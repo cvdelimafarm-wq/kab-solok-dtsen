@@ -707,7 +707,7 @@ function RekapTab({
       {/* Salinan tersembunyi di luar layar, dipakai sebagai sumber gambar saat tombol salin diklik */}
       <div
         ref={tableRef}
-        className="fixed -left-[9999px] top-0 w-[560px] overflow-hidden rounded-lg border border-line bg-white"
+        className="fixed -left-[9999px] top-0 w-[680px] overflow-hidden rounded-lg border border-line bg-white"
         aria-hidden="true"
       >
         <TabelRekapUpdate rows={rows} />
@@ -766,19 +766,72 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
             <th className="px-4 py-2 font-medium">Nama PPL</th>
             <th className="px-4 py-2 font-medium">Nama Jorong</th>
             <th className="px-4 py-2 font-medium">Terakhir Update</th>
+            <th className="px-4 py-2 font-medium">Progress Pendataan</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.ppl_id} className="border-t border-line">
-              <td className="px-4 py-2">{r.nama_ppl}</td>
-              <td className="px-4 py-2 text-ink/70">{r.nama_jorong}</td>
-              <td className="px-4 py-2 text-ink/70">{formatWaktuWIB(r.last_updated)}</td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const hijau = r.selesai_didata + r.selesai_dibersihkan;
+            const kuning = r.potensi_non_respon;
+            const merah = r.belum_didata_bukan_nonrespon;
+            const abu = r.belum_diidentifikasi;
+            const segmen = [
+              { jumlah: hijau, warna: WARNA.hijau.hex },
+              { jumlah: kuning, warna: WARNA.kuning.hex },
+              { jumlah: merah, warna: WARNA.merah.hex },
+              { jumlah: abu, warna: WARNA.abu.hex },
+            ];
+            return (
+              <tr key={r.ppl_id} className="border-t border-line">
+                <td className="px-4 py-2">{r.nama_ppl}</td>
+                <td className="px-4 py-2 text-ink/70">{r.nama_jorong}</td>
+                <td className="px-4 py-2 text-ink/70">{formatWaktuWIB(r.last_updated)}</td>
+                <td className="px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-2 w-24 shrink-0 overflow-hidden rounded-full bg-line">
+                      {segmen.map(
+                        (s, i) =>
+                          s.jumlah > 0 && (
+                            <div
+                              key={i}
+                              style={{
+                                width: `${(s.jumlah / r.total) * 100}%`,
+                                backgroundColor: s.warna,
+                              }}
+                              className="h-full"
+                            />
+                          )
+                      )}
+                    </div>
+                    <span className="whitespace-nowrap text-xs text-ink/60">
+                      {hijau}/{r.total}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-xs text-ink/60">
+        <LegendDot warna={WARNA.hijau.hex} label="Selesai Didata" />
+        <LegendDot warna={WARNA.kuning.hex} label="Belum Didata (Non Respon)" />
+        <LegendDot warna={WARNA.merah.hex} label="Belum Didata" />
+        <LegendDot warna={WARNA.abu.hex} label="Belum Diidentifikasi" />
+      </div>
     </>
+  );
+}
+
+function LegendDot({ warna, label }: { warna: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: warna }}
+      />
+      {label}
+    </span>
   );
 }
 
