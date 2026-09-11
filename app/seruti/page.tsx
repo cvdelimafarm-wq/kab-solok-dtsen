@@ -21,6 +21,22 @@ const STATUS_LABEL: Record<Status, string> = {
   selesai_dibersihkan: "Selesai Dibersihkan",
 };
 
+// Warna status: hijau = selesai dibersihkan, kuning = selesai didata,
+// oren = belum didata (tidak non respon), merah = belum didata (non respon)
+const WARNA = {
+  hijau: { bg: "bg-moss-100", text: "text-moss-700", hex: "#3F7D58" },
+  kuning: { bg: "bg-[#FAF0C5]", text: "text-[#8A6A12]", hex: "#D9B92C" },
+  oren: { bg: "bg-gold-100", text: "text-gold-600", hex: "#C08829" },
+  merah: { bg: "bg-rust-100", text: "text-rust-700", hex: "#A6432D" },
+};
+
+function warnaStatus(status: Status, nonRespon: boolean | null) {
+  if (status === "selesai_dibersihkan") return WARNA.hijau;
+  if (status === "selesai_didata") return WARNA.kuning;
+  if (nonRespon) return WARNA.merah;
+  return WARNA.oren;
+}
+
 // Periode pendataan Seruti Triwulan III 2026
 const TANGGAL_MULAI = new Date(2026, 8, 7); // 7 September 2026
 const TANGGAL_AKHIR = new Date(2026, 8, 14); // 14 September 2026
@@ -182,6 +198,7 @@ function FormulirTab() {
     loadOptions();
   }, [supabase]);
 
+  // Selalu ambil data terbaru dari server - update terbaru menimpa yang lama otomatis
   async function loadSampel(id: string) {
     setJorongId(id);
     setLoadingSampel(true);
@@ -216,6 +233,7 @@ function FormulirTab() {
       .eq("jorong_id", jorongId)
       .maybeSingle();
 
+    // Setiap submit menimpa penuh nilai status/non-respon yang tersimpan (last write wins)
     await Promise.all(
       sampelList.map((s) =>
         supabase
@@ -231,8 +249,9 @@ function FormulirTab() {
       )
     );
 
+    // Re-fetch supaya tampilan selalu mencerminkan data terbaru di server
+    await loadSampel(jorongId);
     setSubmitting(false);
-    setDirty(false);
     setSavedMessage(true);
   }
 
@@ -280,7 +299,7 @@ function FormulirTab() {
               </p>
               <ol className="flex flex-col gap-3">
                 {sampelList.map((s) => {
-                  const sudah = s.status !== "belum_didata";
+                  const warna = warnaStatus(s.status, s.potensi_non_respon);
                   return (
                     <li key={s.id} className="rounded-lg border border-line bg-white p-4">
                       <div className="flex items-center justify-between">
@@ -288,13 +307,12 @@ function FormulirTab() {
                           Ruta No. {s.nomor_urut}
                         </span>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            sudah
-                              ? "bg-moss-100 text-moss-700"
-                              : "bg-rust-100 text-rust-700"
-                          }`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${warna.bg} ${warna.text}`}
                         >
                           {STATUS_LABEL[s.status]}
+                          {s.status === "belum_didata" && s.potensi_non_respon
+                            ? " (Non Respon)"
+                            : ""}
                         </span>
                       </div>
 
@@ -410,14 +428,20 @@ function RekapTab({
     { selesai: 0, belum: 0, nonRespon: 0, total: 0 }
   );
   const persen = totals.total > 0 ? Math.round((totals.selesai / totals.total) * 100) : 0;
-  const idealCount = Math.round(totals.total * idealPercent);
-  const selisih = totals.selesai - idealCount;
+
+  // Target dihitung per SLS (bukan total), dibulatkan ke bawah
+  const jumlahSls = rows.length;
+  const targetPerSls = Math.floor(10 * idealPercent);
+  const totalTarget = targetPerSls * jumlahSls;
+  const selisih = totals.selesai - totalTarget;
+  const hariKe = Math.min(totalPeriodDays, Math.max(1, Math.round(idealPercent * totalPeriodDays)));
 
   const chartData = rows.map((r) => ({
     jorong: r.nama_jorong.replace(/^Jorong\s+/i, ""),
-    "Selesai Didata": r.selesai_didata,
     "Selesai Dibersihkan": r.selesai_dibersihkan,
-    "Belum Didata": r.belum_didata,
+    "Selesai Didata": r.selesai_didata,
+    "Belum Didata (Non Respon)": r.potensi_non_respon,
+    "Belum Didata": r.belum_didata - r.potensi_non_respon,
   }));
 
   const belumLengkap = rows.filter((r) => r.belum_didata > 0);
@@ -442,8 +466,10 @@ function RekapTab({
 
       <div className="mt-3 rounded-lg border border-line bg-white px-4 py-3 text-sm">
         <p>
-          Target ideal hari ini (hari ke-{Math.min(totalPeriodDays, Math.max(1, Math.round(idealPercent * totalPeriodDays)))} dari {totalPeriodDays}, periode 7&ndash;14 September 2026):{" "}
-          <span className="font-semibold text-navy-900">{idealCount} dokumen</span> selesai didata.
+          Target ideal hari ini (hari ke-{hariKe} dari {totalPeriodDays}, periode 7&ndash;14
+          September 2026):{" "}
+          <span className="font-semibold text-navy-900">{targetPerSls} dokumen per SLS</span>{" "}
+          selesai didata (total {totalTarget} dari {jumlahSls} SLS).
         </p>
         <p className="mt-1">
           {selisih >= 0 ? (
@@ -458,9 +484,9 @@ function RekapTab({
         </p>
       </div>
 
-      <div className="mt-6 h-80 rounded-lg border border-line bg-white p-4">
+      <div className="mt-6 h-96 rounded-lg border border-line bg-white p-4">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 40 }}>
+          <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 56 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#DEDBD3" />
             <XAxis
               dataKey="jorong"
@@ -471,10 +497,11 @@ function RekapTab({
             />
             <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#20242B" }} />
             <Tooltip />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="Selesai Didata" stackId="a" fill="#3F7D58" />
-            <Bar dataKey="Selesai Dibersihkan" stackId="a" fill="#C08829" />
-            <Bar dataKey="Belum Didata" stackId="a" fill="#DEDBD3" />
+            <Legend verticalAlign="top" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
+            <Bar dataKey="Selesai Dibersihkan" stackId="a" fill={WARNA.hijau.hex} />
+            <Bar dataKey="Selesai Didata" stackId="a" fill={WARNA.kuning.hex} />
+            <Bar dataKey="Belum Didata (Non Respon)" stackId="a" fill={WARNA.merah.hex} />
+            <Bar dataKey="Belum Didata" stackId="a" fill={WARNA.oren.hex} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -487,21 +514,28 @@ function RekapTab({
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
-            {belumLengkap.map((r) => (
-              <li
-                key={r.ppl_id}
-                className="flex items-start justify-between rounded-md bg-gold-100 px-3 py-2 text-sm text-gold-600"
-              >
-                <span>
-                  <span className="font-medium">{r.nama_jorong}</span> ({r.nama_ppl}) &mdash;
-                  masih {r.belum_didata} sampel belum diidentifikasi
-                  {r.potensi_non_respon > 0 && (
-                    <> ({r.potensi_non_respon} berpotensi non respon)</>
-                  )}
-                  .
-                </span>
-              </li>
-            ))}
+            {belumLengkap.map((r) => {
+              const sudahMulai = r.selesai_didata + r.selesai_dibersihkan > 0;
+              return (
+                <li
+                  key={r.ppl_id}
+                  className={`flex items-start justify-between rounded-md px-3 py-2 text-sm ${
+                    sudahMulai
+                      ? "bg-moss-100 text-moss-700"
+                      : "bg-gold-100 text-gold-600"
+                  }`}
+                >
+                  <span>
+                    <span className="font-medium">{r.nama_jorong}</span> ({r.nama_ppl}) &mdash;
+                    masih {r.belum_didata} sampel belum diidentifikasi
+                    {r.potensi_non_respon > 0 && (
+                      <> ({r.potensi_non_respon} berpotensi non respon)</>
+                    )}
+                    .
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
