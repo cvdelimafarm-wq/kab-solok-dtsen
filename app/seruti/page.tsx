@@ -344,6 +344,9 @@ function FormulirTab() {
 
   const selected = options.find((o) => o.jorong_id === jorongId);
   const selesai = sampelList.filter((s) => s.status !== "belum_didata").length;
+  const belumTeridentifikasi = sampelList.filter(
+    (s) => s.status === "belum_didata" && s.potensi_non_respon === null
+  );
 
   return (
     <div>
@@ -480,10 +483,19 @@ function FormulirTab() {
                 })}
               </ol>
 
+              {belumTeridentifikasi.length > 0 && (
+                <p className="mt-3 rounded-md bg-rust-100 px-3 py-2 text-sm text-rust-700">
+                  Ruta No.{" "}
+                  {belumTeridentifikasi.map((s) => s.nomor_urut).join(", ")}{" "}
+                  belum diidentifikasi. Pilih status atau tandai potensi non
+                  respon untuk semua sampel sebelum submit.
+                </p>
+              )}
+
               <button
                 type="button"
                 onClick={submitJorong}
-                disabled={!dirty || submitting}
+                disabled={!dirty || submitting || belumTeridentifikasi.length > 0}
                 className="mt-4 w-full rounded-md bg-navy-700 px-4 py-3 font-medium text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting ? "Menyimpan..." : "Submit"}
