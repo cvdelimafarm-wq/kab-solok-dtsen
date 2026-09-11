@@ -127,18 +127,18 @@ export default function SerutiPage() {
   }, []);
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-5 py-10">
-      <p className="text-sm font-semibold tracking-wide text-navy-900">
+    <main className="mx-auto min-h-screen max-w-3xl px-5 py-6">
+      <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
         BADAN PUSAT STATISTIK KABUPATEN SOLOK
       </p>
-      <p className="mt-0.5 text-sm font-medium text-navy-400">
+      <p className="mt-0.5 text-xs font-medium text-navy-400">
         Susenas September &middot; Seruti Triwulan III 2026
       </p>
-      <h1 className="mt-1 text-2xl font-semibold text-navy-900">
+      <h1 className="mt-1 whitespace-nowrap text-lg font-bold text-navy-900 sm:text-xl">
         Progress Pendataan Sampel
       </h1>
 
-      <div className="mt-5 rounded-lg bg-rust-100 px-4 py-3 text-sm text-rust-700">
+      <div className="mt-3 rounded-lg bg-rust-100 px-3 py-2 text-xs leading-snug text-rust-700 sm:text-sm">
         {daysLeft > 0 ? (
           <>
             <span className="font-semibold">
@@ -153,19 +153,19 @@ export default function SerutiPage() {
         )}
       </div>
 
-      <div className="mt-3 rounded-lg border border-gold-400 bg-gold-100 px-4 py-3 text-sm text-gold-600">
-        <p className="text-base font-bold">
-          Kumpulkan <span className="text-lg">2 dokumen</span> yang telah
+      <div className="mt-2 rounded-lg border border-gold-400 bg-gold-100 px-3 py-2 text-xs leading-snug text-gold-600 sm:text-sm">
+        <p className="font-bold">
+          Kumpulkan <span className="text-sm sm:text-base">2 dokumen</span> yang telah
           dibersihkan per PPL
         </p>
-        <p className="mt-1">
+        <p className="mt-0.5">
           Paling lambat{" "}
           <span className="font-bold">Senin, 14 September 2026</span> &mdash;
           silakan dititip atau dikirim lewat ekspedisi.
         </p>
       </div>
 
-      <div className="mt-6 flex gap-1 border-b border-line">
+      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
         <TabButton active={tab === "form"} onClick={() => setTab("form")}>
           Formulir Identifikasi
         </TabButton>
@@ -204,7 +204,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+      className={`flex min-h-[52px] items-center justify-center border-b-2 bg-white px-1 py-1.5 text-center text-[10.5px] font-medium leading-tight transition sm:text-xs ${
         active
           ? "border-navy-700 text-navy-900"
           : "border-transparent text-ink/50 hover:text-ink"
@@ -306,26 +306,28 @@ function FormulirTab() {
 
   return (
     <div>
-      <p className="text-sm text-ink/70">
-        Pilih Jorong untuk melihat dan memperbarui status 10 sampel Ruta.
-      </p>
+      <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
+        <p className="text-sm text-ink/70">
+          Pilih Jorong untuk melihat dan memperbarui status 10 sampel Ruta.
+        </p>
 
-      <div className="mt-4">
-        <label className="text-sm font-medium text-ink">Pilih Jorong</label>
-        <select
-          value={jorongId}
-          onChange={(e) => loadSampel(e.target.value)}
-          className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-        >
-          <option value="">
-            {loadingOptions ? "Memuat..." : "Pilih Jorong"}
-          </option>
-          {options.map((o) => (
-            <option key={o.jorong_id} value={o.jorong_id}>
-              {o.nama_jorong}
+        <div className="mt-4">
+          <label className="text-sm font-medium text-ink">Pilih Jorong</label>
+          <select
+            value={jorongId}
+            onChange={(e) => loadSampel(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          >
+            <option value="">
+              {loadingOptions ? "Memuat..." : "Pilih Jorong"}
             </option>
-          ))}
-        </select>
+            {options.map((o) => (
+              <option key={o.jorong_id} value={o.jorong_id}>
+                {o.nama_jorong}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {selected && (
