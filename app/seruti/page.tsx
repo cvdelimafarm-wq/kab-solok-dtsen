@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import NeracaRtCalculator from "./neraca-calculator";
 import {
   Bar,
   BarChart,
@@ -61,6 +62,21 @@ function formatWaktuWIB(iso: string | null | undefined): string {
   return `${dd}-${mm}-${yyyy} pukul ${hh}:${min} WIB`;
 }
 
+// Batas akhir periode monitoring harian (2 hari setelah batas pendataan, untuk buffer pengumpulan dokumen)
+const BATAS_MONITORING_HARIAN = new Date(2026, 8, 16); // 16 September 2026
+
+function wibDateParts(d: Date) {
+  const wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  return { y: wib.getUTCFullYear(), m: wib.getUTCMonth(), day: wib.getUTCDate() };
+}
+
+function sudahUpdateHariIni(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const a = wibDateParts(new Date(iso));
+  const b = wibDateParts(new Date());
+  return a.y === b.y && a.m === b.m && a.day === b.day;
+}
+
 interface JorongOption {
   jorong_id: string;
   nama_jorong: string;
@@ -92,7 +108,7 @@ interface ProgressRow {
 }
 
 export default function SerutiPage() {
-  const [tab, setTab] = useState<"form" | "rekap">("form");
+  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator">("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
     const today = new Date();
@@ -155,14 +171,17 @@ export default function SerutiPage() {
         <TabButton active={tab === "rekap"} onClick={() => setTab("rekap")}>
           Rekapitulasi
         </TabButton>
+        <TabButton active={tab === "kalkulator"} onClick={() => setTab("kalkulator")}>
+          Kalkulator Blok V
+        </TabButton>
       </div>
 
       <div className="mt-6">
-        {tab === "form" ? (
-          <FormulirTab />
-        ) : (
+        {tab === "form" && <FormulirTab />}
+        {tab === "rekap" && (
           <RekapTab idealPercent={idealPercent} totalPeriodDays={totalPeriodDays} />
         )}
+        {tab === "kalkulator" && <NeracaRtCalculator />}
       </div>
     </main>
   );
@@ -510,7 +529,12 @@ function RekapTab({
           selesai didata (total {totalTarget} dari {jumlahSls} SLS).
         </p>
         <p className="mt-1">
-          {selisih >= 0 ? (
+          {totals.selesai === 0 ? (
+            <span className="font-medium text-rust-700">
+              Belum ada dokumen yang selesai didata sama sekali (target hari
+              ini {totalTarget} dokumen).
+            </span>
+          ) : selisih >= 0 ? (
             <span className="font-medium text-moss-700">
               Sesuai/lebih cepat {selisih} dokumen dari target ideal.
             </span>
@@ -554,14 +578,13 @@ function RekapTab({
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
             {belumLengkap.map((r) => {
-              const sudahMulai = r.selesai_didata + r.selesai_dibersihkan > 0;
+              const dalamPeriodeMonitoring = daysBetween(new Date(), BATAS_MONITORING_HARIAN) >= 0;
+              const hijau = dalamPeriodeMonitoring && sudahUpdateHariIni(r.last_updated);
               return (
                 <li
                   key={r.ppl_id}
                   className={`flex items-start justify-between rounded-md px-3 py-2 text-sm ${
-                    sudahMulai
-                      ? "bg-moss-100 text-moss-700"
-                      : "bg-gold-100 text-gold-600"
+                    hijau ? "bg-moss-100 text-moss-700" : "bg-gold-100 text-gold-600"
                   }`}
                 >
                   <span>
@@ -573,7 +596,8 @@ function RekapTab({
                     .
                     <br />
                     <span className="text-xs opacity-70">
-                      Update terakhir: {formatWaktuWIB(r.last_updated)}
+                      Update terakhir: {formatWaktuWIB(r.last_updated)}{" "}
+                      &middot; {hijau ? "sudah update hari ini" : "belum update hari ini"}
                     </span>
                   </span>
                 </li>
