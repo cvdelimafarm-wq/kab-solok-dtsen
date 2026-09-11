@@ -49,6 +49,18 @@ function daysBetween(a: Date, b: Date) {
   return Math.round((utcB - utcA) / (1000 * 60 * 60 * 24));
 }
 
+function formatWaktuWIB(iso: string | null | undefined): string {
+  if (!iso) return "belum pernah diupdate";
+  const d = new Date(iso);
+  const wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const dd = String(wib.getUTCDate()).padStart(2, "0");
+  const mm = String(wib.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = wib.getUTCFullYear();
+  const hh = String(wib.getUTCHours()).padStart(2, "0");
+  const min = String(wib.getUTCMinutes()).padStart(2, "0");
+  return `${dd}-${mm}-${yyyy} pukul ${hh}:${min} WIB`;
+}
+
 interface JorongOption {
   jorong_id: string;
   nama_jorong: string;
@@ -60,6 +72,7 @@ interface Sampel {
   nomor_urut: number;
   status: Status;
   potensi_non_respon: boolean | null;
+  updated_at: string | null;
 }
 
 interface ProgressRow {
@@ -75,6 +88,7 @@ interface ProgressRow {
   belum_didata_bukan_nonrespon: number;
   potensi_non_respon: number;
   total: number;
+  last_updated: string | null;
 }
 
 export default function SerutiPage() {
@@ -212,7 +226,7 @@ function FormulirTab() {
     setLoadingSampel(true);
     const { data } = await supabase
       .from("seruti_sampel")
-      .select("id, nomor_urut, status, potensi_non_respon")
+      .select("id, nomor_urut, status, potensi_non_respon, updated_at")
       .eq("jorong_id", id)
       .order("nomor_urut");
     setSampelList(data ?? []);
@@ -293,6 +307,18 @@ function FormulirTab() {
       {selected && (
         <p className="mt-3 text-sm text-ink/70">
           Petugas (PPL): <span className="font-medium text-ink">{selected.nama_ppl}</span>
+        </p>
+      )}
+      {selected && sampelList.length > 0 && (
+        <p className="mt-1 text-xs text-ink/50">
+          Update data terakhir:{" "}
+          {formatWaktuWIB(
+            sampelList.reduce<string | null>((latest, s) => {
+              if (!s.updated_at) return latest;
+              if (!latest || s.updated_at > latest) return s.updated_at;
+              return latest;
+            }, null)
+          )}
         </p>
       )}
 
@@ -545,6 +571,10 @@ function RekapTab({
                       <> ({r.potensi_non_respon} berpotensi non respon)</>
                     )}
                     .
+                    <br />
+                    <span className="text-xs opacity-70">
+                      Update terakhir: {formatWaktuWIB(r.last_updated)}
+                    </span>
                   </span>
                 </li>
               );
