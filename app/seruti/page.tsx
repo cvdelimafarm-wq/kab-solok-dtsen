@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import NeracaRtCalculator from "./neraca-calculator";
 import AnomaliCepatTab from "./anomali-cepat";
@@ -523,6 +523,9 @@ function RekapTab({
   const supabase = createClient();
   const [rows, setRows] = useState<ProgressRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
+  const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -532,6 +535,43 @@ function RekapTab({
     }
     load();
   }, [supabase]);
+
+  async function salinTabelSebagaiGambar() {
+    if (!tableRef.current) return;
+    setCopyStatus("copying");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(tableRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+      });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setCopyStatus("error");
+          return;
+        }
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        } catch {
+          // Fallback: unduh langsung kalau clipboard image tidak didukung browser
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "rekap-update-ppl.png";
+          a.click();
+          URL.revokeObjectURL(url);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        }
+      });
+    } catch {
+      setCopyStatus("error");
+    }
+  }
 
   const totals = rows.reduce(
     (acc, r) => {
@@ -606,18 +646,22 @@ function RekapTab({
         </p>
       </div>
 
-      <div className="mt-6 h-96 rounded-lg border border-line bg-white p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 56 }}>
+      <div className="mt-6 h-[420px] rounded-lg border border-line bg-white p-4">
+        <p className="mb-2 text-sm font-medium text-navy-900">Grafik Status per Jorong</p>
+        <ResponsiveContainer width="100%" height="90%">
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#DEDBD3" />
-            <XAxis
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: "#20242B" }} />
+            <YAxis
               dataKey="jorong"
+              type="category"
+              width={110}
               tick={{ fontSize: 11, fill: "#20242B" }}
-              angle={-35}
-              textAnchor="end"
-              interval={0}
             />
-            <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#20242B" }} />
             <Tooltip />
             <Legend verticalAlign="top" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
             <Bar dataKey="Selesai Dibersihkan" stackId="a" fill={WARNA.hijau.hex} />
@@ -627,6 +671,46 @@ function RekapTab({
             <Bar dataKey="Belum Diidentifikasi" stackId="a" fill={WARNA.abu.hex} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setShowTable((v) => !v)}
+          className="text-sm font-medium text-navy-400 hover:text-navy-700"
+        >
+          {showTable ? "\u25b4 Sembunyikan tabel" : "\u25be Tampilkan tabel"} Update
+          Terakhir per PPL
+        </button>
+        <button
+          type="button"
+          onClick={salinTabelSebagaiGambar}
+          disabled={copyStatus === "copying"}
+          className="shrink-0 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {copyStatus === "copying"
+            ? "Menyalin..."
+            : copyStatus === "done"
+            ? "Tersalin \u2713"
+            : copyStatus === "error"
+            ? "Gagal, coba lagi"
+            : "Salin Tabel sebagai Gambar"}
+        </button>
+      </div>
+
+      {showTable && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-line bg-white">
+          <TabelRekapUpdate rows={rows} />
+        </div>
+      )}
+
+      {/* Salinan tersembunyi di luar layar, dipakai sebagai sumber gambar saat tombol salin diklik */}
+      <div
+        ref={tableRef}
+        className="fixed -left-[9999px] top-0 w-[560px] overflow-hidden rounded-lg border border-line bg-white"
+        aria-hidden="true"
+      >
+        <TabelRekapUpdate rows={rows} />
       </div>
 
       <div className="mt-6">
@@ -667,6 +751,34 @@ function RekapTab({
         )}
       </div>
     </div>
+  );
+}
+
+function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
+  return (
+    <>
+      <p className="border-b border-line bg-navy-50 px-4 py-2 text-sm font-semibold text-navy-900">
+        Rekap Update Terakhir &mdash; Susenas September &middot; Seruti Triwulan III 2026
+      </p>
+      <table className="w-full text-sm">
+        <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
+          <tr>
+            <th className="px-4 py-2 font-medium">Nama PPL</th>
+            <th className="px-4 py-2 font-medium">Nama Jorong</th>
+            <th className="px-4 py-2 font-medium">Terakhir Update</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.ppl_id} className="border-t border-line">
+              <td className="px-4 py-2">{r.nama_ppl}</td>
+              <td className="px-4 py-2 text-ink/70">{r.nama_jorong}</td>
+              <td className="px-4 py-2 text-ink/70">{formatWaktuWIB(r.last_updated)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
 
