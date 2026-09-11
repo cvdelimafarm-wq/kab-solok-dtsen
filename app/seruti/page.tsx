@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import NeracaRtCalculator from "./neraca-calculator";
+import AnomaliCepatTab from "./anomali-cepat";
 import {
   Bar,
   BarChart,
@@ -108,7 +109,7 @@ interface ProgressRow {
 }
 
 export default function SerutiPage() {
-  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator">("form");
+  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator" | "anomali">("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
     const today = new Date();
@@ -174,6 +175,9 @@ export default function SerutiPage() {
         <TabButton active={tab === "kalkulator"} onClick={() => setTab("kalkulator")}>
           Kalkulator Blok V
         </TabButton>
+        <TabButton active={tab === "anomali"} onClick={() => setTab("anomali")}>
+          Anomali Cepat
+        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -182,6 +186,7 @@ export default function SerutiPage() {
           <RekapTab idealPercent={idealPercent} totalPeriodDays={totalPeriodDays} />
         )}
         {tab === "kalkulator" && <NeracaRtCalculator />}
+        {tab === "anomali" && <AnomaliCepatTab />}
       </div>
     </main>
   );
