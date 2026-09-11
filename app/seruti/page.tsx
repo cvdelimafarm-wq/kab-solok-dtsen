@@ -166,16 +166,16 @@ export default function SerutiPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
-        <TabButton active={tab === "form"} onClick={() => setTab("form")}>
+        <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
-        <TabButton active={tab === "rekap"} onClick={() => setTab("rekap")}>
+        <TabButton active={tab === "rekap"} onClick={() => setTab("rekap")} icon={<IconRekap />}>
           Rekapitulasi
         </TabButton>
-        <TabButton active={tab === "kalkulator"} onClick={() => setTab("kalkulator")}>
+        <TabButton active={tab === "kalkulator"} onClick={() => setTab("kalkulator")} icon={<IconKalkulator />}>
           Kalkulator Blok V
         </TabButton>
-        <TabButton active={tab === "anomali"} onClick={() => setTab("anomali")}>
+        <TabButton active={tab === "anomali"} onClick={() => setTab("anomali")} icon={<IconAnomali />}>
           Anomali Cepat
         </TabButton>
       </div>
@@ -195,23 +195,64 @@ export default function SerutiPage() {
 function TabButton({
   active,
   onClick,
+  icon,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  icon: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex min-h-[52px] items-center justify-center border-b-2 bg-white px-1 py-1.5 text-center text-[10.5px] font-medium leading-tight transition sm:text-xs ${
+      className={`flex min-h-[56px] flex-col items-center justify-center gap-1 border-b-2 bg-white px-1 py-1.5 text-center text-[10.5px] font-medium leading-tight transition sm:text-xs ${
         active
           ? "border-navy-700 text-navy-900"
           : "border-transparent text-ink/50 hover:text-ink"
       }`}
     >
+      <span className={active ? "text-navy-700" : "text-ink/40"}>{icon}</span>
       {children}
     </button>
+  );
+}
+
+function IconFormulir() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="5" y="4" width="14" height="17" rx="2" strokeLinejoin="round" />
+      <path d="M9 3.5h6a1 1 0 011 1V6H8V4.5a1 1 0 011-1z" strokeLinejoin="round" />
+      <path d="M8.5 12.5l2 2 4-4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 16.5h7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconRekap() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 20V10M10 20V4M16 20v-7M20.5 20H3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconKalkulator() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="5" y="3.5" width="14" height="17" rx="2" strokeLinejoin="round" />
+      <path d="M7.5 7.5h9" strokeLinecap="round" />
+      <path d="M7.5 12h1.6M11.2 12h1.6M14.9 12h1.6M7.5 15.5h1.6M11.2 15.5h1.6M14.9 15.5v3M7.5 19h1.6M11.2 19h1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconAnomali() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 8a2 2 0 012-2h1.2l.9-1.4A1 1 0 019 4h6a1 1 0 01.9.6L16.8 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="3.2" />
+    </svg>
   );
 }
 
