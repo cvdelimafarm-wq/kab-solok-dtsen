@@ -28,13 +28,15 @@ const WARNA = {
   kuning: { bg: "bg-[#FAF0C5]", text: "text-[#8A6A12]", hex: "#D9B92C" },
   oren: { bg: "bg-gold-100", text: "text-gold-600", hex: "#C08829" },
   merah: { bg: "bg-rust-100", text: "text-rust-700", hex: "#A6432D" },
+  abu: { bg: "bg-line", text: "text-ink/60", hex: "#DEDBD3" },
 };
 
 function warnaStatus(status: Status, nonRespon: boolean | null) {
   if (status === "selesai_dibersihkan") return WARNA.hijau;
   if (status === "selesai_didata") return WARNA.kuning;
-  if (nonRespon) return WARNA.merah;
-  return WARNA.oren;
+  if (nonRespon === true) return WARNA.merah;
+  if (nonRespon === false) return WARNA.oren;
+  return WARNA.abu; // belum diidentifikasi sama sekali
 }
 
 // Periode pendataan Seruti Triwulan III 2026
@@ -69,6 +71,8 @@ interface ProgressRow {
   selesai_didata: number;
   selesai_dibersihkan: number;
   belum_didata: number;
+  belum_diidentifikasi: number;
+  belum_didata_bukan_nonrespon: number;
   potensi_non_respon: number;
   total: number;
 }
@@ -119,11 +123,15 @@ export default function SerutiPage() {
       </div>
 
       <div className="mt-3 rounded-lg border border-gold-400 bg-gold-100 px-4 py-3 text-sm text-gold-600">
-        <p className="font-semibold">
-          PERHATIAN: 2 DOKUMEN PER PPL YANG TELAH DIBERSIHKAN WAJIB
-          DIKUMPULKAN PALING LAMBAT SENIN 14 SEPTEMBER 2026
+        <p className="text-base font-bold">
+          Kumpulkan <span className="text-lg">2 dokumen</span> yang telah
+          dibersihkan per PPL
         </p>
-        <p className="mt-1">Silakan dititip atau dikirim lewat ekspedisi.</p>
+        <p className="mt-1">
+          Paling lambat{" "}
+          <span className="font-bold">Senin, 14 September 2026</span> &mdash;
+          silakan dititip atau dikirim lewat ekspedisi.
+        </p>
       </div>
 
       <div className="mt-6 flex gap-1 border-b border-line">
@@ -309,10 +317,13 @@ function FormulirTab() {
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${warna.bg} ${warna.text}`}
                         >
-                          {STATUS_LABEL[s.status]}
-                          {s.status === "belum_didata" && s.potensi_non_respon
-                            ? " (Non Respon)"
-                            : ""}
+                          {s.status === "belum_didata"
+                            ? s.potensi_non_respon === true
+                              ? "Belum Didata (Non Respon)"
+                              : s.potensi_non_respon === false
+                              ? "Belum Didata"
+                              : "Belum Diidentifikasi"
+                            : STATUS_LABEL[s.status]}
                         </span>
                       </div>
 
@@ -441,7 +452,8 @@ function RekapTab({
     "Selesai Dibersihkan": r.selesai_dibersihkan,
     "Selesai Didata": r.selesai_didata,
     "Belum Didata (Non Respon)": r.potensi_non_respon,
-    "Belum Didata": r.belum_didata - r.potensi_non_respon,
+    "Belum Didata": r.belum_didata_bukan_nonrespon,
+    "Belum Diidentifikasi": r.belum_diidentifikasi,
   }));
 
   const belumLengkap = rows.filter((r) => r.belum_didata > 0);
@@ -502,6 +514,7 @@ function RekapTab({
             <Bar dataKey="Selesai Didata" stackId="a" fill={WARNA.kuning.hex} />
             <Bar dataKey="Belum Didata (Non Respon)" stackId="a" fill={WARNA.merah.hex} />
             <Bar dataKey="Belum Didata" stackId="a" fill={WARNA.oren.hex} />
+            <Bar dataKey="Belum Diidentifikasi" stackId="a" fill={WARNA.abu.hex} />
           </BarChart>
         </ResponsiveContainer>
       </div>
