@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Bar,
@@ -20,6 +20,16 @@ const STATUS_LABEL: Record<Status, string> = {
   selesai_didata: "Selesai Didata",
   selesai_dibersihkan: "Selesai Dibersihkan",
 };
+
+// Periode pendataan Seruti Triwulan III 2026
+const TANGGAL_MULAI = new Date(2026, 8, 7); // 7 September 2026
+const TANGGAL_AKHIR = new Date(2026, 8, 14); // 14 September 2026
+
+function daysBetween(a: Date, b: Date) {
+  const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((utcB - utcA) / (1000 * 60 * 60 * 24));
+}
 
 interface JorongOption {
   jorong_id: string;
@@ -50,14 +60,55 @@ interface ProgressRow {
 export default function SerutiPage() {
   const [tab, setTab] = useState<"form" | "rekap">("form");
 
+  const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
+    const today = new Date();
+    const total = daysBetween(TANGGAL_MULAI, TANGGAL_AKHIR) + 1;
+    const elapsed = Math.min(
+      total,
+      Math.max(0, daysBetween(TANGGAL_MULAI, today) + 1)
+    );
+    const left = Math.max(0, daysBetween(today, TANGGAL_AKHIR) + 1);
+    return {
+      daysLeft: left,
+      totalPeriodDays: total,
+      idealPercent: total > 0 ? elapsed / total : 0,
+    };
+  }, []);
+
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-5 py-10">
-      <p className="text-sm font-medium text-navy-400">
-        Susenas September &middot; Seruti Triwulan II
+      <p className="text-sm font-semibold tracking-wide text-navy-900">
+        BADAN PUSAT STATISTIK KABUPATEN SOLOK
+      </p>
+      <p className="mt-0.5 text-sm font-medium text-navy-400">
+        Susenas September &middot; Seruti Triwulan III 2026
       </p>
       <h1 className="mt-1 text-2xl font-semibold text-navy-900">
         Progress Pendataan Sampel
       </h1>
+
+      <div className="mt-5 rounded-lg bg-rust-100 px-4 py-3 text-sm text-rust-700">
+        {daysLeft > 0 ? (
+          <>
+            <span className="font-semibold">
+              Sisa waktu {daysLeft} hari lagi.
+            </span>{" "}
+            Batas akhir pendataan: <strong>14 September 2026</strong>.
+          </>
+        ) : (
+          <span className="font-semibold">
+            Waktu pendataan sudah berakhir (batas: 14 September 2026).
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 rounded-lg border border-gold-400 bg-gold-100 px-4 py-3 text-sm text-gold-600">
+        <p className="font-semibold">
+          PERHATIAN: 2 DOKUMEN PER PPL YANG TELAH DIBERSIHKAN WAJIB
+          DIKUMPULKAN PALING LAMBAT SENIN 14 SEPTEMBER 2026
+        </p>
+        <p className="mt-1">Silakan dititip atau dikirim lewat ekspedisi.</p>
+      </div>
 
       <div className="mt-6 flex gap-1 border-b border-line">
         <TabButton active={tab === "form"} onClick={() => setTab("form")}>
@@ -69,7 +120,11 @@ export default function SerutiPage() {
       </div>
 
       <div className="mt-6">
-        {tab === "form" ? <FormulirTab /> : <RekapTab />}
+        {tab === "form" ? (
+          <FormulirTab />
+        ) : (
+          <RekapTab idealPercent={idealPercent} totalPeriodDays={totalPeriodDays} />
+        )}
       </div>
     </main>
   );
@@ -104,10 +159,11 @@ function FormulirTab() {
   const [options, setOptions] = useState<JorongOption[]>([]);
   const [jorongId, setJorongId] = useState("");
   const [sampelList, setSampelList] = useState<Sampel[]>([]);
-  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  const [dirty, setDirty] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [loadingSampel, setLoadingSampel] = useState(false);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [savedMessage, setSavedMessage] = useState(false);
 
   useEffect(() => {
     async function loadOptions() {
@@ -135,7 +191,8 @@ function FormulirTab() {
       .eq("jorong_id", id)
       .order("nomor_urut");
     setSampelList(data ?? []);
-    setDirty({});
+    setDirty(false);
+    setSavedMessage(false);
     setLoadingSampel(false);
   }
 
@@ -146,11 +203,12 @@ function FormulirTab() {
     setSampelList((prev) =>
       prev.map((s) => (s.id === sampelId ? { ...s, ...patch } : s))
     );
-    setDirty((prev) => ({ ...prev, [sampelId]: true }));
+    setDirty(true);
+    setSavedMessage(false);
   }
 
-  async function submitSampel(sampel: Sampel) {
-    setSavingId(sampel.id);
+  async function submitJorong() {
+    setSubmitting(true);
 
     const { data: pplRow } = await supabase
       .from("seruti_ppl")
@@ -158,19 +216,24 @@ function FormulirTab() {
       .eq("jorong_id", jorongId)
       .maybeSingle();
 
-    await supabase
-      .from("seruti_sampel")
-      .update({
-        status: sampel.status,
-        potensi_non_respon:
-          sampel.status === "belum_didata" ? sampel.potensi_non_respon : null,
-        updated_by_ppl_id: pplRow?.id ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sampel.id);
+    await Promise.all(
+      sampelList.map((s) =>
+        supabase
+          .from("seruti_sampel")
+          .update({
+            status: s.status,
+            potensi_non_respon:
+              s.status === "belum_didata" ? s.potensi_non_respon : null,
+            updated_by_ppl_id: pplRow?.id ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", s.id)
+      )
+    );
 
-    setDirty((prev) => ({ ...prev, [sampel.id]: false }));
-    setSavingId(null);
+    setSubmitting(false);
+    setDirty(false);
+    setSavedMessage(true);
   }
 
   const selected = options.find((o) => o.jorong_id === jorongId);
@@ -290,23 +353,24 @@ function FormulirTab() {
                           </div>
                         </div>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => submitSampel(s)}
-                        disabled={!dirty[s.id] || savingId === s.id}
-                        className="mt-3 w-full rounded-md bg-navy-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {savingId === s.id
-                          ? "Menyimpan..."
-                          : dirty[s.id]
-                          ? "Submit"
-                          : "Tersimpan"}
-                      </button>
                     </li>
                   );
                 })}
               </ol>
+
+              <button
+                type="button"
+                onClick={submitJorong}
+                disabled={!dirty || submitting}
+                className="mt-4 w-full rounded-md bg-navy-700 px-4 py-3 font-medium text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {submitting ? "Menyimpan..." : "Submit"}
+              </button>
+              {savedMessage && (
+                <p className="mt-2 text-center text-sm text-moss-700">
+                  Perubahan untuk {selected?.nama_jorong} tersimpan.
+                </p>
+              )}
             </>
           )}
         </div>
@@ -315,7 +379,13 @@ function FormulirTab() {
   );
 }
 
-function RekapTab() {
+function RekapTab({
+  idealPercent,
+  totalPeriodDays,
+}: {
+  idealPercent: number;
+  totalPeriodDays: number;
+}) {
   const supabase = createClient();
   const [rows, setRows] = useState<ProgressRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -340,6 +410,8 @@ function RekapTab() {
     { selesai: 0, belum: 0, nonRespon: 0, total: 0 }
   );
   const persen = totals.total > 0 ? Math.round((totals.selesai / totals.total) * 100) : 0;
+  const idealCount = Math.round(totals.total * idealPercent);
+  const selisih = totals.selesai - idealCount;
 
   const chartData = rows.map((r) => ({
     jorong: r.nama_jorong.replace(/^Jorong\s+/i, ""),
@@ -362,10 +434,29 @@ function RekapTab() {
         <SummaryCard label="Belum didata" value={totals.belum} />
         <SummaryCard label="Potensi non respon" value={totals.nonRespon} tone="rust" />
       </div>
+
       <p className="mt-4 text-sm text-ink/60">
         {persen}% dari seluruh sampel sudah diproses ({totals.selesai} dari{" "}
         {totals.total}).
       </p>
+
+      <div className="mt-3 rounded-lg border border-line bg-white px-4 py-3 text-sm">
+        <p>
+          Target ideal hari ini (hari ke-{Math.min(totalPeriodDays, Math.max(1, Math.round(idealPercent * totalPeriodDays)))} dari {totalPeriodDays}, periode 7&ndash;14 September 2026):{" "}
+          <span className="font-semibold text-navy-900">{idealCount} dokumen</span> selesai didata.
+        </p>
+        <p className="mt-1">
+          {selisih >= 0 ? (
+            <span className="font-medium text-moss-700">
+              Sesuai/lebih cepat {selisih} dokumen dari target ideal.
+            </span>
+          ) : (
+            <span className="font-medium text-rust-700">
+              Tertinggal {Math.abs(selisih)} dokumen dari target ideal.
+            </span>
+          )}
+        </p>
+      </div>
 
       <div className="mt-6 h-80 rounded-lg border border-line bg-white p-4">
         <ResponsiveContainer width="100%" height="100%">
