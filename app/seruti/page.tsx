@@ -760,52 +760,59 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
       <p className="border-b border-line bg-navy-50 px-4 py-2 text-sm font-semibold text-navy-900">
         Rekap Update Terakhir &mdash; Susenas September &middot; Seruti Triwulan III 2026
       </p>
-      <table className="w-full text-sm">
+      <table className="w-full table-fixed text-sm">
+        <colgroup>
+          <col className="w-[22%]" />
+          <col className="w-[20%]" />
+          <col className="w-[16%]" />
+          <col className="w-[42%]" />
+        </colgroup>
         <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
           <tr>
-            <th className="px-4 py-2 font-medium">Nama PPL</th>
-            <th className="px-4 py-2 font-medium">Nama Jorong</th>
-            <th className="px-4 py-2 font-medium">Terakhir Update</th>
-            <th className="px-4 py-2 font-medium">Progress Pendataan</th>
+            <th className="px-3 py-2 font-medium">Nama PPL</th>
+            <th className="px-3 py-2 font-medium">Nama Jorong</th>
+            <th className="px-2 py-2 font-medium">Update</th>
+            <th className="px-3 py-2 font-medium">Progress Pendataan</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
-            const hijau = r.selesai_didata + r.selesai_dibersihkan;
-            const kuning = r.potensi_non_respon;
-            const merah = r.belum_didata_bukan_nonrespon;
-            const abu = r.belum_diidentifikasi;
             const segmen = [
-              { jumlah: hijau, warna: WARNA.hijau.hex },
-              { jumlah: kuning, warna: WARNA.kuning.hex },
-              { jumlah: merah, warna: WARNA.merah.hex },
-              { jumlah: abu, warna: WARNA.abu.hex },
+              { jumlah: r.selesai_dibersihkan, warna: WARNA.hijau.hex },
+              { jumlah: r.selesai_didata, warna: WARNA.kuning.hex },
+              { jumlah: r.potensi_non_respon, warna: WARNA.merah.hex },
+              { jumlah: r.belum_didata_bukan_nonrespon, warna: WARNA.oren.hex },
+              { jumlah: r.belum_diidentifikasi, warna: WARNA.abu.hex },
             ];
             return (
-              <tr key={r.ppl_id} className="border-t border-line">
-                <td className="px-4 py-2">{r.nama_ppl}</td>
-                <td className="px-4 py-2 text-ink/70">{r.nama_jorong}</td>
-                <td className="px-4 py-2 text-ink/70">{formatWaktuWIB(r.last_updated)}</td>
-                <td className="px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-2 w-24 shrink-0 overflow-hidden rounded-full bg-line">
-                      {segmen.map(
-                        (s, i) =>
-                          s.jumlah > 0 && (
-                            <div
-                              key={i}
-                              style={{
-                                width: `${(s.jumlah / r.total) * 100}%`,
-                                backgroundColor: s.warna,
-                              }}
-                              className="h-full"
-                            />
-                          )
-                      )}
-                    </div>
-                    <span className="whitespace-nowrap text-xs text-ink/60">
-                      {hijau}/{r.total}
-                    </span>
+              <tr key={r.ppl_id} className="border-t border-line align-top">
+                <td className="px-3 py-2 break-words">{r.nama_ppl}</td>
+                <td className="px-3 py-2 break-words text-ink/70">{r.nama_jorong}</td>
+                <td className="px-2 py-2 text-[10px] leading-tight text-ink/60">
+                  {formatWaktuWIB(r.last_updated)}
+                </td>
+                <td className="px-3 py-2">
+                  {/* Baris atas: bar progress */}
+                  <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-line">
+                    {segmen.map(
+                      (s, i) =>
+                        s.jumlah > 0 && (
+                          <div
+                            key={i}
+                            style={{
+                              width: `${(s.jumlah / r.total) * 100}%`,
+                              backgroundColor: s.warna,
+                            }}
+                            className="h-full"
+                          />
+                        )
+                    )}
+                  </div>
+                  {/* Baris bawah: angka absolut per kategori */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-ink/60">
+                    {segmen.map((s, i) => (
+                      <AngkaKategori key={i} warna={s.warna} nilai={s.jumlah} />
+                    ))}
                   </div>
                 </td>
               </tr>
@@ -814,12 +821,22 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
         </tbody>
       </table>
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-xs text-ink/60">
-        <LegendDot warna={WARNA.hijau.hex} label="Selesai Didata" />
-        <LegendDot warna={WARNA.kuning.hex} label="Belum Didata (Non Respon)" />
-        <LegendDot warna={WARNA.merah.hex} label="Belum Didata" />
+        <LegendDot warna={WARNA.hijau.hex} label="Selesai Dibersihkan" />
+        <LegendDot warna={WARNA.kuning.hex} label="Selesai Didata" />
+        <LegendDot warna={WARNA.merah.hex} label="Belum Didata (Non Respon)" />
+        <LegendDot warna={WARNA.oren.hex} label="Belum Didata" />
         <LegendDot warna={WARNA.abu.hex} label="Belum Diidentifikasi" />
       </div>
     </>
+  );
+}
+
+function AngkaKategori({ warna, nilai }: { warna: string; nilai: number }) {
+  return (
+    <span className="flex items-center gap-0.5">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: warna }} />
+      {nilai}
+    </span>
   );
 }
 
