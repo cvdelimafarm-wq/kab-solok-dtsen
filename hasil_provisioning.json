@@ -1,0 +1,375 @@
+{
+  "total": 74,
+  "results": [
+    {
+      "nagari": "Aie Batumbuak",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Aie Dingin",
+      "kecamatan": "Lembah Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Aie Luo",
+      "kecamatan": "Payung Sekaki",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Alahan Panjang",
+      "kecamatan": "Lembah Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Aripan",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Batang Barus",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Batu Bajanjang",
+      "kecamatan": "Tigo Lurah",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Batu Bajanjang",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Batu Banyak",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Bukit Bais",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Bukit Kanduang",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Bukit Tandang",
+      "kecamatan": "Bukit Sundi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Cupak",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Dilam",
+      "kecamatan": "Bukit Sundi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Gantuang Ciri",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Garabak Data",
+      "kecamatan": "Tigo Lurah",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Gaung",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Guguak Sarai",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Indudur",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Jawi-Jawi",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Kacang",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Kampuang Batu Dalam",
+      "kecamatan": "Danau Kembar",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Katialo",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Kinari",
+      "kecamatan": "Bukit Sundi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Baru",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Gadang Guguak",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Gadang Koto Anau",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Gaek Guguk",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Hilalang",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Laweh",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Laweh",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Koto Sani",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Kuncir",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Labuh Panjang",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Limau Lunggo",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Lolo",
+      "kecamatan": "Pantai Cermin",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Muaro Paneh",
+      "kecamatan": "Bukit Sundi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Muaro Pingai",
+      "kecamatan": "Junjung Sirih",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Paninggahan",
+      "kecamatan": "Junjung Sirih",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Paninjauan",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Panyakalan",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Parambahan",
+      "kecamatan": "Bukit Sundi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Pasilihan",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Pianggu",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Rangkiang Luluih",
+      "kecamatan": "Tigo Lurah",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Salayo Tanang Bukik Sileh",
+      "kecamatan": "Lembang Jaya",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Salimpat",
+      "kecamatan": "Lembah Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Saniang Baka",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Saok Laweh",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sariak Alahan Tigo",
+      "kecamatan": "Hiliran Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Selayo",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Siaro-Aro",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sibarambang",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Simanau",
+      "kecamatan": "Tigo Lurah",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Simpang Tanjuang Nan Iv",
+      "kecamatan": "Danau Kembar",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Singkarak",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sirukam",
+      "kecamatan": "Payung Sekaki",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sulit Air",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sumani",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sungai Abu",
+      "kecamatan": "Hiliran Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sungai Durian",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sungai Jambur",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sungai Janiah",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Sungai Nanam",
+      "kecamatan": "Lembah Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Supayang",
+      "kecamatan": "Payung Sekaki",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Surian",
+      "kecamatan": "Pantai Cermin",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Talang",
+      "kecamatan": "Gunung Talang",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Talang Babungo",
+      "kecamatan": "Hiliran Gumanti",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Tanjung Alai",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Tanjung Balik",
+      "kecamatan": "X Koto Diatas",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Tanjung Balik Sumiso",
+      "kecamatan": "Tigo Lurah",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Tanjung Bingkung",
+      "kecamatan": "Kubung",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Taruang-Taruang",
+      "kecamatan": "Ix Koto Sungai Lasi",
+      "status": "berhasil"
+    },
+    {
+      "nagari": "Tikalak",
+      "kecamatan": "X Koto Singkarak",
+      "status": "berhasil"
+    }
+  ]
+}
