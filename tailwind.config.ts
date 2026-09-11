@@ -6,7 +6,7 @@ const config: Config = {
     extend: {
       colors: {
         ink: "#20242B",
-        paper: "#F7F6F2",
+        paper: "#EEF3FA",
         navy: {
           50: "#EEF1F6",
           100: "#D6DCE8",
