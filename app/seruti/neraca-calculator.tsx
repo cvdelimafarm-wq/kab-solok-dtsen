@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type FormState = Record<string, string>;
 
-const STORAGE_KEY = "neraca-rt-draft-v1";
+function recordsStorageKey(jorongId: string) {
+  return `neraca-records:${jorongId}`;
+}
 
 function numVal(state: FormState, id: string): number {
   const raw = (state[id] || "").replace(/[.,\s]/g, "");
@@ -111,13 +114,55 @@ const G_ROWS2 = [
   },
 ];
 
+const KATEGORI_USAHA_OPTIONS: string[] = [
+  "1. Pertanian tanaman padi dan palawija",
+  "2. Hortikultura",
+  "3. Perkebunan",
+  "4. Perikanan",
+  "5. Peternakan",
+  "6. Kehutanan dan pertanian lainnya",
+  "7. Pertambangan dan penggalian",
+  "8. Industri pengolahan",
+  "9. Pengadaan listrik, gas, uap/air panas, dan udara dingin",
+  "10. Pengelolaan air, pengelolaan air limbah, pengelolaan dan daur ulang sampah, aktivitas remediasi",
+  "11. Konstruksi",
+  "12. Perdagangan besar dan eceran, reparasi, dan perawatan mobil dan sepeda motor",
+  "13. Pengangkutan dan pergudangan",
+  "14. Penyediaan akomodasi dan penyediaan makan minum",
+  "15. Informasi dan komunikasi",
+  "16. Aktivitas keuangan dan asuransi",
+  "17. Real estat",
+  "18. Aktivitas profesional, ilmiah, dan teknis",
+  "19. Aktivitas penyewaan dan sewa guna tanpa hak opsi, ketenagakerjaan, agen perjalanan, dan penunjang usaha lainnya",
+  "20. Administrasi pemerintahan, pertahanan, dan jaminan sosial wajib",
+  "21. Pendidikan",
+  "22. Aktivitas kesehatan manusia dan aktivitas sosial",
+  "23. Kesenian, hiburan, dan rekreasi",
+  "24. Aktivitas jasa lainnya",
+  "25. Aktivitas rumah tangga sebagai pemberi kerja",
+  "26. Aktivitas badan internasional dan badan ekstra internasional lainnya",
+];
+
+const JENIS_PEKERJAAN_OPTIONS: string[] = [
+  "0. Tentara Nasional Indonesia (TNI) dan Kepolisian Negara Republik Indonesia (POLRI)",
+  "1. Manajer",
+  "2. Tenaga profesional",
+  "3. Teknisi dan asisten profesional",
+  "4. Tenaga tata usaha",
+  "5. Tenaga usaha jasa dan tenaga penjualan",
+  "6. Pekerja terampil pertanian, kehutanan, dan perikanan",
+  "7. Pekerja pengolahan, kerajinan, dan yang berhubungan dengan itu",
+  "8. Operator dan perakit mesin",
+  "9. Pekerja kasar",
+];
+
 const SAMPLE: FormState = {
   meta_nomor: "07 (contoh)",
   meta_nama: "Budi Santoso (contoh)",
-  a1_uraian: "Guru honorer SD", a1_kategori: "Jasa Pendidikan", a1_jenis: "Buruh/Karyawan",
+  a1_uraian: "Guru honorer SD", a1_kategori: "21. Pendidikan", a1_jenis: "2. Tenaga profesional",
   a1_uang: "2800000", a1_lembur: "300000",
-  a2_uraian: "Ojek online", a2_kategori: "Transportasi", a2_jenis: "Pekerja bebas", a2_uang: "1500000",
-  b1_uraian: "Warung kelontong", b1_kategori: "Perdagangan", b1_jenis: "Berusaha sendiri",
+  a2_uraian: "Ojek online", a2_kategori: "13. Pengangkutan dan pergudangan", a2_jenis: "5. Tenaga usaha jasa dan tenaga penjualan", a2_uang: "1500000",
+  b1_uraian: "Warung kelontong", b1_kategori: "12. Perdagangan besar dan eceran, reparasi, dan perawatan mobil dan sepeda motor", b1_jenis: "5. Tenaga usaha jasa dan tenaga penjualan",
   b1_produksi: "4200000", b1_biaya: "2900000",
   c_sewaRumah_produksi: "600000", c_hasilLain_produksi: "250000", c_hasilLain_biaya: "100000",
   d_keuntunganModal_diterima: "150000", d_bunga_diterima: "40000",
@@ -305,6 +350,108 @@ function TextInput({
   );
 }
 
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allowCreate = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  allowCreate?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const filtered = query
+    ? options.filter((o) => o.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  function commitCustom() {
+    const v = query.trim();
+    if (v) onChange(v);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div ref={wrapRef} className="relative min-w-[180px]">
+      <input
+        type="text"
+        value={open ? query : value}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && allowCreate) {
+            e.preventDefault();
+            commitCustom();
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+      />
+      {open && (
+        <ul className="absolute left-0 top-full z-20 mt-1 max-h-56 w-72 overflow-y-auto rounded-md border border-line bg-white py-1 text-sm shadow-lg">
+          {filtered.length === 0 && (
+            <li className="px-3 py-1.5 text-ink/40">
+              {allowCreate && query.trim()
+                ? `Tekan Enter untuk tambah "${query.trim()}"`
+                : "Tidak ditemukan"}
+            </li>
+          )}
+          {filtered.map((opt) => (
+            <li key={opt}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(opt);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className="block w-full px-3 py-1.5 text-left hover:bg-navy-50"
+              >
+                {opt}
+              </button>
+            </li>
+          ))}
+          {allowCreate && query.trim() && filtered.length > 0 && (
+            <li className="border-t border-line">
+              <button
+                type="button"
+                onClick={commitCustom}
+                className="block w-full px-3 py-1.5 text-left text-navy-600 hover:bg-navy-50"
+              >
+                + Tambah &quot;{query.trim()}&quot;
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Th({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
     <th className="whitespace-nowrap px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-navy-600">
@@ -361,34 +508,78 @@ function RecapRow({
 
 // ---------- Main component ----------
 export default function NeracaRtCalculator() {
+  const supabase = createClient();
+
+  const [jorongOptions, setJorongOptions] = useState<
+    { jorong_id: string; nama_jorong: string; nama_ppl: string }[]
+  >([]);
+  const [jorongId, setJorongId] = useState("");
+  const [records, setRecords] = useState<Record<string, FormState>>({});
+  const recordsRef = useRef<Record<string, FormState>>({});
+  const [activeNomor, setActiveNomor] = useState("");
   const [state, setState] = useState<FormState>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        setState(JSON.parse(raw));
-      } else {
-        setState(SAMPLE);
-      }
-    } catch {
-      setState(SAMPLE);
-    }
-    setLoaded(true);
-  }, []);
+    recordsRef.current = records;
+  }, [records]);
 
+  // Muat daftar Jorong (sama seperti tab Formulir Identifikasi)
   useEffect(() => {
-    if (!loaded) return;
+    async function loadJorong() {
+      const { data } = await supabase
+        .from("seruti_ppl")
+        .select("jorong_id, nama, jorong:jorong_id(nama_jorong)")
+        .order("nama");
+      const mapped = (data ?? []).map((row: any) => ({
+        jorong_id: row.jorong_id,
+        nama_jorong: row.jorong?.nama_jorong ?? "-",
+        nama_ppl: row.nama,
+      }));
+      setJorongOptions(mapped);
+    }
+    loadJorong();
+  }, [supabase]);
+
+  // Saat Jorong dipilih, muat semua simulasi tersimpan untuk Jorong itu
+  useEffect(() => {
+    if (!jorongId) {
+      setRecords({});
+      recordsRef.current = {};
+      setActiveNomor("");
+      setState({});
+      setLoaded(false);
+      return;
+    }
+    let recs: Record<string, FormState> = {};
+    try {
+      const raw = localStorage.getItem(recordsStorageKey(jorongId));
+      recs = raw ? JSON.parse(raw) : {};
+    } catch {
+      recs = {};
+    }
+    setRecords(recs);
+    recordsRef.current = recs;
+    setActiveNomor("");
+    setState({});
+    setLoaded(true);
+  }, [jorongId]);
+
+  // Autosave ke localStorage per Jorong + Nomor Sampel, setiap form aktif berubah
+  useEffect(() => {
+    if (!loaded || !jorongId || !activeNomor) return;
     const timer = setTimeout(() => {
+      const updated = { ...recordsRef.current, [activeNomor]: state };
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(recordsStorageKey(jorongId), JSON.stringify(updated));
       } catch {
         // abaikan kalau storage penuh/diblokir
       }
+      recordsRef.current = updated;
+      setRecords(updated);
     }, 300);
     return () => clearTimeout(timer);
-  }, [state, loaded]);
+  }, [state, jorongId, activeNomor, loaded]);
 
   const c = useMemo(() => recompute(state), [state]);
 
@@ -396,17 +587,50 @@ export default function NeracaRtCalculator() {
     setState((prev) => ({ ...prev, [id]: v }));
   }
 
+  function pilihNomorSampel(nomor: string) {
+    setActiveNomor(nomor);
+    const existing = recordsRef.current[nomor];
+    setState(existing ? existing : { meta_nomor: nomor });
+  }
+
+  function pilihNamaResponden(nama: string) {
+    const match = Object.entries(recordsRef.current).find(
+      ([, rec]) => (rec.meta_nama || "").trim().toLowerCase() === nama.trim().toLowerCase()
+    );
+    if (match) {
+      setActiveNomor(match[0]);
+      setState(match[1]);
+    } else {
+      set("meta_nama", nama);
+    }
+  }
+
+  function muatDataSebelumnya() {
+    if (!activeNomor) return;
+    const saved = recordsRef.current[activeNomor];
+    if (saved) setState(saved);
+  }
+
   function loadSample() {
-    setState(SAMPLE);
+    setState({ ...SAMPLE, meta_nomor: activeNomor || SAMPLE.meta_nomor });
   }
   function clearAll() {
-    setState({});
+    setState(activeNomor ? { meta_nomor: activeNomor } : {});
   }
 
   const isBalanced = Math.abs(c.diskrepansi) < 1;
-  const nomor = (state.meta_nomor || "").trim();
-  const nama = (state.meta_nama || "").trim();
-  const idLabel = nomor && nama ? `No. Sampel ${nomor} \u2014 ${nama}` : nomor || nama;
+  const nomorOptions = Object.keys(records);
+  const namaOptions = Array.from(
+    new Set(
+      Object.values(records)
+        .map((r) => (r.meta_nama || "").trim())
+        .filter(Boolean)
+    )
+  );
+  const jorongTerpilih = jorongOptions.find((j) => j.jorong_id === jorongId);
+  const idLabel = jorongTerpilih
+    ? `${jorongTerpilih.nama_jorong}${activeNomor ? ` \u2014 No. Sampel ${activeNomor}` : ""}`
+    : "";
 
   return (
     <div>
@@ -456,16 +680,37 @@ export default function NeracaRtCalculator() {
       {idLabel && <p className="mt-2 text-sm font-medium text-navy-400">{idLabel}</p>}
 
       {/* Identitas */}
-      <div className="mt-4 grid gap-3 rounded-lg border border-line bg-white p-4 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 rounded-lg border border-line bg-white p-4 sm:grid-cols-4">
+        <div>
+          <label className="text-xs font-medium uppercase tracking-wide text-ink/50">
+            Jorong
+          </label>
+          <div className="mt-1">
+            <select
+              value={jorongId}
+              onChange={(e) => setJorongId(e.target.value)}
+              className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+            >
+              <option value="">Pilih Jorong</option>
+              {jorongOptions.map((j) => (
+                <option key={j.jorong_id} value={j.jorong_id}>
+                  {j.nama_jorong}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div>
           <label className="text-xs font-medium uppercase tracking-wide text-ink/50">
             No. Urut Sampel
           </label>
           <div className="mt-1">
-            <TextInput
-              value={state.meta_nomor || ""}
-              onChange={(v) => set("meta_nomor", v)}
-              placeholder="mis. 07"
+            <SearchableSelect
+              value={activeNomor}
+              onChange={pilihNomorSampel}
+              options={nomorOptions}
+              allowCreate
+              placeholder={jorongId ? "Pilih / ketik nomor baru" : "Pilih Jorong dulu"}
             />
           </div>
         </div>
@@ -474,10 +719,12 @@ export default function NeracaRtCalculator() {
             Nama Responden / KRT
           </label>
           <div className="mt-1">
-            <TextInput
+            <SearchableSelect
               value={state.meta_nama || ""}
-              onChange={(v) => set("meta_nama", v)}
-              placeholder="mis. Budi Santoso"
+              onChange={pilihNamaResponden}
+              options={namaOptions}
+              allowCreate
+              placeholder={jorongId ? "Pilih / ketik nama baru" : "Pilih Jorong dulu"}
             />
           </div>
         </div>
@@ -499,6 +746,14 @@ export default function NeracaRtCalculator() {
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
+          onClick={muatDataSebelumnya}
+          disabled={!activeNomor}
+          className="rounded-md border border-navy-400 px-3.5 py-2 text-sm font-medium text-navy-700 hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Muat Data Sebelumnya
+        </button>
+        <button
+          type="button"
           onClick={loadSample}
           className="rounded-md bg-navy-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-navy-600"
         >
@@ -511,7 +766,11 @@ export default function NeracaRtCalculator() {
         >
           Kosongkan Semua
         </button>
-        <span className="text-xs text-ink/40">Draf tersimpan otomatis di peramban ini.</span>
+        <span className="text-xs text-ink/40">
+          {jorongId
+            ? "Simulasi tersimpan otomatis per Jorong & Nomor Sampel di peramban ini."
+            : "Pilih Jorong untuk mulai menyimpan simulasi."}
+        </span>
       </div>
 
       {/* Blok V.A */}
@@ -533,8 +792,8 @@ export default function NeracaRtCalculator() {
                 <tr key={i} className="border-b border-line last:border-b-0">
                   <td className="px-2.5 py-1.5 text-center font-mono text-xs text-ink/40">{i}</td>
                   <td className="px-2 py-1.5"><TextInput value={state[`a${i}_uraian`] || ""} onChange={(v) => set(`a${i}_uraian`, v)} placeholder="Uraian pekerjaan" /></td>
-                  <td className="px-2 py-1.5"><TextInput value={state[`a${i}_kategori`] || ""} onChange={(v) => set(`a${i}_kategori`, v)} placeholder="Kategori usaha" /></td>
-                  <td className="px-2 py-1.5"><TextInput value={state[`a${i}_jenis`] || ""} onChange={(v) => set(`a${i}_jenis`, v)} placeholder="Jenis pekerjaan" /></td>
+                  <td className="px-2 py-1.5"><SearchableSelect value={state[`a${i}_kategori`] || ""} onChange={(v) => set(`a${i}_kategori`, v)} options={KATEGORI_USAHA_OPTIONS} placeholder="Cari kategori usaha" /></td>
+                  <td className="px-2 py-1.5"><SearchableSelect value={state[`a${i}_jenis`] || ""} onChange={(v) => set(`a${i}_jenis`, v)} options={JENIS_PEKERJAAN_OPTIONS} placeholder="Cari jenis pekerjaan" /></td>
                   <td className="px-2 py-1.5"><MoneyInput value={state[`a${i}_uang`] || ""} onChange={(v) => set(`a${i}_uang`, v)} /></td>
                   <td className="px-2 py-1.5"><MoneyInput value={state[`a${i}_barang`] || ""} onChange={(v) => set(`a${i}_barang`, v)} /></td>
                   <td className="px-2 py-1.5"><MoneyInput value={state[`a${i}_lembur`] || ""} onChange={(v) => set(`a${i}_lembur`, v)} /></td>
@@ -569,8 +828,8 @@ export default function NeracaRtCalculator() {
                 <tr key={i} className="border-b border-line last:border-b-0">
                   <td className="px-2.5 py-1.5 text-center font-mono text-xs text-ink/40">{i}</td>
                   <td className="px-2 py-1.5"><TextInput value={state[`b${i}_uraian`] || ""} onChange={(v) => set(`b${i}_uraian`, v)} placeholder="Uraian kegiatan usaha" /></td>
-                  <td className="px-2 py-1.5"><TextInput value={state[`b${i}_kategori`] || ""} onChange={(v) => set(`b${i}_kategori`, v)} placeholder="Kategori usaha" /></td>
-                  <td className="px-2 py-1.5"><TextInput value={state[`b${i}_jenis`] || ""} onChange={(v) => set(`b${i}_jenis`, v)} placeholder="Jenis pekerjaan" /></td>
+                  <td className="px-2 py-1.5"><SearchableSelect value={state[`b${i}_kategori`] || ""} onChange={(v) => set(`b${i}_kategori`, v)} options={KATEGORI_USAHA_OPTIONS} placeholder="Cari kategori usaha" /></td>
+                  <td className="px-2 py-1.5"><SearchableSelect value={state[`b${i}_jenis`] || ""} onChange={(v) => set(`b${i}_jenis`, v)} options={JENIS_PEKERJAAN_OPTIONS} placeholder="Cari jenis pekerjaan" /></td>
                   <td className="px-2 py-1.5"><MoneyInput value={state[`b${i}_produksi`] || ""} onChange={(v) => set(`b${i}_produksi`, v)} /></td>
                   <td className="px-2 py-1.5"><MoneyInput value={state[`b${i}_biaya`] || ""} onChange={(v) => set(`b${i}_biaya`, v)} /></td>
                   <td className="bg-line/40 px-2.5 py-1.5 text-right"><Money value={c.bRows[i - 1].surplus} /></td>
