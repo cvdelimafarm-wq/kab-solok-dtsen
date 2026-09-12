@@ -513,6 +513,32 @@ function FormulirTab() {
   );
 }
 
+function GrafikTooltip({ active, payload }: any) {
+  if (!active || !payload || payload.length === 0) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="rounded-md border border-line bg-white px-3 py-2 text-xs shadow-lg">
+      <p className="font-semibold text-navy-900">
+        {data.jorong} ({data.namaPpl})
+      </p>
+      <div className="mt-1 flex flex-col gap-0.5">
+        {payload.map((p: any) => (
+          <div key={p.name} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-ink/70">
+              <span
+                className="h-2 w-2 shrink-0 rounded-[2px]"
+                style={{ backgroundColor: p.color }}
+              />
+              {p.name}
+            </span>
+            <span className="font-medium text-ink">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RekapTab({
   idealPercent,
   totalPeriodDays,
@@ -606,6 +632,7 @@ function RekapTab({
 
   const chartData = rows.map((r) => ({
     jorong: r.nama_jorong.replace(/^Jorong\s+/i, ""),
+    namaPpl: r.nama_ppl,
     "Selesai Dibersihkan": r.selesai_dibersihkan,
     "Selesai Didata": r.selesai_didata,
     "Belum Didata (Non Respon)": r.potensi_non_respon,
@@ -626,7 +653,7 @@ function RekapTab({
       </p>
 
       <div className="mt-3 rounded-lg border border-line bg-white p-3">
-        <div className="flex h-3 w-full overflow-hidden rounded-full bg-line">
+        <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
           {[
             { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex },
             { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex },
@@ -648,11 +675,11 @@ function RekapTab({
           )}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink/60">
-          <AngkaKategori warna={WARNA.hijau.hex} nilai={kabupaten.hijau} />
-          <AngkaKategori warna={WARNA.kuning.hex} nilai={kabupaten.kuning} />
-          <AngkaKategori warna={WARNA.merah.hex} nilai={kabupaten.merah} />
-          <AngkaKategori warna={WARNA.oren.hex} nilai={kabupaten.oren} />
-          <AngkaKategori warna={WARNA.abu.hex} nilai={kabupaten.abu} />
+          <AngkaKategori warna={WARNA.hijau.hex} label="Clean" nilai={kabupaten.hijau} />
+          <AngkaKategori warna={WARNA.kuning.hex} label="Didata" nilai={kabupaten.kuning} />
+          <AngkaKategori warna={WARNA.merah.hex} label="NR" nilai={kabupaten.merah} />
+          <AngkaKategori warna={WARNA.oren.hex} label="Belum" nilai={kabupaten.oren} />
+          <AngkaKategori warna={WARNA.abu.hex} label="Belum ID" nilai={kabupaten.abu} />
         </div>
       </div>
 
@@ -709,7 +736,7 @@ function RekapTab({
               width={110}
               tick={{ fontSize: 11, fill: "#20242B" }}
             />
-            <Tooltip />
+            <Tooltip content={<GrafikTooltip />} />
             <Legend verticalAlign="top" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
             <Bar dataKey="Selesai Dibersihkan" stackId="a" fill={WARNA.hijau.hex} />
             <Bar dataKey="Selesai Didata" stackId="a" fill={WARNA.kuning.hex} />
@@ -832,11 +859,11 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
         <tbody>
           {rows.map((r) => {
             const segmen = [
-              { jumlah: r.selesai_dibersihkan, warna: WARNA.hijau.hex },
-              { jumlah: r.selesai_didata, warna: WARNA.kuning.hex },
-              { jumlah: r.potensi_non_respon, warna: WARNA.merah.hex },
-              { jumlah: r.belum_didata_bukan_nonrespon, warna: WARNA.oren.hex },
-              { jumlah: r.belum_diidentifikasi, warna: WARNA.abu.hex },
+              { jumlah: r.selesai_dibersihkan, warna: WARNA.hijau.hex, label: "Clean" },
+              { jumlah: r.selesai_didata, warna: WARNA.kuning.hex, label: "Didata" },
+              { jumlah: r.potensi_non_respon, warna: WARNA.merah.hex, label: "NR" },
+              { jumlah: r.belum_didata_bukan_nonrespon, warna: WARNA.oren.hex, label: "Belum" },
+              { jumlah: r.belum_diidentifikasi, warna: WARNA.abu.hex, label: "Belum ID" },
             ];
             return (
               <tr key={r.ppl_id} className="border-t border-line align-top">
@@ -847,7 +874,7 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                 </td>
                 <td className="px-3 py-2">
                   {/* Baris atas: bar progress */}
-                  <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-line">
+                  <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
                     {segmen.map(
                       (s, i) =>
                         s.jumlah > 0 && (
@@ -862,10 +889,13 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                         )
                     )}
                   </div>
-                  {/* Baris bawah: angka absolut per kategori */}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-ink/60">
+                  {/* Baris bawah: sekat per kategori */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-ink/60">
                     {segmen.map((s, i) => (
-                      <AngkaKategori key={i} warna={s.warna} nilai={s.jumlah} />
+                      <span key={i} className="flex items-center gap-1.5">
+                        <AngkaKategori warna={s.warna} label={s.label} nilai={s.jumlah} />
+                        {i < segmen.length - 1 && <span className="text-ink/25">|</span>}
+                      </span>
                     ))}
                   </div>
                 </td>
@@ -885,11 +915,19 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
   );
 }
 
-function AngkaKategori({ warna, nilai }: { warna: string; nilai: number }) {
+function AngkaKategori({
+  warna,
+  label,
+  nilai,
+}: {
+  warna: string;
+  label: string;
+  nilai: number;
+}) {
   return (
-    <span className="flex items-center gap-0.5">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: warna }} />
-      {nilai}
+    <span className="flex items-center gap-1">
+      <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: warna }} />
+      {label} : {nilai}
     </span>
   );
 }
