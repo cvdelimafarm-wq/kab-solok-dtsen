@@ -821,9 +821,9 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
         </colgroup>
         <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
           <tr>
-            <th className="px-3 py-2 font-medium">Nama PPL</th>
-            <th className="px-3 py-2 font-medium">Nama Jorong</th>
-            <th className="px-3 py-2 font-medium">Progress Pendataan</th>
+            <th className="px-3 py-1.5 font-medium">Nama PPL</th>
+            <th className="px-3 py-1.5 font-medium">Nama Jorong</th>
+            <th className="px-3 py-1.5 font-medium">Progress Pendataan</th>
           </tr>
         </thead>
         <tbody>
@@ -865,14 +865,14 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
             ];
             return (
               <tr key={r.ppl_id} className="border-t border-line align-top">
-                <td className="px-3 py-2">
+                <td className="px-3 py-1.5">
                   <p className="break-words">{r.nama_ppl}</p>
                   <p className="mt-0.5 text-[10px] italic leading-tight text-ink/40">
                     {formatWaktuWIB(r.last_updated)}
                   </p>
                 </td>
-                <td className="px-3 py-2 break-words text-ink/70">{r.nama_jorong}</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-1.5 break-words text-ink/70">{r.nama_jorong}</td>
+                <td className="px-3 py-1.5">
                   {/* Baris atas: bar progress */}
                   <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
                     {segmen.map(
@@ -890,7 +890,7 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                     )}
                   </div>
                   {/* Baris bawah: sekat per kategori, dipaksa 1 baris */}
-                  <div className="mt-1.5 flex flex-nowrap items-center gap-x-1.5 overflow-x-auto whitespace-nowrap text-[10px] text-ink/60">
+                  <div className="mt-1 flex flex-nowrap items-center gap-x-1.5 overflow-x-auto whitespace-nowrap text-[10px] text-ink/60">
                     {segmen.map((s, i) => (
                       <span key={i} className="flex shrink-0 items-center gap-1.5">
                         <AngkaKategori
