@@ -815,35 +815,63 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
       </p>
       <table className="w-full table-fixed text-sm">
         <colgroup>
-          <col className="w-[22%]" />
+          <col className="w-[24%]" />
           <col className="w-[20%]" />
-          <col className="w-[16%]" />
-          <col className="w-[42%]" />
+          <col className="w-[56%]" />
         </colgroup>
         <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
           <tr>
             <th className="px-3 py-2 font-medium">Nama PPL</th>
             <th className="px-3 py-2 font-medium">Nama Jorong</th>
-            <th className="px-2 py-2 font-medium">Update</th>
             <th className="px-3 py-2 font-medium">Progress Pendataan</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
+            // Persentase "Didata" bersifat kumulatif: Selesai Dibersihkan + Selesai Didata,
+            // karena dokumen yang sudah dibersihkan sudah pasti melewati tahap didata juga.
+            const kumulatifDidata = r.selesai_dibersihkan + r.selesai_didata;
             const segmen = [
-              { jumlah: r.selesai_dibersihkan, warna: WARNA.hijau.hex, label: "Clean" },
-              { jumlah: r.selesai_didata, warna: WARNA.kuning.hex, label: "Didata" },
-              { jumlah: r.potensi_non_respon, warna: WARNA.merah.hex, label: "NR" },
-              { jumlah: r.belum_didata_bukan_nonrespon, warna: WARNA.oren.hex, label: "Belum" },
-              { jumlah: r.belum_diidentifikasi, warna: WARNA.abu.hex, label: "Belum ID" },
+              {
+                jumlah: r.selesai_dibersihkan,
+                warna: WARNA.hijau.hex,
+                label: "Clean",
+                persenNilai: r.selesai_dibersihkan,
+              },
+              {
+                jumlah: r.selesai_didata,
+                warna: WARNA.kuning.hex,
+                label: "Didata",
+                persenNilai: kumulatifDidata,
+              },
+              {
+                jumlah: r.potensi_non_respon,
+                warna: WARNA.merah.hex,
+                label: "NR",
+                persenNilai: r.potensi_non_respon,
+              },
+              {
+                jumlah: r.belum_didata_bukan_nonrespon,
+                warna: WARNA.oren.hex,
+                label: "Belum",
+                persenNilai: r.belum_didata_bukan_nonrespon,
+              },
+              {
+                jumlah: r.belum_diidentifikasi,
+                warna: WARNA.abu.hex,
+                label: "Belum ID",
+                persenNilai: r.belum_diidentifikasi,
+              },
             ];
             return (
               <tr key={r.ppl_id} className="border-t border-line align-top">
-                <td className="px-3 py-2 break-words">{r.nama_ppl}</td>
-                <td className="px-3 py-2 break-words text-ink/70">{r.nama_jorong}</td>
-                <td className="px-2 py-2 text-[10px] leading-tight text-ink/60">
-                  {formatWaktuWIB(r.last_updated)}
+                <td className="px-3 py-2">
+                  <p className="break-words">{r.nama_ppl}</p>
+                  <p className="mt-0.5 text-[10px] italic leading-tight text-ink/40">
+                    {formatWaktuWIB(r.last_updated)}
+                  </p>
                 </td>
+                <td className="px-3 py-2 break-words text-ink/70">{r.nama_jorong}</td>
                 <td className="px-3 py-2">
                   {/* Baris atas: bar progress */}
                   <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
@@ -861,15 +889,15 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                         )
                     )}
                   </div>
-                  {/* Baris bawah: sekat per kategori */}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-ink/60">
+                  {/* Baris bawah: sekat per kategori, dipaksa 1 baris */}
+                  <div className="mt-1.5 flex flex-nowrap items-center gap-x-1.5 overflow-x-auto whitespace-nowrap text-[10px] text-ink/60">
                     {segmen.map((s, i) => (
-                      <span key={i} className="flex items-center gap-1.5">
+                      <span key={i} className="flex shrink-0 items-center gap-1.5">
                         <AngkaKategori
                           warna={s.warna}
                           label={s.label}
                           nilai={s.jumlah}
-                          persen={r.total > 0 ? Math.round((s.jumlah / r.total) * 100) : 0}
+                          persen={r.total > 0 ? Math.round((s.persenNilai / r.total) * 100) : 0}
                         />
                         {i < segmen.length - 1 && <span className="text-ink/25">|</span>}
                       </span>
@@ -921,12 +949,13 @@ function RekapKabupatenBlock({
   totalSampel: number;
   jumlahJorong: number;
 }) {
+  const kumulatifDidata = kabupaten.hijau + kabupaten.kuning;
   const segmen = [
-    { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex, label: "Clean" },
-    { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex, label: "Didata" },
-    { jumlah: kabupaten.merah, warna: WARNA.merah.hex, label: "NR" },
-    { jumlah: kabupaten.oren, warna: WARNA.oren.hex, label: "Belum" },
-    { jumlah: kabupaten.abu, warna: WARNA.abu.hex, label: "Belum ID" },
+    { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex, label: "Clean", persenNilai: kabupaten.hijau },
+    { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex, label: "Didata", persenNilai: kumulatifDidata },
+    { jumlah: kabupaten.merah, warna: WARNA.merah.hex, label: "NR", persenNilai: kabupaten.merah },
+    { jumlah: kabupaten.oren, warna: WARNA.oren.hex, label: "Belum", persenNilai: kabupaten.oren },
+    { jumlah: kabupaten.abu, warna: WARNA.abu.hex, label: "Belum ID", persenNilai: kabupaten.abu },
   ];
   return (
     <div>
@@ -958,7 +987,7 @@ function RekapKabupatenBlock({
               warna={s.warna}
               label={s.label}
               nilai={s.jumlah}
-              persen={totalSampel > 0 ? Math.round((s.jumlah / totalSampel) * 100) : 0}
+              persen={totalSampel > 0 ? Math.round((s.persenNilai / totalSampel) * 100) : 0}
             />
           ))}
         </div>
