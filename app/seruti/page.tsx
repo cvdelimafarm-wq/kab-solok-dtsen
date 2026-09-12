@@ -585,6 +585,18 @@ function RekapTab({
   );
   const persen = totals.total > 0 ? Math.round((totals.selesai / totals.total) * 100) : 0;
 
+  const kabupaten = rows.reduce(
+    (acc, r) => {
+      acc.hijau += r.selesai_dibersihkan;
+      acc.kuning += r.selesai_didata;
+      acc.merah += r.potensi_non_respon;
+      acc.oren += r.belum_didata_bukan_nonrespon;
+      acc.abu += r.belum_diidentifikasi;
+      return acc;
+    },
+    { hijau: 0, kuning: 0, merah: 0, oren: 0, abu: 0 }
+  );
+
   // Target dihitung per SLS (bukan total), dibulatkan ke bawah
   const jumlahSls = rows.length;
   const targetPerSls = Math.floor(10 * idealPercent);
@@ -601,7 +613,6 @@ function RekapTab({
     "Belum Diidentifikasi": r.belum_diidentifikasi,
   }));
 
-  const belumLengkap = rows.filter((r) => r.belum_didata > 0);
 
   if (loading) {
     return <p className="text-sm text-ink/50">Memuat rekap...</p>;
@@ -609,7 +620,43 @@ function RekapTab({
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <h2 className="text-sm font-semibold text-navy-900">Rekap Kabupaten Solok</h2>
+      <p className="mt-0.5 text-xs text-ink/50">
+        Gabungan seluruh {rows.length} Jorong sampel Seruti Triwulan III 2026.
+      </p>
+
+      <div className="mt-3 rounded-lg border border-line bg-white p-3">
+        <div className="flex h-3 w-full overflow-hidden rounded-full bg-line">
+          {[
+            { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex },
+            { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex },
+            { jumlah: kabupaten.merah, warna: WARNA.merah.hex },
+            { jumlah: kabupaten.oren, warna: WARNA.oren.hex },
+            { jumlah: kabupaten.abu, warna: WARNA.abu.hex },
+          ].map(
+            (s, i) =>
+              s.jumlah > 0 && (
+                <div
+                  key={i}
+                  style={{
+                    width: `${(s.jumlah / totals.total) * 100}%`,
+                    backgroundColor: s.warna,
+                  }}
+                  className="h-full"
+                />
+              )
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink/60">
+          <AngkaKategori warna={WARNA.hijau.hex} nilai={kabupaten.hijau} />
+          <AngkaKategori warna={WARNA.kuning.hex} nilai={kabupaten.kuning} />
+          <AngkaKategori warna={WARNA.merah.hex} nilai={kabupaten.merah} />
+          <AngkaKategori warna={WARNA.oren.hex} nilai={kabupaten.oren} />
+          <AngkaKategori warna={WARNA.abu.hex} nilai={kabupaten.abu} />
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryCard label="Total sampel" value={totals.total} />
         <SummaryCard label="Sudah diproses" value={totals.selesai} tone="moss" />
         <SummaryCard label="Belum didata" value={totals.belum} />
@@ -714,16 +761,17 @@ function RekapTab({
       </div>
 
       <div className="mt-6">
-        <h2 className="text-sm font-medium text-navy-900">Catatan sampel belum diidentifikasi</h2>
-        {belumLengkap.length === 0 ? (
-          <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-sm text-moss-700">
-            Semua sampel di seluruh Jorong sudah diidentifikasi.
+        <h2 className="text-sm font-medium text-navy-900">Catatan</h2>
+        {rows.length === 0 ? (
+          <p className="mt-2 rounded-md bg-line px-3 py-2 text-sm text-ink/60">
+            Belum ada data Jorong.
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
-            {belumLengkap.map((r) => {
+            {rows.map((r) => {
               const dalamPeriodeMonitoring = daysBetween(new Date(), BATAS_MONITORING_HARIAN) >= 0;
               const hijau = dalamPeriodeMonitoring && sudahUpdateHariIni(r.last_updated);
+              const lengkap = r.belum_didata === 0;
               return (
                 <li
                   key={r.ppl_id}
@@ -732,12 +780,18 @@ function RekapTab({
                   }`}
                 >
                   <span>
-                    <span className="font-medium">{r.nama_jorong}</span> ({r.nama_ppl}) &mdash;
-                    masih {r.belum_didata} sampel belum diidentifikasi
-                    {r.potensi_non_respon > 0 && (
-                      <> ({r.potensi_non_respon} berpotensi non respon)</>
+                    <span className="font-medium">{r.nama_jorong}</span> ({r.nama_ppl}) &mdash;{" "}
+                    {lengkap ? (
+                      "semua sampel sudah diidentifikasi."
+                    ) : (
+                      <>
+                        masih {r.belum_didata} sampel belum diidentifikasi
+                        {r.potensi_non_respon > 0 && (
+                          <> ({r.potensi_non_respon} berpotensi non respon)</>
+                        )}
+                        .
+                      </>
                     )}
-                    .
                     <br />
                     <span className="text-xs opacity-70">
                       Update terakhir: {formatWaktuWIB(r.last_updated)}{" "}
