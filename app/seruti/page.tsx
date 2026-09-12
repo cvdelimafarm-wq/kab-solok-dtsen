@@ -647,41 +647,7 @@ function RekapTab({
 
   return (
     <div>
-      <h2 className="text-sm font-semibold text-navy-900">Rekap Kabupaten Solok</h2>
-      <p className="mt-0.5 text-xs text-ink/50">
-        Gabungan seluruh {rows.length} Jorong sampel Seruti Triwulan III 2026.
-      </p>
-
-      <div className="mt-3 rounded-lg border border-line bg-white p-3">
-        <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
-          {[
-            { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex },
-            { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex },
-            { jumlah: kabupaten.merah, warna: WARNA.merah.hex },
-            { jumlah: kabupaten.oren, warna: WARNA.oren.hex },
-            { jumlah: kabupaten.abu, warna: WARNA.abu.hex },
-          ].map(
-            (s, i) =>
-              s.jumlah > 0 && (
-                <div
-                  key={i}
-                  style={{
-                    width: `${(s.jumlah / totals.total) * 100}%`,
-                    backgroundColor: s.warna,
-                  }}
-                  className="h-full"
-                />
-              )
-          )}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink/60">
-          <AngkaKategori warna={WARNA.hijau.hex} label="Clean" nilai={kabupaten.hijau} />
-          <AngkaKategori warna={WARNA.kuning.hex} label="Didata" nilai={kabupaten.kuning} />
-          <AngkaKategori warna={WARNA.merah.hex} label="NR" nilai={kabupaten.merah} />
-          <AngkaKategori warna={WARNA.oren.hex} label="Belum" nilai={kabupaten.oren} />
-          <AngkaKategori warna={WARNA.abu.hex} label="Belum ID" nilai={kabupaten.abu} />
-        </div>
-      </div>
+      <RekapKabupatenBlock kabupaten={kabupaten} totalSampel={totals.total} jumlahJorong={rows.length} />
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryCard label="Total sampel" value={totals.total} />
@@ -774,6 +740,9 @@ function RekapTab({
 
       {showTable && (
         <div className="mt-2 overflow-hidden rounded-lg border border-line bg-white">
+          <div className="border-b border-line p-3">
+            <RekapKabupatenBlock kabupaten={kabupaten} totalSampel={totals.total} jumlahJorong={rows.length} />
+          </div>
           <TabelRekapUpdate rows={rows} />
         </div>
       )}
@@ -784,6 +753,9 @@ function RekapTab({
         className="fixed -left-[9999px] top-0 w-[680px] overflow-hidden rounded-lg border border-line bg-white"
         aria-hidden="true"
       >
+        <div className="border-b border-line p-3">
+          <RekapKabupatenBlock kabupaten={kabupaten} totalSampel={totals.total} jumlahJorong={rows.length} />
+        </div>
         <TabelRekapUpdate rows={rows} />
       </div>
 
@@ -893,7 +865,12 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-ink/60">
                     {segmen.map((s, i) => (
                       <span key={i} className="flex items-center gap-1.5">
-                        <AngkaKategori warna={s.warna} label={s.label} nilai={s.jumlah} />
+                        <AngkaKategori
+                          warna={s.warna}
+                          label={s.label}
+                          nilai={s.jumlah}
+                          persen={r.total > 0 ? Math.round((s.jumlah / r.total) * 100) : 0}
+                        />
                         {i < segmen.length - 1 && <span className="text-ink/25">|</span>}
                       </span>
                     ))}
@@ -919,16 +896,74 @@ function AngkaKategori({
   warna,
   label,
   nilai,
+  persen,
 }: {
   warna: string;
   label: string;
   nilai: number;
+  persen?: number;
 }) {
   return (
     <span className="flex items-center gap-1">
       <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: warna }} />
       {label} : {nilai}
+      {persen !== undefined && <span className="text-ink/40"> ({persen}%)</span>}
     </span>
+  );
+}
+
+function RekapKabupatenBlock({
+  kabupaten,
+  totalSampel,
+  jumlahJorong,
+}: {
+  kabupaten: { hijau: number; kuning: number; merah: number; oren: number; abu: number };
+  totalSampel: number;
+  jumlahJorong: number;
+}) {
+  const segmen = [
+    { jumlah: kabupaten.hijau, warna: WARNA.hijau.hex, label: "Clean" },
+    { jumlah: kabupaten.kuning, warna: WARNA.kuning.hex, label: "Didata" },
+    { jumlah: kabupaten.merah, warna: WARNA.merah.hex, label: "NR" },
+    { jumlah: kabupaten.oren, warna: WARNA.oren.hex, label: "Belum" },
+    { jumlah: kabupaten.abu, warna: WARNA.abu.hex, label: "Belum ID" },
+  ];
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-navy-900">Rekap Kabupaten Solok</h2>
+      <p className="mt-0.5 text-xs text-ink/50">
+        Gabungan seluruh {jumlahJorong} Jorong sampel Seruti Triwulan III 2026.
+      </p>
+
+      <div className="mt-3 rounded-lg border border-line bg-white p-3">
+        <div className="flex h-4 w-full overflow-hidden rounded-full bg-line">
+          {segmen.map(
+            (s, i) =>
+              s.jumlah > 0 && (
+                <div
+                  key={i}
+                  style={{
+                    width: `${totalSampel > 0 ? (s.jumlah / totalSampel) * 100 : 0}%`,
+                    backgroundColor: s.warna,
+                  }}
+                  className="h-full"
+                />
+              )
+          )}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink/60">
+          {segmen.map((s, i) => (
+            <AngkaKategori
+              key={i}
+              warna={s.warna}
+              label={s.label}
+              nilai={s.jumlah}
+              persen={totalSampel > 0 ? Math.round((s.jumlah / totalSampel) * 100) : 0}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
