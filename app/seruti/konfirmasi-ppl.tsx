@@ -27,7 +27,8 @@ interface Temuan {
 
 interface NksOption {
   nks: string;
-  label: string; // "00334 - Jorong Sungai Nanam" atau "00334 (belum ada nama jorong)"
+  label: string; // "00050 - Jorong Aia Daliak (PPL: Nisa Anggraini)" atau "00050 (belum ada nama jorong)"
+  namaPpl: string | null;
 }
 
 const fmtNum = (v: number | null) =>
@@ -38,6 +39,7 @@ export default function KonfirmasiPplTab() {
 
   const [temuan, setTemuan] = useState<Temuan[]>([]);
   const [nksOptions, setNksOptions] = useState<NksOption[]>([]);
+  const [nksPplMap, setNksPplMap] = useState<Map<string, string>>(new Map());
   const [kodeOptions, setKodeOptions] = useState<string[]>([]);
   const [filterNks, setFilterNks] = useState("");
   const [filterKode, setFilterKode] = useState("");
@@ -45,12 +47,11 @@ export default function KonfirmasiPplTab() {
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
 
-  // ---------- muat opsi dropdown NKS - Nama Jorong ----------
+  // ---------- muat opsi dropdown NKS - Nama Jorong - Nama PPL ----------
   // Diambil dari NKS yang punya temuan pending, digabung (di sisi client)
   // dengan tabel kp_nks_jorong kalau sudah ada pemetaannya. Selama
-  // kp_nks_jorong masih kosong, label-nya tetap tampil NKS saja dengan
-  // catatan "(belum ada nama jorong)" — dropdown tetap bisa dipakai filter,
-  // cuma belum menampilkan nama jorong sampai datanya diisi.
+  // kp_nks_jorong masih kosong utk suatu NKS, label-nya tetap tampil NKS
+  // saja dengan catatan "(belum ada nama jorong)".
   const loadNksOptions = useCallback(async () => {
     const { data: pendingRows } = await supabase
       .from("kp_anomali_temuan")
@@ -58,13 +59,20 @@ export default function KonfirmasiPplTab() {
       .eq("status", "pending");
     const uniqueNks = [...new Set((pendingRows ?? []).map((r) => r.nks).filter(Boolean))] as string[];
 
-    const { data: jorongRows } = await supabase.from("kp_nks_jorong").select("nks, nama_jorong");
+    const { data: jorongRows } = await supabase
+      .from("kp_nks_jorong")
+      .select("nks, nama_jorong, nama_ppl");
     const jorongMap = new Map((jorongRows ?? []).map((j) => [j.nks, j.nama_jorong]));
+    const pplMap = new Map((jorongRows ?? []).map((j) => [j.nks, j.nama_ppl]).filter(([, v]) => v) as [string, string][]);
+    setNksPplMap(pplMap);
 
     const opts: NksOption[] = uniqueNks
       .map((nks) => ({
         nks,
-        label: jorongMap.has(nks) ? `${nks} - ${jorongMap.get(nks)}` : `${nks} (belum ada nama jorong)`,
+        namaPpl: pplMap.get(nks) ?? null,
+        label: jorongMap.has(nks)
+          ? `${nks} - ${jorongMap.get(nks)}${pplMap.has(nks) ? ` (PPL: ${pplMap.get(nks)})` : ""}`
+          : `${nks} (belum ada nama jorong)`,
       }))
       .sort((a, b) => a.nks.localeCompare(b.nks));
     setNksOptions(opts);
@@ -179,7 +187,12 @@ export default function KonfirmasiPplTab() {
         ) : (
           <div className="mt-3 space-y-2.5">
             {temuan.map((t) => (
-              <ConfirmCard key={t.id} temuan={t} onConfirm={confirmFinding} />
+              <ConfirmCard
+                key={t.id}
+                temuan={t}
+                namaPplJorong={t.nks ? nksPplMap.get(t.nks) ?? null : null}
+                onConfirm={confirmFinding}
+              />
             ))}
           </div>
         )}
@@ -190,9 +203,11 @@ export default function KonfirmasiPplTab() {
 
 function ConfirmCard({
   temuan,
+  namaPplJorong,
   onConfirm,
 }: {
   temuan: Temuan;
+  namaPplJorong: string | null;
   onConfirm: (id: number, status: "sesuai" | "perlu_koreksi", catatan: string) => void;
 }) {
   const [catatan, setCatatan] = useState("");
@@ -209,6 +224,7 @@ function ConfirmCard({
         {temuan.kode_anomali} &middot; NKS {temuan.nks ?? "-"} &middot; NURT {temuan.nurt ?? "-"}{" "}
         &middot; No.Komoditi {temuan.nourutkomo ?? "-"}
         {temuan.nama_krt ? ` \u00b7 KRT: ${temuan.nama_krt}` : ""}
+        {namaPplJorong ? ` \u00b7 PPL: ${namaPplJorong}` : ""}
       </div>
       <div className="mt-1 text-sm text-ink">
         {temuan.keterangan}

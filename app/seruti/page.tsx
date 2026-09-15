@@ -154,15 +154,13 @@ export default function SerutiPage() {
         )}
       </div>
 
-      <div className="mt-2 rounded-lg border border-gold-400 bg-gold-100 px-3 py-2 text-xs leading-snug text-gold-600 sm:text-sm">
+      <div className="mt-2 rounded-lg border border-moss-500 bg-moss-100 px-3 py-2 text-xs leading-snug text-moss-700 sm:text-sm">
         <p className="font-bold">
-          Kumpulkan <span className="text-sm sm:text-base">2 dokumen</span> yang telah
-          dibersihkan per PPL
+          Terima kasih telah mengumpulkan 2 dokumen pendataan!
         </p>
         <p className="mt-0.5">
-          Paling lambat{" "}
-          <span className="font-bold">Senin, 14 September 2026</span> &mdash;
-          silakan dititip atau dikirim lewat ekspedisi.
+          Dokumen sedang diolah dan dilakukan pengecekan anomali &mdash; silakan konfirmasi
+          temuan anomali di tab &quot;Konfirmasi PPL&quot; di bawah.
         </p>
       </div>
 
