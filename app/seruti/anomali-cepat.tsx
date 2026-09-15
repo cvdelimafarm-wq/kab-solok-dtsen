@@ -254,21 +254,19 @@ export default function AnomaliCepatTab() {
       )}
 
       {!lastUpload ? (
-        <p className="rounded-lg border border-line bg-white p-4 text-sm text-ink/50">
-          Belum ada data yang diupload.
-        </p>
+        <p className="text-xs text-ink/40">Belum ada info upload terakhir (data di bawah tetap ditampilkan kalau ada).</p>
       ) : (
-        <>
-          <p className="text-xs text-ink/50">
-            Terakhir diupdate: {new Date(lastUpload.uploaded_at).toLocaleString("id-ID")}
-            {lastUpload.jumlah_baru != null && (
-              <>
-                {" "}
-                &middot; {lastUpload.jumlah_baru} baru &middot; {lastUpload.jumlah_berubah} berubah &middot;{" "}
-                {lastUpload.jumlah_tetap} tetap &middot; {lastUpload.jumlah_selesai} selesai
-              </>
-            )}
-          </p>
+        <p className="text-xs text-ink/50">
+          Terakhir diupdate: {new Date(lastUpload.uploaded_at).toLocaleString("id-ID")}
+          {lastUpload.jumlah_baru != null && (
+            <>
+              {" "}
+              &middot; {lastUpload.jumlah_baru} baru &middot; {lastUpload.jumlah_berubah} berubah &middot;{" "}
+              {lastUpload.jumlah_tetap} tetap &middot; {lastUpload.jumlah_selesai} selesai
+            </>
+          )}
+        </p>
+      )}
 
           {/* ---------- Sub-tab: Daftar Anomali / Konfirmasi PPL ---------- */}
           <div className="flex gap-1 border-b border-line">
@@ -427,8 +425,6 @@ export default function AnomaliCepatTab() {
               )}
             </div>
           )}
-        </>
-      )}
     </div>
   );
 }
