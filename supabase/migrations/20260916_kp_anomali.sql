@@ -30,12 +30,19 @@ create table if not exists kp_anomali_upload (
   uploaded_by text,
   keterangan text,           -- mis. "Semester 2 - 2026, Kab Solok"
   filenames text,            -- daftar nama file yang diproses, dipisah koma
-  total_temuan integer,      -- jumlah temuan pada snapshot ini (utk info saja)
-  jumlah_baru integer,       -- jumlah temuan baru yang muncul di upload ini
-  jumlah_berubah integer,    -- jumlah temuan lama yg nilainya berubah (reset ke pending)
-  jumlah_tetap integer,      -- jumlah temuan lama yg tidak berubah (status dipertahankan)
-  jumlah_selesai integer     -- jumlah temuan lama yg tidak muncul lagi (ditandai resolved)
+  total_temuan integer       -- jumlah temuan pada snapshot ini (utk info saja)
 );
+
+-- Kolom ringkasan tambahan — pakai ALTER TABLE ADD COLUMN IF NOT EXISTS
+-- (bukan cuma di dalam CREATE TABLE di atas) supaya TETAP ditambahkan
+-- meskipun tabelnya sudah pernah dibuat lebih dulu dari versi migrasi
+-- yang lebih lama sebelum kolom-kolom ini ada (CREATE TABLE IF NOT EXISTS
+-- akan MELEWATI tabel yang sudah ada, jadi kolom baru di dalamnya tidak
+-- pernah ikut ditambahkan kalau cuma diandalkan dari situ).
+alter table kp_anomali_upload add column if not exists jumlah_baru integer;
+alter table kp_anomali_upload add column if not exists jumlah_berubah integer;
+alter table kp_anomali_upload add column if not exists jumlah_tetap integer;
+alter table kp_anomali_upload add column if not exists jumlah_selesai integer;
 
 -- ---------- kp_anomali_temuan: catatan HIDUP, satu baris per temuan unik ----------
 create table if not exists kp_anomali_temuan (

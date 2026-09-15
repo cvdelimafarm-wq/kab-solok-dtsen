@@ -38,7 +38,9 @@ const fmtNum = (v: number | null) =>
   v === null || v === undefined ? "" : v.toLocaleString("id-ID");
 
 export default function AnomaliCepatTab() {
-  const supabase = createClient();
+  // Dibuat SEKALI saja (bukan tiap render) — penting supaya query/koneksi
+  // Supabase-nya stabil, bukan instance baru tiap kali komponen re-render.
+  const [supabase] = useState(() => createClient());
 
   const [subTab, setSubTab] = useState<"daftar" | "konfirmasi">("daftar");
   const [lastUpload, setLastUpload] = useState<{
@@ -105,11 +107,12 @@ export default function AnomaliCepatTab() {
         throw new Error((data.error || "Gagal upload") + detail);
       }
       setUploadMsg({
-        type: "ok",
+        type: data.warningRingkasanUpload ? "err" : "ok",
         text:
           `Berhasil. ${data.totalTemuan} temuan aktif dari file: ${data.filenames.join(", ")}. ` +
           `(${data.ringkasan.baru} baru, ${data.ringkasan.berubah} berubah/perlu dicek ulang, ` +
-          `${data.ringkasan.tetap} tetap, ${data.ringkasan.selesai} selesai/teratasi)`,
+          `${data.ringkasan.tetap} tetap, ${data.ringkasan.selesai} selesai/teratasi)` +
+          (data.warningRingkasanUpload ? ` ⚠ ${data.warningRingkasanUpload}` : ""),
       });
       await loadLastUpload();
       await loadData();

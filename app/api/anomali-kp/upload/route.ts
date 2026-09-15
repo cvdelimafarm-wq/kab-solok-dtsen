@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     const ringkasan = upsertResult as { baru: number; berubah: number; tetap: number; selesai: number };
 
     // 3) lengkapi metadata upload dgn ringkasan perubahan
-    await supabase
+    const { error: updateSummaryErr } = await supabase
       .from('kp_anomali_upload')
       .update({
         jumlah_baru: ringkasan.baru,
@@ -155,12 +155,22 @@ export async function POST(req: NextRequest) {
         jumlah_selesai: ringkasan.selesai,
       })
       .eq('id', uploadId);
+    // Sengaja TIDAK throw kalau ini gagal (mis. kolom belum ada karena migrasi
+    // belum update) — data temuan-nya sendiri sudah tersimpan lewat langkah 2,
+    // jadi upload tetap dianggap berhasil. Tapi log & kirim balik warning-nya
+    // supaya kelihatan di response kalau ada masalah.
+    if (updateSummaryErr) {
+      console.error('Gagal update ringkasan kp_anomali_upload:', updateSummaryErr);
+    }
 
     return NextResponse.json({
       uploadId,
       totalTemuan: findings.length,
       filenames: usedFilenames,
       ringkasan,
+      warningRingkasanUpload: updateSummaryErr
+        ? `Ringkasan upload gagal disimpan: ${updateSummaryErr.message}`
+        : null,
     });
   } catch (err: any) {
     console.error('anomali-kp upload error:', err);
