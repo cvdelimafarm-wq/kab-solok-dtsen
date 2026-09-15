@@ -20,38 +20,10 @@ interface Temuan {
   banyak: number | null;
   nilai: number | null;
   detail: Record<string, unknown> | null;
+  narasi: string | null;
   status: StatusKonfirmasi;
   catatan_ppl: string | null;
   nama_ppl: string | null;
-}
-
-// Label yang lebih enak dibaca utk key teknis di kolom `detail`
-// (isinya beda-beda tergantung jenis pengecekan — lihat lib/anomalyChecks.ts)
-const DETAIL_LABELS: Record<string, string> = {
-  banyakTotal: "Banyak Total tercatat",
-  banyakHitung: "seharusnya (Beli+Nonbeli)",
-  nilaiTotal: "Nilai Total tercatat",
-  nilaiHitung: "seharusnya (Beli+Nonbeli)",
-  kolom5: "Sebulan",
-  kolom6: "Setahun",
-  kolom6Total: "Nilai Setahun",
-  oopA: "OOP sub-a",
-  oopC: "OOP sub-c",
-  jmlKomoditas: "Jumlah komoditas terisi",
-  bumbuBumbuan: "Bumbu-bumbuan",
-  padiPadian: "Padi-padian",
-};
-
-function formatDetail(detail: Record<string, unknown> | null | undefined): string {
-  if (!detail || typeof detail !== "object") return "";
-  const parts: string[] = [];
-  for (const [k, v] of Object.entries(detail)) {
-    if (v === null || v === undefined || typeof v === "object") continue; // lewati nested/array, cuma tampilkan yg simpel
-    const label = DETAIL_LABELS[k] ?? k;
-    const val = typeof v === "number" ? v.toLocaleString("id-ID") : String(v);
-    parts.push(`${label}: ${val}`);
-  }
-  return parts.join(" · ");
 }
 
 interface SummaryRow {
@@ -83,6 +55,8 @@ export default function AnomaliCepatTab() {
   } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [aturanUploading, setAturanUploading] = useState(false);
+  const [aturanMsg, setAturanMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [keterangan, setKeterangan] = useState("");
 
   const [temuan, setTemuan] = useState<Temuan[]>([]);
@@ -151,6 +125,39 @@ export default function AnomaliCepatTab() {
       setUploadMsg({ type: "err", text: err.message });
     } finally {
       setUploading(false);
+    }
+  }
+
+  // ---------- upload Excel aturan anomali (ambang batas, aktif/nonaktif, dst) ----------
+  async function handleUploadAturan(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.elements.namedItem("aturanFile") as HTMLInputElement;
+    if (!fileInput.files || fileInput.files.length === 0) return;
+
+    const fd = new FormData();
+    fd.append("file", fileInput.files[0]);
+
+    setAturanUploading(true);
+    setAturanMsg(null);
+    try {
+      const res = await fetch("/api/anomali-kp/upload-aturan", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal upload aturan");
+      const bagian: string[] = [];
+      if (data.pengaturan) bagian.push(`${data.pengaturan} aturan/ambang batas`);
+      if (data.qMaksimum) bagian.push(`${data.qMaksimum} batas maks. komoditas`);
+      if (data.kalori) bagian.push(`${data.kalori} referensi kalori`);
+      const errTxt = data.errors?.length ? ` ⚠ ${data.errors.join(" | ")}` : "";
+      setAturanMsg({
+        type: data.errors?.length ? "err" : "ok",
+        text: `Sinkron: ${bagian.join(", ") || "tidak ada baris valid"}.${errTxt}`,
+      });
+      form.reset();
+    } catch (err: any) {
+      setAturanMsg({ type: "err", text: err.message });
+    } finally {
+      setAturanUploading(false);
     }
   }
 
@@ -280,6 +287,32 @@ export default function AnomaliCepatTab() {
         )}
       </div>
 
+      {/* ---------- Upload Aturan Anomali (ambang batas, aktif/nonaktif) ---------- */}
+      <div className="rounded-lg border border-line bg-white p-4">
+        <h2 className="text-sm font-semibold text-navy-900">Upload Aturan Anomali (Opsional)</h2>
+        <p className="mt-1 text-xs text-ink/60">
+          Upload file Excel <code className="rounded bg-navy-50 px-1 py-0.5">Draft_Aturan_Anomali_KP.xlsx</code> (atau
+          versi yang sudah Anda edit) untuk mengatur ambang batas, status aktif/nonaktif tiap kode, batas maksimum
+          konsumsi per komoditas, dan referensi kalori — tanpa perlu ubah kode. Kalau belum pernah upload, sistem
+          otomatis pakai nilai default.
+        </p>
+        <form onSubmit={handleUploadAturan} className="mt-3 flex flex-wrap items-center gap-2">
+          <input type="file" name="aturanFile" accept=".xlsx" required className="text-xs" />
+          <button
+            type="submit"
+            disabled={aturanUploading}
+            className="rounded-md bg-navy-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-navy-900 disabled:opacity-50"
+          >
+            {aturanUploading ? "Memproses..." : "Upload Aturan"}
+          </button>
+        </form>
+        {aturanMsg && (
+          <p className={`mt-2 text-sm ${aturanMsg.type === "ok" ? "text-moss-700" : "text-rust-700"}`}>
+            {aturanMsg.text}
+          </p>
+        )}
+      </div>
+
       {debugError && (
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
           ⚠ Diagnostik: {debugError}
@@ -400,8 +433,8 @@ export default function AnomaliCepatTab() {
                         <td className="py-1.5 pr-3">
                           {t.keterangan}
                           {t.nama_lainnya ? ` — "${t.nama_lainnya}"` : ""}
-                          {formatDetail(t.detail) && (
-                            <div className="text-[11px] text-ink/50">{formatDetail(t.detail)}</div>
+                          {t.narasi && (
+                            <div className="mt-0.5 text-[11px] text-ink/50">{t.narasi}</div>
                           )}
                         </td>
                         <td className="py-1.5 pr-3">{fmtNum(t.nilai)}</td>
@@ -538,8 +571,8 @@ function ConfirmCard({
         ) : null}
         {temuan.banyak != null ? ` \u00b7 Banyak: ${fmtNum(temuan.banyak)}` : ""}
         {temuan.nilai != null ? ` \u00b7 Nilai: Rp${fmtNum(temuan.nilai)}` : ""}
-        {formatDetail(temuan.detail) && (
-          <div className="mt-0.5 text-xs text-ink/50">{formatDetail(temuan.detail)}</div>
+        {temuan.narasi && (
+          <div className="mt-0.5 text-xs text-ink/50">{temuan.narasi}</div>
         )}
       </div>
       <textarea

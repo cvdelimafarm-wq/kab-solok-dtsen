@@ -80,6 +80,7 @@ alter table kp_anomali_temuan add column if not exists natural_key text;
 alter table kp_anomali_temuan add column if not exists first_seen_upload_id bigint references kp_anomali_upload(id);
 alter table kp_anomali_temuan add column if not exists last_seen_upload_id bigint references kp_anomali_upload(id);
 alter table kp_anomali_temuan add column if not exists updated_at timestamptz not null default now();
+alter table kp_anomali_temuan add column if not exists narasi text; -- kalimat penjelasan lengkap dgn angka sungguhan
 
 -- status sekarang juga boleh 'resolved' — drop constraint lama kalau ada, buat ulang
 alter table kp_anomali_temuan drop constraint if exists kp_anomali_temuan_status_check;
@@ -187,12 +188,12 @@ begin
     if not found then
       insert into kp_anomali_temuan (
         natural_key, kode_anomali, kelompok, nks, nurt, nourutkomo, nama_krt,
-        keterangan, rincian, kategori, nama_lainnya, banyak, nilai, detail,
+        keterangan, narasi, rincian, kategori, nama_lainnya, banyak, nilai, detail,
         status, first_seen_upload_id, last_seen_upload_id, created_at, updated_at
       ) values (
         v_key, v_item->>'kode_anomali', v_item->>'kelompok',
         v_item->>'nks', v_item->>'nurt', nullif(v_item->>'nourutkomo','')::int, v_item->>'nama_krt',
-        v_item->>'keterangan', v_item->>'rincian', v_item->>'kategori', v_new_nama_lainnya,
+        v_item->>'keterangan', v_item->>'narasi', v_item->>'rincian', v_item->>'kategori', v_new_nama_lainnya,
         v_new_banyak, v_new_nilai, v_item->'detail',
         'pending', p_upload_id, p_upload_id, now(), now()
       );
@@ -202,15 +203,28 @@ begin
         v_existing.banyak is distinct from v_new_banyak
         or v_existing.nilai is distinct from v_new_nilai
         or v_existing.nama_lainnya is distinct from v_new_nama_lainnya
+        or v_existing.detail is distinct from (v_item->'detail')
       );
+
+      -- SELALU perbarui field deskriptif/kosmetik (keterangan, narasi, dst) —
+      -- terlepas dari apakah nilainya berubah atau tidak. Ini penting supaya
+      -- perbaikan pada logika narasi/keterangan di kode ikut ter-backfill ke
+      -- temuan lama yang sudah ada saat diupload ulang, tanpa mereset status
+      -- konfirmasi PPL yang tidak perlu (status cuma direset di blok
+      -- v_changed di bawah, kalau NILAI-nya yang benar-benar berubah).
+      update kp_anomali_temuan set
+        kelompok = v_item->>'kelompok',
+        nama_krt = v_item->>'nama_krt',
+        keterangan = v_item->>'keterangan',
+        narasi = v_item->>'narasi',
+        rincian = v_item->>'rincian',
+        kategori = v_item->>'kategori',
+        last_seen_upload_id = p_upload_id,
+        updated_at = now()
+      where natural_key = v_key;
 
       if v_changed then
         update kp_anomali_temuan set
-          kelompok = v_item->>'kelompok',
-          nama_krt = v_item->>'nama_krt',
-          keterangan = v_item->>'keterangan',
-          rincian = v_item->>'rincian',
-          kategori = v_item->>'kategori',
           nama_lainnya = v_new_nama_lainnya,
           banyak = v_new_banyak,
           nilai = v_new_nilai,
@@ -219,15 +233,10 @@ begin
           catatan_ppl = null,
           nama_ppl = null,
           confirmed_at = null,
-          last_seen_upload_id = p_upload_id,
           updated_at = now()
         where natural_key = v_key;
         v_berubah := v_berubah + 1;
       else
-        update kp_anomali_temuan set
-          last_seen_upload_id = p_upload_id,
-          updated_at = now()
-        where natural_key = v_key;
         v_tetap := v_tetap + 1;
       end if;
     end if;

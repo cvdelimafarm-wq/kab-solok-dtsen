@@ -14,6 +14,7 @@ export type Finding = {
   nourutkomo: number | null;
   nama_krt: string | null;
   keterangan?: string;
+  narasi?: string;
   namaLainnya?: string | null;
   banyak?: number | null;
   nilai?: number | null;
@@ -70,14 +71,125 @@ function stdev(arr: number[], m?: number): number {
   const variance = arr.reduce((a, b) => a + (b - mu) ** 2, 0) / (arr.length - 1);
   return Math.sqrt(variance);
 }
-function round2(x: number): number {
-  return Math.round(x * 100) / 100;
-}
 function nz(v: number | null | undefined): number {
   return v === null || v === undefined ? 0 : v;
 }
 function isBlank(v: unknown): boolean {
   return v === null || v === undefined || String(v).trim() === '';
+}
+function fmtN(n: unknown): string {
+  if (n === null || n === undefined || typeof n !== 'number') return '-';
+  return n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+}
+function fmtRp(n: unknown): string {
+  if (n === null || n === undefined || typeof n !== 'number') return '-';
+  return 'Rp' + n.toLocaleString('id-ID', { maximumFractionDigits: 0 });
+}
+
+/**
+ * Bangun narasi lengkap (kalimat, bukan cuma label pendek) per temuan,
+ * dengan angka sungguhan disisipkan — mengikuti format contoh laporan
+ * anomali tahun lalu (mis. "Ditemukan konsumsi melebihi batas maksimum.
+ * Total konsumsi tercatat 300, sedangkan batas maksimum ... 200.").
+ * `extra` = objek yang sama yang dikirim ke push() (keterangan, detail,
+ * banyak, nilai, namaLainnya, rincian).
+ */
+function buildNarasi(kode: string, extra: Record<string, any>): string {
+  const d = (extra.detail ?? {}) as Record<string, any>;
+  const base = kode.split('.')[0];
+
+  if (kode === 'KP-01' || kode === 'KP-23') {
+    return (
+      `Ditemukan ketidaksesuaian pada isian Banyaknya/Nilai Total. Banyaknya Total tercatat ${fmtN(d.banyakTotal)}, ` +
+      `seharusnya ${fmtN(d.banyakHitung)} (Banyak Beli + Banyak Nonbeli). Nilai Total tercatat ${fmtRp(d.nilaiTotal)}, ` +
+      `seharusnya ${fmtRp(d.nilaiHitung)} (Nilai Beli + Nilai Nonbeli). Mohon periksa kembali isian Blok IV.1 dan perbaiki jika memang keliru.`
+    );
+  }
+  if (kode === 'KP-24') {
+    return (
+      `Kode Sumber Perolehan tercatat ${d.sumberPerolehan} (0=Non Pembelian, 1=Online, 2=Offline, 3=Online & Offline), ` +
+      `namun isian kolom Beli/Nonbeli tidak konsisten dengan kode tersebut (Banyak Beli: ${fmtN(d.banyakBeli)}, ` +
+      `Banyak Nonbeli: ${fmtN(d.banyakNonbeli)}). Mohon periksa kembali kesesuaian sumber perolehan dengan kolom yang terisi.`
+    );
+  }
+  if (kode === 'KP-02') {
+    const bagian: string[] = [];
+    if (d.kolom5 != null) bagian.push(`Sebulan Terakhir tercatat ${fmtRp(d.kolom5)}`);
+    if (d.kolom6 != null) bagian.push(`Setahun Terakhir tercatat ${fmtRp(d.kolom6)}`);
+    return (
+      `Nilai pengeluaran untuk rincian No.${extra.nourutkomo} ${bagian.join(' dan ')} — berada di luar rentang wajar ` +
+      `dibanding sebaran rumah tangga lain untuk rincian yang sama. Mohon periksa kembali kebenaran isian dan satuannya.`
+    );
+  }
+  if (kode === 'KP-03' || kode === 'KP-04') {
+    const jenis = kode === 'KP-03' ? 'bukan makanan' : 'makanan';
+    return (
+      `Ditemukan potensi duplikasi data — total pengeluaran ${jenis} rumah tangga ini (${fmtRp(d.nilaiTotal)}) persis sama ` +
+      `dengan rumah tangga lain di NKS yang sama. Mohon periksa kembali apakah ini kebetulan sama, atau ada kesalahan ` +
+      `penyalinan data antar dokumen. Jika sudah sesuai kondisi lapangan, beri keterangan di Blok Catatan.`
+    );
+  }
+  if (kode === 'KP-07' || kode === 'KP-08' || kode === 'KP-09') {
+    const label = kode === 'KP-07' ? 'total (makanan + bukan makanan)' : kode === 'KP-08' ? 'bukan makanan' : 'makanan';
+    const minVal = kode === 'KP-07' ? 31 : kode === 'KP-08' ? 19 : 13;
+    const blok = kode === 'KP-09' ? 'Blok IV.1' : kode === 'KP-08' ? 'Blok IV.2' : 'Blok IV.1 dan IV.2';
+    return (
+      `Jumlah komoditas ${label} yang terisi cuma ${d.jmlKomoditas} rincian, di bawah standar minimum (${minVal} rincian). ` +
+      `Mohon periksa kembali kelengkapan isian ${blok}.`
+    );
+  }
+  if (kode === 'KP-10') {
+    const sub = extra.keterangan && String(extra.keterangan).includes('3a') ? 'a' : 'c';
+    const nilaiSub = sub === 'a' ? d.oopA : d.oopC;
+    return (
+      `Biaya out-of-pocket (dibayar tunai) sub-rincian ${sub} tercatat ${fmtRp(nilaiSub)}, tidak wajar dibandingkan nilai ` +
+      `total pelayanan kesehatan yang tercatat (${fmtRp(d.kolom6Total)}). Mohon periksa kembali kebenaran isian biaya.`
+    );
+  }
+  if (base === 'KP-11') {
+    return (
+      `Ditemukan isian komoditas "Lainnya" dengan teks "${extra.namaLainnya}" pada rincian ${extra.rincian}. Mohon periksa ` +
+      `apakah ini benar-benar komoditas lain, atau seharusnya dimasukkan ke kode komoditas standar yang sudah tersedia.`
+    );
+  }
+  if (kode === 'KP-12') {
+    return (
+      `Tercatat konsumsi minuman keras sebanyak ${fmtN(extra.banyak)} dengan nilai ${fmtRp(extra.nilai)}. Komoditas ini ` +
+      `sensitif, mohon konfirmasi kebenaran isian ke petugas lapangan/responden.`
+    );
+  }
+  if (kode === 'KP-13') {
+    return (
+      `Tercatat konsumsi daging babi sebanyak ${fmtN(extra.banyak)} dengan nilai ${fmtRp(extra.nilai)}. Komoditas ini ` +
+      `sensitif (mis. di wilayah mayoritas non-konsumen), mohon konfirmasi kebenaran isian.`
+    );
+  }
+  if (kode === 'KP-14') {
+    return `Tercatat pengeluaran untuk gas kota sebesar ${fmtRp(extra.nilai)}, padahal fasilitas ini jarang tersedia di banyak wilayah. Mohon periksa kembali kebenaran isian.`;
+  }
+  if (kode === 'KP-16') {
+    return `Tercatat pengeluaran untuk biogas sebesar ${fmtRp(extra.nilai)}, padahal fasilitas ini jarang tersedia. Mohon periksa kembali kebenaran isian.`;
+  }
+  if (kode === 'KP-17') {
+    return `Tercatat pengeluaran untuk tiket pesawat sebesar ${fmtRp(extra.nilai)} dalam setahun terakhir, di luar kewajaran umum. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+  }
+  if (kode === 'KP-18') {
+    return `Tercatat pengeluaran untuk hotel/penginapan sebesar ${fmtRp(extra.nilai)} dalam setahun terakhir, di luar kewajaran umum. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+  }
+  if (kode === 'KP-19') {
+    return (
+      `Nilai kategori Bumbu-bumbuan (${fmtRp(d.bumbuBumbuan)}) tercatat lebih besar dari kategori Padi-padian ` +
+      `(${fmtRp(d.padiPadian)}) — secara umum ini tidak wajar karena bumbu-bumbuan biasanya bernilai jauh lebih kecil. ` +
+      `Mohon periksa kembali isian kedua kategori tersebut.`
+    );
+  }
+  if (kode === 'KP-20') {
+    return `Konsumsi garam tercatat senilai ${fmtRp(extra.nilai)} per minggu, di luar kewajaran umum berdasarkan data riil tahun lalu. Mohon periksa kembali kebenaran isian dan satuannya.`;
+  }
+  if (kode === 'KP-21') {
+    return `Tercatat pengeluaran untuk transportasi darat sebesar ${fmtRp(extra.nilai)} dalam setahun terakhir, melebihi ambang Rp100 juta. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+  }
+  return typeof extra.keterangan === 'string' ? extra.keterangan : '';
 }
 
 // 17 rincian "...lainnya, sebutkan" yang dipetakan ke NOURUTKOMO + tabel asalnya
@@ -141,7 +253,8 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
           nourutkomo: row.NOURUTKOMO,
           nama_krt: row.NAMAKRT || null,
         },
-        extra
+        extra,
+        { narasi: buildNarasi(kode, extra) }
       )
     );
   }
@@ -150,15 +263,63 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   // Struktur tabel4 SAMA seperti tabel3 (Banyak Beli=K1, Nilai Beli=K2, Banyak Nonbeli=K3,
   // Nilai Nonbeli=K4, Banyak Total=K5, Nilai Total=K6), K7=Sumber Perolehan di ujung.
   // (dikoreksi setelah uji terhadap data riil — bukan K1=SumberPerolehan seperti dugaan awal)
+  // Toleransi 0.01 (bukan exact match) — contoh data tahun lalu (Error_2, tabel3) banyak
+  // menghasilkan false-positive murni akibat pembulatan pecahan hasil konversi satuan.
+  const TOL = 0.01;
   for (const row of t4) {
     const banyakTotal = nz(row.KOLOM5);
     const banyakHitung = nz(row.KOLOM1) + nz(row.KOLOM3);
     const nilaiTotal = nz(row.KOLOM6);
     const nilaiHitung = nz(row.KOLOM2) + nz(row.KOLOM4);
-    if (round2(banyakTotal) !== round2(banyakHitung) || round2(nilaiTotal) !== round2(nilaiHitung)) {
+    if (Math.abs(banyakTotal - banyakHitung) > TOL || Math.abs(nilaiTotal - nilaiHitung) > TOL) {
       push('KP-01', 'A. Konsistensi Perhitungan', row, {
         keterangan: 'Jumlah di Kolom 9 tidak sesuai.',
         detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung },
+      });
+    }
+  }
+
+  // ---------- KP-23: konsistensi Banyak/Nilai Total (tabel 3, bahan makanan mentah) ----------
+  // Versi KP-01 utk tabel 3 (RT, tanpa kolom Sumber Perolehan) — ditambahkan setelah
+  // membandingkan dgn contoh laporan anomali tahun lalu (Error_2: Inkonsistensi Isian
+  // Bahan Makanan), yang ternyata cek serupa TAPI utk tabel bahan makanan mentah,
+  // bukan cuma tabel 4 (ART) seperti KP-01.
+  for (const row of t3) {
+    const banyakTotal = nz(row.KOLOM5);
+    const banyakHitung = nz(row.KOLOM1) + nz(row.KOLOM3);
+    const nilaiTotal = nz(row.KOLOM6);
+    const nilaiHitung = nz(row.KOLOM2) + nz(row.KOLOM4);
+    if (Math.abs(banyakTotal - banyakHitung) > TOL || Math.abs(nilaiTotal - nilaiHitung) > TOL) {
+      push('KP-23', 'A. Konsistensi Perhitungan', row, {
+        keterangan: 'Jumlah di Kolom 9 tidak sesuai.',
+        detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung },
+      });
+    }
+  }
+
+  // ---------- KP-24: konsistensi Sumber Perolehan vs kolom Beli/Nonbeli (tabel 4, makanan jadi) ----------
+  // Ditambahkan berdasarkan contoh laporan anomali tahun lalu (Error_7: Inkonsistensi
+  // Isian makanan jadi). Sumber Perolehan (KOLOM7): 0=Non Pembelian, 1=Online,
+  // 2=Offline, 3=Online & Offline.
+  // ⚠ Kasus sumber=1/2/3 (baris "else if" di bawah) adalah PERLUASAN LOGIS dari pola
+  // yang teramati di data tahun lalu (yang cuma berisi contoh sumber=0) — belum
+  // terverifikasi langsung dgn contoh data sumber=1/2/3, tapi mengikuti logika yang sama.
+  for (const row of t4) {
+    const sumber = row.KOLOM7;
+    if (sumber === null || sumber === undefined) continue;
+    const banyakBeli = nz(row.KOLOM1);
+    const banyakNonbeli = nz(row.KOLOM3);
+    let pesan: string | null = null;
+    if (sumber === 0) {
+      if (banyakNonbeli === 0) pesan = 'Kolom 4 berisi kode 0 tetapi kolom produksi sendiri/pemberian tidak terisi.';
+      else if (banyakBeli > 0) pesan = 'Kolom 4 berisi kode 0 tetapi kolom pembelian terisi.';
+    } else if (sumber === 1 || sumber === 2 || sumber === 3) {
+      if (banyakBeli === 0) pesan = `Kolom 4 berisi kode ${sumber} tetapi kolom pembelian tidak terisi.`;
+    }
+    if (pesan) {
+      push('KP-24', 'A. Konsistensi Perhitungan', row, {
+        keterangan: pesan,
+        detail: { sumberPerolehan: sumber, banyakBeli, banyakNonbeli },
       });
     }
   }

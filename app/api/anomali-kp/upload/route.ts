@@ -101,7 +101,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const findings = runAllChecks(tables as Tables, thresholds);
+    // Ambil pengaturan ambang batas & status aktif dari database (diisi lewat
+    // upload Excel "Aturan Anomali" di route upload-aturan). Kalau belum
+    // pernah diupload, tabelnya kosong dan sistem otomatis pakai nilai
+    // default yang sudah ditulis di lib/anomalyChecks.ts.
+    const { data: pengaturanRows } = await supabase
+      .from('kp_anomali_pengaturan')
+      .select('kode, ambang_batas, aktif');
+
+    const KODE_KE_THRESHOLD_KEY: Record<string, keyof Thresholds> = {
+      'KP-17': 'tiketPesawat',
+      'KP-18': 'hotel',
+      'KP-20': 'garam',
+      'KP-21': 'transportasiDarat',
+      'KP-02': 'zscoreNonMakanan',
+    };
+    const aktifMap = new Map<string, boolean>();
+    for (const r of pengaturanRows ?? []) {
+      aktifMap.set(r.kode, r.aktif);
+      const thresholdKey = KODE_KE_THRESHOLD_KEY[r.kode];
+      if (thresholdKey && r.ambang_batas !== null && r.ambang_batas !== undefined) {
+        (thresholds as any)[thresholdKey] = r.ambang_batas;
+      }
+    }
+
+    let findings = runAllChecks(tables as Tables, thresholds);
+
+    // Buang temuan yang kode-nya ditandai TIDAK AKTIF di kp_anomali_pengaturan.
+    // KP-11.007 dst dicek pakai basis "KP-11" (sebelum titik) supaya bisa
+    // dinonaktifkan sekaligus semua variannya lewat satu baris di Excel.
+    findings = findings.filter((f) => {
+      const base = f.kode_anomali.split('.')[0];
+      const aktifPenuh = aktifMap.get(f.kode_anomali);
+      const aktifBasis = aktifMap.get(base);
+      // default true kalau kode itu belum ada di kp_anomali_pengaturan sama sekali
+      if (aktifPenuh === false) return false;
+      if (aktifPenuh === undefined && aktifBasis === false) return false;
+      return true;
+    });
 
     // 1) catat metadata upload (diisi lengkap setelah upsert selesai, lihat bawah)
     const { data: uploadRow, error: uploadErr } = await supabase
@@ -130,6 +167,7 @@ export async function POST(req: NextRequest) {
       nourutkomo: f.nourutkomo,
       nama_krt: f.nama_krt,
       keterangan: f.keterangan,
+      narasi: f.narasi ?? null,
       rincian: f.rincian ?? null,
       kategori: f.kategori ?? null,
       nama_lainnya: f.namaLainnya ?? null,
