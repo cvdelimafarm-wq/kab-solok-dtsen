@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import NeracaRtCalculator from "./neraca-calculator";
 import AnomaliCepatTab from "./anomali-cepat";
+import KonfirmasiPplTab from "./konfirmasi-ppl";
 import {
   Bar,
   BarChart,
@@ -109,7 +110,7 @@ interface ProgressRow {
 }
 
 export default function SerutiPage() {
-  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator" | "anomali">("form");
+  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator" | "anomali" | "konfirmasi">("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
     const today = new Date();
@@ -165,7 +166,7 @@ export default function SerutiPage() {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
+      <div className="mt-4 grid grid-cols-5 gap-px overflow-hidden rounded-lg border border-line bg-line">
         <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
@@ -178,6 +179,9 @@ export default function SerutiPage() {
         <TabButton active={tab === "anomali"} onClick={() => setTab("anomali")} icon={<IconAnomali />}>
           Anomali Cepat
         </TabButton>
+        <TabButton active={tab === "konfirmasi"} onClick={() => setTab("konfirmasi")} icon={<IconKonfirmasi />}>
+          Konfirmasi PPL
+        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -187,6 +191,7 @@ export default function SerutiPage() {
         )}
         {tab === "kalkulator" && <NeracaRtCalculator />}
         {tab === "anomali" && <AnomaliCepatTab />}
+        {tab === "konfirmasi" && <KonfirmasiPplTab />}
       </div>
     </main>
   );
@@ -252,6 +257,16 @@ function IconAnomali() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M4 8a2 2 0 012-2h1.2l.9-1.4A1 1 0 019 4h6a1 1 0 01.9.6L16.8 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" strokeLinejoin="round" />
       <circle cx="12" cy="13" r="3.2" />
+    </svg>
+  );
+}
+
+function IconKonfirmasi() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="4" y="3.5" width="16" height="17" rx="2" strokeLinejoin="round" />
+      <path d="M8 8.5h8M8 12h8M8 15.5h5" strokeLinecap="round" />
+      <path d="M8.5 8.5l1.5 1.5 2.5-2.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

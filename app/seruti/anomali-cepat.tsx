@@ -39,12 +39,31 @@ interface SummaryRow {
 const fmtNum = (v: number | null) =>
   v === null || v === undefined ? "" : v.toLocaleString("id-ID");
 
+// Render narasi: bagian yang ditandai **...** (angka + rujukan kolom) ditebalkan,
+// sisanya teks biasa.
+export function Narasi({ text }: { text: string | null }) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("**") && p.endsWith("**") ? (
+          <b key={i} className="font-bold text-ink">
+            {p.slice(2, -2)}
+          </b>
+        ) : (
+          <span key={i}>{p}</span>
+        )
+      )}
+    </>
+  );
+}
+
 export default function AnomaliCepatTab() {
   // Dibuat SEKALI saja (bukan tiap render) — penting supaya query/koneksi
   // Supabase-nya stabil, bukan instance baru tiap kali komponen re-render.
   const [supabase] = useState(() => createClient());
 
-  const [subTab, setSubTab] = useState<"daftar" | "konfirmasi">("daftar");
   const [lastUpload, setLastUpload] = useState<{
     id: number;
     uploaded_at: string;
@@ -63,7 +82,7 @@ export default function AnomaliCepatTab() {
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [filterKode, setFilterKode] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [namaPpl, setNamaPpl] = useState("");
+  const [filterNks, setFilterNks] = useState("");
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
 
@@ -173,7 +192,6 @@ export default function AnomaliCepatTab() {
       setSummary(sum as SummaryRow[]);
       setDebugError(null);
     } else {
-      // fallback kalau function RPC belum dibuat di DB — hitung manual di client
       const { data: rows, error: rowsErr } = await supabase.from("kp_anomali_temuan").select("*");
       if (rowsErr) {
         console.error("fallback kp_anomali_temuan error:", rowsErr);
@@ -202,6 +220,7 @@ export default function AnomaliCepatTab() {
     let query = supabase.from("kp_anomali_temuan").select("*");
     if (filterKode) query = query.eq("kode_anomali", filterKode);
     if (filterStatus) query = query.eq("status", filterStatus);
+    if (filterNks.trim()) query = query.eq("nks", filterNks.trim());
     const { data: rows, error: rowsErr2 } = await query.order("kode_anomali").order("nks").order("nurt");
     if (rowsErr2) {
       console.error("loadData temuan error:", rowsErr2);
@@ -209,28 +228,12 @@ export default function AnomaliCepatTab() {
     }
     setTemuan((rows ?? []) as Temuan[]);
     setLoading(false);
-  }, [supabase, filterKode, filterStatus]);
+  }, [supabase, filterKode, filterStatus, filterNks]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // ---------- konfirmasi PPL: tulis langsung dari client (RLS anon terbuka utk update) ----------
-  async function confirmFinding(id: number, status: "sesuai" | "perlu_koreksi", catatan: string) {
-    await supabase
-      .from("kp_anomali_temuan")
-      .update({
-        status,
-        catatan_ppl: catatan || null,
-        nama_ppl: namaPpl || null,
-        confirmed_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-    setTemuan((prev) => prev.filter((t) => t.id !== id));
-    loadData();
-  }
-
-  const pendingList = temuan.filter((t) => t.status === "pending");
   const kodeOptions = [...new Set(summary.map((s) => s.kode_anomali))];
 
   return (
@@ -334,192 +337,117 @@ export default function AnomaliCepatTab() {
         </p>
       )}
 
-          {/* ---------- Sub-tab: Daftar Anomali / Konfirmasi PPL ---------- */}
-          <div className="flex gap-1 border-b border-line">
-            <SubTabButton active={subTab === "daftar"} onClick={() => setSubTab("daftar")}>
-              Daftar Anomali
-            </SubTabButton>
-            <SubTabButton active={subTab === "konfirmasi"} onClick={() => setSubTab("konfirmasi")}>
-              Konfirmasi PPL
-              {pendingList.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-gold-100 px-1.5 py-0.5 text-[10px] font-semibold text-gold-600">
-                  {pendingList.length}
-                </span>
-              )}
-            </SubTabButton>
+      <div className="space-y-3">
+        <div className="overflow-x-auto rounded-lg border border-line bg-white p-4">
+          <h3 className="text-sm font-semibold text-navy-900">Ringkasan per Kode Anomali</h3>
+          <table className="mt-2 w-full text-xs">
+            <thead>
+              <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
+                <th className="py-1.5 pr-3 font-medium">Kode</th>
+                <th className="py-1.5 pr-3 font-medium">Kelompok</th>
+                <th className="py-1.5 pr-3 font-medium">Total</th>
+                <th className="py-1.5 pr-3 font-medium">Pending</th>
+                <th className="py-1.5 pr-3 font-medium">Sesuai</th>
+                <th className="py-1.5 pr-3 font-medium">Koreksi</th>
+                <th className="py-1.5 pr-3 font-medium">Selesai</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((r) => (
+                <tr key={r.kode_anomali} className="border-b border-line/60">
+                  <td className="py-1.5 pr-3 font-medium text-navy-900">{r.kode_anomali}</td>
+                  <td className="py-1.5 pr-3 text-ink/60">{r.kelompok}</td>
+                  <td className="py-1.5 pr-3">{r.total}</td>
+                  <td className="py-1.5 pr-3">{r.pending}</td>
+                  <td className="py-1.5 pr-3">{r.sesuai}</td>
+                  <td className="py-1.5 pr-3">{r.perlu_koreksi}</td>
+                  <td className="py-1.5 pr-3">{r.resolved}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-line bg-white p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="mr-auto text-sm font-semibold text-navy-900">Daftar Temuan</h3>
+            <input
+              type="text"
+              placeholder="Filter NKS..."
+              value={filterNks}
+              onChange={(e) => setFilterNks(e.target.value)}
+              className="w-28 rounded-md border border-line px-2 py-1 text-xs"
+            />
+            <select
+              value={filterKode}
+              onChange={(e) => setFilterKode(e.target.value)}
+              className="rounded-md border border-line px-2 py-1 text-xs"
+            >
+              <option value="">Semua kode</option>
+              {kodeOptions.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="rounded-md border border-line px-2 py-1 text-xs"
+            >
+              <option value="">Semua status</option>
+              <option value="pending">Pending</option>
+              <option value="sesuai">Sesuai</option>
+              <option value="perlu_koreksi">Perlu Koreksi</option>
+              <option value="resolved">Selesai</option>
+            </select>
           </div>
-
-          {/* ---------- TAB: Daftar Anomali ---------- */}
-          {subTab === "daftar" && (
-            <div className="space-y-3">
-              <div className="overflow-x-auto rounded-lg border border-line bg-white p-4">
-                <h3 className="text-sm font-semibold text-navy-900">Ringkasan per Kode Anomali</h3>
-                <table className="mt-2 w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
-                      <th className="py-1.5 pr-3 font-medium">Kode</th>
-                      <th className="py-1.5 pr-3 font-medium">Kelompok</th>
-                      <th className="py-1.5 pr-3 font-medium">Total</th>
-                      <th className="py-1.5 pr-3 font-medium">Pending</th>
-                      <th className="py-1.5 pr-3 font-medium">Sesuai</th>
-                      <th className="py-1.5 pr-3 font-medium">Koreksi</th>
-                      <th className="py-1.5 pr-3 font-medium">Selesai</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.map((r) => (
-                      <tr key={r.kode_anomali} className="border-b border-line/60">
-                        <td className="py-1.5 pr-3 font-medium text-navy-900">{r.kode_anomali}</td>
-                        <td className="py-1.5 pr-3 text-ink/60">{r.kelompok}</td>
-                        <td className="py-1.5 pr-3">{r.total}</td>
-                        <td className="py-1.5 pr-3">{r.pending}</td>
-                        <td className="py-1.5 pr-3">{r.sesuai}</td>
-                        <td className="py-1.5 pr-3">{r.perlu_koreksi}</td>
-                        <td className="py-1.5 pr-3">{r.resolved}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="overflow-x-auto rounded-lg border border-line bg-white p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="mr-auto text-sm font-semibold text-navy-900">Daftar Temuan</h3>
-                  <select
-                    value={filterKode}
-                    onChange={(e) => setFilterKode(e.target.value)}
-                    className="rounded-md border border-line px-2 py-1 text-xs"
-                  >
-                    <option value="">Semua kode</option>
-                    {kodeOptions.map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="rounded-md border border-line px-2 py-1 text-xs"
-                  >
-                    <option value="">Semua status</option>
-                    <option value="pending">Pending</option>
-                    <option value="sesuai">Sesuai</option>
-                    <option value="perlu_koreksi">Perlu Koreksi</option>
-                    <option value="resolved">Selesai</option>
-                  </select>
-                </div>
-                <table className="mt-2 w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
-                      <th className="py-1.5 pr-3 font-medium">Kode</th>
-                      <th className="py-1.5 pr-3 font-medium">NKS</th>
-                      <th className="py-1.5 pr-3 font-medium">NURT</th>
-                      <th className="py-1.5 pr-3 font-medium">No.Komoditi</th>
-                      <th className="py-1.5 pr-3 font-medium">Nama KRT</th>
-                      <th className="py-1.5 pr-3 font-medium">Keterangan</th>
-                      <th className="py-1.5 pr-3 font-medium">Nilai</th>
-                      <th className="py-1.5 pr-3 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {temuan.map((t) => (
-                      <tr key={t.id} className="border-b border-line/60">
-                        <td className="py-1.5 pr-3 font-medium text-navy-900">{t.kode_anomali}</td>
-                        <td className="py-1.5 pr-3">{t.nks}</td>
-                        <td className="py-1.5 pr-3">{t.nurt}</td>
-                        <td className="py-1.5 pr-3">{t.nourutkomo}</td>
-                        <td className="py-1.5 pr-3">{t.nama_krt}</td>
-                        <td className="py-1.5 pr-3">
-                          {t.keterangan}
-                          {t.nama_lainnya ? ` — "${t.nama_lainnya}"` : ""}
-                          {t.narasi && (
-                            <div className="mt-0.5 text-[11px] text-ink/50">{t.narasi}</div>
-                          )}
-                        </td>
-                        <td className="py-1.5 pr-3">{fmtNum(t.nilai)}</td>
-                        <td className="py-1.5 pr-3">
-                          <StatusBadge status={t.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {loading && <p className="mt-2 text-xs text-ink/40">Memuat...</p>}
-              </div>
-            </div>
-          )}
-
-          {/* ---------- TAB: Konfirmasi PPL ---------- */}
-          {subTab === "konfirmasi" && (
-            <div className="rounded-lg border border-line bg-white p-4">
-              <h3 className="text-sm font-semibold text-navy-900">
-                Konfirmasi PPL — Temuan Belum Dikonfirmasi
-              </h3>
-              <p className="mt-1 text-xs text-ink/60">
-                Periksa tiap temuan di lapangan/dokumen, lalu tandai statusnya.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <select
-                  value={filterKode}
-                  onChange={(e) => setFilterKode(e.target.value)}
-                  className="rounded-md border border-line px-2 py-1 text-xs"
-                >
-                  <option value="">Semua kode</option>
-                  {kodeOptions.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Nama PPL (diisi sekali, dipakai utk semua konfirmasi)"
-                  value={namaPpl}
-                  onChange={(e) => setNamaPpl(e.target.value)}
-                  className="min-w-[220px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
-                />
-              </div>
-
-              {pendingList.length === 0 ? (
-                <p className="mt-4 text-sm text-ink/50">
-                  Tidak ada temuan pending untuk filter ini.
-                </p>
-              ) : (
-                <div className="mt-3 space-y-2.5">
-                  {pendingList.map((t) => (
-                    <ConfirmCard key={t.id} temuan={t} onConfirm={confirmFinding} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <table className="mt-2 w-full text-xs">
+            <thead>
+              <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
+                <th className="py-1.5 pr-3 font-medium">Kode</th>
+                <th className="py-1.5 pr-3 font-medium">NKS</th>
+                <th className="py-1.5 pr-3 font-medium">NURT</th>
+                <th className="py-1.5 pr-3 font-medium">No.Komoditi</th>
+                <th className="py-1.5 pr-3 font-medium">Nama KRT</th>
+                <th className="py-1.5 pr-3 font-medium">Keterangan</th>
+                <th className="py-1.5 pr-3 font-medium">Nilai</th>
+                <th className="py-1.5 pr-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {temuan.map((t) => (
+                <tr key={t.id} className="border-b border-line/60">
+                  <td className="py-1.5 pr-3 font-medium text-navy-900">{t.kode_anomali}</td>
+                  <td className="py-1.5 pr-3">{t.nks}</td>
+                  <td className="py-1.5 pr-3">{t.nurt}</td>
+                  <td className="py-1.5 pr-3">{t.nourutkomo}</td>
+                  <td className="py-1.5 pr-3">{t.nama_krt}</td>
+                  <td className="py-1.5 pr-3 text-ink/80">
+                    {t.keterangan}
+                    {t.nama_lainnya ? ` — "${t.nama_lainnya}"` : ""}
+                    {t.narasi && (
+                      <div className="mt-0.5 text-[11px] text-ink/70">
+                        <Narasi text={t.narasi} />
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-1.5 pr-3">{fmtNum(t.nilai)}</td>
+                  <td className="py-1.5 pr-3">
+                    <StatusBadge status={t.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {loading && <p className="mt-2 text-xs text-ink/40">Memuat...</p>}
+        </div>
+      </div>
     </div>
   );
 }
 
-function SubTabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`-mb-px flex items-center border-b-2 px-3 py-2 text-sm font-medium transition ${
-        active ? "border-navy-700 text-navy-900" : "border-transparent text-ink/50 hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: StatusKonfirmasi }) {
+export function StatusBadge({ status }: { status: StatusKonfirmasi }) {
   const cls: Record<StatusKonfirmasi, string> = {
     pending: "bg-gold-100 text-gold-600",
     sesuai: "bg-moss-100 text-moss-700",
@@ -536,67 +464,5 @@ function StatusBadge({ status }: { status: StatusKonfirmasi }) {
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls[status]}`}>
       {label[status]}
     </span>
-  );
-}
-
-function ConfirmCard({
-  temuan,
-  onConfirm,
-}: {
-  temuan: Temuan;
-  onConfirm: (id: number, status: "sesuai" | "perlu_koreksi", catatan: string) => void;
-}) {
-  const [catatan, setCatatan] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function handle(status: "sesuai" | "perlu_koreksi") {
-    setBusy(true);
-    await onConfirm(temuan.id, status, catatan);
-  }
-
-  return (
-    <div className="rounded-lg border border-line bg-paper/40 p-3">
-      <div className="text-[11px] text-ink/50">
-        {temuan.kode_anomali} &middot; NKS {temuan.nks ?? "-"} &middot; NURT {temuan.nurt ?? "-"}{" "}
-        &middot; No.Komoditi {temuan.nourutkomo ?? "-"}
-        {temuan.nama_krt ? ` \u00b7 KRT: ${temuan.nama_krt}` : ""}
-      </div>
-      <div className="mt-1 text-sm text-ink">
-        {temuan.keterangan}
-        {temuan.nama_lainnya ? (
-          <>
-            {" "}
-            &mdash; isian: &quot;<b>{temuan.nama_lainnya}</b>&quot;
-          </>
-        ) : null}
-        {temuan.banyak != null ? ` \u00b7 Banyak: ${fmtNum(temuan.banyak)}` : ""}
-        {temuan.nilai != null ? ` \u00b7 Nilai: Rp${fmtNum(temuan.nilai)}` : ""}
-        {temuan.narasi && (
-          <div className="mt-0.5 text-xs text-ink/50">{temuan.narasi}</div>
-        )}
-      </div>
-      <textarea
-        placeholder="Catatan PPL (opsional)"
-        value={catatan}
-        onChange={(e) => setCatatan(e.target.value)}
-        className="mt-2 min-h-[44px] w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-      />
-      <div className="mt-2 flex gap-2">
-        <button
-          disabled={busy}
-          onClick={() => handle("sesuai")}
-          className="rounded-md bg-moss-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-moss-700 disabled:opacity-50"
-        >
-          &#10003; Sesuai
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => handle("perlu_koreksi")}
-          className="rounded-md bg-rust-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-rust-700 disabled:opacity-50"
-        >
-          &#10007; Perlu Koreksi
-        </button>
-      </div>
-    </div>
   );
 }
