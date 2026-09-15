@@ -59,15 +59,22 @@ export default function AnomaliCepatTab() {
   const [filterStatus, setFilterStatus] = useState("");
   const [namaPpl, setNamaPpl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   // ---------- ambil info upload terakhir (cuma utk ditampilkan, bukan filter) ----------
   const loadLastUpload = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("kp_anomali_upload")
       .select("id, uploaded_at, jumlah_baru, jumlah_berubah, jumlah_tetap, jumlah_selesai")
       .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (error) {
+      console.error("loadLastUpload error:", error);
+      setDebugError(`Gagal membaca kp_anomali_upload: ${error.message} (code: ${error.code})`);
+      return;
+    }
+    setDebugError(null);
     setLastUpload(data ?? null);
   }, [supabase]);
 
@@ -118,12 +125,20 @@ export default function AnomaliCepatTab() {
   const loadData = useCallback(async () => {
     setLoading(true);
 
-    const { data: sum } = await supabase.rpc("kp_anomali_summary");
-    if (sum) {
+    const { data: sum, error: sumErr } = await supabase.rpc("kp_anomali_summary");
+    if (sumErr) {
+      console.error("kp_anomali_summary error:", sumErr);
+      setDebugError(`Gagal memanggil kp_anomali_summary: ${sumErr.message} (code: ${sumErr.code})`);
+    } else if (sum) {
       setSummary(sum as SummaryRow[]);
+      setDebugError(null);
     } else {
       // fallback kalau function RPC belum dibuat di DB — hitung manual di client
-      const { data: rows } = await supabase.from("kp_anomali_temuan").select("*");
+      const { data: rows, error: rowsErr } = await supabase.from("kp_anomali_temuan").select("*");
+      if (rowsErr) {
+        console.error("fallback kp_anomali_temuan error:", rowsErr);
+        setDebugError(`Gagal membaca kp_anomali_temuan: ${rowsErr.message} (code: ${rowsErr.code})`);
+      }
       const byKode = new Map<string, SummaryRow>();
       (rows ?? []).forEach((r: Temuan) => {
         const cur =
@@ -147,7 +162,11 @@ export default function AnomaliCepatTab() {
     let query = supabase.from("kp_anomali_temuan").select("*");
     if (filterKode) query = query.eq("kode_anomali", filterKode);
     if (filterStatus) query = query.eq("status", filterStatus);
-    const { data: rows } = await query.order("kode_anomali").order("nks").order("nurt");
+    const { data: rows, error: rowsErr2 } = await query.order("kode_anomali").order("nks").order("nurt");
+    if (rowsErr2) {
+      console.error("loadData temuan error:", rowsErr2);
+      setDebugError(`Gagal membaca daftar temuan: ${rowsErr2.message} (code: ${rowsErr2.code})`);
+    }
     setTemuan((rows ?? []) as Temuan[]);
     setLoading(false);
   }, [supabase, filterKode, filterStatus]);
@@ -227,6 +246,12 @@ export default function AnomaliCepatTab() {
           </p>
         )}
       </div>
+
+      {debugError && (
+        <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
+          ⚠ Diagnostik: {debugError}
+        </p>
+      )}
 
       {!lastUpload ? (
         <p className="rounded-lg border border-line bg-white p-4 text-sm text-ink/50">
