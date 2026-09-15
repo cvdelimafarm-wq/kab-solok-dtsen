@@ -292,12 +292,21 @@ export default function AnomaliCepatTab() {
 
       {/* ---------- Upload Aturan Anomali (ambang batas, aktif/nonaktif) ---------- */}
       <div className="rounded-lg border border-line bg-white p-4">
-        <h2 className="text-sm font-semibold text-navy-900">Upload Aturan Anomali (Opsional)</h2>
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-sm font-semibold text-navy-900">Upload Aturan Anomali (Opsional)</h2>
+          <a
+            href="/seruti/kelola-anomali"
+            className="shrink-0 whitespace-nowrap rounded-md bg-navy-50 px-2.5 py-1 text-xs font-semibold text-navy-700 hover:bg-navy-100"
+          >
+            Kelola Aturan &rarr;
+          </a>
+        </div>
         <p className="mt-1 text-xs text-ink/60">
           Upload file Excel <code className="rounded bg-navy-50 px-1 py-0.5">Draft_Aturan_Anomali_KP.xlsx</code> (atau
           versi yang sudah Anda edit) untuk mengatur ambang batas, status aktif/nonaktif tiap kode, batas maksimum
           konsumsi per komoditas, dan referensi kalori — tanpa perlu ubah kode. Kalau belum pernah upload, sistem
-          otomatis pakai nilai default.
+          otomatis pakai nilai default. Atau klik &quot;Kelola Aturan&quot; di atas utk lihat &amp; edit semua
+          aturan langsung tanpa Excel.
         </p>
         <form onSubmit={handleUploadAturan} className="mt-3 flex flex-wrap items-center gap-2">
           <input type="file" name="aturanFile" accept=".xlsx" required className="text-xs" />
