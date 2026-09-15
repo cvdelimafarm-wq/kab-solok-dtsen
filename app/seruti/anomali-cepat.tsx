@@ -188,14 +188,17 @@ export default function AnomaliCepatTab() {
           <code className="rounded bg-navy-50 px-1 py-0.5">4</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">5</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">9</code>) dan mengabaikan sisanya.
-          File dari aplikasi desktop entri Susenas — bukan PANTAU.
+          File dari aplikasi desktop entri Susenas — bukan PANTAU.{" "}
+          <b>Sertakan juga file <code className="rounded bg-navy-50 px-1 py-0.5">.dbt</code> pendamping</b>{" "}
+          kalau ada (nama sama persis dengan file .dbf-nya, biasanya utk file nomor 3) — tanpa itu
+          filenya gagal dibaca.
         </p>
         <form onSubmit={handleUpload} className="mt-3 flex flex-wrap items-center gap-2">
           <input
             type="file"
             name="files"
             multiple
-            accept=".xls,.dbf"
+            accept=".xls,.dbf,.dbt"
             required
             className="text-xs"
           />

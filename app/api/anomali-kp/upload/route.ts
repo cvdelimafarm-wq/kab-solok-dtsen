@@ -64,12 +64,24 @@ export async function POST(req: NextRequest) {
     const tables: Partial<Tables> = {};
     const usedFilenames: string[] = [];
 
+    // TAHAP 1: tulis SEMUA file yang diupload ke folder sementara terlebih
+    // dahulu (termasuk file .dbt / memo pendamping). Ini penting karena
+    // tabel dengan kolom teks panjang (mis. tabel 3, kolom NAMAKRTDSR)
+    // butuh file .dbt dengan nama sama persis ada DI SAMPING file .dbf-nya
+    // sebelum bisa dibaca — kalau dibaca duluan sebelum .dbt-nya tersimpan,
+    // akan gagal dengan error "Memo file not found".
     for (const file of files) {
+      const buf = Buffer.from(await file.arrayBuffer());
+      await writeFile(path.join(tmpDir, file.name), buf);
+    }
+
+    // TAHAP 2: baru baca file .dbf yang relevan (bukan file .dbt itu sendiri
+    // — itu cuma pendamping, bukan tabel yang dibaca langsung).
+    for (const file of files) {
+      if (file.name.toLowerCase().endsWith('.dbt')) continue;
       const role = detectTableRole(file.name);
       if (!role) continue; // file di luar 4 tabel yang dipakai, diabaikan
-      const buf = Buffer.from(await file.arrayBuffer());
       const filePath = path.join(tmpDir, file.name);
-      await writeFile(filePath, buf);
       tables[role] = await readDbf(filePath);
       usedFilenames.push(file.name);
     }
