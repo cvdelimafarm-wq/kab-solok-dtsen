@@ -110,8 +110,13 @@ export async function POST(req: NextRequest) {
       .select('kode, ambang_batas, aktif');
 
     const KODE_KE_THRESHOLD_KEY: Record<string, keyof Thresholds> = {
-      'KP-17': 'tiketPesawat',
-      'KP-18': 'hotel',
+      // KP-17/18/22 sekarang pakai rentang (Min & Max), Excel cuma bisa isi
+      // 1 angka per kode — jadi override dari Excel dipakai utk batas ATAS
+      // (Max) saja, batas bawah (Min) tetap pakai default hasil verifikasi
+      // data riil tahun lalu.
+      'KP-17': 'tiketPesawatMax',
+      'KP-18': 'hotelMax',
+      'KP-22': 'transportasiLautMax',
       'KP-20': 'garam',
       'KP-21': 'transportasiDarat',
       'KP-02': 'zscoreNonMakanan',

@@ -41,28 +41,31 @@ const fmtNum = (v: number | null | undefined) =>
 const fmtRp = (v: number | null | undefined) =>
   v === null || v === undefined ? "" : "Rp" + v.toLocaleString("id-ID");
 
-// Label yang lebih enak dibaca utk key teknis di kolom `detail` (isinya beda
-// tergantung jenis pengecekan — lihat lib/anomalyChecks.ts).
-const DETAIL_LABELS: Record<string, string> = {
-  banyakTotal: "Banyaknya Total tercatat",
-  banyakHitung: "Banyaknya seharusnya (Beli + Nonbeli)",
-  nilaiTotal: "Nilai Total tercatat",
-  nilaiHitung: "Nilai seharusnya (Beli + Nonbeli)",
-  sumberPerolehan: "Kode Sumber Perolehan",
-  banyakBeli: "Banyak Beli",
-  banyakNonbeli: "Banyak Nonbeli",
-  kolom5: "Sebulan Terakhir",
-  kolom6: "Setahun Terakhir",
-  kolom6Total: "Nilai Total Pelayanan Kesehatan",
-  oopA: "Biaya OOP (sub-a)",
-  oopC: "Biaya OOP (sub-c)",
-  jmlKomoditas: "Jumlah Komoditas Terisi",
-  bumbuBumbuan: "Nilai Bumbu-bumbuan",
-  padiPadian: "Nilai Padi-padian",
+// Label + rujukan kode rincian (nama field database asli) + format angka per
+// key. Dipetakan eksplisit satu-satu (bukan tebak-tebakan regex) supaya tidak
+// salah format (dulu ada bug: "banyakHitung" ikut diformat Rupiah krn regex
+// mendeteksi kata "hitung", padahal itu satuan banyaknya, bukan rupiah).
+const DETAIL_META: Record<string, { label: string; kode: string; format: "rp" | "num" }> = {
+  banyakTotal: { label: "Banyaknya Total tercatat", kode: "KOLOM5", format: "num" },
+  banyakHitung: { label: "Banyaknya seharusnya (Beli + Nonbeli)", kode: "KOLOM1 + KOLOM3", format: "num" },
+  nilaiTotal: { label: "Nilai Total tercatat", kode: "KOLOM6", format: "rp" },
+  nilaiHitung: { label: "Nilai seharusnya (Beli + Nonbeli)", kode: "KOLOM2 + KOLOM4", format: "rp" },
+  sumberPerolehan: { label: "Kode Sumber Perolehan", kode: "KOLOM7", format: "num" },
+  banyakBeli: { label: "Banyak Beli", kode: "KOLOM1", format: "num" },
+  banyakNonbeli: { label: "Banyak Nonbeli", kode: "KOLOM3", format: "num" },
+  kolom5: { label: "Sebulan Terakhir", kode: "KOLOM5", format: "rp" },
+  kolom6: { label: "Setahun Terakhir", kode: "KOLOM6", format: "rp" },
+  kolom6Total: { label: "Nilai Total Pelayanan Kesehatan", kode: "KOLOM6", format: "rp" },
+  oopA: { label: "Biaya OOP (sub-a)", kode: "KOLOM10", format: "rp" },
+  oopC: { label: "Biaya OOP (sub-c)", kode: "KOLOM12", format: "rp" },
+  jmlKomoditas: { label: "Jumlah Komoditas Terisi", kode: "-", format: "num" },
+  bumbuBumbuan: { label: "Nilai Bumbu-bumbuan", kode: "B432R11K5", format: "rp" },
+  padiPadian: { label: "Nilai Padi-padian", kode: "B432R1K5", format: "rp" },
 };
 
 interface RincianRow {
   label: string;
+  kode: string;
   value: string;
   bad: boolean;
 }
@@ -70,7 +73,8 @@ interface RincianRow {
 // "Data yang dianalisis" — dibangun fleksibel dari field yang benar-benar ada
 // di temuan (detail / banyak / nilai / nama_lainnya), BUKAN kolom tetap.
 // `bad` menandai rincian mana yang jadi pemicu anomali (bukan semua rincian
-// ditandai merah, cuma yang memang jadi sumber masalah).
+// ditandai merah, cuma yang memang jadi sumber masalah). Baris pertama
+// selalu No.Urut Komoditas (kalau ada) supaya PPL tahu rincian yg dimaksud.
 function buildRincian(t: Temuan): RincianRow[] {
   const rows: RincianRow[] = [];
   const d = (t.detail ?? {}) as Record<string, any>;
@@ -96,20 +100,25 @@ function buildRincian(t: Temuan): RincianRow[] {
     badKeys.add("jmlKomoditas");
   }
 
+  if (t.nourutkomo != null) {
+    rows.push({ label: "Nomor Urut Komoditas", kode: "NOURUTKOMO", value: fmtNum(t.nourutkomo), bad: false });
+  }
+
   for (const [k, v] of Object.entries(d)) {
     if (v === null || v === undefined || typeof v === "object") continue;
-    const label = DETAIL_LABELS[k] ?? k;
-    const isRp = /nilai|kolom5|kolom6|hitung/i.test(k) && k !== "jmlKomoditas";
+    const meta = DETAIL_META[k] ?? { label: k, kode: k, format: "num" as const };
     rows.push({
-      label,
-      value: typeof v === "number" ? (isRp ? fmtRp(v) : fmtNum(v)) : String(v),
+      label: meta.label,
+      kode: meta.kode,
+      value: typeof v === "number" ? (meta.format === "rp" ? fmtRp(v) : fmtNum(v)) : String(v),
       bad: badKeys.has(k),
     });
   }
-  if (t.banyak != null) rows.push({ label: "Banyaknya", value: fmtNum(t.banyak), bad: true });
-  if (t.nilai != null) rows.push({ label: "Nilai", value: fmtRp(t.nilai), bad: true });
-  if (t.nama_lainnya) rows.push({ label: 'Isian "Lainnya"', value: t.nama_lainnya, bad: true });
+  if (t.banyak != null) rows.push({ label: "Banyaknya", kode: "KOLOM5", value: fmtNum(t.banyak), bad: true });
+  if (t.nilai != null) rows.push({ label: "Nilai", kode: "KOLOM6", value: fmtRp(t.nilai), bad: true });
+  if (t.nama_lainnya) rows.push({ label: 'Isian "Lainnya"', kode: "KOLOM8", value: t.nama_lainnya, bad: true });
   return rows;
+
 }
 
 const STATUS_META: Record<StatusKonfirmasi, { label: string; badge: string }> = {
@@ -419,7 +428,12 @@ function AnomaliCard({
                       i > 0 ? "border-t border-line" : ""
                     } ${r.bad ? "bg-rust-100/60" : "bg-white"}`}
                   >
-                    <span className="text-ink/60">{r.label}</span>
+                    <span className="text-ink/60">
+                      {r.label}
+                      {r.kode !== "-" && (
+                        <span className="ml-1 text-[10px] font-mono text-ink/35">({r.kode})</span>
+                      )}
+                    </span>
                     <span className={`text-right font-medium ${r.bad ? "text-rust-700" : "text-ink"}`}>
                       {r.value}
                     </span>

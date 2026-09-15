@@ -32,9 +32,13 @@ export type Tables = {
 
 export type Thresholds = {
   garam?: number;
-  tiketPesawat?: number;
-  hotel?: number;
+  tiketPesawatMin?: number;
+  tiketPesawatMax?: number;
+  hotelMin?: number;
+  hotelMax?: number;
   transportasiDarat?: number;
+  transportasiLautMin?: number;
+  transportasiLautMax?: number;
   zscoreNonMakanan?: number;
 };
 //
@@ -171,10 +175,13 @@ function buildNarasi(kode: string, extra: Record<string, any>): string {
     return `Tercatat pengeluaran untuk ${komoditas} sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM5')}, padahal fasilitas ini jarang tersedia di banyak wilayah. Mohon periksa kembali kebenaran isian.`;
   }
   if (kode === 'KP-17') {
-    return `Tercatat pengeluaran untuk tiket pesawat sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, di luar kewajaran umum. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+    return `Tercatat pengeluaran untuk tiket pesawat sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, di luar rentang wajar (kurang dari Rp1 juta atau lebih dari Rp10 juta). Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
   }
   if (kode === 'KP-18') {
-    return `Tercatat pengeluaran untuk hotel/penginapan sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, di luar kewajaran umum. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+    return `Tercatat pengeluaran untuk hotel/penginapan sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, di luar rentang wajar (kurang dari Rp150 ribu atau lebih dari Rp10 juta). Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+  }
+  if (kode === 'KP-22') {
+    return `Tercatat pengeluaran untuk transportasi laut sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, di luar rentang wajar (kurang dari Rp100 ribu atau lebih dari Rp500 ribu). Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
   }
   if (kode === 'KP-19') {
     return (
@@ -184,15 +191,19 @@ function buildNarasi(kode: string, extra: Record<string, any>): string {
     );
   }
   if (kode === 'KP-20') {
-    return `Konsumsi garam tercatat senilai ${numRef(fmtRp(extra.nilai), 'KOLOM6')} per minggu, di luar kewajaran umum berdasarkan data riil tahun lalu. Mohon periksa kembali kebenaran isian dan satuannya.`;
+    return `Konsumsi garam tercatat senilai ${numRef(fmtRp(extra.nilai), 'KOLOM6')} per minggu, di luar kewajaran umum berdasarkan data riil tahun lalu (ambang Rp5.000). Mohon periksa kembali kebenaran isian dan satuannya.`;
   }
   if (kode === 'KP-21') {
-    return `Tercatat pengeluaran untuk transportasi darat sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, melebihi ambang Rp100 juta. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
+    return `Tercatat pengeluaran untuk transportasi darat sebesar ${numRef(fmtRp(extra.nilai), 'KOLOM6')} dalam setahun terakhir, melebihi ambang Rp10 juta. Mohon periksa kembali kebenaran isian dan satuan nilainya.`;
   }
   return typeof extra.keterangan === 'string' ? extra.keterangan : '';
 }
 
-// 17 rincian "...lainnya, sebutkan" yang dipetakan ke NOURUTKOMO + tabel asalnya
+// 18 rincian "...lainnya, sebutkan" yang dipetakan ke NOURUTKOMO + tabel asalnya.
+// Nomor-nomor ini DIVERIFIKASI ULANG terhadap data anomali riil tahun lalu
+// (folder KP.rar) — 2 nomor sebelumnya SALAH (153→138, 211→218; kemungkinan
+// salah baca posisi kolom di form cetak) dan 1 rincian (sayur-sayuran, No.120)
+// TIDAK ADA sama sekali di daftar sebelumnya, sekarang ditambahkan.
 const KOMODITAS_LAINNYA = [
   { n: 7, nama: 'Padi-padian lainnya (sebutkan)', kategori: 'A. Padi-padian', table: 3 },
   { n: 15, nama: 'Umbi-umbian lainnya (sebutkan)', kategori: 'B. Umbi-umbian', table: 3 },
@@ -203,13 +214,14 @@ const KOMODITAS_LAINNYA = [
   { n: 68, nama: 'Daging segar lainnya (sebutkan)', kategori: 'D.1 Daging segar', table: 3 },
   { n: 71, nama: 'Daging lainnya diawetkan, selain sapi & ayam (sebutkan)', kategori: 'D.2 Daging diawetkan', table: 3 },
   { n: 84, nama: 'Hasil lain dari susu (sebutkan)', kategori: 'E. Telur dan Susu', table: 3 },
+  { n: 120, nama: 'Sayur-sayuran lainnya (sebutkan)', kategori: 'F. Sayur-sayuran', table: 3 },
   { n: 124, nama: 'Kacang lainnya (sebutkan)', kategori: 'G. Kacang-kacangan', table: 3 },
   { n: 128, nama: 'Hasil lain dari kacang-kacangan (sebutkan)', kategori: 'G. Kacang-kacangan', table: 3 },
-  { n: 153, nama: 'Buah-buahan lainnya (sebutkan)', kategori: 'H. Buah-buahan', table: 3 },
+  { n: 138, nama: 'Buah-buahan lainnya (sebutkan)', kategori: 'H. Buah-buahan', table: 3 },
   { n: 158, nama: 'Minyak dan kelapa lainnya (sebutkan)', kategori: 'I. Minyak dan Kelapa', table: 3 },
   { n: 166, nama: 'Bahan minuman lainnya (sebutkan)', kategori: 'J. Bahan Minuman', table: 3 },
   { n: 186, nama: 'Lainnya, bahan makanan (sebutkan)', kategori: 'L. Bahan Makanan Lainnya', table: 3 },
-  { n: 211, nama: 'Makanan jadi lainnya (sebutkan)', kategori: 'M. Makanan dan Minuman Jadi', table: 4 },
+  { n: 218, nama: 'Makanan jadi lainnya (sebutkan)', kategori: 'M. Makanan dan Minuman Jadi', table: 4 },
   { n: 225, nama: 'Rokok dan tembakau lainnya (sebutkan)', kategori: 'N. Rokok dan Tembakau', table: 4 },
 ];
 
@@ -230,10 +242,14 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
 
   const thresholds = Object.assign(
     {
-      garam: 3500, // Kolom6, dihitung dari data riil tahun lalu (mean+3SD ~3428, dibulatkan)
-      tiketPesawat: 15000000, // ⚠ sampel tahun lalu cuma 2 kasus, ini angka kebijakan
-      hotel: 5000000, // ⚠ sampel tahun lalu cuma 2 kasus, ini angka kebijakan
-      transportasiDarat: 100000000, // literal dari pesan asli tahun lalu (longgar; lihat catatan)
+      garam: 5000, // Kolom6 per minggu — dikonfirmasi dari data anomali riil tahun lalu (file "24. Konsumsi garam di atas 5000 rupiah")
+      tiketPesawatMin: 1000000, // dari data riil tahun lalu (file 19): rentang wajar Rp1jt - Rp10jt per tahun
+      tiketPesawatMax: 10000000,
+      hotelMin: 150000, // dari data riil tahun lalu (file 22): rentang wajar Rp150rb - Rp10jt per tahun
+      hotelMax: 10000000,
+      transportasiDarat: 10000000, // dari data riil tahun lalu (file 21): ambang Rp10jt, BUKAN Rp100jt seperti sebelumnya
+      transportasiLautMin: 100000, // dari data riil tahun lalu (file 20): rentang wajar Rp100rb - Rp500rb per tahun
+      transportasiLautMax: 500000,
       zscoreNonMakanan: 3, // dipakai KP-02: tandai jika di luar mean ± N*SD per NOURUTKOMO
     },
     opts
@@ -556,8 +572,15 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   }
 
   // ---------- KP-17: tiket pesawat (No.299, tabel 5) ----------
+  // Rentang wajar, BUKAN cuma batas atas — dikoreksi berdasarkan data riil
+  // tahun lalu (sebelumnya cuma cek >Rp15jt, ternyata juga ada kasus "terlalu
+  // kecil" yang perlu dicek, mis. salah satuan/salah ketik).
   for (const row of t5) {
-    if (row.NOURUTKOMO === 299 && nz(row.KOLOM6) > thresholds.tiketPesawat) {
+    if (
+      row.NOURUTKOMO === 299 &&
+      nz(row.KOLOM6) > 0 &&
+      (nz(row.KOLOM6) < thresholds.tiketPesawatMin || nz(row.KOLOM6) > thresholds.tiketPesawatMax)
+    ) {
       push('KP-17', 'C. Kewajaran Nilai', row, {
         keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk tiket pesawat',
         nilai: row.KOLOM6,
@@ -567,9 +590,29 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
 
   // ---------- KP-18: hotel/penginapan (No.302, tabel 5) ----------
   for (const row of t5) {
-    if (row.NOURUTKOMO === 302 && nz(row.KOLOM6) > thresholds.hotel) {
+    if (
+      row.NOURUTKOMO === 302 &&
+      nz(row.KOLOM6) > 0 &&
+      (nz(row.KOLOM6) < thresholds.hotelMin || nz(row.KOLOM6) >= thresholds.hotelMax)
+    ) {
       push('KP-18', 'C. Kewajaran Nilai', row, {
         keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk hotel sebesar itu',
+        nilai: row.KOLOM6,
+      });
+    }
+  }
+
+  // ---------- KP-22: transportasi laut (No.300, tabel 5) ----------
+  // Pengecekan BARU, ditambahkan berdasarkan data anomali riil tahun lalu
+  // (belum ada di sistem sebelumnya).
+  for (const row of t5) {
+    if (
+      row.NOURUTKOMO === 300 &&
+      nz(row.KOLOM6) > 0 &&
+      (nz(row.KOLOM6) < thresholds.transportasiLautMin || nz(row.KOLOM6) > thresholds.transportasiLautMax)
+    ) {
+      push('KP-22', 'C. Kewajaran Nilai', row, {
+        keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk transportasi laut',
         nilai: row.KOLOM6,
       });
     }
@@ -599,10 +642,11 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   }
 
   // ---------- KP-21: transportasi darat (No.298, tabel 5) ----------
+  // Ambang dikoreksi ke Rp10 juta (sebelumnya keliru Rp100 juta — 10x terlalu longgar).
   for (const row of t5) {
-    if (row.NOURUTKOMO === 298 && nz(row.KOLOM6) > thresholds.transportasiDarat) {
+    if (row.NOURUTKOMO === 298 && nz(row.KOLOM6) >= thresholds.transportasiDarat) {
       push('KP-21', 'C. Kewajaran Nilai', row, {
-        keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk transportasi darat >100juta',
+        keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk transportasi darat >Rp10 juta',
         nilai: row.KOLOM6,
       });
     }
