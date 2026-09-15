@@ -34,6 +34,7 @@ interface Temuan {
   status: StatusKonfirmasi;
   catatan_ppl: string | null;
   nama_ppl: string | null;
+  rekomendasi_manual: string | null;
 }
 
 const fmtNum = (v: number | null | undefined) =>
@@ -41,18 +42,27 @@ const fmtNum = (v: number | null | undefined) =>
 const fmtRp = (v: number | null | undefined) =>
   v === null || v === undefined ? "" : "Rp" + v.toLocaleString("id-ID");
 
-// Label + rujukan kode rincian (nama field database asli) + format angka per
-// key. Dipetakan eksplisit satu-satu (bukan tebak-tebakan regex) supaya tidak
-// salah format (dulu ada bug: "banyakHitung" ikut diformat Rupiah krn regex
-// mendeteksi kata "hitung", padahal itu satuan banyaknya, bukan rupiah).
+// Label + rujukan kode rincian + format angka per key. Dipetakan eksplisit
+// satu-satu (bukan tebak-tebakan regex) supaya tidak salah format (dulu ada
+// bug: "banyakHitung" ikut diformat Rupiah krn regex mendeteksi kata
+// "hitung", padahal itu satuan banyaknya, bukan rupiah).
+//
+// PENTING soal nomor kolom yang ditampilkan (field `kode` di bawah):
+// utk KP-01/KP-23/KP-24 (komoditas No.1-225, tabel 3 & 4), nomornya mengacu
+// ke KOLOM CETAK di kuesioner fisik (Kolom 4=Sumber Perolehan [khusus ART],
+// 5=Banyak Beli, 6=Nilai Beli, 7=Banyak Nonbeli, 8=Nilai Nonbeli,
+// 9=Banyak Total, 10=Nilai Total) — BUKAN nama field database (KOLOM1-6) —
+// supaya PPL bisa langsung cocokkan ke kertas kuesioner tanpa bingung.
+// Utk kode lain (KP-02, KP-10, dst, tabel 5/No.226-347) nomor kolom cetak &
+// nama field database KEBETULAN sama, jadi tidak perlu dibedakan.
 const DETAIL_META: Record<string, { label: string; kode: string; format: "rp" | "num" }> = {
-  banyakTotal: { label: "Banyaknya Total tercatat", kode: "KOLOM5", format: "num" },
-  banyakHitung: { label: "Banyaknya seharusnya (Beli + Nonbeli)", kode: "KOLOM1 + KOLOM3", format: "num" },
-  nilaiTotal: { label: "Nilai Total tercatat", kode: "KOLOM6", format: "rp" },
-  nilaiHitung: { label: "Nilai seharusnya (Beli + Nonbeli)", kode: "KOLOM2 + KOLOM4", format: "rp" },
-  sumberPerolehan: { label: "Kode Sumber Perolehan", kode: "KOLOM7", format: "num" },
-  banyakBeli: { label: "Banyak Beli", kode: "KOLOM1", format: "num" },
-  banyakNonbeli: { label: "Banyak Nonbeli", kode: "KOLOM3", format: "num" },
+  banyakTotal: { label: "Banyaknya Total tercatat", kode: "Kolom 9", format: "num" },
+  banyakHitung: { label: "Banyaknya seharusnya (Beli + Nonbeli)", kode: "Kolom 5 + Kolom 7", format: "num" },
+  nilaiTotal: { label: "Nilai Total tercatat", kode: "Kolom 10", format: "rp" },
+  nilaiHitung: { label: "Nilai seharusnya (Beli + Nonbeli)", kode: "Kolom 6 + Kolom 8", format: "rp" },
+  sumberPerolehan: { label: "Kode Sumber Perolehan", kode: "Kolom 4", format: "num" },
+  banyakBeli: { label: "Banyak Beli", kode: "Kolom 5", format: "num" },
+  banyakNonbeli: { label: "Banyak Nonbeli", kode: "Kolom 7", format: "num" },
   kolom5: { label: "Sebulan Terakhir", kode: "KOLOM5", format: "rp" },
   kolom6: { label: "Setahun Terakhir", kode: "KOLOM6", format: "rp" },
   kolom6Total: { label: "Nilai Total Pelayanan Kesehatan", kode: "KOLOM6", format: "rp" },
@@ -325,7 +335,7 @@ export default function KonfirmasiPplTab() {
                     temuan={t}
                     isOpen={openIds.has(t.id)}
                     onToggle={() => toggleCard(t.id)}
-                    rekomendasi={rekomendasiMap.get(t.kode_anomali) ?? null}
+                    rekomendasi={t.rekomendasi_manual || rekomendasiMap.get(t.kode_anomali) || null}
                     onConfirm={confirmFinding}
                   />
                 ))}

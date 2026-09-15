@@ -34,6 +34,19 @@ interface Kalori {
   kalori_per_satuan: number | null;
   catatan: string | null;
 }
+interface LainnyaTemuan {
+  id: number;
+  kode_anomali: string;
+  nks: string | null;
+  nurt: string | null;
+  nourutkomo: number | null;
+  nama_krt: string | null;
+  rincian: string | null; // nama komoditas kategori, mis. "Buah-buahan lainnya (sebutkan)"
+  kategori: string | null;
+  nama_lainnya: string | null; // isian teks PPL, mis. "Kelapa"
+  status: string;
+  rekomendasi_manual: string | null;
+}
 
 const EDIT_PIN = "3333";
 
@@ -43,6 +56,7 @@ export default function KelolaAnomaliPage() {
   const [pengaturan, setPengaturan] = useState<Pengaturan[]>([]);
   const [qmax, setQmax] = useState<QMax[]>([]);
   const [kalori, setKalori] = useState<Kalori[]>([]);
+  const [lainnya, setLainnya] = useState<LainnyaTemuan[]>([]);
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
 
@@ -80,16 +94,24 @@ export default function KelolaAnomaliPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [p, q, k] = await Promise.all([
+    const [p, q, k, l] = await Promise.all([
       supabase.from("kp_anomali_pengaturan").select("*").order("kode"),
       supabase.from("kp_anomali_q_maksimum").select("*").order("no_urut_komoditas"),
       supabase.from("kp_anomali_kalori").select("*").order("no_urut_komoditas"),
+      supabase
+        .from("kp_anomali_temuan")
+        .select("id, kode_anomali, nks, nurt, nourutkomo, nama_krt, rincian, kategori, nama_lainnya, status, rekomendasi_manual")
+        .like("kode_anomali", "KP-11.%")
+        .order("kategori")
+        .order("nourutkomo")
+        .order("nks"),
     ]);
     if (p.error) setDebugError(`Gagal memuat aturan: ${p.error.message}`);
     else setDebugError(null);
     setPengaturan((p.data ?? []) as Pengaturan[]);
     setQmax((q.data ?? []) as QMax[]);
     setKalori((k.data ?? []) as Kalori[]);
+    setLainnya((l.data ?? []) as LainnyaTemuan[]);
     setLoading(false);
   }, [supabase]);
 
@@ -242,6 +264,45 @@ export default function KelolaAnomaliPage() {
             </div>
           </section>
 
+          {/* ---------- Tinjau Komoditas "Lainnya" (KP-11.xxx) ---------- */}
+          <section className="mt-6">
+            <h2 className="text-sm font-bold text-navy-900">
+              Tinjau Komoditas &quot;Lainnya&quot; <span className="font-normal text-ink/40">({lainnya.length})</span>
+            </h2>
+            <p className="mt-0.5 text-xs text-ink/50">
+              Semua isian teks bebas &quot;lainnya, sebutkan&quot; dari PPL. Telaah satu-satu, lalu isi rekomendasi —
+              mis. kalau isiannya &quot;Kelapa&quot;, tulis &quot;Pindahkan ke rincian No.157 - Kelapa&quot;.
+              Rekomendasi ini otomatis tampil ke PPL di kartu konfirmasi (menggantikan rekomendasi umum per kode).
+            </p>
+            <div className="mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+              <table className="w-full min-w-[1100px] text-sm">
+                <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+                  <tr>
+                    <th className="w-16 px-3 py-2 font-medium">No.Urut</th>
+                    <th className="w-52 px-3 py-2 font-medium">Nama Komoditas</th>
+                    <th className="w-40 px-3 py-2 font-medium">NKS / NURT</th>
+                    <th className="w-40 px-3 py-2 font-medium">Isian PPL</th>
+                    <th className="w-24 px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Rekomendasi BPS Kabupaten Solok</th>
+                    <th className="w-20 px-3 py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lainnya.map((row) => (
+                    <LainnyaRow key={row.id} row={row} supabase={supabase} locked={locked} />
+                  ))}
+                  {lainnya.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center text-xs text-ink/40">
+                        Belum ada isian &quot;lainnya&quot; yang tercatat.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           {/* ---------- Tabel Batas Maksimum Konsumsi ---------- */}
           <section className="mt-6">
             <h2 className="text-sm font-bold text-navy-900">
@@ -369,6 +430,80 @@ function PengaturanRow({
           rows={2}
           disabled={locked}
           className="w-full min-w-[220px] rounded border border-line px-1.5 py-1 text-xs text-ink/60 outline-none focus:border-navy-400 disabled:bg-line/30"
+        />
+      </td>
+      <td className="px-3 py-2">
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving || locked}
+          title={locked ? "Masukkan PIN dulu utk menyimpan" : ""}
+          className={`w-full rounded px-2 py-1 text-xs font-semibold text-white transition disabled:opacity-30 ${
+            saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
+          }`}
+        >
+          {saving ? "..." : saved === "ok" ? "\u2713 OK" : saved === "err" ? "Gagal" : "Simpan"}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+// ============================================================================
+// Baris "Tinjau Komoditas Lainnya" — 1 temuan KP-11.xxx per baris, rekomendasi
+// manual per-temuan (BUKAN per-kode) karena tiap isian teks PPL beda-beda.
+// ============================================================================
+function LainnyaRow({
+  row,
+  supabase,
+  locked,
+}: {
+  row: LainnyaTemuan;
+  supabase: ReturnType<typeof createClient>;
+  locked: boolean;
+}) {
+  const [rekomendasi, setRekomendasi] = useState(row.rekomendasi_manual ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
+  const dirty = rekomendasi !== (row.rekomendasi_manual ?? "");
+
+  async function handleSave() {
+    if (locked) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("kp_anomali_temuan")
+      .update({ rekomendasi_manual: rekomendasi || null })
+      .eq("id", row.id);
+    setSaving(false);
+    setSaved(error ? "err" : "ok");
+    if (!error) row.rekomendasi_manual = rekomendasi || null;
+    setTimeout(() => setSaved("idle"), 2000);
+  }
+
+  const statusLabel: Record<string, string> = {
+    pending: "Belum",
+    sesuai: "Sesuai",
+    perlu_koreksi: "Koreksi",
+    resolved: "Selesai",
+  };
+
+  return (
+    <tr className="border-t border-line align-top">
+      <td className="px-3 py-2 font-mono text-xs">{row.nourutkomo}</td>
+      <td className="px-3 py-2 text-xs">{row.rincian}</td>
+      <td className="px-3 py-2 text-xs text-ink/60">
+        {row.nks} / {row.nurt}
+        {row.nama_krt ? <div className="text-ink/40">{row.nama_krt}</div> : null}
+      </td>
+      <td className="px-3 py-2 text-xs font-semibold text-navy-900">{row.nama_lainnya}</td>
+      <td className="px-3 py-2 text-xs">{statusLabel[row.status] ?? row.status}</td>
+      <td className="px-3 py-2">
+        <textarea
+          value={rekomendasi}
+          onChange={(e) => setRekomendasi(e.target.value)}
+          rows={2}
+          disabled={locked}
+          placeholder='Mis. "Pindahkan ke rincian No.157 - Kelapa"'
+          className="w-full min-w-[280px] rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400 disabled:bg-line/30"
         />
       </td>
       <td className="px-3 py-2">

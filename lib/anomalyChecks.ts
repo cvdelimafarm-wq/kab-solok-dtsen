@@ -109,17 +109,21 @@ function buildNarasi(kode: string, extra: Record<string, any>): string {
   const base = kode.split('.')[0];
 
   if (kode === 'KP-01' || kode === 'KP-23') {
+    // PENTING: nomor kolom di sini mengacu ke KOLOM CETAK di kuesioner fisik
+    // (Kolom 5=Banyak Beli, 6=Nilai Beli, 7=Banyak Nonbeli, 8=Nilai Nonbeli,
+    // 9=Banyak Total, 10=Nilai Total) — BUKAN nama field database (KOLOM1-6),
+    // supaya PPL bisa langsung cocokkan ke kertas kuesioner tanpa bingung.
     return (
-      `Ditemukan ketidaksesuaian pada isian Banyaknya/Nilai Total. Banyaknya Total tercatat ${numRef(fmtN(d.banyakTotal), 'KOLOM5')}, ` +
-      `seharusnya ${numRef(fmtN(d.banyakHitung), 'KOLOM1+KOLOM3')} (Banyak Beli + Banyak Nonbeli). Nilai Total tercatat ${numRef(fmtRp(d.nilaiTotal), 'KOLOM6')}, ` +
-      `seharusnya ${numRef(fmtRp(d.nilaiHitung), 'KOLOM2+KOLOM4')} (Nilai Beli + Nilai Nonbeli). Mohon periksa kembali isian Blok IV.1 dan perbaiki jika memang keliru.`
+      `Ditemukan ketidaksesuaian pada isian Banyaknya/Nilai Total. Banyaknya Total tercatat ${numRef(fmtN(d.banyakTotal), 'Kolom 9')}, ` +
+      `seharusnya ${numRef(fmtN(d.banyakHitung), 'Kolom 5 + Kolom 7')} (Banyak Beli + Banyak Nonbeli). Nilai Total tercatat ${numRef(fmtRp(d.nilaiTotal), 'Kolom 10')}, ` +
+      `seharusnya ${numRef(fmtRp(d.nilaiHitung), 'Kolom 6 + Kolom 8')} (Nilai Beli + Nilai Nonbeli). Mohon periksa kembali isian Blok IV.1 dan perbaiki jika memang keliru.`
     );
   }
   if (kode === 'KP-24') {
     return (
-      `Kode Sumber Perolehan tercatat ${numRef(String(d.sumberPerolehan), 'KOLOM7')} (0=Non Pembelian, 1=Online, 2=Offline, 3=Online & Offline), ` +
-      `namun isian kolom Beli/Nonbeli tidak konsisten dengan kode tersebut (Banyak Beli: ${numRef(fmtN(d.banyakBeli), 'KOLOM1')}, ` +
-      `Banyak Nonbeli: ${numRef(fmtN(d.banyakNonbeli), 'KOLOM3')}). Mohon periksa kembali kesesuaian sumber perolehan dengan kolom yang terisi.`
+      `Kode Sumber Perolehan tercatat ${numRef(String(d.sumberPerolehan), 'Kolom 4')} (0=Non Pembelian, 1=Online, 2=Offline, 3=Online & Offline), ` +
+      `namun isian kolom Beli/Nonbeli tidak konsisten dengan kode tersebut (Banyak Beli: ${numRef(fmtN(d.banyakBeli), 'Kolom 5')}, ` +
+      `Banyak Nonbeli: ${numRef(fmtN(d.banyakNonbeli), 'Kolom 7')}). Mohon periksa kembali kesesuaian sumber perolehan dengan kolom yang terisi.`
     );
   }
   if (kode === 'KP-02') {
