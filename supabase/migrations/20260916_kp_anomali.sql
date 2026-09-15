@@ -133,6 +133,15 @@ create policy "public update kp_anomali_temuan"
   using (true)
   with check (true);
 
+-- PENTING: RLS policy di atas cuma mengatur BARIS mana yang boleh diakses —
+-- role anon/authenticated masih butuh izin dasar GRANT di level tabel
+-- (terlewat kalau tabel dibuat lewat SQL Editor manual, beda dgn tabel yang
+-- dibuat lewat Table Editor UI Supabase yang otomatis kasih grant ini).
+-- Tanpa GRANT ini, semua query dari browser akan gagal dgn
+-- "permission denied for table ..." walau kebijakan RLS-nya sudah benar.
+grant select on kp_anomali_upload to anon, authenticated;
+grant select, update on kp_anomali_temuan to anon, authenticated;
+
 -- INSERT/UPSERT sengaja TIDAK dibuka untuk role anon/authenticated — proses
 -- upload & upsert temuan HANYA lewat API route (app/api/anomali-kp/upload)
 -- yang memakai SUPABASE_SERVICE_ROLE_KEY (server-side, bypass RLS). Ini
