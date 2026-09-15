@@ -5,11 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 
 // ---------- tipe data ----------
 
-type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi";
+type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi" | "resolved";
 
 interface Temuan {
   id: number;
-  upload_id: number;
   kode_anomali: string;
   kelompok: string | null;
   nks: string | null;
@@ -32,6 +31,7 @@ interface SummaryRow {
   pending: number;
   sesuai: number;
   perlu_koreksi: number;
+  resolved: number;
 }
 
 const fmtNum = (v: number | null) =>
@@ -41,7 +41,14 @@ export default function AnomaliCepatTab() {
   const supabase = createClient();
 
   const [subTab, setSubTab] = useState<"daftar" | "konfirmasi">("daftar");
-  const [uploadId, setUploadId] = useState<number | null>(null);
+  const [lastUpload, setLastUpload] = useState<{
+    id: number;
+    uploaded_at: string;
+    jumlah_baru: number | null;
+    jumlah_berubah: number | null;
+    jumlah_tetap: number | null;
+    jumlah_selesai: number | null;
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [keterangan, setKeterangan] = useState("");
@@ -53,19 +60,20 @@ export default function AnomaliCepatTab() {
   const [namaPpl, setNamaPpl] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ---------- ambil batch upload terbaru saat pertama render ----------
-  useEffect(() => {
-    async function loadLatestUpload() {
-      const { data } = await supabase
-        .from("kp_anomali_upload")
-        .select("id")
-        .order("id", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) setUploadId(data.id);
-    }
-    loadLatestUpload();
+  // ---------- ambil info upload terakhir (cuma utk ditampilkan, bukan filter) ----------
+  const loadLastUpload = useCallback(async () => {
+    const { data } = await supabase
+      .from("kp_anomali_upload")
+      .select("id, uploaded_at, jumlah_baru, jumlah_berubah, jumlah_tetap, jumlah_selesai")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setLastUpload(data ?? null);
   }, [supabase]);
+
+  useEffect(() => {
+    loadLastUpload();
+  }, [loadLastUpload]);
 
   // ---------- upload file DBF ----------
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
@@ -91,9 +99,13 @@ export default function AnomaliCepatTab() {
       }
       setUploadMsg({
         type: "ok",
-        text: `Berhasil. ${data.totalTemuan} temuan dari file: ${data.filenames.join(", ")}.`,
+        text:
+          `Berhasil. ${data.totalTemuan} temuan aktif dari file: ${data.filenames.join(", ")}. ` +
+          `(${data.ringkasan.baru} baru, ${data.ringkasan.berubah} berubah/perlu dicek ulang, ` +
+          `${data.ringkasan.tetap} tetap, ${data.ringkasan.selesai} selesai/teratasi)`,
       });
-      setUploadId(data.uploadId);
+      await loadLastUpload();
+      await loadData();
       form.reset();
     } catch (err: any) {
       setUploadMsg({ type: "err", text: err.message });
@@ -102,25 +114,29 @@ export default function AnomaliCepatTab() {
     }
   }
 
-  // ---------- muat ringkasan + daftar temuan ----------
+  // ---------- muat ringkasan + daftar temuan (kondisi TERKINI, bukan per-upload) ----------
   const loadData = useCallback(async () => {
-    if (!uploadId) return;
     setLoading(true);
 
-    const { data: sum } = await supabase.rpc("kp_anomali_summary", { p_upload_id: uploadId });
+    const { data: sum } = await supabase.rpc("kp_anomali_summary");
     if (sum) {
       setSummary(sum as SummaryRow[]);
     } else {
       // fallback kalau function RPC belum dibuat di DB — hitung manual di client
-      const { data: rows } = await supabase
-        .from("kp_anomali_temuan")
-        .select("*")
-        .eq("upload_id", uploadId);
+      const { data: rows } = await supabase.from("kp_anomali_temuan").select("*");
       const byKode = new Map<string, SummaryRow>();
       (rows ?? []).forEach((r: Temuan) => {
         const cur =
           byKode.get(r.kode_anomali) ??
-          ({ kode_anomali: r.kode_anomali, kelompok: r.kelompok, total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0 } as SummaryRow);
+          ({
+            kode_anomali: r.kode_anomali,
+            kelompok: r.kelompok,
+            total: 0,
+            pending: 0,
+            sesuai: 0,
+            perlu_koreksi: 0,
+            resolved: 0,
+          } as SummaryRow);
         cur.total++;
         cur[r.status]++;
         byKode.set(r.kode_anomali, cur);
@@ -128,13 +144,13 @@ export default function AnomaliCepatTab() {
       setSummary([...byKode.values()].sort((a, b) => a.kode_anomali.localeCompare(b.kode_anomali)));
     }
 
-    let query = supabase.from("kp_anomali_temuan").select("*").eq("upload_id", uploadId);
+    let query = supabase.from("kp_anomali_temuan").select("*");
     if (filterKode) query = query.eq("kode_anomali", filterKode);
     if (filterStatus) query = query.eq("status", filterStatus);
     const { data: rows } = await query.order("kode_anomali").order("nks").order("nurt");
     setTemuan((rows ?? []) as Temuan[]);
     setLoading(false);
-  }, [supabase, uploadId, filterKode, filterStatus]);
+  }, [supabase, filterKode, filterStatus]);
 
   useEffect(() => {
     loadData();
@@ -166,12 +182,13 @@ export default function AnomaliCepatTab() {
           Upload Hasil Export Aplikasi Desktop Entri
         </h2>
         <p className="mt-1 text-xs text-ink/60">
-          Upload 4 file DBF (nama file diawali angka{" "}
-          <code className="rounded bg-navy-50 px-1 py-0.5">3_</code>,{" "}
-          <code className="rounded bg-navy-50 px-1 py-0.5">4_</code>,{" "}
-          <code className="rounded bg-navy-50 px-1 py-0.5">5_</code>,{" "}
-          <code className="rounded bg-navy-50 px-1 py-0.5">9_</code> persis seperti hasil export
-          aplikasi desktop entri Susenas — bukan PANTAU).
+          Boleh upload <b>semua file hasil export</b> sekaligus (tidak perlu dipilah manual) —
+          sistem otomatis memakai file yang relevan (diawali angka{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">3</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">4</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">5</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">9</code>) dan mengabaikan sisanya.
+          File dari aplikasi desktop entri Susenas — bukan PANTAU.
         </p>
         <form onSubmit={handleUpload} className="mt-3 flex flex-wrap items-center gap-2">
           <input
@@ -208,12 +225,23 @@ export default function AnomaliCepatTab() {
         )}
       </div>
 
-      {!uploadId ? (
+      {!lastUpload ? (
         <p className="rounded-lg border border-line bg-white p-4 text-sm text-ink/50">
           Belum ada data yang diupload.
         </p>
       ) : (
         <>
+          <p className="text-xs text-ink/50">
+            Terakhir diupdate: {new Date(lastUpload.uploaded_at).toLocaleString("id-ID")}
+            {lastUpload.jumlah_baru != null && (
+              <>
+                {" "}
+                &middot; {lastUpload.jumlah_baru} baru &middot; {lastUpload.jumlah_berubah} berubah &middot;{" "}
+                {lastUpload.jumlah_tetap} tetap &middot; {lastUpload.jumlah_selesai} selesai
+              </>
+            )}
+          </p>
+
           {/* ---------- Sub-tab: Daftar Anomali / Konfirmasi PPL ---------- */}
           <div className="flex gap-1 border-b border-line">
             <SubTabButton active={subTab === "daftar"} onClick={() => setSubTab("daftar")}>
@@ -243,6 +271,7 @@ export default function AnomaliCepatTab() {
                       <th className="py-1.5 pr-3 font-medium">Pending</th>
                       <th className="py-1.5 pr-3 font-medium">Sesuai</th>
                       <th className="py-1.5 pr-3 font-medium">Koreksi</th>
+                      <th className="py-1.5 pr-3 font-medium">Selesai</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -254,6 +283,7 @@ export default function AnomaliCepatTab() {
                         <td className="py-1.5 pr-3">{r.pending}</td>
                         <td className="py-1.5 pr-3">{r.sesuai}</td>
                         <td className="py-1.5 pr-3">{r.perlu_koreksi}</td>
+                        <td className="py-1.5 pr-3">{r.resolved}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -284,6 +314,7 @@ export default function AnomaliCepatTab() {
                     <option value="pending">Pending</option>
                     <option value="sesuai">Sesuai</option>
                     <option value="perlu_koreksi">Perlu Koreksi</option>
+                    <option value="resolved">Selesai</option>
                   </select>
                 </div>
                 <table className="mt-2 w-full text-xs">
@@ -400,11 +431,13 @@ function StatusBadge({ status }: { status: StatusKonfirmasi }) {
     pending: "bg-gold-100 text-gold-600",
     sesuai: "bg-moss-100 text-moss-700",
     perlu_koreksi: "bg-rust-100 text-rust-700",
+    resolved: "bg-navy-100 text-navy-600",
   };
   const label: Record<StatusKonfirmasi, string> = {
     pending: "Pending",
     sesuai: "Sesuai",
     perlu_koreksi: "Perlu Koreksi",
+    resolved: "Selesai",
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls[status]}`}>

@@ -23,7 +23,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function detectTableRole(filename: string): keyof Tables | null {
-  const m = filename.match(/^(\d+)_/);
+  // Terima format "3_..." (garis bawah) MAUPUN "3. ..." (titik+spasi, format
+  // penomoran asli aplikasi desktop) — dua-duanya sama-sama dipakai di
+  // berbagai versi/konteks export.
+  const m = filename.match(/^(\d+)[._]/);
   if (!m) return null;
   const n = m[1];
   if (n === '3') return 't3';
@@ -88,7 +91,7 @@ export async function POST(req: NextRequest) {
 
     const findings = runAllChecks(tables as Tables, thresholds);
 
-    // 1) catat metadata upload
+    // 1) catat metadata upload (diisi lengkap setelah upsert selesai, lihat bawah)
     const { data: uploadRow, error: uploadErr } = await supabase
       .from('kp_anomali_upload')
       .insert({
@@ -101,30 +104,52 @@ export async function POST(req: NextRequest) {
     if (uploadErr) throw uploadErr;
     const uploadId = uploadRow.id as number;
 
-    // 2) insert seluruh temuan (batch, supaya tidak ribuan round-trip)
-    const BATCH_SIZE = 500;
-    for (let i = 0; i < findings.length; i += BATCH_SIZE) {
-      const batch = findings.slice(i, i + BATCH_SIZE).map((f) => ({
-        upload_id: uploadId,
-        kode_anomali: f.kode_anomali,
-        kelompok: f.kelompok,
-        nks: f.nks,
-        nurt: f.nurt,
-        nourutkomo: f.nourutkomo,
-        nama_krt: f.nama_krt,
-        keterangan: f.keterangan,
-        rincian: f.rincian ?? null,
-        kategori: f.kategori ?? null,
-        nama_lainnya: f.namaLainnya ?? null,
-        banyak: f.banyak ?? null,
-        nilai: f.nilai ?? null,
-        detail: f.detail ?? null,
-      }));
-      const { error: insErr } = await supabase.from('kp_anomali_temuan').insert(batch);
-      if (insErr) throw insErr;
-    }
+    // 2) upsert seluruh temuan dalam SATU panggilan RPC (atomic, dilakukan di
+    //    Postgres) — bukan insert biasa. Fungsi kp_anomali_upsert_batch akan:
+    //      - insert baris baru untuk temuan yang belum pernah ada,
+    //      - PERTAHANKAN status konfirmasi PPL kalau nilainya tidak berubah,
+    //      - reset ke 'pending' kalau nilainya berubah sejak upload sebelumnya,
+    //      - tandai 'resolved' utk temuan lama yang sudah tidak muncul lagi.
+    const payload = findings.map((f) => ({
+      kode_anomali: f.kode_anomali,
+      kelompok: f.kelompok,
+      nks: f.nks,
+      nurt: f.nurt,
+      nourutkomo: f.nourutkomo,
+      nama_krt: f.nama_krt,
+      keterangan: f.keterangan,
+      rincian: f.rincian ?? null,
+      kategori: f.kategori ?? null,
+      nama_lainnya: f.namaLainnya ?? null,
+      banyak: f.banyak ?? null,
+      nilai: f.nilai ?? null,
+      detail: f.detail ?? null,
+    }));
 
-    return NextResponse.json({ uploadId, totalTemuan: findings.length, filenames: usedFilenames });
+    const { data: upsertResult, error: upsertErr } = await supabase
+      .rpc('kp_anomali_upsert_batch', { p_upload_id: uploadId, p_findings: payload })
+      .single();
+    if (upsertErr) throw upsertErr;
+
+    const ringkasan = upsertResult as { baru: number; berubah: number; tetap: number; selesai: number };
+
+    // 3) lengkapi metadata upload dgn ringkasan perubahan
+    await supabase
+      .from('kp_anomali_upload')
+      .update({
+        jumlah_baru: ringkasan.baru,
+        jumlah_berubah: ringkasan.berubah,
+        jumlah_tetap: ringkasan.tetap,
+        jumlah_selesai: ringkasan.selesai,
+      })
+      .eq('id', uploadId);
+
+    return NextResponse.json({
+      uploadId,
+      totalTemuan: findings.length,
+      filenames: usedFilenames,
+      ringkasan,
+    });
   } catch (err: any) {
     console.error('anomali-kp upload error:', err);
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });
