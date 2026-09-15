@@ -78,6 +78,21 @@ export async function POST(req: NextRequest) {
       else hasil.pengaturan = upsertsAturan.length;
     }
 
+    // Kolom M (index 12) "Rekomendasi PPL" — opsional, ditangani TERPISAH dari
+    // upsert di atas. Kalau selnya kosong, kolom `rekomendasi` di database
+    // TIDAK disentuh (supaya tidak menimpa isi default yang sudah ada dengan
+    // kosong, kalau user upload draft lama yang belum punya kolom ini).
+    const updatesRekomendasi = rowsAturan
+      .filter((r) => typeof r[0] === 'string' && r[0].trim() !== '' && typeof r[12] === 'string' && r[12].trim() !== '')
+      .map((r) => ({ kode: String(r[0]).trim(), rekomendasi: String(r[12]).trim() }));
+    for (const u of updatesRekomendasi) {
+      const { error } = await supabase
+        .from('kp_anomali_pengaturan')
+        .update({ rekomendasi: u.rekomendasi })
+        .eq('kode', u.kode);
+      if (error) hasil.errors.push(`Rekomendasi ${u.kode}: ${error.message}`);
+    }
+
     // ---------- Sheet "2. Batas Maks Konsumsi" -> kp_anomali_q_maksimum ----------
     const rowsQmax = toRows(wb, '2. Batas Maks Konsumsi');
     const upsertsQmax = rowsQmax
