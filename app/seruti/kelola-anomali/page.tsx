@@ -35,6 +35,8 @@ interface Kalori {
   catatan: string | null;
 }
 
+const EDIT_PIN = "3333";
+
 export default function KelolaAnomaliPage() {
   const [supabase] = useState(() => createClient());
 
@@ -46,6 +48,35 @@ export default function KelolaAnomaliPage() {
 
   const [aturanUploading, setAturanUploading] = useState(false);
   const [aturanMsg, setAturanMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  // PIN edit — melihat aturan tetap bebas, tapi MENYIMPAN perubahan (termasuk
+  // import Excel) butuh PIN dulu. Ini pengaman ringan sisi client (sesuai
+  // halaman lain di app ini yang memang tanpa login sungguhan) — bukan
+  // keamanan penuh, cuma pencegah perubahan tidak sengaja/asal-asalan.
+  // Tersimpan per sesi browser (sessionStorage) supaya tidak perlu diulang
+  // tiap ganti tab di halaman yang sama.
+  const [pinInput, setPinInput] = useState("");
+  const [pinOk, setPinOk] = useState(false);
+  const [pinError, setPinError] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("kelola-anomali-pin-ok") === "1") {
+      setPinOk(true);
+    }
+  }, []);
+
+  function handleUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    if (pinInput === EDIT_PIN) {
+      setPinOk(true);
+      setPinError(false);
+      sessionStorage.setItem("kelola-anomali-pin-ok", "1");
+    } else {
+      setPinError(true);
+    }
+  }
+
+  const locked = !pinOk;
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -68,6 +99,7 @@ export default function KelolaAnomaliPage() {
 
   async function handleUploadAturan(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (locked) return;
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem("aturanFile") as HTMLInputElement;
     if (!fileInput.files || fileInput.files.length === 0) return;
@@ -110,6 +142,44 @@ export default function KelolaAnomaliPage() {
         di pengecekan berikutnya, tanpa perlu upload ulang.
       </p>
 
+      {/* ---------- Gerbang PIN utk edit ---------- */}
+      <div className="mt-4 rounded-lg border border-line bg-white p-4">
+        {pinOk ? (
+          <p className="text-xs text-moss-700">
+            &#128275; Mode edit aktif untuk sesi ini.{" "}
+            <button
+              onClick={() => {
+                setPinOk(false);
+                sessionStorage.removeItem("kelola-anomali-pin-ok");
+              }}
+              className="underline"
+            >
+              Kunci lagi
+            </button>
+          </p>
+        ) : (
+          <form onSubmit={handleUnlock} className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-navy-900">Masukkan PIN untuk mengedit:</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={pinInput}
+              onChange={(e) => {
+                setPinInput(e.target.value);
+                setPinError(false);
+              }}
+              className="w-24 rounded-md border border-line px-2 py-1 text-sm"
+              placeholder="PIN"
+            />
+            <button type="submit" className="rounded-md bg-navy-700 px-3 py-1 text-sm font-medium text-white hover:bg-navy-900">
+              Buka
+            </button>
+            {pinError && <span className="text-xs text-rust-700">PIN salah.</span>}
+            <span className="ml-1 text-xs text-ink/40">(Melihat aturan tetap bebas tanpa PIN — cuma menyimpan perubahan yang butuh PIN.)</span>
+          </form>
+        )}
+      </div>
+
       {/* ---------- Import Excel ---------- */}
       <div className="mt-4 rounded-lg border border-line bg-white p-4">
         <h2 className="text-sm font-semibold text-navy-900">Import dari Excel</h2>
@@ -118,11 +188,12 @@ export default function KelolaAnomaliPage() {
           versi yang sudah diedit) untuk sinkron massal. Baris yang tidak berubah tidak akan terpengaruh.
         </p>
         <form onSubmit={handleUploadAturan} className="mt-3 flex flex-wrap items-center gap-2">
-          <input type="file" name="aturanFile" accept=".xlsx" required className="text-sm" />
+          <input type="file" name="aturanFile" accept=".xlsx" required disabled={locked} className="text-sm disabled:opacity-40" />
           <button
             type="submit"
-            disabled={aturanUploading}
-            className="rounded-md bg-navy-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-navy-900 disabled:opacity-50"
+            disabled={aturanUploading || locked}
+            className="rounded-md bg-navy-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-navy-900 disabled:opacity-40"
+            title={locked ? "Masukkan PIN dulu utk mengupload" : ""}
           >
             {aturanUploading ? "Memproses..." : "Upload & Sinkron"}
           </button>
@@ -164,7 +235,7 @@ export default function KelolaAnomaliPage() {
                 </thead>
                 <tbody>
                   {pengaturan.map((row) => (
-                    <PengaturanRow key={row.kode} row={row} supabase={supabase} />
+                    <PengaturanRow key={row.kode} row={row} supabase={supabase} locked={locked} />
                   ))}
                 </tbody>
               </table>
@@ -181,7 +252,7 @@ export default function KelolaAnomaliPage() {
               Dipakai utk pengecekan konsumsi melebihi batas maksimum per komoditas (belum aktif —
               menunggu tabel ini terisi lengkap).
             </p>
-            <QMaxTable rows={qmax} supabase={supabase} onReload={loadAll} />
+            <QMaxTable rows={qmax} supabase={supabase} onReload={loadAll} locked={locked} />
           </section>
 
           {/* ---------- Tabel Referensi Kalori ---------- */}
@@ -192,7 +263,7 @@ export default function KelolaAnomaliPage() {
             <p className="mt-0.5 text-xs text-ink/50">
               Dipakai utk KP-05/KP-06 (over/under kalori) — belum aktif, menunggu tabel ini terisi.
             </p>
-            <KaloriTable rows={kalori} supabase={supabase} onReload={loadAll} />
+            <KaloriTable rows={kalori} supabase={supabase} onReload={loadAll} locked={locked} />
           </section>
         </>
       )}
@@ -203,7 +274,15 @@ export default function KelolaAnomaliPage() {
 // ============================================================================
 // Baris tabel Aturan — dgn state lokal (dirty-tracking) & tombol Simpan.
 // ============================================================================
-function PengaturanRow({ row, supabase }: { row: Pengaturan; supabase: ReturnType<typeof createClient> }) {
+function PengaturanRow({
+  row,
+  supabase,
+  locked,
+}: {
+  row: Pengaturan;
+  supabase: ReturnType<typeof createClient>;
+  locked: boolean;
+}) {
   const [kelompok, setKelompok] = useState(row.kelompok ?? "");
   const [ambang, setAmbang] = useState(row.ambang_batas?.toString() ?? "");
   const [aktif, setAktif] = useState(row.aktif);
@@ -220,6 +299,7 @@ function PengaturanRow({ row, supabase }: { row: Pengaturan; supabase: ReturnTyp
     catatan !== (row.catatan ?? "");
 
   async function handleSave() {
+    if (locked) return;
     setSaving(true);
     const { error } = await supabase
       .from("kp_anomali_pengaturan")
@@ -250,7 +330,8 @@ function PengaturanRow({ row, supabase }: { row: Pengaturan; supabase: ReturnTyp
         <input
           value={kelompok}
           onChange={(e) => setKelompok(e.target.value)}
-          className="w-full rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400"
+          disabled={locked}
+          className="w-full rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400 disabled:bg-line/30"
         />
       </td>
       <td className="px-3 py-2">
@@ -259,18 +340,26 @@ function PengaturanRow({ row, supabase }: { row: Pengaturan; supabase: ReturnTyp
           value={ambang}
           onChange={(e) => setAmbang(e.target.value)}
           placeholder="-"
-          className="w-full rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400"
+          disabled={locked}
+          className="w-full rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400 disabled:bg-line/30"
         />
       </td>
       <td className="px-3 py-2 text-center">
-        <input type="checkbox" checked={aktif} onChange={(e) => setAktif(e.target.checked)} className="h-4 w-4" />
+        <input
+          type="checkbox"
+          checked={aktif}
+          onChange={(e) => setAktif(e.target.checked)}
+          disabled={locked}
+          className="h-4 w-4"
+        />
       </td>
       <td className="px-3 py-2">
         <textarea
           value={rekomendasi}
           onChange={(e) => setRekomendasi(e.target.value)}
           rows={2}
-          className="w-full min-w-[260px] rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400"
+          disabled={locked}
+          className="w-full min-w-[260px] rounded border border-line px-1.5 py-1 text-xs outline-none focus:border-navy-400 disabled:bg-line/30"
         />
       </td>
       <td className="px-3 py-2">
@@ -278,13 +367,15 @@ function PengaturanRow({ row, supabase }: { row: Pengaturan; supabase: ReturnTyp
           value={catatan}
           onChange={(e) => setCatatan(e.target.value)}
           rows={2}
-          className="w-full min-w-[220px] rounded border border-line px-1.5 py-1 text-xs text-ink/60 outline-none focus:border-navy-400"
+          disabled={locked}
+          className="w-full min-w-[220px] rounded border border-line px-1.5 py-1 text-xs text-ink/60 outline-none focus:border-navy-400 disabled:bg-line/30"
         />
       </td>
       <td className="px-3 py-2">
         <button
           onClick={handleSave}
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || locked}
+          title={locked ? "Masukkan PIN dulu utk menyimpan" : ""}
           className={`w-full rounded px-2 py-1 text-xs font-semibold text-white transition disabled:opacity-30 ${
             saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
           }`}
@@ -303,10 +394,12 @@ function QMaxTable({
   rows,
   supabase,
   onReload,
+  locked,
 }: {
   rows: QMax[];
   supabase: ReturnType<typeof createClient>;
   onReload: () => void;
+  locked: boolean;
 }) {
   const [noBaru, setNoBaru] = useState("");
   const [namaBaru, setNamaBaru] = useState("");
@@ -315,7 +408,7 @@ function QMaxTable({
   const [busy, setBusy] = useState(false);
 
   async function tambah() {
-    if (!noBaru.trim() || !qBaru.trim()) return;
+    if (locked || !noBaru.trim() || !qBaru.trim()) return;
     setBusy(true);
     await supabase.from("kp_anomali_q_maksimum").insert({
       no_urut_komoditas: Number(noBaru),
@@ -332,6 +425,7 @@ function QMaxTable({
   }
 
   async function hapus(no: number) {
+    if (locked) return;
     await supabase.from("kp_anomali_q_maksimum").delete().eq("no_urut_komoditas", no);
     onReload();
   }
@@ -350,23 +444,23 @@ function QMaxTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <QMaxRow key={r.no_urut_komoditas} row={r} supabase={supabase} onDelete={() => hapus(r.no_urut_komoditas)} />
+            <QMaxRow key={r.no_urut_komoditas} row={r} supabase={supabase} onDelete={() => hapus(r.no_urut_komoditas)} locked={locked} />
           ))}
           <tr className="border-t border-line bg-navy-50/30">
             <td className="px-3 py-1.5">
-              <input value={noBaru} onChange={(e) => setNoBaru(e.target.value)} placeholder="No." className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={noBaru} onChange={(e) => setNoBaru(e.target.value)} placeholder="No." disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={namaBaru} onChange={(e) => setNamaBaru(e.target.value)} placeholder="Nama komoditas" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={namaBaru} onChange={(e) => setNamaBaru(e.target.value)} placeholder="Nama komoditas" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={satuanBaru} onChange={(e) => setSatuanBaru(e.target.value)} placeholder="Kg" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={satuanBaru} onChange={(e) => setSatuanBaru(e.target.value)} placeholder="Kg" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={qBaru} onChange={(e) => setQBaru(e.target.value)} placeholder="200" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={qBaru} onChange={(e) => setQBaru(e.target.value)} placeholder="200" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <button onClick={tambah} disabled={busy} className="w-full rounded bg-moss-500 px-2 py-1 text-xs font-semibold text-white hover:bg-moss-700 disabled:opacity-40">
+              <button onClick={tambah} disabled={busy || locked} title={locked ? "Masukkan PIN dulu" : ""} className="w-full rounded bg-moss-500 px-2 py-1 text-xs font-semibold text-white hover:bg-moss-700 disabled:opacity-40">
                 + Tambah
               </button>
             </td>
@@ -377,13 +471,24 @@ function QMaxTable({
   );
 }
 
-function QMaxRow({ row, supabase, onDelete }: { row: QMax; supabase: ReturnType<typeof createClient>; onDelete: () => void }) {
+function QMaxRow({
+  row,
+  supabase,
+  onDelete,
+  locked,
+}: {
+  row: QMax;
+  supabase: ReturnType<typeof createClient>;
+  onDelete: () => void;
+  locked: boolean;
+}) {
   const [nama, setNama] = useState(row.nama_komoditas ?? "");
   const [satuan, setSatuan] = useState(row.satuan ?? "");
   const [q, setQ] = useState(row.q_maksimum?.toString() ?? "");
   const dirty = nama !== (row.nama_komoditas ?? "") || satuan !== (row.satuan ?? "") || q !== (row.q_maksimum?.toString() ?? "");
 
   async function save() {
+    if (locked) return;
     await supabase
       .from("kp_anomali_q_maksimum")
       .update({ nama_komoditas: nama || null, satuan: satuan || null, q_maksimum: q.trim() === "" ? null : Number(q) })
@@ -397,19 +502,19 @@ function QMaxRow({ row, supabase, onDelete }: { row: QMax; supabase: ReturnType<
     <tr className="border-t border-line">
       <td className="px-3 py-1.5 font-mono text-xs">{row.no_urut_komoditas}</td>
       <td className="px-3 py-1.5">
-        <input value={nama} onChange={(e) => setNama(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={nama} onChange={(e) => setNama(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="px-3 py-1.5">
-        <input value={satuan} onChange={(e) => setSatuan(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={satuan} onChange={(e) => setSatuan(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="px-3 py-1.5">
-        <input value={q} onChange={(e) => setQ(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="flex gap-1 px-3 py-1.5">
-        <button onClick={save} disabled={!dirty} className="rounded bg-navy-700 px-2 py-1 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-30">
+        <button onClick={save} disabled={!dirty || locked} title={locked ? "Masukkan PIN dulu" : ""} className="rounded bg-navy-700 px-2 py-1 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-30">
           Simpan
         </button>
-        <button onClick={onDelete} className="rounded bg-rust-500 px-2 py-1 text-xs font-semibold text-white hover:bg-rust-700">
+        <button onClick={onDelete} disabled={locked} className="rounded bg-rust-500 px-2 py-1 text-xs font-semibold text-white hover:bg-rust-700 disabled:opacity-30">
           &times;
         </button>
       </td>
@@ -424,10 +529,12 @@ function KaloriTable({
   rows,
   supabase,
   onReload,
+  locked,
 }: {
   rows: Kalori[];
   supabase: ReturnType<typeof createClient>;
   onReload: () => void;
+  locked: boolean;
 }) {
   const [noBaru, setNoBaru] = useState("");
   const [namaBaru, setNamaBaru] = useState("");
@@ -436,7 +543,7 @@ function KaloriTable({
   const [busy, setBusy] = useState(false);
 
   async function tambah() {
-    if (!noBaru.trim() || !kalBaru.trim()) return;
+    if (locked || !noBaru.trim() || !kalBaru.trim()) return;
     setBusy(true);
     await supabase.from("kp_anomali_kalori").insert({
       no_urut_komoditas: Number(noBaru),
@@ -453,6 +560,7 @@ function KaloriTable({
   }
 
   async function hapus(no: number) {
+    if (locked) return;
     await supabase.from("kp_anomali_kalori").delete().eq("no_urut_komoditas", no);
     onReload();
   }
@@ -471,23 +579,23 @@ function KaloriTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <KaloriRow key={r.no_urut_komoditas} row={r} supabase={supabase} onDelete={() => hapus(r.no_urut_komoditas)} />
+            <KaloriRow key={r.no_urut_komoditas} row={r} supabase={supabase} onDelete={() => hapus(r.no_urut_komoditas)} locked={locked} />
           ))}
           <tr className="border-t border-line bg-navy-50/30">
             <td className="px-3 py-1.5">
-              <input value={noBaru} onChange={(e) => setNoBaru(e.target.value)} placeholder="No." className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={noBaru} onChange={(e) => setNoBaru(e.target.value)} placeholder="No." disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={namaBaru} onChange={(e) => setNamaBaru(e.target.value)} placeholder="Nama komoditas" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={namaBaru} onChange={(e) => setNamaBaru(e.target.value)} placeholder="Nama komoditas" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={satuanBaru} onChange={(e) => setSatuanBaru(e.target.value)} placeholder="Kg" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={satuanBaru} onChange={(e) => setSatuanBaru(e.target.value)} placeholder="Kg" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <input value={kalBaru} onChange={(e) => setKalBaru(e.target.value)} placeholder="350" className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+              <input value={kalBaru} onChange={(e) => setKalBaru(e.target.value)} placeholder="350" disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
             </td>
             <td className="px-3 py-1.5">
-              <button onClick={tambah} disabled={busy} className="w-full rounded bg-moss-500 px-2 py-1 text-xs font-semibold text-white hover:bg-moss-700 disabled:opacity-40">
+              <button onClick={tambah} disabled={busy || locked} title={locked ? "Masukkan PIN dulu" : ""} className="w-full rounded bg-moss-500 px-2 py-1 text-xs font-semibold text-white hover:bg-moss-700 disabled:opacity-40">
                 + Tambah
               </button>
             </td>
@@ -498,7 +606,17 @@ function KaloriTable({
   );
 }
 
-function KaloriRow({ row, supabase, onDelete }: { row: Kalori; supabase: ReturnType<typeof createClient>; onDelete: () => void }) {
+function KaloriRow({
+  row,
+  supabase,
+  onDelete,
+  locked,
+}: {
+  row: Kalori;
+  supabase: ReturnType<typeof createClient>;
+  onDelete: () => void;
+  locked: boolean;
+}) {
   const [nama, setNama] = useState(row.nama_komoditas ?? "");
   const [satuan, setSatuan] = useState(row.satuan ?? "");
   const [kal, setKal] = useState(row.kalori_per_satuan?.toString() ?? "");
@@ -506,6 +624,7 @@ function KaloriRow({ row, supabase, onDelete }: { row: Kalori; supabase: ReturnT
     nama !== (row.nama_komoditas ?? "") || satuan !== (row.satuan ?? "") || kal !== (row.kalori_per_satuan?.toString() ?? "");
 
   async function save() {
+    if (locked) return;
     await supabase
       .from("kp_anomali_kalori")
       .update({ nama_komoditas: nama || null, satuan: satuan || null, kalori_per_satuan: kal.trim() === "" ? null : Number(kal) })
@@ -519,19 +638,19 @@ function KaloriRow({ row, supabase, onDelete }: { row: Kalori; supabase: ReturnT
     <tr className="border-t border-line">
       <td className="px-3 py-1.5 font-mono text-xs">{row.no_urut_komoditas}</td>
       <td className="px-3 py-1.5">
-        <input value={nama} onChange={(e) => setNama(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={nama} onChange={(e) => setNama(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="px-3 py-1.5">
-        <input value={satuan} onChange={(e) => setSatuan(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={satuan} onChange={(e) => setSatuan(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="px-3 py-1.5">
-        <input value={kal} onChange={(e) => setKal(e.target.value)} className="w-full rounded border border-line px-1.5 py-1 text-xs" />
+        <input value={kal} onChange={(e) => setKal(e.target.value)} disabled={locked} className="w-full rounded border border-line px-1.5 py-1 text-xs disabled:bg-line/30" />
       </td>
       <td className="flex gap-1 px-3 py-1.5">
-        <button onClick={save} disabled={!dirty} className="rounded bg-navy-700 px-2 py-1 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-30">
+        <button onClick={save} disabled={!dirty || locked} title={locked ? "Masukkan PIN dulu" : ""} className="rounded bg-navy-700 px-2 py-1 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-30">
           Simpan
         </button>
-        <button onClick={onDelete} className="rounded bg-rust-500 px-2 py-1 text-xs font-semibold text-white hover:bg-rust-700">
+        <button onClick={onDelete} disabled={locked} className="rounded bg-rust-500 px-2 py-1 text-xs font-semibold text-white hover:bg-rust-700 disabled:opacity-30">
           &times;
         </button>
       </td>
