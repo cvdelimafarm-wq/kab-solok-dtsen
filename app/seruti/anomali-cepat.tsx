@@ -19,9 +19,39 @@ interface Temuan {
   nama_lainnya: string | null;
   banyak: number | null;
   nilai: number | null;
+  detail: Record<string, unknown> | null;
   status: StatusKonfirmasi;
   catatan_ppl: string | null;
   nama_ppl: string | null;
+}
+
+// Label yang lebih enak dibaca utk key teknis di kolom `detail`
+// (isinya beda-beda tergantung jenis pengecekan — lihat lib/anomalyChecks.ts)
+const DETAIL_LABELS: Record<string, string> = {
+  banyakTotal: "Banyak Total tercatat",
+  banyakHitung: "seharusnya (Beli+Nonbeli)",
+  nilaiTotal: "Nilai Total tercatat",
+  nilaiHitung: "seharusnya (Beli+Nonbeli)",
+  kolom5: "Sebulan",
+  kolom6: "Setahun",
+  kolom6Total: "Nilai Setahun",
+  oopA: "OOP sub-a",
+  oopC: "OOP sub-c",
+  jmlKomoditas: "Jumlah komoditas terisi",
+  bumbuBumbuan: "Bumbu-bumbuan",
+  padiPadian: "Padi-padian",
+};
+
+function formatDetail(detail: Record<string, unknown> | null | undefined): string {
+  if (!detail || typeof detail !== "object") return "";
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(detail)) {
+    if (v === null || v === undefined || typeof v === "object") continue; // lewati nested/array, cuma tampilkan yg simpel
+    const label = DETAIL_LABELS[k] ?? k;
+    const val = typeof v === "number" ? v.toLocaleString("id-ID") : String(v);
+    parts.push(`${label}: ${val}`);
+  }
+  return parts.join(" · ");
 }
 
 interface SummaryRow {
@@ -370,6 +400,9 @@ export default function AnomaliCepatTab() {
                         <td className="py-1.5 pr-3">
                           {t.keterangan}
                           {t.nama_lainnya ? ` — "${t.nama_lainnya}"` : ""}
+                          {formatDetail(t.detail) && (
+                            <div className="text-[11px] text-ink/50">{formatDetail(t.detail)}</div>
+                          )}
                         </td>
                         <td className="py-1.5 pr-3">{fmtNum(t.nilai)}</td>
                         <td className="py-1.5 pr-3">
@@ -505,6 +538,9 @@ function ConfirmCard({
         ) : null}
         {temuan.banyak != null ? ` \u00b7 Banyak: ${fmtNum(temuan.banyak)}` : ""}
         {temuan.nilai != null ? ` \u00b7 Nilai: Rp${fmtNum(temuan.nilai)}` : ""}
+        {formatDetail(temuan.detail) && (
+          <div className="mt-0.5 text-xs text-ink/50">{formatDetail(temuan.detail)}</div>
+        )}
       </div>
       <textarea
         placeholder="Catatan PPL (opsional)"
