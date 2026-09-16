@@ -705,6 +705,26 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
 
   const currentYear = new Date().getFullYear();
 
+  // Tanggal acuan pendataan utk cek M-USIA-VS-TGL-LAHIR — Susenas September 2026,
+  // dikonfirmasi Anda 16/9: pakai tanggal tetap 7 September 2026, BUKAN tanggal
+  // hari ini (new Date()) supaya hasilnya konsisten tidak berubah-ubah tiap upload.
+  const TANGGAL_ACUAN_PENDATAAN = new Date(2026, 8, 7); // bulan 0-indexed: 8 = September
+
+  // Hitung umur (tahun, dibulatkan ke bawah) dari tanggal lahir sampai tanggal acuan.
+  function hitungUmurSampai(tgl: unknown, bln: unknown, thn: unknown, acuan: Date): number | null {
+    const d = Number(tgl), m = Number(bln), y = Number(thn);
+    if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y) || d < 1 || d > 31 || m < 1 || m > 12 || y < 1900) {
+      return null;
+    }
+    const lahir = new Date(y, m - 1, d);
+    let umur = acuan.getFullYear() - lahir.getFullYear();
+    const belumUlangTahun =
+      acuan.getMonth() < lahir.getMonth() ||
+      (acuan.getMonth() === lahir.getMonth() && acuan.getDate() < lahir.getDate());
+    if (belumUlangTahun) umur--;
+    return umur;
+  }
+
   const M_CHECKS: MSimpleCheck[] = [
     { kode: 'M-01', fields: ['M404', 'M407'], keterangan: 'Apakah benar umur kurang dari 18 tahun tetapi statusnya kawin atau cerai mati atau cerai hidup?',
       cond: r => nz(r.M407) < 18 && nz(r.M404) > 1 },
@@ -774,6 +794,30 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
       cond: r => !isBlank(r.M502CHAR) && String(r.M502CHAR).trim().length < 16 && String(r.M502CHAR).trim() !== '9998' },
     { kode: 'M-TAHUN-LAHIR', fields: ['M406C'], keterangan: 'Tahun lahir tidak sesuai format / belum ada perkiraan tahun lahir. Tanyakan perkiraan tahun lahir',
       cond: r => nz(r.M406C) > currentYear },
+    // ---------- tambahan dari USULAN_TAMBAHAN_ANOMALI.xlsx (klarifikasi Anda 16/9) ----------
+    // M406A/M406B/M406C diasumsikan Tanggal/Bulan/Tahun lahir (urutan field belum
+    // dikonfirmasi eksplisit — kalau ternyata terbalik A/B, dampaknya cuma beda
+    // beberapa hari di sekitar ulang tahun, bukan salah tahun).
+    { kode: 'M-USIA-VS-TGL-LAHIR', fields: ['M407', 'M406A', 'M406B', 'M406C'],
+      keterangan: 'Apakah umur (M407) sudah sesuai dengan tanggal lahir (M406a+M406b+M406c), dihitung terhadap tanggal pendataan acuan 7 September 2026 dengan pembulatan ke bawah?',
+      cond: r => {
+        const umurHitung = hitungUmurSampai(r.M406A, r.M406B, r.M406C, TANGGAL_ACUAN_PENDATAAN);
+        return umurHitung !== null && umurHitung !== nz(r.M407);
+      } },
+    { kode: 'M-71', fields: ['M407', 'M503', 'M504'], keterangan: 'Apakah benar umur 18 tahun ke atas tapi masih bersekolah (M503=2) di jenjang kode di bawah 18 (M504<18)?',
+      cond: r => nz(r.M407) > 18 && nz(r.M503) === 2 && nz(r.M504) < 18 },
+    { kode: 'M-68', fields: ['M407', 'M503', 'M504'], keterangan: 'Apakah benar umur 13-15 tahun tapi masih bersekolah (M503=2) di jenjang kode 13-16 (M504)?',
+      cond: r => nz(r.M407) >= 13 && nz(r.M407) <= 15 && nz(r.M503) === 2 && nz(r.M504) >= 13 && nz(r.M504) <= 16 },
+    { kode: 'M-66', fields: ['M407', 'M503', 'M504'], keterangan: 'Apakah benar umur kurang dari 6 tahun tapi sudah bersekolah (M503=2) di jenjang SD (M504=3)?',
+      cond: r => nz(r.M407) < 6 && nz(r.M503) === 2 && nz(r.M504) === 3 },
+    { kode: 'M-65', fields: ['M407', 'M508'], keterangan: 'Apakah benar umur lebih dari 7 tahun tapi M508 masih terisi (>0)?',
+      cond: r => nz(r.M407) > 7 && nz(r.M508) > 0 },
+    { kode: 'M-49', fields: ['M1208'], keterangan: 'Apakah benar M1208 (mengunjungi tempat/peninggalan bersejarah/cagar budaya) diisi kode 2 (secara tidak langsung)? Catatan: yang dimaksud "tidak langsung" adalah mengunjungi secara virtual (live streaming/virtual tour) melalui aplikasi/website/media sosial resmi pengelola — mis. Candi Borobudur di borobudurvirtual.id, museumnasional.iheritage-virtual.id. Tidak termasuk menonton video yang diupload perseorangan.',
+      cond: r => nz(r.M1208) === 2 },
+    { kode: 'M-50', fields: ['M1215'], keterangan: 'Apakah benar M1215 bidang organisasi diisi kode 10 (lainnya)? Bidang organisasi apa?',
+      cond: r => nz(r.M1215) === 10 },
+    { kode: 'M-51', fields: ['M1216'], keterangan: 'Apakah benar M1216 alasan utama mengikuti organisasi diisi kode 6 (lainnya)? Alasannya apa?',
+      cond: r => nz(r.M1216) === 6 },
   ];
 
   for (const chk of M_CHECKS) {
@@ -874,6 +918,15 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     { kode: 'M-58', fields: ['M1502B_LAI'], keterangan: 'Apakah benar M1502b cara membeli rumah kode 4 (lainnya)?', cond: r => nz(r.M1502B) === 4 },
     { kode: 'M-59', fields: [], keterangan: 'Apakah benar M1504 sumber penerangan utama listrik non-PLN atau bukan listrik?', cond: r => nz(r.M1504) === 3 || nz(r.M1504) === 4 },
     { kode: 'M-60', fields: [], keterangan: 'Apakah benar M1505a jumlah meteran listrik lebih dari dua?', cond: r => nz(r.M1505A) > 2 },
+    { kode: 'M-55', fields: ['M1405'], keterangan: 'Apakah benar M1405 cara pengambilan keputusan diisi kode 4 (lainnya)?', cond: r => nz(r.M1405) === 4 },
+    // M-52/M-53: Rincian 1402 (upacara adat/tradisi setahun terakhir) — tiap sub-rincian
+    // (A. Kelahiran ... G. Lainnya) punya 2 field terpisah di DBF: _1 = Menyelenggarakan
+    // (1=Ya,2=Tidak), _2 = Menghadiri (3=Ya,4=Tidak) — dikonfirmasi dari foto kuesioner
+    // asli yang Anda kirim 16/9. "menyelenggarakan dan/atau menghadiri" = OR salah satu Ya.
+    { kode: 'M-52', fields: ['M1402F_1', 'M1402F_2'], keterangan: 'Konfirmasi menyelenggarakan dan/atau menghadiri upacara tradisi panen (Rincian 1402.F) dalam setahun terakhir?',
+      cond: r => nz(r.M1402F_1) === 1 || nz(r.M1402F_2) === 3 },
+    { kode: 'M-53', fields: ['M1402G_1', 'M1402G_2'], keterangan: 'Konfirmasi menyelenggarakan atau menghadiri upacara tradisi lainnya (Rincian 1402.G) dalam setahun terakhir? Upacara/tradisi apa?',
+      cond: r => nz(r.M1402G_1) === 1 || nz(r.M1402G_2) === 3 },
     // Rincian 1415.B: "Trotoar di wilayah tempat tinggal sudah digunakan
     // sepenuhnya utk pejalan kaki..." (1=Setuju, 5=Tidak Setuju, 7=Tidak
     // relevan). NKS 50262/50334 dikecualikan sesuai permintaan.
