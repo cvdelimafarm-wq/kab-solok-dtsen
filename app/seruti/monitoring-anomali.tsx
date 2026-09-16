@@ -4,20 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // ============================================================================
-// Tab "Monitoring Penyelesaian Anomali" — rekap per NKS: berapa temuan yang
-// masih perlu diperiksa (status pending), dan apakah sudah tuntas atau
-// belum. Sumber NKS/Jorong/PPL dari kp_nks_jorong (master mapping yang sudah
-// ada); jumlah "Perlu Diperiksa" dihitung dari kp_anomali_temuan (gabungan
-// VSEN26.KP + VSEN26.M).
+// Tab "Monitoring Penyelesaian Anomali" — rekap per NKS: berapa sampel (RT)
+// yang punya temuan, berapa total temuan awal, berapa sudah dikonfirmasi PPL
+// dan berapa yang belum. Sumber NKS/Jorong/PPL dari kp_nks_jorong (master
+// mapping yang sudah ada); seluruh angka dihitung dari kp_anomali_temuan
+// (gabungan VSEN26.KP + VSEN26.M, SEMUA status — bukan cuma pending).
 // ============================================================================
 
 interface MonitorRow {
   nks: string;
   nama_jorong: string;
   nama_ppl: string;
-  perlu_diperiksa: number;
-  perlu_diperiksa_kp: number;
-  perlu_diperiksa_m: number;
+  jumlah_sampel_diperiksa: number; // jumlah NURT unik yg punya temuan
+  jumlah_awal: number; // total temuan (semua status, termasuk resolved)
+  sudah_dikonfirmasi: number; // status sesuai + perlu_koreksi (PPL sudah menandai)
+  belum_konfirmasi: number; // status pending
 }
 
 export default function MonitoringAnomaliTab() {
@@ -31,32 +32,40 @@ export default function MonitoringAnomaliTab() {
     setLoading(true);
     const [{ data: jorongRows, error: jorongErr }, { data: temuanRows, error: temuanErr }] = await Promise.all([
       supabase.from("kp_nks_jorong").select("nks, nama_jorong, nama_ppl").order("nks"),
-      supabase.from("kp_anomali_temuan").select("nks, kode_anomali").eq("status", "pending"),
+      supabase.from("kp_anomali_temuan").select("nks, nurt, status"),
     ]);
     if (jorongErr) setDebugError(`Gagal memuat NKS/Jorong: ${jorongErr.message}`);
     else if (temuanErr) setDebugError(`Gagal memuat temuan: ${temuanErr.message}`);
     else setDebugError(null);
 
-    // Hitung jumlah pending per NKS, dipecah KP vs M sekaligus digabung.
-    const countMap = new Map<string, { kp: number; m: number }>();
+    // Agregasi per NKS: jumlah sampel (NURT unik), total awal, sudah/belum konfirmasi.
+    const agg = new Map<
+      string,
+      { nurtSet: Set<string>; total: number; sudah: number; belum: number }
+    >();
     for (const t of temuanRows ?? []) {
       const nks = t.nks as string;
       if (!nks) continue;
-      const cur = countMap.get(nks) ?? { kp: 0, m: 0 };
-      if (String(t.kode_anomali).startsWith("KP-")) cur.kp += 1;
-      else cur.m += 1;
-      countMap.set(nks, cur);
+      const cur = agg.get(nks) ?? { nurtSet: new Set<string>(), total: 0, sudah: 0, belum: 0 };
+      if (t.nurt) cur.nurtSet.add(String(t.nurt));
+      cur.total += 1;
+      if (t.status === "pending") cur.belum += 1;
+      else if (t.status === "sesuai" || t.status === "perlu_koreksi") cur.sudah += 1;
+      // status 'resolved' dihitung di jumlah_awal (total) tapi bukan sudah/belum konfirmasi
+      // — karena itu ditutup otomatis oleh sistem, bukan hasil konfirmasi PPL.
+      agg.set(nks, cur);
     }
 
     const list: MonitorRow[] = (jorongRows ?? []).map((j) => {
-      const c = countMap.get(j.nks as string) ?? { kp: 0, m: 0 };
+      const c = agg.get(j.nks as string) ?? { nurtSet: new Set<string>(), total: 0, sudah: 0, belum: 0 };
       return {
         nks: j.nks as string,
         nama_jorong: j.nama_jorong as string,
         nama_ppl: j.nama_ppl as string,
-        perlu_diperiksa: c.kp + c.m,
-        perlu_diperiksa_kp: c.kp,
-        perlu_diperiksa_m: c.m,
+        jumlah_sampel_diperiksa: c.nurtSet.size,
+        jumlah_awal: c.total,
+        sudah_dikonfirmasi: c.sudah,
+        belum_konfirmasi: c.belum,
       };
     });
     setRows(list);
@@ -67,11 +76,11 @@ export default function MonitoringAnomaliTab() {
     load();
   }, [load]);
 
-  const jumlahSudah = rows.filter((r) => r.perlu_diperiksa === 0).length;
+  const jumlahSudah = rows.filter((r) => r.belum_konfirmasi === 0).length;
   const jumlahBelum = rows.length - jumlahSudah;
   const shown = rows.filter((r) => {
-    if (filter === "sudah") return r.perlu_diperiksa === 0;
-    if (filter === "belum") return r.perlu_diperiksa > 0;
+    if (filter === "sudah") return r.belum_konfirmasi === 0;
+    if (filter === "belum") return r.belum_konfirmasi > 0;
     return true;
   });
 
@@ -124,13 +133,24 @@ export default function MonitoringAnomaliTab() {
 
       {/* ---------- Tabel ---------- */}
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[600px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
             <tr>
               <th className="px-3 py-2 font-medium">NKS</th>
               <th className="px-3 py-2 font-medium">Nama Jorong</th>
               <th className="px-3 py-2 font-medium">PPL</th>
-              <th className="px-3 py-2 font-medium text-center">Perlu Diperiksa</th>
+              <th className="px-3 py-2 font-medium text-center" title="Jumlah RT (NURT) unik yang punya minimal 1 temuan anomali">
+                Jml Sampel Diperiksa
+              </th>
+              <th className="px-3 py-2 font-medium text-center" title="Total temuan yang pernah terdeteksi (semua status, termasuk yang sudah selesai/teratasi otomatis)">
+                Jumlah Awal
+              </th>
+              <th className="px-3 py-2 font-medium text-center" title="Temuan yang sudah ditandai PPL sebagai Sesuai atau Perlu Koreksi">
+                Sudah Dikonfirmasi
+              </th>
+              <th className="px-3 py-2 font-medium text-center" title="Temuan yang masih menunggu diperiksa PPL">
+                Belum Konfirmasi
+              </th>
               <th className="px-3 py-2 font-medium text-center">Status Pemeriksaan</th>
             </tr>
           </thead>
@@ -140,32 +160,30 @@ export default function MonitoringAnomaliTab() {
                 <td className="px-3 py-2 font-mono text-xs">{r.nks}</td>
                 <td className="px-3 py-2">{r.nama_jorong}</td>
                 <td className="px-3 py-2 text-ink/70">{r.nama_ppl}</td>
+                <td className="px-3 py-2 text-center">{r.jumlah_sampel_diperiksa}</td>
+                <td className="px-3 py-2 text-center">{r.jumlah_awal}</td>
+                <td className="px-3 py-2 text-center text-moss-700">{r.sudah_dikonfirmasi}</td>
                 <td className="px-3 py-2 text-center">
-                  {r.perlu_diperiksa === 0 ? (
+                  {r.belum_konfirmasi === 0 ? (
                     <span className="text-ink/30">0</span>
                   ) : (
-                    <span
-                      title={`${r.perlu_diperiksa_kp} VSEN26.KP, ${r.perlu_diperiksa_m} VSEN26.M`}
-                      className="cursor-help font-semibold text-rust-700"
-                    >
-                      {r.perlu_diperiksa}
-                    </span>
+                    <span className="font-semibold text-rust-700">{r.belum_konfirmasi}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-center">
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      r.perlu_diperiksa === 0 ? "bg-moss-100 text-moss-700" : "bg-rust-100 text-rust-700"
+                      r.belum_konfirmasi === 0 ? "bg-moss-100 text-moss-700" : "bg-rust-100 text-rust-700"
                     }`}
                   >
-                    {r.perlu_diperiksa === 0 ? "Sudah" : "Belum"}
+                    {r.belum_konfirmasi === 0 ? "Sudah" : "Belum"}
                   </span>
                 </td>
               </tr>
             ))}
             {shown.length === 0 && !loading && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-xs text-ink/40">
+                <td colSpan={8} className="px-3 py-6 text-center text-xs text-ink/40">
                   Tidak ada data untuk filter ini.
                 </td>
               </tr>
