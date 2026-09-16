@@ -367,11 +367,15 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   }
 
   // ---------- KP-02: kewajaran nilai Blok IV.2 (tabel 5), ambang dinamis per NOURUTKOMO ----------
+  // Rincian REKAP (baris jumlah/subtotal di kuesioner, bukan item konsumsi individual)
+  // dikecualikan sepenuhnya dari analisis outlier ini — dikonfirmasi Anda 16/9.
+  const KP02_REKAP_NOURUTKOMO = new Set([307, 316, 334, 341]);
   {
     const byKomo = new Map();
     for (const row of t5) {
       const n = row.NOURUTKOMO;
       if (n === null || n === undefined) continue;
+      if (KP02_REKAP_NOURUTKOMO.has(n)) continue;
       if (!byKomo.has(n)) byKomo.set(n, { k5: [], k6: [] });
       if (row.KOLOM5) byKomo.get(n).k5.push(row.KOLOM5);
       if (row.KOLOM6) byKomo.get(n).k6.push(row.KOLOM6);
