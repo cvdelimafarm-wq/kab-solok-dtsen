@@ -829,8 +829,11 @@ function RekapTab({
           <ul className="mt-2 flex flex-col gap-2">
             {rows.map((r) => {
               const dalamPeriodeMonitoring = daysBetween(new Date(), BATAS_MONITORING_HARIAN) >= 0;
-              const hijau = dalamPeriodeMonitoring && sudahUpdateHariIni(r.last_updated);
               const lengkap = r.belum_didata === 0;
+              // Jorong yang sudah 100% lengkap dianggap "sudah update" terus,
+              // meskipun update terakhirnya beberapa hari lalu — karena memang
+              // sudah tidak ada lagi yang perlu diupdate.
+              const hijau = lengkap || (dalamPeriodeMonitoring && sudahUpdateHariIni(r.last_updated));
               return (
                 <li
                   key={r.ppl_id}
@@ -854,7 +857,12 @@ function RekapTab({
                     <br />
                     <span className="text-xs opacity-70">
                       Update terakhir: {formatWaktuWIB(r.last_updated)}{" "}
-                      &middot; {hijau ? "sudah update hari ini" : "belum update hari ini"}
+                      &middot;{" "}
+                      {lengkap
+                        ? "sudah lengkap 100%"
+                        : hijau
+                        ? "sudah update hari ini"
+                        : "belum update hari ini"}
                     </span>
                   </span>
                 </li>
