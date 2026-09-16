@@ -795,8 +795,6 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   }
 
   // ---------- M-INFORMAN: pemberi info bukan KRT (M401) dan umurnya <17 ----------
-  // ⚠ M409=M401 dari usulan awal (Anomali 2) TIDAK diimplementasikan — makna
-  // persisnya masih perlu diklarifikasi (lihat percakapan sebelumnya).
   {
     const households = new Map<string, any[]>();
     for (const row of m1) {
@@ -806,9 +804,25 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     }
     for (const rows of households.values()) {
       const informanNo = rows[0]?.M409;
-      if (informanNo == null || nz(informanNo) <= 1) continue; // informan = KRT (ART#1), tidak perlu dicek
+      if (informanNo == null) continue;
+
       const informanRow = rows.find(r => nz(r.M401) === nz(informanNo));
-      if (!informanRow) continue;
+
+      // M-INFORMAN-INVALID: nomor ART pemberi informasi (M409) TIDAK COCOK
+      // dengan ART manapun yg tercatat di rumah tangga ini (M401) — berarti
+      // salah ketik/menunjuk ART yang tidak ada. Ini yg dimaksud usulan awal
+      // "M409=M401, apa iya?" — dikonfirmasi maknanya: bukan dicek per-baris
+      // (selalu benar utk baris informan sendiri, jadi bukan anomali kalau
+      // dicek begitu), tapi dicek per-RUMAH TANGGA: apakah ADA baris yg cocok.
+      if (!informanRow) {
+        push('M-INFORMAN-INVALID', 'F. Konsistensi Data ART (VSEN26.M)', rows[0], {
+          keterangan: `Nomor urut ART pemberi informasi (M409=${informanNo}) tidak cocok dengan ART manapun di rumah tangga ini — mohon dicek ulang.`,
+          detail: { nomorUrutInforman: informanNo },
+        });
+        continue;
+      }
+
+      if (nz(informanNo) <= 1) continue; // informan = KRT (ART#1), tidak perlu dicek umur
       if (nz(informanRow.M407) < 17) {
         push('M-INFORMAN', 'F. Konsistensi Data ART (VSEN26.M)', informanRow, {
           keterangan: 'Nomor urut pemberi informasi bukan KRT dan berumur kurang dari 17 tahun — mohon dicek ulang.',
