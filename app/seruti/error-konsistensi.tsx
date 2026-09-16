@@ -7,10 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 // Tab "Error Konsistensi" — VERSI 2 (rombak total dari versi katalog belajar
 // sebelumnya, per arahan Bapak Iqbal 16/9): bukan lagi menjelajah katalog
 // aturan yang abstrak, tapi menampilkan TEMUAN NYATA hasil evaluasi otomatis
-// 930 dari 1.018 aturan konsistensi resmi BPS VSEN26.M terhadap DATA YANG
-// SUDAH DIENTRI (tabel m1/mrt1/mrt2 — data DBF yang sama dipakai Anomali
-// Cepat). Evaluasi jalan otomatis tiap kali ada upload/"Jalankan Ulang" baru
-// (lib/runKonsistensiPipeline.ts), hasilnya tersimpan di kp_konsistensi_temuan.
+// aturan konsistensi resmi BPS -- VSEN26.M (930/1.018) DAN VSEN26.KP
+// (3.280/3.339, ditambahkan 16/9 setelah PPL upload lengkap 15 file DBF
+// VSEN26.KP/VSEN26.M) -- terhadap DATA YANG SUDAH DIENTRI (tabel m1/mrt1/
+// mrt2/.../t3-t12 — data DBF yang sama dipakai Anomali Cepat). Evaluasi
+// jalan otomatis tiap kali ada upload/"Jalankan Ulang" baru
+// (lib/runKonsistensiPipeline.ts utk M, lib/runKonsistensiPipelineKP.ts utk
+// KP), hasilnya tersimpan bareng di kp_konsistensi_temuan (dibedakan lewat
+// kolom kuesioner).
 //
 // PPL HANYA melihat temuan utk NKS yang jadi tanggung jawabnya sendiri —
 // dicocokkan dari nama yang diisi terhadap kp_nks_jorong.nama_ppl (BUKAN
@@ -27,6 +31,7 @@ interface Temuan {
   id: number;
   rule_id: number;
   field: string;
+  kuesioner: string | null;
   nks: string;
   nurt: string;
   art_no: number | null;
@@ -38,6 +43,12 @@ interface Temuan {
   status: "aktif" | "resolved";
   dibaca_at: string | null;
   dibaca_oleh: string | null;
+}
+
+type FilterKuesioner = "SEMUA" | "M" | "KP";
+
+function kuesionerBadgeClass(kuesioner: string | null): string {
+  return kuesioner === "KP" ? "bg-gold-500 text-white" : "bg-navy-400 text-white";
 }
 
 const NAMA_PPL_KEY = "seruti-nama-ppl";
@@ -101,6 +112,7 @@ export default function ErrorKonsistensiTab() {
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
   const [hanyaBelumDibaca, setHanyaBelumDibaca] = useState(true);
+  const [filterKuesioner, setFilterKuesioner] = useState<FilterKuesioner>("SEMUA");
   const [openCards, setOpenCards] = useState<Set<number>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
@@ -200,18 +212,27 @@ export default function ErrorKonsistensiTab() {
     });
   }
 
+  const jumlahM = useMemo(() => temuan.filter((t) => t.kuesioner !== "KP").length, [temuan]);
+  const jumlahKp = useMemo(() => temuan.filter((t) => t.kuesioner === "KP").length, [temuan]);
+
+  const temuanTersaring = useMemo(() => {
+    if (filterKuesioner === "SEMUA") return temuan;
+    if (filterKuesioner === "KP") return temuan.filter((t) => t.kuesioner === "KP");
+    return temuan.filter((t) => t.kuesioner !== "KP"); // "M" -- termasuk baris lama tanpa kolom kuesioner
+  }, [temuan, filterKuesioner]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, Temuan[]>();
-    for (const t of temuan) {
+    for (const t of temuanTersaring) {
       const g = `${t.nks}|${t.nurt}`;
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(t);
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [temuan]);
+  }, [temuanTersaring]);
 
-  const total = temuan.length;
-  const belumDibaca = temuan.filter((t) => !t.dibaca_at).length;
+  const total = temuanTersaring.length;
+  const belumDibaca = temuanTersaring.filter((t) => !t.dibaca_at).length;
   const sudahDibaca = total - belumDibaca;
   const persen = total > 0 ? Math.round((sudahDibaca / total) * 100) : 0;
 
@@ -227,8 +248,8 @@ export default function ErrorKonsistensiTab() {
       <div>
         <h1 className="text-base font-bold text-navy-900 sm:text-lg">Error Konsistensi</h1>
         <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-          Temuan nyata dari 930 aturan konsistensi resmi BPS VSEN26.M, dievaluasi otomatis terhadap data yang sudah
-          Anda entri — hanya untuk NKS &amp; sampel yang jadi tanggung jawab Anda. Wajib dibaca, bukan
+          Temuan nyata dari aturan konsistensi resmi BPS VSEN26.M &amp; VSEN26.KP, dievaluasi otomatis terhadap data
+          yang sudah Anda entri — hanya untuk NKS &amp; sampel yang jadi tanggung jawab Anda. Wajib dibaca, bukan
           dikonfirmasi/ditolak.
         </p>
       </div>
@@ -277,6 +298,29 @@ export default function ErrorKonsistensiTab() {
             <SummaryBox label="Total Temuan" value={total} className="bg-navy-50 text-navy-900" />
             <SummaryBox label="Belum Dibaca" value={belumDibaca} className="bg-gold-100 text-gold-600" />
             <SummaryBox label="Progres" value={`${persen}%`} className="bg-moss-100 text-moss-700" />
+          </div>
+
+          {/* ---------- Filter kuesioner (M / KP) ---------- */}
+          <div className="flex gap-1.5">
+            {(
+              [
+                { key: "SEMUA", label: `Semua (${jumlahM + jumlahKp})` },
+                { key: "M", label: `VSEN26.M (${jumlahM})` },
+                { key: "KP", label: `VSEN26.KP (${jumlahKp})` },
+              ] as { key: FilterKuesioner; label: string }[]
+            ).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setFilterKuesioner(opt.key)}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition ${
+                  filterKuesioner === opt.key
+                    ? "border-navy-700 bg-navy-700 text-white"
+                    : "border-line bg-white text-ink/60 hover:bg-paper/60"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
           <label className="flex items-center gap-2 text-xs text-ink/70">
@@ -408,6 +452,9 @@ function TemuanCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-[11px] text-ink/50">
+              <span className={`mr-1 rounded px-1 py-0.5 text-[9px] font-bold ${kuesionerBadgeClass(temuan.kuesioner)}`}>
+                {temuan.kuesioner === "KP" ? "KP" : "M"}
+              </span>
               {levelLabel(temuan.level, temuan.art_no)}
               {temuan.nama_krt ? ` · ${temuan.nama_krt}` : ""}
               {temuan.is_fatal && <span className="ml-1 font-semibold text-rust-700">(wajib diperbaiki)</span>}

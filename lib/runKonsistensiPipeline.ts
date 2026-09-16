@@ -210,8 +210,13 @@ export async function runKonsistensiPipeline(
     is_fatal: f.is_fatal,
   }));
 
+  // p_kuesioner WAJIB disertakan -- natural_key & sapuan "tandai resolved"
+  // di RPC ini di-scope PER KUESIONER (lihat migrasi
+  // fix_kp_konsistensi_natural_key_scope_by_kuesioner), supaya evaluasi
+  // VSEN26.KP (lib/runKonsistensiPipelineKP.ts, dipanggil terpisah dgn
+  // upload_id yg SAMA) tidak saling menimpa/menyapu temuan VSEN26.M ini.
   const { data: upsertResult, error: upsertErr } = await supabase
-    .rpc('kp_konsistensi_upsert_batch', { p_upload_id: uploadId, p_findings: payload })
+    .rpc('kp_konsistensi_upsert_batch', { p_upload_id: uploadId, p_findings: payload, p_kuesioner: 'M' })
     .single();
   if (upsertErr) throw upsertErr;
 

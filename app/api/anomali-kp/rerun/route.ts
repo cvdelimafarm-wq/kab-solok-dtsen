@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Tables } from '@/lib/anomalyChecks';
 import { runAnomaliPipeline } from '@/lib/runAnomaliPipeline';
 import { runKonsistensiPipeline } from '@/lib/runKonsistensiPipeline';
+import { runKonsistensiPipelineKP } from '@/lib/runKonsistensiPipelineKP';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -77,11 +78,29 @@ export async function POST(req: NextRequest) {
         hasilKonsistensi = await runKonsistensiPipeline(supabase, tables, hasil.uploadId);
       } catch (err: any) {
         console.error('konsistensi-m pipeline error:', err);
-        warningKonsistensi = `Evaluasi Error Konsistensi gagal: ${err.message || String(err)}`;
+        warningKonsistensi = `Evaluasi Error Konsistensi (VSEN26.M) gagal: ${err.message || String(err)}`;
       }
     }
 
-    return NextResponse.json({ ...hasil, konsistensi: hasilKonsistensi, warningKonsistensi });
+    const adaKp = tables.t3 || tables.t4 || tables.t5 || tables.t9 || tables.t6 || tables.t7 || tables.t8 || tables.t10 || tables.t11 || tables.t12;
+    let warningKonsistensiKp: string | null = null;
+    let hasilKonsistensiKp: { totalTemuan: number; ringkasan: { baru: number; tetap: number; selesai: number } } | null = null;
+    if (adaKp) {
+      try {
+        hasilKonsistensiKp = await runKonsistensiPipelineKP(supabase, tables, hasil.uploadId);
+      } catch (err: any) {
+        console.error('konsistensi-kp pipeline error:', err);
+        warningKonsistensiKp = `Evaluasi Error Konsistensi (VSEN26.KP) gagal: ${err.message || String(err)}`;
+      }
+    }
+
+    return NextResponse.json({
+      ...hasil,
+      konsistensi: hasilKonsistensi,
+      warningKonsistensi,
+      konsistensiKp: hasilKonsistensiKp,
+      warningKonsistensiKp,
+    });
   } catch (err: any) {
     console.error('anomali-kp rerun error:', err);
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });

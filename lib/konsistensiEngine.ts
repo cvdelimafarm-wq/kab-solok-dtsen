@@ -53,6 +53,15 @@ export const UNSUPPORTED_FUNCTIONS = new Set(['ISKOORDINATKOSONG', 'INTRANGE', '
 const KNOWN_FUNCTIONS = new Set([
   'ISNULL', 'INT', 'STR', 'MID', 'LEFT', 'TRIM', 'LEN', 'MOD', 'CONTAIN',
   'ISALLEMPTY', 'ISCOMPLETE', 'COUNT', 'GETNOART', 'INNER',
+  // Ditambahkan utk VSEN26.KP (lihat lib/konsistensiFieldMapKP.ts) -- SUM
+  // dipakai BPS cuma dgn 1 argumen field tunggal (rekap ART -> RT, mis.
+  // "SUM(R188K5)", "SUM(MB431K3)"), jadi cukup dievaluasi sbg pass-through
+  // thd nilai field itu SENDIRI -- field itu SUDAH berupa hasil agregasi
+  // (dijumlahkan lintas baris ART) sejak dibentuk di konteks evaluasi
+  // rumah tangga (lib/runKonsistensiPipelineKP.ts), bukan dihitung ulang
+  // di sini. CHECKNOALPHA & ROUNDINT diverifikasi cukup sederhana utk
+  // diimplementasikan langsung dari nama fungsinya.
+  'SUM', 'CHECKNOALPHA', 'ROUNDINT',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -519,6 +528,22 @@ function evalCall(node: Extract<Node, { t: 'call' }>, ctx: EvalCtx): unknown {
     }
     case 'ISALLEMPTY': return args.every((a) => isBlank(evalNode(a, ctx)));
     case 'ISCOMPLETE': return args.every((a) => !isBlank(evalNode(a, ctx)));
+    case 'SUM': {
+      // Lihat catatan di KNOWN_FUNCTIONS -- field argumennya sudah berupa
+      // total teragregasi, jadi SUM cukup jadi pass-through.
+      const v = evalNode(args[0], ctx);
+      return isBlank(v) ? 0 : toNum(v);
+    }
+    case 'CHECKNOALPHA': {
+      // true kalau isian TIDAK mengandung huruf sama sekali (dipakai utk
+      // validasi kolom yg seharusnya cuma angka/simbol, mis. satuan/kode).
+      const s = normStr(evalNode(args[0], ctx));
+      return !/[a-zA-Z]/.test(s);
+    }
+    case 'ROUNDINT': {
+      const v = toNum(evalNode(args[0], ctx));
+      return Number.isFinite(v) ? Math.round(v) : NaN;
+    }
     default:
       return undefined;
   }

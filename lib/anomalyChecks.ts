@@ -27,11 +27,21 @@ export type Tables = {
   t3: DbfRow[]; // Komoditi Makanan RT (bahan makanan mentah, No.1-186)
   t4: DbfRow[]; // Komoditi Makanan ART (makanan/minuman jadi & rokok, No.187-225)
   t5: DbfRow[]; // Komoditi Non Makanan (No.226-347)
-  t9: DbfRow[]; // Rekap RT Blok IV.3.2-3
+  t9: DbfRow[]; // Rekap RT Blok IV.3.2-3 (B43 -- rekapitulasi per RT)
   m1?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_1...", identitas & Blok 4-13 per ART)
+  m1b?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_2...", Blok 8 anak/gizi per ART: M810-M829)
   m1c?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_3...", Blok 11 biaya pendidikan M1112-M1118 per ART)
   mrt1?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_1...", Blok 14-15 per RT: M1401-M1508)
   mrt2?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_2...", Blok 15-17 per RT: M1509-M1703)
+  mrt3?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_3...", M1612B per RT)
+  // ---- VSEN26.KP tambahan (Blok IV.3 ART, Blok V-VII) — ditambahkan setelah
+  // upload file lengkap dari PPL, lihat lib/konsistensiFieldMapKP.ts ----
+  t6?: DbfRow[]; // Rekap B43 ART (file "6...", per ART: B431K3-K6)
+  t7?: DbfRow[]; // ART B5A -- Blok V.A per ART (file "7...", B5AK2-K7)
+  t8?: DbfRow[]; // ART B5B -- Blok V.B per ART (file "8...", B5BK2/MB5BK2-K7)
+  t10?: DbfRow[]; // Rekap B5A-B5E RT (file "10...")
+  t11?: DbfRow[]; // Rekap B5F-B5G RT (file "11...")
+  t12?: DbfRow[]; // Rekap B6-B7 RT (file "12...")
 };
 
 export type Thresholds = {

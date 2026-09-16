@@ -1,10 +1,11 @@
 // app/api/anomali-kp/upload/route.ts
 //
-// Terima upload file DBF (VSEN26.KP: "3_","4_","5_","9_" — VSEN26.M:
-// "1_1","1_3","2_1","2_2"), parse, jalankan seluruh pengecekan anomali,
-// simpan hasilnya ke Supabase. Data mentah hasil parsing ikut disimpan
-// (kolom raw_data) supaya bisa "Jalankan Ulang" nanti tanpa upload file lagi
-// — lihat route /rerun.
+// Terima upload file DBF (VSEN26.KP: "3_" s.d. "12_" — VSEN26.M: "1_1",
+// "1_2","1_3","2_1","2_2","2_3"), parse, jalankan seluruh pengecekan
+// anomali & aturan konsistensi resmi BPS (VSEN26.M + VSEN26.KP), simpan
+// hasilnya ke Supabase. Data mentah hasil parsing ikut disimpan (kolom
+// raw_data) supaya bisa "Jalankan Ulang" nanti tanpa upload file lagi —
+// lihat route /rerun.
 //
 // PENTING: route ini butuh SUPABASE_SERVICE_ROLE_KEY di environment
 // variable Railway (Settings > Variables), BUKAN NEXT_PUBLIC_* — supaya
@@ -20,6 +21,7 @@ import { readDbf } from '@/lib/dbfParser';
 import type { Tables } from '@/lib/anomalyChecks';
 import { runAnomaliPipeline } from '@/lib/runAnomaliPipeline';
 import { runKonsistensiPipeline } from '@/lib/runKonsistensiPipeline';
+import { runKonsistensiPipelineKP } from '@/lib/runKonsistensiPipelineKP';
 
 // Route ini butuh Node.js runtime (paket 'dbffile' pakai modul 'fs'),
 // tidak bisa jalan di Edge Runtime.
@@ -33,10 +35,12 @@ function detectTableRole(filename: string): keyof Tables | null {
   const compound = filename.match(/^(\d+_\d+)[._]/);
   if (compound) {
     if (compound[1] === '1_1') return 'm1';
+    if (compound[1] === '1_2') return 'm1b';
     if (compound[1] === '1_3') return 'm1c';
     if (compound[1] === '2_1') return 'mrt1';
     if (compound[1] === '2_2') return 'mrt2';
-    return null; // 1_2, 2_3 dst -- belum dipakai
+    if (compound[1] === '2_3') return 'mrt3';
+    return null;
   }
 
   // Terima format "3_..." (garis bawah) MAUPUN "3. ..." (titik+spasi, format
@@ -48,7 +52,13 @@ function detectTableRole(filename: string): keyof Tables | null {
   if (n === '3') return 't3';
   if (n === '4') return 't4';
   if (n === '5') return 't5';
+  if (n === '6') return 't6';
+  if (n === '7') return 't7';
+  if (n === '8') return 't8';
   if (n === '9') return 't9';
+  if (n === '10') return 't10';
+  if (n === '11') return 't11';
+  if (n === '12') return 't12';
   return null;
 }
 
@@ -76,6 +86,7 @@ export async function POST(req: NextRequest) {
     tmpDir = await mkdtemp(path.join(tmpdir(), 'anomali-kp-'));
     const tables: Partial<Tables> = {};
     const usedFilenames: string[] = [];
+    const fileDiabaikan: string[] = [];
 
     // TAHAP 1: tulis SEMUA file yang diupload ke folder sementara terlebih
     // dahulu (termasuk file .dbt / memo pendamping). Ini penting karena
@@ -89,29 +100,42 @@ export async function POST(req: NextRequest) {
     }
 
     // TAHAP 2: baru baca file .dbf yang relevan (bukan file .dbt itu sendiri
-    // — itu cuma pendamping, bukan tabel yang dibaca langsung).
+    // — itu cuma pendamping, bukan tabel yang dibaca langsung). File yg
+    // TIDAK dikenali detectTableRole DICATAT (fileDiabaikan) supaya PPL
+    // diberi tahu lewat respons, bukan diam2 diabaikan tanpa keterangan
+    // (dulu tidak ada peringatan ini sama sekali — sempat bikin PPL
+    // mengira semua filenya sudah terekam padahal sebagian tidak dipakai).
     for (const file of files) {
       if (file.name.toLowerCase().endsWith('.dbt')) continue;
       const role = detectTableRole(file.name);
-      if (!role) continue; // file di luar tabel yang dipakai, diabaikan
+      if (!role) {
+        fileDiabaikan.push(file.name);
+        continue;
+      }
       const filePath = path.join(tmpDir, file.name);
       tables[role] = await readDbf(filePath);
       usedFilenames.push(file.name);
     }
 
-    const adaKp = tables.t3 || tables.t4 || tables.t5 || tables.t9;
-    const adaM = tables.m1 || tables.m1c || tables.mrt1 || tables.mrt2;
+    const adaKp = tables.t3 || tables.t4 || tables.t5 || tables.t9 || tables.t6 || tables.t7 || tables.t8 || tables.t10 || tables.t11 || tables.t12;
+    const adaM = tables.m1 || tables.m1b || tables.m1c || tables.mrt1 || tables.mrt2 || tables.mrt3;
     if (!adaKp && !adaM) {
       return NextResponse.json(
         {
           error:
-            'Tidak ada file yang dikenali. Pastikan nama file diawali "3_"/"4_"/"5_"/"9_" (VSEN26.KP) ' +
-            'atau "1_1"/"1_3"/"2_1"/"2_2" (VSEN26.M) persis seperti hasil export aplikasi desktop.',
+            'Tidak ada file yang dikenali. Pastikan nama file diawali "3_" s.d. "12_" (VSEN26.KP) ' +
+            'atau "1_1"/"1_2"/"1_3"/"2_1"/"2_2"/"2_3" (VSEN26.M) persis seperti hasil export aplikasi desktop.',
           namaFileYangDiterimaServer: files.map((f) => f.name),
         },
         { status: 400 }
       );
     }
+    // t3/t4/t5/t9 tetap WAJIB kalau ada file KP sama sekali (dipakai Anomali
+    // Cepat & jadi basis Error Konsistensi KP) — t6/t7/t8/t10/t11/t12 (Blok
+    // IV.3 ART, Blok V-VII) OPSIONAL: kalau tidak diupload, aturan yg
+    // butuh data itu saja yang dilewati (lihat KONSISTENSI_RULES_KP,
+    // unsupported_reason), TIDAK menggagalkan upload PPL yg cuma pernah
+    // upload 7 file lama.
     if (adaKp) {
       const missing = (['t3', 't4', 't5', 't9'] as const).filter((k) => !tables[k]);
       if (missing.length) {
@@ -119,7 +143,7 @@ export async function POST(req: NextRequest) {
           {
             error:
               `File VSEN26.KP tidak lengkap, kurang: ${missing.join(', ')}. ` +
-              'Upload keempat-empatnya sekaligus (3_, 4_, 5_, 9_), atau kalau memang cuma mau upload VSEN26.M, jangan sertakan file KP sama sekali.',
+              'Upload minimal keempat-empatnya sekaligus (3_, 4_, 5_, 9_), atau kalau memang cuma mau upload VSEN26.M, jangan sertakan file KP sama sekali.',
             namaFileYangDiterimaServer: files.map((f) => f.name),
           },
           { status: 400 }
@@ -141,11 +165,35 @@ export async function POST(req: NextRequest) {
         hasilKonsistensi = await runKonsistensiPipeline(supabase, tables, hasil.uploadId);
       } catch (err: any) {
         console.error('konsistensi-m pipeline error:', err);
-        warningKonsistensi = `Evaluasi Error Konsistensi gagal: ${err.message || String(err)}`;
+        warningKonsistensi = `Evaluasi Error Konsistensi (VSEN26.M) gagal: ${err.message || String(err)}`;
       }
     }
 
-    return NextResponse.json({ ...hasil, konsistensi: hasilKonsistensi, warningKonsistensi });
+    // Evaluasi aturan konsistensi resmi BPS VSEN26.KP (3.339 aturan, lihat
+    // lib/konsistensiRulesKP.ts) — sama polanya dgn VSEN26.M di atas, upload_id
+    // SAMA, kegagalan tidak membatalkan hasil Anomali Cepat.
+    let warningKonsistensiKp: string | null = null;
+    let hasilKonsistensiKp: { totalTemuan: number; ringkasan: { baru: number; tetap: number; selesai: number } } | null = null;
+    if (adaKp) {
+      try {
+        hasilKonsistensiKp = await runKonsistensiPipelineKP(supabase, tables, hasil.uploadId);
+      } catch (err: any) {
+        console.error('konsistensi-kp pipeline error:', err);
+        warningKonsistensiKp = `Evaluasi Error Konsistensi (VSEN26.KP) gagal: ${err.message || String(err)}`;
+      }
+    }
+
+    return NextResponse.json({
+      ...hasil,
+      konsistensi: hasilKonsistensi,
+      warningKonsistensi,
+      konsistensiKp: hasilKonsistensiKp,
+      warningKonsistensiKp,
+      // File yg diupload tapi TIDAK dikenali/dipakai (nama tidak cocok pola
+      // manapun) — supaya PPL tahu kalau ada file yg "kelewat" dari 15+ file
+      // ekspor VSEN26.KP/VSEN26.M, bukan cuma diam2 diabaikan server.
+      fileDiabaikan,
+    });
   } catch (err: any) {
     console.error('anomali-kp upload error:', err);
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });
