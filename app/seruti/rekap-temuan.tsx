@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/client";
 // catatan yang disimpan di sini langsung tampil ke PPL.
 // ============================================================================
 
-type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi" | "resolved";
+type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi" | "salah_entry" | "resolved";
 
 interface TemuanRow {
   id: number;
@@ -39,6 +39,7 @@ const STATUS_META: Record<StatusKonfirmasi, { label: string; badge: string }> = 
   pending: { label: "Belum Dikonfirmasi", badge: "bg-gold-100 text-gold-600" },
   sesuai: { label: "Sesuai", badge: "bg-moss-100 text-moss-700" },
   perlu_koreksi: { label: "Perlu Koreksi", badge: "bg-rust-100 text-rust-700" },
+  salah_entry: { label: "Salah Entry", badge: "bg-navy-400 text-white" },
   resolved: { label: "Selesai", badge: "bg-navy-100 text-navy-600" },
 };
 
@@ -212,6 +213,7 @@ export default function RekapTemuanTab() {
           <option value="pending">Belum Dikonfirmasi</option>
           <option value="sesuai">Sesuai</option>
           <option value="perlu_koreksi">Perlu Koreksi</option>
+          <option value="salah_entry">Salah Entry</option>
           <option value="resolved">Selesai</option>
         </select>
         <span className="ml-auto text-xs text-ink/40">

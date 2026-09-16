@@ -15,7 +15,7 @@ import { Narasi } from "./anomali-cepat";
 // kolom opsional utk teks "Catatan BPS Kabupaten" di bawah).
 // ============================================================================
 
-type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi" | "resolved";
+type StatusKonfirmasi = "pending" | "sesuai" | "perlu_koreksi" | "salah_entry" | "resolved";
 
 interface Temuan {
   id: number;
@@ -139,6 +139,7 @@ const STATUS_META: Record<StatusKonfirmasi, { label: string; badge: string }> = 
   pending: { label: "Belum Dikonfirmasi", badge: "bg-gold-100 text-gold-600" },
   sesuai: { label: "Sesuai", badge: "bg-moss-100 text-moss-700" },
   perlu_koreksi: { label: "Perlu Koreksi", badge: "bg-rust-100 text-rust-700" },
+  salah_entry: { label: "Salah Entry", badge: "bg-navy-400 text-white" },
   resolved: { label: "Selesai", badge: "bg-navy-100 text-navy-600" },
 };
 
@@ -164,7 +165,14 @@ export default function KonfirmasiPplTab() {
   const [supabase] = useState(() => createClient());
 
   const [temuan, setTemuan] = useState<Temuan[]>([]);
-  const [ringkasan, setRingkasan] = useState({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0, selesai: 0 });
+  const [ringkasan, setRingkasan] = useState({
+    total: 0,
+    pending: 0,
+    sesuai: 0,
+    perlu_koreksi: 0,
+    salah_entry: 0,
+    selesai: 0,
+  });
   const [rekomendasiMap, setRekomendasiMap] = useState<Map<string, string>>(new Map());
   const [namaPpl, setNamaPpl] = useState("");
   const [openIds, setOpenIds] = useState<Set<number>>(new Set());
@@ -221,7 +229,7 @@ export default function KonfirmasiPplTab() {
   const loadData = useCallback(async () => {
     if (!siapTampil) {
       setTemuan([]);
-      setRingkasan({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0, selesai: 0 });
+      setRingkasan({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0, salah_entry: 0, selesai: 0 });
       return;
     }
     setLoading(true);
@@ -246,6 +254,7 @@ export default function KonfirmasiPplTab() {
       pending: all.filter((t) => t.status === "pending").length,
       sesuai: all.filter((t) => t.status === "sesuai").length,
       perlu_koreksi: all.filter((t) => t.status === "perlu_koreksi").length,
+      salah_entry: all.filter((t) => t.status === "salah_entry").length,
       selesai: all.filter((t) => t.status === "resolved").length,
     });
     const list = all.filter((t) => t.status === "pending");
@@ -264,7 +273,7 @@ export default function KonfirmasiPplTab() {
     loadData();
   }, [loadData]);
 
-  async function confirmFinding(id: number, status: "sesuai" | "perlu_koreksi", catatan: string) {
+  async function confirmFinding(id: number, status: "sesuai" | "perlu_koreksi" | "salah_entry", catatan: string) {
     await supabase
       .from("kp_anomali_temuan")
       .update({
@@ -285,6 +294,7 @@ export default function KonfirmasiPplTab() {
       pending: Math.max(0, prev.pending - 1),
       sesuai: status === "sesuai" ? prev.sesuai + 1 : prev.sesuai,
       perlu_koreksi: status === "perlu_koreksi" ? prev.perlu_koreksi + 1 : prev.perlu_koreksi,
+      salah_entry: status === "salah_entry" ? prev.salah_entry + 1 : prev.salah_entry,
     }));
     loadNksOptions(); // NKS yg temuan terakhirnya baru dikonfirmasi mungkin hilang dari dropdown
   }
@@ -400,10 +410,11 @@ export default function KonfirmasiPplTab() {
           )}
 
           {/* ---------- Ringkasan singkat (sesuai filter yg dipilih) ---------- */}
-          <div className={`grid gap-2 text-center ${filterBatch === "REKAP" ? "grid-cols-5" : "grid-cols-4"}`}>
+          <div className={`grid gap-2 text-center ${filterBatch === "REKAP" ? "grid-cols-6" : "grid-cols-5"}`}>
             <SummaryBox label="Total" value={ringkasan.total} className="bg-navy-50 text-navy-900" />
             <SummaryBox label="Belum" value={ringkasan.pending} className="bg-gold-100 text-gold-600" />
             <SummaryBox label="Koreksi" value={ringkasan.perlu_koreksi} className="bg-rust-100 text-rust-700" />
+            <SummaryBox label="Salah Entry" value={ringkasan.salah_entry} className="bg-navy-100 text-navy-600" />
             <SummaryBox label="Sesuai" value={ringkasan.sesuai} className="bg-moss-100 text-moss-700" />
             {filterBatch === "REKAP" && (
               <SummaryBox label="Selesai" value={ringkasan.selesai} className="bg-line/40 text-ink/60" />
@@ -490,14 +501,14 @@ function AnomaliCard({
   isOpen: boolean;
   onToggle: () => void;
   rekomendasi: string | null;
-  onConfirm: (id: number, status: "sesuai" | "perlu_koreksi", catatan: string) => void;
+  onConfirm: (id: number, status: "sesuai" | "perlu_koreksi" | "salah_entry", catatan: string) => void;
 }) {
   const [catatan, setCatatan] = useState("");
   const [busy, setBusy] = useState(false);
   const meta = STATUS_META[temuan.status];
   const rincian = buildRincian(temuan);
 
-  async function handle(status: "sesuai" | "perlu_koreksi") {
+  async function handle(status: "sesuai" | "perlu_koreksi" | "salah_entry") {
     setBusy(true);
     await onConfirm(temuan.id, status, catatan);
   }
@@ -610,6 +621,17 @@ function AnomaliCard({
               &#10007; Perlu Koreksi
             </button>
           </div>
+          {/* Salah Entry — kasus terpisah: bukan anomali lapangan, tapi salah ketik/salah
+              pilih kode saat entri, jadi cukup dibetulkan di kantor tanpa perlu konfirmasi
+              ulang ke responden. Ditaruh di baris sendiri (bukan disamakan ukurannya dgn
+              2 tombol utama) supaya tidak keliru dianggap tombol utama. */}
+          <button
+            disabled={busy}
+            onClick={() => handle("salah_entry")}
+            className="w-full rounded-md border border-navy-700 py-2.5 text-sm font-semibold text-navy-700 transition hover:bg-navy-50 disabled:opacity-50"
+          >
+            &#9003; Salah Entry
+          </button>
         </div>
       )}
     </div>
