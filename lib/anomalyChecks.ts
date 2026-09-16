@@ -44,6 +44,12 @@ export type Thresholds = {
   transportasiLautMin?: number;
   transportasiLautMax?: number;
   zscoreNonMakanan?: number;
+  // ---------- VSEN26.M ----------
+  uangSaku?: number; // M-35
+  biayaTransport?: number; // M-36
+  biayaBukuLKS?: number; // M-37
+  biayaBukuATK?: number; // M-38
+  sppMaks?: number; // M-39
 };
 //
 //   Tabel 3  (Komoditi Makanan RT / bahan makanan mentah, No.1-186):
@@ -263,6 +269,11 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
       transportasiLautMin: 100000, // dari data riil tahun lalu (file 20): rentang wajar Rp100rb - Rp500rb per tahun
       transportasiLautMax: 500000,
       zscoreNonMakanan: 3, // dipakai KP-02: tandai jika di luar mean ± N*SD per NOURUTKOMO
+      uangSaku: 50000, // M-35, per hari
+      biayaTransport: 30000, // M-36, per hari
+      biayaBukuLKS: 500000, // M-37
+      biayaBukuATK: 500000, // M-38
+      sppMaks: 6000000, // M-39
     },
     opts
   );
@@ -306,7 +317,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     if (Math.abs(banyakTotal - banyakHitung) > TOL || Math.abs(nilaiTotal - nilaiHitung) > TOL) {
       push('KP-01', 'A. Konsistensi Perhitungan', row, {
         keterangan: 'Jumlah di Kolom 9 tidak sesuai.',
-        detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung },
+        detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung, satuan: row.KOLOM9, nomorUrutArt: row.R401 },
       });
     }
   }
@@ -324,7 +335,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     if (Math.abs(banyakTotal - banyakHitung) > TOL || Math.abs(nilaiTotal - nilaiHitung) > TOL) {
       push('KP-23', 'A. Konsistensi Perhitungan', row, {
         keterangan: 'Jumlah di Kolom 9 tidak sesuai.',
-        detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung },
+        detail: { banyakTotal, banyakHitung, nilaiTotal, nilaiHitung, satuan: row.KOLOM9 },
       });
     }
   }
@@ -351,7 +362,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     if (pesan) {
       push('KP-24', 'A. Konsistensi Perhitungan', row, {
         keterangan: pesan,
-        detail: { sumberPerolehan: sumber, banyakBeli, banyakNonbeli },
+        detail: { sumberPerolehan: sumber, banyakBeli, banyakNonbeli, nomorUrutArt: row.R401 },
       });
     }
   }
@@ -534,6 +545,17 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         nilai: row[kolomNilai],
         rincian: item.nama,
         kategori: item.kategori,
+        // Kolom rincian lengkap (Beli/Nonbeli/Satuan/ART) — supaya PPL bisa
+        // lihat gambaran utuh, bukan cuma Banyak/Nilai Total. Sesuai contoh
+        // laporan anomali tahun lalu yang menampilkan semua kolom ini.
+        detail: {
+          banyakBeli: row.KOLOM1,
+          nilaiBeli: row.KOLOM2,
+          banyakNonbeli: row.KOLOM3,
+          nilaiNonbeli: row.KOLOM4,
+          satuan: row.KOLOM9,
+          ...(item.table === 4 ? { nomorUrutArt: row.R401 } : {}),
+        },
       });
     }
   }
@@ -545,6 +567,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         keterangan: 'Cek kembali apakah sudah benar yang dikonsumsi adalah minuman keras',
         banyak: row.KOLOM5,
         nilai: row.KOLOM6,
+        detail: { satuan: row.KOLOM9, nomorUrutArt: row.R401 },
       });
     }
   }
@@ -556,6 +579,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         keterangan: 'Cek kembali apakah sudah benar yang dikonsumsi adalah daging babi',
         banyak: row.KOLOM5,
         nilai: row.KOLOM6,
+        detail: { satuan: row.KOLOM9 },
       });
     }
   }
@@ -649,6 +673,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         keterangan: 'Cek kembali apakah sudah benar konsumsi garam dengan nilai ... per minggu?',
         banyak: row.KOLOM5,
         nilai: row.KOLOM6,
+        detail: { satuan: row.KOLOM9 },
       });
     }
   }
@@ -768,16 +793,16 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   // asli: field M401/M503 JUGA ada di tabel "1_3" ini, jadi tidak perlu
   // gabung-tabel dgn m1.
   const M_EDU_CHECKS: MSimpleCheck[] = [
-    { kode: 'M-35', fields: [], keterangan: 'Apakah benar rata-rata uang saku per hari di atas Rp50.000?',
-      cond: r => nz(r.M1115) > 50000 },
-    { kode: 'M-36', fields: [], keterangan: 'Apakah rata-rata biaya transportasi per hari di atas Rp30.000?',
-      cond: r => nz(r.M1116) > 30000 },
-    { kode: 'M-37', fields: [], keterangan: 'Apakah benar biaya buku pelajaran atau LKS lebih dari Rp500.000?',
-      cond: r => nz(r.M1118E) > 500000 },
-    { kode: 'M-38', fields: [], keterangan: 'Apakah benar biaya buku dan alat tulis lebih dari Rp500.000?',
-      cond: r => nz(r.M1118F) > 500000 },
-    { kode: 'M-39', fields: ['M503'], keterangan: 'Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp6 juta?',
-      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > 6000000 },
+    { kode: 'M-35', fields: [], keterangan: `Apakah benar rata-rata uang saku per hari di atas Rp${thresholds.uangSaku!.toLocaleString('id-ID')}?`,
+      cond: r => nz(r.M1115) > thresholds.uangSaku! },
+    { kode: 'M-36', fields: [], keterangan: `Apakah rata-rata biaya transportasi per hari di atas Rp${thresholds.biayaTransport!.toLocaleString('id-ID')}?`,
+      cond: r => nz(r.M1116) > thresholds.biayaTransport! },
+    { kode: 'M-37', fields: [], keterangan: `Apakah benar biaya buku pelajaran atau LKS lebih dari Rp${thresholds.biayaBukuLKS!.toLocaleString('id-ID')}?`,
+      cond: r => nz(r.M1118E) > thresholds.biayaBukuLKS! },
+    { kode: 'M-38', fields: [], keterangan: `Apakah benar biaya buku dan alat tulis lebih dari Rp${thresholds.biayaBukuATK!.toLocaleString('id-ID')}?`,
+      cond: r => nz(r.M1118F) > thresholds.biayaBukuATK! },
+    { kode: 'M-39', fields: ['M503'], keterangan: `Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp${thresholds.sppMaks!.toLocaleString('id-ID')}?`,
+      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > thresholds.sppMaks! },
     { kode: 'M-41', fields: ['M1114'], keterangan: 'Apakah benar ART tahun ajaran sebelumnya sekolah Negeri (bebas SPP) tetapi ada isian SPP?',
       cond: r => nz(r.M1114) === 1 && nz(r.M1118B) > 0 }, // ⚠ msh perlu verifikasi: field/kode persis penanda "Negeri" blm ditemukan di kuesioner
     { kode: 'M-42', fields: [], keterangan: 'Cek kembali beasiswa lainnya (M1117)',
@@ -870,6 +895,11 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     { kode: 'M-58', fields: ['M1502B_LAI'], keterangan: 'Apakah benar M1502b cara membeli rumah kode 4 (lainnya)?', cond: r => nz(r.M1502B) === 4 },
     { kode: 'M-59', fields: [], keterangan: 'Apakah benar M1504 sumber penerangan utama listrik non-PLN atau bukan listrik?', cond: r => nz(r.M1504) === 3 || nz(r.M1504) === 4 },
     { kode: 'M-60', fields: [], keterangan: 'Apakah benar M1505a jumlah meteran listrik lebih dari dua?', cond: r => nz(r.M1505A) > 2 },
+    // Rincian 1415.B: "Trotoar di wilayah tempat tinggal sudah digunakan
+    // sepenuhnya utk pejalan kaki..." (1=Setuju, 5=Tidak Setuju, 7=Tidak
+    // relevan). NKS 50262/50334 dikecualikan sesuai permintaan.
+    { kode: 'M-TROTOAR', fields: ['M1415B'], keterangan: 'Apakah benar di wilayah tinggal responden ada trotoar?',
+      cond: r => !isBlank(r.M1415B) && nz(r.M1415B) !== 7 && !['50262', '50334'].includes(String(r.NKS ?? '').trim()) },
   ];
   const MRT2_CHECKS: MRtCheck[] = [
     { kode: 'M-61', fields: ['M1602_LAIN'], keterangan: 'Cek kembali apakah benar M1602h sumber informasi perubahan iklim dari lainnya?',

@@ -73,6 +73,7 @@ export default function AnomaliCepatTab() {
     jumlah_selesai: number | null;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [aturanUploading, setAturanUploading] = useState(false);
   const [aturanMsg, setAturanMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -144,6 +145,31 @@ export default function AnomaliCepatTab() {
       setUploadMsg({ type: "err", text: err.message });
     } finally {
       setUploading(false);
+    }
+  }
+
+  // ---------- jalankan ulang pengecekan pakai data upload terakhir (tanpa upload file lagi) ----------
+  async function handleRerun() {
+    setRerunning(true);
+    setUploadMsg(null);
+    try {
+      const res = await fetch("/api/anomali-kp/rerun", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal jalankan ulang");
+      setUploadMsg({
+        type: data.warningRingkasanUpload ? "err" : "ok",
+        text:
+          `Berhasil dijalankan ulang (data sama, tanpa upload file). ${data.totalTemuan} temuan aktif. ` +
+          `(${data.ringkasan.baru} baru, ${data.ringkasan.berubah} berubah/perlu dicek ulang, ` +
+          `${data.ringkasan.tetap} tetap, ${data.ringkasan.selesai} selesai/teratasi)` +
+          (data.warningRingkasanUpload ? ` ⚠ ${data.warningRingkasanUpload}` : ""),
+      });
+      await loadLastUpload();
+      await loadData();
+    } catch (err: any) {
+      setUploadMsg({ type: "err", text: err.message });
+    } finally {
+      setRerunning(false);
     }
   }
 
@@ -338,16 +364,26 @@ export default function AnomaliCepatTab() {
       {!lastUpload ? (
         <p className="text-xs text-ink/40">Belum ada info upload terakhir (data di bawah tetap ditampilkan kalau ada).</p>
       ) : (
-        <p className="text-xs text-ink/50">
-          Terakhir diupdate: {new Date(lastUpload.uploaded_at).toLocaleString("id-ID")}
-          {lastUpload.jumlah_baru != null && (
-            <>
-              {" "}
-              &middot; {lastUpload.jumlah_baru} baru &middot; {lastUpload.jumlah_berubah} berubah &middot;{" "}
-              {lastUpload.jumlah_tetap} tetap &middot; {lastUpload.jumlah_selesai} selesai
-            </>
-          )}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-ink/50">
+            Terakhir diupdate: {new Date(lastUpload.uploaded_at).toLocaleString("id-ID")}
+            {lastUpload.jumlah_baru != null && (
+              <>
+                {" "}
+                &middot; {lastUpload.jumlah_baru} baru &middot; {lastUpload.jumlah_berubah} berubah &middot;{" "}
+                {lastUpload.jumlah_tetap} tetap &middot; {lastUpload.jumlah_selesai} selesai
+              </>
+            )}
+          </p>
+          <button
+            onClick={handleRerun}
+            disabled={rerunning}
+            title="Jalankan ulang seluruh pengecekan pakai data terakhir yang sudah diupload — tanpa perlu pilih file lagi. Berguna sesudah ubah ambang batas/aktifkan-nonaktifkan kode di Kelola Anomali."
+            className="shrink-0 rounded-md bg-moss-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-moss-700 disabled:opacity-50"
+          >
+            {rerunning ? "Memproses..." : "\u21bb Jalankan Ulang (tanpa upload file)"}
+          </button>
+        </div>
       )}
 
       <div className="space-y-3">
