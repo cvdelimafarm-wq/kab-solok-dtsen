@@ -251,6 +251,7 @@ export default function AnomaliCepatTab() {
           <code className="rounded bg-navy-50 px-1 py-0.5">5</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">9</code>) maupun VSEN26.M (diawali{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">1_1</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">1_3</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">2_1</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">2_2</code>) — dan mengabaikan sisanya.
           File dari aplikasi desktop entri Susenas — bukan PANTAU.{" "}

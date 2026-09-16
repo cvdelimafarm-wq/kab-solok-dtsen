@@ -28,9 +28,10 @@ function detectTableRole(filename: string): keyof Tables | null {
   const compound = filename.match(/^(\d+_\d+)[._]/);
   if (compound) {
     if (compound[1] === '1_1') return 'm1';
+    if (compound[1] === '1_3') return 'm1c';
     if (compound[1] === '2_1') return 'mrt1';
     if (compound[1] === '2_2') return 'mrt2';
-    return null; // 1_2, 1_3, 2_3 dst -- belum dipakai
+    return null; // 1_2, 2_3 dst -- belum dipakai
   }
 
   // Terima format "3_..." (garis bawah) MAUPUN "3. ..." (titik+spasi, format

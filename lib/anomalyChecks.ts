@@ -29,6 +29,7 @@ export type Tables = {
   t5: DbfRow[]; // Komoditi Non Makanan (No.226-347)
   t9: DbfRow[]; // Rekap RT Blok IV.3.2-3
   m1?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_1...", identitas & Blok 4-13 per ART)
+  m1c?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_3...", Blok 11 biaya pendidikan M1112-M1118 per ART)
   mrt1?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_1...", Blok 14-15 per RT: M1401-M1508)
   mrt2?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_2...", Blok 15-17 per RT: M1509-M1703)
 };
@@ -247,6 +248,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   const t5 = (tables.t5 || []) as any[];
   const t9 = (tables.t9 || []) as any[];
   const m1 = (tables.m1 || []) as any[];
+  const m1c = (tables.m1c || []) as any[];
   const mrt1 = (tables.mrt1 || []) as any[];
   const mrt2 = (tables.mrt2 || []) as any[];
 
@@ -686,10 +688,12 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
       cond: r => nz(r.M407) < 18 && nz(r.M404) > 1 },
     { kode: 'M-02', fields: ['M501'], keterangan: 'Apakah benar tidak memiliki NIK?',
       cond: r => isBlank(r.M502CHAR) },
-    { kode: 'M-03', fields: ['M503', 'M504', 'M506', 'M508'], keterangan: 'Apakah benar sedang atau pernah bersekolah di sekolah luar biasa atau memiliki ijazah sekolah luar biasa?',
-      cond: r => nz(r.M506) === 25 }, // ⚠ verifikasi: kode 25 diasumsikan "SLB" di M506 (ijazah tertinggi)
+    { kode: 'M-03', fields: ['M503', 'M504', 'M506'], keterangan: 'Apakah benar sedang atau pernah bersekolah di sekolah luar biasa atau memiliki ijazah sekolah luar biasa?',
+      // Dikoreksi setelah baca kuesioner asli: kode 25 di M506 = "Tidak punya ijazah", BUKAN SLB.
+      // SLB sebenarnya 3 kode terpisah per jenjang: 02=SDLB, 07=SMPLB, 12=SMLB (di M504 ATAU M506).
+      cond: r => [2, 7, 12].includes(nz(r.M504)) || [2, 7, 12].includes(nz(r.M506)) },
     { kode: 'M-04', fields: ['M503', 'M504', 'M506', 'M508'], keterangan: 'Apakah benar sedang atau pernah bersekolah di MAK atau memiliki ijazah MAK?',
-      cond: r => nz(r.M504) === 16 }, // ⚠ verifikasi: kode 16 diasumsikan "MAK"
+      cond: r => nz(r.M504) === 16 || nz(r.M506) === 16 }, // dikonfirmasi dari kuesioner: kode 16 = MAK
     { kode: 'M-05', fields: ['M503', 'M504'], keterangan: 'Konfirmasi apakah benar domisili di lokus pendataan tetapi sedang berkuliah?',
       cond: r => nz(r.M503) === 2 && nz(r.M504) === 21 },
     { kode: 'M-06', fields: ['M407'], keterangan: 'Apakah usia 10-64 tahun memang tidak ada kegiatan seminggu yang lalu?',
@@ -731,20 +735,6 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         .every(f => String(r[f] ?? '').trim().toUpperCase() === 'X') },
     { kode: 'M-34', fields: [], keterangan: 'Apakah benar mengunjungi TBM? Cek apakah di daerah ada TBM',
       cond: r => nz(r.M1013) === 1 },
-    { kode: 'M-35', fields: [], keterangan: 'Apakah benar rata-rata uang saku per hari di atas Rp50.000?',
-      cond: r => nz(r.M1115) > 50000 },
-    { kode: 'M-36', fields: [], keterangan: 'Apakah rata-rata biaya transportasi per hari di atas Rp30.000?',
-      cond: r => nz(r.M1116) > 30000 },
-    { kode: 'M-37', fields: [], keterangan: 'Apakah benar biaya buku pelajaran atau LKS lebih dari Rp500.000?',
-      cond: r => nz(r.M1118E) > 500000 },
-    { kode: 'M-38', fields: [], keterangan: 'Apakah benar biaya buku dan alat tulis lebih dari Rp500.000?',
-      cond: r => nz(r.M1118F) > 500000 },
-    { kode: 'M-39', fields: ['M503', 'M504'], keterangan: 'Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp6 juta?',
-      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > 6000000 },
-    { kode: 'M-41', fields: ['M508'], keterangan: 'Apakah benar ART tahun ajaran sebelumnya sekolah di SD/SMP Negeri tetapi ada SPP?',
-      cond: r => nz(r.M1114) === 1 && nz(r.M1118B) > 0 }, // ⚠ verifikasi kode "negeri" di M508
-    { kode: 'M-42', fields: [], keterangan: 'Cek kembali beasiswa lainnya (M1117)',
-      cond: r => String(r.M1117E ?? '').trim().toUpperCase() === 'E' },
     { kode: 'M-43', fields: [], keterangan: 'Apakah benar melakukan olahraga kurang dari 10 menit?',
       cond: r => nz(r.M1204) > 0 && nz(r.M1204) < 10 },
     { kode: 'M-44', fields: [], keterangan: 'Apakah sudah ditulis di catatan jumlah menit olahraga yang sesuai dengan jawaban responden (≥997 menit)?',
@@ -752,7 +742,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     { kode: 'M-45', fields: [], keterangan: 'Apakah benar tujuan olahraga adalah kode 6 (lainnya)?',
       cond: r => nz(r.M1205) === 6 },
     { kode: 'M-46', fields: ['M407', 'M503'], keterangan: 'Apakah benar tujuan olahraga adalah pendidikan tetapi sedang tidak bersekolah?',
-      cond: r => nz(r.M503) === 3 && nz(r.M1205) === 4 }, // ⚠ verifikasi kode M503=3 "tidak sekolah"
+      cond: r => nz(r.M503) !== 2 && nz(r.M1205) === 4 }, // dikoreksi: M503!==2 ("bukan sedang bersekolah") — sebelumnya cuma cek ===3, kelewat kode 1
     { kode: 'M-48', fields: [], keterangan: 'Apakah benar bahasa yang paling sering digunakan di rumah dan/atau pergaulan menggunakan bahasa asing?',
       cond: r => nz(r.M1212) === 3 && nz(r.M1213) === 3 },
     // ---------- tambahan dari 7 usulan awal, belum tercakup di 62 file ----------
@@ -764,6 +754,37 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
 
   for (const chk of M_CHECKS) {
     for (const row of m1) {
+      if (chk.cond(row)) {
+        const detail: Record<string, unknown> = {};
+        for (const f of chk.fields) detail[f] = row[f];
+        push(chk.kode, 'F. Konsistensi Data ART (VSEN26.M)', row, { keterangan: chk.keterangan, detail: Object.keys(detail).length ? detail : undefined });
+      }
+    }
+  }
+
+  // ---------- Blok XI biaya pendidikan (M1112-M1118) — tabel TERPISAH "1_3" ----------
+  // Field-field ini TIDAK ADA di tabel m1 ("1_1") — sempat salah taruh di sana
+  // sebelumnya (jadi tidak pernah aktif). Dikoreksi setelah cek struktur DBF
+  // asli: field M401/M503 JUGA ada di tabel "1_3" ini, jadi tidak perlu
+  // gabung-tabel dgn m1.
+  const M_EDU_CHECKS: MSimpleCheck[] = [
+    { kode: 'M-35', fields: [], keterangan: 'Apakah benar rata-rata uang saku per hari di atas Rp50.000?',
+      cond: r => nz(r.M1115) > 50000 },
+    { kode: 'M-36', fields: [], keterangan: 'Apakah rata-rata biaya transportasi per hari di atas Rp30.000?',
+      cond: r => nz(r.M1116) > 30000 },
+    { kode: 'M-37', fields: [], keterangan: 'Apakah benar biaya buku pelajaran atau LKS lebih dari Rp500.000?',
+      cond: r => nz(r.M1118E) > 500000 },
+    { kode: 'M-38', fields: [], keterangan: 'Apakah benar biaya buku dan alat tulis lebih dari Rp500.000?',
+      cond: r => nz(r.M1118F) > 500000 },
+    { kode: 'M-39', fields: ['M503'], keterangan: 'Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp6 juta?',
+      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > 6000000 },
+    { kode: 'M-41', fields: ['M1114'], keterangan: 'Apakah benar ART tahun ajaran sebelumnya sekolah Negeri (bebas SPP) tetapi ada isian SPP?',
+      cond: r => nz(r.M1114) === 1 && nz(r.M1118B) > 0 }, // ⚠ msh perlu verifikasi: field/kode persis penanda "Negeri" blm ditemukan di kuesioner
+    { kode: 'M-42', fields: [], keterangan: 'Cek kembali beasiswa lainnya (M1117)',
+      cond: r => String(r.M1117E ?? '').trim().toUpperCase() === 'E' },
+  ];
+  for (const chk of M_EDU_CHECKS) {
+    for (const row of m1c) {
       if (chk.cond(row)) {
         const detail: Record<string, unknown> = {};
         for (const f of chk.fields) detail[f] = row[f];
@@ -851,7 +872,10 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     { kode: 'M-60', fields: [], keterangan: 'Apakah benar M1505a jumlah meteran listrik lebih dari dua?', cond: r => nz(r.M1505A) > 2 },
   ];
   const MRT2_CHECKS: MRtCheck[] = [
-    { kode: 'M-61', fields: ['M1602_LAIN'], keterangan: 'Cek kembali apakah benar M1602g sumber informasi perubahan iklim dari lainnya?', cond: r => String(r.M1602G ?? '').trim().toUpperCase() === 'G' },
+    { kode: 'M-61', fields: ['M1602_LAIN'], keterangan: 'Cek kembali apakah benar M1602h sumber informasi perubahan iklim dari lainnya?',
+      // Dikoreksi setelah baca kuesioner asli: huruf H = "Lainnya" (G = "Seminar/Sosialisasi/Penyuluhan",
+      // pilihan berbeda). File contoh tahun lalu salah label/bergeser satu huruf.
+      cond: r => String(r.M1602H ?? '').trim().toUpperCase() === 'H' },
     { kode: 'M-62', fields: ['M1701B_GLA'], keterangan: 'Cek kembali apakah benar bantuan PKH (M1701) digunakan untuk lainnya?', cond: r => String(r.M1701B_G ?? '').trim().toUpperCase() === 'G' },
     { kode: 'M-63', fields: [], keterangan: 'Apakah memang salah satu ART tidak punya alat komunikasi (HP) untuk persiapan bencana?', cond: r => nz(r.M1611C2) === 5 },
   ];
