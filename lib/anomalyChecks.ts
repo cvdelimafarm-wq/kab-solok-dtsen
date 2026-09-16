@@ -143,7 +143,9 @@ function buildNarasi(kode: string, extra: Record<string, any>): string {
     if (d.kolom6 != null) bagian.push(`Setahun Terakhir tercatat ${numRef(fmtRp(d.kolom6), 'KOLOM6')}`);
     return (
       `Nilai pengeluaran untuk rincian No.${extra.nourutkomo} ${bagian.join(' dan ')} — berada di luar rentang wajar ` +
-      `dibanding sebaran rumah tangga lain untuk rincian yang sama. Mohon periksa kembali kebenaran isian dan satuannya.`
+      `dibanding sebaran rumah tangga lain untuk rincian yang sama. Mohon periksa kembali kebenaran isian dan satuannya. ` +
+      `Catatan: status "di luar rentang wajar" ini murni hasil hitungan statistik (outlier) dibanding RT lain, ` +
+      `BUKAN berarti otomatis salah — bisa saja memang benar demikian kondisi RT tersebut.`
     );
   }
   if (kode === 'KP-03' || kode === 'KP-04') {
@@ -919,6 +921,12 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
     { kode: 'M-59', fields: [], keterangan: 'Apakah benar M1504 sumber penerangan utama listrik non-PLN atau bukan listrik?', cond: r => nz(r.M1504) === 3 || nz(r.M1504) === 4 },
     { kode: 'M-60', fields: [], keterangan: 'Apakah benar M1505a jumlah meteran listrik lebih dari dua?', cond: r => nz(r.M1505A) > 2 },
     { kode: 'M-55', fields: ['M1405'], keterangan: 'Apakah benar M1405 cara pengambilan keputusan diisi kode 4 (lainnya)?', cond: r => nz(r.M1405) === 4 },
+    // Rincian 1401.F (dalam 3 bulan terakhir, ART membeli/menggunakan produk tradisional):
+    // 6 item terpisah A-F dgn kodebook Ya/Tidak berselang-seling per item (A,C,E=Ya:1/Tidak:2,
+    // B,D,F=Ya:3/Tidak:4) — dikonfirmasi dari foto kuesioner asli yang Anda kirim 16/9.
+    // Item F = "Perlengkapan Upacara Adat/Tradisi" (keris, guci, tombak, bokor, tempayan, dll).
+    { kode: 'M-PERLENGKAPAN-ADAT', fields: ['M1401F'], keterangan: 'Konfirmasi apakah benar ada ART yang membeli atau menggunakan perlengkapan upacara adat/tradisi (keris, guci, tombak, bokor, tempayan, dll.) dalam 3 bulan terakhir (Rincian 1401.F)?',
+      cond: r => nz(r.M1401F) === 3 },
     // M-52/M-53: Rincian 1402 (upacara adat/tradisi setahun terakhir) — tiap sub-rincian
     // (A. Kelahiran ... G. Lainnya) punya 2 field terpisah di DBF: _1 = Menyelenggarakan
     // (1=Ya,2=Tidak), _2 = Menghadiri (3=Ya,4=Tidak) — dikonfirmasi dari foto kuesioner
