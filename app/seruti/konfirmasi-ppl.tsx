@@ -164,7 +164,7 @@ export default function KonfirmasiPplTab() {
   const [supabase] = useState(() => createClient());
 
   const [temuan, setTemuan] = useState<Temuan[]>([]);
-  const [ringkasan, setRingkasan] = useState({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0 });
+  const [ringkasan, setRingkasan] = useState({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0, selesai: 0 });
   const [rekomendasiMap, setRekomendasiMap] = useState<Map<string, string>>(new Map());
   const [namaPpl, setNamaPpl] = useState("");
   const [openIds, setOpenIds] = useState<Set<number>>(new Set());
@@ -194,15 +194,21 @@ export default function KonfirmasiPplTab() {
 
   // ---------- muat opsi dropdown Batch Anomali (dari kp_anomali_upload) ----------
   const loadBatchOptions = useCallback(async () => {
+    // Batch 1-14 adalah upload percobaan/uji coba sebelum fitur batch ini
+    // ada — sengaja disembunyikan. "Batch N" sekarang = id asli baris upload
+    // (bukan nomor urut relatif), supaya upload berikutnya OTOMATIS muncul
+    // sebagai nomor berikutnya (mis. 15 -> 16) tanpa perlu hitung ulang.
+    const BATCH_MULAI_DARI_ID = 15;
     const { data } = await supabase
       .from("kp_anomali_upload")
       .select("id, keterangan, uploaded_at")
+      .gte("id", BATCH_MULAI_DARI_ID)
       .order("id", { ascending: false });
-    const opts = (data ?? []).map((u, i) => ({
+    const opts = (data ?? []).map((u) => ({
       id: u.id as number,
       label: u.keterangan?.trim()
         ? u.keterangan
-        : `Batch ${(data!.length as number) - i} (${new Date(u.uploaded_at as string).toLocaleDateString("id-ID")})`,
+        : `Batch ${u.id} (${new Date(u.uploaded_at as string).toLocaleDateString("id-ID")})`,
     }));
     setBatchOptions(opts);
   }, [supabase]);
@@ -215,14 +221,17 @@ export default function KonfirmasiPplTab() {
   const loadData = useCallback(async () => {
     if (!siapTampil) {
       setTemuan([]);
-      setRingkasan({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0 });
+      setRingkasan({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0, selesai: 0 });
       return;
     }
     setLoading(true);
 
     // Ringkasan dihitung dari hasil query yg SAMA (sudah difilter NKS+Batch+Kuesioner),
     // bukan dari RPC global — supaya angkanya sesuai konteks yg dipilih PPL.
-    let query = supabase.from("kp_anomali_temuan").select("*").eq("nks", filterNks).eq("last_seen_upload_id", Number(filterBatch));
+    // "REKAP" = semua batch (rekap kumulatif seluruh anomali yg PERNAH
+    // muncul utk NKS ini), tidak difilter per last_seen_upload_id.
+    let query = supabase.from("kp_anomali_temuan").select("*").eq("nks", filterNks);
+    if (filterBatch !== "REKAP") query = query.eq("last_seen_upload_id", Number(filterBatch));
     query = filterKuesioner === "KP" ? query.like("kode_anomali", "KP-%") : query.like("kode_anomali", "M-%");
     const { data: rows, error } = await query.order("kelompok").order("kode_anomali").order("nurt");
     if (error) {
@@ -237,6 +246,7 @@ export default function KonfirmasiPplTab() {
       pending: all.filter((t) => t.status === "pending").length,
       sesuai: all.filter((t) => t.status === "sesuai").length,
       perlu_koreksi: all.filter((t) => t.status === "perlu_koreksi").length,
+      selesai: all.filter((t) => t.status === "resolved").length,
     });
     const list = all.filter((t) => t.status === "pending");
     setTemuan(list);
@@ -338,12 +348,18 @@ export default function KonfirmasiPplTab() {
             className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
           >
             <option value="">-- Pilih Batch --</option>
+            <option value="REKAP">📋 Rekap Semua Batch (semua anomali yg pernah muncul)</option>
             {batchOptions.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
             ))}
           </select>
+          {filterBatch === "REKAP" && (
+            <p className="mt-1 text-[11px] text-navy-500">
+              Menampilkan gabungan seluruh batch — termasuk yg sudah selesai/teratasi.
+            </p>
+          )}
         </div>
         <div>
           <label className="text-xs font-semibold text-navy-900">3. Kuesioner</label>
@@ -384,11 +400,14 @@ export default function KonfirmasiPplTab() {
           )}
 
           {/* ---------- Ringkasan singkat (sesuai filter yg dipilih) ---------- */}
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className={`grid gap-2 text-center ${filterBatch === "REKAP" ? "grid-cols-5" : "grid-cols-4"}`}>
             <SummaryBox label="Total" value={ringkasan.total} className="bg-navy-50 text-navy-900" />
             <SummaryBox label="Belum" value={ringkasan.pending} className="bg-gold-100 text-gold-600" />
             <SummaryBox label="Koreksi" value={ringkasan.perlu_koreksi} className="bg-rust-100 text-rust-700" />
             <SummaryBox label="Sesuai" value={ringkasan.sesuai} className="bg-moss-100 text-moss-700" />
+            {filterBatch === "REKAP" && (
+              <SummaryBox label="Selesai" value={ringkasan.selesai} className="bg-line/40 text-ink/60" />
+            )}
           </div>
 
           {/* ---------- Daftar temuan, dikelompokkan per tema ---------- */}

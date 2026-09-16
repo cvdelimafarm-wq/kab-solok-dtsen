@@ -74,6 +74,15 @@ export default function AnomaliCepatTab() {
   } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [rerunning, setRerunning] = useState(false);
+  // PIN utk tombol "Jalankan Ulang" — pengaman ringan sisi client (sama
+  // seperti PIN di Kelola Anomali), supaya tidak sengaja terpicu ulang.
+  const RERUN_PIN = "3333";
+  const [rerunPinOk, setRerunPinOk] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("rerun-pin-ok") === "1") {
+      setRerunPinOk(true);
+    }
+  }, []);
   const [uploadMsg, setUploadMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [aturanUploading, setAturanUploading] = useState(false);
   const [aturanMsg, setAturanMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -150,6 +159,16 @@ export default function AnomaliCepatTab() {
 
   // ---------- jalankan ulang pengecekan pakai data upload terakhir (tanpa upload file lagi) ----------
   async function handleRerun() {
+    if (!rerunPinOk) {
+      const masukan = window.prompt('Masukkan PIN untuk menjalankan ulang pengecekan:');
+      if (masukan === null) return; // dibatalkan
+      if (masukan !== RERUN_PIN) {
+        setUploadMsg({ type: "err", text: "PIN salah. Jalankan ulang dibatalkan." });
+        return;
+      }
+      setRerunPinOk(true);
+      sessionStorage.setItem("rerun-pin-ok", "1");
+    }
     setRerunning(true);
     setUploadMsg(null);
     try {
@@ -381,7 +400,7 @@ export default function AnomaliCepatTab() {
             title="Jalankan ulang seluruh pengecekan pakai data terakhir yang sudah diupload — tanpa perlu pilih file lagi. Berguna sesudah ubah ambang batas/aktifkan-nonaktifkan kode di Kelola Anomali."
             className="shrink-0 rounded-md bg-moss-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-moss-700 disabled:opacity-50"
           >
-            {rerunning ? "Memproses..." : "\u21bb Jalankan Ulang (tanpa upload file)"}
+            {rerunning ? "Memproses..." : rerunPinOk ? "\u21bb Jalankan Ulang (tanpa upload file)" : "\ud83d\udd12 Jalankan Ulang (perlu PIN)"}
           </button>
         </div>
       )}
