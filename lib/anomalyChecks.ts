@@ -45,11 +45,12 @@ export type Thresholds = {
   transportasiLautMax?: number;
   zscoreNonMakanan?: number;
   // ---------- VSEN26.M ----------
-  uangSaku?: number; // M-35
-  biayaTransport?: number; // M-36
-  biayaBukuLKS?: number; // M-37
-  biayaBukuATK?: number; // M-38
-  sppMaks?: number; // M-39
+  uangSaku?: number; // M-35 (SUDAH TIDAK DIPAKAI — M-35 diganti logikanya, field ini disisakan demi kompatibilitas versi lama)
+  biayaTransport?: number; // (tidak dipakai lagi — M-36 dihapus)
+  biayaBukuLKS?: number; // (tidak dipakai lagi — M-37 dihapus)
+  biayaBukuATK?: number; // (tidak dipakai lagi — M-38 dihapus)
+  sppMaks?: number; // (tidak dipakai lagi — M-39 dihapus)
+  olahragaLama?: number; // M-44, dalam menit
 };
 //
 //   Tabel 3  (Komoditi Makanan RT / bahan makanan mentah, No.1-186):
@@ -269,11 +270,7 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
       transportasiLautMin: 100000, // dari data riil tahun lalu (file 20): rentang wajar Rp100rb - Rp500rb per tahun
       transportasiLautMax: 500000,
       zscoreNonMakanan: 3, // dipakai KP-02: tandai jika di luar mean ± N*SD per NOURUTKOMO
-      uangSaku: 50000, // M-35, per hari
-      biayaTransport: 30000, // M-36, per hari
-      biayaBukuLKS: 500000, // M-37
-      biayaBukuATK: 500000, // M-38
-      sppMaks: 6000000, // M-39
+      olahragaLama: 300, // M-44, menit — dikoreksi dari 997 (default lama)
     },
     opts
   );
@@ -739,16 +736,16 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
       cond: r => nz(r.M403) === 3 && nz(r.M503) === 1 && nz(r.M407) >= 7 && nz(r.M407) <= 18 }, // ⚠ verifikasi rentang usia sekolah
     { kode: 'M-17', fields: ['M403', 'M404', 'M407'], keterangan: 'Apakah benar ART umur 8 sampai 10 tahun tetapi tahun ajaran sebelumnya mengikuti prasekolah?',
       cond: r => nz(r.M403) === 3 && nz(r.M509) === 1 && nz(r.M407) >= 8 && nz(r.M407) <= 10 },
-    { kode: 'M-18', fields: [], keterangan: 'Apakah alasan tidak menggunakan kendaraan bermotor umum rute tertentu memang kode lainnya? Cek Catatan',
-      cond: r => nz(r.M609) === 6 },
-    { kode: 'M-19', fields: [], keterangan: 'Apakah Balita memang ditinggal sendiri atau dititipkan ke kode 9 lainnya?',
+    { kode: 'M-18', fields: [], keterangan: 'Apakah alasan tidak menggunakan kendaraan bermotor umum rute tertentu memang kode lainnya? Kelima pilihan di atas sudah cukup luas, pastikan memang tidak bisa dimasukkan ke kode 1-5.',
+      cond: r => nz(r.M610) === 6 }, // field dikoreksi dari M609 -> M610 (bergeser)
+    { kode: 'M-19', fields: [], keterangan: 'Apakah Balita memang ditinggal sendiri atau dititipkan ke kode 9 lainnya? Ini ke siapa? Harusnya kode 1-8 sudah cukup luas.',
       cond: r => nz(r.M806) === 9 },
-    { kode: 'M-20', fields: [], keterangan: 'Apakah memang ART umur 5 tahun tetapi sudah bisa baca tulis kalimat sederhana?',
-      cond: r => nz(r.M407) === 5 && nz(r.M1004) === 1 },
-    { kode: 'M-21', fields: ['M407', 'M806'], keterangan: 'Apakah ART memang pernah ditinggal sendiri lebih dari 1 jam?',
+    { kode: 'M-20', fields: [], keterangan: 'Apakah memang ART umur kurang dari 5 tahun tetapi sudah bisa baca tulis kalimat sederhana?',
+      cond: r => nz(r.M407) < 5 && nz(r.M1004) === 1 }, // dikoreksi: usia <5 (bukan =5)
+    { kode: 'M-21', fields: ['M407', 'M806'], keterangan: 'Apakah ART memang pernah ditinggal sendiri lebih dari 1 jam? Pastikan bahwa balita benar-benar ditinggal >1 jam tanpa didampingi siapapun.',
       cond: r => nz(r.M808) === 1 },
-    { kode: 'M-24', fields: [], keterangan: 'Apakah benar Menu MBG Lainnya?',
-      cond: r => String(r.M1109J ?? '').trim().toUpperCase() === 'J' },
+    { kode: 'M-24', fields: [], keterangan: 'Apakah benar Menu MBG Lainnya? Ini apa menunya?',
+      cond: r => String(r.M1104J ?? '').trim().toUpperCase() === 'J' }, // field dikoreksi dari M1109J -> M1104J (bergeser)
     { kode: 'M-27', fields: [], keterangan: 'Apakah benar alasan tidak/kurang mengonsumsi makanan pokok dan protein karena tidak tersedia di pasar?',
       cond: r => nz(r.M706) === 2 },
     { kode: 'M-30', fields: [], keterangan: 'Apakah benar anak sedih atau tertekan berlebihan setiap hari?',
@@ -760,11 +757,13 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         .every(f => String(r[f] ?? '').trim().toUpperCase() === 'X') },
     { kode: 'M-34', fields: [], keterangan: 'Apakah benar mengunjungi TBM? Cek apakah di daerah ada TBM',
       cond: r => nz(r.M1013) === 1 },
+    { kode: 'M-35', fields: [], keterangan: 'Apakah benar ada MBG tapi uang saku malah bertambah?',
+      cond: r => nz(r.M1110) === 3 }, // dikoreksi total: field M1115->M1110, logika uangSaku>ambang -> M1110===3
     { kode: 'M-43', fields: [], keterangan: 'Apakah benar melakukan olahraga kurang dari 10 menit?',
       cond: r => nz(r.M1204) > 0 && nz(r.M1204) < 10 },
-    { kode: 'M-44', fields: [], keterangan: 'Apakah sudah ditulis di catatan jumlah menit olahraga yang sesuai dengan jawaban responden (≥997 menit)?',
-      cond: r => nz(r.M1204) >= 997 },
-    { kode: 'M-45', fields: [], keterangan: 'Apakah benar tujuan olahraga adalah kode 6 (lainnya)?',
+    { kode: 'M-44', fields: [], keterangan: `Apakah sudah ditulis di catatan jumlah menit olahraga yang sesuai dengan jawaban responden (≥${thresholds.olahragaLama} menit)?`,
+      cond: r => nz(r.M1204) >= thresholds.olahragaLama! }, // ambang dikoreksi dari 997 -> 300 (bisa diubah via Kelola Anomali)
+    { kode: 'M-45', fields: [], keterangan: 'Apakah benar tujuan olahraga adalah kode 6 (lainnya)? Kode lainnya - olahraga apa?',
       cond: r => nz(r.M1205) === 6 },
     { kode: 'M-46', fields: ['M407', 'M503'], keterangan: 'Apakah benar tujuan olahraga adalah pendidikan tetapi sedang tidak bersekolah?',
       cond: r => nz(r.M503) !== 2 && nz(r.M1205) === 4 }, // dikoreksi: M503!==2 ("bukan sedang bersekolah") — sebelumnya cuma cek ===3, kelewat kode 1
@@ -792,31 +791,11 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   // sebelumnya (jadi tidak pernah aktif). Dikoreksi setelah cek struktur DBF
   // asli: field M401/M503 JUGA ada di tabel "1_3" ini, jadi tidak perlu
   // gabung-tabel dgn m1.
-  const M_EDU_CHECKS: MSimpleCheck[] = [
-    { kode: 'M-35', fields: [], keterangan: `Apakah benar rata-rata uang saku per hari di atas Rp${thresholds.uangSaku!.toLocaleString('id-ID')}?`,
-      cond: r => nz(r.M1115) > thresholds.uangSaku! },
-    { kode: 'M-36', fields: [], keterangan: `Apakah rata-rata biaya transportasi per hari di atas Rp${thresholds.biayaTransport!.toLocaleString('id-ID')}?`,
-      cond: r => nz(r.M1116) > thresholds.biayaTransport! },
-    { kode: 'M-37', fields: [], keterangan: `Apakah benar biaya buku pelajaran atau LKS lebih dari Rp${thresholds.biayaBukuLKS!.toLocaleString('id-ID')}?`,
-      cond: r => nz(r.M1118E) > thresholds.biayaBukuLKS! },
-    { kode: 'M-38', fields: [], keterangan: `Apakah benar biaya buku dan alat tulis lebih dari Rp${thresholds.biayaBukuATK!.toLocaleString('id-ID')}?`,
-      cond: r => nz(r.M1118F) > thresholds.biayaBukuATK! },
-    { kode: 'M-39', fields: ['M503'], keterangan: `Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp${thresholds.sppMaks!.toLocaleString('id-ID')}?`,
-      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > thresholds.sppMaks! },
-    { kode: 'M-41', fields: ['M1114'], keterangan: 'Apakah benar ART tahun ajaran sebelumnya sekolah Negeri (bebas SPP) tetapi ada isian SPP?',
-      cond: r => nz(r.M1114) === 1 && nz(r.M1118B) > 0 }, // ⚠ msh perlu verifikasi: field/kode persis penanda "Negeri" blm ditemukan di kuesioner
-    { kode: 'M-42', fields: [], keterangan: 'Cek kembali beasiswa lainnya (M1117)',
-      cond: r => String(r.M1117E ?? '').trim().toUpperCase() === 'E' },
-  ];
-  for (const chk of M_EDU_CHECKS) {
-    for (const row of m1c) {
-      if (chk.cond(row)) {
-        const detail: Record<string, unknown> = {};
-        for (const f of chk.fields) detail[f] = row[f];
-        push(chk.kode, 'F. Konsistensi Data ART (VSEN26.M)', row, { keterangan: chk.keterangan, detail: Object.keys(detail).length ? detail : undefined });
-      }
-    }
-  }
+  // ---------- M-EDU-CHECKS: DIHAPUS sepenuhnya (M-36,37,38,39,41,42) ----------
+  // Atas permintaan Anda (koreksi 16/9 kedua) — field-field di tabel m1c (1_3)
+  // ini dianggap tidak reliable/tidak sesuai kebutuhan, jadi pengecekannya
+  // dihapus total (bukan cuma dinonaktifkan). Tabel m1c sendiri masih
+  // tersedia di infrastruktur (kalau nanti ada kebutuhan lain memakainya).
 
   // ---------- M-NIK-DUPLIKAT: NIK sama dipakai >1 ART dalam 1 keluarga ----------
   {

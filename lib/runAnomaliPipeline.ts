@@ -17,11 +17,7 @@ const KODE_KE_THRESHOLD_KEY: Record<string, keyof Thresholds> = {
   'KP-20': 'garam',
   'KP-21': 'transportasiDarat',
   'KP-02': 'zscoreNonMakanan',
-  'M-35': 'uangSaku',
-  'M-36': 'biayaTransport',
-  'M-37': 'biayaBukuLKS',
-  'M-38': 'biayaBukuATK',
-  'M-39': 'sppMaks',
+  'M-44': 'olahragaLama',
 };
 
 export async function runAnomaliPipeline(
