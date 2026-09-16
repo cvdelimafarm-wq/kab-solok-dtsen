@@ -104,7 +104,17 @@ export default function ErrorKonsistensiTab() {
   const [openCards, setOpenCards] = useState<Set<number>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
-  // ---------- cari NKS tanggung jawab PPL ybs, dari nama yg diisi ----------
+  // ---------- daftar nama PPL (dropdown), diambil dari kp_nks_jorong ----------
+  const [pplOptions, setPplOptions] = useState<string[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("kp_nks_jorong").select("nama_ppl");
+      const unik = Array.from(new Set((data ?? []).map((r) => r.nama_ppl as string).filter(Boolean)));
+      setPplOptions(unik.sort((a, b) => a.localeCompare(b)));
+    })();
+  }, [supabase]);
+
+  // ---------- cari NKS tanggung jawab PPL ybs, dari nama yg dipilih ----------
   const loadNksSaya = useCallback(async () => {
     const nama = namaPpl.trim();
     if (!nama) {
@@ -115,16 +125,13 @@ export default function ErrorKonsistensiTab() {
     const { data } = await supabase
       .from("kp_nks_jorong")
       .select("nks, nama_jorong")
-      .ilike("nama_ppl", nama);
+      .eq("nama_ppl", nama);
     setNksSaya((data ?? []) as { nks: string; nama_jorong: string | null }[]);
     setLoadingNks(false);
   }, [supabase, namaPpl]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      loadNksSaya();
-    }, 400);
-    return () => clearTimeout(t);
+    loadNksSaya();
   }, [loadNksSaya]);
 
   // ---------- muat temuan aktif utk NKS-NKS itu ----------
@@ -229,13 +236,18 @@ export default function ErrorKonsistensiTab() {
       {/* ---------- Identitas PPL ---------- */}
       <div className="rounded-lg border border-line bg-white p-3">
         <label className="text-xs font-semibold text-navy-900">Nama Anda (PPL)</label>
-        <input
-          type="text"
-          placeholder="Isi nama persis seperti tercatat BPS Kabupaten"
+        <select
           value={namaPpl}
           onChange={(e) => updateNamaPpl(e.target.value)}
           className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-        />
+        >
+          <option value="">-- Pilih Nama Anda --</option>
+          {pplOptions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
         {namaTrim && !loadingNks && nksSaya && nksSaya.length > 0 && (
           <p className="mt-1.5 text-[11px] text-ink/50">
             NKS Anda: {nksSaya.map((n) => n.nks).join(", ")}
@@ -245,14 +257,14 @@ export default function ErrorKonsistensiTab() {
 
       {!namaTrim ? (
         <p className="rounded-lg border border-gold-400/60 bg-gold-100 p-3 text-xs text-gold-600">
-          &#9888; Isi nama Anda dulu di atas untuk melihat temuan konsistensi pada NKS yang jadi tanggung jawab Anda.
+          &#9888; Pilih nama Anda dulu di atas untuk melihat temuan konsistensi pada NKS yang jadi tanggung jawab
+          Anda.
         </p>
       ) : loadingNks ? (
         <p className="py-6 text-center text-sm text-ink/40">Mencari NKS Anda...</p>
       ) : !nksSaya || nksSaya.length === 0 ? (
         <p className="rounded-lg border border-gold-400/60 bg-gold-100 p-3 text-xs text-gold-600">
-          &#9888; Nama &quot;{namaTrim}&quot; tidak ditemukan sebagai PPL untuk NKS manapun di data BPS Kabupaten.
-          Pastikan penulisan nama persis sama dengan yang tercatat (cek ke BPS Kabupaten kalau perlu dikoreksi).
+          &#9888; &quot;{namaTrim}&quot; belum terdaftar sebagai PPL untuk NKS manapun di data BPS Kabupaten.
         </p>
       ) : (
         <>

@@ -175,6 +175,7 @@ export default function KonfirmasiPplTab() {
   });
   const [rekomendasiMap, setRekomendasiMap] = useState<Map<string, string>>(new Map());
   const [namaPpl, setNamaPpl] = useState("");
+  const [pplOptions, setPplOptions] = useState<string[]>([]);
   const [openIds, setOpenIds] = useState<Set<number>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -226,6 +227,13 @@ export default function KonfirmasiPplTab() {
     setRekomendasiMap(new Map((data ?? []).map((r) => [r.kode, r.rekomendasi as string | null])) as Map<string, string>);
   }, [supabase]);
 
+  // ---------- muat opsi dropdown Nama PPL, dari kp_nks_jorong ----------
+  const loadPplOptions = useCallback(async () => {
+    const { data } = await supabase.from("kp_nks_jorong").select("nama_ppl");
+    const unik = Array.from(new Set((data ?? []).map((r) => r.nama_ppl as string).filter(Boolean)));
+    setPplOptions(unik.sort((a, b) => a.localeCompare(b)));
+  }, [supabase]);
+
   const loadData = useCallback(async () => {
     if (!siapTampil) {
       setTemuan([]);
@@ -267,7 +275,8 @@ export default function KonfirmasiPplTab() {
     loadRekomendasi();
     loadNksOptions();
     loadBatchOptions();
-  }, [loadRekomendasi, loadNksOptions, loadBatchOptions]);
+    loadPplOptions();
+  }, [loadRekomendasi, loadNksOptions, loadBatchOptions, loadPplOptions]);
 
   useEffect(() => {
     loadData();
@@ -382,11 +391,6 @@ export default function KonfirmasiPplTab() {
             <option value="KP">VSEN26.KP (Konsumsi/Pengeluaran)</option>
             <option value="M">VSEN26.M (Sosial Budaya/KOR)</option>
           </select>
-          {filterKuesioner === "M" && (
-            <p className="mt-1 text-[11px] text-gold-600">
-              ⚠ Pengecekan anomali utk VSEN26.M belum dibangun — daftar akan selalu kosong utk kuesioner ini.
-            </p>
-          )}
         </div>
       </div>
 
@@ -397,13 +401,18 @@ export default function KonfirmasiPplTab() {
       ) : (
         <>
           {/* Identitas PPL yang sedang konfirmasi — dipakai utk mengisi field nama_ppl saat menyimpan. */}
-          <input
-            type="text"
-            placeholder="Nama Anda (PPL) — isi sekali sebelum mulai konfirmasi"
+          <select
             value={namaPpl}
             onChange={(e) => setNamaPpl(e.target.value)}
             className="w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-          />
+          >
+            <option value="">-- Pilih Nama Anda (PPL) --</option>
+            {pplOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
 
           {debugError && (
             <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {debugError}</p>

@@ -34,6 +34,8 @@ interface MonitorRow {
   sampel_belum: number; // NURT yang belum ada temuan yang dikonfirmasi
   jumlah_temuan: number; // total temuan (semua status)
   temuan_dikonfirmasi: number; // total temuan berstatus non-pending
+  jumlah_error_konsistensi: number; // total temuan Error Konsistensi (kp_konsistensi_temuan) berstatus aktif
+  error_konsistensi_dibaca: number; // dari jumlah di atas, yang sudah ditandai dibaca PPL
 }
 
 type TingkatStatus = "selesai" | "berjalan" | "belum_mulai";
@@ -110,6 +112,16 @@ function DetailPanel({ r }: { r: MonitorRow }) {
         <p className="text-ink/50">Total Sampel</p>
         <p className="font-semibold text-navy-900">{r.jumlah_sampel}</p>
       </div>
+      <div>
+        <p className="text-ink/50">Error Konsistensi (aktif)</p>
+        <p className="font-semibold text-navy-900">{r.jumlah_error_konsistensi}</p>
+      </div>
+      <div>
+        <p className="text-ink/50">Error Konsistensi Sudah Dibaca</p>
+        <p className="font-semibold text-moss-700">
+          {r.error_konsistensi_dibaca}/{r.jumlah_error_konsistensi}
+        </p>
+      </div>
     </div>
   );
 }
@@ -130,12 +142,18 @@ export default function MonitoringAnomaliTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: jorongRows, error: jorongErr }, { data: temuanRows, error: temuanErr }] = await Promise.all([
+    const [
+      { data: jorongRows, error: jorongErr },
+      { data: temuanRows, error: temuanErr },
+      { data: konsistensiRows, error: konsistensiErr },
+    ] = await Promise.all([
       supabase.from("kp_nks_jorong").select("nks, nama_jorong, nama_ppl").order("nks"),
       supabase.from("kp_anomali_temuan").select("nks, nurt, status"),
+      supabase.from("kp_konsistensi_temuan").select("nks, dibaca_at").eq("status", "aktif"),
     ]);
     if (jorongErr) setDebugError(`Gagal memuat NKS/Jorong: ${jorongErr.message}`);
     else if (temuanErr) setDebugError(`Gagal memuat temuan: ${temuanErr.message}`);
+    else if (konsistensiErr) setDebugError(`Gagal memuat temuan Error Konsistensi: ${konsistensiErr.message}`);
     else setDebugError(null);
 
     // Agregasi per NKS, lalu per NURT (sampel), lalu simpulkan status sampel.
@@ -155,6 +173,17 @@ export default function MonitoringAnomaliTab() {
       sampelMap.set(nurt, cur);
     }
 
+    // Agregasi Error Konsistensi (aktif) per NKS: total & yang sudah ditandai dibaca.
+    const konsistensiPerNks = new Map<string, { total: number; dibaca: number }>();
+    for (const k of konsistensiRows ?? []) {
+      const nks = k.nks as string | null;
+      if (!nks) continue;
+      const cur = konsistensiPerNks.get(nks) ?? { total: 0, dibaca: 0 };
+      cur.total += 1;
+      if (k.dibaca_at) cur.dibaca += 1;
+      konsistensiPerNks.set(nks, cur);
+    }
+
     const list: MonitorRow[] = (jorongRows ?? []).map((j) => {
       const nks = j.nks as string;
       const sampelMap = perNks.get(nks);
@@ -172,6 +201,7 @@ export default function MonitoringAnomaliTab() {
           else berjalan += 1;
         }
       }
+      const konsistensi = konsistensiPerNks.get(nks);
       return {
         nks,
         nama_jorong: j.nama_jorong as string,
@@ -182,6 +212,8 @@ export default function MonitoringAnomaliTab() {
         sampel_belum: belum,
         jumlah_temuan: jumlahTemuan,
         temuan_dikonfirmasi: temuanOk,
+        jumlah_error_konsistensi: konsistensi ? konsistensi.total : 0,
+        error_konsistensi_dibaca: konsistensi ? konsistensi.dibaca : 0,
       };
     });
     setRows(list);
@@ -446,6 +478,12 @@ export default function MonitoringAnomaliTab() {
                 Progres {sortArrow("progres")}
               </th>
               <th className="px-3 py-2 font-medium text-center">Status</th>
+              <th className="px-3 py-2 font-medium text-center" title="Jumlah temuan Error Konsistensi (VSEN26.M) yang masih aktif utk NKS ini">
+                Error Konsistensi
+              </th>
+              <th className="px-3 py-2 font-medium text-center" title="Dari jumlah Error Konsistensi di atas, yang sudah ditandai dibaca PPL">
+                Sudah Dibaca
+              </th>
               <th className="px-3 py-2 font-medium text-center">Aksi</th>
             </tr>
           </thead>
@@ -478,6 +516,26 @@ export default function MonitoringAnomaliTab() {
                     <StatusPill status={r._status} />
                   </td>
                   <td className="px-3 py-2 text-center">
+                    {r.jumlah_error_konsistensi === 0 ? (
+                      <span className="text-ink/30">0</span>
+                    ) : (
+                      <span className="font-semibold text-navy-900">{r.jumlah_error_konsistensi}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {r.jumlah_error_konsistensi === 0 ? (
+                      <span className="text-ink/30">-</span>
+                    ) : (
+                      <span
+                        className={`font-semibold ${
+                          r.error_konsistensi_dibaca === r.jumlah_error_konsistensi ? "text-moss-700" : "text-gold-600"
+                        }`}
+                      >
+                        {r.error_konsistensi_dibaca}/{r.jumlah_error_konsistensi}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
                     <button
                       onClick={() => toggleExpand(r.nks)}
                       className="rounded-md border border-line bg-white px-2 py-1 text-xs font-medium text-navy-700 hover:border-navy-400"
@@ -488,7 +546,7 @@ export default function MonitoringAnomaliTab() {
                 </tr>
                 {expanded.has(r.nks) && (
                   <tr className="border-t border-line bg-navy-50/40">
-                    <td colSpan={10} className="px-3 py-3">
+                    <td colSpan={12} className="px-3 py-3">
                       <DetailPanel r={r} />
                     </td>
                   </tr>
@@ -497,7 +555,7 @@ export default function MonitoringAnomaliTab() {
             ))}
             {shown.length === 0 && !loading && (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-xs text-ink/40">
+                <td colSpan={12} className="px-3 py-6 text-center text-xs text-ink/40">
                   Tidak ada data untuk filter ini.
                 </td>
               </tr>
