@@ -320,6 +320,51 @@ export function collectFunctionNames(ast: Node): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Kumpulkan field + NILAI SESUNGGUHNYA yang dipakai saat SATU evaluasi rule
+// (dipanggil hanya saat rule itu TERBUKTI melanggar -- lihat pemanggil di
+// runKonsistensiPipeline.ts / runKonsistensiPipelineKP.ts) -- dipakai utk
+// tampilkan "Data yang dianalisis" di kartu temuan (app/seruti/
+// error-konsistensi.tsx), supaya PPL bisa lihat persis angka/isian apa yg
+// memicu temuan tanpa harus menghitung ulang manual dari rule_expr.
+// ---------------------------------------------------------------------------
+
+export interface FieldValueEntry {
+  name: string; // token field spt tampil di rule_expr, mis. "R502" / "R403[i+1]"
+  value: unknown;
+}
+
+// Label field yg mencakup indeks (kalau ada) -- field yg SAMA dgn indeks
+// BEDA (mis. R403 vs R403[i+1]) dianggap dua "variabel" berbeda krn nilainya
+// bisa beda (baris ART berbeda), sedangkan field dgn indeks [i] (baris ini
+// sendiri) disamakan labelnya dgn field tanpa indeks.
+function fieldEntryLabel(node: Extract<Node, { t: 'field' }>): string {
+  if (!node.idx || node.idx.kind === 'i') return node.name;
+  if (node.idx.kind === 'i+1') return `${node.name}[i+1]`;
+  if (node.idx.kind === 'i-1') return `${node.name}[i-1]`;
+  if (node.idx.kind === 'lit') return `${node.name}[${node.idx.n}]`;
+  return `${node.name}[...]`; // indeks dinamis (field lain) -- label generik
+}
+
+export function collectFieldValues(ast: Node, ctx: EvalCtx): FieldValueEntry[] {
+  const seen = new Set<string>();
+  const out: FieldValueEntry[] = [];
+  walk(ast, (n) => {
+    if (n.t !== 'field') return;
+    const label = fieldEntryLabel(n);
+    if (seen.has(label)) return;
+    seen.add(label);
+    let value: unknown;
+    try {
+      value = evalNode(n, ctx);
+    } catch {
+      value = undefined;
+    }
+    out.push({ name: label, value });
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Parse hasil: sukses (AST) atau unsupported (alasan) -- tidak pernah throw
 // keluar dari fungsi ini, supaya loop compile 1000+ rule tetap jalan mulus.
 // ---------------------------------------------------------------------------

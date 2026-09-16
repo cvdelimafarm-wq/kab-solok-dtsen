@@ -17,7 +17,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DbfRow } from './dbfParser';
 import type { Tables } from './anomalyChecks';
-import { parseRuleExpr, evaluateRule, type EvalCtx, type ParseResult } from './konsistensiEngine';
+import { parseRuleExpr, evaluateRule, collectFieldValues, type EvalCtx, type ParseResult, type FieldValueEntry } from './konsistensiEngine';
 import { KONSISTENSI_FIELD_MAP } from './konsistensiFieldMap';
 import { KONSISTENSI_RULES_M, type KonsistensiRuleM } from './konsistensiRulesM';
 
@@ -39,6 +39,7 @@ export type KonsistensiFinding = {
   perlakuan: string;
   level: string;
   is_fatal: boolean;
+  variabel: FieldValueEntry[]; // semua field & nilai yg dipakai evaluasi rule ini -- utk kartu "Data yang dianalisis"
 };
 
 type Household = {
@@ -153,6 +154,7 @@ export function evaluateKonsistensiM(tables: Partial<Tables>): KonsistensiFindin
             perlakuan: rule.perlakuan,
             level: rule.level,
             is_fatal: rule.is_fatal,
+            variabel: collectFieldValues(ast.ast, ctx),
           });
         }
       }
@@ -173,6 +175,7 @@ export function evaluateKonsistensiM(tables: Partial<Tables>): KonsistensiFindin
           perlakuan: rule.perlakuan,
           level: rule.level,
           is_fatal: rule.is_fatal,
+          variabel: collectFieldValues(ast.ast, ctxRt),
         });
       }
     }
@@ -208,6 +211,7 @@ export async function runKonsistensiPipeline(
     perlakuan: f.perlakuan,
     level: f.level,
     is_fatal: f.is_fatal,
+    variabel: f.variabel,
   }));
 
   // p_kuesioner WAJIB disertakan -- natural_key & sapuan "tandai resolved"

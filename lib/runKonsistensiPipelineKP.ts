@@ -21,7 +21,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DbfRow } from './dbfParser';
 import type { Tables } from './anomalyChecks';
-import { parseRuleExpr, evaluateRule, type EvalCtx, type ParseResult } from './konsistensiEngine';
+import { parseRuleExpr, evaluateRule, collectFieldValues, type EvalCtx, type ParseResult, type FieldValueEntry } from './konsistensiEngine';
 import { KONSISTENSI_FIELD_MAP } from './konsistensiFieldMap';
 import {
   ROW_FIELD_RE,
@@ -44,6 +44,7 @@ export type KonsistensiFinding = {
   perlakuan: string;
   level: string;
   is_fatal: boolean;
+  variabel: FieldValueEntry[]; // semua field & nilai yg dipakai evaluasi rule ini -- utk kartu "Data yang dianalisis"
 };
 
 function key(nks: unknown, nurt: unknown): string {
@@ -318,7 +319,13 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
   const artB5BRules = parsed.filter((p) => p.rule.dispatch === 'art_t8');
 
   const findings: KonsistensiFinding[] = [];
-  const push = (rule: KonsistensiRuleKP, hh: Household, artNo: number | null) => {
+  const push = (
+    rule: KonsistensiRuleKP,
+    hh: Household,
+    artNo: number | null,
+    ast: Parameters<typeof collectFieldValues>[0],
+    ctx: EvalCtx
+  ) => {
     findings.push({
       rule_id: rule.rule_id,
       field: rule.field,
@@ -331,13 +338,14 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
       perlakuan: rule.perlakuan,
       level: rule.level,
       is_fatal: rule.is_fatal,
+      variabel: collectFieldValues(ast, ctx),
     });
   };
 
   for (const hh of households) {
     const ctxRt: EvalCtx = { row: hh.rtRow, roster: [hh.rtRow], rowIndex: 0, fieldMap, artNoColumn: null };
     for (const { rule, ast } of householdRules) {
-      if (evaluateRule(ast.ast, ctxRt)) push(rule, hh, null);
+      if (evaluateRule(ast.ast, ctxRt)) push(rule, hh, null, ast.ast, ctxRt);
     }
 
     for (const raw of hh.t4Rows) {
@@ -345,7 +353,7 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
       const ctx: EvalCtx = { row, roster: [row], rowIndex: 0, fieldMap, artNoColumn: null };
       const artNo = Number.isFinite(toNum(raw.R401)) ? toNum(raw.R401) : null;
       for (const { rule, ast } of artT4Rules) {
-        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo);
+        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo, ast.ast, ctx);
       }
     }
     for (const raw of hh.t6Rows) {
@@ -353,7 +361,7 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
       const ctx: EvalCtx = { row, roster: [row], rowIndex: 0, fieldMap, artNoColumn: null };
       const artNo = Number.isFinite(toNum(raw.R401)) ? toNum(raw.R401) : null;
       for (const { rule, ast } of artT6Rules) {
-        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo);
+        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo, ast.ast, ctx);
       }
     }
     for (const raw of hh.t7Rows) {
@@ -361,7 +369,7 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
       const ctx: EvalCtx = { row, roster: [row], rowIndex: 0, fieldMap, artNoColumn: null };
       const artNo = Number.isFinite(toNum(raw.R401)) ? toNum(raw.R401) : null;
       for (const { rule, ast } of artB5ARules) {
-        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo);
+        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo, ast.ast, ctx);
       }
     }
     for (const raw of hh.t8Rows) {
@@ -369,7 +377,7 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
       const ctx: EvalCtx = { row, roster: [row], rowIndex: 0, fieldMap, artNoColumn: null };
       const artNo = Number.isFinite(toNum(raw.R401)) ? toNum(raw.R401) : null;
       for (const { rule, ast } of artB5BRules) {
-        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo);
+        if (evaluateRule(ast.ast, ctx)) push(rule, hh, artNo, ast.ast, ctx);
       }
     }
   }
@@ -402,6 +410,7 @@ export async function runKonsistensiPipelineKP(
     perlakuan: f.perlakuan,
     level: f.level,
     is_fatal: f.is_fatal,
+    variabel: f.variabel,
   }));
 
   // p_kuesioner WAJIB 'KP' -- lihat catatan sama di runKonsistensiPipeline.ts

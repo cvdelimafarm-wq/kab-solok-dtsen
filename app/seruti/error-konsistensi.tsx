@@ -43,6 +43,7 @@ interface Temuan {
   status: "aktif" | "resolved";
   dibaca_at: string | null;
   dibaca_oleh: string | null;
+  variabel: { name: string; value: unknown }[] | null;
 }
 
 type FilterKuesioner = "SEMUA" | "M" | "KP";
@@ -81,6 +82,29 @@ function pisahPesan(message: string | null): { kondisi: string; masalah: string 
   const masalah = message.slice(idx + 6).trim();
   if (!kondisi || !masalah) return null;
   return { kondisi, masalah };
+}
+
+// Format nilai variabel supaya gampang dibaca -- angka pakai pemisah ribuan
+// ala Indonesia, kosong/null/NaN ditandai jelas "(kosong)" (bukan "0" atau
+// "-") supaya PPL tidak salah kira isian itu benar-benar nol.
+function fmtVarValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "(kosong)";
+  if (typeof v === "number") return Number.isNaN(v) ? "(kosong)" : v.toLocaleString("id-ID");
+  if (typeof v === "boolean") return v ? "Ya" : "Tidak";
+  if (Array.isArray(v)) return v.length === 0 ? "(kosong)" : v.join(", ");
+  return String(v);
+}
+
+// Label deskriptif field, KALAU ada pola yang dikenal (baris komoditas
+// "R{n}K{c}" atau field hasil join ke data VSEN26.M "KOR_..."). Belum ada
+// kamus label utk seluruh ribuan kode field mesin aturan BPS -- kalau tidak
+// cocok pola manapun, cukup tampilkan kode field-nya saja (tanpa label
+// tambahan), sesuai arahan "jika ada labelnya maka tambahkan labelnya".
+function labelForVariabel(name: string): string | null {
+  const rowMatch = /^R(\d+)K(\d+[A-Z]?)(\[.*\])?$/.exec(name);
+  if (rowMatch) return `Baris komoditas No. ${rowMatch[1]}, Kolom ${rowMatch[2]}`;
+  if (name.startsWith("KOR_")) return `Data VSEN26.M: ${name.slice(4)}`;
+  return null;
 }
 
 export default function ErrorKonsistensiTab() {
@@ -301,26 +325,17 @@ export default function ErrorKonsistensiTab() {
           </div>
 
           {/* ---------- Filter kuesioner (M / KP) ---------- */}
-          <div className="flex gap-1.5">
-            {(
-              [
-                { key: "SEMUA", label: `Semua (${jumlahM + jumlahKp})` },
-                { key: "M", label: `VSEN26.M (${jumlahM})` },
-                { key: "KP", label: `VSEN26.KP (${jumlahKp})` },
-              ] as { key: FilterKuesioner; label: string }[]
-            ).map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => setFilterKuesioner(opt.key)}
-                className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition ${
-                  filterKuesioner === opt.key
-                    ? "border-navy-700 bg-navy-700 text-white"
-                    : "border-line bg-white text-ink/60 hover:bg-paper/60"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div>
+            <label className="text-xs font-semibold text-navy-900">Jenis Kuesioner</label>
+            <select
+              value={filterKuesioner}
+              onChange={(e) => setFilterKuesioner(e.target.value as FilterKuesioner)}
+              className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+            >
+              <option value="SEMUA">Semua ({jumlahM + jumlahKp})</option>
+              <option value="M">VSEN26.M ({jumlahM})</option>
+              <option value="KP">VSEN26.KP ({jumlahKp})</option>
+            </select>
           </div>
 
           <label className="flex items-center gap-2 text-xs text-ink/70">
@@ -472,6 +487,35 @@ function TemuanCard({
 
       {isOpen && (
         <div className="space-y-3 border-t border-line bg-paper/30 p-3">
+          {/* Data yang dianalisis — semua variabel & nilai yang dipakai evaluasi
+              aturan ini (dari lib/konsistensiEngine.ts collectFieldValues()),
+              format mirip kartu Anomali Cepat tapi nama/kode variabel dibuat
+              lebih gelap/jelas (font-semibold text-navy-900) sesuai arahan. */}
+          {temuan.variabel && temuan.variabel.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-bold text-navy-900">Data yang dianalisis</p>
+              <div className="overflow-hidden rounded-md border border-line">
+                {temuan.variabel.map((v, i) => {
+                  const label = labelForVariabel(v.name);
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-center justify-between gap-3 px-2.5 py-1.5 text-xs sm:text-sm ${
+                        i > 0 ? "border-t border-line" : ""
+                      } bg-white`}
+                    >
+                      <span className="font-semibold text-navy-900">
+                        {label ?? v.name}
+                        {label && <span className="ml-1 text-[10px] font-mono font-normal text-ink/40">({v.name})</span>}
+                      </span>
+                      <span className="text-right font-medium text-ink">{fmtVarValue(v.value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {pisah ? (
             <div className="space-y-2">
               <div className="rounded-md border border-navy-100 bg-navy-50 p-2.5">
