@@ -194,7 +194,12 @@ export default function SerutiPage() {
         <TabButton active={tab === "anomaliai"} onClick={() => setTab("anomaliai")} icon={<IconAnomaliAi />}>
           Anomali Cepat AI
         </TabButton>
-        <TabButton active={tab === "konfirmasi"} onClick={() => setTab("konfirmasi")} icon={<IconKonfirmasi />}>
+        <TabButton
+          active={tab === "konfirmasi"}
+          onClick={() => setTab("konfirmasi")}
+          icon={<IconKonfirmasi />}
+          highlight
+        >
           Konfirmasi PPL
         </TabButton>
         <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")} icon={<IconMonitoring />}>
@@ -207,6 +212,7 @@ export default function SerutiPage() {
           active={tab === "errorkonsistensi"}
           onClick={() => setTab("errorkonsistensi")}
           icon={<IconErrorKonsistensi />}
+          highlight
         >
           Error Konsistensi
         </TabButton>
@@ -234,22 +240,34 @@ function TabButton({
   onClick,
   icon,
   children,
+  highlight,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   children: React.ReactNode;
+  highlight?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex min-h-[56px] flex-col items-center justify-center gap-1 border-b-2 bg-white px-1 py-1.5 text-center text-[10.5px] font-medium leading-tight transition sm:text-xs ${
+      className={`relative flex min-h-[56px] flex-col items-center justify-center gap-1 border-b-2 px-1 py-1.5 text-center text-[10.5px] font-medium leading-tight transition sm:text-xs ${
         active
-          ? "border-navy-700 text-navy-900"
-          : "border-transparent text-ink/50 hover:text-ink"
+          ? "border-navy-700 bg-white text-navy-900"
+          : highlight
+          ? "border-transparent bg-rust-100 text-rust-700 hover:text-rust-700"
+          : "border-transparent bg-white text-ink/50 hover:text-ink"
       }`}
     >
-      <span className={active ? "text-navy-700" : "text-ink/40"}>{icon}</span>
+      {highlight && (
+        <span className="absolute right-1.5 top-1.5 flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rust-500 opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rust-700" />
+        </span>
+      )}
+      <span className={active ? "text-navy-700" : highlight ? "text-rust-500" : "text-ink/40"}>
+        {icon}
+      </span>
       {children}
     </button>
   );
