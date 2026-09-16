@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Tables } from '@/lib/anomalyChecks';
 import { runAnomaliPipeline } from '@/lib/runAnomaliPipeline';
+import { runKonsistensiPipeline } from '@/lib/runKonsistensiPipeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,19 @@ export async function POST(req: NextRequest) {
       keterangan ?? `Jalankan ulang dari upload #${lastUpload.id}`,
       filenames
     );
-    return NextResponse.json(hasil);
+
+    let warningKonsistensi: string | null = null;
+    let hasilKonsistensi: { totalTemuan: number; ringkasan: { baru: number; tetap: number; selesai: number } } | null = null;
+    if (tables.m1 || tables.mrt1 || tables.mrt2) {
+      try {
+        hasilKonsistensi = await runKonsistensiPipeline(supabase, tables, hasil.uploadId);
+      } catch (err: any) {
+        console.error('konsistensi-m pipeline error:', err);
+        warningKonsistensi = `Evaluasi Error Konsistensi gagal: ${err.message || String(err)}`;
+      }
+    }
+
+    return NextResponse.json({ ...hasil, konsistensi: hasilKonsistensi, warningKonsistensi });
   } catch (err: any) {
     console.error('anomali-kp rerun error:', err);
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });

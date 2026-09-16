@@ -19,6 +19,7 @@ import path from 'path';
 import { readDbf } from '@/lib/dbfParser';
 import type { Tables } from '@/lib/anomalyChecks';
 import { runAnomaliPipeline } from '@/lib/runAnomaliPipeline';
+import { runKonsistensiPipeline } from '@/lib/runKonsistensiPipeline';
 
 // Route ini butuh Node.js runtime (paket 'dbffile' pakai modul 'fs'),
 // tidak bisa jalan di Edge Runtime.
@@ -127,7 +128,24 @@ export async function POST(req: NextRequest) {
     }
 
     const hasil = await runAnomaliPipeline(supabase, tables, keterangan, usedFilenames);
-    return NextResponse.json(hasil);
+
+    // Jalankan juga evaluasi aturan konsistensi resmi BPS VSEN26.M (kalau ada
+    // data m1/mrt1/mrt2) — pakai upload_id yang SAMA dgn Anomali Cepat di
+    // atas, supaya raw_data tidak disimpan dua kali. Kegagalan di sini TIDAK
+    // membatalkan hasil Anomali Cepat yang sudah tersimpan — cukup dilaporkan
+    // sebagai warning.
+    let warningKonsistensi: string | null = null;
+    let hasilKonsistensi: { totalTemuan: number; ringkasan: { baru: number; tetap: number; selesai: number } } | null = null;
+    if (tables.m1 || tables.mrt1 || tables.mrt2) {
+      try {
+        hasilKonsistensi = await runKonsistensiPipeline(supabase, tables, hasil.uploadId);
+      } catch (err: any) {
+        console.error('konsistensi-m pipeline error:', err);
+        warningKonsistensi = `Evaluasi Error Konsistensi gagal: ${err.message || String(err)}`;
+      }
+    }
+
+    return NextResponse.json({ ...hasil, konsistensi: hasilKonsistensi, warningKonsistensi });
   } catch (err: any) {
     console.error('anomali-kp upload error:', err);
     return NextResponse.json({ error: err.message || String(err) }, { status: 500 });

@@ -4,37 +4,40 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // ============================================================================
-// Tab "Error Konsistensi" — katalog aturan validasi/konsistensi resmi BPS
-// Pusat untuk kuesioner VSEN26 (Kor = "M" dan Kor+Modul = "KP"), diambil
-// langsung dari metadata aplikasi client desktop BPS (Assets/Metadata*.xlsx).
-// Total ±4.357 aturan (1.018 utk M, 3.339 utk KP).
+// Tab "Error Konsistensi" — VERSI 2 (rombak total dari versi katalog belajar
+// sebelumnya, per arahan Bapak Iqbal 16/9): bukan lagi menjelajah katalog
+// aturan yang abstrak, tapi menampilkan TEMUAN NYATA hasil evaluasi otomatis
+// 930 dari 1.018 aturan konsistensi resmi BPS VSEN26.M terhadap DATA YANG
+// SUDAH DIENTRI (tabel m1/mrt1/mrt2 — data DBF yang sama dipakai Anomali
+// Cepat). Evaluasi jalan otomatis tiap kali ada upload/"Jalankan Ulang" baru
+// (lib/runKonsistensiPipeline.ts), hasilnya tersimpan di kp_konsistensi_temuan.
 //
-// Ini BUKAN alat konfirmasi/validasi data seperti Konfirmasi PPL — ini alat
-// BELAJAR: PPL menjelajah/mencari aturan, lalu menandai "Sudah Dibaca" per
-// aturan. Tidak ada aksi setuju/tolak, tidak ada efek ke data survei sama
-// sekali (read-only terhadap kp_konsistensi_rules; satu-satunya tulisan
-// adalah baris "sudah dibaca" milik PPL ybs di kp_konsistensi_dibaca).
+// PPL HANYA melihat temuan utk NKS yang jadi tanggung jawabnya sendiri —
+// dicocokkan dari nama yang diisi terhadap kp_nks_jorong.nama_ppl (BUKAN
+// dropdown pilih-NKS bebas seperti Konfirmasi PPL). Setiap temuan terikat
+// NKS + nomor urut sampel (NURT) + nomor urut ART (kalau levelnya per-ART).
 //
-// Pesan asli dari BPS (kolom `message`) hampir semua berpola
-// "<kondisi> tapi <isian bermasalah>" — dipecah otomatis (bukan ditulis
-// ulang manual, krn ~4.357 baris) jadi dua blok "Kalau ... / Tapi ..."
-// supaya lebih gampang dibaca tanpa mengubah arti aslinya.
+// Aksinya cuma SATU: "Tandai Sudah Dibaca" (bukan Sesuai/Perlu
+// Koreksi/Salah Entry seperti Konfirmasi PPL) — tujuannya memaksa PPL
+// membaca aturan yang relevan dgn sampelnya sendiri, bukan meminta
+// keputusan/konfirmasi apa pun. Tidak ada efek ke data survei.
 // ============================================================================
 
-type Kuesioner = "KP" | "M";
-
-interface RuleRingkas {
+interface Temuan {
   id: number;
-  rule_id: number | null;
+  rule_id: number;
   field: string;
-  halaman: number | null;
-  level: string | null;
-  is_fatal: boolean | null;
-}
-
-interface RuleDetail extends RuleRingkas {
-  message: string | null;
+  nks: string;
+  nurt: string;
+  art_no: number | null;
+  nama_krt: string | null;
+  message: string;
   perlakuan: string | null;
+  level: string | null;
+  is_fatal: boolean;
+  status: "aktif" | "resolved";
+  dibaca_at: string | null;
+  dibaca_oleh: string | null;
 }
 
 const NAMA_PPL_KEY = "seruti-nama-ppl";
@@ -43,21 +46,22 @@ function levelBadgeClass(level: string | null): string {
   switch (level) {
     case "RT":
       return "bg-navy-700 text-white";
-    case "ART":
-      return "bg-rust-500 text-white";
-    case "ARTB5A":
-    case "ARTB5B":
-      return "bg-gold-600 text-white";
     case "BALITA":
       return "bg-moss-500 text-white";
     default:
-      return "bg-navy-400 text-white";
+      return "bg-rust-500 text-white"; // ART (paling umum)
   }
 }
 
-// Pecah "<kondisi> tapi <masalah>" jadi dua bagian yang lebih gampang dibaca.
-// Kalau polanya tidak ketemu (sebagian kecil baris memang bukan kalimat
-// "if...but"), tampilkan apa adanya — tidak dipaksakan.
+function levelLabel(level: string | null, artNo: number | null): string {
+  if (level === "RT") return "Tingkat Rumah Tangga";
+  if (artNo != null) return `ART No. ${artNo}`;
+  return level || "-";
+}
+
+// Pecah "<kondisi> tapi <masalah>" jadi dua bagian yang lebih gampang dibaca
+// (sama seperti versi katalog sebelumnya — pesan asli BPS hampir semua
+// berpola ini).
 function pisahPesan(message: string | null): { kondisi: string; masalah: string } | null {
   if (!message) return null;
   const idx = message.toLowerCase().lastIndexOf(" tapi ");
@@ -71,7 +75,7 @@ function pisahPesan(message: string | null): { kondisi: string; masalah: string 
 export default function ErrorKonsistensiTab() {
   const [supabase] = useState(() => createClient());
 
-  // ---------- identitas PPL (dipakai utk menyimpan status "sudah dibaca") ----------
+  // ---------- identitas PPL (dipakai utk cari NKS tanggung jawabnya + menyimpan "sudah dibaca") ----------
   const [namaPpl, setNamaPpl] = useState("");
   useEffect(() => {
     try {
@@ -90,112 +94,86 @@ export default function ErrorKonsistensiTab() {
     }
   }
 
-  const [kuesioner, setKuesioner] = useState<Kuesioner>("KP");
-  const [ringkas, setRingkas] = useState<RuleRingkas[]>([]);
-  const [loadingRingkas, setLoadingRingkas] = useState(false);
-  const [dibacaSet, setDibacaSet] = useState<Set<number>>(new Set());
+  const [nksSaya, setNksSaya] = useState<{ nks: string; nama_jorong: string | null }[] | null>(null);
+  const [loadingNks, setLoadingNks] = useState(false);
 
-  const [search, setSearch] = useState("");
-  const [hanyaBelumDibaca, setHanyaBelumDibaca] = useState(false);
-
-  const [openHalaman, setOpenHalaman] = useState<Set<number>>(new Set());
-  const [detailByHalaman, setDetailByHalaman] = useState<Map<number, RuleDetail[]>>(new Map());
-  const [loadingHalaman, setLoadingHalaman] = useState<Set<number>>(new Set());
+  const [temuan, setTemuan] = useState<Temuan[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [debugError, setDebugError] = useState<string | null>(null);
+  const [hanyaBelumDibaca, setHanyaBelumDibaca] = useState(true);
   const [openCards, setOpenCards] = useState<Set<number>>(new Set());
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
-  const [searchResults, setSearchResults] = useState<RuleDetail[] | null>(null);
-  const [searching, setSearching] = useState(false);
-
-  // ---------- muat daftar ringkas (kolom kecil saja) utk kuesioner terpilih ----------
-  const loadRingkas = useCallback(async () => {
-    setLoadingRingkas(true);
-    const { data } = await supabase
-      .from("kp_konsistensi_rules")
-      .select("id, rule_id, field, halaman, level, is_fatal")
-      .eq("kuesioner", kuesioner)
-      .order("halaman", { ascending: true })
-      .order("rule_id", { ascending: true })
-      .range(0, 4999);
-    setRingkas((data ?? []) as RuleRingkas[]);
-    setDetailByHalaman(new Map());
-    setOpenHalaman(new Set());
-    setOpenCards(new Set());
-    setLoadingRingkas(false);
-  }, [supabase, kuesioner]);
-
-  useEffect(() => {
-    loadRingkas();
-  }, [loadRingkas]);
-
-  // ---------- muat status "sudah dibaca" milik PPL ybs (debounce ketikan nama) ----------
-  const loadDibaca = useCallback(async () => {
+  // ---------- cari NKS tanggung jawab PPL ybs, dari nama yg diisi ----------
+  const loadNksSaya = useCallback(async () => {
     const nama = namaPpl.trim();
     if (!nama) {
-      setDibacaSet(new Set());
+      setNksSaya(null);
       return;
     }
+    setLoadingNks(true);
     const { data } = await supabase
-      .from("kp_konsistensi_dibaca")
-      .select("rule_id")
-      .eq("nama_ppl", nama)
-      .range(0, 9999);
-    setDibacaSet(new Set((data ?? []).map((r) => r.rule_id as number)));
+      .from("kp_nks_jorong")
+      .select("nks, nama_jorong")
+      .ilike("nama_ppl", nama);
+    setNksSaya((data ?? []) as { nks: string; nama_jorong: string | null }[]);
+    setLoadingNks(false);
   }, [supabase, namaPpl]);
 
   useEffect(() => {
     const t = setTimeout(() => {
-      loadDibaca();
+      loadNksSaya();
     }, 400);
     return () => clearTimeout(t);
-  }, [loadDibaca]);
+  }, [loadNksSaya]);
 
-  // ---------- pencarian (aktif kalau input >= 2 karakter) ----------
-  useEffect(() => {
-    const q = search.trim();
-    if (q.length < 2) {
-      setSearchResults(null);
+  // ---------- muat temuan aktif utk NKS-NKS itu ----------
+  const loadTemuan = useCallback(async () => {
+    if (!nksSaya || nksSaya.length === 0) {
+      setTemuan([]);
       return;
     }
-    const t = setTimeout(async () => {
-      setSearching(true);
-      let query = supabase
-        .from("kp_konsistensi_rules")
-        .select("id, rule_id, field, halaman, level, is_fatal, message, perlakuan")
-        .eq("kuesioner", kuesioner)
-        .order("halaman", { ascending: true })
-        .limit(200);
-      query = /^\d+$/.test(q)
-        ? query.or(`rule_id.eq.${q},field.ilike.%${q}%,message.ilike.%${q}%`)
-        : query.or(`field.ilike.%${q}%,message.ilike.%${q}%`);
-      const { data } = await query;
-      setSearchResults((data ?? []) as RuleDetail[]);
-      setSearching(false);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [search, kuesioner, supabase]);
-
-  async function toggleHalaman(h: number) {
-    setOpenHalaman((prev) => {
-      const n = new Set(prev);
-      if (n.has(h)) n.delete(h);
-      else n.add(h);
-      return n;
-    });
-    if (!detailByHalaman.has(h)) {
-      setLoadingHalaman((prev) => new Set(prev).add(h));
-      const { data } = await supabase
-        .from("kp_konsistensi_rules")
-        .select("id, rule_id, field, halaman, level, is_fatal, message, perlakuan")
-        .eq("kuesioner", kuesioner)
-        .eq("halaman", h)
-        .order("rule_id", { ascending: true });
-      setDetailByHalaman((prev) => new Map(prev).set(h, (data ?? []) as RuleDetail[]));
-      setLoadingHalaman((prev) => {
-        const n = new Set(prev);
-        n.delete(h);
-        return n;
-      });
+    setLoading(true);
+    const nksList = nksSaya.map((n) => n.nks);
+    const { data, error } = await supabase
+      .from("kp_konsistensi_temuan")
+      .select("*")
+      .in("nks", nksList)
+      .eq("status", "aktif")
+      .order("nks", { ascending: true })
+      .order("nurt", { ascending: true })
+      .order("art_no", { ascending: true, nullsFirst: true })
+      .range(0, 4999);
+    if (error) {
+      console.error("loadTemuan error:", error);
+      setDebugError(`Gagal membaca temuan: ${error.message} (code: ${error.code})`);
+    } else {
+      setDebugError(null);
     }
+    const list = (data ?? []) as Temuan[];
+    setTemuan(list);
+    setOpenGroups(new Set(list.map((t) => `${t.nks}|${t.nurt}`))); // default semua sampel terbuka
+    setLoading(false);
+  }, [supabase, nksSaya]);
+
+  useEffect(() => {
+    loadTemuan();
+  }, [loadTemuan]);
+
+  async function tandaiDibaca(id: number) {
+    const nama = namaPpl.trim();
+    if (!nama) return;
+    const now = new Date().toISOString();
+    setTemuan((prev) => prev.map((t) => (t.id === id ? { ...t, dibaca_at: now, dibaca_oleh: nama } : t)));
+    await supabase
+      .from("kp_konsistensi_temuan")
+      .update({ dibaca_at: now, dibaca_oleh: nama })
+      .eq("id", id);
+  }
+
+  async function batalkanDibaca(id: number) {
+    setTemuan((prev) => prev.map((t) => (t.id === id ? { ...t, dibaca_at: null, dibaca_oleh: null } : t)));
+    await supabase.from("kp_konsistensi_temuan").update({ dibaca_at: null, dibaca_oleh: null }).eq("id", id);
   }
 
   function toggleCard(id: number) {
@@ -206,189 +184,149 @@ export default function ErrorKonsistensiTab() {
       return n;
     });
   }
-
-  async function toggleDibaca(ruleId: number) {
-    const nama = namaPpl.trim();
-    if (!nama) return;
-    const sudah = dibacaSet.has(ruleId);
-    if (sudah) {
-      setDibacaSet((prev) => {
-        const n = new Set(prev);
-        n.delete(ruleId);
-        return n;
-      });
-      await supabase.from("kp_konsistensi_dibaca").delete().eq("rule_id", ruleId).eq("nama_ppl", nama);
-    } else {
-      setDibacaSet((prev) => new Set(prev).add(ruleId));
-      await supabase
-        .from("kp_konsistensi_dibaca")
-        .upsert({ rule_id: ruleId, nama_ppl: nama }, { onConflict: "rule_id,nama_ppl", ignoreDuplicates: true });
-    }
+  function toggleGroup(g: string) {
+    setOpenGroups((prev) => {
+      const n = new Set(prev);
+      if (n.has(g)) n.delete(g);
+      else n.add(g);
+      return n;
+    });
   }
 
   const grouped = useMemo(() => {
-    const map = new Map<number, RuleRingkas[]>();
-    for (const r of ringkas) {
-      const h = r.halaman ?? 0;
-      if (!map.has(h)) map.set(h, []);
-      map.get(h)!.push(r);
+    const map = new Map<string, Temuan[]>();
+    for (const t of temuan) {
+      const g = `${t.nks}|${t.nurt}`;
+      if (!map.has(g)) map.set(g, []);
+      map.get(g)!.push(t);
     }
-    return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [ringkas]);
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [temuan]);
 
-  const totalRules = ringkas.length;
-  const sudahDibacaCount = ringkas.filter((r) => dibacaSet.has(r.id)).length;
-  const persen = totalRules > 0 ? Math.round((sudahDibacaCount / totalRules) * 100) : 0;
+  const total = temuan.length;
+  const belumDibaca = temuan.filter((t) => !t.dibaca_at).length;
+  const sudahDibaca = total - belumDibaca;
+  const persen = total > 0 ? Math.round((sudahDibaca / total) * 100) : 0;
 
-  const groupedTampil = grouped.filter(([, list]) => !hanyaBelumDibaca || list.some((r) => !dibacaSet.has(r.id)));
-  const sedangCari = search.trim().length >= 2;
+  const groupedTampil = grouped
+    .map(([g, list]) => [g, hanyaBelumDibaca ? list.filter((t) => !t.dibaca_at) : list] as [string, Temuan[]])
+    .filter(([, list]) => list.length > 0);
+
+  const namaTrim = namaPpl.trim();
 
   return (
     <div className="space-y-3 pb-6">
       {/* ---------- Header ---------- */}
       <div>
-        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Error Konsistensi &ndash; Belajar Aturan Validasi</h1>
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Error Konsistensi</h1>
         <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-          Katalog resmi &plusmn;4.357 aturan konsistensi kuesioner VSEN26 (Kor &amp; Modul), diambil langsung dari
-          aplikasi BPS Pusat. Bukan alat cek otomatis — jelajah/cari lalu tandai yang sudah Anda pelajari.
+          Temuan nyata dari 930 aturan konsistensi resmi BPS VSEN26.M, dievaluasi otomatis terhadap data yang sudah
+          Anda entri — hanya untuk NKS &amp; sampel yang jadi tanggung jawab Anda. Wajib dibaca, bukan
+          dikonfirmasi/ditolak.
         </p>
       </div>
 
-      {/* ---------- Kontrol ---------- */}
-      <div className="space-y-2 rounded-lg border border-line bg-white p-3">
-        <div>
-          <label className="text-xs font-semibold text-navy-900">Nama Anda (PPL)</label>
-          <input
-            type="text"
-            placeholder="Isi nama supaya progres belajar Anda tersimpan"
-            value={namaPpl}
-            onChange={(e) => updateNamaPpl(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-semibold text-navy-900">Kuesioner</label>
-            <select
-              value={kuesioner}
-              onChange={(e) => setKuesioner(e.target.value as Kuesioner)}
-              className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
-            >
-              <option value="KP">VSEN26.KP (Kor + Modul)</option>
-              <option value="M">VSEN26.M (Kor)</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-navy-900">Cari</label>
-            <input
-              type="text"
-              placeholder="Kode field / kata kunci..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-            />
-          </div>
-        </div>
-        <label className="flex items-center gap-2 text-xs text-ink/70">
-          <input
-            type="checkbox"
-            checked={hanyaBelumDibaca}
-            onChange={(e) => setHanyaBelumDibaca(e.target.checked)}
-            className="h-3.5 w-3.5"
-          />
-          Hanya tampilkan yang belum dibaca
-        </label>
+      {/* ---------- Identitas PPL ---------- */}
+      <div className="rounded-lg border border-line bg-white p-3">
+        <label className="text-xs font-semibold text-navy-900">Nama Anda (PPL)</label>
+        <input
+          type="text"
+          placeholder="Isi nama persis seperti tercatat BPS Kabupaten"
+          value={namaPpl}
+          onChange={(e) => updateNamaPpl(e.target.value)}
+          className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+        />
+        {namaTrim && !loadingNks && nksSaya && nksSaya.length > 0 && (
+          <p className="mt-1.5 text-[11px] text-ink/50">
+            NKS Anda: {nksSaya.map((n) => n.nks).join(", ")}
+          </p>
+        )}
       </div>
 
-      {!namaPpl.trim() && (
+      {!namaTrim ? (
         <p className="rounded-lg border border-gold-400/60 bg-gold-100 p-3 text-xs text-gold-600">
-          &#9888; Isi nama Anda dulu di atas supaya tombol &quot;Sudah Dibaca&quot; bisa dipakai dan progres belajar
-          Anda tersimpan.
+          &#9888; Isi nama Anda dulu di atas untuk melihat temuan konsistensi pada NKS yang jadi tanggung jawab Anda.
         </p>
-      )}
-
-      {/* ---------- Ringkasan progres ---------- */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <SummaryBox label="Total Aturan" value={totalRules} className="bg-navy-50 text-navy-900" />
-        <SummaryBox label="Sudah Dibaca" value={sudahDibacaCount} className="bg-moss-100 text-moss-700" />
-        <SummaryBox label="Progres" value={`${persen}%`} className="bg-gold-100 text-gold-600" />
-      </div>
-
-      {loadingRingkas ? (
-        <p className="py-6 text-center text-sm text-ink/40">Memuat daftar aturan...</p>
-      ) : sedangCari ? (
-        <div className="space-y-2">
-          {searching ? (
-            <p className="py-6 text-center text-sm text-ink/40">Mencari...</p>
-          ) : !searchResults || searchResults.length === 0 ? (
-            <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
-              Tidak ada aturan yang cocok dengan pencarian &quot;{search}&quot;.
-            </p>
-          ) : (
-            searchResults
-              .filter((r) => !hanyaBelumDibaca || !dibacaSet.has(r.id))
-              .map((r) => (
-                <RuleCard
-                  key={r.id}
-                  rule={r}
-                  isOpen={openCards.has(r.id)}
-                  onToggle={() => toggleCard(r.id)}
-                  sudahDibaca={dibacaSet.has(r.id)}
-                  onToggleDibaca={() => toggleDibaca(r.id)}
-                  disabledDibaca={!namaPpl.trim()}
-                />
-              ))
-          )}
-        </div>
-      ) : groupedTampil.length === 0 ? (
-        <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
-          &#127881; Semua aturan untuk kuesioner ini sudah Anda baca.
+      ) : loadingNks ? (
+        <p className="py-6 text-center text-sm text-ink/40">Mencari NKS Anda...</p>
+      ) : !nksSaya || nksSaya.length === 0 ? (
+        <p className="rounded-lg border border-gold-400/60 bg-gold-100 p-3 text-xs text-gold-600">
+          &#9888; Nama &quot;{namaTrim}&quot; tidak ditemukan sebagai PPL untuk NKS manapun di data BPS Kabupaten.
+          Pastikan penulisan nama persis sama dengan yang tercatat (cek ke BPS Kabupaten kalau perlu dikoreksi).
         </p>
       ) : (
-        groupedTampil.map(([h, list]) => {
-          const total = list.length;
-          const sudah = list.filter((r) => dibacaSet.has(r.id)).length;
-          const isOpen = openHalaman.has(h);
-          const detail = detailByHalaman.get(h);
-          const isLoadingThis = loadingHalaman.has(h);
-          const visibleDetail = detail ? (hanyaBelumDibaca ? detail.filter((r) => !dibacaSet.has(r.id)) : detail) : [];
-          return (
-            <div key={h} className="overflow-hidden rounded-lg border border-line bg-white">
-              <button
-                onClick={() => toggleHalaman(h)}
-                className="flex w-full items-center justify-between gap-2 bg-navy-50 px-3 py-2.5 text-left"
-              >
-                <span className="text-xs font-bold uppercase tracking-wide text-navy-900 sm:text-sm">
-                  Halaman {h || "-"} <span className="font-normal text-navy-400">({sudah}/{total} dibaca)</span>
-                </span>
-                <Chevron open={isOpen} />
-              </button>
-              {isOpen && (
-                <div className="space-y-2 p-2">
-                  {isLoadingThis ? (
-                    <p className="py-3 text-center text-xs text-ink/40">Memuat...</p>
-                  ) : visibleDetail.length === 0 ? (
-                    <p className="py-3 text-center text-xs text-ink/50">
-                      {hanyaBelumDibaca ? "Semua aturan di halaman ini sudah dibaca. \u{1F389}" : "Tidak ada aturan."}
-                    </p>
-                  ) : (
-                    visibleDetail.map((r) => (
-                      <RuleCard
-                        key={r.id}
-                        rule={r}
-                        isOpen={openCards.has(r.id)}
-                        onToggle={() => toggleCard(r.id)}
-                        sudahDibaca={dibacaSet.has(r.id)}
-                        onToggleDibaca={() => toggleDibaca(r.id)}
-                        disabledDibaca={!namaPpl.trim()}
-                      />
-                    ))
+        <>
+          {debugError && (
+            <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {debugError}</p>
+          )}
+
+          {/* ---------- Ringkasan progres ---------- */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <SummaryBox label="Total Temuan" value={total} className="bg-navy-50 text-navy-900" />
+            <SummaryBox label="Belum Dibaca" value={belumDibaca} className="bg-gold-100 text-gold-600" />
+            <SummaryBox label="Progres" value={`${persen}%`} className="bg-moss-100 text-moss-700" />
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-ink/70">
+            <input
+              type="checkbox"
+              checked={hanyaBelumDibaca}
+              onChange={(e) => setHanyaBelumDibaca(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            Hanya tampilkan yang belum dibaca
+          </label>
+
+          {loading ? (
+            <p className="py-6 text-center text-sm text-ink/40">Memuat temuan...</p>
+          ) : total === 0 ? (
+            <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
+              &#127881; Tidak ada temuan konsistensi untuk NKS Anda saat ini.
+            </p>
+          ) : groupedTampil.length === 0 ? (
+            <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
+              &#127881; Semua temuan untuk NKS Anda sudah dibaca.
+            </p>
+          ) : (
+            groupedTampil.map(([g, list]) => {
+              const [nks, nurt] = g.split("|");
+              const jorong = nksSaya.find((n) => n.nks === nks)?.nama_jorong;
+              const totalGroup = (grouped.find(([gg]) => gg === g)?.[1] ?? []).length;
+              const belumGroup = (grouped.find(([gg]) => gg === g)?.[1] ?? []).filter((t) => !t.dibaca_at).length;
+              return (
+                <div key={g} className="overflow-hidden rounded-lg border border-line bg-white">
+                  <button
+                    onClick={() => toggleGroup(g)}
+                    className="flex w-full items-center justify-between gap-2 bg-navy-50 px-3 py-2.5 text-left"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wide text-navy-900 sm:text-sm">
+                      NKS {nks} &middot; Sampel {nurt}
+                      {jorong ? ` (${jorong})` : ""}{" "}
+                      <span className="font-normal text-navy-400">
+                        ({belumGroup}/{totalGroup} belum dibaca)
+                      </span>
+                    </span>
+                    <Chevron open={openGroups.has(g)} />
+                  </button>
+                  {openGroups.has(g) && (
+                    <div className="space-y-2 p-2">
+                      {list.map((t) => (
+                        <TemuanCard
+                          key={t.id}
+                          temuan={t}
+                          isOpen={openCards.has(t.id)}
+                          onToggle={() => toggleCard(t.id)}
+                          onTandaiDibaca={() => tandaiDibaca(t.id)}
+                          onBatalkanDibaca={() => batalkanDibaca(t.id)}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })
+              );
+            })
+          )}
+        </>
       )}
     </div>
   );
@@ -421,34 +359,46 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function RuleCard({
-  rule,
+function TemuanCard({
+  temuan,
   isOpen,
   onToggle,
-  sudahDibaca,
-  onToggleDibaca,
-  disabledDibaca,
+  onTandaiDibaca,
+  onBatalkanDibaca,
 }: {
-  rule: RuleDetail;
+  temuan: Temuan;
   isOpen: boolean;
   onToggle: () => void;
-  sudahDibaca: boolean;
-  onToggleDibaca: () => void;
-  disabledDibaca: boolean;
+  onTandaiDibaca: () => void;
+  onBatalkanDibaca: () => void;
 }) {
-  const pisah = pisahPesan(rule.message);
+  const [busy, setBusy] = useState(false);
+  const pisah = pisahPesan(temuan.message);
+  const sudahDibaca = Boolean(temuan.dibaca_at);
+
+  async function handleTandai() {
+    setBusy(true);
+    await onTandaiDibaca();
+    setBusy(false);
+  }
+  async function handleBatal() {
+    setBusy(true);
+    await onBatalkanDibaca();
+    setBusy(false);
+  }
+
   return (
     <div className={`overflow-hidden rounded-lg border ${sudahDibaca ? "border-moss-500/40" : "border-line"}`}>
       <button onClick={onToggle} className="flex w-full items-start gap-2.5 bg-white p-3 text-left">
-        <span className={`mt-0.5 shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${levelBadgeClass(rule.level)}`}>
-          {rule.field}
+        <span className={`mt-0.5 shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${levelBadgeClass(temuan.level)}`}>
+          {temuan.field}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-[11px] text-ink/50">
-              Hal. {rule.halaman ?? "-"} &middot; No. {rule.rule_id ?? rule.id}
-              {rule.level ? ` · ${rule.level}` : ""}
-              {rule.is_fatal === false && <span className="ml-1 text-gold-600">(fleksibel)</span>}
+              {levelLabel(temuan.level, temuan.art_no)}
+              {temuan.nama_krt ? ` · ${temuan.nama_krt}` : ""}
+              {temuan.is_fatal && <span className="ml-1 font-semibold text-rust-700">(wajib diperbaiki)</span>}
             </p>
             {sudahDibaca && (
               <span className="shrink-0 rounded-full bg-moss-100 px-2 py-0.5 text-[10px] font-semibold text-moss-700">
@@ -456,7 +406,7 @@ function RuleCard({
               </span>
             )}
           </div>
-          <p className="mt-1 line-clamp-2 text-xs text-ink/80 sm:text-sm">{pisah ? pisah.masalah : rule.message}</p>
+          <p className="mt-1 line-clamp-2 text-xs text-ink/80 sm:text-sm">{pisah ? pisah.masalah : temuan.message}</p>
         </div>
         <Chevron open={isOpen} />
       </button>
@@ -476,31 +426,43 @@ function RuleCard({
             </div>
           ) : (
             <div className="rounded-md border border-line bg-white p-2.5">
-              <p className="text-xs leading-relaxed text-ink/80 sm:text-sm">{rule.message}</p>
+              <p className="text-xs leading-relaxed text-ink/80 sm:text-sm">{temuan.message}</p>
             </div>
           )}
 
-          {rule.perlakuan && (
+          {temuan.perlakuan && (
             <div className="flex gap-2 rounded-md border border-navy-100 bg-navy-50 p-2.5">
               <span className="mt-0.5 shrink-0 text-navy-700">&#128214;</span>
               <div>
                 <p className="text-xs font-bold text-navy-900">Perlakuan</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-ink/80 sm:text-sm">{rule.perlakuan}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink/80 sm:text-sm">{temuan.perlakuan}</p>
               </div>
             </div>
           )}
 
-          <button
-            disabled={disabledDibaca}
-            onClick={onToggleDibaca}
-            className={`w-full rounded-md py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              sudahDibaca
-                ? "border border-moss-500 bg-moss-100 text-moss-700 hover:bg-moss-100/70"
-                : "bg-navy-700 text-white hover:bg-navy-900"
-            }`}
-          >
-            {sudahDibaca ? "✓ Sudah Dibaca — klik utk batalkan" : "✓ Tandai Sudah Dibaca"}
-          </button>
+          {sudahDibaca ? (
+            <div className="space-y-1.5">
+              <p className="text-center text-[11px] text-ink/50">
+                Ditandai dibaca oleh {temuan.dibaca_oleh}
+                {temuan.dibaca_at ? ` · ${new Date(temuan.dibaca_at).toLocaleString("id-ID")}` : ""}
+              </p>
+              <button
+                disabled={busy}
+                onClick={handleBatal}
+                className="w-full rounded-md border border-line py-2 text-xs font-semibold text-ink/60 transition hover:bg-paper/60 disabled:opacity-50"
+              >
+                Batalkan tanda dibaca
+              </button>
+            </div>
+          ) : (
+            <button
+              disabled={busy}
+              onClick={handleTandai}
+              className="w-full rounded-md bg-navy-700 py-3 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-50"
+            >
+              &#10003; Tandai Sudah Dibaca
+            </button>
+          )}
         </div>
       )}
     </div>
