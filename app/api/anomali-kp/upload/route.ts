@@ -23,6 +23,16 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function detectTableRole(filename: string): keyof Tables | null {
+  // Pola gabungan dulu (mis. "1_1.", "2_1.") — khusus file VSEN26.M yang
+  // penomorannya dua tingkat (1_1/1_2/1_3 = KOR ART, 2_1/2_2/2_3 = KOR RT).
+  const compound = filename.match(/^(\d+_\d+)[._]/);
+  if (compound) {
+    if (compound[1] === '1_1') return 'm1';
+    if (compound[1] === '2_1') return 'mrt1';
+    if (compound[1] === '2_2') return 'mrt2';
+    return null; // 1_2, 1_3, 2_3 dst -- belum dipakai
+  }
+
   // Terima format "3_..." (garis bawah) MAUPUN "3. ..." (titik+spasi, format
   // penomoran asli aplikasi desktop) — dua-duanya sama-sama dipakai di
   // berbagai versi/konteks export.

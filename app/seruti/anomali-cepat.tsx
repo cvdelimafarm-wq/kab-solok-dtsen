@@ -245,11 +245,14 @@ export default function AnomaliCepatTab() {
         </h2>
         <p className="mt-1 text-xs text-ink/60">
           Boleh upload <b>semua file hasil export</b> sekaligus (tidak perlu dipilah manual) —
-          sistem otomatis memakai file yang relevan (diawali angka{" "}
+          sistem otomatis memakai file yang relevan: VSEN26.KP (diawali angka{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">3</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">4</code>,{" "}
           <code className="rounded bg-navy-50 px-1 py-0.5">5</code>,{" "}
-          <code className="rounded bg-navy-50 px-1 py-0.5">9</code>) dan mengabaikan sisanya.
+          <code className="rounded bg-navy-50 px-1 py-0.5">9</code>) maupun VSEN26.M (diawali{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">1_1</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">2_1</code>,{" "}
+          <code className="rounded bg-navy-50 px-1 py-0.5">2_2</code>) — dan mengabaikan sisanya.
           File dari aplikasi desktop entri Susenas — bukan PANTAU.{" "}
           <b>Sertakan juga file <code className="rounded bg-navy-50 px-1 py-0.5">.dbt</code> pendamping</b>{" "}
           kalau ada (nama sama persis dengan file .dbf-nya, biasanya utk file nomor 3) — tanpa itu

@@ -28,6 +28,9 @@ export type Tables = {
   t4: DbfRow[]; // Komoditi Makanan ART (makanan/minuman jadi & rokok, No.187-225)
   t5: DbfRow[]; // Komoditi Non Makanan (No.226-347)
   t9: DbfRow[]; // Rekap RT Blok IV.3.2-3
+  m1?: DbfRow[]; // VSEN26.M — Data KOR ART (file "1_1...", identitas & Blok 4-13 per ART)
+  mrt1?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_1...", Blok 14-15 per RT: M1401-M1508)
+  mrt2?: DbfRow[]; // VSEN26.M — Data KOR RT (file "2_2...", Blok 15-17 per RT: M1509-M1703)
 };
 
 export type Thresholds = {
@@ -243,6 +246,9 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
   const t4 = (tables.t4 || []) as any[];
   const t5 = (tables.t5 || []) as any[];
   const t9 = (tables.t9 || []) as any[];
+  const m1 = (tables.m1 || []) as any[];
+  const mrt1 = (tables.mrt1 || []) as any[];
+  const mrt2 = (tables.mrt2 || []) as any[];
 
   const thresholds = Object.assign(
     {
@@ -653,6 +659,228 @@ function runAllChecks(tables: Tables, opts: Thresholds = {}): Finding[] {
         keterangan: 'Cek kembali apakah sudah benar pengeluaran untuk transportasi darat >Rp10 juta',
         nilai: row.KOLOM6,
       });
+    }
+  }
+
+  // ==========================================================================
+  // VSEN26.M — pengecekan ART (tabel m1 = file "1_1...Data KOR ART")
+  // Dibangun dari analisis 62 file contoh anomali tahun lalu (MODUL.rar) +
+  // 7 usulan awal. Field & nilai pemicu diverifikasi dari data riil (bukan
+  // dugaan kosong), TAPI beberapa kondisi multi-kode (SD/SMP/SMA, jenis
+  // sekolah) diturunkan dari POLA nilai contoh yang konsisten di tiap file,
+  // BUKAN dari buku pedoman kode resmi (saya tidak punya aksesnya) — ditandai
+  // "⚠ verifikasi" di komentar. Numbering "M-N" mengikuti nomor file aslinya
+  // supaya gampang ditelusuri balik.
+  // ==========================================================================
+  interface MSimpleCheck {
+    kode: string;
+    cond: (r: any) => boolean;
+    keterangan: string;
+    fields: string[]; // field yg direkam di detail (nama field asli, huruf besar)
+  }
+
+  const currentYear = new Date().getFullYear();
+
+  const M_CHECKS: MSimpleCheck[] = [
+    { kode: 'M-01', fields: ['M404', 'M407'], keterangan: 'Apakah benar umur kurang dari 18 tahun tetapi statusnya kawin atau cerai mati atau cerai hidup?',
+      cond: r => nz(r.M407) < 18 && nz(r.M404) > 1 },
+    { kode: 'M-02', fields: ['M501'], keterangan: 'Apakah benar tidak memiliki NIK?',
+      cond: r => isBlank(r.M502CHAR) },
+    { kode: 'M-03', fields: ['M503', 'M504', 'M506', 'M508'], keterangan: 'Apakah benar sedang atau pernah bersekolah di sekolah luar biasa atau memiliki ijazah sekolah luar biasa?',
+      cond: r => nz(r.M506) === 25 }, // ⚠ verifikasi: kode 25 diasumsikan "SLB" di M506 (ijazah tertinggi)
+    { kode: 'M-04', fields: ['M503', 'M504', 'M506', 'M508'], keterangan: 'Apakah benar sedang atau pernah bersekolah di MAK atau memiliki ijazah MAK?',
+      cond: r => nz(r.M504) === 16 }, // ⚠ verifikasi: kode 16 diasumsikan "MAK"
+    { kode: 'M-05', fields: ['M503', 'M504'], keterangan: 'Konfirmasi apakah benar domisili di lokus pendataan tetapi sedang berkuliah?',
+      cond: r => nz(r.M503) === 2 && nz(r.M504) === 21 },
+    { kode: 'M-06', fields: ['M407'], keterangan: 'Apakah usia 10-64 tahun memang tidak ada kegiatan seminggu yang lalu?',
+      cond: r => nz(r.M407) >= 10 && nz(r.M407) <= 64 && String(r.M605_X ?? '').trim().toUpperCase() === 'X' },
+    { kode: 'M-07', fields: [], keterangan: 'Cek kembali apakah ART memang menggunakan kendaraan bermotor umum rute tertentu?',
+      cond: r => nz(r.M608) === 3 },
+    { kode: 'M-08', fields: [], keterangan: 'Apakah pakaian layak memang hanya tiga setel atau kurang?',
+      cond: r => nz(r.M701) === 5 },
+    { kode: 'M-09', fields: ['M503'], keterangan: 'Apakah ART sedang bersekolah atau tidak bersekolah lagi tetapi tidak bisa membaca dan menulis?',
+      cond: r => nz(r.M503) === 2 && nz(r.M1004) === 5 },
+    { kode: 'M-10', fields: ['M503'], keterangan: 'Apakah benar ART yang sedang bersekolah tetapi tidak membaca buku pelajaran sekolah?',
+      cond: r => nz(r.M503) === 2 && nz(r.M1008) === 5 },
+    { kode: 'M-11', fields: ['M407'], keterangan: 'Apakah benar umur ART 1 tahun lebih tetapi r703 kode lainnya?',
+      cond: r => nz(r.M407) >= 1 && nz(r.M703) === 5 },
+    { kode: 'M-12', fields: ['M407'], keterangan: 'Apakah benar umur ART 1 tahun lebih tetapi r706 kode lainnya?',
+      cond: r => nz(r.M407) >= 1 && nz(r.M706) === 5 },
+    { kode: 'M-16', fields: ['M403', 'M404', 'M407'], keterangan: 'Apakah benar ART umur sekolah tetapi tidak atau belum bersekolah?',
+      cond: r => nz(r.M403) === 3 && nz(r.M503) === 1 && nz(r.M407) >= 7 && nz(r.M407) <= 18 }, // ⚠ verifikasi rentang usia sekolah
+    { kode: 'M-17', fields: ['M403', 'M404', 'M407'], keterangan: 'Apakah benar ART umur 8 sampai 10 tahun tetapi tahun ajaran sebelumnya mengikuti prasekolah?',
+      cond: r => nz(r.M403) === 3 && nz(r.M509) === 1 && nz(r.M407) >= 8 && nz(r.M407) <= 10 },
+    { kode: 'M-18', fields: [], keterangan: 'Apakah alasan tidak menggunakan kendaraan bermotor umum rute tertentu memang kode lainnya? Cek Catatan',
+      cond: r => nz(r.M609) === 6 },
+    { kode: 'M-19', fields: [], keterangan: 'Apakah Balita memang ditinggal sendiri atau dititipkan ke kode 9 lainnya?',
+      cond: r => nz(r.M806) === 9 },
+    { kode: 'M-20', fields: [], keterangan: 'Apakah memang ART umur 5 tahun tetapi sudah bisa baca tulis kalimat sederhana?',
+      cond: r => nz(r.M407) === 5 && nz(r.M1004) === 1 },
+    { kode: 'M-21', fields: ['M407', 'M806'], keterangan: 'Apakah ART memang pernah ditinggal sendiri lebih dari 1 jam?',
+      cond: r => nz(r.M808) === 1 },
+    { kode: 'M-24', fields: [], keterangan: 'Apakah benar Menu MBG Lainnya?',
+      cond: r => String(r.M1109J ?? '').trim().toUpperCase() === 'J' },
+    { kode: 'M-27', fields: [], keterangan: 'Apakah benar alasan tidak/kurang mengonsumsi makanan pokok dan protein karena tidak tersedia di pasar?',
+      cond: r => nz(r.M706) === 2 },
+    { kode: 'M-30', fields: [], keterangan: 'Apakah benar anak sedih atau tertekan berlebihan setiap hari?',
+      cond: r => nz(r.M828) === 1 },
+    { kode: 'M-31', fields: [], keterangan: 'Apakah benar anak menendang, menggigit, atau memukul lebih banyak atau jauh lebih banyak?',
+      cond: r => nz(r.M829) === 4 || nz(r.M829) === 5 },
+    { kode: 'M-32', fields: [], keterangan: 'Apakah memang tidak ada kebersamaan sama sekali (Blok IX.4-11)?',
+      cond: r => ['M904_X', 'M905_X', 'M906_X', 'M907_X', 'M908_X', 'M909_X', 'M910_X', 'M911_X']
+        .every(f => String(r[f] ?? '').trim().toUpperCase() === 'X') },
+    { kode: 'M-34', fields: [], keterangan: 'Apakah benar mengunjungi TBM? Cek apakah di daerah ada TBM',
+      cond: r => nz(r.M1013) === 1 },
+    { kode: 'M-35', fields: [], keterangan: 'Apakah benar rata-rata uang saku per hari di atas Rp50.000?',
+      cond: r => nz(r.M1115) > 50000 },
+    { kode: 'M-36', fields: [], keterangan: 'Apakah rata-rata biaya transportasi per hari di atas Rp30.000?',
+      cond: r => nz(r.M1116) > 30000 },
+    { kode: 'M-37', fields: [], keterangan: 'Apakah benar biaya buku pelajaran atau LKS lebih dari Rp500.000?',
+      cond: r => nz(r.M1118E) > 500000 },
+    { kode: 'M-38', fields: [], keterangan: 'Apakah benar biaya buku dan alat tulis lebih dari Rp500.000?',
+      cond: r => nz(r.M1118F) > 500000 },
+    { kode: 'M-39', fields: ['M503', 'M504'], keterangan: 'Apakah benar ART sedang SD/SMP/SMA tetapi SPP lebih dari Rp6 juta?',
+      cond: r => nz(r.M503) === 2 && nz(r.M1118B) > 6000000 },
+    { kode: 'M-41', fields: ['M508'], keterangan: 'Apakah benar ART tahun ajaran sebelumnya sekolah di SD/SMP Negeri tetapi ada SPP?',
+      cond: r => nz(r.M1114) === 1 && nz(r.M1118B) > 0 }, // ⚠ verifikasi kode "negeri" di M508
+    { kode: 'M-42', fields: [], keterangan: 'Cek kembali beasiswa lainnya (M1117)',
+      cond: r => String(r.M1117E ?? '').trim().toUpperCase() === 'E' },
+    { kode: 'M-43', fields: [], keterangan: 'Apakah benar melakukan olahraga kurang dari 10 menit?',
+      cond: r => nz(r.M1204) > 0 && nz(r.M1204) < 10 },
+    { kode: 'M-44', fields: [], keterangan: 'Apakah sudah ditulis di catatan jumlah menit olahraga yang sesuai dengan jawaban responden (≥997 menit)?',
+      cond: r => nz(r.M1204) >= 997 },
+    { kode: 'M-45', fields: [], keterangan: 'Apakah benar tujuan olahraga adalah kode 6 (lainnya)?',
+      cond: r => nz(r.M1205) === 6 },
+    { kode: 'M-46', fields: ['M407', 'M503'], keterangan: 'Apakah benar tujuan olahraga adalah pendidikan tetapi sedang tidak bersekolah?',
+      cond: r => nz(r.M503) === 3 && nz(r.M1205) === 4 }, // ⚠ verifikasi kode M503=3 "tidak sekolah"
+    { kode: 'M-48', fields: [], keterangan: 'Apakah benar bahasa yang paling sering digunakan di rumah dan/atau pergaulan menggunakan bahasa asing?',
+      cond: r => nz(r.M1212) === 3 && nz(r.M1213) === 3 },
+    // ---------- tambahan dari 7 usulan awal, belum tercakup di 62 file ----------
+    { kode: 'M-NIK-FORMAT', fields: ['M502CHAR'], keterangan: 'NIK tidak sesuai format (kurang dari 16 digit)',
+      cond: r => !isBlank(r.M502CHAR) && String(r.M502CHAR).trim().length < 16 && String(r.M502CHAR).trim() !== '9998' },
+    { kode: 'M-TAHUN-LAHIR', fields: ['M406C'], keterangan: 'Tahun lahir tidak sesuai format / belum ada perkiraan tahun lahir. Tanyakan perkiraan tahun lahir',
+      cond: r => nz(r.M406C) > currentYear },
+  ];
+
+  for (const chk of M_CHECKS) {
+    for (const row of m1) {
+      if (chk.cond(row)) {
+        const detail: Record<string, unknown> = {};
+        for (const f of chk.fields) detail[f] = row[f];
+        push(chk.kode, 'F. Konsistensi Data ART (VSEN26.M)', row, { keterangan: chk.keterangan, detail: Object.keys(detail).length ? detail : undefined });
+      }
+    }
+  }
+
+  // ---------- M-NIK-DUPLIKAT: NIK sama dipakai >1 ART dalam 1 keluarga ----------
+  {
+    const byNik = new Map<string, any[]>();
+    for (const row of m1) {
+      const nik = String(row.M502CHAR ?? '').trim();
+      if (!nik || nik === '9998') continue;
+      const key = `${row.NKS}|${row.NURT}|${nik}`;
+      if (!byNik.has(key)) byNik.set(key, []);
+      byNik.get(key)!.push(row);
+    }
+    for (const rows of byNik.values()) {
+      if (rows.length > 1) {
+        for (const row of rows) {
+          push('M-NIK-DUPLIKAT', 'F. Konsistensi Data ART (VSEN26.M)', row, {
+            keterangan: `NIK duplikat — dipakai ${rows.length} ART dalam 1 keluarga.`,
+            detail: { M502CHAR: row.M502CHAR, jmlDuplikat: rows.length },
+          });
+        }
+      }
+    }
+  }
+
+  // ---------- M-INFORMAN: pemberi info bukan KRT (M401) dan umurnya <17 ----------
+  // ⚠ M409=M401 dari usulan awal (Anomali 2) TIDAK diimplementasikan — makna
+  // persisnya masih perlu diklarifikasi (lihat percakapan sebelumnya).
+  {
+    const households = new Map<string, any[]>();
+    for (const row of m1) {
+      const key = `${row.NKS}|${row.NURT}`;
+      if (!households.has(key)) households.set(key, []);
+      households.get(key)!.push(row);
+    }
+    for (const rows of households.values()) {
+      const informanNo = rows[0]?.M409;
+      if (informanNo == null || nz(informanNo) <= 1) continue; // informan = KRT (ART#1), tidak perlu dicek
+      const informanRow = rows.find(r => nz(r.M401) === nz(informanNo));
+      if (!informanRow) continue;
+      if (nz(informanRow.M407) < 17) {
+        push('M-INFORMAN', 'F. Konsistensi Data ART (VSEN26.M)', informanRow, {
+          keterangan: 'Nomor urut pemberi informasi bukan KRT dan berumur kurang dari 17 tahun — mohon dicek ulang.',
+          detail: { nomorUrutInforman: informanNo, umurInforman: informanRow.M407 },
+        });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // VSEN26.M — pengecekan RT (tabel mrt1 = file "2_1...", mrt2 = file "2_2...")
+  // Satu baris = satu rumah tangga (bukan per-ART), jadi identitas temuan
+  // pakai NAMAKRT & NURT saja (NOURUTKOMO tidak relevan, dikosongkan).
+  // ==========================================================================
+  interface MRtCheck {
+    kode: string;
+    cond: (r: any) => boolean;
+    keterangan: string;
+    fields: string[];
+  }
+  const MRT1_CHECKS: MRtCheck[] = [
+    { kode: 'M-56', fields: ['M1501_LAIN'], keterangan: 'Apakah benar M1501 status kepemilikan rumah kode 5 (lainnya)?', cond: r => nz(r.M1501) === 5 },
+    { kode: 'M-57', fields: ['M1502A_LAI'], keterangan: 'Apakah benar M1502a cara memperoleh rumah kode 4 (lainnya)?', cond: r => nz(r.M1502A) === 4 },
+    { kode: 'M-58', fields: ['M1502B_LAI'], keterangan: 'Apakah benar M1502b cara membeli rumah kode 4 (lainnya)?', cond: r => nz(r.M1502B) === 4 },
+    { kode: 'M-59', fields: [], keterangan: 'Apakah benar M1504 sumber penerangan utama listrik non-PLN atau bukan listrik?', cond: r => nz(r.M1504) === 3 || nz(r.M1504) === 4 },
+    { kode: 'M-60', fields: [], keterangan: 'Apakah benar M1505a jumlah meteran listrik lebih dari dua?', cond: r => nz(r.M1505A) > 2 },
+  ];
+  const MRT2_CHECKS: MRtCheck[] = [
+    { kode: 'M-61', fields: ['M1602_LAIN'], keterangan: 'Cek kembali apakah benar M1602g sumber informasi perubahan iklim dari lainnya?', cond: r => String(r.M1602G ?? '').trim().toUpperCase() === 'G' },
+    { kode: 'M-62', fields: ['M1701B_GLA'], keterangan: 'Cek kembali apakah benar bantuan PKH (M1701) digunakan untuk lainnya?', cond: r => String(r.M1701B_G ?? '').trim().toUpperCase() === 'G' },
+    { kode: 'M-63', fields: [], keterangan: 'Apakah memang salah satu ART tidak punya alat komunikasi (HP) untuk persiapan bencana?', cond: r => nz(r.M1611C2) === 5 },
+  ];
+  for (const row of mrt1) {
+    for (const chk of MRT1_CHECKS) {
+      if (chk.cond(row)) {
+        const detail: Record<string, unknown> = {};
+        for (const f of chk.fields) detail[f] = row[f];
+        push(chk.kode, 'G. Kondisi Perumahan (VSEN26.M)', { NKS: row.NKS, NURT: row.NURT, NOURUTKOMO: null, NAMAKRT: row.NAMAKRT }, {
+          keterangan: chk.keterangan,
+          detail: Object.keys(detail).length ? detail : undefined,
+        });
+      }
+    }
+  }
+  for (const row of mrt2) {
+    for (const chk of MRT2_CHECKS) {
+      if (chk.cond(row)) {
+        const detail: Record<string, unknown> = {};
+        for (const f of chk.fields) detail[f] = row[f];
+        push(chk.kode, 'H. Bencana & Bansos (VSEN26.M)', { NKS: row.NKS, NURT: row.NURT, NOURUTKOMO: null, NAMAKRT: row.NAMAKRT }, {
+          keterangan: chk.keterangan,
+          detail: Object.keys(detail).length ? detail : undefined,
+        });
+      }
+    }
+  }
+
+  // ---------- M-BANSOS-BUMIL: cross-table, ART (m1) + RT (mrt2) ----------
+  // Nomor rincian dikoreksi dari usulan awal "M1702B_D" -> "M1701B_D" (bergeser
+  // satu blok, dikonfirmasi lewat data riil tahun lalu — lihat MRT2 field list).
+  {
+    const mrt2ByHousehold = new Map<string, any>();
+    for (const row of mrt2) mrt2ByHousehold.set(`${row.NKS}|${row.NURT}`, row);
+    for (const row of m1) {
+      const rt = mrt2ByHousehold.get(`${row.NKS}|${row.NURT}`);
+      if (!rt) continue;
+      if (nz(row.M405) === 2 && nz(row.M605) === 5 && String(rt.M1701B_D ?? '').trim().toUpperCase() === 'D') {
+        push('M-BANSOS-BUMIL', 'H. Bencana & Bansos (VSEN26.M)', row, {
+          keterangan: 'Tidak ada ART hamil di rumah tangga ini, tetapi M1701B_D=D (bansos utk ibu hamil) — mohon dicek ulang.',
+          detail: { M405: row.M405, M605: row.M605, M1701B_D: rt.M1701B_D },
+        });
+      }
     }
   }
 

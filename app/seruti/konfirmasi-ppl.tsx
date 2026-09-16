@@ -168,51 +168,87 @@ export default function KonfirmasiPplTab() {
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
 
+  // ---------- 3 filter wajib dipilih dulu sebelum daftar anomali muncul ----------
+  const [nksOptions, setNksOptions] = useState<{ nks: string; label: string }[]>([]);
+  const [batchOptions, setBatchOptions] = useState<{ id: number; label: string }[]>([]);
+  const [filterNks, setFilterNks] = useState("");
+  const [filterBatch, setFilterBatch] = useState("");
+  const [filterKuesioner, setFilterKuesioner] = useState<"" | "KP" | "M">("");
+  const siapTampil = Boolean(filterNks && filterBatch && filterKuesioner);
+
+  // ---------- muat opsi dropdown NKS (dari NKS yg punya temuan pending + nama jorong kalau ada) ----------
+  const loadNksOptions = useCallback(async () => {
+    const { data: pendingRows } = await supabase.from("kp_anomali_temuan").select("nks").eq("status", "pending");
+    const uniqueNks = [...new Set((pendingRows ?? []).map((r) => r.nks).filter(Boolean))] as string[];
+    const { data: jorongRows } = await supabase.from("kp_nks_jorong").select("nks, nama_jorong");
+    const jorongMap = new Map((jorongRows ?? []).map((j) => [j.nks, j.nama_jorong]));
+    const opts = uniqueNks
+      .map((nks) => ({ nks, label: jorongMap.has(nks) ? `${nks} - ${jorongMap.get(nks)}` : `${nks} (belum ada nama jorong)` }))
+      .sort((a, b) => a.nks.localeCompare(b.nks));
+    setNksOptions(opts);
+  }, [supabase]);
+
+  // ---------- muat opsi dropdown Batch Anomali (dari kp_anomali_upload) ----------
+  const loadBatchOptions = useCallback(async () => {
+    const { data } = await supabase
+      .from("kp_anomali_upload")
+      .select("id, keterangan, uploaded_at")
+      .order("id", { ascending: false });
+    const opts = (data ?? []).map((u, i) => ({
+      id: u.id as number,
+      label: u.keterangan?.trim()
+        ? u.keterangan
+        : `Batch ${(data!.length as number) - i} (${new Date(u.uploaded_at as string).toLocaleDateString("id-ID")})`,
+    }));
+    setBatchOptions(opts);
+  }, [supabase]);
+
   const loadRekomendasi = useCallback(async () => {
     const { data } = await supabase.from("kp_anomali_pengaturan").select("kode, rekomendasi");
     setRekomendasiMap(new Map((data ?? []).map((r) => [r.kode, r.rekomendasi as string | null])) as Map<string, string>);
   }, [supabase]);
 
   const loadData = useCallback(async () => {
+    if (!siapTampil) {
+      setTemuan([]);
+      setRingkasan({ total: 0, pending: 0, sesuai: 0, perlu_koreksi: 0 });
+      return;
+    }
     setLoading(true);
 
-    const { data: sum, error: sumErr } = await supabase.rpc("kp_anomali_summary");
-    if (sumErr) {
-      console.error("kp_anomali_summary error:", sumErr);
-      setDebugError(`Gagal memuat ringkasan: ${sumErr.message}`);
-    } else if (sum) {
-      const rows = sum as { total: number; pending: number; sesuai: number; perlu_koreksi: number }[];
-      setRingkasan({
-        total: rows.reduce((a, b) => a + b.total, 0),
-        pending: rows.reduce((a, b) => a + b.pending, 0),
-        sesuai: rows.reduce((a, b) => a + b.sesuai, 0),
-        perlu_koreksi: rows.reduce((a, b) => a + b.perlu_koreksi, 0),
-      });
-      setDebugError(null);
-    }
-
-    const { data: rows, error } = await supabase
-      .from("kp_anomali_temuan")
-      .select("*")
-      .eq("status", "pending")
-      .order("kelompok")
-      .order("kode_anomali")
-      .order("nks")
-      .order("nurt");
+    // Ringkasan dihitung dari hasil query yg SAMA (sudah difilter NKS+Batch+Kuesioner),
+    // bukan dari RPC global — supaya angkanya sesuai konteks yg dipilih PPL.
+    let query = supabase.from("kp_anomali_temuan").select("*").eq("nks", filterNks).eq("last_seen_upload_id", Number(filterBatch));
+    query = filterKuesioner === "KP" ? query.like("kode_anomali", "KP-%") : query.like("kode_anomali", "M-%");
+    const { data: rows, error } = await query.order("kelompok").order("kode_anomali").order("nurt");
     if (error) {
       console.error("loadData (konfirmasi) error:", error);
-      setDebugError(`Gagal membaca temuan pending: ${error.message} (code: ${error.code})`);
+      setDebugError(`Gagal membaca temuan: ${error.message} (code: ${error.code})`);
+    } else {
+      setDebugError(null);
     }
-    const list = (rows ?? []) as Temuan[];
+    const all = (rows ?? []) as Temuan[];
+    setRingkasan({
+      total: all.length,
+      pending: all.filter((t) => t.status === "pending").length,
+      sesuai: all.filter((t) => t.status === "sesuai").length,
+      perlu_koreksi: all.filter((t) => t.status === "perlu_koreksi").length,
+    });
+    const list = all.filter((t) => t.status === "pending");
     setTemuan(list);
     setOpenGroups(new Set(list.map((t) => t.kelompok ?? "Lainnya"))); // default semua tema terbuka
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, siapTampil, filterNks, filterBatch, filterKuesioner]);
 
   useEffect(() => {
     loadRekomendasi();
+    loadNksOptions();
+    loadBatchOptions();
+  }, [loadRekomendasi, loadNksOptions, loadBatchOptions]);
+
+  useEffect(() => {
     loadData();
-  }, [loadRekomendasi, loadData]);
+  }, [loadData]);
 
   async function confirmFinding(id: number, status: "sesuai" | "perlu_koreksi", catatan: string) {
     await supabase
@@ -236,6 +272,7 @@ export default function KonfirmasiPplTab() {
       sesuai: status === "sesuai" ? prev.sesuai + 1 : prev.sesuai,
       perlu_koreksi: status === "perlu_koreksi" ? prev.perlu_koreksi + 1 : prev.perlu_koreksi,
     }));
+    loadNksOptions(); // NKS yg temuan terakhirnya baru dikonfirmasi mungkin hilang dari dropdown
   }
 
   function toggleCard(id: number) {
@@ -255,8 +292,6 @@ export default function KonfirmasiPplTab() {
     });
   }
 
-  const jumlahSampel = new Set(temuan.map((t) => t.nks).filter(Boolean)).size;
-
   const grouped = new Map<string, Temuan[]>();
   for (const t of temuan) {
     const g = t.kelompok ?? "Lainnya";
@@ -267,82 +302,128 @@ export default function KonfirmasiPplTab() {
   return (
     <div className="space-y-3 pb-6">
       {/* ---------- Header ---------- */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-base font-bold text-navy-900 sm:text-lg">
-            Konfirmasi PPL &ndash; Temuan Anomali
-          </h1>
-          <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-            Periksa setiap temuan di lapangan/dokumen, lalu tandai statusnya.
-          </p>
-        </div>
-        <span
-          title="Daftar temuan anomali dari sampel yang sudah dientri. Ketuk sebuah kartu untuk membuka detail dan mengonfirmasi."
-          className="shrink-0 cursor-help rounded-full bg-navy-50 px-2.5 py-1.5 text-[11px] font-semibold text-navy-700"
-        >
-          {jumlahSampel} Sampel
-        </span>
-      </div>
-
-      {/* Identitas PPL yang sedang konfirmasi — BUKAN filter wilayah, cuma
-          dipakai utk mengisi field nama_ppl saat menyimpan konfirmasi. */}
-      <input
-        type="text"
-        placeholder="Nama Anda (PPL) — isi sekali sebelum mulai konfirmasi"
-        value={namaPpl}
-        onChange={(e) => setNamaPpl(e.target.value)}
-        className="w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-      />
-
-      {debugError && (
-        <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
-          ⚠ {debugError}
+      <div>
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Konfirmasi PPL &ndash; Temuan Anomali</h1>
+        <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
+          Pilih NKS, batch, dan kuesioner di bawah dulu, baru daftar temuan muncul.
         </p>
-      )}
-
-      {/* ---------- Ringkasan singkat ---------- */}
-      <div className="grid grid-cols-4 gap-2 text-center">
-        <SummaryBox label="Total" value={ringkasan.total} className="bg-navy-50 text-navy-900" />
-        <SummaryBox label="Belum" value={ringkasan.pending} className="bg-gold-100 text-gold-600" />
-        <SummaryBox label="Koreksi" value={ringkasan.perlu_koreksi} className="bg-rust-100 text-rust-700" />
-        <SummaryBox label="Sesuai" value={ringkasan.sesuai} className="bg-moss-100 text-moss-700" />
       </div>
 
-      {/* ---------- Daftar temuan, dikelompokkan per tema ---------- */}
-      {loading ? (
-        <p className="py-6 text-center text-sm text-ink/40">Memuat...</p>
-      ) : temuan.length === 0 ? (
+      {/* ---------- 3 filter wajib ---------- */}
+      <div className="space-y-2 rounded-lg border border-line bg-white p-3">
+        <div>
+          <label className="text-xs font-semibold text-navy-900">1. NKS &ndash; Nama Jorong</label>
+          <select
+            value={filterNks}
+            onChange={(e) => setFilterNks(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
+          >
+            <option value="">-- Pilih NKS --</option>
+            {nksOptions.map((o) => (
+              <option key={o.nks} value={o.nks}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-navy-900">2. Batch Anomali</label>
+          <select
+            value={filterBatch}
+            onChange={(e) => setFilterBatch(e.target.value)}
+            className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
+          >
+            <option value="">-- Pilih Batch --</option>
+            {batchOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-navy-900">3. Kuesioner</label>
+          <select
+            value={filterKuesioner}
+            onChange={(e) => setFilterKuesioner(e.target.value as "" | "KP" | "M")}
+            className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
+          >
+            <option value="">-- Pilih Kuesioner --</option>
+            <option value="KP">VSEN26.KP (Konsumsi/Pengeluaran)</option>
+            <option value="M">VSEN26.M (Sosial Budaya/KOR)</option>
+          </select>
+          {filterKuesioner === "M" && (
+            <p className="mt-1 text-[11px] text-gold-600">
+              ⚠ Pengecekan anomali utk VSEN26.M belum dibangun — daftar akan selalu kosong utk kuesioner ini.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {!siapTampil ? (
         <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
-          🎉 Tidak ada temuan yang perlu dikonfirmasi saat ini.
+          Pilih ketiga filter di atas untuk menampilkan daftar temuan.
         </p>
       ) : (
-        [...grouped.entries()].map(([g, list]) => (
-          <div key={g} className="overflow-hidden rounded-lg border border-line bg-white">
-            <button
-              onClick={() => toggleGroup(g)}
-              className="flex w-full items-center justify-between gap-2 bg-navy-50 px-3 py-2.5 text-left"
-            >
-              <span className="text-xs font-bold uppercase tracking-wide text-navy-900 sm:text-sm">
-                {g} <span className="font-normal text-navy-400">({list.length})</span>
-              </span>
-              <Chevron open={openGroups.has(g)} />
-            </button>
-            {openGroups.has(g) && (
-              <div className="space-y-2 p-2">
-                {list.map((t) => (
-                  <AnomaliCard
-                    key={t.id}
-                    temuan={t}
-                    isOpen={openIds.has(t.id)}
-                    onToggle={() => toggleCard(t.id)}
-                    rekomendasi={t.rekomendasi_manual || rekomendasiMap.get(t.kode_anomali) || null}
-                    onConfirm={confirmFinding}
-                  />
-                ))}
-              </div>
-            )}
+        <>
+          {/* Identitas PPL yang sedang konfirmasi — dipakai utk mengisi field nama_ppl saat menyimpan. */}
+          <input
+            type="text"
+            placeholder="Nama Anda (PPL) — isi sekali sebelum mulai konfirmasi"
+            value={namaPpl}
+            onChange={(e) => setNamaPpl(e.target.value)}
+            className="w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+
+          {debugError && (
+            <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {debugError}</p>
+          )}
+
+          {/* ---------- Ringkasan singkat (sesuai filter yg dipilih) ---------- */}
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <SummaryBox label="Total" value={ringkasan.total} className="bg-navy-50 text-navy-900" />
+            <SummaryBox label="Belum" value={ringkasan.pending} className="bg-gold-100 text-gold-600" />
+            <SummaryBox label="Koreksi" value={ringkasan.perlu_koreksi} className="bg-rust-100 text-rust-700" />
+            <SummaryBox label="Sesuai" value={ringkasan.sesuai} className="bg-moss-100 text-moss-700" />
           </div>
-        ))
+
+          {/* ---------- Daftar temuan, dikelompokkan per tema ---------- */}
+          {loading ? (
+            <p className="py-6 text-center text-sm text-ink/40">Memuat...</p>
+          ) : temuan.length === 0 ? (
+            <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
+              🎉 Tidak ada temuan yang perlu dikonfirmasi untuk filter ini.
+            </p>
+          ) : (
+            [...grouped.entries()].map(([g, list]) => (
+              <div key={g} className="overflow-hidden rounded-lg border border-line bg-white">
+                <button
+                  onClick={() => toggleGroup(g)}
+                  className="flex w-full items-center justify-between gap-2 bg-navy-50 px-3 py-2.5 text-left"
+                >
+                  <span className="text-xs font-bold uppercase tracking-wide text-navy-900 sm:text-sm">
+                    {g} <span className="font-normal text-navy-400">({list.length})</span>
+                  </span>
+                  <Chevron open={openGroups.has(g)} />
+                </button>
+                {openGroups.has(g) && (
+                  <div className="space-y-2 p-2">
+                    {list.map((t) => (
+                      <AnomaliCard
+                        key={t.id}
+                        temuan={t}
+                        isOpen={openIds.has(t.id)}
+                        onToggle={() => toggleCard(t.id)}
+                        rekomendasi={t.rekomendasi_manual || rekomendasiMap.get(t.kode_anomali) || null}
+                        onConfirm={confirmFinding}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </>
       )}
     </div>
   );
