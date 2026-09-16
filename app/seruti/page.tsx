@@ -6,6 +6,7 @@ import NeracaRtCalculator from "./neraca-calculator";
 import AnomaliCepatTab from "./anomali-cepat";
 import KonfirmasiPplTab from "./konfirmasi-ppl";
 import MonitoringAnomaliTab from "./monitoring-anomali";
+import RekapTemuanTab from "./rekap-temuan";
 import {
   Bar,
   BarChart,
@@ -111,7 +112,9 @@ interface ProgressRow {
 }
 
 export default function SerutiPage() {
-  const [tab, setTab] = useState<"form" | "rekap" | "kalkulator" | "anomali" | "konfirmasi" | "monitoring">("form");
+  const [tab, setTab] = useState<
+    "form" | "rekap" | "kalkulator" | "anomali" | "konfirmasi" | "monitoring" | "rekaptemuan"
+  >("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
     const today = new Date();
@@ -165,7 +168,7 @@ export default function SerutiPage() {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-6">
+      <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-7">
         <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
@@ -184,6 +187,9 @@ export default function SerutiPage() {
         <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")} icon={<IconMonitoring />}>
           Monitoring Anomali
         </TabButton>
+        <TabButton active={tab === "rekaptemuan"} onClick={() => setTab("rekaptemuan")} icon={<IconRekapTemuan />}>
+          Rekap Temuan
+        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -195,6 +201,7 @@ export default function SerutiPage() {
         {tab === "anomali" && <AnomaliCepatTab />}
         {tab === "konfirmasi" && <KonfirmasiPplTab />}
         {tab === "monitoring" && <MonitoringAnomaliTab />}
+        {tab === "rekaptemuan" && <RekapTemuanTab />}
       </div>
     </main>
   );
@@ -280,6 +287,15 @@ function IconMonitoring() {
       <rect x="3.5" y="4" width="17" height="16" rx="2" strokeLinejoin="round" />
       <path d="M7 9h3M7 12.5h3M7 16h3" strokeLinecap="round" />
       <path d="M14 9.5l1.5 1.5 2.5-2.8M13.5 15.5h4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconRekapTemuan() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M4 5.5a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H9l-4 3.5v-3.5H6a2 2 0 01-2-2v-9z" strokeLinejoin="round" />
+      <path d="M7.5 8.5h9M7.5 12h6" strokeLinecap="round" />
     </svg>
   );
 }

@@ -143,7 +143,7 @@ export default function MonitoringAnomaliTab() {
                 Jml Sampel Diperiksa
               </th>
               <th className="px-3 py-2 font-medium text-center" title="Total temuan yang pernah terdeteksi (semua status, termasuk yang sudah selesai/teratasi otomatis)">
-                Jumlah Awal
+                Jumlah Temuan Awal
               </th>
               <th className="px-3 py-2 font-medium text-center" title="Temuan yang sudah ditandai PPL sebagai Sesuai atau Perlu Koreksi">
                 Sudah Dikonfirmasi
