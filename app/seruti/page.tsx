@@ -8,6 +8,7 @@ import AnomaliCepatAiTab from "./anomali-cepat-ai";
 import KonfirmasiPplTab from "./konfirmasi-ppl";
 import MonitoringAnomaliTab from "./monitoring-anomali";
 import RekapTemuanTab from "./rekap-temuan";
+import ErrorKonsistensiTab from "./error-konsistensi";
 import {
   Bar,
   BarChart,
@@ -114,7 +115,15 @@ interface ProgressRow {
 
 export default function SerutiPage() {
   const [tab, setTab] = useState<
-    "form" | "rekap" | "kalkulator" | "anomali" | "anomaliai" | "konfirmasi" | "monitoring" | "rekaptemuan"
+    | "form"
+    | "rekap"
+    | "kalkulator"
+    | "anomali"
+    | "anomaliai"
+    | "konfirmasi"
+    | "monitoring"
+    | "rekaptemuan"
+    | "errorkonsistensi"
   >("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
@@ -169,7 +178,7 @@ export default function SerutiPage() {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-8">
+      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-9">
         <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
@@ -194,6 +203,13 @@ export default function SerutiPage() {
         <TabButton active={tab === "rekaptemuan"} onClick={() => setTab("rekaptemuan")} icon={<IconRekapTemuan />}>
           Rekap Temuan
         </TabButton>
+        <TabButton
+          active={tab === "errorkonsistensi"}
+          onClick={() => setTab("errorkonsistensi")}
+          icon={<IconErrorKonsistensi />}
+        >
+          Error Konsistensi
+        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -207,6 +223,7 @@ export default function SerutiPage() {
         {tab === "konfirmasi" && <KonfirmasiPplTab />}
         {tab === "monitoring" && <MonitoringAnomaliTab />}
         {tab === "rekaptemuan" && <RekapTemuanTab />}
+        {tab === "errorkonsistensi" && <ErrorKonsistensiTab />}
       </div>
     </main>
   );
@@ -283,6 +300,16 @@ function IconAnomaliAi() {
       <rect x="4.5" y="12" width="15" height="8.5" rx="2" strokeLinejoin="round" />
       <path d="M8.5 16.25h.01M15.5 16.25h.01" strokeLinecap="round" />
       <path d="M8 19h8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconErrorKonsistensi() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M10.5 4.2L3.2 17.5a1.5 1.5 0 001.3 2.3h15a1.5 1.5 0 001.3-2.3L13.5 4.2a1.7 1.7 0 00-3 0z" strokeLinejoin="round" />
+      <path d="M12 10v4" strokeLinecap="round" />
+      <path d="M12 16.8h.01" strokeLinecap="round" />
     </svg>
   );
 }
