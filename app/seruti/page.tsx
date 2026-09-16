@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import NeracaRtCalculator from "./neraca-calculator";
 import AnomaliCepatTab from "./anomali-cepat";
+import AnomaliCepatAiTab from "./anomali-cepat-ai";
 import KonfirmasiPplTab from "./konfirmasi-ppl";
 import MonitoringAnomaliTab from "./monitoring-anomali";
 import RekapTemuanTab from "./rekap-temuan";
@@ -113,7 +114,7 @@ interface ProgressRow {
 
 export default function SerutiPage() {
   const [tab, setTab] = useState<
-    "form" | "rekap" | "kalkulator" | "anomali" | "konfirmasi" | "monitoring" | "rekaptemuan"
+    "form" | "rekap" | "kalkulator" | "anomali" | "anomaliai" | "konfirmasi" | "monitoring" | "rekaptemuan"
   >("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
@@ -168,7 +169,7 @@ export default function SerutiPage() {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-7">
+      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-8">
         <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
@@ -180,6 +181,9 @@ export default function SerutiPage() {
         </TabButton>
         <TabButton active={tab === "anomali"} onClick={() => setTab("anomali")} icon={<IconAnomali />}>
           Anomali Cepat
+        </TabButton>
+        <TabButton active={tab === "anomaliai"} onClick={() => setTab("anomaliai")} icon={<IconAnomaliAi />}>
+          Anomali Cepat AI
         </TabButton>
         <TabButton active={tab === "konfirmasi"} onClick={() => setTab("konfirmasi")} icon={<IconKonfirmasi />}>
           Konfirmasi PPL
@@ -199,6 +203,7 @@ export default function SerutiPage() {
         )}
         {tab === "kalkulator" && <NeracaRtCalculator />}
         {tab === "anomali" && <AnomaliCepatTab />}
+        {tab === "anomaliai" && <AnomaliCepatAiTab />}
         {tab === "konfirmasi" && <KonfirmasiPplTab />}
         {tab === "monitoring" && <MonitoringAnomaliTab />}
         {tab === "rekaptemuan" && <RekapTemuanTab />}
@@ -267,6 +272,17 @@ function IconAnomali() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M4 8a2 2 0 012-2h1.2l.9-1.4A1 1 0 019 4h6a1 1 0 01.9.6L16.8 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" strokeLinejoin="round" />
       <circle cx="12" cy="13" r="3.2" />
+    </svg>
+  );
+}
+
+function IconAnomaliAi() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M12 3.5l1.2 2.6 2.6 1.2-2.6 1.2L12 11l-1.2-2.5-2.6-1.2 2.6-1.2L12 3.5z" strokeLinejoin="round" />
+      <rect x="4.5" y="12" width="15" height="8.5" rx="2" strokeLinejoin="round" />
+      <path d="M8.5 16.25h.01M15.5 16.25h.01" strokeLinecap="round" />
+      <path d="M8 19h8" strokeLinecap="round" />
     </svg>
   );
 }

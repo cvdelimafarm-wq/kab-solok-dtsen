@@ -72,7 +72,8 @@ export default function RekapTemuanTab() {
   // ---------- data ----------
   const [rows, setRows] = useState<TemuanRow[]>([]);
   const [kodeOptions, setKodeOptions] = useState<string[]>([]);
-  const [filterNks, setFilterNks] = useState("");
+  const [pplOptions, setPplOptions] = useState<string[]>([]);
+  const [filterPpl, setFilterPpl] = useState("");
   const [filterKode, setFilterKode] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,7 +84,7 @@ export default function RekapTemuanTab() {
     let query = supabase
       .from("kp_anomali_temuan")
       .select("id, kode_anomali, kelompok, nks, nurt, nama_krt, nama_ppl, status, catatan_ppl, rekomendasi_manual");
-    if (filterNks.trim()) query = query.eq("nks", filterNks.trim());
+    if (filterPpl) query = query.eq("nama_ppl", filterPpl);
     if (filterKode) query = query.eq("kode_anomali", filterKode);
     if (filterStatus) query = query.eq("status", filterStatus);
     const { data, error } = await query
@@ -95,7 +96,7 @@ export default function RekapTemuanTab() {
     else setDebugError(null);
     setRows((data ?? []) as TemuanRow[]);
     setLoading(false);
-  }, [supabase, filterNks, filterKode, filterStatus]);
+  }, [supabase, filterPpl, filterKode, filterStatus]);
 
   // Daftar kode utk dropdown filter — diambil dari kp_anomali_pengaturan
   // (semua kode yang pernah terdaftar), bukan dari kp_anomali_temuan, supaya
@@ -105,9 +106,20 @@ export default function RekapTemuanTab() {
     setKodeOptions((data ?? []).map((r) => r.kode as string));
   }, [supabase]);
 
+  // Daftar nama PPL utk dropdown filter — dari kp_nks_jorong (master mapping
+  // NKS/Jorong/PPL yang sudah ada), bukan dari kp_anomali_temuan, supaya
+  // konsisten dgn tab Monitoring dan tidak perlu query DISTINCT terpisah.
+  const loadPplOptions = useCallback(async () => {
+    const { data } = await supabase.from("kp_nks_jorong").select("nama_ppl").order("nama_ppl");
+    const unik = Array.from(new Set((data ?? []).map((r) => r.nama_ppl as string).filter(Boolean)));
+    unik.sort((a, b) => a.localeCompare(b));
+    setPplOptions(unik);
+  }, [supabase]);
+
   useEffect(() => {
     loadKodeOptions();
-  }, [loadKodeOptions]);
+    loadPplOptions();
+  }, [loadKodeOptions, loadPplOptions]);
 
   useEffect(() => {
     if (pinOk) load();
@@ -167,13 +179,18 @@ export default function RekapTemuanTab() {
 
       {/* ---------- Filter ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <input
-          type="text"
-          placeholder="Filter NKS..."
-          value={filterNks}
-          onChange={(e) => setFilterNks(e.target.value)}
-          className="w-32 rounded-md border border-line px-2 py-1.5 text-xs"
-        />
+        <select
+          value={filterPpl}
+          onChange={(e) => setFilterPpl(e.target.value)}
+          className="rounded-md border border-line px-2 py-1.5 text-xs"
+        >
+          <option value="">Semua PPL</option>
+          {pplOptions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
         <select
           value={filterKode}
           onChange={(e) => setFilterKode(e.target.value)}
