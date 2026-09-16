@@ -181,13 +181,21 @@ export default function KonfirmasiPplTab() {
   const [loading, setLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
 
-  // ---------- 3 filter wajib dipilih dulu sebelum daftar anomali muncul ----------
+  // ---------- 2 filter wajib dipilih dulu sebelum daftar anomali muncul ----------
+  // (dulu 3, termasuk pilih Batch Anomali satu-satu -- sekarang Batch SELALU
+  // rekap gabungan semua batch, lihat `filterBatch` di bawah, permintaan
+  // Bapak Iqbal supaya PPL tidak bingung pilih batch & tidak ada anomali yg
+  // "ketinggalan" krn masih di batch lama yg belum dikonfirmasi.)
   const [nksOptions, setNksOptions] = useState<{ nks: string; label: string }[]>([]);
-  const [batchOptions, setBatchOptions] = useState<{ id: number; label: string }[]>([]);
   const [filterNks, setFilterNks] = useState("");
-  const [filterBatch, setFilterBatch] = useState("");
+  // "Batch Anomali" TIDAK LAGI bisa dipilih PPL (dulu dropdown per-batch) --
+  // atas arahan Bapak Iqbal, sekarang SELALU rekap gabungan seluruh batch
+  // yg pernah muncul (nilai "REKAP" tetap, tidak pernah berubah) supaya PPL
+  // tidak bingung harus pilih batch mana & tidak ada anomali yg "hilang"
+  // krn ketinggalan batch lama yg belum dikonfirmasi.
+  const filterBatch = "REKAP";
   const [filterKuesioner, setFilterKuesioner] = useState<"" | "KP" | "M">("");
-  const siapTampil = Boolean(filterNks && filterBatch && filterKuesioner);
+  const siapTampil = Boolean(filterNks && filterKuesioner);
 
   // ---------- muat opsi dropdown NKS (dari NKS yg punya temuan pending + nama jorong kalau ada) ----------
   const loadNksOptions = useCallback(async () => {
@@ -199,27 +207,6 @@ export default function KonfirmasiPplTab() {
       .map((nks) => ({ nks, label: jorongMap.has(nks) ? `${nks} - ${jorongMap.get(nks)}` : `${nks} (belum ada nama jorong)` }))
       .sort((a, b) => a.nks.localeCompare(b.nks));
     setNksOptions(opts);
-  }, [supabase]);
-
-  // ---------- muat opsi dropdown Batch Anomali (dari kp_anomali_upload) ----------
-  const loadBatchOptions = useCallback(async () => {
-    // Batch 1-14 adalah upload percobaan/uji coba sebelum fitur batch ini
-    // ada — sengaja disembunyikan. "Batch N" sekarang = id asli baris upload
-    // (bukan nomor urut relatif), supaya upload berikutnya OTOMATIS muncul
-    // sebagai nomor berikutnya (mis. 15 -> 16) tanpa perlu hitung ulang.
-    const BATCH_MULAI_DARI_ID = 15;
-    const { data } = await supabase
-      .from("kp_anomali_upload")
-      .select("id, keterangan, uploaded_at")
-      .gte("id", BATCH_MULAI_DARI_ID)
-      .order("id", { ascending: false });
-    const opts = (data ?? []).map((u) => ({
-      id: u.id as number,
-      label: u.keterangan?.trim()
-        ? u.keterangan
-        : `Batch ${u.id} (${new Date(u.uploaded_at as string).toLocaleDateString("id-ID")})`,
-    }));
-    setBatchOptions(opts);
   }, [supabase]);
 
   const loadRekomendasi = useCallback(async () => {
@@ -242,12 +229,12 @@ export default function KonfirmasiPplTab() {
     }
     setLoading(true);
 
-    // Ringkasan dihitung dari hasil query yg SAMA (sudah difilter NKS+Batch+Kuesioner),
+    // Ringkasan dihitung dari hasil query yg SAMA (sudah difilter NKS+Kuesioner),
     // bukan dari RPC global — supaya angkanya sesuai konteks yg dipilih PPL.
-    // "REKAP" = semua batch (rekap kumulatif seluruh anomali yg PERNAH
-    // muncul utk NKS ini), tidak difilter per last_seen_upload_id.
+    // Batch SELALU direkap gabungan (semua anomali yg PERNAH muncul utk NKS
+    // ini, termasuk yg sudah selesai/teratasi) -- tidak lagi difilter per
+    // last_seen_upload_id (lihat catatan `filterBatch` di atas).
     let query = supabase.from("kp_anomali_temuan").select("*").eq("nks", filterNks);
-    if (filterBatch !== "REKAP") query = query.eq("last_seen_upload_id", Number(filterBatch));
     query = filterKuesioner === "KP" ? query.like("kode_anomali", "KP-%") : query.like("kode_anomali", "M-%");
     const { data: rows, error } = await query.order("kelompok").order("kode_anomali").order("nurt");
     if (error) {
@@ -269,14 +256,13 @@ export default function KonfirmasiPplTab() {
     setTemuan(list);
     setOpenGroups(new Set(list.map((t) => t.kelompok ?? "Lainnya"))); // default semua tema terbuka
     setLoading(false);
-  }, [supabase, siapTampil, filterNks, filterBatch, filterKuesioner]);
+  }, [supabase, siapTampil, filterNks, filterKuesioner]);
 
   useEffect(() => {
     loadRekomendasi();
     loadNksOptions();
-    loadBatchOptions();
     loadPplOptions();
-  }, [loadRekomendasi, loadNksOptions, loadBatchOptions, loadPplOptions]);
+  }, [loadRekomendasi, loadNksOptions, loadPplOptions]);
 
   useEffect(() => {
     loadData();
@@ -338,11 +324,11 @@ export default function KonfirmasiPplTab() {
       <div>
         <h1 className="text-base font-bold text-navy-900 sm:text-lg">Konfirmasi PPL &ndash; Temuan Anomali</h1>
         <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-          Pilih NKS, batch, dan kuesioner di bawah dulu, baru daftar temuan muncul.
+          Pilih NKS dan kuesioner di bawah dulu, baru daftar temuan muncul.
         </p>
       </div>
 
-      {/* ---------- 3 filter wajib ---------- */}
+      {/* ---------- 2 filter wajib (Batch tidak lagi dipilih -- selalu rekap) ---------- */}
       <div className="space-y-2 rounded-lg border border-line bg-white p-3">
         <div>
           <label className="text-xs font-semibold text-navy-900">1. NKS &ndash; Nama Jorong</label>
@@ -359,29 +345,15 @@ export default function KonfirmasiPplTab() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="text-xs font-semibold text-navy-900">2. Batch Anomali</label>
-          <select
-            value={filterBatch}
-            onChange={(e) => setFilterBatch(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
-          >
-            <option value="">-- Pilih Batch --</option>
-            <option value="REKAP">📋 Rekap Semua Batch (semua anomali yg pernah muncul)</option>
-            {batchOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {filterBatch === "REKAP" && (
-            <p className="mt-1 text-[11px] text-navy-500">
-              Menampilkan gabungan seluruh batch — termasuk yg sudah selesai/teratasi.
-            </p>
-          )}
+        <div className="flex items-start gap-2 rounded-md border border-navy-100 bg-navy-50 px-2.5 py-2 text-[11px] text-navy-700">
+          <span className="mt-0.5 shrink-0">📋</span>
+          <span>
+            <span className="font-semibold">Batch Anomali:</span> selalu ditampilkan rekap gabungan SELURUH batch yang
+            pernah muncul untuk NKS ini (termasuk yang sudah selesai/teratasi) — tidak perlu pilih batch satu-satu lagi.
+          </span>
         </div>
         <div>
-          <label className="text-xs font-semibold text-navy-900">3. Kuesioner</label>
+          <label className="text-xs font-semibold text-navy-900">2. Kuesioner</label>
           <select
             value={filterKuesioner}
             onChange={(e) => setFilterKuesioner(e.target.value as "" | "KP" | "M")}
@@ -396,7 +368,7 @@ export default function KonfirmasiPplTab() {
 
       {!siapTampil ? (
         <p className="rounded-lg border border-line bg-white p-6 text-center text-sm text-ink/50">
-          Pilih ketiga filter di atas untuk menampilkan daftar temuan.
+          Pilih NKS &amp; kuesioner di atas untuk menampilkan daftar temuan.
         </p>
       ) : (
         <>
@@ -419,15 +391,13 @@ export default function KonfirmasiPplTab() {
           )}
 
           {/* ---------- Ringkasan singkat (sesuai filter yg dipilih) ---------- */}
-          <div className={`grid gap-2 text-center ${filterBatch === "REKAP" ? "grid-cols-6" : "grid-cols-5"}`}>
+          <div className="grid grid-cols-6 gap-2 text-center">
             <SummaryBox label="Total" value={ringkasan.total} className="bg-navy-50 text-navy-900" />
             <SummaryBox label="Belum" value={ringkasan.pending} className="bg-gold-100 text-gold-600" />
             <SummaryBox label="Koreksi" value={ringkasan.perlu_koreksi} className="bg-rust-100 text-rust-700" />
             <SummaryBox label="Salah Entry" value={ringkasan.salah_entry} className="bg-navy-100 text-navy-600" />
             <SummaryBox label="Sesuai" value={ringkasan.sesuai} className="bg-moss-100 text-moss-700" />
-            {filterBatch === "REKAP" && (
-              <SummaryBox label="Selesai" value={ringkasan.selesai} className="bg-line/40 text-ink/60" />
-            )}
+            <SummaryBox label="Selesai" value={ringkasan.selesai} className="bg-line/40 text-ink/60" />
           </div>
 
           {/* ---------- Daftar temuan, dikelompokkan per tema ---------- */}
