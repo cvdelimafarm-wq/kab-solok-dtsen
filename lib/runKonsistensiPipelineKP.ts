@@ -87,15 +87,12 @@ type Household = {
  * buildArtRow), field map ini murni identity (token -> token) -- cukup
  * dihitung SEKALI di awal, bukan per rumah tangga.
  */
-function buildIdentityFieldMap(): Map<string, string> {
+type ParsedRule = { rule: KonsistensiRuleKP; ast: Extract<ParseResult, { ok: true }> };
+
+function buildIdentityFieldMap(parsedRules: ParsedRule[]): Map<string, string> {
   const names = new Set<string>();
-  for (const rule of KONSISTENSI_RULES_KP) {
-    if (!rule.evaluable) continue;
-    // rule_expr sudah pernah berhasil di-parse saat finalize-kp.ts jalan;
-    // parse ulang di sini murah (dilakukan sekali, bukan per rumah tangga).
-    const res = parseRuleExpr(rule.rule_expr);
-    if (!res.ok) continue;
-    for (const f of collectNamesFromAst(res)) names.add(f.toUpperCase());
+  for (const { ast } of parsedRules) {
+    for (const f of collectNamesFromAst(ast)) names.add(f.toUpperCase());
   }
   const m = new Map<string, string>();
   for (const n of names) m.set(n, n);
@@ -129,7 +126,7 @@ function sumCol(rows: DbfRow[], col: string): number {
   return s;
 }
 
-function buildHouseholds(tables: Partial<Tables>): Household[] {
+function buildHouseholds(tables: Partial<Tables>, parsedRules: ParsedRule[]): Household[] {
   const t3ByKey = groupByKey(tables.t3);
   const t4ByKey = groupByKey(tables.t4);
   const t5ByKey = groupByKey(tables.t5);
@@ -159,11 +156,8 @@ function buildHouseholds(tables: Partial<Tables>): Household[] {
   // sekali supaya tidak perlu resolve utk seluruh kolom yg mungkin ada.
   const staticFieldTokens = new Set<string>();
   const rowFieldTokens: { n: number; c: string; token: string }[] = [];
-  for (const rule of KONSISTENSI_RULES_KP) {
-    if (!rule.evaluable) continue;
-    const res = parseRuleExpr(rule.rule_expr);
-    if (!res.ok) continue;
-    for (const f of collectNamesFromAst(res)) {
+  for (const { ast } of parsedRules) {
+    for (const f of collectNamesFromAst(ast)) {
       const fu = f.toUpperCase();
       const m = ROW_FIELD_RE.exec(fu);
       if (m) rowFieldTokens.push({ n: parseInt(m[1], 10), c: m[2], token: fu });
@@ -298,15 +292,20 @@ function buildArtRow(hh: Household, raw: DbfRow, kind: 't4' | 't6' | 't7' | 't8'
 
 /** Jalankan semua aturan KP yang evaluable terhadap data hasil entri, kembalikan daftar temuan mentah. */
 export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFinding[] {
-  const households = buildHouseholds(tables);
-  const fieldMap = buildIdentityFieldMap();
-
-  const parsed: { rule: KonsistensiRuleKP; ast: Extract<ParseResult, { ok: true }> }[] = [];
+  // Parse SEMUA rule_expr evaluable SEKALI SAJA di sini, lalu hasilnya dipakai
+  // ulang oleh buildIdentityFieldMap & buildHouseholds (sebelumnya rule_expr
+  // yg SAMA di-parse 3x terpisah per upload -- triple alokasi AST utk 3.280
+  // rule sekaligus, ikut andil bikin beban CPU & memori proses Node.js
+  // melonjak & ter-OOM di Railway saat data yg diupload besar).
+  const parsed: ParsedRule[] = [];
   for (const rule of KONSISTENSI_RULES_KP) {
     if (!rule.evaluable) continue;
     const res = parseRuleExpr(rule.rule_expr);
     if (res.ok) parsed.push({ rule, ast: res });
   }
+
+  const households = buildHouseholds(tables, parsed);
+  const fieldMap = buildIdentityFieldMap(parsed);
 
   // Dispatch murni dari rule.dispatch (dihitung dari `field`, lihat
   // konsistensiRulesKP.ts) -- BUKAN dari `level`, yg ternyata tidak selalu

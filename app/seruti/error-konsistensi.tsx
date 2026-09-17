@@ -317,13 +317,6 @@ export default function ErrorKonsistensiTab() {
             <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {debugError}</p>
           )}
 
-          {/* ---------- Ringkasan progres ---------- */}
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <SummaryBox label="Total Temuan" value={total} className="bg-navy-50 text-navy-900" />
-            <SummaryBox label="Belum Dibaca" value={belumDibaca} className="bg-gold-100 text-gold-600" />
-            <SummaryBox label="Progres" value={`${persen}%`} className="bg-moss-100 text-moss-700" />
-          </div>
-
           {/* ---------- Filter kuesioner (M / KP) ---------- */}
           <div>
             <label className="text-xs font-semibold text-navy-900">Jenis Kuesioner</label>
@@ -336,6 +329,13 @@ export default function ErrorKonsistensiTab() {
               <option value="M">VSEN26.M ({jumlahM})</option>
               <option value="KP">VSEN26.KP ({jumlahKp})</option>
             </select>
+          </div>
+
+          {/* ---------- Ringkasan progres ---------- */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <SummaryBox label="Total Temuan" value={total} className="bg-navy-50 text-navy-900" />
+            <SummaryBox label="Belum Dibaca" value={belumDibaca} className="bg-gold-100 text-gold-600" />
+            <SummaryBox label="Progres" value={`${persen}%`} className="bg-moss-100 text-moss-700" />
           </div>
 
           <label className="flex items-center gap-2 text-xs text-ink/70">

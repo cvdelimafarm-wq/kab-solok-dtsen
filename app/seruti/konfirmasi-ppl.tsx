@@ -174,8 +174,6 @@ export default function KonfirmasiPplTab() {
     selesai: 0,
   });
   const [rekomendasiMap, setRekomendasiMap] = useState<Map<string, string>>(new Map());
-  const [namaPpl, setNamaPpl] = useState("");
-  const [pplOptions, setPplOptions] = useState<string[]>([]);
   const [openIds, setOpenIds] = useState<Set<number>>(new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -186,7 +184,11 @@ export default function KonfirmasiPplTab() {
   // rekap gabungan semua batch, lihat `filterBatch` di bawah, permintaan
   // Bapak Iqbal supaya PPL tidak bingung pilih batch & tidak ada anomali yg
   // "ketinggalan" krn masih di batch lama yg belum dikonfirmasi.)
-  const [nksOptions, setNksOptions] = useState<{ nks: string; label: string }[]>([]);
+  // `namaPpl` per opsi NKS -- dipakai utk otomatis mengisi field nama_ppl saat
+  // menyimpan konfirmasi (kolom pilih "Nama Anda (PPL)" DIHAPUS atas arahan
+  // Bapak Iqbal 17/9: siapapun yang mengedit konfirmasi utk NKS tsb dianggap
+  // PPL yang jadi penanggung jawab NKS itu di kp_nks_jorong).
+  const [nksOptions, setNksOptions] = useState<{ nks: string; label: string; namaPpl: string | null }[]>([]);
   const [filterNks, setFilterNks] = useState("");
   // "Batch Anomali" TIDAK LAGI bisa dipilih PPL (dulu dropdown per-batch) --
   // atas arahan Bapak Iqbal, sekarang SELALU rekap gabungan seluruh batch
@@ -197,14 +199,26 @@ export default function KonfirmasiPplTab() {
   const [filterKuesioner, setFilterKuesioner] = useState<"" | "KP" | "M">("");
   const siapTampil = Boolean(filterNks && filterKuesioner);
 
-  // ---------- muat opsi dropdown NKS (dari NKS yg punya temuan pending + nama jorong kalau ada) ----------
+  // ---------- muat opsi dropdown NKS (dari NKS yg PERNAH punya temuan --
+  // termasuk yg semua temuannya sudah dikonfirmasi/selesai, BUKAN cuma yg
+  // masih pending, supaya NKS yg sudah selesai semua tidak "hilang" dari
+  // dropdown) + nama jorong & nama PPL penanggung jawab dari kp_nks_jorong.
   const loadNksOptions = useCallback(async () => {
-    const { data: pendingRows } = await supabase.from("kp_anomali_temuan").select("nks").eq("status", "pending");
-    const uniqueNks = [...new Set((pendingRows ?? []).map((r) => r.nks).filter(Boolean))] as string[];
-    const { data: jorongRows } = await supabase.from("kp_nks_jorong").select("nks, nama_jorong");
-    const jorongMap = new Map((jorongRows ?? []).map((j) => [j.nks, j.nama_jorong]));
+    const { data: allRows } = await supabase.from("kp_anomali_temuan").select("nks");
+    const uniqueNks = [...new Set((allRows ?? []).map((r) => r.nks).filter(Boolean))] as string[];
+    const { data: jorongRows } = await supabase.from("kp_nks_jorong").select("nks, nama_jorong, nama_ppl");
+    const jorongMap = new Map(
+      (jorongRows ?? []).map((j) => [j.nks, { namaJorong: j.nama_jorong as string | null, namaPpl: j.nama_ppl as string | null }])
+    );
     const opts = uniqueNks
-      .map((nks) => ({ nks, label: jorongMap.has(nks) ? `${nks} - ${jorongMap.get(nks)}` : `${nks} (belum ada nama jorong)` }))
+      .map((nks) => {
+        const info = jorongMap.get(nks);
+        return {
+          nks,
+          label: info?.namaJorong ? `${nks} - ${info.namaJorong}` : `${nks} (belum ada nama jorong)`,
+          namaPpl: info?.namaPpl ?? null,
+        };
+      })
       .sort((a, b) => a.nks.localeCompare(b.nks));
     setNksOptions(opts);
   }, [supabase]);
@@ -212,13 +226,6 @@ export default function KonfirmasiPplTab() {
   const loadRekomendasi = useCallback(async () => {
     const { data } = await supabase.from("kp_anomali_pengaturan").select("kode, rekomendasi");
     setRekomendasiMap(new Map((data ?? []).map((r) => [r.kode, r.rekomendasi as string | null])) as Map<string, string>);
-  }, [supabase]);
-
-  // ---------- muat opsi dropdown Nama PPL, dari kp_nks_jorong ----------
-  const loadPplOptions = useCallback(async () => {
-    const { data } = await supabase.from("kp_nks_jorong").select("nama_ppl");
-    const unik = Array.from(new Set((data ?? []).map((r) => r.nama_ppl as string).filter(Boolean)));
-    setPplOptions(unik.sort((a, b) => a.localeCompare(b)));
   }, [supabase]);
 
   const loadData = useCallback(async () => {
@@ -252,46 +259,63 @@ export default function KonfirmasiPplTab() {
       salah_entry: all.filter((t) => t.status === "salah_entry").length,
       selesai: all.filter((t) => t.status === "resolved").length,
     });
-    const list = all.filter((t) => t.status === "pending");
-    setTemuan(list);
-    setOpenGroups(new Set(list.map((t) => t.kelompok ?? "Lainnya"))); // default semua tema terbuka
+    // Temuan yang SUDAH dikonfirmasi tetap ditampilkan (tidak disaring hilang)
+    // -- kartunya diberi warna hijau kalau sudah selesai (lihat AnomaliCard),
+    // sesuai arahan Bapak Iqbal 17/9, supaya PPL tetap bisa melihat riwayat
+    // konfirmasinya sendiri per NKS, bukan cuma yg masih pending.
+    setTemuan(all);
+    setOpenGroups(new Set(all.map((t) => t.kelompok ?? "Lainnya"))); // default semua tema terbuka
     setLoading(false);
   }, [supabase, siapTampil, filterNks, filterKuesioner]);
 
   useEffect(() => {
     loadRekomendasi();
     loadNksOptions();
-    loadPplOptions();
-  }, [loadRekomendasi, loadNksOptions, loadPplOptions]);
+  }, [loadRekomendasi, loadNksOptions]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   async function confirmFinding(id: number, status: "sesuai" | "perlu_koreksi" | "salah_entry", catatan: string) {
+    // Nama PPL TIDAK LAGI dipilih manual -- otomatis diambil dari PPL
+    // penanggung jawab NKS yang sedang dibuka (kp_nks_jorong.nama_ppl),
+    // siapapun yang login dianggap PPL yang bersangkutan.
+    const namaPplOtomatis = nksOptions.find((o) => o.nks === filterNks)?.namaPpl ?? null;
     await supabase
       .from("kp_anomali_temuan")
       .update({
         status,
         catatan_ppl: catatan || null,
-        nama_ppl: namaPpl || null,
+        nama_ppl: namaPplOtomatis,
         confirmed_at: new Date().toISOString(),
       })
       .eq("id", id);
-    setTemuan((prev) => prev.filter((t) => t.id !== id));
+
+    const statusLama = temuan.find((t) => t.id === id)?.status ?? "pending";
+    // Kartu TETAP ditampilkan (diupdate di tempat), tidak dihilangkan dari
+    // daftar -- sesuai arahan Bapak Iqbal 17/9 supaya PPL tetap bisa melihat
+    // temuan yang sudah dikonfirmasi (kartunya berubah warna, lihat AnomaliCard).
+    setTemuan((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status, catatan_ppl: catatan || null, nama_ppl: namaPplOtomatis } : t))
+    );
     setOpenIds((prev) => {
       const n = new Set(prev);
       n.delete(id);
       return n;
     });
-    setRingkasan((prev) => ({
-      ...prev,
-      pending: Math.max(0, prev.pending - 1),
-      sesuai: status === "sesuai" ? prev.sesuai + 1 : prev.sesuai,
-      perlu_koreksi: status === "perlu_koreksi" ? prev.perlu_koreksi + 1 : prev.perlu_koreksi,
-      salah_entry: status === "salah_entry" ? prev.salah_entry + 1 : prev.salah_entry,
-    }));
-    loadNksOptions(); // NKS yg temuan terakhirnya baru dikonfirmasi mungkin hilang dari dropdown
+    setRingkasan((prev) => {
+      const next = { ...prev };
+      if (statusLama === "pending") next.pending = Math.max(0, next.pending - 1);
+      else if (statusLama === "sesuai") next.sesuai = Math.max(0, next.sesuai - 1);
+      else if (statusLama === "perlu_koreksi") next.perlu_koreksi = Math.max(0, next.perlu_koreksi - 1);
+      else if (statusLama === "salah_entry") next.salah_entry = Math.max(0, next.salah_entry - 1);
+      else if (statusLama === "resolved") next.selesai = Math.max(0, next.selesai - 1);
+      if (status === "sesuai") next.sesuai += 1;
+      else if (status === "perlu_koreksi") next.perlu_koreksi += 1;
+      else if (status === "salah_entry") next.salah_entry += 1;
+      return next;
+    });
   }
 
   function toggleCard(id: number) {
@@ -372,20 +396,6 @@ export default function KonfirmasiPplTab() {
         </p>
       ) : (
         <>
-          {/* Identitas PPL yang sedang konfirmasi — dipakai utk mengisi field nama_ppl saat menyimpan. */}
-          <select
-            value={namaPpl}
-            onChange={(e) => setNamaPpl(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-          >
-            <option value="">-- Pilih Nama Anda (PPL) --</option>
-            {pplOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-
           {debugError && (
             <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {debugError}</p>
           )}
@@ -486,6 +496,10 @@ function AnomaliCard({
   const [busy, setBusy] = useState(false);
   const meta = STATUS_META[temuan.status];
   const rincian = buildRincian(temuan);
+  // Sudah dikonfirmasi (status apapun selain pending) -> kartu hijau, supaya
+  // kelihatan sekilas mana yang sudah selesai tanpa perlu disembunyikan
+  // (arahan Bapak Iqbal 17/9).
+  const sudahSelesai = temuan.status !== "pending";
 
   async function handle(status: "sesuai" | "perlu_koreksi" | "salah_entry") {
     setBusy(true);
@@ -493,9 +507,16 @@ function AnomaliCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-line">
+    <div
+      className={`overflow-hidden rounded-lg border-2 ${
+        sudahSelesai ? "border-moss-500 bg-moss-50" : "border-line bg-white"
+      }`}
+    >
       {/* ---------- Header kartu (selalu tampil, collapsed & expanded) ---------- */}
-      <button onClick={onToggle} className="flex w-full items-start gap-2.5 bg-white p-3 text-left">
+      <button
+        onClick={onToggle}
+        className={`flex w-full items-start gap-2.5 p-3 text-left ${sudahSelesai ? "bg-moss-50" : "bg-white"}`}
+      >
         <span
           className={`mt-0.5 shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${kodeBadgeClass(temuan.kelompok)}`}
         >
@@ -582,6 +603,15 @@ function AnomaliCard({
               className="min-h-[56px] w-full rounded-md border border-line bg-white px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
             />
           </div>
+
+          {/* Sudah dikonfirmasi -- tombol di bawah tetap aktif kalau PPL mau
+              membetulkan/mengubah keputusan sebelumnya. */}
+          {sudahSelesai && (
+            <p className="text-center text-[11px] text-moss-700">
+              &#10003; Sudah dikonfirmasi sebagai &quot;{meta.label}&quot;
+              {temuan.nama_ppl ? ` oleh ${temuan.nama_ppl}` : ""}. Tombol di bawah tetap bisa dipakai untuk mengubah.
+            </p>
+          )}
 
           {/* Tombol konfirmasi — besar, mudah disentuh jempol */}
           <div className="flex gap-2">
