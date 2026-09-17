@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const kec = sp.get("kec") || "";
   const nagari = sp.get("nagari") || "";
+  const subsls = sp.get("subsls") || ""; // idsubsls (16 digit), dropdown filter tahap 3
   const status = sp.get("status") || "";
   const q = (sp.get("q") || "").trim();
   const page = Math.max(1, Number(sp.get("page")) || 1);
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
   let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" });
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
+  if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("status_kunjungan", status);
   if (q) {
     const like = `%${q.replace(/[%_]/g, "")}%`;

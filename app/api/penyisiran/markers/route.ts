@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const kec = sp.get("kec") || "";
   const nagari = sp.get("nagari") || "";
+  const subsls = sp.get("subsls") || ""; // idsubsls (16 digit), dropdown filter tahap 3
   const status = sp.get("status") || "";
 
   if (!kec) {
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
     .not("lng", "is", null)
     .limit(MAX_MARKERS);
   if (nagari) query = query.eq("nagari_kode", nagari);
+  if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("status_kunjungan", status);
 
   const { data, error } = await query;

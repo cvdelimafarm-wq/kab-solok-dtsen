@@ -57,6 +57,11 @@ interface KecOption {
   nama: string;
   jumlah: number;
 }
+interface SubslsOption {
+  idsubsls: string;
+  label: string; // mis. "JORONG USAK-01"
+  jumlah: number;
+}
 interface Summary {
   total: number;
   belum: number;
@@ -188,8 +193,10 @@ export default function PenyisiranUsahaTab() {
 function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [nagariOptions, setNagariOptions] = useState<KecOption[]>([]);
+  const [subslsOptions, setSubslsOptions] = useState<SubslsOption[]>([]);
   const [filterKec, setFilterKec] = useState("");
   const [filterNagari, setFilterNagari] = useState("");
+  const [filterSubsls, setFilterSubsls] = useState(""); // idsubsls, mis. "JORONG USAK-01"
   const [filterStatus, setFilterStatus] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -201,6 +208,10 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
   const [markers, setMarkers] = useState<MarkerRow[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [editAllMode, setEditAllMode] = useState(false);
+  // Peta tampil setengah layar begitu halaman dibuka, tapi bisa digulung
+  // ke atas (disembunyikan) supaya daftar keluarga bisa memakai lebar
+  // penuh saat peta sedang tidak dibutuhkan.
+  const [mapVisible, setMapVisible] = useState(true);
   const pageSize = 200;
 
   const guard = useCallback(
@@ -252,6 +263,23 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
       .catch((e) => guard(() => { throw e; }));
   }, [filterKec, token, guard]);
 
+  // Dropdown filter tahap 3: Sub SLS (mis. "JORONG USAK-01") -- baru bisa
+  // dipilih setelah kecamatan & nagari dipilih. WAJIB kirim kec+nagari
+  // sekaligus (lihat komentar di app/api/penyisiran/subsls/route.ts).
+  useEffect(() => {
+    setFilterSubsls("");
+    if (!filterKec || !filterNagari) {
+      setSubslsOptions([]);
+      return;
+    }
+    apiFetch(
+      `/api/penyisiran/subsls?kec=${encodeURIComponent(filterKec)}&nagari=${encodeURIComponent(filterNagari)}`,
+      token
+    )
+      .then(setSubslsOptions)
+      .catch((e) => guard(() => { throw e; }));
+  }, [filterKec, filterNagari, token, guard]);
+
   const bisaMuat = Boolean(filterKec || search);
 
   const loadList = useCallback(async () => {
@@ -266,6 +294,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
       const sp = new URLSearchParams();
       if (filterKec) sp.set("kec", filterKec);
       if (filterNagari) sp.set("nagari", filterNagari);
+      if (filterSubsls) sp.set("subsls", filterSubsls);
       if (filterStatus) sp.set("status", filterStatus);
       if (search) sp.set("q", search);
       sp.set("page", String(page));
@@ -279,11 +308,11 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     } finally {
       setLoading(false);
     }
-  }, [bisaMuat, filterKec, filterNagari, filterStatus, search, page, token, guard]);
+  }, [bisaMuat, filterKec, filterNagari, filterSubsls, filterStatus, search, page, token, guard]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterKec, filterNagari, filterStatus, search]);
+  }, [filterKec, filterNagari, filterSubsls, filterStatus, search]);
 
   useEffect(() => {
     loadList();
@@ -297,6 +326,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     try {
       const sp = new URLSearchParams({ kec: filterKec });
       if (filterNagari) sp.set("nagari", filterNagari);
+      if (filterSubsls) sp.set("subsls", filterSubsls);
       if (filterStatus) sp.set("status", filterStatus);
       const data = await apiFetch(`/api/penyisiran/markers?${sp.toString()}`, token);
       setMarkers(data.markers);
@@ -305,7 +335,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
         throw e;
       });
     }
-  }, [filterKec, filterNagari, filterStatus, token, guard]);
+  }, [filterKec, filterNagari, filterSubsls, filterStatus, token, guard]);
 
   useEffect(() => {
     loadMarkers();
@@ -317,38 +347,50 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     loadMarkers();
   }
 
+  // Bar float "Belum Identifikasi / Tidak Ada Usaha / Ragu-Ragu / Ada
+  // Usaha" di bawah layar: melompat ke kartu BERIKUTNYA (searah gulir ke
+  // bawah) yang berstatus identifikasi_ppl sesuai tombol yang ditekan,
+  // lalu berputar kembali ke kartu paling atas kalau sudah sampai ujung --
+  // supaya bisa dipakai berulang kali menyisir semua kartu dgn status yg
+  // sama. Hanya menjangkau kartu yang sedang dimuat di halaman ini (rows,
+  // dipaginasi 200/halaman).
+  function jumpKeStatus(nilai: NilaiIdentifikasi) {
+    const cards = Array.from(
+      document.querySelectorAll<HTMLElement>(`[data-identifikasi-ppl="${nilai}"]`)
+    );
+    if (cards.length === 0) return;
+    const batasAtas = window.scrollY + 96; // beri sedikit ruang dari bagian atas layar
+    const berikutnya = cards.find((el) => el.getBoundingClientRect().top + window.scrollY > batasAtas);
+    (berikutnya ?? cards[0]).scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  const jumlahIdentifikasi = (Object.keys(IDENTIFIKASI_META) as NilaiIdentifikasi[]).reduce(
+    (acc, k) => ({ ...acc, [k]: rows.filter((r) => r.identifikasi_ppl === k).length }),
+    {} as Record<NilaiIdentifikasi, number>
+  );
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-3 pb-6">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h1 className="text-base font-bold text-navy-900 sm:text-lg">
-            Lembar Pengecekan Penyisiran Undercoverage Usaha
-          </h1>
-          <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-            Keluarga tercatat TIDAK ada usaha di SE2026, tapi ada indikasi usaha di DUTP/DTSEN/PNM Mekar. Tidak
-            memuat NIK/Nomor KK.
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button
-            onClick={() => setEditAllMode((v) => !v)}
-            className={`rounded-md border px-2.5 py-1.5 text-xs font-medium ${
-              editAllMode
-                ? "border-navy-700 bg-navy-700 text-white"
-                : "border-line bg-white text-navy-700 hover:border-navy-400"
-            }`}
-          >
-            {editAllMode ? "🔓 Edit Semua Aktif" : "🔒 Edit Semua Info Lapangan"}
-          </button>
-          <button
-            onClick={() => setShowUpload((v) => !v)}
-            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
-          >
-            {showUpload ? "Tutup" : "⬆ Unggah Data"}
-          </button>
-        </div>
+    <div className="space-y-3 pb-24">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">
+          Lembar Pengecekan Penyisiran Undercoverage Usaha
+        </h1>
+        <button
+          onClick={() => setShowUpload((v) => !v)}
+          className="shrink-0 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
+        >
+          {showUpload ? "Tutup" : "⬆ Unggah Data"}
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-line bg-white p-3">
+        <p className="text-xs text-ink/70 sm:text-sm">
+          Keluarga tercatat <span className="font-semibold text-rust-700">TIDAK ada usaha</span> di SE2026, tapi
+          ada indikasi usaha di DUTP/DTSEN/PNM Mekar.
+        </p>
+        <p className="mt-0.5 text-[11px] text-ink/40">Tidak memuat NIK/Nomor KK.</p>
       </div>
 
       {errMsg && (
@@ -400,6 +442,19 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
           ))}
         </select>
         <select
+          value={filterSubsls}
+          onChange={(e) => setFilterSubsls(e.target.value)}
+          disabled={!filterNagari}
+          className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
+        >
+          <option value="">Semua SLS / Sub SLS</option>
+          {subslsOptions.map((s) => (
+            <option key={s.idsubsls} value={s.idsubsls}>
+              {s.label} ({s.jumlah})
+            </option>
+          ))}
+        </select>
+        <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -427,7 +482,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
       )}
 
       {bisaMuat && (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-3 ${mapVisible ? "lg:grid-cols-2" : ""}`}>
           {/* ---------- List ---------- */}
           <div className="flex flex-col gap-2">
             <div className="text-xs text-ink/50">
@@ -474,22 +529,82 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
           </div>
 
           {/* ---------- Map ---------- */}
-          <div className="relative h-[420px] overflow-hidden rounded-lg border border-line lg:h-auto lg:min-h-[500px]">
-            <PenyisiranMap markers={markers} />
-            <div className="absolute bottom-2 left-2 z-[1000] rounded-md border border-line bg-white/95 p-2 text-[11px] shadow">
-              {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
-                <div key={s} className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: STATUS_META[s].dot }}
-                  />
-                  {STATUS_META[s].label}
+          {mapVisible ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setMapVisible(false)}
+                className="self-start rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
+              >
+                ▲ Sembunyikan Peta
+              </button>
+              <div className="relative h-[50vh] min-h-[320px] overflow-hidden rounded-lg border border-line">
+                <PenyisiranMap markers={markers} />
+                <div className="absolute bottom-2 left-2 z-[1000] rounded-md border border-line bg-white/95 p-2 text-[11px] shadow">
+                  {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
+                    <div key={s} className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: STATUS_META[s].dot }}
+                      />
+                      {STATUS_META[s].label}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMapVisible(true)}
+              className="flex h-10 items-center justify-center rounded-lg border border-dashed border-line bg-white text-xs font-medium text-navy-700 hover:border-navy-400"
+            >
+              ▼ Tampilkan Peta
+            </button>
+          )}
         </div>
       )}
+
+      {/* Bar float navigasi status identifikasi -- di tengah-bawah layar,
+          supaya tidak tumpang tindih dgn tombol "Edit Semua" di pojok
+          kanan bawah. Menekan salah satu tombol langsung menggulir ke
+          kartu berikutnya yg berstatus identifikasi_ppl sesuai (lihat
+          jumpKeStatus di atas). */}
+      <div className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-line bg-white p-1 shadow-lg">
+        {(
+          [
+            { nilai: "belum", label: "Belum Identifikasi" },
+            { nilai: "tidak_ada", label: "Tidak Ada Usaha" },
+            { nilai: "ragu", label: "Ragu-Ragu" },
+            { nilai: "ada", label: "Ada Usaha" },
+          ] as { nilai: NilaiIdentifikasi; label: string }[]
+        ).map(({ nilai, label }) => (
+          <button
+            key={nilai}
+            type="button"
+            onClick={() => jumpKeStatus(nilai)}
+            title={`Lompat ke kartu berikutnya: ${label}`}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-80 ${IDENTIFIKASI_META[nilai].className}`}
+          >
+            {label}
+            <span className="rounded-full bg-white/60 px-1.5 text-[10px]">{jumlahIdentifikasi[nilai] ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tombol "Edit Semua" MELAYANG di pojok bawah halaman -- supaya
+          selalu terjangkau tanpa perlu gulung ke atas dulu, terutama saat
+          daftar keluarga panjang. */}
+      <button
+        onClick={() => setEditAllMode((v) => !v)}
+        className={`fixed bottom-5 right-5 z-40 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
+          editAllMode
+            ? "border-navy-700 bg-navy-700 text-white"
+            : "border-line bg-white text-navy-700 hover:border-navy-400"
+        }`}
+      >
+        {editAllMode ? "🔓 Edit Semua Aktif" : "🔒 Edit Semua Info Lapangan"}
+      </button>
     </div>
   );
 }
@@ -577,8 +692,17 @@ function RowCard({
   const mapsUrl =
     row.lat != null && row.lng != null ? `https://www.google.com/maps?q=${row.lat},${row.lng}` : null;
 
+  const sudahDiidentifikasi = row.identifikasi_ppl !== "belum";
+
   return (
-    <div className="rounded-lg border border-line bg-white p-3" style={{ borderLeft: `4px solid ${meta.dot}` }}>
+    <div
+      id={`kartu-${row.kode_identitas}`}
+      data-identifikasi-ppl={row.identifikasi_ppl}
+      className={`rounded-lg border border-line p-3 transition-colors ${
+        sudahDiidentifikasi ? "bg-moss-100/40" : "bg-white"
+      }`}
+      style={{ borderLeft: `4px solid ${meta.dot}` }}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
         <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
