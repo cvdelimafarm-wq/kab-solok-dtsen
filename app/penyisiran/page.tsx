@@ -7,17 +7,21 @@
 // permintaan) supaya tidak mengganggu tab-tab utama Seruti Triwulan III
 // (beda konteks: ini SE2026, bukan Susenas/Seruti).
 //
-// Ada 2 tab di sini, MASING-MASING dengan PIN sendiri (lihat
-// lib/penyisiranAuth.ts):
+// Ada 3 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
 //  - "Penyisiran Usaha": checklist petugas lapangan (PIN internal BPS,
-//    env PENYISIRAN_PIN) -- nama+alamat+GPS+bukti DUTP/DTSEN/PNM. Kolom
-//    Info PPL/Jorong/Tetangga di sini cuma bisa diubah lewat tombol
-//    Edit/Edit Semua.
-//  - "Identifikasi PPL": link+PIN INI yang dibagikan ke PPL/mantan
-//    pendata SE2026 (env PENYISIRAN_IDENTIFIKASI_PIN) -- cuma nama+
-//    alamat+wilayah, tanpa bukti/GPS, dan cuma bisa mengisi
-//    Ada/Tidak Ada/Ragu. Hasilnya otomatis muncul sbg badge read-only di
-//    tab Penyisiran Usaha.
+//    env PENYISIRAN_PIN, role "penyisiran") -- nama+alamat+GPS+bukti
+//    DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga di sini cuma bisa
+//    diubah lewat tombol Edit/Edit Semua.
+//  - "Identifikasi PPL": dibagikan ke PPL/mantan pendata SE2026, login
+//    PERSONAL (nama lengkap + tanggal lahir, dicocokkan ke tabel
+//    ppl_akun, role "identifikasi_ppl") -- cuma nama+alamat+wilayah,
+//    tanpa bukti/GPS, dan cuma bisa mengisi Ada/Tidak Ada/Ragu utk
+//    wilayah yang dialokasikan ke PPL itu saja. Hasilnya otomatis
+//    muncul sbg badge read-only di tab Penyisiran Usaha.
+//  - "Monitoring Identifikasi PPL": rekap progres pengisian tab
+//    Identifikasi PPL DI ATAS, per PPL -- pakai PIN & sesi yang SAMA
+//    dengan tab Penyisiran Usaha (role "penyisiran", internal staf saja,
+//    BUKAN utk dibagikan ke PPL).
 //
 // Komponen sesungguhnya utk tab Penyisiran Usaha (PIN gate, daftar, peta)
 // TETAP di app/seruti/penyisiran-usaha.tsx + penyisiran-map.tsx -- file
@@ -28,8 +32,9 @@
 import { useState } from "react";
 import PenyisiranUsahaTab from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
+import MonitoringPplTab from "./monitoring-ppl";
 
-type TabKey = "usaha" | "identifikasi";
+type TabKey = "usaha" | "identifikasi" | "monitoring";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -54,11 +59,15 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
           Penyisiran Usaha
         </TabButton>
+        <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")}>
+          Monitoring Identifikasi PPL
+        </TabButton>
       </div>
 
       <div className="mt-4">
         {tab === "usaha" && <PenyisiranUsahaTab />}
         {tab === "identifikasi" && <IdentifikasiPplTab />}
+        {tab === "monitoring" && <MonitoringPplTab />}
       </div>
     </main>
   );
