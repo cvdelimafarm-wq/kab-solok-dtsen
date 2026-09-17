@@ -128,9 +128,29 @@ export async function POST(req: NextRequest) {
       usedFilenames.push(file.name);
     }
     logMem(`selesai baca ${usedFilenames.length} file DBF`);
+    let totalBaris = 0;
     for (const k of Object.keys(tables) as (keyof Tables)[]) {
-      console.log(`[MEM]   tabel ${k}: ${(tables[k] as unknown[] | undefined)?.length ?? 0} baris`);
+      const n = (tables[k] as unknown[] | undefined)?.length ?? 0;
+      totalBaris += n;
+      console.log(`[MEM]   tabel ${k}: ${n} baris`);
     }
+    // Utk upload BESAR (banyak baris total), JANGAN simpan salinan mentah
+    // (raw_data) ke Supabase -- kolom itu dipakai fitur "Jalankan Ulang" saja
+    // (route /rerun), TIDAK WAJIB utk hasil Anomali Cepat & Error Konsistensi
+    // sendiri. Menyimpannya berarti supabase-js harus JSON.stringify SELURUH
+    // data itu (yg pd upload besar bisa >500MB sbg objek JS) -- proses
+    // serialize ini butuh salinan string tambahan yg SEMENTARA bikin memori
+    // dobel persis pd saat proses sudah paling rawan OOM. Di atas batas ini,
+    // fitur "Jalankan Ulang" utk upload tsb jadi tidak tersedia (PPL perlu
+    // upload ulang file kalau mau re-run), tapi hasil pengecekannya sendiri
+    // TETAP tersimpan normal -- lebih baik drpd seluruh upload gagal krn OOM.
+    const RAW_DATA_ROW_LIMIT = 20000;
+    const simpanRawData = totalBaris <= RAW_DATA_ROW_LIMIT;
+    logMem(
+      `total ${totalBaris} baris seluruh tabel${
+        simpanRawData ? '' : ` -- MELEBIHI batas ${RAW_DATA_ROW_LIMIT}, raw_data TIDAK disimpan demi hemat memori`
+      }`
+    );
 
     const adaKp = tables.t3 || tables.t4 || tables.t5 || tables.t9 || tables.t6 || tables.t7 || tables.t8 || tables.t10 || tables.t11 || tables.t12;
     const adaM = tables.m1 || tables.m1b || tables.m1c || tables.mrt1 || tables.mrt2 || tables.mrt3;
@@ -166,7 +186,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const hasil = await runAnomaliPipeline(supabase, tables, keterangan, usedFilenames);
+    const hasil = await runAnomaliPipeline(supabase, tables, keterangan, usedFilenames, simpanRawData);
     logMem('selesai runAnomaliPipeline (Anomali Cepat)');
 
     // Jalankan juga evaluasi aturan konsistensi resmi BPS VSEN26.M (kalau ada
@@ -212,6 +232,12 @@ export async function POST(req: NextRequest) {
       // manapun) — supaya PPL tahu kalau ada file yg "kelewat" dari 15+ file
       // ekspor VSEN26.KP/VSEN26.M, bukan cuma diam2 diabaikan server.
       fileDiabaikan,
+      // Lihat catatan RAW_DATA_ROW_LIMIT di atas -- kalau false, fitur
+      // "Jalankan Ulang" utk upload ini tidak tersedia (data terlalu besar
+      // utk disimpan mentah demi menghindari OOM), tapi hasil pengecekan di
+      // atas TETAP tersimpan & valid.
+      rawDataDisimpan: simpanRawData,
+      totalBarisData: totalBaris,
     });
   } catch (err: any) {
     console.error('anomali-kp upload error:', err);

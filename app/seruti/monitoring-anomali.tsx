@@ -504,15 +504,36 @@ export default function MonitoringAnomaliTab() {
         </div>
         <table ref={tableRef} className="w-full min-w-[900px] text-sm">
           <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+            {/* Baris 1: kelompok kolom -- "Anomali" (Konfirmasi PPL) vs "Error
+                Konsistensi", supaya kelihatan jelas dua sumber temuan yang
+                beda (kp_anomali_temuan vs kp_konsistensi_temuan) tidak
+                tercampur, sesuai arahan Bapak Iqbal 17/9. */}
             <tr>
-              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => toggleSort("nks")}>
+              <th rowSpan={2} className="cursor-pointer select-none border-b border-line px-3 py-2 align-bottom font-medium" onClick={() => toggleSort("nks")}>
                 NKS {sortArrow("nks")}
               </th>
-              <th className="cursor-pointer select-none px-3 py-2 font-medium" onClick={() => toggleSort("jorong")}>
+              <th rowSpan={2} className="cursor-pointer select-none border-b border-line px-3 py-2 align-bottom font-medium" onClick={() => toggleSort("jorong")}>
                 Nama Jorong {sortArrow("jorong")}
               </th>
-              <th className="px-3 py-2 font-medium">PPL</th>
-              <th className="px-3 py-2 font-medium text-center" title="Jumlah RT (NURT) unik yang punya minimal 1 temuan anomali">
+              <th rowSpan={2} className="border-b border-line px-3 py-2 align-bottom font-medium">PPL</th>
+              <th
+                colSpan={6}
+                className="border-b border-l border-line bg-gold-100/60 px-3 py-1.5 text-center font-semibold text-gold-700"
+                title="Kolom dari tab Konfirmasi PPL (kp_anomali_temuan) -- pemeriksaan anomali per sampel"
+              >
+                Anomali (Konfirmasi PPL)
+              </th>
+              <th
+                colSpan={2}
+                className="border-b border-l border-line bg-navy-100/60 px-3 py-1.5 text-center font-semibold text-navy-700"
+                title="Kolom dari tab Error Konsistensi (kp_konsistensi_temuan) -- aturan resmi BPS yang wajib dibaca PPL"
+              >
+                Error Konsistensi
+              </th>
+              <th rowSpan={2} className="border-b border-l border-line px-3 py-2 text-center align-bottom font-medium">Aksi</th>
+            </tr>
+            <tr>
+              <th className="border-l border-line px-3 py-2 font-medium text-center" title="Jumlah RT (NURT) unik yang punya minimal 1 temuan anomali">
                 Jumlah Sampel
               </th>
               <th className="px-3 py-2 font-medium text-center" title="Sampel yang sudah ada aktivitas pemeriksaan (selesai atau berjalan)">
@@ -528,13 +549,12 @@ export default function MonitoringAnomaliTab() {
                 Progres {sortArrow("progres")}
               </th>
               <th className="px-3 py-2 font-medium text-center">Status</th>
-              <th className="px-3 py-2 font-medium text-center" title="Jumlah temuan Error Konsistensi (VSEN26.M) yang masih aktif utk NKS ini">
+              <th className="border-l border-line px-3 py-2 font-medium text-center" title="Jumlah temuan Error Konsistensi (VSEN26.M) yang masih aktif utk NKS ini">
                 Error Konsistensi
               </th>
               <th className="px-3 py-2 font-medium text-center" title="Dari jumlah Error Konsistensi di atas, yang sudah ditandai dibaca PPL">
                 Sudah Dibaca
               </th>
-              <th className="px-3 py-2 font-medium text-center">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -544,7 +564,7 @@ export default function MonitoringAnomaliTab() {
                   <td className="px-3 py-2 font-mono text-xs">{r.nks}</td>
                   <td className="px-3 py-2">{r.nama_jorong}</td>
                   <td className="px-3 py-2 text-ink/70">{r.nama_ppl}</td>
-                  <td className="px-3 py-2 text-center">{r.jumlah_sampel}</td>
+                  <td className="border-l border-line px-3 py-2 text-center">{r.jumlah_sampel}</td>
                   <td className="px-3 py-2 text-center">{r.sampel_selesai + r.sampel_berjalan}</td>
                   <td className="px-3 py-2 text-center text-moss-700">{r.sampel_selesai}</td>
                   <td className="px-3 py-2 text-center">
@@ -565,7 +585,7 @@ export default function MonitoringAnomaliTab() {
                   <td className="px-3 py-2 text-center">
                     <StatusPill status={r._status} />
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="border-l border-line px-3 py-2 text-center">
                     {r.jumlah_error_konsistensi === 0 ? (
                       <span className="text-ink/30">0</span>
                     ) : (
@@ -585,7 +605,7 @@ export default function MonitoringAnomaliTab() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="border-l border-line px-3 py-2 text-center">
                     <button
                       onClick={() => toggleExpand(r.nks)}
                       className="rounded-md border border-line bg-white px-2 py-1 text-xs font-medium text-navy-700 hover:border-navy-400"
