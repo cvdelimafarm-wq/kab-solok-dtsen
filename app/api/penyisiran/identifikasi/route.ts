@@ -9,10 +9,16 @@
 // boleh ikut mengisi) tapi TIDAK sebaliknya: token "identifikasi" tidak
 // bisa dipakai memanggil endpoint checklist utama (list/update/upload/
 // export/markers).
+//
+// Role "identifikasi_ppl" (login personal) JUGA diterima, dengan proteksi
+// tambahan (defense in depth): baris yang mau diubah harus punya idsubsls
+// yang memang ada di alokasi PPL tsb (ppl_alokasi_idsls) -- supaya PPL A
+// tidak bisa mengubah data keluarga di wilayah PPL B walau tahu
+// kode_identitas-nya (mis. dari sumber lain).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +26,8 @@ export const dynamic = "force-dynamic";
 const VALID = new Set(["belum", "ada", "tidak_ada", "ragu"]);
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi"])) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "identifikasi", "identifikasi_ppl"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -38,6 +45,31 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  const pplId = getSessionSubject(token);
+  if (pplId) {
+    const { data: row, error: rowErr } = await supabase
+      .from("penyisiran_usaha")
+      .select("idsubsls")
+      .eq("kode_identitas", id)
+      .maybeSingle();
+    if (rowErr) return NextResponse.json({ error: rowErr.message }, { status: 500 });
+    if (!row) return NextResponse.json({ error: "Data tidak ditemukan." }, { status: 404 });
+
+    const { data: alokasi, error: alokasiErr } = await supabase
+      .from("ppl_alokasi_idsls")
+      .select("idsubsls")
+      .eq("ppl_id", pplId)
+      .eq("idsubsls", row.idsubsls)
+      .maybeSingle();
+    if (alokasiErr) return NextResponse.json({ error: alokasiErr.message }, { status: 500 });
+    if (!alokasi) {
+      return NextResponse.json(
+        { error: "Keluarga ini bukan bagian dari wilayah yang dialokasikan ke Anda." },
+        { status: 403 }
+      );
+    }
+  }
 
   const { error } = await supabase
     .from("penyisiran_usaha")

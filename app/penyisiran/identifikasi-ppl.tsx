@@ -2,25 +2,32 @@
 
 // app/penyisiran/identifikasi-ppl.tsx
 //
-// Tab "Identifikasi PPL (Mantan Pendata)" -- link + PIN INI yang
-// dibagikan ke PPL yang DULU mendata SE2026 di wilayah tsb, utk ditanya
-// ulang: seingat PPL, keluarga ini punya usaha atau tidak? (Ada / Tidak
-// Ada / Ragu). PIN-nya BEDA dari tab "Penyisiran Usaha" (env
-// PENYISIRAN_IDENTIFIKASI_PIN, lihat lib/penyisiranAuth.ts) supaya PIN
-// yang dibagikan ke PPL luar tidak ikut membuka detail bukti
-// DUTP/DTSEN/PNM Mekar / koordinat GPS -- itu tetap di balik PIN internal
-// tab Penyisiran Usaha. Hasil isian di sini otomatis muncul sbg badge
-// read-only di tab Penyisiran Usaha (app/seruti/penyisiran-usaha.tsx).
+// Tab "Identifikasi PPL (Mantan Pendata)" -- dulu dibuka pakai 1 PIN yang
+// dibagikan rata ke semua PPL/mantan pendata SE2026 (env
+// PENYISIRAN_IDENTIFIKASI_PIN). SEKARANG diganti login PERSONAL: Nama
+// Lengkap + Tanggal Lahir (dicocokkan ke tabel ppl_akun, sumbernya sheet
+// "PPL (Login)" pada file "Kode Wilayah dan Alokasi IDSLS - Rapi.xlsx").
 //
-// Filter kecamatan/nagari/pencarian sengaja dibuat SAMA polanya dgn tab
-// Penyisiran Usaha (endpoint summary & nagari dipakai bersama).
+// Konsekuensi login personal ini:
+//  1. Daftar keluarga OTOMATIS dibatasi ke ID Sub SLS yang memang
+//     dialokasikan ke PPL yang login (tabel ppl_alokasi_idsls) -- PPL
+//     TIDAK PERLU LAGI pilih kecamatan/nagari manual seperti sebelumnya.
+//  2. Sesi login disimpan di localStorage (bukan sessionStorage) dan
+//     berumur panjang (180 hari, lihat lib/penyisiranAuth.ts) supaya
+//     besoknya PPL tidak perlu login ulang -- otomatis masuk lagi.
+//  3. Nama diambil dari datalist (autocomplete) supaya PPL tidak salah
+//     ketik nama sendiri (typo bikin login gagal krn dicocokkan persis).
+//
+// Hasil isian di sini otomatis muncul sbg badge read-only di tab
+// Penyisiran Usaha (app/seruti/penyisiran-usaha.tsx).
 
 import { useCallback, useEffect, useState } from "react";
 
-const TOKEN_KEY = "identifikasi-ppl-token";
+const TOKEN_KEY = "identifikasi-ppl-login-token";
+const NAMA_KEY = "identifikasi-ppl-login-nama";
 
 // Halaman ini rencananya ditutup Minggu, 20 September 2026 pukul 12:00 WIB
-// -- ditampilkan sbg pengingat di layar PIN maupun di halaman isian.
+// -- ditampilkan sbg pengingat di layar login maupun di halaman isian.
 const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB.";
 
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
@@ -31,14 +38,6 @@ const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] 
   { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 ];
 
-interface KecOption {
-  kode: string;
-  nama: string;
-  jumlah: number;
-}
-interface Summary {
-  kecamatan: KecOption[];
-}
 interface Row {
   kode_identitas: string;
   kec_kode: string | null;
@@ -52,16 +51,31 @@ interface Row {
   identifikasi_ppl_at: string | null;
 }
 
+function tokenExpMs(token: string): number {
+  // Token role identifikasi_ppl: role.subjectB64.exp.sig (4 bagian) --
+  // exp ada di index ke-2. Format lama (3 bagian) exp ada di index ke-1,
+  // dijaga juga di sini kalau-kalau ada sisa token lama tersimpan.
+  const parts = token.split(".");
+  const expStr = parts.length === 4 ? parts[2] : parts[1];
+  return Number(expStr);
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  const t = sessionStorage.getItem(TOKEN_KEY);
+  const t = localStorage.getItem(TOKEN_KEY);
   if (!t) return null;
-  const exp = Number(t.split(".")[1]);
+  const exp = tokenExpMs(t);
   if (!Number.isFinite(exp) || exp < Date.now()) {
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(NAMA_KEY);
     return null;
   }
   return t;
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(NAMA_KEY);
 }
 
 async function apiFetch(path: string, token: string, init?: RequestInit) {
@@ -76,79 +90,147 @@ async function apiFetch(path: string, token: string, init?: RequestInit) {
 
 export default function IdentifikasiPplTab() {
   const [token, setToken] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinLoading, setPinLoading] = useState(false);
+  const [nama, setNama] = useState<string | null>(null);
+  const [checkedStorage, setCheckedStorage] = useState(false);
 
   useEffect(() => {
     setToken(getToken());
+    setNama(typeof window !== "undefined" ? localStorage.getItem(NAMA_KEY) : null);
+    setCheckedStorage(true);
   }, []);
 
-  async function handleUnlock(e: React.FormEvent) {
+  function handleLoggedIn(t: string, n: string) {
+    localStorage.setItem(TOKEN_KEY, t);
+    localStorage.setItem(NAMA_KEY, n);
+    setToken(t);
+    setNama(n);
+  }
+
+  function handleLogout() {
+    clearToken();
+    setToken(null);
+    setNama(null);
+  }
+
+  if (!checkedStorage) return null; // hindari kedip layar login sebelum cek localStorage
+
+  if (!token) {
+    return <LoginForm onLoggedIn={handleLoggedIn} />;
+  }
+
+  return (
+    <IdentifikasiPanel
+      token={token}
+      nama={nama || ""}
+      onSessionExpired={handleLogout}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) => void }) {
+  const [namaOptions, setNamaOptions] = useState<string[]>([]);
+  const [namaInput, setNamaInput] = useState("");
+  const [tanggalLahir, setTanggalLahir] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/penyisiran/identifikasi-ppl-names")
+      .then((r) => r.json())
+      .then((d) => setNamaOptions(Array.isArray(d?.names) ? d.names : []))
+      .catch(() => setNamaOptions([]));
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPinError(null);
-    setPinLoading(true);
+    setError(null);
+    if (!namaInput.trim() || !tanggalLahir) {
+      setError("Isi nama lengkap dan tanggal lahir.");
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetch("/api/penyisiran/auth", {
+      const res = await fetch("/api/penyisiran/identifikasi-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput, role: "identifikasi" }),
+        body: JSON.stringify({ nama: namaInput, tanggal_lahir: tanggalLahir }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setPinError(data?.error || "PIN salah.");
+        setError(data?.error || "Login gagal.");
         return;
       }
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      setToken(data.token);
+      onLoggedIn(data.token, data.nama);
     } catch {
-      setPinError("Gagal terhubung. Periksa koneksi internet.");
+      setError("Gagal terhubung. Periksa koneksi internet.");
     } finally {
-      setPinLoading(false);
+      setLoading(false);
     }
   }
 
-  if (!token) {
-    return (
-      <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
-        <p className="text-sm font-semibold text-navy-900">Identifikasi PPL (Mantan Pendata)</p>
-        <p className="mt-1 text-xs text-ink/60">
-          Untuk PPL yang dulu mendata SE2026 di wilayah ini -- masukkan PIN akses yang dibagikan ke Anda.
-        </p>
-        <p className="mt-2 rounded-md bg-rust-100 px-2.5 py-1.5 text-[11px] font-medium text-rust-700">
-          ⚠ {PESAN_PENUTUPAN}
-        </p>
-        <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
+  return (
+    <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
+      <p className="text-sm font-semibold text-navy-900">Identifikasi PPL (Mantan Pendata)</p>
+      <p className="mt-1 text-xs text-ink/60">
+        Untuk PPL yang dulu mendata SE2026 di wilayah ini -- masukkan nama lengkap dan tanggal lahir Anda. Setelah
+        berhasil, Anda tidak perlu login ulang besok.
+      </p>
+      <p className="mt-2 rounded-md bg-rust-100 px-2.5 py-1.5 text-[11px] font-medium text-rust-700">
+        ⚠ {PESAN_PENUTUPAN}
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 space-y-2 text-left">
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-ink/60">Nama Lengkap</label>
           <input
-            type="password"
-            inputMode="numeric"
-            value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
-            placeholder="PIN"
+            list="nama-ppl-options"
+            type="text"
+            value={namaInput}
+            onChange={(e) => setNamaInput(e.target.value)}
+            placeholder="Ketik nama lengkap Anda"
             autoFocus
+            autoComplete="off"
             className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
           />
-          <button
-            type="submit"
-            disabled={pinLoading}
-            className="shrink-0 rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {pinLoading ? "..." : "Buka"}
-          </button>
-        </form>
-        {pinError && <p className="mt-2 text-xs text-rust-700">{pinError}</p>}
-      </div>
-    );
-  }
-
-  return <IdentifikasiPanel token={token} onSessionExpired={() => setToken(null)} />;
+          <datalist id="nama-ppl-options">
+            {namaOptions.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-ink/60">Tanggal Lahir</label>
+          <input
+            type="date"
+            value={tanggalLahir}
+            onChange={(e) => setTanggalLahir(e.target.value)}
+            className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {loading ? "Memeriksa..." : "Masuk"}
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-rust-700">{error}</p>}
+    </div>
+  );
 }
 
-function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [nagariOptions, setNagariOptions] = useState<KecOption[]>([]);
-  const [filterKec, setFilterKec] = useState("");
-  const [filterNagari, setFilterNagari] = useState("");
+function IdentifikasiPanel({
+  token,
+  nama,
+  onSessionExpired,
+  onLogout,
+}: {
+  token: string;
+  nama: string;
+  onSessionExpired: () => void;
+  onLogout: () => void;
+}) {
   const [filterStatus, setFilterStatus] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -166,7 +248,6 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-          sessionStorage.removeItem(TOKEN_KEY);
           onSessionExpired();
         } else {
           setErrMsg(msg);
@@ -176,51 +257,16 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
     [onSessionExpired]
   );
 
-  const loadSummary = useCallback(async () => {
-    try {
-      const data = await apiFetch("/api/penyisiran/summary", token);
-      setSummary(data);
-    } catch (e) {
-      guard(() => {
-        throw e;
-      });
-    }
-  }, [token, guard]);
-
-  useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
-
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 400);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  useEffect(() => {
-    setFilterNagari("");
-    if (!filterKec) {
-      setNagariOptions([]);
-      return;
-    }
-    apiFetch(`/api/penyisiran/nagari?kec=${encodeURIComponent(filterKec)}`, token)
-      .then(setNagariOptions)
-      .catch((e) => guard(() => { throw e; }));
-  }, [filterKec, token, guard]);
-
-  const bisaMuat = Boolean(filterKec || search);
-
   const loadList = useCallback(async () => {
-    if (!bisaMuat) {
-      setRows([]);
-      setTotal(0);
-      return;
-    }
     setLoading(true);
     setErrMsg(null);
     try {
       const sp = new URLSearchParams();
-      if (filterKec) sp.set("kec", filterKec);
-      if (filterNagari) sp.set("nagari", filterNagari);
       if (filterStatus) sp.set("status", filterStatus);
       if (search) sp.set("q", search);
       sp.set("page", String(page));
@@ -234,11 +280,11 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
     } finally {
       setLoading(false);
     }
-  }, [bisaMuat, filterKec, filterNagari, filterStatus, search, page, token, guard]);
+  }, [filterStatus, search, page, token, guard]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterKec, filterNagari, filterStatus, search]);
+  }, [filterStatus, search]);
 
   useEffect(() => {
     loadList();
@@ -252,15 +298,24 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
 
   return (
     <div className="space-y-3 pb-6">
-      <div>
-        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
-        <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-          Seingat Saudara sebagai petugas yang dulu mendata SE2026, apakah keluarga berikut memiliki usaha atau
-          tidak?
-        </p>
-        <p className="mt-2 inline-block rounded-md bg-rust-100 px-2.5 py-1.5 text-xs font-medium text-rust-700">
-          ⚠ {PESAN_PENUTUPAN}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
+          <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
+            Seingat Saudara <span className="font-semibold">{nama}</span> sebagai petugas yang dulu mendata SE2026,
+            apakah keluarga berikut memiliki usaha atau tidak?
+          </p>
+          <p className="mt-2 inline-block rounded-md bg-rust-100 px-2.5 py-1.5 text-xs font-medium text-rust-700">
+            ⚠ {PESAN_PENUTUPAN}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700"
+        >
+          Keluar
+        </button>
       </div>
 
       {errMsg && (
@@ -268,31 +323,6 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <select
-          value={filterKec}
-          onChange={(e) => setFilterKec(e.target.value)}
-          className="rounded-md border border-line px-2 py-1.5 text-xs"
-        >
-          <option value="">Pilih Kecamatan...</option>
-          {(summary?.kecamatan ?? []).map((k) => (
-            <option key={k.kode} value={k.kode}>
-              {k.nama} ({k.jumlah})
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterNagari}
-          onChange={(e) => setFilterNagari(e.target.value)}
-          disabled={!filterKec}
-          className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
-        >
-          <option value="">Semua Nagari</option>
-          {nagariOptions.map((n) => (
-            <option key={n.kode} value={n.kode}>
-              {n.nama} ({n.jumlah})
-            </option>
-          ))}
-        </select>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -313,54 +343,48 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
         />
       </div>
 
-      {!bisaMuat && (
-        <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/50">
-          Pilih kecamatan (atau ketik pencarian) dulu untuk menampilkan daftar keluarga.
-        </p>
-      )}
-
-      {bisaMuat && (
+      <div className="flex flex-col gap-2">
+        <div className="text-xs text-ink/50">
+          {loading ? "Memuat..." : `${total} keluarga di wilayah yang dialokasikan ke Anda`}
+        </div>
         <div className="flex flex-col gap-2">
-          <div className="text-xs text-ink/50">{loading ? "Memuat..." : `${total} keluarga cocok filter ini`}</div>
-          <div className="flex flex-col gap-2">
-            {rows.map((row) => (
-              <IdentifikasiCard
-                key={row.kode_identitas}
-                row={row}
-                token={token}
-                onSaved={refreshAfterEdit}
-                onSessionExpired={onSessionExpired}
-              />
-            ))}
-            {rows.length === 0 && !loading && (
-              <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
-                Tidak ada keluarga untuk filter ini.
-              </p>
-            )}
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 py-2 text-xs">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="rounded border border-line px-2 py-1 disabled:opacity-40"
-              >
-                ← Sebelumnya
-              </button>
-              <span>
-                Halaman {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="rounded border border-line px-2 py-1 disabled:opacity-40"
-              >
-                Berikutnya →
-              </button>
-            </div>
+          {rows.map((row) => (
+            <IdentifikasiCard
+              key={row.kode_identitas}
+              row={row}
+              token={token}
+              onSaved={refreshAfterEdit}
+              onSessionExpired={onSessionExpired}
+            />
+          ))}
+          {rows.length === 0 && !loading && (
+            <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
+              Tidak ada keluarga untuk filter ini.
+            </p>
           )}
         </div>
-      )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 py-2 text-xs">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded border border-line px-2 py-1 disabled:opacity-40"
+            >
+              ← Sebelumnya
+            </button>
+            <span>
+              Halaman {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded border border-line px-2 py-1 disabled:opacity-40"
+            >
+              Berikutnya →
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -394,7 +418,6 @@ function IdentifikasiCard({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
         onSessionExpired();
         return;
       }

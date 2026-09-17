@@ -4,12 +4,21 @@
 // dibatasi (nama, alamat, wilayah, status identifikasi) supaya PIN yang
 // dibagikan ke PPL/mantan pendata tidak ikut membuka rincian bukti
 // DUTP/DTSEN/PNM Mekar atau koordinat GPS (itu tetap khusus tab
-// Penyisiran Usaha, PIN yang beda). Menerima kedua role token, sama
+// Penyisiran Usaha, PIN yang beda). Menerima ketiga role token, sama
 // seperti /api/penyisiran/identifikasi.
+//
+// Role "identifikasi_ppl" (login personal nama+tanggal lahir) TIDAK perlu
+// filter kec/nagari manual -- daftar keluarga otomatis dibatasi ke ID Sub
+// SLS yang memang dialokasikan ke PPL yang sedang login (tabel
+// ppl_alokasi_idsls), diambil dari "subject" (id ppl_akun) yang terbawa
+// di token. Kolom idsubsls pada penyisiran_usaha sempat mengandung
+// awalan tanda kutip satu (artefak ekspor Excel, mis. "'130305...") --
+// sudah dibersihkan langsung di database (lihat migrasi terkait), jadi
+// perbandingan di sini memakai nilai idsubsls apa adanya.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +29,8 @@ const KOLOM =
   "nama_kk, alamat, identifikasi_ppl, identifikasi_ppl_at";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi"])) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "identifikasi", "identifikasi_ppl"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -38,7 +48,24 @@ export async function GET(req: NextRequest) {
   const q = (sp.get("q") || "").trim();
   const page = Math.max(1, Number(sp.get("page")) || 1);
 
-  if (!kec && !nagari && !q) {
+  const pplId = getSessionSubject(token); // hanya terisi utk role identifikasi_ppl
+
+  let idsList: string[] = [];
+  const scopedToPpl = Boolean(pplId);
+  if (pplId) {
+    const { data: alokasi, error: alokasiErr } = await supabase
+      .from("ppl_alokasi_idsls")
+      .select("idsubsls")
+      .eq("ppl_id", pplId);
+    if (alokasiErr) return NextResponse.json({ error: alokasiErr.message }, { status: 500 });
+    idsList = (alokasi ?? []).map((r: { idsubsls: string }) => r.idsubsls);
+    if (idsList.length === 0) {
+      // PPL login sah, tapi tidak (lagi) punya alokasi ID Sub SLS apa pun.
+      return NextResponse.json({ rows: [], total: 0, page, pageSize: PAGE_SIZE });
+    }
+  }
+
+  if (!scopedToPpl && !kec && !nagari && !q) {
     return NextResponse.json(
       { error: "Pilih kecamatan (atau isi pencarian) terlebih dahulu." },
       { status: 400 }
@@ -46,6 +73,7 @@ export async function GET(req: NextRequest) {
   }
 
   let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" });
+  if (scopedToPpl) query = query.in("idsubsls", idsList);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (status) query = query.eq("identifikasi_ppl", status);
