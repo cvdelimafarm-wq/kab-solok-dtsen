@@ -19,7 +19,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi", "identifikasi_jorong"])) {
+  if (
+    !verifySession(extractBearer(req), [
+      "penyisiran",
+      "identifikasi",
+      "identifikasi_jorong",
+      "identifikasi_tetangga",
+    ])
+  ) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

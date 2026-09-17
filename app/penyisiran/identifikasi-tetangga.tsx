@@ -1,39 +1,31 @@
 "use client";
 
-// app/penyisiran/identifikasi-jorong.tsx
+// app/penyisiran/identifikasi-tetangga.tsx
 //
-// Tab "Identifikasi Jorong" -- SAMA BENTUK/GAYA dgn tab "Identifikasi PPL"
-// (app/penyisiran/identifikasi-ppl.tsx: kartu keluarga, tombol Ada/Tidak
-// Ada/Ragu, bar float navigasi status), tapi TIGA hal beda (sesuai
-// permintaan):
+// Tab "Identifikasi Tetangga/Lainnya" -- PERSIS SAMA cara kerjanya dgn
+// tab "Identifikasi Jorong" (app/penyisiran/identifikasi-jorong.tsx):
+// login personal nama+tanggal lahir, filter kartu manual Kecamatan ->
+// Nagari -> Sub SLS (bukan auto-scope), kartu Ada/Tidak Ada/Ragu, bar
+// float navigasi status, dan setiap jawaban ikut menandai siapa yang
+// mengisi (identifikasi_ppl_oleh).
 //
-//  1. Login personal PAKAI AKUN BEDA -- "petugas penyisiran" (tabel
-//     petugas_penyisiran_akun, TERPISAH dari ppl_akun/PPL mantan pendata),
-//     walau nama+tanggal lahir sebagai cara masuknya identik. Lihat
-//     app/api/penyisiran/jorong-login, jorong-names, dan komentar role
-//     "identifikasi_jorong" di lib/penyisiranAuth.ts. Boleh saja satu
-//     orang terdaftar di KEDUA tabel (mis. PPL lama yg skrg ikut jadi
-//     petugas penyisiran) -- dua akun independen, tidak konflik.
-//  2. Filter kartu BUKAN auto-scope per petugas (petugas penyisiran tidak
-//     punya tabel alokasi wilayah spt PPL) -- di sini pakai dropdown
-//     manual Kecamatan -> Nagari -> Sub SLS/Jorong (pola sama dgn tab
-//     Penyisiran Usaha), krn tugasnya menyisir PER JORONG, siapa saja
-//     boleh membuka Jorong mana saja.
-//  3. Setiap jawaban ikut menandai SIAPA yang mengisi (kolom
-//     identifikasi_ppl_oleh, diisi otomatis oleh
-//     app/api/penyisiran/identifikasi berdasarkan sesi login) --
-//     ditampilkan di kartu supaya kelihatan kalau sudah pernah diisi
-//     petugas lain.
+// SATU-SATUNYA beda dari Identifikasi Jorong: sumber informasinya.
+// Identifikasi Jorong = petugas penyisiran yang menyisir langsung ke
+// lapangan; di sini = tetangga/pihak lain yang mengetahui keluarga tsb
+// (login personal ke tabel tetangga_akun, role "identifikasi_tetangga",
+// TERPISAH dari ppl_akun maupun petugas_penyisiran_akun -- lihat migrasi
+// supabase/migrations/20260918_tetangga_akun.sql dan komentar role
+// "identifikasi_tetangga" di lib/penyisiranAuth.ts).
 //
 // Hasil isian DI SINI menulis ke kolom yang SAMA PERSIS dgn Identifikasi
-// PPL (penyisiran_usaha.identifikasi_ppl) -- jadi otomatis muncul juga
-// sbg badge read-only di tab Penyisiran Usaha, tanpa perlu sinkronisasi
-// tambahan apa pun.
+// PPL/Jorong (penyisiran_usaha.identifikasi_ppl) -- jadi otomatis muncul
+// juga sbg badge read-only di tab Penyisiran Usaha, tanpa perlu
+// sinkronisasi tambahan apa pun.
 
 import { useCallback, useEffect, useState } from "react";
 
-const TOKEN_KEY = "identifikasi-jorong-login-token";
-const NAMA_KEY = "identifikasi-jorong-login-nama";
+const TOKEN_KEY = "identifikasi-tetangga-login-token";
+const NAMA_KEY = "identifikasi-tetangga-login-nama";
 
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
@@ -57,10 +49,11 @@ const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
-// Sama persis dgn ringkasWilayah di app/seruti/penyisiran-usaha.tsx &
-// app/penyisiran/identifikasi-ppl.tsx -- lihat komentar di sana. Alamat
-// sering sudah memuat nama Jorong/SLS di dalamnya sendiri, jadi baris
-// kedua ("Nagari · Nama SLS") tidak perlu mengulang nama yg sama.
+// Sama persis dgn ringkasWilayah di app/seruti/penyisiran-usaha.tsx,
+// app/penyisiran/identifikasi-ppl.tsx, & identifikasi-jorong.tsx -- lihat
+// komentar di sana. Alamat sering sudah memuat nama Jorong/SLS di
+// dalamnya sendiri, jadi baris kedua ("Nagari · Nama SLS") tidak perlu
+// mengulang nama yg sama.
 function ringkasWilayah(alamat: string | null, nagariNama: string | null, slsNama: string | null): string {
   const sudahDisebut =
     !!alamat && !!slsNama && slsNama.trim().length > 0 && alamat.toUpperCase().includes(slsNama.trim().toUpperCase());
@@ -126,7 +119,7 @@ async function apiFetch(path: string, token: string, init?: RequestInit) {
   return data;
 }
 
-export default function IdentifikasiJorongTab() {
+export default function IdentifikasiTetanggaTab() {
   const [token, setToken] = useState<string | null>(null);
   const [nama, setNama] = useState<string | null>(null);
   const [checkedStorage, setCheckedStorage] = useState(false);
@@ -157,7 +150,7 @@ export default function IdentifikasiJorongTab() {
   }
 
   return (
-    <IdentifikasiJorongPanel
+    <IdentifikasiTetanggaPanel
       token={token}
       nama={nama || ""}
       onSessionExpired={handleLogout}
@@ -174,7 +167,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/penyisiran/jorong-names")
+    fetch("/api/penyisiran/tetangga-names")
       .then((r) => r.json())
       .then((d) => setNamaOptions(Array.isArray(d?.names) ? d.names : []))
       .catch(() => setNamaOptions([]));
@@ -189,7 +182,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/penyisiran/jorong-login", {
+      const res = await fetch("/api/penyisiran/tetangga-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nama: namaInput, tanggal_lahir: tanggalLahir }),
@@ -209,16 +202,16 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
 
   return (
     <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
-      <p className="text-sm font-semibold text-navy-900">Identifikasi Jorong (Petugas Penyisiran)</p>
+      <p className="text-sm font-semibold text-navy-900">Identifikasi Tetangga/Lainnya</p>
       <p className="mt-1 text-xs text-ink/60">
-        Untuk petugas yang menyisir lapangan sekarang -- masukkan nama lengkap dan tanggal lahir Anda. Setelah
-        berhasil, Anda tidak perlu login ulang besok.
+        Untuk tetangga/pihak lain yang mengetahui keluarga bersangkutan -- masukkan nama lengkap dan tanggal lahir
+        Anda. Setelah berhasil, Anda tidak perlu login ulang besok.
       </p>
       <form onSubmit={handleSubmit} className="mt-3 space-y-2 text-left">
         <div>
           <label className="mb-1 block text-[11px] font-medium text-ink/60">Nama Lengkap</label>
           <input
-            list="nama-petugas-options"
+            list="nama-tetangga-options"
             type="text"
             value={namaInput}
             onChange={(e) => setNamaInput(e.target.value)}
@@ -227,7 +220,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
             autoComplete="off"
             className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
           />
-          <datalist id="nama-petugas-options">
+          <datalist id="nama-tetangga-options">
             {namaOptions.map((n) => (
               <option key={n} value={n} />
             ))}
@@ -255,7 +248,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
   );
 }
 
-function IdentifikasiJorongPanel({
+function IdentifikasiTetanggaPanel({
   token,
   nama,
   onSessionExpired,
@@ -358,7 +351,7 @@ function IdentifikasiJorongPanel({
       if (filterStatus) sp.set("status", filterStatus);
       if (search) sp.set("q", search);
       sp.set("page", String(page));
-      const data = await apiFetch(`/api/penyisiran/jorong-list?${sp.toString()}`, token);
+      const data = await apiFetch(`/api/penyisiran/tetangga-list?${sp.toString()}`, token);
       setRows(data.rows);
       setTotal(data.total);
     } catch (e) {
@@ -402,7 +395,7 @@ function IdentifikasiJorongPanel({
   return (
     <div className="space-y-3 pb-28">
       <div className="flex items-start justify-between gap-2">
-        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi Jorong (Petugas Penyisiran)</h1>
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi Tetangga/Lainnya</h1>
         <button
           type="button"
           onClick={onLogout}
@@ -414,8 +407,8 @@ function IdentifikasiJorongPanel({
 
       <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
         <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
-          Sebagai petugas penyisiran <span className="font-semibold">{nama}</span>, konfirmasi berdasarkan
-          pengamatan/informasi lapangan Anda: apakah keluarga berikut memiliki usaha atau tidak?
+          Sebagai <span className="font-semibold">{nama}</span>, konfirmasi berdasarkan pengetahuan Anda sebagai
+          tetangga/pihak lain: apakah keluarga berikut memiliki usaha atau tidak?
         </p>
       </div>
 

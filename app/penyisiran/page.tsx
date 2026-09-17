@@ -7,26 +7,35 @@
 // permintaan) supaya tidak mengganggu tab-tab utama Seruti Triwulan III
 // (beda konteks: ini SE2026, bukan Susenas/Seruti).
 //
-// Ada 4 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
+// Ada 5 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
 //  - "Penyisiran Usaha": checklist petugas lapangan (PIN internal BPS,
 //    env PENYISIRAN_PIN, role "penyisiran") -- nama+alamat+GPS+bukti
 //    DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga di sini cuma bisa
-//    diubah lewat tombol Edit/Edit Semua.
+//    diubah lewat tombol Edit/Edit Semua. Kolom "Identifikasi PPL"
+//    (badge) DIBEKUKAN read-only di sini -- satu-satunya cara mengubahnya
+//    adalah lewat salah satu dari TIGA tab Identifikasi di bawah (lihat
+//    app/api/penyisiran/identifikasi/route.ts, role "penyisiran" SENGAJA
+//    tidak lagi diizinkan menulis ke kolom itu).
 //  - "Identifikasi PPL": dibagikan ke PPL/mantan pendata SE2026, login
 //    PERSONAL (nama lengkap + tanggal lahir, dicocokkan ke tabel
 //    ppl_akun, role "identifikasi_ppl") -- cuma nama+alamat+wilayah,
 //    tanpa bukti/GPS, dan cuma bisa mengisi Ada/Tidak Ada/Ragu utk
-//    wilayah yang dialokasikan ke PPL itu saja. Hasilnya otomatis
-//    muncul sbg badge read-only di tab Penyisiran Usaha.
+//    wilayah yang dialokasikan ke PPL itu saja.
 //  - "Identifikasi Jorong": SAMA BENTUK dgn Identifikasi PPL di atas,
 //    tapi login pakai akun "petugas penyisiran" (tabel
 //    petugas_penyisiran_akun, TERPISAH dari ppl_akun, role
 //    "identifikasi_jorong") & filter kartu MANUAL per Kecamatan/Nagari/
 //    Sub SLS (bukan auto-scope per petugas) -- krn tugasnya menyisir per
-//    Jorong, bukan per wilayah alokasi pribadi. Menulis ke kolom yang
-//    SAMA dgn Identifikasi PPL (identifikasi_ppl), jadi otomatis
-//    ter-update juga di tab Penyisiran Usaha, dan setiap isian ditandai
-//    siapa yang mengisi (identifikasi_ppl_oleh).
+//    Jorong, bukan per wilayah alokasi pribadi.
+//  - "Identifikasi Tetangga/Lainnya": SAMA PERSIS cara kerjanya dgn
+//    Identifikasi Jorong (login personal, filter manual), tapi akun
+//    SENDIRI lagi (tabel tetangga_akun, role "identifikasi_tetangga") --
+//    sumber informasinya tetangga/pihak lain, bukan petugas penyisiran.
+//
+//    KETIGA tab Identifikasi di atas menulis ke kolom yang SAMA
+//    (penyisiran_usaha.identifikasi_ppl + identifikasi_ppl_oleh utk
+//    menandai siapa yang mengisi), jadi otomatis ter-update/sync juga di
+//    tab Penyisiran Usaha tanpa sinkronisasi tambahan apa pun.
 //  - "Monitoring Identifikasi PPL": rekap progres pengisian tab
 //    Identifikasi PPL DI ATAS, per PPL -- pakai PIN & sesi yang SAMA
 //    dengan tab Penyisiran Usaha (role "penyisiran", internal staf saja,
@@ -42,9 +51,10 @@ import { useState } from "react";
 import PenyisiranUsahaTab from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
+import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
 
-type TabKey = "usaha" | "identifikasi" | "jorong" | "monitoring";
+type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -69,6 +79,9 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "jorong"} onClick={() => setTab("jorong")}>
           Identifikasi Jorong
         </TabButton>
+        <TabButton active={tab === "tetangga"} onClick={() => setTab("tetangga")}>
+          Identifikasi Tetangga/Lainnya
+        </TabButton>
         <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
           Penyisiran Usaha
         </TabButton>
@@ -81,6 +94,7 @@ export default function PenyisiranPage() {
         {tab === "usaha" && <PenyisiranUsahaTab />}
         {tab === "identifikasi" && <IdentifikasiPplTab />}
         {tab === "jorong" && <IdentifikasiJorongTab />}
+        {tab === "tetangga" && <IdentifikasiTetanggaTab />}
         {tab === "monitoring" && <MonitoringPplTab />}
       </div>
     </main>

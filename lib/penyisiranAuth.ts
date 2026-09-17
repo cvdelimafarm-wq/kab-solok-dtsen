@@ -51,24 +51,46 @@
 // petugas_penyisiran_akun (mis. PPL lama yang ikut jadi petugas
 // penyisiran) -- dua tabel independen, tidak saling menimpa.
 //
-// TTL utk role personal ("identifikasi_ppl"/"identifikasi_jorong") sengaja
-// jauh lebih panjang (bukan 12 jam) supaya yang sudah login hari ini TIDAK
-// perlu login ulang besok (sesuai permintaan: "besoknya otomatis login")
-// -- token disimpan di localStorage (bukan sessionStorage) oleh halaman
-// client.
+// PERAN KELIMA -- "identifikasi_tetangga": login personal utk tab
+// "Identifikasi Tetangga/Lainnya" -- PERSIS sama cara kerjanya dgn
+// "identifikasi_jorong" (tabel akun SENDIRI yaitu tetangga_akun, filter
+// manual Kecamatan/Nagari/Sub SLS, format token 4-bagian, TTL panjang),
+// bedanya cuma SUMBER informasinya: identifikasi_jorong = petugas
+// penyisiran yang menyisir langsung, identifikasi_tetangga = informasi
+// dari tetangga/pihak lain yang mengetahui keluarga tsb. Sama2 menulis
+// ke kolom identifikasi_ppl yang SAMA dgn 2 role personal lainnya.
+//
+// Ketiga role personal ("identifikasi_ppl"/"identifikasi_jorong"/
+// "identifikasi_tetangga") adalah SATU-SATUNYA yang boleh mengubah
+// identifikasi_ppl (lihat app/api/penyisiran/identifikasi/route.ts) --
+// role "penyisiran"/"identifikasi" (PIN bersama) sengaja TIDAK lagi
+// diizinkan menulis ke kolom itu, supaya tab Penyisiran Usaha selalu
+// menampilkannya sbg READ-ONLY (cuma bisa diubah lewat salah satu dari
+// tiga tab Identifikasi di atas).
+//
+// TTL utk role personal ("identifikasi_ppl"/"identifikasi_jorong"/
+// "identifikasi_tetangga") sengaja jauh lebih panjang (bukan 12 jam)
+// supaya yang sudah login hari ini TIDAK perlu login ulang besok (sesuai
+// permintaan: "besoknya otomatis login") -- token disimpan di
+// localStorage (bukan sessionStorage) oleh halaman client.
 
 import { createHmac, timingSafeEqual } from "crypto";
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 jam -- cukup utk 1 hari kerja lapangan
 const PERSONAL_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 hari -- login personal persisten lintas hari
 
-export type PenyisiranRole = "penyisiran" | "identifikasi" | "identifikasi_ppl" | "identifikasi_jorong";
+export type PenyisiranRole =
+  | "penyisiran"
+  | "identifikasi"
+  | "identifikasi_ppl"
+  | "identifikasi_jorong"
+  | "identifikasi_tetangga";
 
 // Role dgn login PERSONAL (nama+tanggal lahir, format token 4-bagian
 // dgn subject, TTL panjang) -- beda dari "penyisiran"/"identifikasi" yg
 // masih pakai PIN bersama (format token 3-bagian, TTL 12 jam).
 function isPersonalRole(role: PenyisiranRole): boolean {
-  return role === "identifikasi_ppl" || role === "identifikasi_jorong";
+  return role === "identifikasi_ppl" || role === "identifikasi_jorong" || role === "identifikasi_tetangga";
 }
 
 function getSigningSecret(): string {

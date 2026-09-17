@@ -2,9 +2,9 @@
 //
 // Daftar nagari + jumlah keluarga, difilter per kecamatan (dropdown filter
 // tahap 2, dimunculkan setelah kecamatan dipilih). Dipakai bersama oleh
-// tab "Penyisiran Usaha", "Identifikasi PPL", maupun "Identifikasi
-// Jorong" (filter manual, tidak auto-scope) -- jadi role token itu semua
-// diterima.
+// tab "Penyisiran Usaha", "Identifikasi PPL", "Identifikasi Jorong",
+// maupun "Identifikasi Tetangga/Lainnya" (dua yang terakhir filter
+// manual, tidak auto-scope) -- jadi role token itu semua diterima.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -14,7 +14,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi", "identifikasi_jorong"])) {
+  if (
+    !verifySession(extractBearer(req), [
+      "penyisiran",
+      "identifikasi",
+      "identifikasi_jorong",
+      "identifikasi_tetangga",
+    ])
+  ) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

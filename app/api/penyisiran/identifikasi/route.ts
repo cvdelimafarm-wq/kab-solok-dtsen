@@ -1,31 +1,32 @@
 // app/api/penyisiran/identifikasi/route.ts
 //
-// Simpan hasil "Identifikasi PPL (Mantan Pendata)": seingat PPL yang dulu
-// mendata SE2026 di wilayah ini, apakah keluarga tsb punya usaha atau
-// tidak (Ada / Tidak Ada / Ragu). Dipisah dari update/route.ts (checklist
-// petugas lapangan) karena dilindungi PIN yang BEDA
-// (PENYISIRAN_IDENTIFIKASI_PIN) -- PIN ini yang dibagikan ke para PPL,
-// jadi sengaja diterima juga token role "penyisiran" (supervisor internal
-// boleh ikut mengisi) tapi TIDAK sebaliknya: token "identifikasi" tidak
-// bisa dipakai memanggil endpoint checklist utama (list/update/upload/
-// export/markers).
+// Simpan hasil "Identifikasi" (Ada / Tidak Ada / Ragu usaha) -- ditulis
+// ke kolom penyisiran_usaha.identifikasi_ppl yang DIPAKAI BERSAMA oleh
+// KETIGA tab identifikasi personal:
+//  - "Identifikasi PPL"      -> role "identifikasi_ppl" (ppl_akun)
+//  - "Identifikasi Jorong"   -> role "identifikasi_jorong" (petugas_penyisiran_akun)
+//  - "Identifikasi Tetangga/Lainnya" -> role "identifikasi_tetangga" (tetangga_akun)
 //
-// Role "identifikasi_ppl" (login personal PPL) JUGA diterima, dengan
-// proteksi tambahan (defense in depth): baris yang mau diubah harus punya
-// idsubsls yang memang ada di alokasi PPL tsb (ppl_alokasi_idsls) --
-// supaya PPL A tidak bisa mengubah data keluarga di wilayah PPL B walau
-// tahu kode_identitas-nya (mis. dari sumber lain).
+// SENGAJA HANYA ketiga role personal ini yang diterima -- role lama
+// "penyisiran"/"identifikasi" (PIN bersama) TIDAK BOLEH LAGI menulis ke
+// endpoint ini, supaya tab "Penyisiran Usaha" (role "penyisiran") selalu
+// menampilkan kolom ini sbg READ-ONLY (dibekukan): satu-satunya cara
+// mengubahnya adalah lewat salah satu dari tiga tab Identifikasi di atas.
+// (Sebelumnya role "penyisiran" ikut diterima "supaya supervisor internal
+// boleh ikut mengisi" -- itu SUDAH DICABUT atas permintaan pengguna.)
 //
-// Role "identifikasi_jorong" (login personal petugas penyisiran, tab
-// "Identifikasi Jorong") JUGA diterima -- TIDAK ada pengecekan alokasi
-// wilayah spt PPL di atas, krn petugas penyisiran memang bebas menyisir
-// SLS/Sub SLS mana saja (tidak dibatasi wilayah pribadi).
+// Role "identifikasi_ppl" (login personal PPL) dapat proteksi tambahan
+// (defense in depth): baris yang mau diubah harus punya idsubsls yang
+// memang ada di alokasi PPL tsb (ppl_alokasi_idsls) -- supaya PPL A tidak
+// bisa mengubah data keluarga di wilayah PPL B walau tahu kode_identitas-
+// nya (mis. dari sumber lain). Role "identifikasi_jorong" &
+// "identifikasi_tetangga" TIDAK ada pengecekan alokasi wilayah serupa,
+// krn keduanya memang bebas menyisir/melapor SLS/Sub SLS mana saja
+// (tidak dibatasi wilayah pribadi).
 //
-// Utk KEDUA role personal ini, kolom identifikasi_ppl_oleh ikut diisi
-// dgn nama pemilik sesi (dicari dari tabel yang sesuai perannya) supaya
-// bisa ditelusuri siapa yang menjawab -- role lama "penyisiran"/
-// "identifikasi" (PIN bersama, tanpa identitas personal) TIDAK mengubah
-// kolom ini (dibiarkan apa adanya).
+// Utk KETIGA role personal ini, kolom identifikasi_ppl_oleh ikut diisi
+// dgn nama pemilik sesi (dicari dari tabel akun yang sesuai perannya)
+// supaya bisa ditelusuri siapa yang menjawab.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -36,9 +37,17 @@ export const dynamic = "force-dynamic";
 
 const VALID = new Set(["belum", "ada", "tidak_ada", "ragu"]);
 
+// Tabel akun sumber nama, per role personal -- dipakai jg utk
+// identifikasi_ppl_oleh di bawah.
+const TABEL_AKUN: Partial<Record<PenyisiranRole, string>> = {
+  identifikasi_ppl: "ppl_akun",
+  identifikasi_jorong: "petugas_penyisiran_akun",
+  identifikasi_tetangga: "tetangga_akun",
+};
+
 export async function PATCH(req: NextRequest) {
   const token = extractBearer(req);
-  if (!verifySession(token, ["penyisiran", "identifikasi", "identifikasi_ppl", "identifikasi_jorong"])) {
+  if (!verifySession(token, ["identifikasi_ppl", "identifikasi_jorong", "identifikasi_tetangga"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
   const role = (token?.split(".")[0] ?? "") as PenyisiranRole;
@@ -84,12 +93,12 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  // Cari nama pemilik sesi (kalau role personal) utk diisi ke
-  // identifikasi_ppl_oleh -- tabel sumbernya beda tergantung peran.
+  // Cari nama pemilik sesi utk diisi ke identifikasi_ppl_oleh -- tabel
+  // sumbernya beda tergantung peran (lihat TABEL_AKUN di atas).
   let diisiOleh: string | null = null;
-  if (subjectId && (role === "identifikasi_ppl" || role === "identifikasi_jorong")) {
-    const tabel = role === "identifikasi_ppl" ? "ppl_akun" : "petugas_penyisiran_akun";
-    const { data: akun } = await supabase.from(tabel).select("nama").eq("id", subjectId).maybeSingle();
+  const tabelAkun = TABEL_AKUN[role];
+  if (subjectId && tabelAkun) {
+    const { data: akun } = await supabase.from(tabelAkun).select("nama").eq("id", subjectId).maybeSingle();
     diisiOleh = akun?.nama ?? null;
   }
 
