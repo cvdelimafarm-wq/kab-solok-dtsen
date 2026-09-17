@@ -299,16 +299,7 @@ function IdentifikasiPanel({
   return (
     <div className="space-y-3 pb-6">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
-          <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
-            Seingat Saudara <span className="font-semibold">{nama}</span> sebagai petugas yang dulu mendata SE2026,
-            apakah keluarga berikut memiliki usaha atau tidak?
-          </p>
-          <p className="mt-2 inline-block rounded-md bg-rust-100 px-2.5 py-1.5 text-xs font-medium text-rust-700">
-            ⚠ {PESAN_PENUTUPAN}
-          </p>
-        </div>
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
         <button
           type="button"
           onClick={onLogout}
@@ -317,6 +308,17 @@ function IdentifikasiPanel({
           Keluar
         </button>
       </div>
+
+      <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
+        <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
+          Seingat Saudara <span className="font-semibold">{nama}</span> sebagai petugas yang dulu mendata SE2026,
+          apakah keluarga berikut memiliki usaha atau tidak?
+        </p>
+      </div>
+
+      <p className="inline-block rounded-md bg-rust-100 px-2.5 py-1.5 text-xs font-medium text-rust-700">
+        ⚠ {PESAN_PENUTUPAN}
+      </p>
 
       {errMsg && (
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
