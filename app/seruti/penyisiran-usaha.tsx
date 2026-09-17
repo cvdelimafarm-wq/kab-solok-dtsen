@@ -52,6 +52,43 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
   ragu: { label: "Identifikasi PPL: Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 };
 
+type TierPrioritas = "tinggi" | "sedang" | "rendah";
+
+const PRIORITAS_META: Record<TierPrioritas, { label: string; className: string }> = {
+  tinggi: { label: "Prioritas Tinggi", className: "bg-rust-100 text-rust-700" },
+  sedang: { label: "Prioritas Sedang", className: "bg-[#FCEFD1] text-[#8A6A12]" },
+  rendah: { label: "Prioritas Rendah", className: "border border-line text-ink/40" },
+};
+
+// Skor skala prioritas kunjungan (0-100), gabungan 3 pertimbangan yg
+// diminta -- makin tinggi skornya, makin layak didahulukan disisir:
+//  1. Jumlah sumber data yg "mencurigakan ada usaha" (DUTP+DTSEN+PNM
+//     Mekar, 0-3 tercentang) -- bobot PALING BESAR (50) krn ini bukti
+//     paling langsung ada indikasi usaha.
+//  2. Jumlah info tambahan yg sudah dikumpulkan petugas (Info PPL/
+//     Jorong/Tetangga, 0-3 tercentang) -- bobot menengah (30), makin
+//     banyak yg "Ya" makin menguatkan dugaan ada usaha.
+//  3. Ukuran pengelompokan di Sub SLS yg sama (dibandingkan Sub SLS
+//     LAIN yg sedang termuat di daftar ini) -- bobot terkecil (20),
+//     Sub SLS dgn banyak keluarga bermasalah lebih efisien didahulukan
+//     krn sekali jalan bisa menyisir banyak kasus sekaligus. Dihitung
+//     dari daftar yg SEDANG DIMUAT (rows, terpengaruh filter & halaman
+//     aktif), bukan hitungan global se-kabupaten.
+function hitungSkorPrioritas(
+  data: Pick<Row, "bukti_dutp" | "bukti_dtsen" | "bukti_pnm" | "info_ppl" | "info_jorong" | "info_tetangga">,
+  jumlahDiSubsls: number,
+  maxJumlahDiSubsls: number
+) {
+  const jumlahBukti = (data.bukti_dutp ? 1 : 0) + (data.bukti_dtsen ? 1 : 0) + (data.bukti_pnm ? 1 : 0);
+  const jumlahInfo = (data.info_ppl ? 1 : 0) + (data.info_jorong ? 1 : 0) + (data.info_tetangga ? 1 : 0);
+  const skorSumber = (jumlahBukti / 3) * 50;
+  const skorInfo = (jumlahInfo / 3) * 30;
+  const skorKlaster = maxJumlahDiSubsls > 0 ? (jumlahDiSubsls / maxJumlahDiSubsls) * 20 : 0;
+  const skor = Math.round(skorSumber + skorInfo + skorKlaster);
+  const tier: TierPrioritas = skor >= 60 ? "tinggi" : skor >= 30 ? "sedang" : "rendah";
+  return { skor, tier, jumlahBukti, jumlahInfo };
+}
+
 interface KecOption {
   kode: string;
   nama: string;
@@ -347,6 +384,16 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     loadMarkers();
   }
 
+  // Peta idsubsls -> jumlah keluarga dgn idsubsls yg sama di daftar yg
+  // SEDANG DIMUAT (rows) -- dasar hitungan skor "pengelompokan Sub SLS"
+  // di hitungSkorPrioritas(). Cuma sebatas halaman/filter aktif, bukan
+  // hitungan global se-kabupaten (lihat komentar di hitungSkorPrioritas).
+  const jumlahDiSubslsMap = new Map<string, number>();
+  for (const r of rows) {
+    if (r.idsubsls) jumlahDiSubslsMap.set(r.idsubsls, (jumlahDiSubslsMap.get(r.idsubsls) ?? 0) + 1);
+  }
+  const maxJumlahDiSubsls = Math.max(1, ...jumlahDiSubslsMap.values());
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -460,53 +507,11 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
       )}
 
       {bisaMuat && (
-        <div className={`grid grid-cols-1 gap-3 ${mapVisible ? "lg:grid-cols-2" : ""}`}>
-          {/* ---------- List ---------- */}
-          <div className="flex flex-col gap-2">
-            <div className="text-xs text-ink/50">
-              {loading ? "Memuat..." : `${total} keluarga cocok filter ini`}
-            </div>
-            <div className="flex flex-col gap-2">
-              {rows.map((row) => (
-                <RowCard
-                  key={row.kode_identitas}
-                  row={row}
-                  token={token}
-                  editAllMode={editAllMode}
-                  onSaved={refreshAfterEdit}
-                  onSessionExpired={onSessionExpired}
-                />
-              ))}
-              {rows.length === 0 && !loading && (
-                <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
-                  Tidak ada keluarga untuk filter ini.
-                </p>
-              )}
-            </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-3 py-2 text-xs">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="rounded border border-line px-2 py-1 disabled:opacity-40"
-                >
-                  ← Sebelumnya
-                </button>
-                <span>
-                  Halaman {page} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className="rounded border border-line px-2 py-1 disabled:opacity-40"
-                >
-                  Berikutnya →
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ---------- Map ---------- */}
+        <>
+          {/* ---------- Map -- PERSIS di bawah baris filter/kolom cari,
+              full-width (bukan lagi berdampingan dgn daftar), supaya
+              langsung kelihatan begitu filter dipilih. Tetap bisa
+              disembunyikan spy tidak makan tempat kalau tidak dibutuhkan. */}
           {mapVisible ? (
             <div className="flex flex-col gap-2">
               <button
@@ -540,7 +545,54 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
               ▼ Tampilkan Peta
             </button>
           )}
-        </div>
+
+          {/* ---------- List ---------- */}
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-ink/50">
+              {loading ? "Memuat..." : `${total} keluarga cocok filter ini`}
+            </div>
+            <div className="flex flex-col gap-2">
+              {rows.map((row) => (
+                <RowCard
+                  key={row.kode_identitas}
+                  row={row}
+                  token={token}
+                  editAllMode={editAllMode}
+                  jumlahDiSubsls={row.idsubsls ? jumlahDiSubslsMap.get(row.idsubsls) ?? 1 : 1}
+                  maxJumlahDiSubsls={maxJumlahDiSubsls}
+                  onSaved={refreshAfterEdit}
+                  onSessionExpired={onSessionExpired}
+                />
+              ))}
+              {rows.length === 0 && !loading && (
+                <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
+                  Tidak ada keluarga untuk filter ini.
+                </p>
+              )}
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 py-2 text-xs">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded border border-line px-2 py-1 disabled:opacity-40"
+                >
+                  ← Sebelumnya
+                </button>
+                <span>
+                  Halaman {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded border border-line px-2 py-1 disabled:opacity-40"
+                >
+                  Berikutnya →
+                </button>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Tombol "Edit Semua" MELAYANG di pojok bawah halaman -- supaya
@@ -573,12 +625,16 @@ function RowCard({
   row,
   token,
   editAllMode,
+  jumlahDiSubsls,
+  maxJumlahDiSubsls,
   onSaved,
   onSessionExpired,
 }: {
   row: Row;
   token: string;
   editAllMode: boolean;
+  jumlahDiSubsls: number;
+  maxJumlahDiSubsls: number;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -599,6 +655,15 @@ function RowCard({
     infoTetangga !== row.info_tetangga;
   const meta = STATUS_META[status];
   const identMeta = IDENTIFIKASI_META[row.identifikasi_ppl] ?? IDENTIFIKASI_META.belum;
+  // Pakai nilai Info PPL/Jorong/Tetangga yg SEDANG diedit (bukan cuma yg
+  // sudah tersimpan) -- supaya skornya langsung ikut naik/turun begitu
+  // petugas mencentang, sebagai umpan balik instan sebelum ditekan Simpan.
+  const prioritas = hitungSkorPrioritas(
+    { bukti_dutp: row.bukti_dutp, bukti_dtsen: row.bukti_dtsen, bukti_pnm: row.bukti_pnm, info_ppl: infoPpl, info_jorong: infoJorong, info_tetangga: infoTetangga },
+    jumlahDiSubsls,
+    maxJumlahDiSubsls
+  );
+  const prioritasMeta = PRIORITAS_META[prioritas.tier];
 
   async function handleSave() {
     setSaving(true);
@@ -652,7 +717,15 @@ function RowCard({
         <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
         <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
       </div>
-      <p className="mt-0.5 text-xs text-ink/70">{row.alamat || "-"}</p>
+      <div className="mt-1">
+        <span
+          title={`Sumber data (DUTP/DTSEN/PNM): ${prioritas.jumlahBukti}/3 · Info tambahan (PPL/Jorong/Tetangga): ${prioritas.jumlahInfo}/3 · Keluarga lain di Sub SLS yg sama (daftar ini): ${jumlahDiSubsls}`}
+          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${prioritasMeta.className}`}
+        >
+          {prioritasMeta.label} &middot; {prioritas.skor}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-ink/70">{row.alamat || "-"}</p>
       <p className="mb-1.5 text-[11px] text-ink/40">
         {row.nagari_nama} &middot; {row.sls_nama}
         {mapsUrl && (
