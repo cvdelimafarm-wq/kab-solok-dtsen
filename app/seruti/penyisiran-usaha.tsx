@@ -556,6 +556,10 @@ function RowCard({
         info_jorong: infoJorong,
         info_tetangga: infoTetangga,
       });
+      // Cukup 1x tindakan: begitu tersimpan, kunci lagi Info PPL/Jorong/
+      // Tetangga & tampilkan lagi tombol "✎ Edit" -- supaya tidak
+      // kepencet lagi tanpa sengaja setelah selesai mengisi.
+      setUnlocked(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
