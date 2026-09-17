@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("tetangga_akun")
-    .select("id, nama, tanggal_lahir")
+    .select("id, nama, tanggal_lahir, aktif")
     .eq("nama_norm", namaNorm)
     .maybeSingle();
 
@@ -51,6 +51,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Nama tidak ditemukan di daftar. Periksa kembali ejaan nama Anda." },
       { status: 401 }
+    );
+  }
+
+  // Akun yg dinonaktifkan (aktif=false, lihat "Kelola Petugas Penyisiran"
+  // di tab Monitoring) tidak bisa login lagi -- TIDAK dihapus, cuma
+  // dibekukan.
+  if (data.aktif === false) {
+    return NextResponse.json(
+      { error: "Akun ini sudah dinonaktifkan. Hubungi petugas BPS Kabupaten Solok kalau ini keliru." },
+      { status: 403 }
     );
   }
 
