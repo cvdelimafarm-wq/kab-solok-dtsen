@@ -29,6 +29,16 @@ export const runtime = 'nodejs';
 // File DBF bisa besar (ribuan baris) — jangan biarkan Next cache respons ini.
 export const dynamic = 'force-dynamic';
 
+// Log RSS (memori proses sesungguhnya, dalam MB) di titik2 penting --
+// SEMENTARA, dipasang 17/9 utk melacak tepatnya tahap mana yg bikin proses
+// ke-OOM-kill di Railway (limit 1GB) saat upload data besar. Log muncul di
+// tab "Deployments" > "View logs" Railway dgn prefix "[MEM]" supaya gampang
+// dicari -- boleh dihapus lagi setelah root cause OOM terverifikasi.
+function logMem(tag: string) {
+  const mb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+  console.log(`[MEM] ${tag}: ${mb} MB`);
+}
+
 function detectTableRole(filename: string): keyof Tables | null {
   // Pola gabungan dulu (mis. "1_1.", "2_1.") — khusus file VSEN26.M yang
   // penomorannya dua tingkat (1_1/1_2/1_3 = KOR ART, 2_1/2_2/2_3 = KOR RT).
@@ -74,6 +84,7 @@ export async function POST(req: NextRequest) {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   let tmpDir: string | null = null;
+  logMem('mulai POST');
   try {
     const formData = await req.formData();
     const files = formData.getAll('files') as File[];
@@ -116,6 +127,10 @@ export async function POST(req: NextRequest) {
       tables[role] = await readDbf(filePath);
       usedFilenames.push(file.name);
     }
+    logMem(`selesai baca ${usedFilenames.length} file DBF`);
+    for (const k of Object.keys(tables) as (keyof Tables)[]) {
+      console.log(`[MEM]   tabel ${k}: ${(tables[k] as unknown[] | undefined)?.length ?? 0} baris`);
+    }
 
     const adaKp = tables.t3 || tables.t4 || tables.t5 || tables.t9 || tables.t6 || tables.t7 || tables.t8 || tables.t10 || tables.t11 || tables.t12;
     const adaM = tables.m1 || tables.m1b || tables.m1c || tables.mrt1 || tables.mrt2 || tables.mrt3;
@@ -152,6 +167,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hasil = await runAnomaliPipeline(supabase, tables, keterangan, usedFilenames);
+    logMem('selesai runAnomaliPipeline (Anomali Cepat)');
 
     // Jalankan juga evaluasi aturan konsistensi resmi BPS VSEN26.M (kalau ada
     // data m1/mrt1/mrt2) — pakai upload_id yang SAMA dgn Anomali Cepat di
@@ -163,6 +179,7 @@ export async function POST(req: NextRequest) {
     if (tables.m1 || tables.mrt1 || tables.mrt2) {
       try {
         hasilKonsistensi = await runKonsistensiPipeline(supabase, tables, hasil.uploadId);
+        logMem('selesai runKonsistensiPipeline (Error Konsistensi M)');
       } catch (err: any) {
         console.error('konsistensi-m pipeline error:', err);
         warningKonsistensi = `Evaluasi Error Konsistensi (VSEN26.M) gagal: ${err.message || String(err)}`;
@@ -175,8 +192,10 @@ export async function POST(req: NextRequest) {
     let warningKonsistensiKp: string | null = null;
     let hasilKonsistensiKp: { totalTemuan: number; ringkasan: { baru: number; tetap: number; selesai: number } } | null = null;
     if (adaKp) {
+      logMem('sebelum runKonsistensiPipelineKP (tahap terberat -- 3.280 aturan)');
       try {
         hasilKonsistensiKp = await runKonsistensiPipelineKP(supabase, tables, hasil.uploadId);
+        logMem('selesai runKonsistensiPipelineKP (Error Konsistensi KP)');
       } catch (err: any) {
         console.error('konsistensi-kp pipeline error:', err);
         warningKonsistensiKp = `Evaluasi Error Konsistensi (VSEN26.KP) gagal: ${err.message || String(err)}`;

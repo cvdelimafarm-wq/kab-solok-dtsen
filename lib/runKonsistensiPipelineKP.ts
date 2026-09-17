@@ -320,6 +320,21 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
   const households = buildHouseholds(tables, parsed);
   const fieldMap = buildIdentityFieldMap(parsed);
 
+  // Log diagnostik SEMENTARA (17/9, lihat catatan logMem di route.ts) --
+  // supaya kelihatan di Railway logs berapa banyak rumah tangga & baris ART
+  // yg diproses (faktor pengali utama beban memori/CPU tahap ini), plus RSS
+  // proses di titik ini.
+  {
+    const totalArtRows = households.reduce(
+      (s, hh) => s + hh.t4Rows.length + hh.t6Rows.length + hh.t7Rows.length + hh.t8Rows.length,
+      0
+    );
+    const mb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    console.log(
+      `[MEM] evaluateKonsistensiKP: ${parsed.length} aturan, ${households.length} rumah tangga, ${totalArtRows} baris ART total, RSS ${mb} MB`
+    );
+  }
+
   // Dispatch murni dari rule.dispatch (dihitung dari `field`, lihat
   // konsistensiRulesKP.ts) -- BUKAN dari `level`, yg ternyata tidak selalu
   // konsisten dgn tabel yg relevan (mis. rule 3129 field="MB431K3"
@@ -354,7 +369,16 @@ export function evaluateKonsistensiKP(tables: Partial<Tables>): KonsistensiFindi
     });
   };
 
+  let hhIndex = 0;
   for (const hh of households) {
+    hhIndex++;
+    // Log diagnostik SEMENTARA tiap 100 rumah tangga -- kalau proses mati
+    // (OOM) di tengah loop ini, baris [MEM] TERAKHIR yg sempat tercatat di
+    // Railway logs menunjukkan kira-kira di rumah tangga ke berapa itu terjadi.
+    if (hhIndex === 1 || hhIndex % 100 === 0) {
+      const mb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+      console.log(`[MEM]   rumah tangga ke-${hhIndex}/${households.length}, temuan sejauh ini ${findings.length}, RSS ${mb} MB`);
+    }
     const ctxRt: EvalCtx = { row: hh.rtRow, roster: [hh.rtRow], rowIndex: 0, fieldMap, artNoColumn: null };
     for (const { rule, ast } of householdRules) {
       if (evaluateRule(ast.ast, ctxRt)) push(rule, hh, null, ast.ast, ctxRt);
