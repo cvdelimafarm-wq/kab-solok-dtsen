@@ -40,12 +40,14 @@ const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] 
 
 // Dipakai bar float navigasi status di bawah layar -- beda dari PILIHAN
 // (yang cuma 3 pilihan jawaban), di sini termasuk "belum" supaya PPL bisa
-// langsung lompat ke kartu yang belum diisi juga.
-const BAR_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
-  belum: { label: "Belum Identifikasi", className: "border border-line text-ink/50" },
-  tidak_ada: { label: "Tidak Ada Usaha", className: "bg-rust-100 text-rust-700" },
-  ragu: { label: "Ragu-Ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
-  ada: { label: "Ada Usaha", className: "bg-moss-100 text-moss-700" },
+// langsung lompat ke kartu yang belum diisi juga. Gaya kartu statistik
+// (angka besar berwarna + label kecil di bawahnya + progress bar), bukan
+// deretan pil, spy lebih rapi & gampang dibaca sekilas.
+const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
+  belum: { label: "Belum Identifikasi", warna: "text-ink/50" },
+  tidak_ada: { label: "Tidak Ada Usaha", warna: "text-rust-700" },
+  ragu: { label: "Ragu-Ragu", warna: "text-[#8A6A12]" },
+  ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
 interface Row {
@@ -323,11 +325,13 @@ function IdentifikasiPanel({
     (acc, k) => ({ ...acc, [k]: rows.filter((r) => r.identifikasi_ppl === k).length }),
     {} as Record<NilaiIdentifikasi, number>
   );
+  const jumlahSudahDiisi = rows.length - (jumlahIdentifikasi.belum ?? 0);
+  const persenSelesai = rows.length > 0 ? Math.round((jumlahSudahDiisi / rows.length) * 100) : 0;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-3 pb-20">
+    <div className="space-y-3 pb-28">
       <div className="flex items-start justify-between gap-2">
         <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
         <button
@@ -418,22 +422,42 @@ function IdentifikasiPanel({
         )}
       </div>
 
-      {/* Bar float navigasi status di tengah-bawah layar -- menekan salah
-          satu tombol langsung menggulir ke kartu berikutnya yg berstatus
-          sesuai (lihat jumpKeStatus di atas). */}
-      <div className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-line bg-white p-1 shadow-lg">
-        {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
-          <button
-            key={nilai}
-            type="button"
-            onClick={() => jumpKeStatus(nilai)}
-            title={`Lompat ke kartu berikutnya: ${BAR_META[nilai].label}`}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-80 ${BAR_META[nilai].className}`}
-          >
-            {BAR_META[nilai].label}
-            <span className="rounded-full bg-white/60 px-1.5 text-[10px]">{jumlahIdentifikasi[nilai] ?? 0}</span>
-          </button>
-        ))}
+      {/* Kartu float navigasi status di tengah-bawah layar -- angka besar
+          per status (ditekan langsung menggulir ke kartu berikutnya yg
+          sesuai, lihat jumpKeStatus di atas) + progress bar keseluruhan.
+          Cuma menghitung kartu yg sedang dimuat di halaman ini (rows). */}
+      <div className="fixed inset-x-3 bottom-4 z-40 mx-auto max-w-md rounded-xl border border-line bg-white p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2">
+        <div className="grid grid-cols-4 gap-1">
+          {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
+            <button
+              key={nilai}
+              type="button"
+              onClick={() => jumpKeStatus(nilai)}
+              title={`Lompat ke kartu berikutnya: ${BAR_META[nilai].label}`}
+              className="flex flex-col items-center gap-0.5 rounded-md py-1 transition hover:bg-line/40"
+            >
+              <span className={`text-lg font-bold leading-none ${BAR_META[nilai].warna}`}>
+                {jumlahIdentifikasi[nilai] ?? 0}
+              </span>
+              <span className="text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-ink/50">
+                {BAR_META[nilai].label}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line">
+          <div
+            className="h-full rounded-full bg-moss-500 transition-all"
+            style={{ width: `${persenSelesai}%` }}
+          />
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-ink/50">
+          <span>Progres identifikasi</span>
+          <span>
+            {jumlahSudahDiisi}/{rows.length} kartu &middot; {jumlahIdentifikasi.belum ?? 0} belum diisi &middot;{" "}
+            {persenSelesai}%
+          </span>
+        </div>
       </div>
     </div>
   );
