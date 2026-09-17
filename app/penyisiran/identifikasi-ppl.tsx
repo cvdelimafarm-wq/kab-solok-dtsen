@@ -32,11 +32,27 @@ const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026
 
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
+// Warna kartu (KARTU_META, dipakai di bawah) sengaja dibuat PUCAT/muda,
+// sedangkan warna tombol yang aktif (className di sini) dibuat LEBIH
+// PEKAT (solid, teks putih) -- supaya tombol aktif tetap kelihatan
+// jelas di atas kartu yang senada warnanya, tidak "memudar"/menyatu
+// (sebelumnya sama-sama pakai bg-moss-100 dkk utk kartu MAUPUN tombol,
+// jadi tombolnya nyaris tidak kelihatan begitu kartu ikut diwarnai).
 const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] = [
-  { nilai: "ada", label: "Ada", className: "bg-moss-100 text-moss-700" },
-  { nilai: "tidak_ada", label: "Tidak Ada", className: "bg-rust-100 text-rust-700" },
-  { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
+  { nilai: "ada", label: "Ada", className: "bg-moss-500 text-white" },
+  { nilai: "tidak_ada", label: "Tidak Ada", className: "bg-rust-500 text-white" },
+  { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#8A6A12] text-white" },
 ];
+
+// Warna kartu per status -- PUTIH kalau belum diisi, HIJAU/MERAH/KUNING
+// pucat sesuai jawaban (lihat komentar PILIHAN di atas soal kenapa
+// pucat, bukan warna solid).
+const KARTU_META: Record<NilaiIdentifikasi, string> = {
+  belum: "bg-white",
+  ada: "bg-moss-100",
+  tidak_ada: "bg-rust-100",
+  ragu: "bg-[#FCEFD1]",
+};
 
 // Dipakai bar float navigasi status di bawah layar -- beda dari PILIHAN
 // (yang cuma 3 pilihan jawaban), di sini termasuk "belum" supaya PPL bisa
@@ -507,9 +523,7 @@ function IdentifikasiCard({
     <div
       id={`kartu-${row.kode_identitas}`}
       data-identifikasi-ppl={nilai}
-      className={`rounded-lg border border-line p-3 transition-colors ${
-        nilai !== "belum" ? "bg-moss-100/40" : "bg-white"
-      }`}
+      className={`rounded-lg border border-line p-3 transition-colors ${KARTU_META[nilai]}`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
@@ -527,12 +541,21 @@ function IdentifikasiCard({
             disabled={saving}
             onClick={() => pilih(p.nilai)}
             className={`rounded-full px-3 py-1 text-xs font-semibold transition disabled:opacity-50 ${
-              nilai === p.nilai ? p.className : "border border-line text-ink/50 hover:border-navy-400"
+              nilai === p.nilai ? p.className : "border border-line bg-white text-ink/50 hover:border-navy-400"
             }`}
           >
             {p.label}
           </button>
         ))}
+        <button
+          type="button"
+          disabled={saving || nilai === "belum"}
+          onClick={() => pilih("belum")}
+          title="Kembalikan ke Belum Identifikasi"
+          className="rounded-full border border-dashed border-line bg-white px-3 py-1 text-xs font-semibold text-ink/40 transition hover:border-rust-500 hover:text-rust-700 disabled:opacity-40"
+        >
+          ↺ Reset
+        </button>
         {saved === "ok" && <span className="text-[11px] text-moss-700">✓ Tersimpan</span>}
         {saved === "err" && <span className="text-[11px] text-rust-700">Gagal, coba lagi</span>}
       </div>
