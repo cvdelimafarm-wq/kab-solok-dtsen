@@ -104,6 +104,12 @@ export async function PATCH(req: NextRequest) {
 
   const patch: Record<string, unknown> = { identifikasi_ppl: nilai, identifikasi_ppl_at: new Date().toISOString() };
   if (diisiOleh) patch.identifikasi_ppl_oleh = diisiOleh;
+  // identifikasi_ppl_role dicatat terpisah dari nama (identifikasi_ppl_oleh)
+  // krn nama yg sama bisa saja terdaftar di lebih dari satu tabel akun (mis.
+  // petugas penyisiran yg sama juga terdaftar di tetangga_akun) -- dipakai
+  // tab "Monitoring Petugas Penyisiran" utk memisahkan hitungan "diidentifikasi
+  // lewat Jorong" vs "lewat Tetangga/Lainnya" per orang.
+  patch.identifikasi_ppl_role = role;
 
   const { error } = await supabase.from("penyisiran_usaha").update(patch).eq("kode_identitas", id);
 

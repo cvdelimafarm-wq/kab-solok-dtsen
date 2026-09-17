@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
-    .select("id, nama, tanggal_lahir")
+    .select("id, nama, tanggal_lahir, aktif")
     .eq("nama_norm", namaNorm)
     .maybeSingle();
 
@@ -59,6 +59,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Nama tidak ditemukan di daftar petugas penyisiran. Periksa kembali ejaan nama Anda." },
       { status: 401 }
+    );
+  }
+
+  // Petugas yg dinonaktifkan lewat "Kelola Petugas Penyisiran" (tab
+  // Monitoring) tidak bisa login lagi -- lihat komentar migrasi kolom
+  // `aktif`.
+  if (data.aktif === false) {
+    return NextResponse.json(
+      { error: "Akun ini sudah dinonaktifkan. Hubungi petugas BPS Kabupaten Solok kalau ini keliru." },
+      { status: 403 }
     );
   }
 

@@ -40,6 +40,18 @@
 //    Identifikasi PPL DI ATAS, per PPL -- pakai PIN & sesi yang SAMA
 //    dengan tab Penyisiran Usaha (role "penyisiran", internal staf saja,
 //    BUKAN utk dibagikan ke PPL).
+//  - "Monitoring Petugas Penyisiran": rekap per petugas penyisiran (Nama |
+//    Diidentifikasi Jorong | Diidentifikasi Tetangga/Lainnya | Didata |
+//    Dikunjungi) -- pakai PIN/sesi yang sama jg. Ada fitur "Kelola Petugas
+//    Penyisiran" (aktifkan/nonaktifkan akun) yang DEFAULT DISEMBUNYIKAN &
+//    minta PIN lagi sebelum tombolnya aktif -- lihat
+//    app/penyisiran/monitoring-petugas.tsx.
+//
+// Tab "Penyisiran Usaha" sekarang jg punya dropdown "Nama Anda" (label
+// atribusi checklist yg disimpan, BUKAN token/sesi baru -- tab ini tetap
+// PIN bersama) + tombol "Tetapkan Lokasi Rumah Saya" (Geolocation API) utk
+// skor prioritas berbasis jarak, dan tombol "🎯 Pasti" per kartu utk
+// override manual skor prioritas jadi maksimal.
 //
 // Komponen sesungguhnya utk tab Penyisiran Usaha (PIN gate, daftar, peta)
 // TETAP di app/seruti/penyisiran-usaha.tsx + penyisiran-map.tsx -- file
@@ -53,8 +65,9 @@ import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
 import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
+import MonitoringPetugasTab from "./monitoring-petugas";
 
-type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring";
+type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring" | "monitoring_petugas";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -88,6 +101,9 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")}>
           Monitoring Identifikasi PPL
         </TabButton>
+        <TabButton active={tab === "monitoring_petugas"} onClick={() => setTab("monitoring_petugas")}>
+          Monitoring Petugas Penyisiran
+        </TabButton>
       </div>
 
       <div className="mt-4">
@@ -96,6 +112,7 @@ export default function PenyisiranPage() {
         {tab === "jorong" && <IdentifikasiJorongTab />}
         {tab === "tetangga" && <IdentifikasiTetanggaTab />}
         {tab === "monitoring" && <MonitoringPplTab />}
+        {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
       </div>
     </main>
   );

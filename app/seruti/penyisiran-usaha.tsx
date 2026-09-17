@@ -52,7 +52,7 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
   ragu: { label: "Identifikasi PPL: Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 };
 
-type TierPrioritas = "tinggi" | "sedang" | "rendah";
+type TierPrioritas = "pasti" | "tinggi" | "sedang" | "rendah";
 
 // Warna badge "rendah" SENGAJA dibuat solid (bg-navy-100 + teks navy-700),
 // BUKAN pucat/transparan (border border-line text-ink/40) seperti semula --
@@ -60,8 +60,11 @@ type TierPrioritas = "tinggi" | "sedang" | "rendah";
 // user: "ada kartu yang tidak ada skala prioritasnya", padahal badge-nya
 // ADA, cuma kontrasnya terlalu rendah). Dipilih warna biru (navy) supaya
 // beda jelas dari merah (tinggi) & kuning (sedang), tidak disangka warna
-// status lain.
+// status lain. "pasti" (override manual lewat tombol "🎯 Pasti") dibuat
+// SOLID merah tua supaya jelas beda dari "tinggi" biasa (hasil hitungan
+// otomatis) -- ini keputusan MANUSIA, bukan skor.
 const PRIORITAS_META: Record<TierPrioritas, { label: string; className: string }> = {
+  pasti: { label: "Prioritas Pasti", className: "bg-rust-700 text-white" },
   tinggi: { label: "Prioritas Tinggi", className: "bg-rust-100 text-rust-700" },
   sedang: { label: "Prioritas Sedang", className: "bg-[#FCEFD1] text-[#8A6A12]" },
   rendah: { label: "Prioritas Rendah", className: "bg-navy-100 text-navy-700" },
@@ -81,17 +84,38 @@ const PRIORITAS_META: Record<TierPrioritas, { label: string; className: string }
 //     krn sekali jalan bisa menyisir banyak kasus sekaligus. Dihitung
 //     dari daftar yg SEDANG DIMUAT (rows, terpengaruh filter & halaman
 //     aktif), bukan hitungan global se-kabupaten.
+//
+// Dua lapisan TAMBAHAN di atas skor dasar tsb:
+//  - `pasti` (tombol "🎯 Pasti"): override MANUAL -- kalau ditandai, skor
+//    dipaksa 100/tier "pasti" apa pun hasil hitungan otomatis di atas.
+//    Ditandai petugas yang sudah YAKIN (mis. sudah lihat sendiri ada usaha)
+//    tapi skor otomatisnya belum tentu tinggi.
+//  - `jarakKm` (opsional): jarak lurus rumah petugas yang SEDANG LOGIN ke
+//    lokasi sampel -- kalau lokasi rumah petugas sudah ditetapkan (lihat
+//    tombol "Tetapkan Lokasi Rumah Saya") DAN sampel punya koordinat, skor
+//    dasar dikurangi 2 poin per km (maks -20) sebelum tier dihitung ulang --
+//    makin jauh dari rumah petugas yang login, makin rendah prioritasnya
+//    BAGI PETUGAS ITU (skor bisa beda2 antar akun yg login, sesuai
+//    permintaan). Tidak berlaku kalau `pasti` true (override menang).
 function hitungSkorPrioritas(
   data: Pick<Row, "bukti_dutp" | "bukti_dtsen" | "bukti_pnm" | "info_ppl" | "info_jorong" | "info_tetangga">,
   jumlahDiSubsls: number,
-  maxJumlahDiSubsls: number
+  maxJumlahDiSubsls: number,
+  opts?: { pasti?: boolean; jarakKm?: number | null }
 ) {
   const jumlahBukti = (data.bukti_dutp ? 1 : 0) + (data.bukti_dtsen ? 1 : 0) + (data.bukti_pnm ? 1 : 0);
   const jumlahInfo = (data.info_ppl ? 1 : 0) + (data.info_jorong ? 1 : 0) + (data.info_tetangga ? 1 : 0);
+
+  if (opts?.pasti) {
+    return { skor: 100, tier: "pasti" as TierPrioritas, jumlahBukti, jumlahInfo };
+  }
+
   const skorSumber = (jumlahBukti / 3) * 50;
   const skorInfo = (jumlahInfo / 3) * 30;
   const skorKlaster = maxJumlahDiSubsls > 0 ? (jumlahDiSubsls / maxJumlahDiSubsls) * 20 : 0;
-  const skor = Math.round(skorSumber + skorInfo + skorKlaster);
+  const penaltiJarak =
+    opts?.jarakKm != null && Number.isFinite(opts.jarakKm) ? Math.min(20, Math.max(0, opts.jarakKm) * 2) : 0;
+  const skor = Math.round(Math.min(100, Math.max(0, skorSumber + skorInfo + skorKlaster - penaltiJarak)));
   const tier: TierPrioritas = skor >= 60 ? "tinggi" : skor >= 30 ? "sedang" : "rendah";
   return { skor, tier, jumlahBukti, jumlahInfo };
 }
@@ -164,7 +188,36 @@ interface Row {
   identifikasi_ppl: NilaiIdentifikasi;
   identifikasi_ppl_at: string | null;
   catatan_petugas: string | null;
+  prioritas_pasti: boolean;
+  penyisiran_oleh: string | null;
   updated_at: string;
+}
+
+// Satu petugas penyisiran aktif (dari petugas_penyisiran_akun) -- dipakai
+// dropdown "Nama Anda" supaya checklist yg disimpan bisa diatribusikan, dan
+// (kalau lokasi rumahnya sudah ditetapkan) utk hitung skor prioritas
+// berbasis jarak.
+interface PetugasOption {
+  id: number;
+  nama: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+const PETUGAS_ID_KEY = "penyisiran-petugas-id";
+
+// Jarak lurus (haversine, km) antara 2 titik koordinat -- dipakai skor
+// prioritas berbasis jarak rumah petugas ke lokasi sampel. Cukup akurat utk
+// kebutuhan "makin jauh makin rendah prioritas" (tidak perlu jarak jalan
+// sesungguhnya).
+function jarakKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function getToken(): string | null {
@@ -274,6 +327,16 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
   const [markers, setMarkers] = useState<MarkerRow[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [editAllMode, setEditAllMode] = useState(false);
+  // Dropdown "Nama Anda" -- label atribusi (BUKAN token/sesi baru, tab ini
+  // tetap PIN bersama) supaya checklist yg disimpan bisa dihitung per
+  // petugas di tab Monitoring, dan supaya skor prioritas berbasis jarak bisa
+  // dihitung dari lokasi rumah petugas yg dipilih. Id-nya disimpan di
+  // localStorage (bukan sessionStorage) spy tidak perlu pilih ulang setiap
+  // buka tab -- beda dari token PIN yg memang sengaja per-sesi.
+  const [petugasList, setPetugasList] = useState<PetugasOption[]>([]);
+  const [petugasId, setPetugasId] = useState<number | null>(null);
+  const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
+  const [lokasiBusy, setLokasiBusy] = useState(false);
   // Peta tampil setengah layar begitu halaman dibuka, tapi bisa digulung
   // ke atas (disembunyikan) supaya daftar keluarga bisa memakai lebar
   // penuh saat peta sedang tidak dibutuhkan.
@@ -311,6 +374,70 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
+
+  // Muat daftar petugas aktif sekali, lalu pulihkan pilihan "Nama Anda"
+  // yg tersimpan di localStorage (kalau id-nya masih ada di daftar aktif --
+  // petugas yg sudah dinonaktifkan otomatis dianggap belum pilih nama lagi).
+  useEffect(() => {
+    apiFetch("/api/penyisiran/penyisiran-names", token)
+      .then((data) => {
+        const list: PetugasOption[] = data.petugas ?? [];
+        setPetugasList(list);
+        const saved = Number(localStorage.getItem(PETUGAS_ID_KEY));
+        if (Number.isFinite(saved) && saved > 0 && list.some((p) => p.id === saved)) {
+          setPetugasId(saved);
+        }
+      })
+      .catch((e) => guard(() => { throw e; }));
+  }, [token, guard]);
+
+  const petugas = petugasList.find((p) => p.id === petugasId) ?? null;
+
+  function handlePilihPetugas(id: number) {
+    setPetugasId(id || null);
+    if (id) localStorage.setItem(PETUGAS_ID_KEY, String(id));
+    else localStorage.removeItem(PETUGAS_ID_KEY);
+  }
+
+  // Tombol "Tetapkan Lokasi Rumah Saya" -- dipilih SENDIRI oleh petugas
+  // lewat Geolocation API browser (tidak dikumpulkan manual), disimpan ke
+  // petugas_penyisiran_akun.lat/lng lewat /api/penyisiran/set-lokasi-rumah.
+  function handleTetapkanLokasi() {
+    if (!petugasId) {
+      setLokasiStatus("Pilih nama Anda dulu.");
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      setLokasiStatus("Browser ini tidak mendukung deteksi lokasi.");
+      return;
+    }
+    setLokasiBusy(true);
+    setLokasiStatus(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await apiFetch("/api/penyisiran/set-lokasi-rumah", token, {
+            method: "PATCH",
+            body: JSON.stringify({ petugas_id: petugasId, lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          });
+          setPetugasList((prev) =>
+            prev.map((p) => (p.id === petugasId ? { ...p, lat: pos.coords.latitude, lng: pos.coords.longitude } : p))
+          );
+          setLokasiStatus("✓ Lokasi rumah tersimpan.");
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setLokasiStatus(`Gagal: ${msg}`);
+        } finally {
+          setLokasiBusy(false);
+        }
+      },
+      (err) => {
+        setLokasiStatus(`Gagal mengambil lokasi: ${err.message}`);
+        setLokasiBusy(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
 
   // debounce pencarian teks
   useEffect(() => {
@@ -445,6 +572,35 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
           ada indikasi usaha di DUTP/DTSEN/PNM Mekar.
         </p>
         <p className="mt-0.5 text-[11px] text-ink/40">Tidak memuat NIK/Nomor KK.</p>
+      </div>
+
+      {/* "Nama Anda" -- label atribusi checklist (lihat komentar state
+          petugasId) + tombol tetapkan lokasi rumah utk skor prioritas
+          berbasis jarak. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
+        <span className="text-xs font-medium text-ink/60">Nama Anda:</span>
+        <select
+          value={petugasId ?? ""}
+          onChange={(e) => handlePilihPetugas(Number(e.target.value))}
+          className="min-w-[180px] rounded-md border border-line px-2 py-1.5 text-xs"
+        >
+          <option value="">-- Pilih nama --</option>
+          {petugasList.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nama}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleTetapkanLokasi}
+          disabled={lokasiBusy || !petugasId}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {lokasiBusy ? "Mendeteksi..." : "📍 Tetapkan Lokasi Rumah Saya"}
+        </button>
+        {petugas?.lat != null && <span className="text-[11px] text-moss-700">✓ Lokasi rumah sudah ditetapkan</span>}
+        {lokasiStatus && <span className="text-[11px] text-ink/50">{lokasiStatus}</span>}
       </div>
 
       {errMsg && (
@@ -589,6 +745,10 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
                   editAllMode={editAllMode}
                   jumlahDiSubsls={row.idsubsls ? jumlahDiSubslsMap.get(row.idsubsls) ?? 1 : 1}
                   maxJumlahDiSubsls={maxJumlahDiSubsls}
+                  petugasId={petugasId}
+                  petugasNama={petugas?.nama ?? null}
+                  petugasLat={petugas?.lat ?? null}
+                  petugasLng={petugas?.lng ?? null}
                   onSaved={refreshAfterEdit}
                   onSessionExpired={onSessionExpired}
                 />
@@ -656,6 +816,10 @@ function RowCard({
   editAllMode,
   jumlahDiSubsls,
   maxJumlahDiSubsls,
+  petugasId,
+  petugasNama,
+  petugasLat,
+  petugasLng,
   onSaved,
   onSessionExpired,
 }: {
@@ -664,6 +828,10 @@ function RowCard({
   editAllMode: boolean;
   jumlahDiSubsls: number;
   maxJumlahDiSubsls: number;
+  petugasId: number | null;
+  petugasNama: string | null;
+  petugasLat: number | null;
+  petugasLng: number | null;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -672,6 +840,7 @@ function RowCard({
   const [infoPpl, setInfoPpl] = useState(row.info_ppl);
   const [infoJorong, setInfoJorong] = useState(row.info_jorong);
   const [infoTetangga, setInfoTetangga] = useState(row.info_tetangga);
+  const [pastiFlag, setPastiFlag] = useState(row.prioritas_pasti);
   const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
@@ -689,16 +858,26 @@ function RowCard({
     catatan !== (row.catatan_petugas ?? "") ||
     infoPpl !== row.info_ppl ||
     infoJorong !== row.info_jorong ||
-    infoTetangga !== row.info_tetangga;
+    infoTetangga !== row.info_tetangga ||
+    pastiFlag !== row.prioritas_pasti;
   const meta = STATUS_META[status];
   const identMeta = IDENTIFIKASI_META[row.identifikasi_ppl] ?? IDENTIFIKASI_META.belum;
-  // Pakai nilai Info PPL/Jorong/Tetangga yg SEDANG diedit (bukan cuma yg
-  // sudah tersimpan) -- supaya skornya langsung ikut naik/turun begitu
-  // petugas mencentang, sebagai umpan balik instan sebelum ditekan Simpan.
+  // Jarak rumah petugas yg SEDANG LOGIN (dropdown "Nama Anda") ke lokasi
+  // sampel -- null kalau salah satu koordinatnya belum ada, sehingga skor
+  // otomatis tidak kena potongan jarak (lihat hitungSkorPrioritas).
+  const jarak =
+    petugasLat != null && petugasLng != null && row.lat != null && row.lng != null
+      ? jarakKm(petugasLat, petugasLng, row.lat, row.lng)
+      : null;
+  // Pakai nilai Info PPL/Jorong/Tetangga & "Pasti" yg SEDANG diedit (bukan
+  // cuma yg sudah tersimpan) -- supaya skornya langsung ikut naik/turun
+  // begitu petugas mencentang, sebagai umpan balik instan sebelum ditekan
+  // Simpan.
   const prioritas = hitungSkorPrioritas(
     { bukti_dutp: row.bukti_dutp, bukti_dtsen: row.bukti_dtsen, bukti_pnm: row.bukti_pnm, info_ppl: infoPpl, info_jorong: infoJorong, info_tetangga: infoTetangga },
     jumlahDiSubsls,
-    maxJumlahDiSubsls
+    maxJumlahDiSubsls,
+    { pasti: pastiFlag, jarakKm: jarak }
   );
   const prioritasMeta = PRIORITAS_META[prioritas.tier];
 
@@ -714,6 +893,9 @@ function RowCard({
           info_ppl: infoPpl,
           info_jorong: infoJorong,
           info_tetangga: infoTetangga,
+          prioritas_pasti: pastiFlag,
+          petugas_id: petugasId,
+          petugas_nama: petugasNama,
         }),
       });
       setSaved("ok");
@@ -723,6 +905,8 @@ function RowCard({
         info_ppl: infoPpl,
         info_jorong: infoJorong,
         info_tetangga: infoTetangga,
+        prioritas_pasti: pastiFlag,
+        penyisiran_oleh: petugasNama ?? row.penyisiran_oleh,
       });
       // Cukup 1x tindakan: begitu tersimpan, kunci lagi Info PPL/Jorong/
       // Tetangga & tampilkan lagi tombol "✎ Edit" -- supaya tidak
@@ -779,13 +963,24 @@ function RowCard({
         <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
         <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
       </div>
-      <div className="mt-1">
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
         <span
-          title={`Sumber data (DUTP/DTSEN/PNM): ${prioritas.jumlahBukti}/3 · Info tambahan (PPL/Jorong/Tetangga): ${prioritas.jumlahInfo}/3 · Keluarga lain di Sub SLS yg sama (daftar ini): ${jumlahDiSubsls}`}
+          title={`Sumber data (DUTP/DTSEN/PNM): ${prioritas.jumlahBukti}/3 · Info tambahan (PPL/Jorong/Tetangga): ${prioritas.jumlahInfo}/3 · Keluarga lain di Sub SLS yg sama (daftar ini): ${jumlahDiSubsls}${jarak != null ? ` · Jarak dari rumah Anda: ${jarak.toFixed(1)} km` : ""}`}
           className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${prioritasMeta.className}`}
         >
           {prioritasMeta.label} &middot; {prioritas.skor}
         </span>
+        <button
+          type="button"
+          disabled={!canEditInfo}
+          onClick={() => canEditInfo && setPastiFlag((v) => !v)}
+          title="Tandai kalau sudah YAKIN ada usaha -- skor dipaksa maksimal apa pun hasil hitungan otomatis."
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+            pastiFlag ? "bg-rust-700 text-white" : "border border-line text-ink/40 hover:border-navy-400"
+          } ${!canEditInfo ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
+        >
+          🎯 {pastiFlag ? "Pasti" : "Tandai Pasti"}
+        </button>
       </div>
       <p className="mt-1 text-xs text-ink/70">{row.alamat || "-"}</p>
       <p className="mb-1.5 text-[11px] text-ink/40">
