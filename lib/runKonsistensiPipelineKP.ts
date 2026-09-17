@@ -262,7 +262,20 @@ function buildHouseholds(tables: Partial<Tables>, parsedRules: ParsedRule[]): Ho
  * M-strip) diambil langsung dari kolom asli baris itu.
  */
 function buildArtRow(hh: Household, raw: DbfRow, kind: 't4' | 't6' | 't7' | 't8'): DbfRow {
-  const row: DbfRow = { ...hh.rtRow, ...raw };
+  // PENTING (soal memori/OOM): dulu row dibentuk dgn SPREAD PENUH
+  // `{ ...hh.rtRow, ...raw }` -- SELURUH field hh.rtRow (bisa ratusan key
+  // hasil agregasi seluruh rule KP) DISALIN ULANG utk SETIAP baris ART
+  // (t4/t6/t7/t8), padahal jumlah baris ART per upload bisa ribuan (tiap
+  // NOURUTKOMO x tiap ART x tiap rumah tangga). Dlm loop sinkron tanpa jeda
+  // ini bisa bikin heap V8 melonjak sangat cepat (lebih cepat dari sampling
+  // grafik Metrics Railway) sampai kena OOM killer walau limit 1GB blm
+  // kelihatan penuh di grafik. Object.create(hh.rtRow) bikin row BARU yg
+  // "mewarisi" field hh.rtRow lewat prototype chain (BUKAN disalin) --
+  // pembacaan row[col] di konsistensiEngine.ts tetap berlaku SAMA PERSIS spt
+  // spread (field baris ini sendiri menutupi field warisan RT), tapi hh.rtRow
+  // tetap SATU objek yg dipakai bersama oleh semua baris ART, bukan digandakan.
+  const row: DbfRow = Object.create(hh.rtRow);
+  for (const c of Object.keys(raw)) row[c] = raw[c];
   if (kind === 't4') {
     const n = toNum(raw.NOURUTKOMO);
     if (Number.isFinite(n)) {
