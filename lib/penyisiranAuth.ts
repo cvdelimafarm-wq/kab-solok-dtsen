@@ -39,17 +39,37 @@
 // cara parse yang sesuai, jadi token lama yang masih tersimpan di
 // sessionStorage pengguna tidak mendadak invalid.
 //
-// TTL utk "identifikasi_ppl" sengaja jauh lebih panjang (bukan 12 jam)
-// supaya PPL yang sudah login hari ini TIDAK perlu login ulang besok
-// (sesuai permintaan: "besoknya otomatis login") -- token disimpan di
-// localStorage (bukan sessionStorage) oleh halaman client.
+// PERAN KEEMPAT -- "identifikasi_jorong": login personal PETUGAS
+// PENYISIRAN (nama + tanggal lahir, tabel BEDA dari ppl_akun yaitu
+// petugas_penyisiran_akun -- lihat /api/penyisiran/jorong-login), utk tab
+// "Identifikasi Jorong". Beda dari "identifikasi_ppl": petugas di sini
+// TIDAK dibatasi otomatis ke wilayah alokasi pribadi -- mereka bebas
+// pilih Kecamatan/Nagari/Sub SLS mana saja (spt filter di tab Penyisiran
+// Usaha), krn tugasnya menyisir per Jorong, bukan per PPL. Sama-sama
+// format 4-bagian & TTL panjang (login persisten) spt "identifikasi_ppl".
+// Boleh ada orang yg SAMA terdaftar di ppl_akun MAUPUN
+// petugas_penyisiran_akun (mis. PPL lama yang ikut jadi petugas
+// penyisiran) -- dua tabel independen, tidak saling menimpa.
+//
+// TTL utk role personal ("identifikasi_ppl"/"identifikasi_jorong") sengaja
+// jauh lebih panjang (bukan 12 jam) supaya yang sudah login hari ini TIDAK
+// perlu login ulang besok (sesuai permintaan: "besoknya otomatis login")
+// -- token disimpan di localStorage (bukan sessionStorage) oleh halaman
+// client.
 
 import { createHmac, timingSafeEqual } from "crypto";
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 jam -- cukup utk 1 hari kerja lapangan
-const PPL_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 hari -- login PPL persisten lintas hari
+const PERSONAL_SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 hari -- login personal persisten lintas hari
 
-export type PenyisiranRole = "penyisiran" | "identifikasi" | "identifikasi_ppl";
+export type PenyisiranRole = "penyisiran" | "identifikasi" | "identifikasi_ppl" | "identifikasi_jorong";
+
+// Role dgn login PERSONAL (nama+tanggal lahir, format token 4-bagian
+// dgn subject, TTL panjang) -- beda dari "penyisiran"/"identifikasi" yg
+// masih pakai PIN bersama (format token 3-bagian, TTL 12 jam).
+function isPersonalRole(role: PenyisiranRole): boolean {
+  return role === "identifikasi_ppl" || role === "identifikasi_jorong";
+}
 
 function getSigningSecret(): string {
   const s = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -79,13 +99,14 @@ function b64urlDecode(s: string): string | null {
 
 /**
  * Menandatangani sesi. `subject` HANYA dipakai (dan wajib diisi) utk role
- * "identifikasi_ppl" -- membawa id baris ppl_akun supaya endpoint bisa tahu
- * PPL mana yang sedang login tanpa perlu parameter tambahan dari client.
+ * personal ("identifikasi_ppl"/"identifikasi_jorong") -- membawa id baris
+ * ppl_akun / petugas_penyisiran_akun supaya endpoint bisa tahu siapa yang
+ * sedang login tanpa perlu parameter tambahan dari client.
  */
 export function signSession(role: PenyisiranRole = "penyisiran", subject?: string): string {
-  const ttl = role === "identifikasi_ppl" ? PPL_SESSION_TTL_MS : SESSION_TTL_MS;
+  const ttl = isPersonalRole(role) ? PERSONAL_SESSION_TTL_MS : SESSION_TTL_MS;
   const exp = Date.now() + ttl;
-  if (role === "identifikasi_ppl") {
+  if (isPersonalRole(role)) {
     const subB64 = b64urlEncode(subject || "");
     const payload = `${role}.${subB64}.${exp}`;
     const sig = createHmac("sha256", getSigningSecret()).update(payload).digest("hex");

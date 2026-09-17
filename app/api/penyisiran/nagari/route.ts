@@ -2,7 +2,8 @@
 //
 // Daftar nagari + jumlah keluarga, difilter per kecamatan (dropdown filter
 // tahap 2, dimunculkan setelah kecamatan dipilih). Dipakai bersama oleh
-// tab "Penyisiran Usaha" maupun "Identifikasi PPL", jadi kedua role token
+// tab "Penyisiran Usaha", "Identifikasi PPL", maupun "Identifikasi
+// Jorong" (filter manual, tidak auto-scope) -- jadi role token itu semua
 // diterima.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi"])) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi", "identifikasi_jorong"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

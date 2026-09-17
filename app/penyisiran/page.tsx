@@ -7,7 +7,7 @@
 // permintaan) supaya tidak mengganggu tab-tab utama Seruti Triwulan III
 // (beda konteks: ini SE2026, bukan Susenas/Seruti).
 //
-// Ada 3 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
+// Ada 4 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
 //  - "Penyisiran Usaha": checklist petugas lapangan (PIN internal BPS,
 //    env PENYISIRAN_PIN, role "penyisiran") -- nama+alamat+GPS+bukti
 //    DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga di sini cuma bisa
@@ -18,6 +18,15 @@
 //    tanpa bukti/GPS, dan cuma bisa mengisi Ada/Tidak Ada/Ragu utk
 //    wilayah yang dialokasikan ke PPL itu saja. Hasilnya otomatis
 //    muncul sbg badge read-only di tab Penyisiran Usaha.
+//  - "Identifikasi Jorong": SAMA BENTUK dgn Identifikasi PPL di atas,
+//    tapi login pakai akun "petugas penyisiran" (tabel
+//    petugas_penyisiran_akun, TERPISAH dari ppl_akun, role
+//    "identifikasi_jorong") & filter kartu MANUAL per Kecamatan/Nagari/
+//    Sub SLS (bukan auto-scope per petugas) -- krn tugasnya menyisir per
+//    Jorong, bukan per wilayah alokasi pribadi. Menulis ke kolom yang
+//    SAMA dgn Identifikasi PPL (identifikasi_ppl), jadi otomatis
+//    ter-update juga di tab Penyisiran Usaha, dan setiap isian ditandai
+//    siapa yang mengisi (identifikasi_ppl_oleh).
 //  - "Monitoring Identifikasi PPL": rekap progres pengisian tab
 //    Identifikasi PPL DI ATAS, per PPL -- pakai PIN & sesi yang SAMA
 //    dengan tab Penyisiran Usaha (role "penyisiran", internal staf saja,
@@ -32,9 +41,10 @@
 import { useState } from "react";
 import PenyisiranUsahaTab from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
+import IdentifikasiJorongTab from "./identifikasi-jorong";
 import MonitoringPplTab from "./monitoring-ppl";
 
-type TabKey = "usaha" | "identifikasi" | "monitoring";
+type TabKey = "usaha" | "identifikasi" | "jorong" | "monitoring";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -56,6 +66,9 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "identifikasi"} onClick={() => setTab("identifikasi")}>
           Identifikasi PPL
         </TabButton>
+        <TabButton active={tab === "jorong"} onClick={() => setTab("jorong")}>
+          Identifikasi Jorong
+        </TabButton>
         <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
           Penyisiran Usaha
         </TabButton>
@@ -67,6 +80,7 @@ export default function PenyisiranPage() {
       <div className="mt-4">
         {tab === "usaha" && <PenyisiranUsahaTab />}
         {tab === "identifikasi" && <IdentifikasiPplTab />}
+        {tab === "jorong" && <IdentifikasiJorongTab />}
         {tab === "monitoring" && <MonitoringPplTab />}
       </div>
     </main>

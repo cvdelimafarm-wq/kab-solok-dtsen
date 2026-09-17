@@ -54,10 +54,17 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
 
 type TierPrioritas = "tinggi" | "sedang" | "rendah";
 
+// Warna badge "rendah" SENGAJA dibuat solid (bg-navy-100 + teks navy-700),
+// BUKAN pucat/transparan (border border-line text-ink/40) seperti semula --
+// versi pucat itu nyaris tidak kelihatan di atas kartu putih (dilaporkan
+// user: "ada kartu yang tidak ada skala prioritasnya", padahal badge-nya
+// ADA, cuma kontrasnya terlalu rendah). Dipilih warna biru (navy) supaya
+// beda jelas dari merah (tinggi) & kuning (sedang), tidak disangka warna
+// status lain.
 const PRIORITAS_META: Record<TierPrioritas, { label: string; className: string }> = {
   tinggi: { label: "Prioritas Tinggi", className: "bg-rust-100 text-rust-700" },
   sedang: { label: "Prioritas Sedang", className: "bg-[#FCEFD1] text-[#8A6A12]" },
-  rendah: { label: "Prioritas Rendah", className: "border border-line text-ink/40" },
+  rendah: { label: "Prioritas Rendah", className: "bg-navy-100 text-navy-700" },
 };
 
 // Skor skala prioritas kunjungan (0-100), gabungan 3 pertimbangan yg
@@ -87,6 +94,22 @@ function hitungSkorPrioritas(
   const skor = Math.round(skorSumber + skorInfo + skorKlaster);
   const tier: TierPrioritas = skor >= 60 ? "tinggi" : skor >= 30 ? "sedang" : "rendah";
   return { skor, tier, jumlahBukti, jumlahInfo };
+}
+
+// Alamat (baris pertama kartu) sering SUDAH memuat nama Jorong/SLS di
+// dalamnya sendiri (mis. alamat "JALAN JORONG ULU PISAU HILANG" utk
+// keluarga yg SLS-nya memang "JORONG ULU PISAU HILANG" -- lazim di alamat
+// pedesaan yg tidak punya nama jalan sendiri) -- kalau baris kedua tetap
+// menampilkan "Nagari · Nama SLS" apa adanya, nama Jorong itu jadi
+// disebut DUA KALI berturut-turut (dilaporkan user, bikin kartu terasa
+// berulang). Di sini nama SLS di baris kedua disembunyikan HANYA kalau
+// alamat sudah memuat teks yg sama persis (cek case-insensitive) --
+// nagari tetap selalu ditampilkan krn itu jarang ikut disebut di alamat.
+function ringkasWilayah(alamat: string | null, nagariNama: string | null, slsNama: string | null): string {
+  const sudahDisebut =
+    !!alamat && !!slsNama && slsNama.trim().length > 0 && alamat.toUpperCase().includes(slsNama.trim().toUpperCase());
+  const bagian = [nagariNama, sudahDisebut ? null : slsNama].filter((b): b is string => !!b && b.trim().length > 0);
+  return bagian.join(" · ");
 }
 
 interface KecOption {
@@ -766,7 +789,7 @@ function RowCard({
       </div>
       <p className="mt-1 text-xs text-ink/70">{row.alamat || "-"}</p>
       <p className="mb-1.5 text-[11px] text-ink/40">
-        {row.nagari_nama} &middot; {row.sls_nama}
+        {ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}
         {mapsUrl && (
           <>
             {" "}

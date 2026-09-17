@@ -1,52 +1,52 @@
 "use client";
 
-// app/penyisiran/identifikasi-ppl.tsx
+// app/penyisiran/identifikasi-jorong.tsx
 //
-// Tab "Identifikasi PPL (Mantan Pendata)" -- dulu dibuka pakai 1 PIN yang
-// dibagikan rata ke semua PPL/mantan pendata SE2026 (env
-// PENYISIRAN_IDENTIFIKASI_PIN). SEKARANG diganti login PERSONAL: Nama
-// Lengkap + Tanggal Lahir (dicocokkan ke tabel ppl_akun, sumbernya sheet
-// "PPL (Login)" pada file "Kode Wilayah dan Alokasi IDSLS - Rapi.xlsx").
+// Tab "Identifikasi Jorong" -- SAMA BENTUK/GAYA dgn tab "Identifikasi PPL"
+// (app/penyisiran/identifikasi-ppl.tsx: kartu keluarga, tombol Ada/Tidak
+// Ada/Ragu, bar float navigasi status), tapi TIGA hal beda (sesuai
+// permintaan):
 //
-// Konsekuensi login personal ini:
-//  1. Daftar keluarga OTOMATIS dibatasi ke ID Sub SLS yang memang
-//     dialokasikan ke PPL yang login (tabel ppl_alokasi_idsls) -- PPL
-//     TIDAK PERLU LAGI pilih kecamatan/nagari manual seperti sebelumnya.
-//  2. Sesi login disimpan di localStorage (bukan sessionStorage) dan
-//     berumur panjang (180 hari, lihat lib/penyisiranAuth.ts) supaya
-//     besoknya PPL tidak perlu login ulang -- otomatis masuk lagi.
-//  3. Nama diambil dari datalist (autocomplete) supaya PPL tidak salah
-//     ketik nama sendiri (typo bikin login gagal krn dicocokkan persis).
+//  1. Login personal PAKAI AKUN BEDA -- "petugas penyisiran" (tabel
+//     petugas_penyisiran_akun, TERPISAH dari ppl_akun/PPL mantan pendata),
+//     walau nama+tanggal lahir sebagai cara masuknya identik. Lihat
+//     app/api/penyisiran/jorong-login, jorong-names, dan komentar role
+//     "identifikasi_jorong" di lib/penyisiranAuth.ts. Boleh saja satu
+//     orang terdaftar di KEDUA tabel (mis. PPL lama yg skrg ikut jadi
+//     petugas penyisiran) -- dua akun independen, tidak konflik.
+//  2. Filter kartu BUKAN auto-scope per petugas (petugas penyisiran tidak
+//     punya tabel alokasi wilayah spt PPL) -- di sini pakai dropdown
+//     manual Kecamatan -> Nagari -> Sub SLS/Jorong (pola sama dgn tab
+//     Penyisiran Usaha), krn tugasnya menyisir PER JORONG, siapa saja
+//     boleh membuka Jorong mana saja.
+//  3. Setiap jawaban ikut menandai SIAPA yang mengisi (kolom
+//     identifikasi_ppl_oleh, diisi otomatis oleh
+//     app/api/penyisiran/identifikasi berdasarkan sesi login) --
+//     ditampilkan di kartu supaya kelihatan kalau sudah pernah diisi
+//     petugas lain.
 //
-// Hasil isian di sini otomatis muncul sbg badge read-only di tab
-// Penyisiran Usaha (app/seruti/penyisiran-usaha.tsx).
+// Hasil isian DI SINI menulis ke kolom yang SAMA PERSIS dgn Identifikasi
+// PPL (penyisiran_usaha.identifikasi_ppl) -- jadi otomatis muncul juga
+// sbg badge read-only di tab Penyisiran Usaha, tanpa perlu sinkronisasi
+// tambahan apa pun.
 
 import { useCallback, useEffect, useState } from "react";
 
-const TOKEN_KEY = "identifikasi-ppl-login-token";
-const NAMA_KEY = "identifikasi-ppl-login-nama";
+const TOKEN_KEY = "identifikasi-jorong-login-token";
+const NAMA_KEY = "identifikasi-jorong-login-nama";
 
-// Halaman ini rencananya ditutup Minggu, 20 September 2026 pukul 12:00 WIB
-// -- ditampilkan sbg pengingat di layar login maupun di halaman isian.
+// Sama tanggal penutupan dgn tab Identifikasi PPL -- satu upaya yg sama,
+// cuma dua pintu masuk (PPL mantan pendata vs petugas penyisiran skrg).
 const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB.";
 
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
-// Warna kartu (KARTU_META, dipakai di bawah) sengaja dibuat PUCAT/muda,
-// sedangkan warna tombol yang aktif (className di sini) dibuat LEBIH
-// PEKAT (solid, teks putih) -- supaya tombol aktif tetap kelihatan
-// jelas di atas kartu yang senada warnanya, tidak "memudar"/menyatu
-// (sebelumnya sama-sama pakai bg-moss-100 dkk utk kartu MAUPUN tombol,
-// jadi tombolnya nyaris tidak kelihatan begitu kartu ikut diwarnai).
 const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] = [
   { nilai: "ada", label: "Ada", className: "bg-moss-500 text-white" },
   { nilai: "tidak_ada", label: "Tidak Ada", className: "bg-rust-500 text-white" },
   { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#8A6A12] text-white" },
 ];
 
-// Warna kartu per status -- PUTIH kalau belum diisi, HIJAU/MERAH/KUNING
-// pucat sesuai jawaban (lihat komentar PILIHAN di atas soal kenapa
-// pucat, bukan warna solid).
 const KARTU_META: Record<NilaiIdentifikasi, string> = {
   belum: "bg-white",
   ada: "bg-moss-100",
@@ -54,11 +54,6 @@ const KARTU_META: Record<NilaiIdentifikasi, string> = {
   ragu: "bg-[#FCEFD1]",
 };
 
-// Dipakai bar float navigasi status di bawah layar -- beda dari PILIHAN
-// (yang cuma 3 pilihan jawaban), di sini termasuk "belum" supaya PPL bisa
-// langsung lompat ke kartu yang belum diisi juga. Gaya kartu statistik
-// (angka besar berwarna + label kecil di bawahnya + progress bar), bukan
-// deretan pil, spy lebih rapi & gampang dibaca sekilas.
 const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   belum: { label: "Belum Identifikasi", warna: "text-ink/50" },
   tidak_ada: { label: "Tidak Ada Usaha", warna: "text-rust-700" },
@@ -66,6 +61,27 @@ const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
+// Sama persis dgn ringkasWilayah di app/seruti/penyisiran-usaha.tsx &
+// app/penyisiran/identifikasi-ppl.tsx -- lihat komentar di sana. Alamat
+// sering sudah memuat nama Jorong/SLS di dalamnya sendiri, jadi baris
+// kedua ("Nagari · Nama SLS") tidak perlu mengulang nama yg sama.
+function ringkasWilayah(alamat: string | null, nagariNama: string | null, slsNama: string | null): string {
+  const sudahDisebut =
+    !!alamat && !!slsNama && slsNama.trim().length > 0 && alamat.toUpperCase().includes(slsNama.trim().toUpperCase());
+  const bagian = [nagariNama, sudahDisebut ? null : slsNama].filter((b): b is string => !!b && b.trim().length > 0);
+  return bagian.join(" · ");
+}
+
+interface KecOption {
+  kode: string;
+  nama: string;
+  jumlah: number;
+}
+interface SubslsOption {
+  idsubsls: string;
+  label: string;
+  jumlah: number;
+}
 interface Row {
   kode_identitas: string;
   kec_kode: string | null;
@@ -77,29 +93,10 @@ interface Row {
   alamat: string | null;
   identifikasi_ppl: NilaiIdentifikasi;
   identifikasi_ppl_at: string | null;
-}
-
-// Alamat (baris pertama kartu) sering SUDAH memuat nama Jorong/SLS di
-// dalamnya sendiri (mis. alamat "JALAN JORONG ULU PISAU HILANG" utk
-// keluarga yg SLS-nya memang "JORONG ULU PISAU HILANG" -- lazim di alamat
-// pedesaan yg tidak punya nama jalan sendiri) -- kalau baris kedua tetap
-// menampilkan "Nagari · Nama SLS" apa adanya, nama Jorong itu jadi
-// disebut DUA KALI berturut-turut (dilaporkan user, sama di tab Penyisiran
-// Usaha -- lihat komentar ringkasWilayah di app/seruti/penyisiran-usaha.tsx
-// utk versi kembarannya). Nama SLS di baris kedua disembunyikan HANYA
-// kalau alamat sudah memuat teks yg sama persis (cek case-insensitive) --
-// nagari tetap selalu ditampilkan krn itu jarang ikut disebut di alamat.
-function ringkasWilayah(alamat: string | null, nagariNama: string | null, slsNama: string | null): string {
-  const sudahDisebut =
-    !!alamat && !!slsNama && slsNama.trim().length > 0 && alamat.toUpperCase().includes(slsNama.trim().toUpperCase());
-  const bagian = [nagariNama, sudahDisebut ? null : slsNama].filter((b): b is string => !!b && b.trim().length > 0);
-  return bagian.join(" · ");
+  identifikasi_ppl_oleh: string | null;
 }
 
 function tokenExpMs(token: string): number {
-  // Token role identifikasi_ppl: role.subjectB64.exp.sig (4 bagian) --
-  // exp ada di index ke-2. Format lama (3 bagian) exp ada di index ke-1,
-  // dijaga juga di sini kalau-kalau ada sisa token lama tersimpan.
   const parts = token.split(".");
   const expStr = parts.length === 4 ? parts[2] : parts[1];
   return Number(expStr);
@@ -133,7 +130,7 @@ async function apiFetch(path: string, token: string, init?: RequestInit) {
   return data;
 }
 
-export default function IdentifikasiPplTab() {
+export default function IdentifikasiJorongTab() {
   const [token, setToken] = useState<string | null>(null);
   const [nama, setNama] = useState<string | null>(null);
   const [checkedStorage, setCheckedStorage] = useState(false);
@@ -157,14 +154,14 @@ export default function IdentifikasiPplTab() {
     setNama(null);
   }
 
-  if (!checkedStorage) return null; // hindari kedip layar login sebelum cek localStorage
+  if (!checkedStorage) return null;
 
   if (!token) {
     return <LoginForm onLoggedIn={handleLoggedIn} />;
   }
 
   return (
-    <IdentifikasiPanel
+    <IdentifikasiJorongPanel
       token={token}
       nama={nama || ""}
       onSessionExpired={handleLogout}
@@ -181,7 +178,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/penyisiran/identifikasi-ppl-names")
+    fetch("/api/penyisiran/jorong-names")
       .then((r) => r.json())
       .then((d) => setNamaOptions(Array.isArray(d?.names) ? d.names : []))
       .catch(() => setNamaOptions([]));
@@ -196,7 +193,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/penyisiran/identifikasi-login", {
+      const res = await fetch("/api/penyisiran/jorong-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nama: namaInput, tanggal_lahir: tanggalLahir }),
@@ -216,9 +213,9 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
 
   return (
     <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
-      <p className="text-sm font-semibold text-navy-900">Identifikasi PPL (Mantan Pendata)</p>
+      <p className="text-sm font-semibold text-navy-900">Identifikasi Jorong (Petugas Penyisiran)</p>
       <p className="mt-1 text-xs text-ink/60">
-        Untuk PPL yang dulu mendata SE2026 di wilayah ini -- masukkan nama lengkap dan tanggal lahir Anda. Setelah
+        Untuk petugas yang menyisir lapangan sekarang -- masukkan nama lengkap dan tanggal lahir Anda. Setelah
         berhasil, Anda tidak perlu login ulang besok.
       </p>
       <p className="mt-2 rounded-md bg-rust-100 px-2.5 py-1.5 text-[11px] font-medium text-rust-700">
@@ -228,7 +225,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
         <div>
           <label className="mb-1 block text-[11px] font-medium text-ink/60">Nama Lengkap</label>
           <input
-            list="nama-ppl-options"
+            list="nama-petugas-options"
             type="text"
             value={namaInput}
             onChange={(e) => setNamaInput(e.target.value)}
@@ -237,7 +234,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
             autoComplete="off"
             className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
           />
-          <datalist id="nama-ppl-options">
+          <datalist id="nama-petugas-options">
             {namaOptions.map((n) => (
               <option key={n} value={n} />
             ))}
@@ -265,7 +262,7 @@ function LoginForm({ onLoggedIn }: { onLoggedIn: (token: string, nama: string) =
   );
 }
 
-function IdentifikasiPanel({
+function IdentifikasiJorongPanel({
   token,
   nama,
   onSessionExpired,
@@ -276,6 +273,12 @@ function IdentifikasiPanel({
   onSessionExpired: () => void;
   onLogout: () => void;
 }) {
+  const [kecOptions, setKecOptions] = useState<KecOption[]>([]);
+  const [nagariOptions, setNagariOptions] = useState<KecOption[]>([]);
+  const [subslsOptions, setSubslsOptions] = useState<SubslsOption[]>([]);
+  const [filterKec, setFilterKec] = useState("");
+  const [filterNagari, setFilterNagari] = useState("");
+  const [filterSubsls, setFilterSubsls] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -302,20 +305,67 @@ function IdentifikasiPanel({
     [onSessionExpired]
   );
 
+  // Dropdown filter tahap 1: Kecamatan -- daftar diambil dari
+  // /api/penyisiran/summary (dipakai bersama tab Penyisiran Usaha).
+  useEffect(() => {
+    apiFetch("/api/penyisiran/summary", token)
+      .then((d) => setKecOptions(d?.kecamatan ?? []))
+      .catch((e) => guard(() => { throw e; }));
+  }, [token, guard]);
+
+  // Dropdown filter tahap 2: Nagari -- baru muncul setelah Kecamatan dipilih.
+  useEffect(() => {
+    setFilterNagari("");
+    if (!filterKec) {
+      setNagariOptions([]);
+      return;
+    }
+    apiFetch(`/api/penyisiran/nagari?kec=${encodeURIComponent(filterKec)}`, token)
+      .then(setNagariOptions)
+      .catch((e) => guard(() => { throw e; }));
+  }, [filterKec, token, guard]);
+
+  // Dropdown filter tahap 3: Sub SLS/Jorong -- baru muncul setelah
+  // Kecamatan & Nagari dipilih (WAJIB kirim keduanya, lihat komentar di
+  // app/api/penyisiran/subsls/route.ts).
+  useEffect(() => {
+    setFilterSubsls("");
+    if (!filterKec || !filterNagari) {
+      setSubslsOptions([]);
+      return;
+    }
+    apiFetch(
+      `/api/penyisiran/subsls?kec=${encodeURIComponent(filterKec)}&nagari=${encodeURIComponent(filterNagari)}`,
+      token
+    )
+      .then(setSubslsOptions)
+      .catch((e) => guard(() => { throw e; }));
+  }, [filterKec, filterNagari, token, guard]);
+
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 400);
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  const bisaMuat = Boolean(filterKec || search);
+
   const loadList = useCallback(async () => {
+    if (!bisaMuat) {
+      setRows([]);
+      setTotal(0);
+      return;
+    }
     setLoading(true);
     setErrMsg(null);
     try {
       const sp = new URLSearchParams();
+      if (filterKec) sp.set("kec", filterKec);
+      if (filterNagari) sp.set("nagari", filterNagari);
+      if (filterSubsls) sp.set("subsls", filterSubsls);
       if (filterStatus) sp.set("status", filterStatus);
       if (search) sp.set("q", search);
       sp.set("page", String(page));
-      const data = await apiFetch(`/api/penyisiran/identifikasi-list?${sp.toString()}`, token);
+      const data = await apiFetch(`/api/penyisiran/jorong-list?${sp.toString()}`, token);
       setRows(data.rows);
       setTotal(data.total);
     } catch (e) {
@@ -325,11 +375,11 @@ function IdentifikasiPanel({
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, search, page, token, guard]);
+  }, [bisaMuat, filterKec, filterNagari, filterSubsls, filterStatus, search, page, token, guard]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterStatus, search]);
+  }, [filterKec, filterNagari, filterSubsls, filterStatus, search]);
 
   useEffect(() => {
     loadList();
@@ -339,17 +389,10 @@ function IdentifikasiPanel({
     setRows((prev) => prev.map((r) => (r.kode_identitas === id ? { ...r, ...patch } : r)));
   }
 
-  // Bar float "Belum Identifikasi / Tidak Ada Usaha / Ragu-Ragu / Ada
-  // Usaha" di bawah layar: melompat ke kartu BERIKUTNYA (searah gulir ke
-  // bawah) yang berstatus identifikasi_ppl sesuai tombol yang ditekan,
-  // lalu berputar kembali ke kartu paling atas kalau sudah sampai ujung --
-  // supaya bisa dipakai berulang kali menyisir semua kartu dgn status yg
-  // sama. Hanya menjangkau kartu yang sedang dimuat di halaman ini (rows,
-  // dipaginasi 200/halaman).
   function jumpKeStatus(nilai: NilaiIdentifikasi) {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(`[data-identifikasi-ppl="${nilai}"]`));
     if (cards.length === 0) return;
-    const batasAtas = window.scrollY + 96; // beri sedikit ruang dari bagian atas layar
+    const batasAtas = window.scrollY + 96;
     const berikutnya = cards.find((el) => el.getBoundingClientRect().top + window.scrollY > batasAtas);
     (berikutnya ?? cards[0]).scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -366,7 +409,7 @@ function IdentifikasiPanel({
   return (
     <div className="space-y-3 pb-28">
       <div className="flex items-start justify-between gap-2">
-        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
+        <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi Jorong (Petugas Penyisiran)</h1>
         <button
           type="button"
           onClick={onLogout}
@@ -378,8 +421,8 @@ function IdentifikasiPanel({
 
       <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
         <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
-          Seingat Saudara <span className="font-semibold">{nama}</span> sebagai petugas yang dulu mendata SE2026,
-          apakah keluarga berikut memiliki usaha atau tidak?
+          Sebagai petugas penyisiran <span className="font-semibold">{nama}</span>, konfirmasi berdasarkan
+          pengamatan/informasi lapangan Anda: apakah keluarga berikut memiliki usaha atau tidak?
         </p>
       </div>
 
@@ -392,6 +435,44 @@ function IdentifikasiPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
+        <select
+          value={filterKec}
+          onChange={(e) => setFilterKec(e.target.value)}
+          className="rounded-md border border-line px-2 py-1.5 text-xs"
+        >
+          <option value="">Pilih Kecamatan...</option>
+          {kecOptions.map((k) => (
+            <option key={k.kode} value={k.kode}>
+              {k.nama} ({k.jumlah})
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterNagari}
+          onChange={(e) => setFilterNagari(e.target.value)}
+          disabled={!filterKec}
+          className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-40"
+        >
+          <option value="">Semua Nagari</option>
+          {nagariOptions.map((n) => (
+            <option key={n.kode} value={n.kode}>
+              {n.nama} ({n.jumlah})
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterSubsls}
+          onChange={(e) => setFilterSubsls(e.target.value)}
+          disabled={!filterNagari}
+          className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-40"
+        >
+          <option value="">Semua Sub SLS/Jorong</option>
+          {subslsOptions.map((s) => (
+            <option key={s.idsubsls} value={s.idsubsls}>
+              {s.label} ({s.jumlah})
+            </option>
+          ))}
+        </select>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -414,7 +495,11 @@ function IdentifikasiPanel({
 
       <div className="flex flex-col gap-2">
         <div className="text-xs text-ink/50">
-          {loading ? "Memuat..." : `${total} keluarga di wilayah yang dialokasikan ke Anda`}
+          {!bisaMuat
+            ? "Pilih kecamatan (atau isi pencarian) dulu untuk memuat daftar."
+            : loading
+              ? "Memuat..."
+              : `${total} keluarga`}
         </div>
         <div className="flex flex-col gap-2">
           {rows.map((row) => (
@@ -426,7 +511,7 @@ function IdentifikasiPanel({
               onSessionExpired={onSessionExpired}
             />
           ))}
-          {rows.length === 0 && !loading && (
+          {rows.length === 0 && !loading && bisaMuat && (
             <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
               Tidak ada keluarga untuk filter ini.
             </p>
@@ -455,10 +540,6 @@ function IdentifikasiPanel({
         )}
       </div>
 
-      {/* Kartu float navigasi status di tengah-bawah layar -- angka besar
-          per status (ditekan langsung menggulir ke kartu berikutnya yg
-          sesuai, lihat jumpKeStatus di atas) + progress bar keseluruhan.
-          Cuma menghitung kartu yg sedang dimuat di halaman ini (rows). */}
       <div className="fixed inset-x-3 bottom-4 z-40 mx-auto max-w-md rounded-xl border border-line bg-white p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2">
         <div className="grid grid-cols-4 gap-1">
           {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
@@ -485,7 +566,7 @@ function IdentifikasiPanel({
           />
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-ink/50">
-          <span>Progres identifikasi</span>
+          <span>Progres identifikasi (halaman ini)</span>
           <span>
             {jumlahSudahDiisi}/{rows.length} kartu &middot; {jumlahIdentifikasi.belum ?? 0} belum diisi &middot;{" "}
             {persenSelesai}%
@@ -508,6 +589,7 @@ function IdentifikasiCard({
   onSessionExpired: () => void;
 }) {
   const [nilai, setNilai] = useState<NilaiIdentifikasi>(row.identifikasi_ppl);
+  const [oleh, setOleh] = useState<string | null>(row.identifikasi_ppl_oleh);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
 
@@ -521,7 +603,12 @@ function IdentifikasiCard({
         body: JSON.stringify({ id: row.kode_identitas, identifikasi_ppl: v }),
       });
       setSaved("ok");
-      onSaved(row.kode_identitas, { identifikasi_ppl: v, identifikasi_ppl_at: new Date().toISOString() });
+      setOleh(localStorage.getItem(NAMA_KEY));
+      onSaved(row.kode_identitas, {
+        identifikasi_ppl: v,
+        identifikasi_ppl_at: new Date().toISOString(),
+        identifikasi_ppl_oleh: localStorage.getItem(NAMA_KEY),
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
@@ -547,7 +634,10 @@ function IdentifikasiCard({
         <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
       </div>
       <p className="mt-0.5 text-xs text-ink/70">{row.alamat || "-"}</p>
-      <p className="mb-2 text-[11px] text-ink/40">{ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}</p>
+      <p className="mb-1 text-[11px] text-ink/40">{ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}</p>
+      {nilai !== "belum" && oleh && (
+        <p className="mb-2 text-[10px] italic text-ink/40">Diisi oleh: {oleh}</p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {PILIHAN.map((p) => (
           <button
