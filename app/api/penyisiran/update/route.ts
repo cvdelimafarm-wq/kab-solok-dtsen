@@ -21,6 +21,9 @@ export async function PATCH(req: NextRequest) {
   const id = typeof body?.id === "string" ? body.id : "";
   const status = typeof body?.status_kunjungan === "string" ? body.status_kunjungan : "";
   const catatan = typeof body?.catatan_petugas === "string" ? body.catatan_petugas : null;
+  const infoPpl = Boolean(body?.info_ppl);
+  const infoJorong = Boolean(body?.info_jorong);
+  const infoTetangga = Boolean(body?.info_tetangga);
 
   if (!id || !STATUS_VALID.has(status)) {
     return NextResponse.json({ error: "Data tidak lengkap / status tidak valid." }, { status: 400 });
@@ -38,6 +41,9 @@ export async function PATCH(req: NextRequest) {
     .update({
       status_kunjungan: status,
       catatan_petugas: catatan,
+      info_ppl: infoPpl,
+      info_jorong: infoJorong,
+      info_tetangga: infoTetangga,
       updated_at: new Date().toISOString(),
     })
     .eq("kode_identitas", id);

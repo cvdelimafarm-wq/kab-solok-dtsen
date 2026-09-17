@@ -18,7 +18,8 @@ const KOLOM =
   "kode_identitas, idsubsls, kec_kode, kec_nama, nagari_kode, nagari_nama, " +
   "sls_kode, sls_nama, subsls_kode, nama_kk, alamat, lat, lng, " +
   "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, pnm_subsektor, " +
-  "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, updated_at";
+  "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, " +
+  "info_ppl, info_jorong, info_tetangga, updated_at";
 
 export async function GET(req: NextRequest) {
   if (!verifySession(extractBearer(req))) {

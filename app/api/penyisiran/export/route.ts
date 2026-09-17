@@ -42,6 +42,9 @@ interface ExportRow {
   pnm_sektor: string | null;
   dtsen_lapangan_usaha: string | null;
   status_kunjungan: string;
+  info_ppl: boolean;
+  info_jorong: boolean;
+  info_tetangga: boolean;
   catatan_petugas: string | null;
   updated_at: string;
 }
@@ -68,7 +71,7 @@ export async function GET(req: NextRequest) {
     .select(
       "kode_identitas, kec_nama, nagari_nama, sls_nama, nama_kk, alamat, lat, lng, " +
         "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, dtsen_lapangan_usaha, " +
-        "status_kunjungan, catatan_petugas, updated_at"
+        "status_kunjungan, info_ppl, info_jorong, info_tetangga, catatan_petugas, updated_at"
     )
     .order("nagari_nama")
     .order("nama_kk")
@@ -95,6 +98,9 @@ export async function GET(req: NextRequest) {
     "Sektor PNM",
     "Lapangan Usaha DTSEN",
     "Status Pengecekan",
+    "Info PPL",
+    "Info Jorong",
+    "Info Tetangga",
     "Catatan Petugas",
     "Terakhir Diperbarui",
   ];
@@ -116,6 +122,9 @@ export async function GET(req: NextRequest) {
         r.pnm_sektor,
         r.dtsen_lapangan_usaha,
         STATUS_LABEL[r.status_kunjungan as string] ?? r.status_kunjungan,
+        r.info_ppl ? "Ada" : "Tidak",
+        r.info_jorong ? "Ada" : "Tidak",
+        r.info_tetangga ? "Ada" : "Tidak",
         r.catatan_petugas,
         r.updated_at,
       ]

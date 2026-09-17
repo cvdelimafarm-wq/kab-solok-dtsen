@@ -72,6 +72,9 @@ interface Row {
   dtsen_lapangan_usaha: string | null;
   catatan_sensus: string | null;
   status_kunjungan: StatusKunjungan;
+  info_ppl: boolean;
+  info_jorong: boolean;
+  info_tetangga: boolean;
   catatan_petugas: string | null;
   updated_at: string;
 }
@@ -490,9 +493,17 @@ function RowCard({
 }) {
   const [status, setStatus] = useState<StatusKunjungan>(row.status_kunjungan);
   const [catatan, setCatatan] = useState(row.catatan_petugas ?? "");
+  const [infoPpl, setInfoPpl] = useState(row.info_ppl);
+  const [infoJorong, setInfoJorong] = useState(row.info_jorong);
+  const [infoTetangga, setInfoTetangga] = useState(row.info_tetangga);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
-  const dirty = status !== row.status_kunjungan || catatan !== (row.catatan_petugas ?? "");
+  const dirty =
+    status !== row.status_kunjungan ||
+    catatan !== (row.catatan_petugas ?? "") ||
+    infoPpl !== row.info_ppl ||
+    infoJorong !== row.info_jorong ||
+    infoTetangga !== row.info_tetangga;
   const meta = STATUS_META[status];
 
   async function handleSave() {
@@ -500,10 +511,23 @@ function RowCard({
     try {
       await apiFetch("/api/penyisiran/update", token, {
         method: "PATCH",
-        body: JSON.stringify({ id: row.kode_identitas, status_kunjungan: status, catatan_petugas: catatan || null }),
+        body: JSON.stringify({
+          id: row.kode_identitas,
+          status_kunjungan: status,
+          catatan_petugas: catatan || null,
+          info_ppl: infoPpl,
+          info_jorong: infoJorong,
+          info_tetangga: infoTetangga,
+        }),
       });
       setSaved("ok");
-      onSaved(row.kode_identitas, { status_kunjungan: status, catatan_petugas: catatan });
+      onSaved(row.kode_identitas, {
+        status_kunjungan: status,
+        catatan_petugas: catatan,
+        info_ppl: infoPpl,
+        info_jorong: infoJorong,
+        info_tetangga: infoTetangga,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
@@ -552,6 +576,11 @@ function RowCard({
           PNM Mekar {row.bukti_pnm ? "✓" : "-"}
         </span>
       </div>
+      <div className="mb-1.5 flex flex-wrap gap-1.5">
+        <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} />
+        <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} />
+        <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} />
+      </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <select
           value={status}
@@ -581,6 +610,28 @@ function RowCard({
         </button>
       </div>
     </div>
+  );
+}
+
+function InfoToggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+        value ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40 hover:border-navy-400"
+      }`}
+    >
+      {label}: {value ? "Ada" : "Tidak"}
+    </button>
   );
 }
 
