@@ -60,19 +60,45 @@
 // dari tetangga/pihak lain yang mengetahui keluarga tsb. Sama2 menulis
 // ke kolom identifikasi_ppl yang SAMA dgn 2 role personal lainnya.
 //
-// Ketiga role personal ("identifikasi_ppl"/"identifikasi_jorong"/
-// "identifikasi_tetangga") adalah SATU-SATUNYA yang boleh mengubah
-// identifikasi_ppl (lihat app/api/penyisiran/identifikasi/route.ts) --
-// role "penyisiran"/"identifikasi" (PIN bersama) sengaja TIDAK lagi
-// diizinkan menulis ke kolom itu, supaya tab Penyisiran Usaha selalu
-// menampilkannya sbg READ-ONLY (cuma bisa diubah lewat salah satu dari
-// tiga tab Identifikasi di atas).
+// PERAN KEENAM -- "penyisiran_petugas": login personal (nama + tanggal
+// lahir, tabel petugas_penyisiran_akun -- TABEL SAMA dgn
+// "identifikasi_jorong", cuma role token-nya beda) utk tab "Penyisiran
+// Usaha" -- MENGGANTIKAN PIN bersama yang dipakai tab itu sebelumnya
+// (role "penyisiran" TETAP ada, tapi sekarang HANYA dipakai tab
+// Monitoring, lihat di bawah). Dipilih nama role BEDA (bukan dipakaikan
+// ke "penyisiran" langsung) supaya PIN admin ("penyisiran") tetap bisa
+// dipakai terpisah oleh staf BPS utk tab Monitoring Identifikasi PPL /
+// Monitoring Petugas Penyisiran tanpa perlu terdaftar sbg petugas
+// penyisiran.
 //
-// TTL utk role personal ("identifikasi_ppl"/"identifikasi_jorong"/
-// "identifikasi_tetangga") sengaja jauh lebih panjang (bukan 12 jam)
-// supaya yang sudah login hari ini TIDAK perlu login ulang besok (sesuai
-// permintaan: "besoknya otomatis login") -- token disimpan di
-// localStorage (bukan sessionStorage) oleh halaman client.
+// Ketiga role personal identifikasi ("identifikasi_ppl"/
+// "identifikasi_jorong"/"identifikasi_tetangga") adalah SATU-SATUNYA yang
+// boleh mengubah identifikasi_ppl (lihat
+// app/api/penyisiran/identifikasi/route.ts) -- role "penyisiran"/
+// "identifikasi" (PIN bersama) sengaja TIDAK lagi diizinkan menulis ke
+// kolom itu, supaya tab Penyisiran Usaha selalu menampilkannya sbg
+// READ-ONLY (cuma bisa diubah lewat salah satu dari tiga tab Identifikasi
+// di atas).
+//
+// TTL utk SEMUA role personal ("identifikasi_ppl"/"identifikasi_jorong"/
+// "identifikasi_tetangga"/"penyisiran_petugas") sengaja jauh lebih panjang
+// (bukan 12 jam) supaya yang sudah login hari ini TIDAK perlu login ulang
+// besok (sesuai permintaan: "besoknya otomatis login") -- token disimpan
+// di localStorage (bukan sessionStorage) oleh halaman client. Role
+// "penyisiran" (PIN, kini cuma tab Monitoring) & "identifikasi" (PIN,
+// vestigial) TETAP TTL 12 jam spt semula.
+//
+// Pesan error login KHUSUS utk kasus "akun terdaftar di sistem, tapi bukan
+// di TABEL yang dipakai tab ini" (mis. seorang PPL yg cuma ada di
+// ppl_akun mencoba login ke Identifikasi Jorong/Tetangga/tab Penyisiran
+// Usaha, atau sebaliknya) -- dibedakan dari "nama/tanggal lahir salah
+// total" yang tampil pesan generik biasa. Lihat masing-masing route login
+// (jorong-login/tetangga-login/penyisiran-login route.ts) utk logikanya --
+// SETIAP kali gagal cocok di tabel sendiri, route itu ikut mengecek tabel
+// akun LAIN (ppl_akun/petugas_penyisiran_akun/tetangga_akun) dgn nama+
+// tanggal lahir yang SAMA yg diketik pengguna; kalau cocok di tabel lain,
+// tampil pesan role (mis. "Tab ini hanya dapat diakses petugas
+// penyisiran.") bukan pesan generik "tidak ditemukan"/"tidak cocok".
 
 import { createHmac, timingSafeEqual } from "crypto";
 
@@ -84,13 +110,20 @@ export type PenyisiranRole =
   | "identifikasi"
   | "identifikasi_ppl"
   | "identifikasi_jorong"
-  | "identifikasi_tetangga";
+  | "identifikasi_tetangga"
+  | "penyisiran_petugas";
 
 // Role dgn login PERSONAL (nama+tanggal lahir, format token 4-bagian
 // dgn subject, TTL panjang) -- beda dari "penyisiran"/"identifikasi" yg
-// masih pakai PIN bersama (format token 3-bagian, TTL 12 jam).
+// masih pakai PIN bersama (format token 3-bagian, TTL 12 jam, sekarang
+// cuma dipakai tab Monitoring).
 function isPersonalRole(role: PenyisiranRole): boolean {
-  return role === "identifikasi_ppl" || role === "identifikasi_jorong" || role === "identifikasi_tetangga";
+  return (
+    role === "identifikasi_ppl" ||
+    role === "identifikasi_jorong" ||
+    role === "identifikasi_tetangga" ||
+    role === "penyisiran_petugas"
+  );
 }
 
 function getSigningSecret(): string {

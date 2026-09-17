@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const MAX_ROWS_PER_REQUEST = 5000;
 
 export async function POST(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

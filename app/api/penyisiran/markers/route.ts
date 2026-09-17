@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const MAX_MARKERS = 5000;
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

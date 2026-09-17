@@ -2,16 +2,19 @@
 //
 // Simpan hasil checklist petugas lapangan (status kunjungan + catatan +
 // info PPL/Jorong/Tetangga + prioritas_pasti) untuk satu keluarga. Butuh
-// token sesi valid dgn role "penyisiran".
+// token sesi valid dgn role "penyisiran" (PIN admin, jarang dipakai
+// langsung utk ini sekarang) ATAU "penyisiran_petugas" (login personal
+// nama+tanggal lahir -- lihat /api/penyisiran/penyisiran-login, cara
+// akses UTAMA tab Penyisiran Usaha sekarang).
 //
-// `petugas_id` (opsional, id baris petugas_penyisiran_akun) dikirim client
-// dari dropdown "Nama Anda" di tab Penyisiran Usaha -- BUKAN bagian dari
-// token sesi (role "penyisiran" tetap PIN bersama, tidak diubah jadi login
-// personal), cuma label atribusi biasa yg disimpan ke penyisiran_oleh_id/
-// penyisiran_oleh supaya tab "Monitoring Petugas Penyisiran" bisa menghitung
-// "Jumlah Dikunjungi"/"Jumlah Didata" per petugas. Kalau tidak dikirim (mis.
-// pengguna lama yg belum pilih nama), kolom itu dibiarkan seperti semula
-// (tidak ditimpa null) supaya atribusi kunjungan sebelumnya tidak hilang.
+// `petugas_id`/`petugas_nama` (opsional) dikirim client -- diambil dari
+// respons login personal (subject token "penyisiran_petugas"), BUKAN
+// dropdown manual lagi -- disimpan ke penyisiran_oleh_id/penyisiran_oleh
+// supaya tab "Monitoring Petugas Penyisiran" bisa menghitung "Jumlah
+// Dikunjungi"/"Jumlah Didata" per petugas. Kalau tidak dikirim (mis. masih
+// pakai PIN admin lama tanpa login personal), kolom itu dibiarkan seperti
+// semula (tidak ditimpa null) supaya atribusi kunjungan sebelumnya tidak
+// hilang.
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
@@ -22,7 +25,7 @@ export const dynamic = "force-dynamic";
 const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa"]);
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

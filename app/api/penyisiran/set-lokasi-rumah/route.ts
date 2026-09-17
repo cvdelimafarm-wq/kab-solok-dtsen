@@ -10,13 +10,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -27,6 +28,18 @@ export async function PATCH(req: NextRequest) {
 
   if (!petugasId || lat === null || lng === null) {
     return NextResponse.json({ error: "Data tidak lengkap." }, { status: 400 });
+  }
+
+  // Kalau login personal (role "penyisiran_petugas"), pastikan cuma boleh
+  // menetapkan lokasi utk DIRINYA SENDIRI (id di token harus sama dgn
+  // petugas_id yang dikirim) -- defense in depth, mencegah 1 petugas iseng
+  // mengubah lokasi rumah petugas lain lewat request manual.
+  const role = token?.split(".")[0];
+  if (role === "penyisiran_petugas") {
+    const subjectId = getSessionSubject(token);
+    if (subjectId !== String(petugasId)) {
+      return NextResponse.json({ error: "Anda hanya boleh menetapkan lokasi rumah Anda sendiri." }, { status: 403 });
+    }
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

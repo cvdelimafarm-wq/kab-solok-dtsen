@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   if (
     !verifySession(extractBearer(req), [
       "penyisiran",
+      "penyisiran_petugas",
       "identifikasi",
       "identifikasi_jorong",
       "identifikasi_tetangga",

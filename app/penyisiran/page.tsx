@@ -8,14 +8,23 @@
 // (beda konteks: ini SE2026, bukan Susenas/Seruti).
 //
 // Ada 5 tab di sini (lihat lib/penyisiranAuth.ts utk skema sesi/PIN):
-//  - "Penyisiran Usaha": checklist petugas lapangan (PIN internal BPS,
-//    env PENYISIRAN_PIN, role "penyisiran") -- nama+alamat+GPS+bukti
-//    DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga di sini cuma bisa
-//    diubah lewat tombol Edit/Edit Semua. Kolom "Identifikasi PPL"
-//    (badge) DIBEKUKAN read-only di sini -- satu-satunya cara mengubahnya
-//    adalah lewat salah satu dari TIGA tab Identifikasi di bawah (lihat
-//    app/api/penyisiran/identifikasi/route.ts, role "penyisiran" SENGAJA
-//    tidak lagi diizinkan menulis ke kolom itu).
+//  - "Penyisiran Usaha": checklist petugas lapangan -- login PERSONAL
+//    (nama lengkap + tanggal lahir, dicocokkan ke tabel
+//    petugas_penyisiran_akun -- TABEL SAMA dgn "Identifikasi Jorong" di
+//    bawah, cuma role token beda: "penyisiran_petugas") --
+//    MENGGANTIKAN PIN bersama yg dulu dipakai tab ini. Krn loginnya
+//    personal, sistem otomatis tahu siapa yg mengisi (dipakai dasar
+//    hitungan tab "Monitoring Petugas Penyisiran" & skor prioritas
+//    berbasis jarak, lihat app/seruti/penyisiran-usaha.tsx) --
+//    nama+alamat+GPS+bukti DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga
+//    di sini cuma bisa diubah lewat tombol Edit/Edit Semua. Kolom
+//    "Identifikasi PPL" (badge) DIBEKUKAN read-only di sini --
+//    satu-satunya cara mengubahnya adalah lewat salah satu dari TIGA tab
+//    Identifikasi di bawah (lihat app/api/penyisiran/identifikasi/route.ts,
+//    role "penyisiran"/"penyisiran_petugas" SENGAJA tidak lagi diizinkan
+//    menulis ke kolom itu). PIN admin lama ("penyisiran", env
+//    PENYISIRAN_PIN) TETAP ADA tapi sekarang cuma dipakai DUA tab
+//    Monitoring di bawah, bukan lagi tab ini.
 //  - "Identifikasi PPL": dibagikan ke PPL/mantan pendata SE2026, login
 //    PERSONAL (nama lengkap + tanggal lahir, dicocokkan ke tabel
 //    ppl_akun, role "identifikasi_ppl") -- cuma nama+alamat+wilayah,
@@ -47,11 +56,11 @@
 //    minta PIN lagi sebelum tombolnya aktif -- lihat
 //    app/penyisiran/monitoring-petugas.tsx.
 //
-// Tab "Penyisiran Usaha" sekarang jg punya dropdown "Nama Anda" (label
-// atribusi checklist yg disimpan, BUKAN token/sesi baru -- tab ini tetap
-// PIN bersama) + tombol "Tetapkan Lokasi Rumah Saya" (Geolocation API) utk
-// skor prioritas berbasis jarak, dan tombol "🎯 Pasti" per kartu utk
-// override manual skor prioritas jadi maksimal.
+// Tab "Penyisiran Usaha" jg punya tombol "📍 Tetapkan Lokasi Rumah Saya"
+// (Geolocation API, disimpan ke petugas_penyisiran_akun.lat/lng lewat
+// akun personal yg sedang login) utk skor prioritas berbasis jarak, dan
+// tombol "🎯 Tandai Pasti" per kartu utk override manual skor prioritas
+// jadi maksimal.
 //
 // Komponen sesungguhnya utk tab Penyisiran Usaha (PIN gate, daftar, peta)
 // TETAP di app/seruti/penyisiran-usaha.tsx + penyisiran-map.tsx -- file
@@ -77,7 +86,7 @@ export default function PenyisiranPage() {
   const [tab, setTab] = useState<TabKey>("identifikasi");
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-5 py-6">
+    <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 py-6">
       <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
         BADAN PUSAT STATISTIK KABUPATEN SOLOK
       </p>
@@ -85,7 +94,17 @@ export default function PenyisiranPage() {
         Sensus Ekonomi 2026 &middot; Penyisiran Undercoverage Usaha
       </p>
 
-      <div className="mt-4 flex gap-2 border-b border-line">
+      {/* overflow-x-auto + flex-nowrap (bukan flex-wrap) SENGAJA dipakai --
+          dgn 6 tab & beberapa labelnya panjang ("Monitoring Petugas
+          Penyisiran"), kalau dibiarkan flex biasa baris tab ini melebar
+          menembus lebar layar & mendorong SELURUH halaman jadi lebih lebar
+          dari layar HP (dilaporkan user: tampilan berantakan/tidak
+          otomatis ikut lebar layar di HP). Dengan overflow-x-auto,
+          kelebihan lebarnya digulir SENDIRI di baris tab ini saja (bisa
+          digeser ke samping), tidak lagi memaksa seluruh halaman ikut
+          melebar. shrink-0+whitespace-nowrap di TabButton mencegah label
+          tab terpotong/mengecil. */}
+      <div className="mt-4 flex gap-2 overflow-x-auto border-b border-line">
         <TabButton active={tab === "identifikasi"} onClick={() => setTab("identifikasi")}>
           Identifikasi PPL
         </TabButton>
@@ -131,7 +150,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold transition ${
+      className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition ${
         active ? "border-navy-700 text-navy-900" : "border-transparent text-ink/50 hover:text-navy-700"
       }`}
     >

@@ -170,16 +170,38 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
     load();
   }, [load]);
 
-  const search = searchInput.trim().toLowerCase();
-  let tampil = daftar.filter((p) => !search || p.nama.toLowerCase().includes(search));
-  tampil = [...tampil].sort((a, b) => {
-    if (urutan === "nama") return a.nama.localeCompare(b.nama);
-    if (urutan === "dikunjungi") return b.jumlah_dikunjungi - a.jumlah_dikunjungi || a.nama.localeCompare(b.nama);
+  function urutkan(list: PetugasMonitor[]): PetugasMonitor[] {
+    return [...list].sort((a, b) => {
+      if (urutan === "nama") return a.nama.localeCompare(b.nama);
+      if (urutan === "dikunjungi") return b.jumlah_dikunjungi - a.jumlah_dikunjungi || a.nama.localeCompare(b.nama);
+      return (
+        b.jumlah_identifikasi_jorong + b.jumlah_identifikasi_tetangga - (a.jumlah_identifikasi_jorong + a.jumlah_identifikasi_tetangga) ||
+        a.nama.localeCompare(b.nama)
+      );
+    });
+  }
+
+  function adaRiwayat(p: PetugasMonitor): boolean {
     return (
-      b.jumlah_identifikasi_jorong + b.jumlah_identifikasi_tetangga - (a.jumlah_identifikasi_jorong + a.jumlah_identifikasi_tetangga) ||
-      a.nama.localeCompare(b.nama)
+      p.jumlah_identifikasi_jorong > 0 ||
+      p.jumlah_identifikasi_tetangga > 0 ||
+      p.jumlah_dikunjungi > 0 ||
+      p.jumlah_didata > 0
     );
-  });
+  }
+
+  const search = searchInput.trim().toLowerCase();
+  const cocokCari = (p: PetugasMonitor) => !search || p.nama.toLowerCase().includes(search);
+
+  // Petugas nonaktif TANPA riwayat sama sekali disembunyikan total (bukan
+  // sekadar disamarkan) -- biasanya akun yang salah input/tidak pernah
+  // benar2 aktif menyisir. Yang nonaktif TAPI punya riwayat tetap
+  // ditampilkan, dipisah di bagian paling bawah tabel (supaya riwayatnya
+  // tidak hilang dari rekap, tapi tidak mencampur dgn petugas yg SEDANG
+  // aktif menyisir).
+  const tampilAktif = urutkan(daftar.filter((p) => p.aktif && cocokCari(p)));
+  const tampilNonaktifRiwayat = urutkan(daftar.filter((p) => !p.aktif && adaRiwayat(p) && cocokCari(p)));
+  const tampil = [...tampilAktif, ...tampilNonaktifRiwayat];
 
   const totalDikunjungi = daftar.reduce((s, p) => s + p.jumlah_dikunjungi, 0);
   const totalDidata = daftar.reduce((s, p) => s + p.jumlah_didata, 0);
@@ -252,21 +274,18 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
             </tr>
           </thead>
           <tbody>
-            {tampil.map((p) => (
-              <tr key={p.id} className="border-b border-line last:border-0">
-                <td className="px-3 py-2 font-semibold text-navy-900">
-                  {p.nama}
-                  {!p.aktif && (
-                    <span className="ml-1.5 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-medium text-ink/40">
-                      Nonaktif
-                    </span>
-                  )}
+            {tampilAktif.map((p) => (
+              <PetugasRow key={p.id} p={p} />
+            ))}
+            {tampilNonaktifRiwayat.length > 0 && (
+              <tr>
+                <td colSpan={5} className="border-b border-line bg-paper/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                  Nonaktif -- masih ada riwayat data
                 </td>
-                <td className="px-3 py-2 text-right">{p.jumlah_identifikasi_jorong}</td>
-                <td className="px-3 py-2 text-right">{p.jumlah_identifikasi_tetangga}</td>
-                <td className="px-3 py-2 text-right">{p.jumlah_didata}</td>
-                <td className="px-3 py-2 text-right">{p.jumlah_dikunjungi}</td>
               </tr>
+            )}
+            {tampilNonaktifRiwayat.map((p) => (
+              <PetugasRow key={p.id} p={p} />
             ))}
             {tampil.length === 0 && !loading && (
               <tr>
@@ -291,6 +310,25 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
       </button>
       {kelolaOpen && <KelolaPanel token={token} daftar={daftar} onToggled={handleToggled} onSessionExpired={onSessionExpired} />}
     </div>
+  );
+}
+
+function PetugasRow({ p }: { p: PetugasMonitor }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="px-3 py-2 font-semibold text-navy-900">
+        {p.nama}
+        {!p.aktif && (
+          <span className="ml-1.5 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-medium text-ink/40">
+            Nonaktif
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-right">{p.jumlah_identifikasi_jorong}</td>
+      <td className="px-3 py-2 text-right">{p.jumlah_identifikasi_tetangga}</td>
+      <td className="px-3 py-2 text-right">{p.jumlah_didata}</td>
+      <td className="px-3 py-2 text-right">{p.jumlah_dikunjungi}</td>
+    </tr>
   );
 }
 

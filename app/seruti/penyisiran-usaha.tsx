@@ -10,17 +10,27 @@
 // ini) SUDAH TIDAK memuat NIK/Nomor KK sama sekali -- lihat komentar di
 // bagian atas script Python & migrasi supabase/migrations/20260917_penyisiran_usaha.sql.
 //
-// Dikunci PIN server-side, role "penyisiran" (lib/penyisiranAuth.ts) --
-// BEDA dari pola PIN client-side di tab lain (Rekap Temuan, Kelola
-// Anomali), karena di sini yang dilindungi adalah BACAAN nama+alamat+GPS
-// warga, bukan cuma akses EDIT ke data yang memang sudah terbuka publik.
+// Login PERSONAL (nama + tanggal lahir, role "penyisiran_petugas" --
+// lihat lib/penyisiranAuth.ts & app/api/penyisiran/penyisiran-login) --
+// MENGGANTIKAN PIN bersama yang dulu dipakai tab ini. Dicocokkan ke tabel
+// petugas_penyisiran_akun (TABEL SAMA dgn "Identifikasi Jorong", cuma role
+// token-nya beda), sama persis pola/gaya dgn tab Identifikasi Jorong/
+// Tetangga -- token disimpan di localStorage (bukan sessionStorage) spy
+// tidak perlu login ulang tiap hari. PIN admin ("penyisiran", env
+// PENYISIRAN_PIN) TETAP ADA tapi sekarang cuma dipakai tab Monitoring.
+//
+// Karena loginnya personal, sistem otomatis tahu SIAPA yang sedang
+// membuka tab ini -- dipakai utk (1) menandai siapa yang menyimpan
+// checklist tiap keluarga (penyisiran_oleh/penyisiran_oleh_id, dasar
+// hitungan tab Monitoring Petugas Penyisiran) dan (2) skor prioritas
+// berbasis jarak dari lokasi rumah petugas yang login (tombol "📍 Tetapkan
+// Lokasi Rumah Saya", lihat hitungSkorPrioritas()).
 //
 // Kolom Info PPL/Jorong/Tetangga cuma bisa diubah setelah menekan tombol
 // "Edit" (per-kartu) atau "Edit Semua" (global) -- supaya tidak kepencet
 // tidak sengaja saat sekadar melihat-lihat daftar. Kolom "Identifikasi
-// PPL" ditampilkan read-only di sini (badge) -- diisi dari tab lain
-// ("Identifikasi PPL", lihat app/penyisiran/identifikasi-ppl.tsx) yang
-// dibagikan ke PPL/mantan pendata dengan PIN yang berbeda.
+// PPL" ditampilkan read-only di sini (badge) -- diisi dari salah satu dari
+// TIGA tab Identifikasi (masing-masing pakai login/PIN sendiri).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -33,7 +43,11 @@ const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
   ),
 });
 
-const TOKEN_KEY = "penyisiran-token";
+const TOKEN_KEY = "penyisiran-petugas-login-token";
+const NAMA_KEY = "penyisiran-petugas-login-nama";
+const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
+const LAT_KEY = "penyisiran-petugas-login-lat";
+const LNG_KEY = "penyisiran-petugas-login-lng";
 
 type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa";
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
@@ -193,19 +207,6 @@ interface Row {
   updated_at: string;
 }
 
-// Satu petugas penyisiran aktif (dari petugas_penyisiran_akun) -- dipakai
-// dropdown "Nama Anda" supaya checklist yg disimpan bisa diatribusikan, dan
-// (kalau lokasi rumahnya sudah ditetapkan) utk hitung skor prioritas
-// berbasis jarak.
-interface PetugasOption {
-  id: number;
-  nama: string;
-  lat: number | null;
-  lng: number | null;
-}
-
-const PETUGAS_ID_KEY = "penyisiran-petugas-id";
-
 // Jarak lurus (haversine, km) antara 2 titik koordinat -- dipakai skor
 // prioritas berbasis jarak rumah petugas ke lokasi sampel. Cukup akurat utk
 // kebutuhan "makin jauh makin rendah prioritas" (tidak perlu jarak jalan
@@ -220,16 +221,35 @@ function jarakKm(lat1: number, lng1: number, lat2: number, lng2: number): number
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// Token personal (role "penyisiran_petugas") punya 4 bagian
+// (role.subjectB64.exp.sig, lihat lib/penyisiranAuth.ts) -- beda dari token
+// PIN lama yg 3 bagian (role.exp.sig). tokenExpMs() menangani KEDUA bentuk
+// itu spy tidak salah baca posisi expiry-nya (pola sama dgn
+// app/penyisiran/identifikasi-jorong.tsx).
+function tokenExpMs(token: string): number {
+  const parts = token.split(".");
+  const expStr = parts.length === 4 ? parts[2] : parts[1];
+  return Number(expStr);
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  const t = sessionStorage.getItem(TOKEN_KEY);
+  const t = localStorage.getItem(TOKEN_KEY);
   if (!t) return null;
-  const exp = Number(t.split(".")[1]);
+  const exp = tokenExpMs(t);
   if (!Number.isFinite(exp) || exp < Date.now()) {
-    sessionStorage.removeItem(TOKEN_KEY);
+    clearToken();
     return null;
   }
   return t;
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(NAMA_KEY);
+  localStorage.removeItem(PETUGAS_ID_STORE_KEY);
+  localStorage.removeItem(LAT_KEY);
+  localStorage.removeItem(LNG_KEY);
 }
 
 async function apiFetch(path: string, token: string, init?: RequestInit) {
@@ -244,72 +264,193 @@ async function apiFetch(path: string, token: string, init?: RequestInit) {
 
 export default function PenyisiranUsahaTab() {
   const [token, setToken] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinLoading, setPinLoading] = useState(false);
+  const [nama, setNama] = useState<string | null>(null);
+  const [petugasId, setPetugasId] = useState<number | null>(null);
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
+  const [checkedStorage, setCheckedStorage] = useState(false);
 
   useEffect(() => {
     setToken(getToken());
+    if (typeof window !== "undefined") {
+      setNama(localStorage.getItem(NAMA_KEY));
+      const savedId = Number(localStorage.getItem(PETUGAS_ID_STORE_KEY));
+      setPetugasId(Number.isFinite(savedId) && savedId > 0 ? savedId : null);
+      const savedLat = Number(localStorage.getItem(LAT_KEY));
+      const savedLng = Number(localStorage.getItem(LNG_KEY));
+      setLat(Number.isFinite(savedLat) ? savedLat : null);
+      setLng(Number.isFinite(savedLng) ? savedLng : null);
+    }
+    setCheckedStorage(true);
   }, []);
 
-  async function handleUnlock(e: React.FormEvent) {
+  function handleLoggedIn(t: string, n: string, id: number, loginLat: number | null, loginLng: number | null) {
+    localStorage.setItem(TOKEN_KEY, t);
+    localStorage.setItem(NAMA_KEY, n);
+    localStorage.setItem(PETUGAS_ID_STORE_KEY, String(id));
+    if (loginLat != null) localStorage.setItem(LAT_KEY, String(loginLat));
+    else localStorage.removeItem(LAT_KEY);
+    if (loginLng != null) localStorage.setItem(LNG_KEY, String(loginLng));
+    else localStorage.removeItem(LNG_KEY);
+    setToken(t);
+    setNama(n);
+    setPetugasId(id);
+    setLat(loginLat);
+    setLng(loginLng);
+  }
+
+  function handleLogout() {
+    clearToken();
+    setToken(null);
+    setNama(null);
+    setPetugasId(null);
+    setLat(null);
+    setLng(null);
+  }
+
+  function handleLokasiUpdated(newLat: number, newLng: number) {
+    localStorage.setItem(LAT_KEY, String(newLat));
+    localStorage.setItem(LNG_KEY, String(newLng));
+    setLat(newLat);
+    setLng(newLng);
+  }
+
+  if (!checkedStorage) return null;
+
+  if (!token || !petugasId) {
+    return <LoginForm onLoggedIn={handleLoggedIn} />;
+  }
+
+  return (
+    <PenyisiranPanel
+      token={token}
+      nama={nama || ""}
+      petugasId={petugasId}
+      petugasLat={lat}
+      petugasLng={lng}
+      onLokasiUpdated={handleLokasiUpdated}
+      onSessionExpired={handleLogout}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+// Form login personal (nama + tanggal lahir) -- pola & endpoint datalist
+// SAMA PERSIS dgn app/penyisiran/identifikasi-jorong.tsx (jorong-names
+// mengambil dari tabel petugas_penyisiran_akun yg sama, jadi endpoint itu
+// dipakai bersama di sini, bukan endpoint baru).
+function LoginForm({
+  onLoggedIn,
+}: {
+  onLoggedIn: (token: string, nama: string, petugasId: number, lat: number | null, lng: number | null) => void;
+}) {
+  const [namaOptions, setNamaOptions] = useState<string[]>([]);
+  const [namaInput, setNamaInput] = useState("");
+  const [tanggalLahir, setTanggalLahir] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/penyisiran/jorong-names")
+      .then((r) => r.json())
+      .then((d) => setNamaOptions(Array.isArray(d?.names) ? d.names : []))
+      .catch(() => setNamaOptions([]));
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPinError(null);
-    setPinLoading(true);
+    setError(null);
+    if (!namaInput.trim() || !tanggalLahir) {
+      setError("Isi nama lengkap dan tanggal lahir.");
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetch("/api/penyisiran/auth", {
+      const res = await fetch("/api/penyisiran/penyisiran-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput, role: "penyisiran" }),
+        body: JSON.stringify({ nama: namaInput, tanggal_lahir: tanggalLahir }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setPinError(data?.error || "PIN salah.");
+        setError(data?.error || "Login gagal.");
         return;
       }
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      setToken(data.token);
+      onLoggedIn(data.token, data.nama, data.petugas_id, data.lat ?? null, data.lng ?? null);
     } catch {
-      setPinError("Gagal terhubung. Periksa koneksi internet.");
+      setError("Gagal terhubung. Periksa koneksi internet.");
     } finally {
-      setPinLoading(false);
+      setLoading(false);
     }
   }
 
-  if (!token) {
-    return (
-      <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
-        <p className="text-sm font-semibold text-navy-900">Lembar Pengecekan Penyisiran Usaha</p>
-        <p className="mt-1 text-xs text-ink/60">
-          Berisi nama kepala keluarga, alamat, dan koordinat lokasi warga -- masukkan PIN akses dulu.
-        </p>
-        <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
+  return (
+    <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
+      <p className="text-sm font-semibold text-navy-900">Lembar Pengecekan Penyisiran Usaha</p>
+      <p className="mt-1 text-xs text-ink/60">
+        Berisi nama kepala keluarga, alamat, dan koordinat lokasi warga -- masukkan nama lengkap dan tanggal lahir
+        Anda sebagai petugas penyisiran. Setelah berhasil, Anda tidak perlu login ulang besok.
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 space-y-2 text-left">
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-ink/60">Nama Lengkap</label>
           <input
-            type="password"
-            inputMode="numeric"
-            value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
-            placeholder="PIN"
+            list="nama-petugas-penyisiran-usaha-options"
+            type="text"
+            value={namaInput}
+            onChange={(e) => setNamaInput(e.target.value)}
+            placeholder="Ketik nama lengkap Anda"
             autoFocus
+            autoComplete="off"
             className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
           />
-          <button
-            type="submit"
-            disabled={pinLoading}
-            className="shrink-0 rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {pinLoading ? "..." : "Buka"}
-          </button>
-        </form>
-        {pinError && <p className="mt-2 text-xs text-rust-700">{pinError}</p>}
-      </div>
-    );
-  }
-
-  return <PenyisiranPanel token={token} onSessionExpired={() => setToken(null)} />;
+          <datalist id="nama-petugas-penyisiran-usaha-options">
+            {namaOptions.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-ink/60">Tanggal Lahir</label>
+          <input
+            type="date"
+            value={tanggalLahir}
+            onChange={(e) => setTanggalLahir(e.target.value)}
+            className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {loading ? "Memeriksa..." : "Masuk"}
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-rust-700">{error}</p>}
+    </div>
+  );
 }
 
-function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+function PenyisiranPanel({
+  token,
+  nama,
+  petugasId,
+  petugasLat,
+  petugasLng,
+  onLokasiUpdated,
+  onSessionExpired,
+  onLogout,
+}: {
+  token: string;
+  nama: string;
+  petugasId: number;
+  petugasLat: number | null;
+  petugasLng: number | null;
+  onLokasiUpdated: (lat: number, lng: number) => void;
+  onSessionExpired: () => void;
+  onLogout: () => void;
+}) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [nagariOptions, setNagariOptions] = useState<KecOption[]>([]);
   const [subslsOptions, setSubslsOptions] = useState<SubslsOption[]>([]);
@@ -327,14 +468,6 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
   const [markers, setMarkers] = useState<MarkerRow[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [editAllMode, setEditAllMode] = useState(false);
-  // Dropdown "Nama Anda" -- label atribusi (BUKAN token/sesi baru, tab ini
-  // tetap PIN bersama) supaya checklist yg disimpan bisa dihitung per
-  // petugas di tab Monitoring, dan supaya skor prioritas berbasis jarak bisa
-  // dihitung dari lokasi rumah petugas yg dipilih. Id-nya disimpan di
-  // localStorage (bukan sessionStorage) spy tidak perlu pilih ulang setiap
-  // buka tab -- beda dari token PIN yg memang sengaja per-sesi.
-  const [petugasList, setPetugasList] = useState<PetugasOption[]>([]);
-  const [petugasId, setPetugasId] = useState<number | null>(null);
   const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
   const [lokasiBusy, setLokasiBusy] = useState(false);
   // Peta tampil setengah layar begitu halaman dibuka, tapi bisa digulung
@@ -350,7 +483,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-          sessionStorage.removeItem(TOKEN_KEY);
+          clearToken();
           onSessionExpired();
         } else {
           setErrMsg(msg);
@@ -375,38 +508,12 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     loadSummary();
   }, [loadSummary]);
 
-  // Muat daftar petugas aktif sekali, lalu pulihkan pilihan "Nama Anda"
-  // yg tersimpan di localStorage (kalau id-nya masih ada di daftar aktif --
-  // petugas yg sudah dinonaktifkan otomatis dianggap belum pilih nama lagi).
-  useEffect(() => {
-    apiFetch("/api/penyisiran/penyisiran-names", token)
-      .then((data) => {
-        const list: PetugasOption[] = data.petugas ?? [];
-        setPetugasList(list);
-        const saved = Number(localStorage.getItem(PETUGAS_ID_KEY));
-        if (Number.isFinite(saved) && saved > 0 && list.some((p) => p.id === saved)) {
-          setPetugasId(saved);
-        }
-      })
-      .catch((e) => guard(() => { throw e; }));
-  }, [token, guard]);
-
-  const petugas = petugasList.find((p) => p.id === petugasId) ?? null;
-
-  function handlePilihPetugas(id: number) {
-    setPetugasId(id || null);
-    if (id) localStorage.setItem(PETUGAS_ID_KEY, String(id));
-    else localStorage.removeItem(PETUGAS_ID_KEY);
-  }
-
-  // Tombol "Tetapkan Lokasi Rumah Saya" -- dipilih SENDIRI oleh petugas
-  // lewat Geolocation API browser (tidak dikumpulkan manual), disimpan ke
-  // petugas_penyisiran_akun.lat/lng lewat /api/penyisiran/set-lokasi-rumah.
+  // Tombol "Tetapkan Lokasi Rumah Saya" -- dipilih SENDIRI oleh petugas yg
+  // SEDANG LOGIN lewat Geolocation API browser (tidak dikumpulkan manual),
+  // disimpan ke petugas_penyisiran_akun.lat/lng lewat
+  // /api/penyisiran/set-lokasi-rumah. petugasId sudah pasti ada di sini
+  // krn PenyisiranUsahaTab tidak merender panel ini sebelum login sukses.
   function handleTetapkanLokasi() {
-    if (!petugasId) {
-      setLokasiStatus("Pilih nama Anda dulu.");
-      return;
-    }
     if (!("geolocation" in navigator)) {
       setLokasiStatus("Browser ini tidak mendukung deteksi lokasi.");
       return;
@@ -420,9 +527,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
             method: "PATCH",
             body: JSON.stringify({ petugas_id: petugasId, lat: pos.coords.latitude, lng: pos.coords.longitude }),
           });
-          setPetugasList((prev) =>
-            prev.map((p) => (p.id === petugasId ? { ...p, lat: pos.coords.latitude, lng: pos.coords.longitude } : p))
-          );
+          onLokasiUpdated(pos.coords.latitude, pos.coords.longitude);
           setLokasiStatus("✓ Lokasi rumah tersimpan.");
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -574,33 +679,29 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
         <p className="mt-0.5 text-[11px] text-ink/40">Tidak memuat NIK/Nomor KK.</p>
       </div>
 
-      {/* "Nama Anda" -- label atribusi checklist (lihat komentar state
-          petugasId) + tombol tetapkan lokasi rumah utk skor prioritas
-          berbasis jarak. */}
+      {/* Identitas petugas yg sedang login (personal, bukan lagi dropdown)
+          + tombol tetapkan lokasi rumah utk skor prioritas berbasis jarak. */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <span className="text-xs font-medium text-ink/60">Nama Anda:</span>
-        <select
-          value={petugasId ?? ""}
-          onChange={(e) => handlePilihPetugas(Number(e.target.value))}
-          className="min-w-[180px] rounded-md border border-line px-2 py-1.5 text-xs"
-        >
-          <option value="">-- Pilih nama --</option>
-          {petugasList.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nama}
-            </option>
-          ))}
-        </select>
+        <span className="text-xs text-ink/60">
+          Masuk sebagai <span className="font-semibold text-navy-900">{nama}</span>
+        </span>
         <button
           type="button"
           onClick={handleTetapkanLokasi}
-          disabled={lokasiBusy || !petugasId}
+          disabled={lokasiBusy}
           className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
         >
           {lokasiBusy ? "Mendeteksi..." : "📍 Tetapkan Lokasi Rumah Saya"}
         </button>
-        {petugas?.lat != null && <span className="text-[11px] text-moss-700">✓ Lokasi rumah sudah ditetapkan</span>}
+        {petugasLat != null && <span className="text-[11px] text-moss-700">✓ Lokasi rumah sudah ditetapkan</span>}
         {lokasiStatus && <span className="text-[11px] text-ink/50">{lokasiStatus}</span>}
+        <button
+          type="button"
+          onClick={onLogout}
+          className="ml-auto rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-ink/50 hover:border-navy-400"
+        >
+          Keluar
+        </button>
       </div>
 
       {errMsg && (
@@ -746,9 +847,9 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
                   jumlahDiSubsls={row.idsubsls ? jumlahDiSubslsMap.get(row.idsubsls) ?? 1 : 1}
                   maxJumlahDiSubsls={maxJumlahDiSubsls}
                   petugasId={petugasId}
-                  petugasNama={petugas?.nama ?? null}
-                  petugasLat={petugas?.lat ?? null}
-                  petugasLng={petugas?.lng ?? null}
+                  petugasNama={nama}
+                  petugasLat={petugasLat}
+                  petugasLng={petugasLng}
                   onSaved={refreshAfterEdit}
                   onSessionExpired={onSessionExpired}
                 />
@@ -915,7 +1016,7 @@ function RowCard({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
+        clearToken();
         onSessionExpired();
         return;
       }
@@ -941,7 +1042,7 @@ function RowCard({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
+        clearToken();
         onSessionExpired();
         return;
       }
@@ -1178,7 +1279,7 @@ function UploadPanel({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
+        clearToken();
         onSessionExpired();
         return;
       }

@@ -24,7 +24,7 @@ const KOLOM =
   "prioritas_pasti, penyisiran_oleh, updated_at";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
