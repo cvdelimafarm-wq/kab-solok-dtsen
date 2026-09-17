@@ -1,7 +1,9 @@
 // app/api/penyisiran/summary/route.ts
 //
 // Stat tile (total/belum/ditemukan/tidak_ditemukan/tidak_bisa) + daftar
-// kecamatan (utk dropdown filter tahap 1). Butuh token sesi valid.
+// kecamatan (utk dropdown filter tahap 1). Dipakai bersama oleh tab
+// "Penyisiran Usaha" maupun "Identifikasi PPL" (cuma daftar wilayah +
+// jumlah, tidak ada nama/alamat), jadi kedua role token diterima.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -11,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

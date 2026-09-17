@@ -1,7 +1,8 @@
 // app/api/penyisiran/update/route.ts
 //
-// Simpan hasil checklist petugas lapangan (status kunjungan + catatan)
-// untuk satu keluarga. Butuh token sesi valid.
+// Simpan hasil checklist petugas lapangan (status kunjungan + catatan +
+// info PPL/Jorong/Tetangga) untuk satu keluarga. Butuh token sesi valid
+// dgn role "penyisiran".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa"]);
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), "penyisiran")) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

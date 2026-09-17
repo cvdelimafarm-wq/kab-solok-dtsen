@@ -3,7 +3,7 @@
 // Versi RINGAN (cuma kolom yang dibutuhkan peta) dari daftar keluarga yang
 // sedang difilter, TIDAK dipaginasi (sampai batas MAX_MARKERS) supaya peta
 // menampilkan semua titik yang cocok, bukan cuma satu halaman tabel. Butuh
-// token sesi valid.
+// role "penyisiran".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const MAX_MARKERS = 5000;
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), "penyisiran")) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

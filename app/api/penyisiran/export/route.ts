@@ -4,6 +4,7 @@
 // halaman tabel) sebagai file CSV. Dibuka lewat navigasi langsung browser
 // (bukan fetch), jadi token dikirim lewat query string ?token=... (lihat
 // extractBearer di lib/penyisiranAuth.ts) -- bukan header Authorization.
+// Butuh role "penyisiran".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -27,6 +28,13 @@ const STATUS_LABEL: Record<string, string> = {
   tidak_bisa: "Tidak Bisa Ditemui / Pindah",
 };
 
+const IDENTIFIKASI_LABEL: Record<string, string> = {
+  belum: "Belum Diisi PPL",
+  ada: "PPL: Ada Usaha",
+  tidak_ada: "PPL: Tidak Ada Usaha",
+  ragu: "PPL: Ragu-ragu",
+};
+
 interface ExportRow {
   kode_identitas: string;
   kec_nama: string | null;
@@ -45,12 +53,14 @@ interface ExportRow {
   info_ppl: boolean;
   info_jorong: boolean;
   info_tetangga: boolean;
+  identifikasi_ppl: string;
+  identifikasi_ppl_at: string | null;
   catatan_petugas: string | null;
   updated_at: string;
 }
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), "penyisiran")) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -71,7 +81,8 @@ export async function GET(req: NextRequest) {
     .select(
       "kode_identitas, kec_nama, nagari_nama, sls_nama, nama_kk, alamat, lat, lng, " +
         "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, dtsen_lapangan_usaha, " +
-        "status_kunjungan, info_ppl, info_jorong, info_tetangga, catatan_petugas, updated_at"
+        "status_kunjungan, info_ppl, info_jorong, info_tetangga, identifikasi_ppl, " +
+        "identifikasi_ppl_at, catatan_petugas, updated_at"
     )
     .order("nagari_nama")
     .order("nama_kk")
@@ -101,6 +112,8 @@ export async function GET(req: NextRequest) {
     "Info PPL",
     "Info Jorong",
     "Info Tetangga",
+    "Identifikasi PPL",
+    "Identifikasi PPL Diisi Pada",
     "Catatan Petugas",
     "Terakhir Diperbarui",
   ];
@@ -125,6 +138,8 @@ export async function GET(req: NextRequest) {
         r.info_ppl ? "Ada" : "Tidak",
         r.info_jorong ? "Ada" : "Tidak",
         r.info_tetangga ? "Ada" : "Tidak",
+        IDENTIFIKASI_LABEL[r.identifikasi_ppl as string] ?? r.identifikasi_ppl,
+        r.identifikasi_ppl_at,
         r.catatan_petugas,
         r.updated_at,
       ]

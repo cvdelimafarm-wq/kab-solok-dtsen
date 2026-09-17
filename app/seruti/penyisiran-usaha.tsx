@@ -10,10 +10,17 @@
 // ini) SUDAH TIDAK memuat NIK/Nomor KK sama sekali -- lihat komentar di
 // bagian atas script Python & migrasi supabase/migrations/20260917_penyisiran_usaha.sql.
 //
-// Dikunci PIN server-side (lib/penyisiranAuth.ts) -- BEDA dari pola PIN
-// client-side di tab lain (Rekap Temuan, Kelola Anomali), karena di sini
-// yang dilindungi adalah BACAAN nama+alamat+GPS warga, bukan cuma akses
-// EDIT ke data yang memang sudah terbuka publik.
+// Dikunci PIN server-side, role "penyisiran" (lib/penyisiranAuth.ts) --
+// BEDA dari pola PIN client-side di tab lain (Rekap Temuan, Kelola
+// Anomali), karena di sini yang dilindungi adalah BACAAN nama+alamat+GPS
+// warga, bukan cuma akses EDIT ke data yang memang sudah terbuka publik.
+//
+// Kolom Info PPL/Jorong/Tetangga cuma bisa diubah setelah menekan tombol
+// "Edit" (per-kartu) atau "Edit Semua" (global) -- supaya tidak kepencet
+// tidak sengaja saat sekadar melihat-lihat daftar. Kolom "Identifikasi
+// PPL" ditampilkan read-only di sini (badge) -- diisi dari tab lain
+// ("Identifikasi PPL", lihat app/penyisiran/identifikasi-ppl.tsx) yang
+// dibagikan ke PPL/mantan pendata dengan PIN yang berbeda.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -29,12 +36,20 @@ const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
 const TOKEN_KEY = "penyisiran-token";
 
 type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa";
+type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
 const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: string }> = {
   belum: { label: "Belum Dikunjungi", badge: "bg-line text-ink/70", dot: "#6b7280" },
   ditemukan: { label: "Usaha Ditemukan", badge: "bg-moss-100 text-moss-700", dot: "#0ca30c" },
   tidak_ditemukan: { label: "Usaha Tidak Ditemukan", badge: "bg-[#FCEFD1] text-[#8A6A12]", dot: "#fab219" },
   tidak_bisa: { label: "Tidak Bisa Ditemui / Pindah", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
+};
+
+const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
+  belum: { label: "Identifikasi PPL: Belum diisi", className: "border border-line text-ink/40" },
+  ada: { label: "Identifikasi PPL: Ada usaha", className: "bg-moss-100 text-moss-700" },
+  tidak_ada: { label: "Identifikasi PPL: Tidak ada usaha", className: "bg-rust-100 text-rust-700" },
+  ragu: { label: "Identifikasi PPL: Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 };
 
 interface KecOption {
@@ -75,6 +90,8 @@ interface Row {
   info_ppl: boolean;
   info_jorong: boolean;
   info_tetangga: boolean;
+  identifikasi_ppl: NilaiIdentifikasi;
+  identifikasi_ppl_at: string | null;
   catatan_petugas: string | null;
   updated_at: string;
 }
@@ -83,7 +100,7 @@ function getToken(): string | null {
   if (typeof window === "undefined") return null;
   const t = sessionStorage.getItem(TOKEN_KEY);
   if (!t) return null;
-  const exp = Number(t.split(".")[0]);
+  const exp = Number(t.split(".")[1]);
   if (!Number.isFinite(exp) || exp < Date.now()) {
     sessionStorage.removeItem(TOKEN_KEY);
     return null;
@@ -119,7 +136,7 @@ export default function PenyisiranUsahaTab() {
       const res = await fetch("/api/penyisiran/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput }),
+        body: JSON.stringify({ pin: pinInput, role: "penyisiran" }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -183,6 +200,7 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [markers, setMarkers] = useState<MarkerRow[]>([]);
   const [showUpload, setShowUpload] = useState(false);
+  const [editAllMode, setEditAllMode] = useState(false);
   const pageSize = 200;
 
   const guard = useCallback(
@@ -321,12 +339,24 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
             memuat NIK/Nomor KK.
           </p>
         </div>
-        <button
-          onClick={() => setShowUpload((v) => !v)}
-          className="shrink-0 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
-        >
-          {showUpload ? "Tutup" : "⬆ Unggah Data"}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={() => setEditAllMode((v) => !v)}
+            className={`rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+              editAllMode
+                ? "border-navy-700 bg-navy-700 text-white"
+                : "border-line bg-white text-navy-700 hover:border-navy-400"
+            }`}
+          >
+            {editAllMode ? "🔓 Edit Semua Aktif" : "🔒 Edit Semua Info Lapangan"}
+          </button>
+          <button
+            onClick={() => setShowUpload((v) => !v)}
+            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
+          >
+            {showUpload ? "Tutup" : "⬆ Unggah Data"}
+          </button>
+        </div>
       </div>
 
       {errMsg && (
@@ -419,7 +449,14 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
             </div>
             <div className="flex flex-col gap-2">
               {rows.map((row) => (
-                <RowCard key={row.kode_identitas} row={row} token={token} onSaved={refreshAfterEdit} onSessionExpired={onSessionExpired} />
+                <RowCard
+                  key={row.kode_identitas}
+                  row={row}
+                  token={token}
+                  editAllMode={editAllMode}
+                  onSaved={refreshAfterEdit}
+                  onSessionExpired={onSessionExpired}
+                />
               ))}
               {rows.length === 0 && !loading && (
                 <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
@@ -483,11 +520,13 @@ function StatTile({ label, value, color }: { label: string; value: number; color
 function RowCard({
   row,
   token,
+  editAllMode,
   onSaved,
   onSessionExpired,
 }: {
   row: Row;
   token: string;
+  editAllMode: boolean;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -496,8 +535,10 @@ function RowCard({
   const [infoPpl, setInfoPpl] = useState(row.info_ppl);
   const [infoJorong, setInfoJorong] = useState(row.info_jorong);
   const [infoTetangga, setInfoTetangga] = useState(row.info_tetangga);
+  const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
+  const canEditInfo = editAllMode || unlocked;
   const dirty =
     status !== row.status_kunjungan ||
     catatan !== (row.catatan_petugas ?? "") ||
@@ -505,6 +546,7 @@ function RowCard({
     infoJorong !== row.info_jorong ||
     infoTetangga !== row.info_tetangga;
   const meta = STATUS_META[status];
+  const identMeta = IDENTIFIKASI_META[row.identifikasi_ppl] ?? IDENTIFIKASI_META.belum;
 
   async function handleSave() {
     setSaving(true);
@@ -565,6 +607,11 @@ function RowCard({
         )}
         {!mapsUrl && " · tanpa koordinat"}
       </p>
+      <div className="mb-1.5">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${identMeta.className}`}>
+          {identMeta.label}
+        </span>
+      </div>
       <div className="mb-1.5 flex flex-wrap gap-1.5">
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dutp ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
           DUTP {row.bukti_dutp ? "✓" : "-"}
@@ -576,10 +623,19 @@ function RowCard({
           PNM Mekar {row.bukti_pnm ? "✓" : "-"}
         </span>
       </div>
-      <div className="mb-1.5 flex flex-wrap gap-1.5">
-        <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} />
-        <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} />
-        <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} />
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} disabled={!canEditInfo} />
+        <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} disabled={!canEditInfo} />
+        <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} disabled={!canEditInfo} />
+        {!canEditInfo && (
+          <button
+            type="button"
+            onClick={() => setUnlocked(true)}
+            className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+          >
+            ✎ Edit
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <select
@@ -617,18 +673,23 @@ function InfoToggle({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string;
   value: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onChange(!value)}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onChange(!value);
+      }}
       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
         value ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40 hover:border-navy-400"
-      }`}
+      } ${disabled ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
     >
       {label}: {value ? "Ada" : "Tidak"}
     </button>

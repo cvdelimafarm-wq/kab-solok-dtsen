@@ -1,7 +1,9 @@
 // app/api/penyisiran/nagari/route.ts
 //
 // Daftar nagari + jumlah keluarga, difilter per kecamatan (dropdown filter
-// tahap 2, dimunculkan setelah kecamatan dipilih). Butuh token sesi valid.
+// tahap 2, dimunculkan setelah kecamatan dipilih). Dipakai bersama oleh
+// tab "Penyisiran Usaha" maupun "Identifikasi PPL", jadi kedua role token
+// diterima.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -11,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "identifikasi"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

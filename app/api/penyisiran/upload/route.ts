@@ -4,9 +4,8 @@
 // penyisiran_undercoverage_usaha.py, TANPA NIK/Nomor KK) dan upsert ke
 // Supabase lewat RPC penyisiran_upsert_batch. Client (tab UI) yang memecah
 // file JSON jadi beberapa batch kecil sebelum memanggil endpoint ini
-// berkali-kali -- supaya satu request tidak terlalu besar (lihat catatan
-// OOM di app/api/anomali-kp/upload/route.ts utk kenapa ini penting di
-// Railway). Butuh token sesi valid.
+// berkali-kali -- supaya satu request tidak terlalu besar. Butuh role
+// "penyisiran".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -18,7 +17,7 @@ export const dynamic = "force-dynamic";
 const MAX_ROWS_PER_REQUEST = 5000;
 
 export async function POST(req: NextRequest) {
-  if (!verifySession(extractBearer(req))) {
+  if (!verifySession(extractBearer(req), "penyisiran")) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

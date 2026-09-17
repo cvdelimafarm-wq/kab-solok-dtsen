@@ -9,7 +9,6 @@ import KonfirmasiPplTab from "./konfirmasi-ppl";
 import MonitoringAnomaliTab from "./monitoring-anomali";
 import RekapTemuanTab from "./rekap-temuan";
 import ErrorKonsistensiTab from "./error-konsistensi";
-import PenyisiranUsahaTab from "./penyisiran-usaha";
 import {
   Bar,
   BarChart,
@@ -125,7 +124,6 @@ export default function SerutiPage() {
     | "monitoring"
     | "rekaptemuan"
     | "errorkonsistensi"
-    | "penyisiran"
   >("form");
 
   const { daysLeft, totalPeriodDays, idealPercent } = useMemo(() => {
@@ -180,7 +178,7 @@ export default function SerutiPage() {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-10">
+      <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-9">
         <TabButton active={tab === "form"} onClick={() => setTab("form")} icon={<IconFormulir />}>
           Formulir Identifikasi
         </TabButton>
@@ -218,14 +216,6 @@ export default function SerutiPage() {
         >
           Error Konsistensi
         </TabButton>
-        <TabButton
-          active={tab === "penyisiran"}
-          onClick={() => setTab("penyisiran")}
-          icon={<IconPenyisiran />}
-          highlight
-        >
-          Penyisiran Usaha
-        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -240,7 +230,6 @@ export default function SerutiPage() {
         {tab === "monitoring" && <MonitoringAnomaliTab />}
         {tab === "rekaptemuan" && <RekapTemuanTab />}
         {tab === "errorkonsistensi" && <ErrorKonsistensiTab />}
-        {tab === "penyisiran" && <PenyisiranUsahaTab />}
       </div>
     </main>
   );
@@ -368,18 +357,6 @@ function IconErrorKonsistensi() {
       <path d="M12 3l9 16H3l9-16z" strokeLinejoin="round" />
       <path d="M12 9.5v4" strokeLinecap="round" />
       <circle cx="12" cy="16.3" r="0.9" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function IconPenyisiran() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path
-        d="M12 21s-7-6.1-7-11.2A7 7 0 0112 3a7 7 0 017 6.8C19 14.9 12 21 12 21z"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="9.8" r="2.4" />
     </svg>
   );
 }
