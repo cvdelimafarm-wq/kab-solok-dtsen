@@ -38,6 +38,16 @@ const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] 
   { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 ];
 
+// Dipakai bar float navigasi status di bawah layar -- beda dari PILIHAN
+// (yang cuma 3 pilihan jawaban), di sini termasuk "belum" supaya PPL bisa
+// langsung lompat ke kartu yang belum diisi juga.
+const BAR_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
+  belum: { label: "Belum Identifikasi", className: "border border-line text-ink/50" },
+  tidak_ada: { label: "Tidak Ada Usaha", className: "bg-rust-100 text-rust-700" },
+  ragu: { label: "Ragu-Ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
+  ada: { label: "Ada Usaha", className: "bg-moss-100 text-moss-700" },
+};
+
 interface Row {
   kode_identitas: string;
   kec_kode: string | null;
@@ -294,10 +304,30 @@ function IdentifikasiPanel({
     setRows((prev) => prev.map((r) => (r.kode_identitas === id ? { ...r, ...patch } : r)));
   }
 
+  // Bar float "Belum Identifikasi / Tidak Ada Usaha / Ragu-Ragu / Ada
+  // Usaha" di bawah layar: melompat ke kartu BERIKUTNYA (searah gulir ke
+  // bawah) yang berstatus identifikasi_ppl sesuai tombol yang ditekan,
+  // lalu berputar kembali ke kartu paling atas kalau sudah sampai ujung --
+  // supaya bisa dipakai berulang kali menyisir semua kartu dgn status yg
+  // sama. Hanya menjangkau kartu yang sedang dimuat di halaman ini (rows,
+  // dipaginasi 200/halaman).
+  function jumpKeStatus(nilai: NilaiIdentifikasi) {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(`[data-identifikasi-ppl="${nilai}"]`));
+    if (cards.length === 0) return;
+    const batasAtas = window.scrollY + 96; // beri sedikit ruang dari bagian atas layar
+    const berikutnya = cards.find((el) => el.getBoundingClientRect().top + window.scrollY > batasAtas);
+    (berikutnya ?? cards[0]).scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  const jumlahIdentifikasi = (Object.keys(BAR_META) as NilaiIdentifikasi[]).reduce(
+    (acc, k) => ({ ...acc, [k]: rows.filter((r) => r.identifikasi_ppl === k).length }),
+    {} as Record<NilaiIdentifikasi, number>
+  );
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-3 pb-6">
+    <div className="space-y-3 pb-20">
       <div className="flex items-start justify-between gap-2">
         <h1 className="text-base font-bold text-navy-900 sm:text-lg">Identifikasi PPL (Mantan Pendata)</h1>
         <button
@@ -387,6 +417,24 @@ function IdentifikasiPanel({
           </div>
         )}
       </div>
+
+      {/* Bar float navigasi status di tengah-bawah layar -- menekan salah
+          satu tombol langsung menggulir ke kartu berikutnya yg berstatus
+          sesuai (lihat jumpKeStatus di atas). */}
+      <div className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-line bg-white p-1 shadow-lg">
+        {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
+          <button
+            key={nilai}
+            type="button"
+            onClick={() => jumpKeStatus(nilai)}
+            title={`Lompat ke kartu berikutnya: ${BAR_META[nilai].label}`}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-80 ${BAR_META[nilai].className}`}
+          >
+            {BAR_META[nilai].label}
+            <span className="rounded-full bg-white/60 px-1.5 text-[10px]">{jumlahIdentifikasi[nilai] ?? 0}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -432,7 +480,13 @@ function IdentifikasiCard({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-white p-3">
+    <div
+      id={`kartu-${row.kode_identitas}`}
+      data-identifikasi-ppl={nilai}
+      className={`rounded-lg border border-line p-3 transition-colors ${
+        nilai !== "belum" ? "bg-moss-100/40" : "bg-white"
+      }`}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
         <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>

@@ -347,32 +347,10 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
     loadMarkers();
   }
 
-  // Bar float "Belum Identifikasi / Tidak Ada Usaha / Ragu-Ragu / Ada
-  // Usaha" di bawah layar: melompat ke kartu BERIKUTNYA (searah gulir ke
-  // bawah) yang berstatus identifikasi_ppl sesuai tombol yang ditekan,
-  // lalu berputar kembali ke kartu paling atas kalau sudah sampai ujung --
-  // supaya bisa dipakai berulang kali menyisir semua kartu dgn status yg
-  // sama. Hanya menjangkau kartu yang sedang dimuat di halaman ini (rows,
-  // dipaginasi 200/halaman).
-  function jumpKeStatus(nilai: NilaiIdentifikasi) {
-    const cards = Array.from(
-      document.querySelectorAll<HTMLElement>(`[data-identifikasi-ppl="${nilai}"]`)
-    );
-    if (cards.length === 0) return;
-    const batasAtas = window.scrollY + 96; // beri sedikit ruang dari bagian atas layar
-    const berikutnya = cards.find((el) => el.getBoundingClientRect().top + window.scrollY > batasAtas);
-    (berikutnya ?? cards[0]).scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  const jumlahIdentifikasi = (Object.keys(IDENTIFIKASI_META) as NilaiIdentifikasi[]).reduce(
-    (acc, k) => ({ ...acc, [k]: rows.filter((r) => r.identifikasi_ppl === k).length }),
-    {} as Record<NilaiIdentifikasi, number>
-  );
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-3 pb-24">
+    <div className="space-y-3 pb-16">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h1 className="text-base font-bold text-navy-900 sm:text-lg">
           Lembar Pengecekan Penyisiran Undercoverage Usaha
@@ -565,33 +543,6 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
         </div>
       )}
 
-      {/* Bar float navigasi status identifikasi -- di tengah-bawah layar,
-          supaya tidak tumpang tindih dgn tombol "Edit Semua" di pojok
-          kanan bawah. Menekan salah satu tombol langsung menggulir ke
-          kartu berikutnya yg berstatus identifikasi_ppl sesuai (lihat
-          jumpKeStatus di atas). */}
-      <div className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-line bg-white p-1 shadow-lg">
-        {(
-          [
-            { nilai: "belum", label: "Belum Identifikasi" },
-            { nilai: "tidak_ada", label: "Tidak Ada Usaha" },
-            { nilai: "ragu", label: "Ragu-Ragu" },
-            { nilai: "ada", label: "Ada Usaha" },
-          ] as { nilai: NilaiIdentifikasi; label: string }[]
-        ).map(({ nilai, label }) => (
-          <button
-            key={nilai}
-            type="button"
-            onClick={() => jumpKeStatus(nilai)}
-            title={`Lompat ke kartu berikutnya: ${label}`}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-80 ${IDENTIFIKASI_META[nilai].className}`}
-          >
-            {label}
-            <span className="rounded-full bg-white/60 px-1.5 text-[10px]">{jumlahIdentifikasi[nilai] ?? 0}</span>
-          </button>
-        ))}
-      </div>
-
       {/* Tombol "Edit Semua" MELAYANG di pojok bawah halaman -- supaya
           selalu terjangkau tanpa perlu gulung ke atas dulu, terutama saat
           daftar keluarga panjang. */}
@@ -692,15 +643,9 @@ function RowCard({
   const mapsUrl =
     row.lat != null && row.lng != null ? `https://www.google.com/maps?q=${row.lat},${row.lng}` : null;
 
-  const sudahDiidentifikasi = row.identifikasi_ppl !== "belum";
-
   return (
     <div
-      id={`kartu-${row.kode_identitas}`}
-      data-identifikasi-ppl={row.identifikasi_ppl}
-      className={`rounded-lg border border-line p-3 transition-colors ${
-        sudahDiidentifikasi ? "bg-moss-100/40" : "bg-white"
-      }`}
+      className="rounded-lg border border-line bg-white p-3"
       style={{ borderLeft: `4px solid ${meta.dot}` }}
     >
       <div className="flex items-baseline justify-between gap-2">
