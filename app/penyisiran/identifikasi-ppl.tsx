@@ -19,6 +19,10 @@ import { useCallback, useEffect, useState } from "react";
 
 const TOKEN_KEY = "identifikasi-ppl-token";
 
+// Halaman ini rencananya ditutup Minggu, 20 September 2026 pukul 12:00 WIB
+// -- ditampilkan sbg pengingat di layar PIN maupun di halaman isian.
+const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB.";
+
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
 const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] = [
@@ -110,6 +114,9 @@ export default function IdentifikasiPplTab() {
         <p className="text-sm font-semibold text-navy-900">Identifikasi PPL (Mantan Pendata)</p>
         <p className="mt-1 text-xs text-ink/60">
           Untuk PPL yang dulu mendata SE2026 di wilayah ini -- masukkan PIN akses yang dibagikan ke Anda.
+        </p>
+        <p className="mt-2 rounded-md bg-rust-100 px-2.5 py-1.5 text-[11px] font-medium text-rust-700">
+          ⚠ {PESAN_PENUTUPAN}
         </p>
         <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
           <input
@@ -250,6 +257,9 @@ function IdentifikasiPanel({ token, onSessionExpired }: { token: string; onSessi
         <p className="mt-0.5 text-xs text-ink/60 sm:text-sm">
           Seingat Saudara sebagai petugas yang dulu mendata SE2026, apakah keluarga berikut memiliki usaha atau
           tidak?
+        </p>
+        <p className="mt-2 inline-block rounded-md bg-rust-100 px-2.5 py-1.5 text-xs font-medium text-rust-700">
+          ⚠ {PESAN_PENUTUPAN}
         </p>
       </div>
 

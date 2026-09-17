@@ -22,7 +22,7 @@
 // ("Identifikasi PPL", lihat app/penyisiran/identifikasi-ppl.tsx) yang
 // dibagikan ke PPL/mantan pendata dengan PIN yang berbeda.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { MarkerRow } from "./penyisiran-map";
 
@@ -319,14 +319,6 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const exportUrl = useMemo(() => {
-    const sp = new URLSearchParams({ token });
-    if (filterKec) sp.set("kec", filterKec);
-    if (filterNagari) sp.set("nagari", filterNagari);
-    if (filterStatus) sp.set("status", filterStatus);
-    return `/api/penyisiran/export?${sp.toString()}`;
-  }, [token, filterKec, filterNagari, filterStatus]);
-
   return (
     <div className="space-y-3 pb-6">
       <div className="flex items-start justify-between gap-2">
@@ -426,12 +418,6 @@ function PenyisiranPanel({ token, onSessionExpired }: { token: string; onSession
           placeholder="Cari nama / ID / alamat..."
           className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
         />
-        <a
-          href={exportUrl}
-          className="shrink-0 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:border-navy-400"
-        >
-          ⬇ Unduh CSV
-        </a>
       </div>
 
       {!bisaMuat && (

@@ -32,7 +32,11 @@ import IdentifikasiPplTab from "./identifikasi-ppl";
 type TabKey = "usaha" | "identifikasi";
 
 export default function PenyisiranPage() {
-  const [tab, setTab] = useState<TabKey>("usaha");
+  // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
+  // dibagikan ke PPL/mantan pendata, jadi begitu link dibuka langsung
+  // menuju halaman itu. Tab "Penyisiran Usaha" (internal BPS) ditaruh di
+  // urutan terakhir.
+  const [tab, setTab] = useState<TabKey>("identifikasi");
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-5 py-6">
@@ -44,11 +48,11 @@ export default function PenyisiranPage() {
       </p>
 
       <div className="mt-4 flex gap-2 border-b border-line">
-        <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
-          Penyisiran Usaha
-        </TabButton>
         <TabButton active={tab === "identifikasi"} onClick={() => setTab("identifikasi")}>
           Identifikasi PPL
+        </TabButton>
+        <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
+          Penyisiran Usaha
         </TabButton>
       </div>
 
