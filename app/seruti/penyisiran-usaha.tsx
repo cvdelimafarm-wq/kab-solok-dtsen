@@ -107,6 +107,12 @@ interface Summary {
   tidak_bisa: number;
   kecamatan: KecOption[];
 }
+interface PplInfo {
+  nama: string;
+  no_hp: string;
+  korwil: string;
+  pml: string;
+}
 interface Row {
   kode_identitas: string;
   idsubsls: string | null;
@@ -646,6 +652,14 @@ function RowCard({
   const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
+  // "Riwayat Pendataan": nama + No HP PPL yg dulu dialokasikan ke ID Sub
+  // SLS keluarga ini (tabel ppl_alokasi_idsls/ppl_akun) -- dimuat ON
+  // DEMAND (baru fetch pas tombolnya ditekan pertama kali, lalu di-cache
+  // di state ini) supaya tidak membebani daftar yg bisa ratusan kartu.
+  const [riwayatOpen, setRiwayatOpen] = useState(false);
+  const [riwayatData, setRiwayatData] = useState<PplInfo[] | null>(null);
+  const [riwayatLoading, setRiwayatLoading] = useState(false);
+  const [riwayatErr, setRiwayatErr] = useState<string | null>(null);
   const canEditInfo = editAllMode || unlocked;
   const dirty =
     status !== row.status_kunjungan ||
@@ -702,6 +716,31 @@ function RowCard({
     } finally {
       setSaving(false);
       setTimeout(() => setSaved("idle"), 2000);
+    }
+  }
+
+  async function toggleRiwayat() {
+    if (riwayatOpen) {
+      setRiwayatOpen(false);
+      return;
+    }
+    setRiwayatOpen(true);
+    if (riwayatData !== null || !row.idsubsls) return; // sudah pernah dimuat / tidak ada idsubsls
+    setRiwayatLoading(true);
+    setRiwayatErr(null);
+    try {
+      const data = await apiFetch(`/api/penyisiran/ppl-info?idsubsls=${encodeURIComponent(row.idsubsls)}`, token);
+      setRiwayatData(data.ppl ?? []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        sessionStorage.removeItem(TOKEN_KEY);
+        onSessionExpired();
+        return;
+      }
+      setRiwayatErr(msg);
+    } finally {
+      setRiwayatLoading(false);
     }
   }
 
@@ -769,6 +808,58 @@ function RowCard({
           </button>
         )}
       </div>
+
+      {/* Riwayat Pendataan: nama + No HP PPL/mantan pendata yg dulu
+          mendata Sub SLS keluarga ini -- supaya petugas penyisiran bisa
+          langsung menghubungi kalau perlu konfirmasi lapangan. */}
+      <div className="mb-1.5">
+        <button
+          type="button"
+          onClick={toggleRiwayat}
+          className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+        >
+          🕘 Riwayat Pendataan {riwayatOpen ? "▲" : "▼"}
+        </button>
+        {riwayatOpen && (
+          <div className="mt-1.5 rounded-md border border-line bg-paper/60 p-2 text-[11px]">
+            {riwayatLoading && <span className="text-ink/40">Memuat...</span>}
+            {!riwayatLoading && riwayatErr && <span className="text-rust-700">Gagal memuat: {riwayatErr}</span>}
+            {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length === 0 && (
+              <span className="text-ink/40">Tidak ada PPL yang dialokasikan ke Sub SLS ini.</span>
+            )}
+            {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length > 0 && (
+              <div className="space-y-1">
+                {riwayatData.map((p, i) => {
+                  const hpBersih = p.no_hp.replace(/\D/g, "");
+                  const hpWa = hpBersih.startsWith("0") ? `62${hpBersih.slice(1)}` : hpBersih;
+                  return (
+                    <div key={i}>
+                      <span className="font-semibold text-navy-900">{p.nama || "(tanpa nama)"}</span>
+                      {p.no_hp ? (
+                        <>
+                          {" "}
+                          &middot;{" "}
+                          <a
+                            href={`https://wa.me/${hpWa}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-navy-400 underline"
+                          >
+                            {p.no_hp}
+                          </a>
+                        </>
+                      ) : (
+                        <span className="text-ink/40"> &middot; tanpa No HP</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-1.5">
         <select
           value={status}
