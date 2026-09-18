@@ -69,20 +69,24 @@ export async function PATCH(req: NextRequest) {
 
   const subjectId = getSessionSubject(token);
 
-  if (role === "identifikasi_ppl" && subjectId) {
-    const { data: row, error: rowErr } = await supabase
-      .from("penyisiran_usaha")
-      .select("idsubsls")
-      .eq("kode_identitas", id)
-      .maybeSingle();
-    if (rowErr) return NextResponse.json({ error: rowErr.message }, { status: 500 });
-    if (!row) return NextResponse.json({ error: "Data tidak ditemukan." }, { status: 404 });
+  // Nilai LAMA identifikasi_ppl diambil sekalian di sini (bukan query
+  // terpisah) -- dipakai baik utk cek alokasi PPL (role identifikasi_ppl)
+  // MAUPUN utk tahu apakah nilainya benar2 berubah (dasar catat riwayat
+  // di bawah, lihat penyisiran_riwayat).
+  const { data: rowSekarang, error: rowErr } = await supabase
+    .from("penyisiran_usaha")
+    .select("idsubsls, identifikasi_ppl")
+    .eq("kode_identitas", id)
+    .maybeSingle();
+  if (rowErr) return NextResponse.json({ error: rowErr.message }, { status: 500 });
+  if (!rowSekarang) return NextResponse.json({ error: "Data tidak ditemukan." }, { status: 404 });
 
+  if (role === "identifikasi_ppl" && subjectId) {
     const { data: alokasi, error: alokasiErr } = await supabase
       .from("ppl_alokasi_idsls")
       .select("idsubsls")
       .eq("ppl_id", subjectId)
-      .eq("idsubsls", row.idsubsls)
+      .eq("idsubsls", rowSekarang.idsubsls)
       .maybeSingle();
     if (alokasiErr) return NextResponse.json({ error: alokasiErr.message }, { status: 500 });
     if (!alokasi) {
@@ -114,5 +118,20 @@ export async function PATCH(req: NextRequest) {
   const { error } = await supabase.from("penyisiran_usaha").update(patch).eq("kode_identitas", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Catat ke penyisiran_riwayat HANYA kalau nilainya benar2 berubah --
+  // lihat komentar rowSekarang di atas.
+  if (rowSekarang.identifikasi_ppl !== nilai) {
+    await supabase.from("penyisiran_riwayat").insert({
+      kode_identitas: id,
+      jenis: "identifikasi_ppl",
+      nilai_lama: rowSekarang.identifikasi_ppl,
+      nilai_baru: nilai,
+      oleh_nama: diisiOleh,
+      oleh_role: role || null,
+    });
+    // Kegagalan insert riwayat SENGAJA tidak digagalkan ke pengguna.
+  }
+
   return NextResponse.json({ ok: true });
 }

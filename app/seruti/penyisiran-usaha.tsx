@@ -66,6 +66,70 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
   ragu: { label: "Identifikasi PPL: Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
 };
 
+// ---------- Riwayat Perubahan (audit log, tabel penyisiran_riwayat) ----------
+// Timeline "siapa mengubah apa/kapan/dari sumber mana" di panel "🕘 Riwayat
+// Perubahan" tiap kartu -- BEDA dari "☎ Kontak PPL Wilayah Ini" (nama+No HP
+// PPL yg dialokasikan ke Sub SLS, dari ppl_alokasi_idsls, sudah ada
+// sebelumnya) supaya tidak tertukar dua fitur yang sekilas mirip namanya.
+interface RiwayatEntry {
+  jenis: "status_kunjungan" | "info_ppl" | "info_jorong" | "info_tetangga" | "identifikasi_ppl";
+  nilai_lama: string | null;
+  nilai_baru: string | null;
+  oleh_nama: string | null;
+  oleh_role: string | null;
+  created_at: string;
+}
+
+// Label "Sumber" pada timeline -- dipetakan dari kode role token APA
+// ADANYA yg tersimpan di penyisiran_riwayat.oleh_role (lihat migrasi
+// 20260918_penyisiran_riwayat_audit_log.sql). "Otomatis dari akun yang
+// login", bukan kolom teks bebas -- sesuai keputusan sebelumnya.
+const SUMBER_LABEL: Record<string, string> = {
+  penyisiran_petugas: "Petugas Penyisiran",
+  penyisiran: "Petugas Penyisiran (PIN admin)",
+  identifikasi_ppl: "PPL",
+  identifikasi_jorong: "Identifikasi Jorong",
+  identifikasi_tetangga: "Tetangga/Lainnya",
+};
+
+const JENIS_RIWAYAT_LABEL: Record<RiwayatEntry["jenis"], string> = {
+  status_kunjungan: "Status Kunjungan",
+  info_ppl: "Info PPL",
+  info_jorong: "Info Jorong",
+  info_tetangga: "Info Tetangga",
+  identifikasi_ppl: "Identifikasi PPL",
+};
+
+// Ubah nilai MENTAH yg tersimpan di penyisiran_riwayat (mis. "true"/
+// "ditemukan") jadi teks yg enak dibaca -- pakai label yg SAMA dgn badge
+// yg sudah ada di kartu (STATUS_META dkk) supaya konsisten.
+function formatNilaiRiwayat(jenis: RiwayatEntry["jenis"], nilai: string | null): string {
+  if (nilai == null) return "-";
+  if (jenis === "status_kunjungan") return STATUS_META[nilai as StatusKunjungan]?.label ?? nilai;
+  if (jenis === "identifikasi_ppl") {
+    const map: Record<string, string> = {
+      belum: "Belum diisi",
+      ada: "Ada usaha",
+      tidak_ada: "Tidak ada usaha",
+      ragu: "Ragu-ragu",
+    };
+    return map[nilai] ?? nilai;
+  }
+  // info_ppl/info_jorong/info_tetangga -- disimpan sbg string "true"/"false".
+  return nilai === "true" ? "Ada" : "Tidak";
+}
+
+function formatWaktuRiwayat(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 type TierPrioritas = "pasti" | "tinggi" | "sedang" | "rendah";
 
 // Pilihan "Urutkan" daftar keluarga -- "default" = urutan apa adanya dari
@@ -492,6 +556,20 @@ function PenyisiranPanel({
   // keluarga bisa memakai lebar penuh saat peta sedang tidak dibutuhkan.
   const [mapVisible, setMapVisible] = useState(true);
   const [sortBy, setSortBy] = useState<SortBy>("default");
+  // Mode kartu: RINGKAS (default, cocok utk mencari & berpindah sampel)
+  // vs DETAIL (utk mendata/QC) -- disimpan sbg SET kode_identitas yg
+  // sedang dalam mode Detail, bukan boolean per-kartu tersendiri, supaya
+  // tombol global "Semua Ringkas"/"Semua Detail" gampang diterapkan (isi
+  // penuh utk "Semua Detail", kosongkan utk "Semua Ringkas").
+  const [detailIds, setDetailIds] = useState<Set<string>>(new Set());
+  function toggleDetail(id: string) {
+    setDetailIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const pageSize = 200;
 
   // ---------- Live Distance Tracking ----------
@@ -1065,20 +1143,38 @@ function PenyisiranPanel({
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
               <span>{loading ? "Memuat..." : `${total} keluarga cocok filter ini`}</span>
-              <label className="flex items-center gap-1.5">
-                Urutkan:
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortBy)}
-                  className="rounded-md border border-line px-2 py-1 text-xs text-ink"
-                >
-                  <option value="default">Default</option>
-                  <option value="jarak_asc">Jarak terdekat</option>
-                  <option value="jarak_terjauh">Jarak terjauh</option>
-                  <option value="prioritas_desc">Prioritas tertinggi</option>
-                  <option value="prioritas_asc">Prioritas terendah</option>
-                </select>
-              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex overflow-hidden rounded-md border border-line">
+                  <button
+                    type="button"
+                    onClick={() => setDetailIds(new Set())}
+                    className="px-2 py-1 text-xs font-medium text-navy-700 hover:bg-paper"
+                  >
+                    Semua Ringkas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailIds(new Set(rowsSorted.map((r) => r.kode_identitas)))}
+                    className="border-l border-line px-2 py-1 text-xs font-medium text-navy-700 hover:bg-paper"
+                  >
+                    Semua Detail
+                  </button>
+                </div>
+                <label className="flex items-center gap-1.5">
+                  Urutkan:
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortBy)}
+                    className="rounded-md border border-line px-2 py-1 text-xs text-ink"
+                  >
+                    <option value="default">Default</option>
+                    <option value="jarak_asc">Jarak terdekat</option>
+                    <option value="jarak_terjauh">Jarak terjauh</option>
+                    <option value="prioritas_desc">Prioritas tertinggi</option>
+                    <option value="prioritas_asc">Prioritas terendah</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               {rowsSorted.map((row) => (
@@ -1095,6 +1191,8 @@ function PenyisiranPanel({
                   petugasLng={petugasLng}
                   liveLat={liveLoc?.lat ?? null}
                   liveLng={liveLoc?.lng ?? null}
+                  isDetail={detailIds.has(row.kode_identitas)}
+                  onToggleDetail={() => toggleDetail(row.kode_identitas)}
                   onSaved={refreshAfterEdit}
                   onSessionExpired={onSessionExpired}
                 />
@@ -1168,6 +1266,8 @@ function RowCard({
   petugasLng,
   liveLat,
   liveLng,
+  isDetail,
+  onToggleDetail,
   onSaved,
   onSessionExpired,
 }: {
@@ -1182,6 +1282,8 @@ function RowCard({
   petugasLng: number | null;
   liveLat: number | null;
   liveLng: number | null;
+  isDetail: boolean;
+  onToggleDetail: () => void;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -1194,14 +1296,25 @@ function RowCard({
   const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
-  // "Riwayat Pendataan": nama + No HP PPL yg dulu dialokasikan ke ID Sub
-  // SLS keluarga ini (tabel ppl_alokasi_idsls/ppl_akun) -- dimuat ON
-  // DEMAND (baru fetch pas tombolnya ditekan pertama kali, lalu di-cache
-  // di state ini) supaya tidak membebani daftar yg bisa ratusan kartu.
+  // "☎ Kontak PPL Wilayah Ini": nama + No HP PPL yg dulu dialokasikan ke
+  // ID Sub SLS keluarga ini (tabel ppl_alokasi_idsls/ppl_akun) -- dimuat
+  // ON DEMAND (baru fetch pas tombolnya ditekan pertama kali, lalu
+  // di-cache di state ini) supaya tidak membebani daftar yg bisa ratusan
+  // kartu. Namanya SENGAJA dibedakan dari "🕘 Riwayat Perubahan" di bawah
+  // (timeline audit log) supaya dua fitur yg sekilas mirip ini tidak
+  // tertukar.
   const [riwayatOpen, setRiwayatOpen] = useState(false);
   const [riwayatData, setRiwayatData] = useState<PplInfo[] | null>(null);
   const [riwayatLoading, setRiwayatLoading] = useState(false);
   const [riwayatErr, setRiwayatErr] = useState<string | null>(null);
+  // "🕘 Riwayat Perubahan": timeline audit log (tabel penyisiran_riwayat)
+  // -- siapa mengubah Status/Info Jorong/Info Tetangga/Identifikasi PPL,
+  // kapan, dan dari sumber/akun mana. Sama pola dimuat ON DEMAND spt di
+  // atas.
+  const [perubahanOpen, setPerubahanOpen] = useState(false);
+  const [perubahanData, setPerubahanData] = useState<RiwayatEntry[] | null>(null);
+  const [perubahanLoading, setPerubahanLoading] = useState(false);
+  const [perubahanErr, setPerubahanErr] = useState<string | null>(null);
   const canEditInfo = editAllMode || unlocked;
   const dirty =
     status !== row.status_kunjungan ||
@@ -1309,6 +1422,31 @@ function RowCard({
     }
   }
 
+  async function togglePerubahan() {
+    if (perubahanOpen) {
+      setPerubahanOpen(false);
+      return;
+    }
+    setPerubahanOpen(true);
+    if (perubahanData !== null) return; // sudah pernah dimuat
+    setPerubahanLoading(true);
+    setPerubahanErr(null);
+    try {
+      const data = await apiFetch(`/api/penyisiran/riwayat?id=${encodeURIComponent(row.kode_identitas)}`, token);
+      setPerubahanData(data.riwayat ?? []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        clearToken();
+        onSessionExpired();
+        return;
+      }
+      setPerubahanErr(msg);
+    } finally {
+      setPerubahanLoading(false);
+    }
+  }
+
   const mapsUrl =
     row.lat != null && row.lng != null ? `https://www.google.com/maps?q=${row.lat},${row.lng}` : null;
 
@@ -1317,9 +1455,18 @@ function RowCard({
       className="rounded-lg border border-line bg-white p-3"
       style={{ borderLeft: `4px solid ${meta.dot}` }}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
-        <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
+      {/* ---------- RINGKAS: SELALU tampil (nama, jarak live, prioritas,
+          alamat) -- 4 info utama sesuai desain mode Ringkas/Detail, supaya
+          banyak kartu muat dalam satu layar saat petugas sedang mencari/
+          berpindah sampel. Sisa isi kartu (status, info tambahan, riwayat,
+          form Simpan) hanya muncul di mode Detail di bawah. */}
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0 truncate text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
+        {jarakLive != null ? (
+          <span className="shrink-0 text-xs font-bold text-[#2563eb]">{jarakLive.toFixed(1)} km</span>
+        ) : (
+          <span className="shrink-0 text-[10px] text-ink/40">{row.kode_identitas}</span>
+        )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         <span
@@ -1328,161 +1475,235 @@ function RowCard({
         >
           {prioritasMeta.label} &middot; {prioritas.skor}
         </span>
-        <button
-          type="button"
-          disabled={!canEditInfo}
-          onClick={() => canEditInfo && setPastiFlag((v) => !v)}
-          title="Tandai kalau sudah YAKIN ada usaha -- skor dipaksa maksimal apa pun hasil hitungan otomatis."
-          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
-            pastiFlag ? "bg-rust-700 text-white" : "border border-line text-ink/40 hover:border-navy-400"
-          } ${!canEditInfo ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
-        >
-          🎯 {pastiFlag ? "Pasti" : "Tandai Pasti"}
-        </button>
         {jarakLive != null && (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#2563eb]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2563eb]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2563eb]" /> Live &middot; {jarakLive.toFixed(1)} km dari Anda
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2563eb]" /> Live
           </span>
         )}
       </div>
-      <p className="mt-1 text-xs text-ink/70">{row.alamat || "-"}</p>
-      <p className="mb-1.5 text-[11px] text-ink/40">
-        {ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}
-        {mapsUrl && (
-          <>
-            {" "}
-            &middot;{" "}
-            <a href={mapsUrl} target="_blank" rel="noreferrer" className="text-navy-400 underline">
-              Lihat di peta
-            </a>
-            {" "}
-            &middot;{" "}
-            <a
-              href={
-                liveLat != null && liveLng != null
-                  ? `https://www.google.com/maps/dir/?api=1&origin=${liveLat},${liveLng}&destination=${row.lat},${row.lng}`
-                  : mapsUrl
-              }
-              target="_blank"
-              rel="noreferrer"
-              className="text-navy-400 underline"
-            >
-              🧭 Navigasi
-            </a>
-          </>
-        )}
-        {!mapsUrl && " · tanpa koordinat"}
-      </p>
-      <div className="mb-1.5">
-        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${identMeta.className}`}>
-          {identMeta.label}
-        </span>
-      </div>
-      <div className="mb-1.5 flex flex-wrap gap-1.5">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dutp ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-          DUTP {row.bukti_dutp ? "✓" : "-"}
-        </span>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dtsen ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-          DTSEN {row.bukti_dtsen ? "✓" : "-"}
-        </span>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_pnm ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-          PNM Mekar {row.bukti_pnm ? "✓" : "-"}
-        </span>
-      </div>
-      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} disabled={!canEditInfo} />
-        <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} disabled={!canEditInfo} />
-        <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} disabled={!canEditInfo} />
-        {!canEditInfo && (
+      <p className="mt-1 truncate text-xs text-ink/70">📍 {row.alamat || "-"}</p>
+
+      {!isDetail && (
+        <div className="mt-2 flex justify-end">
           <button
             type="button"
-            onClick={() => setUnlocked(true)}
-            className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+            onClick={onToggleDetail}
+            className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
           >
-            ✎ Edit
+            ⌄ Detail
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Riwayat Pendataan: nama + No HP PPL/mantan pendata yg dulu
-          mendata Sub SLS keluarga ini -- supaya petugas penyisiran bisa
-          langsung menghubungi kalau perlu konfirmasi lapangan. */}
-      <div className="mb-1.5">
-        <button
-          type="button"
-          onClick={toggleRiwayat}
-          className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
-        >
-          🕘 Riwayat Pendataan {riwayatOpen ? "▲" : "▼"}
-        </button>
-        {riwayatOpen && (
-          <div className="mt-1.5 rounded-md border border-line bg-paper/60 p-2 text-[11px]">
-            {riwayatLoading && <span className="text-ink/40">Memuat...</span>}
-            {!riwayatLoading && riwayatErr && <span className="text-rust-700">Gagal memuat: {riwayatErr}</span>}
-            {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length === 0 && (
-              <span className="text-ink/40">Tidak ada PPL yang dialokasikan ke Sub SLS ini.</span>
+      {/* ---------- DETAIL: seluruh info teknis + form pendataan, hanya
+          muncul saat kartu ini dibuka lewat tombol "⌄ Detail" (atau
+          "Semua Detail"). Kartu LAIN tidak ikut terbuka -- state isDetail
+          per-kartu dikelola PenyisiranPanel (Set kode_identitas). */}
+      {isDetail && (
+        <>
+          <p className="mb-1.5 mt-1.5 text-[11px] text-ink/40">
+            {ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}
+            {mapsUrl && (
+              <>
+                {" "}
+                &middot;{" "}
+                <a href={mapsUrl} target="_blank" rel="noreferrer" className="text-navy-400 underline">
+                  Lihat di peta
+                </a>
+                {" "}
+                &middot;{" "}
+                <a
+                  href={
+                    liveLat != null && liveLng != null
+                      ? `https://www.google.com/maps/dir/?api=1&origin=${liveLat},${liveLng}&destination=${row.lat},${row.lng}`
+                      : mapsUrl
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-navy-400 underline"
+                >
+                  🧭 Navigasi
+                </a>
+              </>
             )}
-            {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length > 0 && (
-              <div className="space-y-1">
-                {riwayatData.map((p, i) => {
-                  const hpBersih = p.no_hp.replace(/\D/g, "");
-                  const hpWa = hpBersih.startsWith("0") ? `62${hpBersih.slice(1)}` : hpBersih;
-                  return (
-                    <div key={i}>
-                      <span className="font-semibold text-navy-900">{p.nama || "(tanpa nama)"}</span>
-                      {p.no_hp ? (
-                        <>
-                          {" "}
-                          &middot;{" "}
-                          <a
-                            href={`https://wa.me/${hpWa}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-navy-400 underline"
-                          >
-                            {p.no_hp}
-                          </a>
-                        </>
-                      ) : (
-                        <span className="text-ink/40"> &middot; tanpa No HP</span>
-                      )}
-                    </div>
-                  );
-                })}
+            {!mapsUrl && " · tanpa koordinat"}
+          </p>
+          <div className="mb-1.5">
+            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${identMeta.className}`}>
+              {identMeta.label}
+            </span>
+          </div>
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dutp ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+              DUTP {row.bukti_dutp ? "✓" : "-"}
+            </span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dtsen ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+              DTSEN {row.bukti_dtsen ? "✓" : "-"}
+            </span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_pnm ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+              PNM Mekar {row.bukti_pnm ? "✓" : "-"}
+            </span>
+          </div>
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} disabled={!canEditInfo} />
+            <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} disabled={!canEditInfo} />
+            <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} disabled={!canEditInfo} />
+            {!canEditInfo && (
+              <button
+                type="button"
+                onClick={() => setUnlocked(true)}
+                className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+              >
+                ✎ Edit
+              </button>
+            )}
+          </div>
+          <div className="mb-1.5">
+            <button
+              type="button"
+              disabled={!canEditInfo}
+              onClick={() => canEditInfo && setPastiFlag((v) => !v)}
+              title="Tandai kalau sudah YAKIN ada usaha -- skor dipaksa maksimal apa pun hasil hitungan otomatis."
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                pastiFlag ? "bg-rust-700 text-white" : "border border-line text-ink/40 hover:border-navy-400"
+              } ${!canEditInfo ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
+            >
+              🎯 {pastiFlag ? "Pasti" : "Tandai Pasti"}
+            </button>
+          </div>
+
+          {/* ☎ Kontak PPL Wilayah Ini: nama + No HP PPL/mantan pendata yg
+              dulu mendata Sub SLS keluarga ini -- supaya petugas
+              penyisiran bisa langsung menghubungi kalau perlu konfirmasi
+              lapangan. BEDA dari "🕘 Riwayat Perubahan" di bawah. */}
+          <div className="mb-1.5">
+            <button
+              type="button"
+              onClick={toggleRiwayat}
+              className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+            >
+              ☎ Kontak PPL Wilayah Ini {riwayatOpen ? "▲" : "▼"}
+            </button>
+            {riwayatOpen && (
+              <div className="mt-1.5 rounded-md border border-line bg-paper/60 p-2 text-[11px]">
+                {riwayatLoading && <span className="text-ink/40">Memuat...</span>}
+                {!riwayatLoading && riwayatErr && <span className="text-rust-700">Gagal memuat: {riwayatErr}</span>}
+                {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length === 0 && (
+                  <span className="text-ink/40">Tidak ada PPL yang dialokasikan ke Sub SLS ini.</span>
+                )}
+                {!riwayatLoading && !riwayatErr && riwayatData && riwayatData.length > 0 && (
+                  <div className="space-y-1">
+                    {riwayatData.map((p, i) => {
+                      const hpBersih = p.no_hp.replace(/\D/g, "");
+                      const hpWa = hpBersih.startsWith("0") ? `62${hpBersih.slice(1)}` : hpBersih;
+                      return (
+                        <div key={i}>
+                          <span className="font-semibold text-navy-900">{p.nama || "(tanpa nama)"}</span>
+                          {p.no_hp ? (
+                            <>
+                              {" "}
+                              &middot;{" "}
+                              <a
+                                href={`https://wa.me/${hpWa}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-navy-400 underline"
+                              >
+                                {p.no_hp}
+                              </a>
+                            </>
+                          ) : (
+                            <span className="text-ink/40"> &middot; tanpa No HP</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as StatusKunjungan)}
-          className="rounded-md border border-line px-2 py-1 text-xs"
-        >
-          {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_META[s].label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={catatan}
-          onChange={(e) => setCatatan(e.target.value)}
-          placeholder="Catatan petugas..."
-          className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs"
-        />
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          className={`shrink-0 rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-30 ${
-            saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
-          }`}
-        >
-          {saving ? "..." : saved === "ok" ? "✓ Tersimpan" : saved === "err" ? "Gagal" : "Simpan"}
-        </button>
-      </div>
+          {/* 🕘 Riwayat Perubahan: timeline audit log (penyisiran_riwayat)
+              -- siapa mengubah Status/Info Jorong/Info Tetangga/
+              Identifikasi PPL, kapan, dari sumber/akun mana. */}
+          <div className="mb-1.5">
+            <button
+              type="button"
+              onClick={togglePerubahan}
+              className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
+            >
+              🕘 Riwayat Perubahan {perubahanOpen ? "▲" : "▼"}
+            </button>
+            {perubahanOpen && (
+              <div className="mt-1.5 rounded-md border border-line bg-paper/60 p-2 text-[11px]">
+                {perubahanLoading && <span className="text-ink/40">Memuat...</span>}
+                {!perubahanLoading && perubahanErr && (
+                  <span className="text-rust-700">Gagal memuat: {perubahanErr}</span>
+                )}
+                {!perubahanLoading && !perubahanErr && perubahanData && perubahanData.length === 0 && (
+                  <span className="text-ink/40">Belum ada riwayat perubahan tercatat utk keluarga ini.</span>
+                )}
+                {!perubahanLoading && !perubahanErr && perubahanData && perubahanData.length > 0 && (
+                  <div className="space-y-2">
+                    {perubahanData.map((r, i) => (
+                      <div key={i} className={i > 0 ? "border-t border-line pt-1.5" : ""}>
+                        <div className="text-ink/40">{formatWaktuRiwayat(r.created_at)}</div>
+                        <div className="font-semibold text-navy-900">
+                          {JENIS_RIWAYAT_LABEL[r.jenis]}: {formatNilaiRiwayat(r.jenis, r.nilai_baru)}
+                        </div>
+                        {r.oleh_nama && <div className="text-ink/60">Dilakukan oleh: {r.oleh_nama}</div>}
+                        {r.oleh_role && (
+                          <div className="text-ink/60">Sumber: {SUMBER_LABEL[r.oleh_role] ?? r.oleh_role}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as StatusKunjungan)}
+              className="rounded-md border border-line px-2 py-1 text-xs"
+            >
+              {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_META[s].label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={catatan}
+              onChange={(e) => setCatatan(e.target.value)}
+              placeholder="Catatan petugas..."
+              className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs"
+            />
+            <button
+              onClick={handleSave}
+              disabled={!dirty || saving}
+              className={`shrink-0 rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-30 ${
+                saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
+              }`}
+            >
+              {saving ? "..." : saved === "ok" ? "✓ Tersimpan" : saved === "err" ? "Gagal" : "Simpan"}
+            </button>
+          </div>
+
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={onToggleDetail}
+              className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-ink/50 hover:border-navy-400"
+            >
+              ⌃ Tutup
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -15,9 +15,17 @@
 // pakai PIN admin lama tanpa login personal), kolom itu dibiarkan seperti
 // semula (tidak ditimpa null) supaya atribusi kunjungan sebelumnya tidak
 // hilang.
+//
+// SEBELUM update, baris LAMA diambil dulu (status_kunjungan/info_ppl/
+// info_jorong/info_tetangga) supaya field yang BENAR2 berubah nilainya
+// bisa dicatat ke penyisiran_riwayat (audit log, dipakai panel "Riwayat
+// Perubahan" di kartu) -- kalau petugas menekan Simpan tanpa mengubah
+// apa pun (jarang terjadi krn tombol Simpan disabled saat !dirty di
+// frontend, tapi tetap dijaga di sini), tidak ada baris riwayat baru yang
+// dibuat sama sekali.
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +33,11 @@ export const dynamic = "force-dynamic";
 const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa"]);
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
+  const role = (token?.split(".")[0] ?? "") as PenyisiranRole;
 
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";
@@ -51,6 +61,13 @@ export async function PATCH(req: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  const { data: lama, error: lamaErr } = await supabase
+    .from("penyisiran_usaha")
+    .select("status_kunjungan, info_ppl, info_jorong, info_tetangga")
+    .eq("kode_identitas", id)
+    .maybeSingle();
+  if (lamaErr) return NextResponse.json({ error: lamaErr.message }, { status: 500 });
+
   const patch: Record<string, unknown> = {
     status_kunjungan: status,
     catatan_petugas: catatan,
@@ -68,5 +85,38 @@ export async function PATCH(req: NextRequest) {
   const { error } = await supabase.from("penyisiran_usaha").update(patch).eq("kode_identitas", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Catat ke penyisiran_riwayat HANYA field yang nilainya BENAR2 berubah
+  // dibanding sebelumnya -- lihat komentar di atas.
+  if (lama) {
+    const entri: { jenis: string; nilai_lama: string | null; nilai_baru: string }[] = [];
+    if (lama.status_kunjungan !== status) {
+      entri.push({ jenis: "status_kunjungan", nilai_lama: lama.status_kunjungan, nilai_baru: status });
+    }
+    if (lama.info_ppl !== infoPpl) {
+      entri.push({ jenis: "info_ppl", nilai_lama: String(lama.info_ppl), nilai_baru: String(infoPpl) });
+    }
+    if (lama.info_jorong !== infoJorong) {
+      entri.push({ jenis: "info_jorong", nilai_lama: String(lama.info_jorong), nilai_baru: String(infoJorong) });
+    }
+    if (lama.info_tetangga !== infoTetangga) {
+      entri.push({ jenis: "info_tetangga", nilai_lama: String(lama.info_tetangga), nilai_baru: String(infoTetangga) });
+    }
+    if (entri.length > 0) {
+      await supabase.from("penyisiran_riwayat").insert(
+        entri.map((e) => ({
+          kode_identitas: id,
+          jenis: e.jenis,
+          nilai_lama: e.nilai_lama,
+          nilai_baru: e.nilai_baru,
+          oleh_nama: petugasNama,
+          oleh_role: role || null,
+        }))
+      );
+      // Kegagalan insert riwayat SENGAJA tidak digagalkan ke pengguna
+      // (checklist utama sudah tersimpan) -- riwayat cuma pelengkap audit.
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
