@@ -58,6 +58,19 @@
 //    Penyisiran" (aktifkan/nonaktifkan akun) yang DEFAULT DISEMBUNYIKAN &
 //    minta PIN lagi sebelum tombolnya aktif -- lihat
 //    app/penyisiran/monitoring-petugas.tsx.
+//  - "Alokasi Sampel": form rekomendasi wilayah tugas -- login PERSONAL
+//    menumpang akun & role "penyisiran_petugas" YANG SAMA dgn tab
+//    "Penyisiran Usaha" (token localStorage sama, jadi otomatis sudah
+//    login kalau sudah login di tab itu). Isinya checklist maks 5 SLS/
+//    Jorong, diurutkan skor prioritas akhir PERSONAL (beda tiap petugas,
+//    krn faktor jarak dari lokasi rumah masing-masing) tertinggi ke
+//    terendah -- rumus skor (Skor Sumber DUTP/DTSEN/PNM + Skor
+//    Identifikasi Ada-PPL/Jorong/Keduanya + Bonus Volume potensi KK -
+//    Penalti Jarak ke centroid SLS) SUDAH dikonfirmasi user, lihat migrasi
+//    supabase/migrations/20260918_alokasi_sampel.sql. Sesudah submit,
+//    matriks gabungan petugas x Jorong x Nagari x Kecamatan dimunculkan
+//    (HANYA Jorong yg sudah dipilih min. 1 petugas -- lihat
+//    app/penyisiran/alokasi-sampel.tsx).
 //
 // Tab "Penyisiran Usaha" jg punya tombol "📍 Tetapkan Lokasi Rumah Saya"
 // (Geolocation API, disimpan ke petugas_penyisiran_akun.lat/lng lewat
@@ -80,6 +93,7 @@ import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
 import ManajemenTargetTab from "./manajemen-target";
 import AdministrasiSpjTab from "./administrasi-spj";
+import PerencanaanLapanganTab from "./perencanaan-lapangan";
 
 type TabKey =
   | "usaha"
@@ -89,7 +103,8 @@ type TabKey =
   | "monitoring"
   | "monitoring_petugas"
   | "target"
-  | "spj";
+  | "spj"
+  | "perencanaan";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -151,6 +166,17 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "spj"} onClick={() => setTab("spj")}>
           Administrasi
         </TabButton>
+        {/* "Perencanaan Lapangan" (dulu "Alokasi Sampel") -- tab BARU,
+            2 bagian: (1) Identifikasi Hari Tugas (checklist hari dalam
+            seminggu yg bisa turun bertugas) & (2) Identifikasi Wilayah
+            Sampel SLS (checklist SLS/Jorong per petugas Penyisiran
+            berdasarkan skor prioritas personal, jarak dari lokasi rumah
+            petugas). Login menumpang akun & role "penyisiran_petugas" yg
+            SAMA dgn tab "Penyisiran Usaha" (lihat komentar lengkap di
+            perencanaan-lapangan.tsx). */}
+        <TabButton active={tab === "perencanaan"} onClick={() => setTab("perencanaan")}>
+          Perencanaan Lapangan
+        </TabButton>
       </div>
 
       <div className="mt-4">
@@ -162,6 +188,7 @@ export default function PenyisiranPage() {
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
         {tab === "target" && <ManajemenTargetTab />}
         {tab === "spj" && <AdministrasiSpjTab />}
+        {tab === "perencanaan" && <PerencanaanLapanganTab />}
       </div>
     </main>
   );
