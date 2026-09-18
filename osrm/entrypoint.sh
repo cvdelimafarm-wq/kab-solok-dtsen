@@ -48,14 +48,34 @@ unduh_dengan_retry() {
   return 1
 }
 
+# Cek apakah file .osm.pbf valid (tidak kosong & header-nya bisa dibaca
+# osmium) sebelum dipercaya/dipakai ulang. PENTING: tanpa cek ini, file
+# rusak/setengah-unduh yang sempat nyangkut di volume /data (mis. dari
+# percobaan gagal sebelumnya) akan dipakai TERUS-MENERUS tanpa pernah
+# diunduh ulang, karena entrypoint cuma cek "sudah ada file-nya atau
+# belum" -- bukan "isinya valid atau tidak".
+pbf_valid() {
+  local f="$1"
+  [ -s "$f" ] || return 1
+  osmium fileinfo "$f" >/dev/null 2>&1
+}
+
 if [ ! -f "${OSRM_BASE}.mldgr" ]; then
   echo "[osrm] Data terproses belum ada di $DATA_DIR -- memproses dari awal (sekali saja, hasilnya disimpan di volume)..."
 
+  if [ -f "$RAW_PBF" ] && ! pbf_valid "$RAW_PBF"; then
+    echo "[osrm] $RAW_PBF ada tapi rusak/kosong (sisa percobaan gagal sebelumnya) -- hapus, unduh ulang."
+    rm -f "$RAW_PBF"
+  fi
   if [ ! -f "$RAW_PBF" ]; then
     echo "[osrm] Mengunduh extract OSM (sumber utama + cadangan kalau perlu) ..."
     unduh_dengan_retry "$RAW_PBF" "$OSRM_REGION_URL" "${OSRM_REGION_URL_FALLBACK:-}"
   fi
 
+  if [ -f "$CLIPPED_PBF" ] && ! pbf_valid "$CLIPPED_PBF"; then
+    echo "[osrm] $CLIPPED_PBF ada tapi rusak/kosong -- hapus, potong ulang dari $RAW_PBF."
+    rm -f "$CLIPPED_PBF"
+  fi
   if [ ! -f "$CLIPPED_PBF" ]; then
     echo "[osrm] Memotong extract ke bounding box $OSRM_BBOX ..."
     osmium extract --bbox "$OSRM_BBOX" --overwrite -o "$CLIPPED_PBF" "$RAW_PBF"
