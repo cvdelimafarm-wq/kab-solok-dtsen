@@ -76,8 +76,17 @@ import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
 import ManajemenTargetTab from "./manajemen-target";
+import AdministrasiSpjTab from "./administrasi-spj";
 
-type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring" | "monitoring_petugas" | "target";
+type TabKey =
+  | "usaha"
+  | "identifikasi"
+  | "jorong"
+  | "tetangga"
+  | "monitoring"
+  | "monitoring_petugas"
+  | "target"
+  | "spj";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -132,6 +141,13 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "target"} onClick={() => setTab("target")}>
           Manajemen Target
         </TabButton>
+        {/* "Administrasi" -- tab BARU, SPJ Translok (Kwitansi/Surat Tugas/
+            Visum/Laporan/Dokumentasi/Surat Keterangan). Login menumpang
+            akun Identifikasi Jorong ATAU Tetangga (PPL tidak ikut), lihat
+            komentar lengkap di administrasi-spj.tsx & lib/spjAuth.ts. */}
+        <TabButton active={tab === "spj"} onClick={() => setTab("spj")}>
+          Administrasi
+        </TabButton>
       </div>
 
       <div className="mt-4">
@@ -142,6 +158,7 @@ export default function PenyisiranPage() {
         {tab === "monitoring" && <MonitoringPplTab />}
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
         {tab === "target" && <ManajemenTargetTab />}
+        {tab === "spj" && <AdministrasiSpjTab />}
       </div>
     </main>
   );
