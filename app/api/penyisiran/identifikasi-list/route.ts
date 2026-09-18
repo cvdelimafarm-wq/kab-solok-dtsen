@@ -44,6 +44,10 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const kec = sp.get("kec") || "";
   const nagari = sp.get("nagari") || "";
+  // idsubsls persis (mis. "1303040001000202") -- dropdown filter Sub SLS
+  // BARU di tab Identifikasi PPL, cuma menyaring DI DALAM idsList (wilayah
+  // yg sudah otomatis ter-scope ke PPL), lihat /api/penyisiran/identifikasi-subsls.
+  const subsls = sp.get("subsls") || "";
   const status = sp.get("status") || ""; // filter nilai identifikasi_ppl, opsional
   const q = (sp.get("q") || "").trim();
   const page = Math.max(1, Number(sp.get("page")) || 1);
@@ -76,6 +80,7 @@ export async function GET(req: NextRequest) {
   if (scopedToPpl) query = query.in("idsubsls", idsList);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
+  if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("identifikasi_ppl", status);
   if (q) {
     const like = `%${q.replace(/[%_]/g, "")}%`;

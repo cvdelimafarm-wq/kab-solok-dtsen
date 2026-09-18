@@ -79,6 +79,12 @@ interface Row {
   identifikasi_ppl_at: string | null;
 }
 
+interface SubslsOption {
+  idsubsls: string;
+  label: string;
+  jumlah: number;
+}
+
 // Alamat (baris pertama kartu) sering SUDAH memuat nama Jorong/SLS di
 // dalamnya sendiri (mis. alamat "JALAN JORONG ULU PISAU HILANG" utk
 // keluarga yg SLS-nya memang "JORONG ULU PISAU HILANG" -- lazim di alamat
@@ -277,6 +283,12 @@ function IdentifikasiPanel({
   onLogout: () => void;
 }) {
   const [filterStatus, setFilterStatus] = useState("");
+  // Filter Sub SLS/Jorong BARU -- opsinya otomatis dibatasi ke wilayah yg
+  // sudah dialokasikan ke PPL ini (lihat loadSubslsOptions), BUKAN dropdown
+  // Kecamatan/Nagari manual spt tab Identifikasi Jorong/Tetangga (PPL
+  // memang tidak perlu pilih itu, lihat komentar di atas file).
+  const [filterSubsls, setFilterSubsls] = useState("");
+  const [subslsOptions, setSubslsOptions] = useState<SubslsOption[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -307,12 +319,22 @@ function IdentifikasiPanel({
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  // Opsi dropdown Sub SLS -- dimuat SEKALI saat panel dibuka (bukan tiap
+  // filter berubah), krn daftarnya tetap sama selama sesi login (wilayah
+  // alokasi PPL tidak berubah-ubah).
+  useEffect(() => {
+    apiFetch("/api/penyisiran/identifikasi-subsls", token)
+      .then((d) => setSubslsOptions(Array.isArray(d) ? d : []))
+      .catch((e) => guard(() => { throw e; }));
+  }, [token, guard]);
+
   const loadList = useCallback(async () => {
     setLoading(true);
     setErrMsg(null);
     try {
       const sp = new URLSearchParams();
       if (filterStatus) sp.set("status", filterStatus);
+      if (filterSubsls) sp.set("subsls", filterSubsls);
       if (search) sp.set("q", search);
       sp.set("page", String(page));
       const data = await apiFetch(`/api/penyisiran/identifikasi-list?${sp.toString()}`, token);
@@ -325,11 +347,11 @@ function IdentifikasiPanel({
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, search, page, token, guard]);
+  }, [filterStatus, filterSubsls, search, page, token, guard]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterStatus, search]);
+  }, [filterStatus, filterSubsls, search]);
 
   useEffect(() => {
     loadList();
@@ -403,6 +425,20 @@ function IdentifikasiPanel({
           <option value="tidak_ada">Tidak Ada</option>
           <option value="ragu">Ragu-ragu</option>
         </select>
+        {subslsOptions.length > 0 && (
+          <select
+            value={filterSubsls}
+            onChange={(e) => setFilterSubsls(e.target.value)}
+            className="rounded-md border border-line px-2 py-1.5 text-xs"
+          >
+            <option value="">Semua SLS/Sub SLS</option>
+            {subslsOptions.map((s) => (
+              <option key={s.idsubsls} value={s.idsubsls}>
+                {s.label} ({s.jumlah})
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="search"
           value={searchInput}
