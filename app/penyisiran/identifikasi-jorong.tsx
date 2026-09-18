@@ -57,12 +57,11 @@ const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
-// Jumlah Jorong/Sub SLS yg disarankan jadi target konfirmasi per petugas
-// (sesuai potensi kasus terbanyak di kecamatan terpilih) -- HARUS sama
-// dgn TOP_N di app/api/penyisiran/jorong-top/route.ts, krn nilai ini
-// cuma dipakai utk teks banner, isi daftarnya sendiri sudah dibatasi di
-// server.
-const JUMLAH_TARGET_JORONG = 8;
+// Jumlah default target konfirmasi kalau petugas belum diberi target di
+// tab Manajemen Target -- server (app/api/penyisiran/jorong-top/route.ts)
+// yg menentukan angka SEBENARNYA (dari petugas_target.target_identifikasi_jumlah
+// kalau ada), ini cuma nilai awal sebelum data server datang.
+const TARGET_JORONG_DEFAULT = 5;
 
 // Sama persis dgn ringkasWilayah di app/seruti/penyisiran-usaha.tsx &
 // app/penyisiran/identifikasi-ppl.tsx -- lihat komentar di sana. Alamat
@@ -305,6 +304,7 @@ function IdentifikasiJorongPanel({
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [topJorong, setTopJorong] = useState<TopJorongItem[]>([]);
+  const [targetJorong, setTargetJorong] = useState(TARGET_JORONG_DEFAULT);
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -385,7 +385,10 @@ function IdentifikasiJorongPanel({
       return;
     }
     apiFetch(`/api/penyisiran/jorong-top?kec=${encodeURIComponent(filterKec)}`, token)
-      .then(setTopJorong)
+      .then((d) => {
+        setTopJorong(Array.isArray(d?.jorong) ? d.jorong : []);
+        if (typeof d?.target === "number" && d.target > 0) setTargetJorong(d.target);
+      })
       .catch((e) => guard(() => { throw e; }));
   }, [filterKec, token, guard]);
 
@@ -562,13 +565,15 @@ function IdentifikasiJorongPanel({
       {filterKec && topJorong.length > 0 && (
         <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
           <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
-            🎯 Target konfirmasi per petugas: <span className="font-semibold">{JUMLAH_TARGET_JORONG} Jorong/Sub
-            SLS</span> dengan jumlah potensi kasus terbanyak di kecamatan ini. Cek daftarnya di bawah -- klik salah
-            satu untuk langsung mengaktifkan filter ke Jorong tersebut.
+            🎯 Target konfirmasi per petugas: <span className="font-semibold">{targetJorong} Jorong/Sub SLS</span>{" "}
+            dengan jumlah potensi kasus terbanyak di kecamatan ini. Cek daftarnya di bawah -- klik salah satu untuk
+            langsung mengaktifkan filter ke Jorong tersebut. 3 baris terakhir adalah opsi lain (cadangan) di luar
+            target wajib.
           </p>
           <div className="mt-2 flex flex-col gap-1">
             {topJorong.map((item, idx) => {
               const aktif = filterSubsls === item.idsubsls;
+              const opsiLain = idx >= targetJorong;
               return (
                 <button
                   key={item.idsubsls}
@@ -577,7 +582,9 @@ function IdentifikasiJorongPanel({
                   className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs transition ${
                     aktif
                       ? "border-[#8A6A12] bg-[#8A6A12] text-white"
-                      : "border-[#F4D77A] bg-white text-[#8A6A12] hover:bg-[#FCEFD1]"
+                      : opsiLain
+                        ? "border-dashed border-[#F4D77A]/70 bg-white/60 text-[#8A6A12]/70 hover:bg-[#FCEFD1]"
+                        : "border-[#F4D77A] bg-white text-[#8A6A12] hover:bg-[#FCEFD1]"
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -589,6 +596,7 @@ function IdentifikasiJorongPanel({
                       #{idx + 1}
                     </span>
                     <span className="min-w-0 truncate font-medium">{item.label}</span>
+                    {opsiLain && <span className="shrink-0 text-[10px] italic opacity-70">(opsi lain)</span>}
                   </span>
                   <span className={`shrink-0 text-[11px] font-semibold ${aktif ? "text-white" : "text-[#8A6A12]"}`}>
                     {item.jumlah} kasus

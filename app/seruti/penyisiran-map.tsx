@@ -105,9 +105,18 @@ function escapeHtml(s: string): string {
 export default function PenyisiranMap({
   markers,
   userLocation,
+  onLihatDetail,
 }: {
   markers: MarkerRow[];
   userLocation?: UserLocation | null;
+  // Diklik dari tombol "Lihat Detail" pada popup marker -- BEDA dari
+  // tombol "🧭 Navigasi" (tetap link Google Maps spt sebelumnya). Sesuai
+  // permintaan user: "Lihat Detail" TIDAK lagi membuka Google Maps,
+  // melainkan menggulung layar ke kartu keluarga yg sama di daftar
+  // (lihat pemanggilnya di penyisiran-usaha.tsx -- dioper
+  // handleKlikSampelTerdekat yg sudah ada, scroll+highlight+buka mode
+  // Detail).
+  onLihatDetail?: (kode: string) => void;
 }) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -121,6 +130,13 @@ export default function PenyisiranMap({
   // sampel tiap kali GPS bergerak.
   const userLocRef = useRef<UserLocation | null | undefined>(userLocation);
   userLocRef.current = userLocation;
+  // Sama pola dgn userLocRef di atas -- disimpan di ref (bukan dipakai
+  // langsung sbg closure/dependency effect) supaya callback ini SELALU
+  // yg terbaru tanpa memaksa effect gambar-marker di bawah re-run tiap
+  // kali parent re-render (onLihatDetail dari penyisiran-usaha.tsx bukan
+  // fungsi yg di-useCallback, jadi identitasnya beda tiap render).
+  const onLihatDetailRef = useRef<((kode: string) => void) | undefined>(onLihatDetail);
+  onLihatDetailRef.current = onLihatDetail;
 
   // Inisialisasi peta sekali saja.
   useEffect(() => {
@@ -189,6 +205,10 @@ export default function PenyisiranMap({
       const navUrl = u
         ? `https://www.google.com/maps/dir/?api=1&origin=${u.lat},${u.lng}&destination=${m.lat},${m.lng}`
         : mapsViewUrl;
+      // "Lihat Detail" SEKARANG tombol (bukan link Google Maps lagi) --
+      // dipasangi listener klik di popupopen di bawah, memanggil
+      // onLihatDetail (scroll ke kartu keluarga yg sama di daftar).
+      // "🧭 Navigasi" TETAP link Google Maps spt sebelumnya, tidak berubah.
       marker.bindPopup(
         `<div style="font-size:12px;line-height:1.5;min-width:170px">
            <b>${escapeHtml(m.nama_kk || "(tanpa nama)")}</b><br/>
@@ -198,14 +218,29 @@ export default function PenyisiranMap({
            <span style="color:#898781">${escapeHtml(m.nagari_nama || "")}</span>
            ${jarakTxt ? `<br/><span style="color:#41547E;font-weight:600">📍 ${jarakTxt}</span>` : ""}
            <div style="margin-top:6px;display:flex;gap:6px">
-             <a href="${mapsViewUrl}" target="_blank" rel="noreferrer"
-                style="flex:1;text-align:center;padding:4px 6px;border:1px solid #d8d5cd;border-radius:6px;color:#1B2A4A;text-decoration:none;font-weight:600">Lihat Detail</a>
+             <button type="button" class="popup-lihat-detail"
+                style="flex:1;text-align:center;padding:4px 6px;border:1px solid #d8d5cd;border-radius:6px;background:#ffffff;color:#1B2A4A;font:inherit;font-weight:600;cursor:pointer">Lihat Detail</button>
              <a href="${navUrl}" target="_blank" rel="noreferrer"
                 style="flex:1;text-align:center;padding:4px 6px;border-radius:6px;background:#1B2A4A;color:#ffffff;text-decoration:none;font-weight:600">🧭 Navigasi</a>
            </div>
          </div>`
       );
-      marker.on("popupopen", () => gambarGarisRute([m.lat, m.lng]));
+      marker.on("popupopen", () => {
+        gambarGarisRute([m.lat, m.lng]);
+        // Tombol dibuat SEKALI oleh bindPopup (bukan setiap popup dibuka),
+        // jadi listener klik cuma dipasang sekali jg (ditandai
+        // dataset.bound) supaya tidak dobel-terpasang tiap popup
+        // dibuka-tutup berkali-kali.
+        const popupEl = marker.getPopup()?.getElement();
+        const btn = popupEl?.querySelector<HTMLButtonElement>(".popup-lihat-detail");
+        if (btn && btn.dataset.bound !== "1") {
+          btn.dataset.bound = "1";
+          btn.addEventListener("click", () => {
+            map.closePopup();
+            onLihatDetailRef.current?.(m.kode_identitas);
+          });
+        }
+      });
       marker.on("popupclose", () => {
         if (routeLineRef.current) {
           routeLineRef.current.remove();

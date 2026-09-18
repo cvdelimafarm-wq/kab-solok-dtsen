@@ -1300,7 +1300,7 @@ function PenyisiranPanel({
                 ▲ Sembunyikan Peta
               </button>
               <div className="relative h-[24vh] max-h-[260px] min-h-[160px] overflow-hidden rounded-lg border border-line">
-                <PenyisiranMap markers={markers} userLocation={liveLoc} />
+                <PenyisiranMap markers={markers} userLocation={liveLoc} onLihatDetail={handleKlikSampelTerdekat} />
               </div>
               {/* Legenda DIPINDAH ke LUAR peta (dulu melayang di atas
                   peta, menutupi sebagian tampilan) -- dibuat grid 3 kolom
