@@ -22,11 +22,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
+import { HARI_VALID } from "@/lib/penyisiranHari";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-export const HARI_VALID = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"] as const;
 
 function ambilSesi(req: NextRequest): { token: string; petugasId: number } | null {
   const token = extractBearer(req);

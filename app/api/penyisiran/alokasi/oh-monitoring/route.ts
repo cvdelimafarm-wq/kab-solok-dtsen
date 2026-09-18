@@ -21,7 +21,10 @@ import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const KUOTA_OH_TRANSLOK = 280;
+// TIDAK diekspor (Next.js App Router melarang route.ts mengekspor apa pun
+// selain handler HTTP & const konfigurasi resmi runtime/dynamic/dst --
+// lihat komentar lengkap di lib/penyisiranHari.ts utk kasus yg sama).
+const KUOTA_OH_TRANSLOK = 280;
 
 export async function GET(req: NextRequest) {
   const token = extractBearer(req);

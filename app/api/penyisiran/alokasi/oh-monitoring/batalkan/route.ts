@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
-import { HARI_VALID } from "../../hari-tugas/route";
+import { HARI_VALID } from "@/lib/penyisiranHari";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
