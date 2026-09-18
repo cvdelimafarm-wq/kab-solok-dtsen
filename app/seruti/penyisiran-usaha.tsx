@@ -269,6 +269,12 @@ interface Row {
   sls_nama: string | null;
   subsls_kode: string | null;
   nama_kk: string | null;
+  // Nama gabungan Kepala Keluarga + anggota lain (mis. "ZULKARNAINI /
+  // NANGTI MAROZA"), dari kolom baru penyisiran_usaha.nama_anggota_keluarga
+  // -- BEDA dari nama_kk yg cuma nama KK sendirian. null utk data lama yg
+  // belum diunggah ulang lewat script Python versi terbaru -- fallback ke
+  // nama_kk (lihat namaTampilRow() di bawah).
+  nama_anggota_keluarga: string | null;
   alamat: string | null;
   lat: number | null;
   lng: number | null;
@@ -289,6 +295,14 @@ interface Row {
   prioritas_pasti: boolean;
   penyisiran_oleh: string | null;
   updated_at: string;
+}
+
+// Nama yg ditampilkan di kartu/daftar -- utamakan nama_anggota_keluarga
+// (nama gabungan KK + anggota lain, mis. "ZULKARNAINI / NANGTI MAROZA"),
+// fallback ke nama_kk (nama KK sendirian) kalau kolom baru itu kosong
+// (data lama yg belum diunggah ulang lewat script Python versi terbaru).
+function namaTampilRow(row: { nama_kk: string | null; nama_anggota_keluarga: string | null }): string {
+  return row.nama_anggota_keluarga || row.nama_kk || "(tanpa nama)";
 }
 
 // Jarak lurus (haversine, km) antara 2 titik koordinat -- dipakai skor
@@ -1137,8 +1151,8 @@ function PenyisiranPanel({
                       {i + 1}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-navy-900">
-                        {x.r.nama_kk || "(tanpa nama)"}
+                      <span className="block truncate font-semibold text-navy-900" title={namaTampilRow(x.r)}>
+                        {namaTampilRow(x.r)}
                       </span>
                       <span className="block text-[10px] text-ink/40">{x.r.kode_identitas}</span>
                     </span>
@@ -1665,7 +1679,17 @@ function RowCard({
           berpindah sampel. Sisa isi kartu (status, info tambahan, riwayat,
           form Simpan) hanya muncul di mode Detail di bawah. */}
       <div className="flex items-start justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
+        {/* Mode Ringkas (isDetail=false): dipotong 1 baris + "..." otomatis
+            sesuai lebar kartu (class `truncate`) supaya kartu tidak melebar
+            berantakan -- title= utk tooltip nama penuh saat hover/tap-hold.
+            Mode Detail: nama LENGKAP ditampilkan, boleh turun ke baris
+            berikutnya (tanpa truncate). */}
+        <span
+          className={`min-w-0 text-sm font-bold text-navy-900 ${isDetail ? "whitespace-normal" : "truncate"}`}
+          title={isDetail ? undefined : namaTampilRow(row)}
+        >
+          {namaTampilRow(row)}
+        </span>
         {jarakLive != null ? (
           <span className="shrink-0 text-xs font-bold text-[#2563eb]">{jarakLive.toFixed(1)} km</span>
         ) : (
