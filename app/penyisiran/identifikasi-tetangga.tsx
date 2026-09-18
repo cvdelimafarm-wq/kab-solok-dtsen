@@ -559,9 +559,8 @@ function IdentifikasiTetanggaPanel({
         <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
           <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
             🎯 Target konfirmasi: <span className="font-semibold">{targetJorong} Jorong/Sub SLS</span> dengan jumlah
-            potensi kasus terbanyak di kecamatan ini. Cek daftarnya di bawah -- klik salah satu untuk langsung
-            mengaktifkan filter ke Jorong tersebut. 3 baris terakhir adalah opsi lain (cadangan) di luar target
-            wajib.
+            potensi kasus terbanyak di kecamatan ini. Cek daftarnya REKOMENDASI SLS DENGAN JUMLAH KASUS TERBANYAK di
+            bawah -- klik salah satu untuk langsung mengaktifkan filter ke Jorong tersebut.
           </p>
           <div className="mt-2 flex flex-col gap-1">
             {topJorong.map((item, idx) => {
