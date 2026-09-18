@@ -49,6 +49,15 @@
 //     ikut tampil), dikelompokkan per Kecamatan > Nagari > SLS/Jorong dgn
 //     daftar nama petugas yang memilihnya. SLS BOLEH dipilih lebih dari 1
 //     petugas (dikonfirmasi user) -- tidak ada mekanisme rebutan/kunci.
+//     Di samping headernya ada tombol export "⬇ Export Excel Pengawas/
+//     Pencacah (per SUBSLS)" -- HANYA tampil utk 4 pengelola yg sama dgn
+//     tab Manajemen Target/Master Petugas (bolehAksesManajemenTarget).
+//     Narik SEMUA alokasi yang sudah masuk, dipecah per SUBSLS (satu SLS
+//     dgn 3 subsls jadi 3 baris), kolom PROVINSI/KABUPATEN-KOTA di-hardcode
+//     13/"03", KECAMATAN/DESA/SLS/SUBSLS dari kode wilayah, dan Email
+//     Pengawas/Email Pencacah diambil dari data tab Master Petugas -- lihat
+//     app/api/penyisiran/alokasi/export-subsls/route.ts &
+//     app/penyisiran/master-petugas.tsx.
 //  3. "Monitoring Kuota OH Translok" -- panel TAMBAHAN, HANYA tampil kalau
 //     nama hasil login termasuk 4 pengelola yg SAMA dgn tab "Manajemen
 //     Target" (bolehAksesManajemenTarget, lihat
@@ -339,7 +348,7 @@ function PerencanaanPanel({
 
       <HariTugasPanel token={token} />
 
-      <WilayahSampelPanel token={token} petugasId={petugasId} onSessionExpired={onSessionExpired} />
+      <WilayahSampelPanel token={token} nama={nama} petugasId={petugasId} onSessionExpired={onSessionExpired} />
 
       {bolehAksesManajemenTarget(nama) && <OhMonitoringPanel token={token} />}
     </div>
@@ -641,10 +650,12 @@ const KOLOM_TEKS: SortKey[] = ["sls_nama", "nagari_nama", "kec_nama"];
 // client-side di atas hasil rekomendasi yg sama.
 function WilayahSampelPanel({
   token,
+  nama,
   petugasId,
   onSessionExpired,
 }: {
   token: string;
+  nama: string;
   petugasId: number;
   onSessionExpired: () => void;
 }) {
@@ -665,6 +676,45 @@ function WilayahSampelPanel({
   const [filterNagari, setFilterNagari] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("skor_akhir");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportErr, setExportErr] = useState<string | null>(null);
+
+  // Export Excel Pengawas/Pencacah per SUBSLS -- HANYA utk data yang SUDAH
+  // MASUK (dipilih petugas), format kolom mengikuti contoh file dari
+  // pengelola. Fetch manual + blob (bukan window.open langsung ke URL API)
+  // krn endpoint butuh header Authorization -- pola SAMA dgn handleUnduh di
+  // administrasi-spj.tsx. Akses endpointnya sendiri jg dijaga di server
+  // (lihat .../alokasi/export-subsls/route.ts), tombol ini cuma disembunyikan
+  // dari petugas biasa demi UX (lihat gate bolehAksesManajemenTarget(nama)
+  // di JSX di bawah).
+  async function handleExportSubsls() {
+    setExportBusy(true);
+    setExportErr(null);
+    try {
+      const res = await fetch("/api/penyisiran/alokasi/export-subsls", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "alokasi_pengawas_pencacah_subsls.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal mengunduh file.";
+      setExportErr(msg);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+    } finally {
+      setExportBusy(false);
+    }
+  }
 
   async function muatRekomendasi() {
     setLoading(true);
@@ -850,7 +900,28 @@ function WilayahSampelPanel({
       )}
 
       <div className="rounded-lg border border-line bg-white p-4">
-        <p className="text-sm font-semibold text-navy-900">📋 Identifikasi Wilayah Sampel SLS (maks {MAKS_PILIHAN})</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm font-semibold text-navy-900">
+            📋 Identifikasi Wilayah Sampel SLS (maks {MAKS_PILIHAN})
+          </p>
+          {/* Tombol export cuma utk pengelola (sama spt akses tab Manajemen
+              Target/Master Petugas) -- narik data yang SUDAH MASUK (semua
+              petugas), dipecah per SUBSLS, kolom Email Pengawas/Pencacah
+              diambil dari tab Master Petugas. */}
+          {bolehAksesManajemenTarget(nama) && (
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={handleExportSubsls}
+                disabled={exportBusy}
+                className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+              >
+                {exportBusy ? "Menyiapkan..." : "⬇ Export Excel Pengawas/Pencacah (per SUBSLS)"}
+              </button>
+              {exportErr && <p className="mt-1 max-w-[220px] text-[10px] text-rust-700">⚠ {exportErr}</p>}
+            </div>
+          )}
+        </div>
         <p className="mt-1 text-xs text-ink/60">
           Pilih 5 kandidat wilayah sampel, diurutkan menurut skor prioritas akhir tertinggi (skor sumber +
           identifikasi, ditambah bonus volume potensi KK, dikurangi penalti jarak dari lokasi rumah Anda). SLS

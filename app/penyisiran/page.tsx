@@ -92,6 +92,7 @@ import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
 import ManajemenTargetTab from "./manajemen-target";
+import MasterPetugasTab from "./master-petugas";
 import AdministrasiSpjTab from "./administrasi-spj";
 import PerencanaanLapanganTab from "./perencanaan-lapangan";
 
@@ -103,6 +104,7 @@ type TabKey =
   | "monitoring"
   | "monitoring_petugas"
   | "target"
+  | "master_petugas"
   | "spj"
   | "perencanaan";
 
@@ -159,6 +161,13 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "target"} onClick={() => setTab("target")}>
           Manajemen Target
         </TabButton>
+        {/* "Master Petugas" -- tab BARU, perluasan data petugas yg sudah
+            ada (email/alamat/status kepegawaian/pengawas) -- lihat
+            komentar akses & isi lengkap di app/penyisiran/master-petugas.tsx.
+            Akses dibatasi ke 4 nama yg sama dgn "Manajemen Target". */}
+        <TabButton active={tab === "master_petugas"} onClick={() => setTab("master_petugas")}>
+          Master Petugas
+        </TabButton>
         {/* "Administrasi" -- tab BARU, SPJ Translok (Kwitansi/Surat Tugas/
             Visum/Laporan/Dokumentasi/Surat Keterangan). Login menumpang
             akun Identifikasi Jorong ATAU Tetangga (PPL tidak ikut), lihat
@@ -187,6 +196,7 @@ export default function PenyisiranPage() {
         {tab === "monitoring" && <MonitoringPplTab />}
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
         {tab === "target" && <ManajemenTargetTab />}
+        {tab === "master_petugas" && <MasterPetugasTab />}
         {tab === "spj" && <AdministrasiSpjTab />}
         {tab === "perencanaan" && <PerencanaanLapanganTab />}
       </div>
