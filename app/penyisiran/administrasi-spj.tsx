@@ -463,6 +463,25 @@ function formatTanggal(iso: string): string {
   }
 }
 
+// Tanggal hari ini menurut jam LOKAL browser (bukan toISOString() yg pakai
+// UTC -- kalau dipakai jam dini hari WIB, toISOString() bisa mundur sehari),
+// lalu diklem supaya tetap di dlm rentang tanggal_mulai..tanggal_selesai
+// Surat Tugas. Dipakai sbg default form Laporan & Dokumentasi supaya
+// tanggal yg tampil = hari ini (saat petugas benar2 kerja), bukan tanggal
+// mulai ST -- kalau dibiarkan default ke tanggal_mulai, petugas yg lupa
+// ganti tanggal akan submit ke tanggal yg salah & sistem tdk menemukan
+// aktivitas identifikasi (krn memang dicatat di tanggal lain).
+function tanggalHariIniKlem(tanggalMulai: string, tanggalSelesai: string): string {
+  const d = new Date();
+  const tahun = d.getFullYear();
+  const bulan = String(d.getMonth() + 1).padStart(2, "0");
+  const tgl = String(d.getDate()).padStart(2, "0");
+  const hariIni = `${tahun}-${bulan}-${tgl}`;
+  if (hariIni < tanggalMulai) return tanggalMulai;
+  if (hariIni > tanggalSelesai) return tanggalSelesai;
+  return hariIni;
+}
+
 // ---------- Form upload Surat Tugas (pengelola) ----------
 function UploadSuratTugasForm({
   token,
@@ -1049,7 +1068,7 @@ function LaporanForm({
   onDone: () => void;
   guard: (fn: () => void) => void;
 }) {
-  const [tanggal, setTanggal] = useState(st.tanggal_mulai);
+  const [tanggal, setTanggal] = useState(() => tanggalHariIniKlem(st.tanggal_mulai, st.tanggal_selesai));
   const [mode, setMode] = useState<"template" | "bebas">("template");
   const [narasi, setNarasi] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1246,7 +1265,7 @@ function DokumentasiSection({ token, onSessionExpired }: { token: string; onSess
 }
 
 function DokumentasiStCard({ st, token, guard }: { st: DokumentasiSt; token: string; guard: (fn: () => void) => void }) {
-  const [tanggal, setTanggal] = useState(st.tanggal_mulai);
+  const [tanggal, setTanggal] = useState(() => tanggalHariIniKlem(st.tanggal_mulai, st.tanggal_selesai));
   const [foto, setFoto] = useState<Record<number, DokumentasiFotoSlot | null>>({});
   const [loading, setLoading] = useState(false);
   const [busySlot, setBusySlot] = useState<number | null>(null);
