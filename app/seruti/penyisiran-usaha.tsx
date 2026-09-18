@@ -34,7 +34,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { MarkerRow } from "./penyisiran-map";
+import type { MarkerRow, UserLocation } from "./penyisiran-map";
 
 const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
   ssr: false,
@@ -67,6 +67,11 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
 };
 
 type TierPrioritas = "pasti" | "tinggi" | "sedang" | "rendah";
+
+// Pilihan "Urutkan" daftar keluarga -- "default" = urutan apa adanya dari
+// server (spt semula), sisanya diurutkan di BROWSER dari data halaman yg
+// sedang dimuat (lihat komentar rowsSorted di PenyisiranPanel).
+type SortBy = "default" | "jarak_asc" | "jarak_terjauh" | "prioritas_desc" | "prioritas_asc";
 
 // Warna badge "rendah" SENGAJA dibuat solid (bg-navy-100 + teks navy-700),
 // BUKAN pucat/transparan (border border-line text-ink/40) seperti semula --
@@ -219,6 +224,18 @@ function jarakKm(lat1: number, lng1: number, lat2: number, lng2: number): number
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// "Diperbarui X detik/menit lalu" utk status Lokasi Langsung (live
+// tracking) -- teksnya perlu ikut "hidup" tanpa GPS update baru, makanya
+// ada tick interval terpisah di PenyisiranPanel yang cuma memaksa
+// re-render tiap beberapa detik.
+function formatDetikLalu(ts: number): string {
+  const detik = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (detik < 5) return "Diperbarui baru saja";
+  if (detik < 60) return `Diperbarui ${detik} detik lalu`;
+  const menit = Math.round(detik / 60);
+  return `Diperbarui ${menit} menit lalu`;
 }
 
 // Token personal (role "penyisiran_petugas") punya 4 bagian
@@ -470,11 +487,87 @@ function PenyisiranPanel({
   const [editAllMode, setEditAllMode] = useState(false);
   const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
   const [lokasiBusy, setLokasiBusy] = useState(false);
-  // Peta tampil setengah layar begitu halaman dibuka, tapi bisa digulung
-  // ke atas (disembunyikan) supaya daftar keluarga bisa memakai lebar
-  // penuh saat peta sedang tidak dibutuhkan.
+  // Peta tampil COMPACT (bukan lagi setengah layar) begitu halaman
+  // dibuka, tapi bisa digulung ke atas (disembunyikan) supaya daftar
+  // keluarga bisa memakai lebar penuh saat peta sedang tidak dibutuhkan.
   const [mapVisible, setMapVisible] = useState(true);
+  const [sortBy, setSortBy] = useState<SortBy>("default");
   const pageSize = 200;
+
+  // ---------- Live Distance Tracking ----------
+  // Lokasi PENGGUNA SAAT INI (BEDA dari "lokasi rumah" petugasLat/Lng di
+  // atas, yang dipakai skor prioritas & disimpan permanen ke DB) --
+  // dipakai utk navigasi lapangan real-time: jarak tiap kartu & urutan
+  // "Sampel Terdekat" ikut berubah otomatis begitu petugas berpindah,
+  // tanpa reload halaman & tanpa disimpan ke mana pun (murni di memori
+  // browser, hilang begitu tab ditutup -- sengaja, krn ini posisi
+  // SEMENTARA saat menyisir, bukan lokasi permanen).
+  const [liveLoc, setLiveLoc] = useState<UserLocation | null>(null);
+  const [liveStatus, setLiveStatus] = useState<"idle" | "searching" | "active" | "error">("idle");
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState<number | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  // Tick paksa re-render tiap 5 detik HANYA supaya teks "Diperbarui X
+  // detik lalu" tetap segar walau tidak ada koordinat GPS baru masuk --
+  // tidak menyentuh data apa pun.
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Bersihkan watchPosition begitu komponen dilepas (pindah tab/keluar) --
+  // mencegah memory leak & baterai HP terus terpakai di background.
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current != null && typeof navigator !== "undefined" && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  function handleAktifkanLokasiLive() {
+    if (!("geolocation" in navigator)) {
+      setLiveStatus("error");
+      setLiveError("Browser ini tidak mendukung deteksi lokasi.");
+      return;
+    }
+    setLiveStatus("searching");
+    setLiveError(null);
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        setLiveLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null });
+        setLiveStatus("active");
+        setLiveUpdatedAt(Date.now());
+        setLiveError(null);
+      },
+      (err) => {
+        setLiveStatus("error");
+        setLiveError(err.message || "Lokasi tidak tersedia.");
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+    watchIdRef.current = id;
+  }
+
+  function handleNonaktifkanLokasiLive() {
+    if (watchIdRef.current != null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    watchIdRef.current = null;
+    setLiveStatus("idle");
+    setLiveLoc(null);
+    setLiveUpdatedAt(null);
+    setLiveError(null);
+  }
+
+  // Jarak dari lokasi LIVE (bukan lokasi rumah) ke satu keluarga -- null
+  // kalau lokasi live belum aktif atau keluarganya tidak punya koordinat.
+  function jarakLiveRow(row: Row): number | null {
+    if (!liveLoc || row.lat == null || row.lng == null) return null;
+    return jarakKm(liveLoc.lat, liveLoc.lng, row.lat, row.lng);
+  }
 
   const guard = useCallback(
     (fn: () => void) => {
@@ -655,6 +748,54 @@ function PenyisiranPanel({
   }
   const maxJumlahDiSubsls = Math.max(1, ...jumlahDiSubslsMap.values());
 
+  // Skor prioritas SATU keluarga -- dipakai HANYA utk mengurutkan daftar
+  // (dropdown "Urutkan"). RowCard tetap menghitung skornya sendiri secara
+  // live saat sedang diedit (lihat hitungSkorPrioritas di dalam RowCard);
+  // fungsi ini cuma versi "nilai tersimpan saat ini" spy daftar bisa
+  // diurutkan tanpa perlu tiap kartu melaporkan skornya ke atas.
+  function skorRow(row: Row): number {
+    const jarakRumah =
+      petugasLat != null && petugasLng != null && row.lat != null && row.lng != null
+        ? jarakKm(petugasLat, petugasLng, row.lat, row.lng)
+        : null;
+    return hitungSkorPrioritas(row, row.idsubsls ? jumlahDiSubslsMap.get(row.idsubsls) ?? 1 : 1, maxJumlahDiSubsls, {
+      pasti: row.prioritas_pasti,
+      jarakKm: jarakRumah,
+    }).skor;
+  }
+
+  // Pengurutan CUMA sebatas halaman yg sedang dimuat (rows, maks 200
+  // baris/halaman -- sama spt batasan hitungan klaster Sub SLS di
+  // hitungSkorPrioritas), bukan pengurutan global se-kabupaten. Baris
+  // tanpa koordinat/lokasi live selalu diletakkan di BELAKANG saat
+  // diurutkan berdasar jarak (bukan dianggap jarak 0).
+  const rowsSorted =
+    sortBy === "default"
+      ? rows
+      : rows
+          .map((r) => ({ r, jarak: jarakLiveRow(r), skor: skorRow(r) }))
+          .sort((a, b) => {
+            if (sortBy === "jarak_asc" || sortBy === "jarak_terjauh") {
+              if (a.jarak == null && b.jarak == null) return 0;
+              if (a.jarak == null) return 1;
+              if (b.jarak == null) return -1;
+              return sortBy === "jarak_asc" ? a.jarak - b.jarak : b.jarak - a.jarak;
+            }
+            return sortBy === "prioritas_desc" ? b.skor - a.skor : a.skor - b.skor;
+          })
+          .map((x) => x.r);
+
+  // "Sampel Terdekat" -- 3 keluarga terdekat dari lokasi LIVE, dihitung
+  // dari daftar yg sedang dimuat (rows), diperbarui otomatis tiap
+  // koordinat GPS berubah krn liveLoc ikut jadi dependency render ini.
+  const sampelTerdekat = liveLoc
+    ? rows
+        .map((r) => ({ r, jarak: jarakLiveRow(r) }))
+        .filter((x): x is { r: Row; jarak: number } => x.jarak != null)
+        .sort((a, b) => a.jarak - b.jarak)
+        .slice(0, 3)
+    : [];
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -703,6 +844,84 @@ function PenyisiranPanel({
           Keluar
         </button>
       </div>
+
+      {/* ---------- Live Distance Tracking: status lokasi saat ini ---------- */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
+        <span
+          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+            liveStatus === "active"
+              ? "text-moss-700"
+              : liveStatus === "searching"
+              ? "text-[#8A6A12]"
+              : liveStatus === "error"
+              ? "text-rust-700"
+              : "text-ink/50"
+          }`}
+        >
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{
+              backgroundColor:
+                liveStatus === "active"
+                  ? "#0ca30c"
+                  : liveStatus === "searching"
+                  ? "#fab219"
+                  : liveStatus === "error"
+                  ? "#d03b3b"
+                  : "#9ca3af",
+            }}
+          />
+          {liveStatus === "active" && "Lokasi Anda terdeteksi"}
+          {liveStatus === "searching" && "Mencari lokasi..."}
+          {liveStatus === "error" && "Lokasi tidak tersedia"}
+          {liveStatus === "idle" && "Lokasi langsung belum aktif"}
+        </span>
+        {liveStatus === "active" && liveUpdatedAt != null && (
+          <span className="text-[11px] text-ink/40">{formatDetikLalu(liveUpdatedAt)}</span>
+        )}
+        {liveError && liveStatus === "error" && <span className="text-[11px] text-rust-700">{liveError}</span>}
+        {liveStatus === "active" || liveStatus === "searching" ? (
+          <button
+            type="button"
+            onClick={handleNonaktifkanLokasiLive}
+            className="ml-auto rounded-md border border-rust-100 bg-white px-2.5 py-1.5 text-xs font-medium text-rust-700 hover:border-rust-700"
+          >
+            Nonaktifkan
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleAktifkanLokasiLive}
+            className="ml-auto rounded-md bg-navy-700 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-navy-900"
+          >
+            📍 Gunakan Lokasi Saya
+          </button>
+        )}
+      </div>
+
+      {/* "Sampel Terdekat" -- ringkasan 3 keluarga terdekat dari lokasi
+          LIVE, ikut berubah otomatis begitu petugas berpindah. */}
+      {sampelTerdekat.length > 0 && (
+        <div className="rounded-lg border border-line bg-white p-3">
+          <p className="mb-1.5 text-xs font-semibold text-navy-900">📍 Sampel Terdekat</p>
+          <div className="flex flex-col gap-1.5">
+            {sampelTerdekat.map((x, i) => (
+              <div key={x.r.kode_identitas} className="flex items-center justify-between gap-2 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy-100 text-[10px] font-bold text-navy-700">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-navy-900">{x.r.nama_kk || "(tanpa nama)"}</span>
+                    <span className="block text-[10px] text-ink/40">{x.r.kode_identitas}</span>
+                  </span>
+                </span>
+                <span className="shrink-0 font-semibold text-navy-700">{x.jarak.toFixed(1)} km</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {errMsg && (
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
@@ -794,10 +1013,14 @@ function PenyisiranPanel({
 
       {bisaMuat && (
         <>
-          {/* ---------- Map -- PERSIS di bawah baris filter/kolom cari,
-              full-width (bukan lagi berdampingan dgn daftar), supaya
-              langsung kelihatan begitu filter dipilih. Tetap bisa
-              disembunyikan spy tidak makan tempat kalau tidak dibutuhkan. */}
+          {/* ---------- Map -- COMPACT/floating (bukan lagi separuh
+              layar), PERSIS di bawah baris filter/kolom cari, full-width,
+              supaya langsung kelihatan begitu filter dipilih tapi tidak
+              mendorong daftar keluarga jauh ke bawah. Tetap bisa
+              disembunyikan spy tidak makan tempat kalau tidak dibutuhkan;
+              live tracking & jarak pada daftar TETAP berjalan walau peta
+              disembunyikan (state liveLoc ada di komponen induk, bukan di
+              dalam blok ini). */}
           {mapVisible ? (
             <div className="flex flex-col gap-2">
               <button
@@ -807,9 +1030,15 @@ function PenyisiranPanel({
               >
                 ▲ Sembunyikan Peta
               </button>
-              <div className="relative h-[50vh] min-h-[320px] overflow-hidden rounded-lg border border-line">
-                <PenyisiranMap markers={markers} />
+              <div className="relative h-[24vh] max-h-[260px] min-h-[160px] overflow-hidden rounded-lg border border-line">
+                <PenyisiranMap markers={markers} userLocation={liveLoc} />
                 <div className="absolute bottom-2 left-2 z-[1000] rounded-md border border-line bg-white/95 p-2 text-[11px] shadow">
+                  {liveLoc && (
+                    <div className="mb-1 flex items-center gap-1.5 border-b border-line pb-1">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#2563eb]" />
+                      Lokasi Anda
+                    </div>
+                  )}
                   {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
                     <div key={s} className="flex items-center gap-1.5">
                       <span
@@ -834,11 +1063,25 @@ function PenyisiranPanel({
 
           {/* ---------- List ---------- */}
           <div className="flex flex-col gap-2">
-            <div className="text-xs text-ink/50">
-              {loading ? "Memuat..." : `${total} keluarga cocok filter ini`}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
+              <span>{loading ? "Memuat..." : `${total} keluarga cocok filter ini`}</span>
+              <label className="flex items-center gap-1.5">
+                Urutkan:
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortBy)}
+                  className="rounded-md border border-line px-2 py-1 text-xs text-ink"
+                >
+                  <option value="default">Default</option>
+                  <option value="jarak_asc">Jarak terdekat</option>
+                  <option value="jarak_terjauh">Jarak terjauh</option>
+                  <option value="prioritas_desc">Prioritas tertinggi</option>
+                  <option value="prioritas_asc">Prioritas terendah</option>
+                </select>
+              </label>
             </div>
             <div className="flex flex-col gap-2">
-              {rows.map((row) => (
+              {rowsSorted.map((row) => (
                 <RowCard
                   key={row.kode_identitas}
                   row={row}
@@ -850,6 +1093,8 @@ function PenyisiranPanel({
                   petugasNama={nama}
                   petugasLat={petugasLat}
                   petugasLng={petugasLng}
+                  liveLat={liveLoc?.lat ?? null}
+                  liveLng={liveLoc?.lng ?? null}
                   onSaved={refreshAfterEdit}
                   onSessionExpired={onSessionExpired}
                 />
@@ -921,6 +1166,8 @@ function RowCard({
   petugasNama,
   petugasLat,
   petugasLng,
+  liveLat,
+  liveLng,
   onSaved,
   onSessionExpired,
 }: {
@@ -933,6 +1180,8 @@ function RowCard({
   petugasNama: string | null;
   petugasLat: number | null;
   petugasLng: number | null;
+  liveLat: number | null;
+  liveLng: number | null;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -969,6 +1218,14 @@ function RowCard({
   const jarak =
     petugasLat != null && petugasLng != null && row.lat != null && row.lng != null
       ? jarakKm(petugasLat, petugasLng, row.lat, row.lng)
+      : null;
+  // Jarak LIVE (posisi GPS petugas SAAT INI, lihat "📍 Gunakan Lokasi
+  // Saya" di PenyisiranPanel) -- BEDA dari `jarak` di atas (lokasi rumah
+  // permanen, dipakai skor prioritas). Ini murni informasi navigasi utk
+  // petugas di lapangan, tidak ikut memengaruhi skor prioritas.
+  const jarakLive =
+    liveLat != null && liveLng != null && row.lat != null && row.lng != null
+      ? jarakKm(liveLat, liveLng, row.lat, row.lng)
       : null;
   // Pakai nilai Info PPL/Jorong/Tetangga & "Pasti" yg SEDANG diedit (bukan
   // cuma yg sudah tersimpan) -- supaya skornya langsung ikut naik/turun
@@ -1082,6 +1339,11 @@ function RowCard({
         >
           🎯 {pastiFlag ? "Pasti" : "Tandai Pasti"}
         </button>
+        {jarakLive != null && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#2563eb]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2563eb]">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#2563eb]" /> Live &middot; {jarakLive.toFixed(1)} km dari Anda
+          </span>
+        )}
       </div>
       <p className="mt-1 text-xs text-ink/70">{row.alamat || "-"}</p>
       <p className="mb-1.5 text-[11px] text-ink/40">
@@ -1092,6 +1354,20 @@ function RowCard({
             &middot;{" "}
             <a href={mapsUrl} target="_blank" rel="noreferrer" className="text-navy-400 underline">
               Lihat di peta
+            </a>
+            {" "}
+            &middot;{" "}
+            <a
+              href={
+                liveLat != null && liveLng != null
+                  ? `https://www.google.com/maps/dir/?api=1&origin=${liveLat},${liveLng}&destination=${row.lat},${row.lng}`
+                  : mapsUrl
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="text-navy-400 underline"
+            >
+              🧭 Navigasi
             </a>
           </>
         )}
