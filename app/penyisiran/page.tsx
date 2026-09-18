@@ -75,8 +75,9 @@ import IdentifikasiJorongTab from "./identifikasi-jorong";
 import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
+import ManajemenTargetTab from "./manajemen-target";
 
-type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring" | "monitoring_petugas";
+type TabKey = "usaha" | "identifikasi" | "jorong" | "tetangga" | "monitoring" | "monitoring_petugas" | "target";
 
 export default function PenyisiranPage() {
   // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
@@ -123,6 +124,14 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "monitoring_petugas"} onClick={() => setTab("monitoring_petugas")}>
           Monitoring Petugas Penyisiran
         </TabButton>
+        {/* "Manajemen Target" -- tab BARU, ditaruh paling akhir (sama spt
+            "Penyisiran Usaha" & 2 tab Monitoring, area internal BPS bukan
+            utk PPL/tetangga). Tombolnya tampil ke SEMUA orang (sama spt
+            tab lain), tapi ISINYA dibatasi ke 4 nama tertentu -- lihat
+            komentar akses di app/penyisiran/manajemen-target.tsx. */}
+        <TabButton active={tab === "target"} onClick={() => setTab("target")}>
+          Manajemen Target
+        </TabButton>
       </div>
 
       <div className="mt-4">
@@ -132,6 +141,7 @@ export default function PenyisiranPage() {
         {tab === "tetangga" && <IdentifikasiTetanggaTab />}
         {tab === "monitoring" && <MonitoringPplTab />}
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
+        {tab === "target" && <ManajemenTargetTab />}
       </div>
     </main>
   );
