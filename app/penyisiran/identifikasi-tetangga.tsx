@@ -49,6 +49,12 @@ const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
+// Jumlah Jorong/Sub SLS yg disarankan jadi target konfirmasi (sesuai
+// potensi kasus terbanyak di kecamatan terpilih) -- HARUS sama dgn
+// TOP_N di app/api/penyisiran/jorong-top/route.ts, krn nilai ini cuma
+// dipakai utk teks banner, isi daftarnya sendiri sudah dibatasi di server.
+const JUMLAH_TARGET_JORONG = 8;
+
 // Sama persis dgn ringkasWilayah di app/seruti/penyisiran-usaha.tsx,
 // app/penyisiran/identifikasi-ppl.tsx, & identifikasi-jorong.tsx -- lihat
 // komentar di sana. Alamat sering sudah memuat nama Jorong/SLS di
@@ -68,6 +74,17 @@ interface KecOption {
 }
 interface SubslsOption {
   idsubsls: string;
+  label: string;
+  jumlah: number;
+}
+// Item saran "Target Konfirmasi Jorong" -- kombinasi Nagari+Jorong (Sub
+// SLS) dgn jumlah potensi kasus terbanyak DI DALAM kecamatan yg sedang
+// dipilih, lihat app/api/penyisiran/jorong-top/route.ts. label sudah
+// gabungan "Nagari · Jorong" dari server, jadi tinggal ditampilkan.
+interface TopJorongItem {
+  idsubsls: string;
+  nagari_kode: string | null;
+  nagari_nama: string | null;
   label: string;
   jumlah: number;
 }
@@ -276,6 +293,7 @@ function IdentifikasiTetanggaPanel({
   const [filterStatus, setFilterStatus] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [topJorong, setTopJorong] = useState<TopJorongItem[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -308,8 +326,16 @@ function IdentifikasiTetanggaPanel({
   }, [token, guard]);
 
   // Dropdown filter tahap 2: Nagari -- baru muncul setelah Kecamatan dipilih.
+  // CATATAN: dulu ada setFilterNagari("") di sini juga -- dipindah ke
+  // onChange select Kecamatan (lihat bawah), krn kalau resetnya masih di
+  // effect ini, klik saran "Target Konfirmasi Jorong" (handleLoncatJorong,
+  // yg set Nagari+Sub SLS sekaligus tanpa mengubah Kecamatan) tidak akan
+  // memicu effect ini (dependency filterKec tidak berubah) TAPI effect
+  // Sub SLS di bawah tetap terpicu oleh perubahan filterNagari -- supaya
+  // effect itu tidak balik mereset Sub SLS yg baru saja diisi, resetnya
+  // juga harus keluar dari sana. Effect ini SEKARANG cuma tugas memuat
+  // opsi, tidak lagi ikut mengubah filter.
   useEffect(() => {
-    setFilterNagari("");
     if (!filterKec) {
       setNagariOptions([]);
       return;
@@ -321,9 +347,11 @@ function IdentifikasiTetanggaPanel({
 
   // Dropdown filter tahap 3: Sub SLS/Jorong -- baru muncul setelah
   // Kecamatan & Nagari dipilih (WAJIB kirim keduanya, lihat komentar di
-  // app/api/penyisiran/subsls/route.ts).
+  // app/api/penyisiran/subsls/route.ts). Sama seperti effect Nagari di
+  // atas -- reset Sub SLS dipindah ke onChange select Nagari, effect ini
+  // cuma memuat opsi supaya handleLoncatJorong bisa set Nagari+Sub SLS
+  // berbarengan tanpa diclobber balik ke "".
   useEffect(() => {
-    setFilterSubsls("");
     if (!filterKec || !filterNagari) {
       setSubslsOptions([]);
       return;
@@ -335,6 +363,20 @@ function IdentifikasiTetanggaPanel({
       .then(setSubslsOptions)
       .catch((e) => guard(() => { throw e; }));
   }, [filterKec, filterNagari, token, guard]);
+
+  // Saran "Target Konfirmasi Jorong" -- muncul begitu Kecamatan dipilih
+  // (lihat app/api/penyisiran/jorong-top/route.ts). Diminta user: daftar
+  // ini harus sudah tampil SESAAT setelah klik dropdown Kecamatan, jadi
+  // dimuat langsung di sini, bukan menunggu Nagari/Sub SLS ikut dipilih.
+  useEffect(() => {
+    if (!filterKec) {
+      setTopJorong([]);
+      return;
+    }
+    apiFetch(`/api/penyisiran/jorong-top?kec=${encodeURIComponent(filterKec)}`, token)
+      .then(setTopJorong)
+      .catch((e) => guard(() => { throw e; }));
+  }, [filterKec, token, guard]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 400);
@@ -383,6 +425,17 @@ function IdentifikasiTetanggaPanel({
     setRows((prev) => prev.map((r) => (r.kode_identitas === id ? { ...r, ...patch } : r)));
   }
 
+  // Diklik dari daftar saran "Target Konfirmasi Jorong" -- set Nagari &
+  // Sub SLS SEKALIGUS ke kombinasi yg dipilih (Kecamatan tidak perlu
+  // diubah lagi krn daftar saran ini memang sudah scoped ke Kecamatan yg
+  // sedang aktif). Aman dari efek reset otomatis krn reset-nya sudah
+  // dipindah ke onChange select, bukan lagi di useEffect (lihat komentar
+  // di atas).
+  function handleLoncatJorong(item: TopJorongItem) {
+    setFilterNagari(item.nagari_kode || "");
+    setFilterSubsls(item.idsubsls);
+  }
+
   function jumpKeStatus(nilai: NilaiIdentifikasi) {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(`[data-identifikasi-ppl="${nilai}"]`));
     if (cards.length === 0) return;
@@ -427,7 +480,14 @@ function IdentifikasiTetanggaPanel({
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
         <select
           value={filterKec}
-          onChange={(e) => setFilterKec(e.target.value)}
+          onChange={(e) => {
+            // Ganti Kecamatan -> Nagari & Sub SLS yg lama sudah tidak
+            // relevan, reset di sini (bukan di useEffect, lihat komentar
+            // di effect Nagari/Sub SLS di atas).
+            setFilterKec(e.target.value);
+            setFilterNagari("");
+            setFilterSubsls("");
+          }}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
         >
           <option value="">Pilih Kecamatan...</option>
@@ -439,7 +499,12 @@ function IdentifikasiTetanggaPanel({
         </select>
         <select
           value={filterNagari}
-          onChange={(e) => setFilterNagari(e.target.value)}
+          onChange={(e) => {
+            // Ganti Nagari -> Sub SLS yg lama sudah tidak relevan, reset
+            // di sini (bukan di useEffect, lihat komentar di atas).
+            setFilterNagari(e.target.value);
+            setFilterSubsls("");
+          }}
           disabled={!filterKec}
           className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-40"
         >
@@ -482,6 +547,47 @@ function IdentifikasiTetanggaPanel({
           className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
         />
       </div>
+
+      {filterKec && topJorong.length > 0 && (
+        <div className="rounded-lg border border-[#F4D77A] bg-[#FCEFD1] p-3">
+          <p className="text-xs font-medium text-[#8A6A12] sm:text-sm">
+            🎯 Target konfirmasi: <span className="font-semibold">{JUMLAH_TARGET_JORONG} Jorong/Sub SLS</span>{" "}
+            dengan jumlah potensi kasus terbanyak di kecamatan ini. Cek daftarnya di bawah -- klik salah satu untuk
+            langsung mengaktifkan filter ke Jorong tersebut.
+          </p>
+          <div className="mt-2 flex flex-col gap-1">
+            {topJorong.map((item, idx) => {
+              const aktif = filterSubsls === item.idsubsls;
+              return (
+                <button
+                  key={item.idsubsls}
+                  type="button"
+                  onClick={() => handleLoncatJorong(item)}
+                  className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs transition ${
+                    aktif
+                      ? "border-[#8A6A12] bg-[#8A6A12] text-white"
+                      : "border-[#F4D77A] bg-white text-[#8A6A12] hover:bg-[#FCEFD1]"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                        aktif ? "bg-white/20" : "bg-[#F4D77A]/60"
+                      }`}
+                    >
+                      #{idx + 1}
+                    </span>
+                    <span className="min-w-0 truncate font-medium">{item.label}</span>
+                  </span>
+                  <span className={`shrink-0 text-[11px] font-semibold ${aktif ? "text-white" : "text-[#8A6A12]"}`}>
+                    {item.jumlah} kasus
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="text-xs text-ink/50">
