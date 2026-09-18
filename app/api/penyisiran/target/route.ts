@@ -91,11 +91,20 @@ export async function GET(req: NextRequest) {
   const gate = await pastikanPengelola(req, supabase);
   if (gate instanceof NextResponse) return gate;
 
+  // Hanya petugas yg AKTIF (kolom aktif = true) yg ditampilkan/diberi
+  // target di sini -- petugas_penyisiran_akun ini SATU tabel yg dipakai
+  // bersama utk tab Penyisiran Usaha & Identifikasi Jorong, dan status
+  // aktif/nonaktifnya SELALU disamakan jg ke tetangga_akun (Identifikasi
+  // Tetangga/Lainnya) lewat /api/penyisiran/petugas-toggle-aktif, jadi
+  // filter aktif=true di sini otomatis berarti "aktif utk ketiga menu
+  // itu sekaligus" -- petugas yg sudah dinonaktifkan (mis. sudah tidak
+  // bertugas lagi) tidak perlu lagi diberi/diedit target.
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
     .select(
       "id, nama, aktif, petugas_target(target_identifikasi_jumlah, target_identifikasi_satuan, target_kunjungan_kk, target_berhasil_kk)"
     )
+    .eq("aktif", true)
     .order("nama", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -176,7 +185,14 @@ export async function PATCH(req: NextRequest) {
   const nowIso = new Date().toISOString();
 
   if (terapkanSemua) {
-    const { data: semuaPetugas, error: errList } = await supabase.from("petugas_penyisiran_akun").select("id");
+    // Hanya petugas AKTIF -- konsisten dgn daftar yg ditampilkan di GET
+    // di atas (lihat komentar di sana), supaya "Terapkan ke Semua
+    // Petugas" tidak diam-diam ikut menulis target utk petugas yg sudah
+    // dinonaktifkan/tidak ditampilkan sama sekali di tabel.
+    const { data: semuaPetugas, error: errList } = await supabase
+      .from("petugas_penyisiran_akun")
+      .select("id")
+      .eq("aktif", true);
     if (errList) return NextResponse.json({ error: errList.message }, { status: 500 });
     const rows = (semuaPetugas ?? []).map((p: { id: number }) => ({
       petugas_id: p.id,

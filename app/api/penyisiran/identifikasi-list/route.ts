@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 200;
 const KOLOM =
   "kode_identitas, kec_kode, kec_nama, nagari_kode, nagari_nama, sls_nama, " +
-  "nama_kk, alamat, identifikasi_ppl, identifikasi_ppl_at";
+  "nama_kk, nama_anggota_keluarga, alamat, identifikasi_ppl, identifikasi_ppl_at";
 
 export async function GET(req: NextRequest) {
   const token = extractBearer(req);
@@ -84,7 +84,9 @@ export async function GET(req: NextRequest) {
   if (status) query = query.eq("identifikasi_ppl", status);
   if (q) {
     const like = `%${q.replace(/[%_]/g, "")}%`;
-    query = query.or(`nama_kk.ilike.${like},alamat.ilike.${like},kode_identitas.ilike.${like}`);
+    query = query.or(
+      `nama_kk.ilike.${like},nama_anggota_keluarga.ilike.${like},alamat.ilike.${like},kode_identitas.ilike.${like}`
+    );
   }
 
   const from = (page - 1) * PAGE_SIZE;

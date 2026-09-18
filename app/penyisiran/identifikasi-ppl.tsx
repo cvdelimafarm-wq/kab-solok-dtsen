@@ -74,9 +74,18 @@ interface Row {
   nagari_nama: string | null;
   sls_nama: string | null;
   nama_kk: string | null;
+  nama_anggota_keluarga: string | null;
   alamat: string | null;
   identifikasi_ppl: NilaiIdentifikasi;
   identifikasi_ppl_at: string | null;
+}
+
+// Sama dgn namaTampilRow di app/seruti/penyisiran-usaha.tsx &
+// identifikasi-jorong.tsx/identifikasi-tetangga.tsx -- utamakan nama
+// gabungan anggota keluarga (field baru dari data Python), baru pakai
+// nama kepala keluarga sbg cadangan kalau belum terisi.
+function namaTampilRow(row: Row): string {
+  return row.nama_anggota_keluarga || row.nama_kk || "(tanpa nama)";
 }
 
 interface SubslsOption {
@@ -579,8 +588,10 @@ function IdentifikasiCard({
       className={`rounded-lg border border-line p-3 transition-colors ${KARTU_META[nilai]}`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-bold text-navy-900">{row.nama_kk || "(tanpa nama)"}</span>
-        <span className="text-[10px] text-ink/40">{row.kode_identitas}</span>
+        <span className="min-w-0 truncate text-sm font-bold text-navy-900" title={namaTampilRow(row)}>
+          {namaTampilRow(row)}
+        </span>
+        <span className="shrink-0 text-[10px] text-ink/40">{row.kode_identitas}</span>
       </div>
       <p className="mt-0.5 text-xs text-ink/70">{row.alamat || "-"}</p>
       <p className="mb-2 text-[11px] text-ink/40">{ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}</p>
