@@ -2,12 +2,16 @@
 //
 // GET   -> daftar SEMUA petugas (tabel petugas_penyisiran_akun, yang SAMA
 //          dipakai tab Penyisiran Usaha/Identifikasi Jorong/Perencanaan
-//          Lapangan) + kolom "Master Petugas": email, alamat (manual, BUKAN
-//          dari koordinat GPS), status_kepegawaian (mitra/organik), dan
-//          pengawas_id (self-reference ke petugas lain di tabel yg sama --
-//          satu pengawas boleh membawahi banyak PPL, lihat migrasi
-//          20260918_master_petugas_kolom_dan_pengawas.sql).
-// PATCH -> ubah SATU petugas (email/alamat/status_kepegawaian/pengawas_id).
+//          Lapangan) + kolom "Master Petugas": email, alamat_kecamatan/
+//          alamat_nagari/alamat_detail (3 kolom terpisah, diisi MANUAL,
+//          BUKAN dari koordinat GPS -- lihat migrasi
+//          20260918_master_petugas_pisah_alamat.sql yg mengubah kolom
+//          "alamat" tunggal jadi 3 kolom ini), status_kepegawaian (mitra/
+//          organik), dan pengawas_id (self-reference ke petugas lain di
+//          tabel yg sama -- satu pengawas boleh membawahi banyak PPL,
+//          lihat migrasi 20260918_master_petugas_kolom_dan_pengawas.sql).
+// PATCH -> ubah SATU petugas (email/alamat_kecamatan/alamat_nagari/
+//          alamat_detail/status_kepegawaian/pengawas_id).
 //
 // Dipakai tab BARU "Master Petugas" -- akses DIKUNCI ke pengelola yg sama
 // dgn tab "Manajemen Target" (bolehAksesManajemenTarget), krn data ini
@@ -27,7 +31,14 @@ const STATUS_VALID = new Set(["mitra", "organik"]);
 // Whitelist field yg boleh diubah lewat PATCH -- lihat komentar serupa di
 // app/api/penyisiran/target/route.ts kenapa ini sengaja dijaga terpisah,
 // bukan dipercayakan ke nama kolom yg dikirim client.
-const FIELD_VALID = new Set(["email", "alamat", "status_kepegawaian", "pengawas_id"]);
+const FIELD_VALID = new Set([
+  "email",
+  "alamat_kecamatan",
+  "alamat_nagari",
+  "alamat_detail",
+  "status_kepegawaian",
+  "pengawas_id",
+]);
 
 function supabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -73,7 +84,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
-    .select("id, nama, aktif, email, alamat, status_kepegawaian, pengawas_id")
+    .select("id, nama, aktif, email, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
     .order("nama", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -87,7 +98,9 @@ export async function GET(req: NextRequest) {
     nama: p.nama,
     aktif: p.aktif,
     email: p.email ?? null,
-    alamat: p.alamat ?? null,
+    alamat_kecamatan: p.alamat_kecamatan ?? null,
+    alamat_nagari: p.alamat_nagari ?? null,
+    alamat_detail: p.alamat_detail ?? null,
     status_kepegawaian: p.status_kepegawaian ?? null,
     pengawas_id: p.pengawas_id ?? null,
     pengawas_nama: p.pengawas_id != null ? namaById.get(p.pengawas_id) ?? null : null,
@@ -139,7 +152,8 @@ export async function PATCH(req: NextRequest) {
         fields[key] = n;
       }
     } else {
-      // email / alamat -- teks bebas, kosongkan jadi null
+      // email / alamat_kecamatan / alamat_nagari / alamat_detail -- teks
+      // bebas, kosongkan jadi null
       fields[key] = val === "" || val == null ? null : String(val);
     }
   }

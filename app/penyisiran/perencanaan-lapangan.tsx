@@ -70,8 +70,9 @@
 //     hari itu terkunci (tdk bisa dicentang ulang sendiri) sampai
 //     diaktifkan lagi oleh pengelola.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
+import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 const TOKEN_KEY = "penyisiran-petugas-login-token";
 const NAMA_KEY = "penyisiran-petugas-login-nama";
@@ -632,22 +633,13 @@ function OhMonitoringPanel({ token }: { token: string }) {
   );
 }
 
-type SortKey =
-  | "sls_nama"
-  | "nagari_nama"
-  | "kec_nama"
-  | "jumlah_potensi"
-  | "jarak_km"
-  | "skor_akhir"
-  | "sudah_dipilih_oleh";
-type SortDir = "asc" | "desc";
-
-const KOLOM_TEKS: SortKey[] = ["sls_nama", "nagari_nama", "kec_nama"];
-
 // Bagian 2: "Identifikasi Wilayah Sampel SLS" -- checklist maks 5 SLS/
-// Jorong rekomendasi + matriks gabungan sesudah submit. Ada filter
-// Kecamatan/Nagari & kolom bisa diurutkan (klik header) -- keduanya
-// client-side di atas hasil rekomendasi yg sama.
+// Jorong rekomendasi + matriks gabungan sesudah submit. Header tabel pakai
+// komponen bersama ExcelTh/useExcelTable (app/penyisiran/_shared/
+// excel-table.tsx) -- tiap kolom bisa diurutkan (klik nama kolom) & bisa
+// difilter (klik "▾", checklist nilai unik, spt Filter/Sort di Excel),
+// murni client-side di atas hasil rekomendasi yg sama (tidak nambah
+// request API).
 function WilayahSampelPanel({
   token,
   nama,
@@ -672,10 +664,6 @@ function WilayahSampelPanel({
   const [tampilkanMatrix, setTampilkanMatrix] = useState(false);
   const [matrix, setMatrix] = useState<MatrixRow[]>([]);
   const [matrixLoading, setMatrixLoading] = useState(false);
-  const [filterKec, setFilterKec] = useState("");
-  const [filterNagari, setFilterNagari] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("skor_akhir");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
 
@@ -829,46 +817,19 @@ function WilayahSampelPanel({
     }
   }
 
-  const kecOptions = Array.from(new Set(rows.map((r) => r.kec_nama))).sort((a, b) => a.localeCompare(b));
-  const nagariOptions = Array.from(
-    new Set(rows.filter((r) => !filterKec || r.kec_nama === filterKec).map((r) => r.nagari_nama))
-  ).sort((a, b) => a.localeCompare(b));
-
-  function handleFilterKec(v: string) {
-    setFilterKec(v);
-    setFilterNagari(""); // reset Nagari kalau Kecamatan diganti (opsi Nagari lama blm tentu relevan lg)
-  }
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir(KOLOM_TEKS.includes(key) ? "asc" : "desc");
-    }
-  }
-
-  function panahSort(key: SortKey) {
-    if (sortKey !== key) return "";
-    return sortDir === "asc" ? " ▲" : " ▼";
-  }
-
-  const rowsTertampil = rows
-    .filter((r) => (!filterKec || r.kec_nama === filterKec) && (!filterNagari || r.nagari_nama === filterNagari))
-    .slice()
-    .sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      let cmp: number;
-      if (typeof av === "string" && typeof bv === "string") {
-        cmp = av.localeCompare(bv);
-      } else {
-        const an = av == null ? -Infinity : Number(av);
-        const bn = bv == null ? -Infinity : Number(bv);
-        cmp = an - bn;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+  const kolomRekomendasi = useMemo(
+    () => [
+      { key: "sls_nama", label: "Jorong / SLS", getValue: (r: RekomendasiRow) => r.sls_nama },
+      { key: "nagari_nama", label: "Nagari", getValue: (r: RekomendasiRow) => r.nagari_nama },
+      { key: "kec_nama", label: "Kecamatan", getValue: (r: RekomendasiRow) => r.kec_nama },
+      { key: "jumlah_potensi", label: "Potensi KK", getValue: (r: RekomendasiRow) => r.jumlah_potensi },
+      { key: "jarak_km", label: "Jarak (km)", getValue: (r: RekomendasiRow) => r.jarak_km },
+      { key: "skor_akhir", label: "Skor Akhir", getValue: (r: RekomendasiRow) => r.skor_akhir },
+      { key: "sudah_dipilih_oleh", label: "Dipilih Petugas", getValue: (r: RekomendasiRow) => r.sudah_dipilih_oleh },
+    ],
+    []
+  );
+  const tabelRekomendasi = useExcelTable(rows, kolomRekomendasi, { key: "skor_akhir", dir: "desc" });
 
   if (loading) {
     return <p className="text-sm text-ink/60">Memuat rekomendasi...</p>;
@@ -931,43 +892,15 @@ function WilayahSampelPanel({
           Terpilih: {dipilih.size} / {MAKS_PILIHAN}
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <label className="text-ink/60">Kecamatan:</label>
-          <select
-            value={filterKec}
-            onChange={(e) => handleFilterKec(e.target.value)}
-            className="rounded-md border border-line px-2 py-1 text-xs outline-none focus:border-navy-400"
-          >
-            <option value="">Semua Kecamatan</option>
-            {kecOptions.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-          <label className="text-ink/60">Nagari:</label>
-          <select
-            value={filterNagari}
-            onChange={(e) => setFilterNagari(e.target.value)}
-            className="rounded-md border border-line px-2 py-1 text-xs outline-none focus:border-navy-400"
-          >
-            <option value="">Semua Nagari</option>
-            {nagariOptions.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-          {(filterKec || filterNagari) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+          <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+          {tabelRekomendasi.adaFilterAktif && (
             <button
               type="button"
-              onClick={() => {
-                setFilterKec("");
-                setFilterNagari("");
-              }}
-              className="rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900"
+              onClick={tabelRekomendasi.resetFilters}
+              className="shrink-0 rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900"
             >
-              Reset filter
+              Reset semua filter
             </button>
           )}
         </div>
@@ -977,37 +910,24 @@ function WilayahSampelPanel({
             <thead className="sticky top-0 bg-cream-50 text-[11px] uppercase tracking-wide text-ink/50">
               <tr>
                 <th className="px-2 py-2 text-left">✓</th>
-                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("sls_nama")}>
-                  Jorong / SLS{panahSort("sls_nama")}
-                </th>
-                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("nagari_nama")}>
-                  Nagari{panahSort("nagari_nama")}
-                </th>
-                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("kec_nama")}>
-                  Kecamatan{panahSort("kec_nama")}
-                </th>
-                <th
-                  className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700"
-                  onClick={() => toggleSort("jumlah_potensi")}
-                >
-                  Potensi KK{panahSort("jumlah_potensi")}
-                </th>
-                <th className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700" onClick={() => toggleSort("jarak_km")}>
-                  Jarak (km){panahSort("jarak_km")}
-                </th>
-                <th className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700" onClick={() => toggleSort("skor_akhir")}>
-                  Skor Akhir{panahSort("skor_akhir")}
-                </th>
-                <th
-                  className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700"
-                  onClick={() => toggleSort("sudah_dipilih_oleh")}
-                >
-                  Dipilih Petugas{panahSort("sudah_dipilih_oleh")}
-                </th>
+                {kolomRekomendasi.map((k) => (
+                  <ExcelTh
+                    key={k.key}
+                    colKey={k.key}
+                    label={k.label}
+                    align={["jumlah_potensi", "jarak_km", "skor_akhir", "sudah_dipilih_oleh"].includes(k.key) ? "right" : "left"}
+                    sortKey={tabelRekomendasi.sortKey}
+                    sortDir={tabelRekomendasi.sortDir}
+                    onSort={tabelRekomendasi.toggleSort}
+                    values={tabelRekomendasi.uniqueValues[k.key] ?? []}
+                    activeFilter={tabelRekomendasi.filters[k.key]}
+                    onFilterChange={tabelRekomendasi.setColumnFilter}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rowsTertampil.map((r) => {
+              {tabelRekomendasi.rows.map((r) => {
                 const aktif = dipilih.has(r.sls_key);
                 const penuh = !aktif && dipilih.size >= MAKS_PILIHAN;
                 return (
@@ -1033,10 +953,10 @@ function WilayahSampelPanel({
                   </tr>
                 );
               })}
-              {rowsTertampil.length === 0 && (
+              {tabelRekomendasi.rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-2 py-6 text-center text-ink/50">
-                    Tidak ada data{(filterKec || filterNagari) && " utk filter ini"}.
+                  <td colSpan={kolomRekomendasi.length + 1} className="px-2 py-6 text-center text-ink/50">
+                    Tidak ada data{tabelRekomendasi.adaFilterAktif && " utk filter ini"}.
                   </td>
                 </tr>
               )}

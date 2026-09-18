@@ -13,19 +13,27 @@
 // Isi tab: perluasan data petugas yang SUDAH ADA (tabel
 // petugas_penyisiran_akun, SAMA dgn yg dipakai tab Penyisiran
 // Usaha/Identifikasi Jorong/Perencanaan Lapangan), bukan tabel baru --
-// kolom tambahan: email, alamat (diisi MANUAL, bukan dari titik GPS
-// login), status kepegawaian (Mitra/Organik), dan pengawas (dipilih dari
-// petugas lain di tabel yg sama -- satu pengawas boleh membawahi banyak
-// PPL). Lihat migrasi 20260918_master_petugas_kolom_dan_pengawas.sql &
+// kolom tambahan: email, alamat rumah (diisi MANUAL, bukan dari titik GPS
+// login) DIPISAH jadi 3 kolom -- Kecamatan, Nagari, Alamat Detail (lihat
+// migrasi 20260918_master_petugas_pisah_alamat.sql) -- status kepegawaian
+// (Mitra/Organik), dan pengawas (dipilih dari petugas lain di tabel yg
+// sama -- satu pengawas boleh membawahi banyak PPL). Lihat migrasi
+// 20260918_master_petugas_kolom_dan_pengawas.sql &
 // app/api/penyisiran/master-petugas/route.ts.
 //
 // Data ini dipakai jg utk export Excel "Pengawas/Pencacah per SUBSLS" di
 // tab Perencanaan Lapangan (tombol di samping header "Identifikasi
 // Wilayah Sampel SLS") -- lihat
 // app/api/penyisiran/alokasi/export-subsls/route.ts.
+//
+// Header tabel di bawah pakai komponen bersama ExcelTh/useExcelTable
+// (app/penyisiran/_shared/excel-table.tsx) -- tiap kolom bisa diurutkan
+// (klik nama kolom) & difilter (klik "▾", checklist nilai unik) persis
+// spt fitur Filter/Sort di header Excel.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
+import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 // NILAI STRING INI HARUS PERSIS SAMA dgn TOKEN_KEY/NAMA_KEY/
 // PETUGAS_ID_STORE_KEY/LAT_KEY/LNG_KEY di app/seruti/penyisiran-usaha.tsx
@@ -49,7 +57,9 @@ interface PetugasMaster {
   nama: string;
   aktif: boolean;
   email: string | null;
-  alamat: string | null;
+  alamat_kecamatan: string | null;
+  alamat_nagari: string | null;
+  alamat_detail: string | null;
   status_kepegawaian: StatusKepegawaian | null;
   pengawas_id: number | null;
   pengawas_nama: string | null;
@@ -287,9 +297,31 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
   const calonPengawasOrganik = petugas.filter((p) => p.status_kepegawaian === "organik");
   const daftarCalonPengawas = calonPengawasOrganik.length > 0 ? calonPengawasOrganik : petugas.filter((p) => p.aktif);
 
-  const petugasFiltered = cariNama.trim()
+  // Kotak "Cari nama" cepat di atas tabel (search-as-you-type) TETAP ada di
+  // samping filter Excel per-kolom -- keduanya menyaring bersamaan (AND):
+  // ini utk pencarian cepat 1 kolom, filter header utk kombinasi nilai yg
+  // lebih rumit/ persis spt Excel.
+  const petugasSearched = cariNama.trim()
     ? petugas.filter((p) => p.nama.toLowerCase().includes(cariNama.trim().toLowerCase()))
     : petugas;
+
+  const kolom = useMemo(
+    () => [
+      { key: "nama", label: "Nama Petugas", getValue: (p: PetugasMaster) => p.nama },
+      { key: "email", label: "Email", getValue: (p: PetugasMaster) => p.email },
+      { key: "alamat_kecamatan", label: "Kecamatan", getValue: (p: PetugasMaster) => p.alamat_kecamatan },
+      { key: "alamat_nagari", label: "Nagari", getValue: (p: PetugasMaster) => p.alamat_nagari },
+      { key: "alamat_detail", label: "Alamat Detail", getValue: (p: PetugasMaster) => p.alamat_detail },
+      {
+        key: "status_kepegawaian",
+        label: "Status",
+        getValue: (p: PetugasMaster) => (p.status_kepegawaian ? STATUS_LABEL[p.status_kepegawaian] : null),
+      },
+      { key: "pengawas_nama", label: "Pengawas", getValue: (p: PetugasMaster) => p.pengawas_nama },
+    ],
+    []
+  );
+  const tabel = useExcelTable(petugasSearched, kolom, { key: "nama", dir: "asc" });
 
   return (
     <div className="space-y-4 pb-16">
@@ -327,29 +359,44 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
           </div>
         </div>
 
-        <p className="mb-2 text-[10px] text-ink/40">
-          Kolom otomatis tersimpan saat Anda pindah dari kolom yg diedit (onBlur / setelah memilih dropdown). Alamat
-          diisi MANUAL (bukan dari titik GPS login).
-        </p>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+          <p>
+            Kolom otomatis tersimpan saat Anda pindah dari kolom yg diedit (onBlur / setelah memilih dropdown). Alamat
+            diisi MANUAL (bukan dari titik GPS login). Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; utk filter.
+          </p>
+          {tabel.adaFilterAktif && (
+            <button type="button" onClick={tabel.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+              Reset semua filter
+            </button>
+          )}
+        </div>
 
         <div className="overflow-x-auto rounded-md border border-line">
           <table className="min-w-full text-xs">
             <thead>
-              <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-                <th className="px-3 py-2">Nama Petugas</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Alamat</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Pengawas</th>
+              <tr className="border-b border-line bg-paper/60 text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                {kolom.map((k) => (
+                  <ExcelTh
+                    key={k.key}
+                    colKey={k.key}
+                    label={k.label}
+                    sortKey={tabel.sortKey}
+                    sortDir={tabel.sortDir}
+                    onSort={tabel.toggleSort}
+                    values={tabel.uniqueValues[k.key] ?? []}
+                    activeFilter={tabel.filters[k.key]}
+                    onFilterChange={tabel.setColumnFilter}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
-              {petugasFiltered.map((p) => (
+              {tabel.rows.map((p) => (
                 <BarisMaster key={p.id} p={p} daftarCalonPengawas={daftarCalonPengawas} onSimpan={simpanSatu} />
               ))}
-              {petugasFiltered.length === 0 && !loading && (
+              {tabel.rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-ink/40">
+                  <td colSpan={kolom.length} className="px-3 py-4 text-center text-ink/40">
                     Tidak ada petugas yang cocok.
                   </td>
                 </tr>
@@ -372,17 +419,21 @@ function BarisMaster({
   onSimpan: (id: number, fields: Record<string, string | number | null>) => Promise<void>;
 }) {
   const [email, setEmail] = useState(p.email ?? "");
-  const [alamat, setAlamat] = useState(p.alamat ?? "");
+  const [kecamatan, setKecamatan] = useState(p.alamat_kecamatan ?? "");
+  const [nagari, setNagari] = useState(p.alamat_nagari ?? "");
+  const [detail, setDetail] = useState(p.alamat_detail ?? "");
   const [status, setStatus] = useState<StatusKepegawaian | "">(p.status_kepegawaian ?? "");
   const [pengawasId, setPengawasId] = useState<string>(p.pengawas_id != null ? String(p.pengawas_id) : "");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "ok" | "err">("idle");
 
   useEffect(() => {
     setEmail(p.email ?? "");
-    setAlamat(p.alamat ?? "");
+    setKecamatan(p.alamat_kecamatan ?? "");
+    setNagari(p.alamat_nagari ?? "");
+    setDetail(p.alamat_detail ?? "");
     setStatus(p.status_kepegawaian ?? "");
     setPengawasId(p.pengawas_id != null ? String(p.pengawas_id) : "");
-  }, [p.email, p.alamat, p.status_kepegawaian, p.pengawas_id]);
+  }, [p.email, p.alamat_kecamatan, p.alamat_nagari, p.alamat_detail, p.status_kepegawaian, p.pengawas_id]);
 
   async function simpan(fields: Record<string, string | number | null>) {
     setSaveStatus("saving");
@@ -422,13 +473,39 @@ function BarisMaster({
       <td className="px-3 py-1.5">
         <input
           type="text"
-          value={alamat}
-          onChange={(e) => setAlamat(e.target.value)}
+          value={kecamatan}
+          onChange={(e) => setKecamatan(e.target.value)}
           onBlur={() => {
-            if (alamat === (p.alamat ?? "")) return;
-            simpan({ alamat: alamat.trim() === "" ? null : alamat.trim() });
+            if (kecamatan === (p.alamat_kecamatan ?? "")) return;
+            simpan({ alamat_kecamatan: kecamatan.trim() === "" ? null : kecamatan.trim() });
           }}
-          placeholder="Alamat rumah"
+          placeholder="Kecamatan"
+          className="w-32 rounded-md border border-line px-2 py-1 text-xs"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <input
+          type="text"
+          value={nagari}
+          onChange={(e) => setNagari(e.target.value)}
+          onBlur={() => {
+            if (nagari === (p.alamat_nagari ?? "")) return;
+            simpan({ alamat_nagari: nagari.trim() === "" ? null : nagari.trim() });
+          }}
+          placeholder="Nagari"
+          className="w-32 rounded-md border border-line px-2 py-1 text-xs"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <input
+          type="text"
+          value={detail}
+          onChange={(e) => setDetail(e.target.value)}
+          onBlur={() => {
+            if (detail === (p.alamat_detail ?? "")) return;
+            simpan({ alamat_detail: detail.trim() === "" ? null : detail.trim() });
+          }}
+          placeholder="Alamat detail (jorong/jalan/dll)"
           className="w-56 rounded-md border border-line px-2 py-1 text-xs"
         />
       </td>
