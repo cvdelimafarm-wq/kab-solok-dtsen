@@ -894,7 +894,7 @@ function WilayahSampelPanel({
                 setFilterKec("");
                 setFilterNagari("");
               }}
-              className="text-ink/50 underline hover:text-navy-700"
+              className="rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900"
             >
               Reset filter
             </button>
