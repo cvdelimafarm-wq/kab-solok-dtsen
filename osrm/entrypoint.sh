@@ -15,28 +15,36 @@ OSRM_BASE="$DATA_DIR/region.osrm"
 
 mkdir -p "$DATA_DIR"
 
-# Unduh dgn retry + backoff, DIPAKSA pakai IPv4 (-4). Beberapa jaringan cloud
-# (termasuk Railway) kadang gagal konek IPv6 ke host yang dual-stack spt
-# download.geofabrik.de ("Failed to connect ... Could not connect to
-# server") -- curl akan coba IPv6 dulu & gagal sebelum sempat jatuh ke IPv4,
-# jadi kita paksa IPv4 dari awal. Loop retry di sini jg mencegah container
-# crash-loop tiap detik kalau jaringan lagi bermasalah sesaat -- coba
-# beberapa kali dgn jeda yg makin lama dulu sebelum benar2 menyerah.
+# Unduh dgn retry + backoff, DIPAKSA pakai IPv4 (-4), DAN otomatis coba
+# sumber cadangan (OSRM_REGION_URL_FALLBACK) kalau sumber utama gagal
+# total -- beberapa host (mis. Geofabrik) pernah terbukti tidak bisa
+# dijangkau sama sekali dari jaringan Railway, jadi jangan cuma andalkan
+# satu sumber. Loop retry per-sumber jg mencegah container crash-loop tiap
+# detik kalau jaringan lagi bermasalah sesaat -- coba beberapa kali dgn
+# jeda yg makin lama dulu sebelum pindah/menyerah.
 unduh_dengan_retry() {
-  local url="$1"
-  local tujuan="$2"
-  local percobaan=1
-  local maks_percobaan=5
-  while [ "$percobaan" -le "$maks_percobaan" ]; do
-    echo "[osrm] Percobaan unduh ke-$percobaan/$maks_percobaan (paksa IPv4) dari $url ..."
-    if curl -4 -fL --connect-timeout 15 --retry 2 -o "$tujuan" "$url"; then
-      return 0
-    fi
-    echo "[osrm] Gagal konek -- tunggu $((percobaan * 15)) detik sebelum coba lagi ..."
-    sleep $((percobaan * 15))
-    percobaan=$((percobaan + 1))
+  local tujuan="$1"
+  shift
+  local daftar_url=("$@")
+  local percobaan_per_sumber=3
+
+  for url in "${daftar_url[@]}"; do
+    [ -z "$url" ] && continue
+    local percobaan=1
+    while [ "$percobaan" -le "$percobaan_per_sumber" ]; do
+      echo "[osrm] Percobaan unduh ke-$percobaan/$percobaan_per_sumber (paksa IPv4) dari $url ..."
+      if curl -4 -fL --connect-timeout 15 --retry 1 -o "$tujuan" "$url"; then
+        return 0
+      fi
+      echo "[osrm] Gagal konek -- tunggu $((percobaan * 15)) detik sebelum coba lagi ..."
+      sleep $((percobaan * 15))
+      percobaan=$((percobaan + 1))
+    done
+    echo "[osrm] Semua percobaan ke $url gagal -- coba sumber berikutnya kalau masih ada."
   done
-  echo "[osrm] GAGAL mengunduh setelah $maks_percobaan percobaan. Kemungkinan jaringan Railway sedang tidak bisa menjangkau $url -- coba tes manual lewat tab Console di dashboard Railway: curl -4 -v $url -o /dev/null"
+
+  echo "[osrm] GAGAL mengunduh dari SEMUA sumber yang dicoba: ${daftar_url[*]}"
+  echo "[osrm] Tes manual lewat tab Console di dashboard Railway, mis: curl -4 -v <url> -o /dev/null"
   return 1
 }
 
@@ -44,8 +52,8 @@ if [ ! -f "${OSRM_BASE}.mldgr" ]; then
   echo "[osrm] Data terproses belum ada di $DATA_DIR -- memproses dari awal (sekali saja, hasilnya disimpan di volume)..."
 
   if [ ! -f "$RAW_PBF" ]; then
-    echo "[osrm] Mengunduh extract OSM dari $OSRM_REGION_URL ..."
-    unduh_dengan_retry "$OSRM_REGION_URL" "$RAW_PBF"
+    echo "[osrm] Mengunduh extract OSM (sumber utama + cadangan kalau perlu) ..."
+    unduh_dengan_retry "$RAW_PBF" "$OSRM_REGION_URL" "${OSRM_REGION_URL_FALLBACK:-}"
   fi
 
   if [ ! -f "$CLIPPED_PBF" ]; then

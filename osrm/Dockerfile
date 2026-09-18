@@ -23,12 +23,25 @@ WORKDIR /data
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Extract Sumatra dari Geofabrik, dipotong ke bounding box Sumatera Barat
-# (+ sedikit margin) spy pemrosesan jauh lebih cepat & ringan drpd
-# memproses seluruh Sumatra. Ubah OSRM_BBOX kalau area kerja meluas ke
-# provinsi lain. Format bbox: kiri(min lon),bawah(min lat),kanan(max
-# lon),atas(max lat).
-ENV OSRM_REGION_URL="https://download.geofabrik.de/asia/indonesia/sumatra-latest.osm.pbf"
+# Sumber utama: extract PROVINSI Sumatera Barat dari mirror OpenStreetMap.fr
+# (jauh lebih kecil & cepat drpd extract seluruh Sumatra/Indonesia, dan
+# sudah pas dgn wilayah kerja kita). Dipotong lagi ke OSRM_BBOX di bawah
+# (sedikit margin) supaya tetap mencakup jalan di perbatasan provinsi.
+#
+# Sumber CADANGAN: extract Sumatra dari Geofabrik -- dicoba otomatis oleh
+# entrypoint.sh kalau sumber utama gagal total. (Catatan: pada percobaan
+# awal, download.geofabrik.de terbukti TIDAK BISA dijangkau sama sekali
+# dari jaringan Railway -- "Failed to connect ... Could not connect to
+# server", bukan soal IPv4/IPv6 -- kemungkinan IP Railway diblokir dari
+# sisi Geofabrik. Makanya OpenStreetMap.fr dijadikan sumber UTAMA, bukan
+# cadangan. Baris Geofabrik tetap disimpan sbg percobaan kedua siapa tahu
+# nanti sudah tidak diblokir lagi.)
+#
+# Kalau area kerja meluas ke luar Sumatera Barat, lihat osrm/README.md
+# Bagian 6 -- perlu ganti OSRM_REGION_URL ke extract yg lebih luas (mis.
+# Sumatra penuh atau Indonesia penuh) SEKALIGUS perbesar OSRM_BBOX.
+ENV OSRM_REGION_URL="https://download.openstreetmap.fr/extracts/asia/indonesia/west_sumatra-latest.osm.pbf"
+ENV OSRM_REGION_URL_FALLBACK="https://download.geofabrik.de/asia/indonesia/sumatra-latest.osm.pbf"
 ENV OSRM_BBOX="98.4,-3.5,101.9,0.8"
 ENV OSRM_PROFILE="car"
 
