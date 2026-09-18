@@ -270,5 +270,48 @@ export default function PenyisiranMap({
     }
   }, [userLocation]);
 
-  return <div ref={mapDivRef} style={{ position: "absolute", inset: 0 }} />;
+  // Tombol "pusatkan ke lokasi saya" -- pakai koordinat TERBARU dari ref
+  // (bukan closure atas prop userLocation) supaya tombolnya selalu akurat
+  // walau live tracking baru saja aktif/berpindah sesaat sebelum diklik.
+  // Sengaja TIDAK mengubah zoom kalau pengguna sudah zoom in lebih jauh
+  // dari level 15 -- hanya menaikkan zoom kalau saat ini masih lebih jauh.
+  function handlePusatkanLokasi() {
+    const map = mapRef.current;
+    const u = userLocRef.current;
+    if (!map || !u) return;
+    map.setView([u.lat, u.lng], Math.max(map.getZoom(), 15));
+  }
+
+  return (
+    <>
+      <div ref={mapDivRef} style={{ position: "absolute", inset: 0 }} />
+      <button
+        type="button"
+        onClick={handlePusatkanLokasi}
+        disabled={!userLocation}
+        title={userLocation ? "Pusatkan peta ke lokasi saya" : "Aktifkan lokasi langsung dulu"}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          zIndex: 1000,
+          width: 32,
+          height: 32,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 8,
+          border: "1px solid #d8d5cd",
+          background: "#ffffff",
+          fontSize: 16,
+          lineHeight: 1,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+          cursor: userLocation ? "pointer" : "not-allowed",
+          opacity: userLocation ? 1 : 0.5,
+        }}
+      >
+        🎯
+      </button>
+    </>
+  );
 }

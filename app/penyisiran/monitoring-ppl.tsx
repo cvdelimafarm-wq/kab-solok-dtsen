@@ -96,13 +96,6 @@ function formatWaktu(iso: string | null): string {
   }
 }
 
-function nomorWa(noHp: string | null): string | null {
-  if (!noHp) return null;
-  const digit = noHp.replace(/\D/g, "");
-  if (!digit) return null;
-  return digit.startsWith("0") ? `62${digit.slice(1)}` : digit;
-}
-
 export default function MonitoringPplTab() {
   const [token, setToken] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState("");
@@ -300,7 +293,6 @@ function StatTile({ label, nilai, warna }: { label: string; nilai: number | stri
 
 function PplRow({ row }: { row: PerPplRow }) {
   const pct = persen(row.jumlah_diisi, row.jumlah_total);
-  const wa = nomorWa(row.no_hp);
   const belumSelesai = row.jumlah_belum > 0;
 
   return (
@@ -316,16 +308,6 @@ function PplRow({ row }: { row: PerPplRow }) {
             </p>
           )}
         </div>
-        {wa && (
-          <a
-            href={`https://wa.me/${wa}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-md border border-line px-2 py-1 text-[11px] font-medium text-moss-700 hover:border-moss-500"
-          >
-            WhatsApp: {row.no_hp}
-          </a>
-        )}
       </div>
 
       <div className="mt-2 grid grid-cols-3 gap-2 text-center sm:flex sm:items-center sm:gap-4 sm:text-left">

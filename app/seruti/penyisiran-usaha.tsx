@@ -49,6 +49,21 @@ const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
+// Nama2 pegawai KANTOR BPS Kab Solok (bukan petugas lapangan yg tinggal di
+// desa/nagari) -- DIKECUALIKAN dari kewajiban menekan tombol "📍 Tetapkan
+// Lokasi Rumah Saya": lokasi rumahnya otomatis diisi koordinat KANTOR BPS
+// Kab Solok begitu login (lihat efek auto-isi di PenyisiranPanel), HANYA
+// kalau akunnya belum punya koordinat sama sekali -- sekali terisi (baik
+// otomatis di sini maupun manual lewat tombol), tidak diisi ulang lagi.
+// Dicocokkan case-insensitive & tanpa spasi berlebih di awal/akhir.
+const NAMA_PAKAI_KANTOR = new Set(
+  ["Bambang Suryanggono", "Wisnu Dwi Jayanto", "Novriady", "Deswaty", "M. Iqbal Hadi", "Riva Hestaria"].map((n) =>
+    n.trim().toLowerCase()
+  )
+);
+const KANTOR_LAT = -0.9604660386602418;
+const KANTOR_LNG = 100.61102093270257;
+
 type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa";
 type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
 
@@ -570,6 +585,52 @@ function PenyisiranPanel({
       return next;
     });
   }
+  // "Sampel Terdekat": kode_identitas yg DISEMBUNYIKAN SEMENTARA dari
+  // daftar (mis. petugas sudah menuju ke sana / tidak relevan sekarang)
+  // supaya kandidat berikutnya naik peringkat -- murni di memori, tombol
+  // "Reset" mengosongkan set ini lagi. `highlightId` dipakai memberi
+  // sorotan singkat pada kartu yg baru saja ditunjuk dari daftar ini.
+  const [dismissedTerdekatIds, setDismissedTerdekatIds] = useState<Set<string>>(new Set());
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
+
+  // Klik satu baris di panel "Sampel Terdekat" -> buka kartunya ke mode
+  // Detail (spy langsung bisa didata) & scroll halaman ke kartu tsb,
+  // dgn sorotan singkat supaya jelas kartu MANA yg dimaksud.
+  function handleKlikSampelTerdekat(kode: string) {
+    setDetailIds((prev) => {
+      const next = new Set(prev);
+      next.add(kode);
+      return next;
+    });
+    setHighlightId(kode);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightId((cur) => (cur === kode ? null : cur)), 2500);
+    // Double rAF: tunggu React selesai merender kartu dlm mode Detail
+    // (tingginya berubah) dulu sebelum scrollIntoView, spy posisi akhirnya
+    // pas (bukan posisi sblm kartu melebar).
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.getElementById(`kartu-penyisiran-${kode}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+  }
+
+  function handleHapusSampelTerdekat(kode: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setDismissedTerdekatIds((prev) => new Set(prev).add(kode));
+  }
+
+  function handleResetSampelTerdekat() {
+    setDismissedTerdekatIds(new Set());
+  }
+
   const pageSize = 200;
 
   // ---------- Live Distance Tracking ----------
@@ -715,6 +776,40 @@ function PenyisiranPanel({
     );
   }
 
+  // `petugasLat`/`petugasLng` != null berarti akun ini SUDAH punya lokasi
+  // rumah tersimpan (baik dari login sebelumnya yg sudah pernah menekan
+  // tombol, maupun dari auto-isi kantor di bawah) -- dipakai sbg syarat
+  // wajib sebelum filter Kecamatan/pencarian & peta/daftar bisa dipakai,
+  // krn jarak dari lokasi INI yg menentukan skor prioritas (BEDA dari
+  // lokasi live di atas, yg cuma utk navigasi & TIDAK memengaruhi skor).
+  const lokasiRumahSiap = petugasLat != null && petugasLng != null;
+
+  // Auto-isi lokasi rumah dgn koordinat KANTOR BPS Kab Solok utk nama2 di
+  // NAMA_PAKAI_KANTOR (pegawai kantor, bukan petugas lapangan) -- supaya
+  // mereka TIDAK wajib menekan tombol "Tetapkan Lokasi Rumah Saya" spt
+  // petugas lapangan lainnya. HANYA jalan kalau akunnya belum punya
+  // koordinat sama sekali (lokasiRumahSiap masih false); begitu berhasil
+  // (atau kalau sebelumnya sudah pernah diisi dgn cara apa pun), efek ini
+  // tidak jalan lagi -- pola persis sama dgn handleTetapkanLokasi (simpan
+  // permanen ke petugas_penyisiran_akun.lat/lng), cuma dipicu otomatis via
+  // useEffect, bukan klik tombol, & pakai koordinat kantor bukan GPS.
+  const autoLokasiTriedRef = useRef(false);
+  useEffect(() => {
+    if (lokasiRumahSiap) return;
+    if (!NAMA_PAKAI_KANTOR.has(nama.trim().toLowerCase())) return;
+    if (autoLokasiTriedRef.current) return;
+    autoLokasiTriedRef.current = true;
+    apiFetch("/api/penyisiran/set-lokasi-rumah", token, {
+      method: "PATCH",
+      body: JSON.stringify({ petugas_id: petugasId, lat: KANTOR_LAT, lng: KANTOR_LNG }),
+    })
+      .then(() => onLokasiUpdated(KANTOR_LAT, KANTOR_LNG))
+      .catch(() => {
+        // Gagal diam2 -- tombol manual tetap tersedia sbg cadangan.
+        autoLokasiTriedRef.current = false;
+      });
+  }, [lokasiRumahSiap, nama, petugasId, token, onLokasiUpdated]);
+
   // debounce pencarian teks
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 400);
@@ -749,7 +844,10 @@ function PenyisiranPanel({
       .catch((e) => guard(() => { throw e; }));
   }, [filterKec, filterNagari, token, guard]);
 
-  const bisaMuat = Boolean(filterKec || search);
+  // Wajib lokasi rumah SUDAH tersimpan (lokasiRumahSiap) SEBELUM filter
+  // Kecamatan/pencarian bisa dipakai sama sekali -- lihat komentar
+  // lokasiRumahSiap di atas & banner peringatan di JSX (dekat filter bar).
+  const bisaMuat = lokasiRumahSiap && Boolean(filterKec || search);
 
   const loadList = useCallback(async () => {
     if (!bisaMuat) {
@@ -866,10 +964,17 @@ function PenyisiranPanel({
   // "Sampel Terdekat" -- 3 keluarga terdekat dari lokasi LIVE, dihitung
   // dari daftar yg sedang dimuat (rows), diperbarui otomatis tiap
   // koordinat GPS berubah krn liveLoc ikut jadi dependency render ini.
+  // Kandidat yg ada di dismissedTerdekatIds SENGAJA dikecualikan dulu
+  // sblm diambil top-3, supaya kandidat berikutnya otomatis naik
+  // peringkat -- baris keluarganya TETAP ada di daftar utama, cuma
+  // disembunyikan dari panel ringkasan ini saja.
   const sampelTerdekat = liveLoc
     ? rows
         .map((r) => ({ r, jarak: jarakLiveRow(r) }))
-        .filter((x): x is { r: Row; jarak: number } => x.jarak != null)
+        .filter(
+          (x): x is { r: Row; jarak: number } =>
+            x.jarak != null && !dismissedTerdekatIds.has(x.r.kode_identitas)
+        )
         .sort((a, b) => a.jarak - b.jarak)
         .slice(0, 3)
     : [];
@@ -912,7 +1017,11 @@ function PenyisiranPanel({
         >
           {lokasiBusy ? "Mendeteksi..." : "📍 Tetapkan Lokasi Rumah Saya"}
         </button>
-        {petugasLat != null && <span className="text-[11px] text-moss-700">✓ Lokasi rumah sudah ditetapkan</span>}
+        {lokasiRumahSiap ? (
+          <span className="text-[11px] text-moss-700">✓ Lokasi rumah sudah ditetapkan</span>
+        ) : (
+          <span className="text-[11px] font-medium text-rust-700">⚠ Wajib ditekan dulu sebelum bisa memuat daftar</span>
+        )}
         {lokasiStatus && <span className="text-[11px] text-ink/50">{lokasiStatus}</span>}
         <button
           type="button"
@@ -922,6 +1031,15 @@ function PenyisiranPanel({
           Keluar
         </button>
       </div>
+
+      {!lokasiRumahSiap && (
+        <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
+          ⚠ Tekan dulu tombol <span className="font-semibold">📍 Tetapkan Lokasi Rumah Saya</span> di atas sebelum
+          bisa memilih Kecamatan / mencari data. Jarak dari lokasi rumah ke tiap keluarga dipakai untuk menghitung
+          skala prioritas -- cukup ditekan SEKALI, tidak perlu diulang tiap kali masuk. (Lokasi langsung/live pada
+          bagian di bawah BEDA kegunaannya -- hanya untuk navigasi, tidak memengaruhi skala prioritas.)
+        </p>
+      )}
 
       {/* ---------- Live Distance Tracking: status lokasi saat ini ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
@@ -978,26 +1096,68 @@ function PenyisiranPanel({
       </div>
 
       {/* "Sampel Terdekat" -- ringkasan 3 keluarga terdekat dari lokasi
-          LIVE, ikut berubah otomatis begitu petugas berpindah. */}
-      {sampelTerdekat.length > 0 && (
+          LIVE, ikut berubah otomatis begitu petugas berpindah. Klik satu
+          baris -> lompat & sorot kartunya (lihat handleKlikSampelTerdekat).
+          Tombol "✕" menyembunyikan SEMENTARA kandidat itu dari panel ini
+          saja (bukan dari daftar utama) supaya kandidat berikutnya naik;
+          "Reset" mengembalikan semuanya. */}
+      {(sampelTerdekat.length > 0 || dismissedTerdekatIds.size > 0) && (
         <div className="rounded-lg border border-line bg-white p-3">
-          <p className="mb-1.5 text-xs font-semibold text-navy-900">📍 Sampel Terdekat</p>
-          <div className="flex flex-col gap-1.5">
-            {sampelTerdekat.map((x, i) => (
-              <div key={x.r.kode_identitas} className="flex items-center justify-between gap-2 text-xs">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy-100 text-[10px] font-bold text-navy-700">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold text-navy-900">{x.r.nama_kk || "(tanpa nama)"}</span>
-                    <span className="block text-[10px] text-ink/40">{x.r.kode_identitas}</span>
-                  </span>
-                </span>
-                <span className="shrink-0 font-semibold text-navy-700">{x.jarak.toFixed(1)} km</span>
-              </div>
-            ))}
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-navy-900">📍 Sampel Terdekat</p>
+            {dismissedTerdekatIds.size > 0 && (
+              <button
+                type="button"
+                onClick={handleResetSampelTerdekat}
+                className="text-[11px] font-medium text-navy-400 underline hover:text-navy-700"
+              >
+                Reset ({dismissedTerdekatIds.size})
+              </button>
+            )}
           </div>
+          {sampelTerdekat.length === 0 ? (
+            <p className="text-[11px] text-ink/40">
+              Semua kandidat terdekat sedang disembunyikan sementara -- tekan Reset utk memunculkan kembali.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {sampelTerdekat.map((x, i) => (
+                <div
+                  key={x.r.kode_identitas}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleKlikSampelTerdekat(x.r.kode_identitas)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") handleKlikSampelTerdekat(x.r.kode_identitas);
+                  }}
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md p-1 text-xs hover:bg-paper"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy-100 text-[10px] font-bold text-navy-700">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-navy-900">
+                        {x.r.nama_kk || "(tanpa nama)"}
+                      </span>
+                      <span className="block text-[10px] text-ink/40">{x.r.kode_identitas}</span>
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-semibold text-navy-700">{x.jarak.toFixed(1)} km</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleHapusSampelTerdekat(x.r.kode_identitas, e)}
+                      title="Sembunyikan sementara dari daftar ini"
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-ink/30 hover:bg-rust-100 hover:text-rust-700"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1027,7 +1187,9 @@ function PenyisiranPanel({
         <select
           value={filterKec}
           onChange={(e) => setFilterKec(e.target.value)}
-          className="rounded-md border border-line px-2 py-1.5 text-xs"
+          disabled={!lokasiRumahSiap}
+          title={!lokasiRumahSiap ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)" : undefined}
+          className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
         >
           <option value="">Pilih Kecamatan...</option>
           {(summary?.kecamatan ?? []).map((k) => (
@@ -1078,12 +1240,18 @@ function PenyisiranPanel({
           type="search"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
+          disabled={!lokasiRumahSiap}
+          title={!lokasiRumahSiap ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)" : undefined}
           placeholder="Cari nama / ID / alamat..."
-          className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
+          className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
         />
       </div>
 
-      {!bisaMuat && (
+      {/* Kalau lokasi rumah belum siap, banner peringatan di atas (dekat
+          tombol Tetapkan Lokasi) SUDAH menjelaskan sebabnya -- jadi pesan
+          di sini sengaja HANYA muncul kalau lokasi rumah SUDAH siap tapi
+          Kecamatan/pencarian belum diisi, supaya tidak dobel pesan. */}
+      {lokasiRumahSiap && !bisaMuat && (
         <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/50">
           Pilih kecamatan (atau ketik pencarian) dulu untuk menampilkan daftar &amp; peta.
         </p>
@@ -1110,23 +1278,27 @@ function PenyisiranPanel({
               </button>
               <div className="relative h-[24vh] max-h-[260px] min-h-[160px] overflow-hidden rounded-lg border border-line">
                 <PenyisiranMap markers={markers} userLocation={liveLoc} />
-                <div className="absolute bottom-2 left-2 z-[1000] rounded-md border border-line bg-white/95 p-2 text-[11px] shadow">
-                  {liveLoc && (
-                    <div className="mb-1 flex items-center gap-1.5 border-b border-line pb-1">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#2563eb]" />
-                      Lokasi Anda
-                    </div>
-                  )}
-                  {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
-                    <div key={s} className="flex items-center gap-1.5">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: STATUS_META[s].dot }}
-                      />
-                      {STATUS_META[s].label}
-                    </div>
-                  ))}
-                </div>
+              </div>
+              {/* Legenda DIPINDAH ke LUAR peta (dulu melayang di atas
+                  peta, menutupi sebagian tampilan) -- dibuat grid 3 kolom
+                  spy SELALU cuma 2 baris (maks 5 item: 4 status + "Lokasi
+                  Anda") apa pun lebar layarnya, tidak makan tempat. */}
+              <div className="grid grid-cols-3 gap-x-2 gap-y-1 rounded-lg border border-line bg-white p-2 text-[10px] text-ink/70">
+                {liveLoc && (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-[#2563eb]" />
+                    <span className="truncate">Lokasi Anda</span>
+                  </div>
+                )}
+                {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
+                  <div key={s} className="flex items-center gap-1">
+                    <span
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: STATUS_META[s].dot }}
+                    />
+                    <span className="truncate">{STATUS_META[s].label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -1193,6 +1365,7 @@ function PenyisiranPanel({
                   liveLng={liveLoc?.lng ?? null}
                   isDetail={detailIds.has(row.kode_identitas)}
                   onToggleDetail={() => toggleDetail(row.kode_identitas)}
+                  highlighted={highlightId === row.kode_identitas}
                   onSaved={refreshAfterEdit}
                   onSessionExpired={onSessionExpired}
                 />
@@ -1268,6 +1441,7 @@ function RowCard({
   liveLng,
   isDetail,
   onToggleDetail,
+  highlighted,
   onSaved,
   onSessionExpired,
 }: {
@@ -1284,6 +1458,11 @@ function RowCard({
   liveLng: number | null;
   isDetail: boolean;
   onToggleDetail: () => void;
+  // true sesaat (2.5 detik, lihat handleKlikSampelTerdekat di
+  // PenyisiranPanel) setelah kartu ini dituju dari panel "Sampel
+  // Terdekat" -- dipakai cuma utk sorotan ring visual sesaat, BUKAN
+  // state yg disimpan/dipersist.
+  highlighted: boolean;
   onSaved: (id: string, patch: Partial<Row>) => void;
   onSessionExpired: () => void;
 }) {
@@ -1452,7 +1631,10 @@ function RowCard({
 
   return (
     <div
-      className="rounded-lg border border-line bg-white p-3"
+      id={`kartu-penyisiran-${row.kode_identitas}`}
+      className={`rounded-lg border bg-white p-3 transition-shadow ${
+        highlighted ? "border-navy-400 ring-2 ring-navy-400" : "border-line"
+      }`}
       style={{ borderLeft: `4px solid ${meta.dot}` }}
     >
       {/* ---------- RINGKAS: SELALU tampil (nama, jarak live, prioritas,
