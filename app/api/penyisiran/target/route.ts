@@ -52,7 +52,13 @@ function supabaseAdmin() {
  */
 async function pastikanPengelola(
   req: NextRequest,
-  supabase: ReturnType<typeof createClient>
+  // supabase sengaja diketik "any" (BUKAN ReturnType<typeof createClient>) --
+  // mengetik ulang lewat ReturnType<> di sini ternyata bikin TypeScript versi
+  // yg dipakai Railway salah menyimpulkan hasil .select("nama") di bawah jadi
+  // tipe `never` ("Property 'nama' does not exist on type 'never'"), padahal
+  // pola query yg SAMA PERSIS jalan normal di endpoint lain (mis.
+  // petugas-toggle-aktif) yg tidak mengetik ulang variabel supabase-nya.
+  supabase: any
 ): Promise<{ nama: string } | NextResponse> {
   const token = extractBearer(req);
   if (!verifySession(token, "penyisiran_petugas")) {
