@@ -77,8 +77,15 @@ if [ ! -f "${OSRM_BASE}.mldgr" ]; then
     rm -f "$CLIPPED_PBF"
   fi
   if [ ! -f "$CLIPPED_PBF" ]; then
-    echo "[osrm] Memotong extract ke bounding box $OSRM_BBOX ..."
-    osmium extract --bbox "$OSRM_BBOX" --overwrite -o "$CLIPPED_PBF" "$RAW_PBF"
+    echo "[osrm] Memotong extract ke bounding box $OSRM_BBOX (strategi 'simple' -- paling hemat memori) ..."
+    # Strategi default osmium extract (complete_ways) butuh RAM sebanding dgn
+    # ID node TERTINGGI di file SUMBER (bukan cuma luas area yg dipotong) --
+    # jadi tetap bisa OOM ("Killed" oleh OS) meski file sumbernya kecil.
+    # Strategi "simple" cuma 1x pass & jauh lebih hemat memori; konsekuensinya
+    # jalan yg persis motong garis bbox bisa jadi tidak reference-complete,
+    # tapi tidak masalah krn OSRM_BBOX kita sudah dikasih margin di luar
+    # Sumbar, jadi jalan-jalan penting di dalam wilayah kerja tetap utuh.
+    osmium extract --bbox "$OSRM_BBOX" --strategy simple --overwrite -o "$CLIPPED_PBF" "$RAW_PBF"
   fi
 
   echo "[osrm] osrm-extract (profil $OSRM_PROFILE) ..."
