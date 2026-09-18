@@ -23,11 +23,16 @@
 // Isi tab:
 //  - "Ringkasan Hasil Identifikasi": rekap status identifikasi_ppl per
 //    wilayah, level dropdown Kecamatan/Nagari/Sub SLS (RPC
-//    penyisiran_ringkasan_identifikasi). Kolom "Ada" dipecah jadi 3 (Ada
-//    dari PPL / Ada dari Jorong / Ada dari Keduanya) berdasarkan kolom
-//    ada_konfirmasi_ppl & ada_konfirmasi_jorong (lihat migrasi
-//    20260918_ada_konfirmasi_split.sql & app/api/penyisiran/identifikasi/
-//    route.ts) -- selain itu ttp Tidak Ada/Ragu/Belum/Total spt semula.
+//    penyisiran_ringkasan_identifikasi). Kolom "Sumber Informasi (Ada)"
+//    menggabungkan 3 angka (PPL / Jorong / Keduanya) dlm satu sel,
+//    berdasarkan kolom ada_konfirmasi_ppl & ada_konfirmasi_jorong (lihat
+//    migrasi 20260918_ada_konfirmasi_split.sql & app/api/penyisiran/
+//    identifikasi/route.ts) -- selain itu ttp Tidak Ada/Ragu/Belum/Total
+//    spt semula. Tiap baris Kecamatan (view "Per Kecamatan") bisa
+//    di-unhide (▸) utk menampilkan rincian per Nagari-nya tanpa ganti
+//    seluruh tabel -- lihat migrasi 20260918_ringkasan_kec_kode_dan_
+//    drilldown.sql (param p_kec_kode & fix bug nagari_kode yg dulu tdk
+//    unik lintas kecamatan).
 //  - "Target Petugas": target per petugas (tabel petugas_target), dipisah
 //    2 jenis tugas:
 //     - Identifikasi (Jorong): target_identifikasi_jumlah + satuan
@@ -39,7 +44,7 @@
 //    semua) ATAU diedit satu-satu per baris di tabel (auto-simpan saat
 //    kolom ditinggalkan / onBlur).
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 
 // NILAI STRING INI HARUS PERSIS SAMA dgn TOKEN_KEY/NAMA_KEY/
@@ -80,6 +85,8 @@ interface PetugasTarget {
 
 interface RingkasanRow {
   kode: string;
+  kec_kode: string;
+  kec_nama: string;
   nama: string;
   ada_ppl: number;
   ada_jorong: number;
@@ -394,15 +401,50 @@ function ManajemenTargetPanel({ token, onSessionExpired }: { token: string; onSe
 }
 
 // ---------- Ringkasan Hasil Identifikasi (per level wilayah) ----------
+// Sel gabungan utk kolom "Sumber Informasi" (dulu 3 kolom terpisah Ada
+// dari PPL/Jorong/Keduanya, sekarang di-batch jadi satu kolom biar tabel
+// tdk terlalu lebar).
+function SumberInformasi({ ppl, jorong, keduanya }: { ppl: number; jorong: number; keduanya: number }) {
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px]">
+      <span title="Ada dari PPL" className="text-moss-700">
+        PPL <b>{ppl}</b>
+      </span>
+      <span className="text-ink/25">·</span>
+      <span title="Ada dari Jorong/Tetangga" className="text-moss-700">
+        Jorong <b>{jorong}</b>
+      </span>
+      <span className="text-ink/25">·</span>
+      <span title="Ada dari Keduanya (PPL & Jorong/Tetangga)" className="text-moss-700">
+        Keduanya <b>{keduanya}</b>
+      </span>
+    </span>
+  );
+}
+
 function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [level, setLevel] = useState<Level>("kec");
   const [rows, setRows] = useState<RingkasanRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
+  // Fitur "unhide": tiap baris Kecamatan (level="kec") bisa dibuka utk
+  // menampilkan rincian per Nagari-nya TANPA mengganti seluruh tabel ke
+  // view "Per Nagari" (dropdown level di atas ttp bisa dipakai spt biasa
+  // kalau memang mau lihat SEMUA nagari sekaligus scr flat).
+  const [expandedKec, setExpandedKec] = useState<Set<string>>(new Set());
+  const [nagariCache, setNagariCache] = useState<Record<string, RingkasanRow[]>>({});
+  const [nagariLoading, setNagariLoading] = useState<Record<string, boolean>>({});
+  const [nagariErr, setNagariErr] = useState<Record<string, string>>({});
+
   useEffect(() => {
     setLoading(true);
     setErrMsg(null);
+    // Ganti level -> reset semua state drill-down (cuma relevan di level
+    // "kec"), spy tdk nyangkut data/cache dari level sebelumnya.
+    setExpandedKec(new Set());
+    setNagariCache({});
+    setNagariErr({});
     apiFetch(`/api/penyisiran/target/ringkasan?level=${level}`, token)
       .then((d) => setRows(d.data ?? []))
       .catch((e) => {
@@ -415,6 +457,34 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
       })
       .finally(() => setLoading(false));
   }, [level, token, onSessionExpired]);
+
+  async function toggleKec(kodeKec: string) {
+    setExpandedKec((prev) => {
+      const next = new Set(prev);
+      if (next.has(kodeKec)) next.delete(kodeKec);
+      else next.add(kodeKec);
+      return next;
+    });
+    if (nagariCache[kodeKec] || nagariLoading[kodeKec]) return;
+    setNagariLoading((p) => ({ ...p, [kodeKec]: true }));
+    setNagariErr((p) => ({ ...p, [kodeKec]: "" }));
+    try {
+      const d = await apiFetch(
+        `/api/penyisiran/target/ringkasan?level=nagari&kec=${encodeURIComponent(kodeKec)}`,
+        token
+      );
+      setNagariCache((p) => ({ ...p, [kodeKec]: d.data ?? [] }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        onSessionExpired();
+      } else {
+        setNagariErr((p) => ({ ...p, [kodeKec]: msg }));
+      }
+    } finally {
+      setNagariLoading((p) => ({ ...p, [kodeKec]: false }));
+    }
+  }
 
   const totalAdaPpl = rows.reduce((s, r) => s + r.ada_ppl, 0);
   const totalAdaJorong = rows.reduce((s, r) => s + r.ada_jorong, 0);
@@ -441,6 +511,12 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
         </select>
       </div>
 
+      {level === "kec" && (
+        <p className="mb-2 text-[10px] text-ink/40">
+          Klik ikon ▸ di depan nama kecamatan utk menampilkan rincian per Nagari.
+        </p>
+      )}
+
       {errMsg && <p className="mb-2 text-xs text-rust-700">⚠ {errMsg}</p>}
 
       <div className="overflow-x-auto rounded-md border border-line">
@@ -448,9 +524,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
               <th className="px-3 py-2">{LEVEL_LABEL[level]}</th>
-              <th className="px-3 py-2 text-right">Ada dari PPL</th>
-              <th className="px-3 py-2 text-right">Ada dari Jorong</th>
-              <th className="px-3 py-2 text-right">Ada dari Keduanya</th>
+              <th className="px-3 py-2 text-right">Sumber Informasi (Ada)</th>
               <th className="px-3 py-2 text-right">Belum</th>
               <th className="px-3 py-2 text-right">Tidak Ada</th>
               <th className="px-3 py-2 text-right">Ragu</th>
@@ -458,21 +532,69 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.kode} className="border-b border-line last:border-0">
-                <td className="px-3 py-1.5 font-medium text-navy-900">{r.nama}</td>
-                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_ppl}</td>
-                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_jorong}</td>
-                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_keduanya}</td>
-                <td className="px-3 py-1.5 text-right text-ink/60">{r.belum}</td>
-                <td className="px-3 py-1.5 text-right text-[#8A6A12]">{r.tidak_ada}</td>
-                <td className="px-3 py-1.5 text-right text-rust-700">{r.ragu}</td>
-                <td className="px-3 py-1.5 text-right font-semibold text-navy-900">{r.total}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const bisaDibuka = level === "kec";
+              const terbuka = expandedKec.has(r.kode);
+              return (
+                <Fragment key={r.kode}>
+                  <tr className="border-b border-line last:border-0">
+                    <td className="px-3 py-1.5 font-medium text-navy-900">
+                      {bisaDibuka && (
+                        <button
+                          type="button"
+                          onClick={() => toggleKec(r.kode)}
+                          className="mr-1.5 inline-flex w-4 items-center justify-center text-ink/40 hover:text-navy-900"
+                          title={terbuka ? "Sembunyikan rincian per Nagari" : "Tampilkan rincian per Nagari"}
+                        >
+                          {terbuka ? "▾" : "▸"}
+                        </button>
+                      )}
+                      {level === "nagari" ? `${r.nama} — ${r.kec_nama}` : r.nama}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      <SumberInformasi ppl={r.ada_ppl} jorong={r.ada_jorong} keduanya={r.ada_keduanya} />
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-ink/60">{r.belum}</td>
+                    <td className="px-3 py-1.5 text-right text-[#8A6A12]">{r.tidak_ada}</td>
+                    <td className="px-3 py-1.5 text-right text-rust-700">{r.ragu}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-navy-900">{r.total}</td>
+                  </tr>
+                  {bisaDibuka && terbuka && nagariLoading[r.kode] && (
+                    <tr className="border-b border-line bg-paper/30">
+                      <td colSpan={6} className="px-3 py-1.5 pl-8 text-ink/40">
+                        Memuat rincian Nagari...
+                      </td>
+                    </tr>
+                  )}
+                  {bisaDibuka && terbuka && !nagariLoading[r.kode] && nagariErr[r.kode] && (
+                    <tr className="border-b border-line bg-paper/30">
+                      <td colSpan={6} className="px-3 py-1.5 pl-8 text-rust-700">
+                        ⚠ {nagariErr[r.kode]}
+                      </td>
+                    </tr>
+                  )}
+                  {bisaDibuka &&
+                    terbuka &&
+                    !nagariLoading[r.kode] &&
+                    !nagariErr[r.kode] &&
+                    (nagariCache[r.kode] ?? []).map((n) => (
+                      <tr key={n.kode} className="border-b border-line bg-paper/30">
+                        <td className="px-3 py-1.5 pl-8 text-ink/70">↳ {n.nama}</td>
+                        <td className="px-3 py-1.5 text-right">
+                          <SumberInformasi ppl={n.ada_ppl} jorong={n.ada_jorong} keduanya={n.ada_keduanya} />
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-ink/50">{n.belum}</td>
+                        <td className="px-3 py-1.5 text-right text-[#8A6A12]/80">{n.tidak_ada}</td>
+                        <td className="px-3 py-1.5 text-right text-rust-700/80">{n.ragu}</td>
+                        <td className="px-3 py-1.5 text-right font-medium text-navy-900/80">{n.total}</td>
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-center text-ink/40">
+                <td colSpan={6} className="px-3 py-4 text-center text-ink/40">
                   Tidak ada data.
                 </td>
               </tr>
@@ -482,9 +604,9 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             <tfoot>
               <tr className="border-t border-line bg-paper/60 font-semibold text-navy-900">
                 <td className="px-3 py-1.5">Total</td>
-                <td className="px-3 py-1.5 text-right">{totalAdaPpl}</td>
-                <td className="px-3 py-1.5 text-right">{totalAdaJorong}</td>
-                <td className="px-3 py-1.5 text-right">{totalAdaKeduanya}</td>
+                <td className="px-3 py-1.5 text-right">
+                  <SumberInformasi ppl={totalAdaPpl} jorong={totalAdaJorong} keduanya={totalAdaKeduanya} />
+                </td>
                 <td className="px-3 py-1.5 text-right">{totalBelum}</td>
                 <td className="px-3 py-1.5 text-right">{totalTidakAda}</td>
                 <td className="px-3 py-1.5 text-right">{totalRagu}</td>

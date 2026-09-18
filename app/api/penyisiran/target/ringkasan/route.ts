@@ -1,10 +1,18 @@
 // app/api/penyisiran/target/ringkasan/route.ts
 //
-// Rekap jumlah hasil Identifikasi (Ada / Tidak Ada / Ragu / Belum)
-// dikelompokkan per level wilayah pilihan (?level=kec|nagari|subsls) --
-// panel "Ringkasan Hasil Identifikasi" di tab "Manajemen Target". Bungkus
-// RPC penyisiran_ringkasan_identifikasi(p_level) -- lihat migrasi
-// 20260918_petugas_target.sql.
+// Rekap jumlah hasil Identifikasi (Ada -- dipecah PPL/Jorong/Keduanya --
+// / Tidak Ada / Ragu / Belum) dikelompokkan per level wilayah pilihan
+// (?level=kec|nagari|subsls) -- panel "Ringkasan Hasil Identifikasi" di
+// tab "Manajemen Target". Bungkus RPC
+// penyisiran_ringkasan_identifikasi(p_level, p_kec_kode) -- lihat migrasi
+// 20260918_petugas_target.sql (versi awal), 20260918_ada_konfirmasi_split.sql
+// (pecah kolom ada), & 20260918_ringkasan_kec_kode_dan_drilldown.sql
+// (kec_kode/kec_nama + param p_kec_kode).
+//
+// Query param opsional "kec" (kode kecamatan) HANYA berlaku kalau
+// level=nagari -- dipakai fitur "unhide" per kecamatan di panel Ringkasan
+// (klik kecamatan utk menampilkan rincian nagari di dalamnya TANPA
+// mengganti seluruh tabel ke view "Per Nagari").
 //
 // Akses SAMA dgn /api/penyisiran/target (role "penyisiran_petugas" +
 // nama termasuk pengelola yg diizinkan) -- ringkasan ini memang bagian
@@ -50,8 +58,15 @@ export async function GET(req: NextRequest) {
 
   const levelInput = req.nextUrl.searchParams.get("level") || "kec";
   const level = LEVEL_VALID.has(levelInput) ? levelInput : "kec";
+  // "kec" cuma dipakai/diteruskan kalau level=nagari (drill-down per
+  // kecamatan) -- diabaikan diam2 utk level lain spy tdk salah filter.
+  const kecInput = req.nextUrl.searchParams.get("kec");
+  const kecKode = level === "nagari" && kecInput ? kecInput : null;
 
-  const { data, error } = await supabase.rpc("penyisiran_ringkasan_identifikasi", { p_level: level });
+  const { data, error } = await supabase.rpc("penyisiran_ringkasan_identifikasi", {
+    p_level: level,
+    p_kec_kode: kecKode,
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ level, data: data ?? [] });
