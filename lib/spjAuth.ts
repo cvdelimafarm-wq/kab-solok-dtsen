@@ -59,6 +59,19 @@ export function tabelAkun(jenis: SpjPetugasJenis): "petugas_penyisiran_akun" | "
   return jenis === "penyisiran" ? "petugas_penyisiran_akun" : "tetangga_akun";
 }
 
+// Kebalikan dari ROLE_KE_JENIS -- dipakai fitur Laporan
+// (app/api/penyisiran/spj/laporan/route.ts) utk mencocokkan rekap aktivitas
+// ke kolom penyisiran_usaha.identifikasi_ppl_role (nilai APA ADANYA yg
+// ditulis app/api/penyisiran/identifikasi/route.ts, bukan "penyisiran"/
+// "tetangga"), supaya rekap "apa yang saya kerjakan hari ini" konsisten
+// dgn tab Identifikasi Jorong/Tetangga yg memang jadi sumber login menu
+// SPJ ini (BUKAN tab "Penyisiran Usaha" yg rolenya beda,
+// "penyisiran_petugas", walau kebetulan berbagi tabel akun yg sama utk
+// jenis "penyisiran").
+export function roleUntukJenis(jenis: SpjPetugasJenis): "identifikasi_jorong" | "identifikasi_tetangga" {
+  return jenis === "penyisiran" ? "identifikasi_jorong" : "identifikasi_tetangga";
+}
+
 /**
  * Cek tambahan utk aksi yang cuma boleh PENGELOLA (mis. upload Surat
  * Tugas): sesi SPJ valid (lihat verifySpjSession) DITAMBAH nama akun yg

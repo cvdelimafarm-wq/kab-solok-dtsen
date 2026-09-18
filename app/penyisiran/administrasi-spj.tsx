@@ -21,12 +21,14 @@
 // jadi (petugas_jenis, petugas_id) yang dipakai seluruh tabel spj_*.
 //
 // Fitur Surat Tugas SUDAH JALAN PENUH (upload oleh pengelola + lihat/unduh
-// oleh petugas, lihat app/api/penyisiran/spj/surat-tugas/*). Kwitansi,
-// Visum, Laporan, Dokumentasi, & Surat Keterangan MASIH "segera hadir" --
-// menyusul di iterasi berikutnya (butuh template PDF yang sudah
-// dikonfirmasi user, lihat catatan di commit ini).
+// oleh petugas, lihat app/api/penyisiran/spj/surat-tugas/*). Visum JUGA
+// SUDAH JALAN (isi rencana tujuan + tanggal pelaksanaan per ST milik
+// sendiri, lalu unduh PDF -- lihat app/api/penyisiran/spj/visum/* &
+// lib/pdf/visum.ts). Kwitansi, Laporan, Dokumentasi, & Surat Keterangan
+// MASIH "segera hadir" -- menyusul di iterasi berikutnya.
 
 import { useCallback, useEffect, useState } from "react";
+import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
 
 const JORONG_TOKEN_KEY = "identifikasi-jorong-login-token";
 const JORONG_NAMA_KEY = "identifikasi-jorong-login-nama";
@@ -274,20 +276,6 @@ interface SuratTugasRow {
   petugas?: PetugasTaut[];
 }
 
-const DOKUMEN_SEGERA_HADIR: { judul: string; keterangan: string }[] = [
-  { judul: "Kwitansi", keterangan: "Template 1 halaman, terisi otomatis dari data Surat Tugas & Laporan." },
-  { judul: "Visum", keterangan: "Rencana kunjungan (nagari & tanggal) -- data rencana, bukan realisasi." },
-  {
-    judul: "Laporan",
-    keterangan: "Narasi bebas atau otomatis dari rekap identifikasi tab Penyisiran sesuai tanggal & petugas.",
-  },
-  { judul: "Dokumentasi", keterangan: "5 slot foto/hari (berangkat, sampai lokasi, mendata, pulang, sampai rumah)." },
-  {
-    judul: "Surat Keterangan Tidak Menggunakan Kendaraan Dinas",
-    keterangan: "Terisi otomatis nama, NIP, dan tanggal pelaksanaan.",
-  },
-];
-
 function AdministrasiPanel({
   sesi,
   onSessionExpired,
@@ -449,16 +437,20 @@ function AdministrasiPanel({
         </div>
       </div>
 
-      {/* ---------- 5 dokumen lain -- segera hadir ---------- */}
-      {DOKUMEN_SEGERA_HADIR.map((d) => (
-        <div key={d.judul} className="rounded-lg border border-dashed border-line bg-white p-3 opacity-70">
-          <p className="text-xs font-semibold text-navy-900">📝 {d.judul}</p>
-          <p className="mt-1 text-[11px] text-ink/50">{d.keterangan}</p>
-          <p className="mt-1.5 inline-block rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
-            🚧 Segera hadir
-          </p>
-        </div>
-      ))}
+      {/* ---------- Visum -- SUDAH JALAN ---------- */}
+      <VisumSection token={sesi.token} onSessionExpired={onSessionExpired} />
+
+      {/* ---------- Laporan -- SUDAH JALAN ---------- */}
+      <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} />
+
+      {/* ---------- Dokumentasi -- SUDAH JALAN ---------- */}
+      <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} />
+
+      {/* ---------- Kwitansi -- SUDAH JALAN ---------- */}
+      <KwitansiSection token={sesi.token} onSessionExpired={onSessionExpired} />
+
+      {/* ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas -- SUDAH JALAN ---------- */}
+      <SuratKeteranganSection token={sesi.token} onSessionExpired={onSessionExpired} />
     </div>
   );
 }
@@ -632,5 +624,1263 @@ function UploadSuratTugasForm({
         {busy ? "Mengupload..." : "Upload & Tautkan"}
       </button>
     </form>
+  );
+}
+
+// ---------- Visum (rencana kunjungan) ----------
+interface VisumRow {
+  id: number;
+  rencana_tujuan: string;
+  tempat_kedudukan: string;
+  tanggal_berangkat: string;
+  tanggal_tiba_tujuan: string;
+  tanggal_berangkat_kembali: string | null;
+  tanggal_tiba_kembali: string | null;
+}
+interface VisumSuratTugas {
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+  visum: VisumRow | null;
+}
+
+function VisumSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [daftar, setDaftar] = useState<VisumSuratTugas[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const guard = useCallback(
+    (fn: () => void) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      }
+    },
+    [onSessionExpired]
+  );
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/spj/visum", token);
+      setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [token, guard]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  // Unduh PDF -- SENGAJA fetch manual + blob (bukan apiFetch/window.open
+  // langsung ke URL API), krn endpoint ini butuh header Authorization yang
+  // tidak bisa disisipkan lewat navigasi/`window.open` biasa, dan PDF-nya
+  // dibuat on-the-fly (bukan file tersimpan spt Surat Tugas).
+  async function handleUnduh(visumId: number) {
+    try {
+      const res = await fetch(`/api/penyisiran/spj/visum/${visumId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">🧭 Visum (Rencana Kunjungan)</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Isi RENCANA tujuan &amp; tanggal pelaksanaan per Surat Tugas Anda -- bukan realisasi. Setelah disimpan, unduh
+        PDF Visum-nya utk kelengkapan SPJ.
+      </p>
+
+      {errMsg && (
+        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {daftar.map((row) => (
+          <VisumBaris key={row.surat_tugas_id} row={row} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+        ))}
+        {daftar.length === 0 && !loading && (
+          <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
+            Belum ada Surat Tugas yang ditautkan ke Anda -- Visum baru bisa diisi setelah pengelola menautkan Surat
+            Tugas Anda di bagian atas.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VisumBaris({
+  row,
+  token,
+  onSaved,
+  onUnduh,
+  guard,
+}: {
+  row: VisumSuratTugas;
+  token: string;
+  onSaved: () => void;
+  onUnduh: (visumId: number) => void;
+  guard: (fn: () => void) => void;
+}) {
+  const [edit, setEdit] = useState(!row.visum);
+  const [rencanaTujuan, setRencanaTujuan] = useState(row.visum?.rencana_tujuan ?? "");
+  const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(row.visum?.tanggal_berangkat ?? row.tanggal_mulai);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSimpan(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!rencanaTujuan.trim() || !tanggalPelaksanaan) {
+      setError("Rencana tujuan dan tanggal pelaksanaan wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/penyisiran/spj/visum", token, {
+        method: "POST",
+        body: JSON.stringify({
+          surat_tugas_id: row.surat_tugas_id,
+          rencana_tujuan: rencanaTujuan.trim(),
+          tanggal_pelaksanaan: tanggalPelaksanaan,
+        }),
+      });
+      setEdit(false);
+      onSaved();
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{row.nomor_st}</span>
+        <div className="flex items-center gap-2">
+          {row.visum && !edit && (
+            <button
+              type="button"
+              onClick={() => onUnduh(row.visum!.id)}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+            >
+              🖨 Unduh PDF Visum
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEdit((v) => !v)}
+            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+          >
+            {edit ? "Batal" : row.visum ? "Ubah" : "Isi Visum"}
+          </button>
+        </div>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(row.tanggal_mulai)} s/d {formatTanggal(row.tanggal_selesai)}
+      </p>
+
+      {!edit && row.visum && (
+        <p className="mt-1 text-[11px] text-ink/50">
+          Tujuan: <span className="font-medium text-navy-900">{row.visum.rencana_tujuan}</span> -- Tanggal:{" "}
+          {formatTanggal(row.visum.tanggal_berangkat)}
+        </p>
+      )}
+
+      {edit && (
+        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">Rencana Tujuan (Nagari/Jorong)</label>
+            <input
+              type="text"
+              value={rencanaTujuan}
+              onChange={(e) => setRencanaTujuan(e.target.value)}
+              placeholder="Contoh: Nagari Kubung"
+              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan</label>
+            <input
+              type="date"
+              value={tanggalPelaksanaan}
+              onChange={(e) => setTanggalPelaksanaan(e.target.value)}
+              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+            />
+          </div>
+          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+          >
+            {busy ? "Menyimpan..." : "Simpan Visum"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ---------- Laporan (per Surat Tugas, bisa lebih dari 1 tanggal) ----------
+interface LaporanRow {
+  id: number;
+  tanggal: string;
+  mode: "template" | "bebas";
+  narasi: string | null;
+  created_at: string;
+}
+interface LaporanSuratTugas {
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+  laporan: LaporanRow[];
+}
+
+function LaporanSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [daftar, setDaftar] = useState<LaporanSuratTugas[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const guard = useCallback(
+    (fn: () => void) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      }
+    },
+    [onSessionExpired]
+  );
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/spj/laporan", token);
+      setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [token, guard]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  async function handleUnduh(laporanId: number) {
+    try {
+      const res = await fetch(`/api/penyisiran/spj/laporan/${laporanId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">📝 Laporan</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Satu Laporan per tanggal dlm rentang Surat Tugas. Mode "Template" menarik rekap otomatis dari tab Identifikasi
+        Jorong/Tetangga pada tanggal itu -- kalau datanya belum sesuai, koreksi dulu di tab tersebut lalu buat ulang.
+      </p>
+
+      {errMsg && (
+        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {daftar.map((st) => (
+          <LaporanStCard key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+        ))}
+        {daftar.length === 0 && !loading && (
+          <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
+            Belum ada Surat Tugas yang ditautkan ke Anda -- Laporan baru bisa dibuat setelah pengelola menautkan Surat
+            Tugas Anda di bagian atas.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LaporanStCard({
+  st,
+  token,
+  onSaved,
+  onUnduh,
+  guard,
+}: {
+  st: LaporanSuratTugas;
+  token: string;
+  onSaved: () => void;
+  onUnduh: (laporanId: number) => void;
+  guard: (fn: () => void) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <button
+          type="button"
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+        >
+          {showForm ? "Batal" : "+ Tambah Laporan"}
+        </button>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
+      </p>
+
+      {showForm && (
+        <LaporanForm
+          st={st}
+          token={token}
+          onDone={() => {
+            setShowForm(false);
+            onSaved();
+          }}
+          guard={guard}
+        />
+      )}
+
+      <div className="mt-2 flex flex-col gap-1.5">
+        {st.laporan.map((l) => (
+          <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-2">
+            <div>
+              <span className="font-medium text-navy-900">{formatTanggal(l.tanggal)}</span>{" "}
+              <span className="rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold uppercase text-ink/50">
+                {l.mode === "template" ? "Template" : "Narasi Bebas"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onUnduh(l.id)}
+              className="rounded-md border border-line px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+            >
+              🖨 Unduh PDF
+            </button>
+          </div>
+        ))}
+        {st.laporan.length === 0 && !showForm && (
+          <p className="text-[11px] text-ink/40">Belum ada Laporan utk Surat Tugas ini.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LaporanForm({
+  st,
+  token,
+  onDone,
+  guard,
+}: {
+  st: LaporanSuratTugas;
+  token: string;
+  onDone: () => void;
+  guard: (fn: () => void) => void;
+}) {
+  const [tanggal, setTanggal] = useState(st.tanggal_mulai);
+  const [mode, setMode] = useState<"template" | "bebas">("template");
+  const [narasi, setNarasi] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!tanggal) {
+      setError("Tanggal wajib diisi.");
+      return;
+    }
+    if (mode === "bebas" && !narasi.trim()) {
+      setError("Narasi wajib diisi utk mode Narasi Bebas.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/penyisiran/spj/laporan", token, {
+        method: "POST",
+        body: JSON.stringify({
+          surat_tugas_id: st.surat_tugas_id,
+          tanggal,
+          mode,
+          // Utk mode "bebas" ini ISI UTAMA laporan (wajib diisi, dicek di
+          // atas); utk mode "template" ini cuma catatan tambahan opsional
+          // yg ditempel di bawah uraian otomatis (lihat lib/pdf/laporan.ts)
+          // -- kedua kasus SAMA2 dikirim apa adanya, bukan dikosongkan.
+          narasi: narasi.trim(),
+        }),
+      });
+      onDone();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        guard(() => {
+          throw e;
+        });
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal</label>
+          <input
+            type="date"
+            value={tanggal}
+            min={st.tanggal_mulai}
+            max={st.tanggal_selesai}
+            onChange={(e) => setTanggal(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Mode Isi Laporan</label>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value === "bebas" ? "bebas" : "template")}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          >
+            <option value="template">Template (otomatis dari Identifikasi)</option>
+            <option value="bebas">Narasi Bebas</option>
+          </select>
+        </div>
+      </div>
+      {mode === "bebas" ? (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Narasi</label>
+          <textarea
+            value={narasi}
+            onChange={(e) => setNarasi(e.target.value)}
+            rows={4}
+            placeholder="Tuliskan uraian perjalanan &amp; pelaksanaan tugas Anda..."
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+      ) : (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Catatan Tambahan (opsional)</label>
+          <textarea
+            value={narasi}
+            onChange={(e) => setNarasi(e.target.value)}
+            rows={2}
+            placeholder="Ditambahkan sbg catatan pelengkap di bawah uraian otomatis (boleh dikosongkan)"
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+      )}
+      {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+      <button
+        type="submit"
+        disabled={busy}
+        className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+      >
+        {busy ? "Menyimpan..." : "Simpan Laporan"}
+      </button>
+    </form>
+  );
+}
+
+// ---------- Dokumentasi (5 slot foto/hari) ----------
+interface DokumentasiSt {
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+}
+interface DokumentasiFotoSlot {
+  id: number;
+  slot: number;
+  file_nama_asli: string | null;
+  url: string | null;
+}
+
+function DokumentasiSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [daftar, setDaftar] = useState<DokumentasiSt[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const guard = useCallback(
+    (fn: () => void) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      }
+    },
+    [onSessionExpired]
+  );
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/spj/dokumentasi", token);
+      setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [token, guard]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">📷 Dokumentasi</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Maksimal 5 foto/hari per Surat Tugas -- pilih tanggal, lalu upload foto ke slot yang sesuai. Setelah lengkap,
+        unduh PDF Lampiran Dokumentasi-nya.
+      </p>
+
+      {errMsg && (
+        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {daftar.map((st) => (
+          <DokumentasiStCard key={st.surat_tugas_id} st={st} token={token} guard={guard} />
+        ))}
+        {daftar.length === 0 && !loading && (
+          <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
+            Belum ada Surat Tugas yang ditautkan ke Anda -- Dokumentasi baru bisa diupload setelah pengelola menautkan
+            Surat Tugas Anda di bagian atas.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DokumentasiStCard({ st, token, guard }: { st: DokumentasiSt; token: string; guard: (fn: () => void) => void }) {
+  const [tanggal, setTanggal] = useState(st.tanggal_mulai);
+  const [foto, setFoto] = useState<Record<number, DokumentasiFotoSlot | null>>({});
+  const [loading, setLoading] = useState(false);
+  const [busySlot, setBusySlot] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const muatFoto = useCallback(
+    async (tgl: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiFetch(
+          `/api/penyisiran/spj/dokumentasi?surat_tugas_id=${st.surat_tugas_id}&tanggal=${encodeURIComponent(tgl)}`,
+          token
+        );
+        const peta: Record<number, DokumentasiFotoSlot | null> = {};
+        for (const s of SLOT_URUTAN) peta[s] = null;
+        for (const f of (data?.foto ?? []) as DokumentasiFotoSlot[]) peta[f.slot] = f;
+        setFoto(peta);
+      } catch (e) {
+        guard(() => {
+          throw e;
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [st.surat_tugas_id, token, guard]
+  );
+
+  useEffect(() => {
+    muatFoto(tanggal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleUploadSlot(slot: number, file: File) {
+    setBusySlot(slot);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("surat_tugas_id", String(st.surat_tugas_id));
+      form.set("tanggal", tanggal);
+      form.set("slot", String(slot));
+      form.set("file", file);
+      const res = await fetch("/api/penyisiran/spj/dokumentasi", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+      await muatFoto(tanggal);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      guard(() => {
+        throw new Error(msg);
+      });
+    } finally {
+      setBusySlot(null);
+    }
+  }
+
+  async function handleHapusSlot(id: number) {
+    setBusySlot(-1);
+    setError(null);
+    try {
+      await apiFetch(`/api/penyisiran/spj/dokumentasi?id=${id}`, token, { method: "DELETE" });
+      await muatFoto(tanggal);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setBusySlot(null);
+    }
+  }
+
+  async function handleUnduh() {
+    try {
+      const res = await fetch(
+        `/api/penyisiran/spj/dokumentasi/pdf?surat_tugas_id=${st.surat_tugas_id}&tanggal=${encodeURIComponent(tanggal)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    }
+  }
+
+  const adaFoto = Object.values(foto).some((f) => f);
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={tanggal}
+            min={st.tanggal_mulai}
+            max={st.tanggal_selesai}
+            onChange={(e) => {
+              setTanggal(e.target.value);
+              muatFoto(e.target.value);
+            }}
+            className="rounded-md border border-line px-2 py-1 text-[11px]"
+          />
+          <button
+            type="button"
+            onClick={handleUnduh}
+            disabled={!adaFoto}
+            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-40"
+          >
+            🖨 Unduh PDF
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mt-1 text-[11px] text-rust-700">⚠ {error}</p>}
+      {loading && <p className="mt-1 text-[11px] text-ink/40">Memuat...</p>}
+
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {SLOT_URUTAN.map((slot) => {
+          const f = foto[slot];
+          return (
+            <div key={slot} className="rounded-md border border-dashed border-line bg-white p-2 text-center">
+              <p className="text-[10px] font-semibold text-ink/60">{SLOT_LABELS[slot]}</p>
+              {f?.url ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.url} alt={SLOT_LABELS[slot]} className="mx-auto mt-1 h-20 w-full rounded object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => handleHapusSlot(f.id)}
+                    disabled={busySlot !== null}
+                    className="mt-1 text-[10px] text-rust-700 underline disabled:opacity-50"
+                  >
+                    Hapus
+                  </button>
+                </>
+              ) : (
+                <label className="mt-1 flex h-20 cursor-pointer items-center justify-center rounded border border-line bg-paper/50 text-[10px] text-ink/40 hover:border-navy-400">
+                  {busySlot === slot ? "Mengupload..." : "+ Upload"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="hidden"
+                    disabled={busySlot !== null}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleUploadSlot(slot, file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Kwitansi (1 per Surat Tugas) ----------
+interface KwitansiRow {
+  id: number;
+  nominal: number;
+  terbilang: string;
+  untuk_perjalanan_dinas_pada: string;
+  tanggal_spd: string;
+  tanggal_kwitansi: string;
+}
+interface KwitansiSuratTugas {
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+  kwitansi: KwitansiRow | null;
+}
+
+function KwitansiSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [daftar, setDaftar] = useState<KwitansiSuratTugas[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const guard = useCallback(
+    (fn: () => void) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      }
+    },
+    [onSessionExpired]
+  );
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/spj/kwitansi", token);
+      setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [token, guard]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  async function handleUnduh(kwitansiId: number) {
+    try {
+      const res = await fetch(`/api/penyisiran/spj/kwitansi/${kwitansiId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">🧾 Kwitansi</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Nominal diinput manual sesuai yang diterima. Terbilang tersarankan otomatis dari nominal, boleh diubah kalau
+        perlu.
+      </p>
+
+      {errMsg && (
+        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {daftar.map((st) => (
+          <KwitansiBaris key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+        ))}
+        {daftar.length === 0 && !loading && (
+          <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
+            Belum ada Surat Tugas yang ditautkan ke Anda.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KwitansiBaris({
+  st,
+  token,
+  onSaved,
+  onUnduh,
+  guard,
+}: {
+  st: KwitansiSuratTugas;
+  token: string;
+  onSaved: () => void;
+  onUnduh: (kwitansiId: number) => void;
+  guard: (fn: () => void) => void;
+}) {
+  const [edit, setEdit] = useState(!st.kwitansi);
+  const [nominal, setNominal] = useState(st.kwitansi ? String(st.kwitansi.nominal) : "");
+  const [terbilang, setTerbilang] = useState(st.kwitansi?.terbilang ?? "");
+  const [untukPerjalananDinasPada, setUntukPerjalananDinasPada] = useState(st.kwitansi?.untuk_perjalanan_dinas_pada ?? "");
+  const [tanggalSpd, setTanggalSpd] = useState(st.kwitansi?.tanggal_spd ?? st.tanggal_mulai);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSimpan(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const nominalNum = Number(nominal);
+    if (!Number.isFinite(nominalNum) || nominalNum < 0) {
+      setError("Nominal tidak valid.");
+      return;
+    }
+    if (!untukPerjalananDinasPada.trim()) {
+      setError("Tujuan perjalanan dinas dalam kota wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/penyisiran/spj/kwitansi", token, {
+        method: "POST",
+        body: JSON.stringify({
+          surat_tugas_id: st.surat_tugas_id,
+          nominal: nominalNum,
+          terbilang: terbilang.trim(),
+          untuk_perjalanan_dinas_pada: untukPerjalananDinasPada.trim(),
+          tanggal_spd: tanggalSpd,
+        }),
+      });
+      setEdit(false);
+      onSaved();
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <div className="flex items-center gap-2">
+          {st.kwitansi && !edit && (
+            <button
+              type="button"
+              onClick={() => onUnduh(st.kwitansi!.id)}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+            >
+              🖨 Unduh PDF
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEdit((v) => !v)}
+            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+          >
+            {edit ? "Batal" : st.kwitansi ? "Ubah" : "Isi Kwitansi"}
+          </button>
+        </div>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
+      </p>
+
+      {!edit && st.kwitansi && (
+        <p className="mt-1 text-[11px] text-ink/50">
+          Rp {st.kwitansi.nominal.toLocaleString("id-ID")} -- {st.kwitansi.untuk_perjalanan_dinas_pada}
+        </p>
+      )}
+
+      {edit && (
+        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-medium text-ink/50">Nominal (Rp)</label>
+              <input
+                type="number"
+                min={0}
+                value={nominal}
+                onChange={(e) => setNominal(e.target.value)}
+                placeholder="170000"
+                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal SPD</label>
+              <input
+                type="date"
+                value={tanggalSpd}
+                min={st.tanggal_mulai}
+                max={st.tanggal_selesai}
+                onChange={(e) => setTanggalSpd(e.target.value)}
+                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">
+              Untuk Perjalanan Dinas Dalam Kota Pada (Kecamatan/Nagari Tujuan)
+            </label>
+            <input
+              type="text"
+              value={untukPerjalananDinasPada}
+              onChange={(e) => setUntukPerjalananDinasPada(e.target.value)}
+              placeholder="Contoh: Kubung"
+              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">
+              Terbilang (opsional, kosongkan utk otomatis dari nominal)
+            </label>
+            <input
+              type="text"
+              value={terbilang}
+              onChange={(e) => setTerbilang(e.target.value)}
+              placeholder="Otomatis dari nominal kalau dikosongkan"
+              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+            />
+          </div>
+          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+          >
+            {busy ? "Menyimpan..." : "Simpan Kwitansi"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas (1 per ST) ----------
+interface SuratKeteranganRow {
+  id: number;
+  tanggal_pelaksanaan: string;
+}
+interface SuratKeteranganSt {
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+  surat_keterangan: SuratKeteranganRow | null;
+}
+
+function SuratKeteranganSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [daftar, setDaftar] = useState<SuratKeteranganSt[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const guard = useCallback(
+    (fn: () => void) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      }
+    },
+    [onSessionExpired]
+  );
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/spj/surat-keterangan", token);
+      setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [token, guard]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  async function handleUnduh(id: number) {
+    try {
+      const res = await fetch(`/api/penyisiran/spj/surat-keterangan/${id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">🚫🚗 Surat Keterangan Tidak Pakai Kendaraan Dinas</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[11px] text-ink/50">Nama &amp; NIP terisi otomatis dari akun Anda -- tinggal pilih tanggal pelaksanaan.</p>
+
+      {errMsg && (
+        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {daftar.map((st) => (
+          <SuratKeteranganBaris key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+        ))}
+        {daftar.length === 0 && !loading && (
+          <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
+            Belum ada Surat Tugas yang ditautkan ke Anda.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SuratKeteranganBaris({
+  st,
+  token,
+  onSaved,
+  onUnduh,
+  guard,
+}: {
+  st: SuratKeteranganSt;
+  token: string;
+  onSaved: () => void;
+  onUnduh: (id: number) => void;
+  guard: (fn: () => void) => void;
+}) {
+  const [edit, setEdit] = useState(!st.surat_keterangan);
+  const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(st.surat_keterangan?.tanggal_pelaksanaan ?? st.tanggal_mulai);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSimpan(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!tanggalPelaksanaan) {
+      setError("Tanggal pelaksanaan wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch("/api/penyisiran/spj/surat-keterangan", token, {
+        method: "POST",
+        body: JSON.stringify({ surat_tugas_id: st.surat_tugas_id, tanggal_pelaksanaan: tanggalPelaksanaan }),
+      });
+      setEdit(false);
+      onSaved();
+    } catch (e) {
+      guard(() => {
+        throw e;
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <div className="flex items-center gap-2">
+          {st.surat_keterangan && !edit && (
+            <button
+              type="button"
+              onClick={() => onUnduh(st.surat_keterangan!.id)}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+            >
+              🖨 Unduh PDF
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEdit((v) => !v)}
+            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+          >
+            {edit ? "Batal" : st.surat_keterangan ? "Ubah" : "Isi"}
+          </button>
+        </div>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
+      </p>
+
+      {!edit && st.surat_keterangan && (
+        <p className="mt-1 text-[11px] text-ink/50">Tanggal pelaksanaan: {formatTanggal(st.surat_keterangan.tanggal_pelaksanaan)}</p>
+      )}
+
+      {edit && (
+        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan</label>
+            <input
+              type="date"
+              value={tanggalPelaksanaan}
+              min={st.tanggal_mulai}
+              max={st.tanggal_selesai}
+              onChange={(e) => setTanggalPelaksanaan(e.target.value)}
+              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+            />
+          </div>
+          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+          >
+            {busy ? "Menyimpan..." : "Simpan"}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
