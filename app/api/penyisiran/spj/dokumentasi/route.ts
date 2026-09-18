@@ -43,8 +43,14 @@ function bersihkanNamaFile(nama: string): string {
   return nama.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-120);
 }
 
+// supabase diketik "any" (BUKAN ReturnType<typeof createClient>) -- tipe
+// asli createClient dari @supabase/supabase-js generik/kompleks, dan
+// ReturnType<typeof createClient> gagal di-compile Next.js production
+// build (walau lolos di lokal/sandbox) dengan error
+// `Type '"public"' is not assignable to type 'never'`. Pola yg sama & AMAN
+// dipakai jg oleh pastikanPengelolaSpj() di lib/spjAuth.ts.
 async function pastikanMilikSendiri(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   session: { jenis: string; petugasId: string },
   suratTugasId: number
 ): Promise<boolean> {
