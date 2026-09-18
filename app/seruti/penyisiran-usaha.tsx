@@ -1178,7 +1178,16 @@ function PenyisiranPanel({
             value={summary.tidak_ditemukan}
             color={STATUS_META.tidak_ditemukan.dot}
           />
-          <StatTile label={STATUS_META.tidak_bisa.label} value={summary.tidak_bisa} color={STATUS_META.tidak_bisa.dot} />
+          {/* Kartu "Tidak Bisa Ditemui / Pindah" SENGAJA disembunyikan di
+              tampilan HP (grid 2 kolom, layar sempit) atas permintaan --
+              tetap tampil di layar lebar (sm: ke atas, grid 5 kolom) spy
+              datanya tidak hilang total dari monitoring. */}
+          <StatTile
+            label={STATUS_META.tidak_bisa.label}
+            value={summary.tidak_bisa}
+            color={STATUS_META.tidak_bisa.dot}
+            className="hidden sm:block"
+          />
         </div>
       )}
 
@@ -1418,9 +1427,22 @@ function PenyisiranPanel({
   );
 }
 
-function StatTile({ label, value, color }: { label: string; value: number; color: string }) {
+function StatTile({
+  label,
+  value,
+  color,
+  className,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  className?: string;
+}) {
   return (
-    <div className="rounded-lg border border-line bg-white p-3" style={{ borderLeft: `4px solid ${color}` }}>
+    <div
+      className={`rounded-lg border border-line bg-white p-3 ${className ?? ""}`}
+      style={{ borderLeft: `4px solid ${color}` }}
+    >
       <div className="text-lg font-bold text-navy-900">{value.toLocaleString("id-ID")}</div>
       <div className="mt-0.5 text-[11px] text-ink/60">{label}</div>
     </div>
