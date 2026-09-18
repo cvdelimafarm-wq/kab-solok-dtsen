@@ -1,23 +1,24 @@
 // app/api/penyisiran/alokasi/oh-monitoring/batalkan/route.ts
 //
 // Super user (Bambang/Deswaty/Iqbal/Wisnu, lihat lib/manajemenTargetAkses.ts)
-// membatalkan ATAU mengaktifkan-kembali SATU baris hari tugas milik
-// petugas tertentu -- lihat komentar lengkap di
+// membatalkan ATAU mengaktifkan-kembali SATU baris hari tugas (per
+// TANGGAL kalender) milik petugas tertentu -- lihat komentar lengkap di
 // .../oh-monitoring/route.ts & migrasi
-// supabase/migrations/20260918_hari_tugas_oh_translok.sql.
+// supabase/migrations/20260918_hari_tugas_jadi_tanggal_kalender.sql.
 //
-// body: { petugas_id: number, hari: string, aksi: "batalkan" | "aktifkan" }
-// -- "batalkan" mengisi dibatalkan_oleh (nama super user yg login) &
-// dibatalkan_at (now()) supaya baris itu TERKUNCI dari sisi petugas
-// (muncul sbg badge "Dibatalkan oleh <nama>" di checklist Hari Tugas
-// miliknya) & TIDAK IKUT DIHITUNG sbg OH terpakai. "aktifkan" membalikkan
-// (reset ke null) kalau pembatalan keliru/ingin dikembalikan.
+// body: { petugas_id: number, tanggal: string ("YYYY-MM-DD"), aksi:
+// "batalkan" | "aktifkan" } -- "batalkan" mengisi dibatalkan_oleh (nama
+// super user yg login) & dibatalkan_at (now()) supaya baris itu TERKUNCI
+// dari sisi petugas (muncul sbg badge "Dibatalkan oleh <nama>" di
+// checklist Hari Tugas miliknya) & TIDAK IKUT DIHITUNG sbg OH terpakai.
+// "aktifkan" membalikkan (reset ke null) kalau pembatalan keliru/ingin
+// dikembalikan.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
-import { HARI_VALID } from "@/lib/penyisiranHari";
+import { tanggalDalamPeriodeHariTugas } from "@/lib/penyisiranHari";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,9 +36,9 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const petugasId = typeof body?.petugas_id === "number" ? body.petugas_id : null;
-  const hari = typeof body?.hari === "string" ? body.hari : null;
+  const tanggal = typeof body?.tanggal === "string" ? body.tanggal : null;
   const aksi = body?.aksi === "batalkan" || body?.aksi === "aktifkan" ? body.aksi : null;
-  if (!petugasId || !hari || !aksi || !(HARI_VALID as readonly string[]).includes(hari)) {
+  if (!petugasId || !tanggal || !aksi || !tanggalDalamPeriodeHariTugas(tanggal)) {
     return NextResponse.json({ error: "Data tidak lengkap/tidak valid." }, { status: 400 });
   }
 
@@ -67,7 +68,7 @@ export async function PATCH(req: NextRequest) {
     .from("penyisiran_alokasi_hari_tugas")
     .update(patch)
     .eq("petugas_id", petugasId)
-    .eq("hari", hari);
+    .eq("tanggal", tanggal);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

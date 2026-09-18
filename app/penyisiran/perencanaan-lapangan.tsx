@@ -12,21 +12,21 @@
 // satu role token, dua tab berbeda yg membacanya).
 //
 // Dua bagian + 1 panel khusus pengelola:
-//  1. "Identifikasi Hari Tugas" -- checklist 7 HARI DALAM SEMINGGU (Senin
-//     s.d. Minggu, BUKAN tanggal kalender spesifik -- dikonfirmasi user
-//     lewat AskUserQuestion) yang ditandai petugas sbg BISA turun
-//     bertugas lapangan; centang hari yg bisa, hapus centang hari yg
-//     tidak bisa, lalu submit. Disimpan di tabel
-//     penyisiran_alokasi_hari_tugas (SATU baris per petugas+hari, BUKAN
-//     lg kolom array -- diganti krn perlu jejak pembatalan per-hari, lihat
-//     poin 3) lewat GET/PATCH /api/penyisiran/alokasi/hari-tugas. Tiap
-//     hari yg dicentang = 1 OH (Orang-Hari) dari KUOTA_OH_TRANSLOK (280,
-//     hardcode di .../oh-monitoring/route.ts) -- lihat migrasi
-//     supabase/migrations/20260918_hari_tugas_oh_translok.sql utk
-//     justifikasi lengkap tiap parameter (SUDAH dikonfirmasi user lewat
-//     AskUserQuestion: 1 hari = 1 OH sekali pakai, bukan berulang per
-//     minggu; kuota TIDAK mengunci checklist kalau habis, cuma
-//     peringatan).
+//  1. "Identifikasi Hari Tugas" -- checklist per TANGGAL KALENDER dalam
+//     periode 17-30 September 2026 (DIKOREKSI user dari rencana awal
+//     "hari dalam seminggu" -- ruang lingkup penyisiran sudah pasti
+//     tanggalnya, jadi ditampilkan sbg GRID KALENDER Sen..Min dgn angka
+//     tanggal, lihat KALENDER_HARI_TUGAS & lib/penyisiranHari.ts) yang
+//     ditandai petugas sbg BISA turun bertugas lapangan; centang tanggal
+//     yg bisa, hapus centang tanggal yg tidak bisa, lalu submit. Disimpan
+//     di tabel penyisiran_alokasi_hari_tugas (SATU baris per
+//     petugas+tanggal) lewat GET/PATCH /api/penyisiran/alokasi/hari-tugas.
+//     Tiap tanggal yg dicentang = 1 OH (Orang-Hari) dari KUOTA_OH_TRANSLOK
+//     (280, hardcode di .../oh-monitoring/route.ts) -- lihat migrasi
+//     supabase/migrations/20260918_hari_tugas_jadi_tanggal_kalender.sql
+//     utk justifikasi lengkap tiap parameter (SUDAH dikonfirmasi user
+//     lewat AskUserQuestion: 1 tanggal = 1 OH sekali pakai; kuota TIDAK
+//     mengunci checklist kalau habis, cuma peringatan).
 //  2. "Identifikasi Wilayah Sampel SLS" (dulu bernama "Checklist SLS/
 //     Jorong") -- form rekomendasi wilayah tugas: GET
 //     /api/penyisiran/alokasi/rekomendasi mengembalikan daftar SEMUA SLS/
@@ -34,7 +34,11 @@
 //     akhir (personal, berbasis jarak dari lokasi rumah petugas)
 //     tertinggi ke terendah -- rumus lengkap & justifikasi tiap parameter
 //     (SUDAH dikonfirmasi user) ada di migrasi
-//     supabase/migrations/20260918_alokasi_sampel.sql. Petugas checklist
+//     supabase/migrations/20260918_alokasi_sampel.sql. Tabelnya punya
+//     FILTER Kecamatan/Nagari (dropdown, Nagari otomatis mengikuti pilihan
+//     Kecamatan) & tiap kolom bisa DIURUTKAN ascending/descending (klik
+//     header, panah ▲/▼) -- keduanya murni client-side di atas hasil
+//     rekomendasi yg sama, tidak menambah request API. Petugas checklist
 //     MAKS 5 SLS/Jorong -> tombol "Kirim Pilihan" -> POST
 //     /api/penyisiran/alokasi/submit (REPLACE penuh pilihan lama). Sesudah
 //     submit (atau kalau petugas SUDAH PERNAH submit sebelumnya --
@@ -68,15 +72,52 @@ const LNG_KEY = "penyisiran-petugas-login-lng";
 
 const MAKS_PILIHAN = 5;
 
-const HARI_LIST: { key: string; label: string }[] = [
-  { key: "senin", label: "Senin" },
-  { key: "selasa", label: "Selasa" },
-  { key: "rabu", label: "Rabu" },
-  { key: "kamis", label: "Kamis" },
-  { key: "jumat", label: "Jumat" },
-  { key: "sabtu", label: "Sabtu" },
-  { key: "minggu", label: "Minggu" },
+// Grid kalender "Identifikasi Hari Tugas" -- HARDCODE utk periode 17-30
+// September 2026 (dikonfirmasi user, lihat lib/penyisiranHari.ts). Kalau
+// periode resmi berubah, PERBARUI manual: grid 3 baris x 7 kolom (Sen..Min)
+// di bawah ini, DAFTAR_TANGGAL (dipakai jg oleh OhMonitoringPanel utk
+// label singkat), & 2 tempat di lib/penyisiranHari.ts (constraint tanggal).
+const HARI_KOLOM = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+
+interface SelKalender {
+  tanggal: string;
+  tgl: number;
+}
+
+const KALENDER_HARI_TUGAS: (SelKalender | null)[][] = [
+  [
+    null,
+    null,
+    null,
+    { tanggal: "2026-09-17", tgl: 17 },
+    { tanggal: "2026-09-18", tgl: 18 },
+    { tanggal: "2026-09-19", tgl: 19 },
+    { tanggal: "2026-09-20", tgl: 20 },
+  ],
+  [
+    { tanggal: "2026-09-21", tgl: 21 },
+    { tanggal: "2026-09-22", tgl: 22 },
+    { tanggal: "2026-09-23", tgl: 23 },
+    { tanggal: "2026-09-24", tgl: 24 },
+    { tanggal: "2026-09-25", tgl: 25 },
+    { tanggal: "2026-09-26", tgl: 26 },
+    { tanggal: "2026-09-27", tgl: 27 },
+  ],
+  [
+    { tanggal: "2026-09-28", tgl: 28 },
+    { tanggal: "2026-09-29", tgl: 29 },
+    { tanggal: "2026-09-30", tgl: 30 },
+    null,
+    null,
+    null,
+    null,
+  ],
 ];
+
+function labelTanggalPendek(tanggal: string): string {
+  const tgl = Number(tanggal.slice(-2));
+  return `${tgl} Sep`;
+}
 
 interface RekomendasiRow {
   sls_key: string;
@@ -306,14 +347,15 @@ function PerencanaanPanel({
 }
 
 interface HariRow {
-  hari: string;
+  tanggal: string;
   dibatalkan_oleh: string | null;
   dibatalkan_at: string | null;
 }
 
-// Bagian 1: "Identifikasi Hari Tugas" -- checklist 7 hari dalam seminggu.
-// Tiap hari yg dicentang = 1 OH (Orang-Hari) dari kuota translok kabupaten
-// -- lihat app/api/penyisiran/alokasi/hari-tugas/route.ts. Hari yang SUDAH
+// Bagian 1: "Identifikasi Hari Tugas" -- checklist per TANGGAL kalender
+// (grid Sen..Min, periode 17-30 September 2026). Tiap tanggal yg dicentang
+// = 1 OH (Orang-Hari) dari kuota translok kabupaten -- lihat
+// app/api/penyisiran/alokasi/hari-tugas/route.ts. Tanggal yang SUDAH
 // dibatalkan super user (dibatalkan_oleh terisi) TERKUNCI (tidak bisa
 // dicentang ulang sendiri) & tampil sbg badge di sini.
 function HariTugasPanel({ token }: { token: string }) {
@@ -325,25 +367,27 @@ function HariTugasPanel({ token }: { token: string }) {
 
   function terapkanRows(data: HariRow[]) {
     setRows(data);
-    setDipilih(new Set(data.filter((r) => !r.dibatalkan_oleh).map((r) => r.hari)));
+    setDipilih(new Set(data.filter((r) => !r.dibatalkan_oleh).map((r) => r.tanggal)));
   }
 
   useEffect(() => {
     apiFetch("/api/penyisiran/alokasi/hari-tugas", token)
-      .then((data) => terapkanRows(Array.isArray(data?.hari) ? data.hari : []))
+      .then((data) => terapkanRows(Array.isArray(data?.tanggal) ? data.tanggal : []))
       .catch(() => {})
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const dibatalkanMap = new Map(rows.filter((r) => r.dibatalkan_oleh).map((r) => [r.hari, r.dibatalkan_oleh as string]));
+  const dibatalkanMap = new Map(
+    rows.filter((r) => r.dibatalkan_oleh).map((r) => [r.tanggal, r.dibatalkan_oleh as string])
+  );
 
-  function toggle(key: string) {
-    if (dibatalkanMap.has(key)) return; // terkunci, tidak bisa dicentang ulang sendiri
+  function toggle(tanggal: string) {
+    if (dibatalkanMap.has(tanggal)) return; // terkunci, tidak bisa dicentang ulang sendiri
     setDipilih((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(tanggal)) next.delete(tanggal);
+      else next.add(tanggal);
       return next;
     });
   }
@@ -354,9 +398,9 @@ function HariTugasPanel({ token }: { token: string }) {
     try {
       const data = await apiFetch("/api/penyisiran/alokasi/hari-tugas", token, {
         method: "PATCH",
-        body: JSON.stringify({ hari: Array.from(dipilih) }),
+        body: JSON.stringify({ tanggal: Array.from(dipilih) }),
       });
-      terapkanRows(Array.isArray(data?.hari) ? data.hari : []);
+      terapkanRows(Array.isArray(data?.tanggal) ? data.tanggal : []);
       setMsg("Tersimpan.");
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Gagal menyimpan.");
@@ -367,48 +411,69 @@ function HariTugasPanel({ token }: { token: string }) {
 
   return (
     <div className="rounded-lg border border-line bg-white p-4">
-      <p className="text-sm font-semibold text-navy-900">🗓 Identifikasi Hari Tugas</p>
+      <p className="text-sm font-semibold text-navy-900">🗓 Identifikasi Hari Tugas (17-30 September 2026)</p>
       <p className="mt-1 text-xs text-ink/60">
-        Centang hari yang Anda BISA turun bertugas lapangan. Hilangkan centang kalau tidak bisa, lalu tekan Simpan.
-        Tiap hari yang dicentang memakai 1 jatah OH (Orang-Hari) translok kabupaten.
+        Centang tanggal yang Anda BISA turun bertugas lapangan. Hilangkan centang kalau tidak bisa, lalu tekan
+        Simpan. Tiap tanggal yang dicentang memakai 1 jatah OH (Orang-Hari) translok kabupaten.
       </p>
       {loading ? (
         <p className="mt-3 text-xs text-ink/50">Memuat...</p>
       ) : (
         <>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {HARI_LIST.map((h) => {
-              const dibatalkanOleh = dibatalkanMap.get(h.key);
-              if (dibatalkanOleh) {
-                return (
-                  <div
-                    key={h.key}
-                    title={`Dibatalkan oleh ${dibatalkanOleh}`}
-                    className="rounded-full border border-dashed border-rust-300 bg-rust-50 px-4 py-1.5 text-xs font-semibold text-rust-700 opacity-80"
-                  >
-                    🚫 {h.label}
-                    <span className="ml-1 font-normal text-rust-500">(Dibatalkan oleh {dibatalkanOleh})</span>
-                  </div>
-                );
-              }
-              const aktif = dipilih.has(h.key);
-              return (
-                <button
-                  key={h.key}
-                  type="button"
-                  onClick={() => toggle(h.key)}
-                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                    aktif
-                      ? "border-navy-700 bg-navy-700 text-white"
-                      : "border-line bg-white text-ink/60 hover:border-navy-400"
-                  }`}
-                >
-                  {aktif ? "✓ " : ""}
-                  {h.label}
-                </button>
-              );
-            })}
+          <div className="mt-3 max-w-md">
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-ink/50">
+              {HARI_KOLOM.map((h) => (
+                <div key={h} className="py-1">
+                  {h}
+                </div>
+              ))}
+            </div>
+            {KALENDER_HARI_TUGAS.map((baris, i) => (
+              <div key={i} className="mt-1 grid grid-cols-7 gap-1">
+                {baris.map((sel, j) => {
+                  if (!sel) return <div key={j} />;
+                  const dibatalkanOleh = dibatalkanMap.get(sel.tanggal);
+                  if (dibatalkanOleh) {
+                    return (
+                      <div
+                        key={j}
+                        title={`Dibatalkan oleh ${dibatalkanOleh}`}
+                        className="flex aspect-square flex-col items-center justify-center rounded-md border border-dashed border-rust-300 bg-rust-50 text-rust-700"
+                      >
+                        <span className="text-xs font-semibold">🚫 {sel.tgl}</span>
+                      </div>
+                    );
+                  }
+                  const aktif = dipilih.has(sel.tanggal);
+                  return (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() => toggle(sel.tanggal)}
+                      className={`aspect-square rounded-md border text-sm font-semibold transition ${
+                        aktif
+                          ? "border-navy-700 bg-navy-700 text-white"
+                          : "border-line bg-white text-ink/70 hover:border-navy-400"
+                      }`}
+                    >
+                      {sel.tgl}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
+
+          {dibatalkanMap.size > 0 && (
+            <div className="mt-2 space-y-0.5 text-[11px] text-rust-700">
+              {Array.from(dibatalkanMap.entries()).map(([tanggal, oleh]) => (
+                <p key={tanggal}>
+                  🚫 {labelTanggalPendek(tanggal)}: dibatalkan oleh {oleh}
+                </p>
+              ))}
+            </div>
+          )}
+
           <div className="mt-3 flex items-center gap-3">
             <button
               type="button"
@@ -429,7 +494,7 @@ function HariTugasPanel({ token }: { token: string }) {
 interface OhRincianPetugas {
   petugas_id: number;
   petugas_nama: string;
-  hari: HariRow[];
+  tanggal: HariRow[];
 }
 
 // Panel monitoring kuota OH translok -- HANYA tampil utk 4 nama pengelola
@@ -464,13 +529,13 @@ function OhMonitoringPanel({ token }: { token: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function aksi(petugasId: number, hari: string, jenis: "batalkan" | "aktifkan") {
-    const key = `${petugasId}-${hari}`;
+  async function aksi(petugasId: number, tanggal: string, jenis: "batalkan" | "aktifkan") {
+    const key = `${petugasId}-${tanggal}`;
     setAksiBusyKey(key);
     try {
       await apiFetch("/api/penyisiran/alokasi/oh-monitoring/batalkan", token, {
         method: "PATCH",
-        body: JSON.stringify({ petugas_id: petugasId, hari, aksi: jenis }),
+        body: JSON.stringify({ petugas_id: petugasId, tanggal, aksi: jenis }),
       });
       await muat();
     } catch (e: unknown) {
@@ -514,37 +579,40 @@ function OhMonitoringPanel({ token }: { token: string }) {
               <div key={p.petugas_id} className="rounded-md border border-line/70 p-2">
                 <p className="text-xs font-semibold text-navy-900">{p.petugas_nama}</p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {p.hari.map((h) => {
-                    const key = `${p.petugas_id}-${h.hari}`;
-                    const label = HARI_LIST.find((x) => x.key === h.hari)?.label ?? h.hari;
-                    const busy = aksiBusyKey === key;
-                    if (h.dibatalkan_oleh) {
+                  {p.tanggal
+                    .slice()
+                    .sort((a, b) => a.tanggal.localeCompare(b.tanggal))
+                    .map((h) => {
+                      const key = `${p.petugas_id}-${h.tanggal}`;
+                      const label = labelTanggalPendek(h.tanggal);
+                      const busy = aksiBusyKey === key;
+                      if (h.dibatalkan_oleh) {
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => aksi(p.petugas_id, h.tanggal, "aktifkan")}
+                            title={`Dibatalkan oleh ${h.dibatalkan_oleh} -- klik utk aktifkan kembali`}
+                            className="rounded-full border border-dashed border-line px-2.5 py-1 text-[11px] font-medium text-ink/40 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+                          >
+                            🚫 {label}
+                          </button>
+                        );
+                      }
                       return (
                         <button
                           key={key}
                           type="button"
                           disabled={busy}
-                          onClick={() => aksi(p.petugas_id, h.hari, "aktifkan")}
-                          title={`Dibatalkan oleh ${h.dibatalkan_oleh} -- klik utk aktifkan kembali`}
-                          className="rounded-full border border-dashed border-line px-2.5 py-1 text-[11px] font-medium text-ink/40 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+                          onClick={() => aksi(p.petugas_id, h.tanggal, "batalkan")}
+                          title="Klik utk batalkan slot tanggal ini"
+                          className="rounded-full border border-navy-700 bg-navy-50 px-2.5 py-1 text-[11px] font-semibold text-navy-900 hover:bg-rust-50 hover:text-rust-700 disabled:opacity-50"
                         >
-                          🚫 {label}
+                          {label}
                         </button>
                       );
-                    }
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => aksi(p.petugas_id, h.hari, "batalkan")}
-                        title="Klik utk batalkan slot hari ini"
-                        className="rounded-full border border-navy-700 bg-navy-50 px-2.5 py-1 text-[11px] font-semibold text-navy-900 hover:bg-rust-50 hover:text-rust-700 disabled:opacity-50"
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                    })}
                 </div>
               </div>
             ))}
@@ -555,8 +623,22 @@ function OhMonitoringPanel({ token }: { token: string }) {
   );
 }
 
+type SortKey =
+  | "sls_nama"
+  | "nagari_nama"
+  | "kec_nama"
+  | "jumlah_potensi"
+  | "jarak_km"
+  | "skor_akhir"
+  | "sudah_dipilih_oleh";
+type SortDir = "asc" | "desc";
+
+const KOLOM_TEKS: SortKey[] = ["sls_nama", "nagari_nama", "kec_nama"];
+
 // Bagian 2: "Identifikasi Wilayah Sampel SLS" -- checklist maks 5 SLS/
-// Jorong rekomendasi + matriks gabungan sesudah submit.
+// Jorong rekomendasi + matriks gabungan sesudah submit. Ada filter
+// Kecamatan/Nagari & kolom bisa diurutkan (klik header) -- keduanya
+// client-side di atas hasil rekomendasi yg sama.
 function WilayahSampelPanel({
   token,
   petugasId,
@@ -579,6 +661,10 @@ function WilayahSampelPanel({
   const [tampilkanMatrix, setTampilkanMatrix] = useState(false);
   const [matrix, setMatrix] = useState<MatrixRow[]>([]);
   const [matrixLoading, setMatrixLoading] = useState(false);
+  const [filterKec, setFilterKec] = useState("");
+  const [filterNagari, setFilterNagari] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("skor_akhir");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   async function muatRekomendasi() {
     setLoading(true);
@@ -693,6 +779,47 @@ function WilayahSampelPanel({
     }
   }
 
+  const kecOptions = Array.from(new Set(rows.map((r) => r.kec_nama))).sort((a, b) => a.localeCompare(b));
+  const nagariOptions = Array.from(
+    new Set(rows.filter((r) => !filterKec || r.kec_nama === filterKec).map((r) => r.nagari_nama))
+  ).sort((a, b) => a.localeCompare(b));
+
+  function handleFilterKec(v: string) {
+    setFilterKec(v);
+    setFilterNagari(""); // reset Nagari kalau Kecamatan diganti (opsi Nagari lama blm tentu relevan lg)
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(KOLOM_TEKS.includes(key) ? "asc" : "desc");
+    }
+  }
+
+  function panahSort(key: SortKey) {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ▲" : " ▼";
+  }
+
+  const rowsTertampil = rows
+    .filter((r) => (!filterKec || r.kec_nama === filterKec) && (!filterNagari || r.nagari_nama === filterNagari))
+    .slice()
+    .sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      let cmp: number;
+      if (typeof av === "string" && typeof bv === "string") {
+        cmp = av.localeCompare(bv);
+      } else {
+        const an = av == null ? -Infinity : Number(av);
+        const bn = bv == null ? -Infinity : Number(bv);
+        cmp = an - bn;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
   if (loading) {
     return <p className="text-sm text-ink/60">Memuat rekomendasi...</p>;
   }
@@ -733,22 +860,83 @@ function WilayahSampelPanel({
           Terpilih: {dipilih.size} / {MAKS_PILIHAN}
         </p>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <label className="text-ink/60">Kecamatan:</label>
+          <select
+            value={filterKec}
+            onChange={(e) => handleFilterKec(e.target.value)}
+            className="rounded-md border border-line px-2 py-1 text-xs outline-none focus:border-navy-400"
+          >
+            <option value="">Semua Kecamatan</option>
+            {kecOptions.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+          <label className="text-ink/60">Nagari:</label>
+          <select
+            value={filterNagari}
+            onChange={(e) => setFilterNagari(e.target.value)}
+            className="rounded-md border border-line px-2 py-1 text-xs outline-none focus:border-navy-400"
+          >
+            <option value="">Semua Nagari</option>
+            {nagariOptions.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          {(filterKec || filterNagari) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterKec("");
+                setFilterNagari("");
+              }}
+              className="text-ink/50 underline hover:text-navy-700"
+            >
+              Reset filter
+            </button>
+          )}
+        </div>
+
         <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-md border border-line">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-cream-50 text-[11px] uppercase tracking-wide text-ink/50">
               <tr>
                 <th className="px-2 py-2 text-left">✓</th>
-                <th className="px-2 py-2 text-left">Jorong / SLS</th>
-                <th className="px-2 py-2 text-left">Nagari</th>
-                <th className="px-2 py-2 text-left">Kecamatan</th>
-                <th className="px-2 py-2 text-right">Potensi KK</th>
-                <th className="px-2 py-2 text-right">Jarak (km)</th>
-                <th className="px-2 py-2 text-right">Skor Akhir</th>
-                <th className="px-2 py-2 text-right">Dipilih Petugas</th>
+                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("sls_nama")}>
+                  Jorong / SLS{panahSort("sls_nama")}
+                </th>
+                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("nagari_nama")}>
+                  Nagari{panahSort("nagari_nama")}
+                </th>
+                <th className="cursor-pointer select-none px-2 py-2 text-left hover:text-navy-700" onClick={() => toggleSort("kec_nama")}>
+                  Kecamatan{panahSort("kec_nama")}
+                </th>
+                <th
+                  className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700"
+                  onClick={() => toggleSort("jumlah_potensi")}
+                >
+                  Potensi KK{panahSort("jumlah_potensi")}
+                </th>
+                <th className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700" onClick={() => toggleSort("jarak_km")}>
+                  Jarak (km){panahSort("jarak_km")}
+                </th>
+                <th className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700" onClick={() => toggleSort("skor_akhir")}>
+                  Skor Akhir{panahSort("skor_akhir")}
+                </th>
+                <th
+                  className="cursor-pointer select-none px-2 py-2 text-right hover:text-navy-700"
+                  onClick={() => toggleSort("sudah_dipilih_oleh")}
+                >
+                  Dipilih Petugas{panahSort("sudah_dipilih_oleh")}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {rowsTertampil.map((r) => {
                 const aktif = dipilih.has(r.sls_key);
                 const penuh = !aktif && dipilih.size >= MAKS_PILIHAN;
                 return (
@@ -774,10 +962,10 @@ function WilayahSampelPanel({
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
+              {rowsTertampil.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-2 py-6 text-center text-ink/50">
-                    Tidak ada data.
+                    Tidak ada data{(filterKec || filterNagari) && " utk filter ini"}.
                   </td>
                 </tr>
               )}

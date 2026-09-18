@@ -1,19 +1,20 @@
 // app/api/penyisiran/alokasi/hari-tugas/route.ts
 //
-// Checklist "Identifikasi Hari Tugas" -- hari DALAM SEMINGGU (Senin s.d.
-// Minggu, BUKAN tanggal kalender spesifik -- dikonfirmasi user) yang
-// ditandai petugas sbg BISA turun bertugas lapangan. Tiap baris (petugas,
-// hari) di tabel penyisiran_alokasi_hari_tugas = 1 OH (Orang-Hari) dari
-// kuota translok kabupaten (lihat KUOTA_OH_TRANSLOK di
-// .../oh-monitoring/route.ts & migrasi
-// supabase/migrations/20260918_hari_tugas_oh_translok.sql).
+// Checklist "Identifikasi Hari Tugas" -- TANGGAL KALENDER spesifik dalam
+// periode 17-30 September 2026 (dikoreksi user dari rencana awal "hari
+// dalam seminggu" -- ruang lingkup penyisiran sudah pasti tanggalnya,
+// lihat lib/penyisiranHari.ts) yang ditandai petugas sbg BISA turun
+// bertugas lapangan. Tiap baris (petugas, tanggal) di tabel
+// penyisiran_alokasi_hari_tugas = 1 OH (Orang-Hari) dari kuota translok
+// kabupaten (lihat KUOTA_OH_TRANSLOK di .../oh-monitoring/route.ts &
+// migrasi supabase/migrations/20260918_hari_tugas_jadi_tanggal_kalender.sql).
 //
 // GET  -- muat checklist milik petugas yg login SENDIRI (termasuk baris
 //         yg SUDAH dibatalkan super user -- supaya UI bisa menampilkan
 //         badge "Dibatalkan oleh ...").
-// PATCH -- kirim ULANG SELURUH set hari yang ingin AKTIF (bukan cuma
+// PATCH -- kirim ULANG SELURUH set tanggal yang ingin AKTIF (bukan cuma
 //         tambahan) -- baris aktif yg tidak ikut dikirim akan DIHAPUS
-//         (petugas menghilangkan centang), hari baru yg belum ada akan
+//         (petugas menghilangkan centang), tanggal baru yg belum ada akan
 //         DIBUAT. Baris yang SUDAH dibatalkan super user (dibatalkan_oleh
 //         terisi) TIDAK BISA diaktifkan lagi lewat endpoint ini -- diabaikan
 //         diam-diam kalau ikut terkirim di body (defense in depth; UI
@@ -22,7 +23,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
-import { HARI_VALID } from "@/lib/penyisiranHari";
+import { tanggalDalamPeriodeHariTugas } from "@/lib/penyisiranHari";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,11 +50,11 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("penyisiran_alokasi_hari_tugas")
-    .select("hari, dibatalkan_oleh, dibatalkan_at")
+    .select("tanggal, dibatalkan_oleh, dibatalkan_at")
     .eq("petugas_id", sesi.petugasId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ hari: data ?? [] });
+  return NextResponse.json({ tanggal: data ?? [] });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -61,11 +62,11 @@ export async function PATCH(req: NextRequest) {
   if (!sesi) return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  const hariRaw = Array.isArray(body?.hari) ? body.hari : null;
-  if (!hariRaw) return NextResponse.json({ error: "Data hari tidak valid." }, { status: 400 });
+  const tanggalRaw = Array.isArray(body?.tanggal) ? body.tanggal : null;
+  if (!tanggalRaw) return NextResponse.json({ error: "Data tanggal tidak valid." }, { status: 400 });
 
-  const hariDiminta = new Set(
-    hariRaw.filter((h: unknown): h is string => typeof h === "string" && (HARI_VALID as readonly string[]).includes(h))
+  const tanggalDiminta = new Set(
+    tanggalRaw.filter((t: unknown): t is string => typeof t === "string" && tanggalDalamPeriodeHariTugas(t))
   );
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -77,39 +78,39 @@ export async function PATCH(req: NextRequest) {
 
   const { data: existing, error: existingErr } = await supabase
     .from("penyisiran_alokasi_hari_tugas")
-    .select("hari, dibatalkan_oleh")
+    .select("tanggal, dibatalkan_oleh")
     .eq("petugas_id", sesi.petugasId);
   if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 });
 
-  const existingAktif = new Set((existing ?? []).filter((r) => !r.dibatalkan_oleh).map((r) => r.hari));
-  const existingDibatalkan = new Set((existing ?? []).filter((r) => r.dibatalkan_oleh).map((r) => r.hari));
+  const existingAktif = new Set((existing ?? []).filter((r) => !r.dibatalkan_oleh).map((r) => r.tanggal));
+  const existingDibatalkan = new Set((existing ?? []).filter((r) => r.dibatalkan_oleh).map((r) => r.tanggal));
 
-  // Hari yg sudah dibatalkan super user TIDAK BOLEH diaktifkan lg dari sini.
-  const hariBoleh = new Set(Array.from(hariDiminta).filter((h) => !existingDibatalkan.has(h)));
+  // Tanggal yg sudah dibatalkan super user TIDAK BOLEH diaktifkan lg dari sini.
+  const tanggalBoleh = new Set(Array.from(tanggalDiminta).filter((t) => !existingDibatalkan.has(t)));
 
-  const hapus = Array.from(existingAktif).filter((h) => !hariBoleh.has(h));
-  const tambah = Array.from(hariBoleh).filter((h) => !existingAktif.has(h));
+  const hapus = Array.from(existingAktif).filter((t) => !tanggalBoleh.has(t));
+  const tambah = Array.from(tanggalBoleh).filter((t) => !existingAktif.has(t));
 
   if (hapus.length > 0) {
     const { error: delErr } = await supabase
       .from("penyisiran_alokasi_hari_tugas")
       .delete()
       .eq("petugas_id", sesi.petugasId)
-      .in("hari", hapus);
+      .in("tanggal", hapus);
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
   }
   if (tambah.length > 0) {
     const { error: insErr } = await supabase
       .from("penyisiran_alokasi_hari_tugas")
-      .insert(tambah.map((h) => ({ petugas_id: sesi.petugasId, hari: h })));
+      .insert(tambah.map((t) => ({ petugas_id: sesi.petugasId, tanggal: t })));
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
   }
 
   const { data: hasil, error: hasilErr } = await supabase
     .from("penyisiran_alokasi_hari_tugas")
-    .select("hari, dibatalkan_oleh, dibatalkan_at")
+    .select("tanggal, dibatalkan_oleh, dibatalkan_at")
     .eq("petugas_id", sesi.petugasId);
   if (hasilErr) return NextResponse.json({ error: hasilErr.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, hari: hasil ?? [] });
+  return NextResponse.json({ ok: true, tanggal: hasil ?? [] });
 }

@@ -12,6 +12,10 @@
 // habis, endpoint checklist petugas (.../alokasi/hari-tugas) TETAP
 // mengizinkan centang baru -- dashboard ini cuma menampilkan
 // peringatan/status, TIDAK mengunci apa pun (dikonfirmasi user).
+//
+// Baris di sini dikelompokkan per TANGGAL kalender (17-30 September 2026,
+// lihat lib/penyisiranHari.ts) -- dikoreksi dari rencana awal "hari dalam
+// seminggu".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -56,13 +60,14 @@ export async function GET(req: NextRequest) {
 
   const { data: rows, error: rowsErr } = await supabase
     .from("penyisiran_alokasi_hari_tugas")
-    .select("petugas_id, hari, dibatalkan_oleh, dibatalkan_at, petugas_penyisiran_akun(nama)")
-    .order("petugas_id", { ascending: true });
+    .select("petugas_id, tanggal, dibatalkan_oleh, dibatalkan_at, petugas_penyisiran_akun(nama)")
+    .order("petugas_id", { ascending: true })
+    .order("tanggal", { ascending: true });
   if (rowsErr) return NextResponse.json({ error: rowsErr.message }, { status: 500 });
 
   type Baris = {
     petugas_id: number;
-    hari: string;
+    tanggal: string;
     dibatalkan_oleh: string | null;
     dibatalkan_at: string | null;
     petugas_penyisiran_akun: { nama: string } | { nama: string }[] | null;
@@ -71,19 +76,19 @@ export async function GET(req: NextRequest) {
 
   const terpakai = list.filter((r) => !r.dibatalkan_oleh).length;
 
-  const perPetugas = new Map<number, { petugas_id: number; petugas_nama: string; hari: Baris[] }>();
+  const perPetugas = new Map<number, { petugas_id: number; petugas_nama: string; tanggal: Baris[] }>();
   for (const r of list) {
     const namaObj = Array.isArray(r.petugas_penyisiran_akun) ? r.petugas_penyisiran_akun[0] : r.petugas_penyisiran_akun;
     if (!perPetugas.has(r.petugas_id)) {
-      perPetugas.set(r.petugas_id, { petugas_id: r.petugas_id, petugas_nama: namaObj?.nama ?? "-", hari: [] });
+      perPetugas.set(r.petugas_id, { petugas_id: r.petugas_id, petugas_nama: namaObj?.nama ?? "-", tanggal: [] });
     }
-    perPetugas.get(r.petugas_id)!.hari.push(r);
+    perPetugas.get(r.petugas_id)!.tanggal.push(r);
   }
   const rincian = Array.from(perPetugas.values())
     .map((p) => ({
       petugas_id: p.petugas_id,
       petugas_nama: p.petugas_nama,
-      hari: p.hari.map((h) => ({ hari: h.hari, dibatalkan_oleh: h.dibatalkan_oleh, dibatalkan_at: h.dibatalkan_at })),
+      tanggal: p.tanggal.map((t) => ({ tanggal: t.tanggal, dibatalkan_oleh: t.dibatalkan_oleh, dibatalkan_at: t.dibatalkan_at })),
     }))
     .sort((a, b) => a.petugas_nama.localeCompare(b.petugas_nama));
 
