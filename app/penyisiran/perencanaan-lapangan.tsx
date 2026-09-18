@@ -58,6 +58,17 @@
 //     Pengawas/Email Pencacah diambil dari data tab Master Petugas -- lihat
 //     app/api/penyisiran/alokasi/export-subsls/route.ts &
 //     app/penyisiran/master-petugas.tsx.
+//     Di sebelahnya jg ada tombol "🎯 Alokasikan Otomatis (Prioritas)"
+//     (HANYA pengelola, 2x klik krn menimpa data byk petugas) -> POST
+//     .../alokasi/auto-alokasi -- mengisi otomatis 5 SLS prioritas
+//     tertinggi utk SEMUA petugas yg BELUM PERNAH submit sendiri (yg
+//     sudah submit tidak disentuh, SLS-nya dianggap "terpakai"). Kalau
+//     jorong sama diminati >1 petugas, dimenangkan petugas yg datanya
+//     paling akurat (lokasi rumah > titik tengah nagari > tanpa data)
+//     lalu skor_akhir tertinggi -- petugas yg kalah otomatis dialihkan ke
+//     pilihan berikutnya (algoritma "deferred acceptance", lihat komentar
+//     lengkap & justifikasi di .../alokasi/auto-alokasi/route.ts, dikonfirmasi
+//     user lewat AskUserQuestion 2026-09-19).
 //  3. "Monitoring Kuota OH Translok" -- panel TAMBAHAN, HANYA tampil kalau
 //     nama hasil login termasuk 4 pengelola yg SAMA dgn tab "Manajemen
 //     Target" (bolehAksesManajemenTarget, lihat
@@ -156,6 +167,24 @@ interface MatrixRow {
   sls_key: string;
   petugas_id: number;
   petugas_nama: string;
+}
+
+interface AutoAlokasiBaris {
+  petugas_id: number;
+  nama: string;
+  tier: 1 | 2 | 3;
+  tier_label: string;
+  jumlah_dialokasikan: number;
+  daftar_sls: string[];
+}
+
+interface AutoAlokasiHasil {
+  jumlah_petugas_diproses: number;
+  jumlah_petugas_dilewati: number;
+  jumlah_rebutan_terjadi: number;
+  jumlah_dpt_penuh: number;
+  hasil: AutoAlokasiBaris[];
+  pesan?: string;
 }
 
 function tokenExpMs(token: string): number {
@@ -666,6 +695,10 @@ function WilayahSampelPanel({
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoConfirm, setAutoConfirm] = useState(false);
+  const [autoErr, setAutoErr] = useState<string | null>(null);
+  const [autoHasil, setAutoHasil] = useState<AutoAlokasiHasil | null>(null);
 
   // Export Excel Pengawas/Pencacah per SUBSLS -- HANYA utk data yang SUDAH
   // MASUK (dipilih petugas), format kolom mengikuti contoh file dari
@@ -701,6 +734,35 @@ function WilayahSampelPanel({
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
     } finally {
       setExportBusy(false);
+    }
+  }
+
+  // Alokasi otomatis 5 SLS/Jorong prioritas tertinggi utk SEMUA petugas
+  // yg BELUM PERNAH submit sendiri -- lihat penjelasan lengkap algoritma
+  // & justifikasi tiap keputusan (tier lokasi, petugas yg sudah submit
+  // TIDAK disentuh) di .../alokasi/auto-alokasi/route.ts. Tombol ini
+  // butuh 2x klik (arm/konfirmasi) krn menimpa data BANYAK petugas
+  // sekaligus & tidak bisa "dibatalkan" otomatis (cuma bisa diubah manual
+  // satu-satu lewat checklist masing2 petugas sesudahnya).
+  async function handleAutoAlokasi() {
+    if (!autoConfirm) {
+      setAutoConfirm(true);
+      return;
+    }
+    setAutoBusy(true);
+    setAutoErr(null);
+    try {
+      const data = await apiFetch("/api/penyisiran/alokasi/auto-alokasi", token, { method: "POST" });
+      setAutoHasil(data as AutoAlokasiHasil);
+      setAutoConfirm(false);
+      await muatRekomendasi();
+      if (tampilkanMatrix) await muatMatrix();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Gagal menjalankan alokasi otomatis.";
+      setAutoErr(msg);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+    } finally {
+      setAutoBusy(false);
     }
   }
 
@@ -870,7 +932,7 @@ function WilayahSampelPanel({
               petugas), dipecah per SUBSLS, kolom Email Pengawas/Pencacah
               diambil dari tab Master Petugas. */}
           {bolehAksesManajemenTarget(nama) && (
-            <div className="text-right">
+            <div className="flex flex-col items-end gap-1.5 text-right">
               <button
                 type="button"
                 onClick={handleExportSubsls}
@@ -879,10 +941,82 @@ function WilayahSampelPanel({
               >
                 {exportBusy ? "Menyiapkan..." : "⬇ Export Excel Pengawas/Pencacah (per SUBSLS)"}
               </button>
-              {exportErr && <p className="mt-1 max-w-[220px] text-[10px] text-rust-700">⚠ {exportErr}</p>}
+              {exportErr && <p className="max-w-[220px] text-[10px] text-rust-700">⚠ {exportErr}</p>}
+
+              <button
+                type="button"
+                onClick={handleAutoAlokasi}
+                disabled={autoBusy}
+                className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium disabled:opacity-50 ${
+                  autoConfirm
+                    ? "border-rust-400 bg-rust-50 text-rust-700 hover:bg-rust-100"
+                    : "border-line bg-white text-navy-700 hover:border-navy-400"
+                }`}
+              >
+                {autoBusy
+                  ? "Menjalankan..."
+                  : autoConfirm
+                  ? "✅ Yakin? Klik lagi utk konfirmasi"
+                  : "🎯 Alokasikan Otomatis (Prioritas)"}
+              </button>
+              {autoConfirm && !autoBusy && (
+                <button
+                  type="button"
+                  onClick={() => setAutoConfirm(false)}
+                  className="text-[10px] text-ink/50 underline hover:text-ink/70"
+                >
+                  Batal
+                </button>
+              )}
+              {autoErr && <p className="max-w-[220px] text-[10px] text-rust-700">⚠ {autoErr}</p>}
             </div>
           )}
         </div>
+        {bolehAksesManajemenTarget(nama) && autoConfirm && !autoBusy && (
+          <p className="mt-2 max-w-md text-right text-[11px] text-rust-700">
+            Ini akan mengisi otomatis 5 SLS/Jorong prioritas tertinggi utk SEMUA petugas yang BELUM PERNAH submit
+            pilihan sendiri (yang sudah submit tidak diubah). Kalau jorong yang sama diminati beberapa petugas,
+            yang menang adalah yang datanya paling akurat &amp; skornya paling tinggi utk jorong itu -- petugas
+            lain otomatis dialihkan ke pilihan berikutnya.
+          </p>
+        )}
+        {bolehAksesManajemenTarget(nama) && autoHasil && (
+          <div className="mt-3 rounded-md border border-navy-200 bg-navy-50/60 p-3 text-[11px]">
+            <p className="font-semibold text-navy-900">
+              🎯 Hasil Alokasi Otomatis: {autoHasil.jumlah_petugas_diproses} petugas diproses (
+              {autoHasil.jumlah_dpt_penuh} dapat penuh {MAKS_PILIHAN}/{MAKS_PILIHAN}), {autoHasil.jumlah_petugas_dilewati}{" "}
+              petugas dilewati (sudah pernah submit sendiri), {autoHasil.jumlah_rebutan_terjadi}x rebutan
+              jorong diselesaikan otomatis.
+            </p>
+            {autoHasil.pesan && <p className="mt-1 text-ink/60">{autoHasil.pesan}</p>}
+            {autoHasil.hasil.length > 0 && (
+              <div className="mt-2 max-h-56 overflow-y-auto rounded border border-navy-200/70 bg-white">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-cream-50 text-[10px] uppercase tracking-wide text-ink/50">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left">Petugas</th>
+                      <th className="px-2 py-1.5 text-left">Sumber Lokasi</th>
+                      <th className="px-2 py-1.5 text-right">Jumlah</th>
+                      <th className="px-2 py-1.5 text-left">Jorong/SLS Terpilih</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoHasil.hasil.map((h) => (
+                      <tr key={h.petugas_id} className="border-t border-line/60">
+                        <td className="px-2 py-1.5 font-medium text-navy-900">{h.nama}</td>
+                        <td className="px-2 py-1.5 text-ink/60">{h.tier_label}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          {h.jumlah_dialokasikan}/{MAKS_PILIHAN}
+                        </td>
+                        <td className="px-2 py-1.5 text-ink/70">{h.daftar_sls.join(", ")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
         <p className="mt-1 text-xs text-ink/60">
           Pilih 5 kandidat wilayah sampel, diurutkan menurut skor prioritas akhir tertinggi (skor sumber +
           identifikasi, ditambah bonus volume potensi KK, dikurangi penalti jarak dari lokasi rumah Anda). SLS
