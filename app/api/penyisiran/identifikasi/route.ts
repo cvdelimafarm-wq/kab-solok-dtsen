@@ -115,6 +115,22 @@ export async function PATCH(req: NextRequest) {
   // lewat Jorong" vs "lewat Tetangga/Lainnya" per orang.
   patch.identifikasi_ppl_role = role;
 
+  // ada_konfirmasi_ppl / ada_konfirmasi_jorong -- breakdown asal konfirmasi
+  // "ada" utk panel Ringkasan Hasil Identifikasi (tab Manajemen Target,
+  // kolom Ada dari PPL/Jorong/Keduanya). BEDA dgn identifikasi_ppl_role di
+  // atas: kedua flag ini TIDAK saling menimpa, jadi kalau PPL konfirmasi
+  // "ada" lalu Jorong/Tetangga ikut konfirmasi "ada" jg (waktu berbeda),
+  // dua2nya tetap true -> terhitung "keduanya". Direset ke false begitu
+  // status berubah dari "ada" ke nilai lain supaya tdk nyangkut data basi
+  // kalau suatu saat diubah balik ke "ada" oleh peran lain.
+  if (nilai === "ada") {
+    if (role === "identifikasi_ppl") patch.ada_konfirmasi_ppl = true;
+    else patch.ada_konfirmasi_jorong = true; // identifikasi_jorong ATAU identifikasi_tetangga
+  } else {
+    patch.ada_konfirmasi_ppl = false;
+    patch.ada_konfirmasi_jorong = false;
+  }
+
   const { error } = await supabase.from("penyisiran_usaha").update(patch).eq("kode_identitas", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

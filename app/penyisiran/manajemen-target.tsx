@@ -21,9 +21,13 @@
 //     lain jg punya token role "penyisiran_petugas" yang sama persis.
 //
 // Isi tab:
-//  - "Ringkasan Hasil Identifikasi": rekap status identifikasi_ppl
-//    (Ada/Tidak Ada/Ragu/Belum) per wilayah, level dropdown Kecamatan/
-//    Nagari/Sub SLS (RPC penyisiran_ringkasan_identifikasi).
+//  - "Ringkasan Hasil Identifikasi": rekap status identifikasi_ppl per
+//    wilayah, level dropdown Kecamatan/Nagari/Sub SLS (RPC
+//    penyisiran_ringkasan_identifikasi). Kolom "Ada" dipecah jadi 3 (Ada
+//    dari PPL / Ada dari Jorong / Ada dari Keduanya) berdasarkan kolom
+//    ada_konfirmasi_ppl & ada_konfirmasi_jorong (lihat migrasi
+//    20260918_ada_konfirmasi_split.sql & app/api/penyisiran/identifikasi/
+//    route.ts) -- selain itu ttp Tidak Ada/Ragu/Belum/Total spt semula.
 //  - "Target Petugas": target per petugas (tabel petugas_target), dipisah
 //    2 jenis tugas:
 //     - Identifikasi (Jorong): target_identifikasi_jumlah + satuan
@@ -77,8 +81,10 @@ interface PetugasTarget {
 interface RingkasanRow {
   kode: string;
   nama: string;
+  ada_ppl: number;
+  ada_jorong: number;
+  ada_keduanya: number;
   belum: number;
-  ada: number;
   tidak_ada: number;
   ragu: number;
   total: number;
@@ -410,8 +416,10 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
       .finally(() => setLoading(false));
   }, [level, token, onSessionExpired]);
 
+  const totalAdaPpl = rows.reduce((s, r) => s + r.ada_ppl, 0);
+  const totalAdaJorong = rows.reduce((s, r) => s + r.ada_jorong, 0);
+  const totalAdaKeduanya = rows.reduce((s, r) => s + r.ada_keduanya, 0);
   const totalBelum = rows.reduce((s, r) => s + r.belum, 0);
-  const totalAda = rows.reduce((s, r) => s + r.ada, 0);
   const totalTidakAda = rows.reduce((s, r) => s + r.tidak_ada, 0);
   const totalRagu = rows.reduce((s, r) => s + r.ragu, 0);
   const totalSemua = rows.reduce((s, r) => s + r.total, 0);
@@ -440,8 +448,10 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
               <th className="px-3 py-2">{LEVEL_LABEL[level]}</th>
+              <th className="px-3 py-2 text-right">Ada dari PPL</th>
+              <th className="px-3 py-2 text-right">Ada dari Jorong</th>
+              <th className="px-3 py-2 text-right">Ada dari Keduanya</th>
               <th className="px-3 py-2 text-right">Belum</th>
-              <th className="px-3 py-2 text-right">Ada</th>
               <th className="px-3 py-2 text-right">Tidak Ada</th>
               <th className="px-3 py-2 text-right">Ragu</th>
               <th className="px-3 py-2 text-right">Total</th>
@@ -451,8 +461,10 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             {rows.map((r) => (
               <tr key={r.kode} className="border-b border-line last:border-0">
                 <td className="px-3 py-1.5 font-medium text-navy-900">{r.nama}</td>
+                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_ppl}</td>
+                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_jorong}</td>
+                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_keduanya}</td>
                 <td className="px-3 py-1.5 text-right text-ink/60">{r.belum}</td>
-                <td className="px-3 py-1.5 text-right text-moss-700">{r.ada}</td>
                 <td className="px-3 py-1.5 text-right text-[#8A6A12]">{r.tidak_ada}</td>
                 <td className="px-3 py-1.5 text-right text-rust-700">{r.ragu}</td>
                 <td className="px-3 py-1.5 text-right font-semibold text-navy-900">{r.total}</td>
@@ -460,7 +472,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             ))}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-ink/40">
+                <td colSpan={8} className="px-3 py-4 text-center text-ink/40">
                   Tidak ada data.
                 </td>
               </tr>
@@ -470,8 +482,10 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             <tfoot>
               <tr className="border-t border-line bg-paper/60 font-semibold text-navy-900">
                 <td className="px-3 py-1.5">Total</td>
+                <td className="px-3 py-1.5 text-right">{totalAdaPpl}</td>
+                <td className="px-3 py-1.5 text-right">{totalAdaJorong}</td>
+                <td className="px-3 py-1.5 text-right">{totalAdaKeduanya}</td>
                 <td className="px-3 py-1.5 text-right">{totalBelum}</td>
-                <td className="px-3 py-1.5 text-right">{totalAda}</td>
                 <td className="px-3 py-1.5 text-right">{totalTidakAda}</td>
                 <td className="px-3 py-1.5 text-right">{totalRagu}</td>
                 <td className="px-3 py-1.5 text-right">{totalSemua}</td>
