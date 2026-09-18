@@ -24,8 +24,10 @@
 //  - "Ringkasan Hasil Identifikasi": rekap status identifikasi_ppl per
 //    wilayah, level dropdown Kecamatan/Nagari/Sub SLS (RPC
 //    penyisiran_ringkasan_identifikasi). Kolom "Sumber Informasi (Ada)"
-//    menggabungkan 3 angka (PPL / Jorong / Keduanya) dlm satu sel,
-//    berdasarkan kolom ada_konfirmasi_ppl & ada_konfirmasi_jorong (lihat
+//    adalah GRUP header (thead 2 baris) yg menaungi 3 sub-kolom angka
+//    polos PPL/Jorong/Keduanya (BUKAN digabung jd satu sel teks -- pernah
+//    dicoba, kepanjangan & susah dibaca cepat), berdasarkan kolom
+//    ada_konfirmasi_ppl & ada_konfirmasi_jorong (lihat
 //    migrasi 20260918_ada_konfirmasi_split.sql & app/api/penyisiran/
 //    identifikasi/route.ts) -- selain itu ttp Tidak Ada/Ragu/Belum/Total
 //    spt semula. Tiap baris Kecamatan (view "Per Kecamatan") bisa
@@ -401,26 +403,11 @@ function ManajemenTargetPanel({ token, onSessionExpired }: { token: string; onSe
 }
 
 // ---------- Ringkasan Hasil Identifikasi (per level wilayah) ----------
-// Sel gabungan utk kolom "Sumber Informasi" (dulu 3 kolom terpisah Ada
-// dari PPL/Jorong/Keduanya, sekarang di-batch jadi satu kolom biar tabel
-// tdk terlalu lebar).
-function SumberInformasi({ ppl, jorong, keduanya }: { ppl: number; jorong: number; keduanya: number }) {
-  return (
-    <span className="inline-flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px]">
-      <span title="Ada dari PPL" className="text-moss-700">
-        PPL <b>{ppl}</b>
-      </span>
-      <span className="text-ink/25">·</span>
-      <span title="Ada dari Jorong/Tetangga" className="text-moss-700">
-        Jorong <b>{jorong}</b>
-      </span>
-      <span className="text-ink/25">·</span>
-      <span title="Ada dari Keduanya (PPL & Jorong/Tetangga)" className="text-moss-700">
-        Keduanya <b>{keduanya}</b>
-      </span>
-    </span>
-  );
-}
+// Kolom "Sumber Informasi (Ada)" tampil sbg GRUP header (thead 2 baris)
+// yg menaungi 3 sub-kolom angka polos (PPL/Jorong/Keduanya) -- sengaja
+// TIDAK ditulis ulang jadi teks "PPL 362 · Jorong 26 · Keduanya 0" di tiap
+// baris (dicoba sebelumnya, kepanjangan & susah dibaca cepat) -- cukup
+// angkanya saja per sub-kolom, label cukup sekali di header.
 
 function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [level, setLevel] = useState<Level>("kec");
@@ -523,12 +510,29 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th className="px-3 py-2">{LEVEL_LABEL[level]}</th>
-              <th className="px-3 py-2 text-right">Sumber Informasi (Ada)</th>
-              <th className="px-3 py-2 text-right">Belum</th>
-              <th className="px-3 py-2 text-right">Tidak Ada</th>
-              <th className="px-3 py-2 text-right">Ragu</th>
-              <th className="px-3 py-2 text-right">Total</th>
+              <th rowSpan={2} className="px-3 py-2 align-bottom">
+                {LEVEL_LABEL[level]}
+              </th>
+              <th colSpan={3} className="border-b border-line/60 px-3 py-1 text-center">
+                Sumber Informasi (Ada)
+              </th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
+                Belum
+              </th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
+                Tidak Ada
+              </th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
+                Ragu
+              </th>
+              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
+                Total
+              </th>
+            </tr>
+            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+              <th className="px-3 py-1 text-right">PPL</th>
+              <th className="px-3 py-1 text-right">Jorong</th>
+              <th className="px-3 py-1 text-right">Keduanya</th>
             </tr>
           </thead>
           <tbody>
@@ -551,9 +555,9 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                       )}
                       {level === "nagari" ? `${r.nama} — ${r.kec_nama}` : r.nama}
                     </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <SumberInformasi ppl={r.ada_ppl} jorong={r.ada_jorong} keduanya={r.ada_keduanya} />
-                    </td>
+                    <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_ppl}</td>
+                    <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_jorong}</td>
+                    <td className="px-3 py-1.5 text-right text-moss-700">{r.ada_keduanya}</td>
                     <td className="px-3 py-1.5 text-right text-ink/60">{r.belum}</td>
                     <td className="px-3 py-1.5 text-right text-[#8A6A12]">{r.tidak_ada}</td>
                     <td className="px-3 py-1.5 text-right text-rust-700">{r.ragu}</td>
@@ -561,14 +565,14 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                   </tr>
                   {bisaDibuka && terbuka && nagariLoading[r.kode] && (
                     <tr className="border-b border-line bg-paper/30">
-                      <td colSpan={6} className="px-3 py-1.5 pl-8 text-ink/40">
+                      <td colSpan={8} className="px-3 py-1.5 pl-8 text-ink/40">
                         Memuat rincian Nagari...
                       </td>
                     </tr>
                   )}
                   {bisaDibuka && terbuka && !nagariLoading[r.kode] && nagariErr[r.kode] && (
                     <tr className="border-b border-line bg-paper/30">
-                      <td colSpan={6} className="px-3 py-1.5 pl-8 text-rust-700">
+                      <td colSpan={8} className="px-3 py-1.5 pl-8 text-rust-700">
                         ⚠ {nagariErr[r.kode]}
                       </td>
                     </tr>
@@ -580,9 +584,9 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                     (nagariCache[r.kode] ?? []).map((n) => (
                       <tr key={n.kode} className="border-b border-line bg-paper/30">
                         <td className="px-3 py-1.5 pl-8 text-ink/70">↳ {n.nama}</td>
-                        <td className="px-3 py-1.5 text-right">
-                          <SumberInformasi ppl={n.ada_ppl} jorong={n.ada_jorong} keduanya={n.ada_keduanya} />
-                        </td>
+                        <td className="px-3 py-1.5 text-right text-moss-700/80">{n.ada_ppl}</td>
+                        <td className="px-3 py-1.5 text-right text-moss-700/80">{n.ada_jorong}</td>
+                        <td className="px-3 py-1.5 text-right text-moss-700/80">{n.ada_keduanya}</td>
                         <td className="px-3 py-1.5 text-right text-ink/50">{n.belum}</td>
                         <td className="px-3 py-1.5 text-right text-[#8A6A12]/80">{n.tidak_ada}</td>
                         <td className="px-3 py-1.5 text-right text-rust-700/80">{n.ragu}</td>
@@ -594,7 +598,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-center text-ink/40">
+                <td colSpan={8} className="px-3 py-4 text-center text-ink/40">
                   Tidak ada data.
                 </td>
               </tr>
@@ -604,9 +608,9 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
             <tfoot>
               <tr className="border-t border-line bg-paper/60 font-semibold text-navy-900">
                 <td className="px-3 py-1.5">Total</td>
-                <td className="px-3 py-1.5 text-right">
-                  <SumberInformasi ppl={totalAdaPpl} jorong={totalAdaJorong} keduanya={totalAdaKeduanya} />
-                </td>
+                <td className="px-3 py-1.5 text-right">{totalAdaPpl}</td>
+                <td className="px-3 py-1.5 text-right">{totalAdaJorong}</td>
+                <td className="px-3 py-1.5 text-right">{totalAdaKeduanya}</td>
                 <td className="px-3 py-1.5 text-right">{totalBelum}</td>
                 <td className="px-3 py-1.5 text-right">{totalTidakAda}</td>
                 <td className="px-3 py-1.5 text-right">{totalRagu}</td>

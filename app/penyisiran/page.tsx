@@ -16,8 +16,11 @@
 //    personal, sistem otomatis tahu siapa yg mengisi (dipakai dasar
 //    hitungan tab "Monitoring Petugas Penyisiran" & skor prioritas
 //    berbasis jarak, lihat app/seruti/penyisiran-usaha.tsx) --
-//    nama+alamat+GPS+bukti DUTP/DTSEN/PNM. Kolom Info PPL/Jorong/Tetangga
-//    di sini cuma bisa diubah lewat tombol Edit/Edit Semua. Kolom
+//    nama+alamat+GPS+bukti DUTP/DTSEN/PNM. Badge Info PPL/Jorong/Tetangga
+//    + tombol Edit per-kartu sudah DIHAPUS dari kartu (field & skor
+//    prioritas yg memakainya ttp ada di backend, cuma tdk bisa diubah lg
+//    lewat tab ini) -- tombol "Edit Semua" (global) msh ada, skrg cuma
+//    dipakai utk unlock "Tandai Pasti". Kolom
 //    "Identifikasi PPL" (badge) DIBEKUKAN read-only di sini --
 //    satu-satunya cara mengubahnya adalah lewat salah satu dari TIGA tab
 //    Identifikasi di bawah (lihat app/api/penyisiran/identifikasi/route.ts,

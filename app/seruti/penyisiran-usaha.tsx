@@ -26,11 +26,15 @@
 // berbasis jarak dari lokasi rumah petugas yang login (tombol "📍 Tetapkan
 // Lokasi Rumah Saya", lihat hitungSkorPrioritas()).
 //
-// Kolom Info PPL/Jorong/Tetangga cuma bisa diubah setelah menekan tombol
-// "Edit" (per-kartu) atau "Edit Semua" (global) -- supaya tidak kepencet
-// tidak sengaja saat sekadar melihat-lihat daftar. Kolom "Identifikasi
-// PPL" ditampilkan read-only di sini (badge) -- diisi dari salah satu dari
-// TIGA tab Identifikasi (masing-masing pakai login/PIN sendiri).
+// Badge Info PPL/Jorong/Tetangga + tombol "✎ Edit" per-kartu SUDAH
+// DIHAPUS dari kartu (atas permintaan) -- field & skor prioritas yg
+// memakainya TETAP ADA di backend (nilai terakhir yg tersimpan tetap
+// dipakai hitungSkorPrioritas), cuma sudah tdk ada lagi cara mengubahnya
+// lewat tab ini. Tombol melayang "🔒 Edit Semua Info Lapangan" (global,
+// editAllMode) TETAP ADA krn msh dipakai utk unlock "🎯 Tandai Pasti".
+// Kolom "Identifikasi PPL" ditampilkan read-only di sini (badge) -- diisi
+// dari salah satu dari TIGA tab Identifikasi (masing-masing pakai
+// login/PIN sendiri).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -1772,20 +1776,15 @@ function RowCard({
               PNM Mekar {row.bukti_pnm ? "✓" : "-"}
             </span>
           </div>
-          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-            <InfoToggle label="Info PPL" value={infoPpl} onChange={setInfoPpl} disabled={!canEditInfo} />
-            <InfoToggle label="Info Jorong" value={infoJorong} onChange={setInfoJorong} disabled={!canEditInfo} />
-            <InfoToggle label="Info Tetangga" value={infoTetangga} onChange={setInfoTetangga} disabled={!canEditInfo} />
-            {!canEditInfo && (
-              <button
-                type="button"
-                onClick={() => setUnlocked(true)}
-                className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-navy-400 hover:border-navy-400"
-              >
-                ✎ Edit
-              </button>
-            )}
-          </div>
+          {/* Badge "Info PPL/Jorong/Tetangga" + tombol "✎ Edit" per-kartu
+              SUDAH DIHAPUS dari sini (atas permintaan) -- field-nya
+              (info_ppl/info_jorong/info_tetangga) & skor prioritas yg
+              memakainya TETAP ADA di backend, cuma sudah tdk bisa
+              diubah lewat kartu ini lagi. "🎯 Tandai Pasti" di bawah msh
+              butuh unlock (canEditInfo) spt biasa, tapi skrg SATU-
+              SATUNYA cara unlock adalah tombol melayang "🔒 Edit Semua
+              Info Lapangan" (global, lihat editAllMode), krn unlock
+              per-kartu ikut hilang bareng tombol Edit di atas. */}
           <div className="mb-1.5">
             <button
               type="button"
@@ -1936,32 +1935,9 @@ function RowCard({
   );
 }
 
-function InfoToggle({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => {
-        if (!disabled) onChange(!value);
-      }}
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
-        value ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40 hover:border-navy-400"
-      } ${disabled ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
-    >
-      {label}: {value ? "Ada" : "Tidak"}
-    </button>
-  );
-}
+// InfoToggle (badge Ada/Tidak per Info PPL/Jorong/Tetangga) SUDAH DIHAPUS
+// dari kartu -- lihat catatan di FormPendataan tempat div pembungkusnya
+// dulu berada.
 
 function UploadPanel({
   token,
