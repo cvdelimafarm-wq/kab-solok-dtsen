@@ -9,6 +9,11 @@ import KonfirmasiPplTab from "./konfirmasi-ppl";
 import MonitoringAnomaliTab from "./monitoring-anomali";
 import RekapTemuanTab from "./rekap-temuan";
 import ErrorKonsistensiTab from "./error-konsistensi";
+// Komponen header tabel "layaknya Excel" (urutkan & filter per kolom) --
+// aslinya dibuat utk tab Penyisiran (app/penyisiran/_shared/excel-table.tsx)
+// tapi murni komponen UI generik (tidak py logika spesifik Penyisiran),
+// jadi dipakai ulang di sini drpd bikin salinan baru.
+import { useExcelTable, ExcelTh } from "../penyisiran/_shared/excel-table";
 import {
   Bar,
   BarChart,
@@ -920,12 +925,46 @@ function RekapTab({
   );
 }
 
+// Persentase "Didata" bersifat kumulatif: Selesai Dibersihkan + Selesai
+// Didata, krn dokumen yg sudah dibersihkan sudah pasti melewati tahap
+// didata jg -- dipakai jg sbg NILAI SORTIR kolom "Progress Pendataan"
+// (kolom itu sendiri berupa bar visual, bukan angka polos, jadi diurutkan
+// berdasarkan persentase kumulatif ini).
+function persenSelesaiDidata(r: ProgressRow): number {
+  return r.total > 0 ? Math.round(((r.selesai_dibersihkan + r.selesai_didata) / r.total) * 100) : 0;
+}
+
+// Catatan: komponen ini dirender DUA KALI oleh RekapTab (sekali tampil di
+// layar, sekali lagi tersembunyi di luar layar khusus utk "Salin Tabel
+// sebagai Gambar") -- keduanya instance TERPISAH shg py state sort/filter
+// SENDIRI-SENDIRI. SENGAJA begitu (tidak disatukan): salinan tersembunyi
+// utk screenshot tetap menampilkan SEMUA baris apa adanya (urutan resmi
+// asli), sedangkan tabel yg terlihat bisa diurutkan/difilter bebas oleh
+// pengguna tanpa mengubah hasil screenshot yg dibagikan.
 function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
+  const kolom = useMemo(
+    () => [
+      { key: "nama_ppl", label: "Nama PPL", getValue: (r: ProgressRow) => r.nama_ppl },
+      { key: "nama_jorong", label: "Nama Jorong", getValue: (r: ProgressRow) => r.nama_jorong },
+      { key: "progress", label: "Progress Pendataan", getValue: (r: ProgressRow) => persenSelesaiDidata(r) },
+    ],
+    []
+  );
+  const tabel = useExcelTable(rows, kolom, { key: "nama_jorong", dir: "asc" });
+
   return (
     <>
       <p className="border-b border-line bg-navy-50 px-4 py-2 text-sm font-semibold text-navy-900">
         Rekap Update Terakhir &mdash; Susenas September &middot; Seruti Triwulan III 2026
       </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-navy-50/60 px-4 py-1 text-[10px] text-ink/40">
+        <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; utk filter (spt Excel).</p>
+        {tabel.adaFilterAktif && (
+          <button type="button" onClick={tabel.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
+      </div>
       <table className="w-full table-fixed text-sm">
         <colgroup>
           <col className="w-[24%]" />
@@ -934,13 +973,31 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
         </colgroup>
         <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
           <tr>
-            <th className="px-3 py-1.5 font-medium">Nama PPL</th>
-            <th className="px-3 py-1.5 font-medium">Nama Jorong</th>
-            <th className="px-3 py-1.5 font-medium">Progress Pendataan</th>
+            {kolom.map((k) => (
+              <ExcelTh
+                key={k.key}
+                colKey={k.key}
+                label={k.label}
+                sortKey={tabel.sortKey}
+                sortDir={tabel.sortDir}
+                onSort={tabel.toggleSort}
+                values={tabel.uniqueValues[k.key] ?? []}
+                activeFilter={tabel.filters[k.key]}
+                onFilterChange={tabel.setColumnFilter}
+                className="font-medium"
+              />
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {tabel.rows.length === 0 && (
+            <tr>
+              <td colSpan={kolom.length} className="px-3 py-4 text-center text-ink/40">
+                Tidak ada data utk filter ini.
+              </td>
+            </tr>
+          )}
+          {tabel.rows.map((r) => {
             // Persentase "Didata" bersifat kumulatif: Selesai Dibersihkan + Selesai Didata,
             // karena dokumen yang sudah dibersihkan sudah pasti melewati tahap didata juga.
             const kumulatifDidata = r.selesai_dibersihkan + r.selesai_didata;

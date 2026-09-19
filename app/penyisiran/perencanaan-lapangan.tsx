@@ -731,7 +731,10 @@ function OhMonitoringPanel({ token }: { token: string }) {
 // excel-table.tsx) -- tiap kolom bisa diurutkan (klik nama kolom) & bisa
 // difilter (klik "▾", checklist nilai unik, spt Filter/Sort di Excel),
 // murni client-side di atas hasil rekomendasi yg sama (tidak nambah
-// request API).
+// request API). SEMUA tabel di bagian ini pakai pola yg sama: tabel
+// rekomendasi utama, tabel rincian per Sub SLS saat "unhide" (komponen
+// terpisah SubslsDetailTable -- lihat komentar di sana knp harus dipisah),
+// & tabel hasil "🎯 Alokasikan Otomatis".
 function WilayahSampelPanel({
   token,
   nama,
@@ -1044,6 +1047,21 @@ function WilayahSampelPanel({
   );
   const tabelRekomendasi = useExcelTable(rows, kolomRekomendasi, { key: "skor_akhir", dir: "desc" });
 
+  // Header tabel hasil "Alokasikan Otomatis" (pengelola) jg pakai ExcelTh --
+  // hook dipanggil DI SINI (bukan di dalam blok `{autoHasil && (...)}`) krn
+  // Hooks React wajib dipanggil tanpa syarat; kalau autoHasil belum ada,
+  // cukup dikasih array kosong.
+  const kolomAutoHasil = useMemo(
+    () => [
+      { key: "nama", label: "Petugas", getValue: (h: AutoAlokasiBaris) => h.nama },
+      { key: "tier_label", label: "Sumber Lokasi", getValue: (h: AutoAlokasiBaris) => h.tier_label },
+      { key: "jumlah_dialokasikan", label: "Jumlah", getValue: (h: AutoAlokasiBaris) => h.jumlah_dialokasikan },
+      { key: "daftar_sls", label: "Jorong/SLS Terpilih", getValue: (h: AutoAlokasiBaris) => h.daftar_sls.join(", ") },
+    ],
+    []
+  );
+  const tabelAutoHasil = useExcelTable(autoHasil?.hasil ?? [], kolomAutoHasil, { key: "nama", dir: "asc" });
+
   if (loading) {
     return <p className="text-sm text-ink/60">Memuat rekomendasi...</p>;
   }
@@ -1146,14 +1164,24 @@ function WilayahSampelPanel({
                 <table className="w-full text-[11px]">
                   <thead className="sticky top-0 bg-cream-50 text-[10px] uppercase tracking-wide text-ink/50">
                     <tr>
-                      <th className="px-2 py-1.5 text-left">Petugas</th>
-                      <th className="px-2 py-1.5 text-left">Sumber Lokasi</th>
-                      <th className="px-2 py-1.5 text-right">Jumlah</th>
-                      <th className="px-2 py-1.5 text-left">Jorong/SLS Terpilih</th>
+                      {kolomAutoHasil.map((k) => (
+                        <ExcelTh
+                          key={k.key}
+                          colKey={k.key}
+                          label={k.label}
+                          align={k.key === "jumlah_dialokasikan" ? "right" : "left"}
+                          sortKey={tabelAutoHasil.sortKey}
+                          sortDir={tabelAutoHasil.sortDir}
+                          onSort={tabelAutoHasil.toggleSort}
+                          values={tabelAutoHasil.uniqueValues[k.key] ?? []}
+                          activeFilter={tabelAutoHasil.filters[k.key]}
+                          onFilterChange={tabelAutoHasil.setColumnFilter}
+                        />
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {autoHasil.hasil.map((h) => (
+                    {tabelAutoHasil.rows.map((h) => (
                       <tr key={h.petugas_id} className="border-t border-line/60">
                         <td className="px-2 py-1.5 font-medium text-navy-900">{h.nama}</td>
                         <td className="px-2 py-1.5 text-ink/60">{h.tier_label}</td>
@@ -1229,7 +1257,6 @@ function WilayahSampelPanel({
                 const bisaUnhide = r.jumlah_subsls > 1;
                 const isExpanded = expanded.has(r.sls_key);
                 const subslsState = subslsCache.get(r.sls_key);
-                const semuaKode = Array.isArray(subslsState) ? subslsState.map((s) => s.subsls_kode) : [];
 
                 let statusLabel: string | null = null;
                 if (!aktif && !r.tersedia) statusLabel = "Sudah diambil semua";
@@ -1314,43 +1341,12 @@ function WilayahSampelPanel({
                             <p className="text-[11px] text-ink/50">Tidak ada data Sub SLS.</p>
                           )}
                           {Array.isArray(subslsState) && subslsState.length > 0 && (
-                            <table className="w-full text-[11px]">
-                              <thead className="text-[10px] uppercase tracking-wide text-ink/40">
-                                <tr>
-                                  <th className="w-8" />
-                                  <th className="px-2 py-1 text-left">Sub SLS</th>
-                                  <th className="px-2 py-1 text-right">Potensi KK</th>
-                                  <th className="px-2 py-1 text-right">Skor Dasar</th>
-                                  <th className="px-2 py-1 text-right">Dipegang</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {subslsState.map((s) => {
-                                  const milikSaya = s.dipilih_oleh_petugas_id === petugasId;
-                                  const checkedSub =
-                                    current === null || (Array.isArray(current) && current.includes(s.subsls_kode));
-                                  const disabledSub = s.dipilih_oleh_petugas_id != null && !milikSaya;
-                                  return (
-                                    <tr key={s.subsls_kode} className={`border-t border-line/30 ${disabledSub ? "opacity-50" : ""}`}>
-                                      <td className="py-1 pl-4">
-                                        <input
-                                          type="checkbox"
-                                          checked={checkedSub}
-                                          disabled={disabledSub}
-                                          onChange={() => toggleSubsls(r.sls_key, s.subsls_kode, semuaKode)}
-                                        />
-                                      </td>
-                                      <td className="px-2 py-1 text-ink/80">{s.label}</td>
-                                      <td className="px-2 py-1 text-right">{s.jumlah_potensi}</td>
-                                      <td className="px-2 py-1 text-right">{s.skor_dasar_rata}</td>
-                                      <td className="px-2 py-1 text-right text-ink/50">
-                                        {s.dipilih_oleh_nama == null ? "-" : milikSaya ? "Anda" : s.dipilih_oleh_nama}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                            <SubslsDetailTable
+                              rows={subslsState}
+                              current={current}
+                              petugasId={petugasId}
+                              onToggle={(subslsKode, kodeUtk) => toggleSubsls(r.sls_key, subslsKode, kodeUtk)}
+                            />
                           )}
                         </td>
                       </tr>
@@ -1384,6 +1380,96 @@ function WilayahSampelPanel({
 
       {tampilkanMatrix && <MatrixPanel matrix={matrix} loading={matrixLoading} />}
     </div>
+  );
+}
+
+// Rincian per SUBSLS di dalam 1 baris Jorong/SLS yang di-unhide -- header
+// jg pakai ExcelTh/useExcelTable (urutkan & filter, spt tabel lain).
+// DIPISAH jadi komponen sendiri (bukan langsung di dalam .map() baris induk
+// di WilayahSampelPanel) krn Hooks React (termasuk useExcelTable) TIDAK
+// BOLEH dipanggil di dalam callback .map() -- jumlah pemanggilannya bisa
+// berubah2 (mengikuti jumlah baris yg sedang di-unhide/difilter), melanggar
+// Rules of Hooks. `rows` di sini SELALU daftar LENGKAP (belum difilter
+// tabel) SUB SLS milik 1 SLS -- dipakai jg utk hitung semuaKode (dikirim ke
+// onToggle) supaya logika "semua SUBSLS tercentang = pilih seluruh SLS" di
+// toggleSubsls() TETAP benar walau tabel rincian ini SEDANG difilter.
+function SubslsDetailTable({
+  rows,
+  current,
+  petugasId,
+  onToggle,
+}: {
+  rows: SubslsRow[];
+  current: string[] | null | undefined;
+  petugasId: number;
+  onToggle: (subslsKode: string, semuaKode: string[]) => void;
+}) {
+  const kolom = useMemo(
+    () => [
+      { key: "label", label: "Sub SLS", getValue: (s: SubslsRow) => s.label },
+      { key: "jumlah_potensi", label: "Potensi KK", getValue: (s: SubslsRow) => s.jumlah_potensi },
+      { key: "skor_dasar_rata", label: "Skor Dasar", getValue: (s: SubslsRow) => s.skor_dasar_rata },
+      { key: "dipilih_oleh_nama", label: "Dipegang", getValue: (s: SubslsRow) => s.dipilih_oleh_nama },
+    ],
+    []
+  );
+  const tabel = useExcelTable(rows, kolom, { key: "label", dir: "asc" });
+  const semuaKode = rows.map((s) => s.subsls_kode);
+
+  return (
+    <table className="w-full text-[11px]">
+      <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+        <tr>
+          <th className="w-8" />
+          {kolom.map((k) => (
+            <ExcelTh
+              key={k.key}
+              colKey={k.key}
+              label={k.label}
+              align={k.key === "label" ? "left" : "right"}
+              sortKey={tabel.sortKey}
+              sortDir={tabel.sortDir}
+              onSort={tabel.toggleSort}
+              values={tabel.uniqueValues[k.key] ?? []}
+              activeFilter={tabel.filters[k.key]}
+              onFilterChange={tabel.setColumnFilter}
+            />
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {tabel.rows.map((s) => {
+          const milikSaya = s.dipilih_oleh_petugas_id === petugasId;
+          const checkedSub = current === null || (Array.isArray(current) && current.includes(s.subsls_kode));
+          const disabledSub = s.dipilih_oleh_petugas_id != null && !milikSaya;
+          return (
+            <tr key={s.subsls_kode} className={`border-t border-line/30 ${disabledSub ? "opacity-50" : ""}`}>
+              <td className="py-1 pl-4">
+                <input
+                  type="checkbox"
+                  checked={checkedSub}
+                  disabled={disabledSub}
+                  onChange={() => onToggle(s.subsls_kode, semuaKode)}
+                />
+              </td>
+              <td className="px-2 py-1 text-ink/80">{s.label}</td>
+              <td className="px-2 py-1 text-right">{s.jumlah_potensi}</td>
+              <td className="px-2 py-1 text-right">{s.skor_dasar_rata}</td>
+              <td className="px-2 py-1 text-right text-ink/50">
+                {s.dipilih_oleh_nama == null ? "-" : milikSaya ? "Anda" : s.dipilih_oleh_nama}
+              </td>
+            </tr>
+          );
+        })}
+        {tabel.rows.length === 0 && (
+          <tr>
+            <td colSpan={kolom.length + 1} className="py-1.5 text-center text-ink/40">
+              Tidak ada Sub SLS utk filter ini.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   );
 }
 

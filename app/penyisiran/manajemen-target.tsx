@@ -46,8 +46,9 @@
 //    semua) ATAU diedit satu-satu per baris di tabel (auto-simpan saat
 //    kolom ditinggalkan / onBlur).
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
+import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 // NILAI STRING INI HARUS PERSIS SAMA dgn TOKEN_KEY/NAMA_KEY/
 // PETUGAS_ID_STORE_KEY/LAT_KEY/LNG_KEY di app/seruti/penyisiran-usaha.tsx
@@ -473,13 +474,35 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
     }
   }
 
-  const totalAdaPpl = rows.reduce((s, r) => s + r.ada_ppl, 0);
-  const totalAdaJorong = rows.reduce((s, r) => s + r.ada_jorong, 0);
-  const totalAdaKeduanya = rows.reduce((s, r) => s + r.ada_keduanya, 0);
-  const totalBelum = rows.reduce((s, r) => s + r.belum, 0);
-  const totalTidakAda = rows.reduce((s, r) => s + r.tidak_ada, 0);
-  const totalRagu = rows.reduce((s, r) => s + r.ragu, 0);
-  const totalSemua = rows.reduce((s, r) => s + r.total, 0);
+  // Header tabel pakai komponen bersama ExcelTh/useExcelTable (urutkan &
+  // filter per kolom, spt Excel) -- lihat app/penyisiran/_shared/excel-table.tsx.
+  // Kolom "nama" labelnya ikut berubah sesuai level dropdown (Kecamatan/
+  // Nagari/SLS/Sub SLS) makanya `level` masuk dependency array.
+  const kolomRingkasan = useMemo(
+    () => [
+      { key: "nama", label: LEVEL_LABEL[level], getValue: (r: RingkasanRow) => r.nama },
+      { key: "ada_ppl", label: "PPL", getValue: (r: RingkasanRow) => r.ada_ppl },
+      { key: "ada_jorong", label: "Jorong", getValue: (r: RingkasanRow) => r.ada_jorong },
+      { key: "ada_keduanya", label: "Keduanya", getValue: (r: RingkasanRow) => r.ada_keduanya },
+      { key: "belum", label: "Belum", getValue: (r: RingkasanRow) => r.belum },
+      { key: "tidak_ada", label: "Tidak Ada", getValue: (r: RingkasanRow) => r.tidak_ada },
+      { key: "ragu", label: "Ragu", getValue: (r: RingkasanRow) => r.ragu },
+      { key: "total", label: "Total", getValue: (r: RingkasanRow) => r.total },
+    ],
+    [level]
+  );
+  const tabelRingkasan = useExcelTable(rows, kolomRingkasan, { key: "nama", dir: "asc" });
+
+  // Baris "Total" di tfoot SENGAJA mengikuti baris yang SEDANG TAMPIL
+  // (sesudah filter header), bukan seluruh data -- persis spt baris Total
+  // Excel yang ikut menyesuaikan saat Autofilter dipakai.
+  const totalAdaPpl = tabelRingkasan.rows.reduce((s, r) => s + r.ada_ppl, 0);
+  const totalAdaJorong = tabelRingkasan.rows.reduce((s, r) => s + r.ada_jorong, 0);
+  const totalAdaKeduanya = tabelRingkasan.rows.reduce((s, r) => s + r.ada_keduanya, 0);
+  const totalBelum = tabelRingkasan.rows.reduce((s, r) => s + r.belum, 0);
+  const totalTidakAda = tabelRingkasan.rows.reduce((s, r) => s + r.tidak_ada, 0);
+  const totalRagu = tabelRingkasan.rows.reduce((s, r) => s + r.ragu, 0);
+  const totalSemua = tabelRingkasan.rows.reduce((s, r) => s + r.total, 0);
 
   return (
     <div className="rounded-lg border border-line bg-white p-3">
@@ -506,37 +529,68 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
 
       {errMsg && <p className="mb-2 text-xs text-rust-700">⚠ {errMsg}</p>}
 
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+        <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+        {tabelRingkasan.adaFilterAktif && (
+          <button type="button" onClick={tabelRingkasan.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
+      </div>
+
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th rowSpan={2} className="px-3 py-2 align-bottom">
-                {LEVEL_LABEL[level]}
-              </th>
+              <ExcelTh
+                rowSpan={2}
+                colKey="nama"
+                label={LEVEL_LABEL[level]}
+                sortKey={tabelRingkasan.sortKey}
+                sortDir={tabelRingkasan.sortDir}
+                onSort={tabelRingkasan.toggleSort}
+                values={tabelRingkasan.uniqueValues.nama ?? []}
+                activeFilter={tabelRingkasan.filters.nama}
+                onFilterChange={tabelRingkasan.setColumnFilter}
+              />
               <th colSpan={3} className="border-b border-line/60 px-3 py-1 text-center">
                 Sumber Informasi (Ada)
               </th>
-              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
-                Belum
-              </th>
-              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
-                Tidak Ada
-              </th>
-              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
-                Ragu
-              </th>
-              <th rowSpan={2} className="px-3 py-2 text-right align-bottom">
-                Total
-              </th>
+              {(["belum", "tidak_ada", "ragu", "total"] as const).map((key) => (
+                <ExcelTh
+                  key={key}
+                  rowSpan={2}
+                  colKey={key}
+                  label={kolomRingkasan.find((k) => k.key === key)!.label}
+                  align="right"
+                  sortKey={tabelRingkasan.sortKey}
+                  sortDir={tabelRingkasan.sortDir}
+                  onSort={tabelRingkasan.toggleSort}
+                  values={tabelRingkasan.uniqueValues[key] ?? []}
+                  activeFilter={tabelRingkasan.filters[key]}
+                  onFilterChange={tabelRingkasan.setColumnFilter}
+                />
+              ))}
             </tr>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th className="px-3 py-1 text-right">PPL</th>
-              <th className="px-3 py-1 text-right">Jorong</th>
-              <th className="px-3 py-1 text-right">Keduanya</th>
+              {(["ada_ppl", "ada_jorong", "ada_keduanya"] as const).map((key) => (
+                <ExcelTh
+                  key={key}
+                  colKey={key}
+                  label={kolomRingkasan.find((k) => k.key === key)!.label}
+                  align="right"
+                  sortKey={tabelRingkasan.sortKey}
+                  sortDir={tabelRingkasan.sortDir}
+                  onSort={tabelRingkasan.toggleSort}
+                  values={tabelRingkasan.uniqueValues[key] ?? []}
+                  activeFilter={tabelRingkasan.filters[key]}
+                  onFilterChange={tabelRingkasan.setColumnFilter}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {tabelRingkasan.rows.map((r) => {
               const bisaDibuka = level === "kec";
               const terbuka = expandedKec.has(r.kode);
               return (
@@ -596,15 +650,15 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                 </Fragment>
               );
             })}
-            {rows.length === 0 && !loading && (
+            {tabelRingkasan.rows.length === 0 && !loading && (
               <tr>
                 <td colSpan={8} className="px-3 py-4 text-center text-ink/40">
-                  Tidak ada data.
+                  Tidak ada data{tabelRingkasan.adaFilterAktif && " utk filter ini"}.
                 </td>
               </tr>
             )}
           </tbody>
-          {rows.length > 0 && (
+          {tabelRingkasan.rows.length > 0 && (
             <tfoot>
               <tr className="border-t border-line bg-paper/60 font-semibold text-navy-900">
                 <td className="px-3 py-1.5">Total</td>
@@ -695,19 +749,80 @@ function TargetIdentifikasiSection({
         {msg && <span className="text-[11px] text-ink/50">{msg}</span>}
       </div>
 
+      <TabelTargetIdentifikasi petugas={petugas} onSimpanSatu={onSimpanSatu} />
+    </div>
+  );
+}
+
+// Header pakai ExcelTh/useExcelTable (urutkan & filter per kolom) --
+// dipisah jadi komponen sendiri (bukan langsung di
+// TargetIdentifikasiSection) sekadar spy `kolom`/`tabel` tidak bercampur dgn
+// state form bulk terapkan-semua di atasnya.
+function TabelTargetIdentifikasi({
+  petugas,
+  onSimpanSatu,
+}: {
+  petugas: PetugasTarget[];
+  onSimpanSatu: (id: number, fields: Record<string, number | string | null>) => Promise<void>;
+}) {
+  const kolom = useMemo(
+    () => [
+      { key: "nama", label: "Nama Petugas", getValue: (p: PetugasTarget) => p.nama },
+      {
+        key: "target_identifikasi_jumlah",
+        label: "Target Wajib Dikunjungi",
+        getValue: (p: PetugasTarget) => p.target_identifikasi_jumlah,
+      },
+      {
+        key: "target_identifikasi_satuan",
+        label: "Satuan",
+        getValue: (p: PetugasTarget) => (p.target_identifikasi_satuan ? SATUAN_LABEL[p.target_identifikasi_satuan] : null),
+      },
+    ],
+    []
+  );
+  const tabel = useExcelTable(petugas, kolom, { key: "nama", dir: "asc" });
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+        <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+        {tabel.adaFilterAktif && (
+          <button type="button" onClick={tabel.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
+      </div>
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th className="px-3 py-2">Nama Petugas</th>
-              <th className="px-3 py-2">Target Wajib Dikunjungi</th>
-              <th className="px-3 py-2">Satuan</th>
+              {kolom.map((k) => (
+                <ExcelTh
+                  key={k.key}
+                  colKey={k.key}
+                  label={k.label}
+                  sortKey={tabel.sortKey}
+                  sortDir={tabel.sortDir}
+                  onSort={tabel.toggleSort}
+                  values={tabel.uniqueValues[k.key] ?? []}
+                  activeFilter={tabel.filters[k.key]}
+                  onFilterChange={tabel.setColumnFilter}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {petugas.map((p) => (
+            {tabel.rows.map((p) => (
               <BarisIdentifikasi key={p.id} p={p} onSimpan={onSimpanSatu} />
             ))}
+            {tabel.rows.length === 0 && (
+              <tr>
+                <td colSpan={kolom.length} className="px-3 py-4 text-center text-ink/40">
+                  Tidak ada petugas{tabel.adaFilterAktif && " utk filter ini"}.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -892,19 +1007,73 @@ function TargetPendataanSection({
         </div>
       </div>
 
+      <TabelTargetPendataan petugas={petugas} onSimpanSatu={onSimpanSatu} />
+    </div>
+  );
+}
+
+// Sama polanya dgn TabelTargetIdentifikasi -- lihat komentar di sana.
+function TabelTargetPendataan({
+  petugas,
+  onSimpanSatu,
+}: {
+  petugas: PetugasTarget[];
+  onSimpanSatu: (id: number, fields: Record<string, number | string | null>) => Promise<void>;
+}) {
+  const kolom = useMemo(
+    () => [
+      { key: "nama", label: "Nama Petugas", getValue: (p: PetugasTarget) => p.nama },
+      { key: "target_kunjungan_kk", label: "Target Kunjungan (KK)", getValue: (p: PetugasTarget) => p.target_kunjungan_kk },
+      {
+        key: "target_berhasil_kk",
+        label: "Target Berhasil Didata (KK)",
+        getValue: (p: PetugasTarget) => p.target_berhasil_kk,
+      },
+    ],
+    []
+  );
+  const tabel = useExcelTable(petugas, kolom, { key: "nama", dir: "asc" });
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+        <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+        {tabel.adaFilterAktif && (
+          <button type="button" onClick={tabel.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
+      </div>
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th className="px-3 py-2">Nama Petugas</th>
-              <th className="px-3 py-2">Target Kunjungan (KK)</th>
-              <th className="px-3 py-2">Target Berhasil Didata (KK)</th>
+              {kolom.map((k) => (
+                <ExcelTh
+                  key={k.key}
+                  colKey={k.key}
+                  label={k.label}
+                  sortKey={tabel.sortKey}
+                  sortDir={tabel.sortDir}
+                  onSort={tabel.toggleSort}
+                  values={tabel.uniqueValues[k.key] ?? []}
+                  activeFilter={tabel.filters[k.key]}
+                  onFilterChange={tabel.setColumnFilter}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {petugas.map((p) => (
+            {tabel.rows.map((p) => (
               <BarisPendataan key={p.id} p={p} onSimpan={onSimpanSatu} />
             ))}
+            {tabel.rows.length === 0 && (
+              <tr>
+                <td colSpan={kolom.length} className="px-3 py-4 text-center text-ink/40">
+                  Tidak ada petugas{tabel.adaFilterAktif && " utk filter ini"}.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

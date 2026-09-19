@@ -6,11 +6,20 @@
 // klik nama kolom utk urutkan (▲/▼), klik ikon "▾" di kanan nama kolom utk
 // buka dropdown filter (checkbox per nilai unik, ada kotak cari utk
 // mempersempit daftar checkbox, tombol "Pilih Semua"/"Kosongkan"). Dipakai
-// di lebih dari satu tabel (Master Petugas, Identifikasi Wilayah Sampel
-// SLS di Perencanaan Lapangan) makanya ditaruh di sini, bukan diulang di
-// tiap file -- folder "_shared" (prefix underscore) SENGAJA dipakai supaya
-// Next.js App Router TIDAK menganggapnya sbg route (lihat konvensi private
-// folder Next.js), murni tempat komponen dibagi antar tab.
+// di SEMUA tabel data di app ini (Master Petugas, Identifikasi Wilayah
+// Sampel SLS & rincian Sub SLS-nya di Perencanaan Lapangan, Manajemen
+// Target, Monitoring Petugas, tabel Rekap Update di app/seruti/page.tsx)
+// makanya ditaruh di sini, bukan diulang di tiap file -- folder "_shared"
+// (prefix underscore) SENGAJA dipakai supaya Next.js App Router TIDAK
+// menganggapnya sbg route (lihat konvensi private folder Next.js), murni
+// tempat komponen dibagi antar tab/fitur (termasuk lintas folder
+// app/seruti -> app/penyisiran/_shared, tidak masalah krn cuma komponen UI
+// generik, tidak py logika spesifik penyisiran).
+//
+// Prop `rowSpan` di ExcelTh dipakai utk header 2-baris (kolom yg
+// dikelompokkan di bawah 1 label grup, lihat RingkasanIdentifikasi di
+// manajemen-target.tsx) -- kolom yg TIDAK ikut grup manapun diberi
+// rowSpan={2} spy tetap sejajar tinggi dgn grup di sampingnya.
 //
 // Cara pakai (lihat master-petugas.tsx / perencanaan-lapangan.tsx):
 //   const kolom = useMemo(() => [
@@ -141,6 +150,7 @@ export function ExcelTh({
   onFilterChange,
   align = "left",
   className,
+  rowSpan,
 }: {
   label: string;
   colKey: string;
@@ -152,6 +162,11 @@ export function ExcelTh({
   onFilterChange: (key: string, values: Set<string> | null) => void;
   align?: "left" | "right";
   className?: string;
+  // Dipakai utk header 2-baris (grup kolom, mis. "Ringkasan Hasil
+  // Identifikasi" di Manajemen Target) -- kolom yg TIDAK ikut kelompok
+  // manapun ditaruh rowSpan={2} spy tetap sejajar tinggi dgn grup di
+  // sampingnya (yg makan 2 baris: 1 baris label grup + 1 baris sub-kolom).
+  rowSpan?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [cari, setCari] = useState("");
@@ -180,7 +195,12 @@ export function ExcelTh({
   }
 
   return (
-    <th className={`relative select-none px-2 py-2 ${align === "right" ? "text-right" : "text-left"} ${className ?? ""}`}>
+    <th
+      rowSpan={rowSpan}
+      className={`relative select-none px-2 py-2 ${align === "right" ? "text-right" : "text-left"} ${
+        rowSpan ? "align-bottom" : ""
+      } ${className ?? ""}`}
+    >
       <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : ""}`}>
         {align === "right" && (
           <button

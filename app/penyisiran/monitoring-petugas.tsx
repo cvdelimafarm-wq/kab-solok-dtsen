@@ -24,8 +24,18 @@
 // (dicek server-side di /api/penyisiran/petugas-toggle-aktif) sebelum
 // tombol aktif/nonaktif bisa dipakai, supaya tidak kepencet asal oleh siapa
 // saja yang sekadar membuka tab monitoring ini.
+//
+// Header tabel pakai komponen bersama ExcelTh/useExcelTable (app/penyisiran/
+// _shared/excel-table.tsx) -- dropdown "Urutkan" yang dulu terpisah SUDAH
+// DIHAPUS, diganti klik nama kolom (sort) & ikon "▾" (filter checklist nilai
+// unik) langsung di header, spt tabel lain di app ini. Pembagian 2 kelompok
+// baris (aktif di atas, nonaktif-berriwayat di bawah dgn baris pemisah)
+// TETAP dipertahankan -- hasil sort/filter dari useExcelTable dipecah lagi
+// jadi 2 array (tampilAktif/tampilNonaktifRiwayat) DGN URUTAN YANG SAMA,
+// bukan diurutkan ulang terpisah.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 const TOKEN_KEY = "penyisiran-token";
 
@@ -133,7 +143,6 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
-  const [urutan, setUrutan] = useState<"nama" | "dikunjungi" | "diidentifikasi">("nama");
   const [kelolaOpen, setKelolaOpen] = useState(false);
 
   const guard = useCallback(
@@ -170,17 +179,6 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
     load();
   }, [load]);
 
-  function urutkan(list: PetugasMonitor[]): PetugasMonitor[] {
-    return [...list].sort((a, b) => {
-      if (urutan === "nama") return a.nama.localeCompare(b.nama);
-      if (urutan === "dikunjungi") return b.jumlah_dikunjungi - a.jumlah_dikunjungi || a.nama.localeCompare(b.nama);
-      return (
-        b.jumlah_identifikasi_jorong + b.jumlah_identifikasi_tetangga - (a.jumlah_identifikasi_jorong + a.jumlah_identifikasi_tetangga) ||
-        a.nama.localeCompare(b.nama)
-      );
-    });
-  }
-
   function adaRiwayat(p: PetugasMonitor): boolean {
     return (
       p.jumlah_identifikasi_jorong > 0 ||
@@ -198,10 +196,38 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
   // benar2 aktif menyisir. Yang nonaktif TAPI punya riwayat tetap
   // ditampilkan, dipisah di bagian paling bawah tabel (supaya riwayatnya
   // tidak hilang dari rekap, tapi tidak mencampur dgn petugas yg SEDANG
-  // aktif menyisir).
-  const tampilAktif = urutkan(daftar.filter((p) => p.aktif && cocokCari(p)));
-  const tampilNonaktifRiwayat = urutkan(daftar.filter((p) => !p.aktif && adaRiwayat(p) && cocokCari(p)));
-  const tampil = [...tampilAktif, ...tampilNonaktifRiwayat];
+  // aktif menyisir) -- disaring dulu SEBELUM masuk ke useExcelTable spy
+  // yang disembunyikan tidak ikut muncul di daftar checkbox filter header
+  // ataupun ikut dihitung Total di StatTile.
+  //
+  // Urutkan (dulu dropdown "nama"/"dikunjungi"/"diidentifikasi") SEKARANG
+  // dipindah ke klik header kolom (ExcelTh, spt tabel lain di app ini) --
+  // tabelMonitor.rows sudah terurut+terfilter, tinggal dipecah lagi jadi 2
+  // kelompok (aktif/nonaktif berriwayat) dgn urutan yg SAMA persis spt hasil
+  // sort/filter itu.
+  const kolom = useMemo(
+    () => [
+      { key: "nama", label: "Nama", getValue: (p: PetugasMonitor) => p.nama },
+      { key: "jumlah_identifikasi_jorong", label: "Diidentifikasi (Jorong)", getValue: (p: PetugasMonitor) => p.jumlah_identifikasi_jorong },
+      {
+        key: "jumlah_identifikasi_tetangga",
+        label: "Diidentifikasi (Tetangga/Lainnya)",
+        getValue: (p: PetugasMonitor) => p.jumlah_identifikasi_tetangga,
+      },
+      { key: "jumlah_didata", label: "Didata", getValue: (p: PetugasMonitor) => p.jumlah_didata },
+      { key: "jumlah_dikunjungi", label: "Dikunjungi", getValue: (p: PetugasMonitor) => p.jumlah_dikunjungi },
+    ],
+    []
+  );
+  const daftarUntukTabel = useMemo(
+    () => daftar.filter((p) => (p.aktif || adaRiwayat(p)) && cocokCari(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [daftar, search]
+  );
+  const tabelMonitor = useExcelTable(daftarUntukTabel, kolom, { key: "nama", dir: "asc" });
+  const tampilAktif = tabelMonitor.rows.filter((p) => p.aktif);
+  const tampilNonaktifRiwayat = tabelMonitor.rows.filter((p) => !p.aktif);
+  const tampil = tabelMonitor.rows;
 
   const totalDikunjungi = daftar.reduce((s, p) => s + p.jumlah_dikunjungi, 0);
   const totalDidata = daftar.reduce((s, p) => s + p.jumlah_didata, 0);
@@ -250,15 +276,12 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
           placeholder="Cari nama petugas..."
           className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
         />
-        <select
-          value={urutan}
-          onChange={(e) => setUrutan(e.target.value as "nama" | "dikunjungi" | "diidentifikasi")}
-          className="rounded-md border border-line px-2 py-1.5 text-xs"
-        >
-          <option value="nama">Urutkan: Nama (A-Z)</option>
-          <option value="dikunjungi">Urutkan: Dikunjungi terbanyak</option>
-          <option value="diidentifikasi">Urutkan: Diidentifikasi terbanyak</option>
-        </select>
+        <p className="text-[10px] text-ink/40">Klik nama kolom tabel utk urutkan, klik &ldquo;▾&rdquo; utk filter (spt Excel).</p>
+        {tabelMonitor.adaFilterAktif && (
+          <button type="button" onClick={tabelMonitor.resetFilters} className="shrink-0 text-[11px] font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
       </div>
 
       {/* Tabel rekap -- di layar sempit digulirkan ke samping. */}
@@ -266,11 +289,20 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <th className="px-3 py-2">Nama</th>
-              <th className="px-3 py-2 text-right">Diidentifikasi (Jorong)</th>
-              <th className="px-3 py-2 text-right">Diidentifikasi (Tetangga/Lainnya)</th>
-              <th className="px-3 py-2 text-right">Didata</th>
-              <th className="px-3 py-2 text-right">Dikunjungi</th>
+              {kolom.map((k) => (
+                <ExcelTh
+                  key={k.key}
+                  colKey={k.key}
+                  label={k.label}
+                  align={k.key === "nama" ? "left" : "right"}
+                  sortKey={tabelMonitor.sortKey}
+                  sortDir={tabelMonitor.sortDir}
+                  onSort={tabelMonitor.toggleSort}
+                  values={tabelMonitor.uniqueValues[k.key] ?? []}
+                  activeFilter={tabelMonitor.filters[k.key]}
+                  onFilterChange={tabelMonitor.setColumnFilter}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -279,7 +311,7 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
             ))}
             {tampilNonaktifRiwayat.length > 0 && (
               <tr>
-                <td colSpan={5} className="border-b border-line bg-paper/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                <td colSpan={kolom.length} className="border-b border-line bg-paper/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
                   Nonaktif -- masih ada riwayat data
                 </td>
               </tr>
@@ -289,8 +321,8 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
             ))}
             {tampil.length === 0 && !loading && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink/40">
-                  Tidak ada petugas untuk pencarian ini.
+                <td colSpan={kolom.length} className="px-3 py-6 text-center text-ink/40">
+                  Tidak ada petugas untuk pencarian{tabelMonitor.adaFilterAktif ? "/filter" : ""} ini.
                 </td>
               </tr>
             )}
