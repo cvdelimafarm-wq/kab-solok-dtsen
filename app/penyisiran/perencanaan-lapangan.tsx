@@ -1072,7 +1072,15 @@ function WilayahSampelPanel({
                     }`}
                     onClick={() => !penuh && toggleSls(r.sls_key)}
                   >
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                      {/* stopPropagation DI SINI (bukan cuma di <input>-nya) --
+                          <tr> di atas jg py onClick toggleSls yg SAMA; tanpa ini,
+                          klik TEPAT di kotak centang akan memicu toggle DUA KALI
+                          (sekali dari onChange <input>, sekali lagi dari klik yg
+                          "naik"/bubbling ke <tr>) -- hasilnya nge-toggle balik ke
+                          status semula & KELIHATAN spt tombolnya tidak merespons
+                          sama sekali padahal klik di luar kotak centang (di sel
+                          lain baris yg sama) berhasil normal. */}
                       <input type="checkbox" checked={aktif} disabled={penuh} onChange={() => toggleSls(r.sls_key)} />
                     </td>
                     <td className="px-2 py-1.5 font-medium text-navy-900">{r.sls_nama}</td>
