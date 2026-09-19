@@ -91,6 +91,7 @@ import IdentifikasiJorongTab from "./identifikasi-jorong";
 import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
 import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
+import MonitoringTerpaduTab from "./monitoring-terpadu";
 import ManajemenTargetTab from "./manajemen-target";
 import MasterPetugasTab from "./master-petugas";
 import AdministrasiSpjTab from "./administrasi-spj";
@@ -103,6 +104,7 @@ type TabKey =
   | "tetangga"
   | "monitoring"
   | "monitoring_petugas"
+  | "monitoring_terpadu"
   | "target"
   | "master_petugas"
   | "spj"
@@ -153,6 +155,16 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "monitoring_petugas"} onClick={() => setTab("monitoring_petugas")}>
           Monitoring Petugas Penyisiran
         </TabButton>
+        {/* "Monitoring" (terpadu) -- tab BARU, gabungan 7 area monitoring
+            lintas tab yg tadinya tersebar/belum ada (kualitas kunjungan,
+            konsistensi lintas sumber identifikasi, realisasi vs rencana,
+            kelengkapan SPJ, beban kerja petugas, progres vs tenggat,
+            konflik alokasi PPL) -- lihat komentar lengkap di
+            app/penyisiran/monitoring-terpadu.tsx. Pakai PIN/sesi yg sama
+            dgn 2 tab Monitoring di atas. */}
+        <TabButton active={tab === "monitoring_terpadu"} onClick={() => setTab("monitoring_terpadu")}>
+          Monitoring
+        </TabButton>
         {/* "Manajemen Target" -- tab BARU, ditaruh paling akhir (sama spt
             "Penyisiran Usaha" & 2 tab Monitoring, area internal BPS bukan
             utk PPL/tetangga). Tombolnya tampil ke SEMUA orang (sama spt
@@ -195,6 +207,7 @@ export default function PenyisiranPage() {
         {tab === "tetangga" && <IdentifikasiTetanggaTab />}
         {tab === "monitoring" && <MonitoringPplTab />}
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
+        {tab === "monitoring_terpadu" && <MonitoringTerpaduTab />}
         {tab === "target" && <ManajemenTargetTab />}
         {tab === "master_petugas" && <MasterPetugasTab />}
         {tab === "spj" && <AdministrasiSpjTab />}
