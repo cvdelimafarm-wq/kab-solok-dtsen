@@ -25,6 +25,26 @@
 # di-rename (mv, atomik) ke nama akhir SESUDAH lolos -- supaya file yg
 # "curl-nya sukses tapi isinya rusak/terputus" TIDAK PERNAH nyangkut di
 # nama akhir & dipakai ulang.
+#
+# RIWAYAT BUG PENTING #2 (crash-loop "Killed" -- OOM saat memotong bbox):
+# SESUDAH bug #1 di atas diperbaiki, container tetap crash-loop, kali ini
+# selalu tepat di baris `osmium extract` (proses-nya di-SIGKILL oleh OS,
+# muncul sbg "... Killed osmium extract ..." di log Railway, berulang tanpa
+# henti). Ternyata BUKAN soal ukuran wilayah yg dipotong sama sekali --
+# dokumentasi resmi osmium (MEMORY USAGE, docs.osmcode.org/osmium/latest/
+# osmium-extract.html) menyatakan strategi "simple" (yg dipakai di sini
+# krn dikira paling hemat) TETAP butuh RAM MINIMAL = (ID node TERTINGGI di
+# SELURUH file OSM sumber, BUKAN cuma yg ada di dalam bbox) / 8 byte
+# (dikonfirmasi jg oleh github.com/osmcode/osmium-tool issue #234). ID
+# node tertinggi di OpenStreetMap keseluruhan (per Sep 2026, lihat
+# taginfo.openstreetmap.org/taginfo/stats) sekitar 14,19 milyar -> minimal
+# ~1,65 GB RAM HANYA utk satu bitmap ini, & angka ini TERUS NAIK tiap
+# tahun seiring OSM berkembang -- jadi sekecil apa pun bbox-nya dibikin,
+# `osmium extract` akan TETAP butuh RAM segitu (bahkan makin besar di masa
+# depan). Diperbaiki dgn ganti alat potong bbox dari `osmium extract` ke
+# `osmconvert` (paket osmctools, lihat Dockerfile) -- pakai hash table dgn
+# alokasi TETAP (default ~600 MB, TIDAK bergantung ID tertinggi OSM sama
+# sekali) -- lihat komentar lengkap di langkah pemotongan bbox di bawah.
 set -euo pipefail
 
 DATA_DIR="/data"
@@ -122,24 +142,41 @@ if [ ! -f "${OSRM_BASE}.mldgr" ]; then
     rm -f "$CLIPPED_PBF"
   fi
   if [ ! -f "$CLIPPED_PBF" ]; then
-    echo "[osrm] Memotong extract ke bounding box $OSRM_BBOX (strategi 'simple' -- paling hemat memori) ..."
-    # Strategi default osmium extract (complete_ways) butuh RAM sebanding dgn
-    # ID node TERTINGGI di file SUMBER (bukan cuma luas area yg dipotong) --
-    # jadi tetap bisa OOM ("Killed" oleh OS) meski file sumbernya kecil.
-    # Strategi "simple" cuma 1x pass & jauh lebih hemat memori; konsekuensinya
-    # jalan yg persis motong garis bbox bisa jadi tidak reference-complete,
-    # tapi tidak masalah krn OSRM_BBOX kita sudah dikasih margin di luar
-    # Sumbar, jadi jalan-jalan penting di dalam wilayah kerja tetap utuh.
+    echo "[osrm] Memotong extract ke bounding box $OSRM_BBOX (pakai osmconvert) ..."
+    # PAKAI `osmconvert` (paket osmctools), BUKAN `osmium extract` --
+    # ditemukan lewat log crash nyata di Railway ("Killed" berulang tanpa
+    # henti persis di baris osmium extract): dokumentasi resmi osmium
+    # (MEMORY USAGE, docs.osmcode.org/osmium/latest/osmium-extract.html)
+    # menyatakan strategi "simple" (yg sebelumnya dipakai di sini krn
+    # dikira paling hemat) tetap butuh RAM MINIMAL = (ID node TERTINGGI di
+    # SELURUH file sumber) / 8 byte -- BUKAN sebanding luas wilayah yg
+    # dipotong (dikonfirmasi jg oleh github.com/osmcode/osmium-tool issue
+    # #234). ID node tertinggi di OpenStreetMap keseluruhan (bukan cuma
+    # Sumbar) per Sep 2026 sekitar 14,19 milyar (taginfo.openstreetmap.org)
+    # -> minimal ~1,65 GB RAM HANYA utk satu bitmap ini, & angka ini akan
+    # TERUS NAIK tiap tahun seiring OSM berkembang -- jadi biar bbox-nya
+    # dibikin sekecil apa pun, `osmium extract` TETAP butuh RAM segitu.
+    # `osmconvert` pakai hash table dgn alokasi TETAP (default ~600 MB
+    # total: 480 utk node + 90 way + 30 relation, lihat man osmconvert,
+    # bisa diperkecil lagi lewat --hash-memory kalau plan Railway-nya
+    # sangat terbatas), TIDAK bergantung ID tertinggi OSM sama sekali --
+    # jauh lebih hemat & tidak akan memburuk lagi di masa depan.
+    #
+    # --drop-broken-refs: buang referensi node yang ikut kepotong keluar
+    # bbox dari definisi way (SENGAJA tidak pakai --complete-ways spy
+    # tetap hemat resource, sama spt alasan strategi "simple" dulu -- tdk
+    # masalah krn OSRM_BBOX kita sudah dikasih margin di luar Sumbar, jadi
+    # jalan-jalan penting di dalam wilayah kerja tetap utuh).
     #
     # Ditulis ke file SEMENTARA dulu (".mengunduh", format output dipaksa
-    # eksplisit lewat -f pbf krn ekstensinya bukan .osm.pbf) & divalidasi
-    # (pbf_valid) SEBELUM dipakai -- kalau proses osmium extract sendiri
-    # terhenti di tengah jalan (mis. container kena OOM-kill/restart
-    # Railway PAS lg motong), file .osm.pbf akhir tidak pernah kebentuk
-    # dgn isi setengah jadi.
+    # eksplisit lewat --out-pbf krn ekstensinya bukan .osm.pbf) & divalidasi
+    # (pbf_valid) SEBELUM dipakai -- kalau prosesnya sendiri terhenti di
+    # tengah jalan (mis. container kena kill/restart Railway PAS lg
+    # motong), file .osm.pbf akhir tidak pernah kebentuk dgn isi
+    # setengah jadi.
     CLIPPED_SEMENTARA="${CLIPPED_PBF}.mengunduh"
     rm -f "$CLIPPED_SEMENTARA"
-    osmium extract --bbox "$OSRM_BBOX" --strategy simple --overwrite -f pbf -o "$CLIPPED_SEMENTARA" "$RAW_PBF"
+    osmconvert "$RAW_PBF" -b="$OSRM_BBOX" --drop-broken-refs --out-pbf -o="$CLIPPED_SEMENTARA"
     if ! pbf_valid "$CLIPPED_SEMENTARA"; then
       echo "[osrm] Hasil potongan tidak valid (0 way) -- kemungkinan $RAW_PBF sendiri rusak/tidak lengkap."
       echo "[osrm] Hapus $RAW_PBF & file potongan sementara supaya restart berikutnya unduh ulang dari awal, lalu keluar (gagal) sekarang."
