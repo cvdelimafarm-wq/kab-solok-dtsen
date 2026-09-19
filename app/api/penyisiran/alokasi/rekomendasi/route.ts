@@ -42,6 +42,7 @@ interface DasarSlsRow {
   lat_c: number | null;
   lng_c: number | null;
   sudah_dipilih_oleh: number;
+  jumlah_subsls: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
   const [petugasRes, dasarRes, pilihanRes] = await Promise.all([
     supabase.from("petugas_penyisiran_akun").select("nama, lat, lng").eq("id", petugasId).maybeSingle(),
     supabase.rpc("penyisiran_alokasi_dasar_sls"),
-    supabase.from("penyisiran_alokasi_pilihan").select("sls_key").eq("petugas_id", petugasId),
+    supabase.from("penyisiran_alokasi_pilihan").select("sls_key, subsls_kode_list").eq("petugas_id", petugasId),
   ]);
 
   if (petugasRes.error) return NextResponse.json({ error: petugasRes.error.message }, { status: 500 });
@@ -124,6 +125,7 @@ export async function GET(req: NextRequest) {
       penalti_jarak: penalti != null ? Math.round(penalti * 10) / 10 : null,
       skor_akhir: Math.round(skorAkhir * 10) / 10,
       sudah_dipilih_oleh: r.sudah_dipilih_oleh,
+      jumlah_subsls: r.jumlah_subsls,
     };
   });
 
@@ -137,6 +139,12 @@ export async function GET(req: NextRequest) {
     lat: petugasLat,
     lng: petugasLng,
     data: hasil,
-    pilihan: (pilihanRes.data ?? []).map((r) => r.sls_key),
+    // Bentuk kaya (bukan cuma array sls_key) supaya FE bisa merehidrasi
+    // pilihan SEBAGIAN SUBSLS (fitur "unhide") -- subsls_kode null/kosong
+    // berarti pilih SELURUH SLS, spt sebelumnya.
+    pilihan: (pilihanRes.data ?? []).map((r) => ({
+      sls_key: r.sls_key,
+      subsls_kode: Array.isArray(r.subsls_kode_list) && r.subsls_kode_list.length > 0 ? r.subsls_kode_list : null,
+    })),
   });
 }

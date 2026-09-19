@@ -58,6 +58,20 @@
 //     Pengawas/Email Pencacah diambil dari data tab Master Petugas -- lihat
 //     app/api/penyisiran/alokasi/export-subsls/route.ts &
 //     app/penyisiran/master-petugas.tsx.
+//     Tiap baris yang punya >1 SUBSLS (kolom jumlah_subsls dari RPC
+//     penyisiran_alokasi_dasar_sls) menampilkan tombol "unhide" (▸/▾) di
+//     depan nama Jorong/SLS -- diklik utk memecah baris itu jadi rincian
+//     per SUBSLS (fetch GET .../alokasi/subsls?sls_key=..., RPC
+//     penyisiran_alokasi_dasar_subsls), tiap SUBSLS punya checkbox
+//     sendiri sehingga SATU Jorong bisa dibagi ke BEBERAPA PPL berbeda
+//     (mis. Sub SLS 01-02 utk PPL A, Sub SLS 03 utk PPL B) -- TETAP
+//     dihitung 1 dari maks 5 slot pilihan (bukan nambah kuota per
+//     SUBSLS). Kalau SEMUA SUBSLS di baris itu tercentang, otomatis
+//     disederhanakan jadi "pilih seluruh SLS" (subsls_kode_list NULL di
+//     DB) -- setara dgn checklist langsung di baris induk spt sebelumnya.
+//     Disimpan di kolom BARU penyisiran_alokasi_pilihan.subsls_kode_list
+//     (NULL = seluruh SLS, array = sebagian SUBSLS) -- lihat migrasi
+//     alokasi_unhide_subsls & app/api/penyisiran/alokasi/submit/route.ts.
 //     Di sebelahnya jg ada tombol "🎯 Alokasikan Otomatis (Prioritas)"
 //     (HANYA pengelola, 2x klik krn menimpa data byk petugas) -> POST
 //     .../alokasi/auto-alokasi -- mengisi otomatis 5 SLS prioritas
@@ -81,7 +95,7 @@
 //     hari itu terkunci (tdk bisa dicentang ulang sendiri) sampai
 //     diaktifkan lagi oleh pengelola.
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
@@ -155,6 +169,24 @@ interface RekomendasiRow {
   penalti_jarak: number | null;
   skor_akhir: number;
   sudah_dipilih_oleh: number;
+  jumlah_subsls: number;
+}
+
+// Rincian per SUBSLS di dalam satu Jorong/SLS -- dimuat lazy (baru
+// difetch saat baris diklik "unhide") dari GET .../alokasi/subsls.
+interface SubslsRow {
+  subsls_kode: string;
+  label: string;
+  jumlah_potensi: number;
+  skor_dasar_rata: number;
+  sudah_dipilih_oleh: number;
+}
+
+// Bentuk "pilihan" yg dikembalikan endpoint rekomendasi & dikirim ke
+// submit -- subsls_kode null/kosong berarti pilih SELURUH SLS/Jorong.
+interface PilihanEntry {
+  sls_key: string;
+  subsls_kode: string[] | null;
 }
 
 interface MatrixRow {
@@ -167,6 +199,7 @@ interface MatrixRow {
   sls_key: string;
   petugas_id: number;
   petugas_nama: string;
+  subsls_kode_list: string[] | null;
 }
 
 interface AutoAlokasiBaris {
@@ -683,7 +716,15 @@ function WilayahSampelPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<RekomendasiRow[]>([]);
-  const [dipilih, setDipilih] = useState<Set<string>>(new Set());
+  // Map sls_key -> subsls_kode_list: NULL = pilih SELURUH SLS/Jorong
+  // (perilaku lama), array = cuma SEBAGIAN SUBSLS (fitur "unhide"). Key
+  // TIDAK ada di map sama sekali = baris itu tidak dipilih.
+  const [dipilih, setDipilih] = useState<Map<string, string[] | null>>(new Map());
+  // sls_key yang sedang "di-unhide" (rincian per SUBSLS-nya tampil).
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Cache hasil fetch rincian SUBSLS per sls_key -- "loading"/"error" saat
+  // proses, array kalau sudah berhasil dimuat.
+  const [subslsCache, setSubslsCache] = useState<Map<string, SubslsRow[] | "loading" | "error">>(new Map());
   const [sudahPernahSubmit, setSudahPernahSubmit] = useState(false);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
@@ -772,8 +813,8 @@ function WilayahSampelPanel({
     try {
       const data = await apiFetch("/api/penyisiran/alokasi/rekomendasi", token);
       setRows(Array.isArray(data?.data) ? data.data : []);
-      const pilihanAwal: string[] = Array.isArray(data?.pilihan) ? data.pilihan : [];
-      setDipilih(new Set(pilihanAwal));
+      const pilihanAwal: PilihanEntry[] = Array.isArray(data?.pilihan) ? data.pilihan : [];
+      setDipilih(new Map(pilihanAwal.map((p) => [p.sls_key, p.subsls_kode ?? null])));
       setSudahPernahSubmit(pilihanAwal.length > 0);
       if (pilihanAwal.length > 0) setTampilkanMatrix(true);
       setLat(typeof data?.lat === "number" ? data.lat : null);
@@ -809,14 +850,76 @@ function WilayahSampelPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tampilkanMatrix]);
 
+  // Klik baris/checkbox INDUK -- toggle pilih SELURUH SLS/Jorong (null).
+  // Kalau baris ini sebelumnya sedang partial (sebagian SUBSLS dipilih),
+  // klik ini akan MELEPAS semua sekaligus (bukan menambah jadi penuh) --
+  // konsisten dgn checkbox lain: klik pada baris yg aktif = uncheck.
   function toggleSls(key: string) {
     setDipilih((prev) => {
-      const next = new Set(prev);
+      const next = new Map(prev);
       if (next.has(key)) {
         next.delete(key);
       } else {
         if (next.size >= MAKS_PILIHAN) return prev;
-        next.add(key);
+        next.set(key, null);
+      }
+      return next;
+    });
+  }
+
+  // Buka/tutup rincian per SUBSLS utk satu baris ("unhide"), fetch lazy
+  // (cuma sekali per sls_key, hasilnya di-cache) dari
+  // GET /api/penyisiran/alokasi/subsls?sls_key=...
+  async function toggleUnhide(slsKey: string) {
+    const sedangTerbuka = expanded.has(slsKey);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (sedangTerbuka) next.delete(slsKey);
+      else next.add(slsKey);
+      return next;
+    });
+    if (!sedangTerbuka && !subslsCache.has(slsKey)) {
+      setSubslsCache((prev) => new Map(prev).set(slsKey, "loading"));
+      try {
+        const data = await apiFetch(
+          `/api/penyisiran/alokasi/subsls?sls_key=${encodeURIComponent(slsKey)}`,
+          token
+        );
+        setSubslsCache((prev) => new Map(prev).set(slsKey, Array.isArray(data?.data) ? data.data : []));
+      } catch {
+        setSubslsCache((prev) => new Map(prev).set(slsKey, "error"));
+      }
+    }
+  }
+
+  // Klik checkbox SATU SUBSLS (di dalam baris yang sudah di-unhide) --
+  // mengubah pilihan baris induknya jadi PARTIAL (array kode SUBSLS),
+  // atau balik jadi "seluruh SLS" (null) kalau ujung2nya semua SUBSLS
+  // tercentang, atau lepas total kalau tidak ada satupun SUBSLS
+  // tercentang lagi. semuaKode = daftar LENGKAP kode SUBSLS baris ini
+  // (dari hasil fetch unhide), dipakai utk tahu kapan "semua tercentang".
+  function toggleSubsls(slsKey: string, subslsKode: string, semuaKode: string[]) {
+    setDipilih((prev) => {
+      const next = new Map(prev);
+      const current = next.get(slsKey); // undefined = blm dipilih, null = seluruh SLS, array = partial
+      let set: Set<string>;
+      if (current === undefined) {
+        if (next.size >= MAKS_PILIHAN) return prev; // slot penuh, tidak bisa mulai baris baru
+        set = new Set<string>();
+      } else if (current === null) {
+        set = new Set(semuaKode); // sedang "seluruh SLS" -> anggap semua tercentang dulu
+      } else {
+        set = new Set(current);
+      }
+      if (set.has(subslsKode)) set.delete(subslsKode);
+      else set.add(subslsKode);
+
+      if (set.size === 0) {
+        next.delete(slsKey);
+      } else if (set.size >= semuaKode.length) {
+        next.set(slsKey, null); // semua SUBSLS tercentang -> setara "pilih seluruh SLS"
+      } else {
+        next.set(slsKey, Array.from(set));
       }
       return next;
     });
@@ -864,9 +967,13 @@ function WilayahSampelPanel({
     setSubmitBusy(true);
     setSubmitMsg(null);
     try {
+      const pilihanPayload = Array.from(dipilih.entries()).map(([sls_key, subsls_kode]) => ({
+        sls_key,
+        subsls_kode: subsls_kode ?? undefined,
+      }));
       const data = await apiFetch("/api/penyisiran/alokasi/submit", token, {
         method: "POST",
-        body: JSON.stringify({ sls_keys: Array.from(dipilih) }),
+        body: JSON.stringify({ pilihan: pilihanPayload }),
       });
       setSubmitMsg(`Tersimpan ${data?.jumlah_tersimpan ?? dipilih.size} SLS/Jorong.`);
       setSudahPernahSubmit(true);
@@ -1020,7 +1127,8 @@ function WilayahSampelPanel({
         <p className="mt-1 text-xs text-ink/60">
           Pilih 5 kandidat wilayah sampel, diurutkan menurut skor prioritas akhir tertinggi (skor sumber +
           identifikasi, ditambah bonus volume potensi KK, dikurangi penalti jarak dari lokasi rumah Anda). SLS
-          boleh dipilih lebih dari 1 petugas.
+          boleh dipilih lebih dari 1 petugas. Baris yang punya tombol &ldquo;▸&rdquo; bisa di-unhide utk dipecah
+          per Sub SLS &mdash; berguna kalau 1 Jorong ingin dibagi ke beberapa PPL berbeda.
         </p>
         <p className="mt-1 text-xs font-medium text-navy-700">
           Terpilih: {dipilih.size} / {MAKS_PILIHAN}
@@ -1062,37 +1170,125 @@ function WilayahSampelPanel({
             </thead>
             <tbody>
               {tabelRekomendasi.rows.map((r) => {
-                const aktif = dipilih.has(r.sls_key);
+                const current = dipilih.get(r.sls_key); // undefined/null/string[]
+                const aktif = current !== undefined;
+                const partial = Array.isArray(current);
                 const penuh = !aktif && dipilih.size >= MAKS_PILIHAN;
+                const bisaUnhide = r.jumlah_subsls > 1;
+                const isExpanded = expanded.has(r.sls_key);
+                const subslsState = subslsCache.get(r.sls_key);
+                const semuaKode = Array.isArray(subslsState) ? subslsState.map((s) => s.subsls_kode) : [];
+
                 return (
-                  <tr
-                    key={r.sls_key}
-                    className={`cursor-pointer border-t border-line/60 ${aktif ? "bg-navy-50" : "hover:bg-cream-50"} ${
-                      penuh ? "opacity-40" : ""
-                    }`}
-                    onClick={() => !penuh && toggleSls(r.sls_key)}
-                  >
-                    <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                      {/* stopPropagation DI SINI (bukan cuma di <input>-nya) --
-                          <tr> di atas jg py onClick toggleSls yg SAMA; tanpa ini,
-                          klik TEPAT di kotak centang akan memicu toggle DUA KALI
-                          (sekali dari onChange <input>, sekali lagi dari klik yg
-                          "naik"/bubbling ke <tr>) -- hasilnya nge-toggle balik ke
-                          status semula & KELIHATAN spt tombolnya tidak merespons
-                          sama sekali padahal klik di luar kotak centang (di sel
-                          lain baris yg sama) berhasil normal. */}
-                      <input type="checkbox" checked={aktif} disabled={penuh} onChange={() => toggleSls(r.sls_key)} />
-                    </td>
-                    <td className="px-2 py-1.5 font-medium text-navy-900">{r.sls_nama}</td>
-                    <td className="px-2 py-1.5">{r.nagari_nama}</td>
-                    <td className="px-2 py-1.5">{r.kec_nama}</td>
-                    <td className="px-2 py-1.5 text-right">{r.jumlah_potensi}</td>
-                    <td className="px-2 py-1.5 text-right">{r.jarak_km != null ? r.jarak_km.toFixed(1) : "-"}</td>
-                    <td className="px-2 py-1.5 text-right font-semibold text-navy-900">{r.skor_akhir}</td>
-                    <td className="px-2 py-1.5 text-right text-ink/50">
-                      {r.sudah_dipilih_oleh > 0 ? `${r.sudah_dipilih_oleh} org` : "-"}
-                    </td>
-                  </tr>
+                  <Fragment key={r.sls_key}>
+                    <tr
+                      className={`cursor-pointer border-t border-line/60 ${aktif ? "bg-navy-50" : "hover:bg-cream-50"} ${
+                        penuh ? "opacity-40" : ""
+                      }`}
+                      onClick={() => !penuh && toggleSls(r.sls_key)}
+                    >
+                      <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        {/* stopPropagation DI SINI (bukan cuma di <input>-nya) --
+                            <tr> di atas jg py onClick toggleSls yg SAMA; tanpa ini,
+                            klik TEPAT di kotak centang akan memicu toggle DUA KALI
+                            (sekali dari onChange <input>, sekali lagi dari klik yg
+                            "naik"/bubbling ke <tr>) -- hasilnya nge-toggle balik ke
+                            status semula & KELIHATAN spt tombolnya tidak merespons
+                            sama sekali padahal klik di luar kotak centang (di sel
+                            lain baris yg sama) berhasil normal. */}
+                        <input type="checkbox" checked={aktif} disabled={penuh} onChange={() => toggleSls(r.sls_key)} />
+                      </td>
+                      <td className="px-2 py-1.5 font-medium text-navy-900">
+                        <div className="flex items-center gap-1.5">
+                          {bisaUnhide && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleUnhide(r.sls_key);
+                              }}
+                              title={
+                                isExpanded
+                                  ? "Tutup rincian Sub SLS"
+                                  : `Unhide -- pecah jadi ${r.jumlah_subsls} Sub SLS (bisa dibagi ke PPL berbeda)`
+                              }
+                              className="shrink-0 rounded border border-line px-1 text-[10px] leading-4 text-ink/50 hover:border-navy-400 hover:text-navy-700"
+                            >
+                              {isExpanded ? "▾" : "▸"}
+                            </button>
+                          )}
+                          <span>{r.sls_nama}</span>
+                          {partial && (
+                            <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                              {current.length}/{r.jumlah_subsls} Sub SLS
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5">{r.nagari_nama}</td>
+                      <td className="px-2 py-1.5">{r.kec_nama}</td>
+                      <td className="px-2 py-1.5 text-right">{r.jumlah_potensi}</td>
+                      <td className="px-2 py-1.5 text-right">{r.jarak_km != null ? r.jarak_km.toFixed(1) : "-"}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-navy-900">{r.skor_akhir}</td>
+                      <td className="px-2 py-1.5 text-right text-ink/50">
+                        {r.sudah_dipilih_oleh > 0 ? `${r.sudah_dipilih_oleh} org` : "-"}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-t border-line/40 bg-cream-50/60">
+                        <td />
+                        <td colSpan={kolomRekomendasi.length} className="px-2 py-2">
+                          {subslsState === "loading" && (
+                            <p className="text-[11px] text-ink/50">Memuat rincian Sub SLS...</p>
+                          )}
+                          {subslsState === "error" && (
+                            <p className="text-[11px] text-rust-700">Gagal memuat rincian Sub SLS.</p>
+                          )}
+                          {Array.isArray(subslsState) && subslsState.length === 0 && (
+                            <p className="text-[11px] text-ink/50">Tidak ada data Sub SLS.</p>
+                          )}
+                          {Array.isArray(subslsState) && subslsState.length > 0 && (
+                            <table className="w-full text-[11px]">
+                              <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                                <tr>
+                                  <th className="w-8" />
+                                  <th className="px-2 py-1 text-left">Sub SLS</th>
+                                  <th className="px-2 py-1 text-right">Potensi KK</th>
+                                  <th className="px-2 py-1 text-right">Skor Dasar</th>
+                                  <th className="px-2 py-1 text-right">Dipilih Petugas</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {subslsState.map((s) => {
+                                  const checkedSub =
+                                    current === null || (Array.isArray(current) && current.includes(s.subsls_kode));
+                                  const disabledSub = !aktif && dipilih.size >= MAKS_PILIHAN;
+                                  return (
+                                    <tr key={s.subsls_kode} className="border-t border-line/30">
+                                      <td className="py-1 pl-4">
+                                        <input
+                                          type="checkbox"
+                                          checked={checkedSub}
+                                          disabled={disabledSub}
+                                          onChange={() => toggleSubsls(r.sls_key, s.subsls_kode, semuaKode)}
+                                        />
+                                      </td>
+                                      <td className="px-2 py-1 text-ink/80">{s.label}</td>
+                                      <td className="px-2 py-1 text-right">{s.jumlah_potensi}</td>
+                                      <td className="px-2 py-1 text-right">{s.skor_dasar_rata}</td>
+                                      <td className="px-2 py-1 text-right text-ink/50">
+                                        {s.sudah_dipilih_oleh > 0 ? `${s.sudah_dipilih_oleh} org` : "-"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
               {tabelRekomendasi.rows.length === 0 && (
@@ -1125,7 +1321,10 @@ function WilayahSampelPanel({
 }
 
 function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolean }) {
-  // Kelompokkan matrix flat -> Kecamatan > Nagari > SLS/Jorong > [nama petugas]
+  // Kelompokkan matrix flat -> Kecamatan > Nagari > SLS/Jorong > [label petugas]
+  // Label petugas menyertakan rincian Sub SLS kalau pilihannya SEBAGIAN
+  // (subsls_kode_list terisi, hasil "unhide") -- kalau NULL (pilih
+  // seluruh SLS/Jorong) cukup tampilkan nama petugasnya saja spt sebelumnya.
   const kecMap = new Map<
     string,
     { kec_nama: string; nagari: Map<string, { nagari_nama: string; sls: Map<string, { sls_nama: string; petugas: string[] }> }> }
@@ -1137,7 +1336,11 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
     if (!kec.nagari.has(nagariKey)) kec.nagari.set(nagariKey, { nagari_nama: r.nagari_nama, sls: new Map() });
     const nag = kec.nagari.get(nagariKey)!;
     if (!nag.sls.has(r.sls_key)) nag.sls.set(r.sls_key, { sls_nama: r.sls_nama, petugas: [] });
-    nag.sls.get(r.sls_key)!.petugas.push(r.petugas_nama);
+    const label =
+      Array.isArray(r.subsls_kode_list) && r.subsls_kode_list.length > 0
+        ? `${r.petugas_nama} (Sub SLS: ${r.subsls_kode_list.join(", ")})`
+        : r.petugas_nama;
+    nag.sls.get(r.sls_key)!.petugas.push(label);
   }
 
   return (
