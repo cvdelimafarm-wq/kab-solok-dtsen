@@ -3,11 +3,16 @@
 // Versi RINGAN (cuma kolom yang dibutuhkan peta) dari daftar keluarga yang
 // sedang difilter, TIDAK dipaginasi (sampai batas MAX_MARKERS) supaya peta
 // menampilkan semua titik yang cocok, bukan cuma satu halaman tabel. Butuh
-// role "penyisiran".
+// role "penyisiran" atau "penyisiran_petugas".
+//
+// KHUSUS role "penyisiran_petugas": SELALU ditambah filter wilayah alokasi
+// petugas ybs, sama persis polanya dgn /api/penyisiran/list/route.ts --
+// lihat komentar lengkap & lib/wilayahAlokasiPetugas.ts di sana.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
+import { ambilWilayahAlokasi, buildOrFilterWilayah } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +20,8 @@ export const dynamic = "force-dynamic";
 const MAX_MARKERS = 5000;
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -32,17 +38,34 @@ export async function GET(req: NextRequest) {
   const subsls = sp.get("subsls") || ""; // idsubsls (16 digit), dropdown filter tahap 3
   const status = sp.get("status") || "";
 
-  if (!kec) {
+  let filterWilayah: string | null = null;
+  if (getSessionRole(token) === "penyisiran_petugas") {
+    const petugasId = Number(getSessionSubject(token));
+    if (!Number.isFinite(petugasId) || petugasId <= 0) {
+      return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 });
+    }
+    let pilihan;
+    try {
+      pilihan = await ambilWilayahAlokasi(supabase, petugasId);
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memuat wilayah alokasi." }, { status: 500 });
+    }
+    filterWilayah = buildOrFilterWilayah(pilihan);
+    if (!filterWilayah) {
+      return NextResponse.json({ markers: [], capped: false, belumAdaWilayah: true });
+    }
+  } else if (!kec) {
     return NextResponse.json({ error: "Pilih kecamatan terlebih dahulu." }, { status: 400 });
   }
 
   let query = supabase
     .from("penyisiran_usaha")
     .select("kode_identitas, nama_kk, alamat, nagari_nama, lat, lng, status_kunjungan")
-    .eq("kec_kode", kec)
     .not("lat", "is", null)
     .not("lng", "is", null)
     .limit(MAX_MARKERS);
+  if (filterWilayah) query = query.or(filterWilayah);
+  if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("status_kunjungan", status);

@@ -1,24 +1,39 @@
 // app/api/penyisiran/alokasi/submit/route.ts
 //
-// Menyimpan checklist SLS/Jorong yang dipilih PPL penyisiran (maks 5, tab
-// "Alokasi Sampel") -- REPLACE penuh (hapus pilihan lama punya petugas ybs,
-// lalu insert yang baru) krn cuma ada SATU set pilihan aktif per petugas,
-// bukan riwayat berlapis. SLS BOLEH dipilih lebih dari 1 petugas (sudah
-// dikonfirmasi user) -- makanya unique constraint di tabel cuma
-// (petugas_id, sls_key), BUKAN sls_key sendirian.
+// Menyimpan checklist SLS/Jorong yang dipilih PPL penyisiran (tab
+// "Perencanaan Lapangan") -- REPLACE penuh (hapus pilihan lama punya
+// petugas ybs, lalu insert yang baru) krn cuma ada SATU set pilihan aktif
+// per petugas, bukan riwayat berlapis.
 //
-// Body: { pilihan: [{ sls_key: string, subsls_kode?: string[] }] } -- maks
-// 5 ENTRI (dihitung per sls_key, BUKAN per subsls) krn fitur "unhide" per
-// SUBSLS (lihat perencanaan-lapangan.tsx, WilayahSampelPanel) memecah 1
-// Jorong jadi beberapa SUBSLS TAPI itu tetap dihitung 1 slot dari maks 5 --
-// subsls_kode kosong/tidak dikirim = pilih SELURUH SLS/Jorong (perilaku
-// lama). Kalau subsls_kode dikirim, tiap kodenya divalidasi ulang di server
-// lewat RPC penyisiran_alokasi_dasar_subsls (memastikan kode itu benar
-// milik SLS tsb) -- BUKAN percaya begitu saja dari client.
+// TIDAK ADA BATAS JUMLAH (dulu maks 5, DIHAPUS atas permintaan user) --
+// petugas boleh memilih SEBANYAK yang dia mau. SEBAGAI GANTINYA, checklist
+// sekarang EKSKLUSIF: 1 Sub SLS (atau 1 SLS utuh kalau SLS itu tidak py
+// breakdown Sub SLS sama sekali) HANYA BOLEH dipegang SATU petugas --
+// BEDA dari perilaku lama yang mengizinkan SLS yang sama dipilih >1
+// petugas tanpa saling menghalangi. Makanya unique constraint di tabel
+// (petugas_id, sls_key) TETAP ada (1 petugas cuma py 1 baris per SLS),
+// TAPI eksklusivitas ANTAR petugas (baris ini) yang jadi penjaga utama:
+// SEBELUM insert, dicek dulu apakah ada petugas LAIN yang sudah pegang
+// SLS/Sub SLS yang sama -- kalau ada, request ini DITOLAK (bukan
+// menimpa/berbagi diam2).
+//
+// Body: { pilihan: [{ sls_key: string, subsls_kode?: string[] }] } --
+// subsls_kode kosong/tidak dikirim = pilih SELURUH SLS/Jorong. Kalau
+// subsls_kode dikirim, tiap kodenya divalidasi ulang di server lewat RPC
+// penyisiran_alokasi_dasar_subsls (memastikan kode itu benar milik SLS
+// tsb) -- BUKAN percaya begitu saja dari client.
 //
 // sls_key sendiri jg di-RESOLVE ulang lewat RPC penyisiran_alokasi_resolve_sls
 // (bukan percaya nama kec/nagari/sls dari body request) -- mencegah data
 // sampah/palsu kalau ada yang iseng panggil endpoint ini langsung.
+//
+// CATATAN: pengecekan konflik di sini murni di level APLIKASI (baca-lalu-
+// tulis, bukan constraint database atomik) -- utk skala pemakaian ini
+// (puluhan petugas, submit manual tidak bersamaan detik yang sama persis)
+// risiko race condition (2 orang submit SLS yang sama di detik yang
+// SANGAT berdekatan) dianggap dapat diterima, konsisten dgn pola validasi
+// lain di aplikasi ini yang jg di level JS (mis. cek MAKS_PILIHAN yang
+// dulu dipakai di sini).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -27,11 +42,43 @@ import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisira
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAKS_PILIHAN = 5;
-
 interface PilihanBodyEntry {
   sls_key: string;
   subsls_kode?: string[];
+}
+
+interface KlaimOrangLain {
+  sls_key: string;
+  subsls_kode_list: string[] | null;
+  petugas_id: number;
+}
+
+// Cek apakah entri yg DIMINTA (kodeDiminta undefined = minta SELURUH SLS)
+// bentrok dgn klaim petugas LAIN yg SUDAH ada di sls_key yang sama.
+// Return: null kalau tidak ada konflik sama sekali, atau array kode yang
+// bentrok (["*"] = konflik krn minta SELURUH SLS tapi org lain sudah py
+// klaim apa pun di situ, entah utuh atau sebagian) kalau ada.
+function cariKonflik(
+  slsKey: string,
+  kodeDiminta: string[] | undefined,
+  semuaKlaimOrangLain: KlaimOrangLain[]
+): string[] | null {
+  const relevan = semuaKlaimOrangLain.filter((k) => k.sls_key === slsKey);
+  if (relevan.length === 0) return null;
+  if (!kodeDiminta) {
+    return ["*"];
+  }
+  const bentrok = new Set<string>();
+  for (const k of relevan) {
+    if (k.subsls_kode_list === null) {
+      kodeDiminta.forEach((kd) => bentrok.add(kd));
+    } else {
+      kodeDiminta.forEach((kd) => {
+        if (k.subsls_kode_list!.includes(kd)) bentrok.add(kd);
+      });
+    }
+  }
+  return bentrok.size > 0 ? Array.from(bentrok) : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -76,9 +123,6 @@ export async function POST(req: NextRequest) {
   if (bySlsKey.size === 0) {
     return NextResponse.json({ error: "Pilih minimal 1 SLS/Jorong." }, { status: 400 });
   }
-  if (bySlsKey.size > MAKS_PILIHAN) {
-    return NextResponse.json({ error: `Maksimal ${MAKS_PILIHAN} SLS/Jorong.` }, { status: 400 });
-  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -97,12 +141,38 @@ export async function POST(req: NextRequest) {
   }
   const resolvedBySlsKey = new Map((resolved as { sls_key: string }[]).map((r) => [r.sls_key, r]));
 
-  // Validasi ulang subsls_kode (kalau ada) lewat RPC dasar_subsls -- pastikan
-  // tiap kode BENAR milik sls_key tsb, jangan percaya array dari client.
+  // Ambil SEMUA klaim petugas LAIN (bukan diri sendiri) atas sls_key yang
+  // sedang diminta -- dasar pengecekan eksklusivitas di bawah. Punya
+  // sendiri (kalau sebelumnya sudah pernah submit) sengaja DIKECUALIKAN
+  // krn baris lama itu toh akan di-REPLACE (dihapus+diganti) di akhir,
+  // jadi tidak boleh dianggap "konflik dgn diri sendiri".
+  const { data: klaimOrangLainRaw, error: klaimErr } = await supabase
+    .from("penyisiran_alokasi_pilihan")
+    .select("sls_key, subsls_kode_list, petugas_id")
+    .in("sls_key", slsKeys)
+    .neq("petugas_id", petugasId);
+  if (klaimErr) return NextResponse.json({ error: klaimErr.message }, { status: 500 });
+  const klaimOrangLain = (klaimOrangLainRaw ?? []) as KlaimOrangLain[];
+
+  // Validasi subsls_kode (kalau ada) lewat RPC dasar_subsls -- pastikan
+  // tiap kode BENAR milik sls_key tsb, jangan percaya array dari client --
+  // SEKALIGUS cek eksklusivitas: tolak SELURUH request (bukan cuma
+  // melewati diam2) kalau ADA SATU SAJA entri yang bentrok, supaya
+  // petugas tahu persis SLS/Sub SLS mana yang perlu diganti sebelum
+  // pilihan lainnya ikut tersimpan.
   const rows: Record<string, unknown>[] = [];
   for (const [slsKey, subslsDiminta] of bySlsKey) {
     const r = resolvedBySlsKey.get(slsKey) as Record<string, string> | undefined;
     if (!r) continue; // sls_key tidak valid/tidak ditemukan -- lewati diam2 (spt versi lama)
+
+    const konflik = cariKonflik(slsKey, subslsDiminta, klaimOrangLain);
+    if (konflik) {
+      const pesan =
+        konflik[0] === "*"
+          ? `${r.sls_nama} sudah (sebagian atau seluruhnya) dipilih petugas lain -- gunakan "unhide" utk memilih Sub SLS yang masih tersedia saja.`
+          : `Sub SLS ${konflik.join(", ")} di ${r.sls_nama} sudah dipilih petugas lain.`;
+      return NextResponse.json({ error: pesan }, { status: 409 });
+    }
 
     let subslsKodeList: string[] | null = null;
     if (subslsDiminta && subslsDiminta.length > 0) {

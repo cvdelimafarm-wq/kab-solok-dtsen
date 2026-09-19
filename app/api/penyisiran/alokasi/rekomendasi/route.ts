@@ -8,6 +8,21 @@
 // -- sengaja dipakai bersama supaya petugas yang sudah login di tab itu
 // TIDAK perlu login ulang di tab ini).
 //
+// SEJAK checklist jadi EKSKLUSIF (1 Sub SLS/SLS cuma boleh 1 petugas,
+// lihat komentar panjang di .../alokasi/submit/route.ts), endpoint ini
+// JUGA menghitung & menyertakan per baris:
+//  - tersedia: masih ada MINIMAL 1 unit (Sub SLS, atau seluruh SLS kalau
+//    tidak py breakdown Sub SLS) yang bisa diambil petugas ini (termasuk
+//    yang SUDAH dia pegang sendiri) -- kalau false, baris ini HABIS
+//    diambil petugas lain & tidak bisa dicentang sama sekali.
+//  - boleh_pilih_seluruh: TIDAK ADA petugas lain yang pegang apa pun di
+//    SLS ini -- kalau false (tapi tersedia true), petugas HARUS pakai
+//    "unhide" utk memilih Sub SLS yang masih sisa, tidak boleh
+//    langsung centang baris induk (yang berarti minta SELURUH SLS).
+// Dihitung dari SEMUA baris penyisiran_alokasi_pilihan (bukan cuma milik
+// petugas ybs) yang diambil sekali di sini, murni di JS (jumlah baris
+// kecil -- puluhan petugas x sekian SLS -- tidak perlu RPC terpisah).
+//
 // Rumus skor (Layer 1 Skor Dasar + Layer 2 Skor Akhir personal per jarak)
 // dipecah dua tempat:
 //  - RPC penyisiran_alokasi_dasar_sls() (SQL, lihat migrasi
@@ -63,19 +78,35 @@ export async function GET(req: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const [petugasRes, dasarRes, pilihanRes] = await Promise.all([
+  const [petugasRes, dasarRes, pilihanRes, semuaKlaimRes] = await Promise.all([
     supabase.from("petugas_penyisiran_akun").select("nama, lat, lng").eq("id", petugasId).maybeSingle(),
     supabase.rpc("penyisiran_alokasi_dasar_sls"),
     supabase.from("penyisiran_alokasi_pilihan").select("sls_key, subsls_kode_list").eq("petugas_id", petugasId),
+    supabase.from("penyisiran_alokasi_pilihan").select("sls_key, subsls_kode_list, petugas_id"),
   ]);
 
   if (petugasRes.error) return NextResponse.json({ error: petugasRes.error.message }, { status: 500 });
   if (dasarRes.error) return NextResponse.json({ error: dasarRes.error.message }, { status: 500 });
   if (pilihanRes.error) return NextResponse.json({ error: pilihanRes.error.message }, { status: 500 });
+  if (semuaKlaimRes.error) return NextResponse.json({ error: semuaKlaimRes.error.message }, { status: 500 });
 
   const petugasLat = typeof petugasRes.data?.lat === "number" ? petugasRes.data.lat : null;
   const petugasLng = typeof petugasRes.data?.lng === "number" ? petugasRes.data.lng : null;
   const dasar = (dasarRes.data ?? []) as DasarSlsRow[];
+
+  // Klaim petugas LAIN (bukan diri sendiri) per sls_key -- dasar hitungan
+  // tersedia/boleh_pilih_seluruh di bawah.
+  const semuaKlaim = (semuaKlaimRes.data ?? []) as {
+    sls_key: string;
+    subsls_kode_list: string[] | null;
+    petugas_id: number;
+  }[];
+  const klaimOrangLainBySls = new Map<string, { subsls_kode_list: string[] | null }[]>();
+  for (const k of semuaKlaim) {
+    if (k.petugas_id === petugasId) continue;
+    if (!klaimOrangLainBySls.has(k.sls_key)) klaimOrangLainBySls.set(k.sls_key, []);
+    klaimOrangLainBySls.get(k.sls_key)!.push({ subsls_kode_list: k.subsls_kode_list });
+  }
 
   // Baris dgn centroid valid (lat_c/lng_c terisi) -- SLS tanpa satu pun
   // baris usaha berkoordinat (jarang, tapi bisa terjadi) tetap ditampilkan
@@ -110,6 +141,17 @@ export async function GET(req: NextRequest) {
     const jarak = jarakArr[i];
     const penalti = jarak != null ? Math.min(20, jarak * 2) : null;
     const skorAkhir = r.skor_dasar_rata + r.bonus_volume - (penalti ?? 0);
+
+    // efektifTotal = jumlah "unit" yg bisa diperebutkan di SLS ini -- kalau
+    // tidak py breakdown Sub SLS (jumlah_subsls 0), seluruh SLS itu sendiri
+    // yg jadi 1 unit atomik.
+    const efektifTotal = Math.max(r.jumlah_subsls, 1);
+    const klaimOrangLain = klaimOrangLainBySls.get(r.sls_key) ?? [];
+    const terpakaiOlehOrangLain = klaimOrangLain.reduce(
+      (jumlah, k) => jumlah + (k.subsls_kode_list ? k.subsls_kode_list.length : efektifTotal),
+      0
+    );
+
     return {
       sls_key: r.sls_key,
       kec_kode: r.kec_kode,
@@ -126,6 +168,8 @@ export async function GET(req: NextRequest) {
       skor_akhir: Math.round(skorAkhir * 10) / 10,
       sudah_dipilih_oleh: r.sudah_dipilih_oleh,
       jumlah_subsls: r.jumlah_subsls,
+      tersedia: terpakaiOlehOrangLain < efektifTotal,
+      boleh_pilih_seluruh: terpakaiOlehOrangLain === 0,
     };
   });
 

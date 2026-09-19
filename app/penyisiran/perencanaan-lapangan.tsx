@@ -39,16 +39,27 @@
 //     Kecamatan) & tiap kolom bisa DIURUTKAN ascending/descending (klik
 //     header, panah ▲/▼) -- keduanya murni client-side di atas hasil
 //     rekomendasi yg sama, tidak menambah request API. Petugas checklist
-//     MAKS 5 SLS/Jorong -> tombol "Kirim Pilihan" -> POST
-//     /api/penyisiran/alokasi/submit (REPLACE penuh pilihan lama). Sesudah
-//     submit (atau kalau petugas SUDAH PERNAH submit sebelumnya --
+//     SEBANYAK yang dia mau (TIDAK ADA BATAS JUMLAH -- dulu maks 5, batas
+//     itu DIHAPUS atas permintaan user) -> tombol "Kirim Pilihan" -> POST
+//     /api/penyisiran/alokasi/submit (REPLACE penuh pilihan lama). SEBAGAI
+//     GANTI batas jumlah, checklist sekarang EKSKLUSIF: 1 Sub SLS (atau 1
+//     SLS utuh kalau tidak py breakdown Sub SLS) HANYA BOLEH dipegang SATU
+//     petugas -- BEDA dari perilaku lama yg mengizinkan SLS yg sama
+//     dipilih >1 petugas bebas tanpa saling menghalangi. Baris yang sudah
+//     habis diambil petugas lain tampak pudar & checkbox-nya terkunci;
+//     baris yang SEBAGIAN sudah diambil memaksa pakai "unhide" (lihat di
+//     bawah) drpd centang langsung baris induknya. Validasi FINAL & PASTI
+//     ada di server (app/api/penyisiran/alokasi/submit/route.ts, balas 409
+//     kalau bentrok) -- field tersedia/boleh_pilih_seluruh dari endpoint
+//     rekomendasi cuma utk UI (disable checkbox), bukan satu2nya penjaga.
+//     Sesudah submit (atau kalau petugas SUDAH PERNAH submit sebelumnya --
 //     dideteksi dari field "pilihan" yg dikembalikan endpoint
 //     rekomendasi), matriks gabungan SEMUA petugas dimunculkan (GET
 //     /api/penyisiran/alokasi/matrix) -- HANYA menampilkan SLS/Jorong yang
 //     SUDAH dipilih minimal 1 petugas (yang belum dipilih siapa pun tidak
 //     ikut tampil), dikelompokkan per Kecamatan > Nagari > SLS/Jorong dgn
-//     daftar nama petugas yang memilihnya. SLS BOLEH dipilih lebih dari 1
-//     petugas (dikonfirmasi user) -- tidak ada mekanisme rebutan/kunci.
+//     daftar nama petugas yang memilihnya (+ rincian Sub SLS kalau
+//     pilihannya sebagian, lihat subsls_kode_list di MatrixPanel).
 //     Di samping headernya ada tombol export "⬇ Export Excel Pengawas/
 //     Pencacah (per SUBSLS)" -- HANYA tampil utk 4 pengelola yg sama dgn
 //     tab Manajemen Target/Master Petugas (bolehAksesManajemenTarget).
@@ -64,9 +75,10 @@
 //     per SUBSLS (fetch GET .../alokasi/subsls?sls_key=..., RPC
 //     penyisiran_alokasi_dasar_subsls), tiap SUBSLS punya checkbox
 //     sendiri sehingga SATU Jorong bisa dibagi ke BEBERAPA PPL berbeda
-//     (mis. Sub SLS 01-02 utk PPL A, Sub SLS 03 utk PPL B) -- TETAP
-//     dihitung 1 dari maks 5 slot pilihan (bukan nambah kuota per
-//     SUBSLS). Kalau SEMUA SUBSLS di baris itu tercentang, otomatis
+//     (mis. Sub SLS 01-02 utk PPL A, Sub SLS 03 utk PPL B) -- Sub SLS yang
+//     sudah dipegang petugas LAIN otomatis terkunci (checkbox disabled,
+//     kolom "Dipegang" menunjukkan namanya) krn checklist ini EKSKLUSIF
+//     (lihat penjelasan di atas). Kalau SEMUA SUBSLS di baris itu tercentang, otomatis
 //     disederhanakan jadi "pilih seluruh SLS" (subsls_kode_list NULL di
 //     DB) -- setara dgn checklist langsung di baris induk spt sebelumnya.
 //     Disimpan di kolom BARU penyisiran_alokasi_pilihan.subsls_kode_list
@@ -105,7 +117,13 @@ const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
-const MAKS_PILIHAN = 5;
+// Dulu jg dipakai sbg batas jumlah checklist manual petugas (MAKS_PILIHAN)
+// -- batas itu SUDAH DIHAPUS atas permintaan user (checklist manual
+// sekarang BEBAS jumlahnya, dijaga ketersediaan lewat eksklusivitas per
+// Sub SLS, bukan lewat kuota). Konstanta ini SEKARANG cuma dipakai utk
+// target tetap tombol "🎯 Alokasikan Otomatis" (proses TERPISAH, khusus
+// pengelola, TIDAK berubah -- lihat .../alokasi/auto-alokasi/route.ts).
+const TARGET_AUTO_ALOKASI = 5;
 
 // Grid kalender "Identifikasi Hari Tugas" -- HARDCODE utk periode 17-30
 // September 2026 (dikonfirmasi user, lihat lib/penyisiranHari.ts). Kalau
@@ -170,16 +188,27 @@ interface RekomendasiRow {
   skor_akhir: number;
   sudah_dipilih_oleh: number;
   jumlah_subsls: number;
+  // Sejak checklist jadi EKSKLUSIF (lihat komentar di
+  // .../alokasi/submit/route.ts): tersedia = masih ada MINIMAL 1 Sub SLS
+  // (atau seluruh SLS-nya kalau tidak py breakdown Sub SLS) yg BISA
+  // diambil petugas ini; boleh_pilih_seluruh = tidak ada petugas LAIN yg
+  // pegang apa pun di SLS ini (kalau false tapi tersedia true, WAJIB
+  // pakai "unhide" -- tidak boleh langsung centang baris induk).
+  tersedia: boolean;
+  boleh_pilih_seluruh: boolean;
 }
 
 // Rincian per SUBSLS di dalam satu Jorong/SLS -- dimuat lazy (baru
 // difetch saat baris diklik "unhide") dari GET .../alokasi/subsls.
+// dipilih_oleh_petugas_id null = masih bebas; kalau BUKAN milik petugas
+// yang sedang login, checkbox-nya di-disable (lihat JSX tabel).
 interface SubslsRow {
   subsls_kode: string;
   label: string;
   jumlah_potensi: number;
   skor_dasar_rata: number;
-  sudah_dipilih_oleh: number;
+  dipilih_oleh_petugas_id: number | null;
+  dipilih_oleh_nama: string | null;
 }
 
 // Bentuk "pilihan" yg dikembalikan endpoint rekomendasi & dikirim ke
@@ -695,8 +724,9 @@ function OhMonitoringPanel({ token }: { token: string }) {
   );
 }
 
-// Bagian 2: "Identifikasi Wilayah Sampel SLS" -- checklist maks 5 SLS/
-// Jorong rekomendasi + matriks gabungan sesudah submit. Header tabel pakai
+// Bagian 2: "Identifikasi Wilayah Sampel SLS" -- checklist BEBAS JUMLAH
+// (eksklusif per Sub SLS) SLS/Jorong rekomendasi + matriks gabungan
+// sesudah submit. Header tabel pakai
 // komponen bersama ExcelTh/useExcelTable (app/penyisiran/_shared/
 // excel-table.tsx) -- tiap kolom bisa diurutkan (klik nama kolom) & bisa
 // difilter (klik "▾", checklist nilai unik, spt Filter/Sort di Excel),
@@ -853,16 +883,16 @@ function WilayahSampelPanel({
   // Klik baris/checkbox INDUK -- toggle pilih SELURUH SLS/Jorong (null).
   // Kalau baris ini sebelumnya sedang partial (sebagian SUBSLS dipilih),
   // klik ini akan MELEPAS semua sekaligus (bukan menambah jadi penuh) --
-  // konsisten dgn checkbox lain: klik pada baris yg aktif = uncheck.
+  // konsisten dgn checkbox lain: klik pada baris yg aktif = uncheck. TIDAK
+  // ADA lagi batas jumlah (dulu MAKS_PILIHAN) -- yang membatasi sekarang
+  // cuma ketersediaan (baris.tersedia/boleh_pilih_seluruh dari server,
+  // lihat pemakaian di JSX tabel di bawah, disabled lewat prop `disabled`
+  // pada elemen checkbox-nya, BUKAN di sini).
   function toggleSls(key: string) {
     setDipilih((prev) => {
       const next = new Map(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        if (next.size >= MAKS_PILIHAN) return prev;
-        next.set(key, null);
-      }
+      if (next.has(key)) next.delete(key);
+      else next.set(key, null);
       return next;
     });
   }
@@ -898,13 +928,15 @@ function WilayahSampelPanel({
   // tercentang, atau lepas total kalau tidak ada satupun SUBSLS
   // tercentang lagi. semuaKode = daftar LENGKAP kode SUBSLS baris ini
   // (dari hasil fetch unhide), dipakai utk tahu kapan "semua tercentang".
+  // TIDAK ADA lagi batas jumlah -- Sub SLS yg sudah dipegang petugas LAIN
+  // dicegah lewat prop `disabled` pada checkbox-nya sendiri di JSX
+  // (dipilih_oleh_petugas_id), bukan di fungsi ini.
   function toggleSubsls(slsKey: string, subslsKode: string, semuaKode: string[]) {
     setDipilih((prev) => {
       const next = new Map(prev);
       const current = next.get(slsKey); // undefined = blm dipilih, null = seluruh SLS, array = partial
       let set: Set<string>;
       if (current === undefined) {
-        if (next.size >= MAKS_PILIHAN) return prev; // slot penuh, tidak bisa mulai baris baru
         set = new Set<string>();
       } else if (current === null) {
         set = new Set(semuaKode); // sedang "seluruh SLS" -> anggap semua tercentang dulu
@@ -978,8 +1010,20 @@ function WilayahSampelPanel({
       setSubmitMsg(`Tersimpan ${data?.jumlah_tersimpan ?? dipilih.size} SLS/Jorong.`);
       setSudahPernahSubmit(true);
       setTampilkanMatrix(true);
-      await muatMatrix();
+      // Muat ulang rekomendasi jg (bukan cuma matrix) -- field
+      // tersedia/boleh_pilih_seluruh per baris perlu disegarkan supaya
+      // baris yg baru saja diambil langsung kelihatan terkunci bagi
+      // petugas LAIN yang sedang membuka halaman ini bersamaan.
+      await Promise.all([muatMatrix(), muatRekomendasi()]);
     } catch (e: unknown) {
+      // SENGAJA TIDAK muatRekomendasi() di sini (beda dgn jalur sukses di
+      // atas) -- kalau gagal krn konflik eksklusivitas (409), memuat ulang
+      // akan menimpa balik `dipilih` ke pilihan TERSIMPAN TERAKHIR (blm
+      // termasuk perubahan yg baru diketik petugas), menghapus diam2
+      // centangan lain yg sebenarnya masih valid & belum sempat disimpan.
+      // Cukup tampilkan pesan errornya (sudah menyebut SLS/Sub SLS mana yg
+      // bentrok, lihat .../alokasi/submit/route.ts) & biarkan petugas
+      // membatalkan sendiri centang yg bentrok itu sebelum kirim ulang.
       setSubmitMsg(e instanceof Error ? e.message : "Gagal mengirim pilihan.");
     } finally {
       setSubmitBusy(false);
@@ -1032,7 +1076,7 @@ function WilayahSampelPanel({
       <div className="rounded-lg border border-line bg-white p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <p className="text-sm font-semibold text-navy-900">
-            📋 Identifikasi Wilayah Sampel SLS (maks {MAKS_PILIHAN})
+            📋 Identifikasi Wilayah Sampel SLS
           </p>
           {/* Tombol export cuma utk pengelola (sama spt akses tab Manajemen
               Target/Master Petugas) -- narik data yang SUDAH MASUK (semua
@@ -1091,7 +1135,8 @@ function WilayahSampelPanel({
           <div className="mt-3 rounded-md border border-navy-200 bg-navy-50/60 p-3 text-[11px]">
             <p className="font-semibold text-navy-900">
               🎯 Hasil Alokasi Otomatis: {autoHasil.jumlah_petugas_diproses} petugas diproses (
-              {autoHasil.jumlah_dpt_penuh} dapat penuh {MAKS_PILIHAN}/{MAKS_PILIHAN}), {autoHasil.jumlah_petugas_dilewati}{" "}
+              {autoHasil.jumlah_dpt_penuh} dapat penuh {TARGET_AUTO_ALOKASI}/{TARGET_AUTO_ALOKASI}),{" "}
+              {autoHasil.jumlah_petugas_dilewati}{" "}
               petugas dilewati (sudah pernah submit sendiri), {autoHasil.jumlah_rebutan_terjadi}x rebutan
               jorong diselesaikan otomatis.
             </p>
@@ -1113,7 +1158,7 @@ function WilayahSampelPanel({
                         <td className="px-2 py-1.5 font-medium text-navy-900">{h.nama}</td>
                         <td className="px-2 py-1.5 text-ink/60">{h.tier_label}</td>
                         <td className="px-2 py-1.5 text-right">
-                          {h.jumlah_dialokasikan}/{MAKS_PILIHAN}
+                          {h.jumlah_dialokasikan}/{TARGET_AUTO_ALOKASI}
                         </td>
                         <td className="px-2 py-1.5 text-ink/70">{h.daftar_sls.join(", ")}</td>
                       </tr>
@@ -1125,13 +1170,15 @@ function WilayahSampelPanel({
           </div>
         )}
         <p className="mt-1 text-xs text-ink/60">
-          Pilih 5 kandidat wilayah sampel, diurutkan menurut skor prioritas akhir tertinggi (skor sumber +
-          identifikasi, ditambah bonus volume potensi KK, dikurangi penalti jarak dari lokasi rumah Anda). SLS
-          boleh dipilih lebih dari 1 petugas. Baris yang punya tombol &ldquo;▸&rdquo; bisa di-unhide utk dipecah
-          per Sub SLS &mdash; berguna kalau 1 Jorong ingin dibagi ke beberapa PPL berbeda.
+          Pilih SEBANYAK yang Anda mau (tidak ada batas jumlah), diurutkan menurut skor prioritas akhir tertinggi
+          (skor sumber + identifikasi, ditambah bonus volume potensi KK, dikurangi penalti jarak dari lokasi
+          rumah Anda). Setiap Sub SLS (atau seluruh SLS kalau tidak punya Sub SLS) hanya bisa dipegang SATU
+          petugas &mdash; baris yang sudah diambil penuh oleh petugas lain akan tampak pudar &amp; tidak bisa
+          dicentang. Baris yang punya tombol &ldquo;▸&rdquo; bisa di-unhide utk dipecah per Sub SLS &mdash;
+          berguna kalau 1 Jorong ingin dibagi ke beberapa PPL berbeda, atau sebagiannya sudah diambil orang lain.
         </p>
         <p className="mt-1 text-xs font-medium text-navy-700">
-          Terpilih: {dipilih.size} / {MAKS_PILIHAN}
+          Terpilih: {dipilih.size} SLS/Jorong
         </p>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
@@ -1173,19 +1220,28 @@ function WilayahSampelPanel({
                 const current = dipilih.get(r.sls_key); // undefined/null/string[]
                 const aktif = current !== undefined;
                 const partial = Array.isArray(current);
-                const penuh = !aktif && dipilih.size >= MAKS_PILIHAN;
+                // Checkbox INDUK (pilih SELURUH SLS) cuma boleh diklik kalau:
+                // sudah aktif (utk bisa di-uncheck), ATAU masih tersedia DAN
+                // tidak ada petugas lain yg pegang apa pun di SLS ini. Kalau
+                // tersedia tapi SEBAGIAN sudah diambil org lain, petugas WAJIB
+                // pakai "unhide" utk memilih Sub SLS yg masih sisa saja.
+                const utamaBisaDiklik = aktif || (r.tersedia && r.boleh_pilih_seluruh);
                 const bisaUnhide = r.jumlah_subsls > 1;
                 const isExpanded = expanded.has(r.sls_key);
                 const subslsState = subslsCache.get(r.sls_key);
                 const semuaKode = Array.isArray(subslsState) ? subslsState.map((s) => s.subsls_kode) : [];
 
+                let statusLabel: string | null = null;
+                if (!aktif && !r.tersedia) statusLabel = "Sudah diambil semua";
+                else if (!aktif && r.tersedia && !r.boleh_pilih_seluruh) statusLabel = "Sebagian sudah diambil";
+
                 return (
                   <Fragment key={r.sls_key}>
                     <tr
-                      className={`cursor-pointer border-t border-line/60 ${aktif ? "bg-navy-50" : "hover:bg-cream-50"} ${
-                        penuh ? "opacity-40" : ""
-                      }`}
-                      onClick={() => !penuh && toggleSls(r.sls_key)}
+                      className={`border-t border-line/60 ${utamaBisaDiklik ? "cursor-pointer" : ""} ${
+                        aktif ? "bg-navy-50" : "hover:bg-cream-50"
+                      } ${!aktif && !r.tersedia ? "opacity-40" : ""}`}
+                      onClick={() => utamaBisaDiklik && toggleSls(r.sls_key)}
                     >
                       <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
                         {/* stopPropagation DI SINI (bukan cuma di <input>-nya) --
@@ -1196,7 +1252,12 @@ function WilayahSampelPanel({
                             status semula & KELIHATAN spt tombolnya tidak merespons
                             sama sekali padahal klik di luar kotak centang (di sel
                             lain baris yg sama) berhasil normal. */}
-                        <input type="checkbox" checked={aktif} disabled={penuh} onChange={() => toggleSls(r.sls_key)} />
+                        <input
+                          type="checkbox"
+                          checked={aktif}
+                          disabled={!utamaBisaDiklik}
+                          onChange={() => toggleSls(r.sls_key)}
+                        />
                       </td>
                       <td className="px-2 py-1.5 font-medium text-navy-900">
                         <div className="flex items-center gap-1.5">
@@ -1221,6 +1282,11 @@ function WilayahSampelPanel({
                           {partial && (
                             <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                               {current.length}/{r.jumlah_subsls} Sub SLS
+                            </span>
+                          )}
+                          {statusLabel && (
+                            <span className="shrink-0 rounded-full bg-line/60 px-1.5 py-0.5 text-[10px] font-medium text-ink/50">
+                              {statusLabel}
                             </span>
                           )}
                         </div>
@@ -1255,16 +1321,17 @@ function WilayahSampelPanel({
                                   <th className="px-2 py-1 text-left">Sub SLS</th>
                                   <th className="px-2 py-1 text-right">Potensi KK</th>
                                   <th className="px-2 py-1 text-right">Skor Dasar</th>
-                                  <th className="px-2 py-1 text-right">Dipilih Petugas</th>
+                                  <th className="px-2 py-1 text-right">Dipegang</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {subslsState.map((s) => {
+                                  const milikSaya = s.dipilih_oleh_petugas_id === petugasId;
                                   const checkedSub =
                                     current === null || (Array.isArray(current) && current.includes(s.subsls_kode));
-                                  const disabledSub = !aktif && dipilih.size >= MAKS_PILIHAN;
+                                  const disabledSub = s.dipilih_oleh_petugas_id != null && !milikSaya;
                                   return (
-                                    <tr key={s.subsls_kode} className="border-t border-line/30">
+                                    <tr key={s.subsls_kode} className={`border-t border-line/30 ${disabledSub ? "opacity-50" : ""}`}>
                                       <td className="py-1 pl-4">
                                         <input
                                           type="checkbox"
@@ -1277,7 +1344,7 @@ function WilayahSampelPanel({
                                       <td className="px-2 py-1 text-right">{s.jumlah_potensi}</td>
                                       <td className="px-2 py-1 text-right">{s.skor_dasar_rata}</td>
                                       <td className="px-2 py-1 text-right text-ink/50">
-                                        {s.sudah_dipilih_oleh > 0 ? `${s.sudah_dipilih_oleh} org` : "-"}
+                                        {s.dipilih_oleh_nama == null ? "-" : milikSaya ? "Anda" : s.dipilih_oleh_nama}
                                       </td>
                                     </tr>
                                   );

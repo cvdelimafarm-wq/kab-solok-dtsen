@@ -1,0 +1,51 @@
+-- Dua perubahan sekaligus, sama2 diminta user di sesi yang sama:
+--
+-- (A) Checklist "Identifikasi Wilayah Sampel SLS" TIDAK LAGI dibatasi
+--     jumlah (dulu maks 5, DIHAPUS) -- SEBAGAI GANTI, checklist sekarang
+--     EKSKLUSIF: 1 Sub SLS (atau 1 SLS utuh kalau tidak py breakdown Sub
+--     SLS) HANYA BOLEH dipegang SATU petugas, BEDA dari perilaku lama yg
+--     mengizinkan SLS yg sama dipilih bebas oleh banyak petugas. Dicek
+--     dulu sebelum migrasi ini diterapkan: cuma ADA 1 SLS (080-007-0002)
+--     yg sudah dipegang 2 petugas (id 20 & 35) lewat Sub SLS, dan daftar
+--     Sub SLS mereka SUDAH DISJOINT (petugas 20: 02,03,06 / petugas 35:
+--     01,04,05) -- TIDAK ADA konflik nyata yg perlu dibereskan manual,
+--     aturan baru bisa langsung berlaku ke depan.
+--
+--     Pengecekan konflik yang SEBENARNYA (menolak submit kalau bentrok)
+--     dilakukan di level APLIKASI (JS), lihat
+--     app/api/penyisiran/alokasi/submit/route.ts -- BUKAN constraint
+--     database atomik (schema penyisiran_alokasi_pilihan TIDAK berubah
+--     di migrasi ini). Yang berubah di DB cuma RPC
+--     penyisiran_alokasi_dasar_subsls: kolom `sudah_dipilih_oleh` (count)
+--     DIGANTI `dipilih_oleh_petugas_id` + `dipilih_oleh_nama` (SATU
+--     pemegang, bukan count lagi, krn per Sub SLS sekarang cuma bisa 0
+--     atau 1 pemegang) -- dipakai tampilan "unhide" di FE utk menunjukkan
+--     SIAPA yang sudah pegang tiap Sub SLS.
+--
+-- (B) Tab "Penyisiran Usaha" (role token "penyisiran_petugas" SAJA -- role
+--     "penyisiran"/PIN admin & 3 role "identifikasi_*" TIDAK disentuh,
+--     tetap bebas lihat semua data spt sebelumnya) sekarang HANYA
+--     menampilkan keluarga/usaha yang SLS/Sub SLS-nya sudah dipilih
+--     petugas ybs sendiri di kartu "Identifikasi Wilayah Sampel SLS" --
+--     3 RPC BARU versi "_wilayah" (param p_wilayah jsonb = array objek
+--     {kec_kode, nagari_kode, sls_kode, subsls_kode} dari baris
+--     penyisiran_alokasi_pilihan milik petugas ybs, subsls_kode null =
+--     seluruh SLS) menggantikan RPC lama HANYA utk role ini, dipakai
+--     endpoint dropdown Kecamatan/Nagari/Sub SLS + stat tile
+--     (/api/penyisiran/{summary,nagari,subsls}/route.ts). Endpoint
+--     LIST/MARKERS datanya sendiri (butuh paginasi/limit) difilter
+--     LANGSUNG lewat .or() PostgREST di JS
+--     (/api/penyisiran/{list,markers}/route.ts, lib/wilayahAlokasiPetugas.ts),
+--     BUKAN lewat RPC jsonb ini.
+--
+-- Sudah diterapkan langsung ke database lewat MCP Supabase; file ini
+-- cuma catatan riwayat migrasi di repo. Definisi SQL lengkap: lihat
+-- app/api/penyisiran/{summary,nagari,subsls}/route.ts &
+-- app/api/penyisiran/alokasi/{submit,rekomendasi,subsls}/route.ts
+-- (komentar tiap file merujuk balik ke migrasi ini), atau query
+-- pg_get_functiondef langsung ke database kalau perlu salinan SQL
+-- persisnya:
+--   penyisiran_alokasi_dasar_subsls(text)
+--   penyisiran_summary_wilayah(jsonb)
+--   penyisiran_nagari_list_wilayah(text, jsonb)
+--   penyisiran_subsls_list_wilayah(text, text, jsonb)

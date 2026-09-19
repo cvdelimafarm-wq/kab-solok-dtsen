@@ -235,6 +235,22 @@ export function getSessionSubject(token: string | null | undefined): string | nu
   return subject && subject.length > 0 ? subject : null;
 }
 
+/**
+ * Ambil ROLE mentah dari token yang SUDAH divalidasi verifySession() --
+ * selalu panggil verifySession() dulu sebelum mengandalkan nilai ini.
+ * Dipakai endpoint yang diterima BANYAK role sekaligus (mis.
+ * /api/penyisiran/summary, /list) tapi perlu tahu role SPESIFIK apa yang
+ * sedang login supaya bisa menerapkan aturan berbeda per role (mis.
+ * auto-scope wilayah HANYA utk "penyisiran_petugas", role lain spt
+ * "penyisiran"/PIN admin tetap bebas lihat semua data).
+ */
+export function getSessionRole(token: string | null | undefined): PenyisiranRole | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length === 4 || parts.length === 3) return parts[0] as PenyisiranRole;
+  return null;
+}
+
 export function checkPin(pinInput: string, role: PenyisiranRole = "penyisiran"): boolean {
   const real = pinEnvVar(role);
   if (!real) return false;

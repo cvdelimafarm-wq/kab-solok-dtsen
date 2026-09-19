@@ -2,14 +2,28 @@
 //
 // Daftar keluarga (dipaginasi) utk panel kiri lembar pengecekan, dgn
 // filter kecamatan/nagari/status/pencarian teks. Butuh token sesi valid
-// dgn role "penyisiran" (PIN internal BPS). TIDAK PERNAH mengembalikan
-// NIK/Nomor KK -- kolom itu memang tidak ada sama sekali di tabel
-// penyisiran_usaha (sudah dibuang sejak di script Python), jadi tidak
-// mungkin kebocor lewat sini.
+// dgn role "penyisiran" (PIN internal BPS) atau "penyisiran_petugas"
+// (login personal). TIDAK PERNAH mengembalikan NIK/Nomor KK -- kolom itu
+// memang tidak ada sama sekali di tabel penyisiran_usaha (sudah dibuang
+// sejak di script Python), jadi tidak mungkin kebocor lewat sini.
+//
+// KHUSUS role "penyisiran_petugas": hasil query SELALU ditambah filter
+// wilayah alokasi petugas ybs (.or() dari buildOrFilterWilayah(), lihat
+// lib/wilayahAlokasiPetugas.ts) -- TIDAK PEDULI apa pun kec/nagari/subsls/
+// q yang dikirim client, supaya petugas TIDAK BISA lihat data di luar
+// SLS/Sub SLS yang sudah dipilihnya sendiri di kartu "Identifikasi Wilayah
+// Sampel SLS" (termasuk lewat pencarian teks bebas `q` sekalipun tanpa
+// kec/nagari -- makanya filter wilayah ditempel di LUAR blok if/else
+// filter manual di bawah, bukan sbg salah satu opsi). Kalau petugas belum
+// pernah submit alokasi SAMA SEKALI, langsung dikembalikan kosong (BUKAN
+// "tampilkan semua") + flag `belumAdaWilayah` supaya FE bisa kasih pesan
+// yang jelas. Role "penyisiran" (PIN admin) TIDAK terpengaruh apa pun,
+// tetap bebas lihat semua data spt sebelumnya.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
+import { ambilWilayahAlokasi, buildOrFilterWilayah } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +38,8 @@ const KOLOM =
   "prioritas_pasti, penyisiran_oleh, updated_at";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
+  const token = extractBearer(req);
+  if (!verifySession(token, ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
@@ -43,10 +58,30 @@ export async function GET(req: NextRequest) {
   const q = (sp.get("q") || "").trim();
   const page = Math.max(1, Number(sp.get("page")) || 1);
 
-  if (!kec && !nagari && !q) {
+  // Role "penyisiran_petugas" (login personal) SELALU dibatasi ke wilayah
+  // alokasinya sendiri -- lihat komentar panjang di atas file ini. Belum
+  // pernah submit alokasi = tidak ada apa pun yg boleh ditampilkan.
+  let filterWilayah: string | null = null;
+  if (getSessionRole(token) === "penyisiran_petugas") {
+    const petugasId = Number(getSessionSubject(token));
+    if (!Number.isFinite(petugasId) || petugasId <= 0) {
+      return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 });
+    }
+    let pilihan;
+    try {
+      pilihan = await ambilWilayahAlokasi(supabase, petugasId);
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memuat wilayah alokasi." }, { status: 500 });
+    }
+    filterWilayah = buildOrFilterWilayah(pilihan);
+    if (!filterWilayah) {
+      return NextResponse.json({ rows: [], total: 0, page, pageSize: PAGE_SIZE, belumAdaWilayah: true });
+    }
+  } else if (!kec && !nagari && !q) {
     // Jangan biarkan query tanpa filter sama sekali menyapu SEMUA baris --
     // panel filter di client mewajibkan pilih kecamatan dulu, tapi dijaga
-    // juga di sini kalau-kalau dipanggil langsung.
+    // juga di sini kalau-kalau dipanggil langsung. TIDAK berlaku utk
+    // "penyisiran_petugas" krn sudah pasti dibatasi filterWilayah di atas.
     return NextResponse.json(
       { error: "Pilih kecamatan (atau isi pencarian) terlebih dahulu." },
       { status: 400 }
@@ -54,6 +89,7 @@ export async function GET(req: NextRequest) {
   }
 
   let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" });
+  if (filterWilayah) query = query.or(filterWilayah);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (subsls) query = query.eq("idsubsls", subsls);
