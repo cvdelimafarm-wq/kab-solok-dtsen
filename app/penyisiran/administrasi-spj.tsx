@@ -20,15 +20,29 @@
 // Lihat lib/spjAuth.ts utk cara server menerjemahkan kedua role token itu
 // jadi (petugas_jenis, petugas_id) yang dipakai seluruh tabel spj_*.
 //
-// Fitur Surat Tugas SUDAH JALAN PENUH (upload oleh pengelola + lihat/unduh
-// oleh petugas, lihat app/api/penyisiran/spj/surat-tugas/*). Visum JUGA
-// SUDAH JALAN (isi rencana tujuan + tanggal pelaksanaan per ST milik
-// sendiri, lalu unduh PDF -- lihat app/api/penyisiran/spj/visum/* &
-// lib/pdf/visum.ts). Kwitansi, Laporan, Dokumentasi, & Surat Keterangan
-// MASIH "segera hadir" -- menyusul di iterasi berikutnya.
+// Fitur Surat Tugas, Visum, Laporan, Dokumentasi, Kwitansi, & Surat
+// Keterangan SEMUA SUDAH JALAN PENUH (isi/upload + unduh PDF per dokumen).
+//
+// Menu utk PENGELOLA dipecah jadi 4 sub-tab (redesain dari model "kumpulan
+// kartu dokumen" ke model "monitoring per orang + per tanggal", atas
+// masukan user -- pengelola menangani 15-30 petugas sekaligus):
+//   Dashboard | Monitoring SPJ | Cetak SPJ | Arsip SPJ
+// "Arsip SPJ" = persis konten lama (kartu Surat Tugas + form tiap jenis
+// dokumen) -- TIDAK dihapus, krn pengelola & petugas tetap butuh cara utk
+// benar2 MENGISI/upload dokumen, bukan cuma memonitor & mencetak.
+//
+// Petugas/tetangga biasa (non-pengelola) dapat versi ringkas "Administrasi
+// Saya": 🏠 Ringkasan (progres hari ini + riwayat + tombol Cetak SPJ Saya)
+// dan 📝 Isi Dokumen (form yg sama dgn "Arsip SPJ" pengelola, krn PPL tetap
+// perlu mengisi Visum/Laporan/Dokumentasi/dst miliknya sendiri).
+//
+// lib/spjMatriks.ts: definisi status per jenis dokumen & urutan cetak
+// standar, dipakai bersama oleh spj-monitoring.tsx & spj-cetak.tsx.
 
 import { useCallback, useEffect, useState } from "react";
 import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
+import { SpjDashboard, SpjMonitoring, AdministrasiSayaRingkasan, useSpjMonitoring } from "./spj-monitoring";
+import { SpjCetakTab, SpjCetakSaya } from "./spj-cetak";
 
 const JORONG_TOKEN_KEY = "identifikasi-jorong-login-token";
 const JORONG_NAMA_KEY = "identifikasi-jorong-login-nama";
@@ -290,6 +304,15 @@ function AdministrasiPanel({
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [subTabPengelola, setSubTabPengelola] = useState<"dashboard" | "monitoring" | "cetak" | "arsip">("dashboard");
+  const [subTabSaya, setSubTabSaya] = useState<"ringkasan" | "isi">("ringkasan");
+
+  // SATU fetch /api/penyisiran/spj/monitoring dipakai bareng utk
+  // Dashboard, Monitoring SPJ, Cetak SPJ (matriks kelengkapan), DAN
+  // ringkasan "Administrasi Saya" -- server sudah menentukan sendiri (lewat
+  // field pengelola pada responsnya) apakah baris yg dikirim itu SEMUA
+  // petugas atau cuma milik akun yg login.
+  const monitoring = useSpjMonitoring(sesi.token, onSessionExpired);
 
   const guard = useCallback(
     (fn: () => void) => {
@@ -363,6 +386,69 @@ function AdministrasiPanel({
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
       )}
 
+      {pengelola ? (
+        <div className="flex flex-wrap gap-1.5 rounded-md border border-line bg-paper/40 p-1">
+          {(
+            [
+              ["dashboard", "📊 Dashboard"],
+              ["monitoring", "📋 Monitoring SPJ"],
+              ["cetak", "🖨️ Cetak SPJ"],
+              ["arsip", "📁 Arsip SPJ"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSubTabPengelola(key)}
+              className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
+                subTabPengelola === key ? "bg-navy-700 text-white" : "text-ink/60 hover:text-navy-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 rounded-md border border-line bg-paper/40 p-1">
+          {(
+            [
+              ["ringkasan", "🏠 Ringkasan"],
+              ["isi", "📝 Isi Dokumen"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSubTabSaya(key)}
+              className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
+                subTabSaya === key ? "bg-navy-700 text-white" : "text-ink/60 hover:text-navy-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {pengelola && subTabPengelola === "dashboard" && (
+        <SpjDashboard baris={monitoring.baris} loading={monitoring.loading} />
+      )}
+      {pengelola && subTabPengelola === "monitoring" && (
+        <SpjMonitoring baris={monitoring.baris} loading={monitoring.loading} />
+      )}
+      {pengelola && subTabPengelola === "cetak" && (
+        <SpjCetakTab token={sesi.token} onSessionExpired={onSessionExpired} />
+      )}
+
+      {!pengelola && subTabSaya === "ringkasan" && (
+        <div className="space-y-3">
+          <AdministrasiSayaRingkasan baris={monitoring.baris} loading={monitoring.loading} />
+          <SpjCetakSaya token={sesi.token} onSessionExpired={onSessionExpired} />
+        </div>
+      )}
+
+      {((pengelola && subTabPengelola === "arsip") || (!pengelola && subTabSaya === "isi")) && (
+      <>
       {/* ---------- Surat Tugas -- SUDAH JALAN ---------- */}
       <div className="rounded-lg border border-line bg-white p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -451,6 +537,8 @@ function AdministrasiPanel({
 
       {/* ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas -- SUDAH JALAN ---------- */}
       <SuratKeteranganSection token={sesi.token} onSessionExpired={onSessionExpired} />
+      </>
+      )}
     </div>
   );
 }

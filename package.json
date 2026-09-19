@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "dbffile": "^1.13.0",
     "html2canvas": "^1.4.1",
+    "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "next": "15.5.25",
     "pdf-lib": "^1.17.1",

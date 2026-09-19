@@ -1,0 +1,459 @@
+// app/api/penyisiran/spj/cetak/route.ts
+//
+// POST -> "Print Builder": menyusun ulang dokumen SPJ yang SUDAH ADA di
+// sistem (Kwitansi/Surat Tugas/Visum/Laporan/Dokumentasi/Surat Pernyataan)
+// jadi satu atau beberapa PDF gabungan, sesuai pilihan pengelola (petugas +
+// rentang tanggal + jenis dokumen + mode pengelompokan) -- lihat menu
+// "Cetak SPJ" di app/penyisiran/spj-cetak.tsx.
+//
+// Urutan dokumen di dalam SETIAP PDF gabungan SELALU mengikuti standar
+// SPJ yang dikunci sistem (lib/spjMatriks.ts -> URUTAN_CETAK_STANDAR):
+// Kwitansi -> Surat Tugas -> Visum -> [per tanggal: Laporan -> Dokumentasi]
+// -> Surat Pernyataan -- BUKAN urutan centang pengguna.
+//
+// Kwitansi/Surat Tugas/Visum/Surat Pernyataan adalah dokumen TINGKAT
+// PERJALANAN (1 dokumen berlaku utk SELURUH rentang 1 Surat Tugas, lihat
+// lib/spjMatriks.ts) -- utk mode pengelompokan "per_tanggal", dokumen jenis
+// ini HANYA dimasukkan ke file tanggal PALING AWAL dlm rentang pilihan
+// (supaya tidak dobel muncul di tiap file tanggal).
+//
+// Non-pengelola (petugas/tetangga login SPJ biasa) HANYA boleh mencetak
+// data MILIKNYA SENDIRI -- field `petugas` dari body diabaikan sepenuhnya
+// & dipaksa jadi [diri sendiri], sama spt pola akses lain di menu ini.
+//
+// Kalau hasilnya cuma 1 file (1 kelompok, tanpa dokumen yg dilewati),
+// dikembalikan sbg PDF langsung. Kalau lebih dari 1 file ATAU ada dokumen
+// yg dilewati (blm ada datanya), dibungkus jadi 1 file ZIP (pakai
+// dependensi baru "jszip") berisi semua PDF + catatan
+// "_dokumen_dilewati.txt" kalau ada yg dilewati.
+
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { PDFDocument } from "pdf-lib";
+import JSZip from "jszip";
+import { extractBearer } from "@/lib/penyisiranAuth";
+import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
+import { buatPdfVisum } from "@/lib/pdf/visum";
+import { buatPdfKwitansi } from "@/lib/pdf/kwitansi";
+import { buatPdfLaporan, LaporanRekapSnapshot } from "@/lib/pdf/laporan";
+import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
+import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
+import { JenisDokumen, LABEL_DOKUMEN, URUTAN_CETAK_STANDAR, kunciPetugas } from "@/lib/spjMatriks";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const LABEL_PERAN: Record<SpjPetugasJenis, string> = {
+  penyisiran: "Petugas Penyisiran (Identifikasi Jorong)",
+  tetangga: "Petugas Tetangga/Informan (Identifikasi Tetangga/Lainnya)",
+};
+
+type Pengelompokan = "per_orang" | "per_tanggal" | "per_jenis" | "gabung";
+const MODE_VALID: Pengelompokan[] = ["per_orang", "per_tanggal", "per_jenis", "gabung"];
+
+interface UnitCetak {
+  petugasKey: string;
+  petugasNama: string;
+  jenis: JenisDokumen;
+  tanggal: string | null; // null = dokumen tingkat-perjalanan
+  urutanTanggal: string; // tanggal efektif utk penempatan di mode per_tanggal
+  bytes: Uint8Array;
+}
+
+interface Penugasan {
+  petugasJenis: SpjPetugasJenis;
+  petugasId: number;
+  nama: string;
+  suratTugasId: number;
+  nomorSt: string;
+  tanggalMulaiEfektif: string;
+  tanggalList: string[];
+}
+
+interface BarisMatriksMentah {
+  petugas_jenis: SpjPetugasJenis;
+  petugas_id: number;
+  nama: string;
+  surat_tugas_id: number;
+  nomor_st: string;
+  tanggal: string;
+}
+
+function namaFileAman(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "file";
+}
+
+function supabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) return null;
+  return createClient(supabaseUrl, serviceRoleKey);
+}
+
+// Coba sisipkan `bytes` ke dokumen gabungan sbg halaman PDF asli dulu
+// (Surat Tugas biasanya scan PDF); kalau gagal dibaca sbg PDF, coba sbg
+// gambar (Surat Tugas kadang cuma foto/scan JPEG/PNG) & taruh di 1
+// halaman A4 baru, di-scale supaya muat & tetap proporsional.
+async function embedKeMerged(merged: PDFDocument, bytes: Uint8Array): Promise<boolean> {
+  try {
+    const src = await PDFDocument.load(bytes);
+    const pages = await merged.copyPages(src, src.getPageIndices());
+    pages.forEach((p) => merged.addPage(p));
+    return true;
+  } catch {
+    // bukan PDF valid -- lanjut coba sbg gambar di bawah.
+  }
+  const A4: [number, number] = [595.28, 841.89];
+  const percobaan = [
+    () => merged.embedJpg(bytes),
+    () => merged.embedPng(bytes),
+  ];
+  for (const coba of percobaan) {
+    try {
+      const img = await coba();
+      const page = merged.addPage(A4);
+      const scale = Math.min((A4[0] * 0.92) / img.width, (A4[1] * 0.92) / img.height, 1);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      page.drawImage(img, { x: (A4[0] - w) / 2, y: (A4[1] - h) / 2, width: w, height: h });
+      return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+async function gabungkanUnit(units: UnitCetak[]): Promise<Uint8Array> {
+  const merged = await PDFDocument.create();
+  for (const u of units) {
+    await embedKeMerged(merged, u.bytes);
+  }
+  return merged.save();
+}
+
+function kunciKelompok(u: UnitCetak, mode: Pengelompokan): string {
+  if (mode === "per_orang") return u.petugasKey;
+  if (mode === "per_tanggal") return u.tanggal ?? u.urutanTanggal;
+  if (mode === "per_jenis") return u.jenis;
+  return "semua";
+}
+
+export async function POST(req: NextRequest) {
+  const session = verifySpjSession(extractBearer(req));
+  if (!session) return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
+
+  const supabase = supabaseAdmin();
+  if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
+
+  const namaPengelola = await pastikanPengelolaSpj(session, supabase);
+
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Data tidak valid." }, { status: 400 });
+
+  const tanggalMulai = String(body.tanggal_mulai || "");
+  const tanggalSelesai = String(body.tanggal_selesai || "");
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(tanggalMulai) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(tanggalSelesai) ||
+    tanggalMulai > tanggalSelesai
+  ) {
+    return NextResponse.json({ error: "Rentang tanggal tidak valid." }, { status: 400 });
+  }
+
+  const dokumenMentah: unknown[] = Array.isArray(body.dokumen) ? body.dokumen : [];
+  const dokumenDipilih = URUTAN_CETAK_STANDAR.filter((j) => dokumenMentah.includes(j));
+  if (dokumenDipilih.length === 0) {
+    return NextResponse.json({ error: "Pilih minimal 1 jenis dokumen." }, { status: 400 });
+  }
+
+  const pengelompokan: Pengelompokan = MODE_VALID.includes(body.pengelompokan) ? body.pengelompokan : "gabung";
+
+  // Non-pengelola SELALU dipaksa cuma boleh mencetak data miliknya sendiri
+  // -- field `petugas` dari body TIDAK dipakai sama sekali dlm kasus ini.
+  let petugasTarget: { jenis: SpjPetugasJenis; id: number }[];
+  if (namaPengelola) {
+    const raw: unknown[] = Array.isArray(body.petugas) ? body.petugas : [];
+    petugasTarget = raw
+      .filter(
+        (p): p is { jenis: string; id: unknown } =>
+          !!p && typeof p === "object" && ((p as { jenis?: string }).jenis === "penyisiran" || (p as { jenis?: string }).jenis === "tetangga")
+      )
+      .map((p) => ({ jenis: p.jenis as SpjPetugasJenis, id: Number((p as { id: unknown }).id) }))
+      .filter((p) => Number.isFinite(p.id));
+    if (petugasTarget.length === 0) {
+      return NextResponse.json({ error: "Pilih minimal 1 petugas." }, { status: 400 });
+    }
+  } else {
+    petugasTarget = [{ jenis: session.jenis, id: Number(session.petugasId) }];
+  }
+
+  const { data: matriksData, error: errMatriks } = await supabase.rpc("spj_matriks_kelengkapan");
+  if (errMatriks) return NextResponse.json({ error: errMatriks.message }, { status: 500 });
+
+  const petugasSet = new Set(petugasTarget.map((p) => `${p.jenis}:${p.id}`));
+  const barisTerpilih = ((matriksData ?? []) as BarisMatriksMentah[]).filter(
+    (b) => petugasSet.has(`${b.petugas_jenis}:${b.petugas_id}`) && b.tanggal >= tanggalMulai && b.tanggal <= tanggalSelesai
+  );
+  if (barisTerpilih.length === 0) {
+    return NextResponse.json(
+      { error: "Tidak ada Surat Tugas yang cocok dgn petugas & rentang tanggal yang dipilih." },
+      { status: 400 }
+    );
+  }
+
+  // Kelompokkan baris harian jadi per "penugasan" (petugas + 1 Surat
+  // Tugas) beserta daftar tanggal (dlm rentang pilihan) yg relevan.
+  const petaPenugasan = new Map<string, Penugasan>();
+  for (const b of barisTerpilih) {
+    const key = `${b.petugas_jenis}:${b.petugas_id}:${b.surat_tugas_id}`;
+    let p = petaPenugasan.get(key);
+    if (!p) {
+      p = {
+        petugasJenis: b.petugas_jenis,
+        petugasId: b.petugas_id,
+        nama: b.nama,
+        suratTugasId: b.surat_tugas_id,
+        nomorSt: b.nomor_st,
+        tanggalMulaiEfektif: b.tanggal,
+        tanggalList: [],
+      };
+      petaPenugasan.set(key, p);
+    }
+    p.tanggalList.push(b.tanggal);
+    if (b.tanggal < p.tanggalMulaiEfektif) p.tanggalMulaiEfektif = b.tanggal;
+  }
+  for (const p of petaPenugasan.values()) p.tanggalList.sort();
+  const daftarPenugasan = Array.from(petaPenugasan.values()).sort(
+    (a, b) => a.nama.localeCompare(b.nama, "id") || a.suratTugasId - b.suratTugasId
+  );
+
+  const unit: UnitCetak[] = [];
+  const dilewati: string[] = [];
+
+  for (const p of daftarPenugasan) {
+    const petugasKey = kunciPetugas({ petugas_jenis: p.petugasJenis, petugas_id: p.petugasId });
+    const { data: akun } = await supabase.from(tabelAkun(p.petugasJenis)).select("nama, nip").eq("id", p.petugasId).maybeSingle();
+    const namaAkun = akun?.nama ?? p.nama;
+    const peranLabel = LABEL_PERAN[p.petugasJenis];
+
+    if (dokumenDipilih.includes("kwitansi")) {
+      const { data: k } = await supabase
+        .from("spj_kwitansi")
+        .select("*")
+        .eq("surat_tugas_id", p.suratTugasId)
+        .eq("petugas_jenis", p.petugasJenis)
+        .eq("petugas_id", p.petugasId)
+        .maybeSingle();
+      if (k) {
+        const bytes = await buatPdfKwitansi({
+          nomorSt: p.nomorSt,
+          tanggalSpd: k.tanggal_spd,
+          nominal: Number(k.nominal),
+          terbilang: k.terbilang,
+          untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
+          tanggalKwitansi: k.tanggal_kwitansi,
+          namaPenerima: namaAkun,
+          nipPenerima: akun?.nip ?? null,
+        });
+        unit.push({ petugasKey, petugasNama: p.nama, jenis: "kwitansi", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+      } else {
+        dilewati.push(`Kwitansi -- ${p.nama} (${p.nomorSt})`);
+      }
+    }
+
+    if (dokumenDipilih.includes("surat_tugas")) {
+      const { data: st } = await supabase.from("spj_surat_tugas").select("file_path").eq("id", p.suratTugasId).maybeSingle();
+      const blob = st?.file_path ? (await supabase.storage.from("spj-files").download(st.file_path)).data : null;
+      if (blob) {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_tugas", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+      } else {
+        dilewati.push(`Surat Tugas -- ${p.nama} (${p.nomorSt})`);
+      }
+    }
+
+    if (dokumenDipilih.includes("visum")) {
+      const { data: v } = await supabase
+        .from("spj_visum")
+        .select("*")
+        .eq("surat_tugas_id", p.suratTugasId)
+        .eq("petugas_jenis", p.petugasJenis)
+        .eq("petugas_id", p.petugasId)
+        .maybeSingle();
+      if (v) {
+        const bytes = await buatPdfVisum({
+          nomorSt: p.nomorSt,
+          namaPetugas: namaAkun,
+          rencanaTujuan: v.rencana_tujuan,
+          tempatKedudukan: v.tempat_kedudukan,
+          tanggalBerangkat: v.tanggal_berangkat,
+          tanggalTibaTujuan: v.tanggal_tiba_tujuan,
+          tanggalBerangkatKembali: v.tanggal_berangkat_kembali,
+          tanggalTibaKembali: v.tanggal_tiba_kembali,
+        });
+        unit.push({ petugasKey, petugasNama: p.nama, jenis: "visum", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+      } else {
+        dilewati.push(`Visum -- ${p.nama} (${p.nomorSt})`);
+      }
+    }
+
+    // Laporan & Dokumentasi diproses BERSAMA per tanggal (bukan semua
+    // Laporan dulu baru semua Dokumentasi) supaya hasil gabungannya
+    // berurutan rapi per hari: Laporan tgl X lalu Dokumentasi tgl X, baru
+    // lanjut tgl berikutnya -- sesuai standar SPJ yg diminta user.
+    if (dokumenDipilih.includes("laporan") || dokumenDipilih.includes("dokumentasi")) {
+      const { data: laporanRows } = dokumenDipilih.includes("laporan")
+        ? await supabase
+            .from("spj_laporan")
+            .select("*")
+            .eq("surat_tugas_id", p.suratTugasId)
+            .eq("petugas_jenis", p.petugasJenis)
+            .eq("petugas_id", p.petugasId)
+            .in("tanggal", p.tanggalList)
+        : { data: [] as Record<string, unknown>[] };
+      const petaLaporan = new Map((laporanRows ?? []).map((r) => [String(r.tanggal), r]));
+
+      for (const tgl of p.tanggalList) {
+        if (dokumenDipilih.includes("laporan")) {
+          const l = petaLaporan.get(tgl);
+          if (l) {
+            const bytes = await buatPdfLaporan({
+              nomorSt: p.nomorSt,
+              namaPetugas: namaAkun,
+              peranLabel,
+              tanggal: String(l.tanggal),
+              mode: l.mode === "bebas" ? "bebas" : "template",
+              narasi: (l.narasi as string | null) ?? null,
+              rekap: (l.rekap_snapshot as LaporanRekapSnapshot | null) ?? null,
+            });
+            unit.push({ petugasKey, petugasNama: p.nama, jenis: "laporan", tanggal: tgl, urutanTanggal: tgl, bytes });
+          } else {
+            dilewati.push(`Laporan ${tgl} -- ${p.nama} (${p.nomorSt})`);
+          }
+        }
+
+        if (dokumenDipilih.includes("dokumentasi")) {
+          const { data: fotoRows } = await supabase
+            .from("spj_dokumentasi_foto")
+            .select("slot, file_path")
+            .eq("surat_tugas_id", p.suratTugasId)
+            .eq("petugas_jenis", p.petugasJenis)
+            .eq("petugas_id", p.petugasId)
+            .eq("tanggal", tgl)
+            .order("slot", { ascending: true });
+          const foto: DokumentasiFotoInput[] = [];
+          for (const r of (fotoRows ?? []) as { slot: number; file_path: string }[]) {
+            const { data: blob } = await supabase.storage.from("spj-files").download(r.file_path);
+            if (!blob) continue;
+            const bytes2 = new Uint8Array(await blob.arrayBuffer());
+            foto.push({ slot: r.slot, bytes: bytes2, contentType: blob.type === "image/png" ? "image/png" : "image/jpeg" });
+          }
+          if (foto.length > 0) {
+            const lap = petaLaporan.get(tgl);
+            let lokasi = "-";
+            const lokasiArr = (lap?.rekap_snapshot as { lokasi?: { kecNama: string | null; nagariNama: string | null }[] } | undefined)
+              ?.lokasi;
+            if (lokasiArr && lokasiArr.length > 0) {
+              const nagariUnik = [...new Set(lokasiArr.map((l) => l.nagariNama).filter(Boolean))];
+              const kecUnik = [...new Set(lokasiArr.map((l) => l.kecNama).filter(Boolean))];
+              lokasi = `Nagari ${nagariUnik.join(", ")}, Kec. ${kecUnik.join(", ")}`;
+            }
+            const bytes = await buatPdfDokumentasi({ nomorSt: p.nomorSt, namaPetugas: namaAkun, peranLabel, tanggal: tgl, lokasi, foto });
+            unit.push({ petugasKey, petugasNama: p.nama, jenis: "dokumentasi", tanggal: tgl, urutanTanggal: tgl, bytes });
+          } else {
+            dilewati.push(`Dokumentasi ${tgl} -- ${p.nama} (${p.nomorSt})`);
+          }
+        }
+      }
+    }
+
+    if (dokumenDipilih.includes("surat_keterangan")) {
+      const { data: sk } = await supabase
+        .from("spj_surat_pernyataan_kendaraan")
+        .select("*")
+        .eq("surat_tugas_id", p.suratTugasId)
+        .eq("petugas_jenis", p.petugasJenis)
+        .eq("petugas_id", p.petugasId)
+        .maybeSingle();
+      if (sk) {
+        const bytes = await buatPdfSuratKeterangan({
+          nomorSt: p.nomorSt,
+          namaPetugas: namaAkun,
+          nip: akun?.nip ?? null,
+          jenis: p.petugasJenis,
+          tanggalPelaksanaan: sk.tanggal_pelaksanaan,
+        });
+        unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_keterangan", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+      } else {
+        dilewati.push(`Surat Pernyataan -- ${p.nama} (${p.nomorSt})`);
+      }
+    }
+  }
+
+  if (unit.length === 0) {
+    return NextResponse.json(
+      { error: "Tidak ada dokumen yang tersedia utk kombinasi petugas/tanggal/jenis dokumen ini." },
+      { status: 400 }
+    );
+  }
+
+  const peta = new Map<string, UnitCetak[]>();
+  for (const u of unit) {
+    const k = kunciKelompok(u, pengelompokan);
+    if (!peta.has(k)) peta.set(k, []);
+    peta.get(k)!.push(u);
+  }
+  let groupKeys = Array.from(peta.keys());
+  if (pengelompokan === "per_orang") {
+    groupKeys = groupKeys.sort((a, b) => peta.get(a)![0].petugasNama.localeCompare(peta.get(b)![0].petugasNama, "id"));
+  } else if (pengelompokan === "per_tanggal") {
+    groupKeys = groupKeys.sort();
+  } else if (pengelompokan === "per_jenis") {
+    groupKeys = groupKeys.sort(
+      (a, b) => URUTAN_CETAK_STANDAR.indexOf(a as JenisDokumen) - URUTAN_CETAK_STANDAR.indexOf(b as JenisDokumen)
+    );
+  }
+
+  const hasil: { nama: string; bytes: Uint8Array }[] = [];
+  for (let i = 0; i < groupKeys.length; i++) {
+    const k = groupKeys[i];
+    const units = peta.get(k)!;
+    const bytes = await gabungkanUnit(units);
+    let label: string;
+    if (pengelompokan === "per_orang") label = units[0].petugasNama;
+    else if (pengelompokan === "per_tanggal") label = k;
+    else if (pengelompokan === "per_jenis") label = LABEL_DOKUMEN[k as JenisDokumen];
+    else label = `SPJ_${tanggalMulai}_${tanggalSelesai}`;
+    const nomorUrut = String(i + 1).padStart(2, "0");
+    const nama = pengelompokan === "gabung" ? `${namaFileAman(label)}.pdf` : `${nomorUrut}_${namaFileAman(label)}.pdf`;
+    hasil.push({ nama, bytes });
+  }
+
+  if (hasil.length === 1 && dilewati.length === 0) {
+    return new NextResponse(Buffer.from(hasil[0].bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${hasil[0].nama}"`,
+      },
+    });
+  }
+
+  const zip = new JSZip();
+  for (const h of hasil) zip.file(h.nama, h.bytes);
+  if (dilewati.length > 0) {
+    zip.file(
+      "_dokumen_dilewati.txt",
+      "Dokumen berikut TIDAK tersedia di sistem & TIDAK ikut dicetak (belum diisi/diupload):\n\n" + dilewati.join("\n")
+    );
+  }
+  const zipBytes = await zip.generateAsync({ type: "uint8array" });
+  return new NextResponse(Buffer.from(zipBytes), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="SPJ_${tanggalMulai}_${tanggalSelesai}.zip"`,
+    },
+  });
+}
