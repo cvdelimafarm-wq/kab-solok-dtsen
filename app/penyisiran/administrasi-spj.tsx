@@ -715,7 +715,7 @@ function UploadSuratTugasForm({
             return (
               <label key={key} className="flex items-center gap-1.5 py-0.5 text-xs">
                 <input type="checkbox" checked={dipilih.has(key)} onChange={() => toggle(key)} />
-                {p.nama} <span className="text-ink/40">({p.jenis === "penyisiran" ? "Penyisiran" : "Tetangga"})</span>
+                {p.nama}
               </label>
             );
           })}
