@@ -716,7 +716,19 @@ function VisumSection({ token, onSessionExpired }: { token: string; onSessionExp
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noreferrer");
+      // PAKAI elemen <a>+.click(), BUKAN window.open() langsung -- window.open()
+      // yg dipanggil SESUDAH `await fetch()` selesai sering dianggap browser
+      // (terutama Safari/iOS, kadang jg Chrome) BUKAN hasil klik langsung
+      // pengguna (krn ada jeda async di antaranya), jadi popup-nya diblokir
+      // DIAM-DIAM tanpa error apa pun -- persis gejala "tombol Unduh PDF tidak
+      // menghasilkan apa-apa". Klik anchor sintetis TIDAK kena blokir ini.
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       guard(() => {
@@ -942,7 +954,19 @@ function LaporanSection({ token, onSessionExpired }: { token: string; onSessionE
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noreferrer");
+      // PAKAI elemen <a>+.click(), BUKAN window.open() langsung -- window.open()
+      // yg dipanggil SESUDAH `await fetch()` selesai sering dianggap browser
+      // (terutama Safari/iOS, kadang jg Chrome) BUKAN hasil klik langsung
+      // pengguna (krn ada jeda async di antaranya), jadi popup-nya diblokir
+      // DIAM-DIAM tanpa error apa pun -- persis gejala "tombol Unduh PDF tidak
+      // menghasilkan apa-apa". Klik anchor sintetis TIDAK kena blokir ini.
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       guard(() => {
@@ -1354,7 +1378,19 @@ function DokumentasiStCard({ st, token, guard }: { st: DokumentasiSt; token: str
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noreferrer");
+      // PAKAI elemen <a>+.click(), BUKAN window.open() langsung -- window.open()
+      // yg dipanggil SESUDAH `await fetch()` selesai sering dianggap browser
+      // (terutama Safari/iOS, kadang jg Chrome) BUKAN hasil klik langsung
+      // pengguna (krn ada jeda async di antaranya), jadi popup-nya diblokir
+      // DIAM-DIAM tanpa error apa pun -- persis gejala "tombol Unduh PDF tidak
+      // menghasilkan apa-apa". Klik anchor sintetis TIDAK kena blokir ini.
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       guard(() => {
@@ -1503,7 +1539,19 @@ function KwitansiSection({ token, onSessionExpired }: { token: string; onSession
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noreferrer");
+      // PAKAI elemen <a>+.click(), BUKAN window.open() langsung -- window.open()
+      // yg dipanggil SESUDAH `await fetch()` selesai sering dianggap browser
+      // (terutama Safari/iOS, kadang jg Chrome) BUKAN hasil klik langsung
+      // pengguna (krn ada jeda async di antaranya), jadi popup-nya diblokir
+      // DIAM-DIAM tanpa error apa pun -- persis gejala "tombol Unduh PDF tidak
+      // menghasilkan apa-apa". Klik anchor sintetis TIDAK kena blokir ini.
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       guard(() => {
@@ -1762,7 +1810,19 @@ function SuratKeteranganSection({ token, onSessionExpired }: { token: string; on
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noreferrer");
+      // PAKAI elemen <a>+.click(), BUKAN window.open() langsung -- window.open()
+      // yg dipanggil SESUDAH `await fetch()` selesai sering dianggap browser
+      // (terutama Safari/iOS, kadang jg Chrome) BUKAN hasil klik langsung
+      // pengguna (krn ada jeda async di antaranya), jadi popup-nya diblokir
+      // DIAM-DIAM tanpa error apa pun -- persis gejala "tombol Unduh PDF tidak
+      // menghasilkan apa-apa". Klik anchor sintetis TIDAK kena blokir ini.
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       guard(() => {
