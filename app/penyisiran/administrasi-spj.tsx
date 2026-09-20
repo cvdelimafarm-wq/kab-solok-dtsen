@@ -519,7 +519,14 @@ function AdministrasiPanel({
         </div>
       )}
       {pengelola && subTabPengelola === "monitoring" && (
-        <SpjMonitoring baris={monitoring.baris} loading={monitoring.loading} />
+        <SpjMonitoring
+          baris={monitoring.baris}
+          loading={monitoring.loading}
+          token={sesi.token}
+          onSessionExpired={onSessionExpired}
+          sesiJenis={monitoring.sesiJenis}
+          sesiPetugasId={monitoring.sesiPetugasId}
+        />
       )}
       {pengelola && subTabPengelola === "cetak" && (
         <SpjCetakTab token={sesi.token} onSessionExpired={onSessionExpired} />

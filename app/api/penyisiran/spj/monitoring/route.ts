@@ -47,12 +47,34 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const semua = (data ?? []) as BarisMatriks[];
+
+  // sesi_jenis/sesi_petugas_id -- identitas akun yg SEDANG LOGIN (dari
+  // sesi yg SUDAH diverifikasi server, bukan klaim client) -- ditambahkan
+  // atas permintaan user: kartu "Progres Laporan"/"Progres Dokumentasi" di
+  // BAGIAN ATAS tab "Monitoring SPJ" (lihat ProgresSayaKotak di
+  // spj-monitoring.tsx) HARUS tentang akun yg login sendiri, TERMASUK utk
+  // pengelola (yg baris-nya di atas berisi SEMUA petugas, bukan cuma
+  // dirinya) -- FE memfilter `semua` ke baris miliknya sendiri pakai 2
+  // field ini. Petugas biasa (non-pengelola) sebenarnya tidak butuh ini
+  // lagi krn `milikSaya` di bawah SUDAH pre-filtered, tapi tetap dikirim
+  // sekalian supaya bentuk respons konsisten utk kedua kasus.
+  const sesiPetugasId = Number(session.petugasId);
   if (namaPengelola) {
-    return NextResponse.json({ pengelola: true, baris: semua });
+    return NextResponse.json({
+      pengelola: true,
+      baris: semua,
+      sesi_jenis: session.jenis,
+      sesi_petugas_id: Number.isFinite(sesiPetugasId) ? sesiPetugasId : null,
+    });
   }
 
   const milikSaya = semua.filter(
     (b) => b.petugas_jenis === session.jenis && String(b.petugas_id) === String(session.petugasId)
   );
-  return NextResponse.json({ pengelola: false, baris: milikSaya });
+  return NextResponse.json({
+    pengelola: false,
+    baris: milikSaya,
+    sesi_jenis: session.jenis,
+    sesi_petugas_id: Number.isFinite(sesiPetugasId) ? sesiPetugasId : null,
+  });
 }

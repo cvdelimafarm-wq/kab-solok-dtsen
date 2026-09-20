@@ -22,6 +22,7 @@ import {
   JENIS_DOKUMEN,
   JenisDokumen,
   LABEL_DOKUMEN,
+  SpjPetugasJenisMatriks,
   WARNA_DOT,
   statusDokumen,
   ringkasHari,
@@ -67,6 +68,13 @@ function formatTanggalPendek(iso: string): string {
 export function useSpjMonitoring(token: string, onSessionExpired: () => void) {
   const [baris, setBaris] = useState<BarisMatriks[]>([]);
   const [pengelola, setPengelola] = useState(false);
+  // Identitas akun yg SEDANG LOGIN (dikirim server, sesi yg sudah
+  // diverifikasi -- lihat komentar sesi_jenis/sesi_petugas_id di
+  // app/api/penyisiran/spj/monitoring/route.ts) -- dipakai ProgresSayaKotak
+  // di bawah utk menyaring `baris` (yg utk pengelola berisi SEMUA petugas)
+  // jadi cuma milik akun ybs sendiri.
+  const [sesiJenis, setSesiJenis] = useState<SpjPetugasJenisMatriks | null>(null);
+  const [sesiPetugasId, setSesiPetugasId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
@@ -77,6 +85,8 @@ export function useSpjMonitoring(token: string, onSessionExpired: () => void) {
       const data = await apiFetch("/api/penyisiran/spj/monitoring", token);
       setPengelola(!!data?.pengelola);
       setBaris(Array.isArray(data?.baris) ? data.baris : []);
+      setSesiJenis(data?.sesi_jenis === "penyisiran" || data?.sesi_jenis === "tetangga" ? data.sesi_jenis : null);
+      setSesiPetugasId(typeof data?.sesi_petugas_id === "number" ? data.sesi_petugas_id : null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
@@ -90,7 +100,7 @@ export function useSpjMonitoring(token: string, onSessionExpired: () => void) {
     muat();
   }, [muat]);
 
-  return { baris, pengelola, loading, errMsg, muat };
+  return { baris, pengelola, sesiJenis, sesiPetugasId, loading, errMsg, muat };
 }
 
 // ---------- Dashboard ----------
@@ -100,6 +110,14 @@ export function SpjDashboard({ baris, loading }: { baris: BarisMatriks[]; loadin
 
   const barisHariIni = useMemo(() => baris.filter((b) => b.tanggal === tanggal), [baris, tanggal]);
 
+  // perJenis/totalDokumen/totalOk (dasar kartu "Progress SPJ Tanggal Ini" &
+  // "Kelengkapan per Jenis Dokumen") DIHAPUS dari sini -- kedua kartu itu
+  // DIPINDAH ke bagian atas tab "Monitoring SPJ" (lihat ProgresSayaKotak)
+  // & sekaligus diubah jadi PERSONAL (progres akun yg login sendiri,
+  // sampai hari ini), atas permintaan user -- bukan lagi agregat lintas
+  // petugas utk satu tanggal terpilih spt di sini. KartuRingkas
+  // (Petugas/Lengkap/Kurang/Kosong) di bawah TETAP agregat lintas
+  // petugas -- tidak diminta berubah.
   const ringkasan = useMemo(() => {
     const perPetugas = new Map<string, BarisMatriks>();
     for (const b of barisHariIni) perPetugas.set(kunciPetugas(b), b);
@@ -113,16 +131,8 @@ export function SpjDashboard({ baris, loading }: { baris: BarisMatriks[]; loadin
       else if (r.status === "kosong") kosong++;
       else kurang++;
     }
-    const perJenis = JENIS_DOKUMEN.map((j) => {
-      const ok = daftar.filter((b) => statusDokumen(b, j) === "ok").length;
-      return { jenis: j, ok, total: daftar.length };
-    });
-    const totalDokumen = daftar.length * JENIS_DOKUMEN.length;
-    const totalOk = perJenis.reduce((s, p) => s + p.ok, 0);
-    return { totalPetugas: daftar.length, lengkap, kurang, kosong, perJenis, totalDokumen, totalOk };
+    return { totalPetugas: daftar.length, lengkap, kurang, kosong };
   }, [barisHariIni]);
-
-  const pctProgress = ringkasan.totalDokumen > 0 ? Math.round((ringkasan.totalOk / ringkasan.totalDokumen) * 100) : 0;
 
   return (
     <div className="space-y-3">
@@ -173,51 +183,9 @@ export function SpjDashboard({ baris, loading }: { baris: BarisMatriks[]; loadin
             <KartuRingkas label="🟡 Kurang" nilai={ringkasan.kurang} warna="text-gold-600" />
             <KartuRingkas label="🔴 Kosong" nilai={ringkasan.kosong} warna="text-rust-700" />
           </div>
-
-          <div className="rounded-lg border border-line bg-white p-3">
-            <div className="mb-1.5 flex items-baseline justify-between">
-              <p className="text-xs font-semibold text-navy-900">Progress SPJ Tanggal Ini</p>
-              <p className="text-xs text-ink/50">
-                {ringkasan.totalOk}/{ringkasan.totalDokumen} dokumen ({pctProgress}%)
-              </p>
-            </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-line">
-              <div
-                className={`h-full rounded-full transition-all ${pctProgress === 100 ? "bg-moss-500" : "bg-navy-500"}`}
-                style={{ width: `${pctProgress}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] text-ink/40">
-              {ringkasan.totalPetugas} petugas × {JENIS_DOKUMEN.length} dokumen = {ringkasan.totalDokumen} dokumen yang
-              harus tersedia.
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-line bg-white p-3">
-            <p className="mb-2 text-xs font-semibold text-navy-900">Kelengkapan per Jenis Dokumen</p>
-            <p className="mb-2 text-[11px] text-ink/50">Dokumen dengan persentase paling rendah = bottleneck.</p>
-            <div className="space-y-2">
-              {ringkasan.perJenis.map((p) => {
-                const pct = p.total > 0 ? Math.round((p.ok / p.total) * 100) : 0;
-                return (
-                  <div key={p.jenis}>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-medium text-ink/70">{LABEL_DOKUMEN[p.jenis]}</span>
-                      <span className="text-ink/50">
-                        {p.ok}/{p.total}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-line">
-                      <div
-                        className={`h-full rounded-full ${pct === 100 ? "bg-moss-500" : pct >= 70 ? "bg-gold-500" : "bg-rust-500"}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* "Progress SPJ Tanggal Ini" & "Kelengkapan per Jenis Dokumen"
+              DIPINDAH ke bagian atas tab "Monitoring SPJ" (lihat
+              ProgresSayaKotak) -- lihat komentar di ringkasan di atas. */}
         </>
       )}
     </div>
@@ -246,11 +214,38 @@ interface BarisTampil {
   row: BarisMatriks;
 }
 
-export function SpjMonitoring({ baris, loading }: { baris: BarisMatriks[]; loading: boolean }) {
+export function SpjMonitoring({
+  baris,
+  loading,
+  token,
+  onSessionExpired,
+  sesiJenis,
+  sesiPetugasId,
+}: {
+  baris: BarisMatriks[];
+  loading: boolean;
+  // token/onSessionExpired/sesiJenis/sesiPetugasId -- dipakai HANYA utk
+  // kartu "Progres Saya" (ProgresSayaKotak) di bagian atas, lihat komentar
+  // di sana & di sesi_jenis/sesi_petugas_id
+  // app/api/penyisiran/spj/monitoring/route.ts. Tabel matriks lintas
+  // petugas di bawahnya TETAP jalan dari `baris`/`loading` spt semula,
+  // tidak terpengaruh 4 prop baru ini.
+  token: string;
+  onSessionExpired: () => void;
+  sesiJenis: SpjPetugasJenisMatriks | null;
+  sesiPetugasId: number | null;
+}) {
   const [mode, setMode] = useState<"tanggal" | "petugas">("tanggal");
   const [tanggal, setTanggal] = useState(hariIniStr());
   const [petugasKey, setPetugasKey] = useState<string>("");
   const [detailKey, setDetailKey] = useState<string | null>(null);
+
+  // Baris milik akun yg SEDANG LOGIN saja (dari `baris` yg utk pengelola
+  // berisi SEMUA petugas) -- dasar ProgresSayaKotak di bawah.
+  const barisSaya = useMemo(() => {
+    if (!sesiJenis || sesiPetugasId == null) return [];
+    return baris.filter((b) => b.petugas_jenis === sesiJenis && b.petugas_id === sesiPetugasId);
+  }, [baris, sesiJenis, sesiPetugasId]);
 
   const daftarPetugas = useMemo(() => {
     const peta = new Map<string, string>();
@@ -295,6 +290,12 @@ export function SpjMonitoring({ baris, loading }: { baris: BarisMatriks[]; loadi
 
   return (
     <div className="space-y-3">
+      {/* "Progres Saya" -- 2 kotak (Laporan & Dokumentasi) tentang akun yg
+          SEDANG LOGIN sendiri, dipindah ke sini (atas permintaan) --
+          SELALU tampil di bagian PALING ATAS tab ini, di atas matriks
+          lintas petugas di bawah (lihat ProgresSayaKotak). */}
+      <ProgresSayaKotak token={token} onSessionExpired={onSessionExpired} barisSaya={barisSaya} loading={loading} />
+
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
         <div className="flex gap-1.5 rounded-md border border-line bg-paper/40 p-1">
           <button
@@ -483,25 +484,21 @@ async function apiFetchLokal(path: string, token: string) {
   return data;
 }
 
-export function KelengkapanDokumenSaya({
-  token,
-  onSessionExpired,
-  baris,
-  loading,
-}: {
-  token: string;
-  onSessionExpired: () => void;
-  baris: BarisMatriks[];
-  loading: boolean;
-}) {
+// Hook BERSAMA -- dulu logikanya cuma inline di dalam KelengkapanDokumenSaya,
+// DIEKSTRAK (atas kebutuhan fitur baru ProgresSayaKotak di bawah, yg BUKAN
+// turunan/anak KelengkapanDokumenSaya tapi tetap butuh sumber hari kerja
+// yang SAMA persis) supaya tidak ada 2 fetch terpisah ke endpoint yang
+// sama saat keduanya kebetulan dirender bersamaan (mis. kalau nanti kartu
+// ini jg dipasang di "Ringkasan" pengelola).
+function useHariKerjaSaya(token: string, onSessionExpired: () => void) {
   const [hariKerja, setHariKerja] = useState<string[]>([]);
   const [sumber, setSumber] = useState<"hari_tugas" | "fallback_st_range" | null>(null);
-  const [loadingHari, setLoadingHari] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let batal = false;
-    setLoadingHari(true);
+    setLoading(true);
     apiFetchLokal("/api/penyisiran/spj/hari-kerja-saya", token)
       .then((data) => {
         if (batal) return;
@@ -515,12 +512,142 @@ export function KelengkapanDokumenSaya({
         else setErrMsg(msg);
       })
       .finally(() => {
-        if (!batal) setLoadingHari(false);
+        if (!batal) setLoading(false);
       });
     return () => {
       batal = true;
     };
   }, [token, onSessionExpired]);
+
+  return { hariKerja, sumber, loading, errMsg };
+}
+
+// ---------- "Progres Saya" -- 2 kotak (Laporan & Dokumentasi) SAMPAI HARI INI ----------
+//
+// BARU (atas permintaan) -- dipasang di bagian PALING ATAS tab "Monitoring
+// SPJ" (lihat pemakaiannya di SpjMonitoring), MENGGANTIKAN "Progress SPJ
+// Tanggal Ini" & "Kelengkapan per Jenis Dokumen" yang SEBELUMNYA ada di
+// sub-tab Dashboard (sudah dihapus dari SpjDashboard). Beda mendasar dari
+// 2 kartu lama itu:
+//  - Lama: AGREGAT lintas SEMUA petugas, utk SATU tanggal yang dipilih
+//    manual lewat date picker.
+//  - Baru: PERSONAL -- SELALU tentang akun yang SEDANG LOGIN (termasuk
+//    kalau yang login itu pengelola), dihitung dari hari kerja yang dia
+//    TAG sendiri (sumber SAMA dgn KelengkapanDokumenSaya, lihat
+//    useHariKerjaSaya) yang SUDAH LEWAT ATAU HARI INI SAJA (bukan hari
+//    kerja yang dijadwalkan di masa depan) -- sesuai definisi "sampai
+//    hari ini" yang diminta.
+//
+// HANYA 2 dari 6 jenis dokumen yang ditonjolkan di sini (Laporan &
+// Dokumentasi) -- beda dari KelengkapanDokumenSaya yang menampilkan
+// keenamnya -- krn cuma dua ini yang PERLU diisi ULANG tiap hari kerja
+// oleh petugas ybs sendiri (Kwitansi/Surat Tugas/Visum/Surat Pernyataan
+// sifatnya administratif per Surat Tugas, bukan per-hari-kerja).
+export function ProgresSayaKotak({
+  token,
+  onSessionExpired,
+  barisSaya,
+  loading,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+  barisSaya: BarisMatriks[];
+  loading: boolean;
+}) {
+  const { hariKerja, loading: loadingHari, errMsg } = useHariKerjaSaya(token, onSessionExpired);
+
+  // "Sampai hari ini" -- hariIniStr() dari file ini (browser-local),
+  // KONSISTEN dgn konvensi tanggal yang sudah dipakai di seluruh file ini
+  // (SpjDashboard/SpjMonitoring/AdministrasiSayaRingkasan jg pakai
+  // hariIniStr() yang sama, bukan konversi WIB eksplisit spt di
+  // administrasi-spj.tsx).
+  const hariIni = hariIniStr();
+  const hariKerjaSampaiHariIni = useMemo(() => hariKerja.filter((t) => t <= hariIni), [hariKerja, hariIni]);
+
+  const kelengkapan = useMemo(
+    () => hitungKelengkapanPerJenis(barisSaya, hariKerjaSampaiHariIni),
+    [barisSaya, hariKerjaSampaiHariIni]
+  );
+  const progresLaporan = kelengkapan.perJenis.find((p) => p.jenis === "laporan");
+  const progresDokumentasi = kelengkapan.perJenis.find((p) => p.jenis === "dokumentasi");
+
+  const memuat = loading || loadingHari;
+
+  if (memuat && hariKerjaSampaiHariIni.length === 0 && barisSaya.length === 0) {
+    return (
+      <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/40">
+        Memuat progres Anda...
+      </p>
+    );
+  }
+
+  if (hariKerjaSampaiHariIni.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-ink/40">
+        Belum ada hari kerja (sampai hari ini) yang Anda tag di kartu 🗓 Identifikasi Hari Tugas -- progres pribadi
+        belum bisa dihitung.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <KotakProgresSaya label="Progres Laporan" data={progresLaporan} />
+        <KotakProgresSaya label="Progres Dokumentasi" data={progresDokumentasi} />
+      </div>
+      {errMsg && <p className="mt-2 text-[11px] text-rust-700">⚠ {errMsg}</p>}
+    </div>
+  );
+}
+
+function KotakProgresSaya({
+  label,
+  data,
+}: {
+  label: string;
+  data: { ok: number; total: number; pct: number } | undefined;
+}) {
+  const ok = data?.ok ?? 0;
+  const total = data?.total ?? 0;
+  const pct = data?.pct ?? 0;
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <p className="text-[11px] font-semibold text-ink/60">{label}</p>
+      <div className="mt-1 flex items-baseline justify-between">
+        <span className="text-lg font-bold text-navy-900">
+          {ok}/{total}
+        </span>
+        <span
+          className={`text-xs font-semibold ${
+            pct === 100 ? "text-moss-700" : pct >= 70 ? "text-gold-600" : "text-rust-700"
+          }`}
+        >
+          {pct}%
+        </span>
+      </div>
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-line">
+        <div
+          className={`h-full rounded-full ${pct === 100 ? "bg-moss-500" : pct >= 70 ? "bg-gold-500" : "bg-rust-500"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function KelengkapanDokumenSaya({
+  token,
+  onSessionExpired,
+  baris,
+  loading,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+  baris: BarisMatriks[];
+  loading: boolean;
+}) {
+  const { hariKerja, sumber, loading: loadingHari, errMsg } = useHariKerjaSaya(token, onSessionExpired);
 
   const kelengkapan = useMemo(() => hitungKelengkapanPerJenis(baris, hariKerja), [baris, hariKerja]);
 
