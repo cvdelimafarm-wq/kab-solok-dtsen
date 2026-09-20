@@ -1452,6 +1452,13 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
 
   const adaStatusKunjungan = rekap ? Object.values(rekap.rekapStatusKunjungan).some((v) => v > 0) : false;
 
+  // Preview ini CUMA menampilkan REKAP DATA (angka & lokasi) dalam bentuk
+  // tabel/baris -- SENGAJA TIDAK menampilkan narasi/uraian kalimat apa pun
+  // (permintaan user: "narasi tidak usah ditampilkan di menu, narasi
+  // ditampilkan saat sudah di pdf saja"). Kalimat uraian otomatis ("Pada
+  // hari ... melaksanakan tugas ...") HANYA dirangkai saat PDF dibuat,
+  // lihat bagian "B. URAIAN..." di lib/pdf/laporan.ts -- tidak pernah
+  // dirender di komponen mana pun di sini.
   return (
     <div className="rounded-md border border-line bg-paper/30 p-2">
       <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/50">
@@ -1464,42 +1471,88 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
       ) : !rekap || (rekap.totalAktivitas === 0 && !adaStatusKunjungan) ? (
         <p className="text-[11px] text-ink/40">Belum ada aktivitas penyisiran/identifikasi tercatat pada tanggal ini.</p>
       ) : (
-        <div className="space-y-1.5 text-[11px]">
+        <div className="space-y-2.5 text-[11px]">
           <div>
-            <p className="mb-0.5 font-medium text-ink/60">Kartu Keluarga per Status Kunjungan (Penyisiran Usaha)</p>
+            <p className="mb-1 font-medium text-ink/60">Kartu Keluarga per Status Kunjungan (Penyisiran Usaha)</p>
             {adaStatusKunjungan ? (
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(LABEL_STATUS_KUNJUNGAN).map(([k, label]) =>
-                  rekap.rekapStatusKunjungan[k] ? (
-                    <span key={k} className="rounded-full bg-navy-700/10 px-2 py-0.5 text-navy-900">
-                      {label}: <span className="font-semibold">{rekap.rekapStatusKunjungan[k]}</span>
-                    </span>
-                  ) : null
-                )}
-              </div>
+              <table className="w-full text-[11px]">
+                <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Status Kunjungan</th>
+                    <th className="px-2 py-1 text-right">Jml Keluarga</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {Object.entries(LABEL_STATUS_KUNJUNGAN).map(([k, label]) =>
+                    rekap.rekapStatusKunjungan[k] ? (
+                      <tr key={k}>
+                        <td className="px-2 py-1 text-ink/80">{label}</td>
+                        <td className="px-2 py-1 text-right font-semibold text-navy-900">
+                          {rekap.rekapStatusKunjungan[k]}
+                        </td>
+                      </tr>
+                    ) : null
+                  )}
+                </tbody>
+              </table>
             ) : (
               <p className="text-ink/40">Belum ada perubahan status kunjungan yang tercatat.</p>
             )}
           </div>
+
           <div>
-            <p className="mb-0.5 font-medium text-ink/60">
+            <p className="mb-1 font-medium text-ink/60">
               Identifikasi Jorong/Tetangga -- {rekap.totalAktivitas} keluarga
             </p>
-            <p className="text-ink/60">
-              Ada: {rekap.rekapIdentifikasi.ada} · Tidak Ada: {rekap.rekapIdentifikasi.tidak_ada} · Ragu:{" "}
-              {rekap.rekapIdentifikasi.ragu} · Belum: {rekap.rekapIdentifikasi.belum}
-            </p>
+            <table className="w-full text-[11px]">
+              <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                <tr>
+                  <th className="px-2 py-1 text-left">Ada</th>
+                  <th className="px-2 py-1 text-left">Tidak Ada</th>
+                  <th className="px-2 py-1 text-left">Ragu</th>
+                  <th className="px-2 py-1 text-left">Belum</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                <tr>
+                  <td className="px-2 py-1 font-semibold text-navy-900">{rekap.rekapIdentifikasi.ada}</td>
+                  <td className="px-2 py-1 font-semibold text-navy-900">{rekap.rekapIdentifikasi.tidak_ada}</td>
+                  <td className="px-2 py-1 font-semibold text-navy-900">{rekap.rekapIdentifikasi.ragu}</td>
+                  <td className="px-2 py-1 font-semibold text-navy-900">{rekap.rekapIdentifikasi.belum}</td>
+                </tr>
+              </tbody>
+            </table>
+
             {rekap.lokasi.length > 0 && (
-              <ul className="ml-3 mt-1 list-disc space-y-0.5 text-[10px] text-ink/50">
-                {rekap.lokasi.map((l, i) => (
-                  <li key={i}>
-                    {[l.kecNama, l.nagariNama, l.slsNama, l.subslsKode].filter(Boolean).join(" / ")}: {l.jumlah} keluarga
-                  </li>
-                ))}
-              </ul>
+              <table className="mt-1.5 w-full text-[11px]">
+                <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Lokasi (Jorong/Sub SLS/Nagari/Kec.)</th>
+                    <th className="px-2 py-1 text-right">Jml Keluarga</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rekap.lokasi.map((l, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-1 text-ink/80">
+                        {[l.slsNama, l.subslsKode, l.nagariNama, l.kecNama].filter(Boolean).join(" / ")}
+                      </td>
+                      <td className="px-2 py-1 text-right font-semibold text-navy-900">{l.jumlah}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
-          <p className="text-ink/40">Dokumentasi tanggal ini: {rekap.jumlahDokumentasi} foto.</p>
+
+          <table className="w-full text-[11px]">
+            <tbody>
+              <tr>
+                <td className="px-2 py-1 text-ink/60">Dokumentasi tanggal ini</td>
+                <td className="px-2 py-1 text-right font-semibold text-navy-900">{rekap.jumlahDokumentasi} foto</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
     </div>
