@@ -69,7 +69,13 @@ const KANTOR_LAT = -0.9604660386602418;
 const KANTOR_LNG = 100.61102093270257;
 
 type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa";
-type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
+// "tidak_ditemukan" di sini -- opsi tambahan dari identifikasi-jorong.tsx/
+// identifikasi-tetangga.tsx (petugas ke lokasi tp alamat tdk ketemu),
+// diperlakukan server sbg setara "ada" (sudah didata di SE2026) -- lihat
+// komentar lengkap di app/api/penyisiran/identifikasi/route.ts. Cuma
+// dipakai utk RENDER badge di sini, bukan pilihan yg bisa diubah dari tab
+// Penyisiran Usaha (kolom ini read-only di tab ini).
+type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu" | "tidak_ditemukan";
 
 const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: string }> = {
   belum: { label: "Belum Dikunjungi", badge: "bg-line text-ink/70", dot: "#6b7280" },
@@ -83,6 +89,7 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
   ada: { label: "Identifikasi PPL: Ada usaha", className: "bg-moss-100 text-moss-700" },
   tidak_ada: { label: "Identifikasi PPL: Tidak ada usaha", className: "bg-rust-100 text-rust-700" },
   ragu: { label: "Identifikasi PPL: Ragu-ragu", className: "bg-[#FCEFD1] text-[#8A6A12]" },
+  tidak_ditemukan: { label: "Identifikasi: Tidak ditemukan (=sudah didata SE2026)", className: "bg-navy-50 text-navy-700" },
 };
 
 // ---------- Riwayat Perubahan (audit log, tabel penyisiran_riwayat) ----------
@@ -131,6 +138,7 @@ function formatNilaiRiwayat(jenis: RiwayatEntry["jenis"], nilai: string | null):
       ada: "Ada usaha",
       tidak_ada: "Tidak ada usaha",
       ragu: "Ragu-ragu",
+      tidak_ditemukan: "Tidak ditemukan (=sudah didata SE2026)",
     };
     return map[nilai] ?? nilai;
   }

@@ -27,12 +27,19 @@ import { useCallback, useEffect, useState } from "react";
 const TOKEN_KEY = "identifikasi-tetangga-login-token";
 const NAMA_KEY = "identifikasi-tetangga-login-nama";
 
-type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
+// "tidak_ditemukan" -- opsi TAMBAHAN atas permintaan user, SAMA PERSIS
+// dgn identifikasi-jorong.tsx (lihat komentar lengkap di sana): dipakai
+// kalau petugas SUDAH ke lokasi tapi alamatnya sendiri tidak ketemu/tidak
+// jelas (BEDA dari "Tidak Ada" = lokasi ketemu tapi usahanya memang tidak
+// ada). Diperlakukan sama dgn "Ada" di sisi server (dihitung sbg "sudah
+// didata di SE2026") supaya tidak keliru dianggap kasus undercoverage baru.
+type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu" | "tidak_ditemukan";
 
 const PILIHAN: { nilai: NilaiIdentifikasi; label: string; className: string }[] = [
   { nilai: "ada", label: "Ada", className: "bg-moss-500 text-white" },
   { nilai: "tidak_ada", label: "Tidak Ada", className: "bg-rust-500 text-white" },
   { nilai: "ragu", label: "Ragu-ragu", className: "bg-[#8A6A12] text-white" },
+  { nilai: "tidak_ditemukan", label: "Tidak Ditemukan", className: "bg-navy-500 text-white" },
 ];
 
 const KARTU_META: Record<NilaiIdentifikasi, string> = {
@@ -40,12 +47,14 @@ const KARTU_META: Record<NilaiIdentifikasi, string> = {
   ada: "bg-moss-100",
   tidak_ada: "bg-rust-100",
   ragu: "bg-[#FCEFD1]",
+  tidak_ditemukan: "bg-navy-50",
 };
 
 const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   belum: { label: "Belum Identifikasi", warna: "text-ink/50" },
   tidak_ada: { label: "Tidak Ada Usaha", warna: "text-rust-700" },
   ragu: { label: "Ragu-Ragu", warna: "text-[#8A6A12]" },
+  tidak_ditemukan: { label: "Tidak Ditemukan", warna: "text-navy-700" },
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
@@ -545,6 +554,7 @@ function IdentifikasiTetanggaPanel({
           <option value="ada">Ada</option>
           <option value="tidak_ada">Tidak Ada</option>
           <option value="ragu">Ragu-ragu</option>
+          <option value="tidak_ditemukan">Tidak Ditemukan</option>
         </select>
         <input
           type="search"
@@ -648,7 +658,7 @@ function IdentifikasiTetanggaPanel({
       </div>
 
       <div className="fixed inset-x-3 bottom-4 z-40 mx-auto max-w-md rounded-xl border border-line bg-white p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
             <button
               key={nilai}
@@ -746,6 +756,11 @@ function IdentifikasiCard({
       <p className="mb-1 text-[11px] text-ink/40">{ringkasWilayah(row.alamat, row.nagari_nama, row.sls_nama)}</p>
       {nilai !== "belum" && oleh && (
         <p className="mb-2 text-[10px] italic text-ink/40">Diisi oleh: {oleh}</p>
+      )}
+      {nilai === "tidak_ditemukan" && (
+        <p className="mb-2 text-[10px] italic text-navy-700">
+          Dihitung sama seperti "Ada" (dianggap sudah didata di SE2026, tidak perlu ditindaklanjuti).
+        </p>
       )}
       <div className="flex flex-wrap items-center gap-1.5">
         {PILIHAN.map((p) => (

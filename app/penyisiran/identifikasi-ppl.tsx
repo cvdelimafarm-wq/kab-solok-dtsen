@@ -30,7 +30,15 @@ const NAMA_KEY = "identifikasi-ppl-login-nama";
 // -- ditampilkan sbg pengingat di layar login maupun di halaman isian.
 const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB.";
 
-type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu";
+// "tidak_ditemukan" -- TIDAK ditawarkan sbg tombol jawaban DI SINI (PPL
+// menjawab dari INGATAN soal SE2026, bukan kunjungan fisik hari ini, jadi
+// opsi "lokasi tidak ketemu" tidak relevan utk peran ini) -- tapi tetap
+// harus ada di union TYPE & di KARTU_META/BAR_META di bawah, krn kolom
+// identifikasi_ppl DIPAKAI BERSAMA dgn identifikasi-jorong.tsx &
+// identifikasi-tetangga.tsx (yang MENAWARKAN opsi ini) -- kalau tidak,
+// kartu di sini akan gagal render style/label saat menampilkan baris yg
+// sudah diisi "tidak_ditemukan" oleh Jorong/Tetangga.
+type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu" | "tidak_ditemukan";
 
 // Warna kartu (KARTU_META, dipakai di bawah) sengaja dibuat PUCAT/muda,
 // sedangkan warna tombol yang aktif (className di sini) dibuat LEBIH
@@ -52,6 +60,7 @@ const KARTU_META: Record<NilaiIdentifikasi, string> = {
   ada: "bg-moss-100",
   tidak_ada: "bg-rust-100",
   ragu: "bg-[#FCEFD1]",
+  tidak_ditemukan: "bg-navy-50",
 };
 
 // Dipakai bar float navigasi status di bawah layar -- beda dari PILIHAN
@@ -63,6 +72,7 @@ const BAR_META: Record<NilaiIdentifikasi, { label: string; warna: string }> = {
   belum: { label: "Belum Identifikasi", warna: "text-ink/50" },
   tidak_ada: { label: "Tidak Ada Usaha", warna: "text-rust-700" },
   ragu: { label: "Ragu-Ragu", warna: "text-[#8A6A12]" },
+  tidak_ditemukan: { label: "Tidak Ditemukan", warna: "text-navy-700" },
   ada: { label: "Ada Usaha", warna: "text-moss-700" },
 };
 
@@ -433,6 +443,7 @@ function IdentifikasiPanel({
           <option value="ada">Ada</option>
           <option value="tidak_ada">Tidak Ada</option>
           <option value="ragu">Ragu-ragu</option>
+          <option value="tidak_ditemukan">Tidak Ditemukan</option>
         </select>
         {subslsOptions.length > 0 && (
           <select
@@ -505,7 +516,7 @@ function IdentifikasiPanel({
           sesuai, lihat jumpKeStatus di atas) + progress bar keseluruhan.
           Cuma menghitung kartu yg sedang dimuat di halaman ini (rows). */}
       <div className="fixed inset-x-3 bottom-4 z-40 mx-auto max-w-md rounded-xl border border-line bg-white p-3 shadow-lg sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {(Object.keys(BAR_META) as NilaiIdentifikasi[]).map((nilai) => (
             <button
               key={nilai}

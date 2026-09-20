@@ -1,6 +1,7 @@
 // app/api/penyisiran/identifikasi/route.ts
 //
-// Simpan hasil "Identifikasi" (Ada / Tidak Ada / Ragu usaha) -- ditulis
+// Simpan hasil "Identifikasi" (Ada / Tidak Ada / Ragu / Tidak Ditemukan
+// usaha -- lihat komentar VALID di bawah soal "tidak_ditemukan") -- ditulis
 // ke kolom penyisiran_usaha.identifikasi_ppl yang DIPAKAI BERSAMA oleh
 // KETIGA tab identifikasi personal:
 //  - "Identifikasi PPL"      -> role "identifikasi_ppl" (ppl_akun)
@@ -35,7 +36,16 @@ import { verifySession, getSessionSubject, extractBearer, type PenyisiranRole } 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID = new Set(["belum", "ada", "tidak_ada", "ragu"]);
+// "tidak_ditemukan" -- opsi tambahan khusus role identifikasi_jorong &
+// identifikasi_tetangga (petugas yg BENAR2 datang ke lokasi tapi
+// alamatnya sendiri tidak ketemu/tidak jelas -- BEDA dari "tidak_ada" yg
+// berarti lokasinya ketemu tapi usahanya memang tidak ada). SENGAJA
+// diperlakukan SAMA dgn "ada" di bawah (ada_konfirmasi_*, sehingga ikut
+// terhitung "sudah didata di SE2026" di RPC penyisiran_ringkasan_identifikasi)
+// krn ketidakjelasan alamat bukan bukti usaha itu tidak ada -- drpd
+// keliru dianggap kasus undercoverage baru, kasus begini dianggap sudah
+// tercakup & tidak perlu ditindaklanjuti lagi.
+const VALID = new Set(["belum", "ada", "tidak_ada", "ragu", "tidak_ditemukan"]);
 
 // Tabel akun sumber nama, per role personal -- dipakai jg utk
 // identifikasi_ppl_oleh di bawah.
@@ -123,7 +133,7 @@ export async function PATCH(req: NextRequest) {
   // dua2nya tetap true -> terhitung "keduanya". Direset ke false begitu
   // status berubah dari "ada" ke nilai lain supaya tdk nyangkut data basi
   // kalau suatu saat diubah balik ke "ada" oleh peran lain.
-  if (nilai === "ada") {
+  if (nilai === "ada" || nilai === "tidak_ditemukan") {
     if (role === "identifikasi_ppl") patch.ada_konfirmasi_ppl = true;
     else patch.ada_konfirmasi_jorong = true; // identifikasi_jorong ATAU identifikasi_tetangga
   } else {
