@@ -30,6 +30,16 @@ const NAMA_KEY = "identifikasi-ppl-login-nama";
 // -- ditampilkan sbg pengingat di layar login maupun di halaman isian.
 const PESAN_PENUTUPAN = "Halaman ini akan ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB.";
 
+// Tenggat di atas SUDAH LEWAT -- atas permintaan user, tab "Identifikasi
+// PPL" ini SEKARANG resmi dinonaktifkan: baik layar login (PPL baru/belum
+// pernah login) MAUPUN panel isian (PPL yang sesi login-nya masih
+// tersimpan di localStorage dari sebelumnya, lihat getToken()) diganti
+// dgn layar penutupan di bawah (HalamanDitutup) -- BUKAN dihapus dari
+// daftar tab di page.tsx, supaya PPL yang mengklik tab ini/link lama tetap
+// dapat pesan yang jelas, bukan tab hilang begitu saja. Set ke `true` lagi
+// kalau suatu saat pengisian perlu dibuka sementara.
+const IDENTIFIKASI_PPL_AKTIF = false;
+
 // "tidak_ditemukan" -- TIDAK ditawarkan sbg tombol jawaban DI SINI (PPL
 // menjawab dari INGATAN soal SE2026, bukan kunjungan fisik hari ini, jadi
 // opsi "lokasi tidak ketemu" tidak relevan utk peran ini) -- tapi tetap
@@ -184,6 +194,10 @@ export default function IdentifikasiPplTab() {
 
   if (!checkedStorage) return null; // hindari kedip layar login sebelum cek localStorage
 
+  if (!IDENTIFIKASI_PPL_AKTIF) {
+    return <HalamanDitutup />;
+  }
+
   if (!token) {
     return <LoginForm onLoggedIn={handleLoggedIn} />;
   }
@@ -195,6 +209,25 @@ export default function IdentifikasiPplTab() {
       onSessionExpired={handleLogout}
       onLogout={handleLogout}
     />
+  );
+}
+
+// Ditampilkan sbg ganti LoginForm/IdentifikasiPanel selama
+// IDENTIFIKASI_PPL_AKTIF = false (lihat komentar di atas). Sengaja gaya
+// kartunya SAMA dgn LoginForm (max-w-sm, border, rounded-lg) spy terasa
+// konsisten, bukan halaman error.
+function HalamanDitutup() {
+  return (
+    <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
+      <p className="text-sm font-semibold text-navy-900">Identifikasi PPL (Mantan Pendata)</p>
+      <p className="mt-2 rounded-md bg-rust-100 px-2.5 py-1.5 text-[11px] font-medium text-rust-700">
+        ⚠ Pengisian sudah ditutup pada Minggu, 20 September 2026 pukul 12:00 WIB sesuai jadwal yang diinformasikan
+        sebelumnya. Data yang sudah masuk tetap tersimpan.
+      </p>
+      <p className="mt-3 text-xs text-ink/60">
+        Terima kasih atas kontribusi Bapak/Ibu dalam membantu penyisiran undercoverage usaha SE2026 ini.
+      </p>
+    </div>
   );
 }
 
