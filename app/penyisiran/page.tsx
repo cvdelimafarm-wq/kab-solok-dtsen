@@ -493,19 +493,22 @@ function FloatBarRencanaBesok() {
   if (jamSekarang < 17) return null;
 
   const pct = jumlah / KUOTA;
-  const warna = pct >= 1 ? "bg-moss-600" : pct >= 0.5 ? "bg-[#8A6A12]" : "bg-rust-700";
+  // Latar bar SOLID PUTIH (permintaan user) -- warna status (hijau/kuning/
+  // merah) SEBELUMNYA ada di latar bar penuh, sekarang dipindah ke teks/
+  // ikon supaya tetap kelihatan status-nya tanpa latar berwarna.
+  const warnaTeks = pct >= 1 ? "text-moss-700" : pct >= 0.5 ? "text-[#8A6A12]" : "text-rust-700";
 
   return (
-    <div
-      className={`flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-medium text-white shadow-md ${warna}`}
-    >
-      <span>📅 Rencana Besok: {jumlah}/{KUOTA}</span>
+    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-line bg-white px-4 py-2 text-center text-xs font-medium shadow-md">
+      <span className={`font-semibold ${warnaTeks}`}>
+        📅 Rencana Besok: {jumlah}/{KUOTA}
+      </span>
       {pmlNoHp ? (
         <button
           type="button"
           onClick={kirimKeWaPml}
           disabled={kirimStatus === "menyalin"}
-          className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-900 hover:bg-paper disabled:opacity-60"
+          className="shrink-0 rounded-md bg-navy-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
         >
           {kirimStatus === "menyalin"
             ? "Menyalin..."
@@ -516,7 +519,7 @@ function FloatBarRencanaBesok() {
             : `📤 Kirim ke WA ${pmlNama ?? "PML"}`}
         </button>
       ) : (
-        <span className="text-[10px] italic text-white/70">
+        <span className="text-[10px] italic text-ink/40">
           (Nomor WA PML belum diisi di Master Petugas)
         </span>
       )}
@@ -630,12 +633,17 @@ function FloatBarSpjBelumLengkap({ onBukaAdministrasi }: { onBukaAdministrasi: (
   );
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 bg-[#CA8A04] px-4 py-2 text-center text-xs font-medium text-white shadow-md">
-      <span>⚠ SPJ hari ini belum lengkap: {kurang.join(" & ")} belum diisi.</span>
+    // Latar bar SOLID PUTIH (permintaan user, sama spt FloatBarRencanaBesok
+    // di atas) -- warna kuning (permintaan awal) dipindah ke teks/ikon &
+    // tombol, bukan lagi ke latar bar penuh.
+    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-line bg-white px-4 py-2 text-center text-xs font-medium shadow-md">
+      <span className="font-semibold text-[#8A6A12]">
+        ⚠ SPJ hari ini belum lengkap: {kurang.join(" & ")} belum diisi.
+      </span>
       <button
         type="button"
         onClick={onBukaAdministrasi}
-        className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#8A6A12] hover:bg-paper"
+        className="shrink-0 rounded-md bg-[#CA8A04] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#A9720A]"
       >
         Isi di Administrasi →
       </button>
