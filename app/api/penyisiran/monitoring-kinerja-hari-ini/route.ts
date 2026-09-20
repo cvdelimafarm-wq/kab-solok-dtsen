@@ -14,14 +14,16 @@
 //
 // Target Pendataan Harian (KK) SENGAJA tidak disimpan di database -- atas
 // permintaan user, nilainya SAMA utk SEMUA petugas (bukan per-petugas spt
-// target total di tab Manajemen Target), jadi cukup 1 konstanta di sini
-// (dikonsumsi jg oleh FE, lihat TARGET_HARIAN_KK di monitoring-terpadu.tsx --
-// NILAINYA HARUS SAMA, kalau mau diubah ubah di DUA tempat ini).
-export const TARGET_HARIAN_KK = 7;
-
+// target total di tab Manajemen Target). Konstantanya di lib/
+// monitoringKinerjaHarian.ts (BUKAN diekspor langsung dari sini) krn Next.js
+// App Router MELARANG route.ts mengekspor apa pun selain handler HTTP &
+// const konfigurasi resmi (runtime/dynamic/dst) -- lihat komentar lengkap di
+// file lib itu (ini bug yg SEMPAT kejadian & bikin build gagal, sekarang
+// sudah diperbaiki).
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
+import { TARGET_HARIAN_KK } from "@/lib/monitoringKinerjaHarian";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
