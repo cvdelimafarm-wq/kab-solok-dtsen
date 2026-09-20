@@ -1751,7 +1751,15 @@ function StatTile({
 // lapangan.tsx -- html2canvas + Clipboard API dari elemen tersembunyi
 // off-screen lebar tetap, fallback unduh file kalau clipboard image tidak
 // didukung browser) supaya gampang ditempel ke grup WA.
-interface RencanaBesokRow {
+// Diekspor (bukan lokal lagi) supaya bisa dipakai ULANG oleh
+// FloatBarRencanaBesok (app/penyisiran/page.tsx) -- permintaan user: desain
+// gambar "Kirim ke WA PML" di float bar bawah HARUS SAMA PERSIS dgn gambar
+// modal ini (dinilai lebih bagus: ada subjudul Nagari/SLS di bawah nama +
+// judul lengkap dgn tanggal), dan modal ini SENDIRI jg ikut terbuka (bukan
+// cuma menyalin gambar diam2 di belakang layar) saat tombol itu ditekan --
+// jadi float bar mengimpor komponen INI LANGSUNG (satu sumber desain),
+// bukan menduplikasi markupnya sendiri.
+export interface RencanaBesokRow {
   kode_identitas: string;
   idsubsls: string | null;
   nama_kk: string | null;
@@ -1761,7 +1769,7 @@ interface RencanaBesokRow {
   alamat: string | null;
 }
 
-function ModalRencanaBesok({
+export function ModalRencanaBesok({
   token,
   onClose,
   onSessionExpired,
@@ -1922,7 +1930,7 @@ function ModalRencanaBesok({
   );
 }
 
-function TabelRencanaBesokHead() {
+export function TabelRencanaBesokHead() {
   return (
     <thead>
       <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
@@ -1933,7 +1941,7 @@ function TabelRencanaBesokHead() {
   );
 }
 
-function TabelRencanaBesokRow({ row }: { row: RencanaBesokRow }) {
+export function TabelRencanaBesokRow({ row }: { row: RencanaBesokRow }) {
   return (
     <tr className="border-b border-line last:border-0">
       <td className="px-2 py-1.5 font-medium text-navy-900">

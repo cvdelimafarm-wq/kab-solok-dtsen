@@ -85,7 +85,15 @@
 // tidak wajib).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import PenyisiranUsahaTab, { apiFetch, getToken, IS_PML_KEY } from "../seruti/penyisiran-usaha";
+import PenyisiranUsahaTab, {
+  apiFetch,
+  getToken,
+  IS_PML_KEY,
+  ModalRencanaBesok,
+  TabelRencanaBesokHead,
+  TabelRencanaBesokRow,
+  type RencanaBesokRow,
+} from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
 import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
@@ -376,15 +384,26 @@ function FloatBarRencanaBesok() {
   const [pmlNoHp, setPmlNoHp] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [kirimStatus, setKirimStatus] = useState<"idle" | "menyalin" | "selesai" | "error">("idle");
+  // Modal "📅 Dijadwalkan Besok" (komponen ASLI yg sama dgn StatTile di tab
+  // Penyisiran Usaha, diimpor -- BUKAN diduplikasi) -- SEKARANG ikut dibuka
+  // saat tombol "Kirim ke WA" ditekan (permintaan user: "keluar modalnya yg
+  // di atas, karena gambar itu lebih bagus"), supaya petugas bisa LIHAT
+  // dulu daftarnya sebelum/sambil gambar disalin & tab WA terbuka.
+  const [showModal, setShowModal] = useState(false);
   const gambarRef = useRef<HTMLDivElement | null>(null);
   // Baris utk gambar off-screen -- SENGAJA dimuat bersamaan dgn `jumlah`
   // (poll periodik yg sama, lihat muatRingkasan di bawah), BUKAN baru
   // di-fetch saat tombol "Kirim ke WA" ditekan -- supaya gambarRef SUDAH
   // ter-render duluan & html2canvas bisa langsung dipanggil synchronous
   // dari klik tombol, tanpa race condition menunggu fetch+render selesai.
-  const [rowsUntukGambar, setRowsUntukGambar] = useState<
-    { kode_identitas: string; idsubsls: string | null; nama: string }[]
-  >([]);
+  // Tipe baris & tanggal SEKARANG SAMA PERSIS dgn ModalRencanaBesok
+  // (RencanaBesokRow, bukan bentuk ringkas {kode_identitas,idsubsls,nama}
+  // spt sebelumnya) -- permintaan user: desain gambar WA harus SAMA PERSIS
+  // dgn gambar di modal itu (ada subjudul Nagari/SLS di bawah nama tiap
+  // baris), makanya komponen tabelnya (TabelRencanaBesokHead/Row) diimpor
+  // LANGSUNG dari sana, bukan ditulis ulang.
+  const [rowsUntukGambar, setRowsUntukGambar] = useState<RencanaBesokRow[]>([]);
+  const [tanggalRencana, setTanggalRencana] = useState<string | null>(null);
 
   useEffect(() => {
     function bacaStorage() {
@@ -418,17 +437,24 @@ function FloatBarRencanaBesok() {
       });
     apiFetch("/api/penyisiran/rencana-besok", token)
       .then((data) => {
-        const rows = (Array.isArray(data?.rows) ? data.rows : []).map((r: any) => ({
-          kode_identitas: r.kode_identitas,
-          idsubsls: r.idsubsls ?? null,
-          nama: r.nama_anggota_keluarga || r.nama_kk || "(tanpa nama)",
-        }));
-        setRowsUntukGambar(rows);
+        setRowsUntukGambar(Array.isArray(data?.rows) ? data.rows : []);
+        setTanggalRencana(typeof data?.tanggal === "string" ? data.tanggal : null);
       })
       .catch(() => {
         setRowsUntukGambar([]);
+        setTanggalRencana(null);
       });
   }, [token, isPml]);
+
+  // SAMA PERSIS dgn tanggalLabel() di ModalRencanaBesok (app/seruti/
+  // penyisiran-usaha.tsx) -- diulang di sini (bukan diekspor, cuma beberapa
+  // baris) supaya judul gambar off-screen di bawah konsisten formatnya.
+  function tanggalLabel(): string {
+    if (!tanggalRencana) return "besok";
+    const [y, m, d] = tanggalRencana.split("-").map(Number);
+    if (!y || !m || !d) return tanggalRencana;
+    return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+  }
 
   useEffect(() => {
     muatRingkasan();
@@ -450,6 +476,10 @@ function FloatBarRencanaBesok() {
   }
 
   async function kirimKeWaPml() {
+    // Buka modal ASLI "📅 Dijadwalkan Besok" sekalian (permintaan user) --
+    // TIDAK menunggu ini selesai sebelum lanjut menyalin gambar (dua-duanya
+    // jalan bersamaan: modal utk dilihat, clipboard+tab WA di bawah).
+    setShowModal(true);
     if (!gambarRef.current) return;
     setKirimStatus("menyalin");
     try {
@@ -527,28 +557,39 @@ function FloatBarRencanaBesok() {
       {/* Klon tersembunyi off-screen utk html2canvas -- diisi
           `rowsUntukGambar` (dipoll bersamaan dgn `jumlah`, lihat
           muatRingkasan di atas, supaya SUDAH ter-render duluan saat
-          tombol "Kirim ke WA" ditekan). */}
+          tombol "Kirim ke WA" ditekan). Markup tabel (judul + head + baris)
+          SEKARANG memakai komponen ASLI yg SAMA dgn ModalRencanaBesok
+          (TabelRencanaBesokHead/TabelRencanaBesokRow, diimpor) -- permintaan
+          user, supaya desain gambarnya PERSIS sama (ada subjudul Nagari/SLS
+          di bawah nama tiap baris), bukan versi ringkas terpisah spt
+          sebelumnya. */}
       <div style={{ position: "fixed", top: -99999, left: -99999, width: 640 }}>
         <div ref={gambarRef} className="bg-white p-4">
-          <p className="mb-2 text-sm font-bold text-navy-900">Rencana Kunjungan Besok -- Penyisiran Usaha SE2026</p>
+          <p className="mb-2 text-sm font-bold text-navy-900">
+            Rencana Kunjungan {tanggalLabel()} -- Penyisiran Undercoverage Usaha SE2026
+          </p>
           <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-1">Nama Keluarga</th>
-                <th className="px-2 py-1">Kode SLS (16 digit)</th>
-              </tr>
-            </thead>
+            <TabelRencanaBesokHead />
             <tbody>
               {rowsUntukGambar.map((r) => (
-                <tr key={r.kode_identitas} className="border-b border-line">
-                  <td className="px-2 py-1">{r.nama}</td>
-                  <td className="px-2 py-1 font-mono">{r.idsubsls ?? "-"}</td>
-                </tr>
+                <TabelRencanaBesokRow key={r.kode_identitas} row={r} />
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal ASLI "📅 Dijadwalkan Besok" -- ikut terbuka begitu tombol
+          "Kirim ke WA" ditekan (lihat kirimKeWaPml), supaya petugas bisa
+          lihat daftarnya jg (bukan cuma tersalin diam2 ke clipboard). Modal
+          ini fetch data sendiri (independen dari rowsUntukGambar di atas). */}
+      {showModal && (
+        <ModalRencanaBesok
+          token={token}
+          onClose={() => setShowModal(false)}
+          onSessionExpired={() => setToken(null)}
+        />
+      )}
     </div>
   );
 }
