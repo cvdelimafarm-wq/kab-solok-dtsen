@@ -39,10 +39,32 @@
 // lib/spjMatriks.ts: definisi status per jenis dokumen & urutan cetak
 // standar, dipakai bersama oleh spj-monitoring.tsx & spj-cetak.tsx.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
-import { SpjDashboard, SpjMonitoring, AdministrasiSayaRingkasan, useSpjMonitoring } from "./spj-monitoring";
+import { AMBANG_DOKUMENTASI_HARIAN } from "@/lib/spjMatriks";
+import {
+  SpjDashboard,
+  SpjMonitoring,
+  AdministrasiSayaRingkasan,
+  KelengkapanDokumenSaya,
+  useSpjMonitoring,
+} from "./spj-monitoring";
 import { SpjCetakTab, SpjCetakSaya } from "./spj-cetak";
+
+// Tanggal hari ini menurut WIB (UTC+7, tanpa DST) -- dipakai modal ucapan
+// terima kasih SPJ (bandingkan tanggal Laporan/Dokumentasi vs "hari ini")
+// supaya konsisten dgn zona waktu operasional BPS Kab Solok, bukan zona
+// waktu server/browser yg bisa beda2.
+function tanggalHariIniWib(): string {
+  const wib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  return wib.toISOString().slice(0, 10);
+}
+
+function selisihHari(dariTanggal: string, keTanggal: string): number {
+  const a = new Date(dariTanggal + "T00:00:00Z").getTime();
+  const b = new Date(keTanggal + "T00:00:00Z").getTime();
+  return Math.round((b - a) / 86400000);
+}
 
 const JORONG_TOKEN_KEY = "identifikasi-jorong-login-token";
 const JORONG_NAMA_KEY = "identifikasi-jorong-login-nama";
@@ -306,6 +328,11 @@ function AdministrasiPanel({
   const [showUpload, setShowUpload] = useState(false);
   const [subTabPengelola, setSubTabPengelola] = useState<"dashboard" | "monitoring" | "cetak" | "arsip">("dashboard");
   const [subTabSaya, setSubTabSaya] = useState<"ringkasan" | "isi">("ringkasan");
+  const [modalSelesai, setModalSelesai] = useState<{ tanggal: string; telat: number } | null>(null);
+  // Supaya modal ucapan terima kasih cuma muncul SEKALI per (ST, tanggal)
+  // dlm satu sesi browser -- bukan tiap kali petugas upload/edit sesuatu
+  // lagi pd hari yg sudah lengkap sebelumnya.
+  const sudahDitampilkanRef = useRef<Set<string>>(new Set());
 
   // SATU fetch /api/penyisiran/spj/monitoring dipakai bareng utk
   // Dashboard, Monitoring SPJ, Cetak SPJ (matriks kelengkapan), DAN
@@ -313,6 +340,44 @@ function AdministrasiPanel({
   // field pengelola pada responsnya) apakah baris yg dikirim itu SEMUA
   // petugas atau cuma milik akun yg login.
   const monitoring = useSpjMonitoring(sesi.token, onSessionExpired);
+
+  // Dipanggil LaporanSection/DokumentasiSection tiap kali petugas berhasil
+  // simpan Laporan / upload foto Dokumentasi -- cek ULANG ke server (bukan
+  // pakai `monitoring.baris` yg mungkin blm sempat refresh) apakah tanggal
+  // itu SEKARANG sudah py Laporan + Dokumentasi >=3 foto (ambang KHUSUS
+  // fitur ini, sama dgn AMBANG_DOKUMENTASI_HARIAN di lib/spjMatriks.ts --
+  // BUKAN ambang >=5 yg dipakai statusDokumen() utk Dashboard pengelola).
+  // Kalau ya (& blm pernah ditampilkan), tampilkan modal ucapan terima
+  // kasih sesuai permintaan user. Kegagalan cek ini SENGAJA didiamkan --
+  // ini cuma pemicu ucapan terima kasih, bukan bagian alur simpan utama
+  // yg (kalau sampai callback ini terpanggil) sudah sukses tersimpan.
+  const cekDanTandaiSelesai = useCallback(
+    async (suratTugasId: number, tanggal: string) => {
+      const kunci = `${suratTugasId}:${tanggal}`;
+      try {
+        if (!sudahDitampilkanRef.current.has(kunci)) {
+          const data = await apiFetch("/api/penyisiran/spj/monitoring", sesi.token);
+          const barisBaru = (Array.isArray(data?.baris) ? data.baris : []) as {
+            surat_tugas_id: number;
+            tanggal: string;
+            ada_laporan: boolean;
+            slot_dokumentasi_terisi: number;
+          }[];
+          const row = barisBaru.find((b) => b.surat_tugas_id === suratTugasId && b.tanggal === tanggal);
+          if (row && row.ada_laporan && row.slot_dokumentasi_terisi >= AMBANG_DOKUMENTASI_HARIAN) {
+            sudahDitampilkanRef.current.add(kunci);
+            const telat = Math.max(0, selisihHari(tanggal, tanggalHariIniWib()));
+            setModalSelesai({ tanggal, telat });
+          }
+        }
+      } catch {
+        // diamkan -- lihat komentar di atas.
+      } finally {
+        monitoring.muat();
+      }
+    },
+    [sesi.token, monitoring]
+  );
 
   const guard = useCallback(
     (fn: () => void) => {
@@ -442,6 +507,12 @@ function AdministrasiPanel({
 
       {!pengelola && subTabSaya === "ringkasan" && (
         <div className="space-y-3">
+          <KelengkapanDokumenSaya
+            token={sesi.token}
+            onSessionExpired={onSessionExpired}
+            baris={monitoring.baris}
+            loading={monitoring.loading}
+          />
           <AdministrasiSayaRingkasan baris={monitoring.baris} loading={monitoring.loading} />
           <SpjCetakSaya token={sesi.token} onSessionExpired={onSessionExpired} />
         </div>
@@ -527,10 +598,10 @@ function AdministrasiPanel({
       <VisumSection token={sesi.token} onSessionExpired={onSessionExpired} />
 
       {/* ---------- Laporan -- SUDAH JALAN ---------- */}
-      <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} />
+      <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
 
       {/* ---------- Dokumentasi -- SUDAH JALAN ---------- */}
-      <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} />
+      <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
 
       {/* ---------- Kwitansi -- SUDAH JALAN ---------- */}
       <KwitansiSection token={sesi.token} onSessionExpired={onSessionExpired} />
@@ -538,6 +609,30 @@ function AdministrasiPanel({
       {/* ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas -- SUDAH JALAN ---------- */}
       <SuratKeteranganSection token={sesi.token} onSessionExpired={onSessionExpired} />
       </>
+      )}
+
+      {/* ---------- Modal ucapan terima kasih SPJ lengkap ---------- */}
+      {/* Dipicu cekDanTandaiSelesai() -- muncul saat Laporan + Dokumentasi
+          (>=3 foto) utk 1 (Surat Tugas, tanggal) SAMA2 sudah lengkap,
+          persis permintaan user. */}
+      {modalSelesai && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 p-4">
+          <div className="max-w-sm rounded-lg bg-white p-5 text-center shadow-xl">
+            <p className="text-3xl">🎉</p>
+            <p className="mt-2 text-sm font-semibold text-navy-900">
+              {modalSelesai.telat > 0
+                ? `Terima kasih, Anda sudah melengkapi SPJ tanggal ${formatTanggal(modalSelesai.tanggal)} (telat ${modalSelesai.telat} hari).`
+                : "Terima kasih, Anda sudah melengkapi SPJ hari ini tepat waktu."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setModalSelesai(null)}
+              className="mt-4 rounded-md bg-navy-700 px-4 py-1.5 text-xs font-semibold text-white hover:bg-navy-900"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -994,7 +1089,15 @@ interface LaporanSuratTugas {
   laporan: LaporanRow[];
 }
 
-function LaporanSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+function LaporanSection({
+  token,
+  onSessionExpired,
+  onSelesai,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+  onSelesai: (suratTugasId: number, tanggal: string) => void;
+}) {
   const [daftar, setDaftar] = useState<LaporanSuratTugas[]>([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -1087,7 +1190,15 @@ function LaporanSection({ token, onSessionExpired }: { token: string; onSessionE
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <LaporanStCard key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+          <LaporanStCard
+            key={st.surat_tugas_id}
+            st={st}
+            token={token}
+            onSaved={muat}
+            onUnduh={handleUnduh}
+            guard={guard}
+            onSelesai={onSelesai}
+          />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -1106,12 +1217,14 @@ function LaporanStCard({
   onSaved,
   onUnduh,
   guard,
+  onSelesai,
 }: {
   st: LaporanSuratTugas;
   token: string;
   onSaved: () => void;
   onUnduh: (laporanId: number) => void;
   guard: (fn: () => void) => void;
+  onSelesai: (suratTugasId: number, tanggal: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
 
@@ -1135,9 +1248,10 @@ function LaporanStCard({
         <LaporanForm
           st={st}
           token={token}
-          onDone={() => {
+          onDone={(tanggal) => {
             setShowForm(false);
             onSaved();
+            onSelesai(st.surat_tugas_id, tanggal);
           }}
           guard={guard}
         />
@@ -1169,6 +1283,120 @@ function LaporanStCard({
   );
 }
 
+// Label dropdown status_kunjungan (tab "Penyisiran Usaha") -- SAMA persis
+// dgn STATUS_VALID di app/api/penyisiran/update/route.ts, dipakai
+// menampilkan rekapStatusKunjungan dari preview Laporan.
+const LABEL_STATUS_KUNJUNGAN: Record<string, string> = {
+  belum: "Belum",
+  ditemukan: "Ditemukan",
+  tidak_ditemukan: "Tidak Ditemukan",
+  tidak_bisa: "Tidak Bisa Diwawancara",
+  sudah_didata_se2026: "Sudah Didata SE2026",
+};
+
+interface RekapLaporanPreview {
+  lokasi: {
+    kecNama: string | null;
+    nagariNama: string | null;
+    slsNama: string | null;
+    subslsKode: string | null;
+    jumlah: number;
+  }[];
+  rekapIdentifikasi: { ada: number; tidak_ada: number; ragu: number; belum: number };
+  totalAktivitas: number;
+  jumlahDokumentasi: number;
+  rekapStatusKunjungan: Record<string, number>;
+}
+
+// Kartu "Data Hasil Penyisiran" -- ditampilkan LANGSUNG di dalam form
+// Laporan begitu tanggal dipilih (permintaan user: "untuk laporan
+// langsung ditampilkan data hasil penyisiran"), TIDAK menunggu tombol
+// Simpan ditekan. Dipisah jadi komponen sendiri supaya fetch preview-nya
+// independen dari state form Laporan (mode/narasi).
+function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId: number; tanggal: string; token: string }) {
+  const [rekap, setRekap] = useState<RekapLaporanPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tanggal) return;
+    let batal = false;
+    setLoading(true);
+    setError(null);
+    apiFetch(
+      `/api/penyisiran/spj/laporan?preview_surat_tugas_id=${suratTugasId}&preview_tanggal=${encodeURIComponent(tanggal)}`,
+      token
+    )
+      .then((data) => {
+        if (!batal) setRekap(data?.rekap ?? null);
+      })
+      .catch((e) => {
+        if (!batal) setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!batal) setLoading(false);
+      });
+    return () => {
+      batal = true;
+    };
+  }, [suratTugasId, tanggal, token]);
+
+  const adaStatusKunjungan = rekap ? Object.values(rekap.rekapStatusKunjungan).some((v) => v > 0) : false;
+
+  return (
+    <div className="rounded-md border border-line bg-paper/30 p-2">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+        Data Hasil Penyisiran Tanggal {formatTanggal(tanggal)}
+      </p>
+      {loading ? (
+        <p className="text-[11px] text-ink/40">Memuat...</p>
+      ) : error ? (
+        <p className="text-[11px] text-rust-700">⚠ {error}</p>
+      ) : !rekap || (rekap.totalAktivitas === 0 && !adaStatusKunjungan) ? (
+        <p className="text-[11px] text-ink/40">Belum ada aktivitas penyisiran/identifikasi tercatat pada tanggal ini.</p>
+      ) : (
+        <div className="space-y-1.5 text-[11px]">
+          <div>
+            <p className="mb-0.5 font-medium text-ink/60">Kartu Keluarga per Status Kunjungan (Penyisiran Usaha)</p>
+            {adaStatusKunjungan ? (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(LABEL_STATUS_KUNJUNGAN).map(([k, label]) =>
+                  rekap.rekapStatusKunjungan[k] ? (
+                    <span key={k} className="rounded-full bg-navy-700/10 px-2 py-0.5 text-navy-900">
+                      {label}: <span className="font-semibold">{rekap.rekapStatusKunjungan[k]}</span>
+                    </span>
+                  ) : null
+                )}
+              </div>
+            ) : (
+              <p className="text-ink/40">Belum ada perubahan status kunjungan yang tercatat.</p>
+            )}
+          </div>
+          <div>
+            <p className="mb-0.5 font-medium text-ink/60">
+              Identifikasi Jorong/Tetangga -- {rekap.totalAktivitas} keluarga
+            </p>
+            <p className="text-ink/60">
+              Ada: {rekap.rekapIdentifikasi.ada} · Tidak Ada: {rekap.rekapIdentifikasi.tidak_ada} · Ragu:{" "}
+              {rekap.rekapIdentifikasi.ragu} · Belum: {rekap.rekapIdentifikasi.belum}
+            </p>
+            {rekap.lokasi.length > 0 && (
+              <ul className="ml-3 mt-1 list-disc space-y-0.5 text-[10px] text-ink/50">
+                {rekap.lokasi.map((l, i) => (
+                  <li key={i}>
+                    {[l.kecNama, l.nagariNama, l.slsNama, l.subslsKode].filter(Boolean).join(" / ")}: {l.jumlah} keluarga
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <p className="text-ink/40">Dokumentasi tanggal ini: {rekap.jumlahDokumentasi} foto.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LaporanForm({
   st,
   token,
@@ -1177,7 +1405,7 @@ function LaporanForm({
 }: {
   st: LaporanSuratTugas;
   token: string;
-  onDone: () => void;
+  onDone: (tanggal: string) => void;
   guard: (fn: () => void) => void;
 }) {
   const [tanggal, setTanggal] = useState(() => tanggalHariIniKlem(st.tanggal_mulai, st.tanggal_selesai));
@@ -1212,7 +1440,7 @@ function LaporanForm({
           narasi: narasi.trim(),
         }),
       });
-      onDone();
+      onDone(tanggal);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
@@ -1253,6 +1481,9 @@ function LaporanForm({
           </select>
         </div>
       </div>
+
+      {tanggal && <RekapLaporanPreviewBox suratTugasId={st.surat_tugas_id} tanggal={tanggal} token={token} />}
+
       {mode === "bebas" ? (
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/50">Narasi</label>
@@ -1302,7 +1533,15 @@ interface DokumentasiFotoSlot {
   url: string | null;
 }
 
-function DokumentasiSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+function DokumentasiSection({
+  token,
+  onSessionExpired,
+  onSelesai,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+  onSelesai: (suratTugasId: number, tanggal: string) => void;
+}) {
   const [daftar, setDaftar] = useState<DokumentasiSt[]>([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -1363,7 +1602,7 @@ function DokumentasiSection({ token, onSessionExpired }: { token: string; onSess
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <DokumentasiStCard key={st.surat_tugas_id} st={st} token={token} guard={guard} />
+          <DokumentasiStCard key={st.surat_tugas_id} st={st} token={token} guard={guard} onSelesai={onSelesai} />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -1376,7 +1615,17 @@ function DokumentasiSection({ token, onSessionExpired }: { token: string; onSess
   );
 }
 
-function DokumentasiStCard({ st, token, guard }: { st: DokumentasiSt; token: string; guard: (fn: () => void) => void }) {
+function DokumentasiStCard({
+  st,
+  token,
+  guard,
+  onSelesai,
+}: {
+  st: DokumentasiSt;
+  token: string;
+  guard: (fn: () => void) => void;
+  onSelesai: (suratTugasId: number, tanggal: string) => void;
+}) {
   const [tanggal, setTanggal] = useState(() => tanggalHariIniKlem(st.tanggal_mulai, st.tanggal_selesai));
   const [foto, setFoto] = useState<Record<number, DokumentasiFotoSlot | null>>({});
   const [loading, setLoading] = useState(false);
@@ -1429,6 +1678,7 @@ function DokumentasiStCard({ st, token, guard }: { st: DokumentasiSt; token: str
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
       await muatFoto(tanggal);
+      onSelesai(st.surat_tugas_id, tanggal);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       guard(() => {

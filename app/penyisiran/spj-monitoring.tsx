@@ -27,6 +27,7 @@ import {
   ringkasHari,
   labelRingkasan,
   kunciPetugas,
+  hitungKelengkapanPerJenis,
 } from "@/lib/spjMatriks";
 
 async function apiFetch(path: string, token: string) {
@@ -458,6 +459,127 @@ export function SpjMonitoring({ baris, loading }: { baris: BarisMatriks[]; loadi
 // sebelumnya -- BUKAN matriks 15-30 orang. Data sumbernya SAMA (endpoint
 // /api/penyisiran/spj/monitoring), tapi server sudah memfilter ke baris
 // milik sendiri saja utk akun non-pengelola (lihat route.ts).
+
+// ---------- "Kelengkapan per Jenis Dokumen" -- kartu BARU utk 1 orang ----------
+//
+// Beda dgn panel sejenis di SpjDashboard (di atas -- pengelola, lintas
+// org, 1 tanggal terpilih): kartu ini utk SATU orang (akun SPJ yg sedang
+// login), lintas SEMUA hari kerja yg dia TAG di kartu 🗓 Identifikasi
+// Hari Tugas (Perencanaan Lapangan) -- PENYEBUTnya (total) = jumlah hari
+// kerja yg ditag, BUKAN jumlah baris matriks spt di Dashboard pengelola.
+// Lihat lib/spjMatriks.ts hitungKelengkapanPerJenis() utk definisi
+// lengkap tiap jenis dokumen (termasuk ambang Dokumentasi >=3/hari yg
+// BEDA dgn ambang >=5 yg dipakai statusDokumen() di Dashboard/Monitoring
+// pengelola).
+//
+// Fetch tanggal hari kerja terpisah dari `baris` (yg didapat lewat
+// useSpjMonitoring, sudah di-lift ke AdministrasiPanel) krn sumbernya API
+// yg berbeda (.../spj/hari-kerja-saya, bukan .../spj/monitoring).
+
+async function apiFetchLokal(path: string, token: string) {
+  const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+  return data;
+}
+
+export function KelengkapanDokumenSaya({
+  token,
+  onSessionExpired,
+  baris,
+  loading,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+  baris: BarisMatriks[];
+  loading: boolean;
+}) {
+  const [hariKerja, setHariKerja] = useState<string[]>([]);
+  const [sumber, setSumber] = useState<"hari_tugas" | "fallback_st_range" | null>(null);
+  const [loadingHari, setLoadingHari] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let batal = false;
+    setLoadingHari(true);
+    apiFetchLokal("/api/penyisiran/spj/hari-kerja-saya", token)
+      .then((data) => {
+        if (batal) return;
+        setHariKerja(Array.isArray(data?.tanggal) ? data.tanggal : []);
+        setSumber(data?.sumber ?? null);
+      })
+      .catch((e) => {
+        if (batal) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+        else setErrMsg(msg);
+      })
+      .finally(() => {
+        if (!batal) setLoadingHari(false);
+      });
+    return () => {
+      batal = true;
+    };
+  }, [token, onSessionExpired]);
+
+  const kelengkapan = useMemo(() => hitungKelengkapanPerJenis(baris, hariKerja), [baris, hariKerja]);
+
+  const memuat = loading || loadingHari;
+
+  if (memuat && hariKerja.length === 0 && baris.length === 0) {
+    return <p className="rounded-lg border border-line bg-white p-6 text-center text-xs text-ink/40">Memuat data...</p>;
+  }
+
+  if (kelengkapan.totalHariKerja === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-line p-6 text-center text-xs text-ink/40">
+        Belum ada hari kerja yang ditag di kartu 🗓 Identifikasi Hari Tugas (tab Perencanaan Lapangan) -- kelengkapan
+        SPJ belum bisa dihitung.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <p className="mb-1 text-xs font-semibold text-navy-900">📊 Kelengkapan per Jenis Dokumen</p>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Dihitung dari {kelengkapan.totalHariKerja} hari kerja yang Anda tag di kartu 🗓 Identifikasi Hari Tugas.
+      </p>
+      {errMsg && <p className="mb-2 text-[11px] text-rust-700">⚠ {errMsg}</p>}
+      <div className="space-y-2">
+        {kelengkapan.perJenis.map((p) => (
+          <div key={p.jenis}>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-medium text-ink/70">{p.label}</span>
+              <span className="text-ink/50">
+                {p.ok}/{p.total} ({p.pct}%)
+              </span>
+            </div>
+            <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-line">
+              <div
+                className={`h-full rounded-full ${p.pct === 100 ? "bg-moss-500" : p.pct >= 70 ? "bg-gold-500" : "bg-rust-500"}`}
+                style={{ width: `${p.pct}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      {kelengkapan.hariTanpaSt.length > 0 && (
+        <p className="mt-2.5 rounded-md bg-gold-100/40 px-2 py-1.5 text-[10px] text-gold-700">
+          ⚠ {kelengkapan.hariTanpaSt.length} hari kerja yang ditag BELUM tertaut Surat Tugas apa pun:{" "}
+          {kelengkapan.hariTanpaSt.map((t) => formatTanggalPendek(t)).join(", ")}. Hubungi pengelola utk menautkan
+          Surat Tugas pada tanggal tsb.
+        </p>
+      )}
+      {sumber === "fallback_st_range" && (
+        <p className="mt-2 text-[10px] text-ink/40">
+          Catatan: akun Tetangga/Lainnya belum py fitur tag hari kerja tersendiri -- hari kerja di atas diturunkan
+          dari rentang tanggal Surat Tugas yang ditautkan ke Anda.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function AdministrasiSayaRingkasan({ baris, loading }: { baris: BarisMatriks[]; loading: boolean }) {
   const hariIni = hariIniStr();

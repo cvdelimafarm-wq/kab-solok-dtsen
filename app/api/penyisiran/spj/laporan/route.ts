@@ -1,7 +1,16 @@
 // app/api/penyisiran/spj/laporan/route.ts
 //
-// GET  -> daftar Surat Tugas milik petugas yg login, masing2 disertai
-//         daftar Laporan (per tanggal) yg sudah pernah dibuat utknya.
+// GET  -> dua mode:
+//   - mode "daftar" (default, tanpa query khusus): daftar Surat Tugas
+//     milik petugas yg login, masing2 disertai daftar Laporan (per
+//     tanggal) yg sudah pernah dibuat utknya.
+//   - mode "preview" (?preview_surat_tugas_id=&preview_tanggal=): hitung
+//     & KEMBALIKAN rekap template (persis logika yg dipakai POST mode
+//     "template") TANPA menyimpan apa pun -- dipakai kartu Laporan
+//     (app/penyisiran/administrasi-spj.tsx LaporanForm) utk menampilkan
+//     "data hasil penyisiran" LANGSUNG saat petugas memilih tanggal,
+//     sebelum/tanpa perlu menekan Simpan (permintaan user: "untuk laporan
+//     langsung ditampilkan data hasil penyisiran").
 // POST -> buat/perbarui (upsert, kunci: surat_tugas_id+petugas_jenis+
 //         petugas_id+tanggal) SATU Laporan utk SATU tanggal dlm rentang
 //         Surat Tugas tsb. Dua mode:
@@ -13,20 +22,27 @@
 //     "penyisiran" kebetulan sama2 mengacu ke petugas_penyisiran_akun;
 //     dipilih identifikasi_ppl krn itulah aktivitas yg BENAR2 dilakukan
 //     lewat akun yg dipakai login menu SPJ ini, dan satu2nya yg tersedia
-//     jg utk jenis "tetangga"). Hasil tarikannya DISIMPAN sbg snapshot
-//     (kolom rekap_snapshot, jsonb) supaya laporan yg sudah jadi tidak
-//     berubah diam2 kalau datanya diedit belakangan di tab Identifikasi.
+//     jg utk jenis "tetangga"), DITAMBAH rekap status_kunjungan (tab
+//     "Penyisiran Usaha") yg tercatat lewat akun YANG SAMA (nama sama
+//     persis) pada tanggal itu, ditarik dari penyisiran_riwayat (audit
+//     log) -- lihat rekapStatusKunjungan di hitungRekapTemplate(). Hasil
+//     tarikannya DISIMPAN sbg snapshot (kolom rekap_snapshot, jsonb)
+//     supaya laporan yg sudah jadi tidak berubah diam2 kalau datanya
+//     diedit belakangan di tab Identifikasi.
 //   - "bebas": narasi bebas dari petugas, rekap_snapshot null.
 //
 // Kalau mode "template" tapi TIDAK ADA aktivitas tercatat pada tanggal
 // itu, request DITOLAK dgn pesan yg mengarahkan petugas mengoreksi data
 // di tab Identifikasi Jorong/Tetangga dulu (sesuai permintaan user) atau
-// pakai mode "bebas" -- BUKAN diam2 menyimpan laporan kosong.
+// pakai mode "bebas" -- BUKAN diam2 menyimpan laporan kosong. Batasan ini
+// HANYA berlaku saat SIMPAN (POST) -- mode "preview" (GET) tetap
+// mengembalikan rekap apa adanya (boleh nol) krn tujuannya cuma
+// menampilkan, bukan menyimpan.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
-import { verifySpjSession, tabelAkun, roleUntukJenis } from "@/lib/spjAuth";
+import { verifySpjSession, tabelAkun, roleUntukJenis, type SpjSession } from "@/lib/spjAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,12 +60,181 @@ function tanggalBerikutnya(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface LokasiRekap {
+  kecNama: string | null;
+  nagariNama: string | null;
+  slsNama: string | null;
+  subslsKode: string | null;
+  waktuMulai: string | null;
+  waktuSelesai: string | null;
+  jumlah: number;
+}
+
+interface RekapTemplate {
+  lokasi: LokasiRekap[];
+  rekapIdentifikasi: { ada: number; tidak_ada: number; ragu: number; belum: number };
+  totalAktivitas: number;
+  jumlahDokumentasi: number;
+  // Rekap perubahan status_kunjungan (tab "Penyisiran Usaha") oleh akun yg
+  // SAMA persis (nama), pada tanggal yg sama -- BARU, terpisah dari
+  // rekapIdentifikasi di atas (yg sumbernya tab Identifikasi Jorong/
+  // Tetangga) krn dua aktivitas beda meski sering dilakukan orang yg
+  // sama. Kunci = nilai status_kunjungan (lihat STATUS_VALID di
+  // app/api/penyisiran/update/route.ts), nilai = jumlah keluarga.
+  rekapStatusKunjungan: Record<string, number>;
+}
+
+// Ditarik keluar dari POST supaya bisa dipakai bareng oleh mode "preview"
+// (GET, tanpa menyimpan) -- lihat komentar panjang di atas file ini.
+async function hitungRekapTemplate(
+  supabase: SupabaseClient,
+  session: SpjSession,
+  nama: string,
+  suratTugasId: number,
+  tanggal: string
+): Promise<RekapTemplate> {
+  const batasAtas = tanggalBerikutnya(tanggal);
+
+  const [{ data: rows, error: errRows }, { data: riwayat, error: errRiwayat }, { count: jumlahDokumentasi }] =
+    await Promise.all([
+      supabase
+        .from("penyisiran_usaha")
+        .select("kec_nama, nagari_nama, sls_nama, subsls_kode, identifikasi_ppl, identifikasi_ppl_at")
+        .eq("identifikasi_ppl_role", roleUntukJenis(session.jenis))
+        .eq("identifikasi_ppl_oleh", nama)
+        .gte("identifikasi_ppl_at", `${tanggal}T00:00:00+07:00`)
+        .lt("identifikasi_ppl_at", `${batasAtas}T00:00:00+07:00`),
+      supabase
+        .from("penyisiran_riwayat")
+        .select("nilai_baru")
+        .eq("jenis", "status_kunjungan")
+        .eq("oleh_nama", nama)
+        .gte("created_at", `${tanggal}T00:00:00+07:00`)
+        .lt("created_at", `${batasAtas}T00:00:00+07:00`),
+      supabase
+        .from("spj_dokumentasi_foto")
+        .select("id", { count: "exact", head: true })
+        .eq("surat_tugas_id", suratTugasId)
+        .eq("petugas_jenis", session.jenis)
+        .eq("petugas_id", session.petugasId)
+        .eq("tanggal", tanggal),
+    ]);
+  if (errRows) throw new Error(errRows.message);
+  if (errRiwayat) throw new Error(errRiwayat.message);
+
+  const peta = new Map<string, LokasiRekap>();
+  const rekapIdentifikasi = { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 };
+  for (const r of (rows ?? []) as {
+    kec_nama: string | null;
+    nagari_nama: string | null;
+    sls_nama: string | null;
+    subsls_kode: string | null;
+    identifikasi_ppl: string | null;
+    identifikasi_ppl_at: string | null;
+  }[]) {
+    const key = `${r.kec_nama ?? ""}|${r.nagari_nama ?? ""}|${r.sls_nama ?? ""}|${r.subsls_kode ?? ""}`;
+    const at = r.identifikasi_ppl_at;
+    const ada = peta.get(key);
+    if (ada) {
+      ada.jumlah += 1;
+      if (at && (!ada.waktuMulai || at < ada.waktuMulai)) ada.waktuMulai = at;
+      if (at && (!ada.waktuSelesai || at > ada.waktuSelesai)) ada.waktuSelesai = at;
+    } else {
+      peta.set(key, {
+        kecNama: r.kec_nama,
+        nagariNama: r.nagari_nama,
+        slsNama: r.sls_nama,
+        subslsKode: r.subsls_kode,
+        waktuMulai: at,
+        waktuSelesai: at,
+        jumlah: 1,
+      });
+    }
+    if (r.identifikasi_ppl && r.identifikasi_ppl in rekapIdentifikasi) {
+      (rekapIdentifikasi as Record<string, number>)[r.identifikasi_ppl] += 1;
+    }
+  }
+  const lokasi = [...peta.values()].sort((a, b) => (a.waktuMulai ?? "").localeCompare(b.waktuMulai ?? ""));
+
+  const rekapStatusKunjungan: Record<string, number> = {};
+  for (const r of (riwayat ?? []) as { nilai_baru: string }[]) {
+    rekapStatusKunjungan[r.nilai_baru] = (rekapStatusKunjungan[r.nilai_baru] ?? 0) + 1;
+  }
+
+  return {
+    lokasi,
+    rekapIdentifikasi,
+    totalAktivitas: (rows ?? []).length,
+    jumlahDokumentasi: jumlahDokumentasi ?? 0,
+    rekapStatusKunjungan,
+  };
+}
+
+// Cek kepemilikan ST + rentang tanggal + ambil nama akun -- dipakai bareng
+// oleh mode "preview" (GET) & POST, supaya validasinya SELALU konsisten.
+async function pastikanStMilikSesiDanTanggal(
+  supabase: SupabaseClient,
+  session: SpjSession,
+  suratTugasId: number,
+  tanggal: string
+): Promise<{ error: string; status: number } | { nama: string }> {
+  const { data: taut, error: errTaut } = await supabase
+    .from("spj_surat_tugas_petugas")
+    .select("id")
+    .eq("surat_tugas_id", suratTugasId)
+    .eq("petugas_jenis", session.jenis)
+    .eq("petugas_id", session.petugasId)
+    .maybeSingle();
+  if (errTaut) return { error: errTaut.message, status: 500 };
+  if (!taut) return { error: "Surat Tugas ini bukan milik Anda.", status: 403 };
+
+  const { data: stRow, error: errStRow } = await supabase
+    .from("spj_surat_tugas")
+    .select("tanggal_mulai, tanggal_selesai")
+    .eq("id", suratTugasId)
+    .maybeSingle();
+  if (errStRow) return { error: errStRow.message, status: 500 };
+  if (!stRow) return { error: "Surat Tugas tidak ditemukan.", status: 404 };
+  if (tanggal < stRow.tanggal_mulai || tanggal > stRow.tanggal_selesai) {
+    return {
+      error: `Tanggal harus dlm rentang ${stRow.tanggal_mulai} s/d ${stRow.tanggal_selesai} sesuai Surat Tugas.`,
+      status: 400,
+    };
+  }
+
+  const { data: akun } = await supabase.from(tabelAkun(session.jenis)).select("nama").eq("id", session.petugasId).maybeSingle();
+  const nama = akun?.nama ?? null;
+  if (!nama) return { error: "Akun petugas tidak ditemukan.", status: 404 };
+
+  return { nama };
+}
+
 export async function GET(req: NextRequest) {
   const session = verifySpjSession(extractBearer(req));
   if (!session) return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   const supabase = supabaseAdmin();
   if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
+  // ---------- Mode "preview" ----------
+  const previewSuratTugasId = req.nextUrl.searchParams.get("preview_surat_tugas_id");
+  const previewTanggal = req.nextUrl.searchParams.get("preview_tanggal");
+  if (previewSuratTugasId && previewTanggal) {
+    const suratTugasId = Number(previewSuratTugasId);
+    if (!Number.isFinite(suratTugasId)) return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(previewTanggal)) {
+      return NextResponse.json({ error: "Tanggal tidak valid." }, { status: 400 });
+    }
+    const cek = await pastikanStMilikSesiDanTanggal(supabase, session, suratTugasId, previewTanggal);
+    if ("error" in cek) return NextResponse.json({ error: cek.error }, { status: cek.status });
+    try {
+      const rekap = await hitungRekapTemplate(supabase, session, cek.nama, suratTugasId, previewTanggal);
+      return NextResponse.json({ rekap });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal menghitung rekap." }, { status: 500 });
+    }
+  }
+
+  // ---------- Mode "daftar" (default) ----------
   const { data: tautan, error: errTautan } = await supabase
     .from("spj_surat_tugas_petugas")
     .select("surat_tugas_id")
@@ -106,50 +291,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Narasi wajib diisi utk mode Narasi Bebas." }, { status: 400 });
   }
 
-  // Pastikan ST ini memang milik petugas yg login.
-  const { data: taut, error: errTaut } = await supabase
-    .from("spj_surat_tugas_petugas")
-    .select("id")
-    .eq("surat_tugas_id", suratTugasId)
-    .eq("petugas_jenis", session.jenis)
-    .eq("petugas_id", session.petugasId)
-    .maybeSingle();
-  if (errTaut) return NextResponse.json({ error: errTaut.message }, { status: 500 });
-  if (!taut) return NextResponse.json({ error: "Surat Tugas ini bukan milik Anda." }, { status: 403 });
-
-  // Tanggal laporan wajib dlm rentang tanggal_mulai..tanggal_selesai ST ini.
-  const { data: stRow, error: errStRow } = await supabase
-    .from("spj_surat_tugas")
-    .select("tanggal_mulai, tanggal_selesai")
-    .eq("id", suratTugasId)
-    .maybeSingle();
-  if (errStRow) return NextResponse.json({ error: errStRow.message }, { status: 500 });
-  if (!stRow) return NextResponse.json({ error: "Surat Tugas tidak ditemukan." }, { status: 404 });
-  if (tanggal < stRow.tanggal_mulai || tanggal > stRow.tanggal_selesai) {
-    return NextResponse.json(
-      { error: `Tanggal laporan harus dlm rentang ${stRow.tanggal_mulai} s/d ${stRow.tanggal_selesai} sesuai Surat Tugas.` },
-      { status: 400 }
-    );
-  }
+  const cek = await pastikanStMilikSesiDanTanggal(supabase, session, suratTugasId, tanggal);
+  if ("error" in cek) return NextResponse.json({ error: cek.error }, { status: cek.status });
 
   let rekapSnapshot: unknown = null;
 
   if (mode === "template") {
-    const { data: akun } = await supabase.from(tabelAkun(session.jenis)).select("nama").eq("id", session.petugasId).maybeSingle();
-    const nama = akun?.nama ?? null;
-    if (!nama) return NextResponse.json({ error: "Akun petugas tidak ditemukan." }, { status: 404 });
+    let rekap: RekapTemplate;
+    try {
+      rekap = await hitungRekapTemplate(supabase, session, cek.nama, suratTugasId, tanggal);
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal menghitung rekap." }, { status: 500 });
+    }
 
-    const batasAtas = tanggalBerikutnya(tanggal);
-    const { data: rows, error: errRows } = await supabase
-      .from("penyisiran_usaha")
-      .select("kec_nama, nagari_nama, sls_nama, subsls_kode, identifikasi_ppl, identifikasi_ppl_at")
-      .eq("identifikasi_ppl_role", roleUntukJenis(session.jenis))
-      .eq("identifikasi_ppl_oleh", nama)
-      .gte("identifikasi_ppl_at", `${tanggal}T00:00:00+07:00`)
-      .lt("identifikasi_ppl_at", `${batasAtas}T00:00:00+07:00`);
-    if (errRows) return NextResponse.json({ error: errRows.message }, { status: 500 });
-
-    if (!rows || rows.length === 0) {
+    if (rekap.totalAktivitas === 0) {
       return NextResponse.json(
         {
           error:
@@ -160,63 +315,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    type Lokasi = {
-      kecNama: string | null;
-      nagariNama: string | null;
-      slsNama: string | null;
-      subslsKode: string | null;
-      waktuMulai: string | null;
-      waktuSelesai: string | null;
-      jumlah: number;
-    };
-    const peta = new Map<string, Lokasi>();
-    const rekapIdentifikasi = { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 };
-    for (const r of rows as {
-      kec_nama: string | null;
-      nagari_nama: string | null;
-      sls_nama: string | null;
-      subsls_kode: string | null;
-      identifikasi_ppl: string | null;
-      identifikasi_ppl_at: string | null;
-    }[]) {
-      const key = `${r.kec_nama ?? ""}|${r.nagari_nama ?? ""}|${r.sls_nama ?? ""}|${r.subsls_kode ?? ""}`;
-      const at = r.identifikasi_ppl_at;
-      const ada = peta.get(key);
-      if (ada) {
-        ada.jumlah += 1;
-        if (at && (!ada.waktuMulai || at < ada.waktuMulai)) ada.waktuMulai = at;
-        if (at && (!ada.waktuSelesai || at > ada.waktuSelesai)) ada.waktuSelesai = at;
-      } else {
-        peta.set(key, {
-          kecNama: r.kec_nama,
-          nagariNama: r.nagari_nama,
-          slsNama: r.sls_nama,
-          subslsKode: r.subsls_kode,
-          waktuMulai: at,
-          waktuSelesai: at,
-          jumlah: 1,
-        });
-      }
-      if (r.identifikasi_ppl && r.identifikasi_ppl in rekapIdentifikasi) {
-        (rekapIdentifikasi as Record<string, number>)[r.identifikasi_ppl] += 1;
-      }
-    }
-    const lokasi = [...peta.values()].sort((a, b) => (a.waktuMulai ?? "").localeCompare(b.waktuMulai ?? ""));
-
-    const { count: jumlahDokumentasi } = await supabase
-      .from("spj_dokumentasi_foto")
-      .select("id", { count: "exact", head: true })
-      .eq("surat_tugas_id", suratTugasId)
-      .eq("petugas_jenis", session.jenis)
-      .eq("petugas_id", session.petugasId)
-      .eq("tanggal", tanggal);
-
-    rekapSnapshot = {
-      lokasi,
-      rekapIdentifikasi,
-      totalAktivitas: rows.length,
-      jumlahDokumentasi: jumlahDokumentasi ?? 0,
-    };
+    rekapSnapshot = rekap;
   }
 
   const { data: upserted, error: errUpsert } = await supabase

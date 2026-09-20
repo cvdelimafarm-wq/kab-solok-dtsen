@@ -112,3 +112,100 @@ export function kunciPenugasan(row: Pick<BarisMatriks, "petugas_jenis" | "petuga
 export function kunciPetugas(row: Pick<BarisMatriks, "petugas_jenis" | "petugas_id">): string {
   return `${row.petugas_jenis}:${row.petugas_id}`;
 }
+
+// ---------------------------------------------------------------------------
+// Kelengkapan per Jenis Dokumen -- utk SATU orang (kartu "Administrasi Saya",
+// non-pengelola -- lihat app/penyisiran/spj-monitoring.tsx
+// KelengkapanDokumenSaya() & app/penyisiran/administrasi-spj.tsx).
+//
+// BEDA dgn ringkasHari()/statusDokumen() yg dipakai Dashboard/Monitoring
+// pengelola (penyebutnya = baris matriks yg ADA, lintas semua org): di sini
+// PENYEBUTnya = jumlah hari kerja yg BENAR2 ditag org ybs di kartu
+// 🗓 Identifikasi Hari Tugas (Perencanaan Lapangan; lihat
+// app/api/penyisiran/spj/hari-kerja-saya/route.ts) -- sesuai permintaan
+// user "kelengkapannya mengacu ke jumlah hari kerja yang dia tag". Hari
+// kerja yg ditag tapi TIDAK tertaut Surat Tugas apa pun (baris matriks tdk
+// ada utk tanggal itu) dihitung "belum" utk SEMUA jenis dokumen pd tanggal
+// itu, dan jg dilaporkan terpisah lewat `hariTanpaSt` sbg peringatan.
+//
+// Ambang Dokumentasi KHUSUS kartu ini = >=3 foto/hari (BEDA dgn ambang >=5
+// yg dipakai statusDokumen() utk Dashboard/Monitoring pengelola) -- sesuai
+// permintaan user "Dokumentasi hari tertentu oke jika user sudah upload
+// foto minimal 3 per hari". SENGAJA fungsi terpisah (bukan mengubah
+// statusDokumen()) krn dua definisi "lengkap" ini utk audiens/tujuan beda.
+
+export const AMBANG_DOKUMENTASI_HARIAN = 3;
+
+export interface KelengkapanHariRingkas {
+  tanggal: string;
+  adaSt: boolean;
+  slotDokumentasi: number;
+  ok: Record<JenisDokumen, boolean>;
+}
+
+export interface KelengkapanJenisRingkas {
+  jenis: JenisDokumen;
+  label: string;
+  ok: number;
+  total: number;
+  pct: number;
+}
+
+export interface KelengkapanPerJenisHasil {
+  perJenis: KelengkapanJenisRingkas[];
+  perHari: KelengkapanHariRingkas[];
+  totalHariKerja: number;
+  hariTanpaSt: string[];
+}
+
+export function hitungKelengkapanPerJenis(baris: BarisMatriks[], hariKerja: string[]): KelengkapanPerJenisHasil {
+  const tanggalUnik = Array.from(new Set(hariKerja)).sort();
+
+  // Asumsi 1 baris per tanggal (1 ST aktif per org per hari) -- kalau ada
+  // 2 ST org yg sama tumpang tindih tanggalnya (kasus langka, blm pernah
+  // terjadi di data nyata per investigasi), baris TERAKHIR yg menang.
+  const petaBaris = new Map<string, BarisMatriks>();
+  for (const b of baris) petaBaris.set(b.tanggal, b);
+
+  const perHari: KelengkapanHariRingkas[] = tanggalUnik.map((tanggal) => {
+    const row = petaBaris.get(tanggal);
+    if (!row) {
+      return {
+        tanggal,
+        adaSt: false,
+        slotDokumentasi: 0,
+        ok: {
+          kwitansi: false,
+          surat_tugas: false,
+          visum: false,
+          laporan: false,
+          dokumentasi: false,
+          surat_keterangan: false,
+        },
+      };
+    }
+    return {
+      tanggal,
+      adaSt: true,
+      slotDokumentasi: row.slot_dokumentasi_terisi,
+      ok: {
+        kwitansi: row.ada_kwitansi,
+        surat_tugas: true,
+        visum: row.ada_visum,
+        laporan: row.ada_laporan,
+        dokumentasi: row.slot_dokumentasi_terisi >= AMBANG_DOKUMENTASI_HARIAN,
+        surat_keterangan: row.ada_surat_keterangan,
+      },
+    };
+  });
+
+  const perJenis: KelengkapanJenisRingkas[] = JENIS_DOKUMEN.map((jenis) => {
+    const ok = perHari.filter((h) => h.ok[jenis]).length;
+    const total = perHari.length;
+    return { jenis, label: LABEL_DOKUMEN[jenis], ok, total, pct: total > 0 ? Math.round((ok / total) * 100) : 0 };
+  });
+
+  const hariTanpaSt = perHari.filter((h) => !h.adaSt).map((h) => h.tanggal);
+
+  return { perJenis, perHari, totalHariKerja: tanggalUnik.length, hariTanpaSt };
+}
