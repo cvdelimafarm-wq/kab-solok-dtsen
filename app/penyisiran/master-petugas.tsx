@@ -392,6 +392,16 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
                     values={tabel.uniqueValues[k.key] ?? []}
                     activeFilter={tabel.filters[k.key]}
                     onFilterChange={tabel.setColumnFilter}
+                    // Kolom "Nama Petugas" DIBEKUKAN (freeze, permintaan
+                    // user) -- tetap kelihatan di kiri layar walau tabel
+                    // digulir ke kanan (banyak kolom: Email/No.HP/Kecamatan/
+                    // Nagari/Alamat Detail/Status/Pengawas). Latar SOLID
+                    // (bg-paper, bukan bg-paper/60 spt baris header lainnya)
+                    // supaya kolom lain yg tergulir di baliknya tidak
+                    // "tembus" -- z-20 (lebih tinggi dari sel body z-10) spy
+                    // dropdown filter Excel kolom lain tidak ketutup header
+                    // beku ini.
+                    className={k.key === "nama" ? "sticky left-0 z-20 border-r border-line bg-paper" : undefined}
                   />
                 ))}
               </tr>
@@ -461,7 +471,12 @@ function BarisMaster({
 
   return (
     <tr className="border-b border-line last:border-0">
-      <td className="px-3 py-1.5 font-medium text-navy-900">
+      {/* Kolom "Nama" DIBEKUKAN (freeze) -- sticky left-0 + latar SOLID putih
+          (harus opaque, bukan transparan) supaya kolom lain yg digulir ke
+          kiri tidak "tembus" kelihatan di baliknya. z-10 (di bawah z-20
+          header beku di atas) supaya header tetap menang saat scroll
+          vertikal+horizontal bersamaan. */}
+      <td className="sticky left-0 z-10 border-r border-line bg-white px-3 py-1.5 font-medium text-navy-900">
         {p.nama}
         {!p.aktif && <span className="ml-1 text-[9px] text-ink/40">(nonaktif)</span>}
       </td>
