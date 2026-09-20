@@ -2,36 +2,40 @@
 
 // app/penyisiran/monitoring-terpadu.tsx
 //
-// Tab "Monitoring" -- gabungan 8 area monitoring lintas tab yang tadinya
+// Tab "Monitoring" -- gabungan 9 area monitoring lintas tab yang tadinya
 // tersebar/belum ada, dirangkum dalam SATU tab (atas permintaan user
 // setelah dianalisis "apa saja kira2 yang bisa dibuat monitoringnya"):
 //   1. Monitoring Kinerja PPL Hari Ini (ditambahkan belakangan, BUKAN bagian
 //      RPC gabungan di bawah -- lihat komentar SeksiKinerjaPplHariIni):
 //      berhasil didata/dikunjungi/penyelesaian SPJ/akurasi identifikasi per
-//      PPL, khusus HARI INI (bukan akumulatif).
-//   2. Progres vs tenggat waktu Identifikasi (proyeksi selesai berdasar
+//      PPL, khusus HARI INI (bukan akumulatif) -- KHUSUS PPL saja (kolom
+//      "Nama PML" dipindah ke kartu #2, permintaan user).
+//   2. Monitoring PML (BARU, permintaan user, dipisah dari kartu #1) --
+//      rekap kinerja TIM per PML, AGREGASI (bukan query baru) dari data
+//      kartu #1 -- lihat komentar SeksiMonitoringPml.
+//   3. Progres vs tenggat waktu Identifikasi (proyeksi selesai berdasar
 //      rata2 pengisian 7 hari terakhir, dibandingkan tenggat Minggu, 20
 //      September 2026 pukul 12:00 WIB -- lihat PESAN_PENUTUPAN di
 //      identifikasi-ppl.tsx).
-//   3. Konsistensi jawaban lintas sumber Identifikasi (PPL vs Jorong vs
+//   4. Konsistensi jawaban lintas sumber Identifikasi (PPL vs Jorong vs
 //      Tetangga) -- ketiganya menulis ke kolom yg SAMA di penyisiran_usaha
 //      (lihat komentar di page.tsx), jadi riwayatnya (penyisiran_riwayat)
 //      dipakai utk membandingkan jawaban TERAKHIR tiap sumber per keluarga.
-//   4. Realisasi vs rencana Perencanaan Lapangan (Sub SLS yg direncanakan
+//   5. Realisasi vs rencana Perencanaan Lapangan (Sub SLS yg direncanakan
 //      vs yg benar2 dikunjungi, + kuota OH Translok 280 hari).
-//   5. Kualitas & kewajaran data kunjungan Penyisiran Usaha (kelengkapan
+//   6. Kualitas & kewajaran data kunjungan Penyisiran Usaha (kelengkapan
 //      bukti DUTP/DTSEN/PNM + catatan pada kartu "Ditemukan", dan deteksi
 //      update beruntun sangat cepat/"bulk edit" yg patut dicek manual).
-//   6. Kelengkapan SPJ (Surat Tugas yg belum ada Visum-nya).
-//   7. Konflik alokasi wilayah PPL (1 ID Sub SLS dialokasikan ke >1 PPL --
+//   7. Kelengkapan SPJ (Surat Tugas yg belum ada Visum-nya).
+//   8. Konflik alokasi wilayah PPL (1 ID Sub SLS dialokasikan ke >1 PPL --
 //      "bukan bug, memang begitu datanya", lihat komentar di
 //      monitoring-ppl.tsx, tapi tetap perlu terlihat supaya bisa ditindak
 //      kalau memang perlu diluruskan).
-//   8. Beban kerja & kelengkapan data Master Petugas (jumlah bawahan per
+//   9. Beban kerja & kelengkapan data Master Petugas (jumlah bawahan per
 //      pengawas, akun aktif dgn data kontak belum lengkap).
 //
-// (Urutan 2-8 di atas adalah 7 area LAMA, tetap dari SATU RPC gabungan --
-// lihat komentar "Sumber data" di bawah. Area #1 baru dijelaskan di atas.)
+// (Urutan 3-9 di atas adalah 7 area LAMA, tetap dari SATU RPC gabungan --
+// lihat komentar "Sumber data" di bawah. Area #1 & #2 baru dijelaskan di atas.)
 //
 // Sumber data: SATU RPC gabungan penyisiran_monitoring_terpadu() (lihat
 // supabase/migrations/20260919_penyisiran_monitoring_terpadu.sql) supaya
@@ -357,13 +361,16 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
 
       {data && (
         <div className="space-y-4">
-          {/* Seksi #1 -- BARU, permintaan user, DITAMBAHKAN di paling atas
-              (bukan bagian dari 7 seksi RPC gabungan penyisiran_monitoring_
-              terpadu() di atas -- data-nya sendiri dari RPC & endpoint
-              terpisah, lihat SeksiKinerjaPplHariIni di bawah), makanya
-              7 seksi lain di bawah ini SEMUA nomornya digeser +1 (dulu
-              1-7, sekarang 2-8). */}
+          {/* Seksi #1 & #2 -- BARU, permintaan user, DITAMBAHKAN di paling
+              atas (bukan bagian dari 7 seksi RPC gabungan penyisiran_
+              monitoring_terpadu() di bawah -- data-nya sendiri dari RPC &
+              endpoint terpisah, lihat SeksiKinerjaPplHariIni &
+              SeksiMonitoringPml di atas), makanya 7 seksi lain di bawah ini
+              SEMUA nomornya digeser +2 (dulu 1-7, sekarang 3-9). #1 = per
+              PPL, #2 = rekap TIM per PML (agregasi dari data #1 yg sama,
+              lihat komentar SeksiMonitoringPml). */}
           <SeksiKinerjaPplHariIni token={token} onSessionExpired={onSessionExpired} />
+          <SeksiMonitoringPml token={token} onSessionExpired={onSessionExpired} />
           <SeksiProgresTenggat data={data.progres_tenggat} />
           <SeksiKonsistensiIdentifikasi data={data.konsistensi_identifikasi} />
           <SeksiRealisasiRencana data={data.realisasi_vs_rencana} />
@@ -499,9 +506,9 @@ function TabelKinerjaHead() {
         <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-left align-bottom">
           Nama PPL
         </th>
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-left align-bottom">
-          Nama PML
-        </th>
+        {/* Kolom "Nama PML" DIHAPUS dari sini (permintaan user) -- kartu ini
+            sekarang KHUSUS PPL saja, rekap per PML dipindah ke kartu #2
+            terpisah (lihat SeksiMonitoringPml di bawah). */}
         <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
           Berhasil Didata Hari Ini
         </th>
@@ -531,7 +538,6 @@ function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: 
   return (
     <tr>
       <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
-      <td className="px-2 py-1.5">{r.pml_nama || "-"}</td>
       <td
         className={`px-2 py-1.5 text-right font-semibold ${
           r.ditemukan_hari_ini >= targetHarian ? "text-moss-700" : "text-rust-700"
@@ -692,7 +698,240 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
   );
 }
 
-// ---------- 2) Progres vs tenggat waktu ----------
+// ---------- 2) Monitoring PML ----------
+//
+// BARU (permintaan user, dipisah dari kartu #1 di atas) -- rekap kinerja
+// TIM per PML, bukan per PPL. TIDAK butuh endpoint/RPC baru -- dihitung di
+// FE dgn AGREGASI (jumlah/sum per kelompok pml_nama) dari data yg SAMA
+// PERSIS dgn kartu #1 (/api/penyisiran/monitoring-kinerja-hari-ini), makanya
+// komponen ini fetch SENDIRI lagi (pola sama dgn SeksiKinerjaPplHariIni,
+// BUKAN menerima props dari kartu #1 -- 2 komponen ini sengaja independen
+// spy tidak saling bergantung state-nya). PPL tanpa pengawas_id/PML
+// (jarang, data belum lengkap) dikelompokkan ke "(Belum Ada PML)" supaya
+// tidak hilang diam-diam dari rekap.
+interface PmlAgg {
+  pml_nama: string;
+  jumlah_ppl: number;
+  ditemukan_total: number;
+  target_total: number;
+  dikunjungi_total: number;
+  spj_lengkap: number; // pembilang -- jumlah PPL dgn ST hari ini YANG laporan+dokumentasi keduanya OK
+  spj_ada_st: number; // penyebut -- jumlah PPL yg py ST hari ini (butuh SPJ hari ini)
+  akurasi_benar_total: number;
+  akurasi_dasar_total: number;
+}
+
+function agregasiPerPml(baris: KinerjaPplRow[], targetHarian: number): PmlAgg[] {
+  const map = new Map<string, PmlAgg>();
+  for (const r of baris) {
+    const key = r.pml_nama && r.pml_nama.trim() ? r.pml_nama : "(Belum Ada PML)";
+    let agg = map.get(key);
+    if (!agg) {
+      agg = {
+        pml_nama: key,
+        jumlah_ppl: 0,
+        ditemukan_total: 0,
+        target_total: 0,
+        dikunjungi_total: 0,
+        spj_lengkap: 0,
+        spj_ada_st: 0,
+        akurasi_benar_total: 0,
+        akurasi_dasar_total: 0,
+      };
+      map.set(key, agg);
+    }
+    agg.jumlah_ppl += 1;
+    agg.ditemukan_total += r.ditemukan_hari_ini;
+    agg.target_total += targetHarian;
+    agg.dikunjungi_total += r.dikunjungi_hari_ini;
+    if (r.ada_st_hari_ini) {
+      agg.spj_ada_st += 1;
+      if (r.laporan_ok && r.dokumentasi_ok) agg.spj_lengkap += 1;
+    }
+    agg.akurasi_benar_total += r.akurasi_benar;
+    agg.akurasi_dasar_total += r.akurasi_dasar;
+  }
+  return Array.from(map.values()).sort((a, b) => a.pml_nama.localeCompare(b.pml_nama, "id"));
+}
+
+function TabelPmlHead() {
+  return (
+    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+      <tr>
+        <th className="border-b border-line px-2 py-1.5 text-left">Nama PML</th>
+        <th className="border-b border-line px-2 py-1.5 text-right">Jml PPL</th>
+        <th className="border-b border-line px-2 py-1.5 text-right">Berhasil Didata (Tim)</th>
+        <th className="border-b border-line px-2 py-1.5 text-right">Target (Tim)</th>
+        <th className="border-b border-line px-2 py-1.5 text-right">Usaha Dikunjungi (Tim)</th>
+        <th className="border-b border-line px-2 py-1.5 text-center">SPJ Lengkap</th>
+        <th className="border-b border-line px-2 py-1.5 text-right">Akurasi Identifikasi (Tim)</th>
+      </tr>
+    </thead>
+  );
+}
+
+function TabelPmlRow({ a }: { a: PmlAgg }) {
+  const pct = a.akurasi_dasar_total > 0 ? Math.round((a.akurasi_benar_total / a.akurasi_dasar_total) * 100) : null;
+  return (
+    <tr>
+      <td className="px-2 py-1.5 font-medium text-navy-900">{a.pml_nama}</td>
+      <td className="px-2 py-1.5 text-right">{a.jumlah_ppl}</td>
+      <td
+        className={`px-2 py-1.5 text-right font-semibold ${
+          a.ditemukan_total >= a.target_total ? "text-moss-700" : "text-rust-700"
+        }`}
+      >
+        {a.ditemukan_total}
+      </td>
+      <td className="px-2 py-1.5 text-right text-ink/50">{a.target_total}</td>
+      <td className="px-2 py-1.5 text-right">{a.dikunjungi_total}</td>
+      <td className="px-2 py-1.5 text-center">{a.spj_ada_st > 0 ? `${a.spj_lengkap}/${a.spj_ada_st}` : "-"}</td>
+      <td className="px-2 py-1.5 text-right">{pct == null ? "-" : `${pct}%`}</td>
+    </tr>
+  );
+}
+
+function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
+  const [targetHarian, setTargetHarian] = useState(7);
+  const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
+  const gambarRef = useRef<HTMLDivElement | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const d = await apiFetch("/api/penyisiran/monitoring-kinerja-hari-ini", token);
+      setBaris(Array.isArray(d?.baris) ? d.baris : []);
+      setTargetHarian(typeof d?.target_harian_kk === "number" ? d.target_harian_kk : 7);
+      setWaktuMuat(new Date());
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        onSessionExpired();
+      } else {
+        setErrMsg(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, onSessionExpired]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const agregat = useMemo(() => agregasiPerPml(baris, targetHarian), [baris, targetHarian]);
+
+  async function salinSebagaiGambar() {
+    if (!gambarRef.current) return;
+    setCopyStatus("copying");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setCopyStatus("error");
+          return;
+        }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        } catch {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "monitoring-pml-hari-ini.png";
+          a.click();
+          URL.revokeObjectURL(url);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        }
+      }, "image/png");
+    } catch {
+      setCopyStatus("error");
+    }
+  }
+
+  return (
+    <Seksi
+      nomor={2}
+      judul="Monitoring PML"
+      keterangan={`${waktuMuat ? formatJudulWaktu(waktuMuat) : "Memuat..."} -- rekap kinerja TIM per PML HARI INI, dijumlahkan dari data PPL di kartu #1 di atas (khusus PPL aktif).`}
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+        <button
+          type="button"
+          onClick={salinSebagaiGambar}
+          disabled={copyStatus === "copying" || agregat.length === 0}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {copyStatus === "copying"
+            ? "Menyalin..."
+            : copyStatus === "done"
+            ? "✓ Tersalin -- tempel ke WA"
+            : copyStatus === "error"
+            ? "Gagal, coba lagi"
+            : "📋 Salin Monitoring PML (utk WA)"}
+        </button>
+      </div>
+
+      {errMsg && (
+        <p className="mb-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      {!loading && agregat.length === 0 && !errMsg && (
+        <p className="rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
+          Belum ada petugas penyisiran aktif.
+        </p>
+      )}
+
+      {agregat.length > 0 && (
+        <div className="overflow-x-auto rounded-md border border-line">
+          <table className="w-full min-w-[680px] border-collapse text-xs">
+            <TabelPmlHead />
+            <tbody className="divide-y divide-line">
+              {agregat.map((a) => (
+                <TabelPmlRow key={a.pml_nama} a={a} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Klon tersembunyi off-screen utk html2canvas -- pola sama dgn
+          kartu #1 (SeksiKinerjaPplHariIni). */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 720 }}>
+        <div ref={gambarRef} className="bg-white p-4">
+          <p className="text-sm font-bold text-navy-900">Monitoring PML</p>
+          <p className="mb-2 text-[11px] text-ink/50">{waktuMuat ? formatJudulWaktu(waktuMuat) : ""}</p>
+          <table className="w-full border-collapse text-xs">
+            <TabelPmlHead />
+            <tbody>
+              {agregat.map((a) => (
+                <TabelPmlRow key={a.pml_nama} a={a} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Seksi>
+  );
+}
+
+// ---------- 3) Progres vs tenggat waktu ----------
 
 function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   const pct = persen(data.jumlah_selesai, data.total_keluarga);
@@ -710,7 +949,7 @@ function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
 
   return (
     <Seksi
-      nomor={2}
+      nomor={3}
       judul="Progres vs Tenggat Waktu Identifikasi"
       keterangan={`Tenggat pengisian Identifikasi: ${formatTanggalJam(data.deadline)} WIB. Proyeksi dihitung dari rata-rata pengisian 7 hari terakhir.`}
     >
@@ -767,7 +1006,7 @@ function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   );
 }
 
-// ---------- 3) Konsistensi lintas sumber identifikasi ----------
+// ---------- 4) Konsistensi lintas sumber identifikasi ----------
 
 function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi }) {
   const kolom = useMemo(
@@ -791,7 +1030,7 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
 
   return (
     <Seksi
-      nomor={3}
+      nomor={4}
       judul="Konsistensi Jawaban Lintas Sumber Identifikasi"
       keterangan="Membandingkan jawaban TERAKHIR dari PPL, Jorong, dan Tetangga/Lainnya per keluarga (dari riwayat perubahan) -- baris di bawah adalah keluarga yang dijawab beda oleh lebih dari satu sumber."
     >
@@ -869,7 +1108,7 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
   );
 }
 
-// ---------- 4) Realisasi vs rencana ----------
+// ---------- 5) Realisasi vs rencana ----------
 
 function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   const kolom = useMemo(
@@ -887,7 +1126,7 @@ function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
 
   return (
     <Seksi
-      nomor={4}
+      nomor={5}
       judul="Realisasi vs Rencana (Perencanaan Lapangan)"
       keterangan="Sub SLS yang direncanakan tiap petugas (kartu Identifikasi Wilayah Sampel SLS) dibandingkan dgn Sub SLS yang benar-benar sudah dikunjungi di Penyisiran Usaha, plus pemakaian kuota OH Translok."
     >
@@ -951,7 +1190,7 @@ function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   );
 }
 
-// ---------- 5) Kualitas & kewajaran data kunjungan ----------
+// ---------- 6) Kualitas & kewajaran data kunjungan ----------
 
 function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjungan; burst: BurstUpdateRow[] }) {
   const kolomKec = useMemo(
@@ -985,7 +1224,7 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
 
   return (
     <Seksi
-      nomor={5}
+      nomor={6}
       judul="Kualitas & Kewajaran Data Kunjungan Penyisiran Usaha"
       keterangan="Kelengkapan bukti (DUTP/DTSEN/PNM) & catatan pada kartu berstatus “Ditemukan”, plus deteksi update status kunjungan yang beruntun sangat cepat (≥15x dalam 5 menit oleh petugas yang sama) -- patut dicek manual, bisa jadi isi cepat tanpa kunjungan nyata."
     >
@@ -1088,7 +1327,7 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
   );
 }
 
-// ---------- 6) Kelengkapan SPJ ----------
+// ---------- 7) Kelengkapan SPJ ----------
 
 function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
   const kolom = useMemo(
@@ -1104,7 +1343,7 @@ function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
 
   return (
     <Seksi
-      nomor={6}
+      nomor={7}
       judul="Kelengkapan SPJ (Surat Tugas tanpa Visum)"
       keterangan="Setiap petugas yang tercantum di sebuah Surat Tugas seharusnya punya Visum. Daftar di bawah adalah pasangan Surat Tugas x Petugas yang BELUM ada Visum-nya."
     >
@@ -1159,7 +1398,7 @@ function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
   );
 }
 
-// ---------- 7) Konflik alokasi wilayah PPL ----------
+// ---------- 8) Konflik alokasi wilayah PPL ----------
 
 function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
   const kolom = useMemo(
@@ -1178,7 +1417,7 @@ function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
 
   return (
     <Seksi
-      nomor={7}
+      nomor={8}
       judul="Konflik Alokasi Wilayah PPL"
       keterangan="Satu ID Sub SLS yang dialokasikan ke lebih dari satu PPL sekaligus -- perlu diluruskan supaya keluarga di wilayah itu tidak terhitung dobel/rebutan sumber."
     >
@@ -1231,7 +1470,7 @@ function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
   );
 }
 
-// ---------- 8) Beban kerja & kelengkapan data Master Petugas ----------
+// ---------- 9) Beban kerja & kelengkapan data Master Petugas ----------
 
 function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
   const kolomSpan = useMemo(
@@ -1256,7 +1495,7 @@ function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
 
   return (
     <Seksi
-      nomor={8}
+      nomor={9}
       judul="Beban Kerja & Kelengkapan Data Master Petugas"
       keterangan="Jumlah bawahan per pengawas (span of control) dan akun petugas aktif yang datanya (No. HP/NIP/Email) belum lengkap di Master Petugas."
     >
