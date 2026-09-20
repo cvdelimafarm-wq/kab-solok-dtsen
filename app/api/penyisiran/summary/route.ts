@@ -91,7 +91,41 @@ export async function GET(req: NextRequest) {
       pmlNoHp = pml?.no_hp ?? null;
     }
 
-    return NextResponse.json({ ...data, pml_nama: pmlNama, pml_no_hp: pmlNoHp });
+    // Kelengkapan SPJ HARI INI (petugas ybs sendiri) -- dipakai
+    // FloatBarSpjBelumLengkap (app/penyisiran/page.tsx, bar kuning di bawah
+    // FloatBarRencanaBesok) supaya petugas diingatkan kalau Laporan/
+    // Dokumentasi hari ini di menu "Administrasi" (tab SPJ) belum lengkap.
+    // Pakai RPC penyisiran_monitoring_kinerja_hari_ini() yg SUDAH ADA (dulu
+    // dibuat utk seksi "Monitoring Kinerja PPL Hari Ini") -- SATU baris per
+    // petugas aktif, disaring ke id petugas ybs sendiri di sini supaya
+    // definisi "lengkap" (ambang 3 foto/hari, dari spj_matriks_kelengkapan())
+    // SELALU konsisten dgn yg dilihat pengelola di tab Monitoring. Kalau
+    // petugas belum punya Surat Tugas yg mencakup hari ini (ada_st_hari_ini
+    // false), TIDAK dianggap "belum lengkap" -- memang tidak ada kewajiban
+    // SPJ hari itu, jadi field2 di bawah dikirim null (FE menyembunyikan bar).
+    let spjAdaStHariIni = false;
+    let spjLaporanOk: boolean | null = null;
+    let spjDokumentasiOk: boolean | null = null;
+    const { data: kinerjaRows } = await supabase.rpc("penyisiran_monitoring_kinerja_hari_ini");
+    const baris = Array.isArray(kinerjaRows)
+      ? (kinerjaRows as { petugas_id: number; ada_st_hari_ini: boolean; laporan_ok: boolean | null; dokumentasi_ok: boolean | null }[]).find(
+          (r) => r.petugas_id === petugasId
+        )
+      : null;
+    if (baris?.ada_st_hari_ini) {
+      spjAdaStHariIni = true;
+      spjLaporanOk = !!baris.laporan_ok;
+      spjDokumentasiOk = !!baris.dokumentasi_ok;
+    }
+
+    return NextResponse.json({
+      ...data,
+      pml_nama: pmlNama,
+      pml_no_hp: pmlNoHp,
+      spj_ada_st_hari_ini: spjAdaStHariIni,
+      spj_laporan_ok: spjLaporanOk,
+      spj_dokumentasi_ok: spjDokumentasiOk,
+    });
   }
 
   const { data, error } = await supabase.rpc("penyisiran_summary");

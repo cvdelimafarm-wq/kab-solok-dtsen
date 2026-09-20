@@ -131,8 +131,18 @@ export default function PenyisiranPage() {
       {/* Bar BARU terpisah di BAWAH layar (permintaan user, SENGAJA bar
           TERPISAH dari RencanaBesokWarningBar di atas -- yg lama TETAP
           spt semula, cuma tampil saat BELUM 8/8) -- lihat komentar
-          panjang di FloatBarRencanaBesok di bawah. */}
-      <FloatBarRencanaBesok />
+          panjang di FloatBarRencanaBesok di bawah. DIBUNGKUS bareng
+          FloatBarSpjBelumLengkap (bar KUNING BARU, permintaan user
+          "diletakkan di bawah perencanaan 8 KK tadi") dlm SATU wrapper
+          fixed+flex-col -- FloatBarSpjBelumLengkap ditaruh SESUDAHNYA
+          (anak flex terakhir) supaya kalau dua2nya tampil sekaligus,
+          bar SPJ ini yg nempel di tepi bawah layar & bar Rencana Besok
+          persis di atasnya. Kalau salah satu return null, wrapper tetap
+          rapat (tidak ada kotak kosong). */}
+      <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col">
+        <FloatBarRencanaBesok />
+        <FloatBarSpjBelumLengkap onBukaAdministrasi={() => setTab("spj")} />
+      </div>
       <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
         BADAN PUSAT STATISTIK KABUPATEN SOLOK
       </p>
@@ -487,7 +497,7 @@ function FloatBarRencanaBesok() {
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-medium text-white shadow-md ${warna}`}
+      className={`flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-medium text-white shadow-md ${warna}`}
     >
       <span>📅 Rencana Besok: {jumlah}/{KUOTA}</span>
       {pmlNoHp ? (
@@ -536,6 +546,99 @@ function FloatBarRencanaBesok() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Bar KUNING BARU (permintaan user), diletakkan DI BAWAH FloatBarRencanaBesok
+// di atas (lihat wrapper fixed+flex-col di PenyisiranPage) -- pengingat
+// "SPJ hari ini belum lengkap" utk petugas yg SEDANG LOGIN sendiri.
+//  - Sumbernya field spj_ada_st_hari_ini/spj_laporan_ok/spj_dokumentasi_ok
+//    dari /api/penyisiran/summary (lihat komentar panjang di
+//    app/api/penyisiran/summary/route.ts) -- dihitung dari RPC
+//    penyisiran_monitoring_kinerja_hari_ini() yg SAMA dipakai seksi
+//    "Monitoring Kinerja PPL Hari Ini" (tab Monitoring), jadi definisi
+//    "lengkap" (Laporan ada + Dokumentasi >=3 foto/hari) SELALU konsisten
+//    dgn yg dilihat pengelola.
+//  - TIDAK tampil kalau petugas belum punya Surat Tugas yg mencakup hari
+//    ini (spj_ada_st_hari_ini false) -- memang tidak ada kewajiban SPJ hari
+//    itu, bukan berarti "sudah lengkap".
+//  - SENGAJA TIDAK dibatasi jam 17:00 spt FloatBarRencanaBesok (bar itu soal
+//    rencana BESOK, jadi wajar baru relevan sore; bar ini soal SPJ HARI INI
+//    yg bisa/boleh diisi kapan saja sepanjang hari) -- tampil sepanjang hari
+//    selama masih ada bagian yg kurang, padam otomatis begitu Laporan &
+//    Dokumentasi hari ini sudah lengkap.
+//  - Tombol "Isi di Administrasi →" langsung memindahkan tab aktif ke
+//    "Administrasi" (tab "spj") lewat prop onBukaAdministrasi, supaya
+//    petugas tidak perlu cari sendiri tab mana yg dituju.
+function FloatBarSpjBelumLengkap({ onBukaAdministrasi }: { onBukaAdministrasi: () => void }) {
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [isPml, setIsPml] = useState(false);
+  const [adaSt, setAdaSt] = useState(false);
+  const [laporanOk, setLaporanOk] = useState<boolean | null>(null);
+  const [dokumentasiOk, setDokumentasiOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    function bacaStorage() {
+      setToken(getToken());
+      setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!token || isPml) {
+      setAdaSt(false);
+      setLaporanOk(null);
+      setDokumentasiOk(null);
+      return;
+    }
+    let batal = false;
+    function muat() {
+      apiFetch("/api/penyisiran/summary", token as string)
+        .then((data) => {
+          if (batal) return;
+          setAdaSt(!!data?.spj_ada_st_hari_ini);
+          setLaporanOk(typeof data?.spj_laporan_ok === "boolean" ? data.spj_laporan_ok : null);
+          setDokumentasiOk(typeof data?.spj_dokumentasi_ok === "boolean" ? data.spj_dokumentasi_ok : null);
+        })
+        .catch(() => {
+          if (!batal) {
+            setAdaSt(false);
+            setLaporanOk(null);
+            setDokumentasiOk(null);
+          }
+        });
+    }
+    muat();
+    const id = setInterval(muat, 120000);
+    return () => {
+      batal = true;
+      clearInterval(id);
+    };
+  }, [token, isPml]);
+
+  if (!checked || !token || isPml || !adaSt) return null;
+  if (laporanOk && dokumentasiOk) return null;
+
+  const kurang = [!laporanOk ? "Laporan" : null, !dokumentasiOk ? "Dokumentasi (min. 3 foto)" : null].filter(
+    Boolean
+  );
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 bg-[#CA8A04] px-4 py-2 text-center text-xs font-medium text-white shadow-md">
+      <span>⚠ SPJ hari ini belum lengkap: {kurang.join(" & ")} belum diisi.</span>
+      <button
+        type="button"
+        onClick={onBukaAdministrasi}
+        className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#8A6A12] hover:bg-paper"
+      >
+        Isi di Administrasi →
+      </button>
     </div>
   );
 }

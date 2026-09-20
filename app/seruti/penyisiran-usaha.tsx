@@ -871,6 +871,22 @@ function PenyisiranPanel({
     setLiveError(null);
   }
 
+  // Lokasi live sekarang AKTIF OTOMATIS begitu tab ini dibuka (atas
+  // permintaan user, menggantikan tombol "📍 Gunakan Lokasi Saya" yang
+  // sebelumnya wajib ditekan manual tiap kali) -- HANYA dijalankan SEKALI
+  // saat komponen ini mount (dependency [] sengaja kosong, bukan lupa).
+  // Browser TETAP akan menampilkan izin lokasi native 1x (kalau belum
+  // pernah diizinkan sebelumnya/baru di-reset) -- itu aturan keamanan
+  // browser, tidak bisa dilewati siapa pun, bukan batasan aplikasi ini.
+  // Kalau izin sudah pernah diberikan sebelumnya, lokasi langsung aktif
+  // tanpa konfirmasi apa pun. Tombol "📍 Gunakan Lokasi Saya"/"Nonaktifkan"
+  // di bawah TETAP ada sbg kendali manual (mis. kalau petugas sengaja
+  // menonaktifkan, atau deteksi otomatis gagal & perlu dicoba ulang).
+  useEffect(() => {
+    handleAktifkanLokasiLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Jarak dari lokasi LIVE (bukan lokasi rumah) ke satu keluarga -- null
   // kalau lokasi live belum aktif atau keluarganya tidak punya koordinat.
   function jarakLiveRow(row: Row): number | null {
@@ -1018,27 +1034,34 @@ function PenyisiranPanel({
   // Kecamatan/pencarian bisa dipakai sama sekali -- lihat komentar
   // lokasiRumahSiap di atas & banner peringatan di JSX (dekat filter bar).
   //
-  // "📍 Gunakan Lokasi Saya" (lokasi LIVE, liveStatus) SEKARANG JUGA wajib
-  // aktif dulu (atas permintaan) sebelum filter Kecamatan/pencarian bisa
-  // dipakai -- BEDA dari lokasi rumah (ditetapkan SEKALI, permanen) di
-  // atas, lokasi live ini HARUS ditekan ulang tiap kali buka tab (state-nya
-  // murni di memori, hilang begitu tab ditutup/reload, lihat komentar
-  // liveLoc). Dicek lewat liveSiap (bukan langsung liveLoc/liveStatus)
-  // supaya gampang dipakai ulang di beberapa tempat (disabled input, pesan
-  // banner) tanpa mengetik ulang kondisinya.
+  // "📍 Gunakan Lokasi Saya" (lokasi LIVE, liveStatus) SEKARANG AKTIF
+  // OTOMATIS begitu tab ini dibuka (lihat useEffect handleAktifkanLokasiLive
+  // di atas) -- BEDA dari lokasi rumah (ditetapkan SEKALI, permanen) di
+  // atas, lokasi live ini tetap diaktifkan ULANG tiap kali buka tab (state-
+  // nya murni di memori, hilang begitu tab ditutup/reload, lihat komentar
+  // liveLoc), cuma sekarang TANPA perlu tekan tombol manual. Dicek lewat
+  // liveSiap (bukan langsung liveLoc/liveStatus) supaya gampang dipakai
+  // ulang di beberapa tempat (disabled input, pesan banner) tanpa mengetik
+  // ulang kondisinya.
   const liveSiap = liveStatus === "active";
   const bisaMuat = lokasiRumahSiap && liveSiap && Boolean(filterKec || search);
 
   // Dipakai 3x di JSX di bawah (dekat filter bar + 2x diulang di bagian
-  // paling bawah halaman, permintaan user) -- diekstrak jadi satu variabel
-  // supaya teksnya konsisten & padam otomatis di ketiga tempat sekaligus
-  // begitu liveSiap true.
+  // paling bawah halaman) -- diekstrak jadi satu variabel supaya teksnya
+  // konsisten & padam otomatis di ketiga tempat sekaligus begitu liveSiap
+  // true. SEKARANG cuma tampil kalau deteksi otomatis GAGAL/ditolak
+  // (liveStatus "error", mis. izin lokasi diblokir di browser) -- bukan lagi
+  // "wajib tekan tombol" krn lokasi live sudah aktif sendiri saat tab
+  // dibuka (lihat useEffect di atas). Saat masih "searching" (baru mulai
+  // mendeteksi) TIDAK ditampilkan sbg warning, cukup indikator status di
+  // kartu "Live Distance Tracking" di bawah.
   const peringatanLokasiLive =
-    lokasiRumahSiap && !liveSiap ? (
+    lokasiRumahSiap && liveStatus === "error" ? (
       <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
-        ⚠ Tekan dulu tombol <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah
-        sebelum bisa memilih Kecamatan / mencari data -- HARUS ditekan ulang tiap kali buka tab ini (beda dari
-        lokasi rumah di atas yang cukup sekali).
+        ⚠ Lokasi langsung gagal terdeteksi otomatis{liveError ? ` (${liveError})` : ""} -- izinkan akses lokasi utk
+        situs ini di pengaturan browser, lalu tekan{" "}
+        <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah utk mencoba lagi.
+        Kecamatan / pencarian data tidak bisa dipakai sebelum lokasi ini aktif.
       </p>
     ) : null;
 
@@ -1221,10 +1244,10 @@ function PenyisiranPanel({
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
           ⚠ Tekan dulu tombol <span className="font-semibold">📍 Tetapkan Lokasi Rumah Saya</span> di atas sebelum
           bisa memilih Kecamatan / mencari data. Jarak dari lokasi rumah ke tiap keluarga dipakai untuk menghitung
-          skala prioritas -- cukup ditekan SEKALI, tidak perlu diulang tiap kali masuk. Sesudah itu,{" "}
-          <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah jg WAJIB ditekan
-          (beda kegunaan -- lokasi langsung/live utk navigasi real-time, HARUS diaktifkan ulang tiap kali buka tab
-          ini, tidak memengaruhi skala prioritas).
+          skala prioritas -- cukup ditekan SEKALI, tidak perlu diulang tiap kali masuk. Lokasi langsung/live (📍
+          <span className="font-semibold"> Gunakan Lokasi Saya</span>, beda kegunaan -- utk navigasi real-time,
+          tidak memengaruhi skala prioritas) akan otomatis aktif sendiri begitu tab ini dibuka, cek bagian "Live
+          Distance Tracking" di bawah kalau belum menyala.
         </p>
       )}
       {/* Lokasi rumah SUDAH siap tapi lokasi LIVE belum aktif -- banner
@@ -1647,11 +1670,12 @@ function PenyisiranPanel({
         </>
       )}
 
-      {/* Diulang 2x lagi di sini (paling bawah halaman) -- permintaan user
-          supaya peringatan "belum aktifkan lokasi live" lebih kelihatan
-          (user sempat melewatkan yg di atas). Sama persis dgn banner di
-          dekat filter bar (variabel peringatanLokasiLive), padam otomatis
-          begitu liveSiap true. */}
+      {/* Diulang 2x lagi di sini (paling bawah halaman) supaya kalau deteksi
+          lokasi otomatis GAGAL (liveStatus "error"), petugas tetap ngeh
+          walau sempat melewatkan banner yg di atas. Sama persis dgn banner
+          di dekat filter bar (variabel peringatanLokasiLive) -- lihat
+          komentar di sana, sekarang cuma tampil saat error (lokasi live
+          normalnya aktif sendiri, tidak perlu banner "wajib tekan" lagi). */}
       {peringatanLokasiLive}
       {peringatanLokasiLive}
 
