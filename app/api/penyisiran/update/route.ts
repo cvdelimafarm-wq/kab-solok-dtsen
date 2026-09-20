@@ -45,7 +45,36 @@ import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa", "sudah_didata_se2026"]);
+// "jadwalkan_besok" -- status BARU: petugas berencana kembali BESOK utk
+// keluarga ini (dasar kuota "8 kunjungan/hari" & kartu "Dijadwalkan
+// Besok" di FE, lihat tanggalBesokJakarta() & kolom tanggal_rencana_
+// kunjungan di bawah). "tidak_ditemukan"/"tidak_bisa" TETAP diterima di
+// sini (data lama & baris yg diedit ulang tanpa mengubah status itu harus
+// tetap lolos validasi) -- cuma sudah tidak lagi DITAWARKAN di dropdown
+// edit FE (lihat STATUS_PILIHAN di app/seruti/penyisiran-usaha.tsx).
+const STATUS_VALID = new Set([
+  "belum",
+  "ditemukan",
+  "tidak_ditemukan",
+  "tidak_bisa",
+  "sudah_didata_se2026",
+  "jadwalkan_besok",
+]);
+
+// Tanggal BESOK menurut zona waktu Asia/Jakarta (WIB), format "YYYY-MM-DD"
+// -- dihitung dari wall-clock Jakarta (UTC+7, tanpa DST), BUKAN dari zona
+// waktu server (Railway biasanya UTC) supaya tidak meleset saat mendekati
+// pergantian hari. Dipakai mengisi tanggal_rencana_kunjungan otomatis saat
+// status diubah jadi "jadwalkan_besok" -- SAMA formula dgn filter tanggal
+// di RPC penyisiran_summary()/penyisiran_summary_wilayah() (`(now() at
+// time zone 'Asia/Jakarta')::date + 1`), supaya konsisten dgn hitungan
+// kuota di kartu "Dijadwalkan Besok".
+function tanggalBesokJakarta(): string {
+  const jakartaMs = Date.now() + 7 * 60 * 60 * 1000;
+  const jakarta = new Date(jakartaMs);
+  jakarta.setUTCDate(jakarta.getUTCDate() + 1);
+  return jakarta.toISOString().slice(0, 10);
+}
 
 export async function PATCH(req: NextRequest) {
   const token = extractBearer(req);
@@ -108,7 +137,30 @@ export async function PATCH(req: NextRequest) {
         info_tetangga: infoTetangga,
         prioritas_pasti: prioritasPasti,
         updated_at: new Date().toISOString(),
+        // tanggal_rencana_kunjungan: diisi BESOK (WIB) tiap kali status
+        // disimpan sbg "jadwalkan_besok" (termasuk simpan ulang ke status
+        // yg sama -- dianggap menjadwalkan ulang ke "besok" yg baru), null
+        // kan kalau status apa pun selain itu, supaya tidak nyangkut jadi
+        // baris "basi" yg tetap ikut kehitung kuota. Lihat komentar
+        // tanggalBesokJakarta() di atas.
+        tanggal_rencana_kunjungan: status === "jadwalkan_besok" ? tanggalBesokJakarta() : null,
       };
+  // ditemukan_at: HANYA diisi saat status BENAR2 BERUBAH MENJADI
+  // "ditemukan" (bukan tiap simpan ulang) -- dasar hitungan "Usaha
+  // Ditemukan Hari Ini" (StatTile, lihat migrasi
+  // 20260920_penyisiran_jadwalkan_besok.sql). Kalau status berubah MENJADI
+  // sesuatu SELAIN "ditemukan" (mis. petugas keliru lalu membetulkan),
+  // dikosongkan lagi supaya tidak salah ikut kehitung "ditemukan hari
+  // ini". Tidak disentuh sama sekali kalau statusnya TETAP "ditemukan"
+  // (resave catatan/pasti dll) -- waktu "ditemukan" pertama kali tidak
+  // boleh mundur cuma krn diedit ulang.
+  if (!isPml && lama) {
+    if (status === "ditemukan") {
+      if (lama.status_kunjungan !== "ditemukan") patch.ditemukan_at = new Date().toISOString();
+    } else {
+      patch.ditemukan_at = null;
+    }
+  }
   if (petugasId && petugasNama) {
     patch.penyisiran_oleh_id = petugasId;
     patch.penyisiran_oleh = petugasNama;

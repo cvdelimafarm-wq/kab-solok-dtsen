@@ -60,15 +60,20 @@ const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
   ),
 });
 
-const TOKEN_KEY = "penyisiran-petugas-login-token";
-const NAMA_KEY = "penyisiran-petugas-login-nama";
-const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
+// Diekspor (bukan cuma module-scoped) supaya app/penyisiran/page.tsx bisa
+// baca localStorage yang SAMA PERSIS -- dipakai floating warning bar
+// "belum merencanakan 8 kunjungan besok" yang harus tampil di SEMUA tab
+// halaman /penyisiran (bukan cuma tab ini), lihat RencanaBesokWarningBar
+// di page.tsx.
+export const TOKEN_KEY = "penyisiran-petugas-login-token";
+export const NAMA_KEY = "penyisiran-petugas-login-nama";
+export const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
 // is_pml: true kalau akun ini PML (mengawasi >=1 PPL lewat pengawas_id,
 // lihat lib/wilayahAlokasiPetugas.ts) -- dipakai RowCard utk mengunci
 // dropdown Status & input Catatan (PML cuma boleh lihat + "🎯 Tandai
 // Pasti", dikonfirmasi user). Disimpan di localStorage spt field login
 // lain supaya tidak perlu login ulang tiap buka tab.
-const IS_PML_KEY = "penyisiran-petugas-login-ispml";
+export const IS_PML_KEY = "penyisiran-petugas-login-ispml";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
@@ -94,7 +99,21 @@ const KANTOR_LNG = 100.61102093270257;
 // (usaha ada & memang perlu didata sbg undercoverage baru). Warna kartu
 // MERAH, disamakan dgn badge "Identifikasi PPL: Tidak ada usaha" (lihat
 // IDENTIFIKASI_META di bawah & KARTU_BG).
-type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa" | "sudah_didata_se2026";
+// "jadwalkan_besok" -- status BARU (atas permintaan): petugas berencana
+// KEMBALI BESOK ke keluarga ini (dasar kuota "8 kunjungan/hari" & kartu
+// StatTile "📅 Dijadwalkan Besok" -- lihat STATUS_PILIHAN di bawah &
+// tanggal_rencana_kunjungan/ditemukan_at di migrasi
+// 20260920_penyisiran_jadwalkan_besok.sql). Backend
+// (/api/penyisiran/update) yg mengisi tanggal_rencana_kunjungan otomatis
+// jadi BESOK (WIB) tiap kali status ini disimpan -- FE di sini tidak perlu
+// kirim tanggal apa pun sendiri.
+type StatusKunjungan =
+  | "belum"
+  | "ditemukan"
+  | "tidak_ditemukan"
+  | "tidak_bisa"
+  | "sudah_didata_se2026"
+  | "jadwalkan_besok";
 // "tidak_ditemukan" di sini -- opsi tambahan dari identifikasi-jorong.tsx/
 // identifikasi-tetangga.tsx (petugas ke lokasi tp alamat tdk ketemu),
 // diperlakukan server sbg setara "ada" (sudah didata di SE2026) -- lihat
@@ -109,7 +128,20 @@ const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: 
   tidak_ditemukan: { label: "Usaha Tidak Ditemukan", badge: "bg-[#FCEFD1] text-[#8A6A12]", dot: "#fab219" },
   tidak_bisa: { label: "Tidak Bisa Ditemui / Pindah", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
   sudah_didata_se2026: { label: "Sudah Didata di SE2026", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
+  jadwalkan_besok: { label: "Dijadwalkan Besok", badge: "bg-[#DCE6FA] text-[#2545A0]", dot: "#2563eb" },
 };
+
+// Dropdown EDIT (status per-kartu, RowCard) & FILTER (toolbar) -- atas
+// permintaan user, disederhanakan jadi 4 pilihan ini SAJA (dulu 5,
+// "Usaha Tidak Ditemukan" & "Tidak Bisa Ditemui/Pindah" DIHAPUS dari
+// pilihan yg bisa dipilih ke depannya). STATUS_META di atas TETAP memuat
+// KESELURUHAN 6 status (termasuk 2 yg dihapus dari sini + "jadwalkan_
+// besok") krn masih dipakai render badge/warna kartu/legenda peta utk
+// data LAMA yg sudah kadung berstatus itu -- constraint di DB pun sengaja
+// TETAP mengizinkannya (lihat migrasi 20260920_penyisiran_jadwalkan_besok.sql)
+// supaya baris lama itu tidak gagal tersimpan lagi saat diedit ulang
+// (mis. cuma ganti catatan/Tandai Pasti tanpa mengubah statusnya).
+const STATUS_PILIHAN: StatusKunjungan[] = ["belum", "ditemukan", "sudah_didata_se2026", "jadwalkan_besok"];
 
 // Warna LATAR BELAKANG KARTU (bukan cuma badge/dot kecil spt STATUS_META
 // di atas) -- atas permintaan user, supaya status kunjungan langsung
@@ -126,6 +158,9 @@ const KARTU_BG: Record<StatusKunjungan, string> = {
   tidak_ditemukan: "bg-[#FCEFD1]",
   tidak_bisa: "bg-rust-100",
   sudah_didata_se2026: "bg-rust-100",
+  // biru muda -- beda jelas dari hijau/kuning/merah/putih yg sudah ada,
+  // supaya kartu yg dijadwalkan besok langsung kelihatan sekilas.
+  jadwalkan_besok: "bg-[#E4ECFB]",
 };
 
 const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
@@ -304,9 +339,17 @@ interface Summary {
   total: number;
   belum: number;
   ditemukan: number;
+  // Scoped HARI INI (WIB) -- lihat migrasi 20260920_penyisiran_jadwalkan_besok.sql
+  // & komentar ditemukan_at di /api/penyisiran/update. `ditemukan` di atas
+  // TETAP akumulatif dari awal (tidak diubah, dipakai konsumen lain).
+  ditemukan_hari_ini: number;
   tidak_ditemukan: number;
   tidak_bisa: number;
   sudah_didata_se2026: number;
+  // Jumlah KK berstatus "jadwalkan_besok" dgn tanggal_rencana_kunjungan =
+  // BESOK (WIB) -- dasar kartu StatTile "📅 Dijadwalkan Besok" & kuota
+  // warning bar (lihat RencanaBesokWarningBar di app/penyisiran/page.tsx).
+  direncanakan_besok: number;
   kecamatan: KecOption[];
 }
 interface PplInfo {
@@ -399,7 +442,10 @@ function tokenExpMs(token: string): number {
   return Number(expStr);
 }
 
-function getToken(): string | null {
+// Diekspor jg -- dipakai RencanaBesokWarningBar di app/penyisiran/page.tsx
+// supaya cara baca+validasi token PERSIS SAMA (termasuk auto-hapus token
+// kedaluwarsa), tidak duplikat logika expiry di dua tempat.
+export function getToken(): string | null {
   if (typeof window === "undefined") return null;
   const t = localStorage.getItem(TOKEN_KEY);
   if (!t) return null;
@@ -420,7 +466,11 @@ function clearToken() {
   localStorage.removeItem(LNG_KEY);
 }
 
-async function apiFetch(path: string, token: string, init?: RequestInit) {
+// Diekspor jg -- dipakai RencanaBesokWarningBar di app/penyisiran/page.tsx
+// (butuh panggil /api/penyisiran/summary sendiri, di LUAR tab ini, supaya
+// warning "belum merencanakan 8 kunjungan besok" bisa tampil di semua tab
+// halaman /penyisiran, bukan cuma saat tab Penyisiran Usaha aktif).
+export async function apiFetch(path: string, token: string, init?: RequestInit) {
   const res = await fetch(path, {
     ...init,
     headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -660,6 +710,9 @@ function PenyisiranPanel({
   const [editAllMode, setEditAllMode] = useState(false);
   const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
   const [lokasiBusy, setLokasiBusy] = useState(false);
+  // Modal daftar "Dijadwalkan Besok" -- dibuka dari klik StatTile terkait
+  // (lihat ModalRencanaBesok di bawah).
+  const [showRencanaBesok, setShowRencanaBesok] = useState(false);
   // Peta tampil COMPACT (bukan lagi setengah layar) begitu halaman
   // dibuka, tapi bisa digulung ke atas (disembunyikan) supaya daftar
   // keluarga bisa memakai lebar penuh saat peta sedang tidak dibutuhkan.
@@ -941,7 +994,17 @@ function PenyisiranPanel({
   // Wajib lokasi rumah SUDAH tersimpan (lokasiRumahSiap) SEBELUM filter
   // Kecamatan/pencarian bisa dipakai sama sekali -- lihat komentar
   // lokasiRumahSiap di atas & banner peringatan di JSX (dekat filter bar).
-  const bisaMuat = lokasiRumahSiap && Boolean(filterKec || search);
+  //
+  // "📍 Gunakan Lokasi Saya" (lokasi LIVE, liveStatus) SEKARANG JUGA wajib
+  // aktif dulu (atas permintaan) sebelum filter Kecamatan/pencarian bisa
+  // dipakai -- BEDA dari lokasi rumah (ditetapkan SEKALI, permanen) di
+  // atas, lokasi live ini HARUS ditekan ulang tiap kali buka tab (state-nya
+  // murni di memori, hilang begitu tab ditutup/reload, lihat komentar
+  // liveLoc). Dicek lewat liveSiap (bukan langsung liveLoc/liveStatus)
+  // supaya gampang dipakai ulang di beberapa tempat (disabled input, pesan
+  // banner) tanpa mengetik ulang kondisinya.
+  const liveSiap = liveStatus === "active";
+  const bisaMuat = lokasiRumahSiap && liveSiap && Boolean(filterKec || search);
 
   const loadList = useCallback(async () => {
     if (!bisaMuat) {
@@ -1130,8 +1193,21 @@ function PenyisiranPanel({
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
           ⚠ Tekan dulu tombol <span className="font-semibold">📍 Tetapkan Lokasi Rumah Saya</span> di atas sebelum
           bisa memilih Kecamatan / mencari data. Jarak dari lokasi rumah ke tiap keluarga dipakai untuk menghitung
-          skala prioritas -- cukup ditekan SEKALI, tidak perlu diulang tiap kali masuk. (Lokasi langsung/live pada
-          bagian di bawah BEDA kegunaannya -- hanya untuk navigasi, tidak memengaruhi skala prioritas.)
+          skala prioritas -- cukup ditekan SEKALI, tidak perlu diulang tiap kali masuk. Sesudah itu,{" "}
+          <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah jg WAJIB ditekan
+          (beda kegunaan -- lokasi langsung/live utk navigasi real-time, HARUS diaktifkan ulang tiap kali buka tab
+          ini, tidak memengaruhi skala prioritas).
+        </p>
+      )}
+      {/* Lokasi rumah SUDAH siap tapi lokasi LIVE belum aktif -- banner
+          TERPISAH (bukan digabung ke atas) supaya pesannya selalu pas dgn
+          syarat yang MASIH kurang, krn dua syarat ini dicek & diaktifkan
+          lewat tombol yang berbeda (lihat liveSiap). */}
+      {lokasiRumahSiap && !liveSiap && (
+        <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
+          ⚠ Tekan dulu tombol <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah
+          sebelum bisa memilih Kecamatan / mencari data -- HARUS ditekan ulang tiap kali buka tab ini (beda dari
+          lokasi rumah di atas yang cukup sekali).
         </p>
       )}
 
@@ -1266,11 +1342,24 @@ function PenyisiranPanel({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <StatTile label="Total Keluarga" value={summary.total} color="#41547E" />
           <StatTile label={STATUS_META.belum.label} value={summary.belum} color={STATUS_META.belum.dot} />
-          <StatTile label={STATUS_META.ditemukan.label} value={summary.ditemukan} color={STATUS_META.ditemukan.dot} />
+          {/* "Usaha Ditemukan" diganti scoped HARI INI (atas permintaan) --
+              summary.ditemukan (akumulatif) TIDAK dipakai lagi di sini,
+              lihat ditemukan_hari_ini/ditemukan_at di migrasi
+              20260920_penyisiran_jadwalkan_besok.sql. */}
           <StatTile
-            label={STATUS_META.tidak_ditemukan.label}
-            value={summary.tidak_ditemukan}
-            color={STATUS_META.tidak_ditemukan.dot}
+            label="Usaha Ditemukan Hari Ini"
+            value={summary.ditemukan_hari_ini}
+            color={STATUS_META.ditemukan.dot}
+          />
+          {/* Kartu "Usaha Tidak Ditemukan" DIGANTI (atas permintaan) jadi
+              jumlah KK yang sudah dijadwalkan BESOK -- bisa diklik utk
+              buka modal daftar (nama + kode SLS 16 digit), lihat
+              ModalRencanaBesok & /api/penyisiran/rencana-besok. */}
+          <StatTile
+            label="📅 Dijadwalkan Besok"
+            value={summary.direncanakan_besok}
+            color={STATUS_META.jadwalkan_besok.dot}
+            onClick={() => setShowRencanaBesok(true)}
           />
           <StatTile
             label={STATUS_META.sudah_didata_se2026.label}
@@ -1280,7 +1369,9 @@ function PenyisiranPanel({
           {/* Kartu "Tidak Bisa Ditemui / Pindah" SENGAJA disembunyikan di
               tampilan HP (grid 2 kolom, layar sempit) atas permintaan --
               tetap tampil di layar lebar (sm: ke atas, grid 6 kolom) spy
-              datanya tidak hilang total dari monitoring. */}
+              datanya tidak hilang total dari monitoring. Statusnya sendiri
+              sudah tidak bisa dipilih lagi lewat dropdown (lihat
+              STATUS_PILIHAN), jadi angka ini beku di data lama. */}
           <StatTile
             label={STATUS_META.tidak_bisa.label}
             value={summary.tidak_bisa}
@@ -1290,13 +1381,23 @@ function PenyisiranPanel({
         </div>
       )}
 
+      {showRencanaBesok && (
+        <ModalRencanaBesok token={token} onClose={() => setShowRencanaBesok(false)} onSessionExpired={onSessionExpired} />
+      )}
+
       {/* ---------- Filter ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
         <select
           value={filterKec}
           onChange={(e) => setFilterKec(e.target.value)}
-          disabled={!lokasiRumahSiap}
-          title={!lokasiRumahSiap ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)" : undefined}
+          disabled={!lokasiRumahSiap || !liveSiap}
+          title={
+            !lokasiRumahSiap
+              ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)"
+              : !liveSiap
+              ? "Tekan dulu 📍 Gunakan Lokasi Saya (lihat peringatan di atas)"
+              : undefined
+          }
           className="rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
         >
           <option value="">Pilih Kecamatan...</option>
@@ -1338,7 +1439,11 @@ function PenyisiranPanel({
           className="rounded-md border border-line px-2 py-1.5 text-xs"
         >
           <option value="">Semua Status</option>
-          {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
+          {/* Disederhanakan jadi STATUS_PILIHAN (4) -- lihat komentarnya.
+              Data lama berstatus "Tidak Ditemukan"/"Tidak Bisa" tetap
+              MUNCUL di daftar (via "Semua Status"), cuma tidak lagi bisa
+              difilter spesifik ke status itu lewat dropdown ini. */}
+          {STATUS_PILIHAN.map((s) => (
             <option key={s} value={s}>
               {STATUS_META[s].label}
             </option>
@@ -1348,18 +1453,24 @@ function PenyisiranPanel({
           type="search"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          disabled={!lokasiRumahSiap}
-          title={!lokasiRumahSiap ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)" : undefined}
+          disabled={!lokasiRumahSiap || !liveSiap}
+          title={
+            !lokasiRumahSiap
+              ? "Tetapkan lokasi rumah Anda dulu (lihat peringatan di atas)"
+              : !liveSiap
+              ? "Tekan dulu 📍 Gunakan Lokasi Saya (lihat peringatan di atas)"
+              : undefined
+          }
           placeholder="Cari nama / ID / alamat..."
           className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs disabled:opacity-50"
         />
       </div>
 
-      {/* Kalau lokasi rumah belum siap, banner peringatan di atas (dekat
-          tombol Tetapkan Lokasi) SUDAH menjelaskan sebabnya -- jadi pesan
-          di sini sengaja HANYA muncul kalau lokasi rumah SUDAH siap tapi
-          Kecamatan/pencarian belum diisi, supaya tidak dobel pesan. */}
-      {lokasiRumahSiap && !bisaMuat && (
+      {/* Kalau lokasi rumah/lokasi live belum siap, banner peringatan di
+          atas SUDAH menjelaskan sebabnya -- jadi pesan di sini sengaja
+          HANYA muncul kalau KEDUANYA sudah siap tapi Kecamatan/pencarian
+          belum diisi, supaya tidak dobel pesan. */}
+      {lokasiRumahSiap && liveSiap && !bisaMuat && (
         <p className="rounded-lg border border-line bg-white p-4 text-center text-xs text-ink/50">
           Pilih kecamatan (atau ketik pencarian) dulu untuk menampilkan daftar &amp; peta.
         </p>
@@ -1532,20 +1643,248 @@ function StatTile({
   value,
   color,
   className,
+  onClick,
 }: {
   label: string;
   value: number;
   color: string;
   className?: string;
+  // Kalau diisi, kartu dirender sbg <button> (bisa diklik, mis. StatTile
+  // "📅 Dijadwalkan Besok" -> buka ModalRencanaBesok) -- kalau tidak,
+  // tetap <div> biasa spt semula supaya kartu lain tidak ikut kelihatan
+  // "clickable" tanpa alasan.
+  onClick?: () => void;
 }) {
+  const isi = (
+    <>
+      <div className="text-lg font-bold text-navy-900">{value.toLocaleString("id-ID")}</div>
+      <div className="mt-0.5 text-[11px] text-ink/60">{label}</div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`rounded-lg border border-line bg-white p-3 text-left transition hover:border-navy-400 hover:shadow-sm ${className ?? ""}`}
+        style={{ borderLeft: `4px solid ${color}` }}
+      >
+        {isi}
+      </button>
+    );
+  }
   return (
     <div
       className={`rounded-lg border border-line bg-white p-3 ${className ?? ""}`}
       style={{ borderLeft: `4px solid ${color}` }}
     >
-      <div className="text-lg font-bold text-navy-900">{value.toLocaleString("id-ID")}</div>
-      <div className="mt-0.5 text-[11px] text-ink/60">{label}</div>
+      {isi}
     </div>
+  );
+}
+
+// Modal daftar keluarga yg dijadwalkan BESOK -- dibuka dari StatTile "📅
+// Dijadwalkan Besok". Tabel Nama Keluarga + Kode SLS (16 digit,
+// idsubsls) sesuai permintaan, PLUS tombol "Salin sebagai Gambar" (pola
+// SAMA PERSIS dgn salinSebagaiGambar() di app/penyisiran/perencanaan-
+// lapangan.tsx -- html2canvas + Clipboard API dari elemen tersembunyi
+// off-screen lebar tetap, fallback unduh file kalau clipboard image tidak
+// didukung browser) supaya gampang ditempel ke grup WA.
+interface RencanaBesokRow {
+  kode_identitas: string;
+  idsubsls: string | null;
+  nama_kk: string | null;
+  nama_anggota_keluarga: string | null;
+  nagari_nama: string | null;
+  sls_nama: string | null;
+  alamat: string | null;
+}
+
+function ModalRencanaBesok({
+  token,
+  onClose,
+  onSessionExpired,
+}: {
+  token: string;
+  onClose: () => void;
+  onSessionExpired: () => void;
+}) {
+  const [rows, setRows] = useState<RencanaBesokRow[] | null>(null);
+  const [tanggal, setTanggal] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
+  const gambarRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let batal = false;
+    apiFetch("/api/penyisiran/rencana-besok", token)
+      .then((data) => {
+        if (batal) return;
+        setRows(data.rows ?? []);
+        setTanggal(data.tanggal ?? null);
+      })
+      .catch((e) => {
+        if (batal) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+          clearToken();
+          onSessionExpired();
+          return;
+        }
+        setErrMsg(msg);
+      });
+    return () => {
+      batal = true;
+    };
+  }, [token, onSessionExpired]);
+
+  function tanggalLabel(): string {
+    if (!tanggal) return "besok";
+    // tanggal berformat "YYYY-MM-DD" (dari server, sudah dihitung WIB) --
+    // parse manual (bukan `new Date(tanggal)`) supaya tidak kena geser
+    // zona waktu browser pengguna.
+    const [y, m, d] = tanggal.split("-").map(Number);
+    if (!y || !m || !d) return tanggal;
+    return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+  }
+
+  async function salinSebagaiGambar() {
+    if (!gambarRef.current) return;
+    setCopyStatus("copying");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setCopyStatus("error");
+          return;
+        }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        } catch {
+          // Fallback: unduh langsung kalau clipboard image tidak didukung browser.
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "rencana-kunjungan-besok.png";
+          a.click();
+          URL.revokeObjectURL(url);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        }
+      }, "image/png");
+    } catch {
+      setCopyStatus("error");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-navy-900">📅 Dijadwalkan Besok</p>
+            <p className="text-[11px] text-ink/50">Rencana kunjungan {tanggalLabel()}</p>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 text-ink/40 hover:text-navy-700">
+            ✕
+          </button>
+        </div>
+
+        {errMsg && <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>}
+
+        {rows === null && !errMsg && <p className="py-6 text-center text-xs text-ink/40">Memuat...</p>}
+
+        {rows && rows.length === 0 && (
+          <p className="py-6 text-center text-xs text-ink/40">Belum ada keluarga yang dijadwalkan besok.</p>
+        )}
+
+        {rows && rows.length > 0 && (
+          <>
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={salinSebagaiGambar}
+                disabled={copyStatus === "copying"}
+                className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+              >
+                {copyStatus === "copying"
+                  ? "Menyalin..."
+                  : copyStatus === "done"
+                  ? "✓ Tersalin -- tempel ke WA"
+                  : copyStatus === "error"
+                  ? "Gagal, coba lagi"
+                  : "📋 Salin sebagai Gambar (utk WA)"}
+              </button>
+            </div>
+            {/* Render tabel DUA KALI: satu utk ditampilkan on-screen di
+                dalam modal (bisa digulir), satu lagi TERSEMBUNYI off-screen
+                dgn lebar tetap (dirujuk gambarRef) -- html2canvas butuh
+                elemen dgn lebar KONSISTEN supaya hasil gambar tidak
+                terpotong/berantakan mengikuti lebar modal yg responsif.
+                Pola sama persis dgn GridAlokasiDanKuota di
+                perencanaan-lapangan.tsx. */}
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="min-w-full text-xs">
+                <TabelRencanaBesokHead />
+                <tbody>
+                  {rows.map((r) => (
+                    <TabelRencanaBesokRow key={r.kode_identitas} row={r} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ position: "fixed", top: -99999, left: -99999, width: 640 }}>
+              <div ref={gambarRef} className="bg-white p-4">
+                <p className="mb-2 text-sm font-bold text-navy-900">
+                  Rencana Kunjungan {tanggalLabel()} -- Penyisiran Undercoverage Usaha SE2026
+                </p>
+                <table className="w-full text-xs">
+                  <TabelRencanaBesokHead />
+                  <tbody>
+                    {rows.map((r) => (
+                      <TabelRencanaBesokRow key={r.kode_identitas} row={r} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabelRencanaBesokHead() {
+  return (
+    <thead>
+      <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+        <th className="px-2 py-1.5">Nama Keluarga</th>
+        <th className="px-2 py-1.5">Kode SLS (16 Digit)</th>
+      </tr>
+    </thead>
+  );
+}
+
+function TabelRencanaBesokRow({ row }: { row: RencanaBesokRow }) {
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="px-2 py-1.5 font-medium text-navy-900">
+        {namaTampilRow(row)}
+        {(row.nagari_nama || row.sls_nama) && (
+          <span className="block text-[10px] font-normal text-ink/40">
+            {[row.nagari_nama, row.sls_nama].filter(Boolean).join(" · ")}
+          </span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 text-ink/70">{row.idsubsls || "-"}</td>
+    </tr>
   );
 }
 
@@ -1805,6 +2144,27 @@ function RowCard({
       </div>
       <p className="mt-1 truncate text-xs text-ink/70">📍 {row.alamat || "-"}</p>
 
+      {/* Badge Identifikasi PPL/Jorong + DUTP/DTSEN/PNM Mekar -- DIPINDAH
+          ke sini (SELALU tampil, bukan cuma mode Detail lagi) atas
+          permintaan: sebelumnya cuma kelihatan sesudah kartu dibuka ke
+          mode Detail, padahal ini info kunci utk menilai sekilas layak-
+          tidaknya kartu didatangi tanpa perlu buka tiap kartu satu per
+          satu. */}
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${identMeta.className}`}>
+          {identMeta.label}
+        </span>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dutp ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+          DUTP {row.bukti_dutp ? "✓" : "-"}
+        </span>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dtsen ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+          DTSEN {row.bukti_dtsen ? "✓" : "-"}
+        </span>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_pnm ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
+          PNM Mekar {row.bukti_pnm ? "✓" : "-"}
+        </span>
+      </div>
+
       {!isDetail && (
         <div className="mt-2 flex justify-end">
           <button
@@ -1850,22 +2210,9 @@ function RowCard({
             )}
             {!mapsUrl && " · tanpa koordinat"}
           </p>
-          <div className="mb-1.5">
-            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${identMeta.className}`}>
-              {identMeta.label}
-            </span>
-          </div>
-          <div className="mb-1.5 flex flex-wrap gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dutp ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-              DUTP {row.bukti_dutp ? "✓" : "-"}
-            </span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_dtsen ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-              DTSEN {row.bukti_dtsen ? "✓" : "-"}
-            </span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.bukti_pnm ? "bg-moss-100 text-moss-700" : "border border-line text-ink/40"}`}>
-              PNM Mekar {row.bukti_pnm ? "✓" : "-"}
-            </span>
-          </div>
+          {/* Badge Identifikasi PPL/Jorong + DUTP/DTSEN/PNM Mekar DIPINDAH
+              ke bagian Ringkas (SELALU tampil) di atas -- lihat komentar
+              di sana. */}
           {/* Badge "Info PPL/Jorong/Tetangga" + tombol "✎ Edit" per-kartu
               SUDAH DIHAPUS dari sini (atas permintaan) -- field-nya
               (info_ppl/info_jorong/info_tetangga) & skor prioritas yg
@@ -1994,7 +2341,14 @@ function RowCard({
               title={isPml ? "PML tidak bisa mengubah status kunjungan." : undefined}
               className="rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
+              {/* STATUS_PILIHAN (4 opsi, disederhanakan atas permintaan) --
+                  PLUS status kartu ini SENDIRI kalau kebetulan berupa
+                  status LAMA yg sudah dihapus dari pilihan ("Tidak
+                  Ditemukan"/"Tidak Bisa Ditemui/Pindah"), supaya dropdown
+                  tidak diam-diam melompat ke pilihan lain saat kartu itu
+                  dibuka -- tetap kelihatan apa adanya, cuma tidak bisa
+                  dipilih ULANG ke status itu kalau sudah diganti. */}
+              {(STATUS_PILIHAN.includes(status) ? STATUS_PILIHAN : [status, ...STATUS_PILIHAN]).map((s) => (
                 <option key={s} value={s}>
                   {STATUS_META[s].label}
                 </option>

@@ -84,8 +84,8 @@
 // dipindah (aman direname/dipindah manual nanti kalau mau lebih rapi,
 // tidak wajib).
 
-import { useState } from "react";
-import PenyisiranUsahaTab from "../seruti/penyisiran-usaha";
+import { useEffect, useState } from "react";
+import PenyisiranUsahaTab, { apiFetch, getToken, IS_PML_KEY } from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
 import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
@@ -122,6 +122,12 @@ export default function PenyisiranPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 py-6">
+      {/* Floating warning "belum merencanakan 8 kunjungan besok" -- SENGAJA
+          dipasang di sini (level halaman, LUAR blok {tab === "usaha" && ...}
+          di bawah) supaya tampil di TAB MANA PUN petugas sedang berada,
+          bukan cuma saat tab "Penyisiran Usaha" aktif -- lihat komentar
+          panjang di RencanaBesokWarningBar. */}
+      <RencanaBesokWarningBar onRencanakan={() => setTab("usaha")} />
       <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
         BADAN PUSAT STATISTIK KABUPATEN SOLOK
       </p>
@@ -220,6 +226,102 @@ export default function PenyisiranPage() {
         {tab === "perencanaan" && <PerencanaanLapanganTab />}
       </div>
     </main>
+  );
+}
+
+// Floating warning bar "belum merencanakan 8 kunjungan besok" -- muncul
+// OTOMATIS mulai jam 17.00 (WIB, dari jam browser petugas -- app ini
+// dipakai internal BPS Kab Solok, semua di WIB, sama spt pola jam lain di
+// app ini yg tidak konversi TZ eksplisit di FE) kalau kuota harian (8
+// keluarga berstatus "Jadwalkan Besok" utk BESOK) belum tercapai. HANYA
+// utk akun "penyisiran_petugas" (login personal tab Penyisiran Usaha) yg
+// BUKAN PML (PML tidak pernah mengisi status/menjadwalkan sendiri, lihat
+// komentar isPml di app/seruti/penyisiran-usaha.tsx) -- kalau belum login
+// sama sekali/PIN admin/role identifikasi_* lain, bar ini tidak tampil.
+//
+// Dipasang di LEVEL HALAMAN (bukan di dalam tab Penyisiran Usaha) supaya
+// tetap kelihatan di tab mana pun petugas sedang bekerja (mis. sedang di
+// tab Identifikasi Jorong) -- makanya komponen ini baca localStorage &
+// panggil /api/penyisiran/summary SENDIRI (lewat getToken/apiFetch yg
+// diekspor dari app/seruti/penyisiran-usaha.tsx, bukan duplikat logika),
+// bukan menerima token lewat props dari tab manapun.
+//
+// Login/logout terjadi di komponen SAUDARA (tab Penyisiran Usaha) yg
+// tidak otomatis memicu render ulang bar ini -- makanya localStorage
+// dipoll ringan tiap 30 detik (bukan cuma sekali saat mount), cukup utk
+// warning ambient spt ini (bukan kebutuhan real-time).
+function RencanaBesokWarningBar({ onRencanakan }: { onRencanakan: () => void }) {
+  const KUOTA = 8;
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [isPml, setIsPml] = useState(false);
+  const [jumlah, setJumlah] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    function bacaStorage() {
+      setToken(getToken());
+      setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Jam SAAT INI -- dicek ulang tiap 30 detik jg, supaya bar ini otomatis
+  // muncul begitu jam menyentuh 17.00 tanpa perlu reload halaman.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Kuota "direncanakan_besok" -- dari RPC yg SAMA dipakai StatTile "📅
+  // Dijadwalkan Besok" di tab Penyisiran Usaha (lihat migrasi
+  // 20260920_penyisiran_jadwalkan_besok.sql), jadi angkanya SELALU
+  // konsisten dgn yg dilihat petugas di tab itu. Dimuat ulang tiap kali
+  // token berubah & diulang tiap 2 menit selama sesi aktif.
+  useEffect(() => {
+    if (!token || isPml) {
+      setJumlah(null);
+      return;
+    }
+    let batal = false;
+    function muat() {
+      apiFetch("/api/penyisiran/summary", token as string)
+        .then((data) => {
+          if (!batal) setJumlah(typeof data?.direncanakan_besok === "number" ? data.direncanakan_besok : null);
+        })
+        .catch(() => {
+          if (!batal) setJumlah(null);
+        });
+    }
+    muat();
+    const id = setInterval(muat, 120000);
+    return () => {
+      batal = true;
+      clearInterval(id);
+    };
+  }, [token, isPml]);
+
+  if (!checked || !token || isPml || jumlah == null) return null;
+
+  const jamSekarang = new Date(nowMs).getHours();
+  if (jamSekarang < 17 || jumlah >= KUOTA) return null;
+
+  return (
+    <div className="fixed inset-x-0 top-0 z-50 flex flex-wrap items-center justify-center gap-2 bg-rust-700 px-4 py-2 text-center text-xs font-medium text-white shadow-md">
+      <span>
+        ⚠ Kamu belum merencanakan {KUOTA} kunjungan untuk besok (baru {jumlah}/{KUOTA}).
+      </span>
+      <button
+        type="button"
+        onClick={onRencanakan}
+        className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-rust-700 hover:bg-rust-50"
+      >
+        Rencanakan →
+      </button>
+    </div>
   );
 }
 
