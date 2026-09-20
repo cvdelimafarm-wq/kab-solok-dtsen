@@ -84,7 +84,7 @@
 // dipindah (aman direname/dipindah manual nanti kalau mau lebih rapi,
 // tidak wajib).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PenyisiranUsahaTab, { apiFetch, getToken, IS_PML_KEY } from "../seruti/penyisiran-usaha";
 import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
@@ -128,6 +128,11 @@ export default function PenyisiranPage() {
           bukan cuma saat tab "Penyisiran Usaha" aktif -- lihat komentar
           panjang di RencanaBesokWarningBar. */}
       <RencanaBesokWarningBar onRencanakan={() => setTab("usaha")} />
+      {/* Bar BARU terpisah di BAWAH layar (permintaan user, SENGAJA bar
+          TERPISAH dari RencanaBesokWarningBar di atas -- yg lama TETAP
+          spt semula, cuma tampil saat BELUM 8/8) -- lihat komentar
+          panjang di FloatBarRencanaBesok di bawah. */}
+      <FloatBarRencanaBesok />
       <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
         BADAN PUSAT STATISTIK KABUPATEN SOLOK
       </p>
@@ -321,6 +326,216 @@ function RencanaBesokWarningBar({ onRencanakan }: { onRencanakan: () => void }) 
       >
         Rencanakan →
       </button>
+    </div>
+  );
+}
+
+// Bar BARU (permintaan user) di BAWAH layar, TERPISAH dari
+// RencanaBesokWarningBar di atas (yg TETAP spt semula -- cuma tampil saat
+// BELUM 8/8, mulai jam 17:00). Bar ini:
+//  - Tampil SELALU jam 17:00-23:59 (bukan cuma saat belum tercapai), warna
+//    berubah sesuai progres (merah <50%, kuning 50-99%, hijau 100%+) --
+//    padam sendiri jam 00:00-16:59 (jamSekarang<17, sama spt bar di atas).
+//  - Angka "x/8" ini SELALU per PETUGAS YANG LOGIN SAJA (dari RPC
+//    penyisiran_summary_wilayah, wilayah personal petugas ybs) -- BUKAN
+//    direkap per SLS/Kecamatan (sesuai permintaan user).
+//  - Update MENDEKATI real-time: selain polling 30 detik spt bar di atas,
+//    jg mendengarkan custom event "penyisiran:rencana-besok-changed" yg
+//    di-dispatch RowCard (app/seruti/penyisiran-usaha.tsx) SETIAP KALI
+//    checklist berhasil disimpan -- begitu ada kartu yg statusnya berubah
+//    jadi/dari "Dijadwalkan Besok", angka di bar ini langsung diperbarui
+//    tanpa menunggu interval polling berikutnya.
+//  - Tombol "📤 Kirim ke WA PML": MENYALIN gambar rencana besok ke
+//    clipboard (html2canvas, pola SAMA dgn ModalRencanaBesok) DAN membuka
+//    tab WhatsApp ke nomor PML petugas ybs (dari kolom "No. HP" Master
+//    Petugas, via pengawas_id -- lihat /api/penyisiran/summary) sekaligus.
+//    CATATAN JUJUR (batasan browser, BUKAN kurang usaha): tidak ada
+//    website MANA PUN yang bisa menaruh gambar LANGSUNG ke kotak chat
+//    WhatsApp secara otomatis -- itu kotak App/tab LAIN, di luar kendali
+//    halaman ini (kebijakan keamanan browser). Yang BISA dilakukan
+//    sekaligus: (1) gambar SUDAH ada di clipboard, (2) tab WA ke kontak
+//    PML yg BENAR sudah kebuka -- tersisa SATU langkah manual: klik kotak
+//    chat lalu Ctrl+V (atau tekan-tahan lalu Tempel di HP), baru Kirim.
+function FloatBarRencanaBesok() {
+  const KUOTA = 8;
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [isPml, setIsPml] = useState(false);
+  const [jumlah, setJumlah] = useState<number | null>(null);
+  const [pmlNama, setPmlNama] = useState<string | null>(null);
+  const [pmlNoHp, setPmlNoHp] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [kirimStatus, setKirimStatus] = useState<"idle" | "menyalin" | "selesai" | "error">("idle");
+  const gambarRef = useRef<HTMLDivElement | null>(null);
+  // Baris utk gambar off-screen -- SENGAJA dimuat bersamaan dgn `jumlah`
+  // (poll periodik yg sama, lihat muatRingkasan di bawah), BUKAN baru
+  // di-fetch saat tombol "Kirim ke WA" ditekan -- supaya gambarRef SUDAH
+  // ter-render duluan & html2canvas bisa langsung dipanggil synchronous
+  // dari klik tombol, tanpa race condition menunggu fetch+render selesai.
+  const [rowsUntukGambar, setRowsUntukGambar] = useState<
+    { kode_identitas: string; idsubsls: string | null; nama: string }[]
+  >([]);
+
+  useEffect(() => {
+    function bacaStorage() {
+      setToken(getToken());
+      setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const muatRingkasan = useCallback(() => {
+    if (!token || isPml) {
+      setJumlah(null);
+      return;
+    }
+    apiFetch("/api/penyisiran/summary", token)
+      .then((data) => {
+        setJumlah(typeof data?.direncanakan_besok === "number" ? data.direncanakan_besok : null);
+        setPmlNama(typeof data?.pml_nama === "string" ? data.pml_nama : null);
+        setPmlNoHp(typeof data?.pml_no_hp === "string" ? data.pml_no_hp : null);
+      })
+      .catch(() => {
+        setJumlah(null);
+      });
+    apiFetch("/api/penyisiran/rencana-besok", token)
+      .then((data) => {
+        const rows = (Array.isArray(data?.rows) ? data.rows : []).map((r: any) => ({
+          kode_identitas: r.kode_identitas,
+          idsubsls: r.idsubsls ?? null,
+          nama: r.nama_anggota_keluarga || r.nama_kk || "(tanpa nama)",
+        }));
+        setRowsUntukGambar(rows);
+      })
+      .catch(() => {
+        setRowsUntukGambar([]);
+      });
+  }, [token, isPml]);
+
+  useEffect(() => {
+    muatRingkasan();
+    const id = setInterval(muatRingkasan, 30000);
+    return () => clearInterval(id);
+  }, [muatRingkasan]);
+
+  // Dengar event real-time dari RowCard -- lihat komentar panjang di atas.
+  useEffect(() => {
+    window.addEventListener("penyisiran:rencana-besok-changed", muatRingkasan);
+    return () => window.removeEventListener("penyisiran:rencana-besok-changed", muatRingkasan);
+  }, [muatRingkasan]);
+
+  function nomorWaInternasional(raw: string): string {
+    const digit = raw.replace(/\D/g, "");
+    if (digit.startsWith("62")) return digit;
+    if (digit.startsWith("0")) return `62${digit.slice(1)}`;
+    return digit;
+  }
+
+  async function kirimKeWaPml() {
+    if (!gambarRef.current) return;
+    setKirimStatus("menyalin");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      const disalin = await new Promise<boolean>((resolve) => {
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            resolve(false);
+            return;
+          }
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+            resolve(true);
+          } catch {
+            resolve(false);
+          }
+        }, "image/png");
+      });
+
+      // Buka tab WA ke nomor PML APA PUN hasil salin gambar di atas
+      // (kalaupun clipboard gagal, tab WA tetap dibuka -- user tinggal
+      // pakai tombol "Salin sebagai Gambar" di modal 📅 Dijadwalkan Besok
+      // sbg cadangan).
+      if (pmlNoHp) {
+        const nomor = nomorWaInternasional(pmlNoHp);
+        window.open(`https://wa.me/${nomor}`, "_blank", "noopener,noreferrer");
+      }
+
+      setKirimStatus(disalin ? "selesai" : "error");
+      setTimeout(() => setKirimStatus("idle"), 4000);
+    } catch {
+      setKirimStatus("error");
+      setTimeout(() => setKirimStatus("idle"), 2500);
+    }
+  }
+
+  if (!checked || !token || isPml || jumlah == null) return null;
+
+  const jamSekarang = new Date(nowMs).getHours();
+  if (jamSekarang < 17) return null;
+
+  const pct = jumlah / KUOTA;
+  const warna = pct >= 1 ? "bg-moss-600" : pct >= 0.5 ? "bg-[#8A6A12]" : "bg-rust-700";
+
+  return (
+    <div
+      className={`fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-medium text-white shadow-md ${warna}`}
+    >
+      <span>📅 Rencana Besok: {jumlah}/{KUOTA}</span>
+      {pmlNoHp ? (
+        <button
+          type="button"
+          onClick={kirimKeWaPml}
+          disabled={kirimStatus === "menyalin"}
+          className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-navy-900 hover:bg-paper disabled:opacity-60"
+        >
+          {kirimStatus === "menyalin"
+            ? "Menyalin..."
+            : kirimStatus === "selesai"
+            ? "✓ Tersalin -- tempel (Ctrl+V) di WA"
+            : kirimStatus === "error"
+            ? "Gagal salin, coba lagi"
+            : `📤 Kirim ke WA ${pmlNama ?? "PML"}`}
+        </button>
+      ) : (
+        <span className="text-[10px] italic text-white/70">
+          (Nomor WA PML belum diisi di Master Petugas)
+        </span>
+      )}
+
+      {/* Klon tersembunyi off-screen utk html2canvas -- diisi
+          `rowsUntukGambar` (dipoll bersamaan dgn `jumlah`, lihat
+          muatRingkasan di atas, supaya SUDAH ter-render duluan saat
+          tombol "Kirim ke WA" ditekan). */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 640 }}>
+        <div ref={gambarRef} className="bg-white p-4">
+          <p className="mb-2 text-sm font-bold text-navy-900">Rencana Kunjungan Besok -- Penyisiran Usaha SE2026</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-line text-left">
+                <th className="px-2 py-1">Nama Keluarga</th>
+                <th className="px-2 py-1">Kode SLS (16 digit)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsUntukGambar.map((r) => (
+                <tr key={r.kode_identitas} className="border-b border-line">
+                  <td className="px-2 py-1">{r.nama}</td>
+                  <td className="px-2 py-1 font-mono">{r.idsubsls ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

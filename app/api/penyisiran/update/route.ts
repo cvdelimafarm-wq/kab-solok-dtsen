@@ -37,6 +37,15 @@
 // dibuat sama sekali. Utk akun PML, bagian pencatatan riwayat ini otomatis
 // tidak pernah terpicu (status/info tidak pernah ikut ditulis, lihat di
 // atas).
+//
+// KUNCI "sehari setelah didata" (permintaan user): kartu berstatus
+// "ditemukan" yg ditemukan_at-nya BUKAN LAGI hari ini (WIB) DITOLAK
+// (423) kalau body TIDAK menyertakan edit_all=true -- pembatasan
+// SEBENARNYA di sini (bukan cuma disable tombol di FE, lihat
+// terkunciSetelahHariBerganti() & RowCard di app/seruti/penyisiran-usaha.tsx),
+// `edit_all` dikirim client saat tombol melayang "🔒 Edit Semua Info
+// Lapangan" (dipakai PML) sedang aktif -- SATU-SATUNYA jalan buka kunci
+// ini (sesuai permintaan user, bukan terkunci permanen).
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
@@ -93,6 +102,7 @@ export async function PATCH(req: NextRequest) {
   const prioritasPasti = Boolean(body?.prioritas_pasti);
   const petugasId = typeof body?.petugas_id === "number" ? body.petugas_id : null;
   const petugasNama = typeof body?.petugas_nama === "string" && body.petugas_nama.trim() ? body.petugas_nama.trim() : null;
+  const editAll = Boolean(body?.edit_all);
 
   if (!id || !STATUS_VALID.has(status)) {
     return NextResponse.json({ error: "Data tidak lengkap / status tidak valid." }, { status: 400 });
@@ -122,10 +132,33 @@ export async function PATCH(req: NextRequest) {
 
   const { data: lama, error: lamaErr } = await supabase
     .from("penyisiran_usaha")
-    .select("status_kunjungan, info_ppl, info_jorong, info_tetangga")
+    .select("status_kunjungan, info_ppl, info_jorong, info_tetangga, ditemukan_at")
     .eq("kode_identitas", id)
     .maybeSingle();
   if (lamaErr) return NextResponse.json({ error: lamaErr.message }, { status: 500 });
+
+  // Kunci "sehari setelah didata" -- lihat komentar panjang di atas file
+  // ini. Cuma berlaku utk kartu YANG SUDAH "ditemukan" DI HARI SEBELUMNYA
+  // (bukan hari ini) -- dicek DARI DATA LAMA (bukan status yg baru dikirim
+  // body), supaya tetap terkunci apa pun status baru yg dicoba dikirim
+  // (termasuk kalau petugas coba "membetulkan" dgn mengganti ke status
+  // lain). PML tidak kena aturan ini sama sekali (isPml sudah menolak
+  // hampir semua field di atas duluan).
+  if (!isPml && lama && lama.status_kunjungan === "ditemukan" && lama.ditemukan_at && !editAll) {
+    const hariIniWib = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const hariDitemukanWib = new Date(new Date(lama.ditemukan_at).getTime() + 7 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    if (hariDitemukanWib !== hariIniWib) {
+      return NextResponse.json(
+        {
+          error:
+            "Kartu ini sudah terkunci (ditandai \"Usaha Ditemukan\" pada hari sebelumnya). Aktifkan tombol \"🔒 Edit Semua Info Lapangan\" kalau memang perlu dikoreksi.",
+        },
+        { status: 423 }
+      );
+    }
+  }
 
   const patch: Record<string, unknown> = isPml
     ? { prioritas_pasti: prioritasPasti, updated_at: new Date().toISOString() }

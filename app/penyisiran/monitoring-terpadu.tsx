@@ -2,29 +2,36 @@
 
 // app/penyisiran/monitoring-terpadu.tsx
 //
-// Tab "Monitoring" -- gabungan 7 area monitoring lintas tab yang tadinya
+// Tab "Monitoring" -- gabungan 8 area monitoring lintas tab yang tadinya
 // tersebar/belum ada, dirangkum dalam SATU tab (atas permintaan user
 // setelah dianalisis "apa saja kira2 yang bisa dibuat monitoringnya"):
-//   1. Kualitas & kewajaran data kunjungan Penyisiran Usaha (kelengkapan
-//      bukti DUTP/DTSEN/PNM + catatan pada kartu "Ditemukan", dan deteksi
-//      update beruntun sangat cepat/"bulk edit" yg patut dicek manual).
-//   2. Konsistensi jawaban lintas sumber Identifikasi (PPL vs Jorong vs
-//      Tetangga) -- ketiganya menulis ke kolom yg SAMA di penyisiran_usaha
-//      (lihat komentar di page.tsx), jadi riwayatnya (penyisiran_riwayat)
-//      dipakai utk membandingkan jawaban TERAKHIR tiap sumber per keluarga.
-//   3. Realisasi vs rencana Perencanaan Lapangan (Sub SLS yg direncanakan
-//      vs yg benar2 dikunjungi, + kuota OH Translok 280 hari).
-//   4. Kelengkapan SPJ (Surat Tugas yg belum ada Visum-nya).
-//   5. Beban kerja & kelengkapan data Master Petugas (jumlah bawahan per
-//      pengawas, akun aktif dgn data kontak belum lengkap).
-//   6. Progres vs tenggat waktu Identifikasi (proyeksi selesai berdasar
+//   1. Monitoring Kinerja PPL Hari Ini (ditambahkan belakangan, BUKAN bagian
+//      RPC gabungan di bawah -- lihat komentar SeksiKinerjaPplHariIni):
+//      berhasil didata/dikunjungi/penyelesaian SPJ/akurasi identifikasi per
+//      PPL, khusus HARI INI (bukan akumulatif).
+//   2. Progres vs tenggat waktu Identifikasi (proyeksi selesai berdasar
 //      rata2 pengisian 7 hari terakhir, dibandingkan tenggat Minggu, 20
 //      September 2026 pukul 12:00 WIB -- lihat PESAN_PENUTUPAN di
 //      identifikasi-ppl.tsx).
+//   3. Konsistensi jawaban lintas sumber Identifikasi (PPL vs Jorong vs
+//      Tetangga) -- ketiganya menulis ke kolom yg SAMA di penyisiran_usaha
+//      (lihat komentar di page.tsx), jadi riwayatnya (penyisiran_riwayat)
+//      dipakai utk membandingkan jawaban TERAKHIR tiap sumber per keluarga.
+//   4. Realisasi vs rencana Perencanaan Lapangan (Sub SLS yg direncanakan
+//      vs yg benar2 dikunjungi, + kuota OH Translok 280 hari).
+//   5. Kualitas & kewajaran data kunjungan Penyisiran Usaha (kelengkapan
+//      bukti DUTP/DTSEN/PNM + catatan pada kartu "Ditemukan", dan deteksi
+//      update beruntun sangat cepat/"bulk edit" yg patut dicek manual).
+//   6. Kelengkapan SPJ (Surat Tugas yg belum ada Visum-nya).
 //   7. Konflik alokasi wilayah PPL (1 ID Sub SLS dialokasikan ke >1 PPL --
 //      "bukan bug, memang begitu datanya", lihat komentar di
 //      monitoring-ppl.tsx, tapi tetap perlu terlihat supaya bisa ditindak
 //      kalau memang perlu diluruskan).
+//   8. Beban kerja & kelengkapan data Master Petugas (jumlah bawahan per
+//      pengawas, akun aktif dgn data kontak belum lengkap).
+//
+// (Urutan 2-8 di atas adalah 7 area LAMA, tetap dari SATU RPC gabungan --
+// lihat komentar "Sumber data" di bawah. Area #1 baru dijelaskan di atas.)
 //
 // Sumber data: SATU RPC gabungan penyisiran_monitoring_terpadu() (lihat
 // supabase/migrations/20260919_penyisiran_monitoring_terpadu.sql) supaya
@@ -36,7 +43,7 @@
 // app/penyisiran/_shared/excel-table.tsx) spy header-nya bisa
 // difilter+diurutkan, konsisten dgn tabel di tab2 lain.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 const TOKEN_KEY = "penyisiran-token";
@@ -263,7 +270,7 @@ export default function MonitoringTerpaduTab() {
       <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
         <p className="text-sm font-semibold text-navy-900">Monitoring</p>
         <p className="mt-1 text-xs text-ink/60">
-          Rekap gabungan 7 area monitoring lintas tab -- masukkan PIN akses (sama dengan PIN Penyisiran Usaha).
+          Rekap gabungan 8 area monitoring lintas tab -- masukkan PIN akses (sama dengan PIN Penyisiran Usaha).
         </p>
         <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
           <input
@@ -325,8 +332,9 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
         <div>
           <h1 className="text-base font-bold text-navy-900 sm:text-lg">Monitoring</h1>
           <p className="mt-0.5 text-xs text-ink/50">
-            Rekap gabungan 7 area monitoring: kualitas data kunjungan, konsistensi lintas sumber identifikasi,
-            realisasi vs rencana, kelengkapan SPJ, beban kerja petugas, progres vs tenggat, dan konflik alokasi PPL.
+            Rekap gabungan 8 area monitoring: kinerja PPL hari ini, kualitas data kunjungan, konsistensi lintas
+            sumber identifikasi, realisasi vs rencana, kelengkapan SPJ, beban kerja petugas, progres vs tenggat, dan
+            konflik alokasi PPL.
           </p>
         </div>
         <button
@@ -349,6 +357,13 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
 
       {data && (
         <div className="space-y-4">
+          {/* Seksi #1 -- BARU, permintaan user, DITAMBAHKAN di paling atas
+              (bukan bagian dari 7 seksi RPC gabungan penyisiran_monitoring_
+              terpadu() di atas -- data-nya sendiri dari RPC & endpoint
+              terpisah, lihat SeksiKinerjaPplHariIni di bawah), makanya
+              7 seksi lain di bawah ini SEMUA nomornya digeser +1 (dulu
+              1-7, sekarang 2-8). */}
+          <SeksiKinerjaPplHariIni token={token} onSessionExpired={onSessionExpired} />
           <SeksiProgresTenggat data={data.progres_tenggat} />
           <SeksiKonsistensiIdentifikasi data={data.konsistensi_identifikasi} />
           <SeksiRealisasiRencana data={data.realisasi_vs_rencana} />
@@ -410,7 +425,274 @@ function HintFilter({ adaFilterAktif, onReset }: { adaFilterAktif: boolean; onRe
   );
 }
 
-// ---------- 1) Progres vs tenggat waktu ----------
+// ---------- 1) Monitoring Kinerja PPL Hari Ini ----------
+//
+// BEDA dari 7 seksi lain di file ini -- BUKAN bagian dari RPC gabungan
+// penyisiran_monitoring_terpadu(), data-nya sendiri dari endpoint terpisah
+// /api/penyisiran/monitoring-kinerja-hari-ini (RPC
+// penyisiran_monitoring_kinerja_hari_ini(), lihat migrasi
+// 20260920_monitoring_kinerja_ppl_hari_ini.sql), jadi komponen ini fetch
+// SENDIRI (bukan menerima data lewat props dari MonitoringTerpaduPanel spt
+// 7 seksi lain) -- supaya tab "Monitoring" tetap cukup 1x fetch utk 7 area
+// lama, sementara seksi baru ini (yg butuh hitungan "HARI INI", beda pola
+// query-nya) tidak perlu ikut menunggu/menunda RPC gabungan yg besar itu.
+//
+// Per baris = 1 petugas penyisiran AKTIF:
+//  - Berhasil Didata Hari Ini = jumlah kartu berstatus "Ditemukan" HARI INI
+//    (bukan akumulatif, lihat ditemukan_at) yg diisi petugas ini.
+//  - Target Hari Ini = angka TETAP sama utk semua petugas (TARGET_HARIAN_KK
+//    di app/api/penyisiran/monitoring-kinerja-hari-ini/route.ts -- atas
+//    permintaan user, BUKAN target per-petugas spt di tab Manajemen
+//    Target). Warna kolom "Berhasil Didata" ikut menyesuaikan (hijau kalau
+//    >= target, merah kalau masih kurang).
+//  - Usaha Dikunjungi = "Tidak Bisa Ditemui/Pindah" + "Sudah Didata di
+//    SE2026" HARI INI (CATATAN: status "Tidak Bisa Ditemui/Pindah" sudah
+//    tidak lagi bisa dipilih baru sejak migrasi jadwalkan_besok -- kolom
+//    ini akan cenderung 0 dari sumber itu ke depannya kecuali dibuka lagi).
+//  - Penyelesaian SPJ (Laporan/Dokumentasi) = "-" kalau petugas itu memang
+//    tidak py Surat Tugas yg mencakup hari ini (bukan berarti "belum
+//    lengkap"), ✓/✗ kalau ada ST hari ini.
+//  - Akurasi Identifikasi = dari kartu ber-identifikasi "Ada usaha" yg
+//    statusnya berubah HARI INI, berapa % yg hasilnya PERSIS "Ditemukan"
+//    (ketepatan prediksi Identifikasi vs hasil kunjungan riil) -- "-" kalau
+//    belum ada kartu spt itu hari ini.
+//
+// Tombol "📋 Salin sebagai Gambar (utk WA)" -- pola SAMA PERSIS dgn
+// ModalRencanaBesok di app/seruti/penyisiran-usaha.tsx (html2canvas +
+// Clipboard API dari elemen tersembunyi off-screen lebar tetap).
+
+interface KinerjaPplRow {
+  petugas_id: number;
+  nama: string;
+  pml_nama: string | null;
+  ditemukan_hari_ini: number;
+  dikunjungi_hari_ini: number;
+  akurasi_benar: number;
+  akurasi_dasar: number;
+  laporan_ok: boolean | null;
+  dokumentasi_ok: boolean | null;
+  ada_st_hari_ini: boolean;
+}
+
+const HARI_LABEL = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+function formatJudulWaktu(d: Date): string {
+  const hari = HARI_LABEL[d.getDay()];
+  const tanggal = d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+  const jam = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  return `per ${hari}, ${tanggal} pukul ${jam}`;
+}
+
+function labelSpjKinerja(ok: boolean | null, adaSt: boolean): string {
+  if (!adaSt) return "-";
+  return ok ? "✓" : "✗";
+}
+
+function pctAkurasiKinerja(r: KinerjaPplRow): number | null {
+  return r.akurasi_dasar > 0 ? Math.round((r.akurasi_benar / r.akurasi_dasar) * 100) : null;
+}
+
+function TabelKinerjaHead() {
+  return (
+    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+      <tr>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-left align-bottom">
+          Nama PPL
+        </th>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-left align-bottom">
+          Nama PML
+        </th>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+          Berhasil Didata Hari Ini
+        </th>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+          Target Hari Ini
+        </th>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+          Usaha Dikunjungi
+        </th>
+        <th colSpan={2} className="border-b border-line/60 px-2 py-1 text-center">
+          Penyelesaian SPJ
+        </th>
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+          Akurasi Identifikasi
+        </th>
+      </tr>
+      <tr>
+        <th className="border-b border-line px-2 py-1 text-center">Laporan</th>
+        <th className="border-b border-line px-2 py-1 text-center">Dokumentasi</th>
+      </tr>
+    </thead>
+  );
+}
+
+function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: number }) {
+  const pct = pctAkurasiKinerja(r);
+  return (
+    <tr>
+      <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
+      <td className="px-2 py-1.5">{r.pml_nama || "-"}</td>
+      <td
+        className={`px-2 py-1.5 text-right font-semibold ${
+          r.ditemukan_hari_ini >= targetHarian ? "text-moss-700" : "text-rust-700"
+        }`}
+      >
+        {r.ditemukan_hari_ini}
+      </td>
+      <td className="px-2 py-1.5 text-right text-ink/50">{targetHarian}</td>
+      <td className="px-2 py-1.5 text-right">{r.dikunjungi_hari_ini}</td>
+      <td className="px-2 py-1.5 text-center">{labelSpjKinerja(r.laporan_ok, r.ada_st_hari_ini)}</td>
+      <td className="px-2 py-1.5 text-center">{labelSpjKinerja(r.dokumentasi_ok, r.ada_st_hari_ini)}</td>
+      <td className="px-2 py-1.5 text-right">{pct == null ? "-" : `${pct}%`}</td>
+    </tr>
+  );
+}
+
+function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
+  const [targetHarian, setTargetHarian] = useState(7);
+  const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
+  const gambarRef = useRef<HTMLDivElement | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const d = await apiFetch("/api/penyisiran/monitoring-kinerja-hari-ini", token);
+      setBaris(Array.isArray(d?.baris) ? d.baris : []);
+      setTargetHarian(typeof d?.target_harian_kk === "number" ? d.target_harian_kk : 7);
+      setWaktuMuat(new Date());
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        onSessionExpired();
+      } else {
+        setErrMsg(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, onSessionExpired]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const rowsSorted = useMemo(() => [...baris].sort((a, b) => a.nama.localeCompare(b.nama, "id")), [baris]);
+
+  async function salinSebagaiGambar() {
+    if (!gambarRef.current) return;
+    setCopyStatus("copying");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setCopyStatus("error");
+          return;
+        }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        } catch {
+          // Fallback: unduh langsung kalau clipboard image tidak didukung browser.
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "monitoring-kinerja-ppl-hari-ini.png";
+          a.click();
+          URL.revokeObjectURL(url);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        }
+      }, "image/png");
+    } catch {
+      setCopyStatus("error");
+    }
+  }
+
+  return (
+    <Seksi
+      nomor={1}
+      judul="Monitoring Penyisiran Sensus Ekonomi 2026"
+      keterangan={`${waktuMuat ? formatJudulWaktu(waktuMuat) : "Memuat..."} -- kinerja tiap PPL HARI INI (bukan akumulatif sejak awal): berhasil didata, usaha dikunjungi, penyelesaian SPJ, & akurasi identifikasi dibanding hasil lapangan.`}
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+        <button
+          type="button"
+          onClick={salinSebagaiGambar}
+          disabled={copyStatus === "copying" || rowsSorted.length === 0}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {copyStatus === "copying"
+            ? "Menyalin..."
+            : copyStatus === "done"
+            ? "✓ Tersalin -- tempel ke WA"
+            : copyStatus === "error"
+            ? "Gagal, coba lagi"
+            : "📋 Salin Monitoring Hari Ini (utk WA)"}
+        </button>
+      </div>
+
+      {errMsg && (
+        <p className="mb-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      {!loading && rowsSorted.length === 0 && !errMsg && (
+        <p className="rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
+          Belum ada petugas penyisiran aktif.
+        </p>
+      )}
+
+      {rowsSorted.length > 0 && (
+        <div className="overflow-x-auto rounded-md border border-line">
+          <table className="w-full min-w-[760px] border-collapse text-xs">
+            <TabelKinerjaHead />
+            <tbody className="divide-y divide-line">
+              {rowsSorted.map((r) => (
+                <TabelKinerjaRow key={r.petugas_id} r={r} targetHarian={targetHarian} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Klon TERSEMBUNYI off-screen lebar tetap utk html2canvas (pola sama
+          persis dgn ModalRencanaBesok di app/seruti/penyisiran-usaha.tsx) --
+          html2canvas butuh elemen lebar KONSISTEN, bukan mengikuti lebar
+          layar yg responsif, + judul/subjudul diulang di sini krn screenshot
+          cuma menangkap isi div ini saja (bukan heading "1. ..." di luar). */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 820 }}>
+        <div ref={gambarRef} className="bg-white p-4">
+          <p className="text-sm font-bold text-navy-900">Monitoring Penyisiran Sensus Ekonomi 2026</p>
+          <p className="mb-2 text-[11px] text-ink/50">{waktuMuat ? formatJudulWaktu(waktuMuat) : ""}</p>
+          <table className="w-full border-collapse text-xs">
+            <TabelKinerjaHead />
+            <tbody>
+              {rowsSorted.map((r) => (
+                <TabelKinerjaRow key={r.petugas_id} r={r} targetHarian={targetHarian} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Seksi>
+  );
+}
+
+// ---------- 2) Progres vs tenggat waktu ----------
 
 function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   const pct = persen(data.jumlah_selesai, data.total_keluarga);
@@ -428,7 +710,7 @@ function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
 
   return (
     <Seksi
-      nomor={1}
+      nomor={2}
       judul="Progres vs Tenggat Waktu Identifikasi"
       keterangan={`Tenggat pengisian Identifikasi: ${formatTanggalJam(data.deadline)} WIB. Proyeksi dihitung dari rata-rata pengisian 7 hari terakhir.`}
     >
@@ -485,7 +767,7 @@ function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   );
 }
 
-// ---------- 2) Konsistensi lintas sumber identifikasi ----------
+// ---------- 3) Konsistensi lintas sumber identifikasi ----------
 
 function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi }) {
   const kolom = useMemo(
@@ -509,7 +791,7 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
 
   return (
     <Seksi
-      nomor={2}
+      nomor={3}
       judul="Konsistensi Jawaban Lintas Sumber Identifikasi"
       keterangan="Membandingkan jawaban TERAKHIR dari PPL, Jorong, dan Tetangga/Lainnya per keluarga (dari riwayat perubahan) -- baris di bawah adalah keluarga yang dijawab beda oleh lebih dari satu sumber."
     >
@@ -587,7 +869,7 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
   );
 }
 
-// ---------- 3) Realisasi vs rencana ----------
+// ---------- 4) Realisasi vs rencana ----------
 
 function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   const kolom = useMemo(
@@ -605,7 +887,7 @@ function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
 
   return (
     <Seksi
-      nomor={3}
+      nomor={4}
       judul="Realisasi vs Rencana (Perencanaan Lapangan)"
       keterangan="Sub SLS yang direncanakan tiap petugas (kartu Identifikasi Wilayah Sampel SLS) dibandingkan dgn Sub SLS yang benar-benar sudah dikunjungi di Penyisiran Usaha, plus pemakaian kuota OH Translok."
     >
@@ -669,7 +951,7 @@ function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   );
 }
 
-// ---------- 4) Kualitas & kewajaran data kunjungan ----------
+// ---------- 5) Kualitas & kewajaran data kunjungan ----------
 
 function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjungan; burst: BurstUpdateRow[] }) {
   const kolomKec = useMemo(
@@ -703,7 +985,7 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
 
   return (
     <Seksi
-      nomor={4}
+      nomor={5}
       judul="Kualitas & Kewajaran Data Kunjungan Penyisiran Usaha"
       keterangan="Kelengkapan bukti (DUTP/DTSEN/PNM) & catatan pada kartu berstatus “Ditemukan”, plus deteksi update status kunjungan yang beruntun sangat cepat (≥15x dalam 5 menit oleh petugas yang sama) -- patut dicek manual, bisa jadi isi cepat tanpa kunjungan nyata."
     >
@@ -806,7 +1088,7 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
   );
 }
 
-// ---------- 5) Kelengkapan SPJ ----------
+// ---------- 6) Kelengkapan SPJ ----------
 
 function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
   const kolom = useMemo(
@@ -822,7 +1104,7 @@ function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
 
   return (
     <Seksi
-      nomor={5}
+      nomor={6}
       judul="Kelengkapan SPJ (Surat Tugas tanpa Visum)"
       keterangan="Setiap petugas yang tercantum di sebuah Surat Tugas seharusnya punya Visum. Daftar di bawah adalah pasangan Surat Tugas x Petugas yang BELUM ada Visum-nya."
     >
@@ -877,7 +1159,7 @@ function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
   );
 }
 
-// ---------- 6) Konflik alokasi wilayah PPL ----------
+// ---------- 7) Konflik alokasi wilayah PPL ----------
 
 function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
   const kolom = useMemo(
@@ -896,7 +1178,7 @@ function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
 
   return (
     <Seksi
-      nomor={6}
+      nomor={7}
       judul="Konflik Alokasi Wilayah PPL"
       keterangan="Satu ID Sub SLS yang dialokasikan ke lebih dari satu PPL sekaligus -- perlu diluruskan supaya keluarga di wilayah itu tidak terhitung dobel/rebutan sumber."
     >
@@ -949,7 +1231,7 @@ function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
   );
 }
 
-// ---------- 7) Beban kerja & kelengkapan data Master Petugas ----------
+// ---------- 8) Beban kerja & kelengkapan data Master Petugas ----------
 
 function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
   const kolomSpan = useMemo(
@@ -974,7 +1256,7 @@ function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
 
   return (
     <Seksi
-      nomor={7}
+      nomor={8}
       judul="Beban Kerja & Kelengkapan Data Master Petugas"
       keterangan="Jumlah bawahan per pengawas (span of control) dan akun petugas aktif yang datanya (No. HP/NIP/Email) belum lengkap di Master Petugas."
     >

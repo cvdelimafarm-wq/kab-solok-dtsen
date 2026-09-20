@@ -395,6 +395,29 @@ interface Row {
   prioritas_pasti: boolean;
   penyisiran_oleh: string | null;
   updated_at: string;
+  // Kapan status_kunjungan TERAKHIR KALI berubah MENJADI "ditemukan" (lihat
+  // migrasi 20260920_penyisiran_jadwalkan_besok.sql) -- dipakai jg utk
+  // aturan "kartu terkunci sehari setelah didata" di RowCard (lihat
+  // terkunciSetelahHariBerganti di bawah), BUKAN cuma dasar hitungan
+  // ditemukan_hari_ini di StatTile.
+  ditemukan_at: string | null;
+}
+
+// Kartu berstatus "Usaha Ditemukan" TERKUNCI (read-only, dropdown Status &
+// input lain dinonaktifkan) begitu tanggal ditemukan_at BUKAN LAGI hari ini
+// (WIB) -- mencegah data yg sudah final "hari itu" keubah tanpa sengaja
+// keesokan harinya. "🔓 Edit Semua" (editAllMode, tombol melayang bawah
+// yg dipakai PML) SENGAJA tetap bisa membuka kunci ini kalau memang perlu
+// dikoreksi -- BUKAN dikunci permanen, cuma proteksi default. Kartu selain
+// status "Ditemukan" (mis. "Sudah Didata SE2026"/"Tidak Bisa") TIDAK ikut
+// dikunci (permintaan user: cuma status "Ditemukan" saja).
+function terkunciSetelahHariBerganti(row: Row): boolean {
+  if (row.status_kunjungan !== "ditemukan" || !row.ditemukan_at) return false;
+  const jakartaMs = Date.now() + 7 * 60 * 60 * 1000;
+  const hariIniWib = new Date(jakartaMs).toISOString().slice(0, 10);
+  const ditemukanMs = new Date(row.ditemukan_at).getTime() + 7 * 60 * 60 * 1000;
+  const hariDitemukanWib = new Date(ditemukanMs).toISOString().slice(0, 10);
+  return hariDitemukanWib !== hariIniWib;
 }
 
 // Nama yg ditampilkan di kartu/daftar -- utamakan nama_anggota_keluarga
@@ -1006,6 +1029,19 @@ function PenyisiranPanel({
   const liveSiap = liveStatus === "active";
   const bisaMuat = lokasiRumahSiap && liveSiap && Boolean(filterKec || search);
 
+  // Dipakai 3x di JSX di bawah (dekat filter bar + 2x diulang di bagian
+  // paling bawah halaman, permintaan user) -- diekstrak jadi satu variabel
+  // supaya teksnya konsisten & padam otomatis di ketiga tempat sekaligus
+  // begitu liveSiap true.
+  const peringatanLokasiLive =
+    lokasiRumahSiap && !liveSiap ? (
+      <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
+        ⚠ Tekan dulu tombol <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah
+        sebelum bisa memilih Kecamatan / mencari data -- HARUS ditekan ulang tiap kali buka tab ini (beda dari
+        lokasi rumah di atas yang cukup sekali).
+      </p>
+    ) : null;
+
   const loadList = useCallback(async () => {
     if (!bisaMuat) {
       setRows([]);
@@ -1152,14 +1188,6 @@ function PenyisiranPanel({
         </button>
       </div>
 
-      <div className="rounded-lg border border-line bg-white p-3">
-        <p className="text-xs text-ink/70 sm:text-sm">
-          Keluarga tercatat <span className="font-semibold text-rust-700">TIDAK ada usaha</span> di SE2026, tapi
-          ada indikasi usaha di DUTP/DTSEN/PNM Mekar.
-        </p>
-        <p className="mt-0.5 text-[11px] text-ink/40">Tidak memuat NIK/Nomor KK.</p>
-      </div>
-
       {/* Identitas petugas yg sedang login (personal, bukan lagi dropdown)
           + tombol tetapkan lokasi rumah utk skor prioritas berbasis jarak. */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
@@ -1202,14 +1230,12 @@ function PenyisiranPanel({
       {/* Lokasi rumah SUDAH siap tapi lokasi LIVE belum aktif -- banner
           TERPISAH (bukan digabung ke atas) supaya pesannya selalu pas dgn
           syarat yang MASIH kurang, krn dua syarat ini dicek & diaktifkan
-          lewat tombol yang berbeda (lihat liveSiap). */}
-      {lokasiRumahSiap && !liveSiap && (
-        <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">
-          ⚠ Tekan dulu tombol <span className="font-semibold">📍 Gunakan Lokasi Saya</span> pada bagian di bawah
-          sebelum bisa memilih Kecamatan / mencari data -- HARUS ditekan ulang tiap kali buka tab ini (beda dari
-          lokasi rumah di atas yang cukup sekali).
-        </p>
-      )}
+          lewat tombol yang berbeda (lihat liveSiap). Diekstrak ke variabel
+          `peringatanLokasiLive` (bukan cuma inline di sini) supaya bisa
+          DIULANG lagi 2x di bagian PALING BAWAH halaman (permintaan user
+          supaya lebih kelihatan/"ngeh") tanpa menyalin JSX-nya 3x -- padam
+          otomatis di ketiga tempat begitu liveSiap jadi true. */}
+      {peringatanLokasiLive}
 
       {/* ---------- Live Distance Tracking: status lokasi saat ini ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
@@ -1621,12 +1647,23 @@ function PenyisiranPanel({
         </>
       )}
 
+      {/* Diulang 2x lagi di sini (paling bawah halaman) -- permintaan user
+          supaya peringatan "belum aktifkan lokasi live" lebih kelihatan
+          (user sempat melewatkan yg di atas). Sama persis dgn banner di
+          dekat filter bar (variabel peringatanLokasiLive), padam otomatis
+          begitu liveSiap true. */}
+      {peringatanLokasiLive}
+      {peringatanLokasiLive}
+
       {/* Tombol "Edit Semua" MELAYANG di pojok bawah halaman -- supaya
           selalu terjangkau tanpa perlu gulung ke atas dulu, terutama saat
-          daftar keluarga panjang. */}
+          daftar keluarga panjang. Digeser ke bottom-16 (dari bottom-5) --
+          FloatBarRencanaBesok BARU (app/penyisiran/page.tsx) melebar penuh
+          di dasar layar jam 17:00 ke atas, supaya tombol ini tidak
+          ketiban/ketutup bar itu. */}
       <button
         onClick={() => setEditAllMode((v) => !v)}
-        className={`fixed bottom-5 right-5 z-40 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
+        className={`fixed bottom-16 right-5 z-40 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
           editAllMode
             ? "border-navy-700 bg-navy-700 text-white"
             : "border-line bg-white text-navy-700 hover:border-navy-400"
@@ -1964,6 +2001,12 @@ function RowCard({
   const [perubahanLoading, setPerubahanLoading] = useState(false);
   const [perubahanErr, setPerubahanErr] = useState<string | null>(null);
   const canEditInfo = editAllMode || unlocked;
+  // Kunci "sehari setelah didata" (permintaan user) -- lihat
+  // terkunciSetelahHariBerganti() di atas utk aturan lengkapnya. Tombol
+  // melayang "🔒 Edit Semua Info Lapangan" (editAllMode) SENGAJA tetap bisa
+  // membuka kunci ini (dikirim ke server sbg edit_all, lihat handleSave)
+  // -- bukan terkunci permanen tanpa jalan keluar.
+  const terkunci = terkunciSetelahHariBerganti(row) && !editAllMode;
   const dirty =
     status !== row.status_kunjungan ||
     catatan !== (row.catatan_petugas ?? "") ||
@@ -2015,6 +2058,7 @@ function RowCard({
           prioritas_pasti: pastiFlag,
           petugas_id: petugasId,
           petugas_nama: petugasNama,
+          edit_all: editAllMode,
         }),
       });
       setSaved("ok");
@@ -2027,6 +2071,14 @@ function RowCard({
         prioritas_pasti: pastiFlag,
         penyisiran_oleh: petugasNama ?? row.penyisiran_oleh,
       });
+      // Beri tahu FloatBarRencanaBesok (app/penyisiran/page.tsx) supaya
+      // langsung memuat ulang angka "Rencana Besok x/8" SAAT ITU JUGA
+      // begitu ada kartu yang berubah status, bukan menunggu polling 30
+      // detik -- ini memenuhi permintaan "status perubahan angka riil
+      // time setiap ada kartu yang berubah menjadi direncanakan besok".
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("penyisiran:rencana-besok-changed"));
+      }
       // Cukup 1x tindakan: begitu tersimpan, kunci lagi Info PPL/Jorong/
       // Tetangga & tampilkan lagi tombol "✎ Edit" -- supaya tidak
       // kepencet lagi tanpa sengaja setelah selesai mengisi.
@@ -2333,12 +2385,24 @@ function RowCard({
               👁 Mode PML -- hanya bisa melihat &amp; menandai &quot;Pasti&quot;, Status/Catatan dikunci.
             </p>
           )}
+          {!isPml && terkunci && (
+            <p className="mb-1.5 text-[10px] font-medium text-rust-700">
+              🔒 Terkunci -- sudah ditandai &quot;Usaha Ditemukan&quot; pada hari sebelumnya. Aktifkan &quot;🔒 Edit
+              Semua Info Lapangan&quot; (pojok kanan bawah) kalau memang perlu dikoreksi.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusKunjungan)}
-              disabled={isPml}
-              title={isPml ? "PML tidak bisa mengubah status kunjungan." : undefined}
+              disabled={isPml || terkunci}
+              title={
+                isPml
+                  ? "PML tidak bisa mengubah status kunjungan."
+                  : terkunci
+                  ? "Terkunci -- aktifkan Edit Semua utk membuka."
+                  : undefined
+              }
               className="rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
               {/* STATUS_PILIHAN (4 opsi, disederhanakan atas permintaan) --
@@ -2358,13 +2422,19 @@ function RowCard({
               value={catatan}
               onChange={(e) => setCatatan(e.target.value)}
               placeholder="Catatan petugas..."
-              disabled={isPml}
-              title={isPml ? "PML tidak bisa mengubah catatan petugas." : undefined}
+              disabled={isPml || terkunci}
+              title={
+                isPml
+                  ? "PML tidak bisa mengubah catatan petugas."
+                  : terkunci
+                  ? "Terkunci -- aktifkan Edit Semua utk membuka."
+                  : undefined
+              }
               className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               onClick={handleSave}
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || terkunci}
               className={`shrink-0 rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-30 ${
                 saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
               }`}

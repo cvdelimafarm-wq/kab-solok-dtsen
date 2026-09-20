@@ -68,7 +68,30 @@ export async function GET(req: NextRequest) {
       p_wilayah: wilayahKeJsonb(pilihan),
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data);
+
+    // "PML saya" -- nama + No. HP pengawas (kolom Master Petugas) petugas
+    // yg SEDANG login, dipakai tombol "Kirim ke WA PML" di
+    // FloatBarRencanaBesok (app/penyisiran/page.tsx) supaya bisa langsung
+    // buka WA ke nomor PML tanpa harus dicari manual dulu. null kalau
+    // pengawas_id/no_hp belum diisi di Master Petugas.
+    let pmlNama: string | null = null;
+    let pmlNoHp: string | null = null;
+    const { data: akunSaya } = await supabase
+      .from("petugas_penyisiran_akun")
+      .select("pengawas_id")
+      .eq("id", petugasId)
+      .maybeSingle();
+    if (akunSaya?.pengawas_id) {
+      const { data: pml } = await supabase
+        .from("petugas_penyisiran_akun")
+        .select("nama, no_hp")
+        .eq("id", akunSaya.pengawas_id)
+        .maybeSingle();
+      pmlNama = pml?.nama ?? null;
+      pmlNoHp = pml?.no_hp ?? null;
+    }
+
+    return NextResponse.json({ ...data, pml_nama: pmlNama, pml_no_hp: pmlNoHp });
   }
 
   const { data, error } = await supabase.rpc("penyisiran_summary");

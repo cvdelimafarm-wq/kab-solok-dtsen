@@ -13,9 +13,13 @@
 // Isi tab: perluasan data petugas yang SUDAH ADA (tabel
 // petugas_penyisiran_akun, SAMA dgn yg dipakai tab Penyisiran
 // Usaha/Identifikasi Jorong/Perencanaan Lapangan), bukan tabel baru --
-// kolom tambahan: email, alamat rumah (diisi MANUAL, bukan dari titik GPS
-// login) DIPISAH jadi 3 kolom -- Kecamatan, Nagari, Alamat Detail (lihat
-// migrasi 20260918_master_petugas_pisah_alamat.sql) -- status kepegawaian
+// kolom tambahan: email, No. HP (kolom no_hp SUDAH ADA dari awal di tabel
+// ini tapi baru DITAMPILKAN/bisa diedit di sini sekarang -- dipakai jg utk
+// tombol kirim WA ke PML di tab Penyisiran Usaha, lihat komentar
+// FloatBarRencanaBesok di app/penyisiran/page.tsx), alamat rumah (diisi
+// MANUAL, bukan dari titik GPS login) DIPISAH jadi 3 kolom -- Kecamatan,
+// Nagari, Alamat Detail (lihat migrasi
+// 20260918_master_petugas_pisah_alamat.sql) -- status kepegawaian
 // (Mitra/Organik), dan pengawas (dipilih dari petugas lain di tabel yg
 // sama -- satu pengawas boleh membawahi banyak PPL). Lihat migrasi
 // 20260918_master_petugas_kolom_dan_pengawas.sql &
@@ -57,6 +61,7 @@ interface PetugasMaster {
   nama: string;
   aktif: boolean;
   email: string | null;
+  no_hp: string | null;
   alamat_kecamatan: string | null;
   alamat_nagari: string | null;
   alamat_detail: string | null;
@@ -309,6 +314,7 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
     () => [
       { key: "nama", label: "Nama Petugas", getValue: (p: PetugasMaster) => p.nama },
       { key: "email", label: "Email", getValue: (p: PetugasMaster) => p.email },
+      { key: "no_hp", label: "No. HP", getValue: (p: PetugasMaster) => p.no_hp },
       { key: "alamat_kecamatan", label: "Kecamatan", getValue: (p: PetugasMaster) => p.alamat_kecamatan },
       { key: "alamat_nagari", label: "Nagari", getValue: (p: PetugasMaster) => p.alamat_nagari },
       { key: "alamat_detail", label: "Alamat Detail", getValue: (p: PetugasMaster) => p.alamat_detail },
@@ -419,6 +425,7 @@ function BarisMaster({
   onSimpan: (id: number, fields: Record<string, string | number | null>) => Promise<void>;
 }) {
   const [email, setEmail] = useState(p.email ?? "");
+  const [noHp, setNoHp] = useState(p.no_hp ?? "");
   const [kecamatan, setKecamatan] = useState(p.alamat_kecamatan ?? "");
   const [nagari, setNagari] = useState(p.alamat_nagari ?? "");
   const [detail, setDetail] = useState(p.alamat_detail ?? "");
@@ -428,12 +435,13 @@ function BarisMaster({
 
   useEffect(() => {
     setEmail(p.email ?? "");
+    setNoHp(p.no_hp ?? "");
     setKecamatan(p.alamat_kecamatan ?? "");
     setNagari(p.alamat_nagari ?? "");
     setDetail(p.alamat_detail ?? "");
     setStatus(p.status_kepegawaian ?? "");
     setPengawasId(p.pengawas_id != null ? String(p.pengawas_id) : "");
-  }, [p.email, p.alamat_kecamatan, p.alamat_nagari, p.alamat_detail, p.status_kepegawaian, p.pengawas_id]);
+  }, [p.email, p.no_hp, p.alamat_kecamatan, p.alamat_nagari, p.alamat_detail, p.status_kepegawaian, p.pengawas_id]);
 
   async function simpan(fields: Record<string, string | number | null>) {
     setSaveStatus("saving");
@@ -468,6 +476,20 @@ function BarisMaster({
           }}
           placeholder="nama@bps.go.id"
           className="w-44 rounded-md border border-line px-2 py-1 text-xs"
+        />
+      </td>
+      <td className="px-3 py-1.5">
+        <input
+          type="text"
+          inputMode="tel"
+          value={noHp}
+          onChange={(e) => setNoHp(e.target.value)}
+          onBlur={() => {
+            if (noHp === (p.no_hp ?? "")) return;
+            simpan({ no_hp: noHp.trim() === "" ? null : noHp.trim() });
+          }}
+          placeholder="+62 8xx-xxxx-xxxx"
+          className="w-36 rounded-md border border-line px-2 py-1 text-xs"
         />
       </td>
       <td className="px-3 py-1.5">

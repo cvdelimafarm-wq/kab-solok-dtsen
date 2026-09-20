@@ -33,6 +33,7 @@ const STATUS_VALID = new Set(["mitra", "organik"]);
 // bukan dipercayakan ke nama kolom yg dikirim client.
 const FIELD_VALID = new Set([
   "email",
+  "no_hp",
   "alamat_kecamatan",
   "alamat_nagari",
   "alamat_detail",
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
-    .select("id, nama, aktif, email, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
+    .select("id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
     .order("nama", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -98,6 +99,7 @@ export async function GET(req: NextRequest) {
     nama: p.nama,
     aktif: p.aktif,
     email: p.email ?? null,
+    no_hp: p.no_hp ?? null,
     alamat_kecamatan: p.alamat_kecamatan ?? null,
     alamat_nagari: p.alamat_nagari ?? null,
     alamat_detail: p.alamat_detail ?? null,

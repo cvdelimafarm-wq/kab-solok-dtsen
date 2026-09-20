@@ -41,7 +41,7 @@ const KOLOM =
   "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, pnm_subsektor, " +
   "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, " +
   "info_ppl, info_jorong, info_tetangga, identifikasi_ppl, identifikasi_ppl_at, " +
-  "prioritas_pasti, penyisiran_oleh, updated_at";
+  "prioritas_pasti, penyisiran_oleh, updated_at, ditemukan_at";
 
 export async function GET(req: NextRequest) {
   const token = extractBearer(req);
