@@ -68,7 +68,14 @@ const NAMA_PAKAI_KANTOR = new Set(
 const KANTOR_LAT = -0.9604660386602418;
 const KANTOR_LNG = 100.61102093270257;
 
-type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa";
+// "sudah_didata_se2026" -- opsi TAMBAHAN atas permintaan user: dipakai
+// kalau SETELAH dikunjungi/diwawancara ternyata usaha/keluarga ini
+// TERNYATA sudah tercatat di SE2026 (jadi BUKAN kasus undercoverage,
+// walau lokasinya sendiri ketemu & usahanya ada) -- beda dari "ditemukan"
+// (usaha ada & memang perlu didata sbg undercoverage baru). Warna kartu
+// MERAH, disamakan dgn badge "Identifikasi PPL: Tidak ada usaha" (lihat
+// IDENTIFIKASI_META di bawah & KARTU_BG).
+type StatusKunjungan = "belum" | "ditemukan" | "tidak_ditemukan" | "tidak_bisa" | "sudah_didata_se2026";
 // "tidak_ditemukan" di sini -- opsi tambahan dari identifikasi-jorong.tsx/
 // identifikasi-tetangga.tsx (petugas ke lokasi tp alamat tdk ketemu),
 // diperlakukan server sbg setara "ada" (sudah didata di SE2026) -- lihat
@@ -82,6 +89,24 @@ const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: 
   ditemukan: { label: "Usaha Ditemukan", badge: "bg-moss-100 text-moss-700", dot: "#0ca30c" },
   tidak_ditemukan: { label: "Usaha Tidak Ditemukan", badge: "bg-[#FCEFD1] text-[#8A6A12]", dot: "#fab219" },
   tidak_bisa: { label: "Tidak Bisa Ditemui / Pindah", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
+  sudah_didata_se2026: { label: "Sudah Didata di SE2026", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
+};
+
+// Warna LATAR BELAKANG KARTU (bukan cuma badge/dot kecil spt STATUS_META
+// di atas) -- atas permintaan user, supaya status kunjungan langsung
+// kelihatan sekilas dari warna kartu tanpa perlu baca teks:
+//  - putih  : belum dikunjungi (default, tidak berubah)
+//  - hijau  : usaha ditemukan (= sudah didata di penyisiran ini)
+//  - kuning : usaha tidak ditemukan (petugas ke lokasi tp blm ketemu --
+//             belum tentu gagal, jadi TIDAK disamakan merah)
+//  - merah  : tidak bisa ditemui/pindah, ATAU sudah didata di SE2026
+//             (dua2nya = "kasus ini selesai, bukan hasil positif baru")
+const KARTU_BG: Record<StatusKunjungan, string> = {
+  belum: "bg-white",
+  ditemukan: "bg-moss-100",
+  tidak_ditemukan: "bg-[#FCEFD1]",
+  tidak_bisa: "bg-rust-100",
+  sudah_didata_se2026: "bg-rust-100",
 };
 
 const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
@@ -262,6 +287,7 @@ interface Summary {
   ditemukan: number;
   tidak_ditemukan: number;
   tidak_bisa: number;
+  sudah_didata_se2026: number;
   kecamatan: KecOption[];
 }
 interface PplInfo {
@@ -1195,7 +1221,7 @@ function PenyisiranPanel({
 
       {/* ---------- Stat tiles ---------- */}
       {summary && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <StatTile label="Total Keluarga" value={summary.total} color="#41547E" />
           <StatTile label={STATUS_META.belum.label} value={summary.belum} color={STATUS_META.belum.dot} />
           <StatTile label={STATUS_META.ditemukan.label} value={summary.ditemukan} color={STATUS_META.ditemukan.dot} />
@@ -1204,9 +1230,14 @@ function PenyisiranPanel({
             value={summary.tidak_ditemukan}
             color={STATUS_META.tidak_ditemukan.dot}
           />
+          <StatTile
+            label={STATUS_META.sudah_didata_se2026.label}
+            value={summary.sudah_didata_se2026}
+            color={STATUS_META.sudah_didata_se2026.dot}
+          />
           {/* Kartu "Tidak Bisa Ditemui / Pindah" SENGAJA disembunyikan di
               tampilan HP (grid 2 kolom, layar sempit) atas permintaan --
-              tetap tampil di layar lebar (sm: ke atas, grid 5 kolom) spy
+              tetap tampil di layar lebar (sm: ke atas, grid 6 kolom) spy
               datanya tidak hilang total dari monitoring. */}
           <StatTile
             label={STATUS_META.tidak_bisa.label}
@@ -1680,7 +1711,7 @@ function RowCard({
   return (
     <div
       id={`kartu-penyisiran-${row.kode_identitas}`}
-      className={`rounded-lg border bg-white p-3 transition-shadow ${
+      className={`rounded-lg border p-3 transition-shadow ${KARTU_BG[status]} ${
         highlighted ? "border-navy-400 ring-2 ring-navy-400" : "border-line"
       }`}
       style={{ borderLeft: `4px solid ${meta.dot}` }}

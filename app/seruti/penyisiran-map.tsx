@@ -44,6 +44,7 @@ const WARNA_STATUS: Record<string, string> = {
   ditemukan: "#0ca30c",
   tidak_ditemukan: "#fab219",
   tidak_bisa: "#d03b3b",
+  sudah_didata_se2026: "#d03b3b",
 };
 
 const LABEL_STATUS: Record<string, string> = {
@@ -51,6 +52,7 @@ const LABEL_STATUS: Record<string, string> = {
   ditemukan: "Usaha Ditemukan",
   tidak_ditemukan: "Usaha Tidak Ditemukan",
   tidak_bisa: "Tidak Bisa Ditemui / Pindah",
+  sudah_didata_se2026: "Sudah Didata di SE2026",
 };
 
 // Solok kira-kira -0.9 s/d -1.8 lintang, 100.5 s/d 101.5 bujur.

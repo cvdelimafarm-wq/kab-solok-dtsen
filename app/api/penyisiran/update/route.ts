@@ -30,7 +30,7 @@ import { verifySession, extractBearer, type PenyisiranRole } from "@/lib/penyisi
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa"]);
+const STATUS_VALID = new Set(["belum", "ditemukan", "tidak_ditemukan", "tidak_bisa", "sudah_didata_se2026"]);
 
 export async function PATCH(req: NextRequest) {
   const token = extractBearer(req);

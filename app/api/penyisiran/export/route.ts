@@ -26,6 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
   ditemukan: "Usaha Ditemukan",
   tidak_ditemukan: "Usaha Tidak Ditemukan",
   tidak_bisa: "Tidak Bisa Ditemui / Pindah",
+  sudah_didata_se2026: "Sudah Didata di SE2026",
 };
 
 const IDENTIFIKASI_LABEL: Record<string, string> = {
@@ -33,6 +34,7 @@ const IDENTIFIKASI_LABEL: Record<string, string> = {
   ada: "PPL: Ada Usaha",
   tidak_ada: "PPL: Tidak Ada Usaha",
   ragu: "PPL: Ragu-ragu",
+  tidak_ditemukan: "PPL: Tidak Ditemukan (=Sudah Didata SE2026)",
 };
 
 interface ExportRow {
