@@ -415,7 +415,9 @@ function AdministrasiPanel({
     loadSuratTugas();
   }, [loadSuratTugas]);
 
+  const [busyUnduhStId, setBusyUnduhStId] = useState<number | null>(null);
   async function handleUnduh(id: number) {
+    setBusyUnduhStId(id);
     try {
       const data = await apiFetch(`/api/penyisiran/spj/surat-tugas/${id}/file`, sesi.token);
       if (data?.url) window.open(data.url, "_blank", "noreferrer");
@@ -423,8 +425,20 @@ function AdministrasiPanel({
       guard(() => {
         throw e;
       });
+    } finally {
+      setBusyUnduhStId(null);
     }
   }
+
+  // Dipanggil tombol navigasi di kartu Laporan/Dokumentasi versi read-only
+  // (sub-tab Arsip SPJ/Isi Dokumen) -- "+ Tambah Laporan/Dokumentasi" di
+  // sana TIDAK submit apa pun sendiri, cuma memindahkan orang ke sub-tab
+  // aktif (Dashboard utk pengelola, Ringkasan utk petugas biasa) tempat
+  // form submit sebenarnya berada -- sesuai permintaan user.
+  const navigasiKeAktif = useCallback(() => {
+    if (pengelola) setSubTabPengelola("dashboard");
+    else setSubTabSaya("ringkasan");
+  }, [pengelola]);
 
   const labelJenis = sesi.jenis === "penyisiran" ? "Petugas Penyisiran" : "Tetangga/Lainnya";
 
@@ -496,7 +510,13 @@ function AdministrasiPanel({
       )}
 
       {pengelola && subTabPengelola === "dashboard" && (
-        <SpjDashboard baris={monitoring.baris} loading={monitoring.loading} />
+        <div className="space-y-3">
+          <SpjDashboard baris={monitoring.baris} loading={monitoring.loading} />
+          {/* ---------- Laporan & Dokumentasi -- form submit AKTIF, dipindah ke sini
+              (permintaan user) supaya sub-tab Arsip SPJ murni jadi rekap. ---------- */}
+          <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
+          <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
+        </div>
       )}
       {pengelola && subTabPengelola === "monitoring" && (
         <SpjMonitoring baris={monitoring.baris} loading={monitoring.loading} />
@@ -515,6 +535,10 @@ function AdministrasiPanel({
           />
           <AdministrasiSayaRingkasan baris={monitoring.baris} loading={monitoring.loading} />
           <SpjCetakSaya token={sesi.token} onSessionExpired={onSessionExpired} />
+          {/* ---------- Laporan & Dokumentasi -- form submit AKTIF, dipindah ke sini
+              (permintaan user) supaya sub-tab Isi Dokumen murni jadi rekap. ---------- */}
+          <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
+          <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
         </div>
       )}
 
@@ -570,9 +594,10 @@ function AdministrasiPanel({
                 <button
                   type="button"
                   onClick={() => handleUnduh(st.id)}
-                  className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+                  disabled={busyUnduhStId === st.id}
+                  className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
                 >
-                  ⬇ Lihat/Unduh
+                  {busyUnduhStId === st.id ? "⏳ Menyiapkan..." : "⬇ Lihat/Unduh"}
                 </button>
               </div>
               <p className="mt-1 text-ink/60">
@@ -594,16 +619,28 @@ function AdministrasiPanel({
         </div>
       </div>
 
-      {/* ---------- Visum -- SUDAH JALAN ---------- */}
+      {/* ---------- Visum -- SUDAH JALAN (tetap aktif di Arsip, isi 1x/ST) ---------- */}
       <VisumSection token={sesi.token} onSessionExpired={onSessionExpired} />
 
-      {/* ---------- Laporan -- SUDAH JALAN ---------- */}
-      <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
+      {/* ---------- Laporan & Dokumentasi -- READ-ONLY di sini (permintaan
+          user: Arsip SPJ/Isi Dokumen cuma rekap, submit-nya dipindah ke
+          Dashboard/Ringkasan) -- tombol navigasi lompat ke sana. ---------- */}
+      <LaporanSection
+        token={sesi.token}
+        onSessionExpired={onSessionExpired}
+        onSelesai={cekDanTandaiSelesai}
+        readOnly
+        onNavigasiKeAktif={navigasiKeAktif}
+      />
+      <DokumentasiSection
+        token={sesi.token}
+        onSessionExpired={onSessionExpired}
+        onSelesai={cekDanTandaiSelesai}
+        readOnly
+        onNavigasiKeAktif={navigasiKeAktif}
+      />
 
-      {/* ---------- Dokumentasi -- SUDAH JALAN ---------- */}
-      <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
-
-      {/* ---------- Kwitansi -- SUDAH JALAN ---------- */}
+      {/* ---------- Kwitansi -- SUDAH JALAN (tetap aktif di Arsip, isi 1x/ST) ---------- */}
       <KwitansiSection token={sesi.token} onSessionExpired={onSessionExpired} />
 
       {/* ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas -- SUDAH JALAN ---------- */}
@@ -975,6 +1012,17 @@ function VisumBaris({
   const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(row.visum?.tanggal_berangkat ?? row.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyUnduh, setBusyUnduh] = useState(false);
+
+  async function handleKlikUnduh() {
+    if (!row.visum) return;
+    setBusyUnduh(true);
+    try {
+      await onUnduh(row.visum.id);
+    } finally {
+      setBusyUnduh(false);
+    }
+  }
 
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
@@ -1012,10 +1060,11 @@ function VisumBaris({
           {row.visum && !edit && (
             <button
               type="button"
-              onClick={() => onUnduh(row.visum!.id)}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+              onClick={handleKlikUnduh}
+              disabled={busyUnduh}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
             >
-              🖨 Unduh PDF Visum
+              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF Visum"}
             </button>
           )}
           <button
@@ -1093,10 +1142,19 @@ function LaporanSection({
   token,
   onSessionExpired,
   onSelesai,
+  readOnly,
+  onNavigasiKeAktif,
 }: {
   token: string;
   onSessionExpired: () => void;
   onSelesai: (suratTugasId: number, tanggal: string) => void;
+  // readOnly: dipakai versi Arsip SPJ/Isi Dokumen -- cuma rekap (daftar +
+  // Unduh PDF), tombol "+ Tambah Laporan" & form DISEMBUNYIKAN, diganti
+  // tombol navigasi (onNavigasiKeAktif) yg lompat ke sub-tab Dashboard/
+  // Ringkasan tempat form submit sebenarnya berada. Default false (versi
+  // aktif, submit spt biasa).
+  readOnly?: boolean;
+  onNavigasiKeAktif?: () => void;
 }) {
   const [daftar, setDaftar] = useState<LaporanSuratTugas[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1169,19 +1227,31 @@ function LaporanSection({
   return (
     <div className="rounded-lg border border-line bg-white p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-navy-900">📝 Laporan</p>
-        <button
-          type="button"
-          onClick={muat}
-          disabled={loading}
-          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
+        <p className="text-xs font-semibold text-navy-900">📝 Laporan{readOnly ? " (Arsip)" : ""}</p>
+        <div className="flex items-center gap-2">
+          {readOnly && onNavigasiKeAktif && (
+            <button
+              type="button"
+              onClick={onNavigasiKeAktif}
+              className="rounded-md bg-navy-700 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-navy-900"
+            >
+              + Tambah Laporan
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={muat}
+            disabled={loading}
+            className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+          >
+            {loading ? "Memuat..." : "↻ Muat Ulang"}
+          </button>
+        </div>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Satu Laporan per tanggal dlm rentang Surat Tugas. Mode "Template" menarik rekap otomatis dari tab Identifikasi
-        Jorong/Tetangga pada tanggal itu -- kalau datanya belum sesuai, koreksi dulu di tab tersebut lalu buat ulang.
+        {readOnly
+          ? "Rekap/arsip Laporan yang sudah dibuat -- utk membuat Laporan baru, gunakan tombol di atas (lompat ke sub-tab submit)."
+          : 'Satu Laporan per tanggal dlm rentang Surat Tugas. Mode "Template" menarik rekap otomatis dari tab Identifikasi Jorong/Tetangga pada tanggal itu -- kalau datanya belum sesuai, koreksi dulu di tab tersebut lalu buat ulang.'}
       </p>
 
       {errMsg && (
@@ -1198,6 +1268,8 @@ function LaporanSection({
             onUnduh={handleUnduh}
             guard={guard}
             onSelesai={onSelesai}
+            readOnly={readOnly}
+            onNavigasiKeAktif={onNavigasiKeAktif}
           />
         ))}
         {daftar.length === 0 && !loading && (
@@ -1218,6 +1290,8 @@ function LaporanStCard({
   onUnduh,
   guard,
   onSelesai,
+  readOnly,
+  onNavigasiKeAktif,
 }: {
   st: LaporanSuratTugas;
   token: string;
@@ -1225,26 +1299,53 @@ function LaporanStCard({
   onUnduh: (laporanId: number) => void;
   guard: (fn: () => void) => void;
   onSelesai: (suratTugasId: number, tanggal: string) => void;
+  readOnly?: boolean;
+  onNavigasiKeAktif?: () => void;
 }) {
   const [showForm, setShowForm] = useState(false);
+  // Lacak PER-baris (bukan 1 boolean utk seluruh kartu) krn 1 ST bisa py
+  // beberapa Laporan (per tanggal) -- tombol yg diklik yg harus berubah
+  // jadi "Menyiapkan...", bukan semua baris sekaligus.
+  const [busyUnduhId, setBusyUnduhId] = useState<number | null>(null);
+
+  async function handleKlikUnduh(id: number) {
+    setBusyUnduhId(id);
+    try {
+      await onUnduh(id);
+    } finally {
+      setBusyUnduhId(null);
+    }
+  }
 
   return (
     <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-semibold text-navy-900">{st.nomor_st}</span>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
-        >
-          {showForm ? "Batal" : "+ Tambah Laporan"}
-        </button>
+        {readOnly ? (
+          onNavigasiKeAktif && (
+            <button
+              type="button"
+              onClick={onNavigasiKeAktif}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+            >
+              + Tambah
+            </button>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+          >
+            {showForm ? "Batal" : "+ Tambah Laporan"}
+          </button>
+        )}
       </div>
       <p className="mt-1 text-ink/60">
         {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
       </p>
 
-      {showForm && (
+      {!readOnly && showForm && (
         <LaporanForm
           st={st}
           token={token}
@@ -1268,10 +1369,11 @@ function LaporanStCard({
             </div>
             <button
               type="button"
-              onClick={() => onUnduh(l.id)}
-              className="rounded-md border border-line px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+              onClick={() => handleKlikUnduh(l.id)}
+              disabled={busyUnduhId === l.id}
+              className="rounded-md border border-line px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
             >
-              🖨 Unduh PDF
+              {busyUnduhId === l.id ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
             </button>
           </div>
         ))}
@@ -1537,10 +1639,15 @@ function DokumentasiSection({
   token,
   onSessionExpired,
   onSelesai,
+  readOnly,
+  onNavigasiKeAktif,
 }: {
   token: string;
   onSessionExpired: () => void;
   onSelesai: (suratTugasId: number, tanggal: string) => void;
+  // Sama seperti readOnly di LaporanSection -- lihat komentar di sana.
+  readOnly?: boolean;
+  onNavigasiKeAktif?: () => void;
 }) {
   const [daftar, setDaftar] = useState<DokumentasiSt[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1581,19 +1688,31 @@ function DokumentasiSection({
   return (
     <div className="rounded-lg border border-line bg-white p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-navy-900">📷 Dokumentasi</p>
-        <button
-          type="button"
-          onClick={muat}
-          disabled={loading}
-          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
+        <p className="text-xs font-semibold text-navy-900">📷 Dokumentasi{readOnly ? " (Arsip)" : ""}</p>
+        <div className="flex items-center gap-2">
+          {readOnly && onNavigasiKeAktif && (
+            <button
+              type="button"
+              onClick={onNavigasiKeAktif}
+              className="rounded-md bg-navy-700 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-navy-900"
+            >
+              + Tambah Dokumentasi
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={muat}
+            disabled={loading}
+            className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+          >
+            {loading ? "Memuat..." : "↻ Muat Ulang"}
+          </button>
+        </div>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Maksimal 5 foto/hari per Surat Tugas -- pilih tanggal, lalu upload foto ke slot yang sesuai. Setelah lengkap,
-        unduh PDF Lampiran Dokumentasi-nya.
+        {readOnly
+          ? "Rekap/arsip foto Dokumentasi yang sudah diupload -- utk menambah foto, gunakan tombol di atas (lompat ke sub-tab submit)."
+          : "Maksimal 5 foto/hari per Surat Tugas -- pilih tanggal, lalu upload foto ke slot yang sesuai (bisa pilih beberapa foto sekaligus). Setelah lengkap, unduh PDF Lampiran Dokumentasi-nya."}
       </p>
 
       {errMsg && (
@@ -1602,7 +1721,14 @@ function DokumentasiSection({
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <DokumentasiStCard key={st.surat_tugas_id} st={st} token={token} guard={guard} onSelesai={onSelesai} />
+          <DokumentasiStCard
+            key={st.surat_tugas_id}
+            st={st}
+            token={token}
+            guard={guard}
+            onSelesai={onSelesai}
+            readOnly={readOnly}
+          />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -1615,22 +1741,36 @@ function DokumentasiSection({
   );
 }
 
+// Satu foto yang dipilih di batch (multi-select) + slot yang ditandai
+// utknya -- lihat BatchUploadFoto di bawah.
+interface BatchFoto {
+  file: File;
+  slot: number | null;
+}
+
 function DokumentasiStCard({
   st,
   token,
   guard,
   onSelesai,
+  readOnly,
 }: {
   st: DokumentasiSt;
   token: string;
   guard: (fn: () => void) => void;
   onSelesai: (suratTugasId: number, tanggal: string) => void;
+  readOnly?: boolean;
 }) {
   const [tanggal, setTanggal] = useState(() => tanggalHariIniKlem(st.tanggal_mulai, st.tanggal_selesai));
   const [foto, setFoto] = useState<Record<number, DokumentasiFotoSlot | null>>({});
   const [loading, setLoading] = useState(false);
   const [busySlot, setBusySlot] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyUnduh, setBusyUnduh] = useState(false);
+  // ---------- Batch upload (pilih beberapa foto sekaligus) ----------
+  const [batch, setBatch] = useState<BatchFoto[]>([]);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
 
   const muatFoto = useCallback(
     async (tgl: string) => {
@@ -1705,6 +1845,7 @@ function DokumentasiStCard({
   }
 
   async function handleUnduh() {
+    setBusyUnduh(true);
     try {
       const res = await fetch(
         `/api/penyisiran/spj/dokumentasi/pdf?surat_tugas_id=${st.surat_tugas_id}&tanggal=${encodeURIComponent(tanggal)}`,
@@ -1734,6 +1875,74 @@ function DokumentasiStCard({
       guard(() => {
         throw e;
       });
+    } finally {
+      setBusyUnduh(false);
+    }
+  }
+
+  // ---------- Batch upload: pilih hingga 5 foto sekaligus, tandai slotnya
+  // masing2 (Sebelum Berangkat/Sampai di Lokasi/dst), lalu upload semua
+  // sekali klik -- permintaan user, menggantikan cara lama (upload 1-1 per
+  // kotak slot, yg tetap ada & bisa dipakai utk ganti/hapus foto tertentu).
+  function handlePilihBatch(fileList: FileList | null) {
+    setBatchError(null);
+    if (!fileList || fileList.length === 0) return;
+    let dipilih = Array.from(fileList);
+    let melebihi = false;
+    if (dipilih.length > 5) {
+      dipilih = dipilih.slice(0, 5);
+      melebihi = true;
+    }
+    // Default slot per foto = slot KOSONG pertama yg belum dipakai foto lain
+    // dlm batch ini (biar user biasanya tinggal klik Upload tanpa perlu
+    // atur slot manual) -- kalau semua slot kosong sudah "dipesan" foto
+    // lain di batch, slot dibiarkan belum ditandai (null), user WAJIB
+    // pilih manual (dicek di validasiBatch()).
+    const slotDipakaiBatch = new Set<number>();
+    const daftar: BatchFoto[] = dipilih.map((file) => {
+      const slotKosong = SLOT_URUTAN.find((s) => !foto[s] && !slotDipakaiBatch.has(s));
+      if (slotKosong !== undefined) slotDipakaiBatch.add(slotKosong);
+      return { file, slot: slotKosong ?? null };
+    });
+    setBatch(daftar);
+    setBatchError(melebihi ? "Maksimal 5 foto sekaligus -- foto selebihnya diabaikan." : null);
+  }
+
+  function ubahSlotBatch(index: number, slotBaru: number) {
+    setBatch((prev) => prev.map((b, i) => (i === index ? { ...b, slot: slotBaru } : b)));
+  }
+
+  function hapusDariBatch(index: number) {
+    setBatch((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // Slot yg SUDAH dipilih foto LAIN dlm batch yg sama (bukan foto ke-`index`
+  // ini sendiri) -- dipakai menonaktifkan opsi itu di dropdown foto ini,
+  // supaya tidak mungkin 2 foto ditandai slot yang sama (validasi yg
+  // diminta user).
+  function slotTerpakaiFotoLain(index: number): Set<number> {
+    return new Set(batch.filter((_, i) => i !== index).map((b) => b.slot).filter((s): s is number => s !== null));
+  }
+
+  async function handleUploadBatch() {
+    setBatchError(null);
+    if (batch.some((b) => b.slot === null)) {
+      setBatchError("Pilih slot foto (Sebelum Berangkat/Sampai di Lokasi/dst) utk SETIAP foto yang dipilih.");
+      return;
+    }
+    const slotDipilih = batch.map((b) => b.slot as number);
+    if (new Set(slotDipilih).size !== slotDipilih.length) {
+      setBatchError("Tidak boleh ada 2 foto ditandai slot identifikasi yang sama -- setiap foto wajib slot berbeda.");
+      return;
+    }
+    setBatchBusy(true);
+    try {
+      for (const b of batch) {
+        if (b.slot !== null) await handleUploadSlot(b.slot, b.file);
+      }
+      setBatch([]);
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -1752,22 +1961,90 @@ function DokumentasiStCard({
             onChange={(e) => {
               setTanggal(e.target.value);
               muatFoto(e.target.value);
+              setBatch([]);
+              setBatchError(null);
             }}
             className="rounded-md border border-line px-2 py-1 text-[11px]"
           />
           <button
             type="button"
             onClick={handleUnduh}
-            disabled={!adaFoto}
+            disabled={!adaFoto || busyUnduh}
             className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-40"
           >
-            🖨 Unduh PDF
+            {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
           </button>
         </div>
       </div>
 
       {error && <p className="mt-1 text-[11px] text-rust-700">⚠ {error}</p>}
       {loading && <p className="mt-1 text-[11px] text-ink/40">Memuat...</p>}
+
+      {!readOnly && (
+        <div className="mt-2 rounded-md border border-dashed border-navy-300 bg-navy-700/5 p-2">
+          <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400">
+            📤 Pilih Beberapa Foto Sekaligus (maks 5)
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              multiple
+              className="hidden"
+              disabled={batchBusy}
+              onChange={(e) => {
+                handlePilihBatch(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </label>
+
+          {batchError && <p className="mt-1.5 text-[11px] text-rust-700">⚠ {batchError}</p>}
+
+          {batch.length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              {batch.map((b, i) => {
+                const slotTerpakaiLain = slotTerpakaiFotoLain(i);
+                return (
+                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-white p-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink/70">{b.file.name}</span>
+                    <select
+                      value={b.slot ?? ""}
+                      onChange={(e) => ubahSlotBatch(i, Number(e.target.value))}
+                      disabled={batchBusy}
+                      className="rounded-md border border-line px-1.5 py-1 text-[10px]"
+                    >
+                      <option value="" disabled>
+                        -- Pilih Slot --
+                      </option>
+                      {SLOT_URUTAN.map((s) => (
+                        <option key={s} value={s} disabled={slotTerpakaiLain.has(s)}>
+                          {SLOT_LABELS[s]}
+                          {foto[s] ? " (ganti foto lama)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => hapusDariBatch(i)}
+                      disabled={batchBusy}
+                      className="text-[10px] text-rust-700 underline disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={handleUploadBatch}
+                disabled={batchBusy}
+                className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+              >
+                {batchBusy ? "Mengupload..." : `Upload ${batch.length} Foto`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {SLOT_URUTAN.map((slot) => {
@@ -1779,15 +2056,21 @@ function DokumentasiStCard({
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={f.url} alt={SLOT_LABELS[slot]} className="mx-auto mt-1 h-20 w-full rounded object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => handleHapusSlot(f.id)}
-                    disabled={busySlot !== null}
-                    className="mt-1 text-[10px] text-rust-700 underline disabled:opacity-50"
-                  >
-                    Hapus
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleHapusSlot(f.id)}
+                      disabled={busySlot !== null}
+                      className="mt-1 text-[10px] text-rust-700 underline disabled:opacity-50"
+                    >
+                      Hapus
+                    </button>
+                  )}
                 </>
+              ) : readOnly ? (
+                <p className="mt-1 flex h-20 items-center justify-center rounded border border-line bg-paper/30 text-[10px] text-ink/30">
+                  (kosong)
+                </p>
               ) : (
                 <label className="mt-1 flex h-20 cursor-pointer items-center justify-center rounded border border-line bg-paper/50 text-[10px] text-ink/40 hover:border-navy-400">
                   {busySlot === slot ? "Mengupload..." : "+ Upload"}
@@ -1954,6 +2237,17 @@ function KwitansiBaris({
   const [tanggalSpd, setTanggalSpd] = useState(st.kwitansi?.tanggal_spd ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyUnduh, setBusyUnduh] = useState(false);
+
+  async function handleKlikUnduh() {
+    if (!st.kwitansi) return;
+    setBusyUnduh(true);
+    try {
+      await onUnduh(st.kwitansi.id);
+    } finally {
+      setBusyUnduh(false);
+    }
+  }
 
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
@@ -1998,10 +2292,11 @@ function KwitansiBaris({
           {st.kwitansi && !edit && (
             <button
               type="button"
-              onClick={() => onUnduh(st.kwitansi!.id)}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+              onClick={handleKlikUnduh}
+              disabled={busyUnduh}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
             >
-              🖨 Unduh PDF
+              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
             </button>
           )}
           <button
@@ -2219,6 +2514,17 @@ function SuratKeteranganBaris({
   const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(st.surat_keterangan?.tanggal_pelaksanaan ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyUnduh, setBusyUnduh] = useState(false);
+
+  async function handleKlikUnduh() {
+    if (!st.surat_keterangan) return;
+    setBusyUnduh(true);
+    try {
+      await onUnduh(st.surat_keterangan.id);
+    } finally {
+      setBusyUnduh(false);
+    }
+  }
 
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
@@ -2252,10 +2558,11 @@ function SuratKeteranganBaris({
           {st.surat_keterangan && !edit && (
             <button
               type="button"
-              onClick={() => onUnduh(st.surat_keterangan!.id)}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+              onClick={handleKlikUnduh}
+              disabled={busyUnduh}
+              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
             >
-              🖨 Unduh PDF
+              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
             </button>
           )}
           <button
