@@ -106,8 +106,22 @@
 //     oleh <nama>" di checklist Hari Tugas miliknya sendiri (poin 1) &
 //     hari itu terkunci (tdk bisa dicentang ulang sendiri) sampai
 //     diaktifkan lagi oleh pengelola.
+//     Di dalam panel yg sama ada "Monitoring Alokasi Hari Tugas"
+//     (GridAlokasiDanKuota) -- kotak kuota (Kuota/Terpakai/Sisa) + grid
+//     kalender ringkas (baris = nama petugas, kolom = tanggal 17-30 Sep,
+//     sel = titik bulat berwarna, BUKAN teks/bar lebar spt contoh gambar
+//     user, supaya kolom tanggal bisa sempit) -- field `grid` dari respons
+//     GET .../oh-monitoring (lihat komentar lengkap di route.ts itu):
+//     hijau = direncanakan & sudah ada foto dokumentasi SPJ, merah =
+//     direncanakan tapi belum ada foto (dianggap tidak jalan), abu2 =
+//     tidak direncanakan/dibatalkan/libur. Ada tombol "Salin sebagai
+//     Gambar" (html2canvas + Clipboard API, POLA SAMA dgn
+//     salinTabelSebagaiGambar di app/seruti/page.tsx: render ke elemen
+//     tersembunyi off-screen lebar tetap, lalu disalin sbg PNG ke
+//     clipboard supaya gampang ditempel langsung ke grup WA -- fallback
+//     unduh file kalau browser tidak dukung clipboard image).
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
@@ -598,6 +612,109 @@ interface OhRincianPetugas {
   tanggal: HariRow[];
 }
 
+type StatusGridHariTugas = "hijau" | "merah" | "abu";
+
+interface GridBarisPetugas {
+  petugas_id: number;
+  petugas_nama: string;
+  status: Record<string, StatusGridHariTugas>;
+}
+
+const WARNA_GRID_HARI_TUGAS: Record<StatusGridHariTugas, string> = {
+  hijau: "#0ca30c",
+  merah: "#d03b3b",
+  abu: "#9ca3af",
+};
+
+// Kotak kuota (Kuota/Terpakai/Sisa) + grid kalender ringkas per petugas --
+// dipakai DUA KALI oleh OhMonitoringPanel (tampilan biasa on-screen & versi
+// tersembunyi lebar tetap khusus sumber "Salin sebagai Gambar", lihat
+// komentar panjang di atas file ini) supaya isi keduanya PERSIS SAMA.
+function GridAlokasiDanKuota({
+  kuota,
+  terpakai,
+  sisa,
+  tanggalList,
+  baris,
+}: {
+  kuota: number;
+  terpakai: number;
+  sisa: number;
+  tanggalList: string[];
+  baris: GridBarisPetugas[];
+}) {
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="flex flex-wrap gap-2 text-sm">
+        <div className="rounded-md bg-paper/60 px-3 py-1.5">
+          Kuota: <span className="font-semibold text-navy-900">{kuota} OH</span>
+        </div>
+        <div className="rounded-md bg-paper/60 px-3 py-1.5">
+          Terpakai: <span className="font-semibold text-navy-900">{terpakai} OH</span>
+        </div>
+        <div className={`rounded-md px-3 py-1.5 ${sisa < 0 ? "bg-rust-100 text-rust-700" : "bg-paper/60"}`}>
+          Sisa: <span className="font-semibold">{sisa} OH</span>
+          {sisa < 0 && " -- kuota terlampaui!"}
+        </div>
+      </div>
+
+      <table className="mt-3 border-collapse text-[11px]">
+        <thead>
+          <tr>
+            <th className="border-b border-r border-line px-2 py-1 text-left font-semibold text-navy-900">
+              Nama Petugas
+            </th>
+            {tanggalList.map((t) => (
+              <th key={t} className="w-[20px] border-b border-line px-0.5 py-1 text-center font-medium text-ink/50">
+                {Number(t.slice(-2))}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {baris.map((b) => (
+            <tr key={b.petugas_id} className="border-b border-line/60 last:border-0">
+              <td className="whitespace-nowrap border-r border-line px-2 py-1 font-medium text-navy-900">
+                {b.petugas_nama}
+              </td>
+              {tanggalList.map((t) => (
+                <td key={t} className="px-0.5 py-1 text-center">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: WARNA_GRID_HARI_TUGAS[b.status[t] ?? "abu"] }}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+          {baris.length === 0 && (
+            <tr>
+              <td colSpan={tanggalList.length + 1} className="px-2 py-4 text-center text-ink/40">
+                Belum ada data.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-ink/60">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: WARNA_GRID_HARI_TUGAS.hijau }} />
+          Direncanakan
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: WARNA_GRID_HARI_TUGAS.merah }} />
+          Direncanakan, belum ada foto dokumentasi (dianggap tidak jalan)
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: WARNA_GRID_HARI_TUGAS.abu }} />
+          Tidak ada rencana / libur
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Panel monitoring kuota OH translok -- HANYA tampil utk 4 nama pengelola
 // (bolehAksesManajemenTarget), sama spt tab "Manajemen Target". Pengelola
 // bisa membatalkan/mengaktifkan-kembali satu hari milik petugas tertentu
@@ -609,6 +726,10 @@ function OhMonitoringPanel({ token }: { token: string }) {
   const [terpakai, setTerpakai] = useState(0);
   const [rincian, setRincian] = useState<OhRincianPetugas[]>([]);
   const [aksiBusyKey, setAksiBusyKey] = useState<string | null>(null);
+  const [gridTanggal, setGridTanggal] = useState<string[]>([]);
+  const [gridBaris, setGridBaris] = useState<GridBarisPetugas[]>([]);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
 
   async function muat() {
     setLoading(true);
@@ -618,10 +739,49 @@ function OhMonitoringPanel({ token }: { token: string }) {
       setKuota(data?.kuota ?? 0);
       setTerpakai(data?.terpakai ?? 0);
       setRincian(Array.isArray(data?.rincian) ? data.rincian : []);
+      setGridTanggal(Array.isArray(data?.grid?.tanggalList) ? data.grid.tanggalList : []);
+      setGridBaris(Array.isArray(data?.grid?.baris) ? data.grid.baris : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal memuat monitoring OH.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Salin grid+kotak kuota sbg gambar PNG ke clipboard, siap ditempel
+  // langsung ke chat WA -- pola SAMA persis dgn salinTabelSebagaiGambar di
+  // app/seruti/page.tsx (render dari elemen tersembunyi off-screen lebar
+  // tetap, bukan dari tampilan on-screen, supaya hasilnya konsisten tanpa
+  // peduli lebar layar/scroll pengguna).
+  async function salinSebagaiGambar() {
+    if (!gridRef.current) return;
+    setCopyStatus("copying");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gridRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setCopyStatus("error");
+          return;
+        }
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        } catch {
+          // Fallback: unduh langsung kalau clipboard image tidak didukung browser.
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "monitoring-alokasi-hari-tugas.png";
+          a.click();
+          URL.revokeObjectURL(url);
+          setCopyStatus("done");
+          setTimeout(() => setCopyStatus("idle"), 2500);
+        }
+      });
+    } catch {
+      setCopyStatus("error");
     }
   }
 
@@ -661,20 +821,34 @@ function OhMonitoringPanel({ token }: { token: string }) {
       ) : (
         <>
           {error && <p className="mt-2 text-xs font-medium text-rust-700">{error}</p>}
-          <div className="mt-3 flex flex-wrap gap-4 text-sm">
-            <p>
-              Kuota: <span className="font-semibold text-navy-900">{kuota} OH</span>
-            </p>
-            <p>
-              Terpakai: <span className="font-semibold text-navy-900">{terpakai} OH</span>
-            </p>
-            <p className={sisa < 0 ? "font-semibold text-rust-700" : ""}>
-              Sisa: <span className="font-semibold">{sisa} OH</span>
-              {sisa < 0 && " -- kuota terlampaui!"}
-            </p>
+
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-navy-900">📅 Monitoring Alokasi Hari Tugas</p>
+            <button
+              type="button"
+              onClick={salinSebagaiGambar}
+              disabled={copyStatus === "copying"}
+              className="shrink-0 rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+            >
+              {copyStatus === "copying"
+                ? "Menyalin..."
+                : copyStatus === "done"
+                ? "Tersalin ✓"
+                : copyStatus === "error"
+                ? "Gagal, coba lagi"
+                : "📋 Salin sebagai Gambar"}
+            </button>
+          </div>
+          <div className="mt-2 overflow-x-auto">
+            <GridAlokasiDanKuota kuota={kuota} terpakai={terpakai} sisa={sisa} tanggalList={gridTanggal} baris={gridBaris} />
+          </div>
+          {/* Salinan tersembunyi lebar tetap, dipakai sbg sumber gambar saat tombol "Salin sebagai Gambar" diklik -- lihat salinSebagaiGambar. */}
+          <div ref={gridRef} className="fixed -left-[9999px] top-0 w-[720px]" aria-hidden="true">
+            <GridAlokasiDanKuota kuota={kuota} terpakai={terpakai} sisa={sisa} tanggalList={gridTanggal} baris={gridBaris} />
           </div>
 
-          <div className="mt-3 max-h-[24rem] space-y-2 overflow-y-auto">
+          <p className="mt-4 text-xs font-semibold text-navy-900">🛠 Rincian &amp; Kelola per Petugas</p>
+          <div className="mt-2 max-h-[24rem] space-y-2 overflow-y-auto">
             {rincian.length === 0 && <p className="text-xs text-ink/50">Belum ada petugas yang mengisi hari tugas.</p>}
             {rincian.map((p) => (
               <div key={p.petugas_id} className="rounded-md border border-line/70 p-2">

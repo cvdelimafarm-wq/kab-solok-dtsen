@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
+import { daftarTanggalPeriodeHariTugas } from "@/lib/penyisiranHari";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,10 +93,67 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => a.petugas_nama.localeCompare(b.petugas_nama));
 
+  // Grid kalender per petugas x tanggal utk fitur "Monitoring Alokasi Hari
+  // Tugas" (tampilan ringkas ala Gantt + kotak kuota, ada tombol "Salin
+  // sebagai Gambar" utk dikirim ke grup WA -- lihat MonitoringAlokasiGrid
+  // di app/penyisiran/perencanaan-lapangan.tsx). Status per sel:
+  //  - "hijau" : direncanakan (baris AKTIF, dibatalkan_oleh masih kosong)
+  //    DAN sudah ada minimal 1 foto dokumentasi SPJ (spj_dokumentasi_foto,
+  //    petugas_jenis "penyisiran") utk kombinasi petugas+tanggal itu.
+  //  - "merah" : direncanakan TAPI belum ada foto dokumentasi sama sekali
+  //    -- dianggap tidak benar2 jalan ke lapangan (dikonfirmasi user).
+  //  - "abu"   : tidak direncanakan -- baik krn memang belum ditandai/
+  //    tidak tag, direncanakan libur, MAUPUN baris yg sudah dibatalkan
+  //    pengelola (dibatalkan_oleh terisi) -- tidak ada field "libur"
+  //    terpisah di skema, jadi ketiganya digabung jadi satu warna netral.
+  // Baris grid = SEMUA petugas AKTIF digabung dgn petugas non-aktif yg
+  // KEBETULAN masih py riwayat hari tugas (pola sama dgn tab "Monitoring
+  // Petugas Penyisiran", monitoring-petugas.tsx) supaya riwayatnya tidak
+  // hilang dari rekap.
+  const { data: aktifRows, error: aktifErr } = await supabase
+    .from("petugas_penyisiran_akun")
+    .select("id, nama")
+    .eq("aktif", true);
+  if (aktifErr) return NextResponse.json({ error: aktifErr.message }, { status: 500 });
+
+  const { data: dokRows, error: dokErr } = await supabase
+    .from("spj_dokumentasi_foto")
+    .select("petugas_id, tanggal")
+    .eq("petugas_jenis", "penyisiran");
+  if (dokErr) return NextResponse.json({ error: dokErr.message }, { status: 500 });
+
+  const kunciDokumentasi = new Set(
+    (dokRows ?? []).map((r: { petugas_id: number; tanggal: string }) => `${r.petugas_id}|${r.tanggal}`)
+  );
+  const kunciAktifPerTanggal = new Map<string, boolean>();
+  for (const r of list) {
+    kunciAktifPerTanggal.set(`${r.petugas_id}|${r.tanggal}`, !r.dibatalkan_oleh);
+  }
+
+  const namaPerId = new Map<number, string>();
+  for (const a of aktifRows ?? []) namaPerId.set(a.id as number, a.nama as string);
+  for (const p of perPetugas.values()) {
+    if (!namaPerId.has(p.petugas_id)) namaPerId.set(p.petugas_id, p.petugas_nama);
+  }
+
+  const tanggalList = daftarTanggalPeriodeHariTugas();
+  const gridBaris = Array.from(namaPerId.entries())
+    .map(([petugasId, nama]) => {
+      const status: Record<string, "hijau" | "merah" | "abu"> = {};
+      for (const tgl of tanggalList) {
+        const kunci = `${petugasId}|${tgl}`;
+        const direncanakan = kunciAktifPerTanggal.get(kunci) === true;
+        status[tgl] = !direncanakan ? "abu" : kunciDokumentasi.has(kunci) ? "hijau" : "merah";
+      }
+      return { petugas_id: petugasId, petugas_nama: nama, status };
+    })
+    .sort((a, b) => a.petugas_nama.localeCompare(b.petugas_nama));
+
   return NextResponse.json({
     kuota: KUOTA_OH_TRANSLOK,
     terpakai,
     sisa: KUOTA_OH_TRANSLOK - terpakai,
     rincian,
+    grid: { tanggalList, baris: gridBaris },
   });
 }

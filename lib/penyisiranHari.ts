@@ -25,3 +25,20 @@ export function tanggalDalamPeriodeHariTugas(tanggal: string): boolean {
     tanggal <= PERIODE_HARI_TUGAS_SELESAI
   );
 }
+
+/**
+ * Daftar SEMUA tanggal kalender dlm periode Hari Tugas (17-30 Sep 2026,
+ * urut kronologis) -- dipakai endpoint .../alokasi/oh-monitoring utk
+ * membentuk kolom grid kalender "Monitoring Alokasi Hari Tugas" (rekap
+ * per petugas x tanggal, lihat app/penyisiran/perencanaan-lapangan.tsx).
+ */
+export function daftarTanggalPeriodeHariTugas(): string[] {
+  const hasil: string[] = [];
+  const cur = new Date(PERIODE_HARI_TUGAS_MULAI + "T00:00:00Z");
+  const selesai = new Date(PERIODE_HARI_TUGAS_SELESAI + "T00:00:00Z");
+  while (cur <= selesai) {
+    hasil.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return hasil;
+}
