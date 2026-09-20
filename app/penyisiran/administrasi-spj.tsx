@@ -1742,10 +1742,16 @@ function DokumentasiSection({
 }
 
 // Satu foto yang dipilih di batch (multi-select) + slot yang ditandai
-// utknya -- lihat BatchUploadFoto di bawah.
+// utknya. `previewUrl` = URL.createObjectURL(file) dibuat SEKALI saat
+// dipilih (bukan di tiap render) supaya petugas bisa LANGSUNG lihat isi
+// fotonya sendiri (bukan cuma nama file) sebelum menandai slot & upload --
+// permintaan user ("kita tidak tau isinya apa, harusnya ditampilkan
+// gambarnya"). WAJIB di-revoke (URL.revokeObjectURL) begitu tidak dipakai
+// lagi (dibatalkan/sudah diupload/komponen unmount) spy tidak bocor memori.
 interface BatchFoto {
   file: File;
   slot: number | null;
+  previewUrl: string;
 }
 
 function DokumentasiStCard({
@@ -1771,6 +1777,18 @@ function DokumentasiStCard({
   const [batch, setBatch] = useState<BatchFoto[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
+  // Ref berisi `batch` TERKINI (bukan dari closure useEffect mount) -- dipakai
+  // cleanup unmount di bawah spy semua previewUrl yg masih tersisa (blm
+  // sempat di-upload/dibatalkan) tetap direvoke, jangan bocor memori.
+  const batchRef = useRef<BatchFoto[]>([]);
+  useEffect(() => {
+    batchRef.current = batch;
+  }, [batch]);
+  useEffect(() => {
+    return () => {
+      batchRef.current.forEach((b) => URL.revokeObjectURL(b.previewUrl));
+    };
+  }, []);
 
   const muatFoto = useCallback(
     async (tgl: string) => {
@@ -1893,6 +1911,9 @@ function DokumentasiStCard({
       dipilih = dipilih.slice(0, 5);
       melebihi = true;
     }
+    // Kalau masih ada batch LAMA yg blm sempat diupload/dibatalkan, revoke
+    // dulu preview URL-nya sblm diganti batch baru -- jangan bocor memori.
+    batch.forEach((b) => URL.revokeObjectURL(b.previewUrl));
     // Default slot per foto = slot KOSONG pertama yg belum dipakai foto lain
     // dlm batch ini (biar user biasanya tinggal klik Upload tanpa perlu
     // atur slot manual) -- kalau semua slot kosong sudah "dipesan" foto
@@ -1902,7 +1923,10 @@ function DokumentasiStCard({
     const daftar: BatchFoto[] = dipilih.map((file) => {
       const slotKosong = SLOT_URUTAN.find((s) => !foto[s] && !slotDipakaiBatch.has(s));
       if (slotKosong !== undefined) slotDipakaiBatch.add(slotKosong);
-      return { file, slot: slotKosong ?? null };
+      // Preview LANGSUNG dari file yg baru dipilih (client-side, tanpa
+      // perlu upload dulu) -- permintaan user supaya petugas bisa lihat
+      // isi fotonya, bukan cuma nama file, sebelum menandai slot & upload.
+      return { file, slot: slotKosong ?? null, previewUrl: URL.createObjectURL(file) };
     });
     setBatch(daftar);
     setBatchError(melebihi ? "Maksimal 5 foto sekaligus -- foto selebihnya diabaikan." : null);
@@ -1913,7 +1937,11 @@ function DokumentasiStCard({
   }
 
   function hapusDariBatch(index: number) {
-    setBatch((prev) => prev.filter((_, i) => i !== index));
+    setBatch((prev) => {
+      const dihapus = prev[index];
+      if (dihapus) URL.revokeObjectURL(dihapus.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   // Slot yg SUDAH dipilih foto LAIN dlm batch yg sama (bukan foto ke-`index`
@@ -1940,6 +1968,7 @@ function DokumentasiStCard({
       for (const b of batch) {
         if (b.slot !== null) await handleUploadSlot(b.slot, b.file);
       }
+      batch.forEach((b) => URL.revokeObjectURL(b.previewUrl));
       setBatch([]);
     } finally {
       setBatchBusy(false);
@@ -1961,6 +1990,7 @@ function DokumentasiStCard({
             onChange={(e) => {
               setTanggal(e.target.value);
               muatFoto(e.target.value);
+              batch.forEach((b) => URL.revokeObjectURL(b.previewUrl));
               setBatch([]);
               setBatchError(null);
             }}
@@ -2005,6 +2035,12 @@ function DokumentasiStCard({
                 const slotTerpakaiLain = slotTerpakaiFotoLain(i);
                 return (
                   <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-white p-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={b.previewUrl}
+                      alt={b.file.name}
+                      className="h-12 w-12 shrink-0 rounded object-cover"
+                    />
                     <span className="min-w-0 flex-1 truncate text-[11px] text-ink/70">{b.file.name}</span>
                     <select
                       value={b.slot ?? ""}

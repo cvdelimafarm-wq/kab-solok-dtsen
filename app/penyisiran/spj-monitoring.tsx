@@ -546,24 +546,58 @@ export function KelengkapanDokumenSaya({
         Dihitung dari {kelengkapan.totalHariKerja} hari kerja yang Anda tag di kartu 🗓 Identifikasi Hari Tugas.
       </p>
       {errMsg && <p className="mb-2 text-[11px] text-rust-700">⚠ {errMsg}</p>}
-      <div className="space-y-2">
+
+      {/* Ringkasan total per jenis, format ringkas 1 baris (bukan bar
+          panjang) -- detail sebenarnya ada di rincian 6 ikon per hari di
+          bawah, ini cuma utk orientasi cepat "yg mana paling ketinggalan". */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
         {kelengkapan.perJenis.map((p) => (
-          <div key={p.jenis}>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium text-ink/70">{p.label}</span>
-              <span className="text-ink/50">
-                {p.ok}/{p.total} ({p.pct}%)
-              </span>
-            </div>
-            <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-line">
-              <div
-                className={`h-full rounded-full ${p.pct === 100 ? "bg-moss-500" : p.pct >= 70 ? "bg-gold-500" : "bg-rust-500"}`}
-                style={{ width: `${p.pct}%` }}
-              />
+          <span
+            key={p.jenis}
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              p.pct === 100 ? "bg-moss-100/70 text-moss-700" : p.pct >= 70 ? "bg-gold-100/70 text-gold-700" : "bg-rust-100/60 text-rust-700"
+            }`}
+          >
+            {p.label} {p.ok}/{p.total}
+          </span>
+        ))}
+      </div>
+
+      {/* Rincian per hari -- 6 ikon (1 per jenis dokumen), hijau+centang
+          kalau lengkap (termasuk yg "otomatis lengkap" spt Kwitansi/Visum/
+          Surat Pernyataan/Surat Tugas -- aturannya SAMA dgn ringkasan di
+          atas, lihat hitungKelengkapanPerJenis()), merah+"Belum" kalau
+          belum -- permintaan user. */}
+      <div className="space-y-2">
+        {kelengkapan.perHari.map((h) => (
+          <div key={h.tanggal} className="rounded-md border border-line bg-paper/30 p-2">
+            <p className="mb-1.5 text-[11px] font-semibold text-navy-900">
+              {formatTanggalPendek(h.tanggal)}
+              {!h.adaSt && <span className="ml-1.5 text-[10px] font-normal text-gold-700">-- belum tertaut ST</span>}
+            </p>
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+              {JENIS_DOKUMEN.map((j) => {
+                const ok = h.ok[j];
+                return (
+                  <div
+                    key={j}
+                    className={`flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-center ${
+                      ok ? "bg-moss-100/60" : "bg-rust-100/40"
+                    }`}
+                  >
+                    <span className="text-base leading-none">{ok ? "✅" : "❌"}</span>
+                    <span className={`text-[9px] font-medium leading-tight ${ok ? "text-moss-700" : "text-rust-700"}`}>
+                      {LABEL_DOKUMEN[j]}
+                    </span>
+                    <span className="text-[8px] text-ink/40">{ok ? "Lengkap" : "Belum"}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
+
       {kelengkapan.hariTanpaSt.length > 0 && (
         <p className="mt-2.5 rounded-md bg-gold-100/40 px-2 py-1.5 text-[10px] text-gold-700">
           ⚠ {kelengkapan.hariTanpaSt.length} hari kerja yang ditag BELUM tertaut Surat Tugas apa pun:{" "}
