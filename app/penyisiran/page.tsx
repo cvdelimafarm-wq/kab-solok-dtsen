@@ -363,17 +363,23 @@ function RencanaBesokWarningBar({ onRencanakan }: { onRencanakan: () => void }) 
 //    checklist berhasil disimpan -- begitu ada kartu yg statusnya berubah
 //    jadi/dari "Dijadwalkan Besok", angka di bar ini langsung diperbarui
 //    tanpa menunggu interval polling berikutnya.
-//  - Tombol "📤 Kirim ke WA PML": MENYALIN gambar rencana besok ke
-//    clipboard (html2canvas, pola SAMA dgn ModalRencanaBesok) DAN membuka
-//    tab WhatsApp ke nomor PML petugas ybs (dari kolom "No. HP" Master
-//    Petugas, via pengawas_id -- lihat /api/penyisiran/summary) sekaligus.
-//    CATATAN JUJUR (batasan browser, BUKAN kurang usaha): tidak ada
-//    website MANA PUN yang bisa menaruh gambar LANGSUNG ke kotak chat
-//    WhatsApp secara otomatis -- itu kotak App/tab LAIN, di luar kendali
-//    halaman ini (kebijakan keamanan browser). Yang BISA dilakukan
-//    sekaligus: (1) gambar SUDAH ada di clipboard, (2) tab WA ke kontak
-//    PML yg BENAR sudah kebuka -- tersisa SATU langkah manual: klik kotak
-//    chat lalu Ctrl+V (atau tekan-tahan lalu Tempel di HP), baru Kirim.
+//  - Tombol "📤 Kirim ke WA PML": DI HP (yg dukung Web Share API dgn file --
+//    Chrome Android, Safari iOS 15+), pakai navigator.share() supaya
+//    gambar rencana besok LANGSUNG "nempel" siap dikirim persis spt share
+//    bukti transfer dari BRImo/aplikasi bank -- layar Share bawaan HP
+//    kebuka, user tinggal ketuk ikon WhatsApp, PILIH chat PML-nya (WhatsApp
+//    SENGAJA mewajibkan ini, BUKAN sesuatu yg bisa dilewati/diotomatisasi
+//    dari web manapun termasuk BRImo -- itu jg cuma share ke OS, bukan
+//    kirim otomatis), gambar SUDAH terpasang di kotak chat, tinggal tekan
+//    Kirim. TIDAK ADA LAGI langkah salin-tempel manual di jalur ini.
+//    Kalau Web Share API dgn file TIDAK didukung (kebanyakan browser
+//    desktop) atau gagal/dibatalkan karena sebab lain, jatuh ke cara LAMA:
+//    salin gambar ke clipboard (html2canvas, pola SAMA dgn
+//    ModalRencanaBesok) + buka tab WhatsApp ke nomor PML (dari kolom
+//    "No. HP" Master Petugas, via pengawas_id -- lihat
+//    /api/penyisiran/summary) -- di jalur fallback ini tersisa SATU
+//    langkah manual: klik kotak chat lalu Ctrl+V (atau tekan-tahan lalu
+//    Tempel di HP), baru Kirim.
 function FloatBarRencanaBesok() {
   const KUOTA = 8;
   const [checked, setChecked] = useState(false);
@@ -383,7 +389,12 @@ function FloatBarRencanaBesok() {
   const [pmlNama, setPmlNama] = useState<string | null>(null);
   const [pmlNoHp, setPmlNoHp] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [kirimStatus, setKirimStatus] = useState<"idle" | "menyalin" | "selesai" | "error">("idle");
+  // "selesai_share" (JALUR 1, Web Share API) vs "selesai_salin" (JALUR 2,
+  // fallback clipboard) DIBEDAKAN krn pesan sukses ke user beda -- lihat
+  // kirimKeWaPml & label tombol di bawah.
+  const [kirimStatus, setKirimStatus] = useState<
+    "idle" | "menyiapkan" | "selesai_share" | "selesai_salin" | "error"
+  >("idle");
   // Modal "📅 Dijadwalkan Besok" (komponen ASLI yg sama dgn StatTile di tab
   // Penyisiran Usaha, diimpor -- BUKAN diduplikasi) -- SEKARANG ikut dibuka
   // saat tombol "Kirim ke WA" ditekan (permintaan user: "keluar modalnya yg
@@ -477,39 +488,70 @@ function FloatBarRencanaBesok() {
 
   async function kirimKeWaPml() {
     // Buka modal ASLI "📅 Dijadwalkan Besok" sekalian (permintaan user) --
-    // TIDAK menunggu ini selesai sebelum lanjut menyalin gambar (dua-duanya
-    // jalan bersamaan: modal utk dilihat, clipboard+tab WA di bawah).
+    // TIDAK menunggu ini selesai sebelum lanjut menyiapkan gambar (dua-duanya
+    // jalan bersamaan: modal utk dilihat, share/clipboard+tab WA di bawah).
     setShowModal(true);
     if (!gambarRef.current) return;
-    setKirimStatus("menyalin");
+    setKirimStatus("menyiapkan");
     try {
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
-      const disalin = await new Promise<boolean>((resolve) => {
-        canvas.toBlob(async (blob) => {
-          if (!blob) {
-            resolve(false);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        setKirimStatus("error");
+        setTimeout(() => setKirimStatus("idle"), 2500);
+        return;
+      }
+
+      // Rakit nama file gambar sekali di sini (dipakai JALUR 1 di bawah).
+
+      // JALUR 1 (lebih baik, tapi cuma didukung browser HP): Web Share API
+      // dgn file gambar -- lihat komentar panjang di atas komponen ini soal
+      // kenapa ini bikin pengalamannya SAMA spt share bukti tf dari BRImo,
+      // & kenapa WhatsApp TETAP minta pilih chat sendiri (bukan kurangnya
+      // implementasi di sini). navigator.canShare dicek dulu krn beberapa
+      // browser PUNYA navigator.share tapi TIDAK mendukung { files }.
+      const file = new File([blob], `rencana-besok-${tanggalRencana || "besok"}.png`, { type: "image/png" });
+      const dukungShareFile =
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] });
+
+      if (dukungShareFile) {
+        try {
+          await navigator.share({ files: [file], title: `Rencana Kunjungan ${tanggalLabel()}` });
+          setKirimStatus("selesai_share");
+          setTimeout(() => setKirimStatus("idle"), 4000);
+          return;
+        } catch (err) {
+          // User menekan "Batal" di layar Share bawaan HP -- BUKAN error,
+          // hormati pembatalan itu, JANGAN lanjut ke jalur 2 (nanti malah
+          // tetap buka tab WA padahal user memang tidak jadi kirim).
+          if (err instanceof Error && err.name === "AbortError") {
+            setKirimStatus("idle");
             return;
           }
-          try {
-            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-            resolve(true);
-          } catch {
-            resolve(false);
-          }
-        }, "image/png");
-      });
+          // Gagal karena sebab lain (jarang) -> lanjut ke JALUR 2 di bawah.
+        }
+      }
 
-      // Buka tab WA ke nomor PML APA PUN hasil salin gambar di atas
-      // (kalaupun clipboard gagal, tab WA tetap dibuka -- user tinggal
-      // pakai tombol "Salin sebagai Gambar" di modal 📅 Dijadwalkan Besok
-      // sbg cadangan).
+      // JALUR 2 (fallback -- desktop, atau Web Share API gagal): cara LAMA,
+      // salin gambar ke clipboard + buka tab WA ke nomor PML. Tab WA tetap
+      // dibuka meski clipboard gagal -- user tinggal pakai tombol "Salin
+      // sebagai Gambar" di modal 📅 Dijadwalkan Besok sbg cadangan.
+      let disalin = false;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        disalin = true;
+      } catch {
+        disalin = false;
+      }
       if (pmlNoHp) {
         const nomor = nomorWaInternasional(pmlNoHp);
         window.open(`https://wa.me/${nomor}`, "_blank", "noopener,noreferrer");
       }
 
-      setKirimStatus(disalin ? "selesai" : "error");
+      setKirimStatus(disalin ? "selesai_salin" : "error");
       setTimeout(() => setKirimStatus("idle"), 4000);
     } catch {
       setKirimStatus("error");
@@ -537,15 +579,17 @@ function FloatBarRencanaBesok() {
         <button
           type="button"
           onClick={kirimKeWaPml}
-          disabled={kirimStatus === "menyalin"}
+          disabled={kirimStatus === "menyiapkan"}
           className="shrink-0 rounded-md bg-navy-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
         >
-          {kirimStatus === "menyalin"
-            ? "Menyalin..."
-            : kirimStatus === "selesai"
+          {kirimStatus === "menyiapkan"
+            ? "Menyiapkan..."
+            : kirimStatus === "selesai_share"
+            ? "✓ Dibagikan -- pilih chat WA & tekan Kirim"
+            : kirimStatus === "selesai_salin"
             ? "✓ Tersalin -- tempel (Ctrl+V) di WA"
             : kirimStatus === "error"
-            ? "Gagal salin, coba lagi"
+            ? "Gagal, coba lagi"
             : `📤 Kirim ke WA ${pmlNama ?? "PML"}`}
         </button>
       ) : (
