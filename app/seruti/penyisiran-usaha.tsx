@@ -77,6 +77,15 @@ export const IS_PML_KEY = "penyisiran-petugas-login-ispml";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
+// Key SAMA PERSIS dgn identifikasi-jorong.tsx & administrasi-spj.tsx --
+// dipakai LoginForm di bawah utk menurunkan token "identifikasi_jorong"
+// SECARA OTOMATIS begitu login personal di sini berhasil (permintaan user:
+// "cukup 1 login dan semua bisa masuk menu sesuai role"), TANPA petugas
+// perlu mengetik nama+tanggal lahir sekali lagi di tab Identifikasi
+// Jorong/Administrasi -- lihat komentar panjang di LoginForm.
+const JORONG_TOKEN_KEY = "identifikasi-jorong-login-token";
+const JORONG_NAMA_KEY = "identifikasi-jorong-login-nama";
+
 // Nama2 pegawai KANTOR BPS Kab Solok (bukan petugas lapangan yg tinggal di
 // desa/nagari) -- DIKECUALIKAN dari kewajiban menekan tombol "📍 Tetapkan
 // Lokasi Rumah Saya": lokasi rumahnya otomatis diisi koordinat KANTOR BPS
@@ -480,13 +489,50 @@ export function getToken(): string | null {
   return t;
 }
 
-function clearToken() {
+// Diekspor -- dipakai jg oleh tab lain (Monitoring Petugas Penyisiran/
+// Monitoring) yg SEKARANG memakai token bersama ini (lihat komentar
+// simpanLoginPetugas) supaya kalau sesinya kedaluwarsa/ditolak server,
+// tab itu bisa ikut membersihkan token yg SAMA -- gerbang login bersama di
+// page.tsx (poll 30 detik) otomatis mendeteksinya & kembali ke layar login.
+export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(NAMA_KEY);
   localStorage.removeItem(PETUGAS_ID_STORE_KEY);
   localStorage.removeItem(IS_PML_KEY);
   localStorage.removeItem(LAT_KEY);
   localStorage.removeItem(LNG_KEY);
+  // Login SEKARANG 1x utk semua (lihat komentar simpanLoginPetugas) --
+  // "Keluar" dari sini WAJIB ikut menghapus token turunan "identifikasi_
+  // jorong" jg (kalau ada), supaya tidak ada sesi yg ketinggalan tersimpan
+  // begitu petugas benar2 keluar.
+  localStorage.removeItem(JORONG_TOKEN_KEY);
+  localStorage.removeItem(JORONG_NAMA_KEY);
+}
+
+// Diekspor -- SATU-SATUNYA tempat yang menulis sesi login personal
+// "penyisiran_petugas" ke localStorage, dipakai BAIK oleh LoginForm di
+// bawah (dipanggil dari handleLoggedIn tab ini) MAUPUN gerbang login
+// bersama di app/penyisiran/page.tsx (dipasang SEBELUM tab bar, permintaan
+// user "pindah tempat login sebelum masuk ke tab" + "cukup 1 login") --
+// disatukan di sini supaya KEDUA pemanggil menulis key yg SAMA PERSIS
+// dgn cara yg SAMA PERSIS (termasuk lat/lng), tidak ada logika ganda yg
+// bisa berbeda/lupa disinkronkan salah satu.
+export function simpanLoginPetugas(
+  t: string,
+  n: string,
+  id: number,
+  loginLat: number | null,
+  loginLng: number | null,
+  loginIsPml: boolean
+) {
+  localStorage.setItem(TOKEN_KEY, t);
+  localStorage.setItem(NAMA_KEY, n);
+  localStorage.setItem(PETUGAS_ID_STORE_KEY, String(id));
+  localStorage.setItem(IS_PML_KEY, loginIsPml ? "1" : "0");
+  if (loginLat != null) localStorage.setItem(LAT_KEY, String(loginLat));
+  else localStorage.removeItem(LAT_KEY);
+  if (loginLng != null) localStorage.setItem(LNG_KEY, String(loginLng));
+  else localStorage.removeItem(LNG_KEY);
 }
 
 // Diekspor jg -- dipakai RencanaBesokWarningBar di app/penyisiran/page.tsx
@@ -535,14 +581,7 @@ export default function PenyisiranUsahaTab() {
     loginLng: number | null,
     loginIsPml: boolean
   ) {
-    localStorage.setItem(TOKEN_KEY, t);
-    localStorage.setItem(NAMA_KEY, n);
-    localStorage.setItem(PETUGAS_ID_STORE_KEY, String(id));
-    localStorage.setItem(IS_PML_KEY, loginIsPml ? "1" : "0");
-    if (loginLat != null) localStorage.setItem(LAT_KEY, String(loginLat));
-    else localStorage.removeItem(LAT_KEY);
-    if (loginLng != null) localStorage.setItem(LNG_KEY, String(loginLng));
-    else localStorage.removeItem(LNG_KEY);
+    simpanLoginPetugas(t, n, id, loginLat, loginLng, loginIsPml);
     setToken(t);
     setNama(n);
     setPetugasId(id);
@@ -593,7 +632,33 @@ export default function PenyisiranUsahaTab() {
 // SAMA PERSIS dgn app/penyisiran/identifikasi-jorong.tsx (jorong-names
 // mengambil dari tabel petugas_penyisiran_akun yg sama, jadi endpoint itu
 // dipakai bersama di sini, bukan endpoint baru).
-function LoginForm({
+//
+// DIEKSPOR -- dipakai jg sbg gerbang login BERSAMA di app/penyisiran/
+// page.tsx (dipasang SEBELUM tab bar, permintaan user "pindah tempat login
+// sebelum masuk ke tab" + "cukup 1 login dan semua bisa masuk menu sesuai
+// role"), bukan cuma di tab "Penyisiran Usaha" ini -- SATU-SATUNYA
+// komponen form login personal petugas di seluruh app sekarang.
+//
+// Begitu login penyisiran_petugas berhasil, form ini SEKALIAN menurunkan
+// token "identifikasi_jorong" (endpoint /api/penyisiran/jorong-login,
+// kredensial nama+tanggal lahir yg SAMA -- TABEL akunnya jg SAMA,
+// petugas_penyisiran_akun, cuma role token beda) supaya tab "Identifikasi
+// Jorong" & "Administrasi" (yg piggyback token jorong itu, lihat
+// lib/spjAuth.ts) langsung jalan TANPA petugas mengetik ulang nama+tanggal
+// lahir di tab itu -- "1 login" dari sudut pandang petugas, walau di
+// belakang layar sebenarnya 2 token diterbitkan.
+//
+// KECUALI kalau akun ini PML (is_pml=true dari respons penyisiran-login):
+// permintaan user "role akun tidak bisa ganda, jika dia PML maka cukup
+// jadi PML" -- PML SENGAJA TIDAK ikut diturunkan token jorong-nya (PML
+// bertugas mengawasi/"Tandai Pasti", BUKAN turun sendiri menyisir per
+// Jorong), jadi kalau PML memang perlu isi Identifikasi Jorong/Administrasi
+// atas namanya sendiri, tetap harus login manual terpisah di tab itu
+// (jarang terjadi -- PML pada dasarnya tidak dimaksudkan memakai 2 tab
+// itu). Kegagalan panggilan jorong-login (jaringan dll, BUKAN krn PML)
+// jg DIAMKAN -- ini cuma turunan otomatis, bukan syarat wajib login utama;
+// tab Identifikasi Jorong tetap punya form login sendiri sbg cadangan.
+export function LoginForm({
   onLoggedIn,
 }: {
   onLoggedIn: (
@@ -637,7 +702,27 @@ function LoginForm({
         setError(data?.error || "Login gagal.");
         return;
       }
-      onLoggedIn(data.token, data.nama, data.petugas_id, data.lat ?? null, data.lng ?? null, Boolean(data.is_pml));
+      const isPml = Boolean(data.is_pml);
+      // Turunan otomatis token "identifikasi_jorong" -- lihat komentar
+      // panjang di atas komponen ini. SKIP kalau PML (permintaan user:
+      // "role akun tidak bisa ganda, jika dia PML maka cukup jadi PML").
+      if (!isPml) {
+        try {
+          const resJorong = await fetch("/api/penyisiran/jorong-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nama: namaInput, tanggal_lahir: tanggalLahir }),
+          });
+          const dataJorong = await resJorong.json().catch(() => null);
+          if (resJorong.ok && dataJorong?.token) {
+            localStorage.setItem(JORONG_TOKEN_KEY, dataJorong.token);
+            localStorage.setItem(JORONG_NAMA_KEY, dataJorong.nama);
+          }
+        } catch {
+          // Diamkan -- lihat komentar panjang di atas komponen ini.
+        }
+      }
+      onLoggedIn(data.token, data.nama, data.petugas_id, data.lat ?? null, data.lng ?? null, isPml);
     } catch {
       setError("Gagal terhubung. Periksa koneksi internet.");
     } finally {
@@ -1769,6 +1854,83 @@ export interface RencanaBesokRow {
   alamat: string | null;
 }
 
+// ---------- Navigasi tanggal (Modal "📅 Dijadwalkan Besok") ----------
+//
+// BARU (permintaan user "tambahkan tanggal yang bisa dipilih ... jika ada
+// yg lupa kirim gambar") -- modal ini defaultnya TETAP menampilkan rencana
+// BESOK spt semula (server default ke tanggalBesokJakarta(), lihat
+// /api/penyisiran/rencana-besok), tapi sekarang bisa DIGESER (◀/▶, 1 hari
+// sekaligus) atau DIPILIH langsung lewat input tanggal -- supaya kalau ada
+// petugas yg lupa kirim gambar rencana pada harinya, dia (atau PML/admin
+// PIN yg buka modal yg sama) bisa mundur ke tanggal yg terlewat lalu pakai
+// tombol "📋 Salin sebagai Gambar" utk kirim manual ke WA. Tombol "Besok"
+// (reset) memanggil ulang endpoint TANPA parameter tanggal supaya server
+// yg menghitung ulang "besok"-nya (bukan dihitung di FE, hindari duplikasi
+// zona waktu). TIDAK dibatasi rentang maju/mundur.
+function geserTanggalRencanaIso(iso: string, deltaHari: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y || 1970, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() + deltaHari);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function TanggalNavRencana({
+  tanggal,
+  memuat,
+  onGeser,
+  onPilih,
+  onResetBesok,
+}: {
+  tanggal: string | null;
+  memuat: boolean;
+  onGeser: (deltaHari: number) => void;
+  onPilih: (iso: string) => void;
+  onResetBesok: () => void;
+}) {
+  if (!tanggal) return null;
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onGeser(-1)}
+        disabled={memuat}
+        aria-label="Tanggal sebelumnya"
+        className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-40"
+      >
+        ◀
+      </button>
+      <input
+        type="date"
+        value={tanggal}
+        disabled={memuat}
+        onChange={(e) => e.target.value && onPilih(e.target.value)}
+        className="rounded-md border border-line px-2 py-1 text-xs text-navy-900 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+      />
+      <button
+        type="button"
+        onClick={() => onGeser(1)}
+        disabled={memuat}
+        aria-label="Tanggal berikutnya"
+        className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-40"
+      >
+        ▶
+      </button>
+      <button
+        type="button"
+        onClick={onResetBesok}
+        disabled={memuat}
+        className="rounded-md border border-line px-2 py-1 text-xs font-medium text-navy-700 hover:border-navy-400 disabled:opacity-40"
+      >
+        Besok
+      </button>
+      {memuat && <span className="text-[11px] text-ink/40">Memuat...</span>}
+    </div>
+  );
+}
+
 export function ModalRencanaBesok({
   token,
   onClose,
@@ -1780,32 +1942,51 @@ export function ModalRencanaBesok({
 }) {
   const [rows, setRows] = useState<RencanaBesokRow[] | null>(null);
   const [tanggal, setTanggal] = useState<string | null>(null);
+  const [memuat, setMemuat] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
   const gambarRef = useRef<HTMLDivElement | null>(null);
 
+  // tanggalTarget diisi utk pindah ke tanggal tertentu (geser/pilih manual);
+  // TIDAK diisi (undefined) -> server default ke BESOK (lihat komentar
+  // TanggalNavRencana di atas & tanggalBesokJakarta() di route.ts).
+  const muat = useCallback(
+    (tanggalTarget?: string) => {
+      setMemuat(true);
+      setErrMsg(null);
+      const qs = tanggalTarget ? `?tanggal=${tanggalTarget}` : "";
+      apiFetch(`/api/penyisiran/rencana-besok${qs}`, token)
+        .then((data) => {
+          setRows(data.rows ?? []);
+          setTanggal(data.tanggal ?? null);
+        })
+        .catch((e) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+            clearToken();
+            onSessionExpired();
+            return;
+          }
+          setErrMsg(msg);
+        })
+        .finally(() => setMemuat(false));
+    },
+    [token, onSessionExpired]
+  );
+
   useEffect(() => {
-    let batal = false;
-    apiFetch("/api/penyisiran/rencana-besok", token)
-      .then((data) => {
-        if (batal) return;
-        setRows(data.rows ?? []);
-        setTanggal(data.tanggal ?? null);
-      })
-      .catch((e) => {
-        if (batal) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-          clearToken();
-          onSessionExpired();
-          return;
-        }
-        setErrMsg(msg);
-      });
-    return () => {
-      batal = true;
-    };
-  }, [token, onSessionExpired]);
+    muat();
+  }, [muat]);
+
+  const geserTanggal = useCallback(
+    (deltaHari: number) => {
+      if (!tanggal) return;
+      muat(geserTanggalRencanaIso(tanggal, deltaHari));
+    },
+    [tanggal, muat]
+  );
+  const pilihTanggal = useCallback((iso: string) => muat(iso), [muat]);
+  const resetBesok = useCallback(() => muat(), [muat]);
 
   function tanggalLabel(): string {
     if (!tanggal) return "besok";
@@ -1837,7 +2018,7 @@ export function ModalRencanaBesok({
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = "rencana-kunjungan-besok.png";
+          a.download = `rencana-kunjungan-${tanggal ?? "besok"}.png`;
           a.click();
           URL.revokeObjectURL(url);
           setCopyStatus("done");
@@ -1865,12 +2046,20 @@ export function ModalRencanaBesok({
           </button>
         </div>
 
+        <TanggalNavRencana
+          tanggal={tanggal}
+          memuat={memuat}
+          onGeser={geserTanggal}
+          onPilih={pilihTanggal}
+          onResetBesok={resetBesok}
+        />
+
         {errMsg && <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>}
 
         {rows === null && !errMsg && <p className="py-6 text-center text-xs text-ink/40">Memuat...</p>}
 
         {rows && rows.length === 0 && (
-          <p className="py-6 text-center text-xs text-ink/40">Belum ada keluarga yang dijadwalkan besok.</p>
+          <p className="py-6 text-center text-xs text-ink/40">Belum ada keluarga yang dijadwalkan pada {tanggalLabel()}.</p>
         )}
 
         {rows && rows.length > 0 && (

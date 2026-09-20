@@ -9,10 +9,13 @@
 // Bungkus RPC penyisiran_monitoring_petugas() -- lihat migrasi
 // 20260918_penyisiran_petugas_pasti_monitoring.sql.
 //
-// Dikunci role "penyisiran" (PIN internal BPS, sama dgn tab Penyisiran
-// Usaha) -- lihat juga /api/penyisiran/petugas-toggle-aktif utk fitur
-// "Kelola Petugas Penyisiran" (aktifkan/nonaktifkan) yang default
-// disembunyikan di tab ini.
+// Dikunci role "penyisiran" (PIN admin) ATAU "penyisiran_petugas" (login
+// personal, SAMA dgn tab Penyisiran Usaha) -- DIPERLUAS (permintaan user
+// "cukup 1 login dan semua bisa masuk menu sesuai role") supaya tab ini
+// bisa dibuka pakai login personal petugas, tanpa PIN admin terpisah lagi.
+// Fitur "Kelola Petugas Penyisiran" (aktifkan/nonaktifkan) yang default
+// disembunyikan di tab ini TETAP wajib PIN diketik ulang (TIDAK ikut
+// diperluas) -- lihat /api/penyisiran/petugas-toggle-aktif.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -22,7 +25,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

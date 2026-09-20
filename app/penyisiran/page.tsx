@@ -89,15 +89,14 @@ import PenyisiranUsahaTab, {
   apiFetch,
   getToken,
   IS_PML_KEY,
+  LoginForm,
+  simpanLoginPetugas,
   ModalRencanaBesok,
   TabelRencanaBesokHead,
   TabelRencanaBesokRow,
   type RencanaBesokRow,
 } from "../seruti/penyisiran-usaha";
-import IdentifikasiPplTab from "./identifikasi-ppl";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
-import IdentifikasiTetanggaTab from "./identifikasi-tetangga";
-import MonitoringPplTab from "./monitoring-ppl";
 import MonitoringPetugasTab from "./monitoring-petugas";
 import MonitoringTerpaduTab from "./monitoring-terpadu";
 import ManajemenTargetTab from "./manajemen-target";
@@ -105,12 +104,16 @@ import MasterPetugasTab from "./master-petugas";
 import AdministrasiSpjTab from "./administrasi-spj";
 import PerencanaanLapanganTab from "./perencanaan-lapangan";
 
+// "identifikasi" (Identifikasi PPL), "tetangga" (Identifikasi
+// Tetangga/Lainnya), & "monitoring" (Monitoring Identifikasi PPL) SENGAJA
+// DIHAPUS dari sini (permintaan user, "sudah tidak dipakai") -- tombol
+// tab-nya jg dihapus di bawah (bukan cuma disembunyikan via CSS). File
+// komponennya (identifikasi-ppl.tsx/identifikasi-tetangga.tsx/
+// monitoring-ppl.tsx) TETAP ada di disk (tidak dihapus), cuma tidak lagi
+// diimpor/dirender dari sini -- aman dikembalikan lagi nanti kalau perlu.
 type TabKey =
   | "usaha"
-  | "identifikasi"
   | "jorong"
-  | "tetangga"
-  | "monitoring"
   | "monitoring_petugas"
   | "monitoring_terpadu"
   | "target"
@@ -118,7 +121,54 @@ type TabKey =
   | "spj"
   | "perencanaan";
 
+// Gerbang login BERSAMA -- permintaan user "pindah tempat login sebelum
+// masuk ke tab, kemudian setelah login otomatis masuk ke tab penyisiran" +
+// "cukup 1 login dan semua bisa masuk menu sesuai role". SEBELUM ini, tab
+// bar SELALU tampil (bisa diklik-klik walau belum login sama sekali) &
+// SETIAP tab (Penyisiran Usaha/Identifikasi Jorong/Administrasi/dst)
+// mengelola login sendiri-sendiri (kadang minta nama+tanggal lahir lagi
+// walau akunnya SAMA) -- SEKARANG login terjadi SATU KALI di sini, di
+// level halaman, SEBELUM tab bar & isi tab apa pun dirender. Begitu
+// berhasil, tab default "usaha" (Penyisiran Usaha) langsung tampil --
+// tab-tab lain yg akunnya SAMA (Identifikasi Jorong/Administrasi lewat
+// token turunan, Perencanaan Lapangan/Master Petugas/Manajemen Target lewat
+// key localStorage yg SAMA PERSIS, Monitoring Petugas Penyisiran/Monitoring
+// lewat role "penyisiran_petugas" yg SEKARANG jg diterima backend-nya --
+// lihat komentar di masing-masing file) otomatis ikut jalan TANPA login
+// ulang, krn semuanya membaca localStorage yg sama & tidak lagi menampilkan
+// form login sendiri (kondisinya sudah terpenuhi begitu gerbang ini lolos).
+//
+// LoginForm & simpanLoginPetugas diimpor dari app/seruti/penyisiran-usaha.tsx
+// (SATU-SATUNYA form login personal petugas di seluruh app sekarang) --
+// lihat komentar panjang di sana soal turunan otomatis token
+// "identifikasi_jorong" (kecuali PML).
+function useSudahLoginPetugas(): [boolean | null, () => void] {
+  const [sudahLogin, setSudahLogin] = useState<boolean | null>(null);
+
+  const cek = useCallback(() => {
+    setSudahLogin(!!getToken());
+  }, []);
+
+  useEffect(() => {
+    cek();
+    // Poll ringan (pola sama dgn bar2 lain di halaman ini) -- supaya kalau
+    // token dihapus dari DALAM salah satu tab (mis. tombol "Keluar" di tab
+    // Penyisiran Usaha, atau kedaluwarsa), gerbang ini ikut kembali ke
+    // layar login TANPA perlu reload manual (React 'storage' event TIDAK
+    // terpicu utk perubahan dari tab/window yang sama, jadi polling adalah
+    // satu-satunya cara praktis di sini). `cek` jg dipanggil LANGSUNG
+    // (bukan nunggu polling) sesaat setelah login berhasil di bawah, spy
+    // transisi ke tab bar terasa instan.
+    const id = setInterval(cek, 30000);
+    return () => clearInterval(id);
+  }, [cek]);
+
+  return [sudahLogin, cek];
+}
+
 export default function PenyisiranPage() {
+  const [sudahLogin, cekUlangLogin] = useSudahLoginPetugas();
+
   // Default dibuka ke tab "Penyisiran Usaha" (internal BPS, dipakai
   // sehari-hari oleh tim) -- DIUBAH atas permintaan user dari default lama
   // "Identifikasi PPL" (link yg dibagikan ke PPL/mantan pendata biasanya
@@ -126,7 +176,36 @@ export default function PenyisiranPage() {
   // tab default berubah). Tab "Administrasi" (SPJ) jg dipindah ke urutan
   // KEDUA (persis di samping "Penyisiran Usaha") -- lihat urutan TabButton
   // di bawah, BUKAN lagi di dekat "Perencanaan Lapangan" spt sebelumnya.
+  // TETAP jadi default SETELAH login jg (lihat useSudahLoginPetugas di
+  // atas) -- persis permintaan user "setelah login otomatis masuk ke tab
+  // penyisiran".
   const [tab, setTab] = useState<TabKey>("usaha");
+
+  if (sudahLogin === null) return null; // hindari kedip layar login sebelum cek localStorage
+
+  if (!sudahLogin) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center px-5 py-6">
+        <div className="mb-4 text-center">
+          <p className="font-sans text-[13px] font-black italic tracking-tight text-navy-900">
+            BADAN PUSAT STATISTIK KABUPATEN SOLOK
+          </p>
+          <p className="mt-0.5 text-xs font-medium text-navy-400">
+            Sensus Ekonomi 2026 &middot; Penyisiran Undercoverage Usaha
+          </p>
+        </div>
+        <div className="w-full">
+          <LoginForm
+            onLoggedIn={(t, n, id, lat, lng, isPml) => {
+              simpanLoginPetugas(t, n, id, lat, lng, isPml);
+              setTab("usaha");
+              cekUlangLogin(); // langsung tampilkan tab bar, tidak nunggu polling 30 detik
+            }}
+          />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 py-6">
@@ -182,17 +261,8 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "spj"} onClick={() => setTab("spj")}>
           Administrasi
         </TabButton>
-        <TabButton active={tab === "identifikasi"} onClick={() => setTab("identifikasi")}>
-          Identifikasi PPL
-        </TabButton>
         <TabButton active={tab === "jorong"} onClick={() => setTab("jorong")}>
           Identifikasi Jorong
-        </TabButton>
-        <TabButton active={tab === "tetangga"} onClick={() => setTab("tetangga")}>
-          Identifikasi Tetangga/Lainnya
-        </TabButton>
-        <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")}>
-          Monitoring Identifikasi PPL
         </TabButton>
         <TabButton active={tab === "monitoring_petugas"} onClick={() => setTab("monitoring_petugas")}>
           Monitoring Petugas Penyisiran
@@ -237,10 +307,7 @@ export default function PenyisiranPage() {
 
       <div className="mt-4">
         {tab === "usaha" && <PenyisiranUsahaTab />}
-        {tab === "identifikasi" && <IdentifikasiPplTab />}
         {tab === "jorong" && <IdentifikasiJorongTab />}
-        {tab === "tetangga" && <IdentifikasiTetanggaTab />}
-        {tab === "monitoring" && <MonitoringPplTab />}
         {tab === "monitoring_petugas" && <MonitoringPetugasTab />}
         {tab === "monitoring_terpadu" && <MonitoringTerpaduTab />}
         {tab === "target" && <ManajemenTargetTab />}

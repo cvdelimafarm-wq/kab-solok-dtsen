@@ -9,17 +9,19 @@
 //  - petugas_penyisiran_akun.pengawas_id: nama PML.
 //  - spj_matriks_kelengkapan(): status Laporan/Dokumentasi hari ini.
 //
-// View AGREGAT internal staf -- dikunci role "penyisiran" (PIN sama dgn tab
-// Penyisiran Usaha / 2 tab Monitoring lain), BUKAN endpoint publik/petugas.
+// View AGREGAT internal staf -- dikunci role "penyisiran" (PIN admin) ATAU
+// "penyisiran_petugas" (login personal, SAMA dgn tab Penyisiran Usaha) --
+// DIPERLUAS (permintaan user "cukup 1 login dan semua bisa masuk menu
+// sesuai role") supaya tab Monitoring bisa dibuka pakai login personal
+// petugas, tanpa PIN admin terpisah lagi.
 //
-// Target Pendataan Harian (KK) SENGAJA tidak disimpan di database -- atas
-// permintaan user, nilainya SAMA utk SEMUA petugas (bukan per-petugas spt
-// target total di tab Manajemen Target). Konstantanya di lib/
-// monitoringKinerjaHarian.ts (BUKAN diekspor langsung dari sini) krn Next.js
-// App Router MELARANG route.ts mengekspor apa pun selain handler HTTP &
-// const konfigurasi resmi (runtime/dynamic/dst) -- lihat komentar lengkap di
-// file lib itu (ini bug yg SEMPAT kejadian & bikin build gagal, sekarang
-// sudah diperbaiki).
+// Query param opsional ?tanggal=YYYY-MM-DD (permintaan user: kartu #1 & #2
+// di tab Monitoring perlu tanggal yang BISA DIGESER/DIGANTI, bukan cuma
+// "hari ini") -- divalidasi ketat (regex + Date.parse) supaya tidak asal
+// diteruskan mentah ke RPC, & DIBATASI tidak boleh lebih dari hari ini
+// (Asia/Jakarta) krn tanggal masa depan tidak ada gunanya utk monitoring
+// kinerja. Kalau tidak dikirim/tidak valid, RPC-nya sendiri default ke hari
+// ini (lihat migrasi 20260921_monitoring_kinerja_tanggal_pilihan.sql).
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
@@ -28,10 +30,24 @@ import { TARGET_HARIAN_KK } from "@/lib/monitoringKinerjaHarian";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function tanggalHariIniJakarta(): string {
+  return new Date()
+    .toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }); // en-CA -> format YYYY-MM-DD
+}
+
+function parseTanggalParam(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  if (Number.isNaN(Date.parse(raw))) return null;
+  const hariIni = tanggalHariIniJakarta();
+  return raw > hariIni ? hariIni : raw;
+}
+
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
+
+  const tanggal = parseTanggalParam(req.nextUrl.searchParams.get("tanggal"));
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -40,8 +56,11 @@ export async function GET(req: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const { data, error } = await supabase.rpc("penyisiran_monitoring_kinerja_hari_ini");
+  const { data, error } = await supabase.rpc(
+    "penyisiran_monitoring_kinerja_hari_ini",
+    tanggal ? { p_tanggal: tanggal } : {}
+  );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ baris: data ?? [], target_harian_kk: TARGET_HARIAN_KK });
+  return NextResponse.json({ baris: data ?? [], target_harian_kk: TARGET_HARIAN_KK, tanggal: tanggal ?? tanggalHariIniJakarta() });
 }

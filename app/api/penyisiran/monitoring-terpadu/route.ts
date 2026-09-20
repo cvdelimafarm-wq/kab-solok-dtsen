@@ -9,8 +9,11 @@
 // Master Petugas, progres vs tenggat waktu Identifikasi, dan konflik alokasi
 // wilayah PPL (1 ID Sub SLS dipegang >1 PPL).
 //
-// Ini VIEW AGREGAT internal staf -- dikunci role "penyisiran" (PIN yang sama
-// dgn tab Penyisiran Usaha / Monitoring PPL). Semua angka dihitung sekali di
+// Ini VIEW AGREGAT internal staf -- dikunci role "penyisiran" (PIN admin)
+// ATAU "penyisiran_petugas" (login personal, SAMA dgn tab Penyisiran Usaha)
+// -- DIPERLUAS (permintaan user "cukup 1 login dan semua bisa masuk menu
+// sesuai role") supaya tab ini bisa dibuka pakai login personal petugas yg
+// SAMA, tanpa perlu PIN admin terpisah lagi. Semua angka dihitung sekali di
 // satu RPC (penyisiran_monitoring_terpadu) supaya frontend cukup 1x fetch.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,7 +24,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

@@ -20,6 +20,15 @@
 // kebutuhan admin PIN yg melihat gabungan semua petugas sekaligus) --
 // bukan dipaginasi penuh spt /list krn dipakai modal ringkas, bukan tabel
 // utama.
+//
+// Query param opsional ?tanggal=YYYY-MM-DD (permintaan user: kartu/modal
+// "📅 Dijadwalkan Besok" perlu tanggal yang BISA DIPILIH/DIGANTI, bukan
+// cuma "besok" -- supaya petugas yg LUPA kirim gambar rencana pada
+// harinya bisa mundur ke tanggal yg terlewat lalu salin ulang gambarnya).
+// Divalidasi ketat (regex) sebelum diteruskan ke query -- kalau tidak
+// dikirim/tidak valid, fallback ke BESOK (WIB) spt semula. TIDAK dibatasi
+// rentang maju/mundur krn kolom tanggal_rencana_kunjungan sendiri tidak
+// dibatasi.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -35,12 +44,19 @@ const KOLOM = "kode_identitas, idsubsls, nama_kk, nama_anggota_keluarga, nagari_
 // Tanggal BESOK (WIB) -- formula SAMA dgn tanggalBesokJakarta() di
 // /api/penyisiran/update & filter RPC penyisiran_summary(), supaya baris
 // yg dikembalikan di sini SELALU cocok dgn angka "direncanakan_besok" yg
-// ditampilkan StatTile.
+// ditampilkan StatTile (KALAU tanggal tidak diganti user, lihat komentar
+// param ?tanggal= di atas).
 function tanggalBesokJakarta(): string {
   const jakartaMs = Date.now() + 7 * 60 * 60 * 1000;
   const jakarta = new Date(jakartaMs);
   jakarta.setUTCDate(jakarta.getUTCDate() + 1);
   return jakarta.toISOString().slice(0, 10);
+}
+
+function parseTanggalParam(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  if (Number.isNaN(Date.parse(raw))) return null;
+  return raw;
 }
 
 export async function GET(req: NextRequest) {
@@ -49,6 +65,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 
+  const tanggalTarget = parseTanggalParam(req.nextUrl.searchParams.get("tanggal")) ?? tanggalBesokJakarta();
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
@@ -56,13 +74,11 @@ export async function GET(req: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const tanggalBesok = tanggalBesokJakarta();
-
   let query = supabase
     .from("penyisiran_usaha")
     .select(KOLOM, { count: "exact" })
     .eq("status_kunjungan", "jadwalkan_besok")
-    .eq("tanggal_rencana_kunjungan", tanggalBesok);
+    .eq("tanggal_rencana_kunjungan", tanggalTarget);
 
   if (getSessionRole(token) === "penyisiran_petugas") {
     const petugasId = Number(getSessionSubject(token));
@@ -83,7 +99,7 @@ export async function GET(req: NextRequest) {
     }
     const filterWilayah = buildOrFilterWilayah(pilihan);
     if (!filterWilayah) {
-      return NextResponse.json({ rows: [], total: 0, tanggal: tanggalBesok });
+      return NextResponse.json({ rows: [], total: 0, tanggal: tanggalTarget });
     }
     query = query.or(filterWilayah);
   }
@@ -93,5 +109,5 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ rows: data ?? [], total: count ?? 0, tanggal: tanggalBesok });
+  return NextResponse.json({ rows: data ?? [], total: count ?? 0, tanggal: tanggalTarget });
 }

@@ -20,10 +20,13 @@
 // sbg tetangga/lainnya), toggle di sini TIDAK membuat baris baru di sana --
 // cuma menyamakan yang SUDAH ada.
 //
-// Selain token sesi role "penyisiran" (basic gate tab ini), endpoint ini
-// MEWAJIBKAN PIN diketik ulang (dicek server-side lewat checkPin(), sama PIN
-// dgn PENYISIRAN_PIN) -- supaya tombol aktif/nonaktif tidak kepencet asal
-// oleh siapa saja yang sekadar membuka tab monitoring ini.
+// Selain token sesi role "penyisiran" ATAU "penyisiran_petugas" (basic gate
+// tab ini -- DIPERLUAS krn tab "Monitoring Petugas Penyisiran" skrg jg bisa
+// dibuka pakai login personal petugas, permintaan user "cukup 1 login"),
+// endpoint ini MEWAJIBKAN PIN diketik ulang (dicek server-side lewat
+// checkPin(), sama PIN dgn PENYISIRAN_PIN) -- SENGAJA TIDAK ikut diperluas,
+// supaya tombol aktif/nonaktif tidak kepencet asal oleh siapa saja yang
+// sekadar membuka tab monitoring ini/sekadar login personal biasa.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -33,7 +36,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySession(extractBearer(req), "penyisiran")) {
+  if (!verifySession(extractBearer(req), ["penyisiran", "penyisiran_petugas"])) {
     return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
   }
 

@@ -15,7 +15,15 @@
 //    apa pun selain "Belum".
 //  - Jumlah Didata: subset dari Dikunjungi yg status-nya "Usaha Ditemukan".
 //
-// Pakai PIN & sesi yang SAMA dgn tab Penyisiran Usaha (role "penyisiran").
+// Pakai token login personal BERSAMA yg SAMA dgn tab Penyisiran Usaha (role
+// "penyisiran_petugas", key localStorage yg SAMA -- diimpor lewat getToken()
+// dari app/seruti/penyisiran-usaha.tsx). Gerbang PIN sendiri yang dulu ada di
+// sini SUDAH DIHAPUS (permintaan user "cukup 1 login dan semua bisa masuk
+// menu sesuai role") -- gerbang login SUDAH terjadi 1x di level halaman
+// (app/penyisiran/page.tsx) SEBELUM tab bar ditampilkan, jadi tab ini tidak
+// perlu minta PIN lagi. PIN admin lama ("penyisiran") TETAP diterima
+// backend-nya sbg alternatif (lihat app/api/penyisiran/monitoring-petugas/
+// route.ts), cuma tidak lagi ada UI utk memasukkannya di sini.
 // Sumber data: RPC penyisiran_monitoring_petugas() (lihat migrasi
 // 20260918_penyisiran_petugas_pasti_monitoring.sql).
 //
@@ -23,7 +31,8 @@
 // DISEMBUNYIKAN -- diklik dulu utk membuka, lalu WAJIB masukkan PIN lagi
 // (dicek server-side di /api/penyisiran/petugas-toggle-aktif) sebelum
 // tombol aktif/nonaktif bisa dipakai, supaya tidak kepencet asal oleh siapa
-// saja yang sekadar membuka tab monitoring ini.
+// saja yang sekadar login personal biasa/membuka tab monitoring ini --
+// SATU-SATUNYA bagian di tab ini yg TETAP wajib PIN, TIDAK ikut disatukan.
 //
 // Header tabel pakai komponen bersama ExcelTh/useExcelTable (app/penyisiran/
 // _shared/excel-table.tsx) -- dropdown "Urutkan" yang dulu terpisah SUDAH
@@ -35,9 +44,8 @@
 // bukan diurutkan ulang terpisah.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getToken, clearToken } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
-
-const TOKEN_KEY = "penyisiran-token";
 
 interface PetugasMonitor {
   id: number;
@@ -47,18 +55,6 @@ interface PetugasMonitor {
   jumlah_identifikasi_tetangga: number;
   jumlah_dikunjungi: number;
   jumlah_didata: number;
-}
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const t = sessionStorage.getItem(TOKEN_KEY);
-  if (!t) return null;
-  const exp = Number(t.split(".")[1]);
-  if (!Number.isFinite(exp) || exp < Date.now()) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    return null;
-  }
-  return t;
 }
 
 async function apiFetch(path: string, token: string, init?: RequestInit) {
@@ -73,64 +69,19 @@ async function apiFetch(path: string, token: string, init?: RequestInit) {
 
 export default function MonitoringPetugasTab() {
   const [token, setToken] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinLoading, setPinLoading] = useState(false);
 
   useEffect(() => {
     setToken(getToken());
   }, []);
-
-  async function handleUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    setPinError(null);
-    setPinLoading(true);
-    try {
-      const res = await fetch("/api/penyisiran/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput, role: "penyisiran" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setPinError(data?.error || "PIN salah.");
-        return;
-      }
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      setToken(data.token);
-    } catch {
-      setPinError("Gagal terhubung. Periksa koneksi internet.");
-    } finally {
-      setPinLoading(false);
-    }
-  }
 
   if (!token) {
     return (
       <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
         <p className="text-sm font-semibold text-navy-900">Monitoring Petugas Penyisiran</p>
         <p className="mt-1 text-xs text-ink/60">
-          Rekap progres per petugas penyisiran -- masukkan PIN akses (sama dengan PIN Penyisiran Usaha).
+          Sesi login tidak ditemukan. Coba muat ulang halaman, atau login lagi lewat tab &ldquo;Penyisiran
+          Usaha&rdquo;.
         </p>
-        <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
-          <input
-            type="password"
-            inputMode="numeric"
-            value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
-            placeholder="PIN"
-            autoFocus
-            className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-          />
-          <button
-            type="submit"
-            disabled={pinLoading}
-            className="shrink-0 rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {pinLoading ? "..." : "Buka"}
-          </button>
-        </form>
-        {pinError && <p className="mt-2 text-xs text-rust-700">{pinError}</p>}
       </div>
     );
   }
@@ -152,7 +103,7 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-          sessionStorage.removeItem(TOKEN_KEY);
+          clearToken();
           onSessionExpired();
         } else {
           setErrMsg(msg);
@@ -404,7 +355,7 @@ function KelolaPanel({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
+        clearToken();
         onSessionExpired();
         return;
       }

@@ -41,16 +41,26 @@
 // supabase/migrations/20260919_penyisiran_monitoring_terpadu.sql) supaya
 // tab ini cukup 1x fetch, bukan 7x. Ini VIEW AGREGAT internal staf -- PIN
 // & sesi SAMA dgn tab "Penyisiran Usaha"/"Monitoring Identifikasi PPL"
-// (role "penyisiran", key sessionStorage "penyisiran-token").
+// (role "penyisiran"/PIN admin ATAU "penyisiran_petugas"/login personal --
+// lihat app/api/penyisiran/monitoring-terpadu/route.ts).
+//
+// GERBANG PIN sendiri yang dulu ada di sini SUDAH DIHAPUS (permintaan user
+// "cukup 1 login dan semua bisa masuk menu sesuai role") -- tab ini SEKARANG
+// langsung memakai token login personal bersama (key localStorage yg SAMA
+// dgn tab Penyisiran Usaha, diimpor lewat getToken() dari app/seruti/
+// penyisiran-usaha.tsx), krn gerbang login SUDAH terjadi 1x di level halaman
+// (app/penyisiran/page.tsx) SEBELUM tab bar ditampilkan sama sekali -- tidak
+// mungkin tab ini kerender tanpa token itu ada. PIN admin lama ("penyisiran")
+// TETAP diterima backend-nya (lihat komentar di atas), cuma tidak lagi ada
+// UI utk memasukkannya di sini.
 //
 // Semua tabel di sini pakai komponen bersama ExcelTh/useExcelTable (lihat
 // app/penyisiran/_shared/excel-table.tsx) spy header-nya bisa
 // difilter+diurutkan, konsisten dgn tabel di tab2 lain.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getToken, clearToken } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
-
-const TOKEN_KEY = "penyisiran-token";
 
 // ---------- Bentuk data dari RPC ----------
 
@@ -172,18 +182,10 @@ interface MonitoringTerpaduData {
 }
 
 // ---------- Util ----------
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const t = sessionStorage.getItem(TOKEN_KEY);
-  if (!t) return null;
-  const exp = Number(t.split(".")[1]);
-  if (!Number.isFinite(exp) || exp < Date.now()) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    return null;
-  }
-  return t;
-}
+//
+// getToken() (token login personal bersama) diimpor dari app/seruti/
+// penyisiran-usaha.tsx (lihat komentar di atas) -- TIDAK ada lagi versi
+// lokal di sini yg baca PIN dari sessionStorage.
 
 async function apiFetch(path: string, token: string) {
   const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
@@ -237,64 +239,23 @@ const LABEL_NILAI: Record<string, string> = {
 
 export default function MonitoringTerpaduTab() {
   const [token, setToken] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinLoading, setPinLoading] = useState(false);
 
   useEffect(() => {
     setToken(getToken());
   }, []);
 
-  async function handleUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    setPinError(null);
-    setPinLoading(true);
-    try {
-      const res = await fetch("/api/penyisiran/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput, role: "penyisiran" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setPinError(data?.error || "PIN salah.");
-        return;
-      }
-      sessionStorage.setItem(TOKEN_KEY, data.token);
-      setToken(data.token);
-    } catch {
-      setPinError("Gagal terhubung. Periksa koneksi internet.");
-    } finally {
-      setPinLoading(false);
-    }
-  }
-
+  // Tidak ada lagi form PIN di sini (lihat komentar panjang di atas) --
+  // token SEHARUSNYA selalu sudah ada begitu tab ini kerender (gerbang
+  // login bersama di page.tsx sudah lolos duluan). Pesan di bawah ini
+  // cuma jaga-jaga (defensif), bukan alur normal.
   if (!token) {
     return (
       <div className="mx-auto max-w-sm rounded-lg border border-line bg-white p-5 text-center">
         <p className="text-sm font-semibold text-navy-900">Monitoring</p>
         <p className="mt-1 text-xs text-ink/60">
-          Rekap gabungan 8 area monitoring lintas tab -- masukkan PIN akses (sama dengan PIN Penyisiran Usaha).
+          Sesi login tidak ditemukan. Coba muat ulang halaman, atau login lagi lewat tab &ldquo;Penyisiran
+          Usaha&rdquo;.
         </p>
-        <form onSubmit={handleUnlock} className="mt-3 flex gap-2">
-          <input
-            type="password"
-            inputMode="numeric"
-            value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
-            placeholder="PIN"
-            autoFocus
-            className="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
-          />
-          <button
-            type="submit"
-            disabled={pinLoading}
-            className="shrink-0 rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {pinLoading ? "..." : "Buka"}
-          </button>
-        </form>
-        {pinError && <p className="mt-2 text-xs text-rust-700">{pinError}</p>}
       </div>
     );
   }
@@ -316,7 +277,7 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        sessionStorage.removeItem(TOKEN_KEY);
+        clearToken();
         onSessionExpired();
       } else {
         setErrMsg(msg);
@@ -336,9 +297,9 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
         <div>
           <h1 className="text-base font-bold text-navy-900 sm:text-lg">Monitoring</h1>
           <p className="mt-0.5 text-xs text-ink/50">
-            Rekap gabungan 8 area monitoring: kinerja PPL hari ini, kualitas data kunjungan, konsistensi lintas
-            sumber identifikasi, realisasi vs rencana, kelengkapan SPJ, beban kerja petugas, progres vs tenggat, dan
-            konflik alokasi PPL.
+            Rekap gabungan 9 area monitoring: kinerja PPL hari ini, rekap tim per PML, kualitas data kunjungan,
+            konsistensi lintas sumber identifikasi, realisasi vs rencana, kelengkapan SPJ, beban kerja petugas,
+            progres vs tenggat, dan konflik alokasi PPL.
           </p>
         </div>
         <button
@@ -483,13 +444,6 @@ interface KinerjaPplRow {
 
 const HARI_LABEL = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
-function formatJudulWaktu(d: Date): string {
-  const hari = HARI_LABEL[d.getDay()];
-  const tanggal = d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
-  const jam = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-  return `per ${hari}, ${tanggal} pukul ${jam}`;
-}
-
 function labelSpjKinerja(ok: boolean | null, adaSt: boolean): string {
   if (!adaSt) return "-";
   return ok ? "✓" : "✗";
@@ -497,6 +451,103 @@ function labelSpjKinerja(ok: boolean | null, adaSt: boolean): string {
 
 function pctAkurasiKinerja(r: KinerjaPplRow): number | null {
   return r.akurasi_dasar > 0 ? Math.round((r.akurasi_benar / r.akurasi_dasar) * 100) : null;
+}
+
+// ---------- Navigasi tanggal (kartu #1 & #2) ----------
+//
+// BARU (permintaan user "TAMBAHKAN TANGGAL YANG BISA DIGESER/DIGANTI") --
+// kartu #1 (Monitoring Kinerja PPL) & #2 (Monitoring PML) defaultnya
+// menampilkan HARI INI, tapi user bisa geser ke tanggal lain (tombol ◀/▶,
+// 1 hari sekaligus) atau pilih langsung lewat input tanggal, utk melihat
+// rekap hari-hari sebelumnya. Tidak bisa digeser ke tanggal MASA DEPAN
+// (dibatasi di sini utk UX, & dibatasi lagi di server -- lihat komentar
+// route.ts) krn tidak ada gunanya. Kartu #1 & #2 SENGAJA punya state
+// tanggal masing2 sendiri2 (bukan 1 state dibagi) -- konsisten dgn kedua
+// komponen itu yg sudah sengaja independen (lihat komentar SeksiMonitoringPml).
+function tanggalHariIniLokal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function geserTanggalIso(iso: string, deltaHari: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y || 1970, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() + deltaHari);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const ddd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${ddd}`;
+}
+
+function pangkasTanggalMaxHariIni(iso: string): string {
+  const hariIni = tanggalHariIniLokal();
+  return iso > hariIni ? hariIni : iso;
+}
+
+function formatTanggalNav(iso: string): string {
+  try {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(y || 1970, (m || 1) - 1, d || 1);
+    const hari = HARI_LABEL[dt.getDay()];
+    const tgl = dt.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
+    return `${hari}, ${tgl}`;
+  } catch {
+    return iso;
+  }
+}
+
+function TanggalNav({
+  tanggal,
+  onGeser,
+  onPilih,
+}: {
+  tanggal: string;
+  onGeser: (deltaHari: number) => void;
+  onPilih: (iso: string) => void;
+}) {
+  const hariIni = tanggalHariIniLokal();
+  const sudahHariIni = tanggal === hariIni;
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onGeser(-1)}
+        aria-label="Tanggal sebelumnya"
+        className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700"
+      >
+        ◀
+      </button>
+      <input
+        type="date"
+        value={tanggal}
+        max={hariIni}
+        onChange={(e) => e.target.value && onPilih(e.target.value)}
+        className="rounded-md border border-line px-2 py-1 text-xs text-navy-900 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+      />
+      <button
+        type="button"
+        onClick={() => onGeser(1)}
+        disabled={sudahHariIni}
+        aria-label="Tanggal berikutnya"
+        className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-40"
+      >
+        ▶
+      </button>
+      {!sudahHariIni && (
+        <button
+          type="button"
+          onClick={() => onPilih(hariIni)}
+          className="rounded-md border border-line px-2 py-1 text-xs font-medium text-navy-700 hover:border-navy-400"
+        >
+          Hari Ini
+        </button>
+      )}
+      <span className="text-[11px] font-medium text-ink/50">{formatTanggalNav(tanggal)}</span>
+    </div>
+  );
 }
 
 function TabelKinerjaHead() {
@@ -555,6 +606,7 @@ function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: 
 }
 
 function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [tanggal, setTanggal] = useState(tanggalHariIniLokal());
   const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
   const [targetHarian, setTargetHarian] = useState(7);
   const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
@@ -567,7 +619,7 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
     setLoading(true);
     setErrMsg(null);
     try {
-      const d = await apiFetch("/api/penyisiran/monitoring-kinerja-hari-ini", token);
+      const d = await apiFetch(`/api/penyisiran/monitoring-kinerja-hari-ini?tanggal=${tanggal}`, token);
       setBaris(Array.isArray(d?.baris) ? d.baris : []);
       setTargetHarian(typeof d?.target_harian_kk === "number" ? d.target_harian_kk : 7);
       setWaktuMuat(new Date());
@@ -581,11 +633,18 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
     } finally {
       setLoading(false);
     }
-  }, [token, onSessionExpired]);
+  }, [token, tanggal, onSessionExpired]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const geserTanggal = useCallback((deltaHari: number) => {
+    setTanggal((t) => pangkasTanggalMaxHariIni(geserTanggalIso(t, deltaHari)));
+  }, []);
+  const pilihTanggal = useCallback((iso: string) => {
+    setTanggal(pangkasTanggalMaxHariIni(iso));
+  }, []);
 
   const rowsSorted = useMemo(() => [...baris].sort((a, b) => a.nama.localeCompare(b.nama, "id")), [baris]);
 
@@ -625,31 +684,36 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
     <Seksi
       nomor={1}
       judul="Monitoring Penyisiran Sensus Ekonomi 2026"
-      keterangan={`${waktuMuat ? formatJudulWaktu(waktuMuat) : "Memuat..."} -- kinerja tiap PPL HARI INI (bukan akumulatif sejak awal): berhasil didata, usaha dikunjungi, penyelesaian SPJ, & akurasi identifikasi dibanding hasil lapangan.`}
+      keterangan={`Kinerja tiap PPL pada tanggal yang dipilih di bawah (bukan akumulatif sejak awal): berhasil didata, usaha dikunjungi, penyelesaian SPJ, & akurasi identifikasi dibanding hasil lapangan.${
+        waktuMuat ? ` Dimuat pukul ${waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : ""
+      }`}
     >
-      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
-        <button
-          type="button"
-          onClick={salinSebagaiGambar}
-          disabled={copyStatus === "copying" || rowsSorted.length === 0}
-          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-        >
-          {copyStatus === "copying"
-            ? "Menyalin..."
-            : copyStatus === "done"
-            ? "✓ Tersalin -- tempel ke WA"
-            : copyStatus === "error"
-            ? "Gagal, coba lagi"
-            : "📋 Salin Monitoring Hari Ini (utk WA)"}
-        </button>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <TanggalNav tanggal={tanggal} onGeser={geserTanggal} onPilih={pilihTanggal} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+          >
+            {loading ? "Memuat..." : "↻ Muat Ulang"}
+          </button>
+          <button
+            type="button"
+            onClick={salinSebagaiGambar}
+            disabled={copyStatus === "copying" || rowsSorted.length === 0}
+            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+          >
+            {copyStatus === "copying"
+              ? "Menyalin..."
+              : copyStatus === "done"
+              ? "✓ Tersalin -- tempel ke WA"
+              : copyStatus === "error"
+              ? "Gagal, coba lagi"
+              : "📋 Salin Monitoring (utk WA)"}
+          </button>
+        </div>
       </div>
 
       {errMsg && (
@@ -683,7 +747,7 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
       <div style={{ position: "fixed", top: -99999, left: -99999, width: 820 }}>
         <div ref={gambarRef} className="bg-white p-4">
           <p className="text-sm font-bold text-navy-900">Monitoring Penyisiran Sensus Ekonomi 2026</p>
-          <p className="mb-2 text-[11px] text-ink/50">{waktuMuat ? formatJudulWaktu(waktuMuat) : ""}</p>
+          <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
           <table className="w-full border-collapse text-xs">
             <TabelKinerjaHead />
             <tbody>
@@ -792,6 +856,7 @@ function TabelPmlRow({ a }: { a: PmlAgg }) {
 }
 
 function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [tanggal, setTanggal] = useState(tanggalHariIniLokal());
   const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
   const [targetHarian, setTargetHarian] = useState(7);
   const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
@@ -804,7 +869,7 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
     setLoading(true);
     setErrMsg(null);
     try {
-      const d = await apiFetch("/api/penyisiran/monitoring-kinerja-hari-ini", token);
+      const d = await apiFetch(`/api/penyisiran/monitoring-kinerja-hari-ini?tanggal=${tanggal}`, token);
       setBaris(Array.isArray(d?.baris) ? d.baris : []);
       setTargetHarian(typeof d?.target_harian_kk === "number" ? d.target_harian_kk : 7);
       setWaktuMuat(new Date());
@@ -818,11 +883,18 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
     } finally {
       setLoading(false);
     }
-  }, [token, onSessionExpired]);
+  }, [token, tanggal, onSessionExpired]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const geserTanggal = useCallback((deltaHari: number) => {
+    setTanggal((t) => pangkasTanggalMaxHariIni(geserTanggalIso(t, deltaHari)));
+  }, []);
+  const pilihTanggal = useCallback((iso: string) => {
+    setTanggal(pangkasTanggalMaxHariIni(iso));
+  }, []);
 
   const agregat = useMemo(() => agregasiPerPml(baris, targetHarian), [baris, targetHarian]);
 
@@ -861,31 +933,36 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
     <Seksi
       nomor={2}
       judul="Monitoring PML"
-      keterangan={`${waktuMuat ? formatJudulWaktu(waktuMuat) : "Memuat..."} -- rekap kinerja TIM per PML HARI INI, dijumlahkan dari data PPL di kartu #1 di atas (khusus PPL aktif).`}
+      keterangan={`Rekap kinerja TIM per PML pada tanggal yang dipilih di bawah, dijumlahkan dari data PPL di kartu #1 (khusus PPL aktif).${
+        waktuMuat ? ` Dimuat pukul ${waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : ""
+      }`}
     >
-      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
-        <button
-          type="button"
-          onClick={salinSebagaiGambar}
-          disabled={copyStatus === "copying" || agregat.length === 0}
-          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-        >
-          {copyStatus === "copying"
-            ? "Menyalin..."
-            : copyStatus === "done"
-            ? "✓ Tersalin -- tempel ke WA"
-            : copyStatus === "error"
-            ? "Gagal, coba lagi"
-            : "📋 Salin Monitoring PML (utk WA)"}
-        </button>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <TanggalNav tanggal={tanggal} onGeser={geserTanggal} onPilih={pilihTanggal} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+          >
+            {loading ? "Memuat..." : "↻ Muat Ulang"}
+          </button>
+          <button
+            type="button"
+            onClick={salinSebagaiGambar}
+            disabled={copyStatus === "copying" || agregat.length === 0}
+            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+          >
+            {copyStatus === "copying"
+              ? "Menyalin..."
+              : copyStatus === "done"
+              ? "✓ Tersalin -- tempel ke WA"
+              : copyStatus === "error"
+              ? "Gagal, coba lagi"
+              : "📋 Salin Monitoring PML (utk WA)"}
+          </button>
+        </div>
       </div>
 
       {errMsg && (
@@ -916,7 +993,7 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
       <div style={{ position: "fixed", top: -99999, left: -99999, width: 720 }}>
         <div ref={gambarRef} className="bg-white p-4">
           <p className="text-sm font-bold text-navy-900">Monitoring PML</p>
-          <p className="mb-2 text-[11px] text-ink/50">{waktuMuat ? formatJudulWaktu(waktuMuat) : ""}</p>
+          <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
           <table className="w-full border-collapse text-xs">
             <TabelPmlHead />
             <tbody>
