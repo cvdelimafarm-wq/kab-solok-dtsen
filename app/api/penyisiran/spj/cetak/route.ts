@@ -322,6 +322,7 @@ export async function POST(req: NextRequest) {
               nomorSt: p.nomorSt,
               namaPetugas: namaAkun,
               peranLabel,
+              petugasJenis: p.petugasJenis,
               tanggal: String(l.tanggal),
               mode: l.mode === "bebas" ? "bebas" : "template",
               narasi: (l.narasi as string | null) ?? null,

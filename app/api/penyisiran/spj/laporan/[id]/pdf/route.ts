@@ -55,6 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     nomorSt: st?.nomor_st ?? "-",
     namaPetugas: akun?.nama ?? "-",
     peranLabel: LABEL_PERAN[laporan.petugas_jenis as SpjPetugasJenis],
+    petugasJenis: laporan.petugas_jenis as SpjPetugasJenis,
     tanggal: laporan.tanggal,
     mode: laporan.mode === "bebas" ? "bebas" : "template",
     narasi: laporan.narasi,

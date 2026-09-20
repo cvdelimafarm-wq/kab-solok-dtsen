@@ -85,6 +85,14 @@ interface RekapTemplate {
   // sama. Kunci = nilai status_kunjungan (lihat STATUS_VALID di
   // app/api/penyisiran/update/route.ts), nilai = jumlah keluarga.
   rekapStatusKunjungan: Record<string, number>;
+  // Rincian lokasi utk aktivitas Penyisiran Usaha (status_kunjungan) di
+  // atas -- dibangun dgn men-join kode_identitas dari penyisiran_riwayat
+  // balik ke penyisiran_usaha (utk kec/nagari/sls/subsls). BARU: sejak
+  // Penyisiran Usaha jadi wajib (20 Sept 2026) & Identifikasi opsional,
+  // `lokasi` (yg sumbernya kolom identifikasi_ppl_*) makin sering kosong --
+  // field inilah sumber lokasi yg SEHARUSNYA dipakai laporan PDF sbg
+  // utama, dgn `lokasi` (identifikasi) sbg fallback kalau ini kosong.
+  lokasiPenyisiran: LokasiRekap[];
 }
 
 // Ditarik keluar dari POST supaya bisa dipakai bareng oleh mode "preview"
@@ -109,7 +117,7 @@ async function hitungRekapTemplate(
         .lt("identifikasi_ppl_at", `${batasAtas}T00:00:00+07:00`),
       supabase
         .from("penyisiran_riwayat")
-        .select("nilai_baru")
+        .select("nilai_baru, kode_identitas, created_at")
         .eq("jenis", "status_kunjungan")
         .eq("oleh_nama", nama)
         .gte("created_at", `${tanggal}T00:00:00+07:00`)
@@ -159,10 +167,63 @@ async function hitungRekapTemplate(
   }
   const lokasi = [...peta.values()].sort((a, b) => (a.waktuMulai ?? "").localeCompare(b.waktuMulai ?? ""));
 
+  const riwayatRows = (riwayat ?? []) as { nilai_baru: string; kode_identitas: string | null; created_at: string }[];
+
   const rekapStatusKunjungan: Record<string, number> = {};
-  for (const r of (riwayat ?? []) as { nilai_baru: string }[]) {
+  for (const r of riwayatRows) {
     rekapStatusKunjungan[r.nilai_baru] = (rekapStatusKunjungan[r.nilai_baru] ?? 0) + 1;
   }
+
+  // Join balik kode_identitas (dari riwayat status_kunjungan) -> lokasi
+  // usaha (penyisiran_usaha) -- lihat komentar di interface RekapTemplate.
+  // jumlah per lokasi dihitung dari BANYAKNYA baris riwayat (bukan jumlah
+  // kode_identitas unik) supaya totalnya SAMA PERSIS dgn jumlah di
+  // rekapStatusKunjungan (konsisten dgn kartu "Keluarga dikunjungi").
+  const kodeUnik = [...new Set(riwayatRows.map((r) => r.kode_identitas).filter((k): k is string => !!k))];
+  const lokasiUsahaMap = new Map<
+    string,
+    { kec_nama: string | null; nagari_nama: string | null; sls_nama: string | null; subsls_kode: string | null }
+  >();
+  if (kodeUnik.length > 0) {
+    const { data: usahaRows, error: errUsaha } = await supabase
+      .from("penyisiran_usaha")
+      .select("kode_identitas, kec_nama, nagari_nama, sls_nama, subsls_kode")
+      .in("kode_identitas", kodeUnik);
+    if (errUsaha) throw new Error(errUsaha.message);
+    for (const u of (usahaRows ?? []) as {
+      kode_identitas: string;
+      kec_nama: string | null;
+      nagari_nama: string | null;
+      sls_nama: string | null;
+      subsls_kode: string | null;
+    }[]) {
+      lokasiUsahaMap.set(u.kode_identitas, u);
+    }
+  }
+
+  const petaPenyisiran = new Map<string, LokasiRekap>();
+  for (const r of riwayatRows) {
+    const u = r.kode_identitas ? lokasiUsahaMap.get(r.kode_identitas) : undefined;
+    const key = `${u?.kec_nama ?? ""}|${u?.nagari_nama ?? ""}|${u?.sls_nama ?? ""}|${u?.subsls_kode ?? ""}`;
+    const at = r.created_at;
+    const ada = petaPenyisiran.get(key);
+    if (ada) {
+      ada.jumlah += 1;
+      if (at && (!ada.waktuMulai || at < ada.waktuMulai)) ada.waktuMulai = at;
+      if (at && (!ada.waktuSelesai || at > ada.waktuSelesai)) ada.waktuSelesai = at;
+    } else {
+      petaPenyisiran.set(key, {
+        kecNama: u?.kec_nama ?? null,
+        nagariNama: u?.nagari_nama ?? null,
+        slsNama: u?.sls_nama ?? null,
+        subslsKode: u?.subsls_kode ?? null,
+        waktuMulai: at,
+        waktuSelesai: at,
+        jumlah: 1,
+      });
+    }
+  }
+  const lokasiPenyisiran = [...petaPenyisiran.values()].sort((a, b) => (a.waktuMulai ?? "").localeCompare(b.waktuMulai ?? ""));
 
   return {
     lokasi,
@@ -170,6 +231,7 @@ async function hitungRekapTemplate(
     totalAktivitas: (rows ?? []).length,
     jumlahDokumentasi: jumlahDokumentasi ?? 0,
     rekapStatusKunjungan,
+    lokasiPenyisiran,
   };
 }
 
