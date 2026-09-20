@@ -13,6 +13,16 @@
 //  - /api/penyisiran/list, /markers -- lewat filter PostgREST .or() dari
 //    buildOrFilterWilayah() ditempel LANGSUNG di query supabase-js
 //    (BUKAN RPC, krn kedua endpoint ini butuh paginasi/limit).
+//
+// Role PML (dikonfirmasi user): PML TIDAK memilih wilayah sendiri -- wilayah
+// kerja PML adalah GABUNGAN (union) dari wilayah yang sudah dipilih SELURUH
+// PPL yang diawasinya. Relasi PML->PPL memakai kolom pengawas_id yang SUDAH
+// ADA di petugas_penyisiran_akun (dipakai jg oleh tab "Master Petugas",
+// "satu pengawas boleh membawahi banyak PPL") -- TIDAK perlu tabel/kolom
+// baru. daftarIdUntukSesi() di bawah menentukan set petugas_id yang harus
+// digabung (diri sendiri + SELURUH PPL yg pengawas_id-nya = dirinya, kalau
+// ADA -- itu artinya sesi ini PML; kalau tidak ada PPL yg diawasi, dianggap
+// PPL biasa & hasilnya cuma [dirinya sendiri] spt sebelumnya).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -23,16 +33,43 @@ export interface AlokasiWilayahRow {
   subsls_kode_list: string[] | null;
 }
 
-/** Ambil SEMUA baris alokasi milik satu petugas (tabel penyisiran_alokasi_pilihan). */
-export async function ambilWilayahAlokasi(
+/**
+ * Tentukan set petugas_id yang wilayahnya harus DIGABUNG utk sesi
+ * "penyisiran_petugas" yang login (dipakai sbg pengganti [petugasId]
+ * tunggal di ambilWilayahAlokasi() di bawah). Kalau petugas ini adalah PML
+ * (py >=1 PPL dgn pengawas_id = dirinya), hasilnya [dirinya, ...seluruh
+ * PPL yg diawasi] & isPml true -- kalau tidak, hasilnya [dirinya] saja &
+ * isPml false (PPL biasa, perilaku SAMA spt sebelum fitur PML ada).
+ */
+export async function daftarIdUntukSesi(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
   petugasId: number
+): Promise<{ ids: number[]; isPml: boolean }> {
+  const { data, error } = await supabase
+    .from("petugas_penyisiran_akun")
+    .select("id")
+    .eq("pengawas_id", petugasId);
+  if (error) throw new Error(error.message);
+  const diawasi = (data ?? []).map((r) => r.id as number);
+  if (diawasi.length === 0) return { ids: [petugasId], isPml: false };
+  return { ids: [petugasId, ...diawasi], isPml: true };
+}
+
+/** Ambil SEMUA baris alokasi milik satu petugas ATAU gabungan beberapa
+ * petugas sekaligus (tabel penyisiran_alokasi_pilihan) -- terima array
+ * utk kasus PML (lihat daftarIdUntukSesi di atas), tetap terima number
+ * tunggal utk kompatibilitas pemanggil lama/PPL biasa. */
+export async function ambilWilayahAlokasi(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  petugasId: number | number[]
 ): Promise<AlokasiWilayahRow[]> {
+  const ids = Array.isArray(petugasId) ? petugasId : [petugasId];
   const { data, error } = await supabase
     .from("penyisiran_alokasi_pilihan")
     .select("kec_kode, nagari_kode, sls_kode, subsls_kode_list")
-    .eq("petugas_id", petugasId);
+    .in("petugas_id", ids);
   if (error) throw new Error(error.message);
   return (data ?? []) as AlokasiWilayahRow[];
 }

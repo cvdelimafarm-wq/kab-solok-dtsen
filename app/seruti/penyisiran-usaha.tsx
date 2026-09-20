@@ -35,6 +35,19 @@
 // Kolom "Identifikasi PPL" ditampilkan read-only di sini (badge) -- diisi
 // dari salah satu dari TIGA tab Identifikasi (masing-masing pakai
 // login/PIN sendiri).
+//
+// Role PML (dikonfirmasi user): akun "penyisiran_petugas" yg mengawasi
+// >=1 PPL lain lewat pengawas_id (kolom yg SUDAH ADA di
+// petugas_penyisiran_akun, dipakai jg oleh tab "Master Petugas") login
+// PERSIS lewat form yg sama di sini -- BUKAN akun/role terpisah. Bedanya:
+// (1) wilayah yg tampil = GABUNGAN wilayah SELURUH PPL yang diawasinya
+// (PML sendiri TIDAK pernah memilih wilayah manual, lihat
+// lib/wilayahAlokasiPetugas.ts daftarIdUntukSesi()), sehingga PML melihat
+// kartu yg SAMA dgn PPL-nya; (2) dropdown Status & input Catatan DIKUNCI
+// (read-only) di RowCard, cuma "🎯 Tandai Pasti" yg tetap bisa diubah --
+// pembatasan SEBENARNYA di server (/api/penyisiran/update), penguncian di
+// FE murni UX. Flag `is_pml` dikirim balik oleh /api/penyisiran/penyisiran-
+// login & disimpan di localStorage (IS_PML_KEY) spt field login lain.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -50,6 +63,12 @@ const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
 const TOKEN_KEY = "penyisiran-petugas-login-token";
 const NAMA_KEY = "penyisiran-petugas-login-nama";
 const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
+// is_pml: true kalau akun ini PML (mengawasi >=1 PPL lewat pengawas_id,
+// lihat lib/wilayahAlokasiPetugas.ts) -- dipakai RowCard utk mengunci
+// dropdown Status & input Catatan (PML cuma boleh lihat + "🎯 Tandai
+// Pasti", dikonfirmasi user). Disimpan di localStorage spt field login
+// lain supaya tidak perlu login ulang tiap buka tab.
+const IS_PML_KEY = "penyisiran-petugas-login-ispml";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
@@ -396,6 +415,7 @@ function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(NAMA_KEY);
   localStorage.removeItem(PETUGAS_ID_STORE_KEY);
+  localStorage.removeItem(IS_PML_KEY);
   localStorage.removeItem(LAT_KEY);
   localStorage.removeItem(LNG_KEY);
 }
@@ -414,6 +434,7 @@ export default function PenyisiranUsahaTab() {
   const [token, setToken] = useState<string | null>(null);
   const [nama, setNama] = useState<string | null>(null);
   const [petugasId, setPetugasId] = useState<number | null>(null);
+  const [isPml, setIsPml] = useState(false);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [checkedStorage, setCheckedStorage] = useState(false);
@@ -424,6 +445,7 @@ export default function PenyisiranUsahaTab() {
       setNama(localStorage.getItem(NAMA_KEY));
       const savedId = Number(localStorage.getItem(PETUGAS_ID_STORE_KEY));
       setPetugasId(Number.isFinite(savedId) && savedId > 0 ? savedId : null);
+      setIsPml(localStorage.getItem(IS_PML_KEY) === "1");
       const savedLat = Number(localStorage.getItem(LAT_KEY));
       const savedLng = Number(localStorage.getItem(LNG_KEY));
       setLat(Number.isFinite(savedLat) ? savedLat : null);
@@ -432,10 +454,18 @@ export default function PenyisiranUsahaTab() {
     setCheckedStorage(true);
   }, []);
 
-  function handleLoggedIn(t: string, n: string, id: number, loginLat: number | null, loginLng: number | null) {
+  function handleLoggedIn(
+    t: string,
+    n: string,
+    id: number,
+    loginLat: number | null,
+    loginLng: number | null,
+    loginIsPml: boolean
+  ) {
     localStorage.setItem(TOKEN_KEY, t);
     localStorage.setItem(NAMA_KEY, n);
     localStorage.setItem(PETUGAS_ID_STORE_KEY, String(id));
+    localStorage.setItem(IS_PML_KEY, loginIsPml ? "1" : "0");
     if (loginLat != null) localStorage.setItem(LAT_KEY, String(loginLat));
     else localStorage.removeItem(LAT_KEY);
     if (loginLng != null) localStorage.setItem(LNG_KEY, String(loginLng));
@@ -443,6 +473,7 @@ export default function PenyisiranUsahaTab() {
     setToken(t);
     setNama(n);
     setPetugasId(id);
+    setIsPml(loginIsPml);
     setLat(loginLat);
     setLng(loginLng);
   }
@@ -452,6 +483,7 @@ export default function PenyisiranUsahaTab() {
     setToken(null);
     setNama(null);
     setPetugasId(null);
+    setIsPml(false);
     setLat(null);
     setLng(null);
   }
@@ -474,6 +506,7 @@ export default function PenyisiranUsahaTab() {
       token={token}
       nama={nama || ""}
       petugasId={petugasId}
+      isPml={isPml}
       petugasLat={lat}
       petugasLng={lng}
       onLokasiUpdated={handleLokasiUpdated}
@@ -490,7 +523,14 @@ export default function PenyisiranUsahaTab() {
 function LoginForm({
   onLoggedIn,
 }: {
-  onLoggedIn: (token: string, nama: string, petugasId: number, lat: number | null, lng: number | null) => void;
+  onLoggedIn: (
+    token: string,
+    nama: string,
+    petugasId: number,
+    lat: number | null,
+    lng: number | null,
+    isPml: boolean
+  ) => void;
 }) {
   const [namaOptions, setNamaOptions] = useState<string[]>([]);
   const [namaInput, setNamaInput] = useState("");
@@ -524,7 +564,7 @@ function LoginForm({
         setError(data?.error || "Login gagal.");
         return;
       }
-      onLoggedIn(data.token, data.nama, data.petugas_id, data.lat ?? null, data.lng ?? null);
+      onLoggedIn(data.token, data.nama, data.petugas_id, data.lat ?? null, data.lng ?? null, Boolean(data.is_pml));
     } catch {
       setError("Gagal terhubung. Periksa koneksi internet.");
     } finally {
@@ -584,6 +624,7 @@ function PenyisiranPanel({
   token,
   nama,
   petugasId,
+  isPml,
   petugasLat,
   petugasLng,
   onLokasiUpdated,
@@ -593,6 +634,7 @@ function PenyisiranPanel({
   token: string;
   nama: string;
   petugasId: number;
+  isPml: boolean;
   petugasLat: number | null;
   petugasLng: number | null;
   onLokasiUpdated: (lat: number, lng: number) => void;
@@ -1421,6 +1463,7 @@ function PenyisiranPanel({
                   row={row}
                   token={token}
                   editAllMode={editAllMode}
+                  isPml={isPml}
                   jumlahDiSubsls={row.idsubsls ? jumlahDiSubslsMap.get(row.idsubsls) ?? 1 : 1}
                   maxJumlahDiSubsls={maxJumlahDiSubsls}
                   petugasId={petugasId}
@@ -1510,6 +1553,7 @@ function RowCard({
   row,
   token,
   editAllMode,
+  isPml,
   jumlahDiSubsls,
   maxJumlahDiSubsls,
   petugasId,
@@ -1527,6 +1571,13 @@ function RowCard({
   row: Row;
   token: string;
   editAllMode: boolean;
+  // true kalau akun yg login adalah PML (lihat IS_PML_KEY di atas) --
+  // dropdown Status & input Catatan DIKUNCI (read-only), cuma "🎯 Tandai
+  // Pasti" yg tetap bisa diubah (dikonfirmasi user: "PML ... hanya bisa
+  // lihat dan bisa tandai pasti"). Pembatasan SEBENARNYA ada di server
+  // (/api/penyisiran/update, lihat komentar di sana) -- penguncian di sini
+  // murni UX supaya PML tidak mengira perubahannya tersimpan.
+  isPml: boolean;
   jumlahDiSubsls: number;
   maxJumlahDiSubsls: number;
   petugasId: number | null;
@@ -1930,11 +1981,18 @@ function RowCard({
             )}
           </div>
 
+          {isPml && (
+            <p className="mb-1.5 text-[10px] font-medium text-ink/40">
+              👁 Mode PML -- hanya bisa melihat &amp; menandai &quot;Pasti&quot;, Status/Catatan dikunci.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusKunjungan)}
-              className="rounded-md border border-line px-2 py-1 text-xs"
+              disabled={isPml}
+              title={isPml ? "PML tidak bisa mengubah status kunjungan." : undefined}
+              className="rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
               {(Object.keys(STATUS_META) as StatusKunjungan[]).map((s) => (
                 <option key={s} value={s}>
@@ -1946,7 +2004,9 @@ function RowCard({
               value={catatan}
               onChange={(e) => setCatatan(e.target.value)}
               placeholder="Catatan petugas..."
-              className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs"
+              disabled={isPml}
+              title={isPml ? "PML tidak bisa mengubah catatan petugas." : undefined}
+              className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               onClick={handleSave}

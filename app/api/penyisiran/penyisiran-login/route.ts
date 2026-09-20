@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { signSession } from "@/lib/penyisiranAuth";
+import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +100,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // is_pml: true kalau akun ini py >=1 PPL yang mengawasinya lewat
+  // pengawas_id (petugas_penyisiran_akun) -- dipakai FE (penyisiran-usaha.tsx)
+  // utk menyembunyikan/mengunci kontrol status/catatan/info di kartu &
+  // cuma menyisakan "Tandai Pasti" (dikonfirmasi user: PML hanya lihat +
+  // tandai pasti, PPL tetap akses penuh spt sekarang). Kegagalan cek ini
+  // TIDAK menggagalkan login -- default false (dianggap PPL biasa) drpd
+  // memblokir login petugas hanya krn query tambahan ini error.
+  let isPml = false;
+  try {
+    ({ isPml } = await daftarIdUntukSesi(supabase, data.id));
+  } catch {
+    // diamkan -- lihat komentar di atas.
+  }
+
   const token = signSession("penyisiran_petugas", String(data.id));
-  return NextResponse.json({ token, nama: data.nama, lat: data.lat, lng: data.lng, petugas_id: data.id });
+  return NextResponse.json({ token, nama: data.nama, lat: data.lat, lng: data.lng, petugas_id: data.id, is_pml: isPml });
 }

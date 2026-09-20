@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
-import { ambilWilayahAlokasi, wilayahKeJsonb } from "@/lib/wilayahAlokasiPetugas";
+import { ambilWilayahAlokasi, wilayahKeJsonb, daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,9 +47,15 @@ export async function GET(req: NextRequest) {
     if (!Number.isFinite(petugasId) || petugasId <= 0) {
       return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 });
     }
+    let daftarId: number[];
+    try {
+      ({ ids: daftarId } = await daftarIdUntukSesi(supabase, petugasId));
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memuat data pengawasan." }, { status: 500 });
+    }
     let pilihan;
     try {
-      pilihan = await ambilWilayahAlokasi(supabase, petugasId);
+      pilihan = await ambilWilayahAlokasi(supabase, daftarId);
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memuat wilayah alokasi." }, { status: 500 });
     }

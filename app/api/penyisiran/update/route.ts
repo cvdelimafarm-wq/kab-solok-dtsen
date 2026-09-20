@@ -16,16 +16,31 @@
 // semula (tidak ditimpa null) supaya atribusi kunjungan sebelumnya tidak
 // hilang.
 //
+// KHUSUS akun PML (login "penyisiran_petugas" yg py >=1 PPL diawasi lewat
+// pengawas_id, lihat lib/wilayahAlokasiPetugas.ts daftarIdUntukSesi()):
+// HANYA prioritas_pasti yang BOLEH diubah lewat endpoint ini -- status_
+// kunjungan/catatan_petugas/info_ppl/info_jorong/info_tetangga yg dikirim
+// body TETAP divalidasi bentuknya (spy request lama/FE yg belum update ttp
+// jalan tanpa 400) TAPI DIABAIKAN diam2, tidak pernah masuk ke `patch` &
+// tidak pernah dicatat ke penyisiran_riwayat -- sesuai permintaan user
+// "PML ... hanya bisa lihat dan bisa tandai pasti". Dicek dari SESI yang
+// login (getSessionSubject), BUKAN dari petugas_id yg dikirim body (body
+// bisa saja beda/dimanipulasi) -- defense in depth spt pola cek alokasi
+// wilayah PPL di /api/penyisiran/identifikasi/route.ts.
+//
 // SEBELUM update, baris LAMA diambil dulu (status_kunjungan/info_ppl/
 // info_jorong/info_tetangga) supaya field yang BENAR2 berubah nilainya
 // bisa dicatat ke penyisiran_riwayat (audit log, dipakai panel "Riwayat
 // Perubahan" di kartu) -- kalau petugas menekan Simpan tanpa mengubah
 // apa pun (jarang terjadi krn tombol Simpan disabled saat !dirty di
 // frontend, tapi tetap dijaga di sini), tidak ada baris riwayat baru yang
-// dibuat sama sekali.
+// dibuat sama sekali. Utk akun PML, bagian pencatatan riwayat ini otomatis
+// tidak pernah terpicu (status/info tidak pernah ikut ditulis, lihat di
+// atas).
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifySession, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
+import { verifySession, getSessionSubject, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
+import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +76,21 @@ export async function PATCH(req: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  // PML: cuma prioritas_pasti yg boleh ditulis -- lihat komentar panjang
+  // di atas file ini. Dicek dari subjectId SESI (bukan body.petugas_id).
+  let isPml = false;
+  if (role === "penyisiran_petugas") {
+    const subjectId = getSessionSubject(token);
+    const sesiId = Number(subjectId);
+    if (subjectId && Number.isFinite(sesiId) && sesiId > 0) {
+      try {
+        ({ isPml } = await daftarIdUntukSesi(supabase, sesiId));
+      } catch (e) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memeriksa peran." }, { status: 500 });
+      }
+    }
+  }
+
   const { data: lama, error: lamaErr } = await supabase
     .from("penyisiran_usaha")
     .select("status_kunjungan, info_ppl, info_jorong, info_tetangga")
@@ -68,15 +98,17 @@ export async function PATCH(req: NextRequest) {
     .maybeSingle();
   if (lamaErr) return NextResponse.json({ error: lamaErr.message }, { status: 500 });
 
-  const patch: Record<string, unknown> = {
-    status_kunjungan: status,
-    catatan_petugas: catatan,
-    info_ppl: infoPpl,
-    info_jorong: infoJorong,
-    info_tetangga: infoTetangga,
-    prioritas_pasti: prioritasPasti,
-    updated_at: new Date().toISOString(),
-  };
+  const patch: Record<string, unknown> = isPml
+    ? { prioritas_pasti: prioritasPasti, updated_at: new Date().toISOString() }
+    : {
+        status_kunjungan: status,
+        catatan_petugas: catatan,
+        info_ppl: infoPpl,
+        info_jorong: infoJorong,
+        info_tetangga: infoTetangga,
+        prioritas_pasti: prioritasPasti,
+        updated_at: new Date().toISOString(),
+      };
   if (petugasId && petugasNama) {
     patch.penyisiran_oleh_id = petugasId;
     patch.penyisiran_oleh = petugasNama;
@@ -87,8 +119,9 @@ export async function PATCH(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Catat ke penyisiran_riwayat HANYA field yang nilainya BENAR2 berubah
-  // dibanding sebelumnya -- lihat komentar di atas.
-  if (lama) {
+  // dibanding sebelumnya -- lihat komentar di atas. Akun PML dilewati sama
+  // sekali (isPml true) krn status/info tidak pernah ikut ditulis utk PML.
+  if (lama && !isPml) {
     const entri: { jenis: string; nilai_lama: string | null; nilai_baru: string }[] = [];
     if (lama.status_kunjungan !== status) {
       entri.push({ jenis: "status_kunjungan", nilai_lama: lama.status_kunjungan, nilai_baru: status });
