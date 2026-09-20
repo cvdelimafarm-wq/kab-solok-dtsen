@@ -111,11 +111,14 @@ type TabKey =
   | "perencanaan";
 
 export default function PenyisiranPage() {
-  // Default dibuka ke tab "Identifikasi PPL" -- link ini yang paling sering
-  // dibagikan ke PPL/mantan pendata, jadi begitu link dibuka langsung
-  // menuju halaman itu. Tab "Penyisiran Usaha" (internal BPS) ditaruh di
-  // urutan terakhir.
-  const [tab, setTab] = useState<TabKey>("identifikasi");
+  // Default dibuka ke tab "Penyisiran Usaha" (internal BPS, dipakai
+  // sehari-hari oleh tim) -- DIUBAH atas permintaan user dari default lama
+  // "Identifikasi PPL" (link yg dibagikan ke PPL/mantan pendata biasanya
+  // dibuka lewat link langsung ke tab itu, jadi tidak terlalu terpengaruh
+  // tab default berubah). Tab "Administrasi" (SPJ) jg dipindah ke urutan
+  // KEDUA (persis di samping "Penyisiran Usaha") -- lihat urutan TabButton
+  // di bawah, BUKAN lagi di dekat "Perencanaan Lapangan" spt sebelumnya.
+  const [tab, setTab] = useState<TabKey>("usaha");
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-5 py-6">
@@ -137,6 +140,19 @@ export default function PenyisiranPage() {
           melebar. shrink-0+whitespace-nowrap di TabButton mencegah label
           tab terpotong/mengecil. */}
       <div className="mt-4 flex gap-2 overflow-x-auto border-b border-line">
+        <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
+          Penyisiran Usaha
+        </TabButton>
+        {/* "Administrasi" -- SPJ Translok (Kwitansi/Surat Tugas/Visum/
+            Laporan/Dokumentasi/Surat Keterangan). Login menumpang akun
+            Identifikasi Jorong ATAU Tetangga (PPL tidak ikut), lihat
+            komentar lengkap di administrasi-spj.tsx & lib/spjAuth.ts.
+            DIPINDAH ke urutan kedua (persis di samping "Penyisiran Usaha")
+            atas permintaan user -- sebelumnya di dekat "Perencanaan
+            Lapangan" di ujung baris tab. */}
+        <TabButton active={tab === "spj"} onClick={() => setTab("spj")}>
+          Administrasi
+        </TabButton>
         <TabButton active={tab === "identifikasi"} onClick={() => setTab("identifikasi")}>
           Identifikasi PPL
         </TabButton>
@@ -145,9 +161,6 @@ export default function PenyisiranPage() {
         </TabButton>
         <TabButton active={tab === "tetangga"} onClick={() => setTab("tetangga")}>
           Identifikasi Tetangga/Lainnya
-        </TabButton>
-        <TabButton active={tab === "usaha"} onClick={() => setTab("usaha")}>
-          Penyisiran Usaha
         </TabButton>
         <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")}>
           Monitoring Identifikasi PPL
@@ -165,11 +178,11 @@ export default function PenyisiranPage() {
         <TabButton active={tab === "monitoring_terpadu"} onClick={() => setTab("monitoring_terpadu")}>
           Monitoring
         </TabButton>
-        {/* "Manajemen Target" -- tab BARU, ditaruh paling akhir (sama spt
-            "Penyisiran Usaha" & 2 tab Monitoring, area internal BPS bukan
-            utk PPL/tetangga). Tombolnya tampil ke SEMUA orang (sama spt
-            tab lain), tapi ISINYA dibatasi ke 4 nama tertentu -- lihat
-            komentar akses di app/penyisiran/manajemen-target.tsx. */}
+        {/* "Manajemen Target" -- tab BARU, ditaruh paling akhir (area
+            internal BPS bukan utk PPL/tetangga). Tombolnya tampil ke SEMUA
+            orang (sama spt tab lain), tapi ISINYA dibatasi ke 4 nama
+            tertentu -- lihat komentar akses di
+            app/penyisiran/manajemen-target.tsx. */}
         <TabButton active={tab === "target"} onClick={() => setTab("target")}>
           Manajemen Target
         </TabButton>
@@ -179,13 +192,6 @@ export default function PenyisiranPage() {
             Akses dibatasi ke 4 nama yg sama dgn "Manajemen Target". */}
         <TabButton active={tab === "master_petugas"} onClick={() => setTab("master_petugas")}>
           Master Petugas
-        </TabButton>
-        {/* "Administrasi" -- tab BARU, SPJ Translok (Kwitansi/Surat Tugas/
-            Visum/Laporan/Dokumentasi/Surat Keterangan). Login menumpang
-            akun Identifikasi Jorong ATAU Tetangga (PPL tidak ikut), lihat
-            komentar lengkap di administrasi-spj.tsx & lib/spjAuth.ts. */}
-        <TabButton active={tab === "spj"} onClick={() => setTab("spj")}>
-          Administrasi
         </TabButton>
         {/* "Perencanaan Lapangan" (dulu "Alokasi Sampel") -- tab BARU,
             2 bagian: (1) Identifikasi Hari Tugas (checklist hari dalam
