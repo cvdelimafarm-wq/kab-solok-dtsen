@@ -22,6 +22,14 @@
 // (Asia/Jakarta) krn tanggal masa depan tidak ada gunanya utk monitoring
 // kinerja. Kalau tidak dikirim/tidak valid, RPC-nya sendiri default ke hari
 // ini (lihat migrasi 20260921_monitoring_kinerja_tanggal_pilihan.sql).
+//
+// Baris RPC SEKARANG cuma petugas yg BERPERAN PPL (bukan PML, lihat migrasi
+// 20260921b_monitoring_kinerja_hanya_ppl.sql) & ikut 1 kolom baru
+// rencana_besok_terkirim (boolean, lihat migrasi
+// 20260921c_rencana_besok_kirim_status.sql & /api/penyisiran/
+// rencana-besok-kirim) -- diteruskan APA ADANYA di sini (route ini tidak
+// perlu tahu bentuk baris RPC, cuma memforward `data`), FE (monitoring-
+// terpadu.tsx) yg membaca field2 barunya.
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";

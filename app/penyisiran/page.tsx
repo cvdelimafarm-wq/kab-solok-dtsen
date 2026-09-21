@@ -553,6 +553,22 @@ function FloatBarRencanaBesok() {
     return digit;
   }
 
+  // Catat ke server bahwa gambar rencana besok BERHASIL dibagikan/disalin
+  // hari ini (permintaan user: kolom "Kirim Rencana Besok" di kartu #1 tab
+  // Monitoring) -- "fire and forget", TIDAK menunggu/menggagalkan alur
+  // kirim/salin gambar yg sedang berjalan kalau endpoint ini error (sekadar
+  // bookkeeping, bukan bagian inti fitur). Lihat komentar lengkap di
+  // /api/penyisiran/rencana-besok-kirim/route.ts.
+  function catatTerkirim(metode: "share" | "salin") {
+    if (!token) return;
+    apiFetch("/api/penyisiran/rencana-besok-kirim", token, {
+      method: "POST",
+      body: JSON.stringify({ metode }),
+    }).catch(() => {
+      // Sengaja diabaikan -- lihat komentar di atas.
+    });
+  }
+
   async function kirimKeWaPml() {
     // Buka modal ASLI "📅 Dijadwalkan Besok" sekalian (permintaan user) --
     // TIDAK menunggu ini selesai sebelum lanjut menyiapkan gambar (dua-duanya
@@ -588,6 +604,7 @@ function FloatBarRencanaBesok() {
         try {
           await navigator.share({ files: [file], title: `Rencana Kunjungan ${tanggalLabel()}` });
           setKirimStatus("selesai_share");
+          catatTerkirim("share");
           setTimeout(() => setKirimStatus("idle"), 4000);
           return;
         } catch (err) {
@@ -618,6 +635,7 @@ function FloatBarRencanaBesok() {
         window.open(`https://wa.me/${nomor}`, "_blank", "noopener,noreferrer");
       }
 
+      if (disalin) catatTerkirim("salin");
       setKirimStatus(disalin ? "selesai_salin" : "error");
       setTimeout(() => setKirimStatus("idle"), 4000);
     } catch {

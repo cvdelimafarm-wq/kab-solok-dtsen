@@ -405,7 +405,13 @@ function HintFilter({ adaFilterAktif, onReset }: { adaFilterAktif: boolean; onRe
 // lama, sementara seksi baru ini (yg butuh hitungan "HARI INI", beda pola
 // query-nya) tidak perlu ikut menunggu/menunda RPC gabungan yg besar itu.
 //
-// Per baris = 1 petugas penyisiran AKTIF:
+// Per baris = 1 petugas penyisiran AKTIF yang BERPERAN PPL SAJA -- permintaan
+// user "kolom nama PPL hanya tampilkan daftar nama dengan role PPL". Definisi
+// "PML" di RPC (migrasi 20260921b_monitoring_kinerja_hanya_ppl.sql) DISAMAKAN
+// dgn lib/wilayahAlokasiPetugas.ts (daftarIdUntukSesi): petugas dianggap PML
+// kalau ADA >=1 petugas lain yg pengawas_id-nya menunjuk ke dia -- baris petugas
+// spt itu DIKELUARKAN dari kartu ini (rekap tim mereka ada di kartu #2, lihat
+// SeksiMonitoringPml di bawah).
 //  - Berhasil Didata Hari Ini = jumlah kartu berstatus "Ditemukan" HARI INI
 //    (bukan akumulatif, lihat ditemukan_at) yg diisi petugas ini.
 //  - Target Hari Ini = angka TETAP sama utk semua petugas (TARGET_HARIAN_KK
@@ -440,13 +446,36 @@ interface KinerjaPplRow {
   laporan_ok: boolean | null;
   dokumentasi_ok: boolean | null;
   ada_st_hari_ini: boolean;
+  // BARU (permintaan user, migrasi 20260921c_rencana_besok_kirim_status.sql)
+  // -- true kalau petugas ini SUDAH menekan "📤 Kirim ke WA PML"
+  // (FloatBarRencanaBesok, app/penyisiran/page.tsx) pada tanggal yg sedang
+  // dilihat kartu ini (bukan cuma HARI INI -- ikut tanggal navigasi kartu
+  // #1, lihat TanggalNav di atas).
+  rencana_besok_terkirim: boolean;
 }
 
 const HARI_LABEL = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
-function labelSpjKinerja(ok: boolean | null, adaSt: boolean): string {
-  if (!adaSt) return "-";
-  return ok ? "✓" : "✗";
+// ---------- Indikator status sudah/belum (✓/✗) BERWARNA ----------
+//
+// BARU (permintaan user "berikan warna/highlight untuk status sudah atau
+// belum") -- dipakai utk SEMUA kolom status biner sudah/belum di kartu #1 &
+// #2 (Laporan, Dokumentasi, Kirim Rencana Besok, SPJ Lengkap): ✓ HIJAU tebal
+// = sudah, ✗ MERAH tebal = belum, "-" abu2 = tidak berlaku (mis. petugas
+// tidak py Surat Tugas hari itu, bukan berarti "belum lengkap"). Satu
+// komponen dipakai berulang supaya warnanya KONSISTEN di semua kartu.
+function IndikatorCekX({ nilai }: { nilai: boolean | null }) {
+  if (nilai === null) return <span className="text-ink/30">-</span>;
+  return nilai ? (
+    <span className="font-bold text-moss-700">✓</span>
+  ) : (
+    <span className="font-bold text-rust-700">✗</span>
+  );
+}
+
+function nilaiSpjKinerja(ok: boolean | null, adaSt: boolean): boolean | null {
+  if (!adaSt) return null;
+  return !!ok;
 }
 
 function pctAkurasiKinerja(r: KinerjaPplRow): number | null {
@@ -575,6 +604,11 @@ function TabelKinerjaHead() {
         <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
           Akurasi Identifikasi
         </th>
+        {/* Kolom BARU paling kanan (permintaan user) -- lihat komentar
+            rencana_besok_terkirim di KinerjaPplRow di atas. */}
+        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-center align-bottom">
+          Kirim Rencana Besok
+        </th>
       </tr>
       <tr>
         <th className="border-b border-line px-2 py-1 text-center">Laporan</th>
@@ -598,9 +632,16 @@ function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: 
       </td>
       <td className="px-2 py-1.5 text-right text-ink/50">{targetHarian}</td>
       <td className="px-2 py-1.5 text-right">{r.dikunjungi_hari_ini}</td>
-      <td className="px-2 py-1.5 text-center">{labelSpjKinerja(r.laporan_ok, r.ada_st_hari_ini)}</td>
-      <td className="px-2 py-1.5 text-center">{labelSpjKinerja(r.dokumentasi_ok, r.ada_st_hari_ini)}</td>
+      <td className="px-2 py-1.5 text-center">
+        <IndikatorCekX nilai={nilaiSpjKinerja(r.laporan_ok, r.ada_st_hari_ini)} />
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        <IndikatorCekX nilai={nilaiSpjKinerja(r.dokumentasi_ok, r.ada_st_hari_ini)} />
+      </td>
       <td className="px-2 py-1.5 text-right">{pct == null ? "-" : `${pct}%`}</td>
+      <td className="px-2 py-1.5 text-center">
+        <IndikatorCekX nilai={r.rencana_besok_terkirim} />
+      </td>
     </tr>
   );
 }
@@ -728,7 +769,7 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
 
       {rowsSorted.length > 0 && (
         <div className="overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[760px] border-collapse text-xs">
+          <table className="w-full min-w-[900px] border-collapse text-xs">
             <TabelKinerjaHead />
             <tbody className="divide-y divide-line">
               {rowsSorted.map((r) => (
@@ -743,8 +784,10 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
           persis dgn ModalRencanaBesok di app/seruti/penyisiran-usaha.tsx) --
           html2canvas butuh elemen lebar KONSISTEN, bukan mengikuti lebar
           layar yg responsif, + judul/subjudul diulang di sini krn screenshot
-          cuma menangkap isi div ini saja (bukan heading "1. ..." di luar). */}
-      <div style={{ position: "fixed", top: -99999, left: -99999, width: 820 }}>
+          cuma menangkap isi div ini saja (bukan heading "1. ..." di luar).
+          Lebar ditambah 820->940 (permintaan user, kolom baru "Kirim
+          Rencana Besok"). */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 940 }}>
         <div ref={gambarRef} className="bg-white p-4">
           <p className="text-sm font-bold text-navy-900">Monitoring Penyisiran Sensus Ekonomi 2026</p>
           <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
@@ -783,6 +826,10 @@ interface PmlAgg {
   spj_ada_st: number; // penyebut -- jumlah PPL yg py ST hari ini (butuh SPJ hari ini)
   akurasi_benar_total: number;
   akurasi_dasar_total: number;
+  // BARU (permintaan user) -- jumlah PPL di tim ini yg SUDAH kirim rencana
+  // besok ke PML pada tanggal yg sedang dilihat (dari KinerjaPplRow.
+  // rencana_besok_terkirim, lihat komentar interface-nya di atas).
+  kirim_besok_jumlah: number;
 }
 
 function agregasiPerPml(baris: KinerjaPplRow[], targetHarian: number): PmlAgg[] {
@@ -801,6 +848,7 @@ function agregasiPerPml(baris: KinerjaPplRow[], targetHarian: number): PmlAgg[] 
         spj_ada_st: 0,
         akurasi_benar_total: 0,
         akurasi_dasar_total: 0,
+        kirim_besok_jumlah: 0,
       };
       map.set(key, agg);
     }
@@ -812,10 +860,26 @@ function agregasiPerPml(baris: KinerjaPplRow[], targetHarian: number): PmlAgg[] 
       agg.spj_ada_st += 1;
       if (r.laporan_ok && r.dokumentasi_ok) agg.spj_lengkap += 1;
     }
+    if (r.rencana_besok_terkirim) agg.kirim_besok_jumlah += 1;
     agg.akurasi_benar_total += r.akurasi_benar;
     agg.akurasi_dasar_total += r.akurasi_dasar;
   }
   return Array.from(map.values()).sort((a, b) => a.pml_nama.localeCompare(b.pml_nama, "id"));
+}
+
+// Rasio "x/y" BERWARNA (permintaan user "berikan warna/highlight utk status
+// sudah atau belum") -- HIJAU tebal kalau lengkap (x >= y), MERAH tebal
+// kalau belum lengkap, "-" abu2 kalau penyebutnya 0 (tidak ada yg perlu
+// dihitung). Dipakai bareng IndikatorCekX (kartu #1, di atas) utk kartu #2
+// yg statusnya berupa rekap TIM (rasio), bukan biner per-orang.
+function RasioBerwarna({ pembilang, penyebut }: { pembilang: number; penyebut: number }) {
+  if (penyebut <= 0) return <span className="text-ink/30">-</span>;
+  const lengkap = pembilang >= penyebut;
+  return (
+    <span className={`font-semibold ${lengkap ? "text-moss-700" : "text-rust-700"}`}>
+      {pembilang}/{penyebut}
+    </span>
+  );
 }
 
 function TabelPmlHead() {
@@ -829,6 +893,9 @@ function TabelPmlHead() {
         <th className="border-b border-line px-2 py-1.5 text-right">Usaha Dikunjungi (Tim)</th>
         <th className="border-b border-line px-2 py-1.5 text-center">SPJ Lengkap</th>
         <th className="border-b border-line px-2 py-1.5 text-right">Akurasi Identifikasi (Tim)</th>
+        {/* Kolom BARU paling kanan (permintaan user) -- rasio jumlah PPL di
+            tim ini yg SUDAH kirim rencana besok / total PPL di tim. */}
+        <th className="border-b border-line px-2 py-1.5 text-center">Kirim Rencana Besok (Tim)</th>
       </tr>
     </thead>
   );
@@ -849,8 +916,13 @@ function TabelPmlRow({ a }: { a: PmlAgg }) {
       </td>
       <td className="px-2 py-1.5 text-right text-ink/50">{a.target_total}</td>
       <td className="px-2 py-1.5 text-right">{a.dikunjungi_total}</td>
-      <td className="px-2 py-1.5 text-center">{a.spj_ada_st > 0 ? `${a.spj_lengkap}/${a.spj_ada_st}` : "-"}</td>
+      <td className="px-2 py-1.5 text-center">
+        <RasioBerwarna pembilang={a.spj_lengkap} penyebut={a.spj_ada_st} />
+      </td>
       <td className="px-2 py-1.5 text-right">{pct == null ? "-" : `${pct}%`}</td>
+      <td className="px-2 py-1.5 text-center">
+        <RasioBerwarna pembilang={a.kirim_besok_jumlah} penyebut={a.jumlah_ppl} />
+      </td>
     </tr>
   );
 }
@@ -977,7 +1049,7 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
 
       {agregat.length > 0 && (
         <div className="overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[680px] border-collapse text-xs">
+          <table className="w-full min-w-[800px] border-collapse text-xs">
             <TabelPmlHead />
             <tbody className="divide-y divide-line">
               {agregat.map((a) => (
@@ -989,8 +1061,9 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
       )}
 
       {/* Klon tersembunyi off-screen utk html2canvas -- pola sama dgn
-          kartu #1 (SeksiKinerjaPplHariIni). */}
-      <div style={{ position: "fixed", top: -99999, left: -99999, width: 720 }}>
+          kartu #1 (SeksiKinerjaPplHariIni). Lebar ditambah 720->820
+          (permintaan user, kolom baru "Kirim Rencana Besok (Tim)"). */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 820 }}>
         <div ref={gambarRef} className="bg-white p-4">
           <p className="text-sm font-bold text-navy-900">Monitoring PML</p>
           <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
