@@ -263,6 +263,8 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
   // dgn "Kelola Petugas Penyisiran" di tab Monitoring Petugas Penyisiran.
   const [pinAktif, setPinAktif] = useState("");
   const [busyToggleId, setBusyToggleId] = useState<number | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportErr, setExportErr] = useState<string | null>(null);
 
   const loadPetugas = useCallback(async () => {
     setLoading(true);
@@ -326,6 +328,40 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
       setErrMsg(msg);
     } finally {
       setBusyToggleId(null);
+    }
+  }
+
+  // Export seluruh "Daftar Petugas" jadi file Excel (.xlsx) -- fetch manual +
+  // blob (bukan window.open langsung ke URL API) krn endpoint export butuh
+  // header Authorization, pola SAMA dgn handleExportSubsls di
+  // perencanaan-lapangan.tsx. Akses endpointnya sendiri jg dijaga di server
+  // (lihat .../master-petugas/export/route.ts).
+  async function handleExport() {
+    setExportBusy(true);
+    setExportErr(null);
+    try {
+      const res = await fetch("/api/penyisiran/master-petugas/export", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "daftar_petugas_master.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal mengunduh file.";
+      setExportErr(msg);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+    } finally {
+      setExportBusy(false);
     }
   }
 
@@ -414,6 +450,14 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
             </button>
             <button
               type="button"
+              onClick={handleExport}
+              disabled={exportBusy}
+              className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+            >
+              {exportBusy ? "Menyiapkan..." : "⬇ Export Excel"}
+            </button>
+            <button
+              type="button"
               onClick={() => setShowTambah((s) => !s)}
               className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${
                 showTambah
@@ -425,6 +469,8 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
             </button>
           </div>
         </div>
+
+        {exportErr && <p className="mb-2 text-[11px] text-rust-700">⚠ {exportErr}</p>}
 
         {showTambah && (
           <TambahPetugasForm onBatal={() => setShowTambah(false)} onSimpan={tambahPetugas} />
