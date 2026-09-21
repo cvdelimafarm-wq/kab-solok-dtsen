@@ -1998,6 +1998,23 @@ export function ModalRencanaBesok({
     return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
   }
 
+  // Catat ke /api/penyisiran/rencana-besok-kirim bahwa PPL sudah menyalin
+  // rencana kunjungan (utk tanggal yg SEDANG ditampilkan di modal ini --
+  // bisa bukan besok, krn modal punya navigasi tanggal) -- dipakai kartu
+  // #1 "Monitoring Penyisiran Sensus Ekonomi 2026" (kolom "Kirim Rencana
+  // Besok"). Fire-and-forget: kegagalan endpoint ini SENGAJA tidak
+  // mengganggu alur salin gambar yg sudah selesai (lihat komentar header
+  // route.ts).
+  function catatTerkirim() {
+    if (!tanggal) return;
+    apiFetch("/api/penyisiran/rencana-besok-kirim", token, {
+      method: "POST",
+      body: JSON.stringify({ metode: "salin", tanggal_rencana: tanggal }),
+    }).catch(() => {
+      // Sengaja diabaikan
+    });
+  }
+
   async function salinSebagaiGambar() {
     if (!gambarRef.current) return;
     setCopyStatus("copying");
@@ -2012,6 +2029,7 @@ export function ModalRencanaBesok({
         try {
           await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
           setCopyStatus("done");
+          catatTerkirim();
           setTimeout(() => setCopyStatus("idle"), 2500);
         } catch {
           // Fallback: unduh langsung kalau clipboard image tidak didukung browser.
@@ -2022,6 +2040,7 @@ export function ModalRencanaBesok({
           a.click();
           URL.revokeObjectURL(url);
           setCopyStatus("done");
+          catatTerkirim();
           setTimeout(() => setCopyStatus("idle"), 2500);
         }
       }, "image/png");
@@ -2228,13 +2247,6 @@ function RowCard({
   // membuka kunci ini (dikirim ke server sbg edit_all, lihat handleSave)
   // -- bukan terkunci permanen tanpa jalan keluar.
   const terkunci = terkunciSetelahHariBerganti(row) && !editAllMode;
-  const dirty =
-    status !== row.status_kunjungan ||
-    catatan !== (row.catatan_petugas ?? "") ||
-    infoPpl !== row.info_ppl ||
-    infoJorong !== row.info_jorong ||
-    infoTetangga !== row.info_tetangga ||
-    pastiFlag !== row.prioritas_pasti;
   const meta = STATUS_META[status];
   const identMeta = IDENTIFIKASI_META[row.identifikasi_ppl] ?? IDENTIFIKASI_META.belum;
   // Jarak rumah petugas yg SEDANG LOGIN (dropdown "Nama Anda") ke lokasi
@@ -2264,19 +2276,35 @@ function RowCard({
   );
   const prioritasMeta = PRIORITAS_META[prioritas.tier];
 
-  async function handleSave() {
+  // Simpan OTOMATIS setiap ada perubahan (tombol "Simpan" DIHAPUS atas
+  // permintaan user -- "setiap perubahan akan otomatis disimpan, untuk
+  // mencegah perubahan sudah dilakukan tapi lupa klik simpan"). Menerima
+  // `overrides` krn pemanggil (onChange status/catatan, toggle "Tandai
+  // Pasti") memanggil fungsi ini SEGERA setelah `setStatus`/`setCatatan`/
+  // `setPastiFlag`, sebelum React sempat me-render ulang state terbaru --
+  // jadi nilai yg BARU dikirim eksplisit di sini, bukan dibaca dari state
+  // (yg saat itu masih menyimpan nilai LAMA krn pembaruan state bersifat
+  // asinkron).
+  async function handleSave(overrides?: {
+    status?: StatusKunjungan;
+    catatan?: string;
+    pastiFlag?: boolean;
+  }) {
+    const statusKirim = overrides?.status ?? status;
+    const catatanKirim = overrides?.catatan ?? catatan;
+    const pastiFlagKirim = overrides?.pastiFlag ?? pastiFlag;
     setSaving(true);
     try {
       await apiFetch("/api/penyisiran/update", token, {
         method: "PATCH",
         body: JSON.stringify({
           id: row.kode_identitas,
-          status_kunjungan: status,
-          catatan_petugas: catatan || null,
+          status_kunjungan: statusKirim,
+          catatan_petugas: catatanKirim || null,
           info_ppl: infoPpl,
           info_jorong: infoJorong,
           info_tetangga: infoTetangga,
-          prioritas_pasti: pastiFlag,
+          prioritas_pasti: pastiFlagKirim,
           petugas_id: petugasId,
           petugas_nama: petugasNama,
           edit_all: editAllMode,
@@ -2284,12 +2312,12 @@ function RowCard({
       });
       setSaved("ok");
       onSaved(row.kode_identitas, {
-        status_kunjungan: status,
-        catatan_petugas: catatan,
+        status_kunjungan: statusKirim,
+        catatan_petugas: catatanKirim,
         info_ppl: infoPpl,
         info_jorong: infoJorong,
         info_tetangga: infoTetangga,
-        prioritas_pasti: pastiFlag,
+        prioritas_pasti: pastiFlagKirim,
         penyisiran_oleh: petugasNama ?? row.penyisiran_oleh,
       });
       // Beri tahu FloatBarRencanaBesok (app/penyisiran/page.tsx) supaya
@@ -2315,6 +2343,34 @@ function RowCard({
     } finally {
       setSaving(false);
       setTimeout(() => setSaved("idle"), 2000);
+    }
+  }
+
+  // Debounce simpan-otomatis Catatan (input teks) -- kalau setiap ketikan
+  // langsung memicu request PATCH, bisa membanjiri server & terasa lag saat
+  // mengetik cepat. Ditunda 800ms sejak ketikan TERAKHIR; kalau kartu
+  // ditutup/berpindah/dibongkar sebelum jeda itu lewat, timer dibatalkan
+  // TAPI perubahan tetap disimpan lewat flushCatatan() (dipanggil saat
+  // input kehilangan fokus/onBlur) supaya tidak ada perubahan yg hilang.
+  const catatanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (catatanTimer.current) clearTimeout(catatanTimer.current);
+    };
+  }, []);
+  function handleCatatanChange(nilai: string) {
+    setCatatan(nilai);
+    if (catatanTimer.current) clearTimeout(catatanTimer.current);
+    catatanTimer.current = setTimeout(() => {
+      catatanTimer.current = null;
+      handleSave({ catatan: nilai });
+    }, 800);
+  }
+  function flushCatatan() {
+    if (catatanTimer.current) {
+      clearTimeout(catatanTimer.current);
+      catatanTimer.current = null;
+      handleSave({ catatan });
     }
   }
 
@@ -2499,8 +2555,13 @@ function RowCard({
             <button
               type="button"
               disabled={!canEditInfo}
-              onClick={() => canEditInfo && setPastiFlag((v) => !v)}
-              title="Tandai kalau sudah YAKIN ada usaha -- skor dipaksa maksimal apa pun hasil hitungan otomatis."
+              onClick={() => {
+                if (!canEditInfo) return;
+                const next = !pastiFlag;
+                setPastiFlag(next);
+                handleSave({ pastiFlag: next });
+              }}
+              title="Tandai kalau sudah YAKIN ada usaha -- skor dipaksa maksimal apa pun hasil hitungan otomatis. Tersimpan otomatis."
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
                 pastiFlag ? "bg-rust-700 text-white" : "border border-line text-ink/40 hover:border-navy-400"
               } ${!canEditInfo ? "cursor-not-allowed opacity-50 hover:border-line" : ""}`}
@@ -2612,17 +2673,28 @@ function RowCard({
               Semua Info Lapangan&quot; (pojok kanan bawah) kalau memang perlu dikoreksi.
             </p>
           )}
+          {/* Tombol "Simpan" DIHAPUS (atas permintaan) -- setiap perubahan
+              di sini (dropdown Status, ketikan Catatan, "🎯 Tandai Pasti"
+              di atas) langsung terkirim OTOMATIS ke server (lihat
+              handleSave/handleCatatanChange di atas), supaya petugas tidak
+              lagi bisa lupa menekan Simpan. Indikator kecil di ujung kanan
+              (bukan tombol, tidak bisa diklik) menggantikan status
+              "✓ Tersimpan"/"Gagal" yg dulu ada di tombolnya. */}
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as StatusKunjungan)}
+              onChange={(e) => {
+                const next = e.target.value as StatusKunjungan;
+                setStatus(next);
+                handleSave({ status: next });
+              }}
               disabled={isPml || terkunci}
               title={
                 isPml
                   ? "PML tidak bisa mengubah status kunjungan."
                   : terkunci
                   ? "Terkunci -- aktifkan Edit Semua utk membuka."
-                  : undefined
+                  : "Tersimpan otomatis begitu diganti."
               }
               className="rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -2641,7 +2713,8 @@ function RowCard({
             </select>
             <input
               value={catatan}
-              onChange={(e) => setCatatan(e.target.value)}
+              onChange={(e) => handleCatatanChange(e.target.value)}
+              onBlur={flushCatatan}
               placeholder="Catatan petugas..."
               disabled={isPml || terkunci}
               title={
@@ -2649,19 +2722,23 @@ function RowCard({
                   ? "PML tidak bisa mengubah catatan petugas."
                   : terkunci
                   ? "Terkunci -- aktifkan Edit Semua utk membuka."
-                  : undefined
+                  : "Tersimpan otomatis beberapa saat setelah berhenti mengetik."
               }
               className="min-w-[140px] flex-1 rounded-md border border-line px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             />
-            <button
-              onClick={handleSave}
-              disabled={!dirty || saving || terkunci}
-              className={`shrink-0 rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-30 ${
-                saved === "ok" ? "bg-moss-500" : saved === "err" ? "bg-rust-500" : "bg-navy-700 hover:bg-navy-900"
+            <span
+              className={`shrink-0 text-[10px] font-semibold ${
+                saving
+                  ? "text-ink/40"
+                  : saved === "ok"
+                  ? "text-moss-700"
+                  : saved === "err"
+                  ? "text-rust-700"
+                  : "text-transparent"
               }`}
             >
-              {saving ? "..." : saved === "ok" ? "✓ Tersimpan" : saved === "err" ? "Gagal" : "Simpan"}
-            </button>
+              {saving ? "Menyimpan…" : saved === "ok" ? "✓ Tersimpan otomatis" : saved === "err" ? "⚠ Gagal disimpan" : "·"}
+            </span>
           </div>
 
           <div className="mt-2 flex justify-end">
