@@ -42,6 +42,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
 import { AMBANG_DOKUMENTASI_HARIAN } from "@/lib/spjMatriks";
+import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";
 import {
   SpjDashboard,
   SpjMonitoring,
@@ -1451,6 +1452,18 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
   }, [suratTugasId, tanggal, token]);
 
   const adaStatusKunjungan = rekap ? Object.values(rekap.rekapStatusKunjungan).some((v) => v > 0) : false;
+  // Peringatan dini (permintaan user, lihat lib/spjLaporanAturan.ts) --
+  // ditampilkan SEBELUM petugas menekan Simpan supaya tidak kaget tiba2
+  // ditolak server: sejak 20 Sept 2026 aktivitas Penyisiran Usaha WAJIB,
+  // Identifikasi saja (walau ADA datanya) TIDAK LAGI cukup. Dihitung
+  // langsung dari laporanTemplateBolehDisimpan() (SATU sumber kebenaran yg
+  // sama dgn gerbang simpan di server) supaya tidak bisa "lupa disamakan"
+  // kalau aturannya berubah lagi nanti.
+  const perluPeringatanPenyisiranWajib =
+    !!rekap &&
+    rekap.totalAktivitas > 0 &&
+    !adaStatusKunjungan &&
+    !laporanTemplateBolehDisimpan(tanggal, adaStatusKunjungan, rekap.totalAktivitas > 0);
 
   // Preview ini CUMA menampilkan REKAP DATA (angka & lokasi) dalam bentuk
   // tabel/baris -- SENGAJA TIDAK menampilkan narasi/uraian kalimat apa pun
@@ -1472,6 +1485,14 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
         <p className="text-[11px] text-ink/40">Belum ada aktivitas penyisiran/identifikasi tercatat pada tanggal ini.</p>
       ) : (
         <div className="space-y-2.5 text-[11px]">
+          {perluPeringatanPenyisiranWajib && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+              ⚠ Belum ada aktivitas Penyisiran Usaha pada tanggal ini. Sejak {formatTanggal(TANGGAL_WAJIB_PENYISIRAN)},
+              Laporan mode Template wajib berdasarkan aktivitas Penyisiran Usaha -- data Identifikasi di bawah ini
+              saja TIDAK CUKUP utk disimpan. Lengkapi checklist di tab Penyisiran Usaha dulu, atau pakai mode
+              Narasi Bebas.
+            </p>
+          )}
           <div>
             <p className="mb-1 font-medium text-ink/60">Kartu Keluarga per Status Kunjungan (Penyisiran Usaha)</p>
             {adaStatusKunjungan ? (

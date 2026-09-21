@@ -31,18 +31,21 @@
 //     diedit belakangan di tab Identifikasi.
 //   - "bebas": narasi bebas dari petugas, rekap_snapshot null.
 //
-// Kalau mode "template" tapi TIDAK ADA aktivitas tercatat pada tanggal
-// itu, request DITOLAK dgn pesan yg mengarahkan petugas mengoreksi data
-// di tab Identifikasi Jorong/Tetangga dulu (sesuai permintaan user) atau
-// pakai mode "bebas" -- BUKAN diam2 menyimpan laporan kosong. Batasan ini
-// HANYA berlaku saat SIMPAN (POST) -- mode "preview" (GET) tetap
-// mengembalikan rekap apa adanya (boleh nol) krn tujuannya cuma
-// menampilkan, bukan menyimpan.
+// Kalau mode "template" tapi TIDAK ADA aktivitas yg CUKUP tercatat pada
+// tanggal itu (lihat lib/spjLaporanAturan.ts utk aturan lengkapnya --
+// singkatnya: SEBELUM 20 Sept 2026 cukup salah satu dari Penyisiran ATAU
+// Identifikasi, SEJAK 20 Sept 2026 Penyisiran WAJIB & Identifikasi jadi
+// opsional), request DITOLAK dgn pesan yg mengarahkan petugas melengkapi
+// data di tab yg sesuai dulu, atau pakai mode "bebas" -- BUKAN diam2
+// menyimpan laporan kosong. Batasan ini HANYA berlaku saat SIMPAN (POST) --
+// mode "preview" (GET) tetap mengembalikan rekap apa adanya (boleh nol) krn
+// tujuannya cuma menampilkan, bukan menyimpan.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, roleUntukJenis, type SpjSession } from "@/lib/spjAuth";
+import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -304,15 +307,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal menghitung rekap." }, { status: 500 });
     }
 
-    if (rekap.totalAktivitas === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Tidak ada aktivitas identifikasi yang tercatat pada tanggal ini di tab Identifikasi Jorong/Tetangga. " +
-            "Silakan koreksi/lengkapi data di tab tersebut dulu, atau gunakan mode Narasi Bebas.",
-        },
-        { status: 400 }
-      );
+    // Lihat lib/spjLaporanAturan.ts utk aturan lengkapnya -- SEBELUM 20 Sept
+    // 2026: cukup salah satu (OR) dari Penyisiran ATAU Identifikasi. SEJAK
+    // 20 Sept 2026: Penyisiran WAJIB, Identifikasi jadi opsional (boleh ada
+    // boleh tidak, TIDAK LAGI cukup sendirian).
+    const adaAktivitasPenyisiran = Object.values(rekap.rekapStatusKunjungan).some((v) => v > 0);
+    const adaAktivitasIdentifikasi = rekap.totalAktivitas > 0;
+
+    if (!laporanTemplateBolehDisimpan(tanggal, adaAktivitasPenyisiran, adaAktivitasIdentifikasi)) {
+      const error =
+        tanggal >= TANGGAL_WAJIB_PENYISIRAN
+          ? "Tidak ada aktivitas Penyisiran Usaha (perubahan status kunjungan) yang tercatat pada tanggal ini. " +
+            "Sejak 20 September 2026, Laporan wajib berdasarkan aktivitas di tab Penyisiran Usaha -- aktivitas " +
+            "Identifikasi saja tidak lagi cukup. Silakan lengkapi checklist di tab Penyisiran Usaha dulu, atau " +
+            "gunakan mode Narasi Bebas."
+          : "Tidak ada aktivitas Penyisiran maupun Identifikasi yang tercatat pada tanggal ini. " +
+            "Silakan koreksi/lengkapi data di salah satu tab tersebut dulu, atau gunakan mode Narasi Bebas.";
+      return NextResponse.json({ error }, { status: 400 });
     }
 
     rekapSnapshot = rekap;
