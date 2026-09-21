@@ -59,6 +59,8 @@ interface ExportRow {
   identifikasi_ppl_at: string | null;
   catatan_petugas: string | null;
   updated_at: string;
+  aktif: boolean;
+  nonaktif_alasan: string | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -77,6 +79,10 @@ export async function GET(req: NextRequest) {
   const kec = sp.get("kec") || "";
   const nagari = sp.get("nagari") || "";
   const status = sp.get("status") || "";
+  // Default hanya baris aktif (target penyisiran saat ini) -- kirim
+  // ?sertakan_nonaktif=1 utk keperluan audit/arsip yg butuh lihat baris yg
+  // sudah dinonaktifkan (hasil sisir HGBB Sep 2026) juga.
+  const sertakanNonaktif = sp.get("sertakan_nonaktif") === "1";
 
   let query = supabase
     .from("penyisiran_usaha")
@@ -84,11 +90,12 @@ export async function GET(req: NextRequest) {
       "kode_identitas, kec_nama, nagari_nama, sls_nama, nama_kk, alamat, lat, lng, " +
         "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, dtsen_lapangan_usaha, " +
         "status_kunjungan, info_ppl, info_jorong, info_tetangga, identifikasi_ppl, " +
-        "identifikasi_ppl_at, catatan_petugas, updated_at"
+        "identifikasi_ppl_at, catatan_petugas, updated_at, aktif, nonaktif_alasan"
     )
     .order("nagari_nama")
     .order("nama_kk")
     .limit(MAX_ROWS);
+  if (!sertakanNonaktif) query = query.eq("aktif", true);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (status) query = query.eq("status_kunjungan", status);
@@ -118,6 +125,8 @@ export async function GET(req: NextRequest) {
     "Identifikasi PPL Diisi Pada",
     "Catatan Petugas",
     "Terakhir Diperbarui",
+    "Status Aktif",
+    "Alasan Nonaktif",
   ];
   const lines = [header.join(",")];
   for (const r of data ?? []) {
@@ -144,6 +153,8 @@ export async function GET(req: NextRequest) {
         r.identifikasi_ppl_at,
         r.catatan_petugas,
         r.updated_at,
+        r.aktif ? "Aktif" : "Nonaktif",
+        r.nonaktif_alasan,
       ]
         .map(csvEscape)
         .join(",")

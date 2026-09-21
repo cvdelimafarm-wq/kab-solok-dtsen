@@ -64,9 +64,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Pilih kecamatan terlebih dahulu." }, { status: 400 });
   }
 
+  // Baris nonaktif (hasil sisir HGBB Sep 2026, lihat kolom `aktif` di
+  // migrasi terkait) tidak lagi ditampilkan sbg target -- reversibel,
+  // bukan hapus permanen.
   let query = supabase
     .from("penyisiran_usaha")
     .select("kode_identitas, nama_kk, alamat, nagari_nama, lat, lng, status_kunjungan")
+    .eq("aktif", true)
     .not("lat", "is", null)
     .not("lng", "is", null)
     .limit(MAX_MARKERS);

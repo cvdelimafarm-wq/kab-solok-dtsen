@@ -46,10 +46,14 @@ export async function GET(req: NextRequest) {
   const idsList = (alokasi ?? []).map((r: { idsubsls: string }) => r.idsubsls);
   if (idsList.length === 0) return NextResponse.json([]);
 
+  // Baris nonaktif (hasil sisir HGBB Sep 2026) dikeluarkan dari hitungan
+  // "jumlah" per Sub SLS supaya konsisten dgn /identifikasi-list --
+  // reversibel, bukan hapus permanen.
   const { data, error } = await supabase
     .from("penyisiran_usaha")
     .select("idsubsls, sls_nama, subsls_kode")
-    .in("idsubsls", idsList);
+    .in("idsubsls", idsList)
+    .eq("aktif", true);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Diagregasi di JS (bukan RPC/group-by SQL) -- jumlah baris per PPL

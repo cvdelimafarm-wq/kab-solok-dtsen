@@ -52,7 +52,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" });
+  // Baris nonaktif (hasil sisir HGBB Sep 2026, lihat kolom `aktif` di
+  // migrasi terkait) tidak lagi ditampilkan sbg target -- reversibel,
+  // bukan hapus permanen.
+  let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" }).eq("aktif", true);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (subsls) query = query.eq("idsubsls", subsls);

@@ -99,10 +99,14 @@ export async function GET(req: NextRequest) {
   }
   const jumlahDitampilkan = target + TAMBAHAN_OPSI_LAIN;
 
+  // Baris nonaktif (hasil sisir HGBB Sep 2026) dikeluarkan dari hitungan
+  // "potensi kasus" supaya saran Jorong tidak dipengaruhi keluarga yg
+  // sudah tidak lagi jadi target -- reversibel, bukan hapus permanen.
   const { data, error } = await supabase
     .from("penyisiran_usaha")
     .select("idsubsls, nagari_kode, nagari_nama, sls_nama, subsls_kode")
-    .eq("kec_kode", kec);
+    .eq("kec_kode", kec)
+    .eq("aktif", true);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const map = new Map<

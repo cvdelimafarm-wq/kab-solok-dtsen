@@ -100,7 +100,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" });
+  // Hanya baris `aktif = true` yg ditampilkan sbg target penyisiran --
+  // kolom ini ditambah Sep 2026 utk penonaktifan (BUKAN hapus permanen)
+  // hasil sisir HGBB: baris yg tidak match daftar HGBB & belum pernah
+  // dikerjakan (status_kunjungan masih 'belum') ditandai nonaktif, tapi
+  // datanya tetap ada & bisa diaktifkan lagi kapan saja (lihat kolom
+  // nonaktif_alasan/nonaktif_at).
+  let query = supabase.from("penyisiran_usaha").select(KOLOM, { count: "exact" }).eq("aktif", true);
   if (filterWilayah) query = query.or(filterWilayah);
   if (kec) query = query.eq("kec_kode", kec);
   if (nagari) query = query.eq("nagari_kode", nagari);
