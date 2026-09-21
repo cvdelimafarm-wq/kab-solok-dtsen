@@ -38,6 +38,7 @@ import { buatPdfKwitansi } from "@/lib/pdf/kwitansi";
 import { buatPdfLaporan, LaporanRekapSnapshot } from "@/lib/pdf/laporan";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
 import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
+import { hitungLokasiTugas, teksLokasiTugas } from "@/lib/spjLokasiTugas";
 import { JenisDokumen, LABEL_DOKUMEN, URUTAN_CETAK_STANDAR, kunciPetugas } from "@/lib/spjMatriks";
 
 export const runtime = "nodejs";
@@ -351,14 +352,17 @@ export async function POST(req: NextRequest) {
             foto.push({ slot: r.slot, bytes: bytes2, contentType: blob.type === "image/png" ? "image/png" : "image/jpeg" });
           }
           if (foto.length > 0) {
-            const lap = petaLaporan.get(tgl);
+            // Lokasi dihitung LANGSUNG dari aktivitas Penyisiran Usaha/
+            // Identifikasi milik petugas pd tanggal itu (BUKAN dari
+            // rekap_snapshot Laporan, yg bisa kosong/belum ada) -- lihat
+            // lib/spjLokasiTugas.ts & komentar sama di
+            // app/api/penyisiran/spj/dokumentasi/pdf/route.ts.
             let lokasi = "-";
-            const lokasiArr = (lap?.rekap_snapshot as { lokasi?: { kecNama: string | null; nagariNama: string | null }[] } | undefined)
-              ?.lokasi;
-            if (lokasiArr && lokasiArr.length > 0) {
-              const nagariUnik = [...new Set(lokasiArr.map((l) => l.nagariNama).filter(Boolean))];
-              const kecUnik = [...new Set(lokasiArr.map((l) => l.kecNama).filter(Boolean))];
-              lokasi = `Nagari ${nagariUnik.join(", ")}, Kec. ${kecUnik.join(", ")}`;
+            try {
+              const hasilLokasi = await hitungLokasiTugas(supabase, { nama: namaAkun, jenis: p.petugasJenis, tanggal: tgl });
+              lokasi = teksLokasiTugas(hasilLokasi);
+            } catch {
+              // biarkan "-" drpd menggagalkan seluruh pencetakan gabungan.
             }
             const bytes = await buatPdfDokumentasi({ nomorSt: p.nomorSt, namaPetugas: namaAkun, peranLabel, tanggal: tgl, lokasi, foto });
             unit.push({ petugasKey, petugasNama: p.nama, jenis: "dokumentasi", tanggal: tgl, urutanTanggal: tgl, bytes });

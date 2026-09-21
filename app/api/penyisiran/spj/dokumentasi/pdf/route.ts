@@ -12,6 +12,7 @@ import { createClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
+import { hitungLokasiTugas, teksLokasiTugas } from "@/lib/spjLokasiTugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,26 +78,24 @@ export async function GET(req: NextRequest) {
     foto.push({ slot: r.slot, bytes, contentType: tebakContentType(r.file_path, blob.type) });
   }
 
-  const [{ data: st }, { data: akun }, { data: laporan }] = await Promise.all([
+  const [{ data: st }, { data: akun }] = await Promise.all([
     supabase.from("spj_surat_tugas").select("nomor_st").eq("id", suratTugasId).maybeSingle(),
     supabase.from(tabelAkun(jenisPemilik)).select("nama").eq("id", petugasIdPemilik).maybeSingle(),
-    supabase
-      .from("spj_laporan")
-      .select("rekap_snapshot")
-      .eq("surat_tugas_id", suratTugasId)
-      .eq("petugas_jenis", jenisPemilik)
-      .eq("petugas_id", petugasIdPemilik)
-      .eq("tanggal", tanggal)
-      .maybeSingle(),
   ]);
 
+  // Lokasi dihitung LANGSUNG dari aktivitas Penyisiran Usaha/Identifikasi
+  // milik petugas pd tanggal itu (BUKAN dari rekap_snapshot Laporan, yg
+  // bisa kosong kalau petugas belum sempat membuat Laporan utk tanggal
+  // ini) -- lihat lib/spjLokasiTugas.ts.
   let lokasi = "-";
-  const lokasiArr = (laporan?.rekap_snapshot as { lokasi?: { kecNama: string | null; nagariNama: string | null }[] } | null)
-    ?.lokasi;
-  if (lokasiArr && lokasiArr.length > 0) {
-    const nagariUnik = [...new Set(lokasiArr.map((l) => l.nagariNama).filter(Boolean))];
-    const kecUnik = [...new Set(lokasiArr.map((l) => l.kecNama).filter(Boolean))];
-    lokasi = `Nagari ${nagariUnik.join(", ")}, Kec. ${kecUnik.join(", ")}`;
+  if (akun?.nama) {
+    try {
+      const hasilLokasi = await hitungLokasiTugas(supabase, { nama: akun.nama, jenis: jenisPemilik, tanggal });
+      lokasi = teksLokasiTugas(hasilLokasi);
+    } catch {
+      // Gagal menghitung lokasi (mis. error query) tidak boleh menggagalkan
+      // seluruh PDF -- biarkan "-" drpd gagal total.
+    }
   }
 
   const pdfBytes = await buatPdfDokumentasi({
