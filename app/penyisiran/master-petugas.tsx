@@ -313,6 +313,7 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
   const kolom = useMemo(
     () => [
       { key: "nama", label: "Nama Petugas", getValue: (p: PetugasMaster) => p.nama },
+      { key: "status_akun", label: "Status Akun", getValue: (p: PetugasMaster) => (p.aktif ? "Aktif" : "Nonaktif") },
       { key: "email", label: "Email", getValue: (p: PetugasMaster) => p.email },
       { key: "no_hp", label: "No. HP", getValue: (p: PetugasMaster) => p.no_hp },
       { key: "alamat_kecamatan", label: "Kecamatan", getValue: (p: PetugasMaster) => p.alamat_kecamatan },
@@ -478,7 +479,17 @@ function BarisMaster({
           vertikal+horizontal bersamaan. */}
       <td className="sticky left-0 z-10 border-r border-line bg-white px-3 py-1.5 font-medium text-navy-900">
         {p.nama}
-        {!p.aktif && <span className="ml-1 text-[9px] text-ink/40">(nonaktif)</span>}
+      </td>
+      <td className="px-3 py-1.5">
+        <span
+          className={
+            p.aktif
+              ? "rounded-full border border-moss-100 bg-moss-100/40 px-1.5 py-0.5 text-[9px] font-medium text-moss-700"
+              : "rounded-full border border-line px-1.5 py-0.5 text-[9px] font-medium text-ink/40"
+          }
+        >
+          {p.aktif ? "Aktif" : "Nonaktif"}
+        </span>
       </td>
       <td className="px-3 py-1.5">
         <input
