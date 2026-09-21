@@ -405,13 +405,19 @@ function HintFilter({ adaFilterAktif, onReset }: { adaFilterAktif: boolean; onRe
 // lama, sementara seksi baru ini (yg butuh hitungan "HARI INI", beda pola
 // query-nya) tidak perlu ikut menunggu/menunda RPC gabungan yg besar itu.
 //
-// Per baris = 1 petugas penyisiran AKTIF yang BERPERAN PPL SAJA -- permintaan
-// user "kolom nama PPL hanya tampilkan daftar nama dengan role PPL". Definisi
-// "PML" di RPC (migrasi 20260921b_monitoring_kinerja_hanya_ppl.sql) DISAMAKAN
-// dgn lib/wilayahAlokasiPetugas.ts (daftarIdUntukSesi): petugas dianggap PML
-// kalau ADA >=1 petugas lain yg pengawas_id-nya menunjuk ke dia -- baris petugas
-// spt itu DIKELUARKAN dari kartu ini (rekap tim mereka ada di kartu #2, lihat
-// SeksiMonitoringPml di bawah).
+// Per baris = 1 petugas penyisiran AKTIF yang BERPERAN PPL LAPANGAN SAJA --
+// permintaan user "kolom nama PPL hanya tampilkan daftar nama dengan role
+// PPL". Dikecualikan dari kartu ini (RPC, lihat migrasi 20260921b_monitoring_
+// kinerja_hanya_ppl.sql & 20260921d_monitoring_kinerja_kecualikan_organik.sql)
+// kalau SALAH SATU dari 2 syarat terpenuhi:
+//  - status_kepegawaian = 'organik' (user confirmed: SEMUA yg organik adalah
+//    PML/pengelola, TERMASUK yg tidak punya bawahan sama sekali spt akun
+//    pengelola khusus Master Petugas/Manajemen Target -- Bambang, Deswaty,
+//    Arini -- & Yudi Firdian), ATAU
+//  - py >=1 petugas lain yg pengawas_id-nya menunjuk ke dia (definisi PML di
+//    lib/wilayahAlokasiPetugas.ts/daftarIdUntukSesi) -- jaring pengaman utk
+//    PML asli yg status_kepegawaian-nya belum terisi "organik" di data.
+// Rekap tim PML ada di kartu #2, lihat SeksiMonitoringPml di bawah.
 //  - Berhasil Didata Hari Ini = jumlah kartu berstatus "Ditemukan" HARI INI
 //    (bukan akumulatif, lihat ditemukan_at) yg diisi petugas ini.
 //  - Target Hari Ini = angka TETAP sama utk semua petugas (TARGET_HARIAN_KK
