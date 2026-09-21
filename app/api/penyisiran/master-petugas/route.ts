@@ -12,6 +12,18 @@
 //          lihat migrasi 20260918_master_petugas_kolom_dan_pengawas.sql).
 // PATCH -> ubah SATU petugas (email/alamat_kecamatan/alamat_nagari/
 //          alamat_detail/status_kepegawaian/pengawas_id).
+// POST  -> TAMBAH petugas baru langsung ke petugas_penyisiran_akun (nama +
+//          tanggal_lahir WAJIB, krn keduanya dipakai login personal --
+//          lihat app/api/penyisiran/penyisiran-login/route.ts). aktif
+//          otomatis true (default kolom). Sebelum endpoint ini ada, akun
+//          baru HANYA bisa ditambahkan manual lewat SQL langsung ke
+//          Supabase -- tombol "+ Tambah Petugas" di tab ini menggantikan
+//          proses manual tsb.
+//
+// Toggle aktif/nonaktif petugas SENGAJA TIDAK ditaruh di sini -- tab ini
+// memanggil LANGSUNG endpoint yang sudah ada,
+// app/api/penyisiran/petugas-toggle-aktif/route.ts (perlu PIN, & otomatis
+// menyamakan status di tabel tetangga_akun jg), drpd duplikat logikanya.
 //
 // Dipakai tab BARU "Master Petugas" -- akses DIKUNCI ke pengelola yg sama
 // dgn tab "Manajemen Target" (bolehAksesManajemenTarget), krn data ini
@@ -167,4 +179,71 @@ export async function PATCH(req: NextRequest) {
   const { error } = await supabase.from("petugas_penyisiran_akun").update(fields).eq("id", petugasId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
+}
+
+function teksOpsional(v: unknown): string | null {
+  return v === "" || v == null ? null : String(v).trim() || null;
+}
+
+export async function POST(req: NextRequest) {
+  const supabase = supabaseAdmin();
+  if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
+
+  const gate = await pastikanPengelola(req, supabase);
+  if (gate instanceof NextResponse) return gate;
+
+  const body = await req.json().catch(() => null);
+  const nama = typeof body?.nama === "string" ? body.nama.trim() : "";
+  const tanggalLahir = typeof body?.tanggal_lahir === "string" ? body.tanggal_lahir : "";
+
+  if (!nama) {
+    return NextResponse.json({ error: "Nama lengkap wajib diisi." }, { status: 400 });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalLahir)) {
+    // Wajib -- tanpa ini petugas tidak akan bisa login personal sama sekali
+    // (nama+tanggal lahir, lihat penyisiran-login/jorong-login/tetangga-login).
+    return NextResponse.json({ error: "Tanggal lahir wajib diisi." }, { status: 400 });
+  }
+
+  const statusInput = body?.status_kepegawaian;
+  let status_kepegawaian: string | null = null;
+  if (statusInput !== "" && statusInput != null) {
+    if (typeof statusInput === "string" && STATUS_VALID.has(statusInput)) {
+      status_kepegawaian = statusInput;
+    } else {
+      return NextResponse.json({ error: `Status kepegawaian tidak valid: ${statusInput}` }, { status: 400 });
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("petugas_penyisiran_akun")
+    .insert({
+      nama,
+      tanggal_lahir: tanggalLahir,
+      email: teksOpsional(body?.email),
+      no_hp: teksOpsional(body?.no_hp),
+      nip: teksOpsional(body?.nip),
+      alamat_kecamatan: teksOpsional(body?.alamat_kecamatan),
+      alamat_nagari: teksOpsional(body?.alamat_nagari),
+      alamat_detail: teksOpsional(body?.alamat_detail),
+      keterangan: teksOpsional(body?.keterangan),
+      status_kepegawaian,
+    })
+    .select("id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
+    .single();
+
+  if (error) {
+    // 23505 = unique_violation -- nama_norm (nama yg dinormalisasi) sudah
+    // terdaftar, KEMUNGKINAN org yg sama sudah ada (mis. dieja beda kapital/
+    // spasi) drpd benar2 org baru.
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: `Nama "${nama}" sudah terdaftar di daftar petugas. Periksa dulu apakah ini orang yang sama.` },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, petugas: data });
 }

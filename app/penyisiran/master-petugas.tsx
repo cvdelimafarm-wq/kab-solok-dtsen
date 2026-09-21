@@ -254,6 +254,15 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [cariNama, setCariNama] = useState("");
+  const [showTambah, setShowTambah] = useState(false);
+  // PIN BERSAMA utk tombol Aktifkan/Nonaktifkan semua baris -- endpoint yg
+  // dipanggil (petugas-toggle-aktif) MEWAJIBKAN PIN ini di server terlepas
+  // dari tab mana yg memanggilnya (lihat komentar di route itu), jadi UI di
+  // sini tetap harus memintanya walau akses tab ini sendiri sudah dikunci
+  // ke pengelola. Satu PIN dipakai utk SEMUA baris sekali diisi -- sama pola
+  // dgn "Kelola Petugas Penyisiran" di tab Monitoring Petugas Penyisiran.
+  const [pinAktif, setPinAktif] = useState("");
+  const [busyToggleId, setBusyToggleId] = useState<number | null>(null);
 
   const loadPetugas = useCallback(async () => {
     setLoading(true);
@@ -293,6 +302,46 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
         return next;
       })
     );
+  }
+
+  async function toggleAktif(petugasId: number, aktifBaru: boolean) {
+    if (!pinAktif) {
+      setErrMsg("Masukkan PIN dulu utk mengaktifkan/menonaktifkan akun.");
+      return;
+    }
+    setBusyToggleId(petugasId);
+    setErrMsg(null);
+    try {
+      await apiFetch("/api/penyisiran/petugas-toggle-aktif", token, {
+        method: "PATCH",
+        body: JSON.stringify({ petugas_id: petugasId, aktif: aktifBaru, pin: pinAktif }),
+      });
+      setPetugas((prev) => prev.map((p) => (p.id === petugasId ? { ...p, aktif: aktifBaru } : p)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        onSessionExpired();
+        return;
+      }
+      setErrMsg(msg);
+    } finally {
+      setBusyToggleId(null);
+    }
+  }
+
+  async function tambahPetugas(fields: Record<string, string | null>) {
+    const data = await apiFetch("/api/penyisiran/master-petugas", token, {
+      method: "POST",
+      body: JSON.stringify(fields),
+    });
+    if (data?.petugas) {
+      setPetugas((prev) =>
+        [...prev, { ...data.petugas, pengawas_nama: null } as PetugasMaster].sort((a, b) => a.nama.localeCompare(b.nama))
+      );
+    } else {
+      await loadPetugas();
+    }
+    setShowTambah(false);
   }
 
   // Daftar calon pengawas: sebaiknya cuma petugas berstatus "organik" (sesuai
@@ -363,8 +412,23 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
             >
               {loading ? "Memuat..." : "↻ Muat Ulang"}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowTambah((s) => !s)}
+              className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${
+                showTambah
+                  ? "border border-line text-ink/60 hover:border-navy-400"
+                  : "bg-navy-700 text-white hover:bg-navy-900"
+              }`}
+            >
+              {showTambah ? "✕ Batal" : "+ Tambah Petugas"}
+            </button>
           </div>
         </div>
+
+        {showTambah && (
+          <TambahPetugasForm onBatal={() => setShowTambah(false)} onSimpan={tambahPetugas} />
+        )}
 
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
           <p>
@@ -376,6 +440,21 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
               Reset semua filter
             </button>
           )}
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper/40 px-2.5 py-2">
+          <input
+            type="password"
+            inputMode="numeric"
+            value={pinAktif}
+            onChange={(e) => setPinAktif(e.target.value)}
+            placeholder="PIN utk Aktifkan/Nonaktifkan akun"
+            className="w-56 rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+          <p className="text-[10px] text-ink/40">
+            Isi PIN sekali di sini utk mengaktifkan tombol Aktifkan/Nonaktifkan pada tiap baris di kolom &ldquo;Status
+            Akun&rdquo; di bawah.
+          </p>
         </div>
 
         <div className="overflow-x-auto rounded-md border border-line">
@@ -409,7 +488,15 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
             </thead>
             <tbody>
               {tabel.rows.map((p) => (
-                <BarisMaster key={p.id} p={p} daftarCalonPengawas={daftarCalonPengawas} onSimpan={simpanSatu} />
+                <BarisMaster
+                  key={p.id}
+                  p={p}
+                  daftarCalonPengawas={daftarCalonPengawas}
+                  onSimpan={simpanSatu}
+                  pinAktif={pinAktif}
+                  busyToggleId={busyToggleId}
+                  onToggleAktif={toggleAktif}
+                />
               ))}
               {tabel.rows.length === 0 && !loading && (
                 <tr>
@@ -430,10 +517,16 @@ function BarisMaster({
   p,
   daftarCalonPengawas,
   onSimpan,
+  pinAktif,
+  busyToggleId,
+  onToggleAktif,
 }: {
   p: PetugasMaster;
   daftarCalonPengawas: PetugasMaster[];
   onSimpan: (id: number, fields: Record<string, string | number | null>) => Promise<void>;
+  pinAktif: string;
+  busyToggleId: number | null;
+  onToggleAktif: (id: number, aktifBaru: boolean) => void;
 }) {
   const [email, setEmail] = useState(p.email ?? "");
   const [noHp, setNoHp] = useState(p.no_hp ?? "");
@@ -481,15 +574,30 @@ function BarisMaster({
         {p.nama}
       </td>
       <td className="px-3 py-1.5">
-        <span
-          className={
-            p.aktif
-              ? "rounded-full border border-moss-100 bg-moss-100/40 px-1.5 py-0.5 text-[9px] font-medium text-moss-700"
-              : "rounded-full border border-line px-1.5 py-0.5 text-[9px] font-medium text-ink/40"
-          }
-        >
-          {p.aktif ? "Aktif" : "Nonaktif"}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className={
+              p.aktif
+                ? "rounded-full border border-moss-200 bg-moss-100/40 px-1.5 py-0.5 text-[9px] font-medium text-moss-700"
+                : "rounded-full border border-line px-1.5 py-0.5 text-[9px] font-medium text-ink/40"
+            }
+          >
+            {p.aktif ? "Aktif" : "Nonaktif"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onToggleAktif(p.id, !p.aktif)}
+            disabled={!pinAktif || busyToggleId === p.id}
+            title={!pinAktif ? "Isi PIN dulu di atas tabel" : undefined}
+            className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
+              p.aktif
+                ? "border border-rust-700 text-rust-700 hover:bg-rust-100/50"
+                : "bg-moss-500 text-white hover:bg-moss-600"
+            }`}
+          >
+            {busyToggleId === p.id ? "..." : p.aktif ? "Nonaktifkan" : "Aktifkan"}
+          </button>
+        </div>
       </td>
       <td className="px-3 py-1.5">
         <input
@@ -599,5 +707,198 @@ function BarisMaster({
         </div>
       </td>
     </tr>
+  );
+}
+
+// Form "+ Tambah Petugas" -- menggantikan proses manual INSERT SQL langsung
+// ke Supabase yg dipakai sblm endpoint POST /api/penyisiran/master-petugas
+// ada. Nama Lengkap & Tanggal Lahir WAJIB (dipakai login personal, lihat
+// komentar di route POST), field lain opsional & bisa dilengkapi belakangan
+// lewat kolom2 yg sudah ada di tabel (email/No.HP/alamat/status/pengawas).
+function TambahPetugasForm({
+  onBatal,
+  onSimpan,
+}: {
+  onBatal: () => void;
+  onSimpan: (fields: Record<string, string | null>) => Promise<void>;
+}) {
+  const [nama, setNama] = useState("");
+  const [tanggalLahir, setTanggalLahir] = useState("");
+  const [email, setEmail] = useState("");
+  const [noHp, setNoHp] = useState("");
+  const [nip, setNip] = useState("");
+  const [kecamatan, setKecamatan] = useState("");
+  const [nagari, setNagari] = useState("");
+  const [detail, setDetail] = useState("");
+  const [status, setStatus] = useState<StatusKepegawaian | "">("");
+  const [keterangan, setKeterangan] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!nama.trim()) {
+      setError("Nama lengkap wajib diisi.");
+      return;
+    }
+    if (!tanggalLahir) {
+      setError("Tanggal lahir wajib diisi (dipakai utk login personal petugas).");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSimpan({
+        nama: nama.trim(),
+        tanggal_lahir: tanggalLahir,
+        email: email.trim() === "" ? null : email.trim(),
+        no_hp: noHp.trim() === "" ? null : noHp.trim(),
+        nip: nip.trim() === "" ? null : nip.trim(),
+        alamat_kecamatan: kecamatan.trim() === "" ? null : kecamatan.trim(),
+        alamat_nagari: nagari.trim() === "" ? null : nagari.trim(),
+        alamat_detail: detail.trim() === "" ? null : detail.trim(),
+        status_kepegawaian: status === "" ? null : status,
+        keterangan: keterangan.trim() === "" ? null : keterangan.trim(),
+      });
+      // Sukses -- onSimpan (tambahPetugas di parent) yg menutup form ini
+      // (setShowTambah(false)), jadi tidak perlu reset state di sini.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mb-3 space-y-2 rounded-md border border-navy-200 bg-navy-50/30 p-3"
+    >
+      <p className="text-xs font-semibold text-navy-900">Tambah Petugas Baru</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Nama Lengkap *</label>
+          <input
+            type="text"
+            value={nama}
+            onChange={(e) => setNama(e.target.value)}
+            autoFocus
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Tanggal Lahir *</label>
+          <input
+            type="date"
+            value={tanggalLahir}
+            onChange={(e) => setTanggalLahir(e.target.value)}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Status Kepegawaian</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus((e.target.value || "") as StatusKepegawaian | "")}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          >
+            <option value="">-- Belum diisi --</option>
+            {(Object.keys(STATUS_LABEL) as StatusKepegawaian[]).map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="nama@bps.go.id"
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">No. HP</label>
+          <input
+            type="text"
+            inputMode="tel"
+            value={noHp}
+            onChange={(e) => setNoHp(e.target.value)}
+            placeholder="+62 8xx-xxxx-xxxx"
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">NIP / Sobat ID</label>
+          <input
+            type="text"
+            value={nip}
+            onChange={(e) => setNip(e.target.value)}
+            placeholder="NIP (organik) / No. registrasi Sobat (mitra)"
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Kecamatan</label>
+          <input
+            type="text"
+            value={kecamatan}
+            onChange={(e) => setKecamatan(e.target.value)}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Nagari</label>
+          <input
+            type="text"
+            value={nagari}
+            onChange={(e) => setNagari(e.target.value)}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Alamat Detail</label>
+          <input
+            type="text"
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            placeholder="Jorong/jalan/dll"
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Keterangan</label>
+          <input
+            type="text"
+            value={keterangan}
+            onChange={(e) => setKeterangan(e.target.value)}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-rust-700">⚠ {error}</p>}
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {saving ? "Menyimpan..." : "Simpan Petugas Baru"}
+        </button>
+        <button
+          type="button"
+          onClick={onBatal}
+          disabled={saving}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-navy-400"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
   );
 }

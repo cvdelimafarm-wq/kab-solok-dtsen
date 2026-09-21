@@ -21,9 +21,32 @@
 // ini tetap murni presentasi/PDF, tanpa bergantung Supabase).
 
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
+import sharp from "sharp";
 import { formatTanggalIndoDenganHari } from "../spjFormat";
 import { KEGIATAN_NAMA } from "../spjPejabat";
 import { SLOT_LABELS } from "../spjDokumentasi";
+
+// pdf-lib (embedJpg/embedPng di bawah) MENGABAIKAN tag EXIF "Orientation"
+// -- selalu menaruh piksel APA ADANYA. Kamera HP (terutama Android) sering
+// menyimpan foto dgn piksel dlm orientasi "mentah" sensor lalu menandai
+// tag EXIF spy galeri/browser memutar-balikkannya saat ditampilkan; hasilnya
+// foto tampil BENAR di galeri HP/preview browser tapi TERBALIK/miring di
+// PDF ini kalau tag itu tidak ditangani manual. sharp(...).rotate() TANPA
+// argumen membaca tag itu, MEMUTAR PIKSEL SUNGGUHAN sesuai arah yg benar,
+// lalu me-reset tag orientasinya -- setelah ini pdf-lib akan menyisipkan
+// piksel yg SUDAH tegak, tanpa perlu tahu apa-apa soal EXIF.
+async function perbaikiOrientasiFoto(bytes: Uint8Array, contentType: string): Promise<Uint8Array> {
+  try {
+    const img = sharp(Buffer.from(bytes)).rotate();
+    const keluar = contentType === "image/png" ? await img.png().toBuffer() : await img.jpeg({ quality: 90 }).toBuffer();
+    return new Uint8Array(keluar);
+  } catch {
+    // Gagal diproses (mis. bukan file gambar valid) -- pakai bytes ASLI
+    // apa adanya, biar tetap dicoba doc.embedJpg/embedPng di pemanggil
+    // (yg py fallback tersendiri kalau itu jg gagal) drpd PDF gagal total.
+    return bytes;
+  }
+}
 
 export interface DokumentasiFotoInput {
   slot: number;
@@ -261,7 +284,8 @@ export async function buatPdfDokumentasi(data: DokumentasiPdfData): Promise<Uint
     for (const item of kartuBaris) {
       let img: PDFImage | null;
       try {
-        img = item.contentType === "image/png" ? await doc.embedPng(item.bytes) : await doc.embedJpg(item.bytes);
+        const bytesTegak = await perbaikiOrientasiFoto(item.bytes, item.contentType);
+        img = item.contentType === "image/png" ? await doc.embedPng(bytesTegak) : await doc.embedJpg(bytesTegak);
       } catch {
         // Gagal embed (file korup/format tak terduga) -- lewati fotonya,
         // biarkan kartu & keterangannya tetap tampil kosong drpd seluruh
