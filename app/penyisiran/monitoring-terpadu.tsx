@@ -24,7 +24,7 @@
 //   5. Realisasi vs rencana Perencanaan Lapangan (Sub SLS yg direncanakan
 //      vs yg benar2 dikunjungi, + kuota OH Translok 280 hari).
 //   6. Kualitas & kewajaran data kunjungan Penyisiran Usaha (kelengkapan
-//      bukti DUTP/DTSEN/PNM + catatan pada kartu "Ditemukan", dan deteksi
+//      bukti DUTP/DTSEN/PNM + catatan pada kartu "Berhasil Didata", dan deteksi
 //      update beruntun sangat cepat/"bulk edit" yg patut dicek manual).
 //   7. Kelengkapan SPJ (Surat Tugas yg belum ada Visum-nya).
 //   8. Konflik alokasi wilayah PPL (1 ID Sub SLS dialokasikan ke >1 PPL --
@@ -424,7 +424,7 @@ function StatTile({ label, nilai, warna }: { label: string; nilai: number | stri
 //    tidak py Surat Tugas yg mencakup hari ini (bukan berarti "belum
 //    lengkap"), ✓/✗ kalau ada ST hari ini.
 //  - Akurasi Identifikasi = dari kartu ber-identifikasi "Ada usaha" yg
-//    statusnya berubah HARI INI, berapa % yg hasilnya PERSIS "Ditemukan"
+//    statusnya berubah HARI INI, berapa % yg hasilnya PERSIS "Berhasil Didata"
 //    (ketepatan prediksi Identifikasi vs hasil kunjungan riil) -- "-" kalau
 //    belum ada kartu spt itu hari ini.
 //
@@ -1448,9 +1448,9 @@ function KontenKualitas({
       <BannerKartu
         ikon="🔍"
         judul="6. Kualitas & Kewajaran Data Kunjungan Penyisiran Usaha"
-        subjudul="Kelengkapan bukti pada kartu “Ditemukan” + deteksi update beruntun sangat cepat (≥15x dlm 5 menit)"
+        subjudul="Kelengkapan bukti pada kartu “Berhasil Didata” + deteksi update beruntun sangat cepat (≥15x dlm 5 menit)"
       >
-        <StatPill ikon="🏠" label="Kartu Ditemukan" nilai={String(kualitas.total_ditemukan)} />
+        <StatPill ikon="🏠" label="Kartu Berhasil Didata" nilai={String(kualitas.total_ditemukan)} />
         <StatPill
           ikon="⚠"
           label="Tanpa Bukti"
@@ -1552,7 +1552,7 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
       { key: "kec_nama", label: "Kecamatan", getValue: (r: KualitasKunjungan["per_kecamatan"][number]) => r.kec_nama },
       {
         key: "total_ditemukan",
-        label: "Ditemukan",
+        label: "Berhasil Didata",
         getValue: (r: KualitasKunjungan["per_kecamatan"][number]) => r.total_ditemukan,
       },
       {

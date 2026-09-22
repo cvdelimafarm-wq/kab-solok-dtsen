@@ -13,7 +13,7 @@
 //  - Jumlah Dikunjungi: keluarga yg checklist-nya disimpan petugas ini (lwt
 //    dropdown "Nama Anda") di tab "Penyisiran Usaha", status kunjungan
 //    apa pun selain "Belum".
-//  - Jumlah Didata: subset dari Dikunjungi yg status-nya "Usaha Ditemukan".
+//  - Jumlah Didata: subset dari Dikunjungi yg status-nya "Usaha Berhasil Didata".
 //
 // Pakai token login personal BERSAMA yg SAMA dgn tab Penyisiran Usaha (role
 // "penyisiran_petugas", key localStorage yg SAMA -- diimpor lewat getToken()

@@ -1860,7 +1860,7 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
 // Per petugas AKTIF (tab Penyisiran Usaha): berapa Sub SLS yg sudah
 // ditag/dialokasikan (kolom "Jumlah Sub-SLS Ditag" bisa DIKLIK -> modal
 // rincian), jumlah KK di dalamnya, dan progres kunjungan
-// (Ditemukan/Sudah Dikunjungi vs Sisa Belum Dikunjungi). Dihitung lewat
+// (Berhasil Didata/Sudah Dikunjungi vs Sisa Belum Dikunjungi). Dihitung lewat
 // JOIN langsung ke penyisiran_usaha aktif memakai predikat wilayah yg
 // benar (lib/wilayahAlokasiPetugas.ts: kec+nagari+sls sama, dan
 // subsls_kode_list IS NULL [artinya "seluruh SLS"] ATAU subsls_kode =
@@ -2017,7 +2017,7 @@ function KontenRekapPpl({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
         <CatatanKartu>
-          <strong>Catatan:</strong> Progress = (Ditemukan / Jumlah KK) &times; 100
+          <strong>Catatan:</strong> Progress = (Berhasil Didata / Jumlah KK) &times; 100
         </CatatanKartu>
         <LegendaProgresStandar />
       </div>
@@ -2064,7 +2064,7 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
       { key: "jumlah_kk", label: "Jumlah KK", getValue: (r: PemilihanSubslsRow) => r.jumlah_kk },
       {
         key: "jumlah_ditemukan",
-        label: "Ditemukan (Sudah Dikunjungi)",
+        label: "Berhasil Didata (Sudah Dikunjungi)",
         getValue: (r: PemilihanSubslsRow) => r.jumlah_ditemukan,
       },
       { key: "jumlah_sisa", label: "Sisa Belum Dikunjungi", getValue: (r: PemilihanSubslsRow) => r.jumlah_sisa },
@@ -2241,7 +2241,7 @@ function ModalDetailPemilihanSubsls({
                         <th className="px-2 py-1.5 text-left">SLS</th>
                         <th className="px-2 py-1.5 text-left">Sub SLS</th>
                         <th className="px-2 py-1.5 text-right">Jumlah KK</th>
-                        <th className="px-2 py-1.5 text-right">Ditemukan</th>
+                        <th className="px-2 py-1.5 text-right">Berhasil Didata</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">

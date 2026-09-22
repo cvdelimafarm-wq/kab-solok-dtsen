@@ -23,10 +23,11 @@ function csvEscape(v: unknown): string {
 
 const STATUS_LABEL: Record<string, string> = {
   belum: "Belum Dikunjungi",
-  ditemukan: "Usaha Ditemukan",
+  ditemukan: "Usaha Berhasil Didata",
   tidak_ditemukan: "Usaha Tidak Ditemukan",
   tidak_bisa: "Tidak Bisa Ditemui / Pindah",
   sudah_didata_se2026: "Sudah Didata di SE2026",
+  tidak_ada_usaha: "Tidak Ada Usaha",
 };
 
 const IDENTIFIKASI_LABEL: Record<string, string> = {

@@ -1398,10 +1398,11 @@ function LaporanStCard({
 // menampilkan rekapStatusKunjungan dari preview Laporan.
 const LABEL_STATUS_KUNJUNGAN: Record<string, string> = {
   belum: "Belum",
-  ditemukan: "Ditemukan",
+  ditemukan: "Berhasil Didata",
   tidak_ditemukan: "Tidak Ditemukan",
   tidak_bisa: "Tidak Bisa Diwawancara",
   sudah_didata_se2026: "Sudah Didata SE2026",
+  tidak_ada_usaha: "Tidak Ada Usaha",
 };
 
 interface RekapLaporanPreview {

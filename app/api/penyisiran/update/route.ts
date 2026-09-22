@@ -70,6 +70,9 @@ export const dynamic = "force-dynamic";
 // sini (data lama & baris yg diedit ulang tanpa mengubah status itu harus
 // tetap lolos validasi) -- cuma sudah tidak lagi DITAWARKAN di dropdown
 // edit FE (lihat STATUS_PILIHAN di app/seruti/penyisiran-usaha.tsx).
+// "tidak_ada_usaha" -- status BARU (permintaan user): lokasi/keluarga
+// SUDAH didatangi, tapi memang tidak ada usaha di sana -- lihat migrasi
+// 20260922k_tambah_status_tidak_ada_usaha.sql.
 const STATUS_VALID = new Set([
   "belum",
   "ditemukan",
@@ -77,6 +80,7 @@ const STATUS_VALID = new Set([
   "tidak_bisa",
   "sudah_didata_se2026",
   "jadwalkan_besok",
+  "tidak_ada_usaha",
 ]);
 
 // Tanggal BESOK menurut zona waktu Asia/Jakarta (WIB), format "YYYY-MM-DD"
@@ -168,7 +172,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Kartu ini sudah terkunci (ditandai \"Usaha Ditemukan\" pada hari sebelumnya). Aktifkan tombol \"🔒 Edit Semua Info Lapangan\" kalau memang perlu dikoreksi.",
+            "Kartu ini sudah terkunci (ditandai \"Usaha Berhasil Didata\" pada hari sebelumnya). Aktifkan tombol \"🔒 Edit Semua Info Lapangan\" kalau memang perlu dikoreksi.",
         },
         { status: 423 }
       );

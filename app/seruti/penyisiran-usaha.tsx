@@ -126,13 +126,21 @@ const KANTOR_LNG = 100.61102093270257;
 // (/api/penyisiran/update) yg mengisi tanggal_rencana_kunjungan otomatis
 // jadi BESOK (WIB) tiap kali status ini disimpan -- FE di sini tidak perlu
 // kirim tanggal apa pun sendiri.
+// "tidak_ada_usaha" -- status BARU (permintaan user: "usaha ditemukan
+// usaha terlewat berhasil didata, tambahkan pilihan 1 lagi tidak ada
+// usaha") -- dipakai saat lokasi/keluarganya SUDAH didatangi, tapi
+// ternyata memang TIDAK ADA usaha di sana (rumah tangga murni). BEDA dari
+// "tidak_ditemukan" (lokasi/keluarganya sendiri yg tidak ketemu) & dari
+// "sudah_didata_se2026" (usaha ADA tapi sudah tercatat SE2026). Lihat
+// migrasi 20260922k_tambah_status_tidak_ada_usaha.sql.
 type StatusKunjungan =
   | "belum"
   | "ditemukan"
   | "tidak_ditemukan"
   | "tidak_bisa"
   | "sudah_didata_se2026"
-  | "jadwalkan_besok";
+  | "jadwalkan_besok"
+  | "tidak_ada_usaha";
 // "tidak_ditemukan" di sini -- opsi tambahan dari identifikasi-jorong.tsx/
 // identifikasi-tetangga.tsx (petugas ke lokasi tp alamat tdk ketemu),
 // diperlakukan server sbg setara "ada" (sudah didata di SE2026) -- lihat
@@ -143,11 +151,15 @@ type NilaiIdentifikasi = "belum" | "ada" | "tidak_ada" | "ragu" | "tidak_ditemuk
 
 const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: string }> = {
   belum: { label: "Belum Dikunjungi", badge: "bg-line text-ink/70", dot: "#6b7280" },
-  ditemukan: { label: "Usaha Ditemukan", badge: "bg-moss-100 text-moss-700", dot: "#0ca30c" },
+  ditemukan: { label: "Usaha Berhasil Didata", badge: "bg-moss-100 text-moss-700", dot: "#0ca30c" },
   tidak_ditemukan: { label: "Usaha Tidak Ditemukan", badge: "bg-[#FCEFD1] text-[#8A6A12]", dot: "#fab219" },
   tidak_bisa: { label: "Tidak Bisa Ditemui / Pindah", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
   sudah_didata_se2026: { label: "Sudah Didata di SE2026", badge: "bg-rust-100 text-rust-700", dot: "#d03b3b" },
   jadwalkan_besok: { label: "Dijadwalkan Besok", badge: "bg-[#DCE6FA] text-[#2545A0]", dot: "#2563eb" },
+  // Warna ungu -- sengaja beda dari abu/hijau/kuning/merah/biru yg sudah
+  // dipakai status lain, supaya "Tidak Ada Usaha" langsung kelihatan beda
+  // sekilas (bukan varian dari status manapun yg sudah ada).
+  tidak_ada_usaha: { label: "Tidak Ada Usaha", badge: "bg-[#EDE9FE] text-[#5B21B6]", dot: "#7c3aed" },
 };
 
 // Dropdown EDIT (status per-kartu, RowCard) & FILTER (toolbar) -- atas
@@ -160,7 +172,13 @@ const STATUS_META: Record<StatusKunjungan, { label: string; badge: string; dot: 
 // TETAP mengizinkannya (lihat migrasi 20260920_penyisiran_jadwalkan_besok.sql)
 // supaya baris lama itu tidak gagal tersimpan lagi saat diedit ulang
 // (mis. cuma ganti catatan/Tandai Pasti tanpa mengubah statusnya).
-const STATUS_PILIHAN: StatusKunjungan[] = ["belum", "ditemukan", "sudah_didata_se2026", "jadwalkan_besok"];
+const STATUS_PILIHAN: StatusKunjungan[] = [
+  "belum",
+  "ditemukan",
+  "tidak_ada_usaha",
+  "sudah_didata_se2026",
+  "jadwalkan_besok",
+];
 
 // Warna LATAR BELAKANG KARTU (bukan cuma badge/dot kecil spt STATUS_META
 // di atas) -- atas permintaan user, supaya status kunjungan langsung
@@ -180,6 +198,9 @@ const KARTU_BG: Record<StatusKunjungan, string> = {
   // biru muda -- beda jelas dari hijau/kuning/merah/putih yg sudah ada,
   // supaya kartu yg dijadwalkan besok langsung kelihatan sekilas.
   jadwalkan_besok: "bg-[#E4ECFB]",
+  // ungu muda -- senada dgn STATUS_META.tidak_ada_usaha (dot #7c3aed), beda
+  // dari semua warna kartu status lain yg sudah ada.
+  tidak_ada_usaha: "bg-[#F3F0FC]",
 };
 
 const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: string }> = {
@@ -367,6 +388,11 @@ interface Summary {
   tidak_ditemukan: number;
   tidak_bisa: number;
   sudah_didata_se2026: number;
+  // Jumlah KK berstatus "tidak_ada_usaha" (permintaan user: opsi ke-5 di
+  // STATUS_PILIHAN) -- lokasi/keluarganya SUDAH didatangi tapi memang tidak
+  // ada usaha di sana. Lihat migrasi
+  // 20260922k_tambah_status_tidak_ada_usaha.sql.
+  tidak_ada_usaha: number;
   // Jumlah KK berstatus "jadwalkan_besok" dgn tanggal_rencana_kunjungan =
   // BESOK (WIB) -- dasar kartu StatTile "📅 Dijadwalkan Besok" & kuota
   // warning bar (lihat RencanaBesokWarningBar di app/penyisiran/page.tsx).
@@ -443,7 +469,7 @@ interface Row {
   tag_pml_catatan: string | null;
 }
 
-// Kartu berstatus "Usaha Ditemukan" TERKUNCI (read-only, dropdown Status &
+// Kartu berstatus "Usaha Berhasil Didata" TERKUNCI (read-only, dropdown Status &
 // input lain dinonaktifkan) begitu tanggal ditemukan_at BUKAN LAGI hari ini
 // (WIB) -- mencegah data yg sudah final "hari itu" keubah tanpa sengaja
 // keesokan harinya. "🔓 Edit Semua" (editAllMode, tombol melayang bawah
@@ -1535,12 +1561,12 @@ function PenyisiranPanel({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <StatTile label="Total Keluarga" value={summary.total} color="#41547E" />
           <StatTile label={STATUS_META.belum.label} value={summary.belum} color={STATUS_META.belum.dot} />
-          {/* "Usaha Ditemukan" diganti scoped HARI INI (atas permintaan) --
+          {/* "Usaha Berhasil Didata" diganti scoped HARI INI (atas permintaan) --
               summary.ditemukan (akumulatif) TIDAK dipakai lagi di sini,
               lihat ditemukan_hari_ini/ditemukan_at di migrasi
               20260920_penyisiran_jadwalkan_besok.sql. */}
           <StatTile
-            label="Usaha Ditemukan Hari Ini"
+            label="Usaha Berhasil Didata Hari Ini"
             value={summary.ditemukan_hari_ini}
             color={STATUS_META.ditemukan.dot}
           />
@@ -1558,6 +1584,15 @@ function PenyisiranPanel({
             label={STATUS_META.sudah_didata_se2026.label}
             value={summary.sudah_didata_se2026}
             color={STATUS_META.sudah_didata_se2026.dot}
+          />
+          {/* Kartu "Tidak Ada Usaha" -- status baru (permintaan user),
+              SENGAJA tetap tampil di HP (bukan cuma layar lebar) karena ini
+              status yg aktif dipakai/dipilih petugas, beda dari "Tidak Bisa
+              Ditemui/Pindah" yg sudah tidak bisa dipilih lagi. */}
+          <StatTile
+            label={STATUS_META.tidak_ada_usaha.label}
+            value={summary.tidak_ada_usaha}
+            color={STATUS_META.tidak_ada_usaha.dot}
           />
           {/* Kartu "Tidak Bisa Ditemui / Pindah" SENGAJA disembunyikan di
               tampilan HP (grid 2 kolom, layar sempit) atas permintaan --
@@ -3143,7 +3178,7 @@ function RowCard({
           )}
           {!isPml && terkunci && (
             <p className="mb-1.5 text-[10px] font-medium text-rust-700">
-              🔒 Terkunci -- sudah ditandai &quot;Usaha Ditemukan&quot; pada hari sebelumnya. Aktifkan &quot;🔒 Edit
+              🔒 Terkunci -- sudah ditandai &quot;Usaha Berhasil Didata&quot; pada hari sebelumnya. Aktifkan &quot;🔒 Edit
               Semua Info Lapangan&quot; (pojok kanan bawah) kalau memang perlu dikoreksi.
             </p>
           )}
