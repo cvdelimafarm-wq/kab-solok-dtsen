@@ -824,6 +824,10 @@ function PenyisiranPanel({
   const [markers, setMarkers] = useState<MarkerRow[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [editAllMode, setEditAllMode] = useState(false);
+  // "➕ Tambah Target KK Baru" (permintaan user) -- modal terpisah, lihat
+  // ModalTambahManual di atas & tombol melayang di bawah (sebelah "🔒 Edit
+  // Semua Info Lapangan").
+  const [showTambahManual, setShowTambahManual] = useState(false);
   const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
   const [lokasiBusy, setLokasiBusy] = useState(false);
   // Modal daftar "Dijadwalkan Besok" -- dibuka dari klik StatTile terkait
@@ -1772,22 +1776,49 @@ function PenyisiranPanel({
       {peringatanLokasiLive}
       {peringatanLokasiLive}
 
-      {/* Tombol "Edit Semua" MELAYANG di pojok bawah halaman -- supaya
+      {/* Tombol "Edit Semua" & "Tambah Target KK Baru" MELAYANG di pojok
+          bawah halaman, DITUMPUK VERTIKAL dlm 1 wrapper (gap otomatis,
+          menghindari overlap horizontal di layar sempit) -- supaya
           selalu terjangkau tanpa perlu gulung ke atas dulu, terutama saat
           daftar keluarga panjang. Digeser ke bottom-16 (dari bottom-5) --
           FloatBarRencanaBesok BARU (app/penyisiran/page.tsx) melebar penuh
-          di dasar layar jam 17:00 ke atas, supaya tombol ini tidak
+          di dasar layar jam 17:00 ke atas, supaya tombol2 ini tidak
           ketiban/ketutup bar itu. */}
-      <button
-        onClick={() => setEditAllMode((v) => !v)}
-        className={`fixed bottom-16 right-5 z-40 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
-          editAllMode
-            ? "border-navy-700 bg-navy-700 text-white"
-            : "border-line bg-white text-navy-700 hover:border-navy-400"
-        }`}
-      >
-        {editAllMode ? "🔓 Edit Semua Aktif" : "🔒 Edit Semua Info Lapangan"}
-      </button>
+      <div className="fixed bottom-16 right-5 z-40 flex flex-col items-end gap-2">
+        <button
+          onClick={() => setShowTambahManual(true)}
+          className="rounded-full border border-line bg-white px-4 py-2.5 text-xs font-semibold text-navy-700 shadow-lg transition hover:border-navy-400"
+        >
+          ➕ Tambah Target KK Baru
+        </button>
+        <button
+          onClick={() => setEditAllMode((v) => !v)}
+          className={`rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
+            editAllMode
+              ? "border-navy-700 bg-navy-700 text-white"
+              : "border-line bg-white text-navy-700 hover:border-navy-400"
+          }`}
+        >
+          {editAllMode ? "🔓 Edit Semua Aktif" : "🔒 Edit Semua Info Lapangan"}
+        </button>
+      </div>
+
+      {showTambahManual && (
+        <ModalTambahManual
+          token={token}
+          petugasId={petugasId}
+          petugasNama={nama}
+          kecamatanOptions={summary?.kecamatan ?? []}
+          onClose={() => setShowTambahManual(false)}
+          onSessionExpired={onSessionExpired}
+          onCreated={() => {
+            setShowTambahManual(false);
+            loadSummary();
+            loadList();
+            loadMarkers();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2170,6 +2201,236 @@ export function TabelRencanaBesokRow({ row }: { row: RencanaBesokRow }) {
       </td>
       <td className="px-2 py-1.5 text-ink/70">{row.idsubsls || "-"}</td>
     </tr>
+  );
+}
+
+// ---------- "➕ Tambah Target KK Baru" (permintaan user) ----------
+//
+// Modal SEDERHANA (permintaan user "jangan ribet") -- HANYA Nama KRT
+// (wajib), lalu cascading Kecamatan -> Nagari -> Sub SLS (wajib, dropdown
+// PERSIS meniru pola filter bar di PenyisiranPanel di atas: pilih
+// Kecamatan dulu, baru Nagari terbuka, baru Sub SLS terbuka -- lihat 2
+// useEffect di bawah yg identik pola-nya dgn effect nagariOptions/
+// subslsOptions milik filter bar), & Alamat (opsional, satu baris teks
+// bebas). Field lain (GPS, bukti DUTP/DTSEN/PNM, dst) SENGAJA TIDAK ada di
+// sini -- begitu baris ini tersimpan & muncul di daftar, field itu bisa
+// diisi lewat kartu yg SUDAH ADA (kartu ini tidak beda perlakuan dgn
+// baris hasil upload biasa, cuma ditandai ditambah_manual=true di server,
+// lihat komentar di app/api/penyisiran/tambah-manual/route.ts).
+//
+// SENGAJA daftar Kecamatan/Nagari/Sub SLS di modal ini TIDAK diprefill dari
+// filter bar yg sedang aktif di baliknya (mulai kosong tiap dibuka) --
+// menghindari kerumitan "harus disamakan tapi juga tetap bisa diubah
+// bebas", & user cuma minta modal ini "sederhana". kecamatanOptions
+// diteruskan dari `summary.kecamatan` milik PenyisiranPanel (SAMA data yg
+// dipakai filter bar, sudah otomatis terbatas ke wilayah alokasi kalau
+// sesi ini "penyisiran_petugas") -- supaya tidak perlu fetch ganda.
+function ModalTambahManual({
+  token,
+  petugasId,
+  petugasNama,
+  kecamatanOptions,
+  onClose,
+  onSessionExpired,
+  onCreated,
+}: {
+  token: string;
+  petugasId: number | null;
+  petugasNama: string | null;
+  kecamatanOptions: KecOption[];
+  onClose: () => void;
+  onSessionExpired: () => void;
+  onCreated: () => void;
+}) {
+  const [mKec, setMKec] = useState("");
+  const [mNagari, setMNagari] = useState("");
+  const [mSubsls, setMSubsls] = useState(""); // idsubsls
+  const [nagariOptions, setNagariOptions] = useState<KecOption[]>([]);
+  const [subslsOptions, setSubslsOptions] = useState<SubslsOption[]>([]);
+  const [namaKk, setNamaKk] = useState("");
+  const [alamat, setAlamat] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  function tangkapErrorSesi(e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+      clearToken();
+      onSessionExpired();
+      return;
+    }
+    setErrMsg(msg);
+  }
+
+  // Cascading Nagari -- pola identik effect filterNagari di PenyisiranPanel.
+  useEffect(() => {
+    setMNagari("");
+    setMSubsls("");
+    if (!mKec) {
+      setNagariOptions([]);
+      return;
+    }
+    apiFetch(`/api/penyisiran/nagari?kec=${encodeURIComponent(mKec)}`, token)
+      .then(setNagariOptions)
+      .catch(tangkapErrorSesi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mKec, token]);
+
+  // Cascading Sub SLS -- pola identik effect filterSubsls di PenyisiranPanel.
+  useEffect(() => {
+    setMSubsls("");
+    if (!mKec || !mNagari) {
+      setSubslsOptions([]);
+      return;
+    }
+    apiFetch(`/api/penyisiran/subsls?kec=${encodeURIComponent(mKec)}&nagari=${encodeURIComponent(mNagari)}`, token)
+      .then(setSubslsOptions)
+      .catch(tangkapErrorSesi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mKec, mNagari, token]);
+
+  const bisaSimpan = namaKk.trim().length > 0 && Boolean(mSubsls) && !saving;
+
+  async function handleSimpan() {
+    if (!bisaSimpan) return;
+    setSaving(true);
+    setErrMsg(null);
+    try {
+      await apiFetch("/api/penyisiran/tambah-manual", token, {
+        method: "POST",
+        body: JSON.stringify({
+          nama_kk: namaKk.trim(),
+          idsubsls: mSubsls,
+          alamat: alamat.trim() || null,
+          petugas_id: petugasId,
+          petugas_nama: petugasNama,
+        }),
+      });
+      onCreated();
+    } catch (e) {
+      tangkapErrorSesi(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-lg bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-navy-900">➕ Tambah Target KK Baru</p>
+            <p className="text-[11px] text-ink/50">Utk keluarga yg ditemukan saat menyisir, belum ada di daftar.</p>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 text-ink/40 hover:text-navy-700">
+            ✕
+          </button>
+        </div>
+
+        {errMsg && (
+          <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+        )}
+
+        <div className="space-y-2.5">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-ink/60">Nama KRT (Kepala Rumah Tangga) *</span>
+            <input
+              type="text"
+              value={namaKk}
+              onChange={(e) => setNamaKk(e.target.value)}
+              placeholder="Nama kepala rumah tangga"
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-ink/60">Kecamatan *</span>
+            <select
+              value={mKec}
+              onChange={(e) => setMKec(e.target.value)}
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm"
+            >
+              <option value="">Pilih Kecamatan...</option>
+              {kecamatanOptions.map((k) => (
+                <option key={k.kode} value={k.kode}>
+                  {k.nama}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-ink/60">Nagari *</span>
+            <select
+              value={mNagari}
+              onChange={(e) => setMNagari(e.target.value)}
+              disabled={!mKec}
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm disabled:opacity-50"
+            >
+              <option value="">{mKec ? "Pilih Nagari..." : "Pilih Kecamatan dulu"}</option>
+              {nagariOptions.map((n) => (
+                <option key={n.kode} value={n.kode}>
+                  {n.nama}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-ink/60">SLS / Sub SLS *</span>
+            <select
+              value={mSubsls}
+              onChange={(e) => setMSubsls(e.target.value)}
+              disabled={!mNagari}
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm disabled:opacity-50"
+            >
+              <option value="">{mNagari ? "Pilih SLS / Sub SLS..." : "Pilih Nagari dulu"}</option>
+              {subslsOptions.map((s) => (
+                <option key={s.idsubsls} value={s.idsubsls}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-medium text-ink/60">Alamat (opsional)</span>
+            <input
+              type="text"
+              value={alamat}
+              onChange={(e) => setAlamat(e.target.value)}
+              placeholder="Alamat singkat (boleh dikosongkan)"
+              className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-navy-400"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={handleSimpan}
+            disabled={!bisaSimpan}
+            className="rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] text-ink/40">
+          Setelah tersimpan, keluarga ini langsung muncul di daftar &amp; bisa didata spt biasa (status kunjungan,
+          catatan, dst).
+        </p>
+      </div>
+    </div>
   );
 }
 

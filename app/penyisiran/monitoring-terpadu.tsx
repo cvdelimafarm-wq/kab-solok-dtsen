@@ -72,6 +72,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getToken, clearToken } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
+import {
+  progresMeta,
+  BarProgres,
+  StatPill,
+  LegendaTitik,
+  LegendaProgresStandar,
+  BannerKartu,
+  CatatanKartu,
+  useSalinGambar,
+} from "./_shared/kartu-monitoring";
 
 // ---------- Bentuk data dari RPC ----------
 
@@ -356,50 +366,20 @@ function MonitoringTerpaduPanel({ token, onSessionExpired }: { token: string; on
   );
 }
 
-// ---------- Bungkus seksi + stat tile (dipakai berulang) ----------
-
-function Seksi({
-  nomor,
-  judul,
-  keterangan,
-  children,
-}: {
-  nomor: number;
-  judul: string;
-  keterangan: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-lg border border-line bg-white p-3">
-      <div className="mb-2">
-        <h2 className="text-sm font-bold text-navy-900">
-          {nomor}. {judul}
-        </h2>
-        <p className="mt-0.5 text-[11px] text-ink/50">{keterangan}</p>
-      </div>
-      {children}
-    </section>
-  );
-}
+// ---------- Stat tile (dipakai berulang di dalam banner/isi kartu) ----------
+//
+// `Seksi` (pembungkus lama "N. Judul" polos) & `HintFilter` (teks bantuan
+// sort/filter polos) SUDAH TIDAK DIPAKAI lagi -- semua 9 kartu di bawah ini
+// sudah dirombak pakai BannerKartu + toolbar salin-gambar sendiri (lihat
+// komentar "desain ulang" di tiap seksi), jadi dihapus supaya tidak jadi
+// dead code. `StatTile` TETAP dipakai (grid angka besar di dalam beberapa
+// kartu, mis. Progres vs Tenggat & Konsistensi Identifikasi).
 
 function StatTile({ label, nilai, warna }: { label: string; nilai: number | string; warna: string }) {
   return (
     <div className="text-center sm:text-left">
       <div className={`text-lg font-bold leading-none sm:text-xl ${warna}`}>{nilai}</div>
       <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">{label}</div>
-    </div>
-  );
-}
-
-function HintFilter({ adaFilterAktif, onReset }: { adaFilterAktif: boolean; onReset: () => void }) {
-  return (
-    <div className="mb-1 flex items-center justify-between text-[10px] text-ink/40">
-      <span>Klik nama kolom utk urutkan, klik ▾ utk filter.</span>
-      {adaFilterAktif && (
-        <button type="button" onClick={onReset} className="font-medium text-navy-700 hover:underline">
-          Reset semua filter
-        </button>
-      )}
     </div>
   );
 }
@@ -598,47 +578,47 @@ function TanggalNav({
 
 function TabelKinerjaHead() {
   return (
-    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+    <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
       <tr>
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-left align-bottom">
-          Nama PPL
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-left align-bottom">
+          👤 Nama PPL
         </th>
         {/* Kolom "Nama PML" DIHAPUS dari sini (permintaan user) -- kartu ini
             sekarang KHUSUS PPL saja, rekap per PML dipindah ke kartu #2
             terpisah (lihat SeksiMonitoringPml di bawah). */}
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-right align-bottom">
           Berhasil Didata Hari Ini
         </th>
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-right align-bottom">
           Target Hari Ini
         </th>
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-right align-bottom">
           Usaha Dikunjungi
         </th>
-        <th colSpan={2} className="border-b border-line/60 px-2 py-1 text-center">
+        <th colSpan={2} className="border-b border-white/20 px-2 py-1 text-center">
           Penyelesaian SPJ
         </th>
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-right align-bottom">
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-right align-bottom">
           Akurasi Identifikasi
         </th>
         {/* Kolom BARU paling kanan (permintaan user) -- lihat komentar
             rencana_besok_terkirim di KinerjaPplRow di atas. */}
-        <th rowSpan={2} className="border-b border-line px-2 py-1.5 text-center align-bottom">
+        <th rowSpan={2} className="border-b border-white/20 px-2 py-1.5 text-center align-bottom">
           Kirim Rencana Besok
         </th>
       </tr>
       <tr>
-        <th className="border-b border-line px-2 py-1 text-center">Laporan</th>
-        <th className="border-b border-line px-2 py-1 text-center">Dokumentasi</th>
+        <th className="border-b border-white/20 px-2 py-1 text-center">Laporan</th>
+        <th className="border-b border-white/20 px-2 py-1 text-center">Dokumentasi</th>
       </tr>
     </thead>
   );
 }
 
-function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: number }) {
+function TabelKinerjaRow({ r, targetHarian, genap }: { r: KinerjaPplRow; targetHarian: number; genap: boolean }) {
   const pct = pctAkurasiKinerja(r);
   return (
-    <tr>
+    <tr className={genap ? "bg-[#F3F8FE]" : "bg-white"}>
       <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
       <td
         className={`px-2 py-1.5 text-right font-semibold ${
@@ -663,6 +643,48 @@ function TabelKinerjaRow({ r, targetHarian }: { r: KinerjaPplRow; targetHarian: 
   );
 }
 
+// Isi kartu yang BISA DIBAGIKAN (banner+tabel) -- dipakai 2x (on-screen &
+// klon tersembunyi lebar tetap utk "📋 Salin sebagai Gambar"), pola sama
+// dgn KontenRekapPpl di perencanaan-lapangan.tsx.
+function KontenKinerjaPpl({
+  rowsSorted,
+  targetHarian,
+  tanggal,
+}: {
+  rowsSorted: KinerjaPplRow[];
+  targetHarian: number;
+  tanggal: string;
+}) {
+  const rataDidata =
+    rowsSorted.length > 0
+      ? Math.round((rowsSorted.reduce((a, r) => a + r.ditemukan_hari_ini, 0) / rowsSorted.length) * 10) / 10
+      : 0;
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="📅"
+        judul="1. Monitoring Penyisiran Sensus Ekonomi 2026"
+        subjudul={`Kinerja tiap PPL per ${formatTanggalNav(tanggal)} (bukan akumulatif)`}
+      >
+        <StatPill ikon="📅" label="Tanggal" nilai={formatTanggalNav(tanggal)} />
+        <StatPill ikon="👥" label="Jumlah PPL" nilai={String(rowsSorted.length)} />
+        <StatPill ikon="🎯" label="Target/Hari" nilai={String(targetHarian)} />
+        <StatPill ikon="📈" label="Rata2 Didata" nilai={String(rataDidata)} />
+      </BannerKartu>
+      <div className="overflow-x-auto p-4">
+        <table className="w-full min-w-[900px] text-xs">
+          <TabelKinerjaHead />
+          <tbody className="divide-y divide-line">
+            {rowsSorted.map((r, i) => (
+              <TabelKinerjaRow key={r.petugas_id} r={r} targetHarian={targetHarian} genap={i % 2 === 1} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [tanggal, setTanggal] = useState(tanggalHariIniLokal());
   const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
@@ -670,8 +692,8 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
   const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
   const gambarRef = useRef<HTMLDivElement | null>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("monitoring-kinerja-ppl-hari-ini.png");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -706,49 +728,16 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
 
   const rowsSorted = useMemo(() => [...baris].sort((a, b) => a.nama.localeCompare(b.nama, "id")), [baris]);
 
-  async function salinSebagaiGambar() {
-    if (!gambarRef.current) return;
-    setCopyStatus("copying");
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setCopyStatus("error");
-          return;
-        }
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-          setCopyStatus("done");
-          setTimeout(() => setCopyStatus("idle"), 2500);
-        } catch {
-          // Fallback: unduh langsung kalau clipboard image tidak didukung browser.
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "monitoring-kinerja-ppl-hari-ini.png";
-          a.click();
-          URL.revokeObjectURL(url);
-          setCopyStatus("done");
-          setTimeout(() => setCopyStatus("idle"), 2500);
-        }
-      }, "image/png");
-    } catch {
-      setCopyStatus("error");
-    }
-  }
-
   return (
-    <Seksi
-      nomor={1}
-      judul="Monitoring Penyisiran Sensus Ekonomi 2026"
-      keterangan={`Kinerja tiap PPL pada tanggal yang dipilih di bawah (bukan akumulatif sejak awal): berhasil didata, usaha dikunjungi, penyelesaian SPJ, & akurasi identifikasi dibanding hasil lapangan.${
-        waktuMuat ? ` Dimuat pukul ${waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : ""
-      }`}
-    >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line p-2">
         <TanggalNav tanggal={tanggal} onGeser={geserTanggal} onPilih={pilihTanggal} />
         <div className="flex flex-wrap items-center gap-2">
+          {waktuMuat && (
+            <span className="text-[10px] text-ink/40">
+              Dimuat {waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
           <button
             type="button"
             onClick={load}
@@ -759,66 +748,34 @@ function SeksiKinerjaPplHariIni({ token, onSessionExpired }: { token: string; on
           </button>
           <button
             type="button"
-            onClick={salinSebagaiGambar}
+            onClick={() => salin(gambarRef.current)}
             disabled={copyStatus === "copying" || rowsSorted.length === 0}
             className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
           >
-            {copyStatus === "copying"
-              ? "Menyalin..."
-              : copyStatus === "done"
-              ? "✓ Tersalin -- tempel ke WA"
-              : copyStatus === "error"
-              ? "Gagal, coba lagi"
-              : "📋 Salin Monitoring (utk WA)"}
+            {labelTombol("📋 Salin sebagai Gambar")}
           </button>
         </div>
       </div>
 
       {errMsg && (
-        <p className="mb-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+        <p className="m-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
       )}
 
       {!loading && rowsSorted.length === 0 && !errMsg && (
-        <p className="rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
+        <p className="m-2 rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
           Belum ada petugas penyisiran aktif.
         </p>
       )}
 
-      {rowsSorted.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[900px] border-collapse text-xs">
-            <TabelKinerjaHead />
-            <tbody className="divide-y divide-line">
-              {rowsSorted.map((r) => (
-                <TabelKinerjaRow key={r.petugas_id} r={r} targetHarian={targetHarian} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {rowsSorted.length > 0 && <KontenKinerjaPpl rowsSorted={rowsSorted} targetHarian={targetHarian} tanggal={tanggal} />}
 
-      {/* Klon TERSEMBUNYI off-screen lebar tetap utk html2canvas (pola sama
-          persis dgn ModalRencanaBesok di app/seruti/penyisiran-usaha.tsx) --
-          html2canvas butuh elemen lebar KONSISTEN, bukan mengikuti lebar
-          layar yg responsif, + judul/subjudul diulang di sini krn screenshot
-          cuma menangkap isi div ini saja (bukan heading "1. ..." di luar).
-          Lebar ditambah 820->940 (permintaan user, kolom baru "Kirim
-          Rencana Besok"). */}
-      <div style={{ position: "fixed", top: -99999, left: -99999, width: 940 }}>
-        <div ref={gambarRef} className="bg-white p-4">
-          <p className="text-sm font-bold text-navy-900">Monitoring Penyisiran Sensus Ekonomi 2026</p>
-          <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
-          <table className="w-full border-collapse text-xs">
-            <TabelKinerjaHead />
-            <tbody>
-              {rowsSorted.map((r) => (
-                <TabelKinerjaRow key={r.petugas_id} r={r} targetHarian={targetHarian} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Klon TERSEMBUNYI off-screen lebar tetap utk html2canvas -- lihat
+          komentar panjang di KontenRekapPpl (perencanaan-lapangan.tsx) &
+          useSalinGambar (_shared/kartu-monitoring.tsx). */}
+      <div ref={gambarRef} className="fixed -left-[9999px] top-0 w-[1000px]" aria-hidden="true">
+        <KontenKinerjaPpl rowsSorted={rowsSorted} targetHarian={targetHarian} tanggal={tanggal} />
       </div>
-    </Seksi>
+    </section>
   );
 }
 
@@ -901,27 +858,27 @@ function RasioBerwarna({ pembilang, penyebut }: { pembilang: number; penyebut: n
 
 function TabelPmlHead() {
   return (
-    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+    <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
       <tr>
-        <th className="border-b border-line px-2 py-1.5 text-left">Nama PML</th>
-        <th className="border-b border-line px-2 py-1.5 text-right">Jml PPL</th>
-        <th className="border-b border-line px-2 py-1.5 text-right">Berhasil Didata (Tim)</th>
-        <th className="border-b border-line px-2 py-1.5 text-right">Target (Tim)</th>
-        <th className="border-b border-line px-2 py-1.5 text-right">Usaha Dikunjungi (Tim)</th>
-        <th className="border-b border-line px-2 py-1.5 text-center">SPJ Lengkap</th>
-        <th className="border-b border-line px-2 py-1.5 text-right">Akurasi Identifikasi (Tim)</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-left">👤 Nama PML</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-right">Jml PPL</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-right">Berhasil Didata (Tim)</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-right">Target (Tim)</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-right">Usaha Dikunjungi (Tim)</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-center">SPJ Lengkap</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-right">Akurasi Identifikasi (Tim)</th>
         {/* Kolom BARU paling kanan (permintaan user) -- rasio jumlah PPL di
             tim ini yg SUDAH kirim rencana besok / total PPL di tim. */}
-        <th className="border-b border-line px-2 py-1.5 text-center">Kirim Rencana Besok (Tim)</th>
+        <th className="border-b border-white/20 px-2 py-1.5 text-center">Kirim Rencana Besok (Tim)</th>
       </tr>
     </thead>
   );
 }
 
-function TabelPmlRow({ a }: { a: PmlAgg }) {
+function TabelPmlRow({ a, genap }: { a: PmlAgg; genap: boolean }) {
   const pct = a.akurasi_dasar_total > 0 ? Math.round((a.akurasi_benar_total / a.akurasi_dasar_total) * 100) : null;
   return (
-    <tr>
+    <tr className={genap ? "bg-[#F3F8FE]" : "bg-white"}>
       <td className="px-2 py-1.5 font-medium text-navy-900">{a.pml_nama}</td>
       <td className="px-2 py-1.5 text-right">{a.jumlah_ppl}</td>
       <td
@@ -944,6 +901,31 @@ function TabelPmlRow({ a }: { a: PmlAgg }) {
   );
 }
 
+function KontenMonitoringPml({ agregat, tanggal }: { agregat: PmlAgg[]; tanggal: string }) {
+  const totalPpl = agregat.reduce((s, a) => s + a.jumlah_ppl, 0);
+  const totalDitemukan = agregat.reduce((s, a) => s + a.ditemukan_total, 0);
+  return (
+    <div className="bg-white">
+      <BannerKartu ikon="🧑‍💼" judul="2. Monitoring PML" subjudul={`Rekap kinerja TIM per PML per ${formatTanggalNav(tanggal)}`}>
+        <StatPill ikon="📅" label="Tanggal" nilai={formatTanggalNav(tanggal)} />
+        <StatPill ikon="🧑‍💼" label="Jumlah PML" nilai={String(agregat.length)} />
+        <StatPill ikon="👥" label="Total PPL" nilai={String(totalPpl)} />
+        <StatPill ikon="✅" label="Total Didata" nilai={String(totalDitemukan)} />
+      </BannerKartu>
+      <div className="overflow-x-auto p-4">
+        <table className="w-full min-w-[800px] text-xs">
+          <TabelPmlHead />
+          <tbody className="divide-y divide-line">
+            {agregat.map((a, i) => (
+              <TabelPmlRow key={a.pml_nama} a={a} genap={i % 2 === 1} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [tanggal, setTanggal] = useState(tanggalHariIniLokal());
   const [baris, setBaris] = useState<KinerjaPplRow[]>([]);
@@ -951,8 +933,8 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
   const [waktuMuat, setWaktuMuat] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
   const gambarRef = useRef<HTMLDivElement | null>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("monitoring-pml-hari-ini.png");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -987,48 +969,16 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
 
   const agregat = useMemo(() => agregasiPerPml(baris, targetHarian), [baris, targetHarian]);
 
-  async function salinSebagaiGambar() {
-    if (!gambarRef.current) return;
-    setCopyStatus("copying");
-    try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setCopyStatus("error");
-          return;
-        }
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-          setCopyStatus("done");
-          setTimeout(() => setCopyStatus("idle"), 2500);
-        } catch {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "monitoring-pml-hari-ini.png";
-          a.click();
-          URL.revokeObjectURL(url);
-          setCopyStatus("done");
-          setTimeout(() => setCopyStatus("idle"), 2500);
-        }
-      }, "image/png");
-    } catch {
-      setCopyStatus("error");
-    }
-  }
-
   return (
-    <Seksi
-      nomor={2}
-      judul="Monitoring PML"
-      keterangan={`Rekap kinerja TIM per PML pada tanggal yang dipilih di bawah, dijumlahkan dari data PPL di kartu #1 (khusus PPL aktif).${
-        waktuMuat ? ` Dimuat pukul ${waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : ""
-      }`}
-    >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line p-2">
         <TanggalNav tanggal={tanggal} onGeser={geserTanggal} onPilih={pilihTanggal} />
         <div className="flex flex-wrap items-center gap-2">
+          {waktuMuat && (
+            <span className="text-[10px] text-ink/40">
+              Dimuat {waktuMuat.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
           <button
             type="button"
             onClick={load}
@@ -1039,66 +989,128 @@ function SeksiMonitoringPml({ token, onSessionExpired }: { token: string; onSess
           </button>
           <button
             type="button"
-            onClick={salinSebagaiGambar}
+            onClick={() => salin(gambarRef.current)}
             disabled={copyStatus === "copying" || agregat.length === 0}
             className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
           >
-            {copyStatus === "copying"
-              ? "Menyalin..."
-              : copyStatus === "done"
-              ? "✓ Tersalin -- tempel ke WA"
-              : copyStatus === "error"
-              ? "Gagal, coba lagi"
-              : "📋 Salin Monitoring PML (utk WA)"}
+            {labelTombol("📋 Salin sebagai Gambar")}
           </button>
         </div>
       </div>
 
       {errMsg && (
-        <p className="mb-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
+        <p className="m-2 rounded-md border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
       )}
 
       {!loading && agregat.length === 0 && !errMsg && (
-        <p className="rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
+        <p className="m-2 rounded-md border border-line bg-paper/40 p-4 text-center text-xs text-ink/40">
           Belum ada petugas penyisiran aktif.
         </p>
       )}
 
-      {agregat.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[800px] border-collapse text-xs">
-            <TabelPmlHead />
-            <tbody className="divide-y divide-line">
-              {agregat.map((a) => (
-                <TabelPmlRow key={a.pml_nama} a={a} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {agregat.length > 0 && <KontenMonitoringPml agregat={agregat} tanggal={tanggal} />}
 
       {/* Klon tersembunyi off-screen utk html2canvas -- pola sama dgn
-          kartu #1 (SeksiKinerjaPplHariIni). Lebar ditambah 720->820
-          (permintaan user, kolom baru "Kirim Rencana Besok (Tim)"). */}
-      <div style={{ position: "fixed", top: -99999, left: -99999, width: 820 }}>
-        <div ref={gambarRef} className="bg-white p-4">
-          <p className="text-sm font-bold text-navy-900">Monitoring PML</p>
-          <p className="mb-2 text-[11px] text-ink/50">{`per ${formatTanggalNav(tanggal)}`}</p>
-          <table className="w-full border-collapse text-xs">
-            <TabelPmlHead />
-            <tbody>
-              {agregat.map((a) => (
-                <TabelPmlRow key={a.pml_nama} a={a} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+          kartu #1 (SeksiKinerjaPplHariIni). */}
+      <div ref={gambarRef} className="fixed -left-[9999px] top-0 w-[900px]" aria-hidden="true">
+        <KontenMonitoringPml agregat={agregat} tanggal={tanggal} />
       </div>
-    </Seksi>
+    </section>
   );
 }
 
 // ---------- 3) Progres vs tenggat waktu ----------
+//
+// BUKAN tabel (tidak ada baris/kolom) -- tetap dirombak pakai BannerKartu +
+// StatPill (permintaan user "miripkan dengan [desain]") & ditambah tombol
+// "📋 Salin sebagai Gambar" (permintaan user "SETIAP tabel monitoring"),
+// tapi bar progress tunggal & grafik batang tren TETAP dipertahankan apa
+// adanya (tidak dipaksakan jadi tabel) -- cuma warnanya sekarang ikut
+// ambang progresMeta yg sama dgn kartu lain (dulu selalu hijau apa pun
+// persentasenya).
+
+function KontenProgresTenggat({
+  data,
+  pct,
+  sudahLewat,
+  berisiko,
+  hariTersisa,
+  hariDibutuhkan,
+}: {
+  data: ProgresTenggat;
+  pct: number;
+  sudahLewat: boolean;
+  berisiko: boolean;
+  hariTersisa: number;
+  hariDibutuhkan: number;
+}) {
+  const warnaBar = progresMeta(data.jumlah_selesai, data.total_keluarga).warna;
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="⏳"
+        judul="3. Progres vs Tenggat Waktu Identifikasi"
+        subjudul={`Tenggat: ${formatTanggalJam(data.deadline)} WIB -- proyeksi dari rata-rata 7 hari terakhir`}
+      >
+        <StatPill ikon="📋" label="Total Keluarga" nilai={String(data.total_keluarga)} />
+        <StatPill ikon="✅" label="Sudah Diisi" nilai={String(data.jumlah_selesai)} />
+        <StatPill ikon="⏳" label="Sisa" nilai={String(data.sisa)} />
+      </BannerKartu>
+
+      <div className="p-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <StatTile label="Total Keluarga" nilai={data.total_keluarga} warna="text-navy-900" />
+          <StatTile label="Sudah Diisi" nilai={data.jumlah_selesai} warna="text-moss-700" />
+          <StatTile label="Sisa" nilai={data.sisa} warna={data.sisa > 0 ? "text-rust-700" : "text-ink/30"} />
+          <StatTile label="Rata2/Hari (7hr)" nilai={data.rata_rata_per_hari_7hr} warna="text-navy-700" />
+          <StatTile label="Persentase" nilai={`${pct}%`} warna="text-navy-700" />
+        </div>
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#E5E7EB]">
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: warnaBar }} />
+        </div>
+
+        <div
+          className={`mt-3 rounded-md border p-2.5 text-xs ${
+            sudahLewat
+              ? "border-rust-200 bg-rust-100/40 text-rust-700"
+              : data.sisa === 0
+                ? "border-moss-200 bg-moss-100/40 text-moss-700"
+                : berisiko
+                  ? "border-rust-200 bg-rust-100/40 text-rust-700"
+                  : "border-moss-200 bg-moss-100/40 text-moss-700"
+          }`}
+        >
+          {data.sisa === 0
+            ? "✅ Semua keluarga sudah diisi Identifikasi-nya."
+            : sudahLewat
+              ? "⚠ Tenggat sudah lewat dan masih ada sisa yang belum diisi."
+              : berisiko
+                ? `⚠ Dengan kecepatan saat ini (~${Math.round(data.rata_rata_per_hari_7hr)}/hari), sisa ${data.sisa} keluarga diperkirakan butuh ~${Math.ceil(hariDibutuhkan)} hari lagi -- lebih lama dari sisa waktu ke tenggat (~${Math.max(0, Math.ceil(hariTersisa))} hari). Berisiko tidak selesai tepat waktu.`
+                : `Dengan kecepatan saat ini, sisa ${data.sisa} keluarga diperkirakan bisa selesai sebelum tenggat (~${Math.max(0, Math.ceil(hariTersisa))} hari lagi).`}
+        </div>
+
+        {data.tren_harian.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-1 text-[11px] font-semibold text-ink/50">Tren pengisian 10 hari terakhir</p>
+            <div className="flex items-end gap-1">
+              {data.tren_harian.map((h) => {
+                const maxJumlah = Math.max(...data.tren_harian.map((x) => x.jumlah), 1);
+                const tinggi = Math.max(4, Math.round((h.jumlah / maxJumlah) * 48));
+                return (
+                  <div key={h.tanggal} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="text-[9px] text-ink/50">{h.jumlah}</div>
+                    <div className="w-full rounded-t bg-navy-400" style={{ height: `${tinggi}px` }} />
+                    <div className="text-[8px] text-ink/40">{formatTanggal(h.tanggal)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   const pct = persen(data.jumlah_selesai, data.total_keluarga);
@@ -1113,67 +1125,116 @@ function SeksiProgresTenggat({ data }: { data: ProgresTenggat }) {
   const hariDibutuhkan = data.rata_rata_per_hari_7hr > 0 ? data.sisa / data.rata_rata_per_hari_7hr : Infinity;
   const sudahLewat = jamTersisa <= 0;
   const berisiko = !sudahLewat && data.sisa > 0 && hariDibutuhkan > hariTersisa;
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("progres-tenggat-waktu.png");
+
+  const props = { data, pct, sudahLewat, berisiko, hariTersisa, hariDibutuhkan };
 
   return (
-    <Seksi
-      nomor={3}
-      judul="Progres vs Tenggat Waktu Identifikasi"
-      keterangan={`Tenggat pengisian Identifikasi: ${formatTanggalJam(data.deadline)} WIB. Proyeksi dihitung dari rata-rata pengisian 7 hari terakhir.`}
-    >
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatTile label="Total Keluarga" nilai={data.total_keluarga} warna="text-navy-900" />
-        <StatTile label="Sudah Diisi" nilai={data.jumlah_selesai} warna="text-moss-700" />
-        <StatTile label="Sisa" nilai={data.sisa} warna={data.sisa > 0 ? "text-rust-700" : "text-ink/30"} />
-        <StatTile label="Rata2/Hari (7hr)" nilai={data.rata_rata_per_hari_7hr} warna="text-navy-700" />
-        <StatTile label="Persentase" nilai={`${pct}%`} warna="text-navy-700" />
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex justify-end border-b border-line p-2">
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-line">
-        <div className="h-full rounded-full bg-moss-500 transition-all" style={{ width: `${pct}%` }} />
+      <KontenProgresTenggat {...props} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[900px]" aria-hidden="true">
+        <KontenProgresTenggat {...props} />
       </div>
-
-      <div
-        className={`mt-3 rounded-md border p-2.5 text-xs ${
-          sudahLewat
-            ? "border-rust-200 bg-rust-100/40 text-rust-700"
-            : data.sisa === 0
-              ? "border-moss-200 bg-moss-100/40 text-moss-700"
-              : berisiko
-                ? "border-rust-200 bg-rust-100/40 text-rust-700"
-                : "border-moss-200 bg-moss-100/40 text-moss-700"
-        }`}
-      >
-        {data.sisa === 0
-          ? "✅ Semua keluarga sudah diisi Identifikasi-nya."
-          : sudahLewat
-            ? "⚠ Tenggat sudah lewat dan masih ada sisa yang belum diisi."
-            : berisiko
-              ? `⚠ Dengan kecepatan saat ini (~${Math.round(data.rata_rata_per_hari_7hr)}/hari), sisa ${data.sisa} keluarga diperkirakan butuh ~${Math.ceil(hariDibutuhkan)} hari lagi -- lebih lama dari sisa waktu ke tenggat (~${Math.max(0, Math.ceil(hariTersisa))} hari). Berisiko tidak selesai tepat waktu.`
-              : `Dengan kecepatan saat ini, sisa ${data.sisa} keluarga diperkirakan bisa selesai sebelum tenggat (~${Math.max(0, Math.ceil(hariTersisa))} hari lagi).`}
-      </div>
-
-      {data.tren_harian.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-1 text-[11px] font-semibold text-ink/50">Tren pengisian 10 hari terakhir</p>
-          <div className="flex items-end gap-1">
-            {data.tren_harian.map((h) => {
-              const maxJumlah = Math.max(...data.tren_harian.map((x) => x.jumlah), 1);
-              const tinggi = Math.max(4, Math.round((h.jumlah / maxJumlah) * 48));
-              return (
-                <div key={h.tanggal} className="flex flex-1 flex-col items-center gap-1">
-                  <div className="text-[9px] text-ink/50">{h.jumlah}</div>
-                  <div className="w-full rounded-t bg-navy-400" style={{ height: `${tinggi}px` }} />
-                  <div className="text-[8px] text-ink/40">{formatTanggal(h.tanggal)}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </Seksi>
+    </section>
   );
 }
 
 // ---------- 4) Konsistensi lintas sumber identifikasi ----------
+
+function KontenKonsistensi({
+  data,
+  kolom,
+  tabel,
+}: {
+  data: KonsistensiIdentifikasi;
+  kolom: { key: string; label: string; getValue: (r: KonsistensiKonflikRow) => string | number | boolean | null | undefined }[];
+  tabel: ReturnType<typeof useExcelTable<KonsistensiKonflikRow>>;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="🔀"
+        judul="4. Konsistensi Jawaban Lintas Sumber Identifikasi"
+        subjudul="Jawaban TERAKHIR dari PPL, Jorong, dan Tetangga/Lainnya per keluarga -- baris di bawah dijawab beda oleh >1 sumber"
+      >
+        <StatPill ikon="📋" label="Diisi >1 Sumber" nilai={String(data.total_multi_sumber)} />
+        <StatPill ikon="⚠" label="Bertentangan" nilai={String(data.total_konflik)} />
+        <StatPill ikon="📊" label="% Bertentangan" nilai={`${persen(data.total_konflik, data.total_multi_sumber)}%`} />
+      </BannerKartu>
+
+      <div className="p-4">
+        {data.daftar_konflik.length === 0 ? (
+          <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+            ✅ Tidak ada jawaban yang bertentangan antar sumber saat ini.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[720px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolom.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabel.uniqueValues[c.key] ?? []}
+                      sortKey={tabel.sortKey}
+                      sortDir={tabel.sortDir}
+                      onSort={tabel.toggleSort}
+                      activeFilter={tabel.filters[c.key]}
+                      onFilterChange={tabel.setColumnFilter}
+                      variant="dark"
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabel.rows.map((r, i) => (
+                  <tr key={r.kode_identitas} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5 font-mono text-[11px]">{r.kode_identitas}</td>
+                    <td className="px-2 py-1.5">{r.nama_kk || "-"}</td>
+                    <td className="px-2 py-1.5">{r.sls_nama || "-"}</td>
+                    <td className="px-2 py-1.5">{r.subsls_kode || "-"}</td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(r.nilai_per_sumber).map(([k, v]) => (
+                          <span
+                            key={k}
+                            className="rounded-full border border-line px-1.5 py-0.5 text-[10px] text-ink/70"
+                          >
+                            {LABEL_SUMBER[k] ?? k}: <strong>{LABEL_NILAI[v ?? ""] ?? v ?? "-"}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {tabel.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={kolom.length} className="px-2 py-4 text-center text-ink/40">
+                      Tidak ada baris utk filter ini.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi }) {
   const kolom = useMemo(
@@ -1194,35 +1255,80 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
     []
   );
   const tabel = useExcelTable(data.daftar_konflik, kolom, { key: "kode_identitas", dir: "asc" });
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("konsistensi-identifikasi.png");
 
   return (
-    <Seksi
-      nomor={4}
-      judul="Konsistensi Jawaban Lintas Sumber Identifikasi"
-      keterangan="Membandingkan jawaban TERAKHIR dari PPL, Jorong, dan Tetangga/Lainnya per keluarga (dari riwayat perubahan) -- baris di bawah adalah keluarga yang dijawab beda oleh lebih dari satu sumber."
-    >
-      <div className="mb-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Diisi >1 Sumber" nilai={data.total_multi_sumber} warna="text-navy-900" />
-        <StatTile
-          label="Jawaban Bertentangan"
-          nilai={data.total_konflik}
-          warna={data.total_konflik > 0 ? "text-rust-700" : "text-moss-700"}
-        />
-        <StatTile
-          label="% Bertentangan dari Multi-Sumber"
-          nilai={`${persen(data.total_konflik, data.total_multi_sumber)}%`}
-          warna="text-navy-700"
-        />
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        {tabel.adaFilterAktif ? (
+          <button type="button" onClick={tabel.resetFilters} className="text-[11px] font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        ) : (
+          <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter.</span>
+        )}
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-      {data.daftar_konflik.length === 0 ? (
-        <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
-          ✅ Tidak ada jawaban yang bertentangan antar sumber saat ini.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <HintFilter adaFilterAktif={tabel.adaFilterAktif} onReset={tabel.resetFilters} />
-          <table className="w-full min-w-[720px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+      <KontenKonsistensi data={data} kolom={kolom} tabel={tabel} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[1000px]" aria-hidden="true">
+        <KontenKonsistensi data={data} kolom={kolom} tabel={tabel} />
+      </div>
+    </section>
+  );
+}
+
+// ---------- 5) Realisasi vs rencana ----------
+
+function KontenRealisasi({
+  data,
+  kolom,
+  tabel,
+  pctOh,
+}: {
+  data: RealisasiVsRencana;
+  kolom: { key: string; label: string; getValue: (r: RealisasiPetugasRow) => string | number | boolean | null | undefined }[];
+  tabel: ReturnType<typeof useExcelTable<RealisasiPetugasRow>>;
+  pctOh: number;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="🗺️"
+        judul="5. Realisasi vs Rencana (Perencanaan Lapangan)"
+        subjudul="Sub SLS direncanakan vs yang sungguh dikunjungi, plus pemakaian kuota OH Translok"
+      >
+        <StatPill ikon="🧭" label="Petugas" nilai={String(data.per_petugas.length)} />
+        <StatPill ikon="🚗" label="OH Terpakai" nilai={`${data.oh_terpakai}/${data.kuota_oh}`} />
+        <StatPill ikon="📊" label="% OH Terpakai" nilai={`${pctOh}%`} />
+      </BannerKartu>
+
+      <div className="p-4">
+        <div className="mb-3 rounded-md border border-line bg-paper/40 p-2.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-xs font-semibold text-ink/60">Kuota OH Translok</span>
+            <span className="text-xs text-ink/50">
+              {data.oh_terpakai} / {data.kuota_oh} hari terpakai ({pctOh}%)
+            </span>
+          </div>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-line">
+            <div
+              className={`h-full rounded-full transition-all ${pctOh >= 90 ? "bg-rust-500" : "bg-navy-500"}`}
+              style={{ width: `${Math.min(100, pctOh)}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[720px] text-xs">
+            <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
               <tr>
                 {kolom.map((c) => (
                   <ExcelTh
@@ -1235,34 +1341,29 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
                     onSort={tabel.toggleSort}
                     activeFilter={tabel.filters[c.key]}
                     onFilterChange={tabel.setColumnFilter}
+                    variant="dark"
+                    align={c.key === "nama" ? "left" : "right"}
                   />
                 ))}
+                <th className="px-2 py-2 text-right">📊 Realisasi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {tabel.rows.map((r) => (
-                <tr key={r.kode_identitas}>
-                  <td className="px-2 py-1.5 font-mono text-[11px]">{r.kode_identitas}</td>
-                  <td className="px-2 py-1.5">{r.nama_kk || "-"}</td>
-                  <td className="px-2 py-1.5">{r.sls_nama || "-"}</td>
-                  <td className="px-2 py-1.5">{r.subsls_kode || "-"}</td>
+              {tabel.rows.map((r, i) => (
+                <tr key={r.id} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                  <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
+                  <td className="px-2 py-1.5 text-right">{r.jumlah_rencana}</td>
+                  <td className="px-2 py-1.5 text-right">{r.jumlah_realisasi}</td>
+                  <td className="px-2 py-1.5 text-right">{r.jumlah_kunjungan}</td>
+                  <td className="px-2 py-1.5 text-right">{r.jumlah_hari}</td>
                   <td className="px-2 py-1.5">
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(r.nilai_per_sumber).map(([k, v]) => (
-                        <span
-                          key={k}
-                          className="rounded-full border border-line px-1.5 py-0.5 text-[10px] text-ink/70"
-                        >
-                          {LABEL_SUMBER[k] ?? k}: <strong>{LABEL_NILAI[v ?? ""] ?? v ?? "-"}</strong>
-                        </span>
-                      ))}
-                    </div>
+                    <BarProgres pembilang={r.jumlah_realisasi} penyebut={r.jumlah_rencana} />
                   </td>
                 </tr>
               ))}
               {tabel.rows.length === 0 && (
                 <tr>
-                  <td colSpan={kolom.length} className="px-2 py-4 text-center text-ink/40">
+                  <td colSpan={kolom.length + 1} className="px-2 py-4 text-center text-ink/40">
                     Tidak ada baris utk filter ini.
                   </td>
                 </tr>
@@ -1270,12 +1371,17 @@ function SeksiKonsistensiIdentifikasi({ data }: { data: KonsistensiIdentifikasi 
             </tbody>
           </table>
         </div>
-      )}
-    </Seksi>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <CatatanKartu>
+            <strong>Realisasi</strong> = (Sub SLS Terealisasi / Sub SLS Direncanakan) &times; 100
+          </CatatanKartu>
+          <LegendaProgresStandar />
+        </div>
+      </div>
+    </div>
   );
 }
-
-// ---------- 5) Realisasi vs rencana ----------
 
 function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   const kolom = useMemo(
@@ -1290,74 +1396,155 @@ function SeksiRealisasiRencana({ data }: { data: RealisasiVsRencana }) {
   );
   const tabel = useExcelTable(data.per_petugas, kolom, { key: "nama", dir: "asc" });
   const pctOh = persen(data.oh_terpakai, data.kuota_oh);
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("realisasi-vs-rencana.png");
 
   return (
-    <Seksi
-      nomor={5}
-      judul="Realisasi vs Rencana (Perencanaan Lapangan)"
-      keterangan="Sub SLS yang direncanakan tiap petugas (kartu Identifikasi Wilayah Sampel SLS) dibandingkan dgn Sub SLS yang benar-benar sudah dikunjungi di Penyisiran Usaha, plus pemakaian kuota OH Translok."
-    >
-      <div className="mb-3 rounded-md border border-line bg-paper/40 p-2.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-xs font-semibold text-ink/60">Kuota OH Translok</span>
-          <span className="text-xs text-ink/50">
-            {data.oh_terpakai} / {data.kuota_oh} hari terpakai ({pctOh}%)
-          </span>
-        </div>
-        <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-line">
-          <div
-            className={`h-full rounded-full transition-all ${pctOh >= 90 ? "bg-rust-500" : "bg-navy-500"}`}
-            style={{ width: `${Math.min(100, pctOh)}%` }}
-          />
-        </div>
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        {tabel.adaFilterAktif ? (
+          <button type="button" onClick={tabel.resetFilters} className="text-[11px] font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        ) : (
+          <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter.</span>
+        )}
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-
-      <div className="overflow-x-auto">
-        <HintFilter adaFilterAktif={tabel.adaFilterAktif} onReset={tabel.resetFilters} />
-        <table className="w-full min-w-[640px] border-collapse text-xs">
-          <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-            <tr>
-              {kolom.map((c) => (
-                <ExcelTh
-                  key={c.key}
-                  label={c.label}
-                  colKey={c.key}
-                  values={tabel.uniqueValues[c.key] ?? []}
-                  sortKey={tabel.sortKey}
-                  sortDir={tabel.sortDir}
-                  onSort={tabel.toggleSort}
-                  activeFilter={tabel.filters[c.key]}
-                  onFilterChange={tabel.setColumnFilter}
-                  align={c.key === "nama" ? "left" : "right"}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {tabel.rows.map((r) => (
-              <tr key={r.id}>
-                <td className="px-2 py-1.5">{r.nama}</td>
-                <td className="px-2 py-1.5 text-right">{r.jumlah_rencana}</td>
-                <td className="px-2 py-1.5 text-right">{r.jumlah_realisasi}</td>
-                <td className="px-2 py-1.5 text-right">{r.jumlah_kunjungan}</td>
-                <td className="px-2 py-1.5 text-right">{r.jumlah_hari}</td>
-              </tr>
-            ))}
-            {tabel.rows.length === 0 && (
-              <tr>
-                <td colSpan={kolom.length} className="px-2 py-4 text-center text-ink/40">
-                  Tidak ada baris utk filter ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <KontenRealisasi data={data} kolom={kolom} tabel={tabel} pctOh={pctOh} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[1000px]" aria-hidden="true">
+        <KontenRealisasi data={data} kolom={kolom} tabel={tabel} pctOh={pctOh} />
       </div>
-    </Seksi>
+    </section>
   );
 }
 
 // ---------- 6) Kualitas & kewajaran data kunjungan ----------
+
+function KontenKualitas({
+  kualitas,
+  burst,
+  kolomKec,
+  tabelKec,
+  kolomBurst,
+  tabelBurst,
+}: {
+  kualitas: KualitasKunjungan;
+  burst: BurstUpdateRow[];
+  kolomKec: { key: string; label: string; getValue: (r: KualitasKunjungan["per_kecamatan"][number]) => string | number | boolean | null | undefined }[];
+  tabelKec: ReturnType<typeof useExcelTable<KualitasKunjungan["per_kecamatan"][number]>>;
+  kolomBurst: { key: string; label: string; getValue: (r: BurstUpdateRow) => string | number | boolean | null | undefined }[];
+  tabelBurst: ReturnType<typeof useExcelTable<BurstUpdateRow>>;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="🔍"
+        judul="6. Kualitas & Kewajaran Data Kunjungan Penyisiran Usaha"
+        subjudul="Kelengkapan bukti pada kartu “Ditemukan” + deteksi update beruntun sangat cepat (≥15x dlm 5 menit)"
+      >
+        <StatPill ikon="🏠" label="Kartu Ditemukan" nilai={String(kualitas.total_ditemukan)} />
+        <StatPill
+          ikon="⚠"
+          label="Tanpa Bukti"
+          nilai={`${kualitas.tanpa_bukti} (${persen(kualitas.tanpa_bukti, kualitas.total_ditemukan)}%)`}
+        />
+        <StatPill ikon="📝" label="Tanpa Catatan" nilai={String(kualitas.tanpa_catatan)} />
+      </BannerKartu>
+
+      <div className="p-4">
+        <p className="mb-1 text-[11px] font-semibold text-ink/50">Kelengkapan bukti per Kecamatan</p>
+        <div className="mb-4 overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[480px] text-xs">
+            <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+              <tr>
+                {kolomKec.map((c) => (
+                  <ExcelTh
+                    key={c.key}
+                    label={c.label}
+                    colKey={c.key}
+                    values={tabelKec.uniqueValues[c.key] ?? []}
+                    sortKey={tabelKec.sortKey}
+                    sortDir={tabelKec.sortDir}
+                    onSort={tabelKec.toggleSort}
+                    activeFilter={tabelKec.filters[c.key]}
+                    onFilterChange={tabelKec.setColumnFilter}
+                    variant="dark"
+                    align={c.key === "kec_nama" ? "left" : "right"}
+                  />
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {tabelKec.rows.map((r, i) => (
+                <tr key={r.kec_nama} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                  <td className="px-2 py-1.5 font-medium text-navy-900">{r.kec_nama}</td>
+                  <td className="px-2 py-1.5 text-right">{r.total_ditemukan}</td>
+                  <td className="px-2 py-1.5 text-right">{r.tanpa_bukti}</td>
+                </tr>
+              ))}
+              {tabelKec.rows.length === 0 && (
+                <tr>
+                  <td colSpan={kolomKec.length} className="px-2 py-4 text-center text-ink/40">
+                    Tidak ada baris utk filter ini.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mb-1 text-[11px] font-semibold text-ink/50">Update status kunjungan beruntun sangat cepat</p>
+        {burst.length === 0 ? (
+          <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+            ✅ Tidak ada indikasi update beruntun sangat cepat.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[560px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolomBurst.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabelBurst.uniqueValues[c.key] ?? []}
+                      sortKey={tabelBurst.sortKey}
+                      sortDir={tabelBurst.sortDir}
+                      onSort={tabelBurst.toggleSort}
+                      activeFilter={tabelBurst.filters[c.key]}
+                      onFilterChange={tabelBurst.setColumnFilter}
+                      variant="dark"
+                      align={c.key === "jumlah" ? "right" : "left"}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabelBurst.rows.map((r, i) => (
+                  <tr key={`${r.oleh_nama}-${r.bucket}-${i}`} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5">{r.oleh_nama}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold text-rust-700">{r.jumlah}</td>
+                    <td className="px-2 py-1.5">{formatTanggalJam(r.mulai)}</td>
+                    <td className="px-2 py-1.5">{formatTanggalJam(r.selesai)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjungan; burst: BurstUpdateRow[] }) {
   const kolomKec = useMemo(
@@ -1388,113 +1575,98 @@ function SeksiKualitasKunjungan({ kualitas, burst }: { kualitas: KualitasKunjung
     []
   );
   const tabelBurst = useExcelTable(burst, kolomBurst, { key: "jumlah", dir: "desc" });
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("kualitas-kunjungan.png");
+
+  const props = { kualitas, burst, kolomKec, tabelKec, kolomBurst, tabelBurst };
 
   return (
-    <Seksi
-      nomor={6}
-      judul="Kualitas & Kewajaran Data Kunjungan Penyisiran Usaha"
-      keterangan="Kelengkapan bukti (DUTP/DTSEN/PNM) & catatan pada kartu berstatus “Ditemukan”, plus deteksi update status kunjungan yang beruntun sangat cepat (≥15x dalam 5 menit oleh petugas yang sama) -- patut dicek manual, bisa jadi isi cepat tanpa kunjungan nyata."
-    >
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Kartu Ditemukan" nilai={kualitas.total_ditemukan} warna="text-navy-900" />
-        <StatTile
-          label="Tanpa Bukti Sama Sekali"
-          nilai={`${kualitas.tanpa_bukti} (${persen(kualitas.tanpa_bukti, kualitas.total_ditemukan)}%)`}
-          warna={kualitas.tanpa_bukti > 0 ? "text-rust-700" : "text-moss-700"}
-        />
-        <StatTile
-          label="Tanpa Catatan Petugas"
-          nilai={`${kualitas.tanpa_catatan} (${persen(kualitas.tanpa_catatan, kualitas.total_ditemukan)}%)`}
-          warna="text-navy-700"
-        />
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter (di tiap tabel).</span>
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-
-      <p className="mb-1 text-[11px] font-semibold text-ink/50">Kelengkapan bukti per Kecamatan</p>
-      <div className="mb-4 overflow-x-auto">
-        <HintFilter adaFilterAktif={tabelKec.adaFilterAktif} onReset={tabelKec.resetFilters} />
-        <table className="w-full min-w-[480px] border-collapse text-xs">
-          <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-            <tr>
-              {kolomKec.map((c) => (
-                <ExcelTh
-                  key={c.key}
-                  label={c.label}
-                  colKey={c.key}
-                  values={tabelKec.uniqueValues[c.key] ?? []}
-                  sortKey={tabelKec.sortKey}
-                  sortDir={tabelKec.sortDir}
-                  onSort={tabelKec.toggleSort}
-                  activeFilter={tabelKec.filters[c.key]}
-                  onFilterChange={tabelKec.setColumnFilter}
-                  align={c.key === "kec_nama" ? "left" : "right"}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {tabelKec.rows.map((r) => (
-              <tr key={r.kec_nama}>
-                <td className="px-2 py-1.5">{r.kec_nama}</td>
-                <td className="px-2 py-1.5 text-right">{r.total_ditemukan}</td>
-                <td className="px-2 py-1.5 text-right">{r.tanpa_bukti}</td>
-              </tr>
-            ))}
-            {tabelKec.rows.length === 0 && (
-              <tr>
-                <td colSpan={kolomKec.length} className="px-2 py-4 text-center text-ink/40">
-                  Tidak ada baris utk filter ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <KontenKualitas {...props} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[900px]" aria-hidden="true">
+        <KontenKualitas {...props} />
       </div>
-
-      <p className="mb-1 text-[11px] font-semibold text-ink/50">Update status kunjungan beruntun sangat cepat</p>
-      {burst.length === 0 ? (
-        <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
-          ✅ Tidak ada indikasi update beruntun sangat cepat.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <HintFilter adaFilterAktif={tabelBurst.adaFilterAktif} onReset={tabelBurst.resetFilters} />
-          <table className="w-full min-w-[560px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <tr>
-                {kolomBurst.map((c) => (
-                  <ExcelTh
-                    key={c.key}
-                    label={c.label}
-                    colKey={c.key}
-                    values={tabelBurst.uniqueValues[c.key] ?? []}
-                    sortKey={tabelBurst.sortKey}
-                    sortDir={tabelBurst.sortDir}
-                    onSort={tabelBurst.toggleSort}
-                    activeFilter={tabelBurst.filters[c.key]}
-                    onFilterChange={tabelBurst.setColumnFilter}
-                    align={c.key === "jumlah" ? "right" : "left"}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {tabelBurst.rows.map((r, i) => (
-                <tr key={`${r.oleh_nama}-${r.bucket}-${i}`}>
-                  <td className="px-2 py-1.5">{r.oleh_nama}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold text-rust-700">{r.jumlah}</td>
-                  <td className="px-2 py-1.5">{formatTanggalJam(r.mulai)}</td>
-                  <td className="px-2 py-1.5">{formatTanggalJam(r.selesai)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Seksi>
+    </section>
   );
 }
 
 // ---------- 7) Kelengkapan SPJ ----------
+
+function KontenKelengkapanSpj({
+  data,
+  kolom,
+  tabel,
+}: {
+  data: KelengkapanSpj;
+  kolom: { key: string; label: string; getValue: (r: SpjTanpaVisumRow) => string | number | boolean | null | undefined }[];
+  tabel: ReturnType<typeof useExcelTable<SpjTanpaVisumRow>>;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="🧾"
+        judul="7. Kelengkapan SPJ (Surat Tugas tanpa Visum)"
+        subjudul="Pasangan Surat Tugas x Petugas yang BELUM ada Visum-nya"
+      >
+        <StatPill ikon="📄" label="Total Pasangan" nilai={String(data.total_pasangan)} />
+        <StatPill ikon="⚠" label="Belum Visum" nilai={String(data.tanpa_visum)} />
+        <StatPill ikon="📊" label="% Belum Visum" nilai={`${persen(data.tanpa_visum, data.total_pasangan)}%`} />
+      </BannerKartu>
+
+      <div className="p-4">
+        {data.daftar_tanpa_visum.length === 0 ? (
+          <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+            ✅ Semua Surat Tugas sudah ada Visum-nya.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[560px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolom.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabel.uniqueValues[c.key] ?? []}
+                      sortKey={tabel.sortKey}
+                      sortDir={tabel.sortDir}
+                      onSort={tabel.toggleSort}
+                      activeFilter={tabel.filters[c.key]}
+                      onFilterChange={tabel.setColumnFilter}
+                      variant="dark"
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabel.rows.map((r, i) => (
+                  <tr key={`${r.nomor_st}-${r.nama}-${i}`} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5">{r.nomor_st}</td>
+                    <td className="px-2 py-1.5">{r.nama}</td>
+                    <td className="px-2 py-1.5">{formatTanggal(r.tanggal_mulai)}</td>
+                    <td className="px-2 py-1.5">{formatTanggal(r.tanggal_selesai)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
   const kolom = useMemo(
@@ -1507,65 +1679,100 @@ function SeksiKelengkapanSpj({ data }: { data: KelengkapanSpj }) {
     []
   );
   const tabel = useExcelTable(data.daftar_tanpa_visum, kolom, { key: "tanggal_mulai", dir: "desc" });
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("kelengkapan-spj.png");
 
   return (
-    <Seksi
-      nomor={7}
-      judul="Kelengkapan SPJ (Surat Tugas tanpa Visum)"
-      keterangan="Setiap petugas yang tercantum di sebuah Surat Tugas seharusnya punya Visum. Daftar di bawah adalah pasangan Surat Tugas x Petugas yang BELUM ada Visum-nya."
-    >
-      <div className="mb-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatTile label="Total Pasangan ST x Petugas" nilai={data.total_pasangan} warna="text-navy-900" />
-        <StatTile
-          label="Belum Ada Visum"
-          nilai={data.tanpa_visum}
-          warna={data.tanpa_visum > 0 ? "text-rust-700" : "text-moss-700"}
-        />
-        <StatTile label="% Belum Visum" nilai={`${persen(data.tanpa_visum, data.total_pasangan)}%`} warna="text-navy-700" />
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        {tabel.adaFilterAktif ? (
+          <button type="button" onClick={tabel.resetFilters} className="text-[11px] font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        ) : (
+          <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter.</span>
+        )}
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-      {data.daftar_tanpa_visum.length === 0 ? (
-        <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
-          ✅ Semua Surat Tugas sudah ada Visum-nya.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <HintFilter adaFilterAktif={tabel.adaFilterAktif} onReset={tabel.resetFilters} />
-          <table className="w-full min-w-[560px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <tr>
-                {kolom.map((c) => (
-                  <ExcelTh
-                    key={c.key}
-                    label={c.label}
-                    colKey={c.key}
-                    values={tabel.uniqueValues[c.key] ?? []}
-                    sortKey={tabel.sortKey}
-                    sortDir={tabel.sortDir}
-                    onSort={tabel.toggleSort}
-                    activeFilter={tabel.filters[c.key]}
-                    onFilterChange={tabel.setColumnFilter}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {tabel.rows.map((r, i) => (
-                <tr key={`${r.nomor_st}-${r.nama}-${i}`}>
-                  <td className="px-2 py-1.5">{r.nomor_st}</td>
-                  <td className="px-2 py-1.5">{r.nama}</td>
-                  <td className="px-2 py-1.5">{formatTanggal(r.tanggal_mulai)}</td>
-                  <td className="px-2 py-1.5">{formatTanggal(r.tanggal_selesai)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Seksi>
+      <KontenKelengkapanSpj data={data} kolom={kolom} tabel={tabel} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[800px]" aria-hidden="true">
+        <KontenKelengkapanSpj data={data} kolom={kolom} tabel={tabel} />
+      </div>
+    </section>
   );
 }
 
 // ---------- 8) Konflik alokasi wilayah PPL ----------
+
+function KontenKonflikAlokasi({
+  data,
+  kolom,
+  tabel,
+}: {
+  data: KonflikAlokasiPpl;
+  kolom: { key: string; label: string; getValue: (r: KonflikAlokasiRow) => string | number | boolean | null | undefined }[];
+  tabel: ReturnType<typeof useExcelTable<KonflikAlokasiRow>>;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="🧩"
+        judul="8. Konflik Alokasi Wilayah PPL"
+        subjudul="1 ID Sub SLS yang dialokasikan ke lebih dari satu PPL sekaligus"
+      >
+        <StatPill ikon="⚠" label="ID Sub SLS Konflik" nilai={String(data.total_konflik)} />
+      </BannerKartu>
+
+      <div className="p-4">
+        {data.daftar.length === 0 ? (
+          <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+            ✅ Tidak ada ID Sub SLS yang dialokasikan ke lebih dari satu PPL saat ini.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[560px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolom.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabel.uniqueValues[c.key] ?? []}
+                      sortKey={tabel.sortKey}
+                      sortDir={tabel.sortDir}
+                      onSort={tabel.toggleSort}
+                      activeFilter={tabel.filters[c.key]}
+                      onFilterChange={tabel.setColumnFilter}
+                      variant="dark"
+                      align={c.key === "jumlah_ppl" ? "right" : "left"}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabel.rows.map((r, i) => (
+                  <tr key={r.idsubsls} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5 font-mono text-[11px]">{r.idsubsls}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold text-rust-700">{r.jumlah_ppl}</td>
+                    <td className="px-2 py-1.5">{r.ppl_list.map((p) => p.nama).join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
   const kolom = useMemo(
@@ -1581,63 +1788,153 @@ function SeksiKonflikAlokasiPpl({ data }: { data: KonflikAlokasiPpl }) {
     []
   );
   const tabel = useExcelTable(data.daftar, kolom, { key: "idsubsls", dir: "asc" });
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("konflik-alokasi-ppl.png");
 
   return (
-    <Seksi
-      nomor={8}
-      judul="Konflik Alokasi Wilayah PPL"
-      keterangan="Satu ID Sub SLS yang dialokasikan ke lebih dari satu PPL sekaligus -- perlu diluruskan supaya keluarga di wilayah itu tidak terhitung dobel/rebutan sumber."
-    >
-      <div className="mb-2">
-        <StatTile
-          label="ID Sub SLS Konflik"
-          nilai={data.total_konflik}
-          warna={data.total_konflik > 0 ? "text-rust-700" : "text-moss-700"}
-        />
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        {tabel.adaFilterAktif ? (
+          <button type="button" onClick={tabel.resetFilters} className="text-[11px] font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        ) : (
+          <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter.</span>
+        )}
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
       </div>
-      {data.daftar.length === 0 ? (
-        <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
-          ✅ Tidak ada ID Sub SLS yang dialokasikan ke lebih dari satu PPL saat ini.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <HintFilter adaFilterAktif={tabel.adaFilterAktif} onReset={tabel.resetFilters} />
-          <table className="w-full min-w-[560px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <tr>
-                {kolom.map((c) => (
-                  <ExcelTh
-                    key={c.key}
-                    label={c.label}
-                    colKey={c.key}
-                    values={tabel.uniqueValues[c.key] ?? []}
-                    sortKey={tabel.sortKey}
-                    sortDir={tabel.sortDir}
-                    onSort={tabel.toggleSort}
-                    activeFilter={tabel.filters[c.key]}
-                    onFilterChange={tabel.setColumnFilter}
-                    align={c.key === "jumlah_ppl" ? "right" : "left"}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {tabel.rows.map((r) => (
-                <tr key={r.idsubsls}>
-                  <td className="px-2 py-1.5 font-mono text-[11px]">{r.idsubsls}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold text-rust-700">{r.jumlah_ppl}</td>
-                  <td className="px-2 py-1.5">{r.ppl_list.map((p) => p.nama).join(", ")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Seksi>
+      <KontenKonflikAlokasi data={data} kolom={kolom} tabel={tabel} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[800px]" aria-hidden="true">
+        <KontenKonflikAlokasi data={data} kolom={kolom} tabel={tabel} />
+      </div>
+    </section>
   );
 }
 
 // ---------- 9) Beban kerja & kelengkapan data Master Petugas ----------
+
+function KontenBebanKerja({
+  data,
+  kolomSpan,
+  tabelSpan,
+  kolomLengkap,
+  tabelLengkap,
+}: {
+  data: BebanKerjaPetugas;
+  kolomSpan: { key: string; label: string; getValue: (r: SpanPengawasRow) => string | number | boolean | null | undefined }[];
+  tabelSpan: ReturnType<typeof useExcelTable<SpanPengawasRow>>;
+  kolomLengkap: { key: string; label: string; getValue: (r: DataTidakLengkapRow) => string | number | boolean | null | undefined }[];
+  tabelLengkap: ReturnType<typeof useExcelTable<DataTidakLengkapRow>>;
+}) {
+  return (
+    <div className="bg-white">
+      <BannerKartu
+        ikon="👥"
+        judul="9. Beban Kerja & Kelengkapan Data Master Petugas"
+        subjudul="Jumlah bawahan per pengawas & akun aktif yang datanya (No. HP/NIP/Email) belum lengkap"
+      >
+        <StatPill ikon="🧭" label="Pengawas" nilai={String(data.span_pengawas.length)} />
+        <StatPill ikon="⚠" label="Data Belum Lengkap" nilai={String(data.data_tidak_lengkap.length)} />
+      </BannerKartu>
+
+      <div className="p-4">
+        <p className="mb-1 text-[11px] font-semibold text-ink/50">Jumlah bawahan per pengawas</p>
+        {data.span_pengawas.length === 0 ? (
+          <p className="mb-4 rounded-md border border-line bg-paper/40 p-2.5 text-xs text-ink/50">
+            Belum ada data pengawas (kolom &ldquo;Pengawas&rdquo; di Master Petugas belum diisi).
+          </p>
+        ) : (
+          <div className="mb-4 overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[360px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolomSpan.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabelSpan.uniqueValues[c.key] ?? []}
+                      sortKey={tabelSpan.sortKey}
+                      sortDir={tabelSpan.sortDir}
+                      onSort={tabelSpan.toggleSort}
+                      activeFilter={tabelSpan.filters[c.key]}
+                      onFilterChange={tabelSpan.setColumnFilter}
+                      variant="dark"
+                      align={c.key === "jumlah_bawahan" ? "right" : "left"}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabelSpan.rows.map((r, i) => (
+                  <tr key={r.nama_pengawas} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama_pengawas}</td>
+                    <td className="px-2 py-1.5 text-right">{r.jumlah_bawahan}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="mb-1 text-[11px] font-semibold text-ink/50">
+          Akun aktif dengan data belum lengkap ({data.data_tidak_lengkap.length})
+        </p>
+        {data.data_tidak_lengkap.length === 0 ? (
+          <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+            ✅ Semua akun petugas aktif sudah lengkap data kontaknya.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full min-w-[480px] text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr>
+                  {kolomLengkap.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabelLengkap.uniqueValues[c.key] ?? []}
+                      sortKey={tabelLengkap.sortKey}
+                      sortDir={tabelLengkap.sortDir}
+                      onSort={tabelLengkap.toggleSort}
+                      activeFilter={tabelLengkap.filters[c.key]}
+                      onFilterChange={tabelLengkap.setColumnFilter}
+                      variant="dark"
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabelLengkap.rows.map((r, i) => (
+                  <tr key={r.nama} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                    <td className="px-2 py-1.5">{r.nama}</td>
+                    <td className={`px-2 py-1.5 ${r.tanpa_hp ? "font-semibold text-rust-700" : "text-ink/40"}`}>
+                      {r.tanpa_hp ? "Ya" : "Tidak"}
+                    </td>
+                    <td className={`px-2 py-1.5 ${r.tanpa_nip ? "font-semibold text-rust-700" : "text-ink/40"}`}>
+                      {r.tanpa_nip ? "Ya" : "Tidak"}
+                    </td>
+                    <td className={`px-2 py-1.5 ${r.tanpa_email ? "font-semibold text-rust-700" : "text-ink/40"}`}>
+                      {r.tanpa_email ? "Ya" : "Tidak"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
   const kolomSpan = useMemo(
@@ -1659,100 +1956,29 @@ function SeksiBebanKerja({ data }: { data: BebanKerjaPetugas }) {
     []
   );
   const tabelLengkap = useExcelTable(data.data_tidak_lengkap, kolomLengkap, { key: "nama", dir: "asc" });
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("beban-kerja-petugas.png");
+
+  const props = { data, kolomSpan, tabelSpan, kolomLengkap, tabelLengkap };
 
   return (
-    <Seksi
-      nomor={9}
-      judul="Beban Kerja & Kelengkapan Data Master Petugas"
-      keterangan="Jumlah bawahan per pengawas (span of control) dan akun petugas aktif yang datanya (No. HP/NIP/Email) belum lengkap di Master Petugas."
-    >
-      <p className="mb-1 text-[11px] font-semibold text-ink/50">Jumlah bawahan per pengawas</p>
-      {data.span_pengawas.length === 0 ? (
-        <p className="mb-4 rounded-md border border-line bg-paper/40 p-2.5 text-xs text-ink/50">
-          Belum ada data pengawas (kolom &ldquo;Pengawas&rdquo; di Master Petugas belum diisi).
-        </p>
-      ) : (
-        <div className="mb-4 overflow-x-auto">
-          <HintFilter adaFilterAktif={tabelSpan.adaFilterAktif} onReset={tabelSpan.resetFilters} />
-          <table className="w-full min-w-[360px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <tr>
-                {kolomSpan.map((c) => (
-                  <ExcelTh
-                    key={c.key}
-                    label={c.label}
-                    colKey={c.key}
-                    values={tabelSpan.uniqueValues[c.key] ?? []}
-                    sortKey={tabelSpan.sortKey}
-                    sortDir={tabelSpan.sortDir}
-                    onSort={tabelSpan.toggleSort}
-                    activeFilter={tabelSpan.filters[c.key]}
-                    onFilterChange={tabelSpan.setColumnFilter}
-                    align={c.key === "jumlah_bawahan" ? "right" : "left"}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {tabelSpan.rows.map((r) => (
-                <tr key={r.nama_pengawas}>
-                  <td className="px-2 py-1.5">{r.nama_pengawas}</td>
-                  <td className="px-2 py-1.5 text-right">{r.jumlah_bawahan}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <p className="mb-1 text-[11px] font-semibold text-ink/50">
-        Akun aktif dengan data belum lengkap ({data.data_tidak_lengkap.length})
-      </p>
-      {data.data_tidak_lengkap.length === 0 ? (
-        <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
-          ✅ Semua akun petugas aktif sudah lengkap data kontaknya.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <HintFilter adaFilterAktif={tabelLengkap.adaFilterAktif} onReset={tabelLengkap.resetFilters} />
-          <table className="w-full min-w-[480px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-              <tr>
-                {kolomLengkap.map((c) => (
-                  <ExcelTh
-                    key={c.key}
-                    label={c.label}
-                    colKey={c.key}
-                    values={tabelLengkap.uniqueValues[c.key] ?? []}
-                    sortKey={tabelLengkap.sortKey}
-                    sortDir={tabelLengkap.sortDir}
-                    onSort={tabelLengkap.toggleSort}
-                    activeFilter={tabelLengkap.filters[c.key]}
-                    onFilterChange={tabelLengkap.setColumnFilter}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {tabelLengkap.rows.map((r) => (
-                <tr key={r.nama}>
-                  <td className="px-2 py-1.5">{r.nama}</td>
-                  <td className={`px-2 py-1.5 ${r.tanpa_hp ? "font-semibold text-rust-700" : "text-ink/40"}`}>
-                    {r.tanpa_hp ? "Ya" : "Tidak"}
-                  </td>
-                  <td className={`px-2 py-1.5 ${r.tanpa_nip ? "font-semibold text-rust-700" : "text-ink/40"}`}>
-                    {r.tanpa_nip ? "Ya" : "Tidak"}
-                  </td>
-                  <td className={`px-2 py-1.5 ${r.tanpa_email ? "font-semibold text-rust-700" : "text-ink/40"}`}>
-                    {r.tanpa_email ? "Ya" : "Tidak"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Seksi>
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-line p-2">
+        <span className="text-[10px] text-ink/40">Klik nama kolom utk urutkan, klik ▾ utk filter (di tiap tabel).</span>
+        <button
+          type="button"
+          onClick={() => salin(kartuRef.current)}
+          disabled={copyStatus === "copying"}
+          className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+        >
+          {labelTombol("📋 Salin sebagai Gambar")}
+        </button>
+      </div>
+      <KontenBebanKerja {...props} />
+      <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[800px]" aria-hidden="true">
+        <KontenBebanKerja {...props} />
+      </div>
+    </section>
   );
 }
 

@@ -134,6 +134,7 @@ import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 // di sana, cuma belum ditegakkan di kartu ini sebelumnya.
 import { IS_PML_KEY } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
+import { BarProgres, StatPill, LegendaProgresStandar, BannerKartu, CatatanKartu, useSalinGambar } from "./_shared/kartu-monitoring";
 
 const TOKEN_KEY = "penyisiran-petugas-login-token";
 const NAMA_KEY = "penyisiran-petugas-login-nama";
@@ -312,10 +313,6 @@ interface DetailPemilihanSubsls {
   belum_ditag: DetailPemilihanSubslsRow[];
   total_ditag_kk: number;
   total_belum_ditag_kk: number;
-}
-
-function persenPemilihan(bagian: number, total: number): number {
-  return total > 0 ? Math.round((bagian / total) * 100) : 0;
 }
 
 function tokenExpMs(token: string): number {
@@ -1399,7 +1396,7 @@ function WilayahSampelPanel({
           <p className="mt-0.5">
             PML tidak memilih wilayah sendiri -- wilayah kerja Anda otomatis mengikuti gabungan seluruh SLS/Sub SLS
             yang sudah dipilih PPL yang Anda awasi. Checklist di bawah bisa dilihat, tapi tidak bisa diubah. Lihat
-            kartu &quot;📶 Monitoring Status Pemilihan Sub-SLS&quot; di bawah utk rincian per PPL.
+            kartu &quot;📋 Rekap Pendataan PPL&quot; di bawah utk rincian per PPL.
           </p>
         </div>
       )}
@@ -1857,8 +1854,8 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
   );
 }
 
-// ---------- Monitoring Status Pemilihan Sub-SLS (DIPINDAH dari tab
-// Monitoring, permintaan user) ----------
+// ---------- "📋 Rekap Pendataan PPL" (dulu "Monitoring Status Pemilihan
+// Sub-SLS", DIPINDAH dari tab Monitoring, permintaan user) ----------
 //
 // Per petugas AKTIF (tab Penyisiran Usaha): berapa Sub SLS yg sudah
 // ditag/dialokasikan (kolom "Jumlah Sub-SLS Ditag" bisa DIKLIK -> modal
@@ -1872,15 +1869,158 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
 // pindah_pemilihan_subsls_dan_tambah_jabatan_petugas.sql. PANEL INI
 // FETCH SENDIRI (endpoint terpisah /api/penyisiran/pemilihan-subsls),
 // beda dari 2 bagian utama tab ini yg datanya personal per petugas login.
+//
+// Tampilan DIROMBAK (permintaan user, mengacu ke contoh desain "Rekap
+// Pendataan PPL" yg dikasih): kartu banner (ikon+judul+subjudul + 3
+// "stat pill" Update Data/Total PPL/Total KK), header tabel biru gelap,
+// baris berselang-seling, bar Progress berwarna (hijau/kuning/merah/abu2
+// sesuai ambang, lihat progresRekapMeta), + catatan & legenda warna di
+// bawah tabel -- SEMUA fungsi lama (urut/filter kolom via ExcelTh, klik
+// angka utk modal rincian) TETAP ADA, cuma ExcelTh-nya dipakai dgn
+// variant="dark" (lihat prop baru di _shared/excel-table.tsx, TIDAK
+// mengubah tabel lain yg masih pakai default "light").
+//
+// "📋 Salin sebagai Gambar" (html2canvas + Clipboard API, pola SAMA persis
+// dgn salinSebagaiGambar di OhMonitoringPanel/app/seruti/page.tsx) --
+// SENGAJA me-render dari SALINAN TERSEMBUNYI lebar tetap (kartuRef di
+// bawah, BUKAN dari tabel on-screen yg bisa digulung sempit di layar
+// kecil) supaya hasil gambarnya konsisten apa pun lebar layar pengguna --
+// tetap mengikuti sort/filter yg SEDANG aktif krn salinan tersembunyi ini
+// dirender dari `tabel` (hook useExcelTable) yg SAMA persis dgn tabel
+// on-screen, bukan data mentah. Toolbar (tombol Salin/Muat Ulang, teks
+// bantuan sort/filter) SENGAJA DILUAR kartuRef supaya tidak ikut kefoto.
 
-function ProgresBarPemilihan({ persenNilai }: { persenNilai: number }) {
-  const warna = persenNilai >= 100 ? "bg-moss-500" : persenNilai >= 50 ? "bg-navy-500" : "bg-rust-500";
+// Ambang & warna bar Progress, StatPill, titik legenda, dst -- DITARIK ke
+// app/penyisiran/_shared/kartu-monitoring.tsx (permintaan lanjutan user:
+// terapkan gaya kartu ini ke tabel monitoring lain juga) supaya semua
+// kartu monitoring pakai 1 sumber warna/komponen yg sama, bukan disalin
+// ulang di tiap file -- lihat komentar panjang di file itu.
+
+// Ikon kecil per kolom di header tabel -- kosmetik saja, murni mengikuti
+// contoh desain, TIDAK memengaruhi key/urut/filter (yang tetap dari array
+// `kolom` di SeksiPemilihanSubsls).
+const IKON_KOLOM_REKAP: Record<string, string> = {
+  nama: "👤",
+  pengawas_nama: "👤",
+  kec_domisili: "📍",
+  kec_tugas: "📍",
+  jumlah_subsls_ditag: "📄",
+  jumlah_kk: "🏠",
+  jumlah_ditemukan: "✓",
+  jumlah_sisa: "⏳",
+};
+
+// Isi kartu yang BISA DIBAGIKAN (banner+stat pill, catatan belum ditag,
+// tabel, footer catatan+legenda) -- DIPAKAI 2x oleh SeksiPemilihanSubsls
+// (tampilan biasa on-screen & salinan tersembunyi lebar tetap khusus
+// "📋 Salin sebagai Gambar") supaya isi keduanya PERSIS SAMA & SELALU
+// ikut sort/filter yang sedang aktif (keduanya menerima `tabel` yang SAMA
+// persis, bukan data mentah) -- lihat komentar panjang di atas.
+function KontenRekapPpl({
+  data,
+  kolom,
+  tabel,
+  totalPpl,
+  totalKk,
+  tanggalUpdate,
+  onKlikDetail,
+}: {
+  data: PemilihanSubsls;
+  kolom: { key: string; label: string; getValue: (r: PemilihanSubslsRow) => string | number | boolean | null | undefined }[];
+  tabel: ReturnType<typeof useExcelTable<PemilihanSubslsRow>>;
+  totalPpl: number;
+  totalKk: number;
+  tanggalUpdate: string;
+  onKlikDetail: (r: PemilihanSubslsRow) => void;
+}) {
   return (
-    <div className="flex items-center justify-end gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-line">
-        <div className={`h-full rounded-full ${warna}`} style={{ width: `${Math.min(100, persenNilai)}%` }} />
+    <div className="bg-white">
+      <BannerKartu ikon="📋" judul="Rekap Pendataan PPL" subjudul="Jumlah Sub-SLS, Rumah Tangga (KK) dan Progress Kunjungan">
+        <StatPill ikon="📅" label="Update Data" nilai={tanggalUpdate} />
+        <StatPill ikon="👥" label="Total PPL" nilai={String(totalPpl)} />
+        <StatPill ikon="🏠" label="Total KK" nilai={totalKk.toLocaleString("id-ID")} />
+      </BannerKartu>
+
+      <p className="px-4 pt-3 text-[11px] text-ink/50">
+        Sub SLS aktif belum ditag siapapun (se-kabupaten):{" "}
+        <span className={`font-semibold ${data.total_subsls_belum_ditag > 0 ? "text-rust-700" : "text-moss-700"}`}>
+          {data.total_subsls_belum_ditag}
+        </span>
+      </p>
+
+      <div className="overflow-x-auto p-4">
+        <table className="w-full min-w-[880px] text-xs">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr>
+              <th className="px-2 py-2 text-left">No</th>
+              {kolom.map((c) => (
+                <ExcelTh
+                  key={c.key}
+                  label={`${IKON_KOLOM_REKAP[c.key] ?? ""} ${c.label}`.trim()}
+                  colKey={c.key}
+                  values={tabel.uniqueValues[c.key] ?? []}
+                  sortKey={tabel.sortKey}
+                  sortDir={tabel.sortDir}
+                  onSort={tabel.toggleSort}
+                  activeFilter={tabel.filters[c.key]}
+                  onFilterChange={tabel.setColumnFilter}
+                  variant="dark"
+                  align={
+                    c.key === "nama" || c.key === "pengawas_nama" || c.key === "kec_domisili" || c.key === "kec_tugas"
+                      ? "left"
+                      : "right"
+                  }
+                />
+              ))}
+              <th className="px-2 py-2 text-right">📊 Progress</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {tabel.rows.map((r, i) => (
+              <tr key={r.id} className={i % 2 === 1 ? "bg-[#F3F8FE]" : "bg-white"}>
+                <td className="px-2 py-1.5 text-ink/40">{i + 1}</td>
+                <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
+                <td className="px-2 py-1.5">{r.pengawas_nama ?? "-"}</td>
+                <td className="px-2 py-1.5">{r.kec_domisili ?? "-"}</td>
+                <td className="px-2 py-1.5">{r.kec_tugas ?? "-"}</td>
+                <td className="px-2 py-1.5 text-right">
+                  {r.jumlah_subsls_ditag > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => onKlikDetail(r)}
+                      className="font-semibold text-navy-700 underline hover:text-navy-900"
+                    >
+                      {r.jumlah_subsls_ditag}
+                    </button>
+                  ) : (
+                    <span className="text-ink/40">0</span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-right font-semibold text-navy-900">{r.jumlah_kk}</td>
+                <td className="px-2 py-1.5 text-right">{r.jumlah_ditemukan}</td>
+                <td className="px-2 py-1.5 text-right">{r.jumlah_sisa}</td>
+                <td className="px-2 py-1.5">
+                  <BarProgres pembilang={r.jumlah_ditemukan} penyebut={r.jumlah_kk} />
+                </td>
+              </tr>
+            ))}
+            {tabel.rows.length === 0 && (
+              <tr>
+                <td colSpan={kolom.length + 2} className="px-2 py-4 text-center text-ink/40">
+                  Tidak ada baris utk filter ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-      <span className="w-9 text-right tabular-nums">{persenNilai}%</span>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
+        <CatatanKartu>
+          <strong>Catatan:</strong> Progress = (Ditemukan / Jumlah KK) &times; 100
+        </CatatanKartu>
+        <LegendaProgresStandar />
+      </div>
     </div>
   );
 }
@@ -1890,6 +2030,8 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ id: number; nama: string } | null>(null);
+  const kartuRef = useRef<HTMLDivElement>(null);
+  const { copyStatus, salin, labelTombol } = useSalinGambar("rekap-pendataan-ppl.png");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1931,25 +2073,45 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
   );
   const tabel = useExcelTable(data?.per_petugas ?? [], kolom, { key: "jumlah_subsls_ditag", dir: "desc" });
 
+  // Tanggal "Update Data" -- dihitung SEKALI saat kartu ini pertama kali
+  // dirender (bukan tiap render ulang), cukup utk konteks "data per hari
+  // ini dilihat/dibagikan", TIDAK perlu kolom updated_at baru di backend.
+  const tanggalUpdate = useMemo(
+    () => new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+    []
+  );
+  const totalPpl = data?.per_petugas.length ?? 0;
+  const totalKk = useMemo(() => (data?.per_petugas ?? []).reduce((a, r) => a + r.jumlah_kk, 0), [data]);
+
   return (
     <div className="rounded-lg border border-line bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-navy-900">📶 Monitoring Status Pemilihan Sub-SLS (khusus pengelola)</p>
+          <p className="text-sm font-semibold text-navy-900">📋 Rekap Pendataan PPL (khusus pengelola)</p>
           <p className="mt-1 text-xs text-ink/60">
             Sub SLS yang sudah ditag/dialokasikan tiap petugas beserta jumlah KK &amp; progres kunjungannya. Klik
             angka pada kolom &ldquo;Jumlah Sub-SLS Ditag&rdquo; untuk lihat rincian kecamatan/nagari/Sub SLS yang
             ditag, serta Sub SLS yang masih tersedia (belum ditag siapapun) di kecamatan yang sama.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => salin(kartuRef.current)}
+            disabled={copyStatus === "copying" || !data}
+            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+          >
+            {labelTombol("📋 Salin sebagai Gambar")}
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+          >
+            {loading ? "Memuat..." : "↻ Muat Ulang"}
+          </button>
+        </div>
       </div>
 
       {errMsg && (
@@ -1960,15 +2122,11 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
 
       {data && (
         <>
-          <p className="mt-3 text-[11px] text-ink/50">
-            Sub SLS aktif belum ditag siapapun (se-kabupaten):{" "}
-            <span className={`font-semibold ${data.total_subsls_belum_ditag > 0 ? "text-rust-700" : "text-moss-700"}`}>
-              {data.total_subsls_belum_ditag}
-            </span>
-          </p>
-
-          <div className="mt-2 flex items-center justify-between text-[10px] text-ink/40">
-            <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; utk filter.</p>
+          <div className="mt-3 flex items-center justify-between text-[10px] text-ink/40">
+            <p>
+              Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; utk filter. Gambar hasil &ldquo;Salin sebagai
+              Gambar&rdquo; ikut sort/filter yang sedang aktif.
+            </p>
             {tabel.adaFilterAktif && (
               <button type="button" onClick={tabel.resetFilters} className="font-medium text-navy-700 hover:underline">
                 Reset semua filter
@@ -1976,73 +2134,31 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
             )}
           </div>
 
-          <div className="mt-2 overflow-x-auto rounded-md border border-line">
-            <table className="w-full min-w-[820px] text-xs">
-              <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
-                <tr>
-                  <th className="px-2 py-2 text-left">No</th>
-                  {kolom.map((c) => (
-                    <ExcelTh
-                      key={c.key}
-                      label={c.label}
-                      colKey={c.key}
-                      values={tabel.uniqueValues[c.key] ?? []}
-                      sortKey={tabel.sortKey}
-                      sortDir={tabel.sortDir}
-                      onSort={tabel.toggleSort}
-                      activeFilter={tabel.filters[c.key]}
-                      onFilterChange={tabel.setColumnFilter}
-                      align={
-                        c.key === "nama" || c.key === "pengawas_nama" || c.key === "kec_domisili" || c.key === "kec_tugas"
-                          ? "left"
-                          : "right"
-                      }
-                    />
-                  ))}
-                  <th className="px-2 py-2 text-right">Progress</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {tabel.rows.map((r, i) => {
-                  const pct = persenPemilihan(r.jumlah_ditemukan, r.jumlah_kk);
-                  return (
-                    <tr key={r.id}>
-                      <td className="px-2 py-1.5 text-ink/40">{i + 1}</td>
-                      <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
-                      <td className="px-2 py-1.5">{r.pengawas_nama ?? "-"}</td>
-                      <td className="px-2 py-1.5">{r.kec_domisili ?? "-"}</td>
-                      <td className="px-2 py-1.5">{r.kec_tugas ?? "-"}</td>
-                      <td className="px-2 py-1.5 text-right">
-                        {r.jumlah_subsls_ditag > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => setDetail({ id: r.id, nama: r.nama })}
-                            className="font-semibold text-navy-700 underline hover:text-navy-900"
-                          >
-                            {r.jumlah_subsls_ditag}
-                          </button>
-                        ) : (
-                          <span className="text-ink/40">0</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5 text-right">{r.jumlah_kk}</td>
-                      <td className="px-2 py-1.5 text-right">{r.jumlah_ditemukan}</td>
-                      <td className="px-2 py-1.5 text-right">{r.jumlah_sisa}</td>
-                      <td className="px-2 py-1.5">
-                        <ProgresBarPemilihan persenNilai={pct} />
-                      </td>
-                    </tr>
-                  );
-                })}
-                {tabel.rows.length === 0 && (
-                  <tr>
-                    <td colSpan={kolom.length + 2} className="px-2 py-4 text-center text-ink/40">
-                      Tidak ada baris utk filter ini.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="mt-2 overflow-hidden rounded-lg border border-line">
+            <KontenRekapPpl
+              data={data}
+              kolom={kolom}
+              tabel={tabel}
+              totalPpl={totalPpl}
+              totalKk={totalKk}
+              tanggalUpdate={tanggalUpdate}
+              onKlikDetail={(r) => setDetail({ id: r.id, nama: r.nama })}
+            />
+          </div>
+
+          {/* Salinan tersembunyi lebar tetap (1300px), sumber gambar saat
+              "📋 Salin sebagai Gambar" diklik -- lihat komentar panjang di
+              atas file & salinSebagaiGambar(). */}
+          <div ref={kartuRef} className="fixed -left-[9999px] top-0 w-[1300px]" aria-hidden="true">
+            <KontenRekapPpl
+              data={data}
+              kolom={kolom}
+              tabel={tabel}
+              totalPpl={totalPpl}
+              totalKk={totalKk}
+              tanggalUpdate={tanggalUpdate}
+              onKlikDetail={() => {}}
+            />
           </div>
         </>
       )}

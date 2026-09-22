@@ -151,6 +151,7 @@ export function ExcelTh({
   align = "left",
   className,
   rowSpan,
+  variant = "light",
 }: {
   label: string;
   colKey: string;
@@ -167,6 +168,13 @@ export function ExcelTh({
   // manapun ditaruh rowSpan={2} spy tetap sejajar tinggi dgn grup di
   // sampingnya (yg makan 2 baris: 1 baris label grup + 1 baris sub-kolom).
   rowSpan?: number;
+  // "dark" -- utk header berlatar warna gelap (mis. kartu "📋 Rekap
+  // Pendataan PPL" di perencanaan-lapangan.tsx yg mengikuti desain
+  // referensi) -- HANYA mengubah warna ikon urut/filter (supaya tetap
+  // kebaca di atas latar gelap), TIDAK mengubah perilaku apa pun. Default
+  // "light" (perilaku LAMA, dipakai semua tabel lain) -- SENGAJA tidak
+  // disentuh supaya tabel lain yg sudah pakai ExcelTh tidak ikut berubah.
+  variant?: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
   const [cari, setCari] = useState("");
@@ -206,13 +214,25 @@ export function ExcelTh({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className={`rounded px-1 text-[10px] normal-case ${isFiltered ? "bg-navy-700 text-white" : "text-ink/40 hover:text-navy-700"}`}
+            className={`rounded px-1 text-[10px] normal-case ${
+              isFiltered
+                ? variant === "dark"
+                  ? "bg-white text-navy-900"
+                  : "bg-navy-700 text-white"
+                : variant === "dark"
+                ? "text-white/60 hover:text-white"
+                : "text-ink/40 hover:text-navy-700"
+            }`}
             title="Filter"
           >
             ▾
           </button>
         )}
-        <button type="button" onClick={() => onSort(colKey)} className="inline-flex items-center gap-0.5 hover:text-navy-900">
+        <button
+          type="button"
+          onClick={() => onSort(colKey)}
+          className={`inline-flex items-center gap-0.5 ${variant === "dark" ? "hover:text-white/80" : "hover:text-navy-900"}`}
+        >
           {label}
           {sortKey === colKey && <span>{sortDir === "asc" ? " ▲" : " ▼"}</span>}
         </button>
@@ -220,7 +240,15 @@ export function ExcelTh({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className={`rounded px-1 text-[10px] normal-case ${isFiltered ? "bg-navy-700 text-white" : "text-ink/40 hover:text-navy-700"}`}
+            className={`rounded px-1 text-[10px] normal-case ${
+              isFiltered
+                ? variant === "dark"
+                  ? "bg-white text-navy-900"
+                  : "bg-navy-700 text-white"
+                : variant === "dark"
+                ? "text-white/60 hover:text-white"
+                : "text-ink/40 hover:text-navy-700"
+            }`}
             title="Filter"
           >
             ▾
