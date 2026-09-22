@@ -11,7 +11,12 @@
 //          tabel yg sama -- satu pengawas boleh membawahi banyak PPL,
 //          lihat migrasi 20260918_master_petugas_kolom_dan_pengawas.sql).
 // PATCH -> ubah SATU petugas (email/alamat_kecamatan/alamat_nagari/
-//          alamat_detail/status_kepegawaian/pengawas_id).
+//          alamat_detail/status_kepegawaian/pengawas_id/jabatan).
+//          jabatan (BARU, permintaan user): ppl/pml/kepala_kantor -- dipakai
+//          jg utk monitoring "PPL belum ada PML" & "PML belum ada PPL" yg
+//          dihitung CLIENT-SIDE di master-petugas.tsx dari kolom ini +
+//          pengawas_id yg sudah ada (lihat migrasi
+//          pindah_pemilihan_subsls_dan_tambah_jabatan_petugas.sql).
 // POST  -> TAMBAH petugas baru langsung ke petugas_penyisiran_akun (nama +
 //          tanggal_lahir WAJIB, krn keduanya dipakai login personal --
 //          lihat app/api/penyisiran/penyisiran-login/route.ts). aktif
@@ -40,6 +45,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const STATUS_VALID = new Set(["mitra", "organik"]);
+// Jabatan (BARU, permintaan user) -- dipakai jg utk monitoring "PPL belum
+// ada PML" / "PML belum ada PPL" di frontend (dihitung client-side dari
+// kolom ini + pengawas_id yg sudah ada, lihat master-petugas.tsx).
+const JABATAN_VALID = new Set(["ppl", "pml", "kepala_kantor"]);
 // Whitelist field yg boleh diubah lewat PATCH -- lihat komentar serupa di
 // app/api/penyisiran/target/route.ts kenapa ini sengaja dijaga terpisah,
 // bukan dipercayakan ke nama kolom yg dikirim client.
@@ -51,6 +60,7 @@ const FIELD_VALID = new Set([
   "alamat_detail",
   "status_kepegawaian",
   "pengawas_id",
+  "jabatan",
 ]);
 
 function supabaseAdmin() {
@@ -97,7 +107,9 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
-    .select("id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
+    .select(
+      "id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id, jabatan"
+    )
     .order("nama", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -118,6 +130,7 @@ export async function GET(req: NextRequest) {
     status_kepegawaian: p.status_kepegawaian ?? null,
     pengawas_id: p.pengawas_id ?? null,
     pengawas_nama: p.pengawas_id != null ? namaById.get(p.pengawas_id) ?? null : null,
+    jabatan: p.jabatan ?? null,
   }));
 
   return NextResponse.json({ petugas });
@@ -151,6 +164,14 @@ export async function PATCH(req: NextRequest) {
         fields[key] = val;
       } else {
         return NextResponse.json({ error: `Status kepegawaian tidak valid: ${val}` }, { status: 400 });
+      }
+    } else if (key === "jabatan") {
+      if (val === null || val === "") {
+        fields[key] = null;
+      } else if (typeof val === "string" && JABATAN_VALID.has(val)) {
+        fields[key] = val;
+      } else {
+        return NextResponse.json({ error: `Jabatan tidak valid: ${val}` }, { status: 400 });
       }
     } else if (key === "pengawas_id") {
       if (val === null || val === "") {
@@ -215,6 +236,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const jabatanInput = body?.jabatan;
+  let jabatan: string | null = null;
+  if (jabatanInput !== "" && jabatanInput != null) {
+    if (typeof jabatanInput === "string" && JABATAN_VALID.has(jabatanInput)) {
+      jabatan = jabatanInput;
+    } else {
+      return NextResponse.json({ error: `Jabatan tidak valid: ${jabatanInput}` }, { status: 400 });
+    }
+  }
+
   const { data, error } = await supabase
     .from("petugas_penyisiran_akun")
     .insert({
@@ -228,8 +259,11 @@ export async function POST(req: NextRequest) {
       alamat_detail: teksOpsional(body?.alamat_detail),
       keterangan: teksOpsional(body?.keterangan),
       status_kepegawaian,
+      jabatan,
     })
-    .select("id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id")
+    .select(
+      "id, nama, aktif, email, no_hp, alamat_kecamatan, alamat_nagari, alamat_detail, status_kepegawaian, pengawas_id, jabatan"
+    )
     .single();
 
   if (error) {

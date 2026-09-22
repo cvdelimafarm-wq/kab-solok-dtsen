@@ -121,7 +121,7 @@
 //     clipboard supaya gampang ditempel langsung ke grup WA -- fallback
 //     unduh file kalau browser tidak dukung clipboard image).
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
@@ -261,6 +261,50 @@ interface AutoAlokasiHasil {
   jumlah_dpt_penuh: number;
   hasil: AutoAlokasiBaris[];
   pesan?: string;
+}
+
+// Bentuk data "Monitoring Status Pemilihan Sub-SLS" (DIPINDAH dari tab
+// Monitoring ke sini, lihat SeksiPemilihanSubsls di bawah) -- RPC berdiri
+// sendiri penyisiran_pemilihan_subsls() & penyisiran_detail_pemilihan_subsls().
+interface PemilihanSubslsRow {
+  id: number;
+  nama: string;
+  kec_domisili: string | null;
+  nagari_domisili: string | null;
+  kec_tugas: string | null;
+  jumlah_subsls_ditag: number;
+  jumlah_kk: number;
+  jumlah_ditemukan: number;
+  jumlah_sisa: number;
+}
+
+interface PemilihanSubsls {
+  per_petugas: PemilihanSubslsRow[];
+  total_subsls_belum_ditag: number;
+}
+
+interface DetailPemilihanSubslsRow {
+  kec_nama: string;
+  nagari_nama: string;
+  sls_nama: string;
+  subsls_kode: string;
+  idsubsls: string;
+  jumlah_kk: number;
+}
+
+interface DetailPemilihanSubslsDitagRow extends DetailPemilihanSubslsRow {
+  jumlah_ditemukan: number;
+}
+
+interface DetailPemilihanSubsls {
+  ditag: DetailPemilihanSubslsDitagRow[];
+  belum_ditag: DetailPemilihanSubslsRow[];
+  total_ditag_kk: number;
+  total_belum_ditag_kk: number;
+}
+
+function persenPemilihan(bagian: number, total: number): number {
+  return total > 0 ? Math.round((bagian / total) * 100) : 0;
 }
 
 function tokenExpMs(token: string): number {
@@ -455,6 +499,12 @@ function PerencanaanPanel({
       <HariTugasPanel token={token} />
 
       <WilayahSampelPanel token={token} nama={nama} petugasId={petugasId} onSessionExpired={onSessionExpired} />
+
+      {/* DIPINDAH dari tab Monitoring (permintaan user) -- ditaruh tepat di
+          bawah kartu "📋 Identifikasi Wilayah Sampel SLS" di atas. Data
+          agregat SEMUA petugas (bukan personal), jadi digerbang pengelola
+          spt panel2 lain di bawah ini. */}
+      {bolehAksesManajemenTarget(nama) && <SeksiPemilihanSubsls token={token} />}
 
       {bolehAksesManajemenTarget(nama) && <OhMonitoringPanel token={token} />}
     </div>
@@ -1706,6 +1756,333 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Monitoring Status Pemilihan Sub-SLS (DIPINDAH dari tab
+// Monitoring, permintaan user) ----------
+//
+// Per petugas AKTIF (tab Penyisiran Usaha): berapa Sub SLS yg sudah
+// ditag/dialokasikan (kolom "Jumlah Sub-SLS Ditag" bisa DIKLIK -> modal
+// rincian), jumlah KK di dalamnya, dan progres kunjungan
+// (Ditemukan/Sudah Dikunjungi vs Sisa Belum Dikunjungi). Dihitung lewat
+// JOIN langsung ke penyisiran_usaha aktif memakai predikat wilayah yg
+// benar (lib/wilayahAlokasiPetugas.ts: kec+nagari+sls sama, dan
+// subsls_kode_list IS NULL [artinya "seluruh SLS"] ATAU subsls_kode =
+// ANY(subsls_kode_list)) -- lihat RPC penyisiran_pemilihan_subsls() &
+// penyisiran_detail_pemilihan_subsls() migrasi
+// pindah_pemilihan_subsls_dan_tambah_jabatan_petugas.sql. PANEL INI
+// FETCH SENDIRI (endpoint terpisah /api/penyisiran/pemilihan-subsls),
+// beda dari 2 bagian utama tab ini yg datanya personal per petugas login.
+
+function ProgresBarPemilihan({ persenNilai }: { persenNilai: number }) {
+  const warna = persenNilai >= 100 ? "bg-moss-500" : persenNilai >= 50 ? "bg-navy-500" : "bg-rust-500";
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-line">
+        <div className={`h-full rounded-full ${warna}`} style={{ width: `${Math.min(100, persenNilai)}%` }} />
+      </div>
+      <span className="w-9 text-right tabular-nums">{persenNilai}%</span>
+    </div>
+  );
+}
+
+function SeksiPemilihanSubsls({ token }: { token: string }) {
+  const [data, setData] = useState<PemilihanSubsls | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ id: number; nama: string } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const d = await apiFetch("/api/penyisiran/pemilihan-subsls", token);
+      setData(d);
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const kolom = useMemo(
+    () => [
+      { key: "nama", label: "Nama Petugas", getValue: (r: PemilihanSubslsRow) => r.nama },
+      { key: "kec_domisili", label: "Kecamatan Domisili", getValue: (r: PemilihanSubslsRow) => r.kec_domisili },
+      { key: "kec_tugas", label: "Kecamatan Tugas", getValue: (r: PemilihanSubslsRow) => r.kec_tugas },
+      {
+        key: "jumlah_subsls_ditag",
+        label: "Jumlah Sub-SLS Ditag",
+        getValue: (r: PemilihanSubslsRow) => r.jumlah_subsls_ditag,
+      },
+      { key: "jumlah_kk", label: "Jumlah KK", getValue: (r: PemilihanSubslsRow) => r.jumlah_kk },
+      {
+        key: "jumlah_ditemukan",
+        label: "Ditemukan (Sudah Dikunjungi)",
+        getValue: (r: PemilihanSubslsRow) => r.jumlah_ditemukan,
+      },
+      { key: "jumlah_sisa", label: "Sisa Belum Dikunjungi", getValue: (r: PemilihanSubslsRow) => r.jumlah_sisa },
+    ],
+    []
+  );
+  const tabel = useExcelTable(data?.per_petugas ?? [], kolom, { key: "jumlah_subsls_ditag", dir: "desc" });
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-navy-900">📶 Monitoring Status Pemilihan Sub-SLS (khusus pengelola)</p>
+          <p className="mt-1 text-xs text-ink/60">
+            Sub SLS yang sudah ditag/dialokasikan tiap petugas beserta jumlah KK &amp; progres kunjungannya. Klik
+            angka pada kolom &ldquo;Jumlah Sub-SLS Ditag&rdquo; untuk lihat rincian kecamatan/nagari/Sub SLS yang
+            ditag, serta Sub SLS yang masih tersedia (belum ditag siapapun) di kecamatan yang sama.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="shrink-0 rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+
+      {errMsg && (
+        <p className="mt-2 rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
+      )}
+
+      {!data && loading && <p className="mt-3 text-xs text-ink/50">Memuat...</p>}
+
+      {data && (
+        <>
+          <p className="mt-3 text-[11px] text-ink/50">
+            Sub SLS aktif belum ditag siapapun (se-kabupaten):{" "}
+            <span className={`font-semibold ${data.total_subsls_belum_ditag > 0 ? "text-rust-700" : "text-moss-700"}`}>
+              {data.total_subsls_belum_ditag}
+            </span>
+          </p>
+
+          <div className="mt-2 flex items-center justify-between text-[10px] text-ink/40">
+            <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; utk filter.</p>
+            {tabel.adaFilterAktif && (
+              <button type="button" onClick={tabel.resetFilters} className="font-medium text-navy-700 hover:underline">
+                Reset semua filter
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2 overflow-x-auto rounded-md border border-line">
+            <table className="w-full min-w-[820px] text-xs">
+              <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                <tr>
+                  <th className="px-2 py-2 text-left">No</th>
+                  {kolom.map((c) => (
+                    <ExcelTh
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      values={tabel.uniqueValues[c.key] ?? []}
+                      sortKey={tabel.sortKey}
+                      sortDir={tabel.sortDir}
+                      onSort={tabel.toggleSort}
+                      activeFilter={tabel.filters[c.key]}
+                      onFilterChange={tabel.setColumnFilter}
+                      align={c.key === "nama" || c.key === "kec_domisili" || c.key === "kec_tugas" ? "left" : "right"}
+                    />
+                  ))}
+                  <th className="px-2 py-2 text-right">Progress</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {tabel.rows.map((r, i) => {
+                  const pct = persenPemilihan(r.jumlah_ditemukan, r.jumlah_kk);
+                  return (
+                    <tr key={r.id}>
+                      <td className="px-2 py-1.5 text-ink/40">{i + 1}</td>
+                      <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
+                      <td className="px-2 py-1.5">{r.kec_domisili ?? "-"}</td>
+                      <td className="px-2 py-1.5">{r.kec_tugas ?? "-"}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        {r.jumlah_subsls_ditag > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setDetail({ id: r.id, nama: r.nama })}
+                            className="font-semibold text-navy-700 underline hover:text-navy-900"
+                          >
+                            {r.jumlah_subsls_ditag}
+                          </button>
+                        ) : (
+                          <span className="text-ink/40">0</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">{r.jumlah_kk}</td>
+                      <td className="px-2 py-1.5 text-right">{r.jumlah_ditemukan}</td>
+                      <td className="px-2 py-1.5 text-right">{r.jumlah_sisa}</td>
+                      <td className="px-2 py-1.5">
+                        <ProgresBarPemilihan persenNilai={pct} />
+                      </td>
+                    </tr>
+                  );
+                })}
+                {tabel.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={kolom.length + 2} className="px-2 py-4 text-center text-ink/40">
+                      Tidak ada baris utk filter ini.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {detail && (
+        <ModalDetailPemilihanSubsls
+          token={token}
+          petugasId={detail.id}
+          namaPetugas={detail.nama}
+          onClose={() => setDetail(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModalDetailPemilihanSubsls({
+  token,
+  petugasId,
+  namaPetugas,
+  onClose,
+}: {
+  token: string;
+  petugasId: number;
+  namaPetugas: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<DetailPemilihanSubsls | null>(null);
+  const [memuat, setMemuat] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMemuat(true);
+    setErrMsg(null);
+    apiFetch(`/api/penyisiran/detail-pemilihan-subsls?petugas_id=${petugasId}`, token)
+      .then((d) => setData(d))
+      .catch((e) => setErrMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setMemuat(false));
+  }, [petugasId, token]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-navy-900">Rincian Pemilihan Sub-SLS</p>
+            <p className="text-[11px] text-ink/50">{namaPetugas}</p>
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 text-ink/40 hover:text-navy-700">
+            ✕
+          </button>
+        </div>
+
+        {memuat && <p className="py-6 text-center text-xs text-ink/40">Memuat...</p>}
+        {errMsg && (
+          <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
+        )}
+
+        {data && (
+          <div className="space-y-4">
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <p className="text-[11px] font-semibold text-ink/50">Sub SLS yang Ditag ({data.ditag.length})</p>
+                <p className="text-[11px] text-ink/50">{data.total_ditag_kk} KK</p>
+              </div>
+              {data.ditag.length === 0 ? (
+                <p className="rounded-md border border-line bg-paper/40 p-2.5 text-xs text-ink/50">
+                  Belum ada Sub SLS yang ditag utk petugas ini.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] border-collapse text-xs">
+                    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left">Kecamatan</th>
+                        <th className="px-2 py-1.5 text-left">Nagari</th>
+                        <th className="px-2 py-1.5 text-left">SLS</th>
+                        <th className="px-2 py-1.5 text-left">Sub SLS</th>
+                        <th className="px-2 py-1.5 text-right">Jumlah KK</th>
+                        <th className="px-2 py-1.5 text-right">Ditemukan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {data.ditag.map((r) => (
+                        <tr key={r.idsubsls}>
+                          <td className="px-2 py-1.5">{r.kec_nama}</td>
+                          <td className="px-2 py-1.5">{r.nagari_nama}</td>
+                          <td className="px-2 py-1.5">{r.sls_nama}</td>
+                          <td className="px-2 py-1.5 font-mono text-[11px]">{r.subsls_kode}</td>
+                          <td className="px-2 py-1.5 text-right">{r.jumlah_kk}</td>
+                          <td className="px-2 py-1.5 text-right">{r.jumlah_ditemukan}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <p className="text-[11px] font-semibold text-ink/50">
+                  Sub SLS Masih Tersedia di Kecamatan yang Sama, Belum Ditag ({data.belum_ditag.length})
+                </p>
+                <p className="text-[11px] text-ink/50">{data.total_belum_ditag_kk} KK</p>
+              </div>
+              {data.belum_ditag.length === 0 ? (
+                <p className="rounded-md border border-moss-200 bg-moss-100/40 p-2.5 text-xs text-moss-700">
+                  ✅ Semua Sub SLS di kecamatan tugas petugas ini sudah ditag.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[440px] border-collapse text-xs">
+                    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left">Kecamatan</th>
+                        <th className="px-2 py-1.5 text-left">Nagari</th>
+                        <th className="px-2 py-1.5 text-left">SLS</th>
+                        <th className="px-2 py-1.5 text-left">Sub SLS</th>
+                        <th className="px-2 py-1.5 text-right">Jumlah KK</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {data.belum_ditag.map((r) => (
+                        <tr key={r.idsubsls}>
+                          <td className="px-2 py-1.5">{r.kec_nama}</td>
+                          <td className="px-2 py-1.5">{r.nagari_nama}</td>
+                          <td className="px-2 py-1.5">{r.sls_nama}</td>
+                          <td className="px-2 py-1.5 font-mono text-[11px]">{r.subsls_kode}</td>
+                          <td className="px-2 py-1.5 text-right">{r.jumlah_kk}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

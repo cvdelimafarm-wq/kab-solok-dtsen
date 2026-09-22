@@ -56,6 +56,20 @@ const STATUS_LABEL: Record<StatusKepegawaian, string> = {
   organik: "Organik",
 };
 
+// Jabatan (BARU, permintaan user) -- dipakai jg utk monitoring "PPL belum
+// ada PML" & "PML belum ada PPL" (lihat MonitoringJabatanCard di bawah,
+// dihitung CLIENT-SIDE dari kolom ini + pengawas_id yg sudah ada. PPL
+// "belum ada PML" = jabatan ppl & aktif & (tidak py pengawas ATAU pengawas
+// yg ditunjuk BUKAN berjabatan pml). PML "belum ada PPL" = jabatan pml &
+// aktif & tidak ada PPL aktif yg pengawas_id-nya mengarah ke dia.
+type Jabatan = "ppl" | "pml" | "kepala_kantor";
+
+const JABATAN_LABEL: Record<Jabatan, string> = {
+  ppl: "PPL",
+  pml: "PML",
+  kepala_kantor: "Kepala Kantor",
+};
+
 interface PetugasMaster {
   id: number;
   nama: string;
@@ -68,6 +82,7 @@ interface PetugasMaster {
   status_kepegawaian: StatusKepegawaian | null;
   pengawas_id: number | null;
   pengawas_nama: string | null;
+  jabatan: Jabatan | null;
 }
 
 function tokenExpMs(t: string): number {
@@ -409,11 +424,35 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
         label: "Status",
         getValue: (p: PetugasMaster) => (p.status_kepegawaian ? STATUS_LABEL[p.status_kepegawaian] : null),
       },
+      {
+        key: "jabatan",
+        label: "Jabatan",
+        getValue: (p: PetugasMaster) => (p.jabatan ? JABATAN_LABEL[p.jabatan] : null),
+      },
       { key: "pengawas_nama", label: "Pengawas", getValue: (p: PetugasMaster) => p.pengawas_nama },
     ],
     []
   );
   const tabel = useExcelTable(petugasSearched, kolom, { key: "nama", dir: "asc" });
+
+  // Monitoring kelengkapan jabatan PPL/PML (BARU, permintaan user) --
+  // dihitung dari SELURUH daftar petugas yg sudah dimuat (bukan hasil
+  // pencarian/filter tabel di bawah, supaya angkanya tetap utuh walau
+  // sedang mencari/filter baris tertentu).
+  //   - PPL belum ada PML: jabatan ppl, aktif, dan pengawasnya KOSONG atau
+  //     pengawas yg ditunjuk BUKAN berjabatan pml.
+  //   - PML belum ada PPL: jabatan pml, aktif, dan TIDAK ADA petugas
+  //     berjabatan ppl aktif yg pengawas_id-nya mengarah ke dia.
+  const byId = new Map(petugas.map((p) => [p.id, p]));
+  const ppBelumAdaPml = petugas.filter((p) => {
+    if (p.jabatan !== "ppl" || !p.aktif) return false;
+    const pengawas = p.pengawas_id != null ? byId.get(p.pengawas_id) : null;
+    return !pengawas || pengawas.jabatan !== "pml";
+  });
+  const pmlBelumAdaPpl = petugas.filter((p) => {
+    if (p.jabatan !== "pml" || !p.aktif) return false;
+    return !petugas.some((x) => x.aktif && x.jabatan === "ppl" && x.pengawas_id === p.id);
+  });
 
   return (
     <div className="space-y-4 pb-16">
@@ -428,6 +467,42 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
       {errMsg && (
         <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-3 text-xs text-rust-700">⚠ {errMsg}</p>
       )}
+
+      <div className="rounded-lg border border-line bg-white p-3">
+        <p className="mb-2 text-xs font-semibold text-navy-900">🧭 Monitoring Kelengkapan Jabatan PPL/PML</p>
+        <p className="mb-3 text-[11px] text-ink/50">
+          Dihitung dari kolom &ldquo;Jabatan&rdquo; &amp; &ldquo;Pengawas&rdquo; pada tabel di bawah -- isi dulu kedua
+          kolom itu utk tiap petugas supaya monitoring ini akurat.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-md border border-line bg-paper/40 p-2.5">
+            <p className="flex items-baseline justify-between">
+              <span className="text-[11px] font-semibold text-ink/60">PPL Belum Ada PML</span>
+              <span className={`text-base font-bold ${ppBelumAdaPml.length > 0 ? "text-rust-700" : "text-moss-700"}`}>
+                {ppBelumAdaPml.length}
+              </span>
+            </p>
+            {ppBelumAdaPml.length === 0 ? (
+              <p className="mt-1 text-[11px] text-moss-700">✅ Semua PPL aktif sudah punya PML.</p>
+            ) : (
+              <p className="mt-1 text-[11px] text-ink/70">{ppBelumAdaPml.map((p) => p.nama).join(", ")}</p>
+            )}
+          </div>
+          <div className="rounded-md border border-line bg-paper/40 p-2.5">
+            <p className="flex items-baseline justify-between">
+              <span className="text-[11px] font-semibold text-ink/60">PML Belum Ada PPL</span>
+              <span className={`text-base font-bold ${pmlBelumAdaPpl.length > 0 ? "text-rust-700" : "text-moss-700"}`}>
+                {pmlBelumAdaPpl.length}
+              </span>
+            </p>
+            {pmlBelumAdaPpl.length === 0 ? (
+              <p className="mt-1 text-[11px] text-moss-700">✅ Semua PML aktif sudah punya PPL bawahan.</p>
+            ) : (
+              <p className="mt-1 text-[11px] text-ink/70">{pmlBelumAdaPpl.map((p) => p.nama).join(", ")}</p>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-lg border border-line bg-white p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -580,6 +655,7 @@ function BarisMaster({
   const [nagari, setNagari] = useState(p.alamat_nagari ?? "");
   const [detail, setDetail] = useState(p.alamat_detail ?? "");
   const [status, setStatus] = useState<StatusKepegawaian | "">(p.status_kepegawaian ?? "");
+  const [jabatan, setJabatan] = useState<Jabatan | "">(p.jabatan ?? "");
   const [pengawasId, setPengawasId] = useState<string>(p.pengawas_id != null ? String(p.pengawas_id) : "");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "ok" | "err">("idle");
 
@@ -590,8 +666,18 @@ function BarisMaster({
     setNagari(p.alamat_nagari ?? "");
     setDetail(p.alamat_detail ?? "");
     setStatus(p.status_kepegawaian ?? "");
+    setJabatan(p.jabatan ?? "");
     setPengawasId(p.pengawas_id != null ? String(p.pengawas_id) : "");
-  }, [p.email, p.no_hp, p.alamat_kecamatan, p.alamat_nagari, p.alamat_detail, p.status_kepegawaian, p.pengawas_id]);
+  }, [
+    p.email,
+    p.no_hp,
+    p.alamat_kecamatan,
+    p.alamat_nagari,
+    p.alamat_detail,
+    p.status_kepegawaian,
+    p.jabatan,
+    p.pengawas_id,
+  ]);
 
   async function simpan(fields: Record<string, string | number | null>) {
     setSaveStatus("saving");
@@ -730,6 +816,24 @@ function BarisMaster({
         </select>
       </td>
       <td className="px-3 py-1.5">
+        <select
+          value={jabatan}
+          onChange={(e) => {
+            const v = (e.target.value || "") as Jabatan | "";
+            setJabatan(v);
+            simpan({ jabatan: v === "" ? null : v });
+          }}
+          className="rounded-md border border-line px-2 py-1 text-xs"
+        >
+          <option value="">-- Belum diisi --</option>
+          {(Object.keys(JABATAN_LABEL) as Jabatan[]).map((j) => (
+            <option key={j} value={j}>
+              {JABATAN_LABEL[j]}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-3 py-1.5">
         <div className="flex items-center gap-1.5">
           <select
             value={pengawasId}
@@ -777,6 +881,7 @@ function TambahPetugasForm({
   const [nagari, setNagari] = useState("");
   const [detail, setDetail] = useState("");
   const [status, setStatus] = useState<StatusKepegawaian | "">("");
+  const [jabatan, setJabatan] = useState<Jabatan | "">("");
   const [keterangan, setKeterangan] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -804,6 +909,7 @@ function TambahPetugasForm({
         alamat_nagari: nagari.trim() === "" ? null : nagari.trim(),
         alamat_detail: detail.trim() === "" ? null : detail.trim(),
         status_kepegawaian: status === "" ? null : status,
+        jabatan: jabatan === "" ? null : jabatan,
         keterangan: keterangan.trim() === "" ? null : keterangan.trim(),
       });
       // Sukses -- onSimpan (tambahPetugas di parent) yg menutup form ini
@@ -852,6 +958,21 @@ function TambahPetugasForm({
             {(Object.keys(STATUS_LABEL) as StatusKepegawaian[]).map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/60">Jabatan</label>
+          <select
+            value={jabatan}
+            onChange={(e) => setJabatan((e.target.value || "") as Jabatan | "")}
+            className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+          >
+            <option value="">-- Belum diisi --</option>
+            {(Object.keys(JABATAN_LABEL) as Jabatan[]).map((j) => (
+              <option key={j} value={j}>
+                {JABATAN_LABEL[j]}
               </option>
             ))}
           </select>
