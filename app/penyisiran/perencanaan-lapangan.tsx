@@ -133,7 +133,7 @@ import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 // pernah memilih wilayah sendiri, sesuai desain yg sudah didokumentasikan
 // di sana, cuma belum ditegakkan di kartu ini sebelumnya.
 import { IS_PML_KEY } from "../seruti/penyisiran-usaha";
-import { useExcelTable, ExcelTh } from "./_shared/excel-table";
+import { useExcelTable, ExcelTh, type ExcelColumn } from "./_shared/excel-table";
 import { BarProgres, StatPill, LegendaProgresStandar, BannerKartu, CatatanKartu, useSalinGambar } from "./_shared/kartu-monitoring";
 
 const TOKEN_KEY = "penyisiran-petugas-login-token";
@@ -539,6 +539,12 @@ function PerencanaanPanel({
           mereka (atau siapa pun) sudah pernah submit pilihan, sama spt
           perilaku aslinya sebelum dipindah. */}
       {matrixState.tampilkan && <MatrixPanel matrix={matrixState.matrix} loading={matrixState.loading} />}
+
+      {/* "🔄 Monitoring Assignment FASIH" -- BARU (permintaan user), dekat
+          data alokasi/wilayah di atas krn membandingkan data yg SAMA
+          (penyisiran_alokasi_pilihan) dgn hasil assignment eksternal.
+          Pengelola saja, gerbang sama dgn tombol export subsls. */}
+      {bolehAksesManajemenTarget(nama) && <FasihAssignmentPanel token={token} onSessionExpired={onSessionExpired} />}
 
       {bolehAksesManajemenTarget(nama) && <OhMonitoringPanel token={token} />}
     </div>
@@ -1848,6 +1854,258 @@ function MatrixPanel({ matrix, loading }: { matrix: MatrixRow[]; loading: boolea
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- "🔄 Monitoring Assignment FASIH" (permintaan user) ----------
+//
+// Bandingkan data "sekarang" di sistem (hasil tag "📋 Identifikasi Wilayah
+// Sampel SLS", tabel penyisiran_alokasi_pilihan) dgn data hasil assignment
+// yang SUDAH BERHASIL diproses di aplikasi eksternal "FASIH" -- pengelola
+// upload 1/beberapa file Excel format SAMA PERSIS dgn "⬇ Export Excel
+// Pengawas/Pencacah (per SUBSLS)" (file itulah yang tadinya diupload KE
+// FASIH; FASIH lalu bisa diekspor balik per-Pengawas, contoh user
+// "Deswaty.xlsx"). Perbandingan dilakukan SERVER-SIDE (kirim file mentah
+// via FormData, BUKAN parse xlsx di browser) -- lihat komentar lengkap 3
+// jenis selisih & alasan tiap keputusan di
+// app/api/penyisiran/alokasi/fasih-compare/route.ts. HANYA pengelola
+// (bolehAksesManajemenTarget), gerbang SAMA dgn tombol export subsls.
+// Tabelnya PAKAI pola ExcelTh yg sama dgn tabel lain di app ini (lihat
+// TabelSelisih di bawah), tapi state hasil TIDAK disimpan ke DB -- murni
+// alat bantu sekali-jalan tiap kali pengelola punya file FASIH baru utk
+// dicek, tidak perlu riwayat.
+interface FasihHasil {
+  ringkasan: {
+    total_sistem: number;
+    total_fasih: number;
+    total_baris_fasih_dibaca: number;
+    jumlah_file: number;
+    jumlah_belum_di_fasih: number;
+    jumlah_sudah_tidak_ada_di_sistem: number;
+    jumlah_beda_pencacah: number;
+  };
+  belum_di_fasih: Record<string, unknown>[];
+  sudah_tidak_ada_di_sistem: Record<string, unknown>[];
+  beda_pencacah: Record<string, unknown>[];
+}
+
+function FasihAssignmentPanel({
+  token,
+  onSessionExpired,
+}: {
+  token: string;
+  onSessionExpired: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasil, setHasil] = useState<FasihHasil | null>(null);
+
+  async function handleBandingkan() {
+    const files = fileRef.current?.files;
+    if (!files || files.length === 0) {
+      setError("Pilih dulu file Excel hasil FASIH yang mau dibandingkan.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      for (const f of Array.from(files)) fd.append("files", f);
+      const res = await fetch("/api/penyisiran/alokasi/fasih-compare", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+      setHasil(data as FasihHasil);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal membandingkan data.";
+      setError(msg);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  const kolomBelum = useMemo<ExcelColumn<any>[]>(
+    () => [
+      { key: "kec_nama", label: "Kecamatan", getValue: (r) => r.kec_nama },
+      { key: "nagari_nama", label: "Nagari/Desa", getValue: (r) => r.nagari_nama },
+      { key: "sls_nama", label: "SLS", getValue: (r) => r.sls_nama },
+      { key: "subsls_kode", label: "Sub SLS", getValue: (r) => r.subsls_kode },
+      { key: "petugas_nama", label: "Petugas (Sistem)", getValue: (r) => r.petugas_nama },
+      { key: "email_pencacah", label: "Email Pencacah", getValue: (r) => r.email_pencacah },
+    ],
+    []
+  );
+  const tabelBelum = useExcelTable(hasil?.belum_di_fasih ?? [], kolomBelum, { key: "kec_nama", dir: "asc" });
+
+  const kolomHilang = useMemo<ExcelColumn<any>[]>(
+    () => [
+      { key: "kec_nama", label: "Kecamatan", getValue: (r) => r.kec_nama },
+      { key: "nagari_nama", label: "Nagari/Desa", getValue: (r) => r.nagari_nama },
+      { key: "sls_nama", label: "SLS", getValue: (r) => r.sls_nama },
+      { key: "subsls_kode", label: "Sub SLS", getValue: (r) => r.subsls_kode },
+      { key: "email_pencacah", label: "Email Pencacah (FASIH)", getValue: (r) => r.email_pencacah },
+      { key: "sumber_file", label: "File Sumber", getValue: (r) => r.sumber_file },
+    ],
+    []
+  );
+  const tabelHilang = useExcelTable(hasil?.sudah_tidak_ada_di_sistem ?? [], kolomHilang, { key: "kec_nama", dir: "asc" });
+
+  const kolomBeda = useMemo<ExcelColumn<any>[]>(
+    () => [
+      { key: "kec_nama", label: "Kecamatan", getValue: (r) => r.kec_nama },
+      { key: "nagari_nama", label: "Nagari/Desa", getValue: (r) => r.nagari_nama },
+      { key: "sls_nama", label: "SLS", getValue: (r) => r.sls_nama },
+      { key: "subsls_kode", label: "Sub SLS", getValue: (r) => r.subsls_kode },
+      { key: "email_pencacah_sistem", label: "Email Pencacah (Sistem)", getValue: (r) => r.email_pencacah_sistem },
+      { key: "email_pencacah_fasih", label: "Email Pencacah (FASIH)", getValue: (r) => r.email_pencacah_fasih },
+    ],
+    []
+  );
+  const tabelBeda = useExcelTable(hasil?.beda_pencacah ?? [], kolomBeda, { key: "kec_nama", dir: "asc" });
+
+  return (
+    <div className="rounded-lg border border-line bg-white">
+      <BannerKartu
+        ikon="🔄"
+        judul="Monitoring Assignment FASIH"
+        subjudul={`Bandingkan "📋 Identifikasi Wilayah Sampel SLS" di sistem vs hasil assignment yang sudah berhasil diproses di FASIH`}
+      >
+        {hasil && (
+          <>
+            <StatPill
+              ikon="⚠"
+              label="Belum di FASIH"
+              nilai={String(hasil.ringkasan.jumlah_belum_di_fasih)}
+            />
+            <StatPill
+              ikon="❓"
+              label="Tak Ada di Sistem"
+              nilai={String(hasil.ringkasan.jumlah_sudah_tidak_ada_di_sistem)}
+            />
+            <StatPill ikon="🔁" label="Pencacah Beda" nilai={String(hasil.ringkasan.jumlah_beda_pencacah)} />
+          </>
+        )}
+      </BannerKartu>
+
+      <div className="p-4">
+        <p className="text-xs text-ink/60">
+          Upload 1 atau beberapa file Excel hasil export FASIH (format kolom SAMA dgn &quot;⬇ Export Excel
+          Pengawas/Pencacah (per SUBSLS)&quot; -- boleh per-Pengawas seperti contoh, boleh juga digabung sekaligus
+          dalam satu kali upload).
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple disabled={busy} className="text-xs" />
+          <button
+            type="button"
+            onClick={handleBandingkan}
+            disabled={busy}
+            className="rounded-md border border-navy-600 bg-navy-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-navy-700 disabled:opacity-50"
+          >
+            {busy ? "Membandingkan..." : "🔍 Bandingkan"}
+          </button>
+        </div>
+        {error && <p className="mt-2 text-xs text-rust-700">⚠ {error}</p>}
+
+        {hasil && (
+          <div className="mt-4 space-y-5">
+            <p className="text-[11px] text-ink/50">
+              {hasil.ringkasan.total_baris_fasih_dibaca} baris terbaca dari {hasil.ringkasan.jumlah_file} file --{" "}
+              {hasil.ringkasan.total_sistem} SUBSLS ditag di sistem, {hasil.ringkasan.total_fasih} SUBSLS ditemukan
+              di FASIH.
+            </p>
+
+            <TabelSelisih
+              judul={`⚠ Belum Ter-assign di FASIH (${hasil.belum_di_fasih.length})`}
+              keterangan={`Sudah ditag "📋 Identifikasi Wilayah Sampel SLS" di sistem, tapi belum/tidak ketemu di file FASIH yang diupload -- kemungkinan proses assignment gagal atau belum diproses.`}
+              kosong="✅ Semua SUBSLS yang ditag di sistem sudah ketemu di FASIH."
+              tabel={tabelBelum}
+              kolom={kolomBelum}
+            />
+            <TabelSelisih
+              judul={`❓ Sudah Tidak Ada di Sistem (${hasil.sudah_tidak_ada_di_sistem.length})`}
+              keterangan={`Ada di data FASIH yang diupload, tapi tag-nya di "📋 Identifikasi Wilayah Sampel SLS" sudah berubah/dihapus sejak file terakhir di-export -- FASIH jadi ketinggalan data terbaru.`}
+              kosong="✅ Tidak ada data FASIH yang sudah tidak sesuai dengan sistem."
+              tabel={tabelHilang}
+              kolom={kolomHilang}
+            />
+            <TabelSelisih
+              judul={`🔁 Email Pencacah Berbeda (${hasil.beda_pencacah.length})`}
+              keterangan="SUBSLS yang sama ada di sistem maupun FASIH, tapi Email Pencacah-nya berbeda -- kemungkinan update di sistem yang belum ikut terekap ulang ke FASIH."
+              kosong="✅ Tidak ada perbedaan Email Pencacah."
+              tabel={tabelBeda}
+              kolom={kolomBeda}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Tabel generik utk ke-3 daftar selisih FasihAssignmentPanel -- pola SAMA
+// (ExcelTh sortable/filterable) dgn tabel lain di app ini, cuma kolomnya
+// beda-beda per jenis selisih (lihat kolomBelum/kolomHilang/kolomBeda di
+// atas).
+function TabelSelisih({
+  judul,
+  keterangan,
+  kosong,
+  tabel,
+  kolom,
+}: {
+  judul: string;
+  keterangan: string;
+  kosong: string;
+  tabel: ReturnType<typeof useExcelTable<any>>;
+  kolom: ExcelColumn<any>[];
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-navy-900">{judul}</p>
+      <p className="mt-0.5 text-[11px] text-ink/60">{keterangan}</p>
+      {tabel.rows.length === 0 ? (
+        <p className="mt-2 text-[11px] text-moss-700">{kosong}</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto rounded-md border border-line">
+          <table className="w-full min-w-[600px] text-[11px]">
+            <thead className="bg-paper/80 uppercase text-ink/60">
+              <tr>
+                {kolom.map((c) => (
+                  <ExcelTh
+                    key={c.key}
+                    label={c.label}
+                    colKey={c.key}
+                    values={tabel.uniqueValues[c.key] ?? []}
+                    sortKey={tabel.sortKey}
+                    sortDir={tabel.sortDir}
+                    onSort={tabel.toggleSort}
+                    activeFilter={tabel.filters[c.key]}
+                    onFilterChange={tabel.setColumnFilter}
+                  />
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {tabel.rows.map((r, i) => (
+                <tr key={i} className={i % 2 === 1 ? "bg-paper/40" : ""}>
+                  {kolom.map((c) => (
+                    <td key={c.key} className="px-2 py-1.5">
+                      {String(c.getValue(r) ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
