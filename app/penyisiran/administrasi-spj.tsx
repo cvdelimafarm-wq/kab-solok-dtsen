@@ -645,7 +645,7 @@ function AdministrasiPanel({
       </div>
 
       {/* ---------- Visum -- SUDAH JALAN (tetap aktif di Arsip, isi 1x/ST) ---------- */}
-      <VisumSection token={sesi.token} onSessionExpired={onSessionExpired} />
+      <VisumSection token={sesi.token} jenis={sesi.jenis} onSessionExpired={onSessionExpired} />
 
       {/* ---------- Laporan & Dokumentasi -- READ-ONLY di sini (permintaan
           user: Arsip SPJ/Isi Dokumen cuma rekap, submit-nya dipindah ke
@@ -977,10 +977,25 @@ interface VisumSuratTugas {
   visum: VisumRow | null;
 }
 
-function VisumSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+function VisumSection({
+  token,
+  jenis,
+  onSessionExpired,
+}: {
+  token: string;
+  jenis: Jenis;
+  onSessionExpired: () => void;
+}) {
   const [daftar, setDaftar] = useState<VisumSuratTugas[]>([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  // Kecamatan domisili & wilayah tugas -- dihitung SERVER-SIDE dari data
+  // Perencanaan Lapangan (lihat komentar hitungKecamatanVisum di
+  // app/api/penyisiran/spj/visum/route.ts), HANYA terisi utk jenis
+  // "penyisiran". Ditampilkan di sini SEBELUM disimpan supaya petugas tau
+  // nilai apa yg bakal dipakai di PDF Visum-nya.
+  const [kecDomisili, setKecDomisili] = useState<string | null>(null);
+  const [kecWilayahTugas, setKecWilayahTugas] = useState<string | null>(null);
 
   const guard = useCallback(
     (fn: () => void) => {
@@ -1001,6 +1016,8 @@ function VisumSection({ token, onSessionExpired }: { token: string; onSessionExp
     try {
       const data = await apiFetch("/api/penyisiran/spj/visum", token);
       setDaftar(Array.isArray(data?.daftar) ? data.daftar : []);
+      setKecDomisili(typeof data?.kecamatan_domisili === "string" ? data.kecamatan_domisili : null);
+      setKecWilayahTugas(typeof data?.kecamatan_wilayah_tugas === "string" ? data.kecamatan_wilayah_tugas : null);
     } catch (e) {
       guard(() => {
         throw e;
@@ -1064,9 +1081,30 @@ function VisumSection({ token, onSessionExpired }: { token: string; onSessionExp
         </button>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Isi RENCANA tujuan &amp; tanggal pelaksanaan per Surat Tugas Anda -- bukan realisasi. Setelah disimpan, unduh
-        PDF Visum-nya utk kelengkapan SPJ.
+        Isi RENCANA tanggal pelaksanaan per Surat Tugas Anda -- bukan realisasi. Setelah disimpan, unduh PDF
+        Visum-nya utk kelengkapan SPJ.
       </p>
+
+      {jenis === "penyisiran" && (
+        <div className="mb-2 rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
+          <p>
+            Kecamatan domisili (Tempat Kedudukan):{" "}
+            <span className="font-medium text-navy-900">{kecDomisili || "belum ada data"}</span>
+          </p>
+          <p className="mt-0.5">
+            Kecamatan wilayah tugas:{" "}
+            {kecWilayahTugas ? (
+              <span className="font-medium text-navy-900">{kecWilayahTugas}</span>
+            ) : (
+              <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
+            )}
+          </p>
+          <p className="mt-1 text-[10px] text-ink/40">
+            Otomatis diambil dari data domisili &amp; alokasi wilayah tugas Anda di Perencanaan Lapangan -- bukan
+            diketik manual, supaya Visum selalu sesuai data terbaru.
+          </p>
+        </div>
+      )}
 
       {errMsg && (
         <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
@@ -1074,7 +1112,17 @@ function VisumSection({ token, onSessionExpired }: { token: string; onSessionExp
 
       <div className="flex flex-col gap-2">
         {daftar.map((row) => (
-          <VisumBaris key={row.surat_tugas_id} row={row} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+          <VisumBaris
+            key={row.surat_tugas_id}
+            row={row}
+            token={token}
+            jenis={jenis}
+            kecamatanDomisili={kecDomisili}
+            kecamatanWilayahTugas={kecWilayahTugas}
+            onSaved={muat}
+            onUnduh={handleUnduh}
+            guard={guard}
+          />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -1090,17 +1138,25 @@ function VisumSection({ token, onSessionExpired }: { token: string; onSessionExp
 function VisumBaris({
   row,
   token,
+  jenis,
+  kecamatanDomisili,
+  kecamatanWilayahTugas,
   onSaved,
   onUnduh,
   guard,
 }: {
   row: VisumSuratTugas;
   token: string;
+  jenis: Jenis;
+  kecamatanDomisili: string | null;
+  kecamatanWilayahTugas: string | null;
   onSaved: () => void;
   onUnduh: (visumId: number) => void;
   guard: (fn: () => void) => void;
 }) {
   const [edit, setEdit] = useState(!row.visum);
+  // rencanaTujuan HANYA relevan/ditampilkan utk jenis "tetangga" -- jenis
+  // "penyisiran" pakai kecamatanWilayahTugas (dihitung server, read-only).
   const [rencanaTujuan, setRencanaTujuan] = useState(row.visum?.rencana_tujuan ?? "");
   const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(row.visum?.tanggal_berangkat ?? row.tanggal_mulai);
   const [busy, setBusy] = useState(false);
@@ -1120,7 +1176,16 @@ function VisumBaris({
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!rencanaTujuan.trim() || !tanggalPelaksanaan) {
+    if (jenis === "penyisiran") {
+      if (!kecamatanWilayahTugas) {
+        setError("Kecamatan wilayah tugas belum tertaut -- minta pengelola menautkan wilayah SLS Anda dulu.");
+        return;
+      }
+      if (!tanggalPelaksanaan) {
+        setError("Tanggal pelaksanaan wajib diisi.");
+        return;
+      }
+    } else if (!rencanaTujuan.trim() || !tanggalPelaksanaan) {
       setError("Rencana tujuan dan tanggal pelaksanaan wajib diisi.");
       return;
     }
@@ -1130,7 +1195,11 @@ function VisumBaris({
         method: "POST",
         body: JSON.stringify({
           surat_tugas_id: row.surat_tugas_id,
-          rencana_tujuan: rencanaTujuan.trim(),
+          // rencana_tujuan cuma dipakai server utk jenis "tetangga" --
+          // utk jenis "penyisiran" server SELALU hitung ulang sendiri
+          // (lihat app/api/penyisiran/spj/visum/route.ts), jadi dikirim
+          // kosong/diabaikan.
+          rencana_tujuan: jenis === "tetangga" ? rencanaTujuan.trim() : undefined,
           tanggal_pelaksanaan: tanggalPelaksanaan,
         }),
       });
@@ -1182,16 +1251,32 @@ function VisumBaris({
 
       {edit && (
         <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
-          <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">Rencana Tujuan (Nagari/Jorong)</label>
-            <input
-              type="text"
-              value={rencanaTujuan}
-              onChange={(e) => setRencanaTujuan(e.target.value)}
-              placeholder="Contoh: Nagari Kubung"
-              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-            />
-          </div>
+          {jenis === "penyisiran" ? (
+            <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
+              <p>
+                Kecamatan domisili: <span className="font-medium text-navy-900">{kecamatanDomisili || "-"}</span>
+              </p>
+              <p className="mt-0.5">
+                Kecamatan wilayah tugas:{" "}
+                {kecamatanWilayahTugas ? (
+                  <span className="font-medium text-navy-900">{kecamatanWilayahTugas}</span>
+                ) : (
+                  <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
+                )}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-[10px] font-medium text-ink/50">Rencana Tujuan (Nagari/Jorong)</label>
+              <input
+                type="text"
+                value={rencanaTujuan}
+                onChange={(e) => setRencanaTujuan(e.target.value)}
+                placeholder="Contoh: Nagari Kubung"
+                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan</label>
             <input
@@ -1204,7 +1289,7 @@ function VisumBaris({
           {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || (jenis === "penyisiran" && !kecamatanWilayahTugas)}
             className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
           >
             {busy ? "Menyimpan..." : "Simpan Visum"}

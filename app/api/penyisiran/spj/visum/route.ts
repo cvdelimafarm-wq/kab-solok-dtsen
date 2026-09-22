@@ -4,7 +4,10 @@
 //         lewat spj_surat_tugas_petugas), masing2 disertai data visum-nya
 //         kalau sudah pernah diisi (null kalau belum). Beda dgn Surat
 //         Tugas, Visum TIDAK ada mode "pengelola lihat semua" -- tiap
-//         petugas cuma mengisi visum miliknya sendiri.
+//         petugas cuma mengisi visum miliknya sendiri. Juga mengembalikan
+//         `kecamatan_domisili`/`kecamatan_wilayah_tugas` (lihat
+//         hitungKecamatanVisum di bawah) supaya form bisa MENAMPILKAN nilai
+//         yang akan dipakai SEBELUM disimpan.
 // POST -> simpan/perbarui (upsert) visum utk SATU Surat Tugas miliknya
 //         sendiri. Datanya RENCANA (bukan realisasi) -- lihat catatan di
 //         lib/pdf/visum.ts. Utk MVP, form di sisi client cuma minta SATU
@@ -13,11 +16,23 @@
 //         yang sama) -- kolom tanggal_berangkat_kembali/tiba_kembali di
 //         skema tetap terpisah utk fleksibilitas di masa depan kalau perlu
 //         beda hari.
+//
+// `rencana_tujuan` (kecamatan WILAYAH TUGAS) & `tempat_kedudukan` (kecamatan
+// ALAMAT/DOMISILI petugas) -- utk jenis "penyisiran" (PPL/PML) KEDUANYA
+// dihitung OTOMATIS dari data yg SUDAH ADA di sistem (bukan input manual
+// lagi, permintaan user 22 Sep 2026 supaya Visum tidak salah ketik/beda dgn
+// data Perencanaan Lapangan yg sebenarnya):
+//  - domisili  <- petugas_penyisiran_akun.alamat_kecamatan
+//  - wilayah tugas <- distinct penyisiran_alokasi_pilihan.kec_nama milik
+//    petugas itu (bisa >1 kecamatan, digabung " / ")
+// Utk jenis "tetangga" TIDAK ada sumber data itu (tabel tetangga_akun tidak
+// py alamat & tidak pernah nge-tag wilayah SLS), jadi TETAP manual spt
+// sebelumnya (client kirim rencana_tujuan/tempat_kedudukan di body).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
-import { verifySpjSession } from "@/lib/spjAuth";
+import { verifySpjSession, SpjSession } from "@/lib/spjAuth";
 import { TEMPAT_KEDUDUKAN_DEFAULT } from "@/lib/spjPejabat";
 
 export const runtime = "nodejs";
@@ -28,6 +43,51 @@ function supabaseAdmin() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) return null;
   return createClient(supabaseUrl, serviceRoleKey);
+}
+
+// "GUNUNG TALANG"/"gunung talang" -> "Gunung Talang", TAPI angka Romawi
+// (kecamatan "IX Koto Sungai Lasi", "X Koto Diatas", "X Koto Singkarak")
+// TETAP huruf besar semua, bukan ikut jadi "Ix"/"X" -> "X" (kebetulan sudah
+// benar) tapi "Ix" kalau tidak ditangani khusus.
+const ROMAWI = new Set(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]);
+function judulKecamatan(nama: string): string {
+  return nama
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => {
+      const besar = w.toUpperCase();
+      if (ROMAWI.has(besar)) return besar;
+      return besar.charAt(0) + w.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+// supabase diketik "any" (bukan ReturnType<typeof createClient>) -- lihat
+// catatan yang sama di lib/spjAuth.ts (pastikanPengelolaSpj) kenapa: versi
+// generic supabase-js di repo ini rewel soal tipe schema publik kalau
+// dipakai lintas file spt ini.
+async function hitungKecamatanVisum(
+  supabase: any,
+  session: SpjSession
+): Promise<{ domisili: string | null; wilayahTugas: string | null }> {
+  if (session.jenis !== "penyisiran") return { domisili: null, wilayahTugas: null };
+
+  const [{ data: akun }, { data: wilayah }] = await Promise.all([
+    supabase.from("petugas_penyisiran_akun").select("alamat_kecamatan").eq("id", session.petugasId).maybeSingle(),
+    supabase.from("penyisiran_alokasi_pilihan").select("kec_nama").eq("petugas_id", session.petugasId),
+  ]);
+
+  const alamatKecamatan: string | null | undefined = akun?.alamat_kecamatan;
+  const domisili = alamatKecamatan ? judulKecamatan(alamatKecamatan) : null;
+
+  const kecTugasSet = new Set<string>();
+  for (const w of (wilayah ?? []) as { kec_nama?: string | null }[]) {
+    if (w?.kec_nama) kecTugasSet.add(judulKecamatan(w.kec_nama));
+  }
+  const wilayahTugas = kecTugasSet.size > 0 ? Array.from(kecTugasSet).sort().join(" / ") : null;
+
+  return { domisili, wilayahTugas };
 }
 
 export async function GET(req: NextRequest) {
@@ -46,7 +106,14 @@ export async function GET(req: NextRequest) {
   if (errTautan) return NextResponse.json({ error: errTautan.message }, { status: 500 });
 
   const ids = (tautan ?? []).map((t: { surat_tugas_id: number }) => t.surat_tugas_id);
-  if (ids.length === 0) return NextResponse.json({ daftar: [] });
+  if (ids.length === 0) {
+    const kecamatanKosong = await hitungKecamatanVisum(supabase, session);
+    return NextResponse.json({
+      daftar: [],
+      kecamatan_domisili: kecamatanKosong.domisili,
+      kecamatan_wilayah_tugas: kecamatanKosong.wilayahTugas,
+    });
+  }
 
   const [{ data: stList, error: errSt }, { data: visumList, error: errVisum }] = await Promise.all([
     supabase
@@ -74,7 +141,13 @@ export async function GET(req: NextRequest) {
     visum: petaVisum.get(st.id) ?? null,
   }));
 
-  return NextResponse.json({ daftar });
+  const kecamatan = await hitungKecamatanVisum(supabase, session);
+
+  return NextResponse.json({
+    daftar,
+    kecamatan_domisili: kecamatan.domisili,
+    kecamatan_wilayah_tugas: kecamatan.wilayahTugas,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -87,18 +160,40 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const suratTugasId = Number(body?.surat_tugas_id);
-  const rencanaTujuan = String(body?.rencana_tujuan || "").trim();
   const tanggalPelaksanaan = String(body?.tanggal_pelaksanaan || "").trim();
-  const tempatKedudukan = String(body?.tempat_kedudukan || "").trim() || TEMPAT_KEDUDUKAN_DEFAULT;
 
   if (!Number.isFinite(suratTugasId)) {
     return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   }
-  if (!rencanaTujuan) {
-    return NextResponse.json({ error: "Rencana tujuan wajib diisi." }, { status: 400 });
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalPelaksanaan)) {
     return NextResponse.json({ error: "Tanggal pelaksanaan wajib diisi." }, { status: 400 });
+  }
+
+  // rencana_tujuan/tempat_kedudukan: utk jenis "penyisiran" DIHITUNG DI SINI
+  // (abaikan apa pun yg dikirim client utk 2 field itu -- lihat komentar
+  // hitungKecamatanVisum di atas). Utk jenis "tetangga" TETAP manual dari
+  // body (tidak ada sumber data domisili/wilayah tugas utk jenis ini).
+  let rencanaTujuan: string;
+  let tempatKedudukan: string;
+  if (session.jenis === "penyisiran") {
+    const kecamatan = await hitungKecamatanVisum(supabase, session);
+    if (!kecamatan.wilayahTugas) {
+      return NextResponse.json(
+        {
+          error:
+            "Kecamatan wilayah tugas Anda belum tercatat -- minta pengelola menautkan wilayah SLS Anda dulu di menu Perencanaan Lapangan sebelum mengisi Visum.",
+        },
+        { status: 400 }
+      );
+    }
+    rencanaTujuan = kecamatan.wilayahTugas;
+    tempatKedudukan = kecamatan.domisili || TEMPAT_KEDUDUKAN_DEFAULT;
+  } else {
+    rencanaTujuan = String(body?.rencana_tujuan || "").trim();
+    tempatKedudukan = String(body?.tempat_kedudukan || "").trim() || TEMPAT_KEDUDUKAN_DEFAULT;
+    if (!rencanaTujuan) {
+      return NextResponse.json({ error: "Rencana tujuan wajib diisi." }, { status: 400 });
+    }
   }
 
   // Pastikan Surat Tugas ini memang ditautkan ke petugas yang sedang login
