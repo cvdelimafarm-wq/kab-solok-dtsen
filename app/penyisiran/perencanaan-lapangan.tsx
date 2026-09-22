@@ -269,6 +269,7 @@ interface AutoAlokasiHasil {
 interface PemilihanSubslsRow {
   id: number;
   nama: string;
+  pengawas_nama: string | null;
   kec_domisili: string | null;
   nagari_domisili: string | null;
   kec_tugas: string | null;
@@ -485,6 +486,18 @@ function PerencanaanPanel({
   petugasId: number;
   onSessionExpired: () => void;
 }) {
+  // Matriks gabungan (MatrixPanel) -- state-nya di-fetch DI DALAM
+  // WilayahSampelPanel (paling dekat dgn logic submit/rekomendasi yg
+  // memicunya) lalu "diangkat" ke sini lewat onMatrixStateChange, supaya
+  // bisa DIRENDER DI SINI, di bawah kartu "📶 Monitoring Status Pemilihan
+  // Sub-SLS" -- permintaan user (sebelumnya matriks tampil tepat di bawah
+  // kartu "📋 Identifikasi Wilayah Sampel SLS").
+  const [matrixState, setMatrixState] = useState<{ tampilkan: boolean; matrix: MatrixRow[]; loading: boolean }>({
+    tampilkan: false,
+    matrix: [],
+    loading: false,
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between rounded-lg border border-line bg-white px-4 py-2">
@@ -498,13 +511,27 @@ function PerencanaanPanel({
 
       <HariTugasPanel token={token} />
 
-      <WilayahSampelPanel token={token} nama={nama} petugasId={petugasId} onSessionExpired={onSessionExpired} />
+      <WilayahSampelPanel
+        token={token}
+        nama={nama}
+        petugasId={petugasId}
+        onSessionExpired={onSessionExpired}
+        onMatrixStateChange={setMatrixState}
+      />
 
       {/* DIPINDAH dari tab Monitoring (permintaan user) -- ditaruh tepat di
           bawah kartu "📋 Identifikasi Wilayah Sampel SLS" di atas. Data
           agregat SEMUA petugas (bukan personal), jadi digerbang pengelola
           spt panel2 lain di bawah ini. */}
       {bolehAksesManajemenTarget(nama) && <SeksiPemilihanSubsls token={token} />}
+
+      {/* Matriks gabungan semua petugas -- DIPINDAH ke sini (permintaan
+          user), di bawah kartu "📶 Monitoring Status Pemilihan Sub-SLS"
+          persis di atas. TIDAK digerbang bolehAksesManajemenTarget (beda
+          dari kartu di atasnya) -- tetap tampil utk SEMUA petugas begitu
+          mereka (atau siapa pun) sudah pernah submit pilihan, sama spt
+          perilaku aslinya sebelum dipindah. */}
+      {matrixState.tampilkan && <MatrixPanel matrix={matrixState.matrix} loading={matrixState.loading} />}
 
       {bolehAksesManajemenTarget(nama) && <OhMonitoringPanel token={token} />}
     </div>
@@ -964,11 +991,19 @@ function WilayahSampelPanel({
   nama,
   petugasId,
   onSessionExpired,
+  onMatrixStateChange,
 }: {
   token: string;
   nama: string;
   petugasId: number;
   onSessionExpired: () => void;
+  // Matriks gabungan (MatrixPanel) SEKARANG dirender di PerencanaanPanel
+  // (parent), BUKAN di sini lagi -- permintaan user, ditaruh di bawah
+  // kartu "📶 Monitoring Status Pemilihan Sub-SLS" -- tapi state-nya
+  // (tampil/tidak, data, loading) TETAP dihitung & di-fetch DI SINI (paling
+  // dekat dgn logic submit/rekomendasi yg memicunya), lalu "diangkat" ke
+  // parent lewat callback ini tiap kali berubah.
+  onMatrixStateChange?: (state: { tampilkan: boolean; matrix: MatrixRow[]; loading: boolean }) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1106,6 +1141,15 @@ function WilayahSampelPanel({
     if (tampilkanMatrix) muatMatrix();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tampilkanMatrix]);
+
+  // Angkat state matrix ke parent (PerencanaanPanel) supaya MatrixPanel bisa
+  // dirender DI LUAR komponen ini, di bawah kartu "📶 Monitoring Status
+  // Pemilihan Sub-SLS" (permintaan user) -- lihat komentar prop
+  // onMatrixStateChange di atas.
+  useEffect(() => {
+    onMatrixStateChange?.({ tampilkan: tampilkanMatrix, matrix, loading: matrixLoading });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tampilkanMatrix, matrix, matrixLoading]);
 
   // Klik baris/checkbox INDUK -- toggle pilih SELURUH SLS/Jorong (null).
   // Kalau baris ini sebelumnya sedang partial (sebagian SUBSLS dipilih),
@@ -1601,8 +1645,6 @@ function WilayahSampelPanel({
           {submitMsg && <p className="text-xs font-medium text-ink/70">{submitMsg}</p>}
         </div>
       </div>
-
-      {tampilkanMatrix && <MatrixPanel matrix={matrix} loading={matrixLoading} />}
     </div>
   );
 }
@@ -1813,7 +1855,8 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
 
   const kolom = useMemo(
     () => [
-      { key: "nama", label: "Nama Petugas", getValue: (r: PemilihanSubslsRow) => r.nama },
+      { key: "nama", label: "Nama PPL", getValue: (r: PemilihanSubslsRow) => r.nama },
+      { key: "pengawas_nama", label: "Nama PML", getValue: (r: PemilihanSubslsRow) => r.pengawas_nama },
       { key: "kec_domisili", label: "Kecamatan Domisili", getValue: (r: PemilihanSubslsRow) => r.kec_domisili },
       { key: "kec_tugas", label: "Kecamatan Tugas", getValue: (r: PemilihanSubslsRow) => r.kec_tugas },
       {
@@ -1894,7 +1937,11 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
                       onSort={tabel.toggleSort}
                       activeFilter={tabel.filters[c.key]}
                       onFilterChange={tabel.setColumnFilter}
-                      align={c.key === "nama" || c.key === "kec_domisili" || c.key === "kec_tugas" ? "left" : "right"}
+                      align={
+                        c.key === "nama" || c.key === "pengawas_nama" || c.key === "kec_domisili" || c.key === "kec_tugas"
+                          ? "left"
+                          : "right"
+                      }
                     />
                   ))}
                   <th className="px-2 py-2 text-right">Progress</th>
@@ -1907,6 +1954,7 @@ function SeksiPemilihanSubsls({ token }: { token: string }) {
                     <tr key={r.id}>
                       <td className="px-2 py-1.5 text-ink/40">{i + 1}</td>
                       <td className="px-2 py-1.5 font-medium text-navy-900">{r.nama}</td>
+                      <td className="px-2 py-1.5">{r.pengawas_nama ?? "-"}</td>
                       <td className="px-2 py-1.5">{r.kec_domisili ?? "-"}</td>
                       <td className="px-2 py-1.5">{r.kec_tugas ?? "-"}</td>
                       <td className="px-2 py-1.5 text-right">
