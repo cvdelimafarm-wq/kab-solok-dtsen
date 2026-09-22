@@ -18,15 +18,24 @@
 //
 // KHUSUS akun PML (login "penyisiran_petugas" yg py >=1 PPL diawasi lewat
 // pengawas_id, lihat lib/wilayahAlokasiPetugas.ts daftarIdUntukSesi()):
-// HANYA prioritas_pasti yang BOLEH diubah lewat endpoint ini -- status_
-// kunjungan/catatan_petugas/info_ppl/info_jorong/info_tetangga yg dikirim
-// body TETAP divalidasi bentuknya (spy request lama/FE yg belum update ttp
-// jalan tanpa 400) TAPI DIABAIKAN diam2, tidak pernah masuk ke `patch` &
-// tidak pernah dicatat ke penyisiran_riwayat -- sesuai permintaan user
-// "PML ... hanya bisa lihat dan bisa tandai pasti". Dicek dari SESI yang
-// login (getSessionSubject), BUKAN dari petugas_id yg dikirim body (body
-// bisa saja beda/dimanipulasi) -- defense in depth spt pola cek alokasi
+// HANYA prioritas_pasti (& SEKARANG jg tag_pml, lihat di bawah) yang
+// BOLEH diubah lewat endpoint ini -- status_kunjungan/catatan_petugas/
+// info_ppl/info_jorong/info_tetangga yg dikirim body TETAP divalidasi
+// bentuknya (spy request lama/FE yg belum update ttp jalan tanpa 400)
+// TAPI DIABAIKAN diam2, tidak pernah masuk ke `patch` & tidak pernah
+// dicatat ke penyisiran_riwayat -- sesuai permintaan user "PML ... hanya
+// bisa lihat dan bisa tandai pasti". Dicek dari SESI yang login
+// (getSessionSubject), BUKAN dari petugas_id yg dikirim body (body bisa
+// saja beda/dimanipulasi) -- defense in depth spt pola cek alokasi
 // wilayah PPL di /api/penyisiran/identifikasi/route.ts.
+//
+// tag_pml ("🚩 Tandai Perlu Segera", permintaan user): KEBALIKAN dari
+// pembatasan di atas -- field ini JUSTRU HANYA boleh ditulis PML (bukan
+// PPL), krn tujuannya PML memberi tahu PPL bahwa satu keluarga perlu
+// segera didata. Dicek dari SESI yang login jg (isPml), sama spt di
+// atas. tag_pml_oleh/tag_pml_at diisi ULANG otomatis di server tiap kali
+// ditandai true (BUKAN dikirim dari body) -- dikosongkan lagi begitu
+// dibatalkan, pola sama dgn ditemukan_at.
 //
 // SEBELUM update, baris LAMA diambil dulu (status_kunjungan/info_ppl/
 // info_jorong/info_tetangga) supaya field yang BENAR2 berubah nilainya
@@ -100,6 +109,7 @@ export async function PATCH(req: NextRequest) {
   const infoJorong = Boolean(body?.info_jorong);
   const infoTetangga = Boolean(body?.info_tetangga);
   const prioritasPasti = Boolean(body?.prioritas_pasti);
+  const tagPml = Boolean(body?.tag_pml);
   const petugasId = typeof body?.petugas_id === "number" ? body.petugas_id : null;
   const petugasNama = typeof body?.petugas_nama === "string" && body.petugas_nama.trim() ? body.petugas_nama.trim() : null;
   const editAll = Boolean(body?.edit_all);
@@ -132,7 +142,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: lama, error: lamaErr } = await supabase
     .from("penyisiran_usaha")
-    .select("status_kunjungan, info_ppl, info_jorong, info_tetangga, ditemukan_at")
+    .select("status_kunjungan, info_ppl, info_jorong, info_tetangga, ditemukan_at, tag_pml")
     .eq("kode_identitas", id)
     .maybeSingle();
   if (lamaErr) return NextResponse.json({ error: lamaErr.message }, { status: 500 });
@@ -161,7 +171,16 @@ export async function PATCH(req: NextRequest) {
   }
 
   const patch: Record<string, unknown> = isPml
-    ? { prioritas_pasti: prioritasPasti, updated_at: new Date().toISOString() }
+    ? {
+        prioritas_pasti: prioritasPasti,
+        // tag_pml_oleh/tag_pml_at: SELALU diisi ulang (bukan dari body)
+        // tiap kali tag_pml disimpan sbg true -- dikosongkan lagi begitu
+        // dibatalkan (klik ulang). Lihat komentar panjang di atas file.
+        tag_pml: tagPml,
+        tag_pml_oleh: tagPml ? petugasNama : null,
+        tag_pml_at: tagPml ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      }
     : {
         status_kunjungan: status,
         catatan_petugas: catatan,
@@ -234,6 +253,23 @@ export async function PATCH(req: NextRequest) {
       // Kegagalan insert riwayat SENGAJA tidak digagalkan ke pengguna
       // (checklist utama sudah tersimpan) -- riwayat cuma pelengkap audit.
     }
+  }
+
+  // Riwayat khusus tag_pml -- KEBALIKAN dari blok di atas, cuma dicatat
+  // utk akun PML (satu2nya yg boleh mengubah field ini, lihat komentar
+  // panjang di atas file), supaya panel "🕘 Riwayat Perubahan" jg mencatat
+  // siapa/kapan menandai atau membatalkan "🚩 Perlu Segera".
+  if (lama && isPml && lama.tag_pml !== tagPml) {
+    await supabase.from("penyisiran_riwayat").insert({
+      kode_identitas: id,
+      jenis: "tag_pml",
+      nilai_lama: String(lama.tag_pml),
+      nilai_baru: String(tagPml),
+      oleh_nama: petugasNama,
+      oleh_role: role || null,
+    });
+    // Kegagalan insert riwayat SENGAJA tidak digagalkan ke pengguna, sama
+    // spt blok riwayat di atas.
   }
 
   return NextResponse.json({ ok: true });

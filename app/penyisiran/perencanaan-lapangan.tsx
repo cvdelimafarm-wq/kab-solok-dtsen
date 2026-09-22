@@ -123,6 +123,16 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
+// IS_PML_KEY: localStorage key SAMA PERSIS dgn login personal tab
+// "Penyisiran Usaha" (login BERSAMA utk semua tab /penyisiran, lihat
+// komentar panjang di app/seruti/penyisiran-usaha.tsx) -- dipakai di sini
+// utk MENGUNCI kartu "📋 Identifikasi Wilayah Sampel SLS" bagi akun PML
+// (permintaan user: "PML tidak berhak memilih/tag wilayah"). Wilayah kerja
+// PML MEMANG otomatis = gabungan seluruh PPL yg diawasinya (pengawas_id,
+// lihat lib/wilayahAlokasiPetugas.ts daftarIdUntukSesi()) -- PML tidak
+// pernah memilih wilayah sendiri, sesuai desain yg sudah didokumentasikan
+// di sana, cuma belum ditegakkan di kartu ini sebelumnya.
+import { IS_PML_KEY } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
 
 const TOKEN_KEY = "penyisiran-petugas-login-token";
@@ -1032,6 +1042,15 @@ function WilayahSampelPanel({
   const [autoConfirm, setAutoConfirm] = useState(false);
   const [autoErr, setAutoErr] = useState<string | null>(null);
   const [autoHasil, setAutoHasil] = useState<AutoAlokasiHasil | null>(null);
+  // PML tidak boleh memilih/tag wilayah sendiri (lihat komentar import
+  // IS_PML_KEY di atas) -- dibaca dari localStorage yg SAMA persis dgn
+  // login personal tab Penyisiran Usaha, sama pola dgn beberapa panel lain
+  // di app/penyisiran/page.tsx. useEffect (bukan langsung di useState())
+  // krn localStorage cuma ada di browser (hindari mismatch SSR/hydration).
+  const [isPml, setIsPml] = useState(false);
+  useEffect(() => {
+    setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+  }, []);
 
   // Export Excel Pengawas/Pencacah per SUBSLS -- HANYA utk data yang SUDAH
   // MASUK (dipilih petugas), format kolom mengikuti contoh file dari
@@ -1160,6 +1179,7 @@ function WilayahSampelPanel({
   // lihat pemakaian di JSX tabel di bawah, disabled lewat prop `disabled`
   // pada elemen checkbox-nya, BUKAN di sini).
   function toggleSls(key: string) {
+    if (isPml) return; // lihat komentar import IS_PML_KEY di atas
     setDipilih((prev) => {
       const next = new Map(prev);
       if (next.has(key)) next.delete(key);
@@ -1203,6 +1223,7 @@ function WilayahSampelPanel({
   // dicegah lewat prop `disabled` pada checkbox-nya sendiri di JSX
   // (dipilih_oleh_petugas_id), bukan di fungsi ini.
   function toggleSubsls(slsKey: string, subslsKode: string, semuaKode: string[]) {
+    if (isPml) return; // lihat komentar import IS_PML_KEY di atas
     setDipilih((prev) => {
       const next = new Map(prev);
       const current = next.get(slsKey); // undefined = blm dipilih, null = seluruh SLS, array = partial
@@ -1263,6 +1284,14 @@ function WilayahSampelPanel({
   }
 
   async function handleSubmit() {
+    // Jaga2 -- tombolnya sendiri sudah disabled utk PML (lihat JSX di
+    // bawah) & checkbox-nya jg tidak bisa dicentang sama sekali, tapi
+    // tetap ditolak di sini SEBELUM sampai ke server (pembatasan
+    // SEBENARNYA ada di /api/penyisiran/alokasi/submit/route.ts).
+    if (isPml) {
+      setSubmitMsg("PML tidak bisa memilih wilayah sendiri -- wilayah kerja mengikuti gabungan PPL yang diawasi.");
+      return;
+    }
     if (dipilih.size === 0) {
       setSubmitMsg("Pilih minimal 1 SLS/Jorong dulu.");
       return;
@@ -1356,6 +1385,22 @@ function WilayahSampelPanel({
           >
             {lokasiBusy ? "Mendeteksi..." : "📍 Tetapkan Lokasi Rumah Saya"}
           </button>
+        </div>
+      )}
+
+      {/* Banner PML (permintaan user: "PML tidak berhak memilih/tag
+          wilayah") -- checklist di bawah TETAP ditampilkan (boleh dilihat),
+          cuma checkbox & tombol Kirim/Perbarui Pilihan-nya dikunci (lihat
+          utamaBisaDiklik/disabledSub/tombol Kirim di bawah, & pembatasan
+          SEBENARNYA di server /api/penyisiran/alokasi/submit/route.ts). */}
+      {isPml && (
+        <div className="rounded-lg border border-navy-100 bg-navy-50 px-4 py-3 text-xs text-navy-700">
+          <p className="font-semibold">👁 Anda login sebagai PML.</p>
+          <p className="mt-0.5">
+            PML tidak memilih wilayah sendiri -- wilayah kerja Anda otomatis mengikuti gabungan seluruh SLS/Sub SLS
+            yang sudah dipilih PPL yang Anda awasi. Checklist di bawah bisa dilihat, tapi tidak bisa diubah. Lihat
+            kartu &quot;📶 Monitoring Status Pemilihan Sub-SLS&quot; di bawah utk rincian per PPL.
+          </p>
         </div>
       )}
 
@@ -1521,7 +1566,11 @@ function WilayahSampelPanel({
                 // tidak ada petugas lain yg pegang apa pun di SLS ini. Kalau
                 // tersedia tapi SEBAGIAN sudah diambil org lain, petugas WAJIB
                 // pakai "unhide" utk memilih Sub SLS yg masih sisa saja.
-                const utamaBisaDiklik = aktif || (r.tersedia && r.boleh_pilih_seluruh);
+                // !isPml digabung DI SINI (bukan cuma di onClick/onChange) --
+                // supaya styling `cursor-pointer` & disabled checkbox ikut
+                // konsisten sekaligus (lihat komentar import IS_PML_KEY di
+                // atas: PML tidak boleh memilih/tag wilayah sendiri).
+                const utamaBisaDiklik = !isPml && (aktif || (r.tersedia && r.boleh_pilih_seluruh));
                 const bisaUnhide = r.jumlah_subsls > 1;
                 const isExpanded = expanded.has(r.sls_key);
                 const subslsState = subslsCache.get(r.sls_key);
@@ -1613,6 +1662,7 @@ function WilayahSampelPanel({
                               rows={subslsState}
                               current={current}
                               petugasId={petugasId}
+                              isPml={isPml}
                               onToggle={(subslsKode, kodeUtk) => toggleSubsls(r.sls_key, subslsKode, kodeUtk)}
                             />
                           )}
@@ -1637,7 +1687,8 @@ function WilayahSampelPanel({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitBusy || dipilih.size === 0}
+            disabled={submitBusy || dipilih.size === 0 || isPml}
+            title={isPml ? "PML tidak bisa memilih wilayah sendiri." : undefined}
             className="rounded-md bg-navy-700 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
           >
             {submitBusy ? "Mengirim..." : sudahPernahSubmit ? "Perbarui Pilihan" : "Kirim Pilihan"}
@@ -1663,11 +1714,15 @@ function SubslsDetailTable({
   rows,
   current,
   petugasId,
+  isPml,
   onToggle,
 }: {
   rows: SubslsRow[];
   current: string[] | null | undefined;
   petugasId: number;
+  // PML tidak boleh memilih/tag Sub SLS sendiri -- lihat komentar import
+  // IS_PML_KEY di WilayahSampelPanel.
+  isPml: boolean;
   onToggle: (subslsKode: string, semuaKode: string[]) => void;
 }) {
   const kolom = useMemo(
@@ -1707,7 +1762,7 @@ function SubslsDetailTable({
         {tabel.rows.map((s) => {
           const milikSaya = s.dipilih_oleh_petugas_id === petugasId;
           const checkedSub = current === null || (Array.isArray(current) && current.includes(s.subsls_kode));
-          const disabledSub = s.dipilih_oleh_petugas_id != null && !milikSaya;
+          const disabledSub = isPml || (s.dipilih_oleh_petugas_id != null && !milikSaya);
           return (
             <tr key={s.subsls_kode} className={`border-t border-line/30 ${disabledSub ? "opacity-50" : ""}`}>
               <td className="py-1 pl-4">

@@ -5,6 +5,12 @@
 // petugas ybs, lalu insert yang baru) krn cuma ada SATU set pilihan aktif
 // per petugas, bukan riwayat berlapis.
 //
+// KHUSUS akun PML (dikonfirmasi user, lihat lib/wilayahAlokasiPetugas.ts):
+// DITOLAK (403) sama sekali -- PML tidak pernah memilih wilayah sendiri,
+// wilayah kerjanya otomatis = gabungan seluruh PPL yang diawasi lewat
+// pengawas_id. Dicek dari SESI yang login (daftarIdUntukSesi), sama pola
+// dgn pembatasan PML di /api/penyisiran/update/route.ts.
+//
 // TIDAK ADA BATAS JUMLAH (dulu maks 5, DIHAPUS atas permintaan user) --
 // petugas boleh memilih SEBANYAK yang dia mau. SEBAGAI GANTINYA, checklist
 // sekarang EKSKLUSIF: 1 Sub SLS (atau 1 SLS utuh kalau SLS itu tidak py
@@ -38,6 +44,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
+import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,6 +137,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  // PML TIDAK BOLEH memilih/tag wilayah sendiri (dikonfirmasi user) --
+  // wilayah kerja PML SUDAH otomatis = gabungan seluruh PPL yang
+  // diawasinya lewat pengawas_id (lihat daftarIdUntukSesi() &
+  // penjelasan panjang di lib/wilayahAlokasiPetugas.ts). Pembatasan
+  // SEBENARNYA ada di sini (bukan cuma checkbox/tombol dikunci di FE,
+  // lihat WilayahSampelPanel di app/penyisiran/perencanaan-lapangan.tsx).
+  let isPml = false;
+  try {
+    ({ isPml } = await daftarIdUntukSesi(supabase, petugasId));
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memeriksa peran." }, { status: 500 });
+  }
+  if (isPml) {
+    return NextResponse.json(
+      {
+        error:
+          "PML tidak bisa memilih wilayah sendiri -- wilayah kerja otomatis mengikuti gabungan wilayah seluruh PPL yang diawasi.",
+      },
+      { status: 403 }
+    );
+  }
 
   const slsKeys = Array.from(bySlsKey.keys());
   const { data: resolved, error: resolveErr } = await supabase.rpc("penyisiran_alokasi_resolve_sls", {

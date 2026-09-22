@@ -186,7 +186,7 @@ const IDENTIFIKASI_META: Record<NilaiIdentifikasi, { label: string; className: s
 // PPL yg dialokasikan ke Sub SLS, dari ppl_alokasi_idsls, sudah ada
 // sebelumnya) supaya tidak tertukar dua fitur yang sekilas mirip namanya.
 interface RiwayatEntry {
-  jenis: "status_kunjungan" | "info_ppl" | "info_jorong" | "info_tetangga" | "identifikasi_ppl";
+  jenis: "status_kunjungan" | "info_ppl" | "info_jorong" | "info_tetangga" | "identifikasi_ppl" | "tag_pml";
   nilai_lama: string | null;
   nilai_baru: string | null;
   oleh_nama: string | null;
@@ -212,6 +212,7 @@ const JENIS_RIWAYAT_LABEL: Record<RiwayatEntry["jenis"], string> = {
   info_jorong: "Info Jorong",
   info_tetangga: "Info Tetangga",
   identifikasi_ppl: "Identifikasi PPL",
+  tag_pml: "Tanda PML (🚩 Perlu Segera)",
 };
 
 // Ubah nilai MENTAH yg tersimpan di penyisiran_riwayat (mis. "true"/
@@ -230,6 +231,7 @@ function formatNilaiRiwayat(jenis: RiwayatEntry["jenis"], nilai: string | null):
     };
     return map[nilai] ?? nilai;
   }
+  if (jenis === "tag_pml") return nilai === "true" ? "🚩 Ditandai" : "Tidak ditandai";
   // info_ppl/info_jorong/info_tetangga -- disimpan sbg string "true"/"false".
   return nilai === "true" ? "Ada" : "Tidak";
 }
@@ -410,6 +412,12 @@ interface Row {
   // terkunciSetelahHariBerganti di bawah), BUKAN cuma dasar hitungan
   // ditemukan_hari_ini di StatTile.
   ditemukan_at: string | null;
+  // "🚩 Tandai Perlu Segera" (khusus akun PML, permintaan user) -- lihat
+  // komentar panjang di /api/penyisiran/update/route.ts. tag_pml_oleh/
+  // tag_pml_at diisi OTOMATIS di server (bukan dikirim dari FE).
+  tag_pml: boolean;
+  tag_pml_oleh: string | null;
+  tag_pml_at: string | null;
 }
 
 // Kartu berstatus "Usaha Ditemukan" TERKUNCI (read-only, dropdown Status &
@@ -2218,6 +2226,12 @@ function RowCard({
   const [infoJorong, setInfoJorong] = useState(row.info_jorong);
   const [infoTetangga, setInfoTetangga] = useState(row.info_tetangga);
   const [pastiFlag, setPastiFlag] = useState(row.prioritas_pasti);
+  // "🚩 Tandai Perlu Segera" (khusus PML) -- lihat komentar di interface
+  // Row & /api/penyisiran/update/route.ts. tagPmlOleh dipakai murni utk
+  // teks banner ("...oleh <nama>") -- diperbarui OPTIMISTIS begitu PML
+  // menekan tombolnya, supaya tidak perlu menunggu refetch.
+  const [tagPml, setTagPml] = useState(row.tag_pml);
+  const [tagPmlOleh, setTagPmlOleh] = useState(row.tag_pml_oleh);
   const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
@@ -2289,10 +2303,16 @@ function RowCard({
     status?: StatusKunjungan;
     catatan?: string;
     pastiFlag?: boolean;
+    tagPml?: boolean;
   }) {
     const statusKirim = overrides?.status ?? status;
     const catatanKirim = overrides?.catatan ?? catatan;
     const pastiFlagKirim = overrides?.pastiFlag ?? pastiFlag;
+    // tag_pml: cuma BENAR2 ditulis server kalau sesi ini PML (lihat
+    // komentar di /api/penyisiran/update/route.ts) -- tetap dikirim apa
+    // adanya di sini (aman, diabaikan diam2 kalau bukan PML), supaya
+    // handleSave tidak perlu tahu soal isPml sama sekali.
+    const tagPmlKirim = overrides?.tagPml ?? tagPml;
     setSaving(true);
     try {
       await apiFetch("/api/penyisiran/update", token, {
@@ -2305,6 +2325,7 @@ function RowCard({
           info_jorong: infoJorong,
           info_tetangga: infoTetangga,
           prioritas_pasti: pastiFlagKirim,
+          tag_pml: tagPmlKirim,
           petugas_id: petugasId,
           petugas_nama: petugasNama,
           edit_all: editAllMode,
@@ -2318,6 +2339,8 @@ function RowCard({
         info_jorong: infoJorong,
         info_tetangga: infoTetangga,
         prioritas_pasti: pastiFlagKirim,
+        tag_pml: tagPmlKirim,
+        tag_pml_oleh: tagPmlKirim ? petugasNama : null,
         penyisiran_oleh: petugasNama ?? row.penyisiran_oleh,
       });
       // Beri tahu FloatBarRencanaBesok (app/penyisiran/page.tsx) supaya
@@ -2431,7 +2454,15 @@ function RowCard({
     <div
       id={`kartu-penyisiran-${row.kode_identitas}`}
       className={`rounded-lg border p-3 transition-shadow ${KARTU_BG[status]} ${
-        highlighted ? "border-navy-400 ring-2 ring-navy-400" : "border-line"
+        highlighted
+          ? "border-navy-400 ring-2 ring-navy-400"
+          : // Ring merah PERSISTEN (bukan cuma sesaat spt `highlighted`) saat
+            // kartu ditandai PML "🚩 Perlu Segera" -- supaya langsung
+            // kelihatan sekilas saat menggulir daftar, tidak perlu buka
+            // Detail dulu (permintaan user: "usahakan visualisinya bagus").
+            tagPml
+          ? "border-red-300 ring-2 ring-red-400"
+          : "border-line"
       }`}
       style={{ borderLeft: `4px solid ${meta.dot}` }}
     >
@@ -2472,6 +2503,21 @@ function RowCard({
         )}
       </div>
       <p className="mt-1 truncate text-xs text-ink/70">📍 {row.alamat || "-"}</p>
+
+      {/* Banner "🚩 Perlu Segera" -- SELALU tampil (bukan cuma mode Detail),
+          sama spt badge Identifikasi/DUTP/DTSEN/PNM di bawah, supaya PPL
+          langsung lihat peringatan PML tanpa perlu membuka tiap kartu.
+          Ditulis PML lewat tombol khusus di mode Detail (lihat isPml di
+          bawah) -- kartu ini sendiri tampil utk SEMUA role (PPL maupun
+          PML) begitu ditandai. */}
+      {tagPml && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1">
+          <span className="text-sm leading-none">🚩</span>
+          <span className="text-[11px] font-semibold text-red-700">
+            Ditandai PML &middot; perlu didata segera{tagPmlOleh ? ` (oleh ${tagPmlOleh})` : ""}
+          </span>
+        </div>
+      )}
 
       {/* Badge Identifikasi PPL/Jorong + DUTP/DTSEN/PNM Mekar -- DIPINDAH
           ke sini (SELALU tampil, bukan cuma mode Detail lagi) atas
@@ -2570,6 +2616,43 @@ function RowCard({
             </button>
           </div>
 
+          {/* "🚩 Tandai Perlu Segera" -- KHUSUS akun PML (permintaan user:
+              "PML ... tombol khusus tag PML warna merah bendera"), tombol
+              ini SENGAJA tidak dirender sama sekali utk PPL (bukan cuma
+              disabled) krn cuma PML yg boleh mengubah field ini (pembatasan
+              SEBENARNYA jg ada di server, lihat komentar di
+              /api/penyisiran/update/route.ts). Butuh unlock (canEditInfo)
+              spt "🎯 Tandai Pasti" di atas -- konsisten, satu2nya jalan
+              buka kunci jg tombol melayang "🔒 Edit Semua Info Lapangan".
+              Begitu ditandai, banner merah di bagian Ringkas kartu ini
+              (SEMUA role, termasuk PPL yg memegang wilayah ini) langsung
+              tampil -- lihat banner "🚩 Perlu Segera" di atas. */}
+          {isPml && (
+            <div className="mb-1.5">
+              <button
+                type="button"
+                disabled={!canEditInfo}
+                onClick={() => {
+                  if (!canEditInfo) return;
+                  const next = !tagPml;
+                  setTagPml(next);
+                  setTagPmlOleh(next ? petugasNama : null);
+                  handleSave({ tagPml: next });
+                }}
+                title={
+                  tagPml
+                    ? "Batalkan tanda -- PPL tidak lagi melihat peringatan ini. Tersimpan otomatis."
+                    : "Tandai kartu ini PERLU DIDATA SEGERA -- PPL pemegang wilayah ini akan melihat peringatan bendera merah. Tersimpan otomatis."
+                }
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                  tagPml ? "bg-red-600 text-white" : "border border-red-300 text-red-600 hover:bg-red-50"
+                } ${!canEditInfo ? "cursor-not-allowed opacity-50 hover:bg-transparent" : ""}`}
+              >
+                🚩 {tagPml ? "Perlu Segera (klik utk batal)" : "Tandai Perlu Segera"}
+              </button>
+            </div>
+          )}
+
           {/* ☎ Kontak PPL Wilayah Ini: nama + No HP PPL/mantan pendata yg
               dulu mendata Sub SLS keluarga ini -- supaya petugas
               penyisiran bisa langsung menghubungi kalau perlu konfirmasi
@@ -2664,7 +2747,7 @@ function RowCard({
 
           {isPml && (
             <p className="mb-1.5 text-[10px] font-medium text-ink/40">
-              👁 Mode PML -- hanya bisa melihat &amp; menandai &quot;Pasti&quot;, Status/Catatan dikunci.
+              👁 Mode PML -- hanya bisa melihat, menandai &quot;Pasti&quot;, &amp; menandai &quot;🚩 Perlu Segera&quot; utk PPL. Status/Catatan dikunci.
             </p>
           )}
           {!isPml && terkunci && (
