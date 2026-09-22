@@ -19,9 +19,9 @@ import { verifySpjSession, pastikanPengelolaSpj } from "@/lib/spjAuth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const UKURAN_MAKS_BYTE = 15 * 1024 * 1024; // 15MB -- cukup lega utk scan PDF/foto ST
+export const UKURAN_MAKS_BYTE = 15 * 1024 * 1024; // 15MB -- cukup lega utk scan PDF/foto ST
 
-function supabaseAdmin() {
+export function supabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) return null;
@@ -32,7 +32,7 @@ function supabaseAdmin() {
 // -- spasi & karakter aneh diganti "_", tapi ekstensi & sebagian besar
 // nama asli tetap kelihatan (memudahkan penelusuran manual di dashboard
 // Supabase kalau perlu).
-function bersihkanNamaFile(nama: string): string {
+export function bersihkanNamaFile(nama: string): string {
   return nama.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-120);
 }
 
@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
     // Pengelola: semua ST + daftar petugas yang ditautkan ke masing2.
     const { data: semuaSt, error: errSt } = await supabase
       .from("spj_surat_tugas")
-      .select("id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, uploaded_by, created_at")
+      .select(
+        "id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, uploaded_by, created_at, menunggu_file"
+      )
       .order("tanggal_mulai", { ascending: false });
     if (errSt) return NextResponse.json({ error: errSt.message }, { status: 500 });
 
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
 
   const { data: stSaya, error: errStSaya } = await supabase
     .from("spj_surat_tugas")
-    .select("id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, created_at")
+    .select("id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, created_at, menunggu_file")
     .in("id", idSaya)
     .order("tanggal_mulai", { ascending: false });
   if (errStSaya) return NextResponse.json({ error: errStSaya.message }, { status: 500 });

@@ -311,6 +311,7 @@ interface SuratTugasRow {
   uploaded_by?: string;
   created_at: string;
   petugas?: PetugasTaut[];
+  menunggu_file?: boolean;
 }
 
 function AdministrasiPanel({
@@ -598,15 +599,31 @@ function AdministrasiPanel({
           {suratTugas.map((st) => (
             <div key={st.id} className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold text-navy-900">{st.nomor_st}</span>
-                <button
-                  type="button"
-                  onClick={() => handleUnduh(st.id)}
-                  disabled={busyUnduhStId === st.id}
-                  className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-                >
-                  {busyUnduhStId === st.id ? "⏳ Menyiapkan..." : "⬇ Lihat/Unduh"}
-                </button>
+                <span className="font-semibold text-navy-900">
+                  {st.nomor_st}
+                  {st.menunggu_file && (
+                    <span className="ml-1.5 rounded-full bg-rust-100 px-1.5 py-0.5 text-[10px] font-medium text-rust-700">
+                      ⏳ Menunggu file
+                    </span>
+                  )}
+                </span>
+                {st.menunggu_file && pengelola ? (
+                  <GantiFileTombol
+                    id={st.id}
+                    token={sesi.token}
+                    onDone={loadSuratTugas}
+                    onSessionExpired={onSessionExpired}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleUnduh(st.id)}
+                    disabled={busyUnduhStId === st.id}
+                    className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
+                  >
+                    {busyUnduhStId === st.id ? "⏳ Menyiapkan..." : "⬇ Lihat/Unduh"}
+                  </button>
+                )}
               </div>
               <p className="mt-1 text-ink/60">
                 {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
@@ -871,6 +888,74 @@ function UploadSuratTugasForm({
         {busy ? "Mengupload..." : "Upload & Tautkan"}
       </button>
     </form>
+  );
+}
+
+// ---------- Ganti/lengkapi file utk ST yang `menunggu_file` (pengelola) ----------
+// Dipakai khusus utk ST yang nomor/tanggal/petugas-nya sudah tercatat tapi
+// file aslinya belum diupload (badge "⏳ Menunggu file") -- klik langsung
+// buka pemilih file, submit otomatis begitu file dipilih (tidak perlu form
+// terpisah spt UploadSuratTugasForm krn nomor/tanggal/petugas TIDAK diubah
+// di sini, cuma file-nya).
+function GantiFileTombol({
+  id,
+  token,
+  onDone,
+  onSessionExpired,
+}: {
+  id: number;
+  token: string;
+  onDone: () => void;
+  onSessionExpired: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      // Multipart -- SENGAJA tidak lewat apiFetch, sama spt alasan di
+      // UploadSuratTugasForm.
+      const res = await fetch(`/api/penyisiran/spj/surat-tugas/${id}/file`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+      onDone();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+      else setError(msg);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <label className="cursor-pointer rounded-md border border-rust-600 bg-rust-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-rust-700">
+        {busy ? "⏳ Mengupload..." : "⬆ Ganti File"}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          disabled={busy}
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+          }}
+        />
+      </label>
+      {error && <p className="text-[10px] text-rust-700">⚠ {error}</p>}
+    </div>
   );
 }
 
