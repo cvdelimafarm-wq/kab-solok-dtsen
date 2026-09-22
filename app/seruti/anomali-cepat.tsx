@@ -409,8 +409,8 @@ export default function AnomaliCepatTab() {
         <div className="overflow-x-auto rounded-lg border border-line bg-white p-4">
           <h3 className="text-sm font-semibold text-navy-900">Ringkasan per Kode Anomali</h3>
           <table className="mt-2 w-full text-xs">
-            <thead>
-              <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
+            <thead className="bg-[#2563eb] text-left text-white">
+              <tr className="uppercase tracking-wide">
                 <th className="py-1.5 pr-3 font-medium">Kode</th>
                 <th className="py-1.5 pr-3 font-medium">Kelompok</th>
                 <th className="py-1.5 pr-3 font-medium">Total</th>
@@ -471,8 +471,8 @@ export default function AnomaliCepatTab() {
             </select>
           </div>
           <table className="mt-2 w-full text-xs">
-            <thead>
-              <tr className="border-b border-line text-left uppercase tracking-wide text-ink/50">
+            <thead className="bg-[#2563eb] text-left text-white">
+              <tr className="uppercase tracking-wide">
                 <th className="py-1.5 pr-3 font-medium">Kode</th>
                 <th className="py-1.5 pr-3 font-medium">NKS</th>
                 <th className="py-1.5 pr-3 font-medium">NURT</th>

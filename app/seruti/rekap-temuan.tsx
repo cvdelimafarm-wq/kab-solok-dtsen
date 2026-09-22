@@ -225,7 +225,7 @@ export default function RekapTemuanTab() {
       {/* ---------- Tabel ---------- */}
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
         <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+          <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
             <tr>
               <th className="px-3 py-2 font-medium">Kode</th>
               <th className="px-3 py-2 font-medium">NKS</th>

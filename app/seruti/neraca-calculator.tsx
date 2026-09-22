@@ -454,9 +454,9 @@ function SearchableSelect({
 
 function Th({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <th className="whitespace-nowrap px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-navy-600">
+    <th className="whitespace-nowrap px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-white">
       {children}
-      {hint && <span className="block normal-case tracking-normal text-ink/40">{hint}</span>}
+      {hint && <span className="block normal-case tracking-normal text-white/60">{hint}</span>}
     </th>
   );
 }
@@ -781,7 +781,7 @@ export default function NeracaRtCalculator() {
         />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th>#</Th><Th>Uraian Pekerjaan</Th><Th>Kategori Lapangan Usaha</Th><Th>Jenis Pekerjaan</Th>
                 <Th>Upah/Gaji dalam Bentuk Uang</Th><Th>Upah/Gaji dalam Bentuk Barang/Jasa</Th><Th>Lembur, Honorarium, THR, dsb.</Th>
@@ -815,7 +815,7 @@ export default function NeracaRtCalculator() {
         <BlockHeader letter="V.B" title="Pendapatan dari Usaha Rumah Tangga Selama Setahun Terakhir" />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th>#</Th><Th>Uraian Kegiatan Usaha</Th><Th>Kategori Lapangan Usaha</Th><Th>Jenis Pekerjaan</Th>
                 <Th>Nilai Produksi</Th>
@@ -854,7 +854,7 @@ export default function NeracaRtCalculator() {
         />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[520px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th>Rincian</Th>
                 <Th>Nilai Produksi</Th>
@@ -890,7 +890,7 @@ export default function NeracaRtCalculator() {
         <BlockHeader letter="V.D" title="Pendapatan Kepemilikan Selama Setahun Terakhir" />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[480px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr><Th>Rincian</Th><Th>Diterima</Th><Th>Dibayar</Th></tr>
             </thead>
             <tbody>
@@ -919,7 +919,7 @@ export default function NeracaRtCalculator() {
         <BlockHeader letter="V.E" title="Transfer Berjalan (Selain Aset) Selama Setahun Terakhir" />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th>Penerimaan</Th>
                 <Th>Transfer Diterima &mdash; Uang</Th><Th>Transfer Diterima &mdash; Barang/Jasa</Th>
@@ -978,7 +978,7 @@ export default function NeracaRtCalculator() {
         <BlockHeader letter="V.F" title="Transfer Modal / Aset Selama Setahun Terakhir" />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th>Penerimaan</Th>
                 <Th hint="Bangunan, Alat Produksi, Kendaraan, dll">Diterima</Th>
@@ -1014,7 +1014,7 @@ export default function NeracaRtCalculator() {
         <BlockHeader letter="V.G" title="Penambahan dan Pengurangan Aset Selama Setahun Terakhir" />
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="border-b border-line">
+            <thead className="bg-[#2563eb]">
               <tr>
                 <Th hint="Pembelian, Pemberian, Pembuatan Sendiri">Rincian</Th>
                 <Th>Penambahan</Th><Th>Pengurangan</Th><Th>Netto</Th>

@@ -1498,7 +1498,7 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
             <p className="mb-1 font-medium text-ink/60">Kartu Keluarga per Status Kunjungan (Penyisiran Usaha)</p>
             {adaStatusKunjungan ? (
               <table className="w-full text-[11px]">
-                <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                   <tr>
                     <th className="px-2 py-1 text-left">Status Kunjungan</th>
                     <th className="px-2 py-1 text-right">Jml Keluarga</th>
@@ -1527,7 +1527,7 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
               Identifikasi Jorong/Tetangga -- {rekap.totalAktivitas} keluarga
             </p>
             <table className="w-full text-[11px]">
-              <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                 <tr>
                   <th className="px-2 py-1 text-left">Ada</th>
                   <th className="px-2 py-1 text-left">Tidak Ada</th>
@@ -1547,7 +1547,7 @@ function RekapLaporanPreviewBox({ suratTugasId, tanggal, token }: { suratTugasId
 
             {rekap.lokasi.length > 0 && (
               <table className="mt-1.5 w-full text-[11px]">
-                <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+                <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                   <tr>
                     <th className="px-2 py-1 text-left">Lokasi (Jorong/Sub SLS/Nagari/Kec.)</th>
                     <th className="px-2 py-1 text-right">Jml Keluarga</th>

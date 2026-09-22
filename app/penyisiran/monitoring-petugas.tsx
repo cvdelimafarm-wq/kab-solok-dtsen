@@ -238,8 +238,8 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
       {/* Tabel rekap -- di layar sempit digulirkan ke samping. */}
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
         <table className="min-w-full text-xs">
-          <thead>
-            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr className="text-left">
               {kolom.map((k) => (
                 <ExcelTh
                   key={k.key}
@@ -252,6 +252,7 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
                   values={tabelMonitor.uniqueValues[k.key] ?? []}
                   activeFilter={tabelMonitor.filters[k.key]}
                   onFilterChange={tabelMonitor.setColumnFilter}
+                  variant="dark"
                 />
               ))}
             </tr>

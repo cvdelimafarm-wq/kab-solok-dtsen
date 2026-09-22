@@ -580,8 +580,8 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
 
         <div className="overflow-x-auto rounded-md border border-line">
           <table className="min-w-full text-xs">
-            <thead>
-              <tr className="border-b border-line bg-paper/60 text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+            <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+              <tr>
                 {kolom.map((k) => (
                   <ExcelTh
                     key={k.key}
@@ -593,16 +593,18 @@ function MasterPetugasPanel({ token, onSessionExpired }: { token: string; onSess
                     values={tabel.uniqueValues[k.key] ?? []}
                     activeFilter={tabel.filters[k.key]}
                     onFilterChange={tabel.setColumnFilter}
+                    variant="dark"
                     // Kolom "Nama Petugas" DIBEKUKAN (freeze, permintaan
                     // user) -- tetap kelihatan di kiri layar walau tabel
                     // digulir ke kanan (banyak kolom: Email/No.HP/Kecamatan/
                     // Nagari/Alamat Detail/Status/Pengawas). Latar SOLID
-                    // (bg-paper, bukan bg-paper/60 spt baris header lainnya)
-                    // supaya kolom lain yg tergulir di baliknya tidak
-                    // "tembus" -- z-20 (lebih tinggi dari sel body z-10) spy
-                    // dropdown filter Excel kolom lain tidak ketutup header
-                    // beku ini.
-                    className={k.key === "nama" ? "sticky left-0 z-20 border-r border-line bg-paper" : undefined}
+                    // warna gelap yg SAMA dgn header (bg-[#2563eb], bukan
+                    // bg-paper spt sebelum tema disamakan) supaya kolom lain
+                    // yg tergulir di baliknya tidak "tembus" & tetap
+                    // menyatu dgn header gelap -- z-20 (lebih tinggi dari
+                    // sel body z-10) spy dropdown filter Excel kolom lain
+                    // tidak ketutup header beku ini.
+                    className={k.key === "nama" ? "sticky left-0 z-20 border-r border-white/20 bg-[#2563eb]" : undefined}
                   />
                 ))}
               </tr>

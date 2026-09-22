@@ -46,7 +46,7 @@ export default async function DashboardPage() {
 
         <div className="mt-6 overflow-hidden rounded-lg border border-line bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
+            <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase text-white">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Jorong</th>
                 <th className="px-4 py-2.5 font-medium">Nagari</th>

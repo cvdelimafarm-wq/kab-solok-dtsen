@@ -503,7 +503,7 @@ export default function MonitoringAnomaliTab() {
           </button>
         </div>
         <table ref={tableRef} className="w-full min-w-[900px] text-sm">
-          <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+          <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
             {/* Baris 1: kelompok kolom -- "Anomali" (Konfirmasi PPL) vs "Error
                 Konsistensi", supaya kelihatan jelas dua sumber temuan yang
                 beda (kp_anomali_temuan vs kp_konsistensi_temuan) tidak

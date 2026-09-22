@@ -540,8 +540,8 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
 
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
-          <thead>
-            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr className="text-left">
               <ExcelTh
                 rowSpan={2}
                 colKey="nama"
@@ -552,8 +552,9 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                 values={tabelRingkasan.uniqueValues.nama ?? []}
                 activeFilter={tabelRingkasan.filters.nama}
                 onFilterChange={tabelRingkasan.setColumnFilter}
+                variant="dark"
               />
-              <th colSpan={3} className="border-b border-line/60 px-3 py-1 text-center">
+              <th colSpan={3} className="border-b border-white/20 px-3 py-1 text-center">
                 Sumber Informasi (Ada)
               </th>
               {(["belum", "tidak_ada", "ragu", "total"] as const).map((key) => (
@@ -569,10 +570,11 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                   values={tabelRingkasan.uniqueValues[key] ?? []}
                   activeFilter={tabelRingkasan.filters[key]}
                   onFilterChange={tabelRingkasan.setColumnFilter}
+                  variant="dark"
                 />
               ))}
             </tr>
-            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+            <tr className="text-left">
               {(["ada_ppl", "ada_jorong", "ada_keduanya"] as const).map((key) => (
                 <ExcelTh
                   key={key}
@@ -585,6 +587,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
                   values={tabelRingkasan.uniqueValues[key] ?? []}
                   activeFilter={tabelRingkasan.filters[key]}
                   onFilterChange={tabelRingkasan.setColumnFilter}
+                  variant="dark"
                 />
               ))}
             </tr>
@@ -795,8 +798,8 @@ function TabelTargetIdentifikasi({
       </div>
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
-          <thead>
-            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr className="text-left">
               {kolom.map((k) => (
                 <ExcelTh
                   key={k.key}
@@ -808,6 +811,7 @@ function TabelTargetIdentifikasi({
                   values={tabel.uniqueValues[k.key] ?? []}
                   activeFilter={tabel.filters[k.key]}
                   onFilterChange={tabel.setColumnFilter}
+                  variant="dark"
                 />
               ))}
             </tr>
@@ -1046,8 +1050,8 @@ function TabelTargetPendataan({
       </div>
       <div className="overflow-x-auto rounded-md border border-line">
         <table className="min-w-full text-xs">
-          <thead>
-            <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr className="text-left">
               {kolom.map((k) => (
                 <ExcelTh
                   key={k.key}
@@ -1059,6 +1063,7 @@ function TabelTargetPendataan({
                   values={tabel.uniqueValues[k.key] ?? []}
                   activeFilter={tabel.filters[k.key]}
                   onFilterChange={tabel.setColumnFilter}
+                  variant="dark"
                 />
               ))}
             </tr>

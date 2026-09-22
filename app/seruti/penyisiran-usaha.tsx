@@ -2306,8 +2306,8 @@ export function ModalRencanaBesok({
 
 export function TabelRencanaBesokHead() {
   return (
-    <thead>
-      <tr className="border-b border-line bg-paper/60 text-left text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+    <thead className="bg-[#2563eb] text-left text-[10px] font-semibold uppercase tracking-wide text-white">
+      <tr>
         <th className="px-2 py-1.5">Nama Keluarga</th>
         <th className="px-2 py-1.5">Kode SLS (16 Digit)</th>
       </tr>

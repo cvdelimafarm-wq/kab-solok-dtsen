@@ -244,7 +244,7 @@ export default function KelolaAnomaliPage() {
             </h2>
             <div className="mt-2 overflow-x-auto rounded-lg border border-line bg-white">
               <table className="w-full min-w-[1100px] text-sm">
-                <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+                <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
                   <tr>
                     <th className="w-24 px-3 py-2 font-medium">Kode</th>
                     <th className="w-56 px-3 py-2 font-medium">Kelompok</th>
@@ -276,7 +276,7 @@ export default function KelolaAnomaliPage() {
             </p>
             <div className="mt-2 overflow-x-auto rounded-lg border border-line bg-white">
               <table className="w-full min-w-[1100px] text-sm">
-                <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+                <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
                   <tr>
                     <th className="w-16 px-3 py-2 font-medium">No.Urut</th>
                     <th className="w-52 px-3 py-2 font-medium">Nama Komoditas</th>
@@ -568,7 +568,7 @@ function QMaxTable({
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-line bg-white">
       <table className="w-full min-w-[700px] text-sm">
-        <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+        <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
           <tr>
             <th className="w-24 px-3 py-2 font-medium">No.Urut</th>
             <th className="px-3 py-2 font-medium">Nama Komoditas</th>
@@ -703,7 +703,7 @@ function KaloriTable({
   return (
     <div className="mt-2 overflow-x-auto rounded-lg border border-line bg-white">
       <table className="w-full min-w-[700px] text-sm">
-        <thead className="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-600">
+        <thead className="bg-[#2563eb] text-left text-xs font-semibold uppercase tracking-wide text-white">
           <tr>
             <th className="w-24 px-3 py-2 font-medium">No.Urut</th>
             <th className="px-3 py-2 font-medium">Nama Komoditas</th>

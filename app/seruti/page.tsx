@@ -971,7 +971,7 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
           <col className="w-[20%]" />
           <col className="w-[56%]" />
         </colgroup>
-        <thead className="bg-navy-50 text-left text-xs uppercase text-navy-600">
+        <thead className="bg-[#2563eb] text-left text-xs uppercase text-white">
           <tr>
             {kolom.map((k) => (
               <ExcelTh
@@ -985,6 +985,7 @@ function TabelRekapUpdate({ rows }: { rows: ProgressRow[] }) {
                 activeFilter={tabel.filters[k.key]}
                 onFilterChange={tabel.setColumnFilter}
                 className="font-medium"
+                variant="dark"
               />
             ))}
           </tr>

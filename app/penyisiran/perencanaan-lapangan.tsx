@@ -532,19 +532,19 @@ function PerencanaanPanel({
           spt panel2 lain di bawah ini. */}
       {bolehAksesManajemenTarget(nama) && <SeksiPemilihanSubsls token={token} />}
 
-      {/* Matriks gabungan semua petugas -- DIPINDAH ke sini (permintaan
-          user), di bawah kartu "📶 Monitoring Status Pemilihan Sub-SLS"
-          persis di atas. TIDAK digerbang bolehAksesManajemenTarget (beda
-          dari kartu di atasnya) -- tetap tampil utk SEMUA petugas begitu
-          mereka (atau siapa pun) sudah pernah submit pilihan, sama spt
-          perilaku aslinya sebelum dipindah. */}
-      {matrixState.tampilkan && <MatrixPanel matrix={matrixState.matrix} loading={matrixState.loading} />}
-
-      {/* "🔄 Monitoring Assignment FASIH" -- BARU (permintaan user), dekat
-          data alokasi/wilayah di atas krn membandingkan data yg SAMA
-          (penyisiran_alokasi_pilihan) dgn hasil assignment eksternal.
-          Pengelola saja, gerbang sama dgn tombol export subsls. */}
+      {/* "🔄 Monitoring Assignment FASIH" -- DIPINDAH ke sini (permintaan
+          user): di atas "🗂 Matriks Alokasi -- Jorong yang Sudah Dipilih" &
+          di bawah "📋 Rekap Pendataan PPL" persis di atas (sebelumnya
+          dirender SESUDAH MatrixPanel). Pengelola saja, gerbang sama dgn
+          tombol export subsls. */}
       {bolehAksesManajemenTarget(nama) && <FasihAssignmentPanel token={token} onSessionExpired={onSessionExpired} />}
+
+      {/* Matriks gabungan semua petugas -- di bawah kartu "🔄 Monitoring
+          Assignment FASIH" persis di atas (permintaan user). TIDAK digerbang
+          bolehAksesManajemenTarget (beda dari kartu2 di atasnya) -- tetap
+          tampil utk SEMUA petugas begitu mereka (atau siapa pun) sudah
+          pernah submit pilihan, sama spt perilaku aslinya. */}
+      {matrixState.tampilkan && <MatrixPanel matrix={matrixState.matrix} loading={matrixState.loading} />}
 
       {bolehAksesManajemenTarget(nama) && <OhMonitoringPanel token={token} />}
     </div>
@@ -749,13 +749,13 @@ function GridAlokasiDanKuota({
       </div>
 
       <table className="mt-3 border-collapse text-[11px]">
-        <thead>
+        <thead className="bg-[#2563eb] text-white">
           <tr>
-            <th className="border-b border-r border-line px-2 py-1 text-left font-semibold text-navy-900">
+            <th className="border-r border-white/20 px-2 py-1 text-left font-semibold">
               Nama Petugas
             </th>
             {tanggalList.map((t) => (
-              <th key={t} className="w-[20px] border-b border-line px-0.5 py-1 text-center font-medium text-ink/50">
+              <th key={t} className="w-[20px] px-0.5 py-1 text-center font-medium text-white/80">
                 {Number(t.slice(-2))}
               </th>
             ))}
@@ -1478,7 +1478,7 @@ function WilayahSampelPanel({
             {autoHasil.hasil.length > 0 && (
               <div className="mt-2 max-h-56 overflow-y-auto rounded border border-navy-200/70 bg-white">
                 <table className="w-full text-[11px]">
-                  <thead className="sticky top-0 bg-cream-50 text-[10px] uppercase tracking-wide text-ink/50">
+                  <thead className="sticky top-0 bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                     <tr>
                       {kolomAutoHasil.map((k) => (
                         <ExcelTh
@@ -1492,6 +1492,7 @@ function WilayahSampelPanel({
                           values={tabelAutoHasil.uniqueValues[k.key] ?? []}
                           activeFilter={tabelAutoHasil.filters[k.key]}
                           onFilterChange={tabelAutoHasil.setColumnFilter}
+                          variant="dark"
                         />
                       ))}
                     </tr>
@@ -1540,7 +1541,7 @@ function WilayahSampelPanel({
 
         <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-md border border-line">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-cream-50 text-[11px] uppercase tracking-wide text-ink/50">
+            <thead className="sticky top-0 bg-[#2563eb] text-[11px] font-semibold uppercase tracking-wide text-white">
               <tr>
                 <th className="px-2 py-2 text-left">✓</th>
                 {kolomRekomendasi.map((k) => (
@@ -1555,6 +1556,7 @@ function WilayahSampelPanel({
                     values={tabelRekomendasi.uniqueValues[k.key] ?? []}
                     activeFilter={tabelRekomendasi.filters[k.key]}
                     onFilterChange={tabelRekomendasi.setColumnFilter}
+                    variant="dark"
                   />
                 ))}
               </tr>
@@ -1742,7 +1744,7 @@ function SubslsDetailTable({
 
   return (
     <table className="w-full text-[11px]">
-      <thead className="text-[10px] uppercase tracking-wide text-ink/40">
+      <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
         <tr>
           <th className="w-8" />
           {kolom.map((k) => (
@@ -1757,6 +1759,7 @@ function SubslsDetailTable({
               values={tabel.uniqueValues[k.key] ?? []}
               activeFilter={tabel.filters[k.key]}
               onFilterChange={tabel.setColumnFilter}
+              variant="dark"
             />
           ))}
         </tr>
@@ -1912,6 +1915,8 @@ function FasihAssignmentPanel({
   const [memuatAwal, setMemuatAwal] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasil, setHasil] = useState<FasihHasil | null>(null);
+  const [exportBelumBusy, setExportBelumBusy] = useState(false);
+  const [exportBelumErr, setExportBelumErr] = useState<string | null>(null);
 
   // Muat hasil TERAKHIR (dari data yang sudah tersimpan di
   // penyisiran_fasih_assignment) begitu panel dibuka -- supaya pengelola
@@ -1976,6 +1981,46 @@ function FasihAssignmentPanel({
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  // Export Excel daftar "⚠ Belum Ter-assign di FASIH" (permintaan user:
+  // "sediakan export untuk list tersebut agar bisa saya assign kembali")
+  // -- format kolom SAMA dgn "⬇ Export Excel Pengawas/Pencacah (per
+  // SUBSLS)" (yg dulu diupload PERTAMA KALI ke FASIH), jadi file hasil
+  // export ini bisa LANGSUNG diupload ulang ke FASIH utk re-assign SubSLS
+  // yg gagal/belum ter-assign, tanpa perlu diedit manual dulu. Fetch
+  // manual + blob (pola SAMA dgn handleExportSubsls di WilayahSampelPanel
+  // di atas) krn endpoint butuh header Authorization. Dihitung dari data
+  // yang SAMA PERSIS dgn yg tampil di tabel (server re-hitung dari
+  // hitungPerbandingan yg sama, lihat .../fasih-export-belum-assign/
+  // route.ts), jadi TIDAK mungkin beda dgn apa yg dilihat user di layar.
+  async function handleExportBelum() {
+    setExportBelumBusy(true);
+    setExportBelumErr(null);
+    try {
+      const res = await fetch("/api/penyisiran/alokasi/fasih-export-belum-assign", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Gagal (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "assignment_belum_di_fasih.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal mengunduh file.";
+      setExportBelumErr(msg);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+    } finally {
+      setExportBelumBusy(false);
     }
   }
 
@@ -2093,6 +2138,21 @@ function FasihAssignmentPanel({
               kosong="✅ Semua SUBSLS yang ditag di sistem sudah ketemu di FASIH."
               tabel={tabelBelum}
               kolom={kolomBelum}
+              aksi={
+                hasil.belum_di_fasih.length > 0 ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      onClick={handleExportBelum}
+                      disabled={exportBelumBusy}
+                      className="rounded-md border border-navy-600 bg-navy-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-navy-700 disabled:opacity-50"
+                    >
+                      {exportBelumBusy ? "Menyiapkan..." : "⬇ Export Excel"}
+                    </button>
+                    {exportBelumErr && <p className="text-[10px] text-rust-700">⚠ {exportBelumErr}</p>}
+                  </div>
+                ) : undefined
+              }
             />
             <TabelSelisih
               judul={`❓ Sudah Tidak Ada di Sistem (${hasil.sudah_tidak_ada_di_sistem.length})`}
@@ -2125,23 +2185,34 @@ function TabelSelisih({
   kosong,
   tabel,
   kolom,
+  aksi,
 }: {
   judul: string;
   keterangan: string;
   kosong: string;
   tabel: ReturnType<typeof useExcelTable<any>>;
   kolom: ExcelColumn<any>[];
+  // Tombol aksi opsional (mis. "⬇ Export Excel" pada daftar "⚠ Belum
+  // Ter-assign di FASIH", permintaan user) -- ditaruh di kanan header,
+  // sejajar dgn judul. undefined = tidak ada tombol (perilaku lama, 2
+  // tabel selisih lain di panel ini TIDAK diberi aksi apa pun).
+  aksi?: React.ReactNode;
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold text-navy-900">{judul}</p>
-      <p className="mt-0.5 text-[11px] text-ink/60">{keterangan}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-navy-900">{judul}</p>
+          <p className="mt-0.5 text-[11px] text-ink/60">{keterangan}</p>
+        </div>
+        {aksi}
+      </div>
       {tabel.rows.length === 0 ? (
         <p className="mt-2 text-[11px] text-moss-700">{kosong}</p>
       ) : (
         <div className="mt-2 overflow-x-auto rounded-md border border-line">
           <table className="w-full min-w-[600px] text-[11px]">
-            <thead className="bg-paper/80 uppercase text-ink/60">
+            <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
               <tr>
                 {kolom.map((c) => (
                   <ExcelTh
@@ -2154,6 +2225,7 @@ function TabelSelisih({
                     onSort={tabel.toggleSort}
                     activeFilter={tabel.filters[c.key]}
                     onFilterChange={tabel.setColumnFilter}
+                    variant="dark"
                   />
                 ))}
               </tr>
@@ -2556,7 +2628,7 @@ function ModalDetailPemilihanSubsls({
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[520px] border-collapse text-xs">
-                    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                    <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                       <tr>
                         <th className="px-2 py-1.5 text-left">Kecamatan</th>
                         <th className="px-2 py-1.5 text-left">Nagari</th>
@@ -2597,7 +2669,7 @@ function ModalDetailPemilihanSubsls({
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[440px] border-collapse text-xs">
-                    <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+                    <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
                       <tr>
                         <th className="px-2 py-1.5 text-left">Kecamatan</th>
                         <th className="px-2 py-1.5 text-left">Nagari</th>

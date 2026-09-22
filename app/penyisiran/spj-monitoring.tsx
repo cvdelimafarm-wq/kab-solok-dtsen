@@ -382,7 +382,7 @@ export function SpjMonitoring({
             )}
           </div>
           <table className="w-full min-w-[720px] border-collapse text-xs">
-            <thead className="bg-paper text-[10px] font-semibold uppercase tracking-wide text-ink/50">
+            <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
               <tr>
                 {kolom.map((c) => (
                   <ExcelTh
@@ -396,6 +396,7 @@ export function SpjMonitoring({
                     activeFilter={tabel.filters[c.key]}
                     onFilterChange={tabel.setColumnFilter}
                     align={c.key === "nama" ? "left" : "right"}
+                    variant="dark"
                   />
                 ))}
               </tr>

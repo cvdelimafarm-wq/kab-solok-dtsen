@@ -235,7 +235,11 @@ async function ambilSemuaHalaman<T>(
 // TERSIMPAN (bukan dari file yang baru diupload) vs data SEKARANG di
 // sistem -- dipakai bareng oleh GET & POST (lihat komentar besar di atas
 // file ini).
-async function hitungPerbandingan(supabase: any) {
+// "export"-kan (bukan cuma dipakai GET/POST di file ini sendiri) --
+// dipakai jg oleh .../alokasi/fasih-export-belum-assign/route.ts supaya
+// tombol "⬇ Export" pada daftar "⚠ Belum Ter-assign di FASIH" (permintaan
+// user) menghitung dari sumber yang SAMA PERSIS (bukan duplikat logika).
+export async function hitungPerbandingan(supabase: any) {
   const [sistemHasil, namaHasil, fasihHasil] = await Promise.all([
     ambilSemuaHalaman<SystemRow>((dari, sampai) => supabase.rpc("penyisiran_alokasi_export_subsls").range(dari, sampai)),
     ambilSemuaHalaman<NamaLookupRow>((dari, sampai) => supabase.rpc("penyisiran_wilayah_nama_lookup").range(dari, sampai)),
@@ -289,6 +293,14 @@ async function hitungPerbandingan(supabase: any) {
     const f = fasihMap.get(k);
     if (!f) {
       belumDiFasih.push({
+        // Kode wilayah (kec_kode dst) DITAMBAHKAN di sini (sebelumnya cuma
+        // nama) -- permintaan user: sediakan export Excel dari daftar ini
+        // spy bisa diupload ULANG ke FASIH utk re-assign, & upload FASIH
+        // butuh KODE wilayah, bukan nama -- lihat
+        // .../alokasi/fasih-export-belum-assign/route.ts.
+        kec_kode: s.kec_kode,
+        nagari_kode: s.nagari_kode,
+        sls_kode: s.sls_kode,
         kec_nama: s.kec_nama,
         nagari_nama: s.nagari_nama,
         sls_nama: s.sls_nama,
