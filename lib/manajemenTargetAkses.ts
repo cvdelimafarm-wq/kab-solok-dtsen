@@ -37,3 +37,15 @@ export function bolehAksesManajemenTarget(nama: string | null | undefined): bool
   if (!nama) return false;
   return NAMA_MANAJEMEN_TARGET.has(nama.trim().toLowerCase());
 }
+
+// Khusus SATU akun (permintaan user: "tampilkan warning khusus akun saya
+// M. Iqbal Hadi") -- dipakai FasihMismatchWarningBar di
+// app/penyisiran/page.tsx supaya warning selisih "Monitoring Assignment
+// FASIH" HANYA muncul utk akun ini, BEDA dari akses fitur/panelnya sendiri
+// (tab Perencanaan Lapangan) yang tetap terbuka utk SEMUA 7 pengelola di
+// atas lewat bolehAksesManajemenTarget. Normalisasi SAMA persis (case-
+// insensitive & trim).
+export function apakahIqbalHadi(nama: string | null | undefined): boolean {
+  if (!nama) return false;
+  return nama.trim().toLowerCase() === "m. iqbal hadi";
+}

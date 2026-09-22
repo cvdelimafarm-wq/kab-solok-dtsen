@@ -13,12 +13,12 @@
 // dikeluhkan user ("kadang ada perbedaan, update yang tidak terekap, atau
 // proses assignment yang gagal"):
 //   1. belum_di_fasih          -- SUDAH ditag di sistem, TIDAK ketemu di
-//                                  file FASIH yg diupload (assignment
+//                                  data FASIH tersimpan (assignment
 //                                  gagal/belum diproses FASIH).
-//   2. sudah_tidak_ada_di_sistem -- ADA di file FASIH, TIDAK ketemu lagi di
+//   2. sudah_tidak_ada_di_sistem -- ADA di data FASIH, TIDAK ketemu lagi di
 //                                  sistem (sudah dipindah/dihapus di sistem
-//                                  SESUDAH file terakhir diexport ke
-//                                  FASIH -- FASIH jadi ketinggalan).
+//                                  SESUDAH file terakhir diupload -- FASIH
+//                                  jadi ketinggalan).
 //   3. beda_pencacah           -- SUBSLS yg SAMA ada di keduanya, tapi
 //                                  Email Pencacah-nya BEDA (update di
 //                                  sistem yang belum ikut terekap ulang ke
@@ -28,9 +28,34 @@
 // di file Excel-nya (PROVINSI/KABUPATEN-KOTA diabaikan krn selalu
 // 13/"03", khusus Kabupaten Solok).
 //
-// Akses DIKUNCI ke pengelola yang sama dgn tombol export (lihat
-// bolehAksesManajemenTarget) -- SAMA PERSIS pola gate-nya dgn
-// .../alokasi/export-subsls/route.ts.
+// PERSISTENSI (permintaan lanjutan user, "kalau upload beberapa file, data
+// assignment yang sama ditimpa oleh yang terbaru"): data FASIH yang
+// diupload TIDAK cuma dihitung sekali-jalan lalu dibuang, tapi di-UPSERT ke
+// tabel penyisiran_fasih_assignment (migrasi
+// 20260922m_tambah_tabel_fasih_assignment.sql) -- satu baris per kombinasi
+// kode wilayah, upload berikutnya utk SUBSLS yang SAMA otomatis MENIMPA
+// baris lama (bukan menambah duplikat). Dengan begini:
+//  - POST (upload) -- parse file baru -> upsert ke tabel -> hitung ulang
+//    perbandingan dari data TERSIMPAN (bukan cuma dari file yg BARU
+//    diupload kali ini) vs sistem SEKARANG -> balikan hasilnya.
+//  - GET (tanpa upload) -- cukup hitung ulang perbandingan dari data yang
+//    SUDAH tersimpan vs sistem SEKARANG -- dipakai utk (a) tab Perencanaan
+//    Lapangan menampilkan hasil terakhir begitu dibuka (tanpa perlu upload
+//    ulang), dan (b) FasihMismatchWarningBar (app/penyisiran/page.tsx,
+//    HANYA muncul utk akun M. Iqbal Hadi, lihat apakahIqbalHadi di
+//    lib/manajemenTargetAkses.ts) yang mem-poll endpoint ini tiap 30 detik.
+// Krn KEDUA sisi (data FASIH tersimpan & penyisiran_alokasi_pilihan) selalu
+// dibaca LIVE tiap panggilan, warning otomatis hilang begitu salah satu
+// sisi berubah sampai keduanya cocok lagi -- TIDAK perlu logika "clear
+// warning" terpisah.
+//
+// Akses endpoint (baik GET maupun POST) DIKUNCI ke 7 pengelola yang sama
+// dgn tombol export (bolehAksesManajemenTarget) -- SAMA PERSIS pola
+// gate-nya dgn .../alokasi/export-subsls/route.ts. Pembatasan "cuma akun
+// M. Iqbal Hadi" utk WARNING BANNER-nya sendiri ada di SISI KLIEN
+// (FasihMismatchWarningBar), BUKAN di endpoint ini -- ke-7 pengelola tetap
+// bisa upload/lihat panelnya, cuma banner ambient di level halaman yang
+// dibatasi 1 akun sesuai permintaan.
 //
 // Nama Kecamatan/Nagari/SLS utk baris #2 (sudah_tidak_ada_di_sistem) TIDAK
 // bisa diambil dari penyisiran_alokasi_pilihan (krn justru sudah tidak ada
@@ -84,10 +109,16 @@ interface NamaLookupRow {
   sls_nama: string | null;
 }
 
-interface FasihEntry {
-  email_pengawas: string;
+interface FasihRow {
+  kec_kode: string;
+  nagari_kode: string;
+  sls_kode: string;
+  subsls_kode: string;
   email_pencacah: string;
-  sumber_file: Set<string>;
+  email_pengawas: string;
+  sumber_file: string | null;
+  diupload_oleh: string | null;
+  diupload_at: string;
 }
 
 function supabaseAdmin() {
@@ -97,28 +128,32 @@ function supabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-async function pastikanPengelola(req: NextRequest, supabase: any): Promise<null | NextResponse> {
+// Balikan sukses berisi nama akun yang login -- dipakai POST utk mengisi
+// kolom diupload_oleh.
+async function pastikanPengelola(req: NextRequest, supabase: any): Promise<{ error: NextResponse } | { nama: string }> {
   const token = extractBearer(req);
   if (!verifySession(token, "penyisiran_petugas")) {
-    return NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 });
+    return { error: NextResponse.json({ error: "Sesi tidak valid / kedaluwarsa." }, { status: 401 }) };
   }
   const subjectId = getSessionSubject(token);
   if (!subjectId) {
-    return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 });
+    return { error: NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 }) };
   }
   const { data: akun, error } = await supabase
     .from("petugas_penyisiran_akun")
     .select("nama")
     .eq("id", subjectId)
     .maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return { error: NextResponse.json({ error: error.message }, { status: 500 }) };
   if (!bolehAksesManajemenTarget(akun?.nama ?? null)) {
-    return NextResponse.json(
-      { error: "Fitur ini hanya dapat diakses oleh pengelola yang ditentukan." },
-      { status: 403 }
-    );
+    return {
+      error: NextResponse.json(
+        { error: "Fitur ini hanya dapat diakses oleh pengelola yang ditentukan." },
+        { status: 403 }
+      ),
+    };
   }
-  return null;
+  return { nama: akun.nama as string };
 }
 
 // Pulihkan kode wilayah yang kehilangan angka nol di depan (lihat komentar
@@ -147,12 +182,149 @@ function cariKolom(header: unknown[], nama: string): number {
   return header.findIndex((h) => String(h ?? "").trim().toLowerCase() === target);
 }
 
+function urut(a: any, b: any) {
+  return (
+    String(a.kec_nama).localeCompare(String(b.kec_nama), "id") ||
+    String(a.nagari_nama).localeCompare(String(b.nagari_nama), "id") ||
+    String(a.sls_nama).localeCompare(String(b.sls_nama), "id") ||
+    String(a.subsls_kode).localeCompare(String(b.subsls_kode), "id", { numeric: true })
+  );
+}
+
+// Hitung ulang perbandingan dari data penyisiran_fasih_assignment yang
+// TERSIMPAN (bukan dari file yang baru diupload) vs data SEKARANG di
+// sistem -- dipakai bareng oleh GET & POST (lihat komentar besar di atas).
+async function hitungPerbandingan(supabase: any) {
+  const [{ data: sistemData, error: errSistem }, { data: namaData, error: errNama }, { data: fasihData, error: errFasih }] =
+    await Promise.all([
+      supabase.rpc("penyisiran_alokasi_export_subsls"),
+      supabase.rpc("penyisiran_wilayah_nama_lookup"),
+      supabase
+        .from("penyisiran_fasih_assignment")
+        .select("kec_kode, nagari_kode, sls_kode, subsls_kode, email_pencacah, email_pengawas, sumber_file, diupload_oleh, diupload_at"),
+    ]);
+  if (errSistem) return { error: NextResponse.json({ error: errSistem.message }, { status: 500 }) };
+  if (errNama) return { error: NextResponse.json({ error: errNama.message }, { status: 500 }) };
+  if (errFasih) return { error: NextResponse.json({ error: errFasih.message }, { status: 500 }) };
+
+  const sistemRows = (sistemData ?? []) as SystemRow[];
+  const namaRows = (namaData ?? []) as NamaLookupRow[];
+  const fasihRows = (fasihData ?? []) as FasihRow[];
+
+  const namaMap = new Map<string, { kec_nama: string | null; nagari_nama: string | null; sls_nama: string | null }>();
+  for (const n of namaRows) {
+    namaMap.set(kunci(n.kec_kode, n.nagari_kode, n.sls_kode, n.subsls_kode), {
+      kec_nama: n.kec_nama,
+      nagari_nama: n.nagari_nama,
+      sls_nama: n.sls_nama,
+    });
+  }
+
+  const sistemMap = new Map<string, SystemRow>();
+  for (const s of sistemRows) {
+    sistemMap.set(kunci(s.kec_kode, s.nagari_kode, s.sls_kode, s.subsls_kode), s);
+  }
+
+  const fasihMap = new Map<string, FasihRow>();
+  let terakhirUploadAt: string | null = null;
+  let terakhirUploadOleh: string | null = null;
+  for (const f of fasihRows) {
+    fasihMap.set(kunci(f.kec_kode, f.nagari_kode, f.sls_kode, f.subsls_kode), f);
+    if (!terakhirUploadAt || f.diupload_at > terakhirUploadAt) {
+      terakhirUploadAt = f.diupload_at;
+      terakhirUploadOleh = f.diupload_oleh;
+    }
+  }
+
+  const belumDiFasih: any[] = [];
+  const bedaPencacah: any[] = [];
+  for (const [k, s] of sistemMap) {
+    const f = fasihMap.get(k);
+    if (!f) {
+      belumDiFasih.push({
+        kec_nama: s.kec_nama,
+        nagari_nama: s.nagari_nama,
+        sls_nama: s.sls_nama,
+        subsls_kode: s.subsls_kode,
+        petugas_nama: s.petugas_nama,
+        email_pencacah: s.email_pencacah,
+        email_pengawas: s.email_pengawas,
+      });
+    } else if (normalisasiEmail(s.email_pencacah) !== normalisasiEmail(f.email_pencacah)) {
+      bedaPencacah.push({
+        kec_nama: s.kec_nama,
+        nagari_nama: s.nagari_nama,
+        sls_nama: s.sls_nama,
+        subsls_kode: s.subsls_kode,
+        petugas_nama: s.petugas_nama,
+        email_pencacah_sistem: s.email_pencacah,
+        email_pencacah_fasih: f.email_pencacah,
+        sumber_file: f.sumber_file ?? "",
+      });
+    }
+  }
+
+  const sudahTidakAdaDiSistem: any[] = [];
+  for (const [k, f] of fasihMap) {
+    if (sistemMap.has(k)) continue;
+    const nama = namaMap.get(k);
+    sudahTidakAdaDiSistem.push({
+      kec_nama: nama?.kec_nama ?? f.kec_kode,
+      nagari_nama: nama?.nagari_nama ?? f.nagari_kode,
+      sls_nama: nama?.sls_nama ?? f.sls_kode,
+      subsls_kode: f.subsls_kode,
+      email_pencacah: f.email_pencacah,
+      email_pengawas: f.email_pengawas,
+      sumber_file: f.sumber_file ?? "",
+    });
+  }
+
+  belumDiFasih.sort(urut);
+  sudahTidakAdaDiSistem.sort(urut);
+  bedaPencacah.sort(urut);
+
+  return {
+    hasil: {
+      ringkasan: {
+        total_sistem: sistemMap.size,
+        total_fasih: fasihMap.size,
+        terakhir_upload_at: terakhirUploadAt,
+        terakhir_upload_oleh: terakhirUploadOleh,
+        jumlah_belum_di_fasih: belumDiFasih.length,
+        jumlah_sudah_tidak_ada_di_sistem: sudahTidakAdaDiSistem.length,
+        jumlah_beda_pencacah: bedaPencacah.length,
+      },
+      belum_di_fasih: belumDiFasih,
+      sudah_tidak_ada_di_sistem: sudahTidakAdaDiSistem,
+      beda_pencacah: bedaPencacah,
+    },
+  };
+}
+
+// GET -- hitung ulang perbandingan dari data yang SUDAH tersimpan, tanpa
+// perlu upload apa pun. Dipakai tab Perencanaan Lapangan (tampilkan hasil
+// terakhir begitu dibuka) & FasihMismatchWarningBar (poll ringkasan tiap 30
+// detik, HANYA tampil utk akun M. Iqbal Hadi -- lihat komentar besar di
+// atas file ini).
+export async function GET(req: NextRequest) {
+  const supabase = supabaseAdmin();
+  if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
+
+  const gate = await pastikanPengelola(req, supabase);
+  if ("error" in gate) return gate.error;
+
+  const hasil = await hitungPerbandingan(supabase);
+  if ("error" in hasil) return hasil.error;
+  return NextResponse.json(hasil.hasil);
+}
+
 export async function POST(req: NextRequest) {
   const supabase = supabaseAdmin();
   if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
   const gate = await pastikanPengelola(req, supabase);
-  if (gate) return gate;
+  if ("error" in gate) return gate.error;
+  const namaPengelola = gate.nama;
 
   let form: FormData;
   try {
@@ -165,8 +337,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Belum ada file yang diunggah." }, { status: 400 });
   }
 
-  const fasihMap = new Map<string, FasihEntry>();
-  let totalBarisFasih = 0;
+  // Baris yang akan di-UPSERT (permintaan user: "data assignment yang sama
+  // ditimpa oleh yang terbaru") -- key Map memastikan SUBSLS yang muncul
+  // >1x dalam batch upload yang SAMA juga otomatis "yang terakhir dibaca yang
+  // menang", konsisten dgn perilaku upsert-nya sendiri thd data lama.
+  const baruMap = new Map<
+    string,
+    {
+      kec_kode: string;
+      nagari_kode: string;
+      sls_kode: string;
+      subsls_kode: string;
+      email_pencacah: string;
+      email_pengawas: string;
+      sumber_file: string;
+    }
+  >();
+  let totalBarisFasihDibaca = 0;
 
   for (const file of files) {
     let aoa: unknown[][];
@@ -206,115 +393,41 @@ export async function POST(req: NextRequest) {
       const subsls = normalisasiKode(row[idxSubsls], LEBAR_KODE.subsls);
       if (!kec || !nagari || !sls || !subsls) continue; // baris rusak/tidak lengkap, lewati
       const k = kunci(kec, nagari, sls, subsls);
-      const emailPencacah = normalisasiEmail(row[idxPencacah]);
-      const emailPengawas = idxPengawas === -1 ? "" : normalisasiEmail(row[idxPengawas]);
-      const existing = fasihMap.get(k);
-      if (existing) {
-        existing.sumber_file.add(file.name);
-        // Baris terakhir yang dibaca yang dipakai utk nilai emailnya --
-        // kasus 1 SUBSLS muncul di >1 file cukup jarang & tetap kelihatan
-        // dari daftar sumber_file kalau user perlu telusuri manual.
-        existing.email_pencacah = emailPencacah;
-        existing.email_pengawas = emailPengawas;
-      } else {
-        fasihMap.set(k, { email_pencacah: emailPencacah, email_pengawas: emailPengawas, sumber_file: new Set([file.name]) });
-      }
-      totalBarisFasih++;
+      baruMap.set(k, {
+        kec_kode: kec,
+        nagari_kode: nagari,
+        sls_kode: sls,
+        subsls_kode: subsls,
+        email_pencacah: normalisasiEmail(row[idxPencacah]),
+        email_pengawas: idxPengawas === -1 ? "" : normalisasiEmail(row[idxPengawas]),
+        sumber_file: file.name,
+      });
+      totalBarisFasihDibaca++;
     }
   }
 
-  const [{ data: sistemData, error: errSistem }, { data: namaData, error: errNama }] = await Promise.all([
-    supabase.rpc("penyisiran_alokasi_export_subsls"),
-    supabase.rpc("penyisiran_wilayah_nama_lookup"),
-  ]);
-  if (errSistem) return NextResponse.json({ error: errSistem.message }, { status: 500 });
-  if (errNama) return NextResponse.json({ error: errNama.message }, { status: 500 });
-
-  const sistemRows = (sistemData ?? []) as SystemRow[];
-  const namaRows = (namaData ?? []) as NamaLookupRow[];
-
-  const namaMap = new Map<string, { kec_nama: string | null; nagari_nama: string | null; sls_nama: string | null }>();
-  for (const n of namaRows) {
-    namaMap.set(kunci(n.kec_kode, n.nagari_kode, n.sls_kode, n.subsls_kode), {
-      kec_nama: n.kec_nama,
-      nagari_nama: n.nagari_nama,
-      sls_nama: n.sls_nama,
-    });
+  if (baruMap.size > 0) {
+    const sekarang = new Date().toISOString();
+    const rowsUpsert = Array.from(baruMap.values()).map((r) => ({
+      ...r,
+      diupload_oleh: namaPengelola,
+      diupload_at: sekarang,
+    }));
+    const { error: errUpsert } = await supabase
+      .from("penyisiran_fasih_assignment")
+      .upsert(rowsUpsert, { onConflict: "kec_kode,nagari_kode,sls_kode,subsls_kode" });
+    if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
   }
 
-  const sistemMap = new Map<string, SystemRow>();
-  for (const s of sistemRows) {
-    sistemMap.set(kunci(s.kec_kode, s.nagari_kode, s.sls_kode, s.subsls_kode), s);
-  }
-
-  const belumDiFasih: any[] = [];
-  const bedaPencacah: any[] = [];
-  for (const [k, s] of sistemMap) {
-    const f = fasihMap.get(k);
-    if (!f) {
-      belumDiFasih.push({
-        kec_nama: s.kec_nama,
-        nagari_nama: s.nagari_nama,
-        sls_nama: s.sls_nama,
-        subsls_kode: s.subsls_kode,
-        petugas_nama: s.petugas_nama,
-        email_pencacah: s.email_pencacah,
-        email_pengawas: s.email_pengawas,
-      });
-    } else if (normalisasiEmail(s.email_pencacah) !== f.email_pencacah) {
-      bedaPencacah.push({
-        kec_nama: s.kec_nama,
-        nagari_nama: s.nagari_nama,
-        sls_nama: s.sls_nama,
-        subsls_kode: s.subsls_kode,
-        petugas_nama: s.petugas_nama,
-        email_pencacah_sistem: s.email_pencacah,
-        email_pencacah_fasih: f.email_pencacah,
-        sumber_file: Array.from(f.sumber_file).join(", "),
-      });
-    }
-  }
-
-  const sudahTidakAdaDiSistem: any[] = [];
-  for (const [k, f] of fasihMap) {
-    if (sistemMap.has(k)) continue;
-    const [kec, nagari, sls, subsls] = k.split("|");
-    const nama = namaMap.get(k);
-    sudahTidakAdaDiSistem.push({
-      kec_nama: nama?.kec_nama ?? kec,
-      nagari_nama: nama?.nagari_nama ?? nagari,
-      sls_nama: nama?.sls_nama ?? sls,
-      subsls_kode: subsls,
-      email_pencacah: f.email_pencacah,
-      email_pengawas: f.email_pengawas,
-      sumber_file: Array.from(f.sumber_file).join(", "),
-    });
-  }
-
-  function urut(a: any, b: any) {
-    return (
-      String(a.kec_nama).localeCompare(String(b.kec_nama), "id") ||
-      String(a.nagari_nama).localeCompare(String(b.nagari_nama), "id") ||
-      String(a.sls_nama).localeCompare(String(b.sls_nama), "id") ||
-      String(a.subsls_kode).localeCompare(String(b.subsls_kode), "id", { numeric: true })
-    );
-  }
-  belumDiFasih.sort(urut);
-  sudahTidakAdaDiSistem.sort(urut);
-  bedaPencacah.sort(urut);
-
+  const hasil = await hitungPerbandingan(supabase);
+  if ("error" in hasil) return hasil.error;
   return NextResponse.json({
+    ...hasil.hasil,
     ringkasan: {
-      total_sistem: sistemMap.size,
-      total_fasih: fasihMap.size,
-      total_baris_fasih_dibaca: totalBarisFasih,
+      ...hasil.hasil.ringkasan,
+      total_baris_fasih_dibaca: totalBarisFasihDibaca,
       jumlah_file: files.length,
-      jumlah_belum_di_fasih: belumDiFasih.length,
-      jumlah_sudah_tidak_ada_di_sistem: sudahTidakAdaDiSistem.length,
-      jumlah_beda_pencacah: bedaPencacah.length,
+      jumlah_subsls_diupdate: baruMap.size,
     },
-    belum_di_fasih: belumDiFasih,
-    sudah_tidak_ada_di_sistem: sudahTidakAdaDiSistem,
-    beda_pencacah: bedaPencacah,
   });
 }

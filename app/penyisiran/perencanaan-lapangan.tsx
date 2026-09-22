@@ -1881,11 +1881,19 @@ interface FasihHasil {
   ringkasan: {
     total_sistem: number;
     total_fasih: number;
-    total_baris_fasih_dibaca: number;
-    jumlah_file: number;
+    // Terisi HANYA dari data yang sudah TERSIMPAN (tabel
+    // penyisiran_fasih_assignment) -- null kalau belum pernah ada yang
+    // upload sama sekali.
+    terakhir_upload_at: string | null;
+    terakhir_upload_oleh: string | null;
     jumlah_belum_di_fasih: number;
     jumlah_sudah_tidak_ada_di_sistem: number;
     jumlah_beda_pencacah: number;
+    // 3 field di bawah HANYA ada di respons POST (hasil upload barusan),
+    // undefined kalau hasil ini datang dari GET (muat ulang tanpa upload).
+    total_baris_fasih_dibaca?: number;
+    jumlah_file?: number;
+    jumlah_subsls_diupdate?: number;
   };
   belum_di_fasih: Record<string, unknown>[];
   sudah_tidak_ada_di_sistem: Record<string, unknown>[];
@@ -1901,8 +1909,46 @@ function FasihAssignmentPanel({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [memuatAwal, setMemuatAwal] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasil, setHasil] = useState<FasihHasil | null>(null);
+
+  // Muat hasil TERAKHIR (dari data yang sudah tersimpan di
+  // penyisiran_fasih_assignment) begitu panel dibuka -- supaya pengelola
+  // tidak perlu upload ulang tiap kali cuma utk melihat status terkini
+  // (permintaan lanjutan user: data FASIH sekarang PERSISTEN, lihat
+  // komentar besar di route.ts). Kalau belum pernah ada yang upload sama
+  // sekali, hasilnya tetap balik (cuma 3 daftar kosong + total_fasih 0),
+  // BUKAN error -- jadi panel tetap tampil normal, cuma semua "✅ Tidak ada
+  // ...".
+  useEffect(() => {
+    let batal = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/penyisiran/alokasi/fasih-compare", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+        if (!batal) setHasil(data as FasihHasil);
+      } catch (e) {
+        if (!batal) {
+          const msg = e instanceof Error ? e.message : "Gagal memuat status terakhir.";
+          if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
+          // Selain sesi kedaluwarsa, kegagalan muat awal SENGAJA tidak
+          // ditampilkan sbg error mencolok (panel tetap kelihatan "kosong
+          // netral") -- error yg lebih relevan bagi user adalah error
+          // SAAT upload, bukan saat auto-load pertama.
+        }
+      } finally {
+        if (!batal) setMemuatAwal(false);
+      }
+    })();
+    return () => {
+      batal = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   async function handleBandingkan() {
     const files = fileRef.current?.files;
@@ -2002,6 +2048,10 @@ function FasihAssignmentPanel({
           Pengawas/Pencacah (per SUBSLS)&quot; -- boleh per-Pengawas seperti contoh, boleh juga digabung sekaligus
           dalam satu kali upload).
         </p>
+        <p className="mt-1 text-[10px] text-ink/50">
+          File yang diupload TERSIMPAN permanen -- upload berikutnya utk Sub SLS yang sama otomatis MENIMPA data
+          lama dengan yang terbaru (tidak perlu upload ulang seluruh data tiap kali, cukup file yang berubah saja).
+        </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple disabled={busy} className="text-xs" />
           <button
@@ -2010,17 +2060,31 @@ function FasihAssignmentPanel({
             disabled={busy}
             className="rounded-md border border-navy-600 bg-navy-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-navy-700 disabled:opacity-50"
           >
-            {busy ? "Membandingkan..." : "🔍 Bandingkan"}
+            {busy ? "Memproses..." : "⬆ Upload & Bandingkan"}
           </button>
+          {memuatAwal && <span className="text-[11px] text-ink/40">Memuat status terakhir...</span>}
         </div>
         {error && <p className="mt-2 text-xs text-rust-700">⚠ {error}</p>}
 
         {hasil && (
           <div className="mt-4 space-y-5">
             <p className="text-[11px] text-ink/50">
-              {hasil.ringkasan.total_baris_fasih_dibaca} baris terbaca dari {hasil.ringkasan.jumlah_file} file --{" "}
-              {hasil.ringkasan.total_sistem} SUBSLS ditag di sistem, {hasil.ringkasan.total_fasih} SUBSLS ditemukan
-              di FASIH.
+              {typeof hasil.ringkasan.total_baris_fasih_dibaca === "number" && (
+                <>
+                  {hasil.ringkasan.total_baris_fasih_dibaca} baris terbaca dari {hasil.ringkasan.jumlah_file} file
+                  ({hasil.ringkasan.jumlah_subsls_diupdate} Sub SLS diperbarui) barusan --{" "}
+                </>
+              )}
+              {hasil.ringkasan.total_sistem} SUBSLS ditag di sistem, {hasil.ringkasan.total_fasih} SUBSLS tersimpan
+              dari data FASIH
+              {hasil.ringkasan.terakhir_upload_at && (
+                <>
+                  {" "}
+                  (terakhir diupload {new Date(hasil.ringkasan.terakhir_upload_at).toLocaleString("id-ID")} oleh{" "}
+                  {hasil.ringkasan.terakhir_upload_oleh})
+                </>
+              )}
+              .
             </p>
 
             <TabelSelisih

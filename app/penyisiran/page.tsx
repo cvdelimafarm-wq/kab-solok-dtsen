@@ -89,6 +89,7 @@ import PenyisiranUsahaTab, {
   apiFetch,
   getToken,
   IS_PML_KEY,
+  NAMA_KEY,
   BUKA_FILTER_TAG_PML_KEY,
   LoginForm,
   simpanLoginPetugas,
@@ -97,6 +98,7 @@ import PenyisiranUsahaTab, {
   TabelRencanaBesokRow,
   type RencanaBesokRow,
 } from "../seruti/penyisiran-usaha";
+import { apakahIqbalHadi } from "@/lib/manajemenTargetAkses";
 import IdentifikasiJorongTab from "./identifikasi-jorong";
 import MonitoringPetugasTab from "./monitoring-petugas";
 import MonitoringTerpaduTab from "./monitoring-terpadu";
@@ -228,6 +230,10 @@ export default function PenyisiranPage() {
           }}
         />
         <RencanaBesokWarningBar onRencanakan={() => setTab("usaha")} />
+        {/* Warning "Monitoring Assignment FASIH" -- BARU, permintaan user:
+            "tampilkan warning khusus akun saya M. Iqbal Hadi" -- lihat
+            komentar panjang di FasihMismatchWarningBar di bawah. */}
+        <FasihMismatchWarningBar onLihat={() => setTab("perencanaan")} />
       </div>
       {/* Bar BARU terpisah di BAWAH layar (permintaan user, SENGAJA bar
           TERPISAH dari RencanaBesokWarningBar di atas -- yg lama TETAP
@@ -410,6 +416,86 @@ function DitandaiPmlWarningBar({ onLihatFlag }: { onLihatFlag: () => void }) {
         className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
       >
         Lihat daftarnya →
+      </button>
+    </div>
+  );
+}
+
+// Floating warning bar "Monitoring Assignment FASIH" -- permintaan
+// lanjutan user atas fitur di tab Perencanaan Lapangan
+// (FasihAssignmentPanel/app/penyisiran/perencanaan-lapangan.tsx): "kalau
+// ada perbedaan [antara data FASIH yang tersimpan vs "📋 Identifikasi
+// Wilayah Sampel SLS" di sistem], tampilkan warning KHUSUS akun saya
+// M. Iqbal Hadi -- warning hilang begitu sudah timpa-menimpa match antara
+// aplikasi web vs data upload assignment FASIH". Pola SAMA PERSIS dgn
+// DitandaiPmlWarningBar di atas (bar level HALAMAN, poll localStorage +
+// endpoint tiap 30 detik, tampil di TAB MANA PUN) -- BEDANYA cuma 2:
+//  1. Gerbangnya BUKAN "bukan PML" tapi apakahIqbalHadi(nama) --
+//     lib/manajemenTargetAkses.ts. Endpoint-nya sendiri (GET
+//     /api/penyisiran/alokasi/fasih-compare) tetap boleh dipanggil ke-7
+//     pengelola (bolehAksesManajemenTarget di server), tapi BANNER ini
+//     sengaja dibatasi 1 akun sesuai permintaan -- pengelola lain tetap
+//     bisa lihat hasilnya lewat panel di tab Perencanaan Lapangan sendiri,
+//     cuma tidak dapat notifikasi ambient spt ini.
+//  2. "Warning hilang begitu sudah timpa-menimpa match" TIDAK perlu logika
+//     khusus -- endpoint SELALU menghitung ulang dari data live (tabel
+//     penyisiran_fasih_assignment vs penyisiran_alokasi_pilihan SEKARANG),
+//     jadi begitu salah satu sisi berubah sampai cocok lagi, polling
+//     berikutnya (maks 30 detik) otomatis mengembalikan jumlah 0 & bar ini
+//     otomatis hilang sendiri -- tidak ada state "sudah dibaca"/dismiss.
+function FasihMismatchWarningBar({ onLihat }: { onLihat: () => void }) {
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [tampil, setTampil] = useState(false);
+  const [jumlah, setJumlah] = useState(0);
+
+  useEffect(() => {
+    function bacaStorage() {
+      const t = getToken();
+      const nama = typeof window !== "undefined" ? localStorage.getItem(NAMA_KEY) : null;
+      setToken(t);
+      setTampil(!!t && apakahIqbalHadi(nama));
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const muat = useCallback(() => {
+    if (!token || !tampil) {
+      setJumlah(0);
+      return;
+    }
+    apiFetch("/api/penyisiran/alokasi/fasih-compare", token)
+      .then((data) => {
+        const r = data?.ringkasan;
+        const total =
+          (Number(r?.jumlah_belum_di_fasih) || 0) +
+          (Number(r?.jumlah_sudah_tidak_ada_di_sistem) || 0) +
+          (Number(r?.jumlah_beda_pencacah) || 0);
+        setJumlah(total);
+      })
+      .catch(() => setJumlah(0));
+  }, [token, tampil]);
+
+  useEffect(() => {
+    muat();
+    const id = setInterval(muat, 30000);
+    return () => clearInterval(id);
+  }, [muat]);
+
+  if (!checked || !tampil || jumlah === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 bg-amber-600 px-4 py-2 text-center text-xs font-medium text-white shadow-md">
+      <span>🔄 Ada {jumlah} selisih data Assignment FASIH vs sistem &middot; perlu dicek.</span>
+      <button
+        type="button"
+        onClick={onLihat}
+        className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-50"
+      >
+        Lihat →
       </button>
     </div>
   );
