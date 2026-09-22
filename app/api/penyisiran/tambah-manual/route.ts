@@ -164,6 +164,20 @@ export async function POST(req: NextRequest) {
       ditambah_manual_oleh: petugasNama,
       penyisiran_oleh_id: petugasId,
       penyisiran_oleh: petugasNama,
+      // Otomatis ditandai "🚩 Perlu Segera" (permintaan user: "pada fitur +
+      // tambah target kk baru otomatis akan di flag merah") -- KK baru hasil
+      // temuan lapangan mudah terlewat kalau tercampur ratusan baris lain,
+      // jadi langsung ditandai supaya nongol di banner peringatan &
+      // filter "🚩 Ditandai PML" (app/seruti/penyisiran-usaha.tsx),
+      // menandakan tim (PML/PPL lain) perlu memverifikasi/melengkapi data
+      // baris ini. tag_pml_oleh diisi nama penambahnya sendiri (BUKAN
+      // dipaksa harus akun PML spt jalur normal /update -- baris ini
+      // sengaja dikecualikan krn ditulis server sendiri saat insert, bukan
+      // hasil PML menandai baris org lain).
+      tag_pml: true,
+      tag_pml_oleh: petugasNama,
+      tag_pml_at: new Date().toISOString(),
+      tag_pml_catatan: "🆕 KK baru ditambahkan manual saat penyisiran -- mohon diverifikasi/dilengkapi.",
     })
     .select(
       "kode_identitas, idsubsls, kec_kode, kec_nama, nagari_kode, nagari_nama, " +
@@ -171,7 +185,7 @@ export async function POST(req: NextRequest) {
         "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, pnm_subsektor, " +
         "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, " +
         "info_ppl, info_jorong, info_tetangga, identifikasi_ppl, identifikasi_ppl_at, " +
-        "prioritas_pasti, tag_pml, tag_pml_oleh, tag_pml_at, penyisiran_oleh, updated_at, ditemukan_at"
+        "prioritas_pasti, tag_pml, tag_pml_oleh, tag_pml_at, tag_pml_catatan, penyisiran_oleh, updated_at, ditemukan_at"
     )
     .single();
 

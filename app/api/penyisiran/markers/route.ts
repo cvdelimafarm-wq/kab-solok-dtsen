@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
   const nagari = sp.get("nagari") || "";
   const subsls = sp.get("subsls") || ""; // idsubsls (16 digit), dropdown filter tahap 3
   const status = sp.get("status") || "";
+  // Sama dgn /api/penyisiran/list -- lihat komentarnya.
+  const tagPml = sp.get("tag_pml") === "1";
 
   let filterWilayah: string | null = null;
   if (getSessionRole(token) === "penyisiran_petugas") {
@@ -79,6 +81,7 @@ export async function GET(req: NextRequest) {
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("status_kunjungan", status);
+  if (tagPml) query = query.eq("tag_pml", true);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

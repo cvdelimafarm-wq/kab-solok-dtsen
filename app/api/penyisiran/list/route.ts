@@ -41,7 +41,7 @@ const KOLOM =
   "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, pnm_subsektor, " +
   "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, " +
   "info_ppl, info_jorong, info_tetangga, identifikasi_ppl, identifikasi_ppl_at, " +
-  "prioritas_pasti, tag_pml, tag_pml_oleh, tag_pml_at, penyisiran_oleh, updated_at, ditemukan_at";
+  "prioritas_pasti, tag_pml, tag_pml_oleh, tag_pml_at, tag_pml_catatan, penyisiran_oleh, updated_at, ditemukan_at";
 
 export async function GET(req: NextRequest) {
   const token = extractBearer(req);
@@ -61,6 +61,12 @@ export async function GET(req: NextRequest) {
   const nagari = sp.get("nagari") || "";
   const subsls = sp.get("subsls") || ""; // idsubsls (16 digit), dropdown filter tahap 3
   const status = sp.get("status") || "";
+  // tagPml ("🚩 Ditandai PML" -- permintaan user supaya PPL/PML gampang
+  // lihat kartu yg ditandai PML "Perlu Segera" tanpa buka satu-satu):
+  // filter tambahan, independen dari `status` (kartu yg ditandai bisa
+  // status APA SAJA, bukan cuma "belum"), makanya query param terpisah,
+  // bukan ditumpuk ke STATUS_PILIHAN.
+  const tagPml = sp.get("tag_pml") === "1";
   const q = (sp.get("q") || "").trim();
   const page = Math.max(1, Number(sp.get("page")) || 1);
 
@@ -89,7 +95,7 @@ export async function GET(req: NextRequest) {
     if (!filterWilayah) {
       return NextResponse.json({ rows: [], total: 0, page, pageSize: PAGE_SIZE, belumAdaWilayah: true });
     }
-  } else if (!kec && !nagari && !q) {
+  } else if (!kec && !nagari && !q && !tagPml) {
     // Jangan biarkan query tanpa filter sama sekali menyapu SEMUA baris --
     // panel filter di client mewajibkan pilih kecamatan dulu, tapi dijaga
     // juga di sini kalau-kalau dipanggil langsung. TIDAK berlaku utk
@@ -112,6 +118,7 @@ export async function GET(req: NextRequest) {
   if (nagari) query = query.eq("nagari_kode", nagari);
   if (subsls) query = query.eq("idsubsls", subsls);
   if (status) query = query.eq("status_kunjungan", status);
+  if (tagPml) query = query.eq("tag_pml", true);
   if (q) {
     const like = `%${q.replace(/[%_]/g, "")}%`;
     // ikut cari di nama_anggota_keluarga jg (mis. nama pasangan) -- sengaja

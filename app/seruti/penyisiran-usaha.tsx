@@ -74,6 +74,16 @@ export const PETUGAS_ID_STORE_KEY = "penyisiran-petugas-login-id";
 // Pasti", dikonfirmasi user). Disimpan di localStorage spt field login
 // lain supaya tidak perlu login ulang tiap buka tab.
 export const IS_PML_KEY = "penyisiran-petugas-login-ispml";
+// Dipakai DitandaiPmlWarningBar (app/penyisiran/page.tsx, bar peringatan
+// global lintas tab "ada X keluarga ditandai PML") -- permintaan user
+// "tambahkan tombol navigasi menuju daftar kk yang kena flag". Diset "1"
+// SESAAT SEBELUM pindah ke tab "usaha" (setTab di page.tsx), lalu dibaca &
+// DIHAPUS oleh PenyisiranPanel di mount effect utk otomatis menyalakan
+// toggle filterTagPml -- pola localStorage "sinyal sekali pakai" ini sama
+// gayanya dgn IS_PML_KEY dkk (dibaca lintas komponen tanpa prop-drilling),
+// bedanya key ini SELALU dihapus sendiri setelah dibaca (bukan disimpan
+// permanen spt data login).
+export const BUKA_FILTER_TAG_PML_KEY = "penyisiran-buka-filter-tag-pml";
 const LAT_KEY = "penyisiran-petugas-login-lat";
 const LNG_KEY = "penyisiran-petugas-login-lng";
 
@@ -361,6 +371,13 @@ interface Summary {
   // BESOK (WIB) -- dasar kartu StatTile "📅 Dijadwalkan Besok" & kuota
   // warning bar (lihat RencanaBesokWarningBar di app/penyisiran/page.tsx).
   direncanakan_besok: number;
+  // Jumlah KK yg ditandai PML "🚩 Perlu Segera" (tag_pml=true) -- dasar
+  // banner peringatan merah utk PPL (permintaan user: "tampilkan warning
+  // di PPL ada flag ini"), lihat BannerDitandaiPml di bawah. Dihitung dari
+  // RPC penyisiran_summary()/penyisiran_summary_wilayah() (migrasi
+  // 20260922h_summary_tambah_hitung_tag_pml.sql), SUDAH scoped ke wilayah
+  // petugas ybs spt field lain di sini.
+  ditandai_pml: number;
   kecamatan: KecOption[];
 }
 interface PplInfo {
@@ -418,6 +435,12 @@ interface Row {
   tag_pml: boolean;
   tag_pml_oleh: string | null;
   tag_pml_at: string | null;
+  // Catatan opsional PML menjelaskan kenapa ditandai (permintaan user
+  // "pada flag buka juga tambah catatan") -- null/"" = tidak ada catatan.
+  // Diisi PML lewat textarea di bawah tombol 🚩, ATAU otomatis oleh server
+  // saat baris ini hasil "+ Tambah Target KK Baru" (lihat
+  // /api/penyisiran/tambah-manual/route.ts).
+  tag_pml_catatan: string | null;
 }
 
 // Kartu berstatus "Usaha Ditemukan" TERKUNCI (read-only, dropdown Status &
@@ -814,6 +837,24 @@ function PenyisiranPanel({
   const [filterNagari, setFilterNagari] = useState("");
   const [filterSubsls, setFilterSubsls] = useState(""); // idsubsls, mis. "JORONG USAK-01"
   const [filterStatus, setFilterStatus] = useState("");
+  // "🚩 Ditandai PML" (permintaan user) -- checkbox terpisah dari dropdown
+  // Status krn kartu yg ditandai PML bisa berstatus APA SAJA, bukan cuma
+  // "belum". Dipakai baik oleh PPL (biar tidak kelewat kartu yg ditandai
+  // PML-nya) maupun PML sendiri (meninjau ulang tanda yg sudah dibuat).
+  const [filterTagPml, setFilterTagPml] = useState(false);
+  // Sinyal dari DitandaiPmlWarningBar (app/penyisiran/page.tsx, bar
+  // peringatan global lintas tab) -- lihat komentar panjang di
+  // BUKA_FILTER_TAG_PML_KEY. Dicek SEKALI saat panel ini mount (mis. PPL
+  // menekan "Lihat →" di bar itu, yg pindah tab ke "usaha" LALU nge-set
+  // key ini) -- langsung dihapus lagi supaya tidak menyala ulang kalau
+  // panel ini remount/reload tanpa lewat bar tsb.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem(BUKA_FILTER_TAG_PML_KEY) === "1") {
+      localStorage.removeItem(BUKA_FILTER_TAG_PML_KEY);
+      setFilterTagPml(true);
+    }
+  }, []);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -1141,7 +1182,11 @@ function PenyisiranPanel({
   // ulang di beberapa tempat (disabled input, pesan banner) tanpa mengetik
   // ulang kondisinya.
   const liveSiap = liveStatus === "active";
-  const bisaMuat = lokasiRumahSiap && liveSiap && Boolean(filterKec || search);
+  // filterTagPml ikut dihitung sbg "sudah ada filter" (spt filterKec/search)
+  // supaya PML/pengawas bisa langsung lihat SEMUA kartu yg ditandai 🚩 di
+  // seluruh wilayahnya tanpa wajib pilih 1 kecamatan dulu -- beda dgn
+  // filterKec/search yg tanpa itu bisa menyapu banyak sekali baris.
+  const bisaMuat = lokasiRumahSiap && liveSiap && Boolean(filterKec || search || filterTagPml);
 
   // Dipakai 3x di JSX di bawah (dekat filter bar + 2x diulang di bagian
   // paling bawah halaman) -- diekstrak jadi satu variabel supaya teksnya
@@ -1176,6 +1221,7 @@ function PenyisiranPanel({
       if (filterNagari) sp.set("nagari", filterNagari);
       if (filterSubsls) sp.set("subsls", filterSubsls);
       if (filterStatus) sp.set("status", filterStatus);
+      if (filterTagPml) sp.set("tag_pml", "1");
       if (search) sp.set("q", search);
       sp.set("page", String(page));
       const data = await apiFetch(`/api/penyisiran/list?${sp.toString()}`, token);
@@ -1188,11 +1234,11 @@ function PenyisiranPanel({
     } finally {
       setLoading(false);
     }
-  }, [bisaMuat, filterKec, filterNagari, filterSubsls, filterStatus, search, page, token, guard]);
+  }, [bisaMuat, filterKec, filterNagari, filterSubsls, filterStatus, filterTagPml, search, page, token, guard]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterKec, filterNagari, filterSubsls, filterStatus, search]);
+  }, [filterKec, filterNagari, filterSubsls, filterStatus, filterTagPml, search]);
 
   useEffect(() => {
     loadList();
@@ -1208,6 +1254,7 @@ function PenyisiranPanel({
       if (filterNagari) sp.set("nagari", filterNagari);
       if (filterSubsls) sp.set("subsls", filterSubsls);
       if (filterStatus) sp.set("status", filterStatus);
+      if (filterTagPml) sp.set("tag_pml", "1");
       const data = await apiFetch(`/api/penyisiran/markers?${sp.toString()}`, token);
       setMarkers(data.markers);
     } catch (e) {
@@ -1215,7 +1262,7 @@ function PenyisiranPanel({
         throw e;
       });
     }
-  }, [filterKec, filterNagari, filterSubsls, filterStatus, token, guard]);
+  }, [filterKec, filterNagari, filterSubsls, filterStatus, filterTagPml, token, guard]);
 
   useEffect(() => {
     loadMarkers();
@@ -1527,6 +1574,34 @@ function PenyisiranPanel({
         </div>
       )}
 
+      {/* Banner peringatan "🚩 Ditandai PML" -- permintaan user: "jika ada
+          penanda Flag ini maka tampilkan warning di PPL ada flag ini".
+          SELALU tampil (bukan cuma kalau kartu itu kebetulan sedang
+          kelihatan di daftar yg difilter) selama masih ada >=1 kartu
+          tag_pml=true di wilayah petugas ybs (summary sudah discoped sama
+          spt StatTile lain di atas) -- supaya PPL langsung sadar begitu
+          buka tab, tidak perlu scroll/filter manual dulu. Tombol "Lihat"
+          langsung menyalakan toggle filterTagPml & membersihkan
+          filterStatus (spy kartu yg ditandai tidak ikut kesaring status
+          lain yg sedang aktif). */}
+      {summary && summary.ditandai_pml > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5">
+          <span className="text-xs font-semibold text-red-700">
+            🚩 {summary.ditandai_pml} keluarga ditandai PML &middot; perlu segera didata!
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterStatus("");
+              setFilterTagPml(true);
+            }}
+            className="shrink-0 rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-700"
+          >
+            Lihat daftarnya
+          </button>
+        </div>
+      )}
+
       {showRencanaBesok && (
         <ModalRencanaBesok token={token} onClose={() => setShowRencanaBesok(false)} onSessionExpired={onSessionExpired} />
       )}
@@ -1595,6 +1670,23 @@ function PenyisiranPanel({
             </option>
           ))}
         </select>
+        {/* "🚩 Ditandai PML" (permintaan user) -- toggle terpisah dari
+            dropdown Status krn independen dari status_kunjungan (lihat
+            komentar filterTagPml). Sengaja tombol toggle, bukan checkbox
+            polos, spy konsisten gaya dgn tombol2 lain di toolbar & jelas
+            kelihatan aktif/tidaknya sekilas. */}
+        <button
+          type="button"
+          onClick={() => setFilterTagPml((v) => !v)}
+          title="Tampilkan hanya kartu yang ditandai PML 🚩 Perlu Segera"
+          className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-xs font-semibold transition ${
+            filterTagPml
+              ? "border-red-400 bg-red-600 text-white"
+              : "border-red-300 text-red-600 hover:bg-red-50"
+          }`}
+        >
+          🚩 Ditandai PML
+        </button>
         <input
           type="search"
           value={searchInput}
@@ -2493,6 +2585,11 @@ function RowCard({
   // menekan tombolnya, supaya tidak perlu menunggu refetch.
   const [tagPml, setTagPml] = useState(row.tag_pml);
   const [tagPmlOleh, setTagPmlOleh] = useState(row.tag_pml_oleh);
+  // Catatan opsional flag (permintaan user "pada flag buka juga tambah
+  // catatan") -- diedit PML lewat textarea di bawah tombol 🚩, tersimpan
+  // saat blur (SENGAJA tanpa debounce spt catatan_petugas -- jarang
+  // diketik ulang-ulang, cukup simpan sekali selesai mengetik).
+  const [tagPmlCatatan, setTagPmlCatatan] = useState(row.tag_pml_catatan ?? "");
   const [unlocked, setUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<"idle" | "ok" | "err">("idle");
@@ -2565,6 +2662,7 @@ function RowCard({
     catatan?: string;
     pastiFlag?: boolean;
     tagPml?: boolean;
+    tagPmlCatatan?: string;
   }) {
     const statusKirim = overrides?.status ?? status;
     const catatanKirim = overrides?.catatan ?? catatan;
@@ -2574,6 +2672,7 @@ function RowCard({
     // adanya di sini (aman, diabaikan diam2 kalau bukan PML), supaya
     // handleSave tidak perlu tahu soal isPml sama sekali.
     const tagPmlKirim = overrides?.tagPml ?? tagPml;
+    const tagPmlCatatanKirim = overrides?.tagPmlCatatan ?? tagPmlCatatan;
     setSaving(true);
     try {
       await apiFetch("/api/penyisiran/update", token, {
@@ -2587,6 +2686,7 @@ function RowCard({
           info_tetangga: infoTetangga,
           prioritas_pasti: pastiFlagKirim,
           tag_pml: tagPmlKirim,
+          tag_pml_catatan: tagPmlCatatanKirim || null,
           petugas_id: petugasId,
           petugas_nama: petugasNama,
           edit_all: editAllMode,
@@ -2602,6 +2702,7 @@ function RowCard({
         prioritas_pasti: pastiFlagKirim,
         tag_pml: tagPmlKirim,
         tag_pml_oleh: tagPmlKirim ? petugasNama : null,
+        tag_pml_catatan: tagPmlKirim ? tagPmlCatatanKirim || null : null,
         penyisiran_oleh: petugasNama ?? row.penyisiran_oleh,
       });
       // Beri tahu FloatBarRencanaBesok (app/penyisiran/page.tsx) supaya
@@ -2772,11 +2873,18 @@ function RowCard({
           bawah) -- kartu ini sendiri tampil utk SEMUA role (PPL maupun
           PML) begitu ditandai. */}
       {tagPml && (
-        <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1">
-          <span className="text-sm leading-none">🚩</span>
-          <span className="text-[11px] font-semibold text-red-700">
-            Ditandai PML &middot; perlu didata segera{tagPmlOleh ? ` (oleh ${tagPmlOleh})` : ""}
-          </span>
+        <div className="mt-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm leading-none">🚩</span>
+            <span className="text-[11px] font-semibold text-red-700">
+              Ditandai PML &middot; perlu didata segera{tagPmlOleh ? ` (oleh ${tagPmlOleh})` : ""}
+            </span>
+          </div>
+          {/* Catatan flag -- tampil ke SEMUA role (PPL jg) supaya tahu
+              alasan/konteks kenapa ditandai, bukan cuma teks generik di
+              atas. Lihat textarea pengisiannya (khusus PML) di mode
+              Detail. */}
+          {tagPmlCatatan && <p className="mt-0.5 pl-5 text-[11px] text-red-700/80">📝 {tagPmlCatatan}</p>}
         </div>
       )}
 
@@ -2898,7 +3006,12 @@ function RowCard({
                   const next = !tagPml;
                   setTagPml(next);
                   setTagPmlOleh(next ? petugasNama : null);
-                  handleSave({ tagPml: next });
+                  // Catatan ikut dikosongkan lokal saat dibatalkan -- SAMA
+                  // pola dgn tag_pml_oleh di atas (server jg mengosongkan
+                  // tag_pml_catatan begitu tagPml=false, lihat
+                  // /api/penyisiran/update/route.ts).
+                  if (!next) setTagPmlCatatan("");
+                  handleSave({ tagPml: next, tagPmlCatatan: next ? tagPmlCatatan : "" });
                 }}
                 title={
                   tagPml
@@ -2911,6 +3024,23 @@ function RowCard({
               >
                 🚩 {tagPml ? "Perlu Segera (klik utk batal)" : "Tandai Perlu Segera"}
               </button>
+
+              {/* Catatan flag (permintaan user "pada flag buka juga tambah
+                  catatan") -- cuma muncul kalau SEDANG ditandai (tagPml
+                  true), supaya PML bisa jelaskan alasan/konteksnya ke PPL.
+                  Tersimpan saat blur (bukan tiap ketikan, cukup sederhana
+                  utk kebutuhan ini). */}
+              {tagPml && (
+                <textarea
+                  value={tagPmlCatatan}
+                  onChange={(e) => setTagPmlCatatan(e.target.value)}
+                  onBlur={() => handleSave({ tagPmlCatatan })}
+                  disabled={!canEditInfo}
+                  placeholder="Catatan utk PPL (opsional) -- mis. alasan ditandai..."
+                  rows={2}
+                  className="mt-1 w-full resize-none rounded-md border border-red-200 px-2 py-1 text-[11px] text-navy-900 outline-none placeholder:text-ink/30 focus:border-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              )}
             </div>
           )}
 

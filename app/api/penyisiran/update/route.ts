@@ -110,6 +110,11 @@ export async function PATCH(req: NextRequest) {
   const infoTetangga = Boolean(body?.info_tetangga);
   const prioritasPasti = Boolean(body?.prioritas_pasti);
   const tagPml = Boolean(body?.tag_pml);
+  // Catatan opsional utk tag_pml (permintaan user "pada flag buka juga
+  // tambah catatan") -- SAMA pembatasannya dgn tag_pml sendiri (isPml only,
+  // lihat patch di bawah), null/"" dianggap "tidak ada catatan".
+  const tagPmlCatatanRaw = typeof body?.tag_pml_catatan === "string" ? body.tag_pml_catatan.trim() : "";
+  const tagPmlCatatan = tagPmlCatatanRaw || null;
   const petugasId = typeof body?.petugas_id === "number" ? body.petugas_id : null;
   const petugasNama = typeof body?.petugas_nama === "string" && body.petugas_nama.trim() ? body.petugas_nama.trim() : null;
   const editAll = Boolean(body?.edit_all);
@@ -179,6 +184,10 @@ export async function PATCH(req: NextRequest) {
         tag_pml: tagPml,
         tag_pml_oleh: tagPml ? petugasNama : null,
         tag_pml_at: tagPml ? new Date().toISOString() : null,
+        // tag_pml_catatan: SAMA polanya dgn tag_pml_oleh/at -- dikosongkan
+        // lagi begitu tanda dibatalkan (permintaan blm ada, tapi konsisten
+        // dgn "catatan ini melekat ke tanda yg SEDANG aktif").
+        tag_pml_catatan: tagPml ? tagPmlCatatan : null,
         updated_at: new Date().toISOString(),
       }
     : {

@@ -89,6 +89,7 @@ import PenyisiranUsahaTab, {
   apiFetch,
   getToken,
   IS_PML_KEY,
+  BUKA_FILTER_TAG_PML_KEY,
   LoginForm,
   simpanLoginPetugas,
   ModalRencanaBesok,
@@ -213,8 +214,21 @@ export default function PenyisiranPage() {
           dipasang di sini (level halaman, LUAR blok {tab === "usaha" && ...}
           di bawah) supaya tampil di TAB MANA PUN petugas sedang berada,
           bukan cuma saat tab "Penyisiran Usaha" aktif -- lihat komentar
-          panjang di RencanaBesokWarningBar. */}
-      <RencanaBesokWarningBar onRencanakan={() => setTab("usaha")} />
+          panjang di RencanaBesokWarningBar. DIBUNGKUS bareng
+          DitandaiPmlWarningBar (permintaan user: "warning muncul di layar
+          ppl akibat ada flag, tambahkan tombol navigasi") dlm SATU wrapper
+          fixed+flex-col spy tidak saling menumpuk kalau KEDUANYA aktif
+          sekaligus -- pola sama dgn wrapper fixed+bottom utk 2 bar bawah
+          di bawah ini. */}
+      <div className="fixed inset-x-0 top-0 z-50 flex flex-col">
+        <DitandaiPmlWarningBar
+          onLihatFlag={() => {
+            if (typeof window !== "undefined") localStorage.setItem(BUKA_FILTER_TAG_PML_KEY, "1");
+            setTab("usaha");
+          }}
+        />
+        <RencanaBesokWarningBar onRencanakan={() => setTab("usaha")} />
+      </div>
       {/* Bar BARU terpisah di BAWAH layar (permintaan user, SENGAJA bar
           TERPISAH dari RencanaBesokWarningBar di atas -- yg lama TETAP
           spt semula, cuma tampil saat BELUM 8/8) -- lihat komentar
@@ -227,6 +241,10 @@ export default function PenyisiranPage() {
           persis di atasnya. Kalau salah satu return null, wrapper tetap
           rapat (tidak ada kotak kosong). */}
       <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col">
+        {/* Khusus akun PML (lihat komentar panjang di FloatBarDitandaiPml di
+            bawah) -- mutually exclusive dgn 2 bar di bawahnya (keduanya
+            return null utk sesi PML), jadi aman ditumpuk di wrapper yg sama. */}
+        <FloatBarDitandaiPml />
         <FloatBarRencanaBesok />
         <FloatBarSpjBelumLengkap onBukaAdministrasi={() => setTab("spj")} />
       </div>
@@ -319,6 +337,84 @@ export default function PenyisiranPage() {
   );
 }
 
+// Floating warning bar MERAH -- "ada X keluarga ditandai PML" (permintaan
+// user: "warning muncul di layar ppl akibat ada flag, tambahkan tombol
+// navigasi menuju daftar kk yang kena flag"). Beda dari banner StatTile yg
+// sudah ada di dalam tab "Penyisiran Usaha" (app/seruti/penyisiran-
+// usaha.tsx, cuma kelihatan saat tab itu aktif) -- bar INI dipasang di
+// LEVEL HALAMAN (spt RencanaBesokWarningBar) supaya tampil di TAB MANA PUN
+// PPL sedang berada (mis. sedang di tab Identifikasi Jorong), tidak
+// menunggu PPL kebetulan membuka tab Penyisiran Usaha dulu baru sadar ada
+// flag. HANYA utk akun BUKAN PML (PML sendiri yg membuat tanda, tidak
+// perlu diingatkan soal tandanya sendiri) & TIDAK dibatasi jam 17:00 (beda
+// dari RencanaBesokWarningBar) krn sifat "perlu segera" tidak menunggu sore.
+//
+// Tombol "Lihat →" TIDAK bisa langsung membuka filter dari sini (state
+// filterTagPml ada jauh di dalam PenyisiranPanel, komponen anak yg beda),
+// jadi dipakai sinyal localStorage sekali-pakai (BUKA_FILTER_TAG_PML_KEY,
+// lihat komentar panjangnya di app/seruti/penyisiran-usaha.tsx) yg diset
+// oleh `onLihatFlag` (diteruskan dari PenyisiranPage) TEPAT SEBELUM pindah
+// tab ke "usaha" -- PenyisiranPanel membaca & menyalakan filter itu sendiri
+// begitu mount.
+function DitandaiPmlWarningBar({ onLihatFlag }: { onLihatFlag: () => void }) {
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [isPml, setIsPml] = useState(false);
+  const [jumlah, setJumlah] = useState<number | null>(null);
+
+  useEffect(() => {
+    function bacaStorage() {
+      setToken(getToken());
+      setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const muat = useCallback(() => {
+    if (!token || isPml) {
+      setJumlah(null);
+      return;
+    }
+    apiFetch("/api/penyisiran/summary", token)
+      .then((data) => setJumlah(typeof data?.ditandai_pml === "number" ? data.ditandai_pml : null))
+      .catch(() => setJumlah(null));
+  }, [token, isPml]);
+
+  useEffect(() => {
+    muat();
+    const id = setInterval(muat, 30000);
+    return () => clearInterval(id);
+  }, [muat]);
+
+  // Dengar event yg SAMA dgn bar lain -- RowCard men-dispatch ini tiap kali
+  // SATU PUN field tersimpan, jadi bar ini ikut update mendekati real-time
+  // begitu PML menandai/membatalkan 🚩, tanpa menunggu polling 30 detik.
+  useEffect(() => {
+    window.addEventListener("penyisiran:rencana-besok-changed", muat);
+    return () => window.removeEventListener("penyisiran:rencana-besok-changed", muat);
+  }, [muat]);
+
+  if (!checked || !token || isPml || !jumlah) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 bg-red-700 px-4 py-2 text-center text-xs font-medium text-white shadow-md">
+      <span>
+        🚩 Ada {jumlah} keluarga ditandai PML &middot; perlu segera didata.
+      </span>
+      <button
+        type="button"
+        onClick={onLihatFlag}
+        className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50"
+      >
+        Lihat daftarnya →
+      </button>
+    </div>
+  );
+}
+
 // Floating warning bar "belum merencanakan 8 kunjungan besok" -- muncul
 // OTOMATIS mulai jam 17.00 (WIB, dari jam browser petugas -- app ini
 // dipakai internal BPS Kab Solok, semua di WIB, sama spt pola jam lain di
@@ -399,8 +495,12 @@ function RencanaBesokWarningBar({ onRencanakan }: { onRencanakan: () => void }) 
   const jamSekarang = new Date(nowMs).getHours();
   if (jamSekarang < 17 || jumlah >= KUOTA) return null;
 
+  // "fixed inset-x-0 top-0 z-50" DIPINDAH ke wrapper pembungkus di
+  // PenyisiranPage (bareng DitandaiPmlWarningBar) -- div INI SENDIRI
+  // sekarang cuma elemen flex biasa spy 2 bar atas bisa ditumpuk rapi
+  // pakai flex-col, tidak saling menimpa di posisi fixed yg sama.
   return (
-    <div className="fixed inset-x-0 top-0 z-50 flex flex-wrap items-center justify-center gap-2 bg-rust-700 px-4 py-2 text-center text-xs font-medium text-white shadow-md">
+    <div className="flex flex-wrap items-center justify-center gap-2 bg-rust-700 px-4 py-2 text-center text-xs font-medium text-white shadow-md">
       <span>
         ⚠ Kamu belum merencanakan {KUOTA} kunjungan untuk besok (baru {jumlah}/{KUOTA}).
       </span>
@@ -719,6 +819,242 @@ function FloatBarRencanaBesok() {
           onSessionExpired={() => setToken(null)}
         />
       )}
+    </div>
+  );
+}
+
+interface PplDiawasi {
+  petugas_id: number;
+  nama: string;
+  no_hp: string | null;
+}
+
+// Bar BARU (permintaan user: "DARI PML, kirim daftar flag ke PPL MIRIP
+// DENGAN KIRIM RENCANAKAN BESOK DARI PPL") -- KEBALIKAN dari
+// FloatBarRencanaBesok di atas: itu PPL->PML (rencana kunjungan besok),
+// ini PML->PPL (daftar keluarga yg ditandai 🚩 "Perlu Segera", tag_pml).
+// Pola kirimnya SENGAJA disamakan persis (Web Share API dgn file gambar +
+// fallback salin clipboard/buka tab WA) -- lihat komentar panjang di
+// FloatBarRencanaBesok soal kenapa dua jalur itu diperlukan, TIDAK diulang
+// di sini.
+//
+// Beda dari FloatBarRencanaBesok:
+//  - TIDAK dibatasi jam 17:00 -- kartu yg ditandai PML sifatnya "perlu
+//    segera", jadi bar ini tampil kapan saja selama masih ada >=1 baris
+//    tag_pml=true (jumlah>0) di wilayah PML ybs.
+//  - Daftar isi gambar = SEMUA baris tag_pml=true di SELURUH wilayah tim
+//    PML (gabungan wilayah SELURUH PPL yg diawasi, lihat /api/penyisiran/
+//    list?tag_pml=1 & daftarIdUntukSesi) -- BUKAN dipilah per-PPL (belum
+//    ada cara murah memetakan tiap baris ke SATU PPL spesifik pemilik
+//    Sub SLS itu, beda dgn skema alokasi "Kontak PPL Wilayah Ini" yg pakai
+//    tabel lain). PML memilih SENDIRI PPL tujuan lewat dropdown (kalau
+//    mengawasi >1 PPL) -- sama spt WhatsApp yg toh selalu minta pilih chat
+//    tujuan sendiri, jadi tidak menambah langkah manual yg baru.
+//  - Nomor WA & nama PPL tujuan dari field BARU `ppl_diawasi`
+//    (/api/penyisiran/summary, KEBALIKAN dari pml_nama/pml_no_hp yg sudah
+//    ada) -- diisi dari kolom No. HP di Master Petugas, PERSIS sumber yg
+//    sama dgn pml_no_hp.
+function FloatBarDitandaiPml() {
+  const [checked, setChecked] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [isPml, setIsPml] = useState(false);
+  const [jumlah, setJumlah] = useState<number | null>(null);
+  const [pplDiawasi, setPplDiawasi] = useState<PplDiawasi[]>([]);
+  const [pplTerpilih, setPplTerpilih] = useState<number | null>(null);
+  const [kirimStatus, setKirimStatus] = useState<
+    "idle" | "menyiapkan" | "selesai_share" | "selesai_salin" | "error"
+  >("idle");
+  const gambarRef = useRef<HTMLDivElement | null>(null);
+  const [rowsUntukGambar, setRowsUntukGambar] = useState<RencanaBesokRow[]>([]);
+
+  useEffect(() => {
+    function bacaStorage() {
+      setToken(getToken());
+      setIsPml(typeof window !== "undefined" && localStorage.getItem(IS_PML_KEY) === "1");
+      setChecked(true);
+    }
+    bacaStorage();
+    const id = setInterval(bacaStorage, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const muatRingkasan = useCallback(() => {
+    if (!token || !isPml) {
+      setJumlah(null);
+      return;
+    }
+    apiFetch("/api/penyisiran/summary", token)
+      .then((data) => {
+        setJumlah(typeof data?.ditandai_pml === "number" ? data.ditandai_pml : null);
+        const daftar: PplDiawasi[] = Array.isArray(data?.ppl_diawasi) ? data.ppl_diawasi : [];
+        setPplDiawasi(daftar);
+        // Pertahankan pilihan PPL yg sedang aktif kalau masih ada di daftar
+        // terbaru (mis. abis di-Master Petugas nya no_hp-nya baru diisi) --
+        // cuma reset ke PPL pertama kalau pilihan lama sudah tidak valid.
+        setPplTerpilih((prev) => {
+          if (prev != null && daftar.some((p) => p.petugas_id === prev)) return prev;
+          return daftar.length > 0 ? daftar[0].petugas_id : null;
+        });
+      })
+      .catch(() => setJumlah(null));
+    // Isi gambar: SEMUA baris tag_pml=true di wilayah tim PML -- endpoint yg
+    // SAMA dgn filter toggle "🚩 Ditandai PML" di tab Penyisiran Usaha
+    // (app/seruti/penyisiran-usaha.tsx), supaya daftar yg dikirim via WA
+    // SELALU konsisten dgn yg kelihatan kalau PML membuka filter itu sendiri.
+    apiFetch("/api/penyisiran/list?tag_pml=1", token)
+      .then((data) => {
+        setRowsUntukGambar(Array.isArray(data?.rows) ? data.rows : []);
+      })
+      .catch(() => setRowsUntukGambar([]));
+  }, [token, isPml]);
+
+  useEffect(() => {
+    muatRingkasan();
+    const id = setInterval(muatRingkasan, 30000);
+    return () => clearInterval(id);
+  }, [muatRingkasan]);
+
+  // Dengar event yg SAMA dgn FloatBarRencanaBesok -- RowCard men-dispatch
+  // ini tiap kali SATU PUN field tersimpan (bukan cuma rencana besok), jadi
+  // ikut memperbarui bar ini mendekati real-time begitu PML menandai/
+  // membatalkan 🚩 dari kartu manapun, tanpa menunggu polling 30 detik.
+  useEffect(() => {
+    window.addEventListener("penyisiran:rencana-besok-changed", muatRingkasan);
+    return () => window.removeEventListener("penyisiran:rencana-besok-changed", muatRingkasan);
+  }, [muatRingkasan]);
+
+  function nomorWaInternasional(raw: string): string {
+    const digit = raw.replace(/\D/g, "");
+    if (digit.startsWith("62")) return digit;
+    if (digit.startsWith("0")) return `62${digit.slice(1)}`;
+    return digit;
+  }
+
+  async function kirimKeWaPpl() {
+    const ppl = pplDiawasi.find((p) => p.petugas_id === pplTerpilih);
+    if (!gambarRef.current) return;
+    setKirimStatus("menyiapkan");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(gambarRef.current, { backgroundColor: "#ffffff", scale: 2 });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        setKirimStatus("error");
+        setTimeout(() => setKirimStatus("idle"), 2500);
+        return;
+      }
+
+      const file = new File([blob], `ditandai-pml-${new Date().toISOString().slice(0, 10)}.png`, {
+        type: "image/png",
+      });
+      const dukungShareFile =
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] });
+
+      if (dukungShareFile) {
+        try {
+          await navigator.share({ files: [file], title: "Daftar Ditandai PML - Perlu Segera" });
+          setKirimStatus("selesai_share");
+          setTimeout(() => setKirimStatus("idle"), 4000);
+          return;
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            setKirimStatus("idle");
+            return;
+          }
+          // Gagal karena sebab lain -> lanjut ke jalur fallback di bawah.
+        }
+      }
+
+      let disalin = false;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        disalin = true;
+      } catch {
+        disalin = false;
+      }
+      if (ppl?.no_hp) {
+        const nomor = nomorWaInternasional(ppl.no_hp);
+        window.open(`https://wa.me/${nomor}`, "_blank", "noopener,noreferrer");
+      }
+
+      setKirimStatus(disalin ? "selesai_salin" : "error");
+      setTimeout(() => setKirimStatus("idle"), 4000);
+    } catch {
+      setKirimStatus("error");
+      setTimeout(() => setKirimStatus("idle"), 2500);
+    }
+  }
+
+  if (!checked || !token || !isPml || !jumlah) return null;
+
+  const pplAktif = pplDiawasi.find((p) => p.petugas_id === pplTerpilih) ?? null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-red-300 bg-red-50 px-4 py-2 text-center text-xs font-medium shadow-md">
+      <span className="font-semibold text-red-700">🚩 Ditandai PML: {jumlah} keluarga perlu segera didata</span>
+
+      {/* Dropdown pemilih PPL tujuan -- cuma tampil kalau PML mengawasi
+          LEBIH DARI 1 PPL (kalau cuma 1, langsung dipakai tanpa perlu
+          dipilih, lihat pplTerpilih default di muatRingkasan). */}
+      {pplDiawasi.length > 1 && (
+        <select
+          value={pplTerpilih ?? ""}
+          onChange={(e) => setPplTerpilih(Number(e.target.value))}
+          className="rounded-md border border-red-300 bg-white px-2 py-1 text-[11px] text-navy-900"
+        >
+          {pplDiawasi.map((p) => (
+            <option key={p.petugas_id} value={p.petugas_id}>
+              {p.nama}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {pplDiawasi.length === 0 ? (
+        <span className="text-[10px] italic text-ink/40">(Belum ada PPL yang diawasi)</span>
+      ) : pplAktif?.no_hp ? (
+        <button
+          type="button"
+          onClick={kirimKeWaPpl}
+          disabled={kirimStatus === "menyiapkan"}
+          className="shrink-0 rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+        >
+          {kirimStatus === "menyiapkan"
+            ? "Menyiapkan..."
+            : kirimStatus === "selesai_share"
+            ? "✓ Dibagikan -- pilih chat WA & tekan Kirim"
+            : kirimStatus === "selesai_salin"
+            ? "✓ Tersalin -- tempel (Ctrl+V) di WA"
+            : kirimStatus === "error"
+            ? "Gagal, coba lagi"
+            : `📤 Kirim ke WA ${pplAktif.nama}`}
+        </button>
+      ) : (
+        <span className="text-[10px] italic text-ink/40">
+          (Nomor WA {pplAktif?.nama ?? "PPL"} belum diisi di Master Petugas)
+        </span>
+      )}
+
+      {/* Klon tersembunyi off-screen utk html2canvas -- pola SAMA PERSIS dgn
+          FloatBarRencanaBesok, memakai komponen tabel ASLI yg sama
+          (TabelRencanaBesokHead/Row) supaya desain gambar konsisten. */}
+      <div style={{ position: "fixed", top: -99999, left: -99999, width: 640 }}>
+        <div ref={gambarRef} className="bg-white p-4">
+          <p className="mb-2 text-sm font-bold text-navy-900">
+            Daftar Ditandai PML &middot; Perlu Segera Didata -- Penyisiran Undercoverage Usaha SE2026
+          </p>
+          <table className="w-full text-xs">
+            <TabelRencanaBesokHead />
+            <tbody>
+              {rowsUntukGambar.map((r) => (
+                <TabelRencanaBesokRow key={r.kode_identitas} row={r} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
