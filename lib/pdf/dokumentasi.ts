@@ -198,7 +198,7 @@ export async function buatPdfDokumentasi(data: DokumentasiPdfData): Promise<Uint
   const barisGrid: { label: string; nilai: string }[][] = [
     [
       { label: "NAMA PETUGAS", nilai: data.namaPetugas || "-" },
-      { label: "PERAN", nilai: data.peranLabel },
+      { label: "JABATAN", nilai: data.peranLabel },
     ],
     [
       { label: "NOMOR SURAT TUGAS", nilai: data.nomorSt || "-" },

@@ -5,6 +5,8 @@
 // diduplikasi per file spt namaTampilRow di tab-tab lain) krn helper ini
 // murni fungsi tanpa state/komponen, aman & lebih ringkas dipakai bersama.
 
+import type { SpjPetugasJenis } from "./spjAuth";
+
 const NAMA_HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 const NAMA_BULAN = [
   "Januari",
@@ -57,6 +59,52 @@ export function formatJamIndo(iso: string | null | undefined): string {
 export function ringkasUnik(nilai: (string | null | undefined)[]): string {
   const unik = [...new Set(nilai.map((v) => (v ?? "").trim()).filter(Boolean))];
   return unik.length > 0 ? unik.join(", ") : "-";
+}
+
+// "GUNUNG TALANG"/"gunung talang" -> "Gunung Talang", TAPI angka Romawi
+// (kecamatan "IX Koto Sungai Lasi", "X Koto Diatas", "X Koto Singkarak")
+// TETAP huruf besar semua, bukan ikut jadi "Ix"/"X" -> "X" (kebetulan sudah
+// benar) tapi "Ix" kalau tidak ditangani khusus. Dipakai semua tempat yang
+// menampilkan nama kecamatan/nagari/jorong dari data master (yang disimpan
+// UPPERCASE di DB) supaya tampil proper-case di dokumen PDF -- SATU sumber
+// dipakai bersama (bukan diduplikasi per file) spy konsisten di
+// Visum/Laporan/Dokumentasi/Kwitansi.
+const ROMAWI = new Set(["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]);
+export function judulKecamatan(nama: string): string {
+  return nama
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => {
+      const besar = w.toUpperCase();
+      if (ROMAWI.has(besar)) return besar;
+      return besar.charAt(0) + w.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+// Label baku jabatan dari kolom petugas_penyisiran_akun.jabatan -- SAMA
+// PERSIS konvensi JABATAN_LABEL di app/penyisiran/master-petugas.tsx.
+const LABEL_JABATAN_AKUN: Record<string, string> = {
+  ppl: "PPL",
+  pml: "PML",
+  kepala_kantor: "Kepala Kantor",
+};
+
+/**
+ * Label field "JABATAN" pd dokumen SPJ (Laporan, Dokumentasi, Cetak) --
+ * dulu label GENERIK per jenis (mis. "Petugas Penyisiran (Identifikasi
+ * Jorong)"), sekarang utk jenis "penyisiran" pakai jabatan SEBENARNYA
+ * (PPL/PML/Kepala Kantor) dari petugas_penyisiran_akun.jabatan sesuai
+ * permintaan user 22 Sep 2026 -- fallback ke label generik lama kalau
+ * kolom jabatan kosong/nilai tak dikenal (mis. akun lama yg blm diisi).
+ * Jenis "tetangga" TETAP pakai label generik (tabel tetangga_akun tidak
+ * py kolom jabatan, tidak ada distingsi PPL/PML utk jenis ini).
+ */
+export function labelJabatanDokumenSpj(jenis: SpjPetugasJenis, jabatan: string | null | undefined): string {
+  if (jenis === "tetangga") return "Petugas Tetangga/Informan (Identifikasi Tetangga/Lainnya)";
+  if (jabatan && LABEL_JABATAN_AKUN[jabatan]) return LABEL_JABATAN_AKUN[jabatan];
+  return "Petugas Penyisiran (Identifikasi Jorong)";
 }
 
 /** 170000 -> "170.000" (pemisah ribuan titik, gaya Indonesia) -- dipakai baris "Uang sebesar" di Kwitansi. */

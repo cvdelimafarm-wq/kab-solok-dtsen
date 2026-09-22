@@ -33,7 +33,7 @@
 //    Ringkasan & Data Hasil Penyisiran TIDAK ditampilkan.
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
-import { formatTanggalIndoDenganHari, ringkasUnik } from "../spjFormat";
+import { formatTanggalIndoDenganHari, judulKecamatan } from "../spjFormat";
 import { KEGIATAN_NAMA } from "../spjPejabat";
 
 // ---------- Tipe data ----------
@@ -165,8 +165,12 @@ function lokasiUtama(rekap: LaporanRekapSnapshot): LaporanLokasiRow[] {
 // mendaftar semuanya (yg bisa membengkak tak terbatas & merusak jaminan 1
 // halaman).
 function wilayahTugasTeks(lok: LaporanLokasiRow[]): string {
-  const nagariUnik = [...new Set(lok.map((l) => (l.nagariNama ?? "").trim()).filter(Boolean))];
-  const kec = ringkasUnik(lok.map((l) => l.kecNama));
+  // Nilai mentah dari DB tersimpan UPPERCASE -- di-title-case (judulKecamatan)
+  // dulu sebelum dipakai di kalimat/narasi, supaya "SELAYO, Kecamatan KUBUNG"
+  // tampil proper "Selayo, Kecamatan Kubung".
+  const nagariUnik = [...new Set(lok.map((l) => (l.nagariNama ?? "").trim()).filter(Boolean))].map(judulKecamatan);
+  const kecUnik = [...new Set(lok.map((l) => (l.kecNama ?? "").trim()).filter(Boolean))].map(judulKecamatan);
+  const kec = kecUnik.length > 0 ? kecUnik.join(", ") : "-";
   if (nagariUnik.length === 0 && kec === "-") return "-";
   if (nagariUnik.length === 0) return `Kecamatan ${kec}`;
   const nagariTeks = nagariUnik.length <= 3 ? nagariUnik.join(", ") : `${nagariUnik.length} nagari`;
@@ -396,7 +400,7 @@ function gambarKonten(
   const selIdentitas: [string, string][][] = [
     [
       ["NAMA PETUGAS", data.namaPetugas || "-"],
-      ["PERAN", data.peranLabel],
+      ["JABATAN", data.peranLabel],
     ],
     [
       ["NOMOR SURAT TUGAS", data.nomorSt || "-"],

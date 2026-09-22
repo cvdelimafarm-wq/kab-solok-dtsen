@@ -1,12 +1,39 @@
 // lib/pdf/kwitansi.ts
 //
-// Generator PDF "Kwitansi" -- meniru PERSIS layout Template Kwitansi.pdf
-// yang diupload user (1 halaman, 3 kolom tanda tangan: Bendahara
-// Pengeluaran | Setuju dibayar/PPK | Yang menerima). Dua kolom pertama
-// SELALU sama (lib/spjPejabat.ts, dikonfirmasi user berlaku tetap utk
-// semua ST); kolom "Yang menerima" dinamis sesuai petugas yg membuat
-// kwitansi ini (nama & NIP-nya, lihat kolom `nip` baru di
-// petugas_penyisiran_akun/tetangga_akun).
+// Generator PDF "Kwitansi" -- MENIRU PERSIS desain/spasi/font Template
+// Kwitansi.pdf (contoh TERISI) yang diupload user: font Times New Roman
+// (Times-Roman/Times-Bold, BUKAN Helvetica spt versi lama), ukuran 12pt
+// (judul 18pt), garis bawah HANYA selebar teks "KWITANSI" & selebar nama
+// penandatangan (BUKAN garis pemisah selebar halaman spt versi lama).
+// Semua koordinat X/Y teks di bawah diukur LANGSUNG dari PDF contoh tsb
+// (PyMuPDF page.get_text("dict"), origin=baseline tiap span, dikonversi ke
+// koordinat pdf-lib lewat yPdfLib = PAGE_H - yMuPdf) -- BUKAN ditaksir.
+// Pengecualian: kolom "Nama + Nip./Nik." (3 tanda tangan) DIBUAT 3 kolom
+// SAMA LEBAR & DIPUSATKAN (bukan x hasil ukur PERSIS dari contoh) krn
+// nama/nomor identitas panjangnya beda2 tiap petugas -- pendekatan ini
+// TERBUKTI cocok dgn contoh: label "Pejabat Pembuat Komitmen" & nama
+// "Novriady,S.Ak" di contoh PERSIS berpusat di x=297,64 = TEPAT tengah
+// halaman (595,28/2), yaitu tengah kolom-2 dari 3 kolom sama lebar itu.
+//
+// PERBEDAAN dgn versi lama (koreksi permintaan user 22 Sep 2026):
+//  - Font Times New Roman 12pt (bukan Helvetica 10,5/9,5pt).
+//  - "Berdasarkan SPD" -> "Berdasarkan Surat Tugas" (nomor yg dicetak
+//    memang SELALU nomor Surat Tugas, `data.nomorSt`, BUKAN nomor SPD
+//    terpisah -- tidak ada kolom nomor SPD tersendiri di sistem).
+//  - NIP Bendahara/PPK SELALU 1 baris (versi lama/contoh asli sempat
+//    "kepotong" 2 baris krn kolom terlalu sempit -- lebar kolom skrg
+//    dihitung dari 1/3 lebar isi, cukup lega utk NIP 18 digit).
+//  - Baris "Yang menerima" pakai NIK utk PPL & NIP utk PML/lainnya, LABEL
+//    ikut berubah ("Nik."/"Nip.") sesuai `data.jabatanPenerima` (kolom
+//    petugas_penyisiran_akun.jabatan) -- lihat labelIdentitas().
+//  - Baris "Lunas pada / tanggal," DIBIARKAN KOSONG (label saja, TANPA
+//    nilai) sesuai contoh asli -- ini kolom utk Bendahara isi TANGAN saat
+//    kwitansi benar2 dibayar, BUKAN field yg dikelola sistem (versi lama
+//    keliru mengisinya otomatis dgn tanggalKwitansi).
+//
+// Dua kolom pertama tanda tangan (Bendahara Pengeluaran & PPK) SELALU sama
+// (lib/spjPejabat.ts, dikonfirmasi user berlaku tetap utk semua ST); kolom
+// "Yang menerima" dinamis sesuai petugas yg membuat kwitansi ini.
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { formatRupiah, formatTanggalIndo } from "../spjFormat";
@@ -20,96 +47,139 @@ export interface KwitansiPdfData {
   untukPerjalananDinasPada: string;
   tanggalKwitansi: string;
   namaPenerima: string;
-  nipPenerima: string | null;
+  /** NIK (kalau PPL) atau NIP (kalau PML/lainnya) -- lihat `jabatanPenerima`. */
+  idPenerima: string | null;
+  /** 'ppl' | 'pml' | 'kepala_kantor' | null -- dari petugas_penyisiran_akun.jabatan; null utk jenis "tetangga" (tabel itu tidak py kolom jabatan, tetap label "Nip."). */
+  jabatanPenerima: string | null;
+}
+
+/** PPL pakai NIK (bukan pegawai ASN), selain itu (PML/Kepala Kantor/tetangga/tidak diketahui) pakai NIP -- permintaan user 22 Sep 2026. */
+function labelIdentitas(jabatan: string | null): "Nik." | "Nip." {
+  return jabatan === "ppl" ? "Nik." : "Nip.";
 }
 
 const HITAM = rgb(0, 0, 0);
 const A4: [number, number] = [595.28, 841.89];
-const MARGIN_X = 55;
+const PAGE_H = A4[1];
+const MARGIN_X = 57.44;
+const MARGIN_R = 537.84;
+const USABLE_W = MARGIN_R - MARGIN_X;
+
+// ---------- Kolom label/colon/value (blok isi kwitansi) -- diukur dari contoh ----------
+const COLON_X = 202.01;
+const VALUE_X = 216.47;
+const SUBLABEL_X = VALUE_X; // "Nomor"/"Tanggal" di bawah "Berdasarkan Surat Tugas" numpang di kolom value
+const SUBCOLON_X = 264.66;
+const SUBVALUE_X = 279.11;
+
+// ---------- Y tiap baris (dikonversi dari origin baseline PyMuPDF: PAGE_H - yMuPdf) ----------
+const Y_KOP1 = 771.54; // "BADAN PUSAT STATISTIK"
+const Y_KOP2 = 754.29; // "BPS KAB. SOLOK"
+const Y_JUDUL = 717.14; // "KWITANSI"
+const Y_GARIS_JUDUL = 713.27;
+const Y_TERIMA_DARI = 641.5;
+const Y_UANG_SEBESAR = 625.74;
+const Y_UNTUK_PEMBAYARAN = 609.99;
+const Y_BERDASARKAN = 594.23; // + sub-baris "Nomor"
+const Y_TANGGAL_SPD = 578.47; // sub-baris "Tanggal"
+const Y_TUJUAN_1 = 562.72; // "Untuk perjalanan dinas" (baris 1 label 2-baris)
+const Y_TUJUAN_2 = 548.46; // "dalam kota pada" (baris 2, tanpa colon/value sendiri)
+const Y_TERBILANG = 532.71;
+
+const Y_SIG_1 = 474.93; // "Bendahara Pengeluaran" | "Setuju dibayar" | "Yang menerima,"
+const Y_SIG_2 = 460.68; // "BPS" (lanjutan kol-1 saja)
+const Y_SIG_3 = 446.42; // "Solok, {tanggal}" (kol-3 saja)
+const Y_SIG_4 = 432.16; // "Lunas pada" | "Pejabat Pembuat Komitmen"
+const Y_SIG_5 = 417.91; // "tanggal," (lanjutan kol-1 saja, TANPA nilai -- lihat komentar header)
+const Y_NAMA = 361.49; // nama bold (Alex Kandria / Novriady / [penerima])
+const Y_GARIS_NAMA = 358.91;
+const Y_NIP = 346.63;
 
 export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page: PDFPage = doc.addPage(A4);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const { width, height } = page.getSize();
-  const usableWidth = width - MARGIN_X * 2;
-  let y = height - 70;
+  const font = await doc.embedFont(StandardFonts.TimesRoman);
+  const fontBold = await doc.embedFont(StandardFonts.TimesRomanBold);
 
   function teks(
     txt: string,
     x: number,
+    yAtas: number,
     opts: { size?: number; bold?: boolean; align?: "left" | "center" | "right"; maxWidth?: number } = {}
   ) {
-    const size = opts.size ?? 10.5;
+    const size = opts.size ?? 12;
     const f: PDFFont = opts.bold ? fontBold : font;
     let xPos = x;
     if (opts.maxWidth && opts.align === "center") xPos = x + (opts.maxWidth - f.widthOfTextAtSize(txt, size)) / 2;
     else if (opts.maxWidth && opts.align === "right") xPos = x + opts.maxWidth - f.widthOfTextAtSize(txt, size);
-    page.drawText(txt, { x: xPos, y, size, font: f, color: HITAM });
+    page.drawText(txt, { x: xPos, y: PAGE_H - yAtas, size, font: f, color: HITAM });
+    return f.widthOfTextAtSize(txt, size);
   }
-  function garisH(yy: number) {
-    page.drawLine({ start: { x: MARGIN_X, y: yy }, end: { x: width - MARGIN_X, y: yy }, thickness: 0.75, color: HITAM });
+  function garisH(x1: number, x2: number, yAtas: number) {
+    page.drawLine({ start: { x: x1, y: PAGE_H - yAtas }, end: { x: x2, y: PAGE_H - yAtas }, thickness: 0.75, color: HITAM });
   }
 
   // ---------- Kop ----------
-  teks("BADAN PUSAT STATISTIK", MARGIN_X, { bold: true, size: 13, align: "center", maxWidth: usableWidth });
-  y -= 16;
-  teks("BPS KAB. SOLOK", MARGIN_X, { bold: true, size: 12, align: "center", maxWidth: usableWidth });
-  y -= 24;
-  teks("KWITANSI", MARGIN_X, { bold: true, size: 15, align: "center", maxWidth: usableWidth });
-  y -= 6;
-  garisH(y);
-  y -= 30;
+  teks("BADAN PUSAT STATISTIK", MARGIN_X, Y_KOP1);
+  teks("BPS KAB. SOLOK", MARGIN_X + 25.82, Y_KOP2);
+  const lebarJudul = teks("KWITANSI", MARGIN_X, Y_JUDUL, { bold: true, size: 18, align: "center", maxWidth: USABLE_W });
+  const judulX = MARGIN_X + (USABLE_W - lebarJudul) / 2;
+  garisH(judulX, judulX + lebarJudul, Y_GARIS_JUDUL);
 
   // ---------- Isi ----------
-  const labelWidth = 165;
-  const baris = (label: string, value: string, opts: { bold?: boolean } = {}) => {
-    teks(label, MARGIN_X, { size: 10.5 });
-    teks(":", MARGIN_X + labelWidth, { size: 10.5 });
-    teks(value, MARGIN_X + labelWidth + 12, { size: 10.5, bold: opts.bold });
-    y -= 20;
+  const baris = (label: string, yAtas: number, value: string, opts: { bold?: boolean } = {}) => {
+    teks(label, MARGIN_X, yAtas);
+    teks(":", COLON_X, yAtas);
+    teks(value, VALUE_X, yAtas, { bold: opts.bold });
   };
-  baris("Sudah terima dari", "Kuasa Pengguna Anggaran BPS KAB. SOLOK");
-  baris("Uang sebesar", `Rp. ${formatRupiah(data.nominal)},-`, { bold: true });
-  baris("Untuk pembayaran", "Perjalanan Dinas Dalam Kota");
-  baris("Berdasarkan SPD", `Nomor : ${data.nomorSt}`);
-  teks("Tanggal :", MARGIN_X + labelWidth + 12, { size: 10.5 });
-  teks(formatTanggalIndo(data.tanggalSpd), MARGIN_X + labelWidth + 12 + 55, { size: 10.5 });
-  y -= 20;
-  baris("Untuk perjalanan dinas dalam kota pada", data.untukPerjalananDinasPada || "-");
-  baris("Terbilang", `${data.terbilang} #`, { bold: true });
+  baris("Sudah terima dari", Y_TERIMA_DARI, "Kuasa Pengguna Anggaran BPS KAB. SOLOK");
+  baris("Uang sebesar", Y_UANG_SEBESAR, `Rp. ${formatRupiah(data.nominal)},-`, { bold: true });
+  baris("Untuk pembayaran", Y_UNTUK_PEMBAYARAN, "Perjalanan Dinas Dalam Kota");
 
-  y -= 20;
-  garisH(y);
-  y -= 40;
+  teks("Berdasarkan Surat Tugas", MARGIN_X, Y_BERDASARKAN);
+  teks(":", COLON_X, Y_BERDASARKAN);
+  teks("Nomor", SUBLABEL_X, Y_BERDASARKAN);
+  teks(":", SUBCOLON_X, Y_BERDASARKAN);
+  teks(data.nomorSt, SUBVALUE_X, Y_BERDASARKAN);
+  teks("Tanggal", SUBLABEL_X, Y_TANGGAL_SPD);
+  teks(":", SUBCOLON_X, Y_TANGGAL_SPD);
+  teks(formatTanggalIndo(data.tanggalSpd), SUBVALUE_X, Y_TANGGAL_SPD);
 
-  // ---------- 3 kolom tanda tangan ----------
-  const kolomWidth = usableWidth / 3;
-  const x1 = MARGIN_X;
-  const x2 = MARGIN_X + kolomWidth;
-  const x3 = MARGIN_X + kolomWidth * 2;
-  const yAwal = y;
+  teks("Untuk perjalanan dinas", MARGIN_X, Y_TUJUAN_1);
+  teks("dalam kota pada", MARGIN_X, Y_TUJUAN_2);
+  teks(":", COLON_X, Y_TUJUAN_1);
+  teks(data.untukPerjalananDinasPada || "-", VALUE_X, Y_TUJUAN_1);
 
-  teks("Bendahara Pengeluaran BPS", x1, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  teks("Setuju dibayar,", x2, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  teks("Yang menerima,", x3, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  y -= 12;
-  teks("Pejabat Pembuat Komitmen", x2, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  y -= 12;
-  teks(`Solok, ${formatTanggalIndo(data.tanggalKwitansi)}`, x3, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
+  baris("Terbilang", Y_TERBILANG, `${data.terbilang} #`, { bold: true });
 
-  y = yAwal - 60; // ruang tanda tangan basah
-  teks(PEJABAT.bendaharaPengeluaran.nama, x1, { size: 9.5, bold: true, align: "center", maxWidth: kolomWidth - 8 });
-  teks(PEJABAT.ppk.nama, x2, { size: 9.5, bold: true, align: "center", maxWidth: kolomWidth - 8 });
-  teks(data.namaPenerima, x3, { size: 9.5, bold: true, align: "center", maxWidth: kolomWidth - 8 });
-  y -= 13;
-  teks(`Nip. ${PEJABAT.bendaharaPengeluaran.nip}`, x1, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  teks(`Nip. ${PEJABAT.ppk.nip}`, x2, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
-  teks(data.nipPenerima ? `Nip. ${data.nipPenerima}` : "-", x3, { size: 9.5, align: "center", maxWidth: kolomWidth - 8 });
+  // ---------- 3 kolom tanda tangan (sama lebar, dipusatkan) ----------
+  const kolW = USABLE_W / 3;
+  const xKol = [MARGIN_X, MARGIN_X + kolW, MARGIN_X + kolW * 2];
+  const tengah = (i: number, txt: string, yAtas: number, opts: { bold?: boolean; size?: number } = {}) =>
+    teks(txt, xKol[i], yAtas, { ...opts, align: "center", maxWidth: kolW });
 
-  y -= 40;
-  teks("Lunas dibayar pada tanggal " + formatTanggalIndo(data.tanggalKwitansi), MARGIN_X, { size: 9 });
+  tengah(0, "Bendahara Pengeluaran", Y_SIG_1);
+  tengah(1, "Setuju dibayar", Y_SIG_1);
+  tengah(2, "Yang menerima,", Y_SIG_1);
+  tengah(0, "BPS", Y_SIG_2);
+  tengah(2, `Solok, ${formatTanggalIndo(data.tanggalKwitansi)}`, Y_SIG_3);
+  tengah(0, "Lunas pada", Y_SIG_4);
+  tengah(1, "Pejabat Pembuat Komitmen", Y_SIG_4);
+  tengah(0, "tanggal,", Y_SIG_5); // sengaja TANPA nilai -- lihat komentar header (diisi tangan oleh Bendahara)
+
+  const labelPenerima = labelIdentitas(data.jabatanPenerima);
+  const namaKol = [PEJABAT.bendaharaPengeluaran.nama, PEJABAT.ppk.nama, data.namaPenerima];
+  const idKol = [
+    `Nip. ${PEJABAT.bendaharaPengeluaran.nip}`,
+    `Nip. ${PEJABAT.ppk.nip}`,
+    data.idPenerima ? `${labelPenerima} ${data.idPenerima}` : "-",
+  ];
+  namaKol.forEach((nama, i) => {
+    const lebar = tengah(i, nama, Y_NAMA, { bold: true });
+    const xMulai = xKol[i] + (kolW - lebar) / 2;
+    garisH(xMulai, xMulai + lebar, Y_GARIS_NAMA);
+  });
+  idKol.forEach((idTxt, i) => tengah(i, idTxt, Y_NIP));
 
   return doc.save();
 }

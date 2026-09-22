@@ -2,9 +2,11 @@
 //
 // Generator PDF "Surat Pernyataan Tidak Menggunakan Kendaraan Dinas" --
 // mengikuti struktur Template Surat Pernyataan Kendaraan Dinas.docx yang
-// diupload user, dgn dua penyesuaian yg sudah dikonfirmasi:
-//  - Kolom "Sobat ID" -> "NIP" (kolom `nip` baru di petugas_penyisiran_akun/
-//    tetangga_akun -- kalau kosong/petugas bukan ASN, dicetak "-").
+// diupload user, dgn penyesuaian:
+//  - Label "Sobat ID" (SESUAI TEMPLATE ASLI -- sempat diganti "NIP" di sesi
+//    sebelumnya, dikembalikan lagi ke "Sobat ID" per permintaan user 22 Sep
+//    2026). Nilainya TETAP dari kolom `nip` yg sama (petugas_penyisiran_akun/
+//    tetangga_akun) -- cuma label TAMPILAN-nya yg beda, bukan sumber datanya.
 //  - "Jabatan"/"Unit Kerja" disesuaikan ke konteks Petugas Penyisiran /
 //    Tetangga-Informan SE2026 (BUKAN "PPL Mitra Statistik" spt template
 //    asli yg memang contoh dari kegiatan Susenas) -- wording final blm
@@ -91,7 +93,7 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
     y -= 18;
   };
   barisIdentitas("Nama", data.namaPetugas || "-");
-  barisIdentitas("NIP", data.nip || "-");
+  barisIdentitas("Sobat ID", data.nip || "-");
   barisIdentitas("Jabatan", PERAN_JABATAN[data.jenis]);
   barisIdentitas("Unit Kerja", "BPS Kabupaten Solok");
 
@@ -117,7 +119,7 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
   y -= 55; // ruang tanda tangan basah
   teks(data.namaPetugas || "-", kananX, { size: 10.5, bold: true, align: "center", maxWidth: kananWidth });
   y -= 13;
-  teks(data.nip ? `NIP. ${data.nip}` : "-", kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
+  teks(data.nip ? `Sobat ID. ${data.nip}` : "-", kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
 
   return doc.save();
 }

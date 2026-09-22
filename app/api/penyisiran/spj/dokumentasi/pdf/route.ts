@@ -13,14 +13,10 @@ import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
 import { hitungLokasiTugas, teksLokasiTugas } from "@/lib/spjLokasiTugas";
+import { labelJabatanDokumenSpj } from "@/lib/spjFormat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const LABEL_PERAN: Record<SpjPetugasJenis, string> = {
-  penyisiran: "Petugas Penyisiran (Identifikasi Jorong)",
-  tetangga: "Petugas Tetangga/Informan (Identifikasi Tetangga/Lainnya)",
-};
 
 function tebakContentType(path: string, blobType: string | undefined): string {
   if (blobType === "image/png" || blobType === "image/jpeg") return blobType;
@@ -78,10 +74,20 @@ export async function GET(req: NextRequest) {
     foto.push({ slot: r.slot, bytes, contentType: tebakContentType(r.file_path, blob.type) });
   }
 
-  const [{ data: st }, { data: akun }] = await Promise.all([
+  // Kolom "jabatan" (utk label PPL/PML) HANYA ada di petugas_penyisiran_akun
+  // -- tetangga_akun tidak py kolom itu, jadi select-nya dibedakan per jenis
+  // spy tidak error "column does not exist". DUA query .select() TERPISAH
+  // (bukan 1 ternary di dalam .select()) krn tipe supabase-js mem-parse
+  // string select() scr LITERAL -- union dari 2 string literal bikin
+  // hasilnya ParserError di TypeScript walau valid di runtime; hasil
+  // gabungannya di-cast manual ke bentuk yg sama (`jabatan` opsional).
+  const [{ data: st }, { data: akunRaw }] = await Promise.all([
     supabase.from("spj_surat_tugas").select("nomor_st").eq("id", suratTugasId).maybeSingle(),
-    supabase.from(tabelAkun(jenisPemilik)).select("nama").eq("id", petugasIdPemilik).maybeSingle(),
+    jenisPemilik === "penyisiran"
+      ? supabase.from(tabelAkun(jenisPemilik)).select("nama, jabatan").eq("id", petugasIdPemilik).maybeSingle()
+      : supabase.from(tabelAkun(jenisPemilik)).select("nama").eq("id", petugasIdPemilik).maybeSingle(),
   ]);
+  const akun = akunRaw as { nama: string | null; jabatan?: string | null } | null;
 
   // Lokasi dihitung LANGSUNG dari aktivitas Penyisiran Usaha/Identifikasi
   // milik petugas pd tanggal itu (BUKAN dari rekap_snapshot Laporan, yg
@@ -101,7 +107,7 @@ export async function GET(req: NextRequest) {
   const pdfBytes = await buatPdfDokumentasi({
     nomorSt: st?.nomor_st ?? "-",
     namaPetugas: akun?.nama ?? "-",
-    peranLabel: LABEL_PERAN[jenisPemilik],
+    peranLabel: labelJabatanDokumenSpj(jenisPemilik, akun?.jabatan ?? null),
     tanggal,
     lokasi,
     foto,

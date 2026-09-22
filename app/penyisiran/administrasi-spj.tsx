@@ -666,7 +666,7 @@ function AdministrasiPanel({
       />
 
       {/* ---------- Kwitansi -- SUDAH JALAN (tetap aktif di Arsip, isi 1x/ST) ---------- */}
-      <KwitansiSection token={sesi.token} onSessionExpired={onSessionExpired} />
+      <KwitansiSection token={sesi.token} jenis={sesi.jenis} onSessionExpired={onSessionExpired} />
 
       {/* ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas -- SUDAH JALAN ---------- */}
       <SuratKeteranganSection token={sesi.token} onSessionExpired={onSessionExpired} />
@@ -2398,9 +2398,12 @@ interface KwitansiSuratTugas {
   tanggal_mulai: string;
   tanggal_selesai: string;
   kwitansi: KwitansiRow | null;
+  // Dihitung server (jenis "penyisiran" saja -- lihat hitungKecamatanTugas
+  // di lib/spjWilayahTugas.ts), null utk jenis "tetangga" (tetap manual).
+  untuk_perjalanan_dinas_pada_otomatis: string | null;
 }
 
-function KwitansiSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+function KwitansiSection({ token, jenis, onSessionExpired }: { token: string; jenis: Jenis; onSessionExpired: () => void }) {
   const [daftar, setDaftar] = useState<KwitansiSuratTugas[]>([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -2493,7 +2496,7 @@ function KwitansiSection({ token, onSessionExpired }: { token: string; onSession
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <KwitansiBaris key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+          <KwitansiBaris key={st.surat_tugas_id} st={st} token={token} jenis={jenis} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -2508,12 +2511,14 @@ function KwitansiSection({ token, onSessionExpired }: { token: string; onSession
 function KwitansiBaris({
   st,
   token,
+  jenis,
   onSaved,
   onUnduh,
   guard,
 }: {
   st: KwitansiSuratTugas;
   token: string;
+  jenis: Jenis;
   onSaved: () => void;
   onUnduh: (kwitansiId: number) => void;
   guard: (fn: () => void) => void;
@@ -2521,6 +2526,9 @@ function KwitansiBaris({
   const [edit, setEdit] = useState(!st.kwitansi);
   const [nominal, setNominal] = useState(st.kwitansi ? String(st.kwitansi.nominal) : "");
   const [terbilang, setTerbilang] = useState(st.kwitansi?.terbilang ?? "");
+  // untukPerjalananDinasPada HANYA relevan/dipakai utk jenis "tetangga" --
+  // jenis "penyisiran" pakai st.untuk_perjalanan_dinas_pada_otomatis
+  // (dihitung server, read-only, sama pola dgn Visum).
   const [untukPerjalananDinasPada, setUntukPerjalananDinasPada] = useState(st.kwitansi?.untuk_perjalanan_dinas_pada ?? "");
   const [tanggalSpd, setTanggalSpd] = useState(st.kwitansi?.tanggal_spd ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
@@ -2545,8 +2553,12 @@ function KwitansiBaris({
       setError("Nominal tidak valid.");
       return;
     }
-    if (!untukPerjalananDinasPada.trim()) {
+    if (jenis === "tetangga" && !untukPerjalananDinasPada.trim()) {
       setError("Tujuan perjalanan dinas dalam kota wajib diisi.");
+      return;
+    }
+    if (jenis === "penyisiran" && !st.untuk_perjalanan_dinas_pada_otomatis) {
+      setError("Kecamatan wilayah tugas belum tertaut -- minta pengelola menautkan wilayah SLS Anda dulu.");
       return;
     }
     setBusy(true);
@@ -2557,7 +2569,10 @@ function KwitansiBaris({
           surat_tugas_id: st.surat_tugas_id,
           nominal: nominalNum,
           terbilang: terbilang.trim(),
-          untuk_perjalanan_dinas_pada: untukPerjalananDinasPada.trim(),
+          // untuk_perjalanan_dinas_pada cuma dipakai server utk jenis
+          // "tetangga" -- jenis "penyisiran" SELALU dihitung ulang sendiri
+          // di server (lihat app/api/penyisiran/spj/kwitansi/route.ts).
+          untuk_perjalanan_dinas_pada: jenis === "tetangga" ? untukPerjalananDinasPada.trim() : undefined,
           tanggal_spd: tanggalSpd,
         }),
       });
@@ -2632,18 +2647,34 @@ function KwitansiBaris({
               />
             </div>
           </div>
-          <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">
-              Untuk Perjalanan Dinas Dalam Kota Pada (Kecamatan/Nagari Tujuan)
-            </label>
-            <input
-              type="text"
-              value={untukPerjalananDinasPada}
-              onChange={(e) => setUntukPerjalananDinasPada(e.target.value)}
-              placeholder="Contoh: Kubung"
-              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-            />
-          </div>
+          {jenis === "penyisiran" ? (
+            <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
+              <p>
+                Untuk perjalanan dinas dalam kota pada:{" "}
+                {st.untuk_perjalanan_dinas_pada_otomatis ? (
+                  <span className="font-medium text-navy-900">{st.untuk_perjalanan_dinas_pada_otomatis}</span>
+                ) : (
+                  <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
+                )}
+              </p>
+              <p className="mt-1 text-[10px] text-ink/40">
+                Otomatis diambil dari data alokasi wilayah tugas Anda di Perencanaan Lapangan -- bukan diketik manual.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-[10px] font-medium text-ink/50">
+                Untuk Perjalanan Dinas Dalam Kota Pada (Kecamatan/Nagari Tujuan)
+              </label>
+              <input
+                type="text"
+                value={untukPerjalananDinasPada}
+                onChange={(e) => setUntukPerjalananDinasPada(e.target.value)}
+                placeholder="Contoh: Kubung"
+                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-[10px] font-medium text-ink/50">
               Terbilang (opsional, kosongkan utk otomatis dari nominal)
@@ -2659,7 +2690,7 @@ function KwitansiBaris({
           {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || (jenis === "penyisiran" && !st.untuk_perjalanan_dinas_pada_otomatis)}
             className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
           >
             {busy ? "Menyimpan..." : "Simpan Kwitansi"}
@@ -2681,6 +2712,11 @@ interface SuratKeteranganSt {
   tanggal_mulai: string;
   tanggal_selesai: string;
   surat_keterangan: SuratKeteranganRow | null;
+  // Dihitung server (dari tanggal Laporan TERAKHIR milik petugas utk ST ini
+  // -- lihat komentar hitungTanggalPelaksanaan di
+  // app/api/penyisiran/spj/surat-keterangan/route.ts), null kalau petugas
+  // belum pernah membuat Laporan sama sekali utk ST ini.
+  tanggal_pelaksanaan_otomatis: string | null;
 }
 
 function SuratKeteranganSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
@@ -2765,7 +2801,10 @@ function SuratKeteranganSection({ token, onSessionExpired }: { token: string; on
           {loading ? "Memuat..." : "↻ Muat Ulang"}
         </button>
       </div>
-      <p className="mb-2 text-[11px] text-ink/50">Nama &amp; NIP terisi otomatis dari akun Anda -- tinggal pilih tanggal pelaksanaan.</p>
+      <p className="mb-2 text-[11px] text-ink/50">
+        Nama, NIP &amp; tanggal pelaksanaan terisi otomatis (tanggal diambil dari Laporan terakhir yang Anda buat utk Surat Tugas
+        ybs) -- tinggal periksa lalu simpan.
+      </p>
 
       {errMsg && (
         <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
@@ -2799,7 +2838,6 @@ function SuratKeteranganBaris({
   guard: (fn: () => void) => void;
 }) {
   const [edit, setEdit] = useState(!st.surat_keterangan);
-  const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(st.surat_keterangan?.tanggal_pelaksanaan ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyUnduh, setBusyUnduh] = useState(false);
@@ -2817,15 +2855,20 @@ function SuratKeteranganBaris({
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!tanggalPelaksanaan) {
-      setError("Tanggal pelaksanaan wajib diisi.");
+    if (!st.tanggal_pelaksanaan_otomatis) {
+      setError(
+        "Belum ada Laporan Perjalanan Dinas utk Surat Tugas ini -- buat Laporan dulu (menu Laporan) supaya tanggal pelaksanaan bisa dihitung otomatis."
+      );
       return;
     }
     setBusy(true);
     try {
+      // tanggal_pelaksanaan TIDAK dikirim -- server yg menghitung sendiri
+      // dari tanggal Laporan terakhir (lihat route.ts), supaya tidak bisa
+      // beda dgn yg ditampilkan di sini.
       await apiFetch("/api/penyisiran/spj/surat-keterangan", token, {
         method: "POST",
-        body: JSON.stringify({ surat_tugas_id: st.surat_tugas_id, tanggal_pelaksanaan: tanggalPelaksanaan }),
+        body: JSON.stringify({ surat_tugas_id: st.surat_tugas_id }),
       });
       setEdit(false);
       onSaved();
@@ -2873,20 +2916,20 @@ function SuratKeteranganBaris({
       {edit && (
         <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
           <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan</label>
-            <input
-              type="date"
-              value={tanggalPelaksanaan}
-              min={st.tanggal_mulai}
-              max={st.tanggal_selesai}
-              onChange={(e) => setTanggalPelaksanaan(e.target.value)}
-              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-            />
+            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan (otomatis)</label>
+            <p className="rounded-md border border-line bg-paper/60 px-2 py-1.5 text-xs">
+              {st.tanggal_pelaksanaan_otomatis ? (
+                formatTanggal(st.tanggal_pelaksanaan_otomatis)
+              ) : (
+                <span className="text-ink/40">Belum ada Laporan utk Surat Tugas ini</span>
+              )}
+            </p>
+            <p className="mt-1 text-[10px] text-ink/40">Diambil dari tanggal Laporan terakhir yang Anda buat utk Surat Tugas ini.</p>
           </div>
           {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !st.tanggal_pelaksanaan_otomatis}
             className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
           >
             {busy ? "Menyimpan..." : "Simpan"}

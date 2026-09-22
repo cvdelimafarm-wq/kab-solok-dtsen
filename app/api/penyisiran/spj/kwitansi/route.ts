@@ -2,19 +2,30 @@
 //
 // GET  -> daftar Surat Tugas milik petugas yg login, disertai Kwitansi-nya
 //         kalau sudah pernah diisi (satu Kwitansi per ST, sesuai unique
-//         constraint di spj_kwitansi).
+//         constraint di spj_kwitansi), DITAMBAH `untuk_perjalanan_dinas_pada_otomatis`
+//         (jenis "penyisiran" saja -- lihat hitungKecamatanTugas di
+//         lib/spjWilayahTugas.ts) supaya form bisa MENAMPILKAN nilai yg
+//         akan dipakai SEBELUM disimpan.
 // POST -> buat/perbarui (upsert) Kwitansi utk SATU ST miliknya sendiri.
 //         Nominal WAJIB diinput manual (dikonfirmasi user: "diinput
 //         manual tiap kali oleh petugas/pengelola") -- sistem cuma
 //         menyarankan `terbilang` otomatis dari nominal (lib/spjFormat.ts
 //         terbilangRupiah), tapi boleh ditimpa manual kalau client
 //         mengirim `terbilang` sendiri.
+//
+// `untuk_perjalanan_dinas_pada` (kecamatan wilayah tugas) -- utk jenis
+// "penyisiran" DIHITUNG OTOMATIS dari data yg SUDAH ADA di sistem (lewat
+// hitungKecamatanTugas, SATU sumber logic yg SAMA dgn Visum -- lihat
+// komentar di lib/spjWilayahTugas.ts), permintaan user 22 Sep 2026 spy tidak
+// beda2/salah ketik antar dokumen. Utk jenis "tetangga" TETAP manual dari
+// body (tidak ada sumber data wilayah tugas utk jenis ini).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun } from "@/lib/spjAuth";
 import { terbilangRupiah } from "@/lib/spjFormat";
+import { hitungKecamatanTugas } from "@/lib/spjWilayahTugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,12 +70,14 @@ export async function GET(req: NextRequest) {
   if (errKwitansi) return NextResponse.json({ error: errKwitansi.message }, { status: 500 });
 
   const petaKwitansi = new Map((kwitansiList ?? []).map((k: { surat_tugas_id: number }) => [k.surat_tugas_id, k]));
+  const kecamatan = await hitungKecamatanTugas(supabase, session);
   const daftar = (stList ?? []).map((st: { id: number; nomor_st: string; tanggal_mulai: string; tanggal_selesai: string }) => ({
     surat_tugas_id: st.id,
     nomor_st: st.nomor_st,
     tanggal_mulai: st.tanggal_mulai,
     tanggal_selesai: st.tanggal_selesai,
     kwitansi: petaKwitansi.get(st.id) ?? null,
+    untuk_perjalanan_dinas_pada_otomatis: kecamatan.wilayahTugas,
   }));
 
   return NextResponse.json({ daftar });
@@ -79,17 +92,37 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const suratTugasId = Number(body?.surat_tugas_id);
   const nominal = Number(body?.nominal);
-  const untukPerjalananDinasPada = String(body?.untuk_perjalanan_dinas_pada || "").trim();
   const tanggalSpd = String(body?.tanggal_spd || "").trim();
   const tanggalKwitansi = String(body?.tanggal_kwitansi || "").trim() || new Date().toISOString().slice(0, 10);
   const terbilangInput = typeof body?.terbilang === "string" ? body.terbilang.trim() : "";
 
   if (!Number.isFinite(suratTugasId)) return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   if (!Number.isFinite(nominal) || nominal < 0) return NextResponse.json({ error: "Nominal tidak valid." }, { status: 400 });
-  if (!untukPerjalananDinasPada) {
-    return NextResponse.json({ error: "Tujuan perjalanan dinas dalam kota wajib diisi." }, { status: 400 });
-  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalSpd)) return NextResponse.json({ error: "Tanggal SPD wajib diisi." }, { status: 400 });
+
+  // untuk_perjalanan_dinas_pada: utk jenis "penyisiran" DIHITUNG DI SINI
+  // (abaikan apa pun yg dikirim client utk field itu -- lihat komentar
+  // hitungKecamatanTugas di atas). Utk jenis "tetangga" TETAP manual dari
+  // body (tidak ada sumber data wilayah tugas utk jenis ini).
+  let untukPerjalananDinasPada: string;
+  if (session.jenis === "penyisiran") {
+    const kecamatan = await hitungKecamatanTugas(supabase, session);
+    if (!kecamatan.wilayahTugas) {
+      return NextResponse.json(
+        {
+          error:
+            "Kecamatan wilayah tugas Anda belum tercatat -- minta pengelola menautkan wilayah SLS Anda dulu di menu Perencanaan Lapangan sebelum mengisi Kwitansi.",
+        },
+        { status: 400 }
+      );
+    }
+    untukPerjalananDinasPada = kecamatan.wilayahTugas;
+  } else {
+    untukPerjalananDinasPada = String(body?.untuk_perjalanan_dinas_pada || "").trim();
+    if (!untukPerjalananDinasPada) {
+      return NextResponse.json({ error: "Tujuan perjalanan dinas dalam kota wajib diisi." }, { status: 400 });
+    }
+  }
 
   const { data: taut, error: errTaut } = await supabase
     .from("spj_surat_tugas_petugas")

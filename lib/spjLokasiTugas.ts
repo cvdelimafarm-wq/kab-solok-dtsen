@@ -27,6 +27,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { SpjPetugasJenis } from "./spjAuth";
 import { roleUntukJenis } from "./spjAuth";
+import { judulKecamatan } from "./spjFormat";
 
 export interface LokasiTugasRow {
   kecNama: string | null;
@@ -171,8 +172,14 @@ export function lokasiUtamaDari(hasil: LokasiTugasHasil): LokasiTugasRow[] {
 export function teksLokasiTugas(hasil: LokasiTugasHasil): string {
   const lok = lokasiUtamaDari(hasil);
   if (lok.length === 0) return "-";
-  const nagariUnik = [...new Set(lok.map((l) => (l.nagariNama ?? "").trim()).filter(Boolean))];
-  const kecUnik = [...new Set(lok.map((l) => (l.kecNama ?? "").trim()).filter(Boolean))];
+  // Nilai dari DB (master data) tersimpan UPPERCASE -- di-title-case dulu
+  // (judulKecamatan, dgn pengecualian angka Romawi) sebelum ditampilkan di
+  // dokumen, supaya "JORONG GALANGGANG TANGAH" tampil proper "Jorong
+  // Galanggang Tangah". Dedup TETAP dari nilai mentah (case-insensitive
+  // lewat toUpperCase implicit di judulKecamatan) supaya tidak ada duplikat
+  // krn beda kapitalisasi.
+  const nagariUnik = [...new Set(lok.map((l) => (l.nagariNama ?? "").trim()).filter(Boolean))].map(judulKecamatan);
+  const kecUnik = [...new Set(lok.map((l) => (l.kecNama ?? "").trim()).filter(Boolean))].map(judulKecamatan);
   const kecTeks = kecUnik.length > 0 ? kecUnik.join(", ") : null;
 
   if (nagariUnik.length === 0) return kecTeks ? `Kecamatan ${kecTeks}` : "-";
@@ -180,7 +187,14 @@ export function teksLokasiTugas(hasil: LokasiTugasHasil): string {
     return kecTeks ? `${nagariUnik.length} nagari, Kecamatan ${kecTeks}` : `${nagariUnik.length} nagari`;
   }
 
-  const jorongUnik = [...new Set(lok.map((l) => (l.slsNama ?? "").trim()).filter(Boolean))];
+  // sls_nama di master data SUDAH menyertakan awalan "JORONG " di dalam
+  // nilainya sendiri (mis. "JORONG GALANGGANG TANGAH", bukan cuma
+  // "GALANGGANG TANGAH") -- dibuang dulu di sini supaya tidak dobel dgn
+  // awalan "Jorong " yang ditambahkan manual di bawah (`Jorong ${jorongTeks}`),
+  // yang tadinya menghasilkan "Jorong JORONG GALANGGANG TANGAH".
+  const jorongUnik = [...new Set(lok.map((l) => (l.slsNama ?? "").trim()).filter(Boolean))]
+    .map((v) => v.replace(/^jorong\s+/i, ""))
+    .map(judulKecamatan);
   const jorongTeks = jorongUnik.length === 0 ? null : jorongUnik.length <= 3 ? jorongUnik.join(", ") : `${jorongUnik.length} jorong`;
 
   const bagian = [

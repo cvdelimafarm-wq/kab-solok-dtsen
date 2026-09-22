@@ -40,14 +40,10 @@ import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi"
 import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
 import { hitungLokasiTugas, teksLokasiTugas } from "@/lib/spjLokasiTugas";
 import { JenisDokumen, LABEL_DOKUMEN, URUTAN_CETAK_STANDAR, kunciPetugas } from "@/lib/spjMatriks";
+import { labelJabatanDokumenSpj } from "@/lib/spjFormat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const LABEL_PERAN: Record<SpjPetugasJenis, string> = {
-  penyisiran: "Petugas Penyisiran (Identifikasi Jorong)",
-  tetangga: "Petugas Tetangga/Informan (Identifikasi Tetangga/Lainnya)",
-};
 
 type Pengelompokan = "per_orang" | "per_tanggal" | "per_jenis" | "gabung";
 const MODE_VALID: Pengelompokan[] = ["per_orang", "per_tanggal", "per_jenis", "gabung"];
@@ -234,9 +230,21 @@ export async function POST(req: NextRequest) {
 
   for (const p of daftarPenugasan) {
     const petugasKey = kunciPetugas({ petugas_jenis: p.petugasJenis, petugas_id: p.petugasId });
-    const { data: akun } = await supabase.from(tabelAkun(p.petugasJenis)).select("nama, nip").eq("id", p.petugasId).maybeSingle();
+    // Kolom "jabatan" (utk label PPL/PML & pemilihan NIK/NIP di Kwitansi)
+    // HANYA ada di petugas_penyisiran_akun -- tetangga_akun tidak py kolom
+    // itu, jadi select-nya dibedakan per jenis spy tidak error "column does
+    // not exist". DUA query .select() TERPISAH (bukan 1 ternary di dalam
+    // .select()) krn tipe supabase-js mem-parse string select() scr LITERAL
+    // -- union dari 2 string literal bikin hasilnya ParserError di
+    // TypeScript walau valid di runtime; hasilnya di-cast manual ke bentuk
+    // yg sama (`jabatan` opsional).
+    const { data: akunRaw } =
+      p.petugasJenis === "penyisiran"
+        ? await supabase.from(tabelAkun(p.petugasJenis)).select("nama, nip, jabatan").eq("id", p.petugasId).maybeSingle()
+        : await supabase.from(tabelAkun(p.petugasJenis)).select("nama, nip").eq("id", p.petugasId).maybeSingle();
+    const akun = akunRaw as { nama: string | null; nip: string | null; jabatan?: string | null } | null;
     const namaAkun = akun?.nama ?? p.nama;
-    const peranLabel = LABEL_PERAN[p.petugasJenis];
+    const peranLabel = labelJabatanDokumenSpj(p.petugasJenis, akun?.jabatan ?? null);
 
     if (dokumenDipilih.includes("kwitansi")) {
       const { data: k } = await supabase
@@ -255,7 +263,8 @@ export async function POST(req: NextRequest) {
           untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
           tanggalKwitansi: k.tanggal_kwitansi,
           namaPenerima: namaAkun,
-          nipPenerima: akun?.nip ?? null,
+          idPenerima: akun?.nip ?? null,
+          jabatanPenerima: akun?.jabatan ?? null,
         });
         unit.push({ petugasKey, petugasNama: p.nama, jenis: "kwitansi", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
       } else {
