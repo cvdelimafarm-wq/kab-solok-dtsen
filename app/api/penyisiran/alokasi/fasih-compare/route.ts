@@ -191,25 +191,72 @@ function urut(a: any, b: any) {
   );
 }
 
+// BUG yang dilaporkan user (baris "❓ Sudah Tidak Ada di Sistem" menampilkan
+// kode wilayah MENTAH "140"/"001"/"0004"/"00" padahal seharusnya nama
+// Kecamatan/Nagari/SLS): root cause-nya BUKAN di logika pencocokan, tapi
+// penyisiran_wilayah_nama_lookup() punya 1031 baris (SELURUH kombinasi
+// wilayah unik Kab. Solok) -- lebih dari 1000 baris kena batas default
+// "Max Rows" API Supabase/PostgREST PER REQUEST (project ini tidak
+// override angkanya) -- jadi panggilan .rpc() polos di bawah diam-diam
+// cuma dapat 1000 dari 1031 baris, & baris yg "kepotong" jatuh ke fallback
+// kode mentah. Bug ini TIDAK kelihatan kalau dicek manual lewat SQL
+// langsung (execute_sql MCP tool tidak lewat PostgREST, jadi tidak kena
+// batas ini) -- baru kelihatan lewat panggilan supabase-js sungguhan spt
+// di route ini.
+//
+// Perbaikan: SEMUA sumber data yang berpotensi >1000 baris di-paginasi
+// pakai .range() berulang sampai habis (bukan 1 kali panggil polos) --
+// bukan cuma utk lookup nama (RPC-nya jg sudah ditambah "order by"
+// eksplisit, wajib supaya urutan antar-halaman konsisten, lihat migrasi
+// 20260922n_perbaiki_urutan_lookup_nama_wilayah.sql), tapi jg utk 2 sumber
+// lain yg bisa tumbuh lewat 1000 baris di masa depan (penyisiran_
+// alokasi_export_subsls kalau makin banyak petugas submit pilihan
+// wilayah, penyisiran_fasih_assignment kalau nanti diupload utk SELURUH
+// kabupaten).
+const UKURAN_HALAMAN = 1000; // = default "Max Rows" Supabase/PostgREST
+
+async function ambilSemuaHalaman<T>(
+  buatQuery: (dari: number, sampai: number) => PromiseLike<{ data: T[] | null; error: any }>
+): Promise<{ data: T[] } | { error: NextResponse }> {
+  const semua: T[] = [];
+  let dari = 0;
+  for (;;) {
+    const { data, error } = await buatQuery(dari, dari + UKURAN_HALAMAN - 1);
+    if (error) return { error: NextResponse.json({ error: error.message }, { status: 500 }) };
+    const batch = data ?? [];
+    semua.push(...batch);
+    if (batch.length < UKURAN_HALAMAN) break; // halaman terakhir (atau memang < 1 halaman)
+    dari += UKURAN_HALAMAN;
+  }
+  return { data: semua };
+}
+
 // Hitung ulang perbandingan dari data penyisiran_fasih_assignment yang
 // TERSIMPAN (bukan dari file yang baru diupload) vs data SEKARANG di
-// sistem -- dipakai bareng oleh GET & POST (lihat komentar besar di atas).
+// sistem -- dipakai bareng oleh GET & POST (lihat komentar besar di atas
+// file ini).
 async function hitungPerbandingan(supabase: any) {
-  const [{ data: sistemData, error: errSistem }, { data: namaData, error: errNama }, { data: fasihData, error: errFasih }] =
-    await Promise.all([
-      supabase.rpc("penyisiran_alokasi_export_subsls"),
-      supabase.rpc("penyisiran_wilayah_nama_lookup"),
+  const [sistemHasil, namaHasil, fasihHasil] = await Promise.all([
+    ambilSemuaHalaman<SystemRow>((dari, sampai) => supabase.rpc("penyisiran_alokasi_export_subsls").range(dari, sampai)),
+    ambilSemuaHalaman<NamaLookupRow>((dari, sampai) => supabase.rpc("penyisiran_wilayah_nama_lookup").range(dari, sampai)),
+    ambilSemuaHalaman<FasihRow>((dari, sampai) =>
       supabase
         .from("penyisiran_fasih_assignment")
-        .select("kec_kode, nagari_kode, sls_kode, subsls_kode, email_pencacah, email_pengawas, sumber_file, diupload_oleh, diupload_at"),
-    ]);
-  if (errSistem) return { error: NextResponse.json({ error: errSistem.message }, { status: 500 }) };
-  if (errNama) return { error: NextResponse.json({ error: errNama.message }, { status: 500 }) };
-  if (errFasih) return { error: NextResponse.json({ error: errFasih.message }, { status: 500 }) };
+        .select("kec_kode, nagari_kode, sls_kode, subsls_kode, email_pencacah, email_pengawas, sumber_file, diupload_oleh, diupload_at")
+        .order("kec_kode", { ascending: true })
+        .order("nagari_kode", { ascending: true })
+        .order("sls_kode", { ascending: true })
+        .order("subsls_kode", { ascending: true })
+        .range(dari, sampai)
+    ),
+  ]);
+  if ("error" in sistemHasil) return sistemHasil;
+  if ("error" in namaHasil) return namaHasil;
+  if ("error" in fasihHasil) return fasihHasil;
 
-  const sistemRows = (sistemData ?? []) as SystemRow[];
-  const namaRows = (namaData ?? []) as NamaLookupRow[];
-  const fasihRows = (fasihData ?? []) as FasihRow[];
+  const sistemRows = sistemHasil.data;
+  const namaRows = namaHasil.data;
+  const fasihRows = fasihHasil.data;
 
   const namaMap = new Map<string, { kec_nama: string | null; nagari_nama: string | null; sls_nama: string | null }>();
   for (const n of namaRows) {
