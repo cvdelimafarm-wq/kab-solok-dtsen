@@ -40,6 +40,32 @@ export function formatTanggalIndo(iso: string | null | undefined): string {
 }
 
 /**
+ * Rentang tanggal utk dokumen SPJ per-SET (Visum & Surat Pernyataan yg
+ * sekarang bisa mencakup BEBERAPA hari sekaligus, lihat
+ * lib/spjSetHariTugas.ts) -- kalau SET cuma 1 hari, sama persis
+ * formatTanggalIndo; kalau beda hari tp SAMA bulan & tahun, dipersingkat
+ * "23 s.d. 25 September 2026" (bulan/tahun tidak diulang); kalau beda
+ * bulan/tahun, ditulis penuh "23 September s.d. 5 Oktober 2026".
+ */
+export function formatRentangTanggalIndo(mulaiIso: string | null | undefined, selesaiIso: string | null | undefined): string {
+  if (!mulaiIso && !selesaiIso) return "-";
+  if (!selesaiIso || mulaiIso === selesaiIso) return formatTanggalIndo(mulaiIso ?? selesaiIso);
+  if (!mulaiIso) return formatTanggalIndo(selesaiIso);
+  const dMulai = new Date(mulaiIso + "T00:00:00");
+  const dSelesai = new Date(selesaiIso + "T00:00:00");
+  if (Number.isNaN(dMulai.getTime()) || Number.isNaN(dSelesai.getTime())) return `${mulaiIso} s.d. ${selesaiIso}`;
+  const sameTahun = dMulai.getFullYear() === dSelesai.getFullYear();
+  const sameBulan = sameTahun && dMulai.getMonth() === dSelesai.getMonth();
+  if (sameBulan) {
+    return `${dMulai.getDate()} s.d. ${dSelesai.getDate()} ${NAMA_BULAN[dSelesai.getMonth()]} ${dSelesai.getFullYear()}`;
+  }
+  if (sameTahun) {
+    return `${dMulai.getDate()} ${NAMA_BULAN[dMulai.getMonth()]} s.d. ${dSelesai.getDate()} ${NAMA_BULAN[dSelesai.getMonth()]} ${dSelesai.getFullYear()}`;
+  }
+  return `${formatTanggalIndo(mulaiIso)} s.d. ${formatTanggalIndo(selesaiIso)}`;
+}
+
+/**
  * Timestamptz ISO (disimpan UTC oleh Postgres) -> "07.30" (format jam
  * Indonesia, pemisah titik) -- dipakai kolom "Waktu (WIB)" di PDF Laporan,
  * dikonversi manual +7 jam (BUKAN pakai timezone server Node, krn

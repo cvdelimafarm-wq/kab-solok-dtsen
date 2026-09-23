@@ -11,11 +11,16 @@
 // Kwitansi -> Surat Tugas -> Visum -> [per tanggal: Laporan -> Dokumentasi]
 // -> Surat Pernyataan -- BUKAN urutan centang pengguna.
 //
-// Kwitansi/Surat Tugas/Visum/Surat Pernyataan adalah dokumen TINGKAT
-// PERJALANAN (1 dokumen berlaku utk SELURUH rentang 1 Surat Tugas, lihat
-// lib/spjMatriks.ts) -- utk mode pengelompokan "per_tanggal", dokumen jenis
-// ini HANYA dimasukkan ke file tanggal PALING AWAL dlm rentang pilihan
-// (supaya tidak dobel muncul di tiap file tanggal).
+// Surat Tugas TETAP dokumen TINGKAT PERJALANAN (1 file scan berlaku utk
+// SELURUH rentang 1 Surat Tugas). Kwitansi/Visum/Surat Pernyataan SEJAK
+// 23 Sep 2026 TIDAK LAGI 1 dokumen per ST -- BISA ADA BEBERAPA baris (SET
+// tanggal, lihat lib/spjSetHariTugas.ts & migrasi
+// 20260923_spj_dokumen_per_set_hari_tugas.sql), jadi SEMUA SET yg overlap
+// rentang tanggal Print Builder ikut disertakan (bukan cuma 1). Utk mode
+// pengelompokan "per_tanggal", tiap SET dokumen ini ditempatkan di file
+// tanggal AWAL SET-nya sendiri (urutanTanggal = tanggal_mulai_set baris
+// itu, bukan lagi tanggal_mulai Surat Tugas) -- supaya tiap SET nongol di
+// tanggal yg benar2 diwakilinya, bukan selalu di tanggal paling awal ST.
 //
 // Non-pengelola (petugas/tetangga login SPJ biasa) HANYA boleh mencetak
 // data MILIKNYA SENDIRI -- field `petugas` dari body diabaikan sepenuhnya
@@ -247,26 +252,34 @@ export async function POST(req: NextRequest) {
     const peranLabel = labelJabatanDokumenSpj(p.petugasJenis, akun?.jabatan ?? null);
 
     if (dokumenDipilih.includes("kwitansi")) {
-      const { data: k } = await supabase
+      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- ambil SEMUA
+      // yg SET-nya overlap rentang tanggal yg dipilih di Print Builder
+      // (bukan .maybeSingle() lagi, lihat lib/spjSetHariTugas.ts &
+      // migrasi 20260923_spj_dokumen_per_set_hari_tugas.sql).
+      const { data: kList } = await supabase
         .from("spj_kwitansi")
         .select("*")
         .eq("surat_tugas_id", p.suratTugasId)
         .eq("petugas_jenis", p.petugasJenis)
         .eq("petugas_id", p.petugasId)
-        .maybeSingle();
-      if (k) {
-        const bytes = await buatPdfKwitansi({
-          nomorSt: p.nomorSt,
-          tanggalSpd: k.tanggal_spd,
-          nominal: Number(k.nominal),
-          terbilang: k.terbilang,
-          untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
-          tanggalKwitansi: k.tanggal_kwitansi,
-          namaPenerima: namaAkun,
-          idPenerima: akun?.nip ?? null,
-          jabatanPenerima: akun?.jabatan ?? null,
-        });
-        unit.push({ petugasKey, petugasNama: p.nama, jenis: "kwitansi", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+        .lte("tanggal_mulai_set", tanggalSelesai)
+        .gte("tanggal_selesai_set", tanggalMulai)
+        .order("tanggal_mulai_set", { ascending: true });
+      if (kList && kList.length > 0) {
+        for (const k of kList) {
+          const bytes = await buatPdfKwitansi({
+            nomorSt: p.nomorSt,
+            tanggalSpd: k.tanggal_spd,
+            nominal: Number(k.nominal),
+            terbilang: k.terbilang,
+            untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
+            tanggalKwitansi: k.tanggal_kwitansi,
+            namaPenerima: namaAkun,
+            idPenerima: akun?.nip ?? null,
+            jabatanPenerima: akun?.jabatan ?? null,
+          });
+          unit.push({ petugasKey, petugasNama: p.nama, jenis: "kwitansi", tanggal: null, urutanTanggal: k.tanggal_mulai_set, bytes });
+        }
       } else {
         dilewati.push(`Kwitansi -- ${p.nama} (${p.nomorSt})`);
       }
@@ -284,25 +297,31 @@ export async function POST(req: NextRequest) {
     }
 
     if (dokumenDipilih.includes("visum")) {
-      const { data: v } = await supabase
+      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- lihat
+      // komentar sama di blok "kwitansi" di atas.
+      const { data: vList } = await supabase
         .from("spj_visum")
         .select("*")
         .eq("surat_tugas_id", p.suratTugasId)
         .eq("petugas_jenis", p.petugasJenis)
         .eq("petugas_id", p.petugasId)
-        .maybeSingle();
-      if (v) {
-        const bytes = await buatPdfVisum({
-          nomorSt: p.nomorSt,
-          namaPetugas: namaAkun,
-          rencanaTujuan: v.rencana_tujuan,
-          tempatKedudukan: v.tempat_kedudukan,
-          tanggalBerangkat: v.tanggal_berangkat,
-          tanggalTibaTujuan: v.tanggal_tiba_tujuan,
-          tanggalBerangkatKembali: v.tanggal_berangkat_kembali,
-          tanggalTibaKembali: v.tanggal_tiba_kembali,
-        });
-        unit.push({ petugasKey, petugasNama: p.nama, jenis: "visum", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+        .lte("tanggal_mulai_set", tanggalSelesai)
+        .gte("tanggal_selesai_set", tanggalMulai)
+        .order("tanggal_mulai_set", { ascending: true });
+      if (vList && vList.length > 0) {
+        for (const v of vList) {
+          const bytes = await buatPdfVisum({
+            nomorSt: p.nomorSt,
+            namaPetugas: namaAkun,
+            rencanaTujuan: v.rencana_tujuan,
+            tempatKedudukan: v.tempat_kedudukan,
+            tanggalBerangkat: v.tanggal_berangkat,
+            tanggalTibaTujuan: v.tanggal_tiba_tujuan,
+            tanggalBerangkatKembali: v.tanggal_berangkat_kembali,
+            tanggalTibaKembali: v.tanggal_tiba_kembali,
+          });
+          unit.push({ petugasKey, petugasNama: p.nama, jenis: "visum", tanggal: null, urutanTanggal: v.tanggal_mulai_set, bytes });
+        }
       } else {
         dilewati.push(`Visum -- ${p.nama} (${p.nomorSt})`);
       }
@@ -383,22 +402,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (dokumenDipilih.includes("surat_keterangan")) {
-      const { data: sk } = await supabase
+      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- lihat
+      // komentar sama di blok "kwitansi" di atas.
+      const { data: skList } = await supabase
         .from("spj_surat_pernyataan_kendaraan")
         .select("*")
         .eq("surat_tugas_id", p.suratTugasId)
         .eq("petugas_jenis", p.petugasJenis)
         .eq("petugas_id", p.petugasId)
-        .maybeSingle();
-      if (sk) {
-        const bytes = await buatPdfSuratKeterangan({
-          nomorSt: p.nomorSt,
-          namaPetugas: namaAkun,
-          nip: akun?.nip ?? null,
-          jenis: p.petugasJenis,
-          tanggalPelaksanaan: sk.tanggal_pelaksanaan,
-        });
-        unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_keterangan", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
+        .lte("tanggal_mulai_set", tanggalSelesai)
+        .gte("tanggal_selesai_set", tanggalMulai)
+        .order("tanggal_mulai_set", { ascending: true });
+      if (skList && skList.length > 0) {
+        for (const sk of skList) {
+          const bytes = await buatPdfSuratKeterangan({
+            nomorSt: p.nomorSt,
+            namaPetugas: namaAkun,
+            nip: akun?.nip ?? null,
+            jenis: p.petugasJenis,
+            tanggalMulaiSet: sk.tanggal_mulai_set,
+            tanggalSelesaiSet: sk.tanggal_selesai_set,
+          });
+          unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_keterangan", tanggal: null, urutanTanggal: sk.tanggal_mulai_set, bytes });
+        }
       } else {
         dilewati.push(`Surat Pernyataan -- ${p.nama} (${p.nomorSt})`);
       }

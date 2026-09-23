@@ -14,7 +14,7 @@
 //    user minta redaksi lain.
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
-import { formatTanggalIndo } from "../spjFormat";
+import { formatTanggalIndo, formatRentangTanggalIndo } from "../spjFormat";
 import { SpjPetugasJenis } from "../spjAuth";
 
 export const PERAN_JABATAN: Record<SpjPetugasJenis, string> = {
@@ -22,12 +22,17 @@ export const PERAN_JABATAN: Record<SpjPetugasJenis, string> = {
   tetangga: "Petugas Identifikasi Tetangga/Informan SE2026",
 };
 
+// tanggalMulaiSet/tanggalSelesaiSet -- SEKARANG rentang SET (bisa >1 hari,
+// lihat lib/spjSetHariTugas.ts), BUKAN lagi satu tanggal tunggal. Utk SET 1
+// hari, mulai===selesai & kalimatnya tetap sama spt sebelumnya
+// (formatRentangTanggalIndo otomatis tidak mengulang tanggal yg sama).
 export interface SuratKeteranganPdfData {
   nomorSt: string;
   namaPetugas: string;
   nip: string | null;
   jenis: SpjPetugasJenis;
-  tanggalPelaksanaan: string;
+  tanggalMulaiSet: string;
+  tanggalSelesaiSet: string;
 }
 
 const HITAM = rgb(0, 0, 0);
@@ -97,10 +102,11 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
   barisIdentitas("Jabatan", PERAN_JABATAN[data.jenis]);
   barisIdentitas("Unit Kerja", "BPS Kabupaten Solok");
 
+  const rentang = formatRentangTanggalIndo(data.tanggalMulaiSet, data.tanggalSelesaiSet);
   y -= 12;
   paragraf(
     `Menerangkan bahwa dalam rangka melaksanakan perjalanan dinas dalam kota untuk melaksanakan tugas kedinasan ` +
-      `sesuai surat tugas nomor: ${data.nomorSt}, pelaksanaan tanggal ${formatTanggalIndo(data.tanggalPelaksanaan)}, ` +
+      `sesuai surat tugas nomor: ${data.nomorSt}, pelaksanaan tanggal ${rentang}, ` +
       `saya benar-benar tidak menggunakan kendaraan dinas.`
   );
   y -= 8;
@@ -113,7 +119,8 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
   y -= 40;
   const kananX = MARGIN_X + usableWidth * 0.55;
   const kananWidth = usableWidth * 0.45;
-  teks(`Solok, ${formatTanggalIndo(data.tanggalPelaksanaan)}`, kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
+  // Tanggal tanda tangan = akhir SET (hari terakhir pelaksanaan, konsisten dgn migrasi data lama).
+  teks(`Solok, ${formatTanggalIndo(data.tanggalSelesaiSet)}`, kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
   y -= 15;
   teks("Pelaksana Perjalanan Dinas Dalam Kota,", kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
   y -= 55; // ruang tanda tangan basah

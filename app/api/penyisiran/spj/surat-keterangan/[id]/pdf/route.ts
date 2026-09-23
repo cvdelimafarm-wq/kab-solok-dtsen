@@ -52,7 +52,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     namaPetugas: akun?.nama ?? "-",
     nip: akun?.nip ?? null,
     jenis: sk.petugas_jenis as SpjPetugasJenis,
-    tanggalPelaksanaan: sk.tanggal_pelaksanaan,
+    tanggalMulaiSet: sk.tanggal_mulai_set,
+    tanggalSelesaiSet: sk.tanggal_selesai_set,
   });
 
   return new NextResponse(Buffer.from(pdfBytes), {

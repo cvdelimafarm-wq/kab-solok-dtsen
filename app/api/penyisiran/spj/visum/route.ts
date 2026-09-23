@@ -1,21 +1,25 @@
 // app/api/penyisiran/spj/visum/route.ts
 //
 // GET  -> daftar Surat Tugas MILIK petugas yang sedang login (ditautkan
-//         lewat spj_surat_tugas_petugas), masing2 disertai data visum-nya
-//         kalau sudah pernah diisi (null kalau belum). Beda dgn Surat
-//         Tugas, Visum TIDAK ada mode "pengelola lihat semua" -- tiap
-//         petugas cuma mengisi visum miliknya sendiri. Juga mengembalikan
-//         `kecamatan_domisili`/`kecamatan_wilayah_tugas` (lihat
-//         hitungKecamatanTugas di lib/spjWilayahTugas.ts) supaya form bisa MENAMPILKAN nilai
-//         yang akan dipakai SEBELUM disimpan.
-// POST -> simpan/perbarui (upsert) visum utk SATU Surat Tugas miliknya
-//         sendiri. Datanya RENCANA (bukan realisasi) -- lihat catatan di
-//         lib/pdf/visum.ts. Utk MVP, form di sisi client cuma minta SATU
-//         "Tanggal Pelaksanaan" (dipetakan ke keempat kolom tanggal krn
-//         perjalanan dinas dalam kota biasanya berangkat & pulang di hari
-//         yang sama) -- kolom tanggal_berangkat_kembali/tiba_kembali di
-//         skema tetap terpisah utk fleksibilitas di masa depan kalau perlu
-//         beda hari.
+//         lewat spj_surat_tugas_petugas), masing2 disertai DAFTAR visum-nya
+//         -- SEJAK 23 Sep 2026 BISA LEBIH DARI SATU per ST (1 baris per SET
+//         tanggal, lihat lib/spjSetHariTugas.ts & migrasi
+//         20260923_spj_dokumen_per_set_hari_tugas.sql; dulu tepat 1/ST).
+//         Juga mengembalikan `kecamatan_domisili`/`kecamatan_wilayah_tugas`
+//         (lihat hitungKecamatanTugas di lib/spjWilayahTugas.ts) supaya form
+//         bisa MENAMPILKAN nilai yang akan dipakai SEBELUM disimpan.
+// POST -> simpan SATU SET visum utk SATU Surat Tugas miliknya sendiri.
+//         - Kirim `id` -> EDIT baris SET itu.
+//         - Tanpa `id` -> upsert berdasar kunci alami (surat_tugas_id,
+//           petugas_jenis, petugas_id, tanggal_mulai_set).
+//         Tanggal SET (tanggal_mulai_set/tanggal_selesai_set) dipetakan ke
+//         KEEMPAT kolom tanggal Visum (berangkat=tiba_tujuan=awal SET,
+//         berangkat_kembali=tiba_kembali=akhir SET) -- utk SET 1 hari itu
+//         cuma berarti 1 tanggal spt sebelumnya, utk SET multi-hari artinya
+//         "berangkat di hari pertama SET, kembali di hari terakhir SET".
+//         Cara TERCEPAT bikin banyak SET sekaligus dari 🗓 Identifikasi Hari
+//         Tugas tetap lewat POST /api/penyisiran/spj/buat-otomatis --
+//         endpoint ini utk isi/ubah manual 1 SET.
 //
 // `rencana_tujuan` (kecamatan WILAYAH TUGAS) & `tempat_kedudukan` (kecamatan
 // ALAMAT/DOMISILI petugas) -- utk jenis "penyisiran" (PPL/PML) KEDUANYA
@@ -81,19 +85,25 @@ export async function GET(req: NextRequest) {
       .select("*")
       .eq("petugas_jenis", session.jenis)
       .eq("petugas_id", session.petugasId)
-      .in("surat_tugas_id", ids),
+      .in("surat_tugas_id", ids)
+      .order("tanggal_mulai_set", { ascending: true }),
   ]);
   if (errSt) return NextResponse.json({ error: errSt.message }, { status: 500 });
   if (errVisum) return NextResponse.json({ error: errVisum.message }, { status: 500 });
 
-  const petaVisum = new Map((visumList ?? []).map((v: { surat_tugas_id: number }) => [v.surat_tugas_id, v]));
+  const petaVisum = new Map<number, unknown[]>();
+  for (const v of (visumList ?? []) as { surat_tugas_id: number }[]) {
+    const arr = petaVisum.get(v.surat_tugas_id) ?? [];
+    arr.push(v);
+    petaVisum.set(v.surat_tugas_id, arr);
+  }
 
   const daftar = (stList ?? []).map((st: { id: number; nomor_st: string; tanggal_mulai: string; tanggal_selesai: string }) => ({
     surat_tugas_id: st.id,
     nomor_st: st.nomor_st,
     tanggal_mulai: st.tanggal_mulai,
     tanggal_selesai: st.tanggal_selesai,
-    visum: petaVisum.get(st.id) ?? null,
+    visum: petaVisum.get(st.id) ?? [],
   }));
 
   const kecamatan = await hitungKecamatanTugas(supabase, session);
@@ -114,14 +124,16 @@ export async function POST(req: NextRequest) {
   if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
   const body = await req.json().catch(() => null);
+  const idEdit = Number(body?.id);
   const suratTugasId = Number(body?.surat_tugas_id);
-  const tanggalPelaksanaan = String(body?.tanggal_pelaksanaan || "").trim();
+  const tanggalMulaiSet = String(body?.tanggal_mulai_set || "").trim();
+  const tanggalSelesaiSet = String(body?.tanggal_selesai_set || tanggalMulaiSet || "").trim();
 
   if (!Number.isFinite(suratTugasId)) {
     return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalPelaksanaan)) {
-    return NextResponse.json({ error: "Tanggal pelaksanaan wajib diisi." }, { status: 400 });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalMulaiSet) || !/^\d{4}-\d{2}-\d{2}$/.test(tanggalSelesaiSet) || tanggalSelesaiSet < tanggalMulaiSet) {
+    return NextResponse.json({ error: "Rentang tanggal SET tidak valid (tanggal selesai harus >= tanggal mulai)." }, { status: 400 });
   }
 
   // rencana_tujuan/tempat_kedudukan: utk jenis "penyisiran" DIHITUNG DI SINI
@@ -163,23 +175,38 @@ export async function POST(req: NextRequest) {
   if (errTaut) return NextResponse.json({ error: errTaut.message }, { status: 500 });
   if (!taut) return NextResponse.json({ error: "Surat Tugas ini bukan milik Anda." }, { status: 403 });
 
+  const kolom = {
+    surat_tugas_id: suratTugasId,
+    petugas_jenis: session.jenis,
+    petugas_id: session.petugasId,
+    rencana_tujuan: rencanaTujuan,
+    tempat_kedudukan: tempatKedudukan,
+    tanggal_berangkat: tanggalMulaiSet,
+    tanggal_tiba_tujuan: tanggalMulaiSet,
+    tanggal_berangkat_kembali: tanggalSelesaiSet,
+    tanggal_tiba_kembali: tanggalSelesaiSet,
+    tanggal_mulai_set: tanggalMulaiSet,
+    tanggal_selesai_set: tanggalSelesaiSet,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (Number.isFinite(idEdit) && idEdit > 0) {
+    const { data: updated, error: errUpdate } = await supabase
+      .from("spj_visum")
+      .update(kolom)
+      .eq("id", idEdit)
+      .eq("petugas_jenis", session.jenis)
+      .eq("petugas_id", session.petugasId)
+      .select("id")
+      .maybeSingle();
+    if (errUpdate) return NextResponse.json({ error: errUpdate.message }, { status: 500 });
+    if (!updated) return NextResponse.json({ error: "Visum (SET) ini tidak ditemukan / bukan milik Anda." }, { status: 404 });
+    return NextResponse.json({ ok: true, id: updated.id });
+  }
+
   const { data: upserted, error: errUpsert } = await supabase
     .from("spj_visum")
-    .upsert(
-      {
-        surat_tugas_id: suratTugasId,
-        petugas_jenis: session.jenis,
-        petugas_id: session.petugasId,
-        rencana_tujuan: rencanaTujuan,
-        tempat_kedudukan: tempatKedudukan,
-        tanggal_berangkat: tanggalPelaksanaan,
-        tanggal_tiba_tujuan: tanggalPelaksanaan,
-        tanggal_berangkat_kembali: tanggalPelaksanaan,
-        tanggal_tiba_kembali: tanggalPelaksanaan,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "surat_tugas_id,petugas_jenis,petugas_id" }
-    )
+    .upsert(kolom, { onConflict: "surat_tugas_id,petugas_jenis,petugas_id,tanggal_mulai_set" })
     .select("id")
     .single();
   if (errUpsert || !upserted) {

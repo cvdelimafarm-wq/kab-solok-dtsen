@@ -1,16 +1,26 @@
 // app/api/penyisiran/spj/kwitansi/route.ts
 //
-// GET  -> daftar Surat Tugas milik petugas yg login, disertai Kwitansi-nya
-//         kalau sudah pernah diisi (satu Kwitansi per ST, sesuai unique
-//         constraint di spj_kwitansi), DITAMBAH `untuk_perjalanan_dinas_pada_otomatis`
-//         (jenis "penyisiran" saja -- lihat hitungKecamatanTugas di
-//         lib/spjWilayahTugas.ts) supaya form bisa MENAMPILKAN nilai yg
-//         akan dipakai SEBELUM disimpan.
-// POST -> buat/perbarui (upsert) Kwitansi utk SATU ST miliknya sendiri.
-//         Nominal WAJIB diinput manual (dikonfirmasi user: "diinput
-//         manual tiap kali oleh petugas/pengelola") -- sistem cuma
-//         menyarankan `terbilang` otomatis dari nominal (lib/spjFormat.ts
-//         terbilangRupiah), tapi boleh ditimpa manual kalau client
+// GET  -> daftar Surat Tugas milik petugas yg login, masing2 disertai
+//         DAFTAR Kwitansi-nya -- SEJAK 23 Sep 2026 BISA LEBIH DARI SATU per
+//         ST (1 baris per SET tanggal, lihat lib/spjSetHariTugas.ts & migrasi
+//         20260923_spj_dokumen_per_set_hari_tugas.sql; dulu tepat 1 baris/ST).
+//         Tetap disertakan `untuk_perjalanan_dinas_pada_otomatis` (jenis
+//         "penyisiran" saja -- lihat hitungKecamatanTugas di
+//         lib/spjWilayahTugas.ts) supaya form bisa MENAMPILKAN nilai yg akan
+//         dipakai SEBELUM disimpan.
+// POST -> buat/perbarui SATU SET Kwitansi utk SATU ST miliknya sendiri.
+//         - Kalau body kirim `id` -> EDIT baris SET itu (nominal/tanggal
+//           boleh diganti, sesuai permintaan user "mungkin bisa tambahkan
+//           pilihan ganti nilai jika perlu"), TANPA mengubah SET lain.
+//         - Kalau TIDAK kirim `id` -> upsert berdasar kunci alami
+//           (surat_tugas_id, petugas_jenis, petugas_id, tanggal_mulai_set):
+//           kalau SET dgn tanggal_mulai_set itu sudah ada, jadi EDIT; kalau
+//           belum, jadi SET BARU. Cara TERCEPAT bikin banyak SET sekaligus
+//           tetap lewat POST /api/penyisiran/spj/buat-otomatis (dari data yg
+//           sudah ada di sistem) -- endpoint ini utk isi/ubah manual 1 SET.
+//         Nominal WAJIB diisi (boleh hasil saran "Buat Otomatis" yg lalu
+//         diedit, boleh manual penuh) -- sistem cuma menyarankan `terbilang`
+//         otomatis dari nominal, tapi boleh ditimpa manual kalau client
 //         mengirim `terbilang` sendiri.
 //
 // `untuk_perjalanan_dinas_pada` (kecamatan wilayah tugas) -- utk jenis
@@ -64,19 +74,25 @@ export async function GET(req: NextRequest) {
       .select("*")
       .eq("petugas_jenis", session.jenis)
       .eq("petugas_id", session.petugasId)
-      .in("surat_tugas_id", ids),
+      .in("surat_tugas_id", ids)
+      .order("tanggal_mulai_set", { ascending: true }),
   ]);
   if (errSt) return NextResponse.json({ error: errSt.message }, { status: 500 });
   if (errKwitansi) return NextResponse.json({ error: errKwitansi.message }, { status: 500 });
 
-  const petaKwitansi = new Map((kwitansiList ?? []).map((k: { surat_tugas_id: number }) => [k.surat_tugas_id, k]));
+  const petaKwitansi = new Map<number, unknown[]>();
+  for (const k of (kwitansiList ?? []) as { surat_tugas_id: number }[]) {
+    const arr = petaKwitansi.get(k.surat_tugas_id) ?? [];
+    arr.push(k);
+    petaKwitansi.set(k.surat_tugas_id, arr);
+  }
   const kecamatan = await hitungKecamatanTugas(supabase, session);
   const daftar = (stList ?? []).map((st: { id: number; nomor_st: string; tanggal_mulai: string; tanggal_selesai: string }) => ({
     surat_tugas_id: st.id,
     nomor_st: st.nomor_st,
     tanggal_mulai: st.tanggal_mulai,
     tanggal_selesai: st.tanggal_selesai,
-    kwitansi: petaKwitansi.get(st.id) ?? null,
+    kwitansi: petaKwitansi.get(st.id) ?? [],
     untuk_perjalanan_dinas_pada_otomatis: kecamatan.wilayahTugas,
   }));
 
@@ -90,15 +106,24 @@ export async function POST(req: NextRequest) {
   if (!supabase) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
   const body = await req.json().catch(() => null);
+  const idEdit = Number(body?.id);
   const suratTugasId = Number(body?.surat_tugas_id);
   const nominal = Number(body?.nominal);
-  const tanggalSpd = String(body?.tanggal_spd || "").trim();
+  const tanggalMulaiSet = String(body?.tanggal_mulai_set || "").trim();
+  const tanggalSelesaiSet = String(body?.tanggal_selesai_set || tanggalMulaiSet || "").trim();
+  const tanggalSpd = String(body?.tanggal_spd || tanggalMulaiSet || "").trim();
   const tanggalKwitansi = String(body?.tanggal_kwitansi || "").trim() || new Date().toISOString().slice(0, 10);
   const terbilangInput = typeof body?.terbilang === "string" ? body.terbilang.trim() : "";
 
   if (!Number.isFinite(suratTugasId)) return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   if (!Number.isFinite(nominal) || nominal < 0) return NextResponse.json({ error: "Nominal tidak valid." }, { status: 400 });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalMulaiSet) || !/^\d{4}-\d{2}-\d{2}$/.test(tanggalSelesaiSet) || tanggalSelesaiSet < tanggalMulaiSet) {
+    return NextResponse.json({ error: "Rentang tanggal SET tidak valid (tanggal selesai harus >= tanggal mulai)." }, { status: 400 });
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggalSpd)) return NextResponse.json({ error: "Tanggal SPD wajib diisi." }, { status: 400 });
+
+  const jumlahHari = Math.round((new Date(tanggalSelesaiSet + "T00:00:00Z").getTime() - new Date(tanggalMulaiSet + "T00:00:00Z").getTime()) / 86400000) + 1;
+  const nominalPerHari = jumlahHari > 0 ? nominal / jumlahHari : nominal;
 
   // untuk_perjalanan_dinas_pada: utk jenis "penyisiran" DIHITUNG DI SINI
   // (abaikan apa pun yg dikirim client utk field itu -- lihat komentar
@@ -137,22 +162,44 @@ export async function POST(req: NextRequest) {
   const terbilang = terbilangInput || terbilangRupiah(nominal);
   const { data: akun } = await supabase.from(tabelAkun(session.jenis)).select("nama").eq("id", session.petugasId).maybeSingle();
 
+  const kolom = {
+    surat_tugas_id: suratTugasId,
+    petugas_jenis: session.jenis,
+    petugas_id: session.petugasId,
+    nominal,
+    terbilang,
+    untuk_perjalanan_dinas_pada: untukPerjalananDinasPada,
+    tanggal_spd: tanggalSpd,
+    tanggal_kwitansi: tanggalKwitansi,
+    created_by: akun?.nama ?? null,
+    tanggal_mulai_set: tanggalMulaiSet,
+    tanggal_selesai_set: tanggalSelesaiSet,
+    nominal_per_hari: nominalPerHari,
+    jumlah_hari: jumlahHari,
+  };
+
+  // Edit SET yg SUDAH ADA (dipilih via `id`, mis. dari daftar SET di
+  // administrasi-spj.tsx) -- ownership dipastikan lewat eq petugas_jenis/id
+  // di query update-nya sendiri, BUKAN select terpisah dulu.
+  if (Number.isFinite(idEdit) && idEdit > 0) {
+    const { data: updated, error: errUpdate } = await supabase
+      .from("spj_kwitansi")
+      .update(kolom)
+      .eq("id", idEdit)
+      .eq("petugas_jenis", session.jenis)
+      .eq("petugas_id", session.petugasId)
+      .select("id")
+      .maybeSingle();
+    if (errUpdate) return NextResponse.json({ error: errUpdate.message }, { status: 500 });
+    if (!updated) return NextResponse.json({ error: "Kwitansi (SET) ini tidak ditemukan / bukan milik Anda." }, { status: 404 });
+    return NextResponse.json({ ok: true, id: updated.id });
+  }
+
+  // Tanpa `id` -- upsert berdasar kunci alami (SET baru kalau
+  // tanggal_mulai_set belum pernah ada, edit kalau sudah).
   const { data: upserted, error: errUpsert } = await supabase
     .from("spj_kwitansi")
-    .upsert(
-      {
-        surat_tugas_id: suratTugasId,
-        petugas_jenis: session.jenis,
-        petugas_id: session.petugasId,
-        nominal,
-        terbilang,
-        untuk_perjalanan_dinas_pada: untukPerjalananDinasPada,
-        tanggal_spd: tanggalSpd,
-        tanggal_kwitansi: tanggalKwitansi,
-        created_by: akun?.nama ?? null,
-      },
-      { onConflict: "surat_tugas_id,petugas_jenis,petugas_id" }
-    )
+    .upsert(kolom, { onConflict: "surat_tugas_id,petugas_jenis,petugas_id,tanggal_mulai_set" })
     .select("id")
     .single();
   if (errUpsert || !upserted) {

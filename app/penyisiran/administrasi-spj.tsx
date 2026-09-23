@@ -104,13 +104,32 @@ function bacaSesiTersimpan(): SesiSpj | null {
   return null;
 }
 
+// NavigasiHint & ApiError -- dipakai fitur "Buat Otomatis" (POST
+// /api/penyisiran/spj/buat-otomatis) supaya pesan error/peringatan dari
+// server (yg WAJIB disertai navigasi ke menu terkait, permintaan user 23
+// Sep 2026 "sampaikan aja di pesan error/warning dan sertakan navigasinya")
+// tidak hilang di apiFetch -- properti `navigasi` DITEMPEL ke Error yg
+// dilempar, opsional & aman utk semua pemanggil apiFetch lain yg tidak
+// peduli properti ini.
+interface NavigasiHint {
+  halaman: string;
+  keterangan: string;
+}
+interface ApiError extends Error {
+  navigasi?: NavigasiHint;
+}
+
 async function apiFetch(path: string, token: string, init?: RequestInit) {
   const res = await fetch(path, {
     ...init,
     headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+  if (!res.ok) {
+    const err: ApiError = new Error(data?.error || `Gagal (${res.status})`);
+    if (data?.navigasi && typeof data.navigasi === "object") err.navigasi = data.navigasi as NavigasiHint;
+    throw err;
+  }
   return data;
 }
 
@@ -959,6 +978,138 @@ function GantiFileTombol({
   );
 }
 
+// ---------- "Buat Otomatis" (Kwitansi/Visum/Surat Pernyataan per SET) ----------
+//
+// Blok BERSAMA dipakai ULANG oleh KwitansiBaris/VisumBaris/SuratKeteranganBaris
+// -- 1 tombol per ST per jenis dokumen, memanggil POST
+// /api/penyisiran/spj/buat-otomatis dgn `dokumen: [jenisDokumen]` (SATU
+// jenis saja per blok, sesuai section tempat blok ini dipasang). Mode
+// ("per_hari"/"per_rentang") DIPILIH PENGGUNA tiap kali klik -- TIDAK ada
+// default tetap tersimpan (dikonfirmasi user 23 Sep 2026). Hasil (jumlah SET
+// dibuat/sudah ada) & peringatan (mis. kecamatan wilayah tugas blm tertaut,
+// LENGKAP dgn navigasi ke menu terkait) ditampilkan LANGSUNG di bawah
+// tombol, TANPA perlu modal terpisah.
+type JenisDokumenOtomatis = "kwitansi" | "visum" | "surat_keterangan";
+interface HasilBuatOtomatisDokumen {
+  jenis: JenisDokumenOtomatis;
+  dibuat: number;
+  sudahAda: number;
+}
+interface PeringatanBuatOtomatis {
+  kode: string;
+  jenis?: JenisDokumenOtomatis;
+  pesan: string;
+  navigasi: { halaman: string; keterangan: string };
+}
+interface HasilBuatOtomatisRespons {
+  ok: true;
+  mode: "per_hari" | "per_rentang";
+  set: { tanggal_mulai: string; tanggal_selesai: string; jumlah_hari: number }[];
+  hasil: HasilBuatOtomatisDokumen[];
+  peringatan: PeringatanBuatOtomatis[];
+}
+
+function BuatOtomatisBlok({
+  token,
+  suratTugasId,
+  jenisDokumen,
+  labelJenis,
+  onSelesai,
+  onSessionExpired,
+}: {
+  token: string;
+  suratTugasId: number;
+  jenisDokumen: JenisDokumenOtomatis;
+  labelJenis: string;
+  onSelesai: () => void;
+  onSessionExpired: () => void;
+}) {
+  const [mode, setMode] = useState<"per_hari" | "per_rentang">("per_rentang");
+  const [busy, setBusy] = useState(false);
+  const [pesan, setPesan] = useState<string | null>(null);
+  const [navigasi, setNavigasi] = useState<{ halaman: string; keterangan: string } | null>(null);
+  const [gagal, setGagal] = useState(false);
+
+  async function handleKlik() {
+    setBusy(true);
+    setPesan(null);
+    setNavigasi(null);
+    setGagal(false);
+    try {
+      const hasil = (await apiFetch("/api/penyisiran/spj/buat-otomatis", token, {
+        method: "POST",
+        body: JSON.stringify({ surat_tugas_id: suratTugasId, mode, dokumen: [jenisDokumen] }),
+      })) as HasilBuatOtomatisRespons;
+
+      const peringatanJenis = hasil.peringatan.find((p) => p.jenis === jenisDokumen);
+      const hasilJenis = hasil.hasil.find((h) => h.jenis === jenisDokumen);
+      if (peringatanJenis) {
+        setGagal(true);
+        setPesan(peringatanJenis.pesan);
+        setNavigasi(peringatanJenis.navigasi);
+      } else if (hasilJenis) {
+        const bagian: string[] = [];
+        if (hasilJenis.dibuat > 0) bagian.push(`${hasilJenis.dibuat} SET baru dibuat`);
+        if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah ada sebelumnya (tidak ditimpa)`);
+        setPesan(bagian.length > 0 ? bagian.join(", ") + "." : "Tidak ada SET yang perlu dibuat.");
+      } else {
+        setPesan("Selesai.");
+      }
+      onSelesai();
+    } catch (e) {
+      const err = e as ApiError;
+      if (/sesi tidak valid|kedaluwarsa/i.test(err.message)) {
+        onSessionExpired();
+        return;
+      }
+      setGagal(true);
+      setPesan(err.message);
+      setNavigasi(err.navigasi ?? null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed border-navy-300 bg-navy-50/50 p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium text-navy-900">🪄 Buat Otomatis {labelJenis}</span>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "per_hari" | "per_rentang")}
+          className="rounded-md border border-line px-2 py-1 text-[11px]"
+        >
+          <option value="per_rentang">1 set per rentang tersambung</option>
+          <option value="per_hari">1 set per hari</option>
+        </select>
+        <button
+          type="button"
+          onClick={handleKlik}
+          disabled={busy}
+          className="rounded-md bg-navy-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {busy ? "Membuat..." : "Buat Otomatis"}
+        </button>
+      </div>
+      <p className="mt-1 text-[10px] text-ink/40">
+        Dari tanggal yang ditag di 🗓 Identifikasi Hari Tugas (tab Perencanaan Lapangan), dipotong ke rentang Surat
+        Tugas ini.
+      </p>
+      {pesan && (
+        <p className={`mt-1.5 rounded-md p-1.5 text-[11px] ${gagal ? "bg-rust-100/40 text-rust-700" : "bg-emerald-100/40 text-emerald-800"}`}>
+          {gagal ? "⚠ " : "✓ "}
+          {pesan}
+          {navigasi && (
+            <span className="mt-0.5 block text-[10px] opacity-80">
+              Navigasi: {navigasi.halaman} -- {navigasi.keterangan}
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- Visum (rencana kunjungan) ----------
 interface VisumRow {
   id: number;
@@ -968,13 +1119,18 @@ interface VisumRow {
   tanggal_tiba_tujuan: string;
   tanggal_berangkat_kembali: string | null;
   tanggal_tiba_kembali: string | null;
+  // SEJAK 23 Sep 2026 -- batas SET tanggal yg diwakili baris ini (lihat
+  // lib/spjSetHariTugas.ts) -- 1 ST BISA punya BANYAK baris Visum sekarang
+  // (dulu tepat 1).
+  tanggal_mulai_set: string;
+  tanggal_selesai_set: string;
 }
 interface VisumSuratTugas {
   surat_tugas_id: number;
   nomor_st: string;
   tanggal_mulai: string;
   tanggal_selesai: string;
-  visum: VisumRow | null;
+  visum: VisumRow[];
 }
 
 function VisumSection({
@@ -1122,6 +1278,7 @@ function VisumSection({
             onSaved={muat}
             onUnduh={handleUnduh}
             guard={guard}
+            onSessionExpired={onSessionExpired}
           />
         ))}
         {daftar.length === 0 && !loading && (
@@ -1144,6 +1301,7 @@ function VisumBaris({
   onSaved,
   onUnduh,
   guard,
+  onSessionExpired,
 }: {
   row: VisumSuratTugas;
   token: string;
@@ -1153,25 +1311,148 @@ function VisumBaris({
   onSaved: () => void;
   onUnduh: (visumId: number) => void;
   guard: (fn: () => void) => void;
+  onSessionExpired: () => void;
 }) {
-  const [edit, setEdit] = useState(!row.visum);
+  const [tambahBaru, setTambahBaru] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{row.nomor_st}</span>
+        <span className="text-[11px] text-ink/50">{row.visum.length} SET tersimpan</span>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(row.tanggal_mulai)} s/d {formatTanggal(row.tanggal_selesai)}
+      </p>
+
+      <div className="mt-2">
+        <BuatOtomatisBlok
+          token={token}
+          suratTugasId={row.surat_tugas_id}
+          jenisDokumen="visum"
+          labelJenis="Visum"
+          onSelesai={onSaved}
+          onSessionExpired={onSessionExpired}
+        />
+      </div>
+
+      <div className="mt-2 flex flex-col gap-1.5">
+        {row.visum.map((v) =>
+          editId === v.id ? (
+            <VisumSetForm
+              key={v.id}
+              suratTugasId={row.surat_tugas_id}
+              jenis={jenis}
+              kecamatanDomisili={kecamatanDomisili}
+              kecamatanWilayahTugas={kecamatanWilayahTugas}
+              existing={v}
+              token={token}
+              guard={guard}
+              onSaved={() => {
+                setEditId(null);
+                onSaved();
+              }}
+              onCancel={() => setEditId(null)}
+            />
+          ) : (
+            <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-2">
+              <div>
+                <p className="font-medium text-navy-900">
+                  {formatTanggal(v.tanggal_mulai_set)}
+                  {v.tanggal_selesai_set !== v.tanggal_mulai_set ? ` s.d. ${formatTanggal(v.tanggal_selesai_set)}` : ""}
+                </p>
+                <p className="text-[11px] text-ink/50">Tujuan: {v.rencana_tujuan}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onUnduh(v.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+                >
+                  🖨 PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditId(v.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+                >
+                  Ubah
+                </button>
+              </div>
+            </div>
+          )
+        )}
+        {row.visum.length === 0 && (
+          <p className="rounded-md border border-dashed border-line p-2 text-center text-[11px] text-ink/40">
+            Belum ada SET Visum -- pakai &quot;Buat Otomatis&quot; di atas, atau tambah manual di bawah.
+          </p>
+        )}
+      </div>
+
+      {tambahBaru ? (
+        <div className="mt-2">
+          <VisumSetForm
+            suratTugasId={row.surat_tugas_id}
+            jenis={jenis}
+            kecamatanDomisili={kecamatanDomisili}
+            kecamatanWilayahTugas={kecamatanWilayahTugas}
+            existing={null}
+            token={token}
+            guard={guard}
+            onSaved={() => {
+              setTambahBaru(false);
+              onSaved();
+            }}
+            onCancel={() => setTambahBaru(false)}
+            tanggalDefault={row.tanggal_mulai}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTambahBaru(true)}
+          className="mt-2 w-full rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700"
+        >
+          + Tambah SET Manual
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VisumSetForm({
+  suratTugasId,
+  jenis,
+  kecamatanDomisili,
+  kecamatanWilayahTugas,
+  existing,
+  token,
+  guard,
+  onSaved,
+  onCancel,
+  tanggalDefault,
+}: {
+  suratTugasId: number;
+  jenis: Jenis;
+  kecamatanDomisili: string | null;
+  kecamatanWilayahTugas: string | null;
+  existing: VisumRow | null;
+  token: string;
+  guard: (fn: () => void) => void;
+  onSaved: () => void;
+  onCancel: () => void;
+  tanggalDefault?: string;
+}) {
   // rencanaTujuan HANYA relevan/ditampilkan utk jenis "tetangga" -- jenis
   // "penyisiran" pakai kecamatanWilayahTugas (dihitung server, read-only).
-  const [rencanaTujuan, setRencanaTujuan] = useState(row.visum?.rencana_tujuan ?? "");
-  const [tanggalPelaksanaan, setTanggalPelaksanaan] = useState(row.visum?.tanggal_berangkat ?? row.tanggal_mulai);
+  const [rencanaTujuan, setRencanaTujuan] = useState(existing?.rencana_tujuan ?? "");
+  const [tanggalMulaiSet, setTanggalMulaiSet] = useState(existing?.tanggal_mulai_set ?? tanggalDefault ?? "");
+  const [tanggalSelesaiSet, setTanggalSelesaiSet] = useState(
+    existing?.tanggal_selesai_set ?? existing?.tanggal_mulai_set ?? tanggalDefault ?? ""
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyUnduh, setBusyUnduh] = useState(false);
-
-  async function handleKlikUnduh() {
-    if (!row.visum) return;
-    setBusyUnduh(true);
-    try {
-      await onUnduh(row.visum.id);
-    } finally {
-      setBusyUnduh(false);
-    }
-  }
 
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
@@ -1181,12 +1462,12 @@ function VisumBaris({
         setError("Kecamatan wilayah tugas belum tertaut -- minta pengelola menautkan wilayah SLS Anda dulu.");
         return;
       }
-      if (!tanggalPelaksanaan) {
-        setError("Tanggal pelaksanaan wajib diisi.");
-        return;
-      }
-    } else if (!rencanaTujuan.trim() || !tanggalPelaksanaan) {
-      setError("Rencana tujuan dan tanggal pelaksanaan wajib diisi.");
+    } else if (!rencanaTujuan.trim()) {
+      setError("Rencana tujuan wajib diisi.");
+      return;
+    }
+    if (!tanggalMulaiSet || !tanggalSelesaiSet || tanggalSelesaiSet < tanggalMulaiSet) {
+      setError("Rentang tanggal SET tidak valid (tanggal selesai harus >= tanggal mulai).");
       return;
     }
     setBusy(true);
@@ -1194,16 +1475,17 @@ function VisumBaris({
       await apiFetch("/api/penyisiran/spj/visum", token, {
         method: "POST",
         body: JSON.stringify({
-          surat_tugas_id: row.surat_tugas_id,
+          id: existing?.id,
+          surat_tugas_id: suratTugasId,
           // rencana_tujuan cuma dipakai server utk jenis "tetangga" --
           // utk jenis "penyisiran" server SELALU hitung ulang sendiri
           // (lihat app/api/penyisiran/spj/visum/route.ts), jadi dikirim
           // kosong/diabaikan.
           rencana_tujuan: jenis === "tetangga" ? rencanaTujuan.trim() : undefined,
-          tanggal_pelaksanaan: tanggalPelaksanaan,
+          tanggal_mulai_set: tanggalMulaiSet,
+          tanggal_selesai_set: tanggalSelesaiSet,
         }),
       });
-      setEdit(false);
       onSaved();
     } catch (e) {
       guard(() => {
@@ -1215,88 +1497,71 @@ function VisumBaris({
   }
 
   return (
-    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-navy-900">{row.nomor_st}</span>
-        <div className="flex items-center gap-2">
-          {row.visum && !edit && (
-            <button
-              type="button"
-              onClick={handleKlikUnduh}
-              disabled={busyUnduh}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-            >
-              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF Visum"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setEdit((v) => !v)}
-            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
-          >
-            {edit ? "Batal" : row.visum ? "Ubah" : "Isi Visum"}
-          </button>
+    <form onSubmit={handleSimpan} className="space-y-2 rounded-md border border-line bg-white p-2">
+      {jenis === "penyisiran" ? (
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
+          <p>
+            Kecamatan domisili: <span className="font-medium text-navy-900">{kecamatanDomisili || "-"}</span>
+          </p>
+          <p className="mt-0.5">
+            Kecamatan wilayah tugas:{" "}
+            {kecamatanWilayahTugas ? (
+              <span className="font-medium text-navy-900">{kecamatanWilayahTugas}</span>
+            ) : (
+              <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
+            )}
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Rencana Tujuan (Nagari/Jorong)</label>
+          <input
+            type="text"
+            value={rencanaTujuan}
+            onChange={(e) => setRencanaTujuan(e.target.value)}
+            placeholder="Contoh: Nagari Kubung"
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Mulai SET</label>
+          <input
+            type="date"
+            value={tanggalMulaiSet}
+            onChange={(e) => setTanggalMulaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Selesai SET</label>
+          <input
+            type="date"
+            value={tanggalSelesaiSet}
+            onChange={(e) => setTanggalSelesaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
         </div>
       </div>
-      <p className="mt-1 text-ink/60">
-        {formatTanggal(row.tanggal_mulai)} s/d {formatTanggal(row.tanggal_selesai)}
-      </p>
-
-      {!edit && row.visum && (
-        <p className="mt-1 text-[11px] text-ink/50">
-          Tujuan: <span className="font-medium text-navy-900">{row.visum.rencana_tujuan}</span> -- Tanggal:{" "}
-          {formatTanggal(row.visum.tanggal_berangkat)}
-        </p>
-      )}
-
-      {edit && (
-        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
-          {jenis === "penyisiran" ? (
-            <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
-              <p>
-                Kecamatan domisili: <span className="font-medium text-navy-900">{kecamatanDomisili || "-"}</span>
-              </p>
-              <p className="mt-0.5">
-                Kecamatan wilayah tugas:{" "}
-                {kecamatanWilayahTugas ? (
-                  <span className="font-medium text-navy-900">{kecamatanWilayahTugas}</span>
-                ) : (
-                  <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
-                )}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-ink/50">Rencana Tujuan (Nagari/Jorong)</label>
-              <input
-                type="text"
-                value={rencanaTujuan}
-                onChange={(e) => setRencanaTujuan(e.target.value)}
-                placeholder="Contoh: Nagari Kubung"
-                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-            </div>
-          )}
-          <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan</label>
-            <input
-              type="date"
-              value={tanggalPelaksanaan}
-              onChange={(e) => setTanggalPelaksanaan(e.target.value)}
-              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-            />
-          </div>
-          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
-          <button
-            type="submit"
-            disabled={busy || (jenis === "penyisiran" && !kecamatanWilayahTugas)}
-            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {busy ? "Menyimpan..." : "Simpan Visum"}
-          </button>
-        </form>
-      )}
-    </div>
+      {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy || (jenis === "penyisiran" && !kecamatanWilayahTugas)}
+          className="flex-1 rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {busy ? "Menyimpan..." : "Simpan SET"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-navy-400"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -2391,17 +2656,33 @@ interface KwitansiRow {
   untuk_perjalanan_dinas_pada: string;
   tanggal_spd: string;
   tanggal_kwitansi: string;
+  // SEJAK 23 Sep 2026 -- batas SET tanggal yg diwakili baris ini (lihat
+  // lib/spjSetHariTugas.ts) -- 1 ST BISA punya BANYAK baris Kwitansi
+  // sekarang (dulu tepat 1). nominal_per_hari/jumlah_hari disimpan sbg
+  // jejak audit "kenapa nominalnya segini" (lihat migrasi
+  // 20260923_spj_dokumen_per_set_hari_tugas.sql).
+  tanggal_mulai_set: string;
+  tanggal_selesai_set: string;
+  nominal_per_hari: number;
+  jumlah_hari: number;
 }
 interface KwitansiSuratTugas {
   surat_tugas_id: number;
   nomor_st: string;
   tanggal_mulai: string;
   tanggal_selesai: string;
-  kwitansi: KwitansiRow | null;
+  kwitansi: KwitansiRow[];
   // Dihitung server (jenis "penyisiran" saja -- lihat hitungKecamatanTugas
   // di lib/spjWilayahTugas.ts), null utk jenis "tetangga" (tetap manual).
   untuk_perjalanan_dinas_pada_otomatis: string | null;
 }
+
+// Tarif TRANSLOK per hari default -- SAMA PERSIS
+// TARIF_TRANSLOK_PER_HARI_DEFAULT di lib/spjSetHariTugas.ts (dipakai server
+// utk "Buat Otomatis"), diduplikasi kecil di sini HANYA utk saran nominal
+// awal saat isi SET manual di form (bukan sumber kebenaran -- server yg
+// menentukan nominal aktual saat "Buat Otomatis" dipakai).
+const TARIF_TRANSLOK_PER_HARI_SARAN = 170000;
 
 function KwitansiSection({ token, jenis, onSessionExpired }: { token: string; jenis: Jenis; onSessionExpired: () => void }) {
   const [daftar, setDaftar] = useState<KwitansiSuratTugas[]>([]);
@@ -2496,7 +2777,16 @@ function KwitansiSection({ token, jenis, onSessionExpired }: { token: string; je
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <KwitansiBaris key={st.surat_tugas_id} st={st} token={token} jenis={jenis} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+          <KwitansiBaris
+            key={st.surat_tugas_id}
+            st={st}
+            token={token}
+            jenis={jenis}
+            onSaved={muat}
+            onUnduh={handleUnduh}
+            guard={guard}
+            onSessionExpired={onSessionExpired}
+          />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -2515,6 +2805,7 @@ function KwitansiBaris({
   onSaved,
   onUnduh,
   guard,
+  onSessionExpired,
 }: {
   st: KwitansiSuratTugas;
   token: string;
@@ -2522,27 +2813,153 @@ function KwitansiBaris({
   onSaved: () => void;
   onUnduh: (kwitansiId: number) => void;
   guard: (fn: () => void) => void;
+  onSessionExpired: () => void;
 }) {
-  const [edit, setEdit] = useState(!st.kwitansi);
-  const [nominal, setNominal] = useState(st.kwitansi ? String(st.kwitansi.nominal) : "");
-  const [terbilang, setTerbilang] = useState(st.kwitansi?.terbilang ?? "");
+  const [tambahBaru, setTambahBaru] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <span className="text-[11px] text-ink/50">{st.kwitansi.length} SET tersimpan</span>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
+      </p>
+
+      <div className="mt-2">
+        <BuatOtomatisBlok
+          token={token}
+          suratTugasId={st.surat_tugas_id}
+          jenisDokumen="kwitansi"
+          labelJenis="Kwitansi"
+          onSelesai={onSaved}
+          onSessionExpired={onSessionExpired}
+        />
+      </div>
+
+      <div className="mt-2 flex flex-col gap-1.5">
+        {st.kwitansi.map((k) =>
+          editId === k.id ? (
+            <KwitansiSetForm
+              key={k.id}
+              st={st}
+              jenis={jenis}
+              existing={k}
+              token={token}
+              guard={guard}
+              onSaved={() => {
+                setEditId(null);
+                onSaved();
+              }}
+              onCancel={() => setEditId(null)}
+            />
+          ) : (
+            <div key={k.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-2">
+              <div>
+                <p className="font-medium text-navy-900">
+                  {formatTanggal(k.tanggal_mulai_set)}
+                  {k.tanggal_selesai_set !== k.tanggal_mulai_set ? ` s.d. ${formatTanggal(k.tanggal_selesai_set)}` : ""}{" "}
+                  <span className="font-normal text-ink/40">({k.jumlah_hari} hari)</span>
+                </p>
+                <p className="text-[11px] text-ink/50">
+                  Rp {k.nominal.toLocaleString("id-ID")} -- {k.untuk_perjalanan_dinas_pada}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onUnduh(k.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+                >
+                  🖨 PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditId(k.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+                >
+                  Ubah
+                </button>
+              </div>
+            </div>
+          )
+        )}
+        {st.kwitansi.length === 0 && (
+          <p className="rounded-md border border-dashed border-line p-2 text-center text-[11px] text-ink/40">
+            Belum ada SET Kwitansi -- pakai &quot;Buat Otomatis&quot; di atas, atau tambah manual di bawah.
+          </p>
+        )}
+      </div>
+
+      {tambahBaru ? (
+        <div className="mt-2">
+          <KwitansiSetForm
+            st={st}
+            jenis={jenis}
+            existing={null}
+            token={token}
+            guard={guard}
+            onSaved={() => {
+              setTambahBaru(false);
+              onSaved();
+            }}
+            onCancel={() => setTambahBaru(false)}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTambahBaru(true)}
+          className="mt-2 w-full rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700"
+        >
+          + Tambah SET Manual
+        </button>
+      )}
+    </div>
+  );
+}
+
+function KwitansiSetForm({
+  st,
+  jenis,
+  existing,
+  token,
+  guard,
+  onSaved,
+  onCancel,
+}: {
+  st: KwitansiSuratTugas;
+  jenis: Jenis;
+  existing: KwitansiRow | null;
+  token: string;
+  guard: (fn: () => void) => void;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [tanggalMulaiSet, setTanggalMulaiSet] = useState(existing?.tanggal_mulai_set ?? st.tanggal_mulai);
+  const [tanggalSelesaiSet, setTanggalSelesaiSet] = useState(existing?.tanggal_selesai_set ?? existing?.tanggal_mulai_set ?? st.tanggal_mulai);
+  const [nominal, setNominal] = useState(existing ? String(existing.nominal) : "");
+  const [terbilang, setTerbilang] = useState(existing?.terbilang ?? "");
   // untukPerjalananDinasPada HANYA relevan/dipakai utk jenis "tetangga" --
   // jenis "penyisiran" pakai st.untuk_perjalanan_dinas_pada_otomatis
   // (dihitung server, read-only, sama pola dgn Visum).
-  const [untukPerjalananDinasPada, setUntukPerjalananDinasPada] = useState(st.kwitansi?.untuk_perjalanan_dinas_pada ?? "");
-  const [tanggalSpd, setTanggalSpd] = useState(st.kwitansi?.tanggal_spd ?? st.tanggal_mulai);
+  const [untukPerjalananDinasPada, setUntukPerjalananDinasPada] = useState(existing?.untuk_perjalanan_dinas_pada ?? "");
+  const [tanggalSpd, setTanggalSpd] = useState(existing?.tanggal_spd ?? existing?.tanggal_mulai_set ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyUnduh, setBusyUnduh] = useState(false);
 
-  async function handleKlikUnduh() {
-    if (!st.kwitansi) return;
-    setBusyUnduh(true);
-    try {
-      await onUnduh(st.kwitansi.id);
-    } finally {
-      setBusyUnduh(false);
-    }
+  function jumlahHariSet(): number {
+    if (!tanggalMulaiSet || !tanggalSelesaiSet) return 0;
+    const ms = new Date(tanggalMulaiSet + "T00:00:00Z").getTime();
+    const ss = new Date(tanggalSelesaiSet + "T00:00:00Z").getTime();
+    return Math.round((ss - ms) / 86400000) + 1;
+  }
+
+  function handleGunakanTarifDefault() {
+    const hari = jumlahHariSet();
+    if (hari > 0) setNominal(String(TARIF_TRANSLOK_PER_HARI_SARAN * hari));
   }
 
   async function handleSimpan(e: React.FormEvent) {
@@ -2551,6 +2968,10 @@ function KwitansiBaris({
     const nominalNum = Number(nominal);
     if (!Number.isFinite(nominalNum) || nominalNum < 0) {
       setError("Nominal tidak valid.");
+      return;
+    }
+    if (!tanggalMulaiSet || !tanggalSelesaiSet || tanggalSelesaiSet < tanggalMulaiSet) {
+      setError("Rentang tanggal SET tidak valid (tanggal selesai harus >= tanggal mulai).");
       return;
     }
     if (jenis === "tetangga" && !untukPerjalananDinasPada.trim()) {
@@ -2566,6 +2987,7 @@ function KwitansiBaris({
       await apiFetch("/api/penyisiran/spj/kwitansi", token, {
         method: "POST",
         body: JSON.stringify({
+          id: existing?.id,
           surat_tugas_id: st.surat_tugas_id,
           nominal: nominalNum,
           terbilang: terbilang.trim(),
@@ -2573,10 +2995,11 @@ function KwitansiBaris({
           // "tetangga" -- jenis "penyisiran" SELALU dihitung ulang sendiri
           // di server (lihat app/api/penyisiran/spj/kwitansi/route.ts).
           untuk_perjalanan_dinas_pada: jenis === "tetangga" ? untukPerjalananDinasPada.trim() : undefined,
-          tanggal_spd: tanggalSpd,
+          tanggal_spd: tanggalSpd || tanggalMulaiSet,
+          tanggal_mulai_set: tanggalMulaiSet,
+          tanggal_selesai_set: tanggalSelesaiSet,
         }),
       });
-      setEdit(false);
       onSaved();
     } catch (e) {
       guard(() => {
@@ -2588,135 +3011,132 @@ function KwitansiBaris({
   }
 
   return (
-    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
-        <div className="flex items-center gap-2">
-          {st.kwitansi && !edit && (
-            <button
-              type="button"
-              onClick={handleKlikUnduh}
-              disabled={busyUnduh}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-            >
-              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setEdit((v) => !v)}
-            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
-          >
-            {edit ? "Batal" : st.kwitansi ? "Ubah" : "Isi Kwitansi"}
-          </button>
+    <form onSubmit={handleSimpan} className="space-y-2 rounded-md border border-line bg-white p-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Mulai SET</label>
+          <input
+            type="date"
+            value={tanggalMulaiSet}
+            onChange={(e) => setTanggalMulaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Selesai SET</label>
+          <input
+            type="date"
+            value={tanggalSelesaiSet}
+            onChange={(e) => setTanggalSelesaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
         </div>
       </div>
-      <p className="mt-1 text-ink/60">
-        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
-      </p>
-
-      {!edit && st.kwitansi && (
-        <p className="mt-1 text-[11px] text-ink/50">
-          Rp {st.kwitansi.nominal.toLocaleString("id-ID")} -- {st.kwitansi.untuk_perjalanan_dinas_pada}
-        </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 flex items-center justify-between text-[10px] font-medium text-ink/50">
+            <span>Nominal (Rp)</span>
+            <button type="button" onClick={handleGunakanTarifDefault} className="text-navy-700 hover:underline">
+              isi {TARIF_TRANSLOK_PER_HARI_SARAN.toLocaleString("id-ID")} x hari
+            </button>
+          </label>
+          <input
+            type="number"
+            min={0}
+            value={nominal}
+            onChange={(e) => setNominal(e.target.value)}
+            placeholder="170000"
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal SPD</label>
+          <input
+            type="date"
+            value={tanggalSpd}
+            onChange={(e) => setTanggalSpd(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+      </div>
+      {jenis === "penyisiran" ? (
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
+          <p>
+            Untuk perjalanan dinas dalam kota pada:{" "}
+            {st.untuk_perjalanan_dinas_pada_otomatis ? (
+              <span className="font-medium text-navy-900">{st.untuk_perjalanan_dinas_pada_otomatis}</span>
+            ) : (
+              <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
+            )}
+          </p>
+          <p className="mt-1 text-[10px] text-ink/40">
+            Otomatis diambil dari data alokasi wilayah tugas Anda di Perencanaan Lapangan -- bukan diketik manual.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">
+            Untuk Perjalanan Dinas Dalam Kota Pada (Kecamatan/Nagari Tujuan)
+          </label>
+          <input
+            type="text"
+            value={untukPerjalananDinasPada}
+            onChange={(e) => setUntukPerjalananDinasPada(e.target.value)}
+            placeholder="Contoh: Kubung"
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
       )}
-
-      {edit && (
-        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-ink/50">Nominal (Rp)</label>
-              <input
-                type="number"
-                min={0}
-                value={nominal}
-                onChange={(e) => setNominal(e.target.value)}
-                placeholder="170000"
-                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal SPD</label>
-              <input
-                type="date"
-                value={tanggalSpd}
-                min={st.tanggal_mulai}
-                max={st.tanggal_selesai}
-                onChange={(e) => setTanggalSpd(e.target.value)}
-                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-            </div>
-          </div>
-          {jenis === "penyisiran" ? (
-            <div className="rounded-md border border-line bg-paper/40 p-2 text-[11px] text-ink/60">
-              <p>
-                Untuk perjalanan dinas dalam kota pada:{" "}
-                {st.untuk_perjalanan_dinas_pada_otomatis ? (
-                  <span className="font-medium text-navy-900">{st.untuk_perjalanan_dinas_pada_otomatis}</span>
-                ) : (
-                  <span className="font-medium text-rust-700">belum ada wilayah SLS yang ditautkan</span>
-                )}
-              </p>
-              <p className="mt-1 text-[10px] text-ink/40">
-                Otomatis diambil dari data alokasi wilayah tugas Anda di Perencanaan Lapangan -- bukan diketik manual.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-ink/50">
-                Untuk Perjalanan Dinas Dalam Kota Pada (Kecamatan/Nagari Tujuan)
-              </label>
-              <input
-                type="text"
-                value={untukPerjalananDinasPada}
-                onChange={(e) => setUntukPerjalananDinasPada(e.target.value)}
-                placeholder="Contoh: Kubung"
-                className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-            </div>
-          )}
-          <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">
-              Terbilang (opsional, kosongkan utk otomatis dari nominal)
-            </label>
-            <input
-              type="text"
-              value={terbilang}
-              onChange={(e) => setTerbilang(e.target.value)}
-              placeholder="Otomatis dari nominal kalau dikosongkan"
-              className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-            />
-          </div>
-          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
-          <button
-            type="submit"
-            disabled={busy || (jenis === "penyisiran" && !st.untuk_perjalanan_dinas_pada_otomatis)}
-            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {busy ? "Menyimpan..." : "Simpan Kwitansi"}
-          </button>
-        </form>
-      )}
-    </div>
+      <div>
+        <label className="mb-1 block text-[10px] font-medium text-ink/50">
+          Terbilang (opsional, kosongkan utk otomatis dari nominal)
+        </label>
+        <input
+          type="text"
+          value={terbilang}
+          onChange={(e) => setTerbilang(e.target.value)}
+          placeholder="Otomatis dari nominal kalau dikosongkan"
+          className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+        />
+      </div>
+      {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy || (jenis === "penyisiran" && !st.untuk_perjalanan_dinas_pada_otomatis)}
+          className="flex-1 rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {busy ? "Menyimpan..." : "Simpan SET"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-navy-400"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
   );
 }
 
-// ---------- Surat Keterangan Tidak Menggunakan Kendaraan Dinas (1 per ST) ----------
+// ---------- Surat Pernyataan Tidak Menggunakan Kendaraan Dinas ----------
 interface SuratKeteranganRow {
   id: number;
   tanggal_pelaksanaan: string;
+  // SEJAK 23 Sep 2026 -- batas SET tanggal yg diwakili baris ini (lihat
+  // lib/spjSetHariTugas.ts) -- 1 ST BISA punya BANYAK baris sekarang (dulu
+  // tepat 1, tanggalnya dari Laporan terakhir -- SEKARANG dari tagging 🗓
+  // Identifikasi Hari Tugas, sama sumbernya dgn Kwitansi/Visum).
+  tanggal_mulai_set: string;
+  tanggal_selesai_set: string;
 }
 interface SuratKeteranganSt {
   surat_tugas_id: number;
   nomor_st: string;
   tanggal_mulai: string;
   tanggal_selesai: string;
-  surat_keterangan: SuratKeteranganRow | null;
-  // Dihitung server (dari tanggal Laporan TERAKHIR milik petugas utk ST ini
-  // -- lihat komentar hitungTanggalPelaksanaan di
-  // app/api/penyisiran/spj/surat-keterangan/route.ts), null kalau petugas
-  // belum pernah membuat Laporan sama sekali utk ST ini.
-  tanggal_pelaksanaan_otomatis: string | null;
+  surat_keterangan: SuratKeteranganRow[];
 }
 
 function SuratKeteranganSection({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
@@ -2802,8 +3222,8 @@ function SuratKeteranganSection({ token, onSessionExpired }: { token: string; on
         </button>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Nama, NIP &amp; tanggal pelaksanaan terisi otomatis (tanggal diambil dari Laporan terakhir yang Anda buat utk Surat Tugas
-        ybs) -- tinggal periksa lalu simpan.
+        Nama &amp; NIP terisi otomatis. Tanggal SET diambil dari tagging 🗓 Identifikasi Hari Tugas (sama sumbernya dgn
+        Kwitansi/Visum) -- pakai &quot;Buat Otomatis&quot; per Surat Tugas, atau isi manual kalau perlu.
       </p>
 
       {errMsg && (
@@ -2812,7 +3232,15 @@ function SuratKeteranganSection({ token, onSessionExpired }: { token: string; on
 
       <div className="flex flex-col gap-2">
         {daftar.map((st) => (
-          <SuratKeteranganBaris key={st.surat_tugas_id} st={st} token={token} onSaved={muat} onUnduh={handleUnduh} guard={guard} />
+          <SuratKeteranganBaris
+            key={st.surat_tugas_id}
+            st={st}
+            token={token}
+            onSaved={muat}
+            onUnduh={handleUnduh}
+            guard={guard}
+            onSessionExpired={onSessionExpired}
+          />
         ))}
         {daftar.length === 0 && !loading && (
           <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
@@ -2830,47 +3258,151 @@ function SuratKeteranganBaris({
   onSaved,
   onUnduh,
   guard,
+  onSessionExpired,
 }: {
   st: SuratKeteranganSt;
   token: string;
   onSaved: () => void;
   onUnduh: (id: number) => void;
   guard: (fn: () => void) => void;
+  onSessionExpired: () => void;
 }) {
-  const [edit, setEdit] = useState(!st.surat_keterangan);
+  const [tambahBaru, setTambahBaru] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  return (
+    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
+        <span className="text-[11px] text-ink/50">{st.surat_keterangan.length} SET tersimpan</span>
+      </div>
+      <p className="mt-1 text-ink/60">
+        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
+      </p>
+
+      <div className="mt-2">
+        <BuatOtomatisBlok
+          token={token}
+          suratTugasId={st.surat_tugas_id}
+          jenisDokumen="surat_keterangan"
+          labelJenis="Surat Pernyataan"
+          onSelesai={onSaved}
+          onSessionExpired={onSessionExpired}
+        />
+      </div>
+
+      <div className="mt-2 flex flex-col gap-1.5">
+        {st.surat_keterangan.map((s) =>
+          editId === s.id ? (
+            <SuratKeteranganSetForm
+              key={s.id}
+              st={st}
+              existing={s}
+              token={token}
+              guard={guard}
+              onSaved={() => {
+                setEditId(null);
+                onSaved();
+              }}
+              onCancel={() => setEditId(null)}
+            />
+          ) : (
+            <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-white p-2">
+              <p className="font-medium text-navy-900">
+                {formatTanggal(s.tanggal_mulai_set)}
+                {s.tanggal_selesai_set !== s.tanggal_mulai_set ? ` s.d. ${formatTanggal(s.tanggal_selesai_set)}` : ""}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onUnduh(s.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400"
+                >
+                  🖨 PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditId(s.id)}
+                  className="rounded-md border border-line bg-white px-2 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
+                >
+                  Ubah
+                </button>
+              </div>
+            </div>
+          )
+        )}
+        {st.surat_keterangan.length === 0 && (
+          <p className="rounded-md border border-dashed border-line p-2 text-center text-[11px] text-ink/40">
+            Belum ada SET Surat Pernyataan -- pakai &quot;Buat Otomatis&quot; di atas, atau tambah manual di bawah.
+          </p>
+        )}
+      </div>
+
+      {tambahBaru ? (
+        <div className="mt-2">
+          <SuratKeteranganSetForm
+            st={st}
+            existing={null}
+            token={token}
+            guard={guard}
+            onSaved={() => {
+              setTambahBaru(false);
+              onSaved();
+            }}
+            onCancel={() => setTambahBaru(false)}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setTambahBaru(true)}
+          className="mt-2 w-full rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700"
+        >
+          + Tambah SET Manual
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SuratKeteranganSetForm({
+  st,
+  existing,
+  token,
+  guard,
+  onSaved,
+  onCancel,
+}: {
+  st: SuratKeteranganSt;
+  existing: SuratKeteranganRow | null;
+  token: string;
+  guard: (fn: () => void) => void;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [tanggalMulaiSet, setTanggalMulaiSet] = useState(existing?.tanggal_mulai_set ?? st.tanggal_mulai);
+  const [tanggalSelesaiSet, setTanggalSelesaiSet] = useState(existing?.tanggal_selesai_set ?? existing?.tanggal_mulai_set ?? st.tanggal_mulai);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyUnduh, setBusyUnduh] = useState(false);
-
-  async function handleKlikUnduh() {
-    if (!st.surat_keterangan) return;
-    setBusyUnduh(true);
-    try {
-      await onUnduh(st.surat_keterangan.id);
-    } finally {
-      setBusyUnduh(false);
-    }
-  }
 
   async function handleSimpan(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!st.tanggal_pelaksanaan_otomatis) {
-      setError(
-        "Belum ada Laporan Perjalanan Dinas utk Surat Tugas ini -- buat Laporan dulu (menu Laporan) supaya tanggal pelaksanaan bisa dihitung otomatis."
-      );
+    if (!tanggalMulaiSet || !tanggalSelesaiSet || tanggalSelesaiSet < tanggalMulaiSet) {
+      setError("Rentang tanggal SET tidak valid (tanggal selesai harus >= tanggal mulai).");
       return;
     }
     setBusy(true);
     try {
-      // tanggal_pelaksanaan TIDAK dikirim -- server yg menghitung sendiri
-      // dari tanggal Laporan terakhir (lihat route.ts), supaya tidak bisa
-      // beda dgn yg ditampilkan di sini.
       await apiFetch("/api/penyisiran/spj/surat-keterangan", token, {
         method: "POST",
-        body: JSON.stringify({ surat_tugas_id: st.surat_tugas_id }),
+        body: JSON.stringify({
+          id: existing?.id,
+          surat_tugas_id: st.surat_tugas_id,
+          tanggal_mulai_set: tanggalMulaiSet,
+          tanggal_selesai_set: tanggalSelesaiSet,
+        }),
       });
-      setEdit(false);
       onSaved();
     } catch (e) {
       guard(() => {
@@ -2882,60 +3414,44 @@ function SuratKeteranganBaris({
   }
 
   return (
-    <div className="rounded-md border border-line bg-paper/40 p-2.5 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-navy-900">{st.nomor_st}</span>
-        <div className="flex items-center gap-2">
-          {st.surat_keterangan && !edit && (
-            <button
-              type="button"
-              onClick={handleKlikUnduh}
-              disabled={busyUnduh}
-              className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 hover:border-navy-400 disabled:opacity-50"
-            >
-              {busyUnduh ? "⏳ Menyiapkan..." : "🖨 Unduh PDF"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setEdit((v) => !v)}
-            className="rounded-md border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-ink/60 hover:border-navy-400"
-          >
-            {edit ? "Batal" : st.surat_keterangan ? "Ubah" : "Isi"}
-          </button>
+    <form onSubmit={handleSimpan} className="space-y-2 rounded-md border border-line bg-white p-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Mulai SET</label>
+          <input
+            type="date"
+            value={tanggalMulaiSet}
+            onChange={(e) => setTanggalMulaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Selesai SET</label>
+          <input
+            type="date"
+            value={tanggalSelesaiSet}
+            onChange={(e) => setTanggalSelesaiSet(e.target.value)}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
         </div>
       </div>
-      <p className="mt-1 text-ink/60">
-        {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
-      </p>
-
-      {!edit && st.surat_keterangan && (
-        <p className="mt-1 text-[11px] text-ink/50">Tanggal pelaksanaan: {formatTanggal(st.surat_keterangan.tanggal_pelaksanaan)}</p>
-      )}
-
-      {edit && (
-        <form onSubmit={handleSimpan} className="mt-2 space-y-2 rounded-md border border-line bg-white p-2">
-          <div>
-            <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Pelaksanaan (otomatis)</label>
-            <p className="rounded-md border border-line bg-paper/60 px-2 py-1.5 text-xs">
-              {st.tanggal_pelaksanaan_otomatis ? (
-                formatTanggal(st.tanggal_pelaksanaan_otomatis)
-              ) : (
-                <span className="text-ink/40">Belum ada Laporan utk Surat Tugas ini</span>
-              )}
-            </p>
-            <p className="mt-1 text-[10px] text-ink/40">Diambil dari tanggal Laporan terakhir yang Anda buat utk Surat Tugas ini.</p>
-          </div>
-          {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
-          <button
-            type="submit"
-            disabled={busy || !st.tanggal_pelaksanaan_otomatis}
-            className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-          >
-            {busy ? "Menyimpan..." : "Simpan"}
-          </button>
-        </form>
-      )}
-    </div>
+      {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="flex-1 rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
+        >
+          {busy ? "Menyimpan..." : "Simpan SET"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink/60 hover:border-navy-400"
+        >
+          Batal
+        </button>
+      </div>
+    </form>
   );
 }
