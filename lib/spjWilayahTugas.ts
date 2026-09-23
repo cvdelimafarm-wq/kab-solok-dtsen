@@ -18,6 +18,7 @@
 
 import type { SpjSession } from "./spjAuth";
 import { judulKecamatan } from "./spjFormat";
+import { daftarIdUntukSesi } from "./wilayahAlokasiPetugas";
 
 export interface KecamatanTugasHasil {
   domisili: string | null;
@@ -25,12 +26,25 @@ export interface KecamatanTugasHasil {
 }
 
 // supabase diketik "any" -- lihat catatan yg sama di lib/spjAuth.ts kenapa.
+//
+// PERBAIKAN 23 Sep 2026 (ditemukan lewat kasus nyata Adriyanto, jabatan
+// PML): PML TIDAK memilih wilayah sendiri -- wilayah tugasnya = GABUNGAN
+// SLS yg sudah dipilih SELURUH PPL yg diawasinya (kolom pengawas_id di
+// petugas_penyisiran_akun), aturan yg SAMA PERSIS dgn yg sudah dipakai tab
+// Penyisiran Usaha lewat daftarIdUntukSesi() (lib/wilayahAlokasiPetugas.ts)
+// -- SEBELUM perbaikan ini, fungsi di bawah cuma query
+// penyisiran_alokasi_pilihan milik petugas_id session itu SENDIRI, jadi
+// PML (yg memang TIDAK PERNAH py baris sendiri di tabel itu) SELALU dapat
+// wilayahTugas=null & Kwitansi/Visum-nya macet terus walau PPL yg
+// diawasinya sudah lengkap memilih SLS.
 export async function hitungKecamatanTugas(supabase: any, session: SpjSession): Promise<KecamatanTugasHasil> {
   if (session.jenis !== "penyisiran") return { domisili: null, wilayahTugas: null };
 
+  const { ids: idGabungan } = await daftarIdUntukSesi(supabase, Number(session.petugasId));
+
   const [{ data: akun }, { data: wilayah }] = await Promise.all([
     supabase.from("petugas_penyisiran_akun").select("alamat_kecamatan").eq("id", session.petugasId).maybeSingle(),
-    supabase.from("penyisiran_alokasi_pilihan").select("kec_nama").eq("petugas_id", session.petugasId),
+    supabase.from("penyisiran_alokasi_pilihan").select("kec_nama").in("petugas_id", idGabungan),
   ]);
 
   const alamatKecamatan: string | null | undefined = akun?.alamat_kecamatan;
