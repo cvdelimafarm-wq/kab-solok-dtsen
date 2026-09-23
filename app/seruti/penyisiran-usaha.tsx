@@ -895,6 +895,132 @@ function PenyisiranPanel({
   // ModalTambahManual di atas & tombol melayang di bawah (sebelah "🔒 Edit
   // Semua Info Lapangan").
   const [showTambahManual, setShowTambahManual] = useState(false);
+  // Tombol melayang bisa DITEKAN-TAHAN LALU DIGESER (permintaan user) ke
+  // posisi mana saja di layar -- supaya petugas bisa memindahkannya kalau
+  // menutupi kartu/peta. Tap singkat TETAP membuka modal/toggle spt biasa;
+  // baru dianggap "drag" kalau ditahan >= LONG_PRESS_MS TANPA gerak besar
+  // duluan (kalau sempat gerak besar sblm timer nyala, dianggap usaha
+  // scroll halaman, drag DIBATALKAN). Posisi akhir disimpan di localStorage
+  // per-perangkat (bukan per-akun) via FLOAT_BTN_POS_KEY, dan di-clamp ke
+  // dalam layar setiap dipakai/resize supaya tidak "hilang" ke luar layar.
+  const floatBtnRef = useRef<HTMLDivElement>(null);
+  const floatDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    baseLeft: number;
+    baseTop: number;
+    longPressTimer: ReturnType<typeof setTimeout> | null;
+    dragging: boolean;
+    moved: boolean;
+  } | null>(null);
+  // Dipakai onClick tombol utk membedakan "tap asli" vs "klik yg numpang
+  // lewat" begitu drag selesai (browser tetap suka menembakkan event click
+  // setelah pointerup) -- ref, bukan state, krn tdk perlu memicu render.
+  const floatDidDragRef = useRef(false);
+  const [floatPos, setFloatPos] = useState<{ left: number; top: number } | null>(null);
+  const clampFloatPos = useCallback((pos: { left: number; top: number }) => {
+    const el = floatBtnRef.current;
+    const w = el?.offsetWidth ?? 180;
+    const h = el?.offsetHeight ?? 96;
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - w - margin);
+    const maxTop = Math.max(margin, window.innerHeight - h - margin);
+    return {
+      left: Math.min(Math.max(margin, pos.left), maxLeft),
+      top: Math.min(Math.max(margin, pos.top), maxTop),
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("penyisiranFloatBtnPos");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.left === "number" && typeof parsed?.top === "number") {
+          setFloatPos(clampFloatPos(parsed));
+        }
+      }
+    } catch {
+      // localStorage tdk tersedia (mis. mode privat) -- pakai posisi default saja
+    }
+    function onResize() {
+      setFloatPos((cur) => (cur ? clampFloatPos(cur) : cur));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const FLOAT_LONG_PRESS_MS = 350;
+  const FLOAT_MOVE_CANCEL_PX = 8;
+  function handleFloatPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const el = floatBtnRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const state = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseLeft: rect.left,
+      baseTop: rect.top,
+      longPressTimer: null as ReturnType<typeof setTimeout> | null,
+      dragging: false,
+      moved: false,
+    };
+    state.longPressTimer = setTimeout(() => {
+      if (!floatDragRef.current || floatDragRef.current.moved) return;
+      floatDragRef.current.dragging = true;
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {}
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(15);
+    }, FLOAT_LONG_PRESS_MS);
+    floatDragRef.current = state;
+  }
+  function handleFloatPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const state = floatDragRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+    const dx = e.clientX - state.startX;
+    const dy = e.clientY - state.startY;
+    if (!state.dragging) {
+      if (Math.abs(dx) > FLOAT_MOVE_CANCEL_PX || Math.abs(dy) > FLOAT_MOVE_CANCEL_PX) {
+        state.moved = true;
+        if (state.longPressTimer) clearTimeout(state.longPressTimer);
+      }
+      return;
+    }
+    e.preventDefault();
+    floatDidDragRef.current = true;
+    setFloatPos(clampFloatPos({ left: state.baseLeft + dx, top: state.baseTop + dy }));
+  }
+  function handleFloatPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const state = floatDragRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+    if (state.longPressTimer) clearTimeout(state.longPressTimer);
+    if (state.dragging) {
+      try {
+        floatBtnRef.current?.releasePointerCapture(e.pointerId);
+      } catch {}
+      setFloatPos((cur) => {
+        if (cur) {
+          try {
+            localStorage.setItem("penyisiranFloatBtnPos", JSON.stringify(cur));
+          } catch {}
+        }
+        return cur;
+      });
+    }
+    floatDragRef.current = null;
+  }
+  // Dipanggil di awal onClick KEDUA tombol melayang -- return true berarti
+  // klik ini cuma "ekor" dari drag yg baru selesai, JANGAN jalankan aksinya.
+  function konsumsiKlikJikaHabisDrag() {
+    if (floatDidDragRef.current) {
+      floatDidDragRef.current = false;
+      return true;
+    }
+    return false;
+  }
   const [lokasiStatus, setLokasiStatus] = useState<string | null>(null);
   const [lokasiBusy, setLokasiBusy] = useState(false);
   // Modal daftar "Dijadwalkan Besok" -- dibuka dari klik StatTile terkait
@@ -1903,23 +2029,45 @@ function PenyisiranPanel({
       {peringatanLokasiLive}
       {peringatanLokasiLive}
 
-      {/* Tombol "Edit Semua" & "Tambah Target KK Baru" MELAYANG di pojok
-          bawah halaman, DITUMPUK VERTIKAL dlm 1 wrapper (gap otomatis,
-          menghindari overlap horizontal di layar sempit) -- supaya
-          selalu terjangkau tanpa perlu gulung ke atas dulu, terutama saat
-          daftar keluarga panjang. Digeser ke bottom-16 (dari bottom-5) --
-          FloatBarRencanaBesok BARU (app/penyisiran/page.tsx) melebar penuh
-          di dasar layar jam 17:00 ke atas, supaya tombol2 ini tidak
-          ketiban/ketutup bar itu. */}
-      <div className="fixed bottom-16 right-5 z-40 flex flex-col items-end gap-2">
+      {/* Tombol "Edit Semua" & "Tambah Target KK Baru" MELAYANG, DITUMPUK
+          VERTIKAL dlm 1 wrapper (gap otomatis, menghindari overlap
+          horizontal di layar sempit) -- supaya selalu terjangkau tanpa
+          perlu gulung ke atas dulu, terutama saat daftar keluarga panjang.
+          Posisi default bottom-16/right-5 (bukan bottom-5) -- FloatBarRencanaBesok
+          BARU (app/penyisiran/page.tsx) melebar penuh di dasar layar jam
+          17:00 ke atas, supaya tombol2 ini tidak ketiban/ketutup bar itu.
+          BISA DIGESER (permintaan user): tekan-tahan lalu geser ke posisi
+          mana saja di layar; tap singkat tetap membuka modal/toggle spt
+          biasa. Posisi tersimpan per-perangkat, lihat floatPos di atas. */}
+      <div
+        ref={floatBtnRef}
+        onPointerDown={handleFloatPointerDown}
+        onPointerMove={handleFloatPointerMove}
+        onPointerUp={handleFloatPointerUp}
+        onPointerCancel={handleFloatPointerUp}
+        className={`fixed z-40 flex flex-col items-end gap-2 select-none ${
+          floatPos ? "" : "bottom-16 right-5"
+        }`}
+        style={
+          floatPos
+            ? { left: floatPos.left, top: floatPos.top, touchAction: "none" }
+            : { touchAction: "none" }
+        }
+      >
         <button
-          onClick={() => setShowTambahManual(true)}
+          onClick={() => {
+            if (konsumsiKlikJikaHabisDrag()) return;
+            setShowTambahManual(true);
+          }}
           className="rounded-full border border-line bg-white px-4 py-2.5 text-xs font-semibold text-navy-700 shadow-lg transition hover:border-navy-400"
         >
           ➕ Tambah Target KK Baru
         </button>
         <button
-          onClick={() => setEditAllMode((v) => !v)}
+          onClick={() => {
+            if (konsumsiKlikJikaHabisDrag()) return;
+            setEditAllMode((v) => !v);
+          }}
           className={`rounded-full border px-4 py-2.5 text-xs font-semibold shadow-lg transition ${
             editAllMode
               ? "border-navy-700 bg-navy-700 text-white"
