@@ -182,8 +182,37 @@ export function SpjCetakTab({ token, onSessionExpired }: { token: string; onSess
     const jenisTerpilihUrut = URUTAN_CETAK_STANDAR.filter((j) => dokumenDipilih.has(j));
     // Dokumen tingkat-perjalanan (kwitansi/surat_tugas/visum/surat_keterangan)
     // dihitung SEKALI per (petugas, ST), bukan per baris harian -- dedupe dulu.
+    //
+    // PERBAIKAN 23 Sep 2026 (bug ditemukan lewat kasus nyata Adriyanto):
+    // versi lama `perAssignment.set(key, b)` MENIMPA baris sebelumnya tiap
+    // ketemu baris baru, jadi yg akhirnya kepakai cuma baris hari TERAKHIR
+    // dlm rentang terpilih (urutan iterasi ikut urutan tanggal matriks) --
+    // ini cocok dulu krn Kwitansi/Visum/Surat Pernyataan memang berlaku utk
+    // SELURUH rentang ST (1 nilai boolean yg SAMA tiap hari). Sejak model
+    // "1 baris per SET tanggal" (23 Sep 2026, lihat lib/spjSetHariTugas.ts),
+    // ada_kwitansi/ada_visum/ada_surat_keterangan BISA BEDA tiap hari dlm 1
+    // ST (mis. SET cuma menutupi tgl 23-25 & 28-29, kosong di 26-27) --
+    // kalau hari TERAKHIR yg dites kebetulan hari yg TIDAK tertutup SET
+    // manapun, preview salah bilang "belum ada" walau SET-nya benar2 sudah
+    // dibuat. Fix: GABUNGKAN (OR) status tiap hari dlm rentang per
+    // assignment -- "tersedia" kalau ADA SETIDAKNYA 1 hari dlm rentang yg
+    // sudah tercakup SET, bukan cuma tebak dari 1 hari acak.
     const perAssignment = new Map<string, BarisMatriks>();
-    for (const b of barisTerpilih) perAssignment.set(`${kunciPetugas(b)}:${b.surat_tugas_id}`, b);
+    for (const b of barisTerpilih) {
+      const key = `${kunciPetugas(b)}:${b.surat_tugas_id}`;
+      const ada = perAssignment.get(key);
+      perAssignment.set(
+        key,
+        ada
+          ? {
+              ...ada,
+              ada_kwitansi: ada.ada_kwitansi || b.ada_kwitansi,
+              ada_visum: ada.ada_visum || b.ada_visum,
+              ada_surat_keterangan: ada.ada_surat_keterangan || b.ada_surat_keterangan,
+            }
+          : b
+      );
+    }
     const assignmentUnik = Array.from(perAssignment.values());
 
     let tersedia = 0;
