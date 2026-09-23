@@ -45,6 +45,28 @@ alter table spj_surat_pernyataan_kendaraan
   add column if not exists tanggal_mulai_set date,
   add column if not exists tanggal_selesai_set date;
 
+-- ------------------------------------------------------------
+-- 1b. Lepas constraint UNIK LAMA (surat_tugas_id, petugas_jenis,
+--     petugas_id) LEBIH DULU -- WAJIB sebelum backfill di langkah 2,
+--     krn petugas_id=13 dipecah jadi 2 baris dgn (surat_tugas_id,
+--     petugas_jenis, petugas_id) YANG SAMA (cuma tanggal_mulai_set-nya
+--     beda) -- kalau constraint lama masih aktif saat INSERT baris
+--     kedua itu dijalankan, bakal gagal "duplicate key value violates
+--     unique constraint" (persis error yg terjadi saat percobaan
+--     pertama migrasi ini). Constraint baru (4 kolom, termasuk
+--     tanggal_mulai_set) baru dipasang di langkah 3 SETELAH backfill
+--     selesai & kolom SET sudah NOT NULL -- jadi tabel TETAP terlindung
+--     dari duplikat SET yg sama, cuma jendela "belum ada constraint
+--     unik apa pun" antara langkah 1b & 3 (aman krn tidak ada trafik
+--     tulis lain di tengah migrasi ini).
+-- ------------------------------------------------------------
+alter table spj_kwitansi
+  drop constraint if exists spj_kwitansi_surat_tugas_id_petugas_jenis_petugas_id_key;
+alter table spj_visum
+  drop constraint if exists spj_visum_surat_tugas_id_petugas_jenis_petugas_id_key;
+alter table spj_surat_pernyataan_kendaraan
+  drop constraint if exists spj_surat_pernyataan_kendaraa_surat_tugas_id_petugas_jenis__key;
+
 -- ============================================================
 -- 2. Backfill 13 Kwitansi + 16 Visum + 13 Surat Pernyataan LAMA yg sudah
 --    ada di produksi (per 23 Sep 2026) -- DIHITUNG MANUAL & DIPERIKSA SATU
