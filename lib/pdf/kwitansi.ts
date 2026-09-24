@@ -7,7 +7,10 @@
 // penandatangan (BUKAN garis pemisah selebar halaman spt versi lama).
 // Semua koordinat X/Y teks di bawah diukur LANGSUNG dari PDF contoh tsb
 // (PyMuPDF page.get_text("dict"), origin=baseline tiap span, dikonversi ke
-// koordinat pdf-lib lewat yPdfLib = PAGE_H - yMuPdf) -- BUKAN ditaksir.
+// koordinat pdf-lib lewat yPdfLib = PAGE_H - yMuPdf) -- BUKAN ditaksir. Jadi
+// tiap konstanta Y_* di bawah SUDAH dlm bentuk yPdfLib (siap pakai LANGSUNG
+// sbg argumen `y` pdf-lib, TANPA dikurangkan dari PAGE_H lagi -- lihat bug
+// besar yg pernah kejadian krn ini, komentar panjang di teks()/garisH()).
 // Pengecualian: kolom "Nama + Nip./Nik." (3 tanda tangan) DIBUAT 3 kolom
 // SAMA LEBAR & DIPUSATKAN (bukan x hasil ukur PERSIS dari contoh) krn
 // nama/nomor identitas panjangnya beda2 tiap petugas -- pendekatan ini
@@ -92,18 +95,14 @@ const Y_SIG_3 = 446.42; // "Solok, {tanggal}" (kol-3 saja)
 const Y_SIG_4 = 432.16; // "Lunas pada" | "Pejabat Pembuat Komitmen"
 const Y_SIG_5 = 417.91; // "tanggal," (lanjutan kol-1 saja, TANPA nilai -- lihat komentar header)
 const Y_NAMA = 361.49; // nama bold (Alex Kandria / Novriady / [penerima])
-// BUG (lapor user 24 Sep 2026, "Alex dan Novriady di beri coret"): garis di
-// bawah nama HARUS di BAWAH baseline (yAtas = Y_NAMA + offset, angka lebih
-// BESAR = lebih ke bawah di sistem yAtas ini), tapi sebelumnya salah tulis
-// Y_NAMA - 2.58 (yAtas lebih KECIL = ke ATAS) -- garis jadi nangkring ~2,6pt
-// DI ATAS baseline, tepat menembus badan huruf shg terlihat spt coret/strip,
-// BUKAN garis bawah nama spt di Template Kwitansi.pdf (dicek lgs & dicocokkan
-// PERSIS ke situ: offset garis vs baseline di contoh = +2,58, arahnya ke
-// BAWAH). Berlaku utk KETIGA kolom (Bendahara/PPK/Yang menerima) krn satu
-// konstanta dipakai bareng di forEach di bawah -- ketiganya kena, bukan cuma
-// 2 kolom pejabat tetap.
-const OFFSET_GARIS_DARI_BASELINE = 2.58;
-const Y_GARIS_NAMA = Y_NAMA + OFFSET_GARIS_DARI_BASELINE;
+// Garis bawah nama = 2,58pt DI BAWAH baseline (dicocokkan PERSIS ke Template
+// Kwitansi.pdf: baseline nama yPdfLib 480,40 vs garis 482,98 dlm satuan
+// yMuPdf mentah -- 482,98 LEBIH BESAR = lebih ke BAWAH scr visual, tapi
+// setelah dikonversi ke yPdfLib (PAGE_H - yMuPdf) urutannya kebalik jadi
+// LEBIH KECIL drpd baseline, krn yPdfLib naik ke ATAS). Makanya DI SINI
+// (satuan yPdfLib) rumusnya MINUS, bukan plus -- lihat juga komentar
+// panjang di teks()/garisH() soal bug besar yg sempat kejadian gara2 ini.
+const Y_GARIS_NAMA = Y_NAMA - 2.58;
 const Y_NIP = 346.63;
 
 export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array> {
@@ -112,6 +111,19 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
   const font = await doc.embedFont(StandardFonts.TimesRoman);
   const fontBold = await doc.embedFont(StandardFonts.TimesRomanBold);
 
+  // BUG BESAR (lapor user 24 Sep 2026, screenshot "hasil output" terbalik
+  // atas-bawah -- header "BADAN PUSAT STATISTIK"/"KWITANSI" nyasar ke bawah
+  // halaman, blok tanda tangan nyasar ke tengah-atas): konstanta Y_* di atas
+  // SUDAH dlm bentuk yPdfLib jadi (yaitu SUDAH = PAGE_H - yMuPdf, lihat
+  // komentar header file) -- tapi dua fungsi ini dulu MENGURANGKAN LAGI dari
+  // PAGE_H (`y: PAGE_H - yAtas`), jadi dobel konversi & baliknya balik lagi
+  // ke yMuPdf (ukuran dari ATAS halaman) TAPI dipakai LANGSUNG sbg
+  // koordinat pdf-lib (yang dari BAWAH halaman) -- efeknya SELURUH isi
+  // kwitansi tercermin terbalik scr vertikal. Dibuktikan dgn ukur PERSIS:
+  // "BADAN PUSAT STATISTIK" di Template Kwitansi.pdf ada di yMuPdf=70,35
+  // (dkt atas) -- Y_KOP1 di sini = 771,54 = PAGE_H(841,89) - 70,35, PERSIS
+  // yPdfLib-nya. Jadi yAtas di bawah TIDAK PERLU (& TIDAK BOLEH) dikurangkan
+  // dari PAGE_H lagi -- pakai APA ADANYA sbg argumen `y` pdf-lib.
   function teks(
     txt: string,
     x: number,
@@ -123,11 +135,11 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
     let xPos = x;
     if (opts.maxWidth && opts.align === "center") xPos = x + (opts.maxWidth - f.widthOfTextAtSize(txt, size)) / 2;
     else if (opts.maxWidth && opts.align === "right") xPos = x + opts.maxWidth - f.widthOfTextAtSize(txt, size);
-    page.drawText(txt, { x: xPos, y: PAGE_H - yAtas, size, font: f, color: HITAM });
+    page.drawText(txt, { x: xPos, y: yAtas, size, font: f, color: HITAM });
     return f.widthOfTextAtSize(txt, size);
   }
   function garisH(x1: number, x2: number, yAtas: number) {
-    page.drawLine({ start: { x: x1, y: PAGE_H - yAtas }, end: { x: x2, y: PAGE_H - yAtas }, thickness: 0.75, color: HITAM });
+    page.drawLine({ start: { x: x1, y: yAtas }, end: { x: x2, y: yAtas }, thickness: 0.75, color: HITAM });
   }
 
   // ---------- Kop ----------
