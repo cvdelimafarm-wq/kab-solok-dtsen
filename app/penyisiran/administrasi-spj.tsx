@@ -1018,7 +1018,7 @@ interface HasilBuatOtomatisRespons {
 }
 
 const KETERANGAN_SKEMA_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
-  kwitansi: "1 lembar Kwitansi dibuat utk SETIAP hari yang ditag di 🗓 Identifikasi Hari Tugas.",
+  kwitansi: "1 lembar Kwitansi dibuat per rentang tanggal yang tersambung (dipisah kalau ada tanggal yang terputus), nilainya = tarif x jumlah hari.",
   visum: "1 Visum dibuat per rentang tanggal yang tersambung (dipisah kalau ada tanggal yang terputus).",
   surat_keterangan: "1 Surat Pernyataan dibuat mengikuti rentang SET Visum (tersambung/terpisah sama seperti Visum).",
 };

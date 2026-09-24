@@ -5,31 +5,35 @@
 // permintaan user 23 Sep 2026 -- lihat lib/spjSetHariTugas.ts utk penjelasan
 // lengkap model "SET tanggal" yg mendasari fitur ini.
 //
-// (24 Sep 2026, permintaan user -- GANTI aturan 23 Sep): mode SET SEKARANG
-// TETAP per jenis dokumen (BUKAN lagi pilihan bebas `body.mode` spt
+// (24 Sep 2026, permintaan user -- GANTI aturan 23 Sep): mode SET SEMPAT
+// dibuat TETAP per jenis dokumen (BUKAN lagi pilihan bebas `body.mode` spt
 // sebelumnya -- field itu SUDAH TIDAK DIPAKAI lagi & diabaikan kalau masih
-// dikirim client lama):
-//   - Kwitansi          : SELALU "per_hari" -- 1 lembar Kwitansi per 1 hari
-//     kerja yg ditag (supaya nominal per lembar SELALU jelas = tarif x 1,
-//     tidak pernah butuh dikali jumlah hari lagi -- akar masalah kasus
-//     Kwitansi Anike Putri/Mega Nana dkk yg nominalnya "nyangkut" di tarif
-//     1 hari walau SET-nya sudah diperluas mencakup banyak hari).
-//   - Visum             : SELALU "per_rentang" -- tanggal ditag yg
-//     BERURUTAN digabung 1 SET, pecah jadi SET baru begitu ada tanggal yg
-//     terputus.
-//   - Surat Pernyataan Kendaraan: SELALU memakai SET RENTANG YANG SAMA PERSIS
-//     dgn Visum (bukan dihitung ulang terpisah) -- supaya jumlah baris &
-//     rentang tanggalnya identik dgn Visum ("Surat Pernyataan mengacu ke
-//     Visum"), dan jumlah salinan Surat Tugas yg disisipkan saat Cetak SPJ
-//     gabungan otomatis ikut sama banyak dgn jumlah Visum (lihat
-//     app/api/penyisiran/spj/cetak/route.ts).
+// dikirim client lama).
+// (25 Sep 2026, GANTI BALIK permintaan 24 Sep): Kwitansi 1-lembar-per-hari
+// ternyata TIDAK dipakai -- dibalik lagi ke "per_rentang" spt semula, SAMA
+// PERSIS dgn Visum/Surat Pernyataan (bukan dihitung ulang terpisah lagi).
+// Jadi SEKARANG semua 3 jenis dokumen (Kwitansi/Visum/Surat Pernyataan)
+// pakai SATU SET RENTANG YANG SAMA (`setRentang` di bawah):
+//   - Kwitansi  : 1 lembar per SET rentang (bisa >1 hari), nominal = tarif
+//     per hari x JUMLAH HARI dlm SET itu (nominalKwitansiDefault) -- BUKAN
+//     lagi selalu x1. Ini yg sempat salah di migrasi 23 Sep (nominal lama
+//     tidak ikut dikali ulang saat SET diperluas) -- SEKARANG selalu
+//     dihitung ulang dari jumlahHari SET yg aktual, jadi tidak akan
+//     "nyangkut" lagi spt kasus Anike Putri/Mega Nana dulu.
+//   - Visum     : tanggal ditag yg BERURUTAN digabung 1 SET, pecah jadi SET
+//     baru begitu ada tanggal yg terputus.
+//   - Surat Pernyataan Kendaraan: SET RENTANG YANG SAMA PERSIS dgn
+//     Kwitansi/Visum -- supaya jumlah baris & rentang tanggalnya identik
+//     ("Surat Pernyataan mengacu ke Visum"), dan jumlah salinan Surat Tugas
+//     yg disisipkan saat Cetak SPJ gabungan otomatis ikut sama banyak dgn
+//     jumlah Visum (lihat app/api/penyisiran/spj/cetak/route.ts).
 //
 // Sumber data per jenis dokumen (SEMUA sudah ada di sistem, TIDAK ada yg
 // diketik ulang di sini):
 //   - Kwitansi : nominal = TARIF_TRANSLOK_PER_HARI_DEFAULT (bisa dioverride
-//     lewat body.tarif_per_hari) x 1 hari; tujuan ("untuk perjalanan dinas
-//     dalam kota pada") dari hitungKecamatanTugas (SAMA dgn Visum,
-//     lib/spjWilayahTugas.ts).
+//     lewat body.tarif_per_hari) x jumlah hari dlm SET; tujuan ("untuk
+//     perjalanan dinas dalam kota pada") dari hitungKecamatanTugas (SAMA
+//     dgn Visum, lib/spjWilayahTugas.ts).
 //   - Visum    : rencana_tujuan & tempat_kedudukan jg dari
 //     hitungKecamatanTugas; tanggal berangkat/tiba dari batas SET rentang.
 //   - Surat Pernyataan Kendaraan: tanggal_pelaksanaan = tanggal AKHIR SET
@@ -187,13 +191,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Dua penghitungan SET terpisah (lihat komentar besar di atas file ini):
-  //  - setHarian  : "per_hari" -- KHUSUS Kwitansi (1 lembar per 1 hari).
-  //  - setRentang : "per_rentang" -- Visum & Surat Pernyataan (SET SAMA
-  //    PERSIS dipakai keduanya, supaya jumlah & rentangnya identik).
-  const setHarian: SetHariTugas[] = hitungSetUntukSuratTugas(hariKerja.tanggal, st.tanggal_mulai, st.tanggal_selesai, "per_hari");
+  // SATU penghitungan SET rentang, dipakai bareng oleh Kwitansi/Visum/Surat
+  // Pernyataan (lihat komentar besar di atas file ini) -- tanggal ditag yg
+  // BERURUTAN digabung 1 SET, pecah jadi SET baru begitu ada tanggal yg
+  // terputus.
   const setRentang: SetHariTugas[] = hitungSetUntukSuratTugas(hariKerja.tanggal, st.tanggal_mulai, st.tanggal_selesai, "per_rentang");
-  if (setHarian.length === 0 || setRentang.length === 0) {
+  if (setRentang.length === 0) {
     return NextResponse.json(
       {
         error: `Ada tanggal Hari Tugas yang ditandai (${hariKerja.tanggal[0]} s.d. ${hariKerja.tanggal[hariKerja.tanggal.length - 1]}), tapi tidak ada yang berada dalam rentang Surat Tugas ini (${st.tanggal_mulai} s.d. ${st.tanggal_selesai}). Periksa kembali tanggal yang ditandai atau rentang Surat Tugas.`,
@@ -228,10 +231,11 @@ export async function POST(req: NextRequest) {
         navigasi: NAV_WILAYAH_TUGAS,
       });
     } else {
-      // setHarian -- 1 lembar Kwitansi per 1 hari kerja (lihat komentar
-      // besar di atas file ini), jadi jumlahHari SELALU 1 & nominal SELALU
-      // = tarifPerHari x 1 (tidak pernah butuh dikali lagi).
-      const baris = setHarian.map((s) => {
+      // setRentang -- 1 lembar Kwitansi per SET rentang (bisa >1 hari),
+      // nominal = tarifPerHari x jumlah hari SET itu (nominalKwitansiDefault
+      // SELALU mengalikan ulang dari jumlahHari yg aktual -- lihat komentar
+      // besar di atas file ini knp ini penting).
+      const baris = setRentang.map((s) => {
         const nominal = nominalKwitansiDefault(s.jumlahHari, tarifPerHari);
         return {
           surat_tugas_id: suratTugasId,
@@ -255,7 +259,7 @@ export async function POST(req: NextRequest) {
         .select("tanggal_mulai_set");
       if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
       const jumlahDibuat = dibuat?.length ?? 0;
-      hasil.push({ jenis: "kwitansi", dibuat: jumlahDibuat, sudahAda: setHarian.length - jumlahDibuat });
+      hasil.push({ jenis: "kwitansi", dibuat: jumlahDibuat, sudahAda: setRentang.length - jumlahDibuat });
     }
   }
 
@@ -324,8 +328,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     nomor_st: st.nomor_st,
-    set_kwitansi: setHarian.map((s) => ({ tanggal_mulai: s.tanggalMulai, tanggal_selesai: s.tanggalSelesai, jumlah_hari: s.jumlahHari })),
-    set_visum_dan_pernyataan: setRentang.map((s) => ({ tanggal_mulai: s.tanggalMulai, tanggal_selesai: s.tanggalSelesai, jumlah_hari: s.jumlahHari })),
+    set: setRentang.map((s) => ({ tanggal_mulai: s.tanggalMulai, tanggal_selesai: s.tanggalSelesai, jumlah_hari: s.jumlahHari })),
     hasil,
     peringatan,
   });
