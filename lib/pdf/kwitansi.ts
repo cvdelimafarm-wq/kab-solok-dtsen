@@ -92,7 +92,18 @@ const Y_SIG_3 = 446.42; // "Solok, {tanggal}" (kol-3 saja)
 const Y_SIG_4 = 432.16; // "Lunas pada" | "Pejabat Pembuat Komitmen"
 const Y_SIG_5 = 417.91; // "tanggal," (lanjutan kol-1 saja, TANPA nilai -- lihat komentar header)
 const Y_NAMA = 361.49; // nama bold (Alex Kandria / Novriady / [penerima])
-const Y_GARIS_NAMA = 358.91;
+// BUG (lapor user 24 Sep 2026, "Alex dan Novriady di beri coret"): garis di
+// bawah nama HARUS di BAWAH baseline (yAtas = Y_NAMA + offset, angka lebih
+// BESAR = lebih ke bawah di sistem yAtas ini), tapi sebelumnya salah tulis
+// Y_NAMA - 2.58 (yAtas lebih KECIL = ke ATAS) -- garis jadi nangkring ~2,6pt
+// DI ATAS baseline, tepat menembus badan huruf shg terlihat spt coret/strip,
+// BUKAN garis bawah nama spt di Template Kwitansi.pdf (dicek lgs & dicocokkan
+// PERSIS ke situ: offset garis vs baseline di contoh = +2,58, arahnya ke
+// BAWAH). Berlaku utk KETIGA kolom (Bendahara/PPK/Yang menerima) krn satu
+// konstanta dipakai bareng di forEach di bawah -- ketiganya kena, bukan cuma
+// 2 kolom pejabat tetap.
+const OFFSET_GARIS_DARI_BASELINE = 2.58;
+const Y_GARIS_NAMA = Y_NAMA + OFFSET_GARIS_DARI_BASELINE;
 const Y_NIP = 346.63;
 
 export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array> {
@@ -179,7 +190,20 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
     const xMulai = xKol[i] + (kolW - lebar) / 2;
     garisH(xMulai, xMulai + lebar, Y_GARIS_NAMA);
   });
-  idKol.forEach((idTxt, i) => tengah(i, idTxt, Y_NIP));
+  // BUG lain yg ketemu sekalian (contoh 01_Adriyanto.pdf: ID kolom "Yang
+  // menerima" 34 karakter -- lebih panjang dari NIP 18 digit biasa yg jadi
+  // asumsi lebar kolom, lihat komentar header -- nempel ke kolom sebelah
+  // krn "tengah()" cuma pusatkan teks TANPA batasi lebarnya) -- kecilkan
+  // ukuran font kalau ID lebih lebar dari kolomnya (dikurangi sedikit
+  // padding) supaya SELALU muat 1 baris di kolomnya sendiri, tidak pernah
+  // nyerempet ke kolom tetangga.
+  const PADDING_KOL_ID = 6;
+  idKol.forEach((idTxt, i) => {
+    let size = 12;
+    const lebarMaksimal = kolW - PADDING_KOL_ID;
+    while (size > 7 && font.widthOfTextAtSize(idTxt, size) > lebarMaksimal) size -= 0.5;
+    tengah(i, idTxt, Y_NIP, { size });
+  });
 
   return doc.save();
 }
