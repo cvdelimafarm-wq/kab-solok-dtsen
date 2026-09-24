@@ -61,6 +61,25 @@ function labelIdentitas(jabatan: string | null): "Nik." | "Nip." {
   return jabatan === "ppl" ? "Nik." : "Nip.";
 }
 
+/**
+ * Utk pegawai organik (PML/Kepala Kantor -- ASN, PUNYA NIP), kolom
+ * `petugas_penyisiran_akun.nip` kadang berisi gabungan "Sobat ID-NIP"
+ * (mis. "340019357-197602252007011001" -- 9 digit Sobat ID + "-" + NIP)
+ * krn org ybs jg py akun Sobat (dipakai di Surat Pernyataan, LABEL
+ * "Sobat ID", lihat lib/pdf/suratKeterangan.ts -- itu MEMANG sengaja
+ * tampilkan gabungan itu, TIDAK diubah). Permintaan user 24 Sep 2026:
+ * di Kwitansi (baris "Nip." bawah nama), utk organik/PML HANYA nomor
+ * NIP-nya saja yg tampil, BUKAN Sobat ID-nya -- jadi kalau ada tanda "-",
+ * ambil bagian SETELAH "-" TERAKHIR (NIP-nya). PPL (pakai "Nik.", nomor
+ * mitra murni tanpa tanda "-") tidak kena aturan ini -- dibiarkan apa
+ * adanya krn memang tidak pernah digabung.
+ */
+function bersihkanNip(id: string | null, jabatan: string | null): string | null {
+  if (!id || jabatan === "ppl") return id;
+  const idxStrip = id.lastIndexOf("-");
+  return idxStrip === -1 ? id : id.slice(idxStrip + 1);
+}
+
 const HITAM = rgb(0, 0, 0);
 const A4: [number, number] = [595.28, 841.89];
 const PAGE_H = A4[1];
@@ -191,11 +210,12 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
   tengah(0, "tanggal,", Y_SIG_5); // sengaja TANPA nilai -- lihat komentar header (diisi tangan oleh Bendahara)
 
   const labelPenerima = labelIdentitas(data.jabatanPenerima);
+  const idPenerimaBersih = bersihkanNip(data.idPenerima, data.jabatanPenerima);
   const namaKol = [PEJABAT.bendaharaPengeluaran.nama, PEJABAT.ppk.nama, data.namaPenerima];
   const idKol = [
     `Nip. ${PEJABAT.bendaharaPengeluaran.nip}`,
     `Nip. ${PEJABAT.ppk.nip}`,
-    data.idPenerima ? `${labelPenerima} ${data.idPenerima}` : "-",
+    idPenerimaBersih ? `${labelPenerima} ${idPenerimaBersih}` : "-",
   ];
   namaKol.forEach((nama, i) => {
     const lebar = tengah(i, nama, Y_NAMA, { bold: true });
