@@ -41,6 +41,7 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { formatRupiah, formatTanggalIndo } from "../spjFormat";
 import { PEJABAT } from "../spjPejabat";
+import { labelIdentitas, bersihkanNip } from "../spjIdentitas";
 
 export interface KwitansiPdfData {
   nomorSt: string;
@@ -52,32 +53,8 @@ export interface KwitansiPdfData {
   namaPenerima: string;
   /** NIK (kalau PPL) atau NIP (kalau PML/lainnya) -- lihat `jabatanPenerima`. */
   idPenerima: string | null;
-  /** 'ppl' | 'pml' | 'kepala_kantor' | null -- dari petugas_penyisiran_akun.jabatan; null utk jenis "tetangga" (tabel itu tidak py kolom jabatan, tetap label "Nip."). */
+  /** 'ppl' | 'pml' | 'kepala_kantor' | null -- dari petugas_penyisiran_akun.jabatan; null utk jenis "tetangga" (tabel itu tidak py kolom jabatan, tetap label "NIK."). Logic label/pembersihan Sobat ID-NIP SEKARANG di lib/spjIdentitas.ts (dipakai bareng dgn Surat Pernyataan). */
   jabatanPenerima: string | null;
-}
-
-/** PPL pakai NIK (bukan pegawai ASN), selain itu (PML/Kepala Kantor/tetangga/tidak diketahui) pakai NIP -- permintaan user 22 Sep 2026. */
-function labelIdentitas(jabatan: string | null): "Nik." | "Nip." {
-  return jabatan === "ppl" ? "Nik." : "Nip.";
-}
-
-/**
- * Utk pegawai organik (PML/Kepala Kantor -- ASN, PUNYA NIP), kolom
- * `petugas_penyisiran_akun.nip` kadang berisi gabungan "Sobat ID-NIP"
- * (mis. "340019357-197602252007011001" -- 9 digit Sobat ID + "-" + NIP)
- * krn org ybs jg py akun Sobat (dipakai di Surat Pernyataan, LABEL
- * "Sobat ID", lihat lib/pdf/suratKeterangan.ts -- itu MEMANG sengaja
- * tampilkan gabungan itu, TIDAK diubah). Permintaan user 24 Sep 2026:
- * di Kwitansi (baris "Nip." bawah nama), utk organik/PML HANYA nomor
- * NIP-nya saja yg tampil, BUKAN Sobat ID-nya -- jadi kalau ada tanda "-",
- * ambil bagian SETELAH "-" TERAKHIR (NIP-nya). PPL (pakai "Nik.", nomor
- * mitra murni tanpa tanda "-") tidak kena aturan ini -- dibiarkan apa
- * adanya krn memang tidak pernah digabung.
- */
-function bersihkanNip(id: string | null, jabatan: string | null): string | null {
-  if (!id || jabatan === "ppl") return id;
-  const idxStrip = id.lastIndexOf("-");
-  return idxStrip === -1 ? id : id.slice(idxStrip + 1);
 }
 
 const HITAM = rgb(0, 0, 0);

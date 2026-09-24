@@ -22,6 +22,17 @@
 // itu, bukan lagi tanggal_mulai Surat Tugas) -- supaya tiap SET nongol di
 // tanggal yg benar2 diwakilinya, bukan selalu di tanggal paling awal ST.
 //
+// (24 Sep 2026) Kalau tanggal Hari Tugas 1 ST TERPUTUS (ada "lubang", mis.
+// tagnya tgl 2-3 & 6-8), dokumen SEKARANG disusun per KELOMPOK tanggal yg
+// tersambung dulu -- 1 kelompok = paket LENGKAP Kwitansi->Surat Tugas->
+// Visum->Laporan->Dokumentasi->Surat Pernyataan utk rentang itu -- baru
+// lanjut ke kelompok tanggal berikutnya (BUKAN lagi dikelompokkan per JENIS
+// dokumen dulu lintas SEMUA kelompok tanggal spt sebelumnya). Surat Tugas
+// (1 file scan yg sama utk seluruh ST) SENGAJA disisipkan ULANG di setiap
+// kelompok spy tiap kelompok tetap 1 paket mandiri. Batas kelompok dihitung
+// dari tanggal Hari Tugas sendiri (lib/spjSetHariTugas.ts, mode
+// "per_rentang") -- lihat blok "kelompokSet" di bawah.
+//
 // Non-pengelola (petugas/tetangga login SPJ biasa) HANYA boleh mencetak
 // data MILIKNYA SENDIRI -- field `petugas` dari body diabaikan sepenuhnya
 // & dipaksa jadi [diri sendiri], sama spt pola akses lain di menu ini.
@@ -44,6 +55,8 @@ import { buatPdfLaporan, LaporanRekapSnapshot } from "@/lib/pdf/laporan";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
 import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
 import { hitungLokasiTugas, teksLokasiTugas } from "@/lib/spjLokasiTugas";
+import { hitungKecamatanTugas } from "@/lib/spjWilayahTugas";
+import { hitungSetDariTanggal } from "@/lib/spjSetHariTugas";
 import { JenisDokumen, LABEL_DOKUMEN, URUTAN_CETAK_STANDAR, kunciPetugas } from "@/lib/spjMatriks";
 import { labelJabatanDokumenSpj } from "@/lib/spjFormat";
 
@@ -251,22 +264,130 @@ export async function POST(req: NextRequest) {
     const namaAkun = akun?.nama ?? p.nama;
     const peranLabel = labelJabatanDokumenSpj(p.petugasJenis, akun?.jabatan ?? null);
 
-    if (dokumenDipilih.includes("kwitansi")) {
-      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- ambil SEMUA
-      // yg SET-nya overlap rentang tanggal yg dipilih di Print Builder
-      // (bukan .maybeSingle() lagi, lihat lib/spjSetHariTugas.ts &
-      // migrasi 20260923_spj_dokumen_per_set_hari_tugas.sql).
-      const { data: kList } = await supabase
-        .from("spj_kwitansi")
-        .select("*")
-        .eq("surat_tugas_id", p.suratTugasId)
-        .eq("petugas_jenis", p.petugasJenis)
-        .eq("petugas_id", p.petugasId)
-        .lte("tanggal_mulai_set", tanggalSelesai)
-        .gte("tanggal_selesai_set", tanggalMulai)
-        .order("tanggal_mulai_set", { ascending: true });
-      if (kList && kList.length > 0) {
-        for (const k of kList) {
+    // Ambil dulu SEMUA baris dokumen level-SET (Kwitansi/Visum/Surat
+    // Pernyataan) -- BUKAN langsung dijadikan unit PDF di sini, krn urutan
+    // final SEKARANG per KELOMPOK tanggal dulu (lihat "kelompokSet" di
+    // bawah), bukan per jenis dokumen lintas semua kelompok.
+    const { data: kListRaw } = dokumenDipilih.includes("kwitansi")
+      ? await supabase
+          .from("spj_kwitansi")
+          .select("*")
+          .eq("surat_tugas_id", p.suratTugasId)
+          .eq("petugas_jenis", p.petugasJenis)
+          .eq("petugas_id", p.petugasId)
+          .lte("tanggal_mulai_set", tanggalSelesai)
+          .gte("tanggal_selesai_set", tanggalMulai)
+          .order("tanggal_mulai_set", { ascending: true })
+      : { data: [] as Record<string, any>[] };
+    const kList = kListRaw ?? [];
+    if (dokumenDipilih.includes("kwitansi") && kList.length === 0) {
+      dilewati.push(`Kwitansi -- ${p.nama} (${p.nomorSt})`);
+    }
+
+    const { data: vListRaw } = dokumenDipilih.includes("visum")
+      ? await supabase
+          .from("spj_visum")
+          .select("*")
+          .eq("surat_tugas_id", p.suratTugasId)
+          .eq("petugas_jenis", p.petugasJenis)
+          .eq("petugas_id", p.petugasId)
+          .lte("tanggal_mulai_set", tanggalSelesai)
+          .gte("tanggal_selesai_set", tanggalMulai)
+          .order("tanggal_mulai_set", { ascending: true })
+      : { data: [] as Record<string, any>[] };
+    const vList = vListRaw ?? [];
+    if (dokumenDipilih.includes("visum") && vList.length === 0) {
+      dilewati.push(`Visum -- ${p.nama} (${p.nomorSt})`);
+    }
+
+    const { data: skListRaw } = dokumenDipilih.includes("surat_keterangan")
+      ? await supabase
+          .from("spj_surat_pernyataan_kendaraan")
+          .select("*")
+          .eq("surat_tugas_id", p.suratTugasId)
+          .eq("petugas_jenis", p.petugasJenis)
+          .eq("petugas_id", p.petugasId)
+          .lte("tanggal_mulai_set", tanggalSelesai)
+          .gte("tanggal_selesai_set", tanggalMulai)
+          .order("tanggal_mulai_set", { ascending: true })
+      : { data: [] as Record<string, any>[] };
+    const skList = skListRaw ?? [];
+    if (dokumenDipilih.includes("surat_keterangan") && skList.length === 0) {
+      dilewati.push(`Surat Pernyataan -- ${p.nama} (${p.nomorSt})`);
+    }
+
+    // Surat Tugas -- 1 file scan yg SAMA, diambil SEKALI lalu disisipkan
+    // ULANG di setiap kelompok tanggal (permintaan user 24 Sep 2026, spy
+    // tiap kelompok tetap 1 paket SPJ yg lengkap & mandiri).
+    let suratTugasBytes: Uint8Array | null = null;
+    if (dokumenDipilih.includes("surat_tugas")) {
+      const { data: st } = await supabase.from("spj_surat_tugas").select("file_path").eq("id", p.suratTugasId).maybeSingle();
+      const blob = st?.file_path ? (await supabase.storage.from("spj-files").download(st.file_path)).data : null;
+      if (blob) {
+        suratTugasBytes = new Uint8Array(await blob.arrayBuffer());
+      } else {
+        dilewati.push(`Surat Tugas -- ${p.nama} (${p.nomorSt})`);
+      }
+    }
+
+    const { data: laporanRows } = dokumenDipilih.includes("laporan")
+      ? await supabase
+          .from("spj_laporan")
+          .select("*")
+          .eq("surat_tugas_id", p.suratTugasId)
+          .eq("petugas_jenis", p.petugasJenis)
+          .eq("petugas_id", p.petugasId)
+          .in("tanggal", p.tanggalList)
+      : { data: [] as Record<string, unknown>[] };
+    const petaLaporan = new Map((laporanRows ?? []).map((r) => [String(r.tanggal), r]));
+
+    // Kecamatan domisili petugas -- utk baris lokasi tandatangan Surat
+    // Pernyataan (24 Sep 2026, SATU sumber sama dgn Kwitansi/Visum,
+    // lib/spjWilayahTugas.ts).
+    const tempatKedudukanPetugas = dokumenDipilih.includes("surat_keterangan")
+      ? (await hitungKecamatanTugas(supabase, { jenis: p.petugasJenis, petugasId: String(p.petugasId) })).domisili
+      : null;
+
+    // ------------------------------------------------------------------
+    // Batas KELOMPOK tanggal: dihitung dari tanggal Hari Tugas milik
+    // penugasan ini sendiri (p.tanggalList, SUDAH difilter ke rentang Print
+    // Builder), mode "per_rentang" -- tanggal yg BERURUTAN (selisih 1 hari)
+    // digabung 1 kelompok, begitu ada "lubang" kelompok baru dimulai (mis.
+    // 2,3,6,7,8 -> [2-3] & [6-8]). Ini menjamin SETIAP tanggal di
+    // p.tanggalList pasti kebagian TEPAT 1 kelompok (tidak dobel/tidak ada
+    // yg terlewat) -- beda dgn memakai batas SET tersimpan di baris
+    // Kwitansi/Visum/Surat Pernyataan langsung, yg BISA lebih rinci (mis.
+    // dibuat mode "per_hari") atau blm tentu menutupi semua tanggal (kalau
+    // SET blm dibuat utk sebagian tanggal). Baris2 dokumen itu lalu
+    // DIMASUKKAN ke kelompok yg MEMUAT rentangnya (bukan dicocokkan persis
+    // sama) lewat kelompokMemuat() di bawah; kalau ada baris yg rentangnya
+    // di luar SEMUA kelompok alami ini (kasus langka/data tdk konsisten),
+    // kelompok tambahan disisipkan supaya baris itu tetap tercetak (drpd
+    // hilang diam2).
+    const kelompokSet: { tanggalMulai: string; tanggalSelesai: string }[] = hitungSetDariTanggal(
+      p.tanggalList,
+      "per_rentang"
+    ).map((s) => ({ tanggalMulai: s.tanggalMulai, tanggalSelesai: s.tanggalSelesai }));
+    const kelompokMemuat = (kel: { tanggalMulai: string; tanggalSelesai: string }, mulai: string, selesai: string) =>
+      mulai >= kel.tanggalMulai && selesai <= kel.tanggalSelesai;
+    const pastikanKelompokUtk = (mulai: string, selesai: string) => {
+      if (!kelompokSet.some((k) => kelompokMemuat(k, mulai, selesai))) {
+        kelompokSet.push({ tanggalMulai: mulai, tanggalSelesai: selesai });
+      }
+    };
+    for (const k of kList) pastikanKelompokUtk(k.tanggal_mulai_set, k.tanggal_selesai_set);
+    for (const v of vList) pastikanKelompokUtk(v.tanggal_mulai_set, v.tanggal_selesai_set);
+    for (const sk of skList) pastikanKelompokUtk(sk.tanggal_mulai_set, sk.tanggal_selesai_set);
+    kelompokSet.sort((a, b) => a.tanggalMulai.localeCompare(b.tanggalMulai));
+
+    // ------------------------------------------------------------------
+    // Susun unit PDF PER KELOMPOK tanggal dulu, urutan DLM 1 kelompok tetap
+    // standar SPJ (lib/spjMatriks.ts -> URUTAN_CETAK_STANDAR): Kwitansi ->
+    // Surat Tugas -> Visum -> Laporan -> Dokumentasi -> Surat Pernyataan --
+    // baru lanjut ke kelompok tanggal berikutnya.
+    for (const kel of kelompokSet) {
+      if (dokumenDipilih.includes("kwitansi")) {
+        for (const k of kList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
           const bytes = await buatPdfKwitansi({
             nomorSt: p.nomorSt,
             tanggalSpd: k.tanggal_spd,
@@ -280,36 +401,21 @@ export async function POST(req: NextRequest) {
           });
           unit.push({ petugasKey, petugasNama: p.nama, jenis: "kwitansi", tanggal: null, urutanTanggal: k.tanggal_mulai_set, bytes });
         }
-      } else {
-        dilewati.push(`Kwitansi -- ${p.nama} (${p.nomorSt})`);
       }
-    }
 
-    if (dokumenDipilih.includes("surat_tugas")) {
-      const { data: st } = await supabase.from("spj_surat_tugas").select("file_path").eq("id", p.suratTugasId).maybeSingle();
-      const blob = st?.file_path ? (await supabase.storage.from("spj-files").download(st.file_path)).data : null;
-      if (blob) {
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_tugas", tanggal: null, urutanTanggal: p.tanggalMulaiEfektif, bytes });
-      } else {
-        dilewati.push(`Surat Tugas -- ${p.nama} (${p.nomorSt})`);
+      if (suratTugasBytes) {
+        unit.push({
+          petugasKey,
+          petugasNama: p.nama,
+          jenis: "surat_tugas",
+          tanggal: null,
+          urutanTanggal: kel.tanggalMulai,
+          bytes: suratTugasBytes,
+        });
       }
-    }
 
-    if (dokumenDipilih.includes("visum")) {
-      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- lihat
-      // komentar sama di blok "kwitansi" di atas.
-      const { data: vList } = await supabase
-        .from("spj_visum")
-        .select("*")
-        .eq("surat_tugas_id", p.suratTugasId)
-        .eq("petugas_jenis", p.petugasJenis)
-        .eq("petugas_id", p.petugasId)
-        .lte("tanggal_mulai_set", tanggalSelesai)
-        .gte("tanggal_selesai_set", tanggalMulai)
-        .order("tanggal_mulai_set", { ascending: true });
-      if (vList && vList.length > 0) {
-        for (const v of vList) {
+      if (dokumenDipilih.includes("visum")) {
+        for (const v of vList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
           const bytes = await buatPdfVisum({
             nomorSt: p.nomorSt,
             namaPetugas: namaAkun,
@@ -322,28 +428,13 @@ export async function POST(req: NextRequest) {
           });
           unit.push({ petugasKey, petugasNama: p.nama, jenis: "visum", tanggal: null, urutanTanggal: v.tanggal_mulai_set, bytes });
         }
-      } else {
-        dilewati.push(`Visum -- ${p.nama} (${p.nomorSt})`);
       }
-    }
 
-    // Laporan & Dokumentasi diproses BERSAMA per tanggal (bukan semua
-    // Laporan dulu baru semua Dokumentasi) supaya hasil gabungannya
-    // berurutan rapi per hari: Laporan tgl X lalu Dokumentasi tgl X, baru
-    // lanjut tgl berikutnya -- sesuai standar SPJ yg diminta user.
-    if (dokumenDipilih.includes("laporan") || dokumenDipilih.includes("dokumentasi")) {
-      const { data: laporanRows } = dokumenDipilih.includes("laporan")
-        ? await supabase
-            .from("spj_laporan")
-            .select("*")
-            .eq("surat_tugas_id", p.suratTugasId)
-            .eq("petugas_jenis", p.petugasJenis)
-            .eq("petugas_id", p.petugasId)
-            .in("tanggal", p.tanggalList)
-        : { data: [] as Record<string, unknown>[] };
-      const petaLaporan = new Map((laporanRows ?? []).map((r) => [String(r.tanggal), r]));
-
-      for (const tgl of p.tanggalList) {
+      // Laporan & Dokumentasi HANYA utk tanggal2 dlm kelompok ini -- tetap
+      // diproses BERSAMA per tanggal (Laporan tgl X lalu Dokumentasi tgl X)
+      // sesuai standar SPJ yg sudah ditetapkan sebelumnya.
+      const tanggalDlmKelompok = p.tanggalList.filter((t) => t >= kel.tanggalMulai && t <= kel.tanggalSelesai);
+      for (const tgl of tanggalDlmKelompok) {
         if (dokumenDipilih.includes("laporan")) {
           const l = petaLaporan.get(tgl);
           if (l) {
@@ -399,22 +490,9 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-    }
 
-    if (dokumenDipilih.includes("surat_keterangan")) {
-      // SEKARANG bisa ada BANYAK baris (SET) per petugas+ST -- lihat
-      // komentar sama di blok "kwitansi" di atas.
-      const { data: skList } = await supabase
-        .from("spj_surat_pernyataan_kendaraan")
-        .select("*")
-        .eq("surat_tugas_id", p.suratTugasId)
-        .eq("petugas_jenis", p.petugasJenis)
-        .eq("petugas_id", p.petugasId)
-        .lte("tanggal_mulai_set", tanggalSelesai)
-        .gte("tanggal_selesai_set", tanggalMulai)
-        .order("tanggal_mulai_set", { ascending: true });
-      if (skList && skList.length > 0) {
-        for (const sk of skList) {
+      if (dokumenDipilih.includes("surat_keterangan")) {
+        for (const sk of skList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
           const bytes = await buatPdfSuratKeterangan({
             nomorSt: p.nomorSt,
             namaPetugas: namaAkun,
@@ -422,11 +500,18 @@ export async function POST(req: NextRequest) {
             jenis: p.petugasJenis,
             tanggalMulaiSet: sk.tanggal_mulai_set,
             tanggalSelesaiSet: sk.tanggal_selesai_set,
+            jabatan: akun?.jabatan ?? null,
+            tempatKedudukan: tempatKedudukanPetugas,
           });
-          unit.push({ petugasKey, petugasNama: p.nama, jenis: "surat_keterangan", tanggal: null, urutanTanggal: sk.tanggal_mulai_set, bytes });
+          unit.push({
+            petugasKey,
+            petugasNama: p.nama,
+            jenis: "surat_keterangan",
+            tanggal: null,
+            urutanTanggal: sk.tanggal_mulai_set,
+            bytes,
+          });
         }
-      } else {
-        dilewati.push(`Surat Pernyataan -- ${p.nama} (${p.nomorSt})`);
       }
     }
   }

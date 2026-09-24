@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
+import { hitungKecamatanTugas } from "@/lib/spjWilayahTugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,22 +39,31 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!namaPengelola) return NextResponse.json({ error: "Data ini bukan milik Anda." }, { status: 403 });
   }
 
-  const [{ data: st }, { data: akun }] = await Promise.all([
+  const jenisPetugas = sk.petugas_jenis as SpjPetugasJenis;
+  // "jabatan" HANYA ada di petugas_penyisiran_akun -- tetangga_akun tidak
+  // py kolom itu sama sekali (select-nya bakal error kalau ikut diminta).
+  // DUA query .select() TERPISAH (bukan 1 ternary di dalam .select()) krn
+  // tipe supabase-js mem-parse string select() scr LITERAL -- union dari 2
+  // string literal bikin hasilnya ParserError di TypeScript walau valid di
+  // runtime (pola sama spt di app/api/penyisiran/spj/cetak/route.ts).
+  const [{ data: st }, { data: akunRaw }, kecamatan] = await Promise.all([
     supabase.from("spj_surat_tugas").select("nomor_st").eq("id", sk.surat_tugas_id).maybeSingle(),
-    supabase
-      .from(tabelAkun(sk.petugas_jenis as SpjPetugasJenis))
-      .select("nama, nip")
-      .eq("id", sk.petugas_id)
-      .maybeSingle(),
+    jenisPetugas === "penyisiran"
+      ? supabase.from(tabelAkun(jenisPetugas)).select("nama, nip, jabatan").eq("id", sk.petugas_id).maybeSingle()
+      : supabase.from(tabelAkun(jenisPetugas)).select("nama, nip").eq("id", sk.petugas_id).maybeSingle(),
+    hitungKecamatanTugas(supabase, { jenis: jenisPetugas, petugasId: String(sk.petugas_id) }),
   ]);
+  const akun = akunRaw as { nama: string | null; nip: string | null; jabatan?: string | null } | null;
 
   const pdfBytes = await buatPdfSuratKeterangan({
     nomorSt: st?.nomor_st ?? "-",
     namaPetugas: akun?.nama ?? "-",
     nip: akun?.nip ?? null,
-    jenis: sk.petugas_jenis as SpjPetugasJenis,
+    jenis: jenisPetugas,
     tanggalMulaiSet: sk.tanggal_mulai_set,
     tanggalSelesaiSet: sk.tanggal_selesai_set,
+    jabatan: akun?.jabatan ?? null,
+    tempatKedudukan: kecamatan.domisili,
   });
 
   return new NextResponse(Buffer.from(pdfBytes), {
