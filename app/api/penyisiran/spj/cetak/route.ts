@@ -29,9 +29,16 @@
 // lanjut ke kelompok tanggal berikutnya (BUKAN lagi dikelompokkan per JENIS
 // dokumen dulu lintas SEMUA kelompok tanggal spt sebelumnya). Surat Tugas
 // (1 file scan yg sama utk seluruh ST) SENGAJA disisipkan ULANG di setiap
-// kelompok spy tiap kelompok tetap 1 paket mandiri. Batas kelompok dihitung
-// dari tanggal Hari Tugas sendiri (lib/spjSetHariTugas.ts, mode
-// "per_rentang") -- lihat blok "kelompokSet" di bawah.
+// kelompok spy tiap kelompok tetap 1 paket mandiri.
+//
+// (24 Sep 2026, GANTI lagi) Sejak Kwitansi berubah jadi SELALU 1 lembar per
+// hari (lihat app/api/penyisiran/spj/buat-otomatis/route.ts), batas
+// kelompok TIDAK BISA lagi dihitung dari Kwitansi (semuanya cuma 1 hari) --
+// SEKARANG diambil dari baris VISUM (SELALU "per_rentang", jadi itu SUMBER
+// kebenaran rentang tersambung/terputus), dgn fallback ke tanggalList kalau
+// Visum tidak ada datanya sama sekali. "Surat Tugas jumlahnya mengacu ke
+// jumlah Visum" (permintaan user) otomatis terpenuhi krn 1 kelompok = 1
+// baris Visum = 1 salinan Surat Tugas. Lihat blok "kelompokSet" di bawah.
 //
 // Non-pengelola (petugas/tetangga login SPJ biasa) HANYA boleh mencetak
 // data MILIKNYA SENDIRI -- field `petugas` dari body diabaikan sepenuhnya
@@ -349,25 +356,33 @@ export async function POST(req: NextRequest) {
       : null;
 
     // ------------------------------------------------------------------
-    // Batas KELOMPOK tanggal: dihitung dari tanggal Hari Tugas milik
-    // penugasan ini sendiri (p.tanggalList, SUDAH difilter ke rentang Print
-    // Builder), mode "per_rentang" -- tanggal yg BERURUTAN (selisih 1 hari)
-    // digabung 1 kelompok, begitu ada "lubang" kelompok baru dimulai (mis.
-    // 2,3,6,7,8 -> [2-3] & [6-8]). Ini menjamin SETIAP tanggal di
-    // p.tanggalList pasti kebagian TEPAT 1 kelompok (tidak dobel/tidak ada
-    // yg terlewat) -- beda dgn memakai batas SET tersimpan di baris
-    // Kwitansi/Visum/Surat Pernyataan langsung, yg BISA lebih rinci (mis.
-    // dibuat mode "per_hari") atau blm tentu menutupi semua tanggal (kalau
-    // SET blm dibuat utk sebagian tanggal). Baris2 dokumen itu lalu
-    // DIMASUKKAN ke kelompok yg MEMUAT rentangnya (bukan dicocokkan persis
-    // sama) lewat kelompokMemuat() di bawah; kalau ada baris yg rentangnya
-    // di luar SEMUA kelompok alami ini (kasus langka/data tdk konsisten),
-    // kelompok tambahan disisipkan supaya baris itu tetap tercetak (drpd
-    // hilang diam2).
-    const kelompokSet: { tanggalMulai: string; tanggalSelesai: string }[] = hitungSetDariTanggal(
-      p.tanggalList,
-      "per_rentang"
-    ).map((s) => ({ tanggalMulai: s.tanggalMulai, tanggalSelesai: s.tanggalSelesai }));
+    // Batas KELOMPOK tanggal: SEKARANG diambil dari baris VISUM (24 Sep
+    // 2026, permintaan user -- "Surat Tugas jumlahnya mengacu ke jumlah
+    // Visum") krn Visum SELALU dibuat mode "per_rentang" (lihat
+    // app/api/penyisiran/spj/buat-otomatis/route.ts) -- itu SUMBER
+    // kebenaran rentang tanggal yg tersambung/terputus, BUKAN lagi
+    // dihitung ulang independen dari tanggalList. Kwitansi (SEKARANG
+    // SELALU 1 lembar/hari) & Surat Pernyataan (SELALU mengikuti rentang
+    // Visum yg sama) otomatis masuk kelompok yg MEMUAT tanggalnya lewat
+    // kelompokMemuat() di bawah.
+    //
+    // Fallback ke tanggalList (mode "per_rentang", gabung tanggal
+    // berurutan) HANYA kalau Visum tidak dipilih/tidak ada datanya sama
+    // sekali di print job ini -- spy Kwitansi/Laporan/Dokumentasi-only
+    // print tetap terkelompok rapi. `pastikanKelompokUtk` tetap jadi jaring
+    // pengaman: kalau ada baris Kwitansi/Surat Pernyataan yg rentangnya
+    // (msh) di luar SEMUA kelompok Visum (data lama/tdk konsisten),
+    // kelompok tambahan disisipkan drpd baris itu hilang diam2 dari cetakan.
+    const kelompokSet: { tanggalMulai: string; tanggalSelesai: string }[] =
+      vList.length > 0
+        ? Array.from(new Set(vList.map((v) => `${v.tanggal_mulai_set}|${v.tanggal_selesai_set}`))).map((s) => {
+            const [tanggalMulai, tanggalSelesai] = s.split("|");
+            return { tanggalMulai, tanggalSelesai };
+          })
+        : hitungSetDariTanggal(p.tanggalList, "per_rentang").map((s) => ({
+            tanggalMulai: s.tanggalMulai,
+            tanggalSelesai: s.tanggalSelesai,
+          }));
     const kelompokMemuat = (kel: { tanggalMulai: string; tanggalSelesai: string }, mulai: string, selesai: string) =>
       mulai >= kel.tanggalMulai && selesai <= kel.tanggalSelesai;
     const pastikanKelompokUtk = (mulai: string, selesai: string) => {
@@ -376,7 +391,6 @@ export async function POST(req: NextRequest) {
       }
     };
     for (const k of kList) pastikanKelompokUtk(k.tanggal_mulai_set, k.tanggal_selesai_set);
-    for (const v of vList) pastikanKelompokUtk(v.tanggal_mulai_set, v.tanggal_selesai_set);
     for (const sk of skList) pastikanKelompokUtk(sk.tanggal_mulai_set, sk.tanggal_selesai_set);
     kelompokSet.sort((a, b) => a.tanggalMulai.localeCompare(b.tanggalMulai));
 

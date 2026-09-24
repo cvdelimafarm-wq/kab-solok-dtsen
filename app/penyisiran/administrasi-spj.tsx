@@ -983,12 +983,22 @@ function GantiFileTombol({
 // Blok BERSAMA dipakai ULANG oleh KwitansiBaris/VisumBaris/SuratKeteranganBaris
 // -- 1 tombol per ST per jenis dokumen, memanggil POST
 // /api/penyisiran/spj/buat-otomatis dgn `dokumen: [jenisDokumen]` (SATU
-// jenis saja per blok, sesuai section tempat blok ini dipasang). Mode
-// ("per_hari"/"per_rentang") DIPILIH PENGGUNA tiap kali klik -- TIDAK ada
-// default tetap tersimpan (dikonfirmasi user 23 Sep 2026). Hasil (jumlah SET
-// dibuat/sudah ada) & peringatan (mis. kecamatan wilayah tugas blm tertaut,
-// LENGKAP dgn navigasi ke menu terkait) ditampilkan LANGSUNG di bawah
-// tombol, TANPA perlu modal terpisah.
+// jenis saja per blok, sesuai section tempat blok ini dipasang).
+//
+// (24 Sep 2026, permintaan user) Mode SET SEKARANG TETAP per jenis dokumen
+// (BUKAN lagi pilihan bebas user tiap klik spt sebelumnya, lihat komentar
+// panjang di app/api/penyisiran/spj/buat-otomatis/route.ts):
+//   - Kwitansi           : SELALU "per_hari" -- 1 lembar Kwitansi per 1 hari
+//     kerja (supaya nominal per lembar tidak pernah ambigu).
+//   - Visum              : SELALU "per_rentang" -- 1 SET kalau tanggal
+//     Hari Tugas tersambung, pecah kalau ada tanggal yg terputus.
+//   - Surat Pernyataan   : SELALU mengikuti SET Visum yg SAMA (per_rentang)
+//     -- supaya jumlah & rentangnya PERSIS sama dgn Visum.
+// Jadi TIDAK ADA lagi pilihan mode di UI ini -- backend yg menentukan
+// otomatis sesuai jenisDokumen. Hasil (jumlah SET dibuat/sudah ada) &
+// peringatan (mis. kecamatan wilayah tugas blm tertaut, LENGKAP dgn
+// navigasi ke menu terkait) ditampilkan LANGSUNG di bawah tombol, TANPA
+// perlu modal terpisah.
 type JenisDokumenOtomatis = "kwitansi" | "visum" | "surat_keterangan";
 interface HasilBuatOtomatisDokumen {
   jenis: JenisDokumenOtomatis;
@@ -1003,11 +1013,15 @@ interface PeringatanBuatOtomatis {
 }
 interface HasilBuatOtomatisRespons {
   ok: true;
-  mode: "per_hari" | "per_rentang";
-  set: { tanggal_mulai: string; tanggal_selesai: string; jumlah_hari: number }[];
   hasil: HasilBuatOtomatisDokumen[];
   peringatan: PeringatanBuatOtomatis[];
 }
+
+const KETERANGAN_SKEMA_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
+  kwitansi: "1 lembar Kwitansi dibuat utk SETIAP hari yang ditag di 🗓 Identifikasi Hari Tugas.",
+  visum: "1 Visum dibuat per rentang tanggal yang tersambung (dipisah kalau ada tanggal yang terputus).",
+  surat_keterangan: "1 Surat Pernyataan dibuat mengikuti rentang SET Visum (tersambung/terpisah sama seperti Visum).",
+};
 
 function BuatOtomatisBlok({
   token,
@@ -1024,7 +1038,6 @@ function BuatOtomatisBlok({
   onSelesai: () => void;
   onSessionExpired: () => void;
 }) {
-  const [mode, setMode] = useState<"per_hari" | "per_rentang">("per_rentang");
   const [busy, setBusy] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
   const [navigasi, setNavigasi] = useState<{ halaman: string; keterangan: string } | null>(null);
@@ -1038,7 +1051,7 @@ function BuatOtomatisBlok({
     try {
       const hasil = (await apiFetch("/api/penyisiran/spj/buat-otomatis", token, {
         method: "POST",
-        body: JSON.stringify({ surat_tugas_id: suratTugasId, mode, dokumen: [jenisDokumen] }),
+        body: JSON.stringify({ surat_tugas_id: suratTugasId, dokumen: [jenisDokumen] }),
       })) as HasilBuatOtomatisRespons;
 
       const peringatanJenis = hasil.peringatan.find((p) => p.jenis === jenisDokumen);
@@ -1074,14 +1087,6 @@ function BuatOtomatisBlok({
     <div className="rounded-md border border-dashed border-navy-300 bg-navy-50/50 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-medium text-navy-900">🪄 Buat Otomatis {labelJenis}</span>
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value as "per_hari" | "per_rentang")}
-          className="rounded-md border border-line px-2 py-1 text-[11px]"
-        >
-          <option value="per_rentang">1 set per rentang tersambung</option>
-          <option value="per_hari">1 set per hari</option>
-        </select>
         <button
           type="button"
           onClick={handleKlik}
@@ -1091,10 +1096,7 @@ function BuatOtomatisBlok({
           {busy ? "Membuat..." : "Buat Otomatis"}
         </button>
       </div>
-      <p className="mt-1 text-[10px] text-ink/40">
-        Dari tanggal yang ditag di 🗓 Identifikasi Hari Tugas (tab Perencanaan Lapangan), dipotong ke rentang Surat
-        Tugas ini.
-      </p>
+      <p className="mt-1 text-[10px] text-ink/40">{KETERANGAN_SKEMA_OTOMATIS[jenisDokumen]}</p>
       {pesan && (
         <p className={`mt-1.5 rounded-md p-1.5 text-[11px] ${gagal ? "bg-rust-100/40 text-rust-700" : "bg-emerald-100/40 text-emerald-800"}`}>
           {gagal ? "⚠ " : "✓ "}
@@ -2941,6 +2943,29 @@ function KwitansiSetForm({
   const [tanggalMulaiSet, setTanggalMulaiSet] = useState(existing?.tanggal_mulai_set ?? st.tanggal_mulai);
   const [tanggalSelesaiSet, setTanggalSelesaiSet] = useState(existing?.tanggal_selesai_set ?? existing?.tanggal_mulai_set ?? st.tanggal_mulai);
   const [nominal, setNominal] = useState(existing ? String(existing.nominal) : "");
+  // (24 Sep 2026, permintaan user) Nominal SEKARANG otomatis dihitung ulang
+  // (tarif x jumlah hari) tiap kali rentang tanggal SET diubah -- sebelumnya
+  // nominal lama TETAP TERBAWA saat rentang diperluas via form ini (baru
+  // ter-update kalau pengguna KLIK tombol "isi ... x hari" scr manual),
+  // itulah penyebab kasus Kwitansi Anike/Mega Nana dkk nominalnya nyangkut
+  // di 1 hari padahal SET-nya sudah diperluas jadi banyak hari. `nominalManual`
+  // jadi true begitu pengguna mengetik SENDIRI di kolom Nominal -- sejak itu
+  // auto-recalc berhenti supaya tidak menimpa angka yg memang sengaja
+  // diisi beda dari tarif default.
+  const [nominalManual, setNominalManual] = useState(false);
+  const lewatiEfekPertama = useRef(true);
+  useEffect(() => {
+    if (lewatiEfekPertama.current) {
+      // Jangan timpa nominal yg baru dimuat (mode edit) hanya krn efek ini
+      // ikut jalan sekali di render pertama.
+      lewatiEfekPertama.current = false;
+      return;
+    }
+    if (nominalManual) return;
+    const hari = jumlahHariSet();
+    if (hari > 0) setNominal(String(TARIF_TRANSLOK_PER_HARI_SARAN * hari));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tanggalMulaiSet, tanggalSelesaiSet]);
   const [terbilang, setTerbilang] = useState(existing?.terbilang ?? "");
   // untukPerjalananDinasPada HANYA relevan/dipakai utk jenis "tetangga" --
   // jenis "penyisiran" pakai st.untuk_perjalanan_dinas_pada_otomatis
@@ -2960,6 +2985,7 @@ function KwitansiSetForm({
   function handleGunakanTarifDefault() {
     const hari = jumlahHariSet();
     if (hari > 0) setNominal(String(TARIF_TRANSLOK_PER_HARI_SARAN * hari));
+    setNominalManual(false); // kembali ke mode auto-sync tiap tanggal SET berubah
   }
 
   async function handleSimpan(e: React.FormEvent) {
@@ -3044,10 +3070,17 @@ function KwitansiSetForm({
             type="number"
             min={0}
             value={nominal}
-            onChange={(e) => setNominal(e.target.value)}
+            onChange={(e) => {
+              setNominal(e.target.value);
+              setNominalManual(true); // pengguna ketik sendiri -- stop auto-recalc
+            }}
             placeholder="170000"
             className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
           />
+          <p className="mt-0.5 text-[10px] text-ink/40">
+            Otomatis mengikuti tarif x jumlah hari kalau rentang tanggal SET diubah -- ketik manual di sini kalau mau
+            override.
+          </p>
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal SPD</label>
