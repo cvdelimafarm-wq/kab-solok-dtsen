@@ -702,12 +702,25 @@ interface OhRincianPetugas {
   tanggal: HariRow[];
 }
 
+// (25 Sep 2026) Utk form "+ Tambah Hari Tugas" -- daftar SEMUA petugas
+// aktif (beda dari OhRincianPetugas yg cuma berisi petugas yg SUDAH py
+// minimal 1 baris hari tugas).
+interface AktifPetugasRingkas {
+  id: number;
+  nama: string;
+}
+
 type StatusGridHariTugas = "hijau" | "merah" | "abu";
 
 interface GridBarisPetugas {
   petugas_id: number;
   petugas_nama: string;
   status: Record<string, StatusGridHariTugas>;
+  // (27 Sep 2026) 3 kolom rekap di sebelah kanan grid tanggal -- lihat
+  // komentar perhitungannya di app/api/penyisiran/alokasi/oh-monitoring/route.ts.
+  jumlahHariKerja: number;
+  adaDokumentasi: number;
+  tidakAdaDokumentasi: number;
 }
 
 const WARNA_GRID_HARI_TUGAS: Record<StatusGridHariTugas, string> = {
@@ -759,6 +772,25 @@ function GridAlokasiDanKuota({
                 {Number(t.slice(-2))}
               </th>
             ))}
+            {/* (27 Sep 2026) 3 kolom rekap di sebelah kanan grid tanggal -- permintaan user. */}
+            <th
+              className="whitespace-nowrap border-l border-white/20 px-2 py-1 text-center font-semibold"
+              title="Total tanggal yang direncanakan (dicentang) seluruh periode, tidak dievaluasi ada/tidaknya dokumentasi"
+            >
+              Hari Kerja
+            </th>
+            <th
+              className="whitespace-nowrap px-2 py-1 text-center font-semibold"
+              title="Total tanggal direncanakan yang SUDAH ada foto dokumentasi"
+            >
+              Ada Dok.
+            </th>
+            <th
+              className="whitespace-nowrap px-2 py-1 text-center font-semibold"
+              title="Tanggal direncanakan yang SUDAH LEWAT (s.d. kemarin) tapi BELUM ada dokumentasi -- tanggal yang belum lewat tidak ikut dihitung di sini"
+            >
+              Tidak Ada Dok.
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -775,11 +807,20 @@ function GridAlokasiDanKuota({
                   />
                 </td>
               ))}
+              <td className="border-l border-line px-2 py-1 text-center font-semibold text-navy-900">
+                {b.jumlahHariKerja}
+              </td>
+              <td className="px-2 py-1 text-center font-semibold" style={{ color: WARNA_GRID_HARI_TUGAS.hijau }}>
+                {b.adaDokumentasi}
+              </td>
+              <td className="px-2 py-1 text-center font-semibold" style={{ color: WARNA_GRID_HARI_TUGAS.merah }}>
+                {b.tidakAdaDokumentasi}
+              </td>
             </tr>
           ))}
           {baris.length === 0 && (
             <tr>
-              <td colSpan={tanggalList.length + 1} className="px-2 py-4 text-center text-ink/40">
+              <td colSpan={tanggalList.length + 4} className="px-2 py-4 text-center text-ink/40">
                 Belum ada data.
               </td>
             </tr>
@@ -799,6 +840,10 @@ function GridAlokasiDanKuota({
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: WARNA_GRID_HARI_TUGAS.abu }} />
           Tidak ada rencana / libur
+        </span>
+        <span>
+          "Tidak Ada Dok." hanya menghitung tanggal yang sudah lewat (s.d. kemarin) -- tanggal yang belum lewat tidak
+          dianggap bermasalah.
         </span>
       </div>
     </div>
@@ -820,6 +865,11 @@ function OhMonitoringPanel({ token }: { token: string }) {
   const [gridBaris, setGridBaris] = useState<GridBarisPetugas[]>([]);
   const gridRef = useRef<HTMLDivElement>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done" | "error">("idle");
+  // (25 Sep 2026) "+ Tambah Hari Tugas" -- daftar SEMUA petugas aktif
+  // (termasuk yg belum py baris sama sekali) + form pilih petugas/tanggal.
+  const [aktifPetugas, setAktifPetugas] = useState<AktifPetugasRingkas[]>([]);
+  const [tambahPetugasId, setTambahPetugasId] = useState<string>("");
+  const [tambahTanggal, setTambahTanggal] = useState<string>("");
 
   async function muat() {
     setLoading(true);
@@ -831,6 +881,7 @@ function OhMonitoringPanel({ token }: { token: string }) {
       setRincian(Array.isArray(data?.rincian) ? data.rincian : []);
       setGridTanggal(Array.isArray(data?.grid?.tanggalList) ? data.grid.tanggalList : []);
       setGridBaris(Array.isArray(data?.grid?.baris) ? data.grid.baris : []);
+      setAktifPetugas(Array.isArray(data?.aktifPetugas) ? data.aktifPetugas : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal memuat monitoring OH.");
     } finally {
@@ -880,7 +931,7 @@ function OhMonitoringPanel({ token }: { token: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function aksi(petugasId: number, tanggal: string, jenis: "batalkan" | "aktifkan") {
+  async function aksi(petugasId: number, tanggal: string, jenis: "batalkan" | "aktifkan" | "tambah") {
     const key = `${petugasId}-${tanggal}`;
     setAksiBusyKey(key);
     try {
@@ -894,6 +945,17 @@ function OhMonitoringPanel({ token }: { token: string }) {
     } finally {
       setAksiBusyKey(null);
     }
+  }
+
+  // (25 Sep 2026) Submit form "+ Tambah Hari Tugas" -- panggil aksi yg SAMA
+  // (endpoint batalkan/route.ts, aksi "tambah") lalu kosongkan pilihan
+  // tanggal saja (petugas tetap terpilih supaya bisa tambah tanggal lain
+  // lagi utk petugas yg sama tanpa pilih ulang).
+  async function tambahHariTugas() {
+    const petugasId = Number(tambahPetugasId);
+    if (!Number.isFinite(petugasId) || petugasId <= 0 || !tambahTanggal) return;
+    await aksi(petugasId, tambahTanggal, "tambah");
+    setTambahTanggal("");
   }
 
   const sisa = kuota - terpakai;
@@ -935,6 +997,51 @@ function OhMonitoringPanel({ token }: { token: string }) {
           {/* Salinan tersembunyi lebar tetap, dipakai sbg sumber gambar saat tombol "Salin sebagai Gambar" diklik -- lihat salinSebagaiGambar. */}
           <div ref={gridRef} className="fixed -left-[9999px] top-0 w-[720px]" aria-hidden="true">
             <GridAlokasiDanKuota kuota={kuota} terpakai={terpakai} sisa={sisa} tanggalList={gridTanggal} baris={gridBaris} />
+          </div>
+
+          {/* (25 Sep 2026) "+ Tambah Hari Tugas" -- permintaan user: super
+              user bukan cuma bisa MEMBATALKAN centang petugas, tapi juga
+              bisa LANGSUNG MENAMBAHKAN hari tugas utk petugas aktif mana
+              pun (termasuk yg belum pernah centang tanggal apa pun sama
+              sekali, makanya pilihan petugasnya dari aktifPetugas -- SEMUA
+              petugas aktif -- bukan dari rincian yg cuma berisi petugas
+              yg sudah py minimal 1 baris). */}
+          <div className="mt-3 rounded-md border border-dashed border-navy-300 bg-navy-50/40 p-2">
+            <p className="text-xs font-semibold text-navy-900">➕ Tambah Hari Tugas (utk petugas aktif mana pun)</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <select
+                value={tambahPetugasId}
+                onChange={(e) => setTambahPetugasId(e.target.value)}
+                className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-ink/80"
+              >
+                <option value="">Pilih petugas...</option>
+                {aktifPetugas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nama}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={tambahTanggal}
+                onChange={(e) => setTambahTanggal(e.target.value)}
+                className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-ink/80"
+              >
+                <option value="">Pilih tanggal...</option>
+                {gridTanggal.map((t) => (
+                  <option key={t} value={t}>
+                    {labelTanggalPendek(t)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!tambahPetugasId || !tambahTanggal || aksiBusyKey === `${Number(tambahPetugasId)}-${tambahTanggal}`}
+                onClick={tambahHariTugas}
+                className="rounded-md border border-navy-700 bg-navy-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-navy-800 disabled:opacity-50"
+              >
+                Tambahkan
+              </button>
+            </div>
           </div>
 
           <p className="mt-4 text-xs font-semibold text-navy-900">🛠 Rincian &amp; Kelola per Petugas</p>

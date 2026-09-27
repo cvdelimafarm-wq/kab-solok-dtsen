@@ -136,18 +136,55 @@ export async function GET(req: NextRequest) {
     if (!namaPerId.has(p.petugas_id)) namaPerId.set(p.petugas_id, p.petugas_nama);
   }
 
+  // (27 Sep 2026) Rekap 3 angka per petugas di sebelah kanan grid (permintaan
+  // user): "Hari Kerja" = total tanggal direncanakan (hijau+merah) SELURUH
+  // periode (termasuk tanggal yg belum lewat -- ini murni jumlah komitmen,
+  // bukan evaluasi); "Ada Dokumentasi" = total sel hijau; "Tidak Ada
+  // Dokumentasi" = (jumlah hari direncanakan yg tanggalnya SUDAH LEWAT, s.d.
+  // KEMARIN) - (Ada Dokumentasi) -- SENGAJA tidak sekadar "Hari Kerja - Ada
+  // Dokumentasi", supaya hari yg direncanakan tapi belum lewat (hari ini/
+  // besok) TIDAK ikut dihitung "bermasalah" krn memang wajar belum ada
+  // dokumentasinya. "Kemarin" dihitung di zona WIB (UTC+7, SAMA pola dgn
+  // formatJamIndo di lib/spjFormat.ts) supaya tidak meleset kalau server
+  // Railway berjalan di UTC.
+  const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const todayWib = nowWib.toISOString().slice(0, 10);
+  const kemarinDate = new Date(todayWib + "T00:00:00Z");
+  kemarinDate.setUTCDate(kemarinDate.getUTCDate() - 1);
+  const kemarinWib = kemarinDate.toISOString().slice(0, 10);
+
   const tanggalList = daftarTanggalPeriodeHariTugas();
   const gridBaris = Array.from(namaPerId.entries())
     .map(([petugasId, nama]) => {
       const status: Record<string, "hijau" | "merah" | "abu"> = {};
+      let jumlahHariKerja = 0;
+      let adaDokumentasi = 0;
+      let hariKerjaSampaiKemarin = 0;
       for (const tgl of tanggalList) {
         const kunci = `${petugasId}|${tgl}`;
         const direncanakan = kunciAktifPerTanggal.get(kunci) === true;
-        status[tgl] = !direncanakan ? "abu" : kunciDokumentasi.has(kunci) ? "hijau" : "merah";
+        const st = !direncanakan ? "abu" : kunciDokumentasi.has(kunci) ? "hijau" : "merah";
+        status[tgl] = st;
+        if (st !== "abu") {
+          jumlahHariKerja++;
+          if (st === "hijau") adaDokumentasi++;
+          if (tgl <= kemarinWib) hariKerjaSampaiKemarin++;
+        }
       }
-      return { petugas_id: petugasId, petugas_nama: nama, status };
+      const tidakAdaDokumentasi = hariKerjaSampaiKemarin - adaDokumentasi;
+      return { petugas_id: petugasId, petugas_nama: nama, status, jumlahHariKerja, adaDokumentasi, tidakAdaDokumentasi };
     })
     .sort((a, b) => a.petugas_nama.localeCompare(b.petugas_nama));
+
+  // (25 Sep 2026) aktifPetugas -- dikirim TERPISAH dari "rincian" (yang cuma
+  // berisi petugas yg SUDAH py minimal 1 baris hari tugas), khusus utk
+  // dropdown "+ Tambah Hari Tugas" (permintaan user: super user bisa
+  // menambahkan hari tugas utk SELURUH petugas aktif, termasuk yg belum
+  // pernah centang tanggal apa pun sama sekali -- petugas spt ini TIDAK
+  // muncul di "rincian" krn memang belum py baris sama sekali).
+  const aktifPetugas = (aktifRows ?? [])
+    .map((a) => ({ id: a.id as number, nama: a.nama as string }))
+    .sort((a, b) => a.nama.localeCompare(b.nama));
 
   return NextResponse.json({
     kuota: KUOTA_OH_TRANSLOK,
@@ -155,5 +192,6 @@ export async function GET(req: NextRequest) {
     sisa: KUOTA_OH_TRANSLOK - terpakai,
     rincian,
     grid: { tanggalList, baris: gridBaris },
+    aktifPetugas,
   });
 }

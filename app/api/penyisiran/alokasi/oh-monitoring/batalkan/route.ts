@@ -1,18 +1,28 @@
 // app/api/penyisiran/alokasi/oh-monitoring/batalkan/route.ts
 //
-// Super user (Bambang/Deswaty/Iqbal/Wisnu, lihat lib/manajemenTargetAkses.ts)
-// membatalkan ATAU mengaktifkan-kembali SATU baris hari tugas (per
-// TANGGAL kalender) milik petugas tertentu -- lihat komentar lengkap di
-// .../oh-monitoring/route.ts & migrasi
+// Super user (7 pengelola, lihat lib/manajemenTargetAkses.ts) mengelola
+// SATU baris hari tugas (per TANGGAL kalender) milik petugas tertentu --
+// lihat komentar lengkap di .../oh-monitoring/route.ts & migrasi
 // supabase/migrations/20260918_hari_tugas_jadi_tanggal_kalender.sql.
 //
 // body: { petugas_id: number, tanggal: string ("YYYY-MM-DD"), aksi:
-// "batalkan" | "aktifkan" } -- "batalkan" mengisi dibatalkan_oleh (nama
-// super user yg login) & dibatalkan_at (now()) supaya baris itu TERKUNCI
-// dari sisi petugas (muncul sbg badge "Dibatalkan oleh <nama>" di
-// checklist Hari Tugas miliknya) & TIDAK IKUT DIHITUNG sbg OH terpakai.
-// "aktifkan" membalikkan (reset ke null) kalau pembatalan keliru/ingin
-// dikembalikan.
+// "batalkan" | "aktifkan" | "tambah" }
+//  - "batalkan" mengisi dibatalkan_oleh (nama super user yg login) &
+//    dibatalkan_at (now()) supaya baris itu TERKUNCI dari sisi petugas
+//    (muncul sbg badge "Dibatalkan oleh <nama>" di checklist Hari Tugas
+//    miliknya) & TIDAK IKUT DIHITUNG sbg OH terpakai.
+//  - "aktifkan" membalikkan (reset ke null) kalau pembatalan keliru/ingin
+//    dikembalikan -- HANYA berlaku kalau barisnya sudah ada (UPDATE saja).
+//  - (25 Sep 2026) "tambah" -- BARU, permintaan user: super user bisa
+//    LANGSUNG menambahkan hari tugas utk petugas aktif mana pun, BUKAN
+//    cuma membatalkan baris yg sudah dicentang petugas sendiri. Beda dari
+//    "aktifkan" krn baris utk (petugas_id, tanggal) itu BOLEH BELUM ADA
+//    sama sekali (petugas ybs belum pernah centang tanggal itu, bahkan
+//    belum py baris SATU PUN) -- makanya pakai UPSERT (insert kalau blm
+//    ada, atau reset dibatalkan_oleh/dibatalkan_at ke null kalau row-nya
+//    kebetulan sudah ada tapi dlm status dibatalkan), bukan UPDATE spt
+//    "aktifkan". petugas_id divalidasi via FK (gagal rapi kalau id-nya
+//    tidak ada di petugas_penyisiran_akun).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -37,7 +47,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const petugasId = typeof body?.petugas_id === "number" ? body.petugas_id : null;
   const tanggal = typeof body?.tanggal === "string" ? body.tanggal : null;
-  const aksi = body?.aksi === "batalkan" || body?.aksi === "aktifkan" ? body.aksi : null;
+  const aksi = body?.aksi === "batalkan" || body?.aksi === "aktifkan" || body?.aksi === "tambah" ? body.aksi : null;
   if (!petugasId || !tanggal || !aksi || !tanggalDalamPeriodeHariTugas(tanggal)) {
     return NextResponse.json({ error: "Data tidak lengkap/tidak valid." }, { status: 400 });
   }
@@ -57,6 +67,19 @@ export async function PATCH(req: NextRequest) {
   if (adminErr) return NextResponse.json({ error: adminErr.message }, { status: 500 });
   if (!bolehAksesManajemenTarget(admin?.nama)) {
     return NextResponse.json({ error: "Aksi ini hanya dapat dilakukan oleh pengelola yang ditentukan." }, { status: 403 });
+  }
+
+  if (aksi === "tambah") {
+    // UPSERT (bukan UPDATE) -- baris (petugas_id, tanggal) ini boleh belum
+    // ada sama sekali (lihat komentar header di atas).
+    const { error } = await supabase
+      .from("penyisiran_alokasi_hari_tugas")
+      .upsert(
+        { petugas_id: petugasId, tanggal, dibatalkan_oleh: null, dibatalkan_at: null },
+        { onConflict: "petugas_id,tanggal" }
+      );
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
   const patch =
