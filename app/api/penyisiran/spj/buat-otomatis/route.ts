@@ -40,15 +40,42 @@
 //     rentang (konsisten dgn migrasi 20260923_spj_dokumen_per_set_hari_tugas.sql
 //     yg memakai tanggal akhir SET utk baris lama yg dipecah).
 //
-// SET yg SUDAH ADA (tanggal_mulai_set sama persis) TIDAK ditimpa -- endpoint
-// ini HANYA membuat SET yg BELUM ada (upsert dgn ignoreDuplicates), supaya
-// nilai yg sudah diedit manual pengguna tidak pernah tertimpa diam2 oleh
-// klik "Buat Otomatis" berikutnya. Kalau prasyarat data BELUM lengkap (mis.
-// belum ada tanggal Hari Tugas ditag, atau belum ada kecamatan wilayah
-// tugas), endpoint MENOLAK jenis dokumen terkait & mengembalikan pesan
-// error/peringatan YG JELAS + `navigasi` (menu tujuan) spy pengguna tahu ke
-// mana harus melengkapi -- sesuai permintaan eksplisit user "sampaikan aja
-// di pesan error/warning dan sertakan navigasinya".
+// SET yg SUDAH ADA (tanggal_mulai_set sama persis DENGAN tanggal_selesai_set
+// yg jg sama, alias baris itu SUDAH menutupi PERSIS 1 SET penuh) TIDAK
+// ditimpa -- endpoint ini HANYA membuat SET yg BELUM ada (upsert dgn
+// ignoreDuplicates), supaya nilai yg sudah diedit manual pengguna (mis.
+// nominal Kwitansi) tidak pernah tertimpa diam2 oleh klik "Buat Otomatis"
+// berikutnya. Kalau prasyarat data BELUM lengkap (mis. belum ada tanggal
+// Hari Tugas ditag, atau belum ada kecamatan wilayah tugas), endpoint
+// MENOLAK jenis dokumen terkait & mengembalikan pesan error/peringatan YG
+// JELAS + `navigasi` (menu tujuan) spy pengguna tahu ke mana harus
+// melengkapi -- sesuai permintaan eksplisit user "sampaikan aja di pesan
+// error/warning dan sertakan navigasinya".
+//
+// (27 Sep 2026, permintaan user) SETIAP kali tombol "Buat Otomatis" diklik,
+// endpoint ini SEKARANG mengecek dulu apakah baris Kwitansi/Visum/Surat
+// Pernyataan yg SUDAH ADA konsisten dgn `setRentang` hasil hitung tanggal
+// Hari Tugas SAAT INI (lihat rencanakanPerbaikanSet, lib/spjSetHariTugas.ts)
+// -- 2 pola inkonsistensi nyata yg pernah ditemukan manual (kasus Fadhil
+// Ananda/Ondri Yandi/Ayu Sepriani/Megawati, sisa dari mode "1 lembar per
+// hari" yg sempat aktif 24 Sep 2026):
+//   1. SET yg masih TERPECAH jadi beberapa baris 1-hari di dlm 1 rentang
+//      Hari Tugas yg SEBENARNYA tersambung (mis. 23,24,25 Sep msh 3 baris
+//      terpisah padahal Hari Tugas-nya tersambung 23-25).
+//   2. SET yg baris existing-nya baru menutupi SEBAGIAN drpd rentang Hari
+//      Tugas SAAT INI (mis. Kwitansi msh 18-26 padahal Hari Tugas & Visum
+//      sudah diperluas ke 18-30 -- upsert ignoreDuplicates TIDAK PERNAH
+//      memperluas baris yg sudah ada, jadi tanpa pengecekan ini SET itu
+//      akan "nyangkut" selamanya).
+// Kalau ketemu salah satu di atas, baris PALING AWAL dlm SET itu di-UPDATE
+// jadi menutupi rentang SET PENUH (nominal/tanggal terkait dihitung ULANG),
+// baris lain yg overlap SET yg sama DIHAPUS -- baru SETELAH itu langkah
+// upsert SET baru (spt sebelumnya) dijalankan. SET yg SUDAH konsisten (1
+// baris, rentang persis sama dgn SET) TIDAK disentuh sama sekali, supaya
+// nominal yg sudah diedit manual pengguna tetap aman. Hasil perbaikan ini
+// dilaporkan balik ke pengguna lewat field `perbaikan` pada response, spy
+// pengelola tahu apakah tombol ini langsung generate SET baru saja, atau
+// ada data lama yg dirapikan dulu sebelumnya.
 //
 // Non-pengelola (petugas/tetangga biasa) HANYA boleh membuat dokumen utk
 // dirinya sendiri (field `petugas` di body diabaikan, sama spt pola akses
@@ -69,7 +96,9 @@ import {
   TARIF_TRANSLOK_PER_HARI_DEFAULT,
   hitungSetUntukSuratTugas,
   nominalKwitansiDefault,
+  rencanakanPerbaikanSet,
   SetHariTugas,
+  BarisSetExisting,
 } from "@/lib/spjSetHariTugas";
 
 export const runtime = "nodejs";
@@ -89,6 +118,19 @@ interface HasilDokumen {
   jenis: JenisDokumenSet;
   dibuat: number;
   sudahAda: number;
+  diperbaiki: number;
+}
+
+// (27 Sep 2026) 1 entri per SET yg ternyata TIDAK konsisten dgn Hari Tugas
+// saat ini & baru dirapikan ulang -- lihat komentar besar di atas file ini.
+interface PerbaikanSet {
+  jenis: JenisDokumenSet;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+  // Rentang tiap baris SEBELUM digabung/diluaskan -- kalau cuma 1 entri &
+  // rentangnya lebih sempit drpd tanggalMulai/tanggalSelesai di atas,
+  // berarti SET itu DIPERLUAS (bukan digabung dari beberapa fragmen).
+  rentangSebelum: { tanggalMulai: string; tanggalSelesai: string }[];
 }
 
 function supabaseAdmin() {
@@ -208,6 +250,51 @@ export async function POST(req: NextRequest) {
 
   const peringatan: Peringatan[] = [];
   const hasil: HasilDokumen[] = [];
+  const perbaikan: PerbaikanSet[] = [];
+
+  // Alias non-null -- TypeScript tidak bisa menyempitkan tipe `supabase`
+  // (const, dicek null di atas) dari dlm badan function bersarang di bawah
+  // (closure), jadi ditangkap dulu di sini sbg binding baru bertipe pasti
+  // non-null.
+  const db = supabase;
+
+  // (27 Sep 2026) Helper BERSAMA: ambil baris existing 1 tabel dokumen-SET,
+  // lalu jalankan rencana perbaikan (UPDATE baris pertama jadi rentang SET
+  // penuh + DELETE fragmen lain) sebelum baris baru dibuat -- dipakai oleh
+  // ketiga blok Kwitansi/Visum/Surat Pernyataan di bawah, `terapkanUpdate`
+  // beda2 per jenis dokumen (field yg direcompute beda).
+  async function perbaikiSetTidakKonsisten(
+    tabel: "spj_kwitansi" | "spj_visum" | "spj_surat_pernyataan_kendaraan",
+    jenis: JenisDokumenSet,
+    terapkanUpdate: (setPenuh: SetHariTugas) => Record<string, unknown>
+  ): Promise<{ error: string | null; jumlahDiperbaiki: number }> {
+    const { data: existingRaw, error: errBaca } = await db
+      .from(tabel)
+      .select("id, tanggal_mulai_set, tanggal_selesai_set")
+      .eq("surat_tugas_id", suratTugasId)
+      .eq("petugas_jenis", targetJenis)
+      .eq("petugas_id", targetId);
+    if (errBaca) return { error: errBaca.message, jumlahDiperbaiki: 0 };
+
+    const existing: BarisSetExisting[] = ((existingRaw ?? []) as { id: number; tanggal_mulai_set: string; tanggal_selesai_set: string }[]).map(
+      (r) => ({ id: r.id, tanggalMulaiSet: r.tanggal_mulai_set, tanggalSelesaiSet: r.tanggal_selesai_set })
+    );
+    const rencana = rencanakanPerbaikanSet(setRentang, existing);
+
+    let jumlahDiperbaiki = 0;
+    for (const r of rencana) {
+      if (r.status !== "perlu_diperbaiki" || r.idDipertahankan === null) continue;
+      const { error: errUpdate } = await db.from(tabel).update(terapkanUpdate(r.set)).eq("id", r.idDipertahankan);
+      if (errUpdate) return { error: errUpdate.message, jumlahDiperbaiki };
+      if (r.idDihapus.length > 0) {
+        const { error: errDelete } = await db.from(tabel).delete().in("id", r.idDihapus);
+        if (errDelete) return { error: errDelete.message, jumlahDiperbaiki };
+      }
+      jumlahDiperbaiki++;
+      perbaikan.push({ jenis, tanggalMulai: r.set.tanggalMulai, tanggalSelesai: r.set.tanggalSelesai, rentangSebelum: r.rentangSebelum });
+    }
+    return { error: null, jumlahDiperbaiki };
+  }
 
   // Kecamatan domisili/wilayah tugas -- DIPAKAI BERSAMA oleh Kwitansi &
   // Visum (SATU sumber logic, lihat lib/spjWilayahTugas.ts). Utk jenis
@@ -231,6 +318,23 @@ export async function POST(req: NextRequest) {
         navigasi: NAV_WILAYAH_TUGAS,
       });
     } else {
+      // (27 Sep 2026) Rapikan dulu SET yg msh terpecah/blm diperluas sblm
+      // membuat baris baru -- lihat komentar besar di atas file ini.
+      const { error: errPerbaikan, jumlahDiperbaiki } = await perbaikiSetTidakKonsisten("spj_kwitansi", "kwitansi", (s) => {
+        const nominal = nominalKwitansiDefault(s.jumlahHari, tarifPerHari);
+        return {
+          tanggal_mulai_set: s.tanggalMulai,
+          tanggal_selesai_set: s.tanggalSelesai,
+          tanggal_spd: s.tanggalMulai,
+          jumlah_hari: s.jumlahHari,
+          nominal_per_hari: tarifPerHari,
+          nominal,
+          terbilang: terbilangRupiah(nominal),
+          untuk_perjalanan_dinas_pada: kecamatan.wilayahTugas,
+        };
+      });
+      if (errPerbaikan) return NextResponse.json({ error: errPerbaikan }, { status: 500 });
+
       // setRentang -- 1 lembar Kwitansi per SET rentang (bisa >1 hari),
       // nominal = tarifPerHari x jumlah hari SET itu (nominalKwitansiDefault
       // SELALU mengalikan ulang dari jumlahHari yg aktual -- lihat komentar
@@ -259,7 +363,12 @@ export async function POST(req: NextRequest) {
         .select("tanggal_mulai_set");
       if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
       const jumlahDibuat = dibuat?.length ?? 0;
-      hasil.push({ jenis: "kwitansi", dibuat: jumlahDibuat, sudahAda: setRentang.length - jumlahDibuat });
+      hasil.push({
+        jenis: "kwitansi",
+        dibuat: jumlahDibuat,
+        diperbaiki: jumlahDiperbaiki,
+        sudahAda: setRentang.length - jumlahDibuat - jumlahDiperbaiki,
+      });
     }
   }
 
@@ -276,6 +385,21 @@ export async function POST(req: NextRequest) {
       });
     } else {
       const tempatKedudukan = kecamatan.domisili || TEMPAT_KEDUDUKAN_DEFAULT;
+
+      // (27 Sep 2026) Rapikan dulu SET yg msh terpecah/blm diperluas.
+      const { error: errPerbaikan, jumlahDiperbaiki } = await perbaikiSetTidakKonsisten("spj_visum", "visum", (s) => ({
+        tanggal_mulai_set: s.tanggalMulai,
+        tanggal_selesai_set: s.tanggalSelesai,
+        rencana_tujuan: kecamatan.wilayahTugas,
+        tempat_kedudukan: tempatKedudukan,
+        tanggal_berangkat: s.tanggalMulai,
+        tanggal_tiba_tujuan: s.tanggalMulai,
+        tanggal_berangkat_kembali: s.tanggalSelesai,
+        tanggal_tiba_kembali: s.tanggalSelesai,
+        updated_at: new Date().toISOString(),
+      }));
+      if (errPerbaikan) return NextResponse.json({ error: errPerbaikan }, { status: 500 });
+
       const baris = setRentang.map((s) => ({
         surat_tugas_id: suratTugasId,
         petugas_jenis: targetJenis,
@@ -296,7 +420,12 @@ export async function POST(req: NextRequest) {
         .select("tanggal_mulai_set");
       if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
       const jumlahDibuat = dibuat?.length ?? 0;
-      hasil.push({ jenis: "visum", dibuat: jumlahDibuat, sudahAda: setRentang.length - jumlahDibuat });
+      hasil.push({
+        jenis: "visum",
+        dibuat: jumlahDibuat,
+        diperbaiki: jumlahDiperbaiki,
+        sudahAda: setRentang.length - jumlahDibuat - jumlahDiperbaiki,
+      });
     }
   }
 
@@ -308,6 +437,14 @@ export async function POST(req: NextRequest) {
     // akhir SET utk baris lama yg dipecah). Tersedia utk KEDUA jenis petugas
     // (fallback rentang ST tetap menghasilkan SET yg valid utk jenis
     // "tetangga").
+    // (27 Sep 2026) Rapikan dulu SET yg msh terpecah/blm diperluas.
+    const { error: errPerbaikan, jumlahDiperbaiki } = await perbaikiSetTidakKonsisten("spj_surat_pernyataan_kendaraan", "surat_keterangan", (s) => ({
+      tanggal_mulai_set: s.tanggalMulai,
+      tanggal_selesai_set: s.tanggalSelesai,
+      tanggal_pelaksanaan: s.tanggalSelesai,
+    }));
+    if (errPerbaikan) return NextResponse.json({ error: errPerbaikan }, { status: 500 });
+
     const baris = setRentang.map((s) => ({
       surat_tugas_id: suratTugasId,
       petugas_jenis: targetJenis,
@@ -322,8 +459,27 @@ export async function POST(req: NextRequest) {
       .select("tanggal_mulai_set");
     if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
     const jumlahDibuat = dibuat?.length ?? 0;
-    hasil.push({ jenis: "surat_keterangan", dibuat: jumlahDibuat, sudahAda: setRentang.length - jumlahDibuat });
+    hasil.push({
+      jenis: "surat_keterangan",
+      dibuat: jumlahDibuat,
+      diperbaiki: jumlahDiperbaiki,
+      sudahAda: setRentang.length - jumlahDibuat - jumlahDiperbaiki,
+    });
   }
+
+  // (27 Sep 2026) Ringkasan proses 1 kalimat spy pengelola langsung tahu
+  // apakah tombol ini murni generate SET baru, atau ada data lama yg
+  // dirapikan ulang dulu (jumlah_diperbaiki > 0) sebelum generate --
+  // permintaan user "tambahkan informasi progress ... apakah dia langsung
+  // generate atau ada inkonsistensi, kemudian menulis kembali".
+  const totalDiperbaiki = perbaikan.length;
+  const totalDibuat = hasil.reduce((a, h) => a + h.dibuat, 0);
+  const ringkasanProses =
+    totalDiperbaiki === 0
+      ? totalDibuat === 0
+        ? "Tidak ada perubahan -- semua SET yang relevan sudah lengkap & konsisten dengan tanggal Hari Tugas saat ini."
+        : `Langsung generate -- semua SET sudah konsisten, ${totalDibuat} baris dokumen baru dibuat.`
+      : `Ditemukan ${totalDiperbaiki} SET yang belum konsisten dengan tanggal Hari Tugas saat ini (baris lama digabung/diperluas ulang) sebelum ${totalDibuat} baris dokumen baru dibuat.`;
 
   return NextResponse.json({
     ok: true,
@@ -331,5 +487,7 @@ export async function POST(req: NextRequest) {
     set: setRentang.map((s) => ({ tanggal_mulai: s.tanggalMulai, tanggal_selesai: s.tanggalSelesai, jumlah_hari: s.jumlahHari })),
     hasil,
     peringatan,
+    perbaikan,
+    ringkasan_proses: ringkasanProses,
   });
 }

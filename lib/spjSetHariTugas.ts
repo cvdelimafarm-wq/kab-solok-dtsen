@@ -131,3 +131,87 @@ export function nominalKwitansiDefault(
 ): number {
   return tarifPerHari * jumlahHari;
 }
+
+// ---------------------------------------------------------------------
+// (27 Sep 2026) Pengecekan & rencana PERBAIKAN konsistensi SET Kwitansi/
+// Visum/Surat Pernyataan Kendaraan -- dipakai "Buat Otomatis" SETIAP kali
+// diklik, SEBELUM membuat baris baru, supaya kasus data lama yg masih
+// "nyangkut" pecah per-hari (peninggalan mode "per_hari" yg pernah aktif
+// 24 Sep 2026, lihat kasus nyata Fadhil Ananda/Ondri Yandi/Ayu Sepriani/
+// Megawati yg sempat diperbaiki manual lewat SQL) ATAU SET yg blm
+// diperluas walau tanggal Hari Tugas-nya sudah bertambah (kasus Megawati:
+// Kwitansi cuma sampai 26 Sep walau Hari Tugas & Visum-nya sudah 18-30)
+// -- BISA ketahuan & dibetulkan SENDIRI oleh sistem, bukan menunggu
+// ditemukan manual lagi.
+//
+// Definisi "konsisten" utk 1 SET (hasil hitungSetUntukSuratTugas): ADA
+// PERSIS 1 baris existing yg tanggal_mulai_set & tanggal_selesai_set-nya
+// SAMA PERSIS dgn batas SET itu. Kalau tidak (baik krn baris masih
+// terpecah jadi >1 potongan DI DALAM rentang SET, ATAU baris yg ada baru
+// menutupi SEBAGIAN drpd SET penuh), SET itu "perlu_diperbaiki": baris
+// PALING AWAL (tanggal_mulai_set terkecil) di antara yg overlap SET itu
+// DIPERTAHANKAN (di-UPDATE jadi menutupi rentang SET penuh oleh
+// pemanggil), baris LAIN yg overlap SET yg sama akan DIHAPUS (duplikat/
+// fragmen). Kalau BELUM ADA baris sama sekali di rentang SET itu,
+// statusnya "belum_ada" -- akan dibuat baru lewat upsert seperti biasa
+// (BUKAN "perlu_diperbaiki", supaya laporan progress ke pengguna jelas
+// membedakan "dibuat baru" drpd "diperbaiki krn tidak konsisten").
+//
+// SENGAJA fungsi murni (tanpa Supabase) -- pemanggil (route.ts) yg
+// menjalankan UPDATE/DELETE sesungguhnya sesuai rencana yg dikembalikan
+// di sini, krn field yg di-recompute (nominal, tanggal_pelaksanaan, dst)
+// beda2 per jenis dokumen.
+
+export interface BarisSetExisting {
+  id: number;
+  tanggalMulaiSet: string;
+  tanggalSelesaiSet: string;
+}
+
+export interface RentangSet {
+  tanggalMulai: string;
+  tanggalSelesai: string;
+}
+
+export interface RencanaPerbaikanSet {
+  set: SetHariTugas;
+  status: "konsisten" | "belum_ada" | "perlu_diperbaiki";
+  /** Baris yg dipertahankan (di-UPDATE jadi rentang SET penuh) -- null kalau status "belum_ada". */
+  idDipertahankan: number | null;
+  /** Baris lain yg overlap SET yg sama & harus DIHAPUS (fragmen/duplikat) -- hanya terisi kalau "perlu_diperbaiki". */
+  idDihapus: number[];
+  /** Rentang tiap baris SEBELUM diperbaiki -- utk ditampilkan di laporan progress ("sebelumnya N baris: 18-18, 19-19, ..."). */
+  rentangSebelum: RentangSet[];
+}
+
+export function rencanakanPerbaikanSet(
+  setRentang: SetHariTugas[],
+  existingRows: BarisSetExisting[]
+): RencanaPerbaikanSet[] {
+  return setRentang.map((s) => {
+    const dalamSet = existingRows
+      .filter((r) => r.tanggalMulaiSet >= s.tanggalMulai && r.tanggalSelesaiSet <= s.tanggalSelesai)
+      .slice()
+      .sort((a, b) => a.tanggalMulaiSet.localeCompare(b.tanggalMulaiSet));
+
+    if (dalamSet.length === 0) {
+      return { set: s, status: "belum_ada", idDipertahankan: null, idDihapus: [], rentangSebelum: [] };
+    }
+
+    const satuBarisPenuh =
+      dalamSet.length === 1 &&
+      dalamSet[0].tanggalMulaiSet === s.tanggalMulai &&
+      dalamSet[0].tanggalSelesaiSet === s.tanggalSelesai;
+    if (satuBarisPenuh) {
+      return { set: s, status: "konsisten", idDipertahankan: dalamSet[0].id, idDihapus: [], rentangSebelum: [] };
+    }
+
+    return {
+      set: s,
+      status: "perlu_diperbaiki",
+      idDipertahankan: dalamSet[0].id,
+      idDihapus: dalamSet.slice(1).map((r) => r.id),
+      rentangSebelum: dalamSet.map((r) => ({ tanggalMulai: r.tanggalMulaiSet, tanggalSelesai: r.tanggalSelesaiSet })),
+    };
+  });
+}

@@ -985,25 +985,33 @@ function GantiFileTombol({
 // /api/penyisiran/spj/buat-otomatis dgn `dokumen: [jenisDokumen]` (SATU
 // jenis saja per blok, sesuai section tempat blok ini dipasang).
 //
-// (24 Sep 2026, permintaan user) Mode SET SEKARANG TETAP per jenis dokumen
-// (BUKAN lagi pilihan bebas user tiap klik spt sebelumnya, lihat komentar
-// panjang di app/api/penyisiran/spj/buat-otomatis/route.ts):
-//   - Kwitansi           : SELALU "per_hari" -- 1 lembar Kwitansi per 1 hari
-//     kerja (supaya nominal per lembar tidak pernah ambigu).
-//   - Visum              : SELALU "per_rentang" -- 1 SET kalau tanggal
-//     Hari Tugas tersambung, pecah kalau ada tanggal yg terputus.
-//   - Surat Pernyataan   : SELALU mengikuti SET Visum yg SAMA (per_rentang)
-//     -- supaya jumlah & rentangnya PERSIS sama dgn Visum.
+// (25 Sep 2026, GANTI BALIK permintaan 24 Sep) Mode SET SEKARANG TETAP per
+// jenis dokumen (BUKAN lagi pilihan bebas user tiap klik spt sebelumnya,
+// lihat komentar panjang di app/api/penyisiran/spj/buat-otomatis/route.ts)
+// -- KETIGA jenis dokumen SEKARANG pakai SATU SET RENTANG YANG SAMA
+// ("per_rentang": tanggal Hari Tugas yg BERURUTAN digabung 1 SET, pecah
+// jadi SET baru begitu ada tanggal yg terputus). Kwitansi SEMPAT "1 lembar
+// per hari" pada 24 Sep 2026 tapi ternyata tidak dipakai, jadi dibalik lagi
+// ke per_rentang spt Visum/Surat Pernyataan (nominalnya = tarif x jumlah
+// hari dlm SET, bukan lagi selalu x1).
 // Jadi TIDAK ADA lagi pilihan mode di UI ini -- backend yg menentukan
-// otomatis sesuai jenisDokumen. Hasil (jumlah SET dibuat/sudah ada) &
-// peringatan (mis. kecamatan wilayah tugas blm tertaut, LENGKAP dgn
-// navigasi ke menu terkait) ditampilkan LANGSUNG di bawah tombol, TANPA
-// perlu modal terpisah.
+// otomatis sesuai jenisDokumen. Hasil (jumlah SET dibuat/sudah
+// konsisten/diperbaiki) & peringatan (mis. kecamatan wilayah tugas blm
+// tertaut, LENGKAP dgn navigasi ke menu terkait) ditampilkan LANGSUNG di
+// bawah tombol, TANPA perlu modal terpisah. (27 Sep 2026) SETIAP klik jg
+// otomatis mengecek & merapikan dulu SET lama yg tidak konsisten dgn
+// tanggal Hari Tugas saat ini -- lihat komentar besar di route.ts & field
+// `diperbaiki`/`perbaikan` di bawah.
 type JenisDokumenOtomatis = "kwitansi" | "visum" | "surat_keterangan";
 interface HasilBuatOtomatisDokumen {
   jenis: JenisDokumenOtomatis;
   dibuat: number;
   sudahAda: number;
+  // (27 Sep 2026) Jumlah SET yg TIDAK konsisten dgn tanggal Hari Tugas saat
+  // ini (msh terpecah per hari, atau blm diperluas) & sudah dirapikan
+  // ULANG otomatis sblm proses generate SET baru -- lihat komentar besar
+  // di app/api/penyisiran/spj/buat-otomatis/route.ts.
+  diperbaiki: number;
 }
 interface PeringatanBuatOtomatis {
   kode: string;
@@ -1011,10 +1019,26 @@ interface PeringatanBuatOtomatis {
   pesan: string;
   navigasi: { halaman: string; keterangan: string };
 }
+interface PerbaikanSetInfo {
+  jenis: JenisDokumenOtomatis;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+  rentangSebelum: { tanggalMulai: string; tanggalSelesai: string }[];
+}
 interface HasilBuatOtomatisRespons {
   ok: true;
   hasil: HasilBuatOtomatisDokumen[];
   peringatan: PeringatanBuatOtomatis[];
+  perbaikan: PerbaikanSetInfo[];
+  ringkasan_proses: string;
+}
+
+function formatTglSingkat(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
+function formatRentangSingkat(mulai: string, selesai: string): string {
+  return mulai === selesai ? formatTglSingkat(mulai) : `${formatTglSingkat(mulai)}-${formatTglSingkat(selesai)}`;
 }
 
 const KETERANGAN_SKEMA_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
@@ -1042,12 +1066,18 @@ function BuatOtomatisBlok({
   const [pesan, setPesan] = useState<string | null>(null);
   const [navigasi, setNavigasi] = useState<{ halaman: string; keterangan: string } | null>(null);
   const [gagal, setGagal] = useState(false);
+  // (27 Sep 2026) Detail SET yg dirapikan ulang (msh terpecah/blm
+  // diperluas) sblm generate -- ditampilkan terpisah dari `pesan` (yg
+  // tetap ringkasan 1 baris) supaya pengelola bisa lihat PERSIS SET mana &
+  // rentang sebelum/sesudahnya, bukan cuma jumlahnya.
+  const [perbaikanDetail, setPerbaikanDetail] = useState<PerbaikanSetInfo[]>([]);
 
   async function handleKlik() {
     setBusy(true);
     setPesan(null);
     setNavigasi(null);
     setGagal(false);
+    setPerbaikanDetail([]);
     try {
       const hasil = (await apiFetch("/api/penyisiran/spj/buat-otomatis", token, {
         method: "POST",
@@ -1056,15 +1086,22 @@ function BuatOtomatisBlok({
 
       const peringatanJenis = hasil.peringatan.find((p) => p.jenis === jenisDokumen);
       const hasilJenis = hasil.hasil.find((h) => h.jenis === jenisDokumen);
+      const perbaikanJenis = (hasil.perbaikan ?? []).filter((p) => p.jenis === jenisDokumen);
+      setPerbaikanDetail(perbaikanJenis);
       if (peringatanJenis) {
         setGagal(true);
         setPesan(peringatanJenis.pesan);
         setNavigasi(peringatanJenis.navigasi);
       } else if (hasilJenis) {
         const bagian: string[] = [];
+        if (hasilJenis.diperbaiki > 0) bagian.push(`🔧 ${hasilJenis.diperbaiki} SET tidak konsisten dirapikan ulang`);
         if (hasilJenis.dibuat > 0) bagian.push(`${hasilJenis.dibuat} SET baru dibuat`);
-        if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah ada sebelumnya (tidak ditimpa)`);
-        setPesan(bagian.length > 0 ? bagian.join(", ") + "." : "Tidak ada SET yang perlu dibuat.");
+        if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah konsisten (tidak disentuh)`);
+        setPesan(
+          bagian.length > 0
+            ? bagian.join(", ") + "."
+            : "Tidak ada SET yang perlu dibuat -- semua sudah konsisten & lengkap."
+        );
       } else {
         setPesan("Selesai.");
       }
@@ -1107,6 +1144,22 @@ function BuatOtomatisBlok({
             </span>
           )}
         </p>
+      )}
+      {perbaikanDetail.length > 0 && (
+        <div className="mt-1 rounded-md border border-amber-300/60 bg-amber-100/40 p-1.5 text-[10px] text-amber-900">
+          <p className="font-semibold">🔧 Rincian perbaikan (sebelum generate):</p>
+          <ul className="mt-0.5 list-disc pl-3.5">
+            {perbaikanDetail.map((p, i) => (
+              <li key={i}>
+                Jadi <b>{formatRentangSingkat(p.tanggalMulai, p.tanggalSelesai)}</b> (sebelumnya{" "}
+                {p.rentangSebelum.length > 1
+                  ? `${p.rentangSebelum.length} baris terpisah: ${p.rentangSebelum.map((r) => formatRentangSingkat(r.tanggalMulai, r.tanggalSelesai)).join(", ")}`
+                  : `1 baris ${formatRentangSingkat(p.rentangSebelum[0].tanggalMulai, p.rentangSebelum[0].tanggalSelesai)} yang belum diperluas`}
+                )
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
