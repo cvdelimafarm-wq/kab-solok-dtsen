@@ -35,10 +35,37 @@ import { SLOT_LABELS } from "../spjDokumentasi";
 // argumen membaca tag itu, MEMUTAR PIKSEL SUNGGUHAN sesuai arah yg benar,
 // lalu me-reset tag orientasinya -- setelah ini pdf-lib akan menyisipkan
 // piksel yg SUDAH tegak, tanpa perlu tahu apa-apa soal EXIF.
+//
+// (27 Sep 2026) SEKALIAN downscale resolusi foto di sini -- INI PENYEBAB
+// UTAMA yg ditemukan dari investigasi bug "setelah klik Generate PDF lama
+// merespon, lalu Gagal (502)": foto asli dari kamera HP petugas bisa
+// 8-12 MP (beberapa MB per file), padahal di PDF Dokumentasi ini SELALU
+// ditampilkan sbg thumbnail kecil (kartu grid, lebar tercetak < 5 cm).
+// Sebelum perbaikan ini, sharp cuma dipakai memutar orientasi TANPA
+// mengubah resolusi -- pdf-lib lalu memuat piksel ASLI SEPENUHNYA (utuh 8-12
+// MP) ke memori Node utk SETIAP foto, x SETIAP tanggal, x SETIAP petugas
+// yg dicetak sekaligus (app/api/penyisiran/spj/cetak/route.ts memproses
+// SEMUA unit dokumen dlm 1 request, semuanya ditahan di memori sampai
+// selesai digabung). Utk cetak rentang panjang (mis. 13 hari x beberapa
+// petugas x 4 foto/hari), total ini gampang menembus batas memori
+// container Railway -> proses di-KILL paksa (bukti: log deploy Railway
+// menunjukkan baris "Killed" polos tanpa error/exception, tanda khas OOM
+// killer Linux) -> container restart otomatis -> permintaan yg sedang
+// berjalan terputus & muncul sbg "⚠ Gagal (502)" di sisi pengguna.
+// `resize()` di bawah membatasi sisi TERPANJANG foto ke maks 1280px
+// (`fit:"inside"` = rasio asli dipertahankan, tdk pernah membesarkan foto
+// yg sudah lebih kecil) -- jauh lebih dari cukup utk ukuran cetak kartu
+// kecil ini, tapi memangkas ukuran file/memori per foto biasanya 10-20x
+// lipat. HANYA memengaruhi salinan sementara yg dipakai generator PDF ini
+// -- file ASLI yg tersimpan di Supabase Storage (bucket "spj-files") SAMA
+// SEKALI TIDAK diubah/ditimpa.
 async function perbaikiOrientasiFoto(bytes: Uint8Array, contentType: string): Promise<Uint8Array> {
   try {
-    const img = sharp(Buffer.from(bytes)).rotate();
-    const keluar = contentType === "image/png" ? await img.png().toBuffer() : await img.jpeg({ quality: 90 }).toBuffer();
+    const img = sharp(Buffer.from(bytes))
+      .rotate()
+      .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true });
+    const keluar =
+      contentType === "image/png" ? await img.png({ quality: 80 }).toBuffer() : await img.jpeg({ quality: 78 }).toBuffer();
     return new Uint8Array(keluar);
   } catch {
     // Gagal diproses (mis. bukan file gambar valid) -- pakai bytes ASLI
