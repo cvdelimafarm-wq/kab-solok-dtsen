@@ -19,6 +19,15 @@
 //    asli yg memang contoh dari kegiatan Susenas) -- wording final blm
 //    dikonfirmasi user, gampang diubah lewat PERAN_JABATAN di bawah kalau
 //    user minta redaksi lain.
+//  - (27 Sep 2026) GANTI LAGI baris "Jabatan" utk jenis "penyisiran": SEKARANG
+//    dinamis sesuai kolom petugas_penyisiran_akun.jabatan (SAMA data dgn yg
+//    tampil di 👤 Daftar Petugas / Master Petugas) -- "PPL Penyisiran SE2026"
+//    utk jabatan 'ppl', "PML Penyisiran SE2026" utk 'pml'. Jenis "tetangga"
+//    (tidak py kolom jabatan) & kasus 'kepala_kantor'/null TETAP pakai teks
+//    generik PERAN_JABATAN spt sebelumnya (user cuma minta redaksi PPL/PML).
+//  - (27 Sep 2026) Ukuran font isi disamakan dgn lib/pdf/laporan.ts
+//    (fontIsi default 10, BUKAN 10.5 spt sebelumnya) -- font FAMILY sudah
+//    sama-sama Helvetica dari awal, jadi cuma UKURAN yg disesuaikan.
 //  - (24 Sep 2026) Baris id DI BAWAH NAMA DI BAGIAN TANDATANGAN (bawah,
 //    bukan daftar identitas atas) SEKARANG pakai label "Nip."/"NIK." sesuai
 //    jabatan petugas (organik/PML -> Nip. + NIP 18 digit bersih tanpa
@@ -43,6 +52,22 @@ export const PERAN_JABATAN: Record<SpjPetugasJenis, string> = {
   penyisiran: "Petugas Penyisiran Undercoverage Usaha SE2026",
   tetangga: "Petugas Identifikasi Tetangga/Informan SE2026",
 };
+
+/**
+ * (27 Sep 2026) Label baris "Jabatan" -- utk jenis "penyisiran" SEKARANG
+ * pakai jabatan SEBENARNYA petugas ("PPL Penyisiran SE2026"/"PML Penyisiran
+ * SE2026", dari kolom petugas_penyisiran_akun.jabatan, SAMA sumber dgn yg
+ * tampil di 👤 Daftar Petugas/Master Petugas) -- BUKAN lagi teks generik
+ * PERAN_JABATAN. jenis "tetangga" (tabelnya tidak py kolom jabatan) & kasus
+ * jabatan 'kepala_kantor'/null/tidak dikenal tetap fallback ke PERAN_JABATAN.
+ */
+function labelJabatanSuratPernyataan(jenis: SpjPetugasJenis, jabatan: string | null): string {
+  if (jenis === "penyisiran") {
+    if (jabatan === "ppl") return "PPL Penyisiran SE2026";
+    if (jabatan === "pml") return "PML Penyisiran SE2026";
+  }
+  return PERAN_JABATAN[jenis];
+}
 
 // tanggalMulaiSet/tanggalSelesaiSet -- SEKARANG rentang SET (bisa >1 hari,
 // lihat lib/spjSetHariTugas.ts), BUKAN lagi satu tanggal tunggal. Utk SET 1
@@ -99,7 +124,7 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
     x: number,
     opts: { size?: number; bold?: boolean; align?: "left" | "center" | "right"; maxWidth?: number } = {}
   ) {
-    const size = opts.size ?? 10.5;
+    const size = opts.size ?? 10;
     const f: PDFFont = opts.bold ? fontBold : font;
     let xPos = x;
     if (opts.maxWidth && opts.align === "center") xPos = x + (opts.maxWidth - f.widthOfTextAtSize(txt, size)) / 2;
@@ -122,7 +147,7 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
       x += font.widthOfTextAtSize(k, size) + spasiPerGap;
     }
   }
-  function paragraf(txt: string, size = 10.5, lineHeight = 15) {
+  function paragraf(txt: string, size = 10, lineHeight = 15) {
     const baris = bungkusTeks(font, txt, size, usableWidth);
     baris.forEach((kataArr, idx) => {
       gambarBarisJustify(kataArr, size, idx === baris.length - 1);
@@ -138,9 +163,9 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
 
   const labelWidth = 130; // dilebarkan (referensi gambar ke-2) dari 110
   const barisIdentitas = (label: string, value: string) => {
-    teks(label, MARGIN_X + 20, { size: 10.5 });
-    teks(":", MARGIN_X + 20 + labelWidth, { size: 10.5 });
-    teks(value, MARGIN_X + 20 + labelWidth + 12, { size: 10.5 }); // tidak bold lagi (referensi gambar ke-2)
+    teks(label, MARGIN_X + 20, { size: 10 });
+    teks(":", MARGIN_X + 20 + labelWidth, { size: 10 });
+    teks(value, MARGIN_X + 20 + labelWidth + 12, { size: 10 }); // tidak bold lagi (referensi gambar ke-2)
     y -= 18;
   };
   barisIdentitas("Nama", data.namaPetugas || "-");
@@ -151,7 +176,7 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
   // apa adanya spt sebelumnya (TIDAK diubah jadi "NIK." spt baris bawah --
   // permintaan user cuma utk kasus organik).
   barisIdentitas(organik(data.jabatan) ? "Nip." : "Sobat ID", (organik(data.jabatan) ? bersihkanNip(data.nip, data.jabatan) : data.nip) || "-");
-  barisIdentitas("Jabatan", PERAN_JABATAN[data.jenis]);
+  barisIdentitas("Jabatan", labelJabatanSuratPernyataan(data.jenis, data.jabatan));
   barisIdentitas("Unit Kerja", "BPS Kabupaten Solok");
 
   const rentang = formatRentangTanggalIndo(data.tanggalMulaiSet, data.tanggalSelesaiSet);
@@ -175,21 +200,21 @@ export async function buatPdfSuratKeterangan(data: SuratKeteranganPdfData): Prom
   // Lokasi = kecamatan domisili petugas (bukan hardcode "Solok" lagi, 24 Sep 2026).
   const tempatTandaTangan = data.tempatKedudukan || TEMPAT_KEDUDUKAN_DEFAULT;
   teks(`${tempatTandaTangan}, ${formatTanggalIndo(data.tanggalSelesaiSet)}`, kananX, {
-    size: 10.5,
+    size: 10,
     align: "center",
     maxWidth: kananWidth,
   });
   y -= 15;
-  teks("Pelaksana Perjalanan Dinas Dalam Kota,", kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
+  teks("Pelaksana Perjalanan Dinas Dalam Kota,", kananX, { size: 10, align: "center", maxWidth: kananWidth });
   y -= 55; // ruang tanda tangan basah
-  teks(data.namaPetugas || "-", kananX, { size: 10.5, bold: true, align: "center", maxWidth: kananWidth });
+  teks(data.namaPetugas || "-", kananX, { size: 10, bold: true, align: "center", maxWidth: kananWidth });
   y -= 13;
   // Id di bawah nama (bagian tandatangan): Nip. utk organik/PML, NIK. utk
   // mitra/PPL & tetangga -- logic SAMA dgn Kwitansi, lib/spjIdentitas.ts
   // (24 Sep 2026; sebelumnya selalu "Sobat ID." spt baris identitas atas).
   const labelIdTtd = labelIdentitas(data.jabatan);
   const idTtdBersih = bersihkanNip(data.nip, data.jabatan);
-  teks(idTtdBersih ? `${labelIdTtd} ${idTtdBersih}` : "-", kananX, { size: 10.5, align: "center", maxWidth: kananWidth });
+  teks(idTtdBersih ? `${labelIdTtd} ${idTtdBersih}` : "-", kananX, { size: 10, align: "center", maxWidth: kananWidth });
 
   return doc.save();
 }
