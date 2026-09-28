@@ -63,6 +63,22 @@ export interface PerbaikanSet {
   rentangSebelum: { tanggalMulai: string; tanggalSelesai: string }[];
 }
 
+// (28 Sep 2026, laporan user -- kasus Hari Tugas 17-30 diganti jadi 18-30,
+// baris Kwitansi/Visum lama 17-30 tetap nyangkut & muncul DOBEL bareng
+// baris baru 18-30 pas Cetak SPJ) 1 entri per baris LAMA yg dihapus krn
+// rentang tanggalnya SUDAH TIDAK BERIRISAN sama sekali dgn SET manapun
+// hasil hitung Hari Tugas SAAT INI (lihat yatimDihapus,
+// lib/spjSetHariTugas.ts) -- beda dgn PerbaikanSet di atas (yg baris
+// lamanya masih beririsan & di-UPDATE/digabung), entri di sini baris
+// lamanya BENAR2 DIHAPUS TOTAL (tidak ada SET pengganti yg "melanjutkan"
+// baris itu, krn dari sudut pandang tanggal Hari Tugas saat ini rentang
+// itu sudah tidak pernah ada).
+export interface BarisUsangDihapus {
+  jenis: JenisDokumenSet;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+}
+
 export interface HasilProsesPenugasan {
   ok: boolean;
   /** Pesan error KERAS (blm ada Hari Tugas / SET kosong / gagal query DB) -- kalau terisi, `hasil` bisa saja kosong/parsial. */
@@ -73,6 +89,7 @@ export interface HasilProsesPenugasan {
   hasil: HasilDokumen[];
   peringatan: Peringatan[];
   perbaikan: PerbaikanSet[];
+  dihapusKrnUsang: BarisUsangDihapus[];
   ringkasanProses?: string;
 }
 
@@ -102,7 +119,7 @@ export async function prosesBuatOtomatisPenugasan(
       ? (params.tarifPerHari as number)
       : TARIF_TRANSLOK_PER_HARI_DEFAULT;
 
-  const kosong = (): HasilProsesPenugasan => ({ ok: false, set: [], hasil: [], peringatan: [], perbaikan: [] });
+  const kosong = (): HasilProsesPenugasan => ({ ok: false, set: [], hasil: [], peringatan: [], perbaikan: [], dihapusKrnUsang: [] });
 
   const { data: st, error: errSt } = await supabase
     .from("spj_surat_tugas")
@@ -140,6 +157,13 @@ export async function prosesBuatOtomatisPenugasan(
   const peringatan: Peringatan[] = [];
   const hasil: HasilDokumen[] = [];
   const perbaikan: PerbaikanSet[] = [];
+  // (28 Sep 2026) Baris LAMA yg dihapus krn rentangnya sudah TIDAK
+  // beririsan sama sekali dgn SET manapun hasil hitung Hari Tugas SAAT
+  // INI -- lihat `yatimDihapus` di rencanakanPerbaikanSet
+  // (lib/spjSetHariTugas.ts) & komentar besar di sana knp ini perlu (kasus
+  // Hari Tugas 17-30 diganti jadi 18-30, baris lama 17-30 dulu nyangkut
+  // selamanya & tercetak DOBEL bareng baris baru 18-30).
+  const dihapusKrnUsang: BarisUsangDihapus[] = [];
   const db = supabase;
 
   async function perbaikiSetTidakKonsisten(
@@ -158,7 +182,7 @@ export async function prosesBuatOtomatisPenugasan(
     const existing: BarisSetExisting[] = ((existingRaw ?? []) as { id: number; tanggal_mulai_set: string; tanggal_selesai_set: string }[]).map(
       (r) => ({ id: r.id, tanggalMulaiSet: r.tanggal_mulai_set, tanggalSelesaiSet: r.tanggal_selesai_set })
     );
-    const rencana = rencanakanPerbaikanSet(setRentang, existing);
+    const { rencana, yatimDihapus } = rencanakanPerbaikanSet(setRentang, existing);
 
     let jumlahDiperbaiki = 0;
     for (const r of rencana) {
@@ -172,6 +196,22 @@ export async function prosesBuatOtomatisPenugasan(
       jumlahDiperbaiki++;
       perbaikan.push({ jenis, tanggalMulai: r.set.tanggalMulai, tanggalSelesai: r.set.tanggalSelesai, rentangSebelum: r.rentangSebelum });
     }
+
+    // (28 Sep 2026) Baris "yatim" -- tidak beririsan SET manapun saat ini,
+    // artinya rentang tanggal yg diwakilinya sudah tidak ada lagi di tag
+    // Hari Tugas (bukan cuma bergeser/menyempit, tp benar2 hilang) -- HAPUS
+    // TOTAL, tidak ada SET pengganti yg "melanjutkan"-nya.
+    if (yatimDihapus.length > 0) {
+      const { error: errHapusYatim } = await db
+        .from(tabel)
+        .delete()
+        .in("id", yatimDihapus.map((r) => r.id));
+      if (errHapusYatim) return { error: errHapusYatim.message, jumlahDiperbaiki };
+      for (const r of yatimDihapus) {
+        dihapusKrnUsang.push({ jenis, tanggalMulai: r.tanggalMulaiSet, tanggalSelesai: r.tanggalSelesaiSet });
+      }
+    }
+
     return { error: null, jumlahDiperbaiki };
   }
 
@@ -209,7 +249,7 @@ export async function prosesBuatOtomatisPenugasan(
           untuk_perjalanan_dinas_pada: kecamatan.wilayahTugas,
         };
       });
-      if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan };
+      if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
 
       const baris = setRentang.map((s) => {
         const nominal = nominalKwitansiDefault(s.jumlahHari, tarifPerHari);
@@ -233,7 +273,7 @@ export async function prosesBuatOtomatisPenugasan(
         .from("spj_kwitansi")
         .upsert(baris, { onConflict: "surat_tugas_id,petugas_jenis,petugas_id,tanggal_mulai_set", ignoreDuplicates: true })
         .select("tanggal_mulai_set");
-      if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan };
+      if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
       const jumlahDibuat = dibuat?.length ?? 0;
       hasil.push({
         jenis: "kwitansi",
@@ -269,7 +309,7 @@ export async function prosesBuatOtomatisPenugasan(
         tanggal_tiba_kembali: s.tanggalSelesai,
         updated_at: new Date().toISOString(),
       }));
-      if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan };
+      if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
 
       const baris = setRentang.map((s) => ({
         surat_tugas_id: suratTugasId,
@@ -289,7 +329,7 @@ export async function prosesBuatOtomatisPenugasan(
         .from("spj_visum")
         .upsert(baris, { onConflict: "surat_tugas_id,petugas_jenis,petugas_id,tanggal_mulai_set", ignoreDuplicates: true })
         .select("tanggal_mulai_set");
-      if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan };
+      if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
       const jumlahDibuat = dibuat?.length ?? 0;
       hasil.push({
         jenis: "visum",
@@ -310,7 +350,7 @@ export async function prosesBuatOtomatisPenugasan(
         tanggal_pelaksanaan: s.tanggalSelesai,
       })
     );
-    if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan };
+    if (errPerbaikan) return { ok: false, error: errPerbaikan, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
 
     const baris = setRentang.map((s) => ({
       surat_tugas_id: suratTugasId,
@@ -324,7 +364,7 @@ export async function prosesBuatOtomatisPenugasan(
       .from("spj_surat_pernyataan_kendaraan")
       .upsert(baris, { onConflict: "surat_tugas_id,petugas_jenis,petugas_id,tanggal_mulai_set", ignoreDuplicates: true })
       .select("tanggal_mulai_set");
-    if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan };
+    if (errUpsert) return { ok: false, error: errUpsert.message, set: [], hasil, peringatan, perbaikan, dihapusKrnUsang };
     const jumlahDibuat = dibuat?.length ?? 0;
     hasil.push({
       jenis: "surat_keterangan",
@@ -336,12 +376,25 @@ export async function prosesBuatOtomatisPenugasan(
 
   const totalDiperbaiki = perbaikan.length;
   const totalDibuat = hasil.reduce((a, h) => a + h.dibuat, 0);
+  const totalDihapusUsang = dihapusKrnUsang.length;
+  const bagianRingkasan: string[] = [];
+  if (totalDiperbaiki > 0) {
+    bagianRingkasan.push(`${totalDiperbaiki} SET yang belum konsisten dengan tanggal Hari Tugas saat ini (baris lama digabung/diperluas ulang)`);
+  }
+  // (28 Sep 2026) Info baris usang yg dihapus TOTAL (bukan digabung/
+  // diperluas) -- beda kasus dgn "diperbaiki" di atas, lihat komentar
+  // besar di lib/spjSetHariTugas.ts.
+  if (totalDihapusUsang > 0) {
+    bagianRingkasan.push(
+      `${totalDihapusUsang} baris dokumen LAMA dihapus krn rentang tanggalnya sudah tidak ada lagi di tag Hari Tugas saat ini (bukan cuma bergeser, tp benar2 hilang)`
+    );
+  }
   const ringkasanProses =
-    totalDiperbaiki === 0
+    bagianRingkasan.length === 0
       ? totalDibuat === 0
         ? "Tidak ada perubahan -- semua SET yang relevan sudah lengkap & konsisten dengan tanggal Hari Tugas saat ini."
         : `Langsung generate -- semua SET sudah konsisten, ${totalDibuat} baris dokumen baru dibuat.`
-      : `Ditemukan ${totalDiperbaiki} SET yang belum konsisten dengan tanggal Hari Tugas saat ini (baris lama digabung/diperluas ulang) sebelum ${totalDibuat} baris dokumen baru dibuat.`;
+      : `Ditemukan ${bagianRingkasan.join("; ")} sebelum ${totalDibuat} baris dokumen baru dibuat.`;
 
   return {
     ok: true,
@@ -350,6 +403,7 @@ export async function prosesBuatOtomatisPenugasan(
     hasil,
     peringatan,
     perbaikan,
+    dihapusKrnUsang,
     ringkasanProses,
   };
 }

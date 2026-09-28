@@ -43,6 +43,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
 import { AMBANG_DOKUMENTASI_HARIAN } from "@/lib/spjMatriks";
 import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";
+// (28 Sep 2026) terbilangRupiah dipakai KwitansiSetForm utk PREVIEW
+// read-only "Terbilang" di bawah kolom Nominal -- lihat komentar besar di
+// app/api/penyisiran/spj/kwitansi/route.ts kenapa field ini TIDAK LAGI
+// boleh diketik manual (nominal & terbilang pernah lepas sinkron, kasus
+// B-1259/13030/SS.330/2026). Aman diimpor ke komponen client krn
+// lib/spjFormat.ts murni fungsi format tanpa dependensi server.
+import { terbilangRupiah } from "@/lib/spjFormat";
 import {
   SpjDashboard,
   SpjMonitoring,
@@ -1028,11 +1035,22 @@ interface PerbaikanSetInfo {
   tanggalSelesai: string;
   rentangSebelum: { tanggalMulai: string; tanggalSelesai: string }[];
 }
+// (28 Sep 2026) 1 entri per baris dokumen LAMA yg DIHAPUS TOTAL krn
+// rentang tanggalnya sudah tidak beririsan sama sekali dgn Hari Tugas
+// SAAT INI (mis. Hari Tugas 17-30 diganti jadi 18-30, baris lama 17-30
+// dihapus) -- lihat komentar besar di lib/spjSetHariTugas.ts. Beda dgn
+// PerbaikanSetInfo (baris lamanya masih dipakai, cuma diperluas/digabung).
+interface BarisUsangDihapusInfo {
+  jenis: JenisDokumenOtomatis;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+}
 interface HasilBuatOtomatisRespons {
   ok: true;
   hasil: HasilBuatOtomatisDokumen[];
   peringatan: PeringatanBuatOtomatis[];
   perbaikan: PerbaikanSetInfo[];
+  dihapus_krn_usang: BarisUsangDihapusInfo[];
   ringkasan_proses: string;
 }
 
@@ -1074,6 +1092,11 @@ function BuatOtomatisBlok({
   // tetap ringkasan 1 baris) supaya pengelola bisa lihat PERSIS SET mana &
   // rentang sebelum/sesudahnya, bukan cuma jumlahnya.
   const [perbaikanDetail, setPerbaikanDetail] = useState<PerbaikanSetInfo[]>([]);
+  // (28 Sep 2026) Baris LAMA yg dihapus TOTAL krn tanggalnya sudah tidak
+  // ada lagi di Hari Tugas saat ini (lihat komentar besar di
+  // lib/spjSetHariTugas.ts) -- ditampilkan terpisah dari perbaikanDetail
+  // krn beda makna (dihapus total vs digabung/diperluas).
+  const [dihapusDetail, setDihapusDetail] = useState<BarisUsangDihapusInfo[]>([]);
 
   async function handleKlik() {
     setBusy(true);
@@ -1081,6 +1104,7 @@ function BuatOtomatisBlok({
     setNavigasi(null);
     setGagal(false);
     setPerbaikanDetail([]);
+    setDihapusDetail([]);
     try {
       const hasil = (await apiFetch("/api/penyisiran/spj/buat-otomatis", token, {
         method: "POST",
@@ -1090,7 +1114,9 @@ function BuatOtomatisBlok({
       const peringatanJenis = hasil.peringatan.find((p) => p.jenis === jenisDokumen);
       const hasilJenis = hasil.hasil.find((h) => h.jenis === jenisDokumen);
       const perbaikanJenis = (hasil.perbaikan ?? []).filter((p) => p.jenis === jenisDokumen);
+      const dihapusJenis = (hasil.dihapus_krn_usang ?? []).filter((d) => d.jenis === jenisDokumen);
       setPerbaikanDetail(perbaikanJenis);
+      setDihapusDetail(dihapusJenis);
       if (peringatanJenis) {
         setGagal(true);
         setPesan(peringatanJenis.pesan);
@@ -1098,6 +1124,7 @@ function BuatOtomatisBlok({
       } else if (hasilJenis) {
         const bagian: string[] = [];
         if (hasilJenis.diperbaiki > 0) bagian.push(`🔧 ${hasilJenis.diperbaiki} SET tidak konsisten dirapikan ulang`);
+        if (dihapusJenis.length > 0) bagian.push(`🗑 ${dihapusJenis.length} baris lama dihapus (tanggalnya sudah tidak ada lagi)`);
         if (hasilJenis.dibuat > 0) bagian.push(`${hasilJenis.dibuat} SET baru dibuat`);
         if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah konsisten (tidak disentuh)`);
         setPesan(
@@ -1164,6 +1191,16 @@ function BuatOtomatisBlok({
           </ul>
         </div>
       )}
+      {dihapusDetail.length > 0 && (
+        <div className="mt-1 rounded-md border border-rust-100 bg-rust-100/30 p-1.5 text-[10px] text-rust-700">
+          <p className="font-semibold">🗑 Baris lama dihapus (tanggalnya sudah tidak ada lagi di Hari Tugas saat ini):</p>
+          <ul className="mt-0.5 list-disc pl-3.5">
+            {dihapusDetail.map((d, i) => (
+              <li key={i}>{formatRentangSingkat(d.tanggalMulai, d.tanggalSelesai)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -1192,13 +1229,28 @@ interface ButuhPerhatianSemua {
   pesan: string;
   navigasi?: { halaman: string; keterangan: string };
 }
+// (28 Sep 2026) 1 entri per baris dokumen LAMA yg dihapus TOTAL di seluruh
+// proses "jalankan semua" -- lihat komentar besar di lib/spjSetHariTugas.ts
+// & BarisUsangDihapusInfo di atas.
+interface DihapusUsangSemua {
+  petugas_jenis: "penyisiran" | "tetangga";
+  petugas_id: string;
+  nama: string | null;
+  surat_tugas_id: number;
+  nomor_st: string | null;
+  jenis: JenisDokumenOtomatis;
+  tanggal_mulai: string;
+  tanggal_selesai: string;
+}
 interface HasilBuatOtomatisSemuaRespons {
   ok: true;
   total_pasangan: number;
   total_dibuat: number;
   total_diperbaiki: number;
+  total_dihapus_usang: number;
   hasil_per_jenis: HasilPerJenisSemua[];
   butuh_perhatian: ButuhPerhatianSemua[];
+  dihapus_krn_usang: DihapusUsangSemua[];
   ringkasan: string;
 }
 
@@ -1278,6 +1330,22 @@ function JalankanSemuaPetugasBlok({ token, onSessionExpired, onSelesai }: { toke
                     {b.nomor_st ? ` -- ST ${b.nomor_st}` : ""}
                     {b.jenis ? ` (${LABEL_JENIS_OTOMATIS[b.jenis]})` : ""}: {b.pesan}
                     {b.navigasi && <span className="block text-[10px] opacity-80">Navigasi: {b.navigasi.halaman} -- {b.navigasi.keterangan}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {hasil.dihapus_krn_usang.length > 0 && (
+            <div className="rounded-md border border-rust-100 bg-rust-100/30 p-2 text-[11px] text-rust-700">
+              <p className="font-semibold">
+                🗑 {hasil.dihapus_krn_usang.length} baris dokumen lama dihapus (tanggalnya sudah tidak ada lagi di Hari Tugas saat ini, mis. karena
+                rentang tanggal diubah/dipersempit):
+              </p>
+              <ul className="mt-1 list-disc space-y-1 pl-3.5">
+                {hasil.dihapus_krn_usang.map((d, i) => (
+                  <li key={i}>
+                    <b>{d.nama || `${d.petugas_jenis}:${d.petugas_id}`}</b>
+                    {d.nomor_st ? ` -- ST ${d.nomor_st}` : ""} ({LABEL_JENIS_OTOMATIS[d.jenis]}): {formatRentangSingkat(d.tanggal_mulai, d.tanggal_selesai)}
                   </li>
                 ))}
               </ul>
@@ -2946,8 +3014,8 @@ function KwitansiSection({ token, jenis, onSessionExpired }: { token: string; je
         </button>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Nominal diinput manual sesuai yang diterima. Terbilang tersarankan otomatis dari nominal, boleh diubah kalau
-        perlu.
+        Nominal diinput manual sesuai yang diterima. Terbilang SELALU mengikuti nominal secara otomatis (tidak bisa
+        diketik beda sendiri), supaya angka & terbilang tidak pernah tidak nyambung.
       </p>
 
       {errMsg && (
@@ -3143,7 +3211,14 @@ function KwitansiSetForm({
     if (hari > 0) setNominal(String(TARIF_TRANSLOK_PER_HARI_SARAN * hari));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tanggalMulaiSet, tanggalSelesaiSet]);
-  const [terbilang, setTerbilang] = useState(existing?.terbilang ?? "");
+  // (28 Sep 2026) "Terbilang" TIDAK LAGI state terpisah yg bisa lepas
+  // sinkron dari `nominal` (lihat komentar besar di
+  // app/api/penyisiran/spj/kwitansi/route.ts) -- SEKARANG murni turunan
+  // dihitung ULANG tiap render dari `nominal` yg SEDANG diketik, jadi
+  // MUSTAHIL beda dari yg nanti disimpan server (server jg menghitung
+  // ulang persis dari nominal yg sama, fungsi yg SAMA).
+  const nominalUntukPreview = Number(nominal);
+  const terbilangPreview = Number.isFinite(nominalUntukPreview) && nominalUntukPreview >= 0 ? terbilangRupiah(nominalUntukPreview) : "-";
   // untukPerjalananDinasPada HANYA relevan/dipakai utk jenis "tetangga" --
   // jenis "penyisiran" pakai st.untuk_perjalanan_dinas_pada_otomatis
   // (dihitung server, read-only, sama pola dgn Visum).
@@ -3193,7 +3268,9 @@ function KwitansiSetForm({
           id: existing?.id,
           surat_tugas_id: st.surat_tugas_id,
           nominal: nominalNum,
-          terbilang: terbilang.trim(),
+          // "terbilang" TIDAK dikirim lagi -- server SELALU menghitung
+          // ulang sendiri dari `nominal` di atas (lihat komentar besar di
+          // app/api/penyisiran/spj/kwitansi/route.ts).
           // untuk_perjalanan_dinas_pada cuma dipakai server utk jenis
           // "tetangga" -- jenis "penyisiran" SELALU dihitung ulang sendiri
           // di server (lihat app/api/penyisiran/spj/kwitansi/route.ts).
@@ -3298,16 +3375,17 @@ function KwitansiSetForm({
         </div>
       )}
       <div>
-        <label className="mb-1 block text-[10px] font-medium text-ink/50">
-          Terbilang (opsional, kosongkan utk otomatis dari nominal)
-        </label>
-        <input
-          type="text"
-          value={terbilang}
-          onChange={(e) => setTerbilang(e.target.value)}
-          placeholder="Otomatis dari nominal kalau dikosongkan"
-          className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-        />
+        <label className="mb-1 block text-[10px] font-medium text-ink/50">Terbilang (otomatis, tidak bisa diketik manual)</label>
+        {/* (28 Sep 2026) READ-ONLY -- lihat komentar besar di
+            app/api/penyisiran/spj/kwitansi/route.ts kenapa field ini tidak
+            lagi boleh jadi input bebas: dulu bisa lepas sinkron dari
+            nominal (kasus B-1259/13030/SS.330/2026, Nominal "Rp. 170.000"
+            tp Terbilang "satu juta lima ratus tiga puluh ribu rupiah"
+            krn nominal sempat diganti tp terbilang lama ikut terkirim
+            tanpa disadari). SEKARANG cuma pratinjau -- angka yg BENAR2
+            disimpan dihitung ulang di server dari `nominal`, bukan dari
+            teks ini. */}
+        <p className="w-full rounded-md border border-line bg-paper/40 px-2 py-1.5 text-xs italic text-ink/60">{terbilangPreview}</p>
       </div>
       {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
       <div className="flex items-center gap-2">

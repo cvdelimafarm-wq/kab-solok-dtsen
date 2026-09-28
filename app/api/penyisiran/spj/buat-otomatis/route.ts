@@ -136,6 +136,11 @@ export async function POST(req: NextRequest) {
     hasil: hasil.hasil,
     peringatan: hasil.peringatan,
     perbaikan: hasil.perbaikan,
+    // (28 Sep 2026) Baris dokumen LAMA yg dihapus TOTAL krn rentang
+    // tanggalnya sudah tidak beririsan sama sekali dgn Hari Tugas saat ini
+    // -- lihat komentar besar di lib/spjSetHariTugas.ts (kasus 17-30 diganti
+    // jadi 18-30, baris lama dulu nyangkut & tercetak dobel).
+    dihapus_krn_usang: hasil.dihapusKrnUsang,
     ringkasan_proses: hasil.ringkasanProses,
   });
 }

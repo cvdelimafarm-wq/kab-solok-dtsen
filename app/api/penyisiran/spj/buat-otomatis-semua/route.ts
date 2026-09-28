@@ -130,8 +130,25 @@ export async function POST(req: NextRequest) {
   const totalPerJenis = new Map<JenisDokumenSet, { dibuat: number; diperbaiki: number; sudahAda: number }>();
   for (const j of JENIS_DOKUMEN_SET) totalPerJenis.set(j, { dibuat: 0, diperbaiki: 0, sudahAda: 0 });
   const butuhPerhatian: ButuhPerhatian[] = [];
+  // (28 Sep 2026) Rekap baris dokumen LAMA yg dihapus TOTAL (bukan
+  // digabung/diperluas) krn rentang tanggalnya sudah tidak beririsan lagi
+  // dgn Hari Tugas SAAT INI (mis. Hari Tugas 17-30 diganti jadi 18-30) --
+  // lihat komentar besar di lib/spjSetHariTugas.ts. Disertakan nama
+  // petugas + nomor ST supaya pengelola bisa cross-check kalau perlu
+  // (walau ini penghapusan yg DIHARAPKAN/benar, bukan error).
+  const dihapusKrnUsangSemua: {
+    petugas_jenis: SpjPetugasJenis;
+    petugas_id: string;
+    nama: string | null;
+    surat_tugas_id: number;
+    nomor_st: string | null;
+    jenis: JenisDokumenSet;
+    tanggal_mulai: string;
+    tanggal_selesai: string;
+  }[] = [];
   let totalDibuat = 0;
   let totalDiperbaiki = 0;
+  let totalDihapusUsang = 0;
 
   // SENGAJA sekuensial (bukan Promise.all) -- lihat komentar besar di
   // atas file ini kenapa (hindari membanjiri Supabase & urutan hasil
@@ -181,26 +198,41 @@ export async function POST(req: NextRequest) {
         navigasi: p.navigasi,
       });
     }
+    for (const d of hasil.dihapusKrnUsang) {
+      totalDihapusUsang++;
+      dihapusKrnUsangSemua.push({
+        petugas_jenis: t.petugas_jenis,
+        petugas_id: t.petugas_id,
+        nama,
+        surat_tugas_id: t.surat_tugas_id,
+        nomor_st: hasil.nomorSt ?? null,
+        jenis: d.jenis,
+        tanggal_mulai: d.tanggalMulai,
+        tanggal_selesai: d.tanggalSelesai,
+      });
+    }
   }
 
   const hasilPerJenis = JENIS_DOKUMEN_SET.map((j) => ({ jenis: j, ...totalPerJenis.get(j)! }));
 
   const ringkasan =
-    totalDibuat === 0 && totalDiperbaiki === 0
+    totalDibuat === 0 && totalDiperbaiki === 0 && totalDihapusUsang === 0
       ? `Tidak ada perubahan -- semua ${tautan.length} pasangan petugas+Surat Tugas sudah lengkap & konsisten.${
           butuhPerhatian.length > 0 ? ` ${butuhPerhatian.length} butuh perhatian pengelola/petugas ybs (lihat daftar).` : ""
         }`
-      : `Diproses ${tautan.length} pasangan petugas+Surat Tugas: ${totalDibuat} baris dokumen baru dibuat, ${totalDiperbaiki} SET lama dirapikan ulang.${
-          butuhPerhatian.length > 0 ? ` ${butuhPerhatian.length} butuh perhatian pengelola/petugas ybs (lihat daftar).` : ""
-        }`;
+      : `Diproses ${tautan.length} pasangan petugas+Surat Tugas: ${totalDibuat} baris dokumen baru dibuat, ${totalDiperbaiki} SET lama dirapikan ulang${
+          totalDihapusUsang > 0 ? `, ${totalDihapusUsang} baris dokumen lama dihapus krn tanggalnya sudah tidak ada lagi di Hari Tugas saat ini` : ""
+        }.${butuhPerhatian.length > 0 ? ` ${butuhPerhatian.length} butuh perhatian pengelola/petugas ybs (lihat daftar).` : ""}`;
 
   return NextResponse.json({
     ok: true,
     total_pasangan: tautan.length,
     total_dibuat: totalDibuat,
     total_diperbaiki: totalDiperbaiki,
+    total_dihapus_usang: totalDihapusUsang,
     hasil_per_jenis: hasilPerJenis,
     butuh_perhatian: butuhPerhatian,
+    dihapus_krn_usang: dihapusKrnUsangSemua,
     ringkasan,
   });
 }

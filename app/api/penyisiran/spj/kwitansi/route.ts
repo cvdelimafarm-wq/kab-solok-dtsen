@@ -19,9 +19,26 @@
 //           tetap lewat POST /api/penyisiran/spj/buat-otomatis (dari data yg
 //           sudah ada di sistem) -- endpoint ini utk isi/ubah manual 1 SET.
 //         Nominal WAJIB diisi (boleh hasil saran "Buat Otomatis" yg lalu
-//         diedit, boleh manual penuh) -- sistem cuma menyarankan `terbilang`
-//         otomatis dari nominal, tapi boleh ditimpa manual kalau client
-//         mengirim `terbilang` sendiri.
+//         diedit, boleh manual penuh).
+//
+// (28 Sep 2026, laporan user -- kasus B-1259/13030/SS.330/2026: Nominal
+// "Rp. 170.000" tp Terbilang "Satu juta lima ratus tiga puluh ribu rupiah",
+// alias ANGKA & TERBILANG TIDAK KONSISTEN) `terbilang` KIRIMAN CLIENT
+// SEKARANG DIABAIKAN TOTAL -- field itu dulu boleh "ditimpa manual" (lihat
+// riwayat di atas), yg berarti kalau form frontend (KwitansiSetForm)
+// meng-otomatis-ulang `nominal` (mis. krn rentang tanggal SET diubah, atau
+// tombol "isi tarif x hari" diklik) TANPA ikut meng-update state `terbilang`
+// yg terpisah, nilai lama yg SUDAH TIDAK NYAMBUNG dgn nominal baru itu
+// tetap terkirim & DIPERCAYA APA ADANYA oleh server (`terbilangInput ||
+// terbilangRupiah(nominal)` -- terbilangInput menang kalau tidak kosong).
+// SEKARANG `terbilang` SELALU dihitung ulang di server dari `nominal` yg
+// SAMA yg disimpan pada baris itu (SATU sumber angka, sesuai prinsip yg
+// sama dgn perbaikan tanggal_spd Kwitansi sebelumnya: "tidak mungkin
+// menjelaskan trik ke berbagai user" -- jangan andalkan disiplin manual utk
+// menjaga 2 field tetap sinkron, buat SISTEM yg TIDAK BISA membuatnya lepas
+// sinkron). Field "Terbilang" di form SEKARANG jadi PREVIEW read-only
+// (dihitung live di client dari nominal, fungsi SAMA persis), bukan input
+// yg dikirim ke server.
 //
 // `untuk_perjalanan_dinas_pada` (kecamatan wilayah tugas) -- utk jenis
 // "penyisiran" DIHITUNG OTOMATIS dari data yg SUDAH ADA di sistem (lewat
@@ -113,7 +130,11 @@ export async function POST(req: NextRequest) {
   const tanggalSelesaiSet = String(body?.tanggal_selesai_set || tanggalMulaiSet || "").trim();
   const tanggalSpd = String(body?.tanggal_spd || tanggalMulaiSet || "").trim();
   const tanggalKwitansi = String(body?.tanggal_kwitansi || "").trim() || new Date().toISOString().slice(0, 10);
-  const terbilangInput = typeof body?.terbilang === "string" ? body.terbilang.trim() : "";
+  // (28 Sep 2026) `body.terbilang` SENGAJA TIDAK DIBACA lagi -- lihat
+  // komentar besar di atas file ini kenapa (kasus B-1259/13030/SS.330/2026,
+  // nominal & terbilang lepas sinkron krn client bisa kirim terbilang lama
+  // yg tidak lagi cocok dgn nominal baru). `terbilang` SEKARANG SELALU
+  // dihitung ulang dari `nominal` yg baris ini SIMPAN (lihat di bawah).
 
   if (!Number.isFinite(suratTugasId)) return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   if (!Number.isFinite(nominal) || nominal < 0) return NextResponse.json({ error: "Nominal tidak valid." }, { status: 400 });
@@ -159,7 +180,7 @@ export async function POST(req: NextRequest) {
   if (errTaut) return NextResponse.json({ error: errTaut.message }, { status: 500 });
   if (!taut) return NextResponse.json({ error: "Surat Tugas ini bukan milik Anda." }, { status: 403 });
 
-  const terbilang = terbilangInput || terbilangRupiah(nominal);
+  const terbilang = terbilangRupiah(nominal);
   const { data: akun } = await supabase.from(tabelAkun(session.jenis)).select("nama").eq("id", session.petugasId).maybeSingle();
 
   const kolom = {
