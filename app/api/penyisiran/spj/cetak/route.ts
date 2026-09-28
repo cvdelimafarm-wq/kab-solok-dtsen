@@ -459,7 +459,28 @@ export async function POST(req: NextRequest) {
 
       // Surat Tugas -- 1 file scan yg SAMA, diambil SEKALI lalu disisipkan
       // ULANG di setiap kelompok tanggal (permintaan user 24 Sep 2026, spy
-      // tiap kelompok tetap 1 paket SPJ yg lengkap & mandiri).
+      // tiap kelompok tetap 1 paket SPJ yg lengkap & mandiri) -- TAPI HANYA
+      // kalau kelompok itu benar2 akan jadi FILE TERPISAH (mode
+      // "per_tanggal", kunci grup = tanggal, beda per kelompok). Utk mode
+      // "per_orang"/"gabung"/"per_jenis", kunci grup TIDAK berubah antar
+      // kelompok (tetap petugasKey / "semua" / "surat_tugas" berapa pun
+      // banyaknya kelompok petugas ini) -- pemanggilan tanpa penjagaan akan
+      // menyisipkan SCAN YANG SAMA PERSIS berkali-kali (1x per kelompok) ke
+      // SATU PDF gabungan yg sama, jadi halaman Surat Tugas DOBEL/TRIPEL
+      // dst tanpa guna (bukan cuma beda nilai spt Kwitansi/Visum/Surat
+      // Pernyataan yg memang boleh >1 baris kalau tanggalnya beda).
+      //
+      // (28 Sep 2026, laporan user -- PDF "01_Velmarniati" berisi Surat
+      // Tugas & beberapa dokumen lain persis dobel) Ditemukan lewat PDF yg
+      // dikirim user: petugas dgn data yg SEMPAT terbagi jd 2 kelompok
+      // (baik krn Hari Tugas beneran terputus, ATAU sisa baris SET usang yg
+      // BARU diperbaiki hari ini di lib/spjSetHariTugas.ts) dicetak mode
+      // "per_orang" -> Surat Tugas-nya kepasang 2x dlm 1 file yg sama.
+      // `kunciStYgSudahDisisipkan` melacak kunci grup mana yg SUDAH dapat
+      // Surat Tugas-nya utk petugas/ST ini (di-reset tiap `p`, aman lintas
+      // petugas krn Set baru dibuat tiap iterasi) -- kunci yg sama tidak
+      // akan disisipi ulang.
+      const kunciStYgSudahDisisipkan = new Set<string>();
       let suratTugasBytes: Uint8Array | null = null;
       if (dokumenDipilih.includes("surat_tugas")) {
         const { data: st } = await supabase.from("spj_surat_tugas").select("file_path").eq("id", p.suratTugasId).maybeSingle();
@@ -557,10 +578,16 @@ export async function POST(req: NextRequest) {
         }
 
         if (suratTugasBytes) {
-          await tambahKeGrup(
-            { petugasKey, petugasNama: p.nama, jenis: "surat_tugas", tanggal: null, urutanTanggal: kel.tanggalMulai },
-            suratTugasBytes
-          );
+          const infoSuratTugas: UnitInfo = { petugasKey, petugasNama: p.nama, jenis: "surat_tugas", tanggal: null, urutanTanggal: kel.tanggalMulai };
+          const kunciSuratTugas = kunciUntukGrup(infoSuratTugas);
+          // Lihat komentar besar di deklarasi `kunciStYgSudahDisisipkan` di
+          // atas -- cuma disisipkan lagi kalau kelompok ini benar2 menuju
+          // FILE/grup yg BEDA dari kelompok sebelumnya (mode "per_tanggal"),
+          // supaya tidak dobel di mode "per_orang"/"gabung"/"per_jenis".
+          if (!kunciStYgSudahDisisipkan.has(kunciSuratTugas)) {
+            kunciStYgSudahDisisipkan.add(kunciSuratTugas);
+            await tambahKeGrup(infoSuratTugas, suratTugasBytes);
+          }
         }
 
         if (dokumenDipilih.includes("visum")) {
