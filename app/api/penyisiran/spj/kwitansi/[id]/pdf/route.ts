@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // runtime; hasil gabungannya di-cast manual ke bentuk yg sama (`jabatan`
   // opsional).
   const [{ data: st }, { data: akunRaw }] = await Promise.all([
-    supabase.from("spj_surat_tugas").select("nomor_st").eq("id", kwitansi.surat_tugas_id).maybeSingle(),
+    supabase.from("spj_surat_tugas").select("nomor_st, tanggal_terbit").eq("id", kwitansi.surat_tugas_id).maybeSingle(),
     jenisKwitansi === "penyisiran"
       ? supabase.from(tabelAkun(jenisKwitansi)).select("nama, nip, jabatan").eq("id", kwitansi.petugas_id).maybeSingle()
       : supabase.from(tabelAkun(jenisKwitansi)).select("nama, nip").eq("id", kwitansi.petugas_id).maybeSingle(),
@@ -57,7 +57,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const pdfBytes = await buatPdfKwitansi({
     nomorSt: st?.nomor_st ?? "-",
-    tanggalSpd: kwitansi.tanggal_spd,
+    // Tanggal terbit ST (SATU nilai tetap per ST) -- BUKAN tanggal_spd
+    // milik kwitansi ini (per-segmen, bisa beda2), lihat komentar di
+    // KwitansiPdfData/lib/pdf/kwitansi.ts. Fallback ke tanggal_spd HANYA
+    // utk jaga2 kalau `st` gagal ditemukan (mis. ST sudah terhapus).
+    tanggalTerbitSt: st?.tanggal_terbit ?? kwitansi.tanggal_spd,
     nominal: Number(kwitansi.nominal),
     terbilang: kwitansi.terbilang,
     untukPerjalananDinasPada: kwitansi.untuk_perjalanan_dinas_pada,

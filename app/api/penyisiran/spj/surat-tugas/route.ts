@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const { data: semuaSt, error: errSt } = await supabase
       .from("spj_surat_tugas")
       .select(
-        "id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, uploaded_by, created_at, menunggu_file"
+        "id, nomor_st, tanggal_terbit, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, uploaded_by, created_at, menunggu_file"
       )
       .order("tanggal_mulai", { ascending: false });
     if (errSt) return NextResponse.json({ error: errSt.message }, { status: 500 });
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
 
   const { data: stSaya, error: errStSaya } = await supabase
     .from("spj_surat_tugas")
-    .select("id, nomor_st, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, created_at, menunggu_file")
+    .select("id, nomor_st, tanggal_terbit, tanggal_mulai, tanggal_selesai, keterangan, file_nama_asli, created_at, menunggu_file")
     .in("id", idSaya)
     .order("tanggal_mulai", { ascending: false });
   if (errStSaya) return NextResponse.json({ error: errStSaya.message }, { status: 500 });
@@ -137,14 +137,18 @@ export async function POST(req: NextRequest) {
   if (!form) return NextResponse.json({ error: "Data form tidak valid." }, { status: 400 });
 
   const nomorSt = String(form.get("nomor_st") || "").trim();
+  const tanggalTerbit = String(form.get("tanggal_terbit") || "").trim();
   const tanggalMulai = String(form.get("tanggal_mulai") || "").trim();
   const tanggalSelesai = String(form.get("tanggal_selesai") || "").trim();
   const keterangan = String(form.get("keterangan") || "").trim() || null;
   const petugasRaw = String(form.get("petugas") || "[]");
   const file = form.get("file");
 
-  if (!nomorSt || !tanggalMulai || !tanggalSelesai) {
-    return NextResponse.json({ error: "Nomor ST, tanggal mulai, dan tanggal selesai wajib diisi." }, { status: 400 });
+  if (!nomorSt || !tanggalTerbit || !tanggalMulai || !tanggalSelesai) {
+    return NextResponse.json(
+      { error: "Nomor ST, tanggal terbit, tanggal mulai, dan tanggal selesai wajib diisi." },
+      { status: 400 }
+    );
   }
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "File Surat Tugas wajib diupload." }, { status: 400 });
@@ -181,6 +185,7 @@ export async function POST(req: NextRequest) {
     .from("spj_surat_tugas")
     .insert({
       nomor_st: nomorSt,
+      tanggal_terbit: tanggalTerbit,
       tanggal_mulai: tanggalMulai,
       tanggal_selesai: tanggalSelesai,
       keterangan,

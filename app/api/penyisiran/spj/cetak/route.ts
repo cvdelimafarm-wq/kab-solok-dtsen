@@ -150,6 +150,10 @@ interface Penugasan {
   nama: string;
   suratTugasId: number;
   nomorSt: string;
+  // Tanggal ST diterbitkan/ditandatangani (spj_surat_tugas.tanggal_terbit,
+  // dirambatkan lewat RPC spj_matriks_kelengkapan) -- dipakai sbg field
+  // "Tanggal" pada Kwitansi cetak-gabungan, lihat lib/pdf/kwitansi.ts.
+  tanggalTerbitSt: string;
   tanggalMulaiEfektif: string;
   tanggalList: string[];
 }
@@ -160,6 +164,7 @@ interface BarisMatriksMentah {
   nama: string;
   surat_tugas_id: number;
   nomor_st: string;
+  tanggal_terbit: string;
   tanggal: string;
 }
 
@@ -309,6 +314,7 @@ export async function POST(req: NextRequest) {
         nama: b.nama,
         suratTugasId: b.surat_tugas_id,
         nomorSt: b.nomor_st,
+        tanggalTerbitSt: b.tanggal_terbit,
         tanggalMulaiEfektif: b.tanggal,
         tanggalList: [],
       };
@@ -596,7 +602,7 @@ export async function POST(req: NextRequest) {
           for (const k of kList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
             const bytes = await buatPdfKwitansi({
               nomorSt: p.nomorSt,
-              tanggalSpd: k.tanggal_spd,
+              tanggalTerbitSt: p.tanggalTerbitSt,
               nominal: Number(k.nominal),
               terbilang: k.terbilang,
               untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,

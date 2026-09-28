@@ -76,6 +76,13 @@ const LEVEL_LABEL: Record<Level, string> = {
   subsls: "SLS/Sub SLS",
 };
 
+type KonstruksiTipeBaris = "PPL" | "UNASSIGNED" | "NO_PPL";
+const LABEL_TIPE_BARIS: Record<KonstruksiTipeBaris, string> = {
+  PPL: "PPL Terdaftar",
+  UNASSIGNED: "Di Luar Wilayah PPL",
+  NO_PPL: "Kecamatan Tanpa PPL",
+};
+
 interface PetugasTarget {
   id: number;
   nama: string;
@@ -98,6 +105,43 @@ interface RingkasanRow {
   tidak_ada: number;
   ragu: number;
   total: number;
+}
+
+// ---------- Monitoring Usaha Konstruksi (live) ----------
+// Bungkus RPC penyisiran_monitoring_konstruksi_kecamatan() &
+// penyisiran_monitoring_konstruksi_ppl() -- lihat migrasi
+// 20260928c_monitoring_konstruksi_kecamatan_dan_ppl.sql &
+// app/api/penyisiran/target/monitoring-konstruksi/route.ts. Menggantikan
+// laporan Excel "Monitoring_Penyisiran_Usaha_Konstruksi_SE2026.xlsx" --
+// angkanya sama persis (sudah dicocokkan), tapi di sini LIVE (query
+// langsung ke DB tiap dibuka/dimuat ulang), tidak perlu diunduh ulang.
+interface KonstruksiKecamatanRow {
+  kec_kode: string;
+  kec_nama: string;
+  jumlah_ppl_terdaftar: number;
+  target: number;
+  realisasi: number;
+  belum_masuk_wilayah_ppl: number;
+  ditemukan: number;
+  sudah_didata_se2026: number;
+  tidak_ada_usaha: number;
+  tidak_ditemukan: number;
+  jadwalkan_besok: number;
+  ditandai_pml: number;
+  ada_nama_pemilik: number;
+  ada_koordinat: number;
+  baru_ditambah_manual: number;
+}
+
+interface KonstruksiPplRow {
+  kec_kode: string;
+  kec_nama: string;
+  petugas_id: number | null;
+  nama_ppl: string;
+  no_hp_ppl: string | null;
+  tipe_baris: KonstruksiTipeBaris;
+  target: number;
+  realisasi: number;
 }
 
 function tokenExpMs(t: string): number {
@@ -350,6 +394,8 @@ function ManajemenTargetPanel({ token, onSessionExpired }: { token: string; onSe
       )}
 
       <RingkasanIdentifikasi token={token} onSessionExpired={onSessionExpired} />
+
+      <MonitoringKonstruksi token={token} onSessionExpired={onSessionExpired} />
 
       <div className="rounded-lg border border-line bg-white p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -677,6 +723,304 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
           )}
         </table>
       </div>
+    </div>
+  );
+}
+
+// ---------- Monitoring Usaha Konstruksi (live) ----------
+// Dua tabel: ringkasan per Kecamatan, lalu rincian per PPL (bisa
+// disembunyikan -- default tampil krn itulah yg paling sering dicek: PPL
+// mana yg wilayah pilihannya belum mencakup target Konstruksi). Baris
+// "UNASSIGNED" (usaha di luar wilayah pilihan PPL manapun) & "NO_PPL"
+// (kecamatan belum py PPL terdaftar sama sekali) ditandai warna spy
+// langsung kelihatan tanpa harus baca kolom Tipe satu-satu -- sama spt
+// warna kuning/salmon di laporan Excel sebelumnya.
+function MonitoringKonstruksi({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const [kecRows, setKecRows] = useState<KonstruksiKecamatanRow[]>([]);
+  const [pplRows, setPplRows] = useState<KonstruksiPplRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [tampilkanRincianPpl, setTampilkanRincianPpl] = useState(true);
+
+  const muat = useCallback(async () => {
+    setLoading(true);
+    setErrMsg(null);
+    try {
+      const d = await apiFetch("/api/penyisiran/target/monitoring-konstruksi", token);
+      setKecRows(d.kecamatan ?? []);
+      setPplRows(d.ppl ?? []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
+        onSessionExpired();
+      } else {
+        setErrMsg(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, onSessionExpired]);
+
+  useEffect(() => {
+    muat();
+  }, [muat]);
+
+  const kolomKec = useMemo(
+    () => [
+      { key: "kec_nama", label: "Kecamatan", getValue: (r: KonstruksiKecamatanRow) => r.kec_nama },
+      { key: "jumlah_ppl_terdaftar", label: "PPL Terdaftar", getValue: (r: KonstruksiKecamatanRow) => r.jumlah_ppl_terdaftar },
+      { key: "target", label: "Target", getValue: (r: KonstruksiKecamatanRow) => r.target },
+      { key: "realisasi", label: "Realisasi", getValue: (r: KonstruksiKecamatanRow) => r.realisasi },
+      {
+        key: "persen_realisasi",
+        label: "% Realisasi",
+        getValue: (r: KonstruksiKecamatanRow) => (r.target > 0 ? Math.round((r.realisasi / r.target) * 100) : 0),
+      },
+      {
+        key: "belum_masuk_wilayah_ppl",
+        label: "Belum Masuk Wilayah PPL",
+        getValue: (r: KonstruksiKecamatanRow) => r.belum_masuk_wilayah_ppl,
+      },
+      { key: "ada_nama_pemilik", label: "Ada Nama Pemilik", getValue: (r: KonstruksiKecamatanRow) => r.ada_nama_pemilik },
+      { key: "ada_koordinat", label: "Ada Koordinat", getValue: (r: KonstruksiKecamatanRow) => r.ada_koordinat },
+      { key: "ditandai_pml", label: "Ditandai PML", getValue: (r: KonstruksiKecamatanRow) => r.ditandai_pml },
+      { key: "ditemukan", label: "Ditemukan", getValue: (r: KonstruksiKecamatanRow) => r.ditemukan },
+      { key: "tidak_ada_usaha", label: "Tidak Ada Usaha", getValue: (r: KonstruksiKecamatanRow) => r.tidak_ada_usaha },
+    ],
+    []
+  );
+  const tabelKec = useExcelTable(kecRows, kolomKec, { key: "kec_nama", dir: "asc" });
+
+  const kolomPpl = useMemo(
+    () => [
+      { key: "kec_nama", label: "Kecamatan", getValue: (r: KonstruksiPplRow) => r.kec_nama },
+      { key: "nama_ppl", label: "Nama PPL", getValue: (r: KonstruksiPplRow) => r.nama_ppl },
+      { key: "no_hp_ppl", label: "No HP", getValue: (r: KonstruksiPplRow) => r.no_hp_ppl },
+      { key: "tipe_baris", label: "Tipe", getValue: (r: KonstruksiPplRow) => LABEL_TIPE_BARIS[r.tipe_baris] },
+      { key: "target", label: "Target", getValue: (r: KonstruksiPplRow) => r.target },
+      { key: "realisasi", label: "Realisasi", getValue: (r: KonstruksiPplRow) => r.realisasi },
+      {
+        key: "persen_realisasi",
+        label: "% Realisasi",
+        getValue: (r: KonstruksiPplRow) => (r.target > 0 ? Math.round((r.realisasi / r.target) * 100) : 0),
+      },
+    ],
+    []
+  );
+  const tabelPpl = useExcelTable(pplRows, kolomPpl, { key: "kec_nama", dir: "asc" });
+
+  const totalTarget = kecRows.reduce((s, r) => s + r.target, 0);
+  const totalRealisasi = kecRows.reduce((s, r) => s + r.realisasi, 0);
+  const totalBelumMasuk = kecRows.reduce((s, r) => s + r.belum_masuk_wilayah_ppl, 0);
+  const jumlahKecTanpaPpl = kecRows.filter((r) => r.jumlah_ppl_terdaftar === 0).length;
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-navy-900">🏗 Monitoring Usaha Konstruksi</p>
+        <button
+          type="button"
+          onClick={muat}
+          disabled={loading}
+          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
+        >
+          {loading ? "Memuat..." : "↻ Muat Ulang"}
+        </button>
+      </div>
+      <p className="mb-2 text-[10px] text-ink/40">
+        Khusus target usaha dari sumber &ldquo;Konstruksi&rdquo; (Konfirmasi Konstruksi &amp; DUTL). Data live --
+        ditarik langsung dari database tiap kartu ini dimuat/dimuat ulang, otomatis ikut berubah kalau status
+        kunjungan atau alokasi wilayah PPL berubah.
+      </p>
+
+      {errMsg && <p className="mb-2 text-xs text-rust-700">⚠ {errMsg}</p>}
+
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-center">
+          <p className="text-[10px] text-ink/50">Target</p>
+          <p className="text-base font-bold text-navy-900">{totalTarget}</p>
+        </div>
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-center">
+          <p className="text-[10px] text-ink/50">Realisasi</p>
+          <p className="text-base font-bold text-navy-900">
+            {totalRealisasi}{" "}
+            <span className="text-[10px] font-normal text-ink/40">
+              ({totalTarget > 0 ? Math.round((totalRealisasi / totalTarget) * 100) : 0}%)
+            </span>
+          </p>
+        </div>
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-center">
+          <p className="text-[10px] text-ink/50">Belum Masuk Wilayah PPL</p>
+          <p className="text-base font-bold text-[#8A6A12]">{totalBelumMasuk}</p>
+        </div>
+        <div className="rounded-md border border-line bg-paper/40 p-2 text-center">
+          <p className="text-[10px] text-ink/50">Kecamatan Tanpa PPL</p>
+          <p className="text-base font-bold text-rust-700">{jumlahKecTanpaPpl}</p>
+        </div>
+      </div>
+
+      <p className="mb-1.5 text-[11px] font-semibold text-navy-900">Ringkasan per Kecamatan</p>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+        <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+        {tabelKec.adaFilterAktif && (
+          <button type="button" onClick={tabelKec.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+            Reset semua filter
+          </button>
+        )}
+      </div>
+      <div className="mb-4 overflow-x-auto rounded-md border border-line">
+        <table className="min-w-full text-xs">
+          <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+            <tr className="text-left">
+              {kolomKec.map((k) => (
+                <ExcelTh
+                  key={k.key}
+                  colKey={k.key}
+                  label={k.label}
+                  align={k.key === "kec_nama" ? "left" : "right"}
+                  sortKey={tabelKec.sortKey}
+                  sortDir={tabelKec.sortDir}
+                  onSort={tabelKec.toggleSort}
+                  values={tabelKec.uniqueValues[k.key] ?? []}
+                  activeFilter={tabelKec.filters[k.key]}
+                  onFilterChange={tabelKec.setColumnFilter}
+                  variant="dark"
+                />
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tabelKec.rows.map((r) => (
+              <tr key={r.kec_kode} className={`border-b border-line last:border-0 ${r.jumlah_ppl_terdaftar === 0 ? "bg-rust-100/30" : ""}`}>
+                <td className="px-3 py-1.5 font-medium text-navy-900">{r.kec_nama}</td>
+                <td className="px-3 py-1.5 text-right text-ink/70">{r.jumlah_ppl_terdaftar}</td>
+                <td className="px-3 py-1.5 text-right text-navy-900">{r.target}</td>
+                <td className="px-3 py-1.5 text-right text-moss-700">{r.realisasi}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">
+                  {r.target > 0 ? Math.round((r.realisasi / r.target) * 100) : 0}%
+                </td>
+                <td className="px-3 py-1.5 text-right text-[#8A6A12]">{r.belum_masuk_wilayah_ppl}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">{r.ada_nama_pemilik}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">{r.ada_koordinat}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">{r.ditandai_pml}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">{r.ditemukan}</td>
+                <td className="px-3 py-1.5 text-right text-ink/60">{r.tidak_ada_usaha}</td>
+              </tr>
+            ))}
+            {tabelKec.rows.length === 0 && !loading && (
+              <tr>
+                <td colSpan={kolomKec.length} className="px-3 py-4 text-center text-ink/40">
+                  Tidak ada data{tabelKec.adaFilterAktif && " utk filter ini"}.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {tabelKec.rows.length > 0 && (
+            <tfoot>
+              <tr className="border-t border-line bg-paper/60 font-semibold text-navy-900">
+                <td className="px-3 py-1.5">Total</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.jumlah_ppl_terdaftar, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.target, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.realisasi, 0)}</td>
+                <td className="px-3 py-1.5 text-right">
+                  {(() => {
+                    const t = tabelKec.rows.reduce((s, r) => s + r.target, 0);
+                    const rr = tabelKec.rows.reduce((s, r) => s + r.realisasi, 0);
+                    return t > 0 ? Math.round((rr / t) * 100) : 0;
+                  })()}
+                  %
+                </td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.belum_masuk_wilayah_ppl, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.ada_nama_pemilik, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.ada_koordinat, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.ditandai_pml, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.ditemukan, 0)}</td>
+                <td className="px-3 py-1.5 text-right">{tabelKec.rows.reduce((s, r) => s + r.tidak_ada_usaha, 0)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold text-navy-900">Rincian per PPL</p>
+        <button
+          type="button"
+          onClick={() => setTampilkanRincianPpl((v) => !v)}
+          className="text-[11px] font-medium text-navy-700 hover:underline"
+        >
+          {tampilkanRincianPpl ? "Sembunyikan" : "Tampilkan"}
+        </button>
+      </div>
+
+      {tampilkanRincianPpl && (
+        <>
+          <p className="mb-2 text-[10px] text-ink/40">
+            Baris <span className="rounded bg-[#FCE8C8] px-1 text-[#8A6A12]">kuning</span> = usaha yang lokasinya di
+            luar semua wilayah pilihan PPL yang terdaftar di kecamatan itu. Baris{" "}
+            <span className="rounded bg-rust-100 px-1 text-rust-700">merah muda</span> = kecamatan yang belum punya
+            PPL terdaftar sama sekali.
+          </p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink/40">
+            <p>Klik nama kolom utk urutkan, klik &ldquo;▾&rdquo; di header utk filter (spt Excel).</p>
+            {tabelPpl.adaFilterAktif && (
+              <button type="button" onClick={tabelPpl.resetFilters} className="shrink-0 font-medium text-navy-700 hover:underline">
+                Reset semua filter
+              </button>
+            )}
+          </div>
+          <div className="overflow-x-auto rounded-md border border-line">
+            <table className="min-w-full text-xs">
+              <thead className="bg-[#2563eb] text-[10px] font-semibold uppercase tracking-wide text-white">
+                <tr className="text-left">
+                  {kolomPpl.map((k) => (
+                    <ExcelTh
+                      key={k.key}
+                      colKey={k.key}
+                      label={k.label}
+                      align={k.key === "target" || k.key === "realisasi" || k.key === "persen_realisasi" ? "right" : "left"}
+                      sortKey={tabelPpl.sortKey}
+                      sortDir={tabelPpl.sortDir}
+                      onSort={tabelPpl.toggleSort}
+                      values={tabelPpl.uniqueValues[k.key] ?? []}
+                      activeFilter={tabelPpl.filters[k.key]}
+                      onFilterChange={tabelPpl.setColumnFilter}
+                      variant="dark"
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tabelPpl.rows.map((r, i) => (
+                  <tr
+                    key={`${r.kec_kode}-${r.petugas_id ?? r.tipe_baris}-${i}`}
+                    className={`border-b border-line last:border-0 ${
+                      r.tipe_baris === "NO_PPL" ? "bg-rust-100/40" : r.tipe_baris === "UNASSIGNED" ? "bg-[#FCE8C8]/50" : ""
+                    }`}
+                  >
+                    <td className="px-3 py-1.5 font-medium text-navy-900">{r.kec_nama}</td>
+                    <td className="px-3 py-1.5 text-ink/80">{r.nama_ppl}</td>
+                    <td className="px-3 py-1.5 text-ink/60">{r.no_hp_ppl ?? "-"}</td>
+                    <td className="px-3 py-1.5 text-ink/60">{LABEL_TIPE_BARIS[r.tipe_baris]}</td>
+                    <td className="px-3 py-1.5 text-right text-navy-900">{r.target}</td>
+                    <td className="px-3 py-1.5 text-right text-moss-700">{r.realisasi}</td>
+                    <td className="px-3 py-1.5 text-right text-ink/60">
+                      {r.target > 0 ? Math.round((r.realisasi / r.target) * 100) : 0}%
+                    </td>
+                  </tr>
+                ))}
+                {tabelPpl.rows.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={kolomPpl.length} className="px-3 py-4 text-center text-ink/40">
+                      Tidak ada data{tabelPpl.adaFilterAktif && " utk filter ini"}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

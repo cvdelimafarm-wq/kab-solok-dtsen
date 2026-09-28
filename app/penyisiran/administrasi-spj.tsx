@@ -330,6 +330,12 @@ interface PetugasTaut {
 interface SuratTugasRow {
   id: number;
   nomor_st: string;
+  // Tanggal Surat Tugas ini DITANDATANGANI/DITERBITKAN -- SATU tanggal
+  // tetap per ST (beda dgn tanggal_mulai/tanggal_selesai yg mrpkan
+  // rentang PELAKSANAAN tugasnya). Dipakai al. sbg field "Tanggal" pada
+  // Kwitansi cetak (lihat lib/pdf/kwitansi.ts) -- lihat migrasi
+  // 20260929_tambah_tanggal_terbit_surat_tugas.sql.
+  tanggal_terbit: string;
   tanggal_mulai: string;
   tanggal_selesai: string;
   keterangan: string | null;
@@ -657,6 +663,7 @@ function AdministrasiPanel({
               <p className="mt-1 text-ink/60">
                 {formatTanggal(st.tanggal_mulai)} s/d {formatTanggal(st.tanggal_selesai)}
               </p>
+              <p className="mt-0.5 text-[10px] text-ink/40">Tanggal Terbit ST: {formatTanggal(st.tanggal_terbit)}</p>
               {st.keterangan && <p className="mt-0.5 text-ink/50">{st.keterangan}</p>}
               {pengelola && st.petugas && st.petugas.length > 0 && (
                 <p className="mt-1 text-[10px] text-ink/40">
@@ -768,9 +775,20 @@ function UploadSuratTugasForm({
 }) {
   const [petugasOptions, setPetugasOptions] = useState<PetugasTaut[]>([]);
   const [nomorSt, setNomorSt] = useState("");
+  const [tanggalTerbit, setTanggalTerbit] = useState("");
+  // Tanggal Terbit belum diisi manual -> ikut Tanggal Mulai secara otomatis
+  // (kasus PALING UMUM: ST ditandatangani di hari pertama pelaksanaan) --
+  // begitu user mengetik sendiri di kolom Tanggal Terbit, auto-ikut ini
+  // berhenti (lihat handleTanggalMulaiChange).
+  const [tanggalTerbitDiubahManual, setTanggalTerbitDiubahManual] = useState(false);
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [tanggalSelesai, setTanggalSelesai] = useState("");
   const [keterangan, setKeterangan] = useState("");
+
+  function handleTanggalMulaiChange(v: string) {
+    setTanggalMulai(v);
+    if (!tanggalTerbitDiubahManual) setTanggalTerbit(v);
+  }
   const [file, setFile] = useState<File | null>(null);
   const [dipilih, setDipilih] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -798,8 +816,8 @@ function UploadSuratTugasForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!nomorSt.trim() || !tanggalMulai || !tanggalSelesai) {
-      setError("Nomor ST, tanggal mulai, dan tanggal selesai wajib diisi.");
+    if (!nomorSt.trim() || !tanggalTerbit || !tanggalMulai || !tanggalSelesai) {
+      setError("Nomor ST, tanggal terbit, tanggal mulai, dan tanggal selesai wajib diisi.");
       return;
     }
     if (!file) {
@@ -818,6 +836,7 @@ function UploadSuratTugasForm({
       });
       const form = new FormData();
       form.set("nomor_st", nomorSt.trim());
+      form.set("tanggal_terbit", tanggalTerbit);
       form.set("tanggal_mulai", tanggalMulai);
       form.set("tanggal_selesai", tanggalSelesai);
       form.set("keterangan", keterangan.trim());
@@ -845,7 +864,7 @@ function UploadSuratTugasForm({
 
   return (
     <form onSubmit={handleSubmit} className="mb-3 space-y-2 rounded-md border border-line bg-paper/40 p-3">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/50">Nomor ST</label>
           <input
@@ -857,11 +876,26 @@ function UploadSuratTugasForm({
           />
         </div>
         <div>
+          <label className="mb-1 block text-[10px] font-medium text-ink/50">
+            Tanggal Terbit ST
+            <span className="ml-1 font-normal normal-case text-ink/40">(saat ditandatangani)</span>
+          </label>
+          <input
+            type="date"
+            value={tanggalTerbit}
+            onChange={(e) => {
+              setTanggalTerbit(e.target.value);
+              setTanggalTerbitDiubahManual(true);
+            }}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+          />
+        </div>
+        <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Mulai</label>
           <input
             type="date"
             value={tanggalMulai}
-            onChange={(e) => setTanggalMulai(e.target.value)}
+            onChange={(e) => handleTanggalMulaiChange(e.target.value)}
             className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
           />
         </div>

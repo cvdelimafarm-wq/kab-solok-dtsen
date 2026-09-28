@@ -45,7 +45,16 @@ import { labelIdentitas, bersihkanNip } from "../spjIdentitas";
 
 export interface KwitansiPdfData {
   nomorSt: string;
-  tanggalSpd: string;
+  // Tanggal Surat Tugas DITERBITKAN/ditandatangani (kolom
+  // spj_surat_tugas.tanggal_terbit) -- BUKAN tanggal_spd milik kwitansi
+  // per-baris (bisa beda2 per rentang/segmen kalau 1 ST dipecah jadi
+  // beberapa Kwitansi). Field ini dicetak di sub-baris "Tanggal" di bawah
+  // "Nomor" pada blok "Berdasarkan Surat Tugas" -- HARUS SATU nilai tetap
+  // per ST, konsisten di semua Kwitansi yg berasal dari ST yg sama. Lihat
+  // migrasi 20260929_tambah_tanggal_terbit_surat_tugas.sql (koreksi
+  // permintaan user 29 Sep 2026 -- sebelumnya field ini keliru diisi
+  // tanggal_spd/tanggal_mulai_set kwitansi, yg bisa berbeda2 per segmen).
+  tanggalTerbitSt: string;
   nominal: number;
   terbilang: string;
   untukPerjalananDinasPada: string;
@@ -162,7 +171,7 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
   teks(data.nomorSt, SUBVALUE_X, Y_BERDASARKAN);
   teks("Tanggal", SUBLABEL_X, Y_TANGGAL_SPD);
   teks(":", SUBCOLON_X, Y_TANGGAL_SPD);
-  teks(formatTanggalIndo(data.tanggalSpd), SUBVALUE_X, Y_TANGGAL_SPD);
+  teks(formatTanggalIndo(data.tanggalTerbitSt), SUBVALUE_X, Y_TANGGAL_SPD);
 
   teks("Untuk perjalanan dinas", MARGIN_X, Y_TUJUAN_1);
   teks("dalam kota pada", MARGIN_X, Y_TUJUAN_2);
