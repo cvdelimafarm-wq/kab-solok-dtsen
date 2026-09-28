@@ -481,6 +481,13 @@ export async function POST(req: NextRequest) {
       // petugas krn Set baru dibuat tiap iterasi) -- kunci yg sama tidak
       // akan disisipi ulang.
       const kunciStYgSudahDisisipkan = new Set<string>();
+      // (28 Sep 2026) Sama spt `kunciStYgSudahDisisipkan` di atas, tapi utk
+      // Laporan/Dokumentasi -- 1 TANGGAL yg sama bisa msh "termuat" di 2
+      // kelompok Visum yg tumpang tindih (kasus SET lama/baru blm dibereskan,
+      // lihat komentar besar di `kelompokMemuat` di bawah), jadi tanpa
+      // penjagaan ini Laporan/Dokumentasi tgl tsb jg akan tersisip 2x persis
+      // spt kasus Kwitansi/Visum/Surat Pernyataan yg dilaporkan user.
+      const tanggalLaporanSudahDiproses = new Set<string>();
       let suratTugasBytes: Uint8Array | null = null;
       if (dokumenDipilih.includes("surat_tugas")) {
         const { data: st } = await supabase.from("spj_surat_tugas").select("file_path").eq("id", p.suratTugasId).maybeSingle();
@@ -538,8 +545,36 @@ export async function POST(req: NextRequest) {
               tanggalMulai: s.tanggalMulai,
               tanggalSelesai: s.tanggalSelesai,
             }));
+      // (28 Sep 2026, laporan user -- PDF "31_Velmarniati" Kwitansi/Visum/
+      // Surat Pernyataan varian "18" tercetak DOBEL, sedangkan varian "17"
+      // yg sudah usang cuma sekali) DULU `kelompokMemuat` pakai tes
+      // CONTAINMENT (mulai>=kel.mulai && selesai<=kel.selesai) -- ini BENAR
+      // selama Kwitansi masih model "1 lembar per hari" (butuh cek apakah 1
+      // hari ada DI DALAM rentang kelompok yg lebih besar), tapi SEJAK
+      // 25 Sep 2026 Kwitansi/Visum/Surat Pernyataan SEMUA dihitung "per_rentang"
+      // dgn SET tanggal yg SAMA PERSIS lintas ke-3 jenis dokumen itu -- jadi
+      // di kondisi normal (sudah diperbaiki via "Buat Otomatis") rentang 1
+      // baris dokumen SELALU sama PERSIS dgn 1 kelompok, tidak pernah cuma
+      // "di dalam"-nya. Masalahnya: SEBELUM "Buat Otomatis" diklik ulang stlh
+      // Hari Tugas diubah, baris SET LAMA (mis. 17-30) & baris SET BARU (mis.
+      // 18-30) bisa SAMA2 masih ada di DB sekaligus (blm dibereskan) -- Visum
+      // jd punya 2 kelompok tanggal (17-30 & 18-30) yg SALING TUMPANG TINDIH.
+      // Dgn tes containment, baris 18-30 (mulai=18,selesai=30) TERHITUNG
+      // "di dalam" KEDUA kelompok itu (18>=17 && 30<=30 -> masuk kelompok
+      // 17-30 JUGA, bukan cuma kelompok 18-30 miliknya sendiri) -> tersisip
+      // 2x ke PDF gabungan. Baris 17-30 TIDAK kena masalah yg sama (18>=17
+      // tp 17-30 TIDAK match kelompok 18-30 krn 17>=18 salah), makanya cuma
+      // varian "18" yg dobel, varian "17" tetap sekali -- PERSIS sesuai laporan
+      // user. Diganti jadi tes KESAMAAN PERSIS (bukan containment) supaya 1
+      // baris dokumen HANYA pernah masuk ke 1 kelompok (miliknya sendiri) --
+      // aman krn kelompokSet & baris kList/vList/skList SEKARANG selalu
+      // dibangun dari rentang SET yg SAMA PERSIS (bukan sub-rentang lagi),
+      // & `pastikanKelompokUtk` di bawah tetap menjamin ada kelompok yg PAS
+      // utk baris manapun (ditambahkan dari nilai baris itu sendiri kalau
+      // blm ada), jadi tidak ada baris yg jd hilang tercetak akibat perubahan
+      // ini.
       const kelompokMemuat = (kel: { tanggalMulai: string; tanggalSelesai: string }, mulai: string, selesai: string) =>
-        mulai >= kel.tanggalMulai && selesai <= kel.tanggalSelesai;
+        mulai === kel.tanggalMulai && selesai === kel.tanggalSelesai;
       const pastikanKelompokUtk = (mulai: string, selesai: string) => {
         if (!kelompokSet.some((k) => kelompokMemuat(k, mulai, selesai))) {
           kelompokSet.push({ tanggalMulai: mulai, tanggalSelesai: selesai });
@@ -612,7 +647,10 @@ export async function POST(req: NextRequest) {
         // Laporan & Dokumentasi HANYA utk tanggal2 dlm kelompok ini -- tetap
         // diproses BERSAMA per tanggal (Laporan tgl X lalu Dokumentasi tgl X)
         // sesuai standar SPJ yg sudah ditetapkan sebelumnya.
-        const tanggalDlmKelompok = p.tanggalList.filter((t) => t >= kel.tanggalMulai && t <= kel.tanggalSelesai);
+        const tanggalDlmKelompok = p.tanggalList.filter(
+          (t) => t >= kel.tanggalMulai && t <= kel.tanggalSelesai && !tanggalLaporanSudahDiproses.has(t)
+        );
+        for (const t of tanggalDlmKelompok) tanggalLaporanSudahDiproses.add(t);
         for (const tgl of tanggalDlmKelompok) {
           if (dokumenDipilih.includes("laporan")) {
             const l = petaLaporan.get(tgl);
