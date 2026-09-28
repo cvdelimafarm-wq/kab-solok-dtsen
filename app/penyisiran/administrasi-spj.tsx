@@ -540,14 +540,17 @@ function AdministrasiPanel({
         </div>
       )}
       {pengelola && subTabPengelola === "monitoring" && (
-        <SpjMonitoring
-          baris={monitoring.baris}
-          loading={monitoring.loading}
-          token={sesi.token}
-          onSessionExpired={onSessionExpired}
-          sesiJenis={monitoring.sesiJenis}
-          sesiPetugasId={monitoring.sesiPetugasId}
-        />
+        <div className="space-y-3">
+          <JalankanSemuaPetugasBlok token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={monitoring.muat} />
+          <SpjMonitoring
+            baris={monitoring.baris}
+            loading={monitoring.loading}
+            token={sesi.token}
+            onSessionExpired={onSessionExpired}
+            sesiJenis={monitoring.sesiJenis}
+            sesiPetugasId={monitoring.sesiPetugasId}
+          />
+        </div>
       )}
       {pengelola && subTabPengelola === "cetak" && (
         <SpjCetakTab token={sesi.token} onSessionExpired={onSessionExpired} />
@@ -1159,6 +1162,127 @@ function BuatOtomatisBlok({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// (28 Sep 2026) "Jalankan untuk SEMUA petugas sekaligus" -- versi BULK dari
+// BuatOtomatisBlok di atas, KHUSUS pengelola. Lihat komentar besar di
+// app/api/penyisiran/spj/buat-otomatis-semua/route.ts utk latar belakang
+// lengkap (laporan "PPL Ilham tidak ada spj lain selain ST" -> setelah cek
+// semua petugas, ternyata krn tombol "Buat Otomatis" ADA 3 terpisah per
+// jenis dokumen & gampang ada yg kelewat). Ditempatkan di tab "📋 Monitoring
+// SPJ" krn di sanalah pengelola memantau kelengkapan SEMUA petugas.
+interface HasilPerJenisSemua {
+  jenis: JenisDokumenOtomatis;
+  dibuat: number;
+  diperbaiki: number;
+  sudahAda: number;
+}
+interface ButuhPerhatianSemua {
+  petugas_jenis: "penyisiran" | "tetangga";
+  petugas_id: string;
+  nama: string | null;
+  surat_tugas_id: number;
+  nomor_st: string | null;
+  kode: string;
+  jenis?: JenisDokumenOtomatis;
+  pesan: string;
+  navigasi?: { halaman: string; keterangan: string };
+}
+interface HasilBuatOtomatisSemuaRespons {
+  ok: true;
+  total_pasangan: number;
+  total_dibuat: number;
+  total_diperbaiki: number;
+  hasil_per_jenis: HasilPerJenisSemua[];
+  butuh_perhatian: ButuhPerhatianSemua[];
+  ringkasan: string;
+}
+
+const LABEL_JENIS_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
+  kwitansi: "Kwitansi",
+  visum: "Visum",
+  surat_keterangan: "Surat Pernyataan",
+};
+
+function JalankanSemuaPetugasBlok({ token, onSessionExpired, onSelesai }: { token: string; onSessionExpired: () => void; onSelesai: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [hasil, setHasil] = useState<HasilBuatOtomatisSemuaRespons | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  async function handleKlik() {
+    setBusy(true);
+    setErrMsg(null);
+    setHasil(null);
+    try {
+      const data = (await apiFetch("/api/penyisiran/spj/buat-otomatis-semua", token, {
+        method: "POST",
+        body: JSON.stringify({}),
+      })) as HasilBuatOtomatisSemuaRespons;
+      setHasil(data);
+      onSelesai();
+    } catch (e) {
+      const err = e as ApiError;
+      if (/sesi tidak valid|kedaluwarsa/i.test(err.message)) {
+        onSessionExpired();
+        return;
+      }
+      setErrMsg(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-dashed border-navy-400 bg-navy-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold text-navy-900">🔁 Jalankan untuk SEMUA petugas sekaligus</p>
+          <p className="mt-0.5 text-[11px] text-ink/50">
+            Membuat/merapikan Kwitansi, Visum &amp; Surat Pernyataan yang belum lengkap utk SELURUH petugas dalam satu klik -- supaya tidak ada yang
+            kelewat karena lupa klik tombol "Buat Otomatis" per jenis dokumen satu-satu.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleKlik}
+          disabled={busy}
+          className="shrink-0 rounded-md bg-navy-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-navy-700 disabled:opacity-60"
+        >
+          {busy ? "Memproses semua petugas..." : "Jalankan Sekarang"}
+        </button>
+      </div>
+
+      {errMsg && <p className="mt-2 rounded-md bg-rust-100/40 p-1.5 text-[11px] text-rust-700">⚠ {errMsg}</p>}
+
+      {hasil && (
+        <div className="mt-2 space-y-1.5">
+          <p className="rounded-md bg-emerald-100/40 p-1.5 text-[11px] text-emerald-800">✓ {hasil.ringkasan}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {hasil.hasil_per_jenis.map((h) => (
+              <span key={h.jenis} className="rounded-md border border-line bg-white px-2 py-1 text-[10px] text-ink/70">
+                <b className="text-navy-900">{LABEL_JENIS_OTOMATIS[h.jenis]}</b>: {h.dibuat} dibuat, {h.diperbaiki} dirapikan, {h.sudahAda} sudah ada
+              </span>
+            ))}
+          </div>
+          {hasil.butuh_perhatian.length > 0 && (
+            <div className="rounded-md border border-amber-300/60 bg-amber-100/40 p-2 text-[11px] text-amber-900">
+              <p className="font-semibold">⚠ {hasil.butuh_perhatian.length} butuh perhatian (tidak bisa diproses otomatis):</p>
+              <ul className="mt-1 list-disc space-y-1 pl-3.5">
+                {hasil.butuh_perhatian.map((b, i) => (
+                  <li key={i}>
+                    <b>{b.nama || `${b.petugas_jenis}:${b.petugas_id}`}</b>
+                    {b.nomor_st ? ` -- ST ${b.nomor_st}` : ""}
+                    {b.jenis ? ` (${LABEL_JENIS_OTOMATIS[b.jenis]})` : ""}: {b.pesan}
+                    {b.navigasi && <span className="block text-[10px] opacity-80">Navigasi: {b.navigasi.halaman} -- {b.navigasi.keterangan}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
