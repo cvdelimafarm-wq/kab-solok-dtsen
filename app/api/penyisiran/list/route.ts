@@ -38,6 +38,7 @@ const PAGE_SIZE = 200;
 const KOLOM =
   "kode_identitas, idsubsls, kec_kode, kec_nama, nagari_kode, nagari_nama, " +
   "sls_kode, sls_nama, subsls_kode, nama_kk, nama_anggota_keluarga, alamat, lat, lng, " +
+  "nama_pemilik_usaha, no_hp_pemilik_usaha, " +
   "bukti_dutp, bukti_dtsen, bukti_pnm, pnm_sektor, pnm_subsektor, " +
   "dtsen_lapangan_usaha, catatan_sensus, status_kunjungan, catatan_petugas, " +
   "info_ppl, info_jorong, info_tetangga, identifikasi_ppl, identifikasi_ppl_at, " +

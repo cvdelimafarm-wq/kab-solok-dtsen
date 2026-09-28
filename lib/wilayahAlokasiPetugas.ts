@@ -23,6 +23,25 @@
 // digabung (diri sendiri + SELURUH PPL yg pengawas_id-nya = dirinya, kalau
 // ADA -- itu artinya sesi ini PML; kalau tidak ada PPL yg diawasi, dianggap
 // PPL biasa & hasilnya cuma [dirinya sendiri] spt sebelumnya).
+//
+// (28 Sep 2026, permintaan user -- import daftar usaha "DUTL & Konstruksi
+// SE2026") Sebagian baris penyisiran_usaha yg ditambah manual dari daftar
+// eksternal TIDAK punya kode SLS pasti (cuma sampai level kecamatan+nagari,
+// mis. dari daftar UTL yg IDSBR-nya cuma 10 digit) -- `sls_kode` baris itu
+// DIBIARKAN NULL, BUKAN dipaksa isi kode SLS yg belum pasti benar. Baris
+// begini SENGAJA diperlakukan beda dari baris normal: bukan "tidak cocok
+// SLS manapun = hilang" (spt sebelumnya, krn NULL = apapun selalu false di
+// SQL), tapi "tampil ke SEMUA petugas yang punya alokasi APAPUN di
+// kecamatan+nagari yg sama" (boleh dobel di banyak petugas sekaligus,
+// petugas mana pun yg wilayah tugasnya ada di nagari itu bisa menemukan &
+// menyisirnya, krn kita memang tidak tahu SLS pastinya). Diterapkan di 4
+// tempat sekaligus, HARUS SELALU DIUBAH BARENGAN kalau logic ini diubah
+// lagi ke depan: buildOrFilterWilayah() di bawah (endpoint /list &
+// /markers, filter langsung PostgREST), + 3 fungsi RPC Postgres
+// penyisiran_summary_wilayah/penyisiran_nagari_list_wilayah/
+// penyisiran_subsls_list_wilayah (endpoint /summary, /nagari, /subsls --
+// lihat query pg_get_functiondef kalau perlu baca definisi SQL persisnya,
+// migrasi ini cuma catatan spt migrasi 20260919 sebelumnya).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -92,17 +111,27 @@ export function wilayahKeJsonb(pilihan: AlokasiWilayahRow[]) {
  * WAJIB memperlakukan ini sbg "jangan tampilkan apa pun" (bukan "berarti
  * tampilkan semua", krn justru sebaliknya: belum ada alokasi = belum ada
  * yg BOLEH ditampilkan sama sekali).
+ *
+ * (28 Sep 2026) SELAIN klausa exact-match SLS spt sebelumnya, ditambahkan
+ * klausa KEDUA per kecamatan+nagari UNIK yg petugas ini py alokasi apapun
+ * di dalamnya -- match baris `sls_kode IS NULL` (baris "nagari-only", lihat
+ * komentar besar di atas file ini). SATU petugas cuma py alokasi di 1-2
+ * nagari biasanya, jd `Set` di sini kecil, aman dipanggil per-request.
  */
 export function buildOrFilterWilayah(pilihan: AlokasiWilayahRow[]): string | null {
   if (pilihan.length === 0) return null;
-  return pilihan
-    .map((p) => {
-      const dasar = `kec_kode.eq.${p.kec_kode},nagari_kode.eq.${p.nagari_kode},sls_kode.eq.${p.sls_kode}`;
-      if (p.subsls_kode_list && p.subsls_kode_list.length > 0) {
-        const daftar = p.subsls_kode_list.map((k) => `"${k}"`).join(",");
-        return `and(${dasar},subsls_kode.in.(${daftar}))`;
-      }
-      return `and(${dasar})`;
-    })
-    .join(",");
+  const klausaSlsPersis = pilihan.map((p) => {
+    const dasar = `kec_kode.eq.${p.kec_kode},nagari_kode.eq.${p.nagari_kode},sls_kode.eq.${p.sls_kode}`;
+    if (p.subsls_kode_list && p.subsls_kode_list.length > 0) {
+      const daftar = p.subsls_kode_list.map((k) => `"${k}"`).join(",");
+      return `and(${dasar},subsls_kode.in.(${daftar}))`;
+    }
+    return `and(${dasar})`;
+  });
+  const kecNagariUnik = new Set(pilihan.map((p) => `${p.kec_kode}|${p.nagari_kode}`));
+  const klausaNagariSaja = Array.from(kecNagariUnik).map((key) => {
+    const [kec, nagari] = key.split("|");
+    return `and(kec_kode.eq.${kec},nagari_kode.eq.${nagari},sls_kode.is.null)`;
+  });
+  return [...klausaSlsPersis, ...klausaNagariSaja].join(",");
 }

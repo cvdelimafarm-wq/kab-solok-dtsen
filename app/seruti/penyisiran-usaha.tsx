@@ -430,6 +430,13 @@ interface Row {
   // nama_kk (lihat namaTampilRow() di bawah).
   nama_anggota_keluarga: string | null;
   alamat: string | null;
+  // Nama pemilik/pengusaha usaha & no HP-nya (permintaan user, khusus
+  // sumber Daftar Konstruksi/DUTL SE2026 -- kolom nama_pengusaha/no_hp di
+  // Excel sumber). null utk baris lain (DUTL & data lama tidak selalu
+  // punya info ini). Ditampilkan di kartu persis di bawah alamat, lihat
+  // render 👤/📞 di RowCard.
+  nama_pemilik_usaha: string | null;
+  no_hp_pemilik_usaha: string | null;
   lat: number | null;
   lng: number | null;
   bukti_dutp: boolean;
@@ -3048,6 +3055,17 @@ function RowCard({
         )}
       </div>
       <p className="mt-1 truncate text-xs text-ink/70">📍 {row.alamat || "-"}</p>
+      {/* Nama pemilik/pengusaha & No HP-nya (permintaan user) -- cuma tampil
+          kalau salah satu terisi (kebanyakan baris lama & DUTL tidak punya
+          info ini, jadi keduanya null -- baris ini disembunyikan total,
+          bukan tampil "-"). */}
+      {(row.nama_pemilik_usaha || row.no_hp_pemilik_usaha) && (
+        <p className="mt-0.5 truncate text-xs text-ink/70">
+          {row.nama_pemilik_usaha ? `👤 ${row.nama_pemilik_usaha}` : ""}
+          {row.nama_pemilik_usaha && row.no_hp_pemilik_usaha ? " · " : ""}
+          {row.no_hp_pemilik_usaha ? `📞 ${row.no_hp_pemilik_usaha}` : ""}
+        </p>
+      )}
 
       {/* Banner "🚩 Perlu Segera" -- SELALU tampil (bukan cuma mode Detail),
           sama spt badge Identifikasi/DUTP/DTSEN/PNM di bawah, supaya PPL

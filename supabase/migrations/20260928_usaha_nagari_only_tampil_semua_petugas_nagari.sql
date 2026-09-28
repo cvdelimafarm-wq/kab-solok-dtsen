@@ -1,0 +1,38 @@
+-- (28 Sep 2026, permintaan user) Import daftar usaha "DUTL & Konstruksi
+-- SE2026" -- sebagian baris penyisiran_usaha yg ditambah manual dari daftar
+-- ini TIDAK punya kode SLS pasti (cuma sampai level kecamatan+nagari, mis.
+-- dari daftar UTL yg IDSBR-nya cuma 10 digit, kec+nagari saja). `sls_kode`
+-- baris begini DIBIARKAN NULL, BUKAN dipaksa isi kode SLS yg belum pasti
+-- benar.
+--
+-- Sebelum migrasi ini: filter wilayah petugas (buildOrFilterWilayah &
+-- 3 RPC "_wilayah", lihat migrasi 20260919_alokasi_eksklusif_dan_wilayah_
+-- petugas.sql) MEWAJIBKAN sls_kode COCOK PERSIS dgn alokasi petugas --
+-- akibatnya baris ber-sls_kode NULL TIDAK PERNAH match ke petugas manapun
+-- (NULL = apapun selalu false di SQL) -- HILANG TOTAL dari tampilan semua
+-- PPL/PML (admin PIN "penyisiran" tetap bisa lihat, cuma role
+-- "penyisiran_petugas" yg kena).
+--
+-- SESUDAH migrasi ini (dikonfirmasi user): baris "nagari-only" begini
+-- SENGAJA ditampilkan ke SEMUA petugas yg punya alokasi APAPUN di
+-- kecamatan+nagari yg sama (boleh dobel muncul di banyak petugas
+-- sekaligus) -- krn kita memang tidak tahu SLS pastinya, jadi petugas
+-- manapun yg wilayah tugasnya nyentuh nagari itu berpotensi menemukannya
+-- saat sisir. Diterapkan di 4 tempat (HARUS diubah barengan kalau logic
+-- ini diubah lagi ke depan):
+--   1. lib/wilayahAlokasiPetugas.ts -> buildOrFilterWilayah() (endpoint
+--      /api/penyisiran/list & /markers)
+--   2. RPC penyisiran_summary_wilayah(jsonb) (endpoint /api/penyisiran/summary)
+--   3. RPC penyisiran_nagari_list_wilayah(text, jsonb) (endpoint /api/penyisiran/nagari)
+--   4. RPC penyisiran_subsls_list_wilayah(text, text, jsonb) -- TIDAK
+--      berubah (baris nagari-only tetap tidak dihitung di dropdown Sub
+--      SLS, krn memang tidak punya idsubsls sama sekali).
+--
+-- Pola matching baru (RPC #2 & #3): `u.sls_kode is null OR (match SLS
+-- persis spt sebelumnya)` -- jadi baris normal (sls_kode terisi) PERILAKUNYA
+-- TIDAK BERUBAH SAMA SEKALI, cuma baris nagari-only yg dapat aturan baru.
+--
+-- Sudah diterapkan langsung ke database lewat MCP Supabase (CREATE OR
+-- REPLACE FUNCTION utk 2 RPC di atas); file ini cuma catatan riwayat
+-- migrasi di repo, spt migrasi 20260919 sebelumnya. Definisi SQL lengkap:
+-- query pg_get_functiondef ke database kalau perlu salinan persisnya.
