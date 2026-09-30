@@ -365,8 +365,8 @@ export default function BencanaPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl px-5 py-10">
-      <p className="text-sm font-medium text-navy-400">BPS Kabupaten Solok</p>
-      <h1 className="mt-1 text-2xl font-semibold text-navy-900">
+      <p className="text-sm font-medium text-orange-400">BPS Kabupaten Solok</p>
+      <h1 className="mt-1 text-2xl font-semibold text-orange-900">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>
       <p className="mt-2 text-sm text-ink/70">
@@ -376,14 +376,14 @@ export default function BencanaPage() {
         masing-masing.
       </p>
 
-      <div className="mt-6 flex gap-1 rounded-md bg-navy-50 p-1">
+      <div className="mt-6 flex gap-1 rounded-md bg-orange-50 p-1">
         <button
           type="button"
           onClick={() => setTab("identifikasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "identifikasi"
-              ? "bg-white text-navy-900 shadow-sm"
-              : "text-navy-400 hover:text-navy-600"
+              ? "bg-white text-orange-900 shadow-sm"
+              : "text-orange-400 hover:text-orange-600"
           }`}
         >
           Identifikasi
@@ -393,8 +393,8 @@ export default function BencanaPage() {
           onClick={() => setTab("monitoring")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "monitoring"
-              ? "bg-white text-navy-900 shadow-sm"
-              : "text-navy-400 hover:text-navy-600"
+              ? "bg-white text-orange-900 shadow-sm"
+              : "text-orange-400 hover:text-orange-600"
           }`}
         >
           Monitoring Hasil Identifikasi
@@ -404,7 +404,7 @@ export default function BencanaPage() {
       {tab === "identifikasi" ? (
         <div className="mt-6 flex flex-col gap-6">
           <section className="rounded-md border border-line bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-navy-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-orange-400">
               Kriteria Kode 1: Terdampak
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/80">
@@ -432,7 +432,7 @@ export default function BencanaPage() {
                   setMitraIdManual(null);
                 }}
                 placeholder="Pilih dari daftar atau ketik nama"
-                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
               />
               <datalist id="daftar-mitra">
                 {mitraList.map((m) => (
@@ -440,7 +440,7 @@ export default function BencanaPage() {
                 ))}
               </datalist>
               {matchedMitra?.saran_in_scope && matchedMitra.saran_iddesa && (
-                <p className="mt-1 text-xs text-navy-400">
+                <p className="mt-1 text-xs text-orange-400">
                   Wilayah tugas disarankan berdasarkan alamat: {matchedMitra.alamat_desa},{" "}
                   {matchedMitra.alamat_kecamatan}. Filter di bawah dapat diubah bebas.
                 </p>
@@ -455,7 +455,7 @@ export default function BencanaPage() {
                 <select
                   value={selectedKecamatan}
                   onChange={(e) => handleKecamatanChange(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                 >
                   <option value="">Pilih kecamatan</option>
                   {kecamatanOptions.map((k) => (
@@ -473,7 +473,7 @@ export default function BencanaPage() {
                   value={selectedIddesa}
                   onChange={(e) => handleNagariChange(e.target.value)}
                   disabled={!selectedKecamatan}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400 disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
                 >
                   <option value="">Pilih nagari</option>
                   {nagariOptions.map((n) => (
@@ -502,7 +502,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(true)}
-                      className="flex-1 rounded-md bg-navy-700 px-4 py-2.5 font-medium text-white transition hover:bg-navy-600 disabled:opacity-60"
+                      className="flex-1 rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
                     >
                       Ya, ada
                     </button>
@@ -510,7 +510,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(false)}
-                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-navy-400 disabled:opacity-60"
+                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-orange-400 disabled:opacity-60"
                     >
                       Tidak ada
                     </button>
@@ -523,7 +523,7 @@ export default function BencanaPage() {
                       value={gateCatatan}
                       onChange={(e) => setGateCatatan(e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                     />
                   </div>
                   {gateError && (
@@ -557,7 +557,7 @@ export default function BencanaPage() {
                         key={jorong.idsls}
                         className="rounded-md border border-line bg-white p-4"
                       >
-                        <p className="font-medium text-navy-900">{jorong.jorong}</p>
+                        <p className="font-medium text-orange-900">{jorong.jorong}</p>
 
                         {state.submitted ? (
                           <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-sm text-moss-700">
@@ -580,8 +580,8 @@ export default function BencanaPage() {
                                 }
                                 className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                                   state.seluruh === true
-                                    ? "border-navy-700 bg-navy-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-navy-400"
+                                    ? "border-orange-700 bg-orange-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-orange-400"
                                 }`}
                               >
                                 Ya, seluruhnya
@@ -596,8 +596,8 @@ export default function BencanaPage() {
                                 }
                                 className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                                   state.seluruh === false
-                                    ? "border-navy-700 bg-navy-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-navy-400"
+                                    ? "border-orange-700 bg-orange-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-orange-400"
                                 }`}
                               >
                                 Tidak, sebagian
@@ -612,12 +612,12 @@ export default function BencanaPage() {
                                 <ul className="mt-2 flex flex-col gap-1.5">
                                   {jorong.subsls.map((s) => (
                                     <li key={s.idsubsls}>
-                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-navy-400">
+                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
                                         <input
                                           type="checkbox"
                                           checked={state.checkedSubsls.has(s.idsubsls)}
                                           onChange={() => toggleSubsls(jorong.idsls, s.idsubsls)}
-                                          className="h-4 w-4 accent-navy-700"
+                                          className="h-4 w-4 accent-orange-700"
                                         />
                                         <span className="text-sm text-ink">
                                           Sub SLS {s.sub_sls}
@@ -637,12 +637,12 @@ export default function BencanaPage() {
                                 <ul className="mt-2 flex flex-col gap-1.5">
                                   {INDIKATOR_DAMPAK.map((ind) => (
                                     <li key={ind.key}>
-                                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-navy-400">
+                                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
                                         <input
                                           type="checkbox"
                                           checked={state.indikator.has(ind.key)}
                                           onChange={() => toggleIndikator(jorong.idsls, ind.key)}
-                                          className="mt-0.5 h-4 w-4 shrink-0 accent-navy-700"
+                                          className="mt-0.5 h-4 w-4 shrink-0 accent-orange-700"
                                         />
                                         <span className="text-sm text-ink">{ind.label}</span>
                                       </label>
@@ -663,7 +663,7 @@ export default function BencanaPage() {
                                     updateJorongState(jorong.idsls, { catatan: e.target.value })
                                   }
                                   rows={2}
-                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                                 />
                               </div>
                             )}
@@ -679,7 +679,7 @@ export default function BencanaPage() {
                                 type="button"
                                 disabled={state.submitting}
                                 onClick={() => submitJorong(jorong)}
-                                className="mt-3 w-full rounded-md bg-navy-700 px-4 py-2.5 font-medium text-white transition hover:bg-navy-600 disabled:opacity-60"
+                                className="mt-3 w-full rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
                               >
                                 {state.submitting ? "Mengirim..." : "Simpan data Jorong ini"}
                               </button>
@@ -701,7 +701,7 @@ export default function BencanaPage() {
             <select
               value={monKecFilter}
               onChange={(e) => setMonKecFilter(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua kecamatan</option>
               {kecamatanOptions.map((k) => (
@@ -719,10 +719,10 @@ export default function BencanaPage() {
           ) : (
             <>
               <section>
-                <h2 className="font-medium text-navy-900">Rekap per Nagari</h2>
+                <h2 className="font-medium text-orange-900">Rekap per Nagari</h2>
                 <div className="mt-2 overflow-x-auto rounded-md border border-line">
                   <table className="w-full min-w-[640px] text-left text-sm">
-                    <thead className="bg-navy-50 text-navy-600">
+                    <thead className="bg-orange-50 text-orange-600">
                       <tr>
                         <th className="px-3 py-2 font-medium">Kecamatan</th>
                         <th className="px-3 py-2 font-medium">Nagari</th>
@@ -770,10 +770,10 @@ export default function BencanaPage() {
               </section>
 
               <section>
-                <h2 className="font-medium text-navy-900">Rekap per Jorong</h2>
+                <h2 className="font-medium text-orange-900">Rekap per Jorong</h2>
                 <div className="mt-2 overflow-x-auto rounded-md border border-line">
                   <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="bg-navy-50 text-navy-600">
+                    <thead className="bg-orange-50 text-orange-600">
                       <tr>
                         <th className="px-3 py-2 font-medium">Nagari</th>
                         <th className="px-3 py-2 font-medium">Jorong</th>
