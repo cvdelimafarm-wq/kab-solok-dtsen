@@ -58,6 +58,7 @@ type MonitoringJorongRow = {
   jumlah_subsls_terdampak_gabungan: number;
   nama_mitra_terakhir: string | null;
   terakhir_diisi: string | null;
+  total_kk_terdampak: number;
 };
 
 // Status turunan (dihitung di client dari gabungan gate nagari + isian
@@ -88,6 +89,7 @@ type JorongLocalState = {
   seluruh: boolean | null;
   checkedSubsls: Set<string>;
   indikator: Set<string>;
+  indikatorKk: Record<string, number | "">;
   catatan: string;
   submitting: boolean;
   submitted: boolean;
@@ -99,6 +101,7 @@ function emptyJorongState(): JorongLocalState {
     seluruh: null,
     checkedSubsls: new Set(),
     indikator: new Set(),
+    indikatorKk: {},
     catatan: "",
     submitting: false,
     submitted: false,
@@ -369,9 +372,26 @@ export default function BencanaPage() {
   function toggleIndikator(idsls: string, key: string) {
     const cur = getJorongState(idsls);
     const next = new Set(cur.indikator);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    updateJorongState(idsls, { indikator: next });
+    const nextKk = { ...cur.indikatorKk };
+    if (next.has(key)) {
+      next.delete(key);
+      delete nextKk[key];
+    } else {
+      next.add(key);
+    }
+    updateJorongState(idsls, { indikator: next, indikatorKk: nextKk });
+  }
+
+  function setIndikatorKk(idsls: string, key: string, value: string) {
+    const cur = getJorongState(idsls);
+    const nextKk = { ...cur.indikatorKk };
+    if (value === "") {
+      nextKk[key] = "";
+    } else {
+      const num = Math.max(0, Math.floor(Number(value)));
+      nextKk[key] = Number.isFinite(num) ? num : "";
+    }
+    updateJorongState(idsls, { indikatorKk: nextKk });
   }
 
   async function submitJorong(jorong: JorongItem) {
@@ -401,6 +421,11 @@ export default function BencanaPage() {
           seluruh_subsls_terdampak: state.seluruh,
           subsls_terdampak: Array.from(state.checkedSubsls),
           indikator_dampak: Array.from(state.indikator),
+          indikator_dampak_kk: Object.fromEntries(
+            Array.from(state.indikator)
+              .filter((key) => typeof state.indikatorKk[key] === "number")
+              .map((key) => [key, state.indikatorKk[key] as number])
+          ),
           catatan: state.catatan,
         }),
       });
@@ -808,19 +833,41 @@ export default function BencanaPage() {
                                   Indikator dampak (opsional, boleh lebih dari satu)
                                 </p>
                                 <ul className="mt-2 flex flex-col gap-1.5">
-                                  {INDIKATOR_DAMPAK.map((ind) => (
-                                    <li key={ind.key}>
-                                      <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
-                                        <input
-                                          type="checkbox"
-                                          checked={state.indikator.has(ind.key)}
-                                          onChange={() => toggleIndikator(jorong.idsls, ind.key)}
-                                          className="mt-0.5 h-4 w-4 shrink-0 accent-orange-700"
-                                        />
-                                        <span className="text-sm text-ink">{ind.label}</span>
-                                      </label>
-                                    </li>
-                                  ))}
+                                  {INDIKATOR_DAMPAK.map((ind) => {
+                                    const checked = state.indikator.has(ind.key);
+                                    return (
+                                      <li key={ind.key}>
+                                        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => toggleIndikator(jorong.idsls, ind.key)}
+                                            className="mt-0.5 h-4 w-4 shrink-0 accent-orange-700"
+                                          />
+                                          <span className="text-sm text-ink">{ind.label}</span>
+                                        </label>
+                                        {checked && (
+                                          <div className="ml-6 mt-1.5 flex items-center gap-2">
+                                            <label className="text-xs text-ink/60">
+                                              Perkiraan jumlah KK terdampak:
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              step={1}
+                                              value={state.indikatorKk[ind.key] ?? ""}
+                                              onChange={(e) =>
+                                                setIndikatorKk(jorong.idsls, ind.key, e.target.value)
+                                              }
+                                              placeholder="0"
+                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                                            />
+                                            <span className="text-xs text-ink/50">KK</span>
+                                          </div>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               </div>
                             )}
@@ -880,7 +927,8 @@ export default function BencanaPage() {
                   <h2 className="text-lg font-semibold text-orange-900">Progress Identifikasi</h2>
                   <p className="text-sm text-ink/60">
                     Rekap pelaksanaan identifikasi Jorong/Sub SLS terdampak bencana
-                    hidrometeorologi akhir 2025, di 29 nagari yang perlu diidentifikasi.
+                    hidrometeorologi akhir 2025, mencakup seluruh {totalNagariMon} nagari
+                    di Kabupaten Solok.
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-orange-900 px-3 py-1.5 text-xs font-medium text-white">
@@ -1190,6 +1238,7 @@ export default function BencanaPage() {
                         <th className="px-3 py-2 font-medium">Jorong</th>
                         <th className="px-3 py-2 font-medium">Sub SLS Terdampak</th>
                         <th className="px-3 py-2 font-medium">Jumlah Isian</th>
+                        <th className="px-3 py-2 font-medium">Perkiraan KK Terdampak</th>
                         <th className="px-3 py-2 font-medium">Status</th>
                         <th className="px-3 py-2 font-medium">Konflik</th>
                         <th className="px-3 py-2 font-medium">Mitra Terakhir</th>
@@ -1206,6 +1255,9 @@ export default function BencanaPage() {
                           <td className="px-3 py-2 text-ink/80">
                             {r.jumlah_identifikasi} ({r.jumlah_bilang_seluruh} seluruh &middot;{" "}
                             {r.jumlah_bilang_sebagian} sebagian)
+                          </td>
+                          <td className="px-3 py-2 text-ink/80">
+                            {r.total_kk_terdampak > 0 ? `${r.total_kk_terdampak} KK` : "-"}
                           </td>
                           <td className="px-3 py-2">
                             <JorongStatusBadge status={r.status} />
@@ -1226,7 +1278,7 @@ export default function BencanaPage() {
                       ))}
                       {monJorongFiltered.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-3 py-4 text-center text-ink/50">
+                          <td colSpan={8} className="px-3 py-4 text-center text-ink/50">
                             Belum ada data.
                           </td>
                         </tr>

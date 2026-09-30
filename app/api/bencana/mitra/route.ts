@@ -2,7 +2,8 @@
 //
 // GET -> daftar mitra (untuk dropdown nama pengisi) beserta saran nagari
 // (iddesa) berdasarkan alamat rumah mitra, dan penanda apakah saran itu
-// termasuk dalam 29 nagari yang perlu diidentifikasi. Publik, tanpa login.
+// termasuk dalam wilayah Kabupaten Solok yang perlu diidentifikasi. Publik,
+// tanpa login.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";

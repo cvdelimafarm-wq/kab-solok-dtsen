@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       seluruh_subsls_terdampak,
       subsls_terdampak,
       indikator_dampak,
+      indikator_dampak_kk,
       catatan,
     } = body ?? {};
 
@@ -94,6 +95,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Perkiraan jumlah KK terdampak per indikator -- hanya untuk indikator
+    // yang memang dicentang (indikatorFinal), nilai harus bilangan bulat >= 0.
+    const indikatorKkFinal: Record<string, number> = {};
+    if (indikator_dampak_kk && typeof indikator_dampak_kk === "object" && !Array.isArray(indikator_dampak_kk)) {
+      for (const key of Object.keys(indikator_dampak_kk as Record<string, unknown>)) {
+        if (!INDIKATOR_DAMPAK_VALID.has(key) || !indikatorFinal.includes(key)) continue;
+        const raw = (indikator_dampak_kk as Record<string, unknown>)[key];
+        const num = typeof raw === "number" ? raw : Number(raw);
+        if (Number.isFinite(num) && Number.isInteger(num) && num >= 0) {
+          indikatorKkFinal[key] = num;
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from("bencana_identifikasi_jorong")
       .insert({
@@ -107,6 +122,7 @@ export async function POST(req: NextRequest) {
         seluruh_subsls_terdampak,
         subsls_terdampak: subslsFinal,
         indikator_dampak: indikatorFinal,
+        indikator_dampak_kk: indikatorKkFinal,
         catatan: typeof catatan === "string" && catatan.trim() ? catatan.trim() : null,
       })
       .select("id")
