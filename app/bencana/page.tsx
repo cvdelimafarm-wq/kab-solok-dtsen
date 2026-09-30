@@ -1223,6 +1223,116 @@ function PengaturanBebanSection() {
   );
 }
 
+// Ikon outline putih sederhana utk sidebar "rel langkah" -- SATU warna
+// (currentColor/putih) saja, tidak berwarna-warni, supaya konsisten dipakai
+// di atas lingkaran biru (aktif) maupun abu-abu (tidak aktif).
+function IkonLangkah1() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 15l9-3.5 9 3.5 9-3.5v21l-9 3.5-9-3.5-9 3.5V15z" />
+      <path d="M14 11.5v21M23 15v21" />
+      <path d="M33 7c4.6 0 8.4 3.6 8.4 8.2 0 6.3-8.4 14.8-8.4 14.8s-8.4-8.5-8.4-14.8C24.6 10.6 28.4 7 33 7z" />
+      <circle cx="33" cy="15.4" r="2.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function IkonLangkah2() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 5h15l8 8v27a2 2 0 01-2 2H11a2 2 0 01-2-2V7a2 2 0 012-2z" />
+      <path d="M26 5v8h8" />
+      <path d="M14 29v-6M19 29v-10.5M24 29v-4.5" />
+      <circle cx="34.5" cy="34.5" r="6.6" strokeDasharray="2 2.6" />
+      <circle cx="34.5" cy="34.5" r="2.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function IkonLangkah3() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="17" cy="13" r="4" />
+      <path d="M8 27c0-5.2 4-8.6 9-8.6s9 3.4 9 8.6" />
+      <circle cx="33" cy="10.5" r="3.1" />
+      <path d="M27.5 19.5c0-3.4 2.5-5.6 5.5-5.6s5.5 2.2 5.5 5.6" />
+      <path d="M5 33.5c0-4.4 4.6-7.5 10-7.5s10 3.1 10 7.5v3.5H5v-3.5z" />
+      <circle cx="37.5" cy="30" r="6.2" strokeDasharray="1.9 2.3" />
+      <circle cx="37.5" cy="30" r="2.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function IkonLangkah4() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 5h16l8 8v25a2 2 0 01-2 2H9a2 2 0 01-2-2V7a2 2 0 012-2z" />
+      <path d="M25 5v8h8" />
+      <path d="M12.5 22.5h13M12.5 27.5h13M12.5 32.5h8.5" />
+      <path d="M38.5 21.5l4 4-13 13-4.7 1 1-4.8z" />
+    </svg>
+  );
+}
+
+const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4; label: string; ikon: () => JSX.Element }[] = [
+  { n: 1, label: "Pilih Wilayah Sampel", ikon: IkonLangkah1 },
+  { n: 2, label: "Kebutuhan Petugas per Kecamatan", ikon: IkonLangkah2 },
+  { n: 3, label: "Susunan Tim (Korwil, PML, PPL)", ikon: IkonLangkah3 },
+  { n: 4, label: "Kertas Kerja Plotting Sub SLS ke PPL", ikon: IkonLangkah4 },
+];
+
+// Sidebar "rel langkah" -- 4 lingkaran bernomor tersambung garis putus-putus,
+// mencerminkan alur kerja Langkah 1-4. Diklik utk scroll halus ke section
+// terkait; lingkaran yg sedang kelihatan di layar otomatis ditandai aktif
+// (lihat IntersectionObserver di AlokasiPetugasSection). Disembunyikan di
+// layar sempit (<lg) supaya tidak mendesak tabel yg sudah lebar.
+function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n: 1 | 2 | 3 | 4) => void }) {
+  return (
+    <aside className="hidden shrink-0 lg:block lg:w-36">
+      <div className="sticky top-6 flex flex-col items-center pt-1">
+        {LANGKAH_SIDEBAR.map((l, i) => {
+          const Ikon = l.ikon;
+          const isAktif = aktif === l.n;
+          return (
+            <div key={l.n} className="flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => onPilih(l.n)}
+                title={`Langkah ${l.n} — ${l.label}`}
+                className="group relative flex flex-col items-center"
+              >
+                <span
+                  className={`absolute -top-2 left-1/2 z-10 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${
+                    isAktif ? "bg-blue-800" : "bg-blue-300"
+                  }`}
+                >
+                  {l.n}
+                </span>
+                <span
+                  className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
+                    isAktif
+                      ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-300/60"
+                      : "bg-blue-300 text-white group-hover:bg-blue-400"
+                  }`}
+                >
+                  <span className="h-7 w-7">
+                    <Ikon />
+                  </span>
+                </span>
+              </button>
+              <p
+                className={`mt-2 max-w-[8rem] text-center text-[11px] font-semibold leading-tight ${
+                  isAktif ? "text-blue-900" : "text-blue-300"
+                }`}
+              >
+                {l.label}
+              </p>
+              {i < LANGKAH_SIDEBAR.length - 1 && <div className="my-2.5 h-5 border-l-2 border-dotted border-blue-200" />}
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
 function AlokasiPetugasSection() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1830,7 +1940,45 @@ function AlokasiPetugasSection() {
     });
   }, [bebanDraftPerPpl, rataBebanTetap, kertasKerja, draftPpl, petugasList]);
 
+  const langkah1Ref = useRef<HTMLElement | null>(null);
+  const langkah2Ref = useRef<HTMLElement | null>(null);
+  const langkah3Ref = useRef<HTMLElement | null>(null);
   const langkah4Ref = useRef<HTMLElement | null>(null);
+  const [langkahAktif, setLangkahAktif] = useState<1 | 2 | 3 | 4>(1);
+
+  // Sidebar "rel langkah" (4 lingkaran bernomor di kiri) -- diklik utk
+  // scroll halus ke section terkait, dan otomatis menandai langkah mana
+  // yg lagi kelihatan di layar pakai IntersectionObserver (bukan dipilih
+  // manual), supaya tetap sinkron walau user scroll bebas.
+  useEffect(() => {
+    const target = [
+      { ref: langkah1Ref, n: 1 as const },
+      { ref: langkah2Ref, n: 2 as const },
+      { ref: langkah3Ref, n: 3 as const },
+      { ref: langkah4Ref, n: 4 as const },
+    ];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const terlihat = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!terlihat) return;
+        const cocok = target.find((t) => t.ref.current === terlihat.target);
+        if (cocok) setLangkahAktif(cocok.n);
+      },
+      { rootMargin: "-15% 0px -60% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] }
+    );
+    target.forEach((t) => {
+      if (t.ref.current) observer.observe(t.ref.current);
+    });
+    return () => observer.disconnect();
+  }, [loading]);
+
+  function scrollKeLangkah(n: 1 | 2 | 3 | 4) {
+    const ref = n === 1 ? langkah1Ref : n === 2 ? langkah2Ref : n === 3 ? langkah3Ref : langkah4Ref;
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function filterKeStatusBeban(tone: BalanceTone | "") {
     setStatusBebanFilter(tone);
     setStatusPlotFilter("");
@@ -2110,7 +2258,9 @@ function AlokasiPetugasSection() {
   }
 
   return (
-    <div className="mt-6 flex flex-col gap-6">
+    <div className="mt-6 flex gap-6">
+      <SidebarLangkah aktif={langkahAktif} onPilih={scrollKeLangkah} />
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
       <section className="rounded-md border border-blue-100 bg-white p-4">
         <h2 className="font-medium text-blue-900">Ringkasan Alokasi Petugas</h2>
@@ -2441,7 +2591,7 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 1: WILAYAH SAMPEL ===== */}
-      <section className="rounded-md border border-line bg-white p-4">
+      <section ref={langkah1Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="font-medium text-blue-900">Langkah 1 — Pilih Wilayah Sampel</h2>
@@ -2631,14 +2781,14 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 2: KEBUTUHAN PETUGAS ===== */}
-      <section className="rounded-md border border-line bg-white p-4">
+      <section ref={langkah2Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-medium text-blue-900">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
             <p className="mt-1 text-xs text-ink/60">
-              Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. 1 kuesioner BENCANA-K
-              (KK terdampak) berbobot 1, 1 listing KK tidak terdampak berbobot 0,12428, jarak rumah petugas berbobot
-              1 per 5 KM. Kapasitas dihitung dari ±15 menit/kuesioner, ±5 jam kerja/hari.
+              Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. Bobot KK terdampak,
+              KK tidak terdampak, dan jarak rumah petugas bisa diatur di tab &quot;⚙️ Kelola Perkiraan Beban&quot;.
+              Kapasitas dihitung dari ±15 menit/kuesioner, ±5 jam kerja/hari.
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -2776,7 +2926,7 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 3: SUSUNAN TIM (MANUAL, TANPA PENGELOMPOKAN OTOMATIS) ===== */}
-      <section className="rounded-md border border-line bg-white p-4">
+      <section ref={langkah3Ref} className="rounded-md border border-line bg-white p-4">
         <h2 className="font-medium text-blue-900">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
         <p className="mt-1 text-xs text-ink/60">
           Semua jenjang ditetapkan manual satu per satu, tidak ada pengelompokan otomatis. Korwil wajib pegawai
@@ -3807,6 +3957,7 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }
