@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 // ------------------------------------------------------------------------
@@ -178,6 +178,25 @@ type RingkasanKorwilRow = {
   jumlah_ppl: number;
   jumlah_subsls: number;
   total_skor_beban_akhir: number;
+};
+
+// Baris "Kertas Kerja Beban" -- KK total & KK terdampak per Sub SLS
+// terdampak, sbg variabel input skor_beban_pendataan (bisa dikoreksi manual).
+type KertasKerjaBebanRow = {
+  idsubsls: string;
+  kecamatan: string;
+  nagari: string;
+  sls: string;
+  sub_sls: string;
+  kk_total: number;
+  kk_terdampak_estimasi: number;
+  kk_tidak_terdampak_estimasi: number;
+  skor_beban_pendataan: number;
+  kk_total_asli: number;
+  kk_terdampak_asli: number;
+  kk_total_manual: boolean;
+  kk_terdampak_manual: boolean;
+  punya_data_kk: boolean;
 };
 
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
@@ -517,11 +536,135 @@ function balanceInfo(skor: number, rata: number): { label: string; cls: string; 
 
 const ALOKASI_PAGE_SIZE = 25;
 const SAMPEL_PAGE_SIZE = 25;
+const BEBAN_PAGE_SIZE = 25;
+const BOBOT_KK_TERDAMPAK = 1;
+const BOBOT_KK_TIDAK_TERDAMPAK = 0.12428;
+
+// Kapasitas 1 PML membawahi PPL: idealnya 3-4 orang, MAKSIMAL 4 (dijaga --
+// opsi PML yg sudah penuh dinonaktifkan di dropdown), kalau masih di bawah
+// 3 cuma diberi WARNING (bukan diblokir, krn di awal alokasi wajar dulu
+// PML baru punya 1-2 PPL sebelum trial-error selesai).
+const KAPASITAS_MAX_PPL_PER_PML = 4;
+const KAPASITAS_IDEAL_MIN_PPL_PER_PML = 3;
+
+// Dropdown nama petugas (PPL/PML/Korwil) bisa berjumlah ratusan orang --
+// <select> bawaan browser tidak bisa diketik utk mencari. Combobox ini:
+// input teks yg bisa diketik utk memfilter + daftar pilihan yg discroll,
+// klik di luar utk menutup, opsi bisa dinonaktifkan (mis. PML yg sudah
+// penuh 4 PPL) tanpa menyembunyikannya (supaya tetap kelihatan alasannya).
+function Combobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  className,
+  allowClear = true,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  options: { value: number; label: string; disabled?: boolean }[];
+  placeholder: string;
+  disabled?: boolean;
+  className?: string;
+  allowClear?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = options.find((o) => o.value === value) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+
+  return (
+    <div ref={wrapRef} className={`relative ${className ?? ""}`}>
+      <input
+        type="text"
+        disabled={disabled}
+        value={open ? query : selected?.label ?? ""}
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setOpen(false);
+            setQuery("");
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400 disabled:bg-gray-50 disabled:text-ink/40"
+      />
+      {open && !disabled && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full min-w-[12rem] overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg">
+          {allowClear && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(null);
+                setOpen(false);
+                setQuery("");
+              }}
+              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-orange-50"
+            >
+              {placeholder}
+            </button>
+          )}
+          {filtered.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              disabled={o.disabled}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (o.disabled) return;
+                onChange(o.value);
+                setOpen(false);
+                setQuery("");
+              }}
+              className={`block w-full px-2 py-1.5 text-left ${
+                o.disabled
+                  ? "cursor-not-allowed text-ink/30"
+                  : o.value === value
+                  ? "bg-orange-50 font-medium text-orange-700 hover:bg-orange-100"
+                  : "text-ink hover:bg-orange-50"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+          {filtered.length === 0 && <div className="px-2 py-1.5 text-ink/40">Tidak ditemukan.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AlokasiPetugasSection() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [bebanRows, setBebanRows] = useState<KertasKerjaBebanRow[]>([]);
   const [calonSampel, setCalonSampel] = useState<CalonSampelRow[]>([]);
   const [kertasKerja, setKertasKerja] = useState<KertasKerjaRow[]>([]);
   const [ringkasanPpl, setRingkasanPpl] = useState<RingkasanPplRow[]>([]);
@@ -559,6 +702,24 @@ function AlokasiPetugasSection() {
   const [simpanBusy, setSimpanBusy] = useState(false);
   const [simpanError, setSimpanError] = useState<string | null>(null);
 
+  // Draft koreksi Kertas Kerja Beban (KK Total & KK Terdampak per Sub SLS):
+  // sama seperti draft plotting -- input lokal dulu, baru dikirim batch
+  // saat "Simpan Perubahan" ditekan supaya tidak spam server tiap ketik.
+  const [draftKkTotal, setDraftKkTotal] = useState<Record<string, number>>({});
+  const [draftKkTerdampak, setDraftKkTerdampak] = useState<Record<string, number>>({});
+  const [bebanKecFilter, setBebanKecFilter] = useState("");
+  const [bebanSearch, setBebanSearch] = useState("");
+  const [bebanSimpanBusy, setBebanSimpanBusy] = useState(false);
+  const [bebanError, setBebanError] = useState<string | null>(null);
+  const [bebanTerbuka, setBebanTerbuka] = useState(false);
+
+  async function muatBeban() {
+    const res = await fetch("/api/bencana/alokasi/beban");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
+    setBebanRows(json.data ?? []);
+  }
+
   async function muatSampel() {
     const res = await fetch("/api/bencana/alokasi/sampel");
     const json = await res.json();
@@ -583,7 +744,7 @@ function AlokasiPetugasSection() {
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([muatSampel(), muatData(hariKerja)]);
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja)]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Gagal memuat data alokasi.");
     } finally {
@@ -728,6 +889,114 @@ function AlokasiPetugasSection() {
     }
   }
 
+  // Sinkronkan draft Kertas Kerja Beban dgn data server (pola sama dgn
+  // draftPpl di atas): baris yg sedang diedit dipertahankan nilainya.
+  useEffect(() => {
+    setDraftKkTotal((prev) => {
+      const next: Record<string, number> = {};
+      for (const r of bebanRows) {
+        next[r.idsubsls] = Object.prototype.hasOwnProperty.call(prev, r.idsubsls) ? prev[r.idsubsls] : r.kk_total;
+      }
+      return next;
+    });
+    setDraftKkTerdampak((prev) => {
+      const next: Record<string, number> = {};
+      for (const r of bebanRows) {
+        next[r.idsubsls] = Object.prototype.hasOwnProperty.call(prev, r.idsubsls)
+          ? prev[r.idsubsls]
+          : r.kk_terdampak_estimasi;
+      }
+      return next;
+    });
+  }, [bebanRows]);
+
+  function jumlahPerubahanBeban(): number {
+    let n = 0;
+    for (const r of bebanRows) {
+      const total = draftKkTotal[r.idsubsls] ?? r.kk_total;
+      const terdampak = draftKkTerdampak[r.idsubsls] ?? r.kk_terdampak_estimasi;
+      if (total !== r.kk_total || terdampak !== r.kk_terdampak_estimasi) n++;
+    }
+    return n;
+  }
+
+  function batalkanPerubahanBeban() {
+    const nextTotal: Record<string, number> = {};
+    const nextTerdampak: Record<string, number> = {};
+    for (const r of bebanRows) {
+      nextTotal[r.idsubsls] = r.kk_total;
+      nextTerdampak[r.idsubsls] = r.kk_terdampak_estimasi;
+    }
+    setDraftKkTotal(nextTotal);
+    setDraftKkTerdampak(nextTerdampak);
+    setBebanError(null);
+  }
+
+  function resetBarisBeban(idsubsls: string) {
+    const r = bebanRows.find((x) => x.idsubsls === idsubsls);
+    if (!r) return;
+    setDraftKkTotal((prev) => ({ ...prev, [idsubsls]: r.kk_total_asli }));
+    setDraftKkTerdampak((prev) => ({ ...prev, [idsubsls]: r.kk_terdampak_asli }));
+  }
+
+  async function handleSimpanBeban() {
+    setBebanSimpanBusy(true);
+    setBebanError(null);
+    try {
+      for (const r of bebanRows) {
+        const draftTotal = draftKkTotal[r.idsubsls] ?? r.kk_total;
+        const draftTerdampak = draftKkTerdampak[r.idsubsls] ?? r.kk_terdampak_estimasi;
+        if (draftTotal === r.kk_total && draftTerdampak === r.kk_terdampak_estimasi) continue;
+
+        const totalOverride = draftTotal === r.kk_total_asli ? null : draftTotal;
+        const terdampakOverride = draftTerdampak === r.kk_terdampak_asli ? null : draftTerdampak;
+
+        const res = await fetch("/api/bencana/alokasi/beban", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            idsubsls: r.idsubsls,
+            kk_total_override: totalOverride,
+            kk_terdampak_override: terdampakOverride,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Gagal menyimpan koreksi ${r.sub_sls}.`);
+      }
+      // Skor beban pendataan berubah -> refresh semua turunan (calon sampel,
+      // kertas kerja alokasi, kebutuhan petugas) supaya konsisten di seluruh
+      // tab, bukan cuma kertas kerja beban.
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerjaDipakai)]);
+    } catch (err) {
+      setBebanError(err instanceof Error ? err.message : "Gagal menyimpan koreksi data KK.");
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerjaDipakai)]).catch(() => {});
+    } finally {
+      setBebanSimpanBusy(false);
+    }
+  }
+
+  async function handleResetSemuaBeban() {
+    if (!window.confirm("Kembalikan SEMUA koreksi KK ke data asli/estimasi? Perubahan manual yang sudah tersimpan akan dihapus.")) {
+      return;
+    }
+    setBebanSimpanBusy(true);
+    setBebanError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/beban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reset_semua: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal mereset koreksi data KK.");
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerjaDipakai)]);
+    } catch (err) {
+      setBebanError(err instanceof Error ? err.message : "Gagal mereset koreksi data KK.");
+    } finally {
+      setBebanSimpanBusy(false);
+    }
+  }
+
   async function handleSusunanTim(petugasId: number, peran: "ppl" | "pml" | "korwil", atasanId: number | null) {
     setTimBusyId(petugasId);
     setTimError(null);
@@ -764,6 +1033,42 @@ function AlokasiPetugasSection() {
     } finally {
       setTimBusyId(null);
     }
+  }
+
+  // ---- Turunan: kertas kerja beban ----
+  const kecamatanOptionsBeban = useMemo(
+    () => Array.from(new Set(bebanRows.map((r) => r.kecamatan))).sort(),
+    [bebanRows]
+  );
+  const filteredBeban = useMemo(() => {
+    const q = bebanSearch.trim().toLowerCase();
+    return bebanRows.filter((r) => {
+      if (bebanKecFilter && r.kecamatan !== bebanKecFilter) return false;
+      if (
+        q &&
+        !r.nagari.toLowerCase().includes(q) &&
+        !r.sls.toLowerCase().includes(q) &&
+        !r.sub_sls.toLowerCase().includes(q)
+      )
+        return false;
+      return true;
+    });
+  }, [bebanRows, bebanKecFilter, bebanSearch]);
+  const bebanTotalPages = Math.max(1, Math.ceil(filteredBeban.length / BEBAN_PAGE_SIZE));
+  const [bebanPage, setBebanPageState] = useState(1);
+  const bebanPageClamped = Math.min(bebanPage, bebanTotalPages);
+  const bebanPaged = filteredBeban.slice((bebanPageClamped - 1) * BEBAN_PAGE_SIZE, bebanPageClamped * BEBAN_PAGE_SIZE);
+  function setBebanPage(p: number) {
+    setBebanPageState(p);
+  }
+  const jumlahPerubahanBebanTampil = jumlahPerubahanBeban();
+  // Skor beban pendataan dihitung LIVE dari draft (utk umpan balik instan),
+  // memakai rumus persis yg sama dgn server (bencana_skor_beban_subsls()).
+  function skorLiveBeban(idsubsls: string, kkTotalFallback: number, kkTerdampakFallback: number): number {
+    const total = draftKkTotal[idsubsls] ?? kkTotalFallback;
+    const terdampak = draftKkTerdampak[idsubsls] ?? kkTerdampakFallback;
+    const tidakTerdampak = Math.max(total - terdampak, 0);
+    return Math.round((terdampak * BOBOT_KK_TERDAMPAK + tidakTerdampak * BOBOT_KK_TIDAK_TERDAMPAK) * 100) / 100;
   }
 
   // ---- Turunan: wilayah sampel ----
@@ -872,6 +1177,20 @@ function AlokasiPetugasSection() {
     if (!pml?.atasan_id) return null;
     return petugasList.find((p) => p.id === pml.atasan_id)?.nama ?? null;
   }
+
+  // Jumlah PPL yg (di draft, belum tentu tersimpan) membawahi tiap PML --
+  // dipakai utk MENJAGA kapasitas maksimal 4 PPL/PML di dropdown Langkah 4
+  // (opsi PML yg sudah penuh dinonaktifkan), dihitung live tiap draftPpl /
+  // draftPmlByPpl berubah supaya batasnya kerasa langsung saat trial-error.
+  const jumlahPplPerPmlDraft = useMemo(() => {
+    const map = new Map<number, number>();
+    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    for (const pplId of pplIdsDipakai) {
+      const pmlId = draftPmlByPpl[pplId] ?? null;
+      if (pmlId) map.set(pmlId, (map.get(pmlId) ?? 0) + 1);
+    }
+    return map;
+  }, [draftPpl, draftPmlByPpl]);
 
   const jumlahPerubahanPending = useMemo(() => {
     let n = 0;
@@ -1001,6 +1320,238 @@ function AlokasiPetugasSection() {
           </p>
         </div>
       )}
+
+      {/* ===== KERTAS KERJA BEBAN: KOREKSI DATA KK ===== */}
+      <section className="rounded-md border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setBebanTerbuka((v) => !v)}
+            className="flex items-center gap-2 text-left"
+          >
+            <span className="text-slate-400">{bebanTerbuka ? "▾" : "▸"}</span>
+            <span>
+              <h2 className="font-medium text-slate-800">Kertas Kerja Beban — Koreksi Data KK</h2>
+              <p className="mt-0.5 text-xs text-ink/60">
+                Lihat &amp; koreksi manual jumlah KK Total dan KK Terdampak per Sub SLS terdampak — inilah variabel
+                yang menentukan Skor Beban Pendataan di seluruh langkah di bawah. KK Total asal dari data Wilkerstat,
+                KK Terdampak asal dari estimasi rata-rata per Jorong.
+              </p>
+            </span>
+          </button>
+          {!bebanTerbuka && (
+            <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length} Sub
+              SLS terkoreksi manual
+            </span>
+          )}
+        </div>
+
+        {bebanTerbuka && (
+          <div className="mt-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <span className="text-xs text-ink/70">
+                {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length}{" "}
+                Sub SLS sudah terkoreksi manual
+              </span>
+              <span className="ml-auto flex items-center gap-2">
+                {jumlahPerubahanBebanTampil > 0 && (
+                  <span className="rounded-full bg-orange-200 px-2.5 py-1 text-xs font-medium text-orange-800">
+                    {jumlahPerubahanBebanTampil} perubahan belum disimpan
+                  </span>
+                )}
+                <button
+                  type="button"
+                  disabled={bebanSimpanBusy}
+                  onClick={handleResetSemuaBeban}
+                  className="rounded-md border border-rust-200 bg-white px-3 py-1.5 text-xs font-medium text-rust-600 transition hover:bg-rust-50 disabled:opacity-40"
+                >
+                  Reset Semua ke Data Asli
+                </button>
+                <button
+                  type="button"
+                  disabled={jumlahPerubahanBebanTampil === 0 || bebanSimpanBusy}
+                  onClick={batalkanPerubahanBeban}
+                  className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:bg-gray-50 disabled:opacity-40"
+                >
+                  ↺ Batalkan Perubahan
+                </button>
+                <button
+                  type="button"
+                  disabled={jumlahPerubahanBebanTampil === 0 || bebanSimpanBusy}
+                  onClick={handleSimpanBeban}
+                  className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {bebanSimpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
+                </button>
+              </span>
+            </div>
+
+            {bebanError && (
+              <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{bebanError}</p>
+            )}
+
+            <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
+                <select
+                  value={bebanKecFilter}
+                  onChange={(e) => {
+                    setBebanKecFilter(e.target.value);
+                    setBebanPage(1);
+                  }}
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                >
+                  <option value="">Semua kecamatan</option>
+                  {kecamatanOptionsBeban.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
+                <input
+                  value={bebanSearch}
+                  onChange={(e) => {
+                    setBebanSearch(e.target.value);
+                    setBebanPage(1);
+                  }}
+                  placeholder="Ketik kata kunci..."
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                />
+              </div>
+            </div>
+
+            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+              <table className="w-full min-w-[1100px] text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Kecamatan</th>
+                    <th className="px-3 py-2 font-medium">Nagari</th>
+                    <th className="px-3 py-2 font-medium">Jorong/SLS</th>
+                    <th className="px-3 py-2 font-medium">Sub SLS</th>
+                    <th className="px-3 py-2 font-medium">KK Total</th>
+                    <th className="px-3 py-2 font-medium">KK Terdampak</th>
+                    <th className="px-3 py-2 font-medium">KK Tidak Terdampak</th>
+                    <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
+                    <th className="px-3 py-2 font-medium">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bebanPaged.map((r) => {
+                    const total = draftKkTotal[r.idsubsls] ?? r.kk_total;
+                    const terdampak = draftKkTerdampak[r.idsubsls] ?? r.kk_terdampak_estimasi;
+                    const tidakTerdampak = Math.max(total - terdampak, 0);
+                    const skorLive = skorLiveBeban(r.idsubsls, r.kk_total, r.kk_terdampak_estimasi);
+                    const berubah = total !== r.kk_total || terdampak !== r.kk_terdampak_estimasi;
+                    return (
+                      <tr key={r.idsubsls} className={`border-t border-line ${berubah ? "bg-orange-50/50" : ""}`}>
+                        <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
+                        <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
+                        <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
+                        <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={total}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value) || 0);
+                                setDraftKkTotal((prev) => ({ ...prev, [r.idsubsls]: val }));
+                              }}
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                            />
+                            {r.kk_total_manual && (
+                              <span
+                                className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-700"
+                                title={`Data asli (Wilkerstat): ${r.kk_total_asli}`}
+                              >
+                                manual
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={terdampak}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value) || 0);
+                                setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: val }));
+                              }}
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                            />
+                            {r.kk_terdampak_manual && (
+                              <span
+                                className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-700"
+                                title={`Estimasi rata-jorong: ${r.kk_terdampak_asli}`}
+                              >
+                                manual
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-ink/80">{tidakTerdampak.toLocaleString("id-ID")}</td>
+                        <td className="px-3 py-2 font-medium text-ink">{skorLive.toLocaleString("id-ID")}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => resetBarisBeban(r.idsubsls)}
+                            title="Kembalikan baris ini ke data asli/estimasi"
+                            className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                          >
+                            ↺ reset
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {bebanPaged.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-3 py-4 text-center text-ink/50">
+                        Tidak ada data yang cocok dengan filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredBeban.length > 0 && (
+              <div className="mt-2 flex items-center justify-between text-sm text-ink/60">
+                <span>
+                  {(bebanPageClamped - 1) * BEBAN_PAGE_SIZE + 1}-
+                  {Math.min(bebanPageClamped * BEBAN_PAGE_SIZE, filteredBeban.length)} dari {filteredBeban.length}{" "}
+                  baris
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    disabled={bebanPageClamped <= 1}
+                    onClick={() => setBebanPage(bebanPageClamped - 1)}
+                    className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+                  >
+                    &lsaquo;
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bebanPageClamped >= bebanTotalPages}
+                    onClick={() => setBebanPage(bebanPageClamped + 1)}
+                    className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+                  >
+                    &rsaquo;
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ===== LANGKAH 1: WILAYAH SAMPEL ===== */}
       <section className="rounded-md border border-line bg-white p-4">
@@ -1270,18 +1821,13 @@ function AlokasiPetugasSection() {
           <div className="rounded-md border border-line p-3">
             <h3 className="text-sm font-semibold text-ink">Korwil ({korwilOptions.length})</h3>
             <div className="mt-2 flex gap-1.5">
-              <select
-                value={korwilBaruId}
-                onChange={(e) => setKorwilBaruId(e.target.value ? Number(e.target.value) : "")}
-                className="min-w-0 flex-1 rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-orange-400"
-              >
-                <option value="">+ Pilih calon Korwil (organik)...</option>
-                {calonKorwilBaru.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nama}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                value={korwilBaruId === "" ? null : korwilBaruId}
+                onChange={(v) => setKorwilBaruId(v ?? "")}
+                options={calonKorwilBaru.map((p) => ({ value: p.id, label: p.nama }))}
+                placeholder="+ Pilih calon Korwil (organik)..."
+                className="min-w-0 flex-1"
+              />
               <button
                 type="button"
                 disabled={!korwilBaruId || timBusyId === korwilBaruId}
@@ -1326,18 +1872,13 @@ function AlokasiPetugasSection() {
           <div className="rounded-md border border-line p-3">
             <h3 className="text-sm font-semibold text-ink">PML ({pmlOptions.length})</h3>
             <div className="mt-2 flex gap-1.5">
-              <select
-                value={pmlBaruId}
-                onChange={(e) => setPmlBaruId(e.target.value ? Number(e.target.value) : "")}
-                className="min-w-0 flex-1 rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-orange-400"
-              >
-                <option value="">+ Pilih calon PML (organik/mitra)...</option>
-                {calonPmlBaru.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nama} ({p.status_kepegawaian})
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                value={pmlBaruId === "" ? null : pmlBaruId}
+                onChange={(v) => setPmlBaruId(v ?? "")}
+                options={calonPmlBaru.map((p) => ({ value: p.id, label: `${p.nama} (${p.status_kepegawaian})` }))}
+                placeholder="+ Pilih calon PML (organik/mitra)..."
+                className="min-w-0 flex-1"
+              />
               <button
                 type="button"
                 disabled={!pmlBaruId || timBusyId === pmlBaruId}
@@ -1371,19 +1912,20 @@ function AlokasiPetugasSection() {
                         ? `${r.jumlah_ppl} PPL · beban ${r.total_skor_beban_akhir.toLocaleString("id-ID")}`
                         : "belum ada PPL"}
                     </p>
-                    <select
-                      value={p.atasan_id ?? ""}
+                    {r && r.jumlah_ppl > 0 && r.jumlah_ppl < KAPASITAS_IDEAL_MIN_PPL_PER_PML && (
+                      <p className="mt-0.5 text-[10px] font-medium text-orange-600">
+                        ⚠ PML ini membawahi &lt; {KAPASITAS_IDEAL_MIN_PPL_PER_PML} PPL (idealnya {KAPASITAS_IDEAL_MIN_PPL_PER_PML}-
+                        {KAPASITAS_MAX_PPL_PER_PML})
+                      </p>
+                    )}
+                    <Combobox
+                      value={p.atasan_id}
+                      onChange={(v) => handleSusunanTim(p.id, "pml", v)}
                       disabled={timBusyId === p.id}
-                      onChange={(e) => handleSusunanTim(p.id, "pml", e.target.value ? Number(e.target.value) : null)}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-2 py-1 text-[11px] outline-none focus:border-orange-400"
-                    >
-                      <option value="">Korwil: belum dipilih...</option>
-                      {korwilOptions.map((k) => (
-                        <option key={k.id} value={k.id}>
-                          Korwil: {k.nama}
-                        </option>
-                      ))}
-                    </select>
+                      options={korwilOptions.map((k) => ({ value: k.id, label: `Korwil: ${k.nama}` }))}
+                      placeholder="Korwil: belum dipilih..."
+                      className="mt-1 w-full"
+                    />
                   </li>
                 );
               })}
@@ -1408,21 +1950,23 @@ function AlokasiPetugasSection() {
                       <p className="text-[10px] text-ink/50">
                         {r.jumlah_subsls} Sub SLS · beban {r.total_skor_beban_akhir.toLocaleString("id-ID")}
                       </p>
-                      <select
-                        value={p?.atasan_id ?? ""}
+                      <Combobox
+                        value={p?.atasan_id ?? null}
+                        onChange={(v) => handleSusunanTim(r.ppl_id, "ppl", v)}
                         disabled={timBusyId === r.ppl_id}
-                        onChange={(e) =>
-                          handleSusunanTim(r.ppl_id, "ppl", e.target.value ? Number(e.target.value) : null)
-                        }
-                        className="mt-1 w-full rounded-md border border-line bg-white px-2 py-1 text-[11px] outline-none focus:border-orange-400"
-                      >
-                        <option value="">PML: belum dipilih...</option>
-                        {pmlOptions.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            PML: {m.nama}
-                          </option>
-                        ))}
-                      </select>
+                        options={pmlOptions.map((m) => {
+                          const jumlah = ringkasanPml.find((x) => x.pml_id === m.id)?.jumlah_ppl ?? 0;
+                          const sudahPunyaIni = p?.atasan_id === m.id;
+                          const penuh = jumlah >= KAPASITAS_MAX_PPL_PER_PML && !sudahPunyaIni;
+                          return {
+                            value: m.id,
+                            label: `PML: ${m.nama}${penuh ? ` (penuh - ${KAPASITAS_MAX_PPL_PER_PML} PPL)` : ""}`,
+                            disabled: penuh,
+                          };
+                        })}
+                        placeholder="PML: belum dipilih..."
+                        className="mt-1 w-full"
+                      />
                     </li>
                   );
                 })}
@@ -1502,8 +2046,16 @@ function AlokasiPetugasSection() {
                     const pct = Math.min(100, Math.round((r.total_skor_beban_akhir / maxSkor) * 100));
                     return (
                       <div key={r.pml_id} className="flex items-center gap-2 text-sm">
-                        <span className="w-40 shrink-0 truncate text-ink/80" title={r.pml_nama}>
+                        <span className="flex w-40 shrink-0 items-center gap-1 truncate text-ink/80" title={r.pml_nama}>
                           {r.pml_nama}
+                          {r.jumlah_ppl > 0 && r.jumlah_ppl < KAPASITAS_IDEAL_MIN_PPL_PER_PML && (
+                            <span
+                              title={`Membawahi < ${KAPASITAS_IDEAL_MIN_PPL_PER_PML} PPL (idealnya ${KAPASITAS_IDEAL_MIN_PPL_PER_PML}-${KAPASITAS_MAX_PPL_PER_PML})`}
+                              className="shrink-0 text-orange-500"
+                            >
+                              ⚠
+                            </span>
+                          )}
                         </span>
                         <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
                           <div className={`h-full rounded-full ${info.barCls}`} style={{ width: `${pct}%` }} />
@@ -1728,22 +2280,14 @@ function AlokasiPetugasSection() {
                     <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
-                        <select
+                        <Combobox
                           disabled={pplOptions.length === 0}
-                          value={draftPplId ?? ""}
-                          onChange={(e) => {
-                            const val = e.target.value ? Number(e.target.value) : null;
-                            setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: val }));
-                          }}
-                          className="w-48 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
-                        >
-                          <option value="">Plot ke PPL...</option>
-                          {pplOptions.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {infoPplUntukBaris(p, r)}
-                            </option>
-                          ))}
-                        </select>
+                          value={draftPplId ?? null}
+                          onChange={(val) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: val }))}
+                          options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
+                          placeholder="Plot ke PPL..."
+                          className="w-48"
+                        />
                         {draftPplId && (
                           <button
                             type="button"
@@ -1769,22 +2313,25 @@ function AlokasiPetugasSection() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <select
+                      <Combobox
                         disabled={!draftPplId || pmlOptions.length === 0}
-                        value={draftPmlId ?? ""}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
+                        value={draftPmlId ?? null}
+                        onChange={(val) => {
                           if (draftPplId) setDraftPmlByPpl((prev) => ({ ...prev, [draftPplId]: val }));
                         }}
-                        className="w-40 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400 disabled:bg-gray-50"
-                      >
-                        <option value="">Pilih PML...</option>
-                        {pmlOptions.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nama}
-                          </option>
-                        ))}
-                      </select>
+                        options={pmlOptions.map((p) => {
+                          const jumlah = jumlahPplPerPmlDraft.get(p.id) ?? 0;
+                          const sudahPunyaIni = draftPmlId === p.id;
+                          const penuh = jumlah >= KAPASITAS_MAX_PPL_PER_PML && !sudahPunyaIni;
+                          return {
+                            value: p.id,
+                            label: `${p.nama}${penuh ? ` (penuh - ${KAPASITAS_MAX_PPL_PER_PML} PPL)` : ""}`,
+                            disabled: penuh,
+                          };
+                        })}
+                        placeholder="Pilih PML..."
+                        className="w-40"
+                      />
                     </td>
                     <td className="px-3 py-2 text-ink/80">
                       {korwilNama ?? <span className="text-xs text-ink/40">-</span>}
