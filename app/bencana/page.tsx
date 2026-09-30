@@ -402,6 +402,102 @@ function IkonSumberKkTerdampak({
   );
 }
 
+// Ikon "bandingkan dgn data verifikasi" (🧭) di baris Sub SLS yang Jorong-nya
+// SUDAH ADA data verifikasi resmi (lihat bencana_kk_terdampak_verifikasi_jorong
+// & AMBANG_SELISIH_VERIFIKASI_JORONG). Beda dgn IkonSumberKkTerdampak, ikon
+// ini TIDAK fetch ke server -- seluruh datanya (rincian tiap Sub SLS
+// se-Jorong + nilai draft terkini) sudah ada di memory (bebanRows +
+// draftKkTerdampak), jadi popovernya murni hitung ulang lokal & langsung
+// ikut berubah kalau admin sedang mengetik koreksi manual.
+function IkonVerifikasiJorong({
+  namaJorong,
+  verifikasiTotal,
+  totalJorongLive,
+  rincianSub,
+  bedaSignifikan,
+}: {
+  namaJorong: string;
+  verifikasiTotal: number;
+  totalJorongLive: number;
+  rincianSub: { sub_sls: string; nilai: number }[];
+  bedaSignifikan: boolean;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 280;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+  }
+
+  const selisih = totalJorongLive - verifikasiTotal;
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        title="Bandingkan dengan data verifikasi resmi per Jorong"
+        className={`text-sm leading-none ${bedaSignifikan ? "text-rust-600" : "text-slate-400 hover:text-slate-600"}`}
+      >
+        🧭
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
+          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+        >
+          <p className="font-semibold text-ink">Verifikasi Jorong {namaJorong}</p>
+          <p className="mt-1 text-ink/70">
+            Data awal KK terdampak (verifikasi resmi): <b>{verifikasiTotal}</b>
+          </p>
+          <p className="text-ink/70">
+            Jumlah menurut aplikasi (total semua Sub SLS di Jorong ini): <b>{totalJorongLive}</b>
+          </p>
+          {bedaSignifikan && (
+            <p className="mt-1 font-medium text-rust-600">
+              Selisih {selisih > 0 ? "+" : ""}
+              {selisih} KK -- lebih dari {AMBANG_SELISIH_VERIFIKASI_JORONG}, mohon ditinjau ulang manual.
+            </p>
+          )}
+          <p className="mt-2 font-medium text-ink/70">Rincian tiap Sub SLS (menurut aplikasi):</p>
+          <ul className="mt-1 space-y-0.5">
+            {rincianSub.map((s) => (
+              <li key={s.sub_sls} className="flex justify-between text-ink/70">
+                <span>Sub SLS {s.sub_sls}</span>
+                <span className="font-medium text-ink">{s.nilai}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type CalonSampelRow = {
   idsubsls: string;
   kecamatan: string;
@@ -436,6 +532,7 @@ type RingkasanKorwilRow = {
 // terdampak, sbg variabel input skor_beban_pendataan (bisa dikoreksi manual).
 type KertasKerjaBebanRow = {
   idsubsls: string;
+  idsls: string;
   kecamatan: string;
   nagari: string;
   sls: string;
@@ -449,7 +546,17 @@ type KertasKerjaBebanRow = {
   kk_total_manual: boolean;
   kk_terdampak_manual: boolean;
   punya_data_kk: boolean;
+  // Data verifikasi lapangan resmi (Januari 2026) jumlah keluarga terdampak
+  // PER JORONG -- null kalau Jorong ybs belum ada datanya. Dipakai utk
+  // membandingkan thd total kk_terdampak (dijumlah per Jorong) & menandai
+  // Sub SLS yg selisihnya jauh sbg perlu ditinjau ulang manual.
+  verifikasi_total_keluarga: number | null;
 };
+
+// Selisih di atas ini (KK) antara data verifikasi resmi per Jorong vs total
+// kk_terdampak aplikasi (dijumlah per Jorong) dianggap signifikan -> baris2
+// Sub SLS di Jorong itu ditandai merah utk ditinjau ulang manual.
+const AMBANG_SELISIH_VERIFIKASI_JORONG = 15;
 
 type PengaturanBebanRow = {
   kunci: string;
@@ -2427,6 +2534,44 @@ function AlokasiPetugasSection() {
     return Math.round((terdampak * BOBOT_KK_TERDAMPAK + tidakTerdampak * BOBOT_KK_TIDAK_TERDAMPAK) * 100) / 100;
   }
 
+  // Semua baris Sub SLS dikelompokkan per Jorong (idsls) -- dipakai popover
+  // "🧭 Verifikasi Jorong" utk menampilkan rincian tiap Sub SLS se-Jorong.
+  // Dari SELURUH bebanRows (bukan cuma yg tampil di halaman/filter saat ini),
+  // supaya perbandingannya selalu lengkap walau tabel sedang difilter.
+  const subRowsPerJorong = useMemo(() => {
+    const map = new Map<string, KertasKerjaBebanRow[]>();
+    for (const r of bebanRows) {
+      const arr = map.get(r.idsls) ?? [];
+      arr.push(r);
+      map.set(r.idsls, arr);
+    }
+    return map;
+  }, [bebanRows]);
+
+  // Total KK terdampak LIVE per Jorong (dijumlah dari draft/nilai terkini tiap
+  // Sub SLS-nya) -- dibandingkan dgn verifikasi_total_keluarga (data
+  // verifikasi resmi) utk menentukan baris mana yg perlu ditandai merah.
+  const totalTerdampakPerJorongLive = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of bebanRows) {
+      const nilai = draftKkTerdampak[r.idsubsls] ?? r.kk_terdampak_estimasi;
+      map.set(r.idsls, Math.round(((map.get(r.idsls) ?? 0) + nilai) * 100) / 100);
+    }
+    return map;
+  }, [bebanRows, draftKkTerdampak]);
+
+  // Jumlah baris Sub SLS yg Jorong-nya selisih >15 KK dari data verifikasi --
+  // dipakai badge & legenda di atas tabel Kertas Kerja Beban.
+  const jumlahBarisBedaVerifikasi = useMemo(() => {
+    let n = 0;
+    for (const r of bebanRows) {
+      if (r.verifikasi_total_keluarga == null) continue;
+      const totalJorong = totalTerdampakPerJorongLive.get(r.idsls) ?? 0;
+      if (Math.abs(totalJorong - r.verifikasi_total_keluarga) > AMBANG_SELISIH_VERIFIKASI_JORONG) n++;
+    }
+    return n;
+  }, [bebanRows, totalTerdampakPerJorongLive]);
+
   // ---- Turunan: wilayah sampel ----
   const kecamatanOptionsSampel = useMemo(
     () => Array.from(new Set(calonSampel.map((r) => r.kecamatan))).sort(),
@@ -3157,16 +3302,30 @@ function AlokasiPetugasSection() {
               </p>
             </span>
           </button>
-          {!bebanTerbuka && (
-            <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-              {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length} Sub
-              SLS terkoreksi manual
-            </span>
-          )}
+          <span className="flex shrink-0 items-center gap-1.5">
+            {jumlahBarisBedaVerifikasi > 0 && (
+              <span className="rounded-full bg-rust-100 px-3 py-1 text-xs font-medium text-rust-700">
+                🧭 {jumlahBarisBedaVerifikasi} Sub SLS beda &gt;{AMBANG_SELISIH_VERIFIKASI_JORONG} dari verifikasi
+              </span>
+            )}
+            {!bebanTerbuka && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length}{" "}
+                Sub SLS terkoreksi manual
+              </span>
+            )}
+          </span>
         </div>
 
         {bebanTerbuka && (
           <div className="mt-3">
+            {jumlahBarisBedaVerifikasi > 0 && (
+              <p className="mb-2 rounded-md border border-rust-100 bg-rust-50 px-3 py-2 text-xs text-rust-700">
+                Baris berwarna merah = total KK Terdampak Jorong ybs (dijumlah semua Sub SLS-nya) selisih lebih dari{" "}
+                {AMBANG_SELISIH_VERIFIKASI_JORONG} KK dari data verifikasi resmi lapangan. Klik ikon 🧭 pada baris
+                tsb utk lihat rinciannya. Ini hanya penanda utk ditinjau ulang manual — bukan koreksi otomatis.
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span className="text-xs text-ink/70">
                 {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length}{" "}
@@ -3273,8 +3432,17 @@ function AlokasiPetugasSection() {
                     const tidakTerdampak = Math.max(total - terdampak, 0);
                     const skorLive = skorLiveBeban(r.idsubsls, r.kk_total, r.kk_terdampak_estimasi);
                     const berubah = total !== r.kk_total || terdampak !== r.kk_terdampak_estimasi;
+                    const totalJorongLive = totalTerdampakPerJorongLive.get(r.idsls) ?? terdampak;
+                    const bedaSignifikanJorong =
+                      r.verifikasi_total_keluarga != null &&
+                      Math.abs(totalJorongLive - r.verifikasi_total_keluarga) > AMBANG_SELISIH_VERIFIKASI_JORONG;
                     return (
-                      <tr key={r.idsubsls} className={`border-t border-line ${berubah ? "bg-orange-50/50" : ""}`}>
+                      <tr
+                        key={r.idsubsls}
+                        className={`border-t border-line ${
+                          bedaSignifikanJorong ? "bg-rust-50" : berubah ? "bg-orange-50/50" : ""
+                        }`}
+                      >
                         <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
                         <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
                         <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
@@ -3319,6 +3487,18 @@ function AlokasiPetugasSection() {
                                 setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: nilai }))
                               }
                             />
+                            {r.verifikasi_total_keluarga != null && (
+                              <IkonVerifikasiJorong
+                                namaJorong={r.sls}
+                                verifikasiTotal={r.verifikasi_total_keluarga}
+                                totalJorongLive={totalJorongLive}
+                                bedaSignifikan={bedaSignifikanJorong}
+                                rincianSub={(subRowsPerJorong.get(r.idsls) ?? []).map((s) => ({
+                                  sub_sls: s.sub_sls,
+                                  nilai: draftKkTerdampak[s.idsubsls] ?? s.kk_terdampak_estimasi,
+                                }))}
+                              />
+                            )}
                             {r.kk_terdampak_manual && (
                               <span
                                 className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-700"
