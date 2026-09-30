@@ -60,6 +60,18 @@ type MonitoringJorongRow = {
   terakhir_diisi: string | null;
 };
 
+// Status turunan (dihitung di client dari gabungan gate nagari + isian
+// jorong) utk dashboard "Progress Identifikasi" di tab Monitoring.
+type JorongStatus = "terdampak" | "tidak_terdampak" | "belum";
+type NagariStatus = "belum" | "sedang" | "selesai";
+
+type JorongDerived = MonitoringJorongRow & { status: JorongStatus; konflik: boolean };
+type NagariDerived = MonitoringNagariRow & {
+  status: NagariStatus;
+  terdampakCount: number;
+  konflik: boolean;
+};
+
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
   { key: "korban", label: "Korban meninggal, hilang, atau luka" },
   { key: "hunian_rusak", label: "Hunian rusak / terendam" },
@@ -109,6 +121,66 @@ function formatTanggal(iso: string | null): string {
   }
 }
 
+// ---- Komponen kecil utk dashboard "Progress Identifikasi" ---------------
+
+function StatCard({
+  ikon,
+  warna,
+  label,
+  nilai,
+  sub,
+}: {
+  ikon: string;
+  warna: string;
+  label: string;
+  nilai: string | number;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-md border border-line bg-white p-3">
+      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-base ${warna}`}>
+        {ikon}
+      </div>
+      <p className="mt-2 text-xs text-ink/60">{label}</p>
+      <p className="text-xl font-semibold text-ink">
+        {nilai}
+        {sub && <span className="ml-1.5 text-xs font-medium text-ink/50">{sub}</span>}
+      </p>
+    </div>
+  );
+}
+
+function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai: number }) {
+  return (
+    <div className={`rounded-md px-3 py-2 ${warna}`}>
+      <p className="text-xs font-medium">{label}</p>
+      <p className="text-lg font-semibold">{nilai}</p>
+    </div>
+  );
+}
+
+const STATUS_NAGARI_SPEC: Record<NagariStatus, { label: string; cls: string }> = {
+  belum: { label: "Belum Diisi", cls: "bg-gray-100 text-gray-600" },
+  sedang: { label: "Sedang Diisi", cls: "bg-orange-100 text-orange-700" },
+  selesai: { label: "Selesai", cls: "bg-moss-100 text-moss-700" },
+};
+
+function StatusBadge({ status }: { status: NagariStatus }) {
+  const spec = STATUS_NAGARI_SPEC[status];
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${spec.cls}`}>{spec.label}</span>;
+}
+
+const STATUS_JORONG_SPEC: Record<JorongStatus, { label: string; cls: string }> = {
+  terdampak: { label: "Terdampak", cls: "bg-orange-100 text-orange-700" },
+  tidak_terdampak: { label: "Tidak Terdampak", cls: "bg-moss-100 text-moss-700" },
+  belum: { label: "Belum Diisi", cls: "bg-gray-100 text-gray-600" },
+};
+
+function JorongStatusBadge({ status }: { status: JorongStatus }) {
+  const spec = STATUS_JORONG_SPEC[status];
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${spec.cls}`}>{spec.label}</span>;
+}
+
 export default function BencanaPage() {
   const [tab, setTab] = useState<"identifikasi" | "monitoring">("identifikasi");
 
@@ -142,6 +214,9 @@ export default function BencanaPage() {
   const [monNagari, setMonNagari] = useState<MonitoringNagariRow[]>([]);
   const [monJorong, setMonJorong] = useState<MonitoringJorongRow[]>([]);
   const [monKecFilter, setMonKecFilter] = useState("");
+  const [monStatusFilter, setMonStatusFilter] = useState<"" | NagariStatus>("");
+  const [monSearch, setMonSearch] = useState("");
+  const [monNagariPage, setMonNagariPage] = useState(1);
 
   useEffect(() => {
     async function loadAwal() {
@@ -340,12 +415,106 @@ export default function BencanaPage() {
     }
   }
 
-  const monNagariFiltered = monKecFilter
-    ? monNagari.filter((r) => r.kecamatan === monKecFilter)
-    : monNagari;
+  // ---- Turunan status "Progress Identifikasi" -----------------------
+  // Jorong dianggap:
+  //  - "terdampak"       kalau sudah ada isian jorong (seluruh/sebagian).
+  //  - "tidak_terdampak" kalau nagarinya sudah dijawab "tidak ada jorong
+  //    terdampak" pada gate (shg jorong ini otomatis tidak perlu diisi).
+  //  - "belum"           kalau belum ada isian sama sekali (gate blm
+  //    dijawab, atau gate "ya" tapi jorong ini blm direview).
+  const nagariByIddesa = new Map(monNagari.map((n) => [n.iddesa, n]));
+
+  const jorongDerived: JorongDerived[] = monJorong.map((j) => {
+    const nag = nagariByIddesa.get(j.iddesa);
+    const nagariBilangTidak = (nag?.jumlah_gate_tidak ?? 0) > 0 && (nag?.jumlah_gate_ya ?? 0) === 0;
+    let status: JorongStatus;
+    if (j.jumlah_identifikasi > 0) status = "terdampak";
+    else if (nagariBilangTidak) status = "tidak_terdampak";
+    else status = "belum";
+    const konflik = j.konflik_jorong || (nag?.konflik_gate ?? false);
+    return { ...j, status, konflik };
+  });
+
+  const jorongByIddesa = new Map<string, JorongDerived[]>();
+  for (const j of jorongDerived) {
+    const list = jorongByIddesa.get(j.iddesa) ?? [];
+    list.push(j);
+    jorongByIddesa.set(j.iddesa, list);
+  }
+
+  // Nagari dianggap "selesai" kalau: gate-nya "tidak" (tidak perlu jorong),
+  // atau gate-nya "ya" DAN seluruh jorong di nagari itu sudah "terdampak".
+  // "sedang" kalau baru sebagian jorong yg sudah diisi. "belum" kalau gate
+  // sama sekali belum dijawab.
+  const nagariDerived: NagariDerived[] = monNagari.map((n) => {
+    const jorongList = jorongByIddesa.get(n.iddesa) ?? [];
+    const terdampakCount = jorongList.filter((j) => j.status === "terdampak").length;
+    let status: NagariStatus;
+    if (n.jumlah_gate_total === 0) status = "belum";
+    else if (n.jumlah_gate_ya === 0 && n.jumlah_gate_tidak > 0) status = "selesai";
+    else if (n.jumlah_gate_ya > 0 && n.jumlah_jorong_total > 0 && terdampakCount >= n.jumlah_jorong_total)
+      status = "selesai";
+    else status = "sedang";
+    const konflik = n.konflik_gate || jorongList.some((j) => j.konflik);
+    return { ...n, status, terdampakCount, konflik };
+  });
+
+  const totalKecamatanMon = new Set(monNagari.map((n) => n.kecamatan)).size;
+  const totalNagariMon = monNagari.length;
+  const totalJorongMon = jorongDerived.length;
+  const jorongSudahDiisi = jorongDerived.filter((j) => j.status !== "belum").length;
+  const jorongTerdampak = jorongDerived.filter((j) => j.status === "terdampak").length;
+  const jorongTidakTerdampak = jorongDerived.filter((j) => j.status === "tidak_terdampak").length;
+  const jorongBelumDiisi = jorongDerived.filter((j) => j.status === "belum").length;
+  const jorongKonflikCount = jorongDerived.filter((j) => j.konflik).length;
+  const pctSudahDiisi = totalJorongMon > 0 ? Math.round((jorongSudahDiisi / totalJorongMon) * 100) : 0;
+
+  const kecamatanProgressMap = new Map<string, { total: number; sudah: number }>();
+  for (const j of jorongDerived) {
+    const cur = kecamatanProgressMap.get(j.kecamatan) ?? { total: 0, sudah: 0 };
+    cur.total += 1;
+    if (j.status !== "belum") cur.sudah += 1;
+    kecamatanProgressMap.set(j.kecamatan, cur);
+  }
+  const kecamatanProgress = Array.from(kecamatanProgressMap.entries())
+    .map(([kecamatan, v]) => ({
+      kecamatan,
+      total: v.total,
+      sudah: v.sudah,
+      pct: v.total > 0 ? Math.round((v.sudah / v.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.pct - a.pct);
+
+  const nagariBelumList = nagariDerived
+    .filter((n) => n.status === "belum")
+    .sort((a, b) => a.nagari.localeCompare(b.nagari));
+  const nagariKonflikList = nagariDerived
+    .filter((n) => n.konflik)
+    .sort((a, b) => a.nagari.localeCompare(b.nagari));
+
+  const lastUpdatedMon =
+    [...monNagari.map((n) => n.terakhir_diisi), ...monJorong.map((j) => j.terakhir_diisi)]
+      .filter((d): d is string => Boolean(d))
+      .sort()
+      .pop() ?? null;
+
+  const nagariFilteredFull = nagariDerived.filter((n) => {
+    if (monKecFilter && n.kecamatan !== monKecFilter) return false;
+    if (monStatusFilter && n.status !== monStatusFilter) return false;
+    if (monSearch.trim() && !n.nagari.toLowerCase().includes(monSearch.trim().toLowerCase())) return false;
+    return true;
+  });
+  const MON_PAGE_SIZE = 10;
+  const nagariTotalPages = Math.max(1, Math.ceil(nagariFilteredFull.length / MON_PAGE_SIZE));
+  const nagariPageClamped = Math.min(monNagariPage, nagariTotalPages);
+  const nagariPaged = nagariFilteredFull.slice(
+    (nagariPageClamped - 1) * MON_PAGE_SIZE,
+    nagariPageClamped * MON_PAGE_SIZE
+  );
+
   const monJorongFiltered = monKecFilter
-    ? monJorong.filter((r) => r.kecamatan === monKecFilter)
-    : monJorong;
+    ? jorongDerived.filter((r) => r.kecamatan === monKecFilter)
+    : jorongDerived;
 
   if (loading) {
     return (
@@ -364,7 +533,11 @@ export default function BencanaPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-5 py-10">
+    <main
+      className={`mx-auto min-h-screen px-5 py-10 ${
+        tab === "monitoring" ? "max-w-6xl" : "max-w-2xl"
+      }`}
+    >
       <p className="text-sm font-medium text-orange-400">BPS Kabupaten Solok</p>
       <h1 className="mt-1 text-2xl font-semibold text-orange-900">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
@@ -696,55 +869,266 @@ export default function BencanaPage() {
         </div>
       ) : (
         <div className="mt-6 flex flex-col gap-6">
-          <div>
-            <label className="text-sm font-medium text-ink">Filter Kecamatan</label>
-            <select
-              value={monKecFilter}
-              onChange={(e) => setMonKecFilter(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
-            >
-              <option value="">Semua kecamatan</option>
-              {kecamatanOptions.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {monLoading ? (
             <p className="text-sm text-ink/60">Memuat monitoring...</p>
           ) : monError ? (
             <p className="rounded-md bg-rust-100 px-3 py-2 text-sm text-rust-700">{monError}</p>
           ) : (
             <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-orange-900">Progress Identifikasi</h2>
+                  <p className="text-sm text-ink/60">
+                    Rekap pelaksanaan identifikasi Jorong/Sub SLS terdampak bencana
+                    hidrometeorologi akhir 2025, di 29 nagari yang perlu diidentifikasi.
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-orange-900 px-3 py-1.5 text-xs font-medium text-white">
+                  Data terakhir diperbarui: {formatTanggal(lastUpdatedMon)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <StatCard
+                  ikon="📍"
+                  warna="bg-blue-100 text-blue-700"
+                  label="Jumlah Kecamatan"
+                  nilai={totalKecamatanMon}
+                />
+                <StatCard
+                  ikon="🏘️"
+                  warna="bg-teal-100 text-teal-700"
+                  label="Jumlah Nagari"
+                  nilai={totalNagariMon}
+                />
+                <StatCard
+                  ikon="🧩"
+                  warna="bg-violet-100 text-violet-700"
+                  label="Total Jorong"
+                  nilai={totalJorongMon}
+                />
+                <StatCard
+                  ikon="✅"
+                  warna="bg-moss-100 text-moss-700"
+                  label="Sudah Diisi"
+                  nilai={jorongSudahDiisi}
+                  sub={`${pctSudahDiisi}%`}
+                />
+                <StatCard
+                  ikon="📋"
+                  warna="bg-orange-100 text-orange-700"
+                  label="Belum Diisi"
+                  nilai={jorongBelumDiisi}
+                  sub={
+                    totalJorongMon > 0
+                      ? `${Math.round((jorongBelumDiisi / totalJorongMon) * 100)}%`
+                      : "0%"
+                  }
+                />
+                <StatCard
+                  ikon="⚠️"
+                  warna="bg-rust-100 text-rust-700"
+                  label="Ada Konflik"
+                  nilai={jorongKonflikCount}
+                />
+              </div>
+
+              <section className="rounded-md border border-line bg-white p-4">
+                <h3 className="font-medium text-orange-900">Progress Identifikasi Jorong</h3>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-orange-50">
+                    <div
+                      className="h-full rounded-full bg-moss-500 transition-all"
+                      style={{ width: `${pctSudahDiisi}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-lg font-semibold text-moss-700">
+                    {pctSudahDiisi}%
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-ink/60">
+                  {jorongSudahDiisi} dari {totalJorongMon} Jorong sudah memiliki jawaban
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <MiniStat warna="bg-orange-50 text-orange-700" label="Terdampak" nilai={jorongTerdampak} />
+                  <MiniStat
+                    warna="bg-moss-100 text-moss-700"
+                    label="Tidak Terdampak"
+                    nilai={jorongTidakTerdampak}
+                  />
+                  <MiniStat warna="bg-gray-100 text-gray-600" label="Belum Diisi" nilai={jorongBelumDiisi} />
+                  <MiniStat warna="bg-rust-100 text-rust-700" label="Konflik" nilai={jorongKonflikCount} />
+                </div>
+              </section>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <section className="rounded-md border border-line bg-white p-4">
+                  <h3 className="font-medium text-orange-900">Progress per Kecamatan</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-left text-sm">
+                      <thead className="text-xs text-ink/50">
+                        <tr>
+                          <th className="px-2 py-1.5 font-medium">Kecamatan</th>
+                          <th className="px-2 py-1.5 font-medium">Jorong</th>
+                          <th className="px-2 py-1.5 font-medium">Diisi</th>
+                          <th className="px-2 py-1.5 font-medium">Progress</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kecamatanProgress.map((k) => (
+                          <tr key={k.kecamatan} className="border-t border-line">
+                            <td className="px-2 py-1.5 text-ink">{k.kecamatan}</td>
+                            <td className="px-2 py-1.5 text-ink/70">{k.total}</td>
+                            <td className="px-2 py-1.5 text-ink/70">{k.sudah}</td>
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-20 overflow-hidden rounded-full bg-orange-50">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      k.pct === 100 ? "bg-moss-500" : "bg-orange-500"
+                                    }`}
+                                    style={{ width: `${k.pct}%` }}
+                                  />
+                                </div>
+                                <span className="shrink-0 text-xs font-medium text-ink/70">{k.pct}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <div className="flex flex-col gap-4">
+                  <section className="rounded-md border border-line bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium text-orange-900">Nagari Belum Diidentifikasi</h3>
+                      <span className="text-xs text-ink/50">{nagariBelumList.length} nagari</span>
+                    </div>
+                    <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                      {nagariBelumList.length === 0 && (
+                        <li className="text-sm text-ink/50">Semua nagari sudah mulai diisi.</li>
+                      )}
+                      {nagariBelumList.map((n) => (
+                        <li
+                          key={n.iddesa}
+                          className="flex items-center justify-between rounded-md bg-orange-50/60 px-3 py-1.5 text-sm"
+                        >
+                          <span className="text-ink">{n.nagari}</span>
+                          <span className="text-xs text-ink/50">{n.kecamatan}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section className="rounded-md border border-line bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium text-orange-900">Nagari dengan Konflik Data</h3>
+                      <span className="text-xs text-ink/50">{nagariKonflikList.length} nagari</span>
+                    </div>
+                    <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+                      {nagariKonflikList.length === 0 && (
+                        <li className="text-sm text-ink/50">Belum ada konflik data.</li>
+                      )}
+                      {nagariKonflikList.map((n) => (
+                        <li
+                          key={n.iddesa}
+                          className="flex items-center justify-between rounded-md bg-rust-100/60 px-3 py-1.5 text-sm"
+                        >
+                          <span className="text-ink">{n.nagari}</span>
+                          <span className="text-xs text-rust-700">{n.kecamatan}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                </div>
+              </div>
+
+              <section className="rounded-md border border-line bg-white p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
+                    <select
+                      value={monKecFilter}
+                      onChange={(e) => {
+                        setMonKecFilter(e.target.value);
+                        setMonNagariPage(1);
+                      }}
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="">Semua kecamatan</option>
+                      {kecamatanOptions.map((k) => (
+                        <option key={k} value={k}>
+                          {k}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-ink/60">Filter Status</label>
+                    <select
+                      value={monStatusFilter}
+                      onChange={(e) => {
+                        setMonStatusFilter(e.target.value as "" | NagariStatus);
+                        setMonNagariPage(1);
+                      }}
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                    >
+                      <option value="">Semua status</option>
+                      <option value="belum">Belum Diisi</option>
+                      <option value="sedang">Sedang Diisi</option>
+                      <option value="selesai">Selesai</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-ink/60">Cari Nagari</label>
+                    <input
+                      value={monSearch}
+                      onChange={(e) => {
+                        setMonSearch(e.target.value);
+                        setMonNagariPage(1);
+                      }}
+                      placeholder="Ketik nama nagari..."
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                    />
+                  </div>
+                </div>
+              </section>
+
               <section>
                 <h2 className="font-medium text-orange-900">Rekap per Nagari</h2>
                 <div className="mt-2 overflow-x-auto rounded-md border border-line">
-                  <table className="w-full min-w-[640px] text-left text-sm">
+                  <table className="w-full min-w-[820px] text-left text-sm">
                     <thead className="bg-orange-50 text-orange-600">
                       <tr>
                         <th className="px-3 py-2 font-medium">Kecamatan</th>
                         <th className="px-3 py-2 font-medium">Nagari</th>
-                        <th className="px-3 py-2 font-medium">Jorong Terdampak</th>
+                        <th className="px-3 py-2 font-medium">Jorong</th>
                         <th className="px-3 py-2 font-medium">Jawaban Ya/Tidak</th>
+                        <th className="px-3 py-2 font-medium">Terdampak</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
                         <th className="px-3 py-2 font-medium">Konflik</th>
                         <th className="px-3 py-2 font-medium">Terakhir Diisi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {monNagariFiltered.map((r) => (
+                      {nagariPaged.map((r) => (
                         <tr key={r.iddesa} className="border-t border-line">
                           <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
                           <td className="px-3 py-2 font-medium text-ink">{r.nagari}</td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.jumlah_jorong_dilaporkan_terdampak} / {r.jumlah_jorong_total}
-                          </td>
+                          <td className="px-3 py-2 text-ink/80">{r.jumlah_jorong_total}</td>
                           <td className="px-3 py-2 text-ink/80">
                             {r.jumlah_gate_ya} ya &middot; {r.jumlah_gate_tidak} tidak
                           </td>
+                          <td className="px-3 py-2 text-ink/80">
+                            {r.terdampakCount} / {r.jumlah_jorong_total}
+                          </td>
                           <td className="px-3 py-2">
-                            {r.konflik_gate ? (
+                            <StatusBadge status={r.status} />
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.konflik ? (
                               <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
                                 Konflik
                               </span>
@@ -757,28 +1141,56 @@ export default function BencanaPage() {
                           </td>
                         </tr>
                       ))}
-                      {monNagariFiltered.length === 0 && (
+                      {nagariPaged.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-3 py-4 text-center text-ink/50">
-                            Belum ada data.
+                          <td colSpan={8} className="px-3 py-4 text-center text-ink/50">
+                            Tidak ada nagari yang cocok dengan filter.
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+                {nagariFilteredFull.length > 0 && (
+                  <div className="mt-2 flex items-center justify-between text-sm text-ink/60">
+                    <span>
+                      {(nagariPageClamped - 1) * MON_PAGE_SIZE + 1}-
+                      {Math.min(nagariPageClamped * MON_PAGE_SIZE, nagariFilteredFull.length)} dari{" "}
+                      {nagariFilteredFull.length} nagari
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={nagariPageClamped <= 1}
+                        onClick={() => setMonNagariPage((p) => p - 1)}
+                        className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+                      >
+                        &lsaquo;
+                      </button>
+                      <button
+                        type="button"
+                        disabled={nagariPageClamped >= nagariTotalPages}
+                        onClick={() => setMonNagariPage((p) => p + 1)}
+                        className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+                      >
+                        &rsaquo;
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               <section>
                 <h2 className="font-medium text-orange-900">Rekap per Jorong</h2>
                 <div className="mt-2 overflow-x-auto rounded-md border border-line">
-                  <table className="w-full min-w-[720px] text-left text-sm">
+                  <table className="w-full min-w-[780px] text-left text-sm">
                     <thead className="bg-orange-50 text-orange-600">
                       <tr>
                         <th className="px-3 py-2 font-medium">Nagari</th>
                         <th className="px-3 py-2 font-medium">Jorong</th>
                         <th className="px-3 py-2 font-medium">Sub SLS Terdampak</th>
                         <th className="px-3 py-2 font-medium">Jumlah Isian</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
                         <th className="px-3 py-2 font-medium">Konflik</th>
                         <th className="px-3 py-2 font-medium">Mitra Terakhir</th>
                       </tr>
@@ -796,7 +1208,10 @@ export default function BencanaPage() {
                             {r.jumlah_bilang_sebagian} sebagian)
                           </td>
                           <td className="px-3 py-2">
-                            {r.konflik_jorong ? (
+                            <JorongStatusBadge status={r.status} />
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.konflik ? (
                               <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
                                 Konflik
                               </span>
@@ -811,7 +1226,7 @@ export default function BencanaPage() {
                       ))}
                       {monJorongFiltered.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-3 py-4 text-center text-ink/50">
+                          <td colSpan={7} className="px-3 py-4 text-center text-ink/50">
                             Belum ada data.
                           </td>
                         </tr>
