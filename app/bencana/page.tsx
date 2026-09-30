@@ -551,8 +551,13 @@ function AlokasiPetugasSection() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const [reassignBusyId, setReassignBusyId] = useState<string | null>(null);
-  const [reassignError, setReassignError] = useState<string | null>(null);
+  // Draft plotting Sub SLS->PPL & PPL->PML: TIDAK submit ke server tiap
+  // dropdown dipilih (supaya bisa trial-error lihat keseimbangan beban dulu).
+  // Baru terkirim ke server sekaligus saat tombol "Simpan Perubahan" ditekan.
+  const [draftPpl, setDraftPpl] = useState<Record<string, number | null>>({});
+  const [draftPmlByPpl, setDraftPmlByPpl] = useState<Record<number, number | null>>({});
+  const [simpanBusy, setSimpanBusy] = useState(false);
+  const [simpanError, setSimpanError] = useState<string | null>(null);
 
   async function muatSampel() {
     const res = await fetch("/api/bencana/alokasi/sampel");
@@ -641,41 +646,85 @@ function AlokasiPetugasSection() {
     }
   }
 
-  async function handleReassign(idsubsls: string, pplId: number) {
-    setReassignBusyId(idsubsls);
-    setReassignError(null);
-    try {
-      const res = await fetch("/api/bencana/alokasi/reassign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idsubsls, ppl_id: pplId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal memplot Sub SLS.");
-      await muatData(hariKerjaDipakai);
-    } catch (err) {
-      setReassignError(err instanceof Error ? err.message : "Gagal memplot Sub SLS.");
-    } finally {
-      setReassignBusyId(null);
+  // Sinkronkan draft dengan data server: nilai yang SUDAH ada draft-nya
+  // dipertahankan (supaya trial-error yang belum disimpan tidak hilang saat
+  // data lain di-refresh, mis. ganti hari kerja), baris/PPL baru diisi dari
+  // nilai server sbg titik awal.
+  useEffect(() => {
+    setDraftPpl((prev) => {
+      const next: Record<string, number | null> = {};
+      for (const r of kertasKerja) {
+        next[r.idsubsls] = Object.prototype.hasOwnProperty.call(prev, r.idsubsls) ? prev[r.idsubsls] : r.ppl_id;
+      }
+      return next;
+    });
+    setDraftPmlByPpl((prev) => {
+      const next: Record<number, number | null> = { ...prev };
+      for (const r of kertasKerja) {
+        if (r.ppl_id && !Object.prototype.hasOwnProperty.call(next, r.ppl_id)) {
+          next[r.ppl_id] = r.pml_id;
+        }
+      }
+      return next;
+    });
+  }, [kertasKerja]);
+
+  function batalkanSemuaPerubahan() {
+    const nextPpl: Record<string, number | null> = {};
+    const nextPml: Record<number, number | null> = {};
+    for (const r of kertasKerja) {
+      nextPpl[r.idsubsls] = r.ppl_id;
+      if (r.ppl_id && !(r.ppl_id in nextPml)) nextPml[r.ppl_id] = r.pml_id;
     }
+    setDraftPpl(nextPpl);
+    setDraftPmlByPpl(nextPml);
+    setSimpanError(null);
   }
 
-  async function handleBatalkanPlot(idsubsls: string) {
-    setReassignBusyId(idsubsls);
-    setReassignError(null);
+  async function handleSimpanPerubahan() {
+    setSimpanBusy(true);
+    setSimpanError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/reassign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idsubsls, buka_kunci: true }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal membatalkan plot Sub SLS.");
+      for (const r of kertasKerja) {
+        const draftVal = draftPpl[r.idsubsls] ?? null;
+        const serverVal = r.ppl_id ?? null;
+        if (draftVal === serverVal) continue;
+        const res = await fetch("/api/bencana/alokasi/reassign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draftVal ? { idsubsls: r.idsubsls, ppl_id: draftVal } : { idsubsls: r.idsubsls, buka_kunci: true }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Gagal menyimpan plot ${r.sub_sls}.`);
+      }
+
+      const serverPmlByPpl = new Map<number, number | null>();
+      for (const r of kertasKerja) {
+        if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
+      }
+      const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+      for (const pplId of pplIdsDipakai) {
+        const draftVal = draftPmlByPpl[pplId] ?? null;
+        const serverVal = serverPmlByPpl.get(pplId) ?? null;
+        if (draftVal === serverVal) continue;
+        const res = await fetch("/api/bencana/alokasi/susunan-tim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ petugas_id: pplId, peran: "ppl", atasan_id: draftVal }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Gagal menyimpan PML.");
+      }
+
       await muatData(hariKerjaDipakai);
     } catch (err) {
-      setReassignError(err instanceof Error ? err.message : "Gagal membatalkan plot Sub SLS.");
+      setSimpanError(err instanceof Error ? err.message : "Gagal menyimpan perubahan.");
+      // Tetap refresh supaya perubahan yg sempat berhasil sebelum error
+      // tercermin di layar; draft yg belum sempat tersimpan tetap
+      // dipertahankan lewat efek sinkronisasi di atas.
+      await muatData(hariKerjaDipakai).catch(() => {});
     } finally {
-      setReassignBusyId(null);
+      setSimpanBusy(false);
     }
   }
 
@@ -779,17 +828,66 @@ function AlokasiPetugasSection() {
     [petugasList]
   );
 
+  // Label dropdown PPL: HANYA nama + petunjuk kedekatan wilayah (jumlah Sub
+  // SLS yg SUDAH dia pegang di draft saat ini pada kecamatan/nagari yg
+  // sama) -- TANPA angka beban di dalam label. Beban ditampilkan di kolom
+  // "Beban Petugas" tersendiri, dihitung ulang real-time dari draftPpl.
   function infoPplUntukBaris(p: PetugasRingkas, row: KertasKerjaRow): string {
-    const info = ringkasanPpl.find((x) => x.ppl_id === p.id);
-    const beban = info ? info.total_skor_beban_akhir : 0;
-    const diKec = kertasKerja.filter((k) => k.ppl_id === p.id && k.kecamatan === row.kecamatan).length;
-    const diNagari = kertasKerja.filter((k) => k.ppl_id === p.id && k.nagari === row.nagari).length;
-    let ket = `beban ${beban.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
-    if (diNagari > 0) ket += `, ${diNagari} Sub SLS di nagari ini`;
-    else if (diKec > 0) ket += `, ${diKec} Sub SLS di kecamatan ini`;
-    else ket += ", belum ada Sub SLS di sini";
-    return `${p.nama} — ${ket}`;
+    const diKec = kertasKerja.filter((k) => draftPpl[k.idsubsls] === p.id && k.kecamatan === row.kecamatan).length;
+    const diNagari = kertasKerja.filter((k) => draftPpl[k.idsubsls] === p.id && k.nagari === row.nagari).length;
+    if (diNagari > 0) return `${p.nama} — ${diNagari} Sub SLS di nagari ini`;
+    if (diKec > 0) return `${p.nama} — ${diKec} Sub SLS di kecamatan ini`;
+    return p.nama;
   }
+
+  // Total skor beban pendataan (tanpa jarak) utk SELURUH wilayah sampel yang
+  // sedang tampil (kertasKerja sudah terbatas ke Sub SLS sampel terkonfirmasi
+  // di Langkah 1) -- bergerak sesuai jumlah wilayah sampel yang dicentang.
+  const totalSkorWilayahTugas = useMemo(
+    () => kertasKerja.reduce((s, r) => s + r.skor_beban_pendataan, 0),
+    [kertasKerja]
+  );
+  const TOTAL_PPL_TETAP = 133;
+  const rataBebanTetap = totalSkorWilayahTugas / TOTAL_PPL_TETAP;
+
+  // Beban draft per PPL (skor beban pendataan, TANPA jarak -- jarak riil
+  // baru dihitung server sesudah plot benar2 disimpan): dihitung ulang
+  // instan setiap draftPpl berubah, tanpa panggilan server.
+  const bebanDraftPerPpl = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of kertasKerja) {
+      const pid = draftPpl[r.idsubsls];
+      if (pid) map.set(pid, (map.get(pid) ?? 0) + r.skor_beban_pendataan);
+    }
+    return map;
+  }, [kertasKerja, draftPpl]);
+
+  function pmlDraftUntukPpl(pplId: number): number | null {
+    return draftPmlByPpl[pplId] ?? null;
+  }
+
+  function korwilNamaUntukPml(pmlId: number | null): string | null {
+    if (!pmlId) return null;
+    const pml = petugasList.find((p) => p.id === pmlId);
+    if (!pml?.atasan_id) return null;
+    return petugasList.find((p) => p.id === pml.atasan_id)?.nama ?? null;
+  }
+
+  const jumlahPerubahanPending = useMemo(() => {
+    let n = 0;
+    for (const r of kertasKerja) {
+      if ((draftPpl[r.idsubsls] ?? null) !== (r.ppl_id ?? null)) n++;
+    }
+    const serverPmlByPpl = new Map<number, number | null>();
+    for (const r of kertasKerja) {
+      if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
+    }
+    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    for (const pplId of pplIdsDipakai) {
+      if ((draftPmlByPpl[pplId] ?? null) !== (serverPmlByPpl.get(pplId) ?? null)) n++;
+    }
+    return n;
+  }, [kertasKerja, draftPpl, draftPmlByPpl]);
 
   const jumlahTanpaDataKk = useMemo(() => kertasKerja.filter((r) => !r.punya_data_kk).length, [kertasKerja]);
   const kecamatanTanpaDataPenuh = useMemo(
@@ -828,7 +926,7 @@ function AlokasiPetugasSection() {
     const q = search.trim().toLowerCase();
     return kertasKerja.filter((r) => {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
-      if (pplFilter && r.ppl_id !== pplFilter) return false;
+      if (pplFilter && (draftPpl[r.idsubsls] ?? null) !== pplFilter) return false;
       if (dataFilter === "lengkap" && !r.punya_data_kk) return false;
       if (dataFilter === "belum" && r.punya_data_kk) return false;
       if (
@@ -840,7 +938,7 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-  }, [kertasKerja, kecFilter, pplFilter, dataFilter, search]);
+  }, [kertasKerja, kecFilter, pplFilter, dataFilter, search, draftPpl]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ALOKASI_PAGE_SIZE));
   const pageClamped = Math.min(page, totalPages);
@@ -1463,9 +1561,9 @@ function AlokasiPetugasSection() {
           <div>
             <h2 className="font-medium text-orange-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
             <p className="text-xs text-ink/60">
-              {filtered.length} dari {kertasKerja.length} baris wilayah sampel. Pilih PPL satu per satu lewat dropdown
-              &quot;Aksi&quot; — opsi dropdown menampilkan beban kerja PPL saat ini &amp; berapa Sub SLS yang sudah
-              dia pegang di kecamatan/nagari yang sama, sbg panduan kedekatan wilayah.
+              {filtered.length} dari {kertasKerja.length} baris wilayah sampel. Pilih PPL &amp; PML bebas dulu
+              (trial-error) — kolom &quot;Beban Petugas&quot; langsung berubah tiap kali memilih, TANPA tersimpan ke
+              server. Baru tersimpan sesudah menekan &quot;Simpan Perubahan&quot;.
             </p>
           </div>
           <button
@@ -1478,8 +1576,38 @@ function AlokasiPetugasSection() {
           </button>
         </div>
 
-        {reassignError && (
-          <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{reassignError}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-orange-100 bg-orange-50/60 px-3 py-2">
+          <span className="text-xs text-ink/70">
+            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷ {TOTAL_PPL_TETAP} PPL tetap):{" "}
+            <strong className="text-orange-900">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            {jumlahPerubahanPending > 0 && (
+              <span className="rounded-full bg-orange-200 px-2.5 py-1 text-xs font-medium text-orange-800">
+                {jumlahPerubahanPending} perubahan belum disimpan
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={jumlahPerubahanPending === 0 || simpanBusy}
+              onClick={batalkanSemuaPerubahan}
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:bg-gray-50 disabled:opacity-40"
+            >
+              ↺ Batalkan Perubahan
+            </button>
+            <button
+              type="button"
+              disabled={jumlahPerubahanPending === 0 || simpanBusy}
+              onClick={handleSimpanPerubahan}
+              className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
+            >
+              {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
+            </button>
+          </span>
+        </div>
+
+        {simpanError && (
+          <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{simpanError}</p>
         )}
         {kertasKerja.length === 0 && (
           <p className="mt-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-700">
@@ -1554,7 +1682,7 @@ function AlokasiPetugasSection() {
         </div>
 
         <div className="mt-2 overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[1300px] text-left text-sm">
+          <table className="w-full min-w-[1450px] text-left text-sm">
             <thead className="bg-orange-50 text-orange-600">
               <tr>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
@@ -1566,71 +1694,110 @@ function AlokasiPetugasSection() {
                 <th className="px-3 py-2 font-medium">Skor Jarak</th>
                 <th className="px-3 py-2 font-medium">Skor Beban Akhir</th>
                 <th className="px-3 py-2 font-medium">PPL</th>
+                <th className="px-3 py-2 font-medium">Beban Petugas</th>
                 <th className="px-3 py-2 font-medium">PML</th>
                 <th className="px-3 py-2 font-medium">Korwil</th>
                 <th className="px-3 py-2 font-medium">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {paged.map((r) => (
-                <tr key={r.idsubsls} className="border-t border-line">
-                  <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
-                  <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
-                  <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
-                  <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
-                  <td className="px-3 py-2">
-                    <BadgeDataKk punya={r.punya_data_kk} />
-                  </td>
-                  <td className="px-3 py-2 text-ink/80">{r.skor_beban_pendataan.toLocaleString("id-ID")}</td>
-                  <td className="px-3 py-2 text-ink/80">
-                    {r.jarak_status === "riil" ? (
-                      `${r.skor_jarak.toLocaleString("id-ID")} (${r.jarak_km?.toLocaleString("id-ID")} km)`
-                    ) : (
-                      <span className="text-xs text-ink/40">belum ada lokasi</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
-                  <td className="px-3 py-2 text-ink/80">{r.ppl_nama ?? <span className="text-xs text-ink/40">-</span>}</td>
-                  <td className="px-3 py-2 text-ink/80">{r.pml_nama ?? <span className="text-xs text-ink/40">-</span>}</td>
-                  <td className="px-3 py-2 text-ink/80">
-                    {r.korwil_nama ?? <span className="text-xs text-ink/40">-</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
+              {paged.map((r) => {
+                const draftPplId = draftPpl[r.idsubsls] ?? null;
+                const berubah = draftPplId !== (r.ppl_id ?? null);
+                const bebanPpl = draftPplId ? bebanDraftPerPpl.get(draftPplId) ?? 0 : null;
+                const info = bebanPpl != null ? balanceInfo(bebanPpl, rataBebanTetap) : null;
+                const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
+                const korwilNama = korwilNamaUntukPml(draftPmlId);
+                return (
+                  <tr key={r.idsubsls} className={`border-t border-line ${berubah ? "bg-orange-50/50" : ""}`}>
+                    <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
+                    <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
+                    <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
+                    <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
+                    <td className="px-3 py-2">
+                      <BadgeDataKk punya={r.punya_data_kk} />
+                    </td>
+                    <td className="px-3 py-2 text-ink/80">{r.skor_beban_pendataan.toLocaleString("id-ID")}</td>
+                    <td className="px-3 py-2 text-ink/80">
+                      {r.jarak_status === "riil" ? (
+                        `${r.skor_jarak.toLocaleString("id-ID")} (${r.jarak_km?.toLocaleString("id-ID")} km)`
+                      ) : (
+                        <span className="text-xs text-ink/40">belum ada lokasi</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          disabled={pplOptions.length === 0}
+                          value={draftPplId ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value ? Number(e.target.value) : null;
+                            setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: val }));
+                          }}
+                          className="w-48 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                        >
+                          <option value="">Plot ke PPL...</option>
+                          {pplOptions.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {infoPplUntukBaris(p, r)}
+                            </option>
+                          ))}
+                        </select>
+                        {draftPplId && (
+                          <button
+                            type="button"
+                            onClick={() => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: null }))}
+                            title="Lepas plot Sub SLS ini (belum tersimpan sampai Simpan Perubahan ditekan)"
+                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {bebanPpl != null ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-ink">
+                            {bebanPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                          </span>
+                          {info && <span className={`text-[10px] font-medium ${info.cls}`}>{info.label}</span>}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-ink/40">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
                       <select
-                        disabled={reassignBusyId === r.idsubsls || pplOptions.length === 0}
-                        value={r.ppl_id ?? ""}
+                        disabled={!draftPplId || pmlOptions.length === 0}
+                        value={draftPmlId ?? ""}
                         onChange={(e) => {
                           const val = e.target.value ? Number(e.target.value) : null;
-                          if (val) handleReassign(r.idsubsls, val);
+                          if (draftPplId) setDraftPmlByPpl((prev) => ({ ...prev, [draftPplId]: val }));
                         }}
-                        className="w-52 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                        className="w-40 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400 disabled:bg-gray-50"
                       >
-                        <option value="">Plot ke PPL...</option>
-                        {pplOptions.map((p) => (
+                        <option value="">Pilih PML...</option>
+                        {pmlOptions.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {infoPplUntukBaris(p, r)}
+                            {p.nama}
                           </option>
                         ))}
                       </select>
-                      {r.ppl_id && (
-                        <button
-                          type="button"
-                          disabled={reassignBusyId === r.idsubsls}
-                          onClick={() => handleBatalkanPlot(r.idsubsls)}
-                          title="Batalkan plot Sub SLS ini"
-                          className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
-                        >
-                          ✕ batal
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2 text-ink/80">
+                      {korwilNama ?? <span className="text-xs text-ink/40">-</span>}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {berubah && <span className="text-orange-600">belum disimpan</span>}
+                    </td>
+                  </tr>
+                );
+              })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-4 text-center text-ink/50">
+                  <td colSpan={13} className="px-3 py-4 text-center text-ink/50">
                     Tidak ada data yang cocok dengan filter.
                   </td>
                 </tr>
