@@ -149,7 +149,258 @@ type PetugasRingkas = {
   lokasi_status: "riil" | "tanpa_data" | "perkiraan_nagari";
   aktif: boolean;
   alamat_kecamatan: string | null;
+  pendaftaran_bencana_konfirmasi: boolean;
+  kegiatan_lain: string[];
 };
+
+// Status "kesediaan ikut pendataan bencana" utk seorang PPL yg sudah diplot,
+// dipakai utk ikon warning di kolom PPL Langkah 4:
+//  - "belum_konfirmasi": namanya tidak ada di daftar self-report konfirmasi
+//    kesediaan ikut pendataan bencana -> perlu dihubungi & ditawarkan.
+//  - "beban_ganda": sudah konfirmasi ikut pendataan bencana, TAPI juga sudah
+//    ditandai (tag) di kegiatan/survei lain -> boleh saja, tapi beban kerja
+//    petugas itu nambah, jadi perlu diberi tahu di depan.
+type StatusKesediaanPpl = { tipe: "belum_konfirmasi" | "beban_ganda"; kegiatanLain: string[] } | null;
+
+function statusKesediaanPpl(p: PetugasRingkas | undefined): StatusKesediaanPpl {
+  if (!p) return null;
+  const kegiatanLain = p.kegiatan_lain ?? [];
+  if (!p.pendaftaran_bencana_konfirmasi) return { tipe: "belum_konfirmasi", kegiatanLain };
+  if (kegiatanLain.length > 0) return { tipe: "beban_ganda", kegiatanLain };
+  return null;
+}
+
+// Ikon warning ringan di kolom PPL (Langkah 4) -- klik utk buka popover kecil
+// yg menjelaskan kenapa warning muncul. Sengaja dibuat SANGAT ringan (bukan
+// modal penuh layar): posisi fixed dihitung dari lokasi klik, tutup sendiri
+// kalau klik di luar/scroll/resize -- pola yg sama dgn popover ThKontrol.
+function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaanPpl> }) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 260;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+  }
+
+  const warna = status.tipe === "belum_konfirmasi" ? "text-rust-600" : "text-orange-500";
+  const judul =
+    status.tipe === "belum_konfirmasi" ? "Belum konfirmasi ikut pendataan bencana" : "Sudah bertugas di kegiatan lain";
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button type="button" onClick={toggle} title={judul} className={`text-sm leading-none ${warna}`}>
+        ⚠️
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
+          className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+        >
+          <p className={`font-semibold ${warna}`}>{judul}</p>
+          {status.tipe === "belum_konfirmasi" ? (
+            <p className="mt-1 text-ink/70">
+              Nama ini tidak ada di daftar self-report kesediaan ikut pendataan bencana. Perlu dihubungi utk ditawarkan
+              &amp; diminta konfirmasi kesediaannya.
+              {status.kegiatanLain.length > 0 && (
+                <> Catatan: sudah bertugas juga di {status.kegiatanLain.join(", ")}.</>
+              )}
+            </p>
+          ) : (
+            <p className="mt-1 text-ink/70">
+              Sudah konfirmasi ikut pendataan bencana, tapi juga sudah bertugas di{" "}
+              <b>{status.kegiatanLain.join(", ")}</b>. Boleh saja dirangkap, tapi beban kerjanya bertambah.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Rincian satu laporan identifikasi jorong (mitra) yg jadi SUMBER estimasi
+// KK terdampak utk sebuah Sub SLS -- dipakai popover "Sumber data KK
+// Terdampak" di Kertas Kerja Beban, supaya admin bisa lihat langsung siapa
+// lapor berapa & jenis kerusakan apa sebelum mengoreksi angka.
+type RincianSumberKk = {
+  nama_mitra: string;
+  indikator_dampak: string[];
+  total_kk: number;
+  catatan: string | null;
+  dibuat_pada: string;
+};
+
+type SumberKkTerdampak = {
+  idsls: string;
+  jorong: string;
+  sub_sls: string;
+  rincian: RincianSumberKk[];
+  jumlah_laporan: number;
+  rata_rata: number;
+  maksimum: number;
+};
+
+function labelIndikatorDampak(key: string): string {
+  return INDIKATOR_DAMPAK.find((i) => i.key === key)?.label ?? key;
+}
+
+// Ikon "cari tahu sumber data" di kolom KK Terdampak (Kertas Kerja Beban) --
+// klik utk buka popover berisi rincian tiap laporan mitra (nama, jumlah KK,
+// jenis kerusakan) yg mencakup Sub SLS ini, + tombol pintas "Terapkan
+// rata-rata"/"Terapkan maksimum" utk mengisi kolom KK Terdampak dari angka
+// itu (opsi ketik manual tetap ada di kolom inputnya, tidak berubah). Data
+// di-fetch sekali per Sub SLS saat pertama kali dibuka (bukan saat tabel
+// dimuat) supaya tetap ringan & cepat -- pola popover sama dgn ThKontrol /
+// IkonStatusKesediaanPpl.
+function IkonSumberKkTerdampak({
+  idsubsls,
+  onTerapkan,
+}: {
+  idsubsls: string;
+  onTerapkan: (nilai: number) => void;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [data, setData] = useState<SumberKkTerdampak | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  async function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 300;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+    if (!data && !loading) {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/bencana/alokasi/beban/sumber?idsubsls=${encodeURIComponent(idsubsls)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Gagal memuat sumber data KK terdampak.");
+        setData(json);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        title="Cari tahu dari mana data KK terdampak diperoleh"
+        className="text-sm leading-none text-blue-600 hover:text-blue-900"
+      >
+        🔎
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 300 }}
+          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+        >
+          <p className="font-semibold text-ink">Sumber data KK Terdampak</p>
+          {loading && <p className="mt-1 text-ink/60">Memuat...</p>}
+          {error && <p className="mt-1 text-rust-600">{error}</p>}
+          {data && !loading && !error && (
+            <>
+              {data.jumlah_laporan === 0 ? (
+                <p className="mt-1 text-ink/60">
+                  Belum ada laporan identifikasi jorong yang mencakup Sub SLS ini.
+                </p>
+              ) : (
+                <>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {data.rincian.map((r, i) => (
+                      <li key={i} className="border-b border-line/60 pb-1.5 last:border-0">
+                        <span className="font-medium text-ink">{r.nama_mitra}</span>
+                        <span className="text-ink/70"> : {r.total_kk} KK</span>
+                        {r.indikator_dampak.length > 0 && (
+                          <p className="text-[10px] text-ink/50">
+                            {r.indikator_dampak.map(labelIndikatorDampak).join(", ")}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTerapkan(data.rata_rata);
+                        setBuka(false);
+                      }}
+                      className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-900 hover:bg-blue-100"
+                    >
+                      Terapkan rata-rata ({data.rata_rata})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onTerapkan(data.maksimum);
+                        setBuka(false);
+                      }}
+                      className="rounded-full bg-orange-50 px-2 py-1 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
+                    >
+                      Terapkan maksimum ({data.maksimum})
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-ink/40">Atau ketik manual langsung di kolom KK Terdampak.</p>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type CalonSampelRow = {
   idsubsls: string;
@@ -206,6 +457,19 @@ type PengaturanBebanRow = {
   label: string;
   keterangan: string | null;
   updated_at: string;
+};
+
+// Baris "Kartu Mitra Perlu Dihubungi" -- mitra aktif yang BELUM konfirmasi
+// ikut pendataan bencana (pendaftaran_bencana_konfirmasi = false), perlu
+// dihubungi utk ditawarkan & dicatat hasilnya (diterima/menolak).
+type MitraKontakRow = {
+  id: number;
+  nama: string;
+  no_hp: string | null;
+  alamat_kecamatan: string | null;
+  status_kontak_pendaftaran_bencana: "diterima" | "menolak" | null;
+  catatan_penolakan_pendaftaran_bencana: string | null;
+  dikontak_pendaftaran_bencana_at: string | null;
 };
 
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
@@ -389,7 +653,7 @@ function ThKontrol({
             title="Aksi kolom"
             onClick={bukaAksi}
             className={`shrink-0 rounded p-1 text-xs leading-none transition ${
-              aksiAktif || tampil ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-700"
+              aksiAktif || tampil ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
             }`}
           >
             ⋮
@@ -664,14 +928,14 @@ function RekapSubslsSection({
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="font-medium text-blue-900">{title}</h2>
+          <h2 className="font-medium text-blue-950">{title}</h2>
           {subtitle && <p className="text-xs text-ink/60">{subtitle}</p>}
         </div>
         <button
           type="button"
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-40"
+          className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
         >
           Export ke Excel
         </button>
@@ -990,7 +1254,7 @@ function Combobox({
                 o.disabled
                   ? "cursor-not-allowed text-ink/30"
                   : o.value === value
-                  ? "bg-blue-50 font-medium text-blue-700 hover:bg-blue-100"
+                  ? "bg-blue-50 font-medium text-blue-900 hover:bg-blue-100"
                   : "text-ink hover:bg-blue-50"
               }`}
             >
@@ -1126,7 +1390,7 @@ function PengaturanBebanSection() {
   return (
     <div className="mt-6 flex flex-col gap-6">
       <section className="rounded-md border border-blue-100 bg-white p-4">
-        <h2 className="font-medium text-blue-900">Kelola Perkiraan Beban Tugas</h2>
+        <h2 className="font-medium text-blue-950">Kelola Perkiraan Beban Tugas</h2>
         <p className="mt-1 text-sm text-ink/70">
           Bobot &amp; parameter di bawah ini menentukan perhitungan{" "}
           <strong>skor beban pendataan</strong>, <strong>skor jarak</strong>, dan{" "}
@@ -1189,7 +1453,7 @@ function PengaturanBebanSection() {
       </section>
 
       <section className="rounded-md border border-line bg-white p-4">
-        <h3 className="font-medium text-blue-900">Simulasi Contoh Perhitungan</h3>
+        <h3 className="font-medium text-blue-950">Simulasi Contoh Perhitungan</h3>
         <p className="mt-1 text-xs text-ink/60">
           Pratinjau memakai nilai di atas (termasuk yang belum disimpan), supaya Bapak/Ibu
           bisa cek dampaknya dulu sebelum menyimpan.
@@ -1201,26 +1465,26 @@ function PengaturanBebanSection() {
             <p className="mt-2">
               Skor beban pendataan = {contohKkTerdampak} × {bobotTerdampak} + {contohKkTidakTerdampak} × {bobotTidakTerdampak}
               {" = "}
-              <strong className="text-blue-700">{contohSkorBebanPendataan.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+              <strong className="text-blue-900">{contohSkorBebanPendataan.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
             </p>
             <p className="mt-1">
               Menit dibutuhkan = {contohKkTerdampak} × {menitTerdampak} + {contohKkTidakTerdampak} × {menitTidakTerdampak}
               {" = "}
-              <strong className="text-blue-700">{contohMenitDibutuhkan.toLocaleString("id-ID")}</strong> menit
+              <strong className="text-blue-900">{contohMenitDibutuhkan.toLocaleString("id-ID")}</strong> menit
             </p>
             <p className="mt-1">
               Jumlah hari kerja = CEIL({contohMenitDibutuhkan} ÷ ({jamKerja} × 60))
               {" = "}
-              <strong className="text-blue-700">{contohHariKerja}</strong> hari (PP {contohHariKerja}×)
+              <strong className="text-blue-900">{contohHariKerja}</strong> hari (PP {contohHariKerja}×)
             </p>
             <p className="mt-1">
               Skor jarak = ({contohJarakKm} ÷ {pembagiJarak}) × {contohHariKerja}
               {" = "}
-              <strong className="text-blue-700">{contohSkorJarak.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+              <strong className="text-blue-900">{contohSkorJarak.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
             </p>
             <p className="mt-1">
               Skor beban akhir ={" "}
-              <strong className="text-blue-700">{contohSkorBebanAkhir.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+              <strong className="text-blue-900">{contohSkorBebanAkhir.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
             </p>
           </div>
           <div className="rounded-md border border-line bg-gray-50/60 p-3 text-xs text-ink/70">
@@ -1282,6 +1546,7 @@ type MasterPetugasRow = {
   pekerjaan: string | null;
   bisa_mengendarai_motor: boolean | null;
   punya_kendaraan_bermotor: boolean | null;
+  pendaftaran_bencana_konfirmasi: boolean;
 };
 
 function kecamatanTampil(r: MasterPetugasRow): string {
@@ -1313,6 +1578,7 @@ function MasterPetugasSection() {
   const [pendidikanSel, setPendidikanSel] = useState<Set<string>>(new Set());
   const [pekerjaanSel, setPekerjaanSel] = useState<Set<string>>(new Set());
   const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
+  const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
 
   const [sortKey, setSortKey] = useState<"nama" | "umur" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -1347,6 +1613,7 @@ function MasterPetugasSection() {
   const opsiPendidikan = opsiUnik((r) => r.pendidikan || "Tidak ada data");
   const opsiPekerjaan = opsiUnik((r) => r.pekerjaan || "Tidak ada data");
   const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
+  const opsiPendaftaran = ["Sudah Mendaftar", "Belum Mendaftar"];
 
   function sortAsc(key: "nama" | "umur") {
     setSortKey(key);
@@ -1378,6 +1645,11 @@ function MasterPetugasSection() {
       if (pendidikanSel.size > 0 && !pendidikanSel.has(r.pendidikan || "Tidak ada data")) return false;
       if (pekerjaanSel.size > 0 && !pekerjaanSel.has(r.pekerjaan || "Tidak ada data")) return false;
       if (motorSel.size > 0 && !motorSel.has(boolTampil(r.bisa_mengendarai_motor))) return false;
+      if (
+        pendaftaranSel.size > 0 &&
+        !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar")
+      )
+        return false;
       return true;
     });
 
@@ -1404,6 +1676,7 @@ function MasterPetugasSection() {
     pendidikanSel,
     pekerjaanSel,
     motorSel,
+    pendaftaranSel,
     sortKey,
     sortDir,
   ]);
@@ -1423,12 +1696,13 @@ function MasterPetugasSection() {
       Pekerjaan: r.pekerjaan ?? "",
       "Bisa Mengendarai Motor": boolTampil(r.bisa_mengendarai_motor),
       "Punya Kendaraan Bermotor": boolTampil(r.punya_kendaraan_bermotor),
+      "Status Pendaftaran Bencana": r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar",
       "No HP": r.no_hp ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
     ws["!cols"] = [
       { wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
+      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master Petugas");
@@ -1519,6 +1793,10 @@ function MasterPetugasSection() {
                 label="Bisa Motor"
                 filter={{ options: opsiMotor, selected: motorSel, onApply: setMotorSel }}
               />
+              <ThKontrol
+                label="Status Pendaftaran"
+                filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
+              />
             </tr>
           </thead>
           <tbody>
@@ -1538,11 +1816,22 @@ function MasterPetugasSection() {
                 <td className="px-3 py-2">{r.pendidikan ?? "—"}</td>
                 <td className="px-3 py-2">{r.pekerjaan ?? "—"}</td>
                 <td className="px-3 py-2">{boolTampil(r.bisa_mengendarai_motor)}</td>
+                <td className="px-3 py-2">
+                  {r.pendaftaran_bencana_konfirmasi ? (
+                    <span className="rounded-full bg-moss-100 px-2 py-0.5 text-xs font-medium text-moss-700">
+                      Sudah Mendaftar
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-ink/50">
+                      Belum Mendaftar
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-3 py-6 text-center text-ink/50">
+                <td colSpan={13} className="px-3 py-6 text-center text-ink/50">
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
@@ -1650,7 +1939,7 @@ function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n:
               </button>
               <p
                 className={`mt-2 max-w-[8rem] text-center text-[11px] font-semibold leading-tight ${
-                  isAktif ? "text-blue-900" : "text-blue-300"
+                  isAktif ? "text-blue-950" : "text-blue-300"
                 }`}
               >
                 {l.label}
@@ -1739,11 +2028,52 @@ function AlokasiPetugasSection() {
   const [bebanError, setBebanError] = useState<string | null>(null);
   const [bebanTerbuka, setBebanTerbuka] = useState(false);
 
+  // Kartu "Mitra Perlu Dihubungi" -- lihat komentar di MitraKontakRow & di
+  // app/api/bencana/alokasi/kontak-mitra/route.ts.
+  const [kontakRows, setKontakRows] = useState<MitraKontakRow[]>([]);
+  const [kontakTerbuka, setKontakTerbuka] = useState(true);
+  const [kontakBusyId, setKontakBusyId] = useState<number | null>(null);
+  const [kontakError, setKontakError] = useState<string | null>(null);
+  // Draft pilihan "Menolak" yg belum disimpan (menunggu catatan diisi) --
+  // supaya klik radio Menolak TIDAK langsung submit tanpa alasan.
+  const [kontakMenolakDraft, setKontakMenolakDraft] = useState<Record<number, string>>({});
+
   async function muatBeban() {
     const res = await fetch("/api/bencana/alokasi/beban");
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
     setBebanRows(json.data ?? []);
+  }
+
+  async function muatKontak() {
+    const res = await fetch("/api/bencana/alokasi/kontak-mitra");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Gagal memuat daftar mitra perlu dihubungi.");
+    setKontakRows(json.data ?? []);
+  }
+
+  async function simpanStatusKontak(id: number, status: "diterima" | "menolak" | null, catatan?: string) {
+    setKontakBusyId(id);
+    setKontakError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/kontak-mitra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, status, catatan }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status kontak.");
+      setKontakMenolakDraft((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await muatKontak();
+    } catch (err) {
+      setKontakError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
+    } finally {
+      setKontakBusyId(null);
+    }
   }
 
   async function muatSampel() {
@@ -1770,7 +2100,7 @@ function AlokasiPetugasSection() {
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja)]);
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja), muatKontak()]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Gagal memuat data alokasi.");
     } finally {
@@ -2596,16 +2926,16 @@ function AlokasiPetugasSection() {
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
       <section className="rounded-md border border-blue-100 bg-white p-4">
-        <h2 className="font-medium text-blue-900">Ringkasan Alokasi Petugas</h2>
+        <h2 className="font-medium text-blue-950">Ringkasan Alokasi Petugas</h2>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <MiniStat warna="bg-blue-50 text-blue-700" label="Sub SLS Sampel" nilai={kertasKerja.length} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Sub SLS Sampel" nilai={kertasKerja.length} />
           <MiniStat
-            warna="bg-blue-50 text-blue-700"
+            warna="bg-blue-50 text-blue-900"
             label="Total Skor Beban"
             nilai={Math.round(totalSkorWilayahTugas)}
           />
-          <MiniStat warna="bg-blue-50 text-blue-700" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
-          <MiniStat warna="bg-blue-50 text-blue-700" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
         </div>
@@ -2668,6 +2998,146 @@ function AlokasiPetugasSection() {
           </p>
         </div>
       )}
+
+      {/* ===== KARTU MITRA PERLU DIHUBUNGI (BELUM MENDAFTAR) ===== */}
+      <section className="rounded-md border border-amber-200 bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setKontakTerbuka((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+        >
+          <div>
+            <h2 className="font-medium text-blue-950">📞 Mitra Perlu Dihubungi (Belum Mendaftar)</h2>
+            <p className="mt-1 text-xs text-ink/60">
+              Mitra aktif yang belum konfirmasi kesediaan ikut pendataan bencana. Hubungi, tawarkan, lalu catat
+              hasilnya di sini.
+            </p>
+          </div>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+              {kontakRows.length} perlu dihubungi
+            </span>
+            <span className="text-slate-400">{kontakTerbuka ? "▾" : "▸"}</span>
+          </span>
+        </button>
+
+        {kontakError && <p className="mt-2 text-xs text-rust-600">{kontakError}</p>}
+
+        {kontakTerbuka && (
+          <div className="mt-3">
+            {kontakRows.length === 0 ? (
+              <p className="text-sm text-ink/50">
+                Semua mitra aktif sudah konfirmasi kesediaan ikut pendataan bencana.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {kontakRows.map((m) => {
+                  const busy = kontakBusyId === m.id;
+                  const draftCatatan = kontakMenolakDraft[m.id];
+                  const sedangIsiMenolak = draftCatatan !== undefined;
+                  const pilihan = sedangIsiMenolak ? "menolak" : m.status_kontak_pendaftaran_bencana;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`rounded-md border p-3 text-sm ${
+                        pilihan === "menolak"
+                          ? "border-rust-200 bg-rust-50/40"
+                          : pilihan === "diterima"
+                          ? "border-moss-200 bg-moss-50/40"
+                          : "border-line bg-white"
+                      }`}
+                    >
+                      <p className="font-medium text-ink">{m.nama}</p>
+                      <p className="text-xs text-ink/60">
+                        {m.no_hp || "No HP tidak ada"}
+                        {m.alamat_kecamatan && <> · {m.alamat_kecamatan}</>}
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-3 text-xs">
+                        <label className="flex cursor-pointer items-center gap-1">
+                          <input
+                            type="radio"
+                            name={`kontak-${m.id}`}
+                            checked={pilihan === "diterima"}
+                            disabled={busy}
+                            onChange={() => simpanStatusKontak(m.id, "diterima")}
+                          />
+                          Terima
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-1">
+                          <input
+                            type="radio"
+                            name={`kontak-${m.id}`}
+                            checked={pilihan === "menolak"}
+                            disabled={busy}
+                            onChange={() =>
+                              setKontakMenolakDraft((prev) => ({
+                                ...prev,
+                                [m.id]: m.catatan_penolakan_pendaftaran_bencana ?? "",
+                              }))
+                            }
+                          />
+                          Menolak
+                        </label>
+                        {m.status_kontak_pendaftaran_bencana && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => simpanStatusKontak(m.id, null)}
+                            className="ml-auto text-[10px] text-ink/40 underline hover:text-ink/60"
+                          >
+                            batalkan
+                          </button>
+                        )}
+                      </div>
+
+                      {pilihan === "menolak" && (
+                        <div className="mt-2">
+                          <textarea
+                            value={draftCatatan ?? m.catatan_penolakan_pendaftaran_bencana ?? ""}
+                            onChange={(e) =>
+                              setKontakMenolakDraft((prev) => ({ ...prev, [m.id]: e.target.value }))
+                            }
+                            placeholder="Alasan menolak (wajib diisi)..."
+                            rows={2}
+                            className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
+                          />
+                          {sedangIsiMenolak && (
+                            <div className="mt-1 flex gap-1.5">
+                              <button
+                                type="button"
+                                disabled={busy || !(draftCatatan ?? "").trim()}
+                                onClick={() => simpanStatusKontak(m.id, "menolak", draftCatatan)}
+                                className="rounded-full bg-rust-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-rust-700 disabled:opacity-40"
+                              >
+                                Simpan
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  setKontakMenolakDraft((prev) => {
+                                    const next = { ...prev };
+                                    delete next[m.id];
+                                    return next;
+                                  })
+                                }
+                                className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ===== KERTAS KERJA BEBAN: KOREKSI DATA KK ===== */}
       <section className="rounded-md border border-slate-200 bg-white p-4">
@@ -2843,6 +3313,12 @@ function AlokasiPetugasSection() {
                               }}
                               className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
                             />
+                            <IkonSumberKkTerdampak
+                              idsubsls={r.idsubsls}
+                              onTerapkan={(nilai) =>
+                                setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: nilai }))
+                              }
+                            />
                             {r.kk_terdampak_manual && (
                               <span
                                 className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-700"
@@ -2927,7 +3403,7 @@ function AlokasiPetugasSection() {
       <section ref={langkah1Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-blue-900">Langkah 1 — Pilih Wilayah Sampel</h2>
+            <h2 className="font-medium text-blue-950">Langkah 1 — Pilih Wilayah Sampel</h2>
             <p className="mt-1 text-xs text-ink/60">
               Centang Sub SLS terdampak mana yang benar-benar akan dijadikan wilayah sampel pendataan. Sub SLS yang
               tidak dicentang di sini tidak akan muncul di kertas kerja plotting Langkah 4 dan tidak ikut dihitung di
@@ -3117,7 +3593,7 @@ function AlokasiPetugasSection() {
       <section ref={langkah2Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-medium text-blue-900">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
+            <h2 className="font-medium text-blue-950">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
             <p className="mt-1 text-xs text-ink/60">
               Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. Bobot KK terdampak,
               KK tidak terdampak, dan jarak rumah petugas bisa diatur di tab &quot;⚙️ Kelola Perkiraan Beban&quot;.
@@ -3139,7 +3615,7 @@ function AlokasiPetugasSection() {
             <button
               type="button"
               onClick={handleTerapkanHariKerja}
-              className="rounded-md border border-blue-700 bg-white px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50"
+              className="rounded-md border border-blue-700 bg-white px-3 py-2 text-sm font-medium text-blue-900 transition hover:bg-blue-50"
             >
               Hitung Ulang
             </button>
@@ -3147,9 +3623,9 @@ function AlokasiPetugasSection() {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <MiniStat warna="bg-blue-50 text-blue-700" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
-          <MiniStat warna="bg-blue-50 text-blue-700" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
-          <MiniStat warna="bg-blue-50 text-blue-700" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PPL Sudah Diplot" nilai={ringkasanPpl.length} />
         </div>
         <p className="mt-1.5 text-[11px] text-ink/50">
@@ -3260,7 +3736,7 @@ function AlokasiPetugasSection() {
 
       {/* ===== LANGKAH 3: SUSUNAN TIM (MANUAL, TANPA PENGELOMPOKAN OTOMATIS) ===== */}
       <section ref={langkah3Ref} className="rounded-md border border-line bg-white p-4">
-        <h2 className="font-medium text-blue-900">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
+        <h2 className="font-medium text-blue-950">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
         <p className="mt-1 text-xs text-ink/60">
           Semua jenjang ditetapkan manual satu per satu, tidak ada pengelompokan otomatis. Korwil wajib pegawai
           organik. PML boleh organik atau mitra. PPL wajib mitra (diplot lewat kertas kerja Langkah 4).
@@ -3507,7 +3983,7 @@ function AlokasiPetugasSection() {
       {/* ===== VISUALISASI KESEIMBANGAN BEBAN ===== */}
       {(ringkasanPpl.length > 0 || ringkasanPml.length > 0 || ringkasanKorwil.length > 0) && (
         <section className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-medium text-blue-900">Keseimbangan Beban Tim</h2>
+          <h2 className="font-medium text-blue-950">Keseimbangan Beban Tim</h2>
           <p className="mt-1 text-xs text-ink/60">
             Diperbarui otomatis setiap kali ada plot Sub SLS atau perubahan susunan tim. Hijau = beban mendekati
             rata-rata (selisih ≤15%). Oranye = beban rendah. Merah = kelebihan beban.
@@ -3689,7 +4165,7 @@ function AlokasiPetugasSection() {
       <section ref={langkah4Ref}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-blue-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
+            <h2 className="font-medium text-blue-950">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
             <p className="text-xs text-ink/60">
               {filtered.length} dari {kertasKerja.length} baris wilayah sampel. Pilih PPL &amp; PML bebas dulu
               (trial-error) — kolom &quot;Beban Petugas&quot; langsung berubah tiap kali memilih, TANPA tersimpan ke
@@ -3700,7 +4176,7 @@ function AlokasiPetugasSection() {
             type="button"
             onClick={handleExport}
             disabled={filtered.length === 0}
-            className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-40"
+            className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
           >
             Export ke Excel
           </button>
@@ -3709,7 +4185,7 @@ function AlokasiPetugasSection() {
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
           <span className="text-xs text-ink/70">
             Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷ {TOTAL_PPL_TETAP} PPL tetap):{" "}
-            <strong className="text-blue-900">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
+            <strong className="text-blue-950">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
@@ -4149,6 +4625,8 @@ function AlokasiPetugasSection() {
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
                 const bgBaris = berubah ? "bg-orange-50/50" : "bg-white";
+                const petugasDraftPpl = draftPplId ? petugasList.find((x) => x.id === draftPplId) : undefined;
+                const statusKesediaan = statusKesediaanPpl(petugasDraftPpl);
                 return (
                   <tr key={r.idsubsls} className={`border-t border-line ${bgBaris}`}>
                     {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
@@ -4189,6 +4667,7 @@ function AlokasiPetugasSection() {
                           placeholder="Plot ke PPL..."
                           className="w-48"
                         />
+                        {statusKesediaan && <IkonStatusKesediaanPpl status={statusKesediaan} />}
                         {draftPplId && (
                           <button
                             type="button"
@@ -4702,7 +5181,7 @@ export default function BencanaPage() {
       }`}
     >
       <p className="text-sm font-medium text-blue-400">BPS Kabupaten Solok</p>
-      <h1 className="mt-1 text-2xl font-semibold text-blue-900">
+      <h1 className="mt-1 text-2xl font-semibold text-blue-950">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>
       <p className="mt-2 text-sm text-ink/70">
@@ -4718,7 +5197,7 @@ export default function BencanaPage() {
           onClick={() => setTab("identifikasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "identifikasi"
-              ? "bg-white text-blue-900 shadow-sm"
+              ? "bg-white text-blue-950 shadow-sm"
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
@@ -4729,7 +5208,7 @@ export default function BencanaPage() {
           onClick={() => setTab("monitoring")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "monitoring"
-              ? "bg-white text-blue-900 shadow-sm"
+              ? "bg-white text-blue-950 shadow-sm"
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
@@ -4740,7 +5219,7 @@ export default function BencanaPage() {
           onClick={() => setTab("alokasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "alokasi"
-              ? "bg-white text-blue-900 shadow-sm"
+              ? "bg-white text-blue-950 shadow-sm"
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
@@ -4751,7 +5230,7 @@ export default function BencanaPage() {
           onClick={() => setTab("master")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "master"
-              ? "bg-white text-blue-900 shadow-sm"
+              ? "bg-white text-blue-950 shadow-sm"
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
@@ -4762,7 +5241,7 @@ export default function BencanaPage() {
           onClick={() => setTab("pengaturan")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "pengaturan"
-              ? "bg-white text-blue-900 shadow-sm"
+              ? "bg-white text-blue-950 shadow-sm"
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
@@ -4932,7 +5411,7 @@ export default function BencanaPage() {
                         key={jorong.idsls}
                         className="rounded-md border border-line bg-white p-4"
                       >
-                        <p className="font-medium text-blue-900">{jorong.jorong}</p>
+                        <p className="font-medium text-blue-950">{jorong.jorong}</p>
 
                         {state.submitted ? (
                           <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-sm text-moss-700">
@@ -5101,7 +5580,7 @@ export default function BencanaPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-blue-900">Progress Identifikasi</h2>
+                  <h2 className="text-lg font-semibold text-blue-950">Progress Identifikasi</h2>
                   <p className="text-sm text-ink/60">
                     Rekap pelaksanaan identifikasi Jorong/Sub SLS terdampak bencana
                     hidrometeorologi akhir 2025, mencakup seluruh {totalNagariMon} nagari
@@ -5116,7 +5595,7 @@ export default function BencanaPage() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <StatCard
                   ikon="📍"
-                  warna="bg-blue-100 text-blue-700"
+                  warna="bg-blue-100 text-blue-900"
                   label="Jumlah Kecamatan"
                   nilai={totalKecamatanMon}
                 />
@@ -5159,7 +5638,7 @@ export default function BencanaPage() {
               </div>
 
               <section className="rounded-md border border-line bg-white p-4">
-                <h3 className="font-medium text-blue-900">Progress Identifikasi Jorong</h3>
+                <h3 className="font-medium text-blue-950">Progress Identifikasi Jorong</h3>
                 <div className="mt-3 flex items-center gap-3">
                   <div className="h-3 flex-1 overflow-hidden rounded-full bg-orange-50">
                     <div
@@ -5188,7 +5667,7 @@ export default function BencanaPage() {
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <section className="rounded-md border border-line bg-white p-4">
-                  <h3 className="font-medium text-blue-900">Progress per Kecamatan</h3>
+                  <h3 className="font-medium text-blue-950">Progress per Kecamatan</h3>
                   <div className="mt-3 overflow-x-auto">
                     <table className="w-full min-w-[420px] text-left text-sm">
                       <thead className="text-xs text-ink/50">
@@ -5228,7 +5707,7 @@ export default function BencanaPage() {
                 <div className="flex flex-col gap-4">
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-blue-900">Nagari Belum Diidentifikasi</h3>
+                      <h3 className="font-medium text-blue-950">Nagari Belum Diidentifikasi</h3>
                       <span className="text-xs text-ink/50">{nagariBelumList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
@@ -5249,7 +5728,7 @@ export default function BencanaPage() {
 
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-blue-900">Nagari dengan Konflik Data</h3>
+                      <h3 className="font-medium text-blue-950">Nagari dengan Konflik Data</h3>
                       <span className="text-xs text-ink/50">{nagariKonflikList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
