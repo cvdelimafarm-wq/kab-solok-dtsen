@@ -302,6 +302,8 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
 // dari lokasi tombol saat diklik) supaya TIDAK terpotong oleh
 // overflow-auto pembungkus tabel, dan otomatis tertutup kalau tabelnya
 // discroll atau jendela di-resize.
+type ThKontrolJenis = "search" | "filter" | "sort";
+
 function ThKontrol({
   label,
   className,
@@ -317,16 +319,29 @@ function ThKontrol({
   filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
   sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
-  const [buka, setBuka] = useState<"search" | "filter" | "sort" | null>(null);
+  // Satu tombol "⋮" per kolom (bukan 3 ikon terpisah) supaya header tetap
+  // rapi. Diklik -> kalau kolom itu punya lebih dari 1 kontrol, muncul
+  // menu pilihan (Cari/Filter/Urutkan) dulu; kalau cuma 1 kontrol yg
+  // relevan, langsung ke kontrol itu. Popover `position: fixed` (posisi
+  // dihitung dari lokasi tombol saat diklik) supaya tidak terpotong
+  // overflow-auto pembungkus tabel, dan otomatis tertutup kalau tabelnya
+  // discroll atau jendela di-resize.
+  const jenisTersedia: ThKontrolJenis[] = [
+    ...(search ? (["search"] as const) : []),
+    ...(filter ? (["filter"] as const) : []),
+    ...(sort ? (["sort"] as const) : []),
+  ];
+
+  const [tampil, setTampil] = useState<"menu" | ThKontrolJenis | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [filterDraft, setFilterDraft] = useState<Set<string>>(new Set());
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!buka) return;
+    if (!tampil) return;
     function tutupJikaDiluar(e: Event) {
       if (popoverRef.current && e.target instanceof Node && popoverRef.current.contains(e.target)) return;
-      setBuka(null);
+      setTampil(null);
     }
     document.addEventListener("mousedown", tutupJikaDiluar);
     document.addEventListener("scroll", tutupJikaDiluar, true);
@@ -336,66 +351,94 @@ function ThKontrol({
       document.removeEventListener("scroll", tutupJikaDiluar, true);
       window.removeEventListener("resize", tutupJikaDiluar);
     };
-  }, [buka]);
+  }, [tampil]);
 
-  function bukaPopover(jenis: "search" | "filter" | "sort", e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka === jenis) {
-      setBuka(null);
+  function bukaAksi(e: React.MouseEvent<HTMLButtonElement>) {
+    if (tampil) {
+      setTampil(null);
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = jenis === "sort" ? 176 : 224;
+    const lebar = 224;
     setPos({
       top: rect.bottom + 4,
-      left: Math.min(rect.left, window.innerWidth - lebar - 8),
+      left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)),
     });
-    if (jenis === "filter") setFilterDraft(new Set(filter?.selected ?? []));
-    setBuka(jenis);
+    if (filter) setFilterDraft(new Set(filter.selected));
+    setTampil(jenisTersedia.length === 1 ? jenisTersedia[0] : "menu");
   }
 
   const searchAktif = !!search?.value;
   const filterAktif = !!filter && filter.selected.size > 0;
+  const aksiAktif = searchAktif || filterAktif || !!sort?.active;
 
-  const tombolCls = (aktif: boolean) =>
-    `rounded p-1 text-[11px] leading-none transition ${
-      aktif ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-700"
-    }`;
+  const LABEL_JENIS: Record<ThKontrolJenis, string> = {
+    search: "🔍 Cari",
+    filter: "▽ Filter",
+    sort: sort?.active ? (sort.dir === "asc" ? "▲ Urutkan" : "▼ Urutkan") : "⇅ Urutkan",
+  };
 
   return (
     <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-1.5">
         <span className="truncate">{label}</span>
-        <span className="flex shrink-0 items-center gap-0.5">
-          {search && (
-            <button type="button" title="Cari" onClick={(e) => bukaPopover("search", e)} className={tombolCls(searchAktif)}>
-              🔍
-            </button>
-          )}
-          {filter && (
-            <button type="button" title="Filter" onClick={(e) => bukaPopover("filter", e)} className={tombolCls(filterAktif)}>
-              ▽
-            </button>
-          )}
-          {sort && (
-            <button type="button" title="Urutkan" onClick={(e) => bukaPopover("sort", e)} className={tombolCls(sort.active)}>
-              {sort.active ? (sort.dir === "asc" ? "▲" : "▼") : "⇅"}
-            </button>
-          )}
-        </span>
+        {jenisTersedia.length > 0 && (
+          <button
+            type="button"
+            title="Aksi kolom"
+            onClick={bukaAksi}
+            className={`shrink-0 rounded p-1 text-xs leading-none transition ${
+              aksiAktif || tampil ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-700"
+            }`}
+          >
+            ⋮
+          </button>
+        )}
       </div>
 
-      {buka === "search" && search && pos && (
+      {tampil === "menu" && pos && (
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
+          className="z-50 rounded-md border border-line bg-white p-1 text-left font-normal normal-case text-ink shadow-lg"
+        >
+          {jenisTersedia.map((j) => (
+            <button
+              key={j}
+              type="button"
+              onClick={() => setTampil(j)}
+              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
+            >
+              <span>{LABEL_JENIS[j]}</span>
+              {j === "search" && searchAktif && <span className="text-[10px] text-blue-600">aktif</span>}
+              {j === "filter" && filterAktif && <span className="text-[10px] text-blue-600">aktif</span>}
+              {j === "sort" && sort?.active && <span className="text-[10px] text-blue-600">aktif</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tampil === "search" && search && pos && (
         <div
           ref={popoverRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
           className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
         >
+          {jenisTersedia.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setTampil("menu")}
+              className="mb-1.5 text-[10px] font-medium text-ink/50 hover:text-ink/80"
+            >
+              ← Kembali
+            </button>
+          )}
           <input
             autoFocus
             value={search.value}
             onChange={(e) => search.onChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") setBuka(null);
+              if (e.key === "Enter") setTampil(null);
             }}
             placeholder={search.placeholder ?? "Ketik kata kunci..."}
             className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
@@ -406,7 +449,7 @@ function ThKontrol({
               type="button"
               onClick={() => {
                 search.onChange("");
-                setBuka(null);
+                setTampil(null);
               }}
               className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
             >
@@ -416,12 +459,21 @@ function ThKontrol({
         </div>
       )}
 
-      {buka === "filter" && filter && pos && (
+      {tampil === "filter" && filter && pos && (
         <div
           ref={popoverRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
           className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
         >
+          {jenisTersedia.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setTampil("menu")}
+              className="mb-1.5 text-[10px] font-medium text-ink/50 hover:text-ink/80"
+            >
+              ← Kembali
+            </button>
+          )}
           <div className="max-h-52 overflow-y-auto">
             {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
             <div className="flex flex-col gap-1">
@@ -453,7 +505,7 @@ function ThKontrol({
               type="button"
               onClick={() => {
                 filter.onApply(filterDraft);
-                setBuka(null);
+                setTampil(null);
               }}
               className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
             >
@@ -463,17 +515,26 @@ function ThKontrol({
         </div>
       )}
 
-      {buka === "sort" && sort && pos && (
+      {tampil === "sort" && sort && pos && (
         <div
           ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 176 }}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
           className="z-50 rounded-md border border-line bg-white p-1 text-left font-normal normal-case text-ink shadow-lg"
         >
+          {jenisTersedia.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setTampil("menu")}
+              className="mb-1 block w-full px-2 py-1 text-left text-[10px] font-medium text-ink/50 hover:text-ink/80"
+            >
+              ← Kembali
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
               sort.onAsc();
-              setBuka(null);
+              setTampil(null);
             }}
             className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
           >
@@ -483,7 +544,7 @@ function ThKontrol({
             type="button"
             onClick={() => {
               sort.onDesc();
-              setBuka(null);
+              setTampil(null);
             }}
             className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
           >
@@ -494,7 +555,7 @@ function ThKontrol({
               type="button"
               onClick={() => {
                 sort.onReset();
-                setBuka(null);
+                setTampil(null);
               }}
               className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
             >
