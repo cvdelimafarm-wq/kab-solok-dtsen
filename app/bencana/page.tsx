@@ -199,6 +199,14 @@ type KertasKerjaBebanRow = {
   punya_data_kk: boolean;
 };
 
+type PengaturanBebanRow = {
+  kunci: string;
+  nilai: number;
+  label: string;
+  keterangan: string | null;
+  updated_at: string;
+};
+
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
   { key: "korban", label: "Korban meninggal, hilang, atau luka" },
   { key: "hunian_rusak", label: "Hunian rusak / terendam" },
@@ -288,28 +296,213 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
   );
 }
 
-// Header kolom tabel yg bisa diklik utk sorting (panah menunjukkan arah
-// aktif). `active` dibanding di pemanggil krn generic key-nya beda2 per
-// tabel.
-function ThSort({
+// Header kolom tabel dengan 3 kontrol terpisah -- cari (🔍), filter (▽),
+// urut (⇅) -- masing-masing buka popover sendiri supaya tidak tumpang
+// tindih/susah diklik. Popover dipasang `position: fixed` (posisi dihitung
+// dari lokasi tombol saat diklik) supaya TIDAK terpotong oleh
+// overflow-auto pembungkus tabel, dan otomatis tertutup kalau tabelnya
+// discroll atau jendela di-resize.
+function ThKontrol({
   label,
-  active,
-  dir,
-  onClick,
   className,
+  stickyLeft,
+  search,
+  filter,
+  sort,
 }: {
   label: string;
-  active: boolean;
-  dir: "asc" | "desc";
-  onClick: () => void;
   className?: string;
+  stickyLeft?: boolean;
+  search?: { value: string; onChange: (v: string) => void; placeholder?: string };
+  filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
+  sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
+  const [buka, setBuka] = useState<"search" | "filter" | "sort" | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [filterDraft, setFilterDraft] = useState<Set<string>>(new Set());
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (popoverRef.current && e.target instanceof Node && popoverRef.current.contains(e.target)) return;
+      setBuka(null);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  function bukaPopover(jenis: "search" | "filter" | "sort", e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka === jenis) {
+      setBuka(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = jenis === "sort" ? 176 : 224;
+    setPos({
+      top: rect.bottom + 4,
+      left: Math.min(rect.left, window.innerWidth - lebar - 8),
+    });
+    if (jenis === "filter") setFilterDraft(new Set(filter?.selected ?? []));
+    setBuka(jenis);
+  }
+
+  const searchAktif = !!search?.value;
+  const filterAktif = !!filter && filter.selected.size > 0;
+
+  const tombolCls = (aktif: boolean) =>
+    `rounded p-1 text-[11px] leading-none transition ${
+      aktif ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-700"
+    }`;
+
   return (
-    <th className={`px-3 py-2 font-medium ${className ?? ""}`}>
-      <button type="button" onClick={onClick} className="flex items-center gap-1 hover:text-orange-800">
-        {label}
-        <span className={active ? "text-orange-800" : "text-orange-300"}>{active && dir === "asc" ? "▲" : "▼"}</span>
-      </button>
+    <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
+      <div className="flex items-center justify-between gap-1.5">
+        <span className="truncate">{label}</span>
+        <span className="flex shrink-0 items-center gap-0.5">
+          {search && (
+            <button type="button" title="Cari" onClick={(e) => bukaPopover("search", e)} className={tombolCls(searchAktif)}>
+              🔍
+            </button>
+          )}
+          {filter && (
+            <button type="button" title="Filter" onClick={(e) => bukaPopover("filter", e)} className={tombolCls(filterAktif)}>
+              ▽
+            </button>
+          )}
+          {sort && (
+            <button type="button" title="Urutkan" onClick={(e) => bukaPopover("sort", e)} className={tombolCls(sort.active)}>
+              {sort.active ? (sort.dir === "asc" ? "▲" : "▼") : "⇅"}
+            </button>
+          )}
+        </span>
+      </div>
+
+      {buka === "search" && search && pos && (
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
+          className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
+        >
+          <input
+            autoFocus
+            value={search.value}
+            onChange={(e) => search.onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setBuka(null);
+            }}
+            placeholder={search.placeholder ?? "Ketik kata kunci..."}
+            className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+          />
+          <p className="mt-1 text-[10px] text-ink/50">Tekan Enter untuk mencari</p>
+          {search.value && (
+            <button
+              type="button"
+              onClick={() => {
+                search.onChange("");
+                setBuka(null);
+              }}
+              className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
+            >
+              Hapus pencarian
+            </button>
+          )}
+        </div>
+      )}
+
+      {buka === "filter" && filter && pos && (
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
+          className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
+        >
+          <div className="max-h-52 overflow-y-auto">
+            {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
+            <div className="flex flex-col gap-1">
+              {filter.options.map((opt) => (
+                <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
+                  <input
+                    type="checkbox"
+                    checked={filterDraft.has(opt)}
+                    onChange={() => {
+                      setFilterDraft((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(opt)) next.delete(opt);
+                        else next.add(opt);
+                        return next;
+                      });
+                    }}
+                    className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                  />
+                  <span className="truncate">{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
+            <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
+              Bersihkan
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                filter.onApply(filterDraft);
+                setBuka(null);
+              }}
+              className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
+            >
+              Terapkan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {buka === "sort" && sort && pos && (
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 176 }}
+          className="z-50 rounded-md border border-line bg-white p-1 text-left font-normal normal-case text-ink shadow-lg"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              sort.onAsc();
+              setBuka(null);
+            }}
+            className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
+          >
+            ▲ Urut naik (A-Z)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              sort.onDesc();
+              setBuka(null);
+            }}
+            className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
+          >
+            ▼ Urut turun (Z-A)
+          </button>
+          {sort.active && (
+            <button
+              type="button"
+              onClick={() => {
+                sort.onReset();
+                setBuka(null);
+              }}
+              className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
+            >
+              ✕ Reset urutan
+            </button>
+          )}
+        </div>
+      )}
     </th>
   );
 }
@@ -409,14 +602,14 @@ function RekapSubslsSection({
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="font-medium text-orange-900">{title}</h2>
+          <h2 className="font-medium text-blue-900">{title}</h2>
           {subtitle && <p className="text-xs text-ink/60">{subtitle}</p>}
         </div>
         <button
           type="button"
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="shrink-0 rounded-md border border-orange-700 bg-white px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-40"
+          className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-40"
         >
           Export ke Excel
         </button>
@@ -431,7 +624,7 @@ function RekapSubslsSection({
               setKecFilter(e.target.value);
               setPage(1);
             }}
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
           >
             <option value="">Semua kecamatan</option>
             {kecamatanOptions.map((k) => (
@@ -449,7 +642,7 @@ function RekapSubslsSection({
               setStatusFilter(e.target.value as "" | JorongStatus);
               setPage(1);
             }}
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
           >
             <option value="">Semua status</option>
             <option value="terdampak">Terdampak</option>
@@ -466,14 +659,14 @@ function RekapSubslsSection({
               setPage(1);
             }}
             placeholder="Ketik kata kunci..."
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
           />
         </div>
       </div>
 
       <div className="mt-2 overflow-x-auto rounded-md border border-line">
         <table className="w-full min-w-[820px] text-left text-sm">
-          <thead className="bg-orange-50 text-orange-600">
+          <thead className="bg-blue-50 text-blue-600">
             <tr>
               <th className="px-3 py-2 font-medium">Kecamatan</th>
               <th className="px-3 py-2 font-medium">Nagari</th>
@@ -583,7 +776,7 @@ function balanceInfo(skor: number, rata: number): BalanceInfo {
       tone: "kelebihan",
     };
   }
-  return { label: "Beban Rendah", cls: "text-orange-600", barCls: "bg-orange-400", dotCls: "bg-orange-400", tone: "rendah" };
+  return { label: "Beban Rendah", cls: "text-violet-600", barCls: "bg-violet-400", dotCls: "bg-violet-400", tone: "rendah" };
 }
 
 const LEGENDA_STATUS_BEBAN: { tone: BalanceTone; label: string; keterangan: string }[] = [
@@ -607,7 +800,7 @@ function LegendaStatusBeban({ withBelum = false }: { withBelum?: boolean }) {
                 ? "bg-amber-500"
                 : it.tone === "kelebihan"
                 ? "bg-rust-500"
-                : "bg-orange-400"
+                : "bg-violet-400"
             }`}
           />
           {it.label}
@@ -701,7 +894,7 @@ function Combobox({
           }
         }}
         placeholder={placeholder}
-        className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400 disabled:bg-gray-50 disabled:text-ink/40"
+        className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-ink/40"
       />
       {open && !disabled && (
         <div className="absolute z-20 mt-1 max-h-56 w-full min-w-[12rem] overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg">
@@ -714,7 +907,7 @@ function Combobox({
                 setOpen(false);
                 setQuery("");
               }}
-              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-orange-50"
+              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-blue-50"
             >
               {placeholder}
             </button>
@@ -735,8 +928,8 @@ function Combobox({
                 o.disabled
                   ? "cursor-not-allowed text-ink/30"
                   : o.value === value
-                  ? "bg-orange-50 font-medium text-orange-700 hover:bg-orange-100"
-                  : "text-ink hover:bg-orange-50"
+                  ? "bg-blue-50 font-medium text-blue-700 hover:bg-blue-100"
+                  : "text-ink hover:bg-blue-50"
               }`}
             >
               {o.label}
@@ -745,6 +938,226 @@ function Combobox({
           {filtered.length === 0 && <div className="px-2 py-1.5 text-ink/40">Tidak ditemukan.</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+const PENGATURAN_BEBAN_DEFAULT: Record<string, number> = {
+  bobot_kk_terdampak: 1,
+  bobot_kk_tidak_terdampak: 0.1428,
+  pembagi_jarak_km: 5,
+};
+
+function PengaturanBebanSection() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rows, setRows] = useState<PengaturanBebanRow[]>([]);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [simpanBusy, setSimpanBusy] = useState(false);
+  const [simpanError, setSimpanError] = useState<string | null>(null);
+  const [simpanSukses, setSimpanSukses] = useState(false);
+
+  async function muat() {
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/bencana/pengaturan-beban");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
+      const data: PengaturanBebanRow[] = json.data ?? [];
+      setRows(data);
+      setDraft((prev) => {
+        // Jangan timpa draft yg sedang diketik user kalau ini refetch setelah simpan.
+        const next: Record<string, string> = {};
+        for (const r of data) {
+          next[r.kunci] = prev[r.kunci] !== undefined ? prev[r.kunci] : String(r.nilai);
+        }
+        return next;
+      });
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Gagal memuat pengaturan beban.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    muat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function nilaiAsli(kunci: string): number {
+    const r = rows.find((x) => x.kunci === kunci);
+    return r ? r.nilai : PENGATURAN_BEBAN_DEFAULT[kunci] ?? 0;
+  }
+
+  function draftNum(kunci: string): number {
+    const v = Number(draft[kunci]);
+    return Number.isFinite(v) ? v : nilaiAsli(kunci);
+  }
+
+  const adaPerubahan = rows.some((r) => draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai));
+
+  function batalkanPerubahan() {
+    const next: Record<string, string> = {};
+    for (const r of rows) next[r.kunci] = String(r.nilai);
+    setDraft(next);
+    setSimpanError(null);
+    setSimpanSukses(false);
+  }
+
+  async function simpanPerubahan() {
+    setSimpanBusy(true);
+    setSimpanError(null);
+    setSimpanSukses(false);
+    try {
+      const berubah = rows.filter((r) => draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai));
+      for (const r of berubah) {
+        const nilai = Number(draft[r.kunci]);
+        if (!Number.isFinite(nilai) || nilai <= 0) {
+          throw new Error(`Nilai "${r.label}" harus berupa angka lebih besar dari 0.`);
+        }
+        const res = await fetch("/api/bencana/pengaturan-beban", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kunci: r.kunci, nilai }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Gagal menyimpan "${r.label}".`);
+      }
+      await muat();
+      setSimpanSukses(true);
+    } catch (e) {
+      setSimpanError(e instanceof Error ? e.message : "Gagal menyimpan pengaturan.");
+    } finally {
+      setSimpanBusy(false);
+    }
+  }
+
+  // Simulasi contoh perhitungan pakai nilai draft (belum tentu tersimpan)
+  // supaya admin bisa lihat dampaknya SEBELUM menekan "Simpan Perubahan".
+  const contohKkTerdampak = 10;
+  const contohKkTidakTerdampak = 20;
+  const contohJarakKm = 12;
+  const bobotTerdampak = draftNum("bobot_kk_terdampak");
+  const bobotTidakTerdampak = draftNum("bobot_kk_tidak_terdampak");
+  const pembagiJarak = draftNum("pembagi_jarak_km") || 1;
+  const contohSkorBebanPendataan =
+    contohKkTerdampak * bobotTerdampak + contohKkTidakTerdampak * bobotTidakTerdampak;
+  const contohSkorJarak = contohJarakKm / pembagiJarak;
+  const contohSkorBebanAkhir = contohSkorBebanPendataan + contohSkorJarak;
+
+  if (loading) {
+    return <p className="mt-6 text-sm text-ink/60">Memuat pengaturan beban...</p>;
+  }
+  if (loadError) {
+    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-sm text-rust-700">{loadError}</p>;
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-6">
+      <section className="rounded-md border border-blue-100 bg-white p-4">
+        <h2 className="font-medium text-blue-900">Kelola Perkiraan Beban Tugas</h2>
+        <p className="mt-1 text-sm text-ink/70">
+          Bobot &amp; parameter di bawah ini menentukan perhitungan{" "}
+          <strong>skor beban pendataan</strong>, <strong>skor jarak</strong>, dan{" "}
+          <strong>skor beban akhir</strong> di seluruh tab Alokasi Petugas (Langkah 1-4,
+          Ringkasan, dan Kebutuhan Petugas per Kecamatan). Perubahan di sini{" "}
+          <strong>langsung berdampak</strong> pada semua perhitungan tersebut begitu
+          disimpan.
+        </p>
+
+        <div className="mt-4 flex flex-col gap-4">
+          {rows.map((r) => (
+            <div key={r.kunci} className="rounded-md border border-line bg-gray-50/60 p-3">
+              <label className="text-sm font-medium text-ink">{r.label}</label>
+              {r.keterangan && <p className="mt-0.5 text-xs text-ink/60">{r.keterangan}</p>}
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={draft[r.kunci] ?? String(r.nilai)}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, [r.kunci]: e.target.value }))}
+                  className="w-32 rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                {draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai) && (
+                  <span className="text-xs text-orange-600">
+                    belum disimpan (semula {r.nilai})
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!adaPerubahan || simpanBusy}
+            onClick={batalkanPerubahan}
+            className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:bg-gray-50 disabled:opacity-40"
+          >
+            ↺ Batalkan Perubahan
+          </button>
+          <button
+            type="button"
+            disabled={!adaPerubahan || simpanBusy}
+            onClick={simpanPerubahan}
+            className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
+          >
+            {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
+          </button>
+          {simpanSukses && !adaPerubahan && (
+            <span className="text-xs font-medium text-moss-700">
+              ✓ Tersimpan. Perhitungan beban di tab Alokasi Petugas sudah memakai nilai baru.
+            </span>
+          )}
+        </div>
+        {simpanError && (
+          <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{simpanError}</p>
+        )}
+      </section>
+
+      <section className="rounded-md border border-line bg-white p-4">
+        <h3 className="font-medium text-blue-900">Simulasi Contoh Perhitungan</h3>
+        <p className="mt-1 text-xs text-ink/60">
+          Pratinjau memakai nilai di atas (termasuk yang belum disimpan), supaya Bapak/Ibu
+          bisa cek dampaknya dulu sebelum menyimpan.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-md border border-line bg-gray-50/60 p-3 text-xs text-ink/70">
+            <p className="font-medium text-ink">Contoh Sub SLS</p>
+            <p className="mt-1">{contohKkTerdampak} KK terdampak, {contohKkTidakTerdampak} KK tidak terdampak, jarak {contohJarakKm} km</p>
+            <p className="mt-2">
+              Skor beban pendataan = {contohKkTerdampak} × {bobotTerdampak} + {contohKkTidakTerdampak} × {bobotTidakTerdampak}
+              {" = "}
+              <strong className="text-blue-700">{contohSkorBebanPendataan.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+            </p>
+            <p className="mt-1">
+              Skor jarak = {contohJarakKm} ÷ {pembagiJarak}
+              {" = "}
+              <strong className="text-blue-700">{contohSkorJarak.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+            </p>
+            <p className="mt-1">
+              Skor beban akhir ={" "}
+              <strong className="text-blue-700">{contohSkorBebanAkhir.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+            </p>
+          </div>
+          <div className="rounded-md border border-line bg-gray-50/60 p-3 text-xs text-ink/70">
+            <p className="font-medium text-ink">Rumus yang dipakai sistem</p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              <li>
+                Skor beban pendataan = (KK terdampak × <em>Bobot Keluarga Terdampak</em>) +
+                (KK tidak terdampak × <em>Bobot Keluarga Tidak Terdampak</em>)
+              </li>
+              <li>
+                Skor jarak = jarak tempuh (km) ÷ <em>Pembagi Jarak (km)</em>
+              </li>
+              <li>Skor beban akhir = skor beban pendataan + skor jarak</li>
+            </ul>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -776,6 +1189,7 @@ function AlokasiPetugasSection() {
 
   const [sampelKecFilter, setSampelKecFilter] = useState("");
   const [sampelStatusFilter, setSampelStatusFilter] = useState<"" | "sudah" | "belum">("");
+  const [sampelDataFilter, setSampelDataFilter] = useState<"" | "lengkap" | "belum">("");
   const [sampelSearch, setSampelSearch] = useState("");
   const [sampelPage, setSampelPage] = useState(1);
   const [sampelBusyId, setSampelBusyId] = useState<string | null>(null);
@@ -1192,6 +1606,8 @@ function AlokasiPetugasSection() {
       if (sampelKecFilter && r.kecamatan !== sampelKecFilter) return false;
       if (sampelStatusFilter === "sudah" && !r.termasuk_sampel) return false;
       if (sampelStatusFilter === "belum" && r.termasuk_sampel) return false;
+      if (sampelDataFilter === "lengkap" && !r.punya_data_kk) return false;
+      if (sampelDataFilter === "belum" && r.punya_data_kk) return false;
       if (
         q &&
         !r.nagari.toLowerCase().includes(q) &&
@@ -1201,7 +1617,7 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelSearch]);
+  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelDataFilter, sampelSearch]);
   const jumlahSampelTerpilih = useMemo(() => calonSampel.filter((r) => r.termasuk_sampel).length, [calonSampel]);
   const sampelTotalPages = Math.max(1, Math.ceil(filteredSampel.length / SAMPEL_PAGE_SIZE));
   const sampelPageClamped = Math.min(sampelPage, sampelTotalPages);
@@ -1551,6 +1967,38 @@ function AlokasiPetugasSection() {
     setPage(1);
   }
 
+  // Dipakai popover "Urutkan" ThKontrol -- pilih arah langsung (bukan toggle)
+  // supaya opsi "Urut naik"/"Urut turun"/"Reset urutan" selalu jelas maknanya.
+  function sortAsc(key: NonNullable<typeof sortKey>) {
+    setSortKey(key);
+    setSortDir("asc");
+    setPage(1);
+  }
+  function sortDesc(key: NonNullable<typeof sortKey>) {
+    setSortKey(key);
+    setSortDir("desc");
+    setPage(1);
+  }
+  function sortReset() {
+    setSortKey(null);
+    setPage(1);
+  }
+
+  // Adapter Data KK: state asli `dataFilter` cuma 1 nilai ("" | "lengkap" |
+  // "belum"), tapi popover filter ThKontrol berbasis multi-pilih (Set).
+  // Dikonversi dua arah supaya popovernya tetap konsisten dgn checkbox-list
+  // di mockup walau di baliknya cuma single-value.
+  const DATA_KK_OPSI = ["Lengkap", "Belum Ada Data"];
+  const dataFilterSelected = new Set<string>(
+    dataFilter === "lengkap" ? ["Lengkap"] : dataFilter === "belum" ? ["Belum Ada Data"] : DATA_KK_OPSI
+  );
+  function terapkanDataFilter(next: Set<string>) {
+    if (next.size === 0 || next.size === DATA_KK_OPSI.length) setDataFilter("");
+    else if (next.has("Lengkap")) setDataFilter("lengkap");
+    else setDataFilter("belum");
+    setPage(1);
+  }
+
   const totalPages = Math.max(1, Math.ceil(sorted.length / alokasiPageSize));
   const pageClamped = Math.min(page, totalPages);
   // alokasiPageSize bisa Infinity (opsi "Semua") -- 0 * Infinity = NaN di JS,
@@ -1603,17 +2051,17 @@ function AlokasiPetugasSection() {
   return (
     <div className="mt-6 flex flex-col gap-6">
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
-      <section className="rounded-md border border-orange-100 bg-white p-4">
-        <h2 className="font-medium text-orange-900">Ringkasan Alokasi Petugas</h2>
+      <section className="rounded-md border border-blue-100 bg-white p-4">
+        <h2 className="font-medium text-blue-900">Ringkasan Alokasi Petugas</h2>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <MiniStat warna="bg-orange-50 text-orange-700" label="Sub SLS Sampel" nilai={kertasKerja.length} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="Sub SLS Sampel" nilai={kertasKerja.length} />
           <MiniStat
-            warna="bg-orange-50 text-orange-700"
+            warna="bg-blue-50 text-blue-700"
             label="Total Skor Beban"
             nilai={Math.round(totalSkorWilayahTugas)}
           />
-          <MiniStat warna="bg-orange-50 text-orange-700" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
-          <MiniStat warna="bg-orange-50 text-orange-700" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
         </div>
@@ -1649,9 +2097,9 @@ function AlokasiPetugasSection() {
           <button
             type="button"
             onClick={() => filterKeStatusBeban("rendah")}
-            className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
+            className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
           >
-            🟠 {statusPplCounts.rendah} rendah
+            🟣 {statusPplCounts.rendah} rendah
           </button>
           <button
             type="button"
@@ -1756,7 +2204,7 @@ function AlokasiPetugasSection() {
                     setBebanKecFilter(e.target.value);
                     setBebanPage(1);
                   }}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">Semua kecamatan</option>
                   {kecamatanOptionsBeban.map((k) => (
@@ -1775,7 +2223,7 @@ function AlokasiPetugasSection() {
                     setBebanPage(1);
                   }}
                   placeholder="Ketik kata kunci..."
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 />
               </div>
             </div>
@@ -1785,9 +2233,18 @@ function AlokasiPetugasSection() {
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <th className="px-3 py-2 font-medium">Kecamatan</th>
-                    <th className="px-3 py-2 font-medium">Nagari</th>
-                    <th className="px-3 py-2 font-medium">Jorong/SLS</th>
-                    <th className="px-3 py-2 font-medium">Sub SLS</th>
+                    <ThKontrol
+                      label="Nagari"
+                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                    />
+                    <ThKontrol
+                      label="Jorong/SLS"
+                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                    />
+                    <ThKontrol
+                      label="Sub SLS"
+                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                    />
                     <th className="px-3 py-2 font-medium">KK Total</th>
                     <th className="px-3 py-2 font-medium">KK Terdampak</th>
                     <th className="px-3 py-2 font-medium">KK Tidak Terdampak</th>
@@ -1818,7 +2275,7 @@ function AlokasiPetugasSection() {
                                 const val = Math.max(0, Number(e.target.value) || 0);
                                 setDraftKkTotal((prev) => ({ ...prev, [r.idsubsls]: val }));
                               }}
-                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
                             />
                             {r.kk_total_manual && (
                               <span
@@ -1840,7 +2297,7 @@ function AlokasiPetugasSection() {
                                 const val = Math.max(0, Number(e.target.value) || 0);
                                 setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: val }));
                               }}
-                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
                             />
                             {r.kk_terdampak_manual && (
                               <span
@@ -1926,7 +2383,7 @@ function AlokasiPetugasSection() {
       <section className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-orange-900">Langkah 1 — Pilih Wilayah Sampel</h2>
+            <h2 className="font-medium text-blue-900">Langkah 1 — Pilih Wilayah Sampel</h2>
             <p className="mt-1 text-xs text-ink/60">
               Centang Sub SLS terdampak mana yang benar-benar akan dijadikan wilayah sampel pendataan. Sub SLS yang
               tidak dicentang di sini tidak akan muncul di kertas kerja plotting Langkah 4 dan tidak ikut dihitung di
@@ -1940,7 +2397,7 @@ function AlokasiPetugasSection() {
 
         {sampelError && <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{sampelError}</p>}
 
-        <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line bg-orange-50/40 p-3 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line bg-blue-50/40 p-3 sm:grid-cols-4">
           <div>
             <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
             <select
@@ -1949,7 +2406,7 @@ function AlokasiPetugasSection() {
                 setSampelKecFilter(e.target.value);
                 setSampelPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua kecamatan</option>
               {kecamatanOptionsSampel.map((k) => (
@@ -1967,7 +2424,7 @@ function AlokasiPetugasSection() {
                 setSampelStatusFilter(e.target.value as "" | "sudah" | "belum");
                 setSampelPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua</option>
               <option value="sudah">Sudah dicentang</option>
@@ -1983,7 +2440,7 @@ function AlokasiPetugasSection() {
                 setSampelPage(1);
               }}
               placeholder="Ketik kata kunci..."
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
           </div>
           <div className="flex items-end gap-1.5">
@@ -1991,7 +2448,7 @@ function AlokasiPetugasSection() {
               type="button"
               disabled={sampelBulkBusy || filteredSampel.length === 0}
               onClick={() => handleCentangSemuaFiltered(true, filteredSampel)}
-              className="flex-1 rounded-md bg-orange-500 px-2 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
+              className="flex-1 rounded-md bg-blue-500 px-2 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
             >
               ✓ Centang Semua
             </button>
@@ -2012,14 +2469,41 @@ function AlokasiPetugasSection() {
 
         <div className="mt-3 overflow-x-auto rounded-md border border-line">
           <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-orange-50 text-orange-600">
+            <thead className="bg-blue-50 text-blue-600">
               <tr>
                 <th className="w-10 px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
-                <th className="px-3 py-2 font-medium">Nagari</th>
-                <th className="px-3 py-2 font-medium">Jorong/SLS</th>
-                <th className="px-3 py-2 font-medium">Sub SLS</th>
-                <th className="px-3 py-2 font-medium">Data KK</th>
+                <ThKontrol
+                  label="Nagari"
+                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                />
+                <ThKontrol
+                  label="Jorong/SLS"
+                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                />
+                <ThKontrol
+                  label="Sub SLS"
+                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                />
+                <ThKontrol
+                  label="Data KK"
+                  filter={{
+                    options: ["Lengkap", "Belum Ada Data"],
+                    selected: new Set(
+                      sampelDataFilter === "lengkap"
+                        ? ["Lengkap"]
+                        : sampelDataFilter === "belum"
+                        ? ["Belum Ada Data"]
+                        : ["Lengkap", "Belum Ada Data"]
+                    ),
+                    onApply: (next) => {
+                      if (next.size === 0 || next.size === 2) setSampelDataFilter("");
+                      else if (next.has("Lengkap")) setSampelDataFilter("lengkap");
+                      else setSampelDataFilter("belum");
+                      setSampelPage(1);
+                    },
+                  }}
+                />
                 <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
               </tr>
             </thead>
@@ -2032,7 +2516,7 @@ function AlokasiPetugasSection() {
                       checked={r.termasuk_sampel}
                       disabled={sampelBusyId === r.idsubsls}
                       onChange={(e) => handleToggleSampel(r.idsubsls, e.target.checked)}
-                      className="h-4 w-4 accent-orange-500"
+                      className="h-4 w-4 accent-blue-500"
                     />
                   </td>
                   <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
@@ -2089,7 +2573,7 @@ function AlokasiPetugasSection() {
       <section className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-medium text-orange-900">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
+            <h2 className="font-medium text-blue-900">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
             <p className="mt-1 text-xs text-ink/60">
               Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. 1 kuesioner BENCANA-K
               (KK terdampak) berbobot 1, 1 listing KK tidak terdampak berbobot 0,12428, jarak rumah petugas berbobot
@@ -2105,13 +2589,13 @@ function AlokasiPetugasSection() {
                 max={24}
                 value={hariKerjaInput}
                 onChange={(e) => setHariKerjaInput(Math.min(24, Math.max(1, Number(e.target.value) || 1)))}
-                className="mt-1 w-28 rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                className="mt-1 w-28 rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <button
               type="button"
               onClick={handleTerapkanHariKerja}
-              className="rounded-md border border-orange-700 bg-white px-3 py-2 text-sm font-medium text-orange-700 transition hover:bg-orange-50"
+              className="rounded-md border border-blue-700 bg-white px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50"
             >
               Hitung Ulang
             </button>
@@ -2119,9 +2603,9 @@ function AlokasiPetugasSection() {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <MiniStat warna="bg-orange-50 text-orange-700" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
-          <MiniStat warna="bg-orange-50 text-orange-700" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
-          <MiniStat warna="bg-orange-50 text-orange-700" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
+          <MiniStat warna="bg-blue-50 text-blue-700" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PPL Sudah Diplot" nilai={ringkasanPpl.length} />
         </div>
         <p className="mt-1.5 text-[11px] text-ink/50">
@@ -2131,7 +2615,7 @@ function AlokasiPetugasSection() {
 
         <div className="mt-3 overflow-x-auto rounded-md border border-line">
           <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="bg-orange-50 text-orange-600">
+            <thead className="bg-blue-50 text-blue-600">
               <tr>
                 <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
@@ -2183,7 +2667,7 @@ function AlokasiPetugasSection() {
                       <td className="px-3 py-2 text-ink/80">{k.jumlah_korwil_dibutuhkan}</td>
                     </tr>
                     {terbuka && (
-                      <tr className="border-t border-line bg-orange-50/30">
+                      <tr className="border-t border-line bg-blue-50/30">
                         <td colSpan={9} className="px-4 py-3">
                           <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
                             Detail Perhitungan — {k.kecamatan}
@@ -2232,7 +2716,7 @@ function AlokasiPetugasSection() {
 
       {/* ===== LANGKAH 3: SUSUNAN TIM (MANUAL, TANPA PENGELOMPOKAN OTOMATIS) ===== */}
       <section className="rounded-md border border-line bg-white p-4">
-        <h2 className="font-medium text-orange-900">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
+        <h2 className="font-medium text-blue-900">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
         <p className="mt-1 text-xs text-ink/60">
           Semua jenjang ditetapkan manual satu per satu, tidak ada pengelompokan otomatis. Korwil wajib pegawai
           organik. PML boleh organik atau mitra. PPL wajib mitra (diplot lewat kertas kerja Langkah 4).
@@ -2259,7 +2743,7 @@ function AlokasiPetugasSection() {
                   if (korwilBaruId) handleSusunanTim(korwilBaruId, "korwil", null);
                   setKorwilBaruId("");
                 }}
-                className="shrink-0 rounded-md bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                className="shrink-0 rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
               >
                 Tambah
               </button>
@@ -2310,7 +2794,7 @@ function AlokasiPetugasSection() {
                   if (pmlBaruId) handleSusunanTim(pmlBaruId, "pml", null);
                   setPmlBaruId("");
                 }}
-                className="shrink-0 rounded-md bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                className="shrink-0 rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
               >
                 Tambah
               </button>
@@ -2479,7 +2963,7 @@ function AlokasiPetugasSection() {
       {/* ===== VISUALISASI KESEIMBANGAN BEBAN ===== */}
       {(ringkasanPpl.length > 0 || ringkasanPml.length > 0 || ringkasanKorwil.length > 0) && (
         <section className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-medium text-orange-900">Keseimbangan Beban Tim</h2>
+          <h2 className="font-medium text-blue-900">Keseimbangan Beban Tim</h2>
           <p className="mt-1 text-xs text-ink/60">
             Diperbarui otomatis setiap kali ada plot Sub SLS atau perubahan susunan tim. Hijau = beban mendekati
             rata-rata (selisih ≤15%). Oranye = beban rendah. Merah = kelebihan beban.
@@ -2661,7 +3145,7 @@ function AlokasiPetugasSection() {
       <section ref={langkah4Ref}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-orange-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
+            <h2 className="font-medium text-blue-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
             <p className="text-xs text-ink/60">
               {filtered.length} dari {kertasKerja.length} baris wilayah sampel. Pilih PPL &amp; PML bebas dulu
               (trial-error) — kolom &quot;Beban Petugas&quot; langsung berubah tiap kali memilih, TANPA tersimpan ke
@@ -2672,16 +3156,16 @@ function AlokasiPetugasSection() {
             type="button"
             onClick={handleExport}
             disabled={filtered.length === 0}
-            className="shrink-0 rounded-md border border-orange-700 bg-white px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-40"
+            className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-40"
           >
             Export ke Excel
           </button>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-orange-100 bg-orange-50/60 px-3 py-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
           <span className="text-xs text-ink/70">
             Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷ {TOTAL_PPL_TETAP} PPL tetap):{" "}
-            <strong className="text-orange-900">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
+            <strong className="text-blue-900">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
@@ -2705,7 +3189,7 @@ function AlokasiPetugasSection() {
               type="button"
               disabled={jumlahPerubahanPending === 0 || simpanBusy}
               onClick={handleSimpanPerubahan}
-              className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
+              className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
             >
               {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
             </button>
@@ -2713,7 +3197,7 @@ function AlokasiPetugasSection() {
         </div>
 
         {diffTerbuka && daftarPerubahanPending.length > 0 && (
-          <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-orange-100 bg-orange-50/40 p-2">
+          <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-blue-100 bg-blue-50/40 p-2">
             <ul className="flex flex-col gap-1 text-xs text-ink/70">
               {daftarPerubahanPending.map((d, i) => (
                 <li key={i}>
@@ -2780,7 +3264,7 @@ function AlokasiPetugasSection() {
             }}
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${
               !statusBebanFilter && !statusPlotFilter && !hanyaBerubahFilter
-                ? "bg-orange-500 text-white"
+                ? "bg-blue-500 text-white"
                 : "bg-gray-100 text-ink/60 hover:bg-gray-200"
             }`}
           >
@@ -2808,10 +3292,10 @@ function AlokasiPetugasSection() {
             type="button"
             onClick={() => filterKeStatusBeban(statusBebanFilter === "rendah" ? "" : "rendah")}
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-              statusBebanFilter === "rendah" ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+              statusBebanFilter === "rendah" ? "bg-violet-500 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100"
             }`}
           >
-            🟠 PPL Beban Rendah
+            🟣 PPL Beban Rendah
           </button>
           <button
             type="button"
@@ -2858,7 +3342,7 @@ function AlokasiPetugasSection() {
                 setAlokasiPageSize(e.target.value === "semua" ? Infinity : Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+              className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -2878,7 +3362,7 @@ function AlokasiPetugasSection() {
                 setKecFilter(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua kecamatan</option>
               {kecamatanOptions.map((k) => (
@@ -2922,13 +3406,13 @@ function AlokasiPetugasSection() {
                 setStatusBebanFilter(e.target.value as "" | BalanceTone);
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua</option>
               <option value="seimbang">🟢 Seimbang</option>
               <option value="perhatian">🟡 Perhatian</option>
               <option value="kelebihan">🔴 Kelebihan</option>
-              <option value="rendah">🟠 Beban Rendah</option>
+              <option value="rendah">🟣 Beban Rendah</option>
             </select>
           </div>
           <div>
@@ -2939,7 +3423,7 @@ function AlokasiPetugasSection() {
                 setStatusPlotFilter(e.target.value as "" | "sudah" | "belum");
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua</option>
               <option value="sudah">Sudah diplot</option>
@@ -2954,7 +3438,7 @@ function AlokasiPetugasSection() {
                 setDataFilter(e.target.value as "" | "lengkap" | "belum");
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             >
               <option value="">Semua</option>
               <option value="lengkap">Data Lengkap</option>
@@ -2970,52 +3454,145 @@ function AlokasiPetugasSection() {
                 setPage(1);
               }}
               placeholder="Ketik kata kunci..."
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
           </div>
         </div>
 
         <div className="mt-2 max-h-[70vh] overflow-auto rounded-md border border-line">
           <table className="w-full min-w-[1450px] text-left text-sm">
-            <thead className="sticky top-0 z-20 bg-orange-50 text-orange-600">
+            <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
               <tr>
-                {!modeFokus && <th className="px-3 py-2 font-medium">Kecamatan</th>}
-                {!modeFokus && <th className="px-3 py-2 font-medium">Nagari</th>}
-                <th className="px-3 py-2 font-medium">Jorong/SLS</th>
-                <th className="sticky left-0 z-30 bg-orange-50 px-3 py-2 font-medium">Sub SLS</th>
-                {!modeFokus && <th className="px-3 py-2 font-medium">Data KK</th>}
                 {!modeFokus && (
-                  <ThSort
+                  <ThKontrol
+                    label="Kecamatan"
+                    sort={{
+                      active: sortKey === "kecamatan",
+                      dir: sortDir,
+                      onAsc: () => sortAsc("kecamatan"),
+                      onDesc: () => sortDesc("kecamatan"),
+                      onReset: sortReset,
+                    }}
+                  />
+                )}
+                {!modeFokus && (
+                  <ThKontrol
+                    label="Nagari"
+                    search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  />
+                )}
+                <ThKontrol
+                  label="Jorong/SLS"
+                  search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                />
+                <ThKontrol
+                  label="Sub SLS"
+                  stickyLeft
+                  search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                />
+                {!modeFokus && (
+                  <ThKontrol
+                    label="Data KK"
+                    filter={{ options: DATA_KK_OPSI, selected: dataFilterSelected, onApply: terapkanDataFilter }}
+                  />
+                )}
+                {!modeFokus && (
+                  <ThKontrol
                     label="Skor Beban Pendataan"
-                    active={sortKey === "skor_beban_pendataan"}
-                    dir={sortDir}
-                    onClick={() => toggleSort("skor_beban_pendataan")}
+                    sort={{
+                      active: sortKey === "skor_beban_pendataan",
+                      dir: sortDir,
+                      onAsc: () => sortAsc("skor_beban_pendataan"),
+                      onDesc: () => sortDesc("skor_beban_pendataan"),
+                      onReset: sortReset,
+                    }}
                   />
                 )}
                 {!modeFokus && (
-                  <ThSort
+                  <ThKontrol
                     label="Skor Jarak"
-                    active={sortKey === "skor_jarak"}
-                    dir={sortDir}
-                    onClick={() => toggleSort("skor_jarak")}
+                    sort={{
+                      active: sortKey === "skor_jarak",
+                      dir: sortDir,
+                      onAsc: () => sortAsc("skor_jarak"),
+                      onDesc: () => sortDesc("skor_jarak"),
+                      onReset: sortReset,
+                    }}
                   />
                 )}
-                <ThSort
+                <ThKontrol
                   label="Skor Beban Akhir"
-                  active={sortKey === "skor_beban_akhir"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("skor_beban_akhir")}
+                  sort={{
+                    active: sortKey === "skor_beban_akhir",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("skor_beban_akhir"),
+                    onDesc: () => sortDesc("skor_beban_akhir"),
+                    onReset: sortReset,
+                  }}
                 />
-                <th className="px-3 py-2 font-medium">PPL</th>
-                <ThSort
+                <ThKontrol
+                  label="PPL"
+                  filter={{
+                    options: petugasList.filter((p) => p.peran === "ppl").map((p) => p.nama),
+                    selected: pplFilter ? new Set([petugasList.find((p) => p.id === pplFilter)?.nama ?? ""]) : new Set(),
+                    onApply: (next) => {
+                      const nama = Array.from(next)[0];
+                      const p = nama ? petugasList.find((x) => x.nama === nama) : null;
+                      setPplFilter(p ? p.id : "");
+                      setPage(1);
+                    },
+                  }}
+                />
+                <ThKontrol
                   label="Beban Petugas"
-                  active={sortKey === "beban_ppl"}
-                  dir={sortDir}
-                  onClick={() => toggleSort("beban_ppl")}
+                  sort={{
+                    active: sortKey === "beban_ppl",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("beban_ppl"),
+                    onDesc: () => sortDesc("beban_ppl"),
+                    onReset: sortReset,
+                  }}
                 />
-                <th className="px-3 py-2 font-medium">PML</th>
+                <ThKontrol
+                  label="PML"
+                  filter={{
+                    options: petugasList.filter((p) => p.peran === "pml").map((p) => p.nama),
+                    selected:
+                      pmlFilterLangkah4 ? new Set([petugasList.find((p) => p.id === pmlFilterLangkah4)?.nama ?? ""]) : new Set(),
+                    onApply: (next) => {
+                      const nama = Array.from(next)[0];
+                      const p = nama ? petugasList.find((x) => x.nama === nama) : null;
+                      setPmlFilterLangkah4(p ? p.id : "");
+                      setPage(1);
+                    },
+                  }}
+                />
                 {!modeFokus && <th className="px-3 py-2 font-medium">Korwil</th>}
-                <th className="px-3 py-2 font-medium">Status</th>
+                <ThKontrol
+                  label="Status"
+                  filter={{
+                    options: ["Seimbang", "Perhatian", "Kelebihan Beban", "Beban Rendah"],
+                    selected: new Set(
+                      statusBebanFilter === "seimbang"
+                        ? ["Seimbang"]
+                        : statusBebanFilter === "perhatian"
+                        ? ["Perhatian"]
+                        : statusBebanFilter === "kelebihan"
+                        ? ["Kelebihan Beban"]
+                        : statusBebanFilter === "rendah"
+                        ? ["Beban Rendah"]
+                        : ["Seimbang", "Perhatian", "Kelebihan Beban", "Beban Rendah"]
+                    ),
+                    onApply: (next) => {
+                      if (next.size === 0 || next.size === 4) setStatusBebanFilter("");
+                      else if (next.has("Seimbang")) setStatusBebanFilter("seimbang");
+                      else if (next.has("Perhatian")) setStatusBebanFilter("perhatian");
+                      else if (next.has("Kelebihan Beban")) setStatusBebanFilter("kelebihan");
+                      else if (next.has("Beban Rendah")) setStatusBebanFilter("rendah");
+                      setPage(1);
+                    },
+                  }}
+                />
               </tr>
             </thead>
             <tbody>
@@ -3174,7 +3751,7 @@ function AlokasiPetugasSection() {
 }
 
 export default function BencanaPage() {
-  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi">("identifikasi");
+  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi" | "pengaturan">("identifikasi");
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
@@ -3568,11 +4145,17 @@ export default function BencanaPage() {
   return (
     <main
       className={`mx-auto min-h-screen px-5 py-10 ${
-        tab === "alokasi" ? "max-w-[1800px]" : tab === "monitoring" ? "max-w-6xl" : "max-w-2xl"
+        tab === "alokasi"
+          ? "max-w-[1800px]"
+          : tab === "monitoring"
+          ? "max-w-6xl"
+          : tab === "pengaturan"
+          ? "max-w-4xl"
+          : "max-w-2xl"
       }`}
     >
-      <p className="text-sm font-medium text-orange-400">BPS Kabupaten Solok</p>
-      <h1 className="mt-1 text-2xl font-semibold text-orange-900">
+      <p className="text-sm font-medium text-blue-400">BPS Kabupaten Solok</p>
+      <h1 className="mt-1 text-2xl font-semibold text-blue-900">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>
       <p className="mt-2 text-sm text-ink/70">
@@ -3582,14 +4165,14 @@ export default function BencanaPage() {
         masing-masing.
       </p>
 
-      <div className="mt-6 flex gap-1 rounded-md bg-orange-50 p-1">
+      <div className="mt-6 flex gap-1 rounded-md bg-blue-50 p-1">
         <button
           type="button"
           onClick={() => setTab("identifikasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "identifikasi"
-              ? "bg-white text-orange-900 shadow-sm"
-              : "text-orange-400 hover:text-orange-600"
+              ? "bg-white text-blue-900 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
           }`}
         >
           Identifikasi
@@ -3599,8 +4182,8 @@ export default function BencanaPage() {
           onClick={() => setTab("monitoring")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "monitoring"
-              ? "bg-white text-orange-900 shadow-sm"
-              : "text-orange-400 hover:text-orange-600"
+              ? "bg-white text-blue-900 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
           }`}
         >
           Monitoring Hasil Identifikasi
@@ -3610,20 +4193,33 @@ export default function BencanaPage() {
           onClick={() => setTab("alokasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "alokasi"
-              ? "bg-white text-orange-900 shadow-sm"
-              : "text-orange-400 hover:text-orange-600"
+              ? "bg-white text-blue-900 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
           }`}
         >
           Alokasi Petugas
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("pengaturan")}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+            tab === "pengaturan"
+              ? "bg-white text-blue-900 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
+          }`}
+        >
+          ⚙️ Kelola Perkiraan Beban
         </button>
       </div>
 
       {tab === "alokasi" ? (
         <AlokasiPetugasSection />
+      ) : tab === "pengaturan" ? (
+        <PengaturanBebanSection />
       ) : tab === "identifikasi" ? (
         <div className="mt-6 flex flex-col gap-6">
           <section className="rounded-md border border-line bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-orange-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-blue-400">
               Kriteria Kode 1: Terdampak
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/80">
@@ -3651,7 +4247,7 @@ export default function BencanaPage() {
                   setMitraIdManual(null);
                 }}
                 placeholder="Pilih dari daftar atau ketik nama"
-                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
               <datalist id="daftar-mitra">
                 {mitraList.map((m) => (
@@ -3659,7 +4255,7 @@ export default function BencanaPage() {
                 ))}
               </datalist>
               {matchedMitra?.saran_in_scope && matchedMitra.saran_iddesa && (
-                <p className="mt-1 text-xs text-orange-400">
+                <p className="mt-1 text-xs text-blue-400">
                   Wilayah tugas disarankan berdasarkan alamat: {matchedMitra.alamat_desa},{" "}
                   {matchedMitra.alamat_kecamatan}. Filter di bawah dapat diubah bebas.
                 </p>
@@ -3674,7 +4270,7 @@ export default function BencanaPage() {
                 <select
                   value={selectedKecamatan}
                   onChange={(e) => handleKecamatanChange(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                 >
                   <option value="">Pilih kecamatan</option>
                   {kecamatanOptions.map((k) => (
@@ -3692,7 +4288,7 @@ export default function BencanaPage() {
                   value={selectedIddesa}
                   onChange={(e) => handleNagariChange(e.target.value)}
                   disabled={!selectedKecamatan}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
                 >
                   <option value="">Pilih nagari</option>
                   {nagariOptions.map((n) => (
@@ -3721,7 +4317,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(true)}
-                      className="flex-1 rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
+                      className="flex-1 rounded-md bg-blue-700 px-4 py-2.5 font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
                     >
                       Ya, ada
                     </button>
@@ -3729,7 +4325,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(false)}
-                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-orange-400 disabled:opacity-60"
+                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-blue-400 disabled:opacity-60"
                     >
                       Tidak ada
                     </button>
@@ -3742,7 +4338,7 @@ export default function BencanaPage() {
                       value={gateCatatan}
                       onChange={(e) => setGateCatatan(e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                     />
                   </div>
                   {gateError && (
@@ -3776,7 +4372,7 @@ export default function BencanaPage() {
                         key={jorong.idsls}
                         className="rounded-md border border-line bg-white p-4"
                       >
-                        <p className="font-medium text-orange-900">{jorong.jorong}</p>
+                        <p className="font-medium text-blue-900">{jorong.jorong}</p>
 
                         {state.submitted ? (
                           <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-sm text-moss-700">
@@ -3799,8 +4395,8 @@ export default function BencanaPage() {
                                 }
                                 className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                                   state.seluruh === true
-                                    ? "border-orange-700 bg-orange-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-orange-400"
+                                    ? "border-blue-700 bg-blue-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-blue-400"
                                 }`}
                               >
                                 Ya, seluruhnya
@@ -3815,8 +4411,8 @@ export default function BencanaPage() {
                                 }
                                 className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
                                   state.seluruh === false
-                                    ? "border-orange-700 bg-orange-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-orange-400"
+                                    ? "border-blue-700 bg-blue-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-blue-400"
                                 }`}
                               >
                                 Tidak, sebagian
@@ -3831,12 +4427,12 @@ export default function BencanaPage() {
                                 <ul className="mt-2 flex flex-col gap-1.5">
                                   {jorong.subsls.map((s) => (
                                     <li key={s.idsubsls}>
-                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
+                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-blue-400">
                                         <input
                                           type="checkbox"
                                           checked={state.checkedSubsls.has(s.idsubsls)}
                                           onChange={() => toggleSubsls(jorong.idsls, s.idsubsls)}
-                                          className="h-4 w-4 accent-orange-700"
+                                          className="h-4 w-4 accent-blue-700"
                                         />
                                         <span className="text-sm text-ink">
                                           Sub SLS {s.sub_sls}
@@ -3858,12 +4454,12 @@ export default function BencanaPage() {
                                     const checked = state.indikator.has(ind.key);
                                     return (
                                       <li key={ind.key}>
-                                        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
+                                        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-blue-400">
                                           <input
                                             type="checkbox"
                                             checked={checked}
                                             onChange={() => toggleIndikator(jorong.idsls, ind.key)}
-                                            className="mt-0.5 h-4 w-4 shrink-0 accent-orange-700"
+                                            className="mt-0.5 h-4 w-4 shrink-0 accent-blue-700"
                                           />
                                           <span className="text-sm text-ink">{ind.label}</span>
                                         </label>
@@ -3881,7 +4477,7 @@ export default function BencanaPage() {
                                                 setIndikatorKk(jorong.idsls, ind.key, e.target.value)
                                               }
                                               placeholder="0"
-                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                                             />
                                             <span className="text-xs text-ink/50">KK</span>
                                           </div>
@@ -3904,7 +4500,7 @@ export default function BencanaPage() {
                                     updateJorongState(jorong.idsls, { catatan: e.target.value })
                                   }
                                   rows={2}
-                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                                 />
                               </div>
                             )}
@@ -3920,7 +4516,7 @@ export default function BencanaPage() {
                                 type="button"
                                 disabled={state.submitting}
                                 onClick={() => submitJorong(jorong)}
-                                className="mt-3 w-full rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
+                                className="mt-3 w-full rounded-md bg-blue-700 px-4 py-2.5 font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
                               >
                                 {state.submitting ? "Mengirim..." : "Simpan data Jorong ini"}
                               </button>
@@ -3945,14 +4541,14 @@ export default function BencanaPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-orange-900">Progress Identifikasi</h2>
+                  <h2 className="text-lg font-semibold text-blue-900">Progress Identifikasi</h2>
                   <p className="text-sm text-ink/60">
                     Rekap pelaksanaan identifikasi Jorong/Sub SLS terdampak bencana
                     hidrometeorologi akhir 2025, mencakup seluruh {totalNagariMon} nagari
                     di Kabupaten Solok.
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-orange-900 px-3 py-1.5 text-xs font-medium text-white">
+                <span className="shrink-0 rounded-full bg-blue-900 px-3 py-1.5 text-xs font-medium text-white">
                   Data terakhir diperbarui: {formatTanggal(lastUpdatedMon)}
                 </span>
               </div>
@@ -4003,7 +4599,7 @@ export default function BencanaPage() {
               </div>
 
               <section className="rounded-md border border-line bg-white p-4">
-                <h3 className="font-medium text-orange-900">Progress Identifikasi Jorong</h3>
+                <h3 className="font-medium text-blue-900">Progress Identifikasi Jorong</h3>
                 <div className="mt-3 flex items-center gap-3">
                   <div className="h-3 flex-1 overflow-hidden rounded-full bg-orange-50">
                     <div
@@ -4032,7 +4628,7 @@ export default function BencanaPage() {
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <section className="rounded-md border border-line bg-white p-4">
-                  <h3 className="font-medium text-orange-900">Progress per Kecamatan</h3>
+                  <h3 className="font-medium text-blue-900">Progress per Kecamatan</h3>
                   <div className="mt-3 overflow-x-auto">
                     <table className="w-full min-w-[420px] text-left text-sm">
                       <thead className="text-xs text-ink/50">
@@ -4072,7 +4668,7 @@ export default function BencanaPage() {
                 <div className="flex flex-col gap-4">
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-orange-900">Nagari Belum Diidentifikasi</h3>
+                      <h3 className="font-medium text-blue-900">Nagari Belum Diidentifikasi</h3>
                       <span className="text-xs text-ink/50">{nagariBelumList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
@@ -4093,7 +4689,7 @@ export default function BencanaPage() {
 
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-orange-900">Nagari dengan Konflik Data</h3>
+                      <h3 className="font-medium text-blue-900">Nagari dengan Konflik Data</h3>
                       <span className="text-xs text-ink/50">{nagariKonflikList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
