@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 // ------------------------------------------------------------------------
@@ -288,6 +288,32 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
   );
 }
 
+// Header kolom tabel yg bisa diklik utk sorting (panah menunjukkan arah
+// aktif). `active` dibanding di pemanggil krn generic key-nya beda2 per
+// tabel.
+function ThSort({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <th className={`px-3 py-2 font-medium ${className ?? ""}`}>
+      <button type="button" onClick={onClick} className="flex items-center gap-1 hover:text-orange-800">
+        {label}
+        <span className={active ? "text-orange-800" : "text-orange-300"}>{active && dir === "asc" ? "▲" : "▼"}</span>
+      </button>
+    </th>
+  );
+}
+
 const STATUS_JORONG_SPEC: Record<JorongStatus, { label: string; cls: string }> = {
   terdampak: { label: "Terdampak", cls: "bg-orange-100 text-orange-700" },
   tidak_terdampak: { label: "Tidak Terdampak", cls: "bg-moss-100 text-moss-700" },
@@ -526,12 +552,75 @@ function BadgeDataKk({ punya }: { punya: boolean }) {
 // tiap PPL dibandingkan rata-rata tim, bukan cuma ditampilkan mentah --
 // sesuai permintaan user ("buat tools agar kertas kerja bisa
 // menjaga/memandu agar beban berimbang").
-function balanceInfo(skor: number, rata: number): { label: string; cls: string; barCls: string } {
-  if (rata <= 0) return { label: "-", cls: "text-ink/50", barCls: "bg-gray-300" };
+type BalanceTone = "netral" | "seimbang" | "perhatian" | "kelebihan" | "rendah";
+type BalanceInfo = { label: string; cls: string; barCls: string; dotCls: string; tone: BalanceTone };
+
+// 4 tingkat (bukan 2) supaya ada jenjang peringatan sebelum "kelebihan":
+// dlm rentang +-15% dari rata-rata = Seimbang, 15%-35% lebih tinggi =
+// Perhatian (blm dianggap masalah, tp mulai perlu dilirik), >35% lebih
+// tinggi = Kelebihan Beban, di bawah rata-rata >15% = Beban Rendah.
+function balanceInfo(skor: number, rata: number): BalanceInfo {
+  if (rata <= 0) return { label: "-", cls: "text-ink/50", barCls: "bg-gray-300", dotCls: "bg-gray-300", tone: "netral" };
   const selisih = (skor - rata) / rata;
-  if (Math.abs(selisih) <= 0.15) return { label: "Seimbang", cls: "text-moss-700", barCls: "bg-moss-500" };
-  if (selisih > 0.15) return { label: "Kelebihan Beban", cls: "text-rust-700", barCls: "bg-rust-500" };
-  return { label: "Beban Rendah", cls: "text-orange-600", barCls: "bg-orange-400" };
+  if (Math.abs(selisih) <= 0.15) {
+    return { label: "Seimbang", cls: "text-moss-700", barCls: "bg-moss-500", dotCls: "bg-moss-500", tone: "seimbang" };
+  }
+  if (selisih > 0.15 && selisih <= 0.35) {
+    return {
+      label: "Perhatian",
+      cls: "text-amber-700",
+      barCls: "bg-amber-500",
+      dotCls: "bg-amber-500",
+      tone: "perhatian",
+    };
+  }
+  if (selisih > 0.35) {
+    return {
+      label: "Kelebihan Beban",
+      cls: "text-rust-700",
+      barCls: "bg-rust-500",
+      dotCls: "bg-rust-500",
+      tone: "kelebihan",
+    };
+  }
+  return { label: "Beban Rendah", cls: "text-orange-600", barCls: "bg-orange-400", dotCls: "bg-orange-400", tone: "rendah" };
+}
+
+const LEGENDA_STATUS_BEBAN: { tone: BalanceTone; label: string; keterangan: string }[] = [
+  { tone: "seimbang", label: "Seimbang", keterangan: "dlm rentang ±15% dari rata-rata" },
+  { tone: "perhatian", label: "Perhatian", keterangan: "15%-35% di atas rata-rata" },
+  { tone: "kelebihan", label: "Kelebihan Beban", keterangan: ">35% di atas rata-rata" },
+  { tone: "rendah", label: "Beban Rendah", keterangan: ">15% di bawah rata-rata" },
+];
+
+function LegendaStatusBeban({ withBelum = false }: { withBelum?: boolean }) {
+  const items = LEGENDA_STATUS_BEBAN;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink/60">
+      {items.map((it) => (
+        <span key={it.tone} className="flex items-center gap-1" title={it.keterangan}>
+          <span
+            className={`h-2 w-2 rounded-full ${
+              it.tone === "seimbang"
+                ? "bg-moss-500"
+                : it.tone === "perhatian"
+                ? "bg-amber-500"
+                : it.tone === "kelebihan"
+                ? "bg-rust-500"
+                : "bg-orange-400"
+            }`}
+          />
+          {it.label}
+        </span>
+      ))}
+      {withBelum && (
+        <span className="flex items-center gap-1" title="Belum ada petugas yg diplot">
+          <span className="h-2 w-2 rounded-full bg-gray-300" />
+          Belum diplot
+        </span>
+      )}
+    </div>
+  );
 }
 
 const ALOKASI_PAGE_SIZE = 25;
@@ -673,6 +762,16 @@ function AlokasiPetugasSection() {
   const [kebutuhan, setKebutuhan] = useState<KebutuhanRow[]>([]);
   const [petugasList, setPetugasList] = useState<PetugasRingkas[]>([]);
   const [hariKerjaInput, setHariKerjaInput] = useState(24);
+  const [detailKebutuhanTerbuka, setDetailKebutuhanTerbuka] = useState<Set<string>>(new Set());
+  const [optimasiTerbuka, setOptimasiTerbuka] = useState(false);
+  function toggleDetailKebutuhan(kecamatan: string) {
+    setDetailKebutuhanTerbuka((prev) => {
+      const next = new Set(prev);
+      if (next.has(kecamatan)) next.delete(kecamatan);
+      else next.add(kecamatan);
+      return next;
+    });
+  }
   const [hariKerjaDipakai, setHariKerjaDipakai] = useState(24);
 
   const [sampelKecFilter, setSampelKecFilter] = useState("");
@@ -690,9 +789,20 @@ function AlokasiPetugasSection() {
 
   const [kecFilter, setKecFilter] = useState("");
   const [pplFilter, setPplFilter] = useState<number | "">("");
+  const [pmlFilterLangkah4, setPmlFilterLangkah4] = useState<number | "">("");
   const [dataFilter, setDataFilter] = useState<"" | "lengkap" | "belum">("");
+  const [statusBebanFilter, setStatusBebanFilter] = useState<"" | BalanceTone>("");
+  const [statusPlotFilter, setStatusPlotFilter] = useState<"" | "sudah" | "belum">("");
+  const [hanyaBerubahFilter, setHanyaBerubahFilter] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [alokasiPageSize, setAlokasiPageSize] = useState<number>(ALOKASI_PAGE_SIZE);
+  const [sortKey, setSortKey] = useState<
+    "kecamatan" | "skor_beban_pendataan" | "skor_jarak" | "skor_beban_akhir" | "beban_ppl" | null
+  >(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [modeFokus, setModeFokus] = useState(false);
+  const [diffTerbuka, setDiffTerbuka] = useState(false);
 
   // Draft plotting Sub SLS->PPL & PPL->PML: TIDAK submit ke server tiap
   // dropdown dipilih (supaya bisa trial-error lihat keseimbangan beban dulu).
@@ -1192,6 +1302,71 @@ function AlokasiPetugasSection() {
     return map;
   }, [draftPpl, draftPmlByPpl]);
 
+  // Jumlah PPL (yg sudah punya draft plot) per status beban -- dipakai utk
+  // ringkasan chip yg bisa diklik utk memfilter tabel Langkah 4.
+  const statusPplCounts = useMemo(() => {
+    const counts: Record<BalanceTone, number> = { netral: 0, seimbang: 0, perhatian: 0, kelebihan: 0, rendah: 0 };
+    for (const beban of bebanDraftPerPpl.values()) {
+      const tone = balanceInfo(beban, rataBebanTetap).tone;
+      counts[tone] += 1;
+    }
+    return counts;
+  }, [bebanDraftPerPpl, rataBebanTetap]);
+
+  const jumlahPplDiplotDraft = useMemo(() => bebanDraftPerPpl.size, [bebanDraftPerPpl]);
+
+  // "Optimasi Beban" -- MURNI INFORMASI, tidak ada tombol terapkan/pindah di
+  // sini. Cuma menyarankan Sub SLS mana yg PALING besar kontribusinya ke
+  // beban PPL yg kelebihan, dan PPL mana yg (saat ini) beban-nya paling
+  // rendah sbg kandidat -- keputusan pindah tetap 100% manual lewat dropdown
+  // PPL di tabel Langkah 4.
+  type SaranOptimasi = {
+    pplId: number;
+    namaPpl: string;
+    beban: number;
+    baris: KertasKerjaRow | null;
+    namaKandidat: string | null;
+    bebanKandidat: number | null;
+  };
+  const sasaranOptimasi = useMemo((): SaranOptimasi[] => {
+    if (rataBebanTetap <= 0) return [];
+    const namaPetugas = (id: number) => petugasList.find((p) => p.id === id)?.nama ?? `#${id}`;
+    const overloaded = [...bebanDraftPerPpl.entries()]
+      .filter(([, beban]) => balanceInfo(beban, rataBebanTetap).tone === "kelebihan")
+      .sort((a, b) => b[1] - a[1]);
+    const underloaded = [...bebanDraftPerPpl.entries()]
+      .filter(([, beban]) => balanceInfo(beban, rataBebanTetap).tone === "rendah")
+      .sort((a, b) => a[1] - b[1]);
+    return overloaded.slice(0, 5).map(([pplId, beban]) => {
+      const rowsPpl = kertasKerja
+        .filter((r) => (draftPpl[r.idsubsls] ?? null) === pplId)
+        .sort((a, b) => b.skor_beban_pendataan - a.skor_beban_pendataan);
+      const kandidat = underloaded[0];
+      return {
+        pplId,
+        namaPpl: namaPetugas(pplId),
+        beban,
+        baris: rowsPpl[0] ?? null,
+        namaKandidat: kandidat ? namaPetugas(kandidat[0]) : null,
+        bebanKandidat: kandidat ? kandidat[1] : null,
+      };
+    });
+  }, [bebanDraftPerPpl, rataBebanTetap, kertasKerja, draftPpl, petugasList]);
+
+  const langkah4Ref = useRef<HTMLElement | null>(null);
+  function filterKeStatusBeban(tone: BalanceTone | "") {
+    setStatusBebanFilter(tone);
+    setStatusPlotFilter("");
+    setPage(1);
+    langkah4Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function filterKeBelumDiplot() {
+    setStatusBebanFilter("");
+    setStatusPlotFilter("belum");
+    setPage(1);
+    langkah4Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const jumlahPerubahanPending = useMemo(() => {
     let n = 0;
     for (const r of kertasKerja) {
@@ -1208,7 +1383,46 @@ function AlokasiPetugasSection() {
     return n;
   }, [kertasKerja, draftPpl, draftPmlByPpl]);
 
+  // Daftar rinci perubahan draft yg belum disimpan (bukan cuma angka) --
+  // supaya admin bisa cek dulu sebelum menekan "Simpan Perubahan".
+  type BarisPerubahan = { label: string; dari: string; ke: string };
+  const daftarPerubahanPending = useMemo((): BarisPerubahan[] => {
+    const hasil: BarisPerubahan[] = [];
+    const namaPetugas = (id: number | null): string => {
+      if (!id) return "belum dipilih";
+      return petugasList.find((p) => p.id === id)?.nama ?? `#${id}`;
+    };
+    for (const r of kertasKerja) {
+      const draftVal = draftPpl[r.idsubsls] ?? null;
+      const serverVal = r.ppl_id ?? null;
+      if (draftVal !== serverVal) {
+        hasil.push({ label: `PPL — ${r.sls} · ${r.sub_sls}`, dari: namaPetugas(serverVal), ke: namaPetugas(draftVal) });
+      }
+    }
+    const serverPmlByPpl = new Map<number, number | null>();
+    for (const r of kertasKerja) {
+      if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
+    }
+    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    for (const pplId of pplIdsDipakai) {
+      const draftVal = draftPmlByPpl[pplId] ?? null;
+      const serverVal = serverPmlByPpl.get(pplId) ?? null;
+      if (draftVal !== serverVal) {
+        hasil.push({ label: `PML — utk PPL ${namaPetugas(pplId)}`, dari: namaPetugas(serverVal), ke: namaPetugas(draftVal) });
+      }
+    }
+    return hasil;
+  }, [kertasKerja, draftPpl, draftPmlByPpl, petugasList]);
+
   const jumlahTanpaDataKk = useMemo(() => kertasKerja.filter((r) => !r.punya_data_kk).length, [kertasKerja]);
+  const jumlahTanpaKoordinat = useMemo(
+    () => kertasKerja.filter((r) => r.jarak_status !== "riil").length,
+    [kertasKerja]
+  );
+  const jumlahBelumDiplot = useMemo(
+    () => kertasKerja.filter((r) => !(draftPpl[r.idsubsls] ?? null)).length,
+    [kertasKerja, draftPpl]
+  );
   const kecamatanTanpaDataPenuh = useMemo(
     () => kebutuhan.filter((k) => k.jumlah_subsls_tanpa_data_kk === k.jumlah_subsls).map((k) => k.kecamatan),
     [kebutuhan]
@@ -1241,13 +1455,33 @@ function AlokasiPetugasSection() {
     [kebutuhan]
   );
 
+  // Status beban SATU baris ditentukan dari beban PPL yg (draft) memegangnya
+  // -- bukan skor baris itu sendiri -- krn yg dijaga keseimbangannya adalah
+  // beban PETUGAS, bukan beban per-Sub-SLS. Baris tanpa PPL dianggap tone
+  // "netral" (dipakai jg oleh filter "Status Plot").
+  function toneBarisAlokasi(r: KertasKerjaRow): BalanceTone | "belum" {
+    const pplId = draftPpl[r.idsubsls] ?? null;
+    if (!pplId) return "belum";
+    const beban = bebanDraftPerPpl.get(pplId) ?? 0;
+    return balanceInfo(beban, rataBebanTetap).tone;
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return kertasKerja.filter((r) => {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
-      if (pplFilter && (draftPpl[r.idsubsls] ?? null) !== pplFilter) return false;
+      const draftPplId = draftPpl[r.idsubsls] ?? null;
+      if (pplFilter && draftPplId !== pplFilter) return false;
+      if (pmlFilterLangkah4) {
+        const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
+        if (draftPmlId !== pmlFilterLangkah4) return false;
+      }
       if (dataFilter === "lengkap" && !r.punya_data_kk) return false;
       if (dataFilter === "belum" && r.punya_data_kk) return false;
+      if (statusPlotFilter === "sudah" && !draftPplId) return false;
+      if (statusPlotFilter === "belum" && draftPplId) return false;
+      if (statusBebanFilter && toneBarisAlokasi(r) !== statusBebanFilter) return false;
+      if (hanyaBerubahFilter && draftPplId === (r.ppl_id ?? null)) return false;
       if (
         q &&
         !r.nagari.toLowerCase().includes(q) &&
@@ -1257,11 +1491,72 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-  }, [kertasKerja, kecFilter, pplFilter, dataFilter, search, draftPpl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    kertasKerja,
+    kecFilter,
+    pplFilter,
+    pmlFilterLangkah4,
+    dataFilter,
+    statusPlotFilter,
+    statusBebanFilter,
+    hanyaBerubahFilter,
+    search,
+    draftPpl,
+    draftPmlByPpl,
+    bebanDraftPerPpl,
+    rataBebanTetap,
+  ]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ALOKASI_PAGE_SIZE));
+  // Sorting: kolom yg bisa diurutkan diambil dari kunci sortKey. "beban_ppl"
+  // pakai beban draft PPL yg memegang baris itu (0 kalau belum diplot).
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    const arah = sortDir === "asc" ? 1 : -1;
+    const nilai = (r: KertasKerjaRow): number | string => {
+      switch (sortKey) {
+        case "kecamatan":
+          return r.kecamatan;
+        case "skor_beban_pendataan":
+          return r.skor_beban_pendataan;
+        case "skor_jarak":
+          return r.jarak_status === "riil" ? r.skor_jarak : -1;
+        case "skor_beban_akhir":
+          return r.skor_beban_akhir;
+        case "beban_ppl": {
+          const pplId = draftPpl[r.idsubsls] ?? null;
+          return pplId ? bebanDraftPerPpl.get(pplId) ?? 0 : -1;
+        }
+        default:
+          return 0;
+      }
+    };
+    return [...filtered].sort((a, b) => {
+      const va = nilai(a);
+      const vb = nilai(b);
+      if (typeof va === "string" || typeof vb === "string") {
+        return String(va).localeCompare(String(vb)) * arah;
+      }
+      return (va - vb) * arah;
+    });
+  }, [filtered, sortKey, sortDir, draftPpl, bebanDraftPerPpl]);
+
+  function toggleSort(key: NonNullable<typeof sortKey>) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / alokasiPageSize));
   const pageClamped = Math.min(page, totalPages);
-  const paged = filtered.slice((pageClamped - 1) * ALOKASI_PAGE_SIZE, pageClamped * ALOKASI_PAGE_SIZE);
+  // alokasiPageSize bisa Infinity (opsi "Semua") -- 0 * Infinity = NaN di JS,
+  // jadi ditangani terpisah drpd lewat slice biasa.
+  const paged =
+    alokasiPageSize === Infinity ? sorted : sorted.slice((pageClamped - 1) * alokasiPageSize, pageClamped * alokasiPageSize);
 
   function handleExport() {
     const dataRows = filtered.map((r) => ({
@@ -1307,6 +1602,67 @@ function AlokasiPetugasSection() {
 
   return (
     <div className="mt-6 flex flex-col gap-6">
+      {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
+      <section className="rounded-md border border-orange-100 bg-white p-4">
+        <h2 className="font-medium text-orange-900">Ringkasan Alokasi Petugas</h2>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Sub SLS Sampel" nilai={kertasKerja.length} />
+          <MiniStat
+            warna="bg-orange-50 text-orange-700"
+            label="Total Skor Beban"
+            nilai={Math.round(totalSkorWilayahTugas)}
+          />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
+          <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
+        </div>
+        <p className="mt-2 text-[11px] text-ink/50">
+          {jumlahPplDiplotDraft} dari {TOTAL_PPL_TETAP} PPL sudah punya plot (draft) · {jumlahBelumDiplot} dari{" "}
+          {kertasKerja.length} Sub SLS belum diplot
+          {jumlahPerubahanPending > 0 && <> · {jumlahPerubahanPending} perubahan belum disimpan</>}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-ink/60">Status beban PPL (klik utk filter Langkah 4):</span>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban("seimbang")}
+            className="rounded-full bg-moss-50 px-2.5 py-1 text-xs font-medium text-moss-700 hover:bg-moss-100"
+          >
+            🟢 {statusPplCounts.seimbang} seimbang
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban("perhatian")}
+            className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+          >
+            🟡 {statusPplCounts.perhatian} perhatian
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban("kelebihan")}
+            className="rounded-full bg-rust-50 px-2.5 py-1 text-xs font-medium text-rust-700 hover:bg-rust-100"
+          >
+            🔴 {statusPplCounts.kelebihan} kelebihan
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban("rendah")}
+            className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
+          >
+            🟠 {statusPplCounts.rendah} rendah
+          </button>
+          <button
+            type="button"
+            onClick={filterKeBelumDiplot}
+            className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink/60 hover:bg-gray-200"
+          >
+            ☐ {jumlahBelumDiplot} Sub SLS belum diplot
+          </button>
+        </div>
+      </section>
+
       {jumlahTanpaDataKk > 0 && (
         <div className="rounded-md border border-rust-100 bg-rust-100/40 px-4 py-3 text-sm text-rust-700">
           <p className="font-medium">⚠ Data KK belum lengkap</p>
@@ -1497,7 +1853,20 @@ function AlokasiPetugasSection() {
                           </div>
                         </td>
                         <td className="px-3 py-2 text-ink/80">{tidakTerdampak.toLocaleString("id-ID")}</td>
-                        <td className="px-3 py-2 font-medium text-ink">{skorLive.toLocaleString("id-ID")}</td>
+                        <td className="px-3 py-2 font-medium text-ink">
+                          {skorLive.toLocaleString("id-ID")}
+                          {berubah && (
+                            <span
+                              className={`ml-1.5 text-[10px] font-medium ${
+                                skorLive >= r.skor_beban_pendataan ? "text-rust-600" : "text-moss-600"
+                              }`}
+                              title={`Skor sebelum koreksi: ${r.skor_beban_pendataan.toLocaleString("id-ID")}`}
+                            >
+                              ({skorLive >= r.skor_beban_pendataan ? "+" : ""}
+                              {(skorLive - r.skor_beban_pendataan).toLocaleString("id-ID", { maximumFractionDigits: 2 })})
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <button
                             type="button"
@@ -1761,42 +2130,97 @@ function AlokasiPetugasSection() {
         </p>
 
         <div className="mt-3 overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-orange-50 text-orange-600">
               <tr>
+                <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
                 <th className="px-3 py-2 font-medium">Skor Beban Total</th>
                 <th className="px-3 py-2 font-medium">Jml Sub SLS Sampel</th>
                 <th className="px-3 py-2 font-medium">Belum Ada Data KK</th>
+                <th className="px-3 py-2 font-medium">Beban/PPL</th>
                 <th className="px-3 py-2 font-medium">PPL</th>
                 <th className="px-3 py-2 font-medium">PML</th>
                 <th className="px-3 py-2 font-medium">Korwil</th>
               </tr>
             </thead>
             <tbody>
-              {kebutuhan.map((k) => (
-                <tr key={k.kecamatan} className="border-t border-line">
-                  <td className="px-3 py-2 font-medium text-ink">{k.kecamatan}</td>
-                  <td className="px-3 py-2 text-ink/80">{k.total_skor_beban.toLocaleString("id-ID")}</td>
-                  <td className="px-3 py-2 text-ink/80">{k.jumlah_subsls}</td>
-                  <td className="px-3 py-2">
-                    {k.jumlah_subsls_tanpa_data_kk > 0 ? (
-                      <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
-                        {k.jumlah_subsls_tanpa_data_kk}
-                        {k.jumlah_subsls_tanpa_data_kk === k.jumlah_subsls ? " (seluruhnya)" : ""}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-ink/40">-</span>
+              {kebutuhan.map((k) => {
+                const terbuka = detailKebutuhanTerbuka.has(k.kecamatan);
+                const bebanPerPpl = k.jumlah_ppl_dibutuhkan > 0 ? k.total_skor_beban / k.jumlah_ppl_dibutuhkan : 0;
+                const kebutuhanTeoritis = k.kapasitas_per_ppl > 0 ? k.total_skor_beban / k.kapasitas_per_ppl : 0;
+                return (
+                  <Fragment key={k.kecamatan}>
+                    <tr className="border-t border-line">
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleDetailKebutuhan(k.kecamatan)}
+                          className="text-ink/40 hover:text-ink/70"
+                          title="Detail perhitungan"
+                        >
+                          {terbuka ? "▾" : "▸"}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 font-medium text-ink">{k.kecamatan}</td>
+                      <td className="px-3 py-2 text-ink/80">{k.total_skor_beban.toLocaleString("id-ID")}</td>
+                      <td className="px-3 py-2 text-ink/80">{k.jumlah_subsls}</td>
+                      <td className="px-3 py-2">
+                        {k.jumlah_subsls_tanpa_data_kk > 0 ? (
+                          <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
+                            {k.jumlah_subsls_tanpa_data_kk}
+                            {k.jumlah_subsls_tanpa_data_kk === k.jumlah_subsls ? " (seluruhnya)" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-ink/40">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-ink/80">
+                        {bebanPerPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                      </td>
+                      <td className="px-3 py-2 text-ink/80">{k.jumlah_ppl_dibutuhkan}</td>
+                      <td className="px-3 py-2 text-ink/80">{k.jumlah_pml_dibutuhkan}</td>
+                      <td className="px-3 py-2 text-ink/80">{k.jumlah_korwil_dibutuhkan}</td>
+                    </tr>
+                    {terbuka && (
+                      <tr className="border-t border-line bg-orange-50/30">
+                        <td colSpan={9} className="px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                            Detail Perhitungan — {k.kecamatan}
+                          </p>
+                          <div className="mt-1.5 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-ink/70 sm:grid-cols-4">
+                            <p>
+                              Total skor beban: <strong className="text-ink">{k.total_skor_beban.toLocaleString("id-ID")}</strong>
+                            </p>
+                            <p>
+                              Kapasitas per PPL: <strong className="text-ink">{k.kapasitas_per_ppl.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
+                            </p>
+                            <p>
+                              Hari kerja dipakai: <strong className="text-ink">{hariKerjaDipakai}</strong>
+                            </p>
+                            <p>
+                              Kebutuhan teoritis: <strong className="text-ink">{kebutuhanTeoritis.toLocaleString("id-ID", { maximumFractionDigits: 2 })} PPL</strong>
+                            </p>
+                            <p>
+                              Pembulatan (dipakai): <strong className="text-ink">{k.jumlah_ppl_dibutuhkan} PPL</strong>
+                            </p>
+                            <p>
+                              Beban rata-rata/PPL: <strong className="text-ink">{bebanPerPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
+                            </p>
+                          </div>
+                          <p className="mt-2 text-[11px] text-ink/50">
+                            Catatan: perhitungan ini estimasi kebutuhan per kecamatan (dibulatkan ke atas), BUKAN
+                            plotting petugas -- plotting sebenarnya tetap manual di Langkah 4 & bisa lintas kecamatan.
+                          </p>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-ink/80">{k.jumlah_ppl_dibutuhkan}</td>
-                  <td className="px-3 py-2 text-ink/80">{k.jumlah_pml_dibutuhkan}</td>
-                  <td className="px-3 py-2 text-ink/80">{k.jumlah_korwil_dibutuhkan}</td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
               {kebutuhan.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center text-ink/50">
+                  <td colSpan={9} className="px-3 py-4 text-center text-ink/50">
                     Belum ada wilayah sampel yang dicentang di Langkah 1.
                   </td>
                 </tr>
@@ -1976,6 +2400,80 @@ function AlokasiPetugasSection() {
             </ul>
           </div>
         </div>
+
+        {korwilOptions.length > 0 && (
+          <div className="mt-4 border-t border-line pt-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/50">Struktur Tim (Pohon)</h3>
+            <div className="mt-2 flex flex-col gap-2 text-xs">
+              {korwilOptions.map((k) => {
+                const pmlUnderKorwil = pmlOptions.filter((p) => p.atasan_id === k.id);
+                const rKorwil = ringkasanKorwil.find((x) => x.korwil_id === k.id);
+                return (
+                  <div key={k.id} className="rounded-md border border-line p-2">
+                    <p className="font-semibold text-ink">
+                      👤 Korwil {k.nama}
+                      {rKorwil && (
+                        <span className="ml-2 font-normal text-ink/50">
+                          ({rKorwil.jumlah_pml} PML · {rKorwil.jumlah_ppl} PPL · beban{" "}
+                          {rKorwil.total_skor_beban_akhir.toLocaleString("id-ID")})
+                        </span>
+                      )}
+                    </p>
+                    <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l border-line pl-3">
+                      {pmlUnderKorwil.map((m) => {
+                        const pplUnderPml = ringkasanPpl.filter((r) => {
+                          const p = petugasList.find((x) => x.id === r.ppl_id);
+                          return p?.atasan_id === m.id;
+                        });
+                        const rPml = ringkasanPml.find((x) => x.pml_id === m.id);
+                        return (
+                          <div key={m.id}>
+                            <p className="font-medium text-ink/80">
+                              PML {m.nama}
+                              {rPml && (
+                                <span className="ml-2 font-normal text-ink/50">
+                                  ({rPml.jumlah_ppl} PPL · beban {rPml.total_skor_beban_akhir.toLocaleString("id-ID")})
+                                </span>
+                              )}
+                              {rPml && rPml.jumlah_ppl > 0 && rPml.jumlah_ppl < KAPASITAS_IDEAL_MIN_PPL_PER_PML && (
+                                <span className="ml-1 text-orange-500" title="Membawahi < 3 PPL">
+                                  ⚠
+                                </span>
+                              )}
+                            </p>
+                            <ul className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-line pl-3 text-ink/60">
+                              {pplUnderPml.map((r) => (
+                                <li key={r.ppl_id}>
+                                  PPL {r.ppl_nama}{" "}
+                                  <span className="text-ink/40">
+                                    ({r.jumlah_subsls} Sub SLS · beban {r.total_skor_beban_akhir.toLocaleString("id-ID")})
+                                  </span>
+                                </li>
+                              ))}
+                              {pplUnderPml.length === 0 && <li className="text-ink/30">belum ada PPL</li>}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                      {pmlUnderKorwil.length === 0 && <p className="text-ink/30">belum ada PML</p>}
+                    </div>
+                  </div>
+                );
+              })}
+              {pmlOptions.filter((p) => !p.atasan_id).length > 0 && (
+                <div className="rounded-md border border-dashed border-line p-2 text-ink/60">
+                  <p className="font-medium">PML belum punya Korwil:</p>
+                  <p className="mt-0.5">
+                    {pmlOptions
+                      .filter((p) => !p.atasan_id)
+                      .map((p) => p.nama)
+                      .join(", ")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ===== VISUALISASI KESEIMBANGAN BEBAN ===== */}
@@ -2104,11 +2602,63 @@ function AlokasiPetugasSection() {
               </div>
             </div>
           )}
+
+          {sasaranOptimasi.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <button
+                type="button"
+                onClick={() => setOptimasiTerbuka((v) => !v)}
+                className="flex items-center gap-2 text-left text-xs font-semibold uppercase tracking-wide text-ink/50 hover:text-ink/70"
+              >
+                <span>{optimasiTerbuka ? "▾" : "▸"}</span>
+                Optimasi Beban (informasi, bukan otomatis)
+              </button>
+              {optimasiTerbuka && (
+                <div className="mt-2 flex flex-col gap-1.5 rounded-md border border-line bg-gray-50 p-2.5 text-xs text-ink/70">
+                  <p className="text-[11px] text-ink/50">
+                    Saran di bawah HANYA informasi (Sub SLS mana yg paling besar kontribusinya ke beban PPL yg
+                    kelebihan, & PPL mana yg saat ini paling longgar) -- tidak ada yang dipindahkan otomatis. Kalau
+                    setuju, pindahkan sendiri lewat dropdown PPL di baris terkait pada Langkah 4.
+                  </p>
+                  {sasaranOptimasi.map((s) => (
+                    <div key={s.pplId} className="rounded-md bg-white px-2.5 py-2">
+                      <span className="font-medium text-rust-700">{s.namaPpl}</span>{" "}
+                      <span className="text-ink/60">
+                        (beban {s.beban.toLocaleString("id-ID", { maximumFractionDigits: 1 })})
+                      </span>
+                      {s.baris ? (
+                        <>
+                          {" "}
+                          — Sub SLS terbesar:{" "}
+                          <span className="font-medium text-ink">
+                            {s.baris.sls} · {s.baris.sub_sls}
+                          </span>{" "}
+                          (skor {s.baris.skor_beban_pendataan.toLocaleString("id-ID")})
+                          {s.namaKandidat && s.bebanKandidat != null ? (
+                            <>
+                              {" "}
+                              → pertimbangkan pindah ke{" "}
+                              <span className="font-medium text-moss-700">{s.namaKandidat}</span> (beban rendah,{" "}
+                              {s.bebanKandidat.toLocaleString("id-ID", { maximumFractionDigits: 1 })})
+                            </>
+                          ) : (
+                            <> — belum ada PPL berbeban rendah sbg kandidat saat ini.</>
+                          )}
+                        </>
+                      ) : (
+                        <> — tidak ada baris terdeteksi.</>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
       {/* ===== LANGKAH 4: KERTAS KERJA PLOTTING SUB SLS -> PPL ===== */}
-      <section>
+      <section ref={langkah4Ref}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="font-medium text-orange-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
@@ -2135,9 +2685,13 @@ function AlokasiPetugasSection() {
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
-              <span className="rounded-full bg-orange-200 px-2.5 py-1 text-xs font-medium text-orange-800">
-                {jumlahPerubahanPending} perubahan belum disimpan
-              </span>
+              <button
+                type="button"
+                onClick={() => setDiffTerbuka((v) => !v)}
+                className="rounded-full bg-orange-200 px-2.5 py-1 text-xs font-medium text-orange-800 hover:bg-orange-300"
+              >
+                {jumlahPerubahanPending} perubahan belum disimpan {diffTerbuka ? "▾" : "▸"}
+              </button>
             )}
             <button
               type="button"
@@ -2158,6 +2712,18 @@ function AlokasiPetugasSection() {
           </span>
         </div>
 
+        {diffTerbuka && daftarPerubahanPending.length > 0 && (
+          <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-orange-100 bg-orange-50/40 p-2">
+            <ul className="flex flex-col gap-1 text-xs text-ink/70">
+              {daftarPerubahanPending.map((d, i) => (
+                <li key={i}>
+                  <span className="font-medium text-ink/80">{d.label}:</span> {d.dari} → <strong>{d.ke}</strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {simpanError && (
           <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{simpanError}</p>
         )}
@@ -2166,6 +2732,142 @@ function AlokasiPetugasSection() {
             Belum ada baris. Centang dulu wilayah sampel di Langkah 1.
           </p>
         )}
+
+        {(jumlahTanpaDataKk > 0 || jumlahTanpaKoordinat > 0 || jumlahBelumDiplot > 0) && kertasKerja.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium text-ink/60">Data belum lengkap:</span>
+            {jumlahTanpaDataKk > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDataFilter("belum");
+                  setPage(1);
+                }}
+                className="rounded-full bg-rust-50 px-2.5 py-1 text-xs font-medium text-rust-700 hover:bg-rust-100"
+              >
+                ⚠ {jumlahTanpaDataKk} SLS belum ada data KK
+              </button>
+            )}
+            {jumlahTanpaKoordinat > 0 && (
+              <span
+                className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink/60"
+                title="Lokasi rumah petugas blm diisi/diverifikasi -- skor jarak blm dihitung dari data riil"
+              >
+                ⚪ {jumlahTanpaKoordinat} SLS belum ada koordinat jarak
+              </span>
+            )}
+            {jumlahBelumDiplot > 0 && (
+              <button
+                type="button"
+                onClick={filterKeBelumDiplot}
+                className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink/60 hover:bg-gray-200"
+              >
+                ☐ {jumlahBelumDiplot} SLS belum diplot
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-ink/60">Quick filter:</span>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusBebanFilter("");
+              setStatusPlotFilter("");
+              setHanyaBerubahFilter(false);
+              setPage(1);
+            }}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              !statusBebanFilter && !statusPlotFilter && !hanyaBerubahFilter
+                ? "bg-orange-500 text-white"
+                : "bg-gray-100 text-ink/60 hover:bg-gray-200"
+            }`}
+          >
+            Semua
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban(statusBebanFilter === "perhatian" ? "" : "perhatian")}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              statusBebanFilter === "perhatian" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+            }`}
+          >
+            ⚠ Perlu Perhatian
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban(statusBebanFilter === "kelebihan" ? "" : "kelebihan")}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              statusBebanFilter === "kelebihan" ? "bg-rust-500 text-white" : "bg-rust-50 text-rust-700 hover:bg-rust-100"
+            }`}
+          >
+            🔴 PPL Kelebihan
+          </button>
+          <button
+            type="button"
+            onClick={() => filterKeStatusBeban(statusBebanFilter === "rendah" ? "" : "rendah")}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              statusBebanFilter === "rendah" ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+            }`}
+          >
+            🟠 PPL Beban Rendah
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusPlotFilter((v) => (v === "belum" ? "" : "belum"));
+              setStatusBebanFilter("");
+              setPage(1);
+            }}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              statusPlotFilter === "belum" ? "bg-ink text-white" : "bg-gray-100 text-ink/60 hover:bg-gray-200"
+            }`}
+          >
+            ☐ Belum Diplot
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setHanyaBerubahFilter((v) => !v);
+              setPage(1);
+            }}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              hanyaBerubahFilter ? "bg-ink text-white" : "bg-gray-100 text-ink/60 hover:bg-gray-200"
+            }`}
+          >
+            ✎ Ada Perubahan
+          </button>
+          <button
+            type="button"
+            onClick={() => setModeFokus((v) => !v)}
+            className="ml-auto rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink/70 hover:bg-gray-50"
+            title="Sembunyikan kolom sekunder supaya fokus ke plotting"
+          >
+            {modeFokus ? "⊞ Tampilan Lengkap" : "⊞ Mode Fokus"}
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between">
+          <LegendaStatusBeban withBelum />
+          <div className="flex items-center gap-1.5 text-xs text-ink/60">
+            <span>Tampilkan:</span>
+            <select
+              value={alokasiPageSize === Infinity ? "semua" : alokasiPageSize}
+              onChange={(e) => {
+                setAlokasiPageSize(e.target.value === "semua" ? Infinity : Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="semua">Semua</option>
+            </select>
+            <span>baris</span>
+          </div>
+        </div>
 
         <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-4">
           <div>
@@ -2188,20 +2890,60 @@ function AlokasiPetugasSection() {
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Filter PPL</label>
+            <Combobox
+              value={pplFilter === "" ? null : pplFilter}
+              onChange={(v) => {
+                setPplFilter(v ?? "");
+                setPage(1);
+              }}
+              options={pplOptions.map((p) => ({ value: p.id, label: p.nama }))}
+              placeholder="Semua PPL"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink/60">Filter PML</label>
+            <Combobox
+              value={pmlFilterLangkah4 === "" ? null : pmlFilterLangkah4}
+              onChange={(v) => {
+                setPmlFilterLangkah4(v ?? "");
+                setPage(1);
+              }}
+              options={pmlOptions.map((p) => ({ value: p.id, label: p.nama }))}
+              placeholder="Semua PML"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink/60">Status Beban PPL</label>
             <select
-              value={pplFilter}
+              value={statusBebanFilter}
               onChange={(e) => {
-                setPplFilter(e.target.value ? Number(e.target.value) : "");
+                setStatusBebanFilter(e.target.value as "" | BalanceTone);
                 setPage(1);
               }}
               className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
-              <option value="">Semua PPL</option>
-              {pplOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nama}
-                </option>
-              ))}
+              <option value="">Semua</option>
+              <option value="seimbang">🟢 Seimbang</option>
+              <option value="perhatian">🟡 Perhatian</option>
+              <option value="kelebihan">🔴 Kelebihan</option>
+              <option value="rendah">🟠 Beban Rendah</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink/60">Status Plot</label>
+            <select
+              value={statusPlotFilter}
+              onChange={(e) => {
+                setStatusPlotFilter(e.target.value as "" | "sudah" | "belum");
+                setPage(1);
+              }}
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+            >
+              <option value="">Semua</option>
+              <option value="sudah">Sudah diplot</option>
+              <option value="belum">Belum diplot</option>
             </select>
           </div>
           <div>
@@ -2219,7 +2961,7 @@ function AlokasiPetugasSection() {
               <option value="belum">Belum Ada Data</option>
             </select>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
             <input
               value={search}
@@ -2233,23 +2975,47 @@ function AlokasiPetugasSection() {
           </div>
         </div>
 
-        <div className="mt-2 overflow-x-auto rounded-md border border-line">
+        <div className="mt-2 max-h-[70vh] overflow-auto rounded-md border border-line">
           <table className="w-full min-w-[1450px] text-left text-sm">
-            <thead className="bg-orange-50 text-orange-600">
+            <thead className="sticky top-0 z-20 bg-orange-50 text-orange-600">
               <tr>
-                <th className="px-3 py-2 font-medium">Kecamatan</th>
-                <th className="px-3 py-2 font-medium">Nagari</th>
+                {!modeFokus && <th className="px-3 py-2 font-medium">Kecamatan</th>}
+                {!modeFokus && <th className="px-3 py-2 font-medium">Nagari</th>}
                 <th className="px-3 py-2 font-medium">Jorong/SLS</th>
-                <th className="px-3 py-2 font-medium">Sub SLS</th>
-                <th className="px-3 py-2 font-medium">Data KK</th>
-                <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
-                <th className="px-3 py-2 font-medium">Skor Jarak</th>
-                <th className="px-3 py-2 font-medium">Skor Beban Akhir</th>
+                <th className="sticky left-0 z-30 bg-orange-50 px-3 py-2 font-medium">Sub SLS</th>
+                {!modeFokus && <th className="px-3 py-2 font-medium">Data KK</th>}
+                {!modeFokus && (
+                  <ThSort
+                    label="Skor Beban Pendataan"
+                    active={sortKey === "skor_beban_pendataan"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("skor_beban_pendataan")}
+                  />
+                )}
+                {!modeFokus && (
+                  <ThSort
+                    label="Skor Jarak"
+                    active={sortKey === "skor_jarak"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("skor_jarak")}
+                  />
+                )}
+                <ThSort
+                  label="Skor Beban Akhir"
+                  active={sortKey === "skor_beban_akhir"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("skor_beban_akhir")}
+                />
                 <th className="px-3 py-2 font-medium">PPL</th>
-                <th className="px-3 py-2 font-medium">Beban Petugas</th>
+                <ThSort
+                  label="Beban Petugas"
+                  active={sortKey === "beban_ppl"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("beban_ppl")}
+                />
                 <th className="px-3 py-2 font-medium">PML</th>
-                <th className="px-3 py-2 font-medium">Korwil</th>
-                <th className="px-3 py-2 font-medium">Aksi</th>
+                {!modeFokus && <th className="px-3 py-2 font-medium">Korwil</th>}
+                <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -2258,25 +3024,37 @@ function AlokasiPetugasSection() {
                 const berubah = draftPplId !== (r.ppl_id ?? null);
                 const bebanPpl = draftPplId ? bebanDraftPerPpl.get(draftPplId) ?? 0 : null;
                 const info = bebanPpl != null ? balanceInfo(bebanPpl, rataBebanTetap) : null;
+                const delta = bebanPpl != null && rataBebanTetap > 0 ? bebanPpl - rataBebanTetap : null;
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
+                const bgBaris = berubah ? "bg-orange-50/50" : "bg-white";
                 return (
-                  <tr key={r.idsubsls} className={`border-t border-line ${berubah ? "bg-orange-50/50" : ""}`}>
-                    <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
-                    <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
+                  <tr key={r.idsubsls} className={`border-t border-line ${bgBaris}`}>
+                    {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
+                    {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.nagari}</td>}
                     <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
-                    <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
-                    <td className="px-3 py-2">
-                      <BadgeDataKk punya={r.punya_data_kk} />
-                    </td>
-                    <td className="px-3 py-2 text-ink/80">{r.skor_beban_pendataan.toLocaleString("id-ID")}</td>
-                    <td className="px-3 py-2 text-ink/80">
-                      {r.jarak_status === "riil" ? (
-                        `${r.skor_jarak.toLocaleString("id-ID")} (${r.jarak_km?.toLocaleString("id-ID")} km)`
-                      ) : (
-                        <span className="text-xs text-ink/40">belum ada lokasi</span>
-                      )}
-                    </td>
+                    <td className={`sticky left-0 z-10 px-3 py-2 text-ink/80 ${bgBaris}`}>{r.sub_sls}</td>
+                    {!modeFokus && (
+                      <td className="px-3 py-2">
+                        <BadgeDataKk punya={r.punya_data_kk} />
+                      </td>
+                    )}
+                    {!modeFokus && (
+                      <td className="px-3 py-2 text-ink/80">{r.skor_beban_pendataan.toLocaleString("id-ID")}</td>
+                    )}
+                    {!modeFokus && (
+                      <td className="px-3 py-2 text-ink/80">
+                        {r.jarak_status === "riil" ? (
+                          <span title="Jarak dihitung dari centroid Sub SLS ke lokasi rumah petugas (OSRM/garis lurus)">
+                            {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km)
+                          </span>
+                        ) : (
+                          <span className="text-xs text-ink/40" title="Lokasi rumah petugas blm diisi/diverifikasi">
+                            ⚪ belum tersedia
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
@@ -2303,10 +3081,15 @@ function AlokasiPetugasSection() {
                     <td className="px-3 py-2">
                       {bebanPpl != null ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-ink">
+                          <span className="text-base font-semibold text-ink">
                             {bebanPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
                           </span>
-                          {info && <span className={`text-[10px] font-medium ${info.cls}`}>{info.label}</span>}
+                          {info && delta != null && (
+                            <span className={`text-[10px] font-medium ${info.cls}`}>
+                              {delta >= 0 ? "+" : ""}
+                              {delta.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-xs text-ink/40">-</span>
@@ -2333,18 +3116,23 @@ function AlokasiPetugasSection() {
                         className="w-40"
                       />
                     </td>
-                    <td className="px-3 py-2 text-ink/80">
-                      {korwilNama ?? <span className="text-xs text-ink/40">-</span>}
-                    </td>
+                    {!modeFokus && (
+                      <td className="px-3 py-2 text-ink/80">
+                        {korwilNama ?? <span className="text-xs text-ink/40">-</span>}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-xs">
-                      {berubah && <span className="text-orange-600">belum disimpan</span>}
+                      <div className="flex flex-col gap-0.5">
+                        {info && <span className={`font-medium ${info.cls}`}>{info.label}</span>}
+                        {berubah && <span className="text-orange-600">belum disimpan</span>}
+                      </div>
                     </td>
                   </tr>
                 );
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-4 text-center text-ink/50">
+                  <td colSpan={modeFokus ? 7 : 13} className="px-3 py-4 text-center text-ink/50">
                     Tidak ada data yang cocok dengan filter.
                   </td>
                 </tr>
@@ -2353,11 +3141,12 @@ function AlokasiPetugasSection() {
           </table>
         </div>
 
-        {filtered.length > 0 && (
+        {sorted.length > 0 && (
           <div className="mt-2 flex items-center justify-between text-sm text-ink/60">
             <span>
-              {(pageClamped - 1) * ALOKASI_PAGE_SIZE + 1}-
-              {Math.min(pageClamped * ALOKASI_PAGE_SIZE, filtered.length)} dari {filtered.length} baris
+              {(pageClamped - 1) * alokasiPageSize + 1}-
+              {Math.min(pageClamped * alokasiPageSize, sorted.length)} dari {sorted.length} baris
+              {sorted.length !== kertasKerja.length && <> (dari {kertasKerja.length} total)</>}
             </span>
             <div className="flex gap-1">
               <button
