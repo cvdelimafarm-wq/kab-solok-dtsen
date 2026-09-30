@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -16,7 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type SubslsItem = { idsubsls: string; sub_sls: string };
 type JorongItem = { idsls: string; jorong: string; subsls: SubslsItem[] };
-type NagariItem = { iddesa: string; nagari: string; jorong: JorongItem[] };
+type NagariItem = { iddesa: string; nagari: string; daftar_awal: boolean; jorong: JorongItem[] };
 type KecamatanItem = { kecamatan: string; nagari: NagariItem[] };
 
 type MitraItem = {
@@ -71,6 +72,23 @@ type NagariDerived = MonitoringNagariRow & {
   status: NagariStatus;
   terdampakCount: number;
   konflik: boolean;
+};
+
+// Baris rekap datar tingkat Sub SLS (dipakai tab Monitoring, menggantikan
+// tabel "Rekap per Nagari" & "Rekap per Jorong" sebelumnya) -- satu baris
+// per Sub SLS, status diturunkan dari status Jorong induknya + apakah
+// idsubsls tsb ada di gabungan subsls_terdampak Jorong tersebut.
+type SubslsFlatRow = {
+  idsubsls: string;
+  idsls: string;
+  iddesa: string;
+  kecamatan: string;
+  nagari: string;
+  jorong: string;
+  subSls: string;
+  daftarAwal: boolean;
+  status: JorongStatus;
+  perkiraanKk: number | null;
 };
 
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
@@ -162,17 +180,6 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
   );
 }
 
-const STATUS_NAGARI_SPEC: Record<NagariStatus, { label: string; cls: string }> = {
-  belum: { label: "Belum Diisi", cls: "bg-gray-100 text-gray-600" },
-  sedang: { label: "Sedang Diisi", cls: "bg-orange-100 text-orange-700" },
-  selesai: { label: "Selesai", cls: "bg-moss-100 text-moss-700" },
-};
-
-function StatusBadge({ status }: { status: NagariStatus }) {
-  const spec = STATUS_NAGARI_SPEC[status];
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${spec.cls}`}>{spec.label}</span>;
-}
-
 const STATUS_JORONG_SPEC: Record<JorongStatus, { label: string; cls: string }> = {
   terdampak: { label: "Terdampak", cls: "bg-orange-100 text-orange-700" },
   tidak_terdampak: { label: "Tidak Terdampak", cls: "bg-moss-100 text-moss-700" },
@@ -182,6 +189,219 @@ const STATUS_JORONG_SPEC: Record<JorongStatus, { label: string; cls: string }> =
 function JorongStatusBadge({ status }: { status: JorongStatus }) {
   const spec = STATUS_JORONG_SPEC[status];
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${spec.cls}`}>{spec.label}</span>;
+}
+
+const SUBSLS_PAGE_SIZE = 25;
+
+// Tabel rekap tingkat Sub SLS untuk tab Monitoring, dipakai 2x (daftar awal
+// & nagari tambahan) -- masing-masing dgn filter, pencarian, paginasi, dan
+// tombol export ke Excel sendiri-sendiri.
+function RekapSubslsSection({
+  title,
+  subtitle,
+  rows,
+  kecamatanOptions,
+  fileName,
+}: {
+  title: string;
+  subtitle?: string;
+  rows: SubslsFlatRow[];
+  kecamatanOptions: string[];
+  fileName: string;
+}) {
+  const [kecFilter, setKecFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | JorongStatus>("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (kecFilter && r.kecamatan !== kecFilter) return false;
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (
+        q &&
+        !r.nagari.toLowerCase().includes(q) &&
+        !r.jorong.toLowerCase().includes(q) &&
+        !r.subSls.toLowerCase().includes(q)
+      )
+        return false;
+      return true;
+    });
+  }, [rows, kecFilter, statusFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SUBSLS_PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const paged = filtered.slice(
+    (pageClamped - 1) * SUBSLS_PAGE_SIZE,
+    pageClamped * SUBSLS_PAGE_SIZE
+  );
+
+  function handleExport() {
+    const dataRows = filtered.map((r) => ({
+      "ID SLS": r.idsls,
+      Kecamatan: r.kecamatan,
+      Nagari: r.nagari,
+      "Jorong/SLS": r.jorong,
+      "Sub SLS": r.subSls,
+      "Status Terdampak": STATUS_JORONG_SPEC[r.status].label,
+      "Perkiraan Jumlah KK Terdampak": r.perkiraanKk ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataRows);
+    // Paksa kolom "ID SLS" (kolom pertama, kode 14 digit) jadi bertipe teks
+    // -- kalau tidak, Excel bisa membuang angka nol di depan kode begitu
+    // file dibuka (pola sama dgn export kode wilayah lain di aplikasi ini).
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    for (let R = 1; R <= range.e.r; R++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: 0 });
+      const cell = ws[addr];
+      if (cell) cell.t = "s";
+    }
+    ws["!cols"] = [
+      { wch: 18 }, // ID SLS
+      { wch: 16 }, // Kecamatan
+      { wch: 22 }, // Nagari
+      { wch: 22 }, // Jorong/SLS
+      { wch: 10 }, // Sub SLS
+      { wch: 16 }, // Status Terdampak
+      { wch: 14 }, // Perkiraan KK
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap");
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
+  }
+
+  return (
+    <section>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-medium text-orange-900">{title}</h2>
+          {subtitle && <p className="text-xs text-ink/60">{subtitle}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={filtered.length === 0}
+          className="shrink-0 rounded-md border border-orange-700 bg-white px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-40"
+        >
+          Export ke Excel
+        </button>
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-3">
+        <div>
+          <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
+          <select
+            value={kecFilter}
+            onChange={(e) => {
+              setKecFilter(e.target.value);
+              setPage(1);
+            }}
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+          >
+            <option value="">Semua kecamatan</option>
+            {kecamatanOptions.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-ink/60">Filter Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | JorongStatus);
+              setPage(1);
+            }}
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+          >
+            <option value="">Semua status</option>
+            <option value="terdampak">Terdampak</option>
+            <option value="tidak_terdampak">Tidak Terdampak</option>
+            <option value="belum">Belum Diisi</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Ketik kata kunci..."
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
+          />
+        </div>
+      </div>
+
+      <div className="mt-2 overflow-x-auto rounded-md border border-line">
+        <table className="w-full min-w-[820px] text-left text-sm">
+          <thead className="bg-orange-50 text-orange-600">
+            <tr>
+              <th className="px-3 py-2 font-medium">Kecamatan</th>
+              <th className="px-3 py-2 font-medium">Nagari</th>
+              <th className="px-3 py-2 font-medium">Jorong/SLS</th>
+              <th className="px-3 py-2 font-medium">Sub SLS</th>
+              <th className="px-3 py-2 font-medium">Status Terdampak</th>
+              <th className="px-3 py-2 font-medium">Perkiraan Jumlah KK Terdampak</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paged.map((r) => (
+              <tr key={r.idsubsls} className="border-t border-line">
+                <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
+                <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
+                <td className="px-3 py-2 font-medium text-ink">{r.jorong}</td>
+                <td className="px-3 py-2 text-ink/80">{r.subSls}</td>
+                <td className="px-3 py-2">
+                  <JorongStatusBadge status={r.status} />
+                </td>
+                <td className="px-3 py-2 text-ink/80">
+                  {r.perkiraanKk != null ? `${r.perkiraanKk} KK` : "-"}
+                </td>
+              </tr>
+            ))}
+            {paged.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-4 text-center text-ink/50">
+                  Tidak ada data yang cocok dengan filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {filtered.length > 0 && (
+        <div className="mt-2 flex items-center justify-between text-sm text-ink/60">
+          <span>
+            {(pageClamped - 1) * SUBSLS_PAGE_SIZE + 1}-
+            {Math.min(pageClamped * SUBSLS_PAGE_SIZE, filtered.length)} dari {filtered.length} baris
+          </span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={pageClamped <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+            >
+              &lsaquo;
+            </button>
+            <button
+              type="button"
+              disabled={pageClamped >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
+            >
+              &rsaquo;
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function BencanaPage() {
@@ -216,10 +436,6 @@ export default function BencanaPage() {
   const [monError, setMonError] = useState<string | null>(null);
   const [monNagari, setMonNagari] = useState<MonitoringNagariRow[]>([]);
   const [monJorong, setMonJorong] = useState<MonitoringJorongRow[]>([]);
-  const [monKecFilter, setMonKecFilter] = useState("");
-  const [monStatusFilter, setMonStatusFilter] = useState<"" | NagariStatus>("");
-  const [monSearch, setMonSearch] = useState("");
-  const [monNagariPage, setMonNagariPage] = useState(1);
 
   useEffect(() => {
     async function loadAwal() {
@@ -467,6 +683,47 @@ export default function BencanaPage() {
     jorongByIddesa.set(j.iddesa, list);
   }
 
+  // ---- Rekap datar tingkat Sub SLS (tab Monitoring) ------------------
+  // Diturunkan dari pohon "wilayah" (selalu lengkap 1085 Sub SLS) +
+  // jorongDerived (status & gabungan subsls_terdampak per Jorong). Status
+  // per Sub SLS: ikut status Jorong induknya untuk "belum"/"tidak_terdampak";
+  // kalau Jorong "terdampak", baru dicek apakah idsubsls tsb memang ada di
+  // subsls_terdampak_gabungan Jorong itu (Sub SLS lain di Jorong yg sama yg
+  // tidak dicentang dianggap "tidak_terdampak", bukan "terdampak").
+  const jorongDerivedByIdsls = new Map(jorongDerived.map((j) => [j.idsls, j]));
+
+  const subslsFlatAll: SubslsFlatRow[] = [];
+  for (const kec of wilayah) {
+    for (const nag of kec.nagari) {
+      for (const jor of nag.jorong) {
+        const jd = jorongDerivedByIdsls.get(jor.idsls);
+        const jStatus: JorongStatus = jd?.status ?? "belum";
+        const terdampakSet = new Set(jd?.subsls_terdampak_gabungan ?? []);
+        for (const s of jor.subsls) {
+          let status: JorongStatus;
+          if (jStatus === "belum") status = "belum";
+          else if (jStatus === "tidak_terdampak") status = "tidak_terdampak";
+          else status = terdampakSet.has(s.idsubsls) ? "terdampak" : "tidak_terdampak";
+          subslsFlatAll.push({
+            idsubsls: s.idsubsls,
+            idsls: jor.idsls,
+            iddesa: nag.iddesa,
+            kecamatan: kec.kecamatan,
+            nagari: nag.nagari,
+            jorong: jor.jorong,
+            subSls: s.sub_sls,
+            daftarAwal: nag.daftar_awal,
+            status,
+            perkiraanKk: status === "terdampak" ? jd?.total_kk_terdampak ?? null : null,
+          });
+        }
+      }
+    }
+  }
+
+  const subslsDaftarAwal = subslsFlatAll.filter((r) => r.daftarAwal);
+  const subslsTambahan = subslsFlatAll.filter((r) => !r.daftarAwal);
+
   // Nagari dianggap "selesai" kalau: gate-nya "tidak" (tidak perlu jorong),
   // atau gate-nya "ya" DAN seluruh jorong di nagari itu sudah "terdampak".
   // "sedang" kalau baru sebagian jorong yg sudah diisi. "belum" kalau gate
@@ -522,24 +779,6 @@ export default function BencanaPage() {
       .filter((d): d is string => Boolean(d))
       .sort()
       .pop() ?? null;
-
-  const nagariFilteredFull = nagariDerived.filter((n) => {
-    if (monKecFilter && n.kecamatan !== monKecFilter) return false;
-    if (monStatusFilter && n.status !== monStatusFilter) return false;
-    if (monSearch.trim() && !n.nagari.toLowerCase().includes(monSearch.trim().toLowerCase())) return false;
-    return true;
-  });
-  const MON_PAGE_SIZE = 10;
-  const nagariTotalPages = Math.max(1, Math.ceil(nagariFilteredFull.length / MON_PAGE_SIZE));
-  const nagariPageClamped = Math.min(monNagariPage, nagariTotalPages);
-  const nagariPaged = nagariFilteredFull.slice(
-    (nagariPageClamped - 1) * MON_PAGE_SIZE,
-    nagariPageClamped * MON_PAGE_SIZE
-  );
-
-  const monJorongFiltered = monKecFilter
-    ? jorongDerived.filter((r) => r.kecamatan === monKecFilter)
-    : jorongDerived;
 
   if (loading) {
     return (
@@ -1093,200 +1332,21 @@ export default function BencanaPage() {
                 </div>
               </div>
 
-              <section className="rounded-md border border-line bg-white p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
-                    <select
-                      value={monKecFilter}
-                      onChange={(e) => {
-                        setMonKecFilter(e.target.value);
-                        setMonNagariPage(1);
-                      }}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
-                    >
-                      <option value="">Semua kecamatan</option>
-                      {kecamatanOptions.map((k) => (
-                        <option key={k} value={k}>
-                          {k}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-ink/60">Filter Status</label>
-                    <select
-                      value={monStatusFilter}
-                      onChange={(e) => {
-                        setMonStatusFilter(e.target.value as "" | NagariStatus);
-                        setMonNagariPage(1);
-                      }}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
-                    >
-                      <option value="">Semua status</option>
-                      <option value="belum">Belum Diisi</option>
-                      <option value="sedang">Sedang Diisi</option>
-                      <option value="selesai">Selesai</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-ink/60">Cari Nagari</label>
-                    <input
-                      value={monSearch}
-                      onChange={(e) => {
-                        setMonSearch(e.target.value);
-                        setMonNagariPage(1);
-                      }}
-                      placeholder="Ketik nama nagari..."
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
-                    />
-                  </div>
-                </div>
-              </section>
+              <RekapSubslsSection
+                title="Rekap Sub SLS — Daftar Awal (29 Nagari)"
+                subtitle={`${subslsDaftarAwal.length} baris Sub SLS pada cakupan awal identifikasi.`}
+                rows={subslsDaftarAwal}
+                kecamatanOptions={kecamatanOptions}
+                fileName="rekap_subsls_daftar_awal"
+              />
 
-              <section>
-                <h2 className="font-medium text-orange-900">Rekap per Nagari</h2>
-                <div className="mt-2 overflow-x-auto rounded-md border border-line">
-                  <table className="w-full min-w-[820px] text-left text-sm">
-                    <thead className="bg-orange-50 text-orange-600">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Kecamatan</th>
-                        <th className="px-3 py-2 font-medium">Nagari</th>
-                        <th className="px-3 py-2 font-medium">Jorong</th>
-                        <th className="px-3 py-2 font-medium">Jawaban Ya/Tidak</th>
-                        <th className="px-3 py-2 font-medium">Terdampak</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium">Konflik</th>
-                        <th className="px-3 py-2 font-medium">Terakhir Diisi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {nagariPaged.map((r) => (
-                        <tr key={r.iddesa} className="border-t border-line">
-                          <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
-                          <td className="px-3 py-2 font-medium text-ink">{r.nagari}</td>
-                          <td className="px-3 py-2 text-ink/80">{r.jumlah_jorong_total}</td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.jumlah_gate_ya} ya &middot; {r.jumlah_gate_tidak} tidak
-                          </td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.terdampakCount} / {r.jumlah_jorong_total}
-                          </td>
-                          <td className="px-3 py-2">
-                            <StatusBadge status={r.status} />
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.konflik ? (
-                              <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
-                                Konflik
-                              </span>
-                            ) : (
-                              <span className="text-ink/40">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-ink/60">
-                            {formatTanggal(r.terakhir_diisi)}
-                          </td>
-                        </tr>
-                      ))}
-                      {nagariPaged.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="px-3 py-4 text-center text-ink/50">
-                            Tidak ada nagari yang cocok dengan filter.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {nagariFilteredFull.length > 0 && (
-                  <div className="mt-2 flex items-center justify-between text-sm text-ink/60">
-                    <span>
-                      {(nagariPageClamped - 1) * MON_PAGE_SIZE + 1}-
-                      {Math.min(nagariPageClamped * MON_PAGE_SIZE, nagariFilteredFull.length)} dari{" "}
-                      {nagariFilteredFull.length} nagari
-                    </span>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        disabled={nagariPageClamped <= 1}
-                        onClick={() => setMonNagariPage((p) => p - 1)}
-                        className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
-                      >
-                        &lsaquo;
-                      </button>
-                      <button
-                        type="button"
-                        disabled={nagariPageClamped >= nagariTotalPages}
-                        onClick={() => setMonNagariPage((p) => p + 1)}
-                        className="rounded-md border border-line px-2.5 py-1 disabled:opacity-40"
-                      >
-                        &rsaquo;
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              <section>
-                <h2 className="font-medium text-orange-900">Rekap per Jorong</h2>
-                <div className="mt-2 overflow-x-auto rounded-md border border-line">
-                  <table className="w-full min-w-[780px] text-left text-sm">
-                    <thead className="bg-orange-50 text-orange-600">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Nagari</th>
-                        <th className="px-3 py-2 font-medium">Jorong</th>
-                        <th className="px-3 py-2 font-medium">Sub SLS Terdampak</th>
-                        <th className="px-3 py-2 font-medium">Jumlah Isian</th>
-                        <th className="px-3 py-2 font-medium">Perkiraan KK Terdampak</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium">Konflik</th>
-                        <th className="px-3 py-2 font-medium">Mitra Terakhir</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {monJorongFiltered.map((r) => (
-                        <tr key={r.idsls} className="border-t border-line">
-                          <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
-                          <td className="px-3 py-2 font-medium text-ink">{r.jorong}</td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.jumlah_subsls_terdampak_gabungan} / {r.jumlah_subsls_total}
-                          </td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.jumlah_identifikasi} ({r.jumlah_bilang_seluruh} seluruh &middot;{" "}
-                            {r.jumlah_bilang_sebagian} sebagian)
-                          </td>
-                          <td className="px-3 py-2 text-ink/80">
-                            {r.total_kk_terdampak > 0 ? `${r.total_kk_terdampak} KK` : "-"}
-                          </td>
-                          <td className="px-3 py-2">
-                            <JorongStatusBadge status={r.status} />
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.konflik ? (
-                              <span className="rounded-full bg-rust-100 px-2 py-0.5 text-xs font-medium text-rust-700">
-                                Konflik
-                              </span>
-                            ) : (
-                              <span className="text-ink/40">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-ink/60">
-                            {r.nama_mitra_terakhir ?? "-"}
-                          </td>
-                        </tr>
-                      ))}
-                      {monJorongFiltered.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="px-3 py-4 text-center text-ink/50">
-                            Belum ada data.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+              <RekapSubslsSection
+                title="Rekap Sub SLS — Nagari Tambahan (Perluasan Cakupan)"
+                subtitle={`${subslsTambahan.length} baris Sub SLS pada nagari hasil perluasan cakupan ke seluruh Kabupaten Solok.`}
+                rows={subslsTambahan}
+                kecamatanOptions={kecamatanOptions}
+                fileName="rekap_subsls_nagari_tambahan"
+              />
             </>
           )}
         </div>

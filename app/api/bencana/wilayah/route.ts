@@ -26,6 +26,7 @@ type WilayahRow = {
   nagari: string;
   sls: string;
   sub_sls: string;
+  daftar_awal: boolean;
 };
 
 export async function GET() {
@@ -37,7 +38,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("bencana_wilayah")
-      .select("idsubsls, iddesa, idsls, kecamatan, nagari, sls, sub_sls")
+      .select("idsubsls, iddesa, idsls, kecamatan, nagari, sls, sub_sls, daftar_awal")
       .order("kecamatan", { ascending: true })
       .order("nagari", { ascending: true })
       .order("idsls", { ascending: true })
@@ -52,7 +53,12 @@ export async function GET() {
     // Susun pohon: kecamatan -> nagari -> jorong (idsls) -> daftar sub SLS
     type SubslsItem = { idsubsls: string; sub_sls: string };
     type JorongItem = { idsls: string; jorong: string; subsls: SubslsItem[] };
-    type NagariItem = { iddesa: string; nagari: string; jorong: JorongItem[] };
+    type NagariItem = {
+      iddesa: string;
+      nagari: string;
+      daftar_awal: boolean;
+      jorong: JorongItem[];
+    };
     type KecamatanItem = { kecamatan: string; nagari: NagariItem[] };
 
     const kecMap = new Map<string, KecamatanItem>();
@@ -66,7 +72,7 @@ export async function GET() {
 
       let nag = kec.nagari.find((n) => n.iddesa === row.iddesa);
       if (!nag) {
-        nag = { iddesa: row.iddesa, nagari: row.nagari, jorong: [] };
+        nag = { iddesa: row.iddesa, nagari: row.nagari, daftar_awal: row.daftar_awal, jorong: [] };
         kec.nagari.push(nag);
       }
 
