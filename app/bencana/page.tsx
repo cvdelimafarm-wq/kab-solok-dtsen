@@ -105,6 +105,7 @@ type KertasKerjaRow = {
   skor_beban_pendataan: number;
   jarak_km: number | null;
   jarak_status: "riil" | "tanpa_data";
+  jumlah_hari_kerja: number;
   skor_jarak: number;
   skor_beban_akhir: number;
   terkunci: boolean;
@@ -1007,6 +1008,9 @@ const PENGATURAN_BEBAN_DEFAULT: Record<string, number> = {
   bobot_kk_terdampak: 1,
   bobot_kk_tidak_terdampak: 0.1428,
   pembagi_jarak_km: 5,
+  menit_per_kk_tidak_terdampak: 3,
+  menit_per_kk_terdampak: 20,
+  jam_kerja_per_hari: 5,
 };
 
 function PengaturanBebanSection() {
@@ -1096,15 +1100,20 @@ function PengaturanBebanSection() {
 
   // Simulasi contoh perhitungan pakai nilai draft (belum tentu tersimpan)
   // supaya admin bisa lihat dampaknya SEBELUM menekan "Simpan Perubahan".
-  const contohKkTerdampak = 10;
-  const contohKkTidakTerdampak = 20;
+  const contohKkTerdampak = 5;
+  const contohKkTidakTerdampak = 145;
   const contohJarakKm = 12;
   const bobotTerdampak = draftNum("bobot_kk_terdampak");
   const bobotTidakTerdampak = draftNum("bobot_kk_tidak_terdampak");
   const pembagiJarak = draftNum("pembagi_jarak_km") || 1;
+  const menitTerdampak = draftNum("menit_per_kk_terdampak");
+  const menitTidakTerdampak = draftNum("menit_per_kk_tidak_terdampak");
+  const jamKerja = draftNum("jam_kerja_per_hari") || 1;
   const contohSkorBebanPendataan =
     contohKkTerdampak * bobotTerdampak + contohKkTidakTerdampak * bobotTidakTerdampak;
-  const contohSkorJarak = contohJarakKm / pembagiJarak;
+  const contohMenitDibutuhkan = contohKkTerdampak * menitTerdampak + contohKkTidakTerdampak * menitTidakTerdampak;
+  const contohHariKerja = Math.max(1, Math.ceil(contohMenitDibutuhkan / (jamKerja * 60)));
+  const contohSkorJarak = (contohJarakKm / pembagiJarak) * contohHariKerja;
   const contohSkorBebanAkhir = contohSkorBebanPendataan + contohSkorJarak;
 
   if (loading) {
@@ -1195,7 +1204,17 @@ function PengaturanBebanSection() {
               <strong className="text-blue-700">{contohSkorBebanPendataan.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
             </p>
             <p className="mt-1">
-              Skor jarak = {contohJarakKm} ÷ {pembagiJarak}
+              Menit dibutuhkan = {contohKkTerdampak} × {menitTerdampak} + {contohKkTidakTerdampak} × {menitTidakTerdampak}
+              {" = "}
+              <strong className="text-blue-700">{contohMenitDibutuhkan.toLocaleString("id-ID")}</strong> menit
+            </p>
+            <p className="mt-1">
+              Jumlah hari kerja = CEIL({contohMenitDibutuhkan} ÷ ({jamKerja} × 60))
+              {" = "}
+              <strong className="text-blue-700">{contohHariKerja}</strong> hari (PP {contohHariKerja}×)
+            </p>
+            <p className="mt-1">
+              Skor jarak = ({contohJarakKm} ÷ {pembagiJarak}) × {contohHariKerja}
               {" = "}
               <strong className="text-blue-700">{contohSkorJarak.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
             </p>
@@ -1212,13 +1231,325 @@ function PengaturanBebanSection() {
                 (KK tidak terdampak × <em>Bobot Keluarga Tidak Terdampak</em>)
               </li>
               <li>
-                Skor jarak = jarak tempuh (km) ÷ <em>Pembagi Jarak (km)</em>
+                Jumlah hari kerja = CEIL((KK terdampak × <em>Menit per KK Terdampak</em> + KK
+                tidak terdampak × <em>Menit per KK Tidak Terdampak</em>) ÷ (<em>Jam Kerja
+                Efektif per Hari</em> × 60)), minimal 1 hari
+              </li>
+              <li>
+                Skor jarak = (jarak tempuh (km) ÷ <em>Pembagi Jarak (km)</em>) × jumlah hari
+                kerja &mdash; petugas PP tiap hari kerja (tidak menginap), jadi kalau volume KK
+                butuh &gt;1 hari, PP-nya ikut dihitung &gt;1×
               </li>
               <li>Skor beban akhir = skor beban pendataan + skor jarak</li>
             </ul>
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------------
+// Tab "Master Petugas": daftar identitas + demografi semua petugas (organik
+// & mitra), read-only, dengan berbagai filter per kolom (pola ThKontrol yg
+// sama dgn tab Alokasi Petugas).
+//
+// Domisili (kecamatan/nagari/jorong) diutamakan dari HASIL JOIN koordinat
+// (kecamatan_wilayah/nagari_wilayah/alamat_jorong, via idsubsls_1303 hasil
+// matching rekrutmen mitra -> bencana_wilayah) -- "usahakan matching dengan
+// koordinat" sesuai permintaan. Kalau tidak ada Sub SLS yg cocok, fallback
+// ke alamat self-report (alamat_kecamatan/alamat_nagari); jorong tidak
+// punya data self-report jadi tampil "Tidak ada data" kalau tidak ke-join.
+// ------------------------------------------------------------------------
+
+type MasterPetugasRow = {
+  id: number;
+  nama: string;
+  status_kepegawaian: string;
+  peran: string | null;
+  aktif: boolean;
+  no_hp: string | null;
+  alamat_kecamatan: string | null;
+  alamat_nagari: string | null;
+  kecamatan_wilayah: string | null;
+  nagari_wilayah: string | null;
+  alamat_jorong: string | null;
+  idsubsls_1303: string | null;
+  lokasi_status: string | null;
+  umur: number | null;
+  jenis_kelamin: string | null;
+  pendidikan: string | null;
+  pekerjaan: string | null;
+  bisa_mengendarai_motor: boolean | null;
+  punya_kendaraan_bermotor: boolean | null;
+};
+
+function kecamatanTampil(r: MasterPetugasRow): string {
+  return r.kecamatan_wilayah || r.alamat_kecamatan || "Tidak ada data";
+}
+function nagariTampil(r: MasterPetugasRow): string {
+  return r.nagari_wilayah || r.alamat_nagari || "Tidak ada data";
+}
+function jorongTampil(r: MasterPetugasRow): string {
+  return r.alamat_jorong || "Tidak ada data";
+}
+function boolTampil(v: boolean | null): string {
+  return v === true ? "Ya" : v === false ? "Tidak" : "Tidak ada data";
+}
+
+function MasterPetugasSection() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rows, setRows] = useState<MasterPetugasRow[]>([]);
+
+  const [search, setSearch] = useState("");
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [peranSel, setPeranSel] = useState<Set<string>>(new Set());
+  const [aktifSel, setAktifSel] = useState<Set<string>>(new Set());
+  const [kecamatanSel, setKecamatanSel] = useState<Set<string>>(new Set());
+  const [nagariSel, setNagariSel] = useState<Set<string>>(new Set());
+  const [jorongSel, setJorongSel] = useState<Set<string>>(new Set());
+  const [jkSel, setJkSel] = useState<Set<string>>(new Set());
+  const [pendidikanSel, setPendidikanSel] = useState<Set<string>>(new Set());
+  const [pekerjaanSel, setPekerjaanSel] = useState<Set<string>>(new Set());
+  const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
+
+  const [sortKey, setSortKey] = useState<"nama" | "umur" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  useEffect(() => {
+    (async () => {
+      setLoadError(null);
+      try {
+        const res = await fetch("/api/bencana/master-petugas");
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Gagal memuat data master petugas.");
+        setRows(json.data ?? []);
+      } catch (e) {
+        setLoadError(e instanceof Error ? e.message : "Gagal memuat data master petugas.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  function opsiUnik(nilai: (r: MasterPetugasRow) => string): string[] {
+    return Array.from(new Set(rows.map(nilai))).sort((a, b) => a.localeCompare(b, "id"));
+  }
+
+  const opsiStatus = opsiUnik((r) => (r.status_kepegawaian === "organik" ? "Organik" : "Mitra"));
+  const opsiPeran = opsiUnik((r) => (r.peran ? r.peran.toUpperCase() : "Belum Ada Peran"));
+  const opsiAktif = ["Aktif", "Nonaktif"];
+  const opsiKecamatan = opsiUnik(kecamatanTampil);
+  const opsiNagari = opsiUnik(nagariTampil);
+  const opsiJorong = opsiUnik(jorongTampil);
+  const opsiJk = opsiUnik((r) => (r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "Tidak ada data"));
+  const opsiPendidikan = opsiUnik((r) => r.pendidikan || "Tidak ada data");
+  const opsiPekerjaan = opsiUnik((r) => r.pekerjaan || "Tidak ada data");
+  const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
+
+  function sortAsc(key: "nama" | "umur") {
+    setSortKey(key);
+    setSortDir("asc");
+  }
+  function sortDesc(key: "nama" | "umur") {
+    setSortKey(key);
+    setSortDir("desc");
+  }
+  function sortReset() {
+    setSortKey(null);
+  }
+
+  const filtered = useMemo(() => {
+    const kw = search.trim().toLowerCase();
+    let hasil = rows.filter((r) => {
+      if (kw && !r.nama.toLowerCase().includes(kw)) return false;
+      if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra")) return false;
+      if (peranSel.size > 0 && !peranSel.has(r.peran ? r.peran.toUpperCase() : "Belum Ada Peran")) return false;
+      if (aktifSel.size > 0 && !aktifSel.has(r.aktif ? "Aktif" : "Nonaktif")) return false;
+      if (kecamatanSel.size > 0 && !kecamatanSel.has(kecamatanTampil(r))) return false;
+      if (nagariSel.size > 0 && !nagariSel.has(nagariTampil(r))) return false;
+      if (jorongSel.size > 0 && !jorongSel.has(jorongTampil(r))) return false;
+      if (
+        jkSel.size > 0 &&
+        !jkSel.has(r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "Tidak ada data")
+      )
+        return false;
+      if (pendidikanSel.size > 0 && !pendidikanSel.has(r.pendidikan || "Tidak ada data")) return false;
+      if (pekerjaanSel.size > 0 && !pekerjaanSel.has(r.pekerjaan || "Tidak ada data")) return false;
+      if (motorSel.size > 0 && !motorSel.has(boolTampil(r.bisa_mengendarai_motor))) return false;
+      return true;
+    });
+
+    if (sortKey) {
+      hasil = [...hasil].sort((a, b) => {
+        let cmp = 0;
+        if (sortKey === "nama") cmp = a.nama.localeCompare(b.nama, "id");
+        else if (sortKey === "umur") cmp = (a.umur ?? -1) - (b.umur ?? -1);
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return hasil;
+  }, [
+    rows,
+    search,
+    statusSel,
+    peranSel,
+    aktifSel,
+    kecamatanSel,
+    nagariSel,
+    jorongSel,
+    jkSel,
+    pendidikanSel,
+    pekerjaanSel,
+    motorSel,
+    sortKey,
+    sortDir,
+  ]);
+
+  function handleExport() {
+    const dataRows = filtered.map((r) => ({
+      Nama: r.nama,
+      "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
+      Peran: r.peran ? r.peran.toUpperCase() : "",
+      Aktif: r.aktif ? "Aktif" : "Nonaktif",
+      Kecamatan: kecamatanTampil(r),
+      Nagari: nagariTampil(r),
+      Jorong: jorongTampil(r),
+      Umur: r.umur ?? "",
+      "Jenis Kelamin": r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "",
+      Pendidikan: r.pendidikan ?? "",
+      Pekerjaan: r.pekerjaan ?? "",
+      "Bisa Mengendarai Motor": boolTampil(r.bisa_mengendarai_motor),
+      "Punya Kendaraan Bermotor": boolTampil(r.punya_kendaraan_bermotor),
+      "No HP": r.no_hp ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataRows);
+    ws["!cols"] = [
+      { wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Master Petugas");
+    XLSX.writeFile(wb, "master_petugas.xlsx");
+  }
+
+  if (loading) {
+    return <p className="mt-6 text-ink/60">Memuat data master petugas...</p>;
+  }
+  if (loadError) {
+    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>;
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-3">
+      <section className="rounded-md border border-line bg-white p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-blue-400">Master Petugas</p>
+        <p className="mt-1 text-sm text-ink/70">
+          Daftar identitas &amp; demografi seluruh petugas (organik &amp; mitra). Kolom Kecamatan/Nagari/Jorong
+          diutamakan dari hasil pencocokan (matching) koordinat domisili petugas ke wilayah Sub SLS; kalau tidak ada
+          Sub SLS yang cocok, kecamatan/nagari memakai data isian awal (self-report) dan Jorong tampil
+          &ldquo;Tidak ada data&rdquo;. Data umur, jenis kelamin, pendidikan, pekerjaan, dan kendaraan bermotor
+          berasal dari data rekrutmen mitra sehingga untuk petugas organik (BPS) kolom tersebut kosong.
+        </p>
+        <p className="mt-2 text-xs text-ink/50">
+          Menampilkan {filtered.length} dari {rows.length} petugas.
+        </p>
+      </section>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50"
+        >
+          ⬇ Unduh Excel
+        </button>
+      </div>
+
+      <div className="max-h-[70vh] overflow-auto rounded-md border border-line">
+        <table className="w-full min-w-[1500px] text-left text-sm">
+          <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
+            <tr>
+              <ThKontrol
+                label="Nama"
+                stickyLeft
+                search={{ value: search, onChange: setSearch, placeholder: "Cari nama..." }}
+                sort={{
+                  active: sortKey === "nama",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("nama"),
+                  onDesc: () => sortDesc("nama"),
+                  onReset: sortReset,
+                }}
+              />
+              <ThKontrol
+                label="Status"
+                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
+              />
+              <ThKontrol label="Peran" filter={{ options: opsiPeran, selected: peranSel, onApply: setPeranSel }} />
+              <ThKontrol label="Aktif" filter={{ options: opsiAktif, selected: aktifSel, onApply: setAktifSel }} />
+              <ThKontrol
+                label="Kecamatan"
+                filter={{ options: opsiKecamatan, selected: kecamatanSel, onApply: setKecamatanSel }}
+              />
+              <ThKontrol label="Nagari" filter={{ options: opsiNagari, selected: nagariSel, onApply: setNagariSel }} />
+              <ThKontrol label="Jorong" filter={{ options: opsiJorong, selected: jorongSel, onApply: setJorongSel }} />
+              <ThKontrol
+                label="Umur"
+                sort={{
+                  active: sortKey === "umur",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("umur"),
+                  onDesc: () => sortDesc("umur"),
+                  onReset: sortReset,
+                }}
+              />
+              <ThKontrol label="Jenis Kelamin" filter={{ options: opsiJk, selected: jkSel, onApply: setJkSel }} />
+              <ThKontrol
+                label="Pendidikan"
+                filter={{ options: opsiPendidikan, selected: pendidikanSel, onApply: setPendidikanSel }}
+              />
+              <ThKontrol
+                label="Pekerjaan"
+                filter={{ options: opsiPekerjaan, selected: pekerjaanSel, onApply: setPekerjaanSel }}
+              />
+              <ThKontrol
+                label="Bisa Motor"
+                filter={{ options: opsiMotor, selected: motorSel, onApply: setMotorSel }}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
+                <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
+                <td className="px-3 py-2">{r.status_kepegawaian === "organik" ? "Organik" : "Mitra"}</td>
+                <td className="px-3 py-2">{r.peran ? r.peran.toUpperCase() : "—"}</td>
+                <td className="px-3 py-2">{r.aktif ? "Aktif" : "Nonaktif"}</td>
+                <td className="px-3 py-2">{kecamatanTampil(r)}</td>
+                <td className="px-3 py-2">{nagariTampil(r)}</td>
+                <td className="px-3 py-2">{jorongTampil(r)}</td>
+                <td className="px-3 py-2">{r.umur ?? "—"}</td>
+                <td className="px-3 py-2">
+                  {r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "—"}
+                </td>
+                <td className="px-3 py-2">{r.pendidikan ?? "—"}</td>
+                <td className="px-3 py-2">{r.pekerjaan ?? "—"}</td>
+                <td className="px-3 py-2">{boolTampil(r.bisa_mengendarai_motor)}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={12} className="px-3 py-6 text-center text-ink/50">
+                  Tidak ada petugas yang cocok dengan filter saat ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2224,6 +2555,8 @@ function AlokasiPetugasSection() {
       "Status Data KK": r.punya_data_kk ? "Lengkap" : "Belum Ada Data",
       "KK Total": r.kk_total,
       "Skor Beban Kerja Pendataan (tanpa jarak)": r.skor_beban_pendataan,
+      "Jarak (km)": r.jarak_km ?? "",
+      "Jumlah Hari Kerja (PP)": r.jumlah_hari_kerja,
       "Skor Jarak": r.skor_jarak,
       "Skor Beban Akhir": r.skor_beban_akhir,
       PPL: r.ppl_nama ?? "",
@@ -3833,8 +4166,10 @@ function AlokasiPetugasSection() {
                     {!modeFokus && (
                       <td className="px-3 py-2 text-ink/80">
                         {r.jarak_status === "riil" ? (
-                          <span title="Jarak dihitung dari centroid Sub SLS ke lokasi rumah petugas (OSRM/garis lurus)">
-                            {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km)
+                          <span
+                            title={`Jarak dihitung dari titik Sub SLS ke lokasi rumah petugas (OSRM/garis lurus), dikali perkiraan ${r.jumlah_hari_kerja} hari kerja (PP tiap hari, tidak menginap)`}
+                          >
+                            {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km × {r.jumlah_hari_kerja} hari)
                           </span>
                         ) : (
                           <span className="text-xs text-ink/40" title="Lokasi rumah petugas blm diisi/diverifikasi">
@@ -3963,7 +4298,7 @@ function AlokasiPetugasSection() {
 }
 
 export default function BencanaPage() {
-  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi" | "pengaturan">("identifikasi");
+  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi" | "master" | "pengaturan">("identifikasi");
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
@@ -4357,7 +4692,7 @@ export default function BencanaPage() {
   return (
     <main
       className={`mx-auto min-h-screen px-5 py-10 ${
-        tab === "alokasi"
+        tab === "alokasi" || tab === "master"
           ? "max-w-[1800px]"
           : tab === "monitoring"
           ? "max-w-6xl"
@@ -4413,6 +4748,17 @@ export default function BencanaPage() {
         </button>
         <button
           type="button"
+          onClick={() => setTab("master")}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+            tab === "master"
+              ? "bg-white text-blue-900 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
+          }`}
+        >
+          Master Petugas
+        </button>
+        <button
+          type="button"
           onClick={() => setTab("pengaturan")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "pengaturan"
@@ -4426,6 +4772,8 @@ export default function BencanaPage() {
 
       {tab === "alokasi" ? (
         <AlokasiPetugasSection />
+      ) : tab === "master" ? (
+        <MasterPetugasSection />
       ) : tab === "pengaturan" ? (
         <PengaturanBebanSection />
       ) : tab === "identifikasi" ? (

@@ -8,6 +8,13 @@
 // perhitungan beban (Langkah 1-4, Ringkasan, dsb) otomatis ikut berubah
 // tanpa perlu migrasi/deploy ulang.
 //
+// skor_jarak = (jarak_km / pembagi_jarak_km) x jumlah_hari_kerja -- petugas
+// pulang-pergi (PP) setiap hari kerja (tidak menginap), jadi kalau volume KK
+// di satu Sub SLS butuh >1 hari utk didata habis, PP-nya juga dihitung >1x.
+// jumlah_hari_kerja = CEIL((kk_terdampak x menit_per_kk_terdampak +
+// kk_tidak_terdampak x menit_per_kk_tidak_terdampak) / (jam_kerja_per_hari x 60)),
+// minimal 1 hari.
+//
 // GET  -> daftar semua baris pengaturan (kunci, nilai, label, keterangan).
 // POST { kunci, nilai } -> update SATU baris pengaturan. nilai harus angka > 0.
 //
@@ -30,6 +37,9 @@ const KUNCI_VALID = new Set([
   "bobot_kk_terdampak",
   "bobot_kk_tidak_terdampak",
   "pembagi_jarak_km",
+  "menit_per_kk_terdampak",
+  "menit_per_kk_tidak_terdampak",
+  "jam_kerja_per_hari",
 ]);
 
 export async function GET() {

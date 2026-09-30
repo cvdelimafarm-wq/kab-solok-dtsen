@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     let jarak_status = "tanpa_data";
 
     if (ppl.lokasi_status === "riil" && typeof ppl.lat === "number" && typeof ppl.lng === "number") {
-      const { data: centroidRows } = await supabase.rpc("bencana_subsls_centroid");
+      const { data: centroidRows } = await supabase.rpc("bencana_subsls_titik_jarak");
       const titik = ((centroidRows ?? []) as { idsubsls: string; lat: number | null; lng: number | null }[]).find(
         (c) => c.idsubsls === idsubsls
       );
