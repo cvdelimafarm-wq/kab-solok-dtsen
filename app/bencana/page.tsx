@@ -252,6 +252,23 @@ function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaa
   );
 }
 
+// Satu badge kecil PER kegiatan lain (bukan satu ikon gabungan) -- supaya
+// pas admin sedang mem-plot PPL, langsung kelihatan tanpa perlu klik
+// kegiatan APA SAJA yg sudah dipegang petugas itu (mis. "PES SE2026" dan
+// "SPDT NTP 2026" tampil terpisah, bukan digabung jadi satu teks). Admin
+// yg memutuskan sendiri tetap plot dobel (merangkap) atau pilih petugas
+// lain -- badge ini murni informasi, bukan larangan otomatis.
+function BadgeKegiatanLain({ kegiatan }: { kegiatan: string }) {
+  return (
+    <span
+      title={`Petugas ini sudah bertugas/terdaftar di kegiatan "${kegiatan}". Boleh saja dirangkap (merangkap), tapi pertimbangkan beban kerjanya -- putuskan tetap plot dobel atau koreksi ke petugas lain.`}
+      className="shrink-0 rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-medium text-orange-700"
+    >
+      ⚠ {kegiatan}
+    </span>
+  );
+}
+
 // Rincian satu laporan identifikasi jorong (mitra) yg jadi SUMBER estimasi
 // KK terdampak utk sebuah Sub SLS -- dipakai popover "Sumber data KK
 // Terdampak" di Kertas Kerja Beban, supaya admin bisa lihat langsung siapa
@@ -5150,7 +5167,13 @@ function AlokasiPetugasSection() {
                           placeholder="Plot ke PPL..."
                           className="w-48"
                         />
-                        {statusKesediaan && <IkonStatusKesediaanPpl status={statusKesediaan} />}
+                        {statusKesediaan?.tipe === "belum_konfirmasi" && (
+                          <IkonStatusKesediaanPpl status={statusKesediaan} />
+                        )}
+                        {statusKesediaan &&
+                          statusKesediaan.kegiatanLain.map((k) => (
+                            <BadgeKegiatanLain key={k} kegiatan={k} />
+                          ))}
                         {draftPplId && (
                           <button
                             type="button"
