@@ -2231,6 +2231,418 @@ function MasterPetugasSection() {
   );
 }
 
+// 5 kegiatan lain yang dikenal aplikasi -- HARUS sama persis dgn whitelist
+// KEGIATAN_LAIN_VALID di app/api/bencana/kegiatan-petugas/route.ts.
+const KEGIATAN_LAIN_DAFTAR = [
+  "PES SE2026",
+  "SPDT NTP 2026",
+  "SITASI 2026",
+  "SKSPPI/SKLNPT/SKTNP/SKNP",
+  "GC Mix Method",
+] as const;
+
+type KegiatanPetugasRow = {
+  id: number;
+  nama: string;
+  status_kepegawaian: "organik" | "mitra";
+  peran: string | null;
+  aktif: boolean;
+  pendaftaran_bencana_konfirmasi: boolean;
+  kegiatan_lain: string[];
+  sudah_plotting: boolean;
+  jumlah_subsls_diplot: number;
+};
+
+function KegiatanPetugasSection() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rows, setRows] = useState<KegiatanPetugasRow[]>([]);
+  // Kunci busy per sel yang sedang disimpan, format `${petugasId}:${field}`,
+  // supaya checkbox/select lain tetap bisa dipakai saat satu sel lain masih
+  // menyimpan -- dan errSel menyimpan pesan error PER SEL (bukan global)
+  // supaya satu gagal simpan tidak mengganggu baris lain.
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [errSel, setErrSel] = useState<Map<string, string>>(new Map());
+
+  const [search, setSearch] = useState("");
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
+  const [plottingSel, setPlottingSel] = useState<Set<string>>(new Set());
+  const [kegiatanSel, setKegiatanSel] = useState<Record<string, Set<string>>>(() => {
+    const awal: Record<string, Set<string>> = {};
+    for (const k of KEGIATAN_LAIN_DAFTAR) awal[k] = new Set<string>();
+    return awal;
+  });
+
+  const [sortKey, setSortKey] = useState<"nama" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  useEffect(() => {
+    muatUlang();
+  }, []);
+
+  async function muatUlang() {
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal memuat data kegiatan petugas.");
+      setRows(json.data ?? []);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Gagal memuat data kegiatan petugas.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function tandaiError(kunci: string, pesan: string | null) {
+    setErrSel((prev) => {
+      const next = new Map(prev);
+      if (pesan) next.set(kunci, pesan);
+      else next.delete(kunci);
+      return next;
+    });
+  }
+
+  async function ubahStatusKepegawaian(id: number, status: "organik" | "mitra") {
+    const kunci = `${id}:status`;
+    const sebelum = rows.find((r) => r.id === id)?.status_kepegawaian;
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status_kepegawaian: status } : r)));
+    setBusy((prev) => new Set(prev).add(kunci));
+    tandaiError(kunci, null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, status_kepegawaian: status }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status kepegawaian.");
+    } catch (e) {
+      if (sebelum) setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status_kepegawaian: sebelum } : r)));
+      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(kunci);
+        return next;
+      });
+    }
+  }
+
+  async function ubahMendaftar(id: number, nilai: boolean) {
+    const kunci = `${id}:mendaftar`;
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, pendaftaran_bencana_konfirmasi: nilai } : r))
+    );
+    setBusy((prev) => new Set(prev).add(kunci));
+    tandaiError(kunci, null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, pendaftaran_bencana_konfirmasi: nilai }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status pendaftaran.");
+    } catch (e) {
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, pendaftaran_bencana_konfirmasi: !nilai } : r))
+      );
+      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(kunci);
+        return next;
+      });
+    }
+  }
+
+  async function ubahKegiatanLain(id: number, kegiatan: string, aktif: boolean) {
+    const kunci = `${id}:${kegiatan}`;
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              kegiatan_lain: aktif
+                ? Array.from(new Set([...r.kegiatan_lain, kegiatan]))
+                : r.kegiatan_lain.filter((k) => k !== kegiatan),
+            }
+          : r
+      )
+    );
+    setBusy((prev) => new Set(prev).add(kunci));
+    tandaiError(kunci, null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, kegiatan, aktif }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan kegiatan.");
+    } catch (e) {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                kegiatan_lain: aktif
+                  ? r.kegiatan_lain.filter((k) => k !== kegiatan)
+                  : Array.from(new Set([...r.kegiatan_lain, kegiatan])),
+              }
+            : r
+        )
+      );
+      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(kunci);
+        return next;
+      });
+    }
+  }
+
+  function opsiUnik(nilai: (r: KegiatanPetugasRow) => string): string[] {
+    return Array.from(new Set(rows.map(nilai))).sort((a, b) => a.localeCompare(b, "id"));
+  }
+
+  const opsiStatus = opsiUnik((r) => (r.status_kepegawaian === "organik" ? "Organik" : "Mitra"));
+  const opsiPendaftaran = ["Sudah Mengajukan Diri", "Belum Mengajukan Diri"];
+  const opsiPlotting = ["Sudah Plotting", "Belum Plotting"];
+
+  function sortAsc(key: "nama") {
+    setSortKey(key);
+    setSortDir("asc");
+  }
+  function sortDesc(key: "nama") {
+    setSortKey(key);
+    setSortDir("desc");
+  }
+  function sortReset() {
+    setSortKey(null);
+  }
+
+  const filtered = useMemo(() => {
+    const kw = search.trim().toLowerCase();
+    let hasil = rows.filter((r) => {
+      if (kw && !r.nama.toLowerCase().includes(kw)) return false;
+      if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra"))
+        return false;
+      if (
+        pendaftaranSel.size > 0 &&
+        !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mengajukan Diri" : "Belum Mengajukan Diri")
+      )
+        return false;
+      if (plottingSel.size > 0 && !plottingSel.has(r.sudah_plotting ? "Sudah Plotting" : "Belum Plotting"))
+        return false;
+      for (const k of KEGIATAN_LAIN_DAFTAR) {
+        const sel = kegiatanSel[k];
+        if (sel && sel.size > 0) {
+          const label = r.kegiatan_lain.includes(k) ? "Ikut" : "Tidak Ikut";
+          if (!sel.has(label)) return false;
+        }
+      }
+      return true;
+    });
+
+    if (sortKey === "nama") {
+      hasil = [...hasil].sort((a, b) => {
+        const cmp = a.nama.localeCompare(b.nama, "id");
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return hasil;
+  }, [rows, search, statusSel, pendaftaranSel, plottingSel, kegiatanSel, sortKey, sortDir]);
+
+  function handleExport() {
+    const dataRows = filtered.map((r) => {
+      const baris: Record<string, string> = {
+        Nama: r.nama,
+        "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
+        "Mengajukan Diri Kegiatan Bencana": r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak",
+        "Sudah Plotting": r.sudah_plotting ? `Ya (${r.jumlah_subsls_diplot} Sub SLS)` : "Belum",
+      };
+      for (const k of KEGIATAN_LAIN_DAFTAR) baris[k] = r.kegiatan_lain.includes(k) ? "Ya" : "";
+      return baris;
+    });
+    const ws = XLSX.utils.json_to_sheet(dataRows);
+    ws["!cols"] = [{ wch: 26 }, { wch: 16 }, { wch: 26 }, { wch: 18 }, ...KEGIATAN_LAIN_DAFTAR.map(() => ({ wch: 16 }))];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kegiatan Petugas");
+    XLSX.writeFile(wb, "kegiatan_petugas.xlsx");
+  }
+
+  if (loading) {
+    return <p className="mt-6 text-ink/60">Memuat data kegiatan petugas...</p>;
+  }
+  if (loadError) {
+    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>;
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-3">
+      <section className="rounded-md border border-line bg-white p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-blue-400">Kegiatan Petugas</p>
+        <p className="mt-1 text-sm text-ink/70">
+          Status kesediaan &amp; keterlibatan seluruh petugas (organik &amp; mitra) di kegiatan pendataan
+          bencana maupun kegiatan lain yang berjalan bersamaan. Kolom &ldquo;Status Kepegawaian&rdquo;,
+          &ldquo;Mengajukan Diri&rdquo;, dan kelima kolom kegiatan lain BISA DIEDIT langsung di tabel ini
+          (klik checkbox/pilihan, otomatis tersimpan). Kolom &ldquo;Sudah Plotting&rdquo; murni informasi
+          (dihitung dari jumlah Sub SLS yang sudah di-plot ke petugas ini di tab Alokasi Petugas) --
+          BUKAN tombol/penugasan, hanya penanda supaya terlihat sekilas siapa yang belum kebagian
+          wilayah.
+        </p>
+        <p className="mt-2 text-xs text-ink/50">
+          Menampilkan {filtered.length} dari {rows.length} petugas.
+        </p>
+      </section>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50"
+        >
+          ⬇ Unduh Excel
+        </button>
+      </div>
+
+      <div className="max-h-[70vh] overflow-auto rounded-md border border-line">
+        <table className="w-full min-w-[1500px] text-left text-sm">
+          <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
+            <tr>
+              <ThKontrol
+                label="Nama"
+                stickyLeft
+                search={{ value: search, onChange: setSearch, placeholder: "Cari nama..." }}
+                sort={{
+                  active: sortKey === "nama",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("nama"),
+                  onDesc: () => sortDesc("nama"),
+                  onReset: sortReset,
+                }}
+              />
+              <ThKontrol
+                label="Status Kepegawaian"
+                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
+              />
+              <ThKontrol
+                label="Mengajukan Diri"
+                filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
+              />
+              <ThKontrol
+                label="Sudah Plotting"
+                filter={{ options: opsiPlotting, selected: plottingSel, onApply: setPlottingSel }}
+              />
+              {KEGIATAN_LAIN_DAFTAR.map((k) => (
+                <ThKontrol
+                  key={k}
+                  label={k}
+                  filter={{
+                    options: ["Ikut", "Tidak Ikut"],
+                    selected: kegiatanSel[k],
+                    onApply: (next) => setKegiatanSel((prev) => ({ ...prev, [k]: next })),
+                  }}
+                />
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => {
+              const kunciStatus = `${r.id}:status`;
+              const kunciMendaftar = `${r.id}:mendaftar`;
+              return (
+                <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={r.status_kepegawaian}
+                      disabled={busy.has(kunciStatus)}
+                      onChange={(e) => ubahStatusKepegawaian(r.id, e.target.value as "organik" | "mitra")}
+                      className="rounded border border-line bg-white px-1.5 py-1 text-xs disabled:opacity-50"
+                    >
+                      <option value="organik">Organik</option>
+                      <option value="mitra">Mitra</option>
+                    </select>
+                    {errSel.has(kunciStatus) && (
+                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciStatus)}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={r.pendaftaran_bencana_konfirmasi}
+                        disabled={busy.has(kunciMendaftar)}
+                        onChange={(e) => ubahMendaftar(r.id, e.target.checked)}
+                        className="h-3.5 w-3.5 accent-blue-600 disabled:opacity-50"
+                      />
+                      <span className="text-xs text-ink/70">
+                        {r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak"}
+                      </span>
+                    </label>
+                    {errSel.has(kunciMendaftar) && (
+                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciMendaftar)}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.sudah_plotting ? (
+                      <span
+                        title="Murni informasi -- plotting dilakukan di tab Alokasi Petugas, bukan di sini."
+                        className="rounded-full bg-moss-100 px-2 py-0.5 text-xs font-medium text-moss-700"
+                      >
+                        Ya ({r.jumlah_subsls_diplot} Sub SLS)
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-ink/50">
+                        Belum
+                      </span>
+                    )}
+                  </td>
+                  {KEGIATAN_LAIN_DAFTAR.map((k) => {
+                    const kunciK = `${r.id}:${k}`;
+                    const ikut = r.kegiatan_lain.includes(k);
+                    return (
+                      <td key={k} className="px-3 py-2">
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={ikut}
+                            disabled={busy.has(kunciK)}
+                            onChange={(e) => ubahKegiatanLain(r.id, k, e.target.checked)}
+                            className="h-3.5 w-3.5 accent-blue-600 disabled:opacity-50"
+                          />
+                          <span className="text-xs text-ink/70">{ikut ? "Ikut" : "—"}</span>
+                        </label>
+                        {errSel.has(kunciK) && (
+                          <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciK)}</p>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={4 + KEGIATAN_LAIN_DAFTAR.length} className="px-3 py-6 text-center text-ink/50">
+                  Tidak ada petugas yang cocok dengan filter saat ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // Ikon outline putih sederhana utk sidebar "rel langkah" -- SATU warna
 // (currentColor/putih) saja, tidak berwarna-warni, supaya konsisten dipakai
 // di atas lingkaran biru (aktif) maupun abu-abu (tidak aktif).
@@ -5283,7 +5695,9 @@ function AlokasiPetugasSection() {
 }
 
 export default function BencanaPage() {
-  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi" | "master" | "pengaturan">("identifikasi");
+  const [tab, setTab] = useState<
+    "identifikasi" | "monitoring" | "alokasi" | "master" | "kegiatan-petugas" | "pengaturan"
+  >("identifikasi");
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
@@ -5737,7 +6151,7 @@ export default function BencanaPage() {
   return (
     <main
       className={`mx-auto min-h-screen px-5 py-10 ${
-        tab === "alokasi" || tab === "master"
+        tab === "alokasi" || tab === "master" || tab === "kegiatan-petugas"
           ? "max-w-[1800px]"
           : tab === "monitoring"
           ? "max-w-6xl"
@@ -5804,6 +6218,17 @@ export default function BencanaPage() {
         </button>
         <button
           type="button"
+          onClick={() => setTab("kegiatan-petugas")}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+            tab === "kegiatan-petugas"
+              ? "bg-white text-blue-950 shadow-sm"
+              : "text-blue-400 hover:text-blue-600"
+          }`}
+        >
+          Kegiatan Petugas
+        </button>
+        <button
+          type="button"
           onClick={() => setTab("pengaturan")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "pengaturan"
@@ -5819,6 +6244,8 @@ export default function BencanaPage() {
         <AlokasiPetugasSection />
       ) : tab === "master" ? (
         <MasterPetugasSection />
+      ) : tab === "kegiatan-petugas" ? (
+        <KegiatanPetugasSection />
       ) : tab === "pengaturan" ? (
         <PengaturanBebanSection />
       ) : tab === "identifikasi" ? (
