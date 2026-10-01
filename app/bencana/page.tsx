@@ -413,6 +413,175 @@ function IkonSumberKkTerdampak({
   );
 }
 
+type MitraCalon = {
+  id: number;
+  nama: string;
+  no_telp: string | null;
+  alamat_kecamatan: string | null;
+  alamat_desa: string | null;
+  posisi: string | null;
+  status_seleksi: string | null;
+};
+
+type RekomendasiMitra = { tier1: MitraCalon[]; tier2: MitraCalon[]; tier3: MitraCalon[] };
+
+// Tombol bantuan (❓) di samping kolom "Nama Mitra" pada form Identifikasi --
+// MURNI rekomendasi/bantuan keputusan, bukan penugasan otomatis: nama hanya
+// terisi ke kolom kalau admin/mitra sendiri yang klik "Pilih nama ini".
+//
+// Skala prioritas: (1) Nagari yang sama & terdaftar Diterima di kegiatan
+// lain (Sensus 2026) -> (2) Kecamatan yang sama & terdaftar Diterima ->
+// (3) Nagari yang sama tapi belum/tidak terdaftar di kegiatan lain.
+function IkonRekomendasiMitra({
+  iddesa,
+  kecamatan,
+  onPilih,
+}: {
+  iddesa: string;
+  kecamatan: string;
+  onPilih: (nama: string) => void;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [data, setData] = useState<RekomendasiMitra | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dikueriUntuk, setDikueriUntuk] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  async function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 320;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+    if (!iddesa || !kecamatan) return;
+    const kunci = `${iddesa}|${kecamatan}`;
+    if (dikueriUntuk === kunci && data) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/bencana/rekomendasi-mitra?iddesa=${encodeURIComponent(iddesa)}&kecamatan=${encodeURIComponent(
+          kecamatan
+        )}`
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal memuat rekomendasi mitra.");
+      setData(json);
+      setDikueriUntuk(kunci);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function Daftar({ list }: { list: MitraCalon[] }) {
+    if (list.length === 0) return <p className="text-ink/40">Tidak ada.</p>;
+    return (
+      <ul className="space-y-1">
+        {list.map((m) => (
+          <li key={m.id} className="flex items-center justify-between gap-2 border-b border-line/60 pb-1 last:border-0">
+            <div className="min-w-0">
+              <p className="truncate font-medium text-ink">{m.nama}</p>
+              <p className="truncate text-[10px] text-ink/50">
+                {m.alamat_desa || "-"}, {m.alamat_kecamatan || "-"}
+                {m.posisi ? ` • ${m.posisi}` : ""}
+                {m.no_telp ? ` • ${m.no_telp}` : ""}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onPilih(m.nama);
+                setBuka(false);
+              }}
+              className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-900 hover:bg-blue-100"
+            >
+              Pilih
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block shrink-0 align-middle">
+      <button
+        type="button"
+        onClick={toggle}
+        title="Rekomendasi nama mitra untuk Nagari ini"
+        className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs font-bold leading-none text-blue-900 hover:bg-blue-200"
+      >
+        ?
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 320 }}
+          className="z-50 max-h-96 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+        >
+          <p className="font-semibold text-ink">Rekomendasi Nama Mitra</p>
+          {!iddesa || !kecamatan ? (
+            <p className="mt-1 text-ink/60">Pilih Kecamatan dan Nagari dulu di bawah.</p>
+          ) : loading ? (
+            <p className="mt-1 text-ink/60">Memuat...</p>
+          ) : error ? (
+            <p className="mt-1 text-rust-600">{error}</p>
+          ) : (
+            data && (
+              <div className="mt-1.5 flex flex-col gap-2.5">
+                <div>
+                  <p className="mb-1 font-medium text-moss-700">
+                    1) Nagari sama &amp; terdaftar kegiatan lain (Sensus 2026)
+                  </p>
+                  <Daftar list={data.tier1} />
+                </div>
+                <div>
+                  <p className="mb-1 font-medium text-blue-900">
+                    2) Kecamatan sama &amp; terdaftar kegiatan lain
+                  </p>
+                  <Daftar list={data.tier2} />
+                </div>
+                <div>
+                  <p className="mb-1 font-medium text-orange-700">
+                    3) Nagari sama, belum/tidak terdaftar kegiatan lain
+                  </p>
+                  <Daftar list={data.tier3} />
+                </div>
+                <p className="border-t border-line pt-1.5 text-[10px] text-ink/40">
+                  Hanya rekomendasi -- klik &quot;Pilih&quot; untuk mengisi kolom Nama
+                  Mitra, atau tetap ketik nama lain secara manual.
+                </p>
+              </div>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Ikon "bandingkan dgn data verifikasi" (🧭) di baris Sub SLS yang Jorong-nya
 // SUDAH ADA data verifikasi resmi (lihat bencana_kk_terdampak_verifikasi_jorong
 // & AMBANG_SELISIH_VERIFIKASI_JORONG). Beda dgn IkonSumberKkTerdampak, ikon
@@ -5606,6 +5775,14 @@ export default function BencanaPage() {
             <div>
               <label className="text-sm font-medium text-ink">
                 Nama Mitra <span className="text-rust-500">*</span>
+                <IkonRekomendasiMitra
+                  iddesa={selectedIddesa}
+                  kecamatan={selectedKecamatan}
+                  onPilih={(nama) => {
+                    setNamaInput(nama);
+                    setMitraIdManual(null);
+                  }}
+                />
               </label>
               <input
                 list="daftar-mitra"
