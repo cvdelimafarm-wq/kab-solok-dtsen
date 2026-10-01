@@ -5681,7 +5681,7 @@ export default function BencanaPage() {
                                     : "border-line bg-white text-ink hover:border-blue-400"
                                 }`}
                               >
-                                Tidak, sebagian
+                                Ya, sebagian
                               </button>
                               <button
                                 type="button"
