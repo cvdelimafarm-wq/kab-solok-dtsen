@@ -729,6 +729,14 @@ type KertasKerjaBebanRow = {
   // membandingkan thd total kk_terdampak (dijumlah per Jorong) & menandai
   // Sub SLS yg selisihnya jauh sbg perlu ditinjau ulang manual.
   verifikasi_total_keluarga: number | null;
+  // "KK Terdampak (Wawancara Sub SLS)" -- angka PER SUB SLS langsung dari
+  // field perkiraan KK yg diisi mitra/anak magang scr spesifik per Sub SLS
+  // (beda dari kk_terdampak_estimasi yg cuma rata-rata per Jorong). null
+  // kalau belum ada laporan yg spesifik menyebut Sub SLS ini; kalau Jorong
+  // ybs ada laporan "tidak ada yg terdampak", kk_wawancara_tidak_terdampak
+  // jadi true (ditampilkan sbg "NO", bukan angka).
+  kk_wawancara: number | null;
+  kk_wawancara_tidak_terdampak: boolean;
 };
 
 // Selisih di atas ini (KK) antara data verifikasi resmi per Jorong vs total
@@ -3658,7 +3666,7 @@ function AlokasiPetugasSection() {
             </div>
 
             <div className="mt-2 overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1350px] text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <th className="px-3 py-2 font-medium">Kecamatan</th>
@@ -3676,6 +3684,15 @@ function AlokasiPetugasSection() {
                     />
                     <th className="px-3 py-2 font-medium">KK Total</th>
                     <th className="px-3 py-2 font-medium">KK Terdampak</th>
+                    <th className="px-3 py-2 font-medium">
+                      KK Terdampak (Wawancara Sub SLS)
+                      <span
+                        className="ml-1 cursor-help text-ink/40"
+                        title="Angka spesifik per Sub SLS dari hasil wawancara mitra/anak magang (field perkiraan KK per Sub SLS saat Identifikasi), bukan rata-rata per Jorong. 'NO' = Jorong ybs sudah ada laporan 'tidak ada yang terdampak'. '-' = belum ada laporan spesifik sampai level Sub SLS ini."
+                      >
+                        ⓘ
+                      </span>
+                    </th>
                     <th className="px-3 py-2 font-medium">KK Tidak Terdampak</th>
                     <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
                     <th className="px-3 py-2 font-medium">Aksi</th>
@@ -3764,6 +3781,36 @@ function AlokasiPetugasSection() {
                               </span>
                             )}
                           </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.kk_wawancara_tidak_terdampak ? (
+                            <span
+                              className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                              title="Jorong ini sudah ada laporan 'tidak ada yang terdampak' dari mitra/anak magang."
+                            >
+                              NO
+                            </span>
+                          ) : r.kk_wawancara != null ? (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-ink">
+                                {r.kk_wawancara.toLocaleString("id-ID")}
+                              </span>
+                              {terdampak !== r.kk_wawancara && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: r.kk_wawancara as number }))
+                                  }
+                                  title="Pakai angka wawancara ini sbg KK Terdampak"
+                                  className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-900 hover:bg-blue-100"
+                                >
+                                  pakai
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-ink/30">-</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-ink/80">{tidakTerdampak.toLocaleString("id-ID")}</td>
                         <td className="px-3 py-2 font-medium text-ink">
