@@ -36,19 +36,32 @@ export async function GET() {
   }
 
   try {
-    const { data, error } = await supabase
-      .from("bencana_wilayah")
-      .select("idsubsls, iddesa, idsls, kecamatan, nagari, sls, sub_sls, daftar_awal")
-      .order("kecamatan", { ascending: true })
-      .order("nagari", { ascending: true })
-      .order("idsls", { ascending: true })
-      .order("sub_sls", { ascending: true });
+    // Ambil SEMUA baris lewat paginasi .range() -- proyek Supabase ini
+    // membatasi max rows per request (defaultnya 1000), sedangkan
+    // bencana_wilayah sudah > 1000 baris (satu baris per Sub SLS). Tanpa
+    // paginasi, baris-baris di ekor urutan (abjad kecamatan/nagari
+    // terakhir, mis. sebagian Nagari di Kec. X Koto Singkarak) terpotong
+    // diam-diam dan hilang dari dropdown form Identifikasi.
+    const PAGE_SIZE = 1000;
+    const rows: WilayahRow[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("bencana_wilayah")
+        .select("idsubsls, iddesa, idsls, kecamatan, nagari, sls, sub_sls, daftar_awal")
+        .order("kecamatan", { ascending: true })
+        .order("nagari", { ascending: true })
+        .order("idsls", { ascending: true })
+        .order("sub_sls", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      const page = (data ?? []) as WilayahRow[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
     }
-
-    const rows = (data ?? []) as WilayahRow[];
 
     // Susun pohon: kecamatan -> nagari -> jorong (idsls) -> daftar sub SLS
     type SubslsItem = { idsubsls: string; sub_sls: string };
