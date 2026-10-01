@@ -503,11 +503,9 @@ function IkonRekomendasiMitra({
         {list.map((m) => (
           <li key={m.id} className="flex items-center justify-between gap-2 border-b border-line/60 pb-1 last:border-0">
             <div className="min-w-0">
-              <p className="truncate font-medium text-ink">{m.nama}</p>
-              <p className="truncate text-[10px] text-ink/50">
-                {m.alamat_desa || "-"}, {m.alamat_kecamatan || "-"}
-                {m.posisi ? ` • ${m.posisi}` : ""}
-                {m.no_telp ? ` • ${m.no_telp}` : ""}
+              <p className="truncate font-medium text-ink">
+                {m.nama}
+                {m.no_telp ? ` (${m.no_telp})` : ""}
               </p>
             </div>
             <button
@@ -541,7 +539,7 @@ function IkonRekomendasiMitra({
           style={{ position: "fixed", top: pos.top, left: pos.left, width: 320 }}
           className="z-50 max-h-96 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
         >
-          <p className="font-semibold text-ink">Rekomendasi Nama Mitra</p>
+          <p className="font-semibold text-ink">Rekomendasi Nama Mitra untuk dihubungi</p>
           {!iddesa || !kecamatan ? (
             <p className="mt-1 text-ink/60">Pilih Kecamatan dan Nagari dulu di bawah.</p>
           ) : loading ? (
