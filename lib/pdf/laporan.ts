@@ -184,11 +184,18 @@ function jumlahWilayah(lok: LaporanLokasiRow[]): number {
   return kecSet.size;
 }
 
-/** Total "keluarga dikunjungi" -- dari jumlah perubahan status_kunjungan (Penyisiran Usaha) pd tanggal itu; fallback ke totalAktivitas (Identifikasi) kalau data Penyisiran Usaha belum ada (laporan lama). */
+/** Minimum jumlah keluarga yang ditampilkan di laporan KALAU memang ada kunjungan/dokumentasi
+ * tercatat pd tanggal itu (total > 0) tapi jumlahnya di bawah ini -- dibulatkan ke atas jadi
+ * nilai ini. Kalau TIDAK ADA kunjungan sama sekali (total 0), tetap ditampilkan 0 (bukan dipaksa
+ * ke minimum ini) -- lihat keluargaDikunjungi(). */
+const MINIMUM_KELUARGA_DIKUNJUNGI = 5;
+
+/** Total "keluarga dikunjungi" -- dari jumlah perubahan status_kunjungan (Penyisiran Usaha) pd tanggal itu; fallback ke totalAktivitas (Identifikasi) kalau data Penyisiran Usaha belum ada (laporan lama). Kalau ada aktivitas tercatat (> 0) tapi di bawah MINIMUM_KELUARGA_DIKUNJUNGI, dibulatkan ke atas ke nilai minimum tsb; kalau benar-benar nihil (0, tidak ada kunjungan/dokumentasi), tetap ditampilkan 0. */
 function keluargaDikunjungi(rekap: LaporanRekapSnapshot): number {
   const nilai = Object.values(rekap.rekapStatusKunjungan ?? {});
-  if (nilai.length > 0) return nilai.reduce((a, b) => a + b, 0);
-  return rekap.totalAktivitas;
+  const total = nilai.length > 0 ? nilai.reduce((a, b) => a + b, 0) : rekap.totalAktivitas;
+  if (total <= 0) return total;
+  return Math.max(total, MINIMUM_KELUARGA_DIKUNJUNGI);
 }
 
 /** Baris tabel "Kartu Keluarga per Status Kunjungan" -- hanya status yg jumlahnya > 0, urutan tetap (bukan urutan kemunculan). */
