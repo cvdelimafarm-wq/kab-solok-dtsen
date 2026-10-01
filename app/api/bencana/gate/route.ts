@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       nagari,
       mitra_id,
       nama_mitra,
+      nama_pegawai_magang,
       ada_jorong_terdampak,
       catatan,
     } = body ?? {};
@@ -47,6 +48,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Data tidak lengkap atau tidak valid." }, { status: 400 });
     }
 
+    const namaMagang =
+      typeof nama_pegawai_magang === "string" && nama_pegawai_magang.trim()
+        ? nama_pegawai_magang.trim()
+        : null;
+
     const { data, error } = await supabase
       .from("bencana_identifikasi_nagari_gate")
       .insert({
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
         nagari: nagari.trim(),
         mitra_id: typeof mitra_id === "number" ? mitra_id : null,
         nama_mitra: nama_mitra.trim(),
+        nama_pegawai_magang: namaMagang,
         ada_jorong_terdampak,
         catatan: typeof catatan === "string" && catatan.trim() ? catatan.trim() : null,
       })
@@ -63,6 +70,20 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Catat nama pegawai magang ke master list (kalau belum ada) supaya
+    // muncul di dropdown utk pengisian berikutnya -- gagal di sini tidak
+    // boleh menggagalkan submit jawaban gate yang sudah tersimpan.
+    if (namaMagang) {
+      await supabase
+        .from("bencana_pegawai_magang")
+        .insert({ nama: namaMagang })
+        .select("id")
+        .then(
+          () => {},
+          () => {}
+        );
     }
 
     return NextResponse.json({ data });

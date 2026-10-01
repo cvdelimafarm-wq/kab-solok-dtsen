@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       jorong,
       mitra_id,
       nama_mitra,
+      nama_pegawai_magang,
       seluruh_subsls_terdampak,
       tidak_ada_terdampak,
       subsls_terdampak,
@@ -74,6 +75,10 @@ export async function POST(req: NextRequest) {
     } = body ?? {};
 
     const tidakAdaTerdampak = tidak_ada_terdampak === true;
+    const namaMagang =
+      typeof nama_pegawai_magang === "string" && nama_pegawai_magang.trim()
+        ? nama_pegawai_magang.trim()
+        : null;
 
     if (
       typeof idsls !== "string" || !idsls.trim() ||
@@ -180,6 +185,7 @@ export async function POST(req: NextRequest) {
         jorong: jorong.trim(),
         mitra_id: typeof mitra_id === "number" ? mitra_id : null,
         nama_mitra: nama_mitra.trim(),
+        nama_pegawai_magang: namaMagang,
         seluruh_subsls_terdampak,
         tidak_ada_terdampak: tidakAdaTerdampak,
         subsls_terdampak: subslsFinal,
@@ -194,6 +200,20 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Catat nama pegawai magang ke master list (kalau belum ada) supaya
+    // muncul di dropdown utk pengisian berikutnya -- gagal di sini tidak
+    // boleh menggagalkan hasil identifikasi yang sudah tersimpan.
+    if (namaMagang) {
+      await supabase
+        .from("bencana_pegawai_magang")
+        .insert({ nama: namaMagang })
+        .select("id")
+        .then(
+          () => {},
+          () => {}
+        );
     }
 
     return NextResponse.json({ data });

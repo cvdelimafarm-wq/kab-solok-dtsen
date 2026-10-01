@@ -1,8 +1,10 @@
 // app/api/bencana/monitoring/route.ts
 //
 // GET -> ringkasan hasil identifikasi untuk tab Monitoring: agregat per
-// nagari (dari RPC bencana_monitoring_nagari) dan per jorong (dari RPC
-// bencana_monitoring_jorong), termasuk penanda konflik antar mitra.
+// nagari (dari RPC bencana_monitoring_nagari), per jorong (dari RPC
+// bencana_monitoring_jorong), termasuk penanda konflik antar mitra, dan
+// per pegawai magang (dari RPC bencana_monitoring_magang) -- jumlah hasil
+// identifikasi yang masuk HARI INI per pegawai magang.
 // Publik, tanpa login (read-only, tidak ada data sensitif).
 
 import { NextResponse } from "next/server";
@@ -25,9 +27,10 @@ export async function GET() {
   }
 
   try {
-    const [nagariRes, jorongRes] = await Promise.all([
+    const [nagariRes, jorongRes, magangRes] = await Promise.all([
       supabase.rpc("bencana_monitoring_nagari"),
       supabase.rpc("bencana_monitoring_jorong"),
+      supabase.rpc("bencana_monitoring_magang"),
     ]);
 
     if (nagariRes.error) {
@@ -36,10 +39,14 @@ export async function GET() {
     if (jorongRes.error) {
       return NextResponse.json({ error: jorongRes.error.message }, { status: 500 });
     }
+    if (magangRes.error) {
+      return NextResponse.json({ error: magangRes.error.message }, { status: 500 });
+    }
 
     return NextResponse.json({
       nagari: nagariRes.data ?? [],
       jorong: jorongRes.data ?? [],
+      magang: magangRes.data ?? [],
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";

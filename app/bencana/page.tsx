@@ -30,6 +30,16 @@ type MitraItem = {
   saran_in_scope: boolean;
 };
 
+type PegawaiMagangItem = { id: number; nama: string };
+
+type MonitoringMagangRow = {
+  id: number;
+  nama: string;
+  jumlah_hari_ini: number;
+  jumlah_total: number;
+  terakhir_diisi: string | null;
+};
+
 type MonitoringNagariRow = {
   iddesa: string;
   kecamatan: string;
@@ -673,6 +683,75 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
       <p className="text-xs font-medium">{label}</p>
       <p className="text-lg font-semibold">{nilai}</p>
     </div>
+  );
+}
+
+// Monitoring Magang -- ditaruh paling atas tab Monitoring. Menghitung
+// hasil identifikasi (per-Jorong) yang masuk HARI INI per pegawai magang,
+// termasuk pegawai magang yang hari ini belum mengisi sama sekali (0)
+// supaya kelihatan siapa yang belum submit. Nama yang belum pernah ada di
+// Identifikasi (belum didampingi magang) tidak muncul di sini -- itu
+// bukan masalah, kolomnya memang opsional.
+function MonitoringMagangSection({ data }: { data: MonitoringMagangRow[] }) {
+  if (data.length === 0) {
+    return (
+      <section className="rounded-md border border-line bg-white p-4">
+        <h3 className="font-medium text-blue-950">👩‍🎓 Monitoring Magang</h3>
+        <p className="mt-1 text-sm text-ink/60">
+          Belum ada nama pegawai magang yang tercatat. Nama akan muncul di sini
+          begitu diisi lewat kolom &quot;Nama Pegawai Magang&quot; pada form
+          Identifikasi.
+        </p>
+      </section>
+    );
+  }
+
+  const totalHariIni = data.reduce((sum, m) => sum + m.jumlah_hari_ini, 0);
+  const belumIsiHariIni = data.filter((m) => m.jumlah_hari_ini === 0).length;
+
+  return (
+    <section className="rounded-md border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-medium text-blue-950">👩‍🎓 Monitoring Magang</h3>
+        <span className="shrink-0 rounded-full bg-moss-100 px-3 py-1 text-xs font-medium text-moss-700">
+          {totalHariIni} hasil identifikasi masuk hari ini
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-ink/60">
+        Jumlah hasil identifikasi (per-Jorong) yang dimasukkan tiap pegawai
+        magang hari ini.{" "}
+        {belumIsiHariIni > 0 && (
+          <span className="text-orange-700">
+            {belumIsiHariIni} pegawai magang belum mengisi hari ini.
+          </span>
+        )}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {data.map((m) => (
+          <div
+            key={m.id}
+            className={`rounded-md border px-3 py-2 ${
+              m.jumlah_hari_ini > 0
+                ? "border-moss-200 bg-moss-50"
+                : "border-line bg-gray-50"
+            }`}
+          >
+            <p className="truncate text-sm font-medium text-ink" title={m.nama}>
+              {m.nama}
+            </p>
+            <p
+              className={`text-lg font-semibold ${
+                m.jumlah_hari_ini > 0 ? "text-moss-700" : "text-ink/40"
+              }`}
+            >
+              {m.jumlah_hari_ini}
+              <span className="ml-1 text-xs font-normal text-ink/50">hari ini</span>
+            </p>
+            <p className="text-xs text-ink/50">Total keseluruhan: {m.jumlah_total}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -4971,6 +5050,7 @@ export default function BencanaPage() {
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
+  const [magangList, setMagangList] = useState<PegawaiMagangItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -4978,6 +5058,7 @@ export default function BencanaPage() {
   const [namaInput, setNamaInput] = useState("");
   const [mitraIdManual, setMitraIdManual] = useState<number | null>(null);
   const [saranDipakai, setSaranDipakai] = useState(false);
+  const [namaMagangInput, setNamaMagangInput] = useState("");
 
   // Filter wilayah (selalu dapat diubah bebas)
   const [selectedKecamatan, setSelectedKecamatan] = useState("");
@@ -4998,20 +5079,24 @@ export default function BencanaPage() {
   const [monError, setMonError] = useState<string | null>(null);
   const [monNagari, setMonNagari] = useState<MonitoringNagariRow[]>([]);
   const [monJorong, setMonJorong] = useState<MonitoringJorongRow[]>([]);
+  const [monMagang, setMonMagang] = useState<MonitoringMagangRow[]>([]);
 
   useEffect(() => {
     async function loadAwal() {
       try {
-        const [wRes, mRes] = await Promise.all([
+        const [wRes, mRes, pmRes] = await Promise.all([
           fetch("/api/bencana/wilayah"),
           fetch("/api/bencana/mitra"),
+          fetch("/api/bencana/pegawai-magang"),
         ]);
         const wJson = await wRes.json();
         const mJson = await mRes.json();
+        const pmJson = await pmRes.json();
         if (!wRes.ok) throw new Error(wJson.error || "Gagal memuat daftar wilayah.");
         if (!mRes.ok) throw new Error(mJson.error || "Gagal memuat daftar mitra.");
         setWilayah(wJson.data ?? []);
         setMitraList(mJson.data ?? []);
+        if (pmRes.ok) setMagangList(pmJson.data ?? []);
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Gagal memuat data awal.");
       } finally {
@@ -5032,6 +5117,7 @@ export default function BencanaPage() {
         if (!res.ok) throw new Error(json.error || "Gagal memuat monitoring.");
         setMonNagari(json.nagari ?? []);
         setMonJorong(json.jorong ?? []);
+        setMonMagang(json.magang ?? []);
       } catch (err) {
         setMonError(err instanceof Error ? err.message : "Gagal memuat monitoring.");
       } finally {
@@ -5040,6 +5126,20 @@ export default function BencanaPage() {
     }
     loadMonitoring();
   }, [tab]);
+
+  // Tambahkan nama pegawai magang ke daftar lokal (optimis) begitu dipakai
+  // di suatu submit, supaya form berikutnya (jorong lain di nagari yang
+  // sama) langsung lihat nama itu di dropdown tanpa perlu reload. Server
+  // (route gate/jorong) yang menyimpan permanen ke bencana_pegawai_magang.
+  function catatNamaMagangLokal(nama: string) {
+    const trimmed = nama.trim();
+    if (!trimmed) return;
+    setMagangList((prev) =>
+      prev.some((m) => m.nama.trim().toLowerCase() === trimmed.toLowerCase())
+        ? prev
+        : [...prev, { id: -Date.now(), nama: trimmed }].sort((a, b) => a.nama.localeCompare(b.nama))
+    );
+  }
 
   const matchedMitra = useMemo(() => {
     const nama = namaInput.trim().toLowerCase();
@@ -5113,6 +5213,7 @@ export default function BencanaPage() {
           nagari: selectedNagariItem.nagari,
           mitra_id: matchedMitra?.id ?? mitraIdManual,
           nama_mitra: namaInput.trim(),
+          nama_pegawai_magang: namaMagangInput.trim() || null,
           ada_jorong_terdampak: jawaban,
           catatan: gateCatatan,
         }),
@@ -5120,6 +5221,7 @@ export default function BencanaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mengirim jawaban.");
       setGateSubmitted(true);
+      catatNamaMagangLokal(namaMagangInput);
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Gagal mengirim jawaban.");
       setGateAnswer(null);
@@ -5226,6 +5328,7 @@ export default function BencanaPage() {
           jorong: jorong.jorong,
           mitra_id: matchedMitra?.id ?? mitraIdManual,
           nama_mitra: namaInput.trim(),
+          nama_pegawai_magang: namaMagangInput.trim() || null,
           seluruh_subsls_terdampak: state.jawaban === "seluruh",
           tidak_ada_terdampak: state.jawaban === "tidak_ada",
           subsls_terdampak: Array.from(state.checkedSubsls),
@@ -5245,6 +5348,7 @@ export default function BencanaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mengirim data jorong.");
       updateJorongState(jorong.idsls, { submitting: false, submitted: true, error: null });
+      catatNamaMagangLokal(namaMagangInput);
     } catch (err) {
       updateJorongState(jorong.idsls, {
         submitting: false,
@@ -5501,7 +5605,7 @@ export default function BencanaPage() {
           <section className="flex flex-col gap-4">
             <div>
               <label className="text-sm font-medium text-ink">
-                Nama Bapak/Ibu <span className="text-rust-500">*</span>
+                Nama Mitra <span className="text-rust-500">*</span>
               </label>
               <input
                 list="daftar-mitra"
@@ -5524,6 +5628,26 @@ export default function BencanaPage() {
                   {matchedMitra.alamat_kecamatan}. Filter di bawah dapat diubah bebas.
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-ink">Nama Pegawai Magang</label>
+              <input
+                list="daftar-magang"
+                value={namaMagangInput}
+                onChange={(e) => setNamaMagangInput(e.target.value)}
+                placeholder="Isi jika didampingi pegawai magang (opsional)"
+                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              />
+              <datalist id="daftar-magang">
+                {magangList.map((m) => (
+                  <option key={m.id} value={m.nama} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-ink/50">
+                Pilih dari daftar kalau sudah pernah diisi sebelumnya (supaya nama
+                konsisten/tidak typo), atau ketik nama baru kalau belum pernah ada.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -5871,6 +5995,8 @@ export default function BencanaPage() {
             <p className="rounded-md bg-rust-100 px-3 py-2 text-sm text-rust-700">{monError}</p>
           ) : (
             <>
+              <MonitoringMagangSection data={monMagang} />
+
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-semibold text-blue-950">Progress Identifikasi</h2>
