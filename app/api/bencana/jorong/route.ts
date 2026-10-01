@@ -1,13 +1,30 @@
 // app/api/bencana/jorong/route.ts
 //
 // POST -> simpan jawaban tingkat JORONG: "apakah seluruh Sub SLS di jorong
-// ini terdampak?" (ya/tidak) + (jika tidak/sebagian) daftar sub SLS yang
-// dicentang + indikator dampak opsional + catatan. Publik, tanpa login.
+// ini terdampak?" (ya, seluruhnya / tidak, sebagian / tidak ada yang
+// terdampak) + (jika sebagian) daftar sub SLS yang ditandai TERDAMPAK atau
+// RAGU + perkiraan jumlah keluarga terdampak per Sub SLS + indikator dampak
+// (jorong-level) opsional + catatan. Publik, tanpa login.
 //
 // Saat seluruh_subsls_terdampak === true, server (bukan client) yang
 // mengisi subsls_terdampak dengan SELURUH idsubsls milik idsls tsb --
 // diambil segar dari bencana_wilayah -- agar agregasi di Monitoring
 // konsisten walau daftar sub SLS berubah di kemudian hari.
+//
+// tidak_ada_terdampak === true -> TIDAK ADA Sub SLS yang terdampak di Jorong
+// ini sama sekali (subsls_terdampak & subsls_ragu dikosongkan paksa). Baris
+// ini tetap disimpan (bukan di-skip) supaya tercatat sbg respons mitra utk
+// Jorong tsb di Monitoring -- lihat bencana_monitoring_jorong().
+//
+// subsls_ragu: Sub SLS yg mitra RAGU apakah terdampak atau tidak -- SENGAJA
+// TIDAK dimasukkan ke subsls_terdampak (jadi tidak ikut dihitung "terdampak"
+// di agregasi/skor beban otomatis manapun) supaya tetap perlu ditinjau
+// manual, bukan diasumsikan terdampak.
+//
+// perkiraan_kk_subsls: perkiraan jumlah KELUARGA terdampak PER Sub SLS (utk
+// Sub SLS yg ada di subsls_terdampak ATAU subsls_ragu) -- lebih presisi
+// drpd indikator_dampak_kk yg levelnya per-Jorong, dipakai di Kertas Kerja
+// Beban utk atribusi per Sub SLS yg akurat.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -47,11 +64,16 @@ export async function POST(req: NextRequest) {
       mitra_id,
       nama_mitra,
       seluruh_subsls_terdampak,
+      tidak_ada_terdampak,
       subsls_terdampak,
+      subsls_ragu,
+      perkiraan_kk_subsls,
       indikator_dampak,
       indikator_dampak_kk,
       catatan,
     } = body ?? {};
+
+    const tidakAdaTerdampak = tidak_ada_terdampak === true;
 
     if (
       typeof idsls !== "string" || !idsls.trim() ||
@@ -66,8 +88,15 @@ export async function POST(req: NextRequest) {
     }
 
     let subslsFinal: string[] = [];
+    let subslsRaguFinal: string[] = [];
 
-    if (seluruh_subsls_terdampak) {
+    if (tidakAdaTerdampak) {
+      // Tidak ada Sub SLS yang terdampak di Jorong ini -- baris tetap
+      // disimpan (sbg respons mitra), subsls_terdampak & subsls_ragu paksa
+      // kosong apa pun yg dikirim client.
+      subslsFinal = [];
+      subslsRaguFinal = [];
+    } else if (seluruh_subsls_terdampak) {
       // Ambil segar seluruh idsubsls milik idsls ini dari tabel referensi.
       const { data: subslsRows, error: subslsError } = await supabase
         .from("bencana_wilayah")
@@ -79,13 +108,45 @@ export async function POST(req: NextRequest) {
       }
       subslsFinal = (subslsRows ?? []).map((r) => r.idsubsls as string);
     } else {
-      if (!Array.isArray(subsls_terdampak) || subsls_terdampak.length === 0) {
+      const subslsRaguMentah = Array.isArray(subsls_ragu)
+        ? subsls_ragu.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      if (
+        (!Array.isArray(subsls_terdampak) || subsls_terdampak.length === 0) &&
+        subslsRaguMentah.length === 0
+      ) {
         return NextResponse.json(
-          { error: "Pilih minimal satu Sub SLS yang terdampak, atau tandai seluruh Sub SLS terdampak." },
+          {
+            error:
+              "Pilih minimal satu Sub SLS (terdampak atau ragu), atau tandai seluruh Sub SLS terdampak / tidak ada yang terdampak.",
+          },
           { status: 400 }
         );
       }
-      subslsFinal = subsls_terdampak.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+      subslsFinal = Array.isArray(subsls_terdampak)
+        ? subsls_terdampak.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      // Ragu TIDAK boleh overlap dgn terdampak -- kalau ada, terdampak menang.
+      subslsRaguFinal = subslsRaguMentah.filter((s) => !subslsFinal.includes(s));
+    }
+
+    // Perkiraan jumlah KELUARGA terdampak PER Sub SLS -- hanya utk Sub SLS
+    // yg memang ditandai terdampak atau ragu, nilai harus bilangan bulat >= 0.
+    const subslsBolehDiisi = new Set([...subslsFinal, ...subslsRaguFinal]);
+    const perkiraanKkSubslsFinal: Record<string, number> = {};
+    if (
+      perkiraan_kk_subsls &&
+      typeof perkiraan_kk_subsls === "object" &&
+      !Array.isArray(perkiraan_kk_subsls)
+    ) {
+      for (const key of Object.keys(perkiraan_kk_subsls as Record<string, unknown>)) {
+        if (!subslsBolehDiisi.has(key)) continue;
+        const raw = (perkiraan_kk_subsls as Record<string, unknown>)[key];
+        const num = typeof raw === "number" ? raw : Number(raw);
+        if (Number.isFinite(num) && Number.isInteger(num) && num >= 0) {
+          perkiraanKkSubslsFinal[key] = num;
+        }
+      }
     }
 
     let indikatorFinal: string[] = [];
@@ -120,7 +181,10 @@ export async function POST(req: NextRequest) {
         mitra_id: typeof mitra_id === "number" ? mitra_id : null,
         nama_mitra: nama_mitra.trim(),
         seluruh_subsls_terdampak,
+        tidak_ada_terdampak: tidakAdaTerdampak,
         subsls_terdampak: subslsFinal,
+        subsls_ragu: subslsRaguFinal,
+        perkiraan_kk_subsls: perkiraanKkSubslsFinal,
         indikator_dampak: indikatorFinal,
         indikator_dampak_kk: indikatorKkFinal,
         catatan: typeof catatan === "string" && catatan.trim() ? catatan.trim() : null,

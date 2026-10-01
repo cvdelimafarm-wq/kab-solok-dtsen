@@ -54,6 +54,7 @@ type MonitoringJorongRow = {
   jumlah_identifikasi: number;
   jumlah_bilang_seluruh: number;
   jumlah_bilang_sebagian: number;
+  jumlah_bilang_tidak_ada: number;
   konflik_jorong: boolean;
   subsls_terdampak_gabungan: string[];
   jumlah_subsls_terdampak_gabungan: number;
@@ -592,8 +593,13 @@ const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
 ];
 
 type JorongLocalState = {
-  seluruh: boolean | null;
-  checkedSubsls: Set<string>;
+  // "seluruh" = seluruh Sub SLS terdampak, "sebagian" = sebagian (dipilih di
+  // checklist Sub SLS), "tidak_ada" = TIDAK ADA Sub SLS yang terdampak di
+  // Jorong ini sama sekali.
+  jawaban: "seluruh" | "sebagian" | "tidak_ada" | null;
+  checkedSubsls: Set<string>; // Sub SLS yg YAKIN terdampak (dipilih saat jawaban="sebagian")
+  raguSubsls: Set<string>; // Sub SLS yg RAGU/belum yakin terdampak atau tidak
+  perkiraanKkSubsls: Record<string, number | "">; // perkiraan jumlah KELUARGA terdampak PER Sub SLS (checkedSubsls & raguSubsls)
   indikator: Set<string>;
   indikatorKk: Record<string, number | "">;
   catatan: string;
@@ -604,8 +610,10 @@ type JorongLocalState = {
 
 function emptyJorongState(): JorongLocalState {
   return {
-    seluruh: null,
+    jawaban: null,
     checkedSubsls: new Set(),
+    raguSubsls: new Set(),
+    perkiraanKkSubsls: {},
     indikator: new Set(),
     indikatorKk: {},
     catatan: "",
@@ -1865,6 +1873,7 @@ function MasterPetugasSection() {
                   onReset: sortReset,
                 }}
               />
+              <th className="px-3 py-2 font-medium">No HP</th>
               <ThKontrol
                 label="Status"
                 filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
@@ -1910,6 +1919,7 @@ function MasterPetugasSection() {
             {filtered.map((r) => (
               <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
                 <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
+                <td className="px-3 py-2 text-ink/80">{r.no_hp || "—"}</td>
                 <td className="px-3 py-2">{r.status_kepegawaian === "organik" ? "Organik" : "Mitra"}</td>
                 <td className="px-3 py-2">{r.peran ? r.peran.toUpperCase() : "—"}</td>
                 <td className="px-3 py-2">{r.aktif ? "Aktif" : "Nonaktif"}</td>
@@ -1938,7 +1948,7 @@ function MasterPetugasSection() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-3 py-6 text-center text-ink/50">
+                <td colSpan={14} className="px-3 py-6 text-center text-ink/50">
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
@@ -5129,12 +5139,41 @@ export default function BencanaPage() {
     }));
   }
 
-  function toggleSubsls(idsls: string, idsubsls: string) {
+  // Tandai SATU Sub SLS sbg "terdampak" atau "ragu" -- saling eksklusif (pilih
+  // salah satu akan menghapus tanda dari status yg lain), klik ulang pada
+  // status yg sama akan membatalkannya (kembali ke "tidak ditandai").
+  function toggleSubslsStatus(idsls: string, idsubsls: string, status: "terdampak" | "ragu") {
     const cur = getJorongState(idsls);
-    const next = new Set(cur.checkedSubsls);
-    if (next.has(idsubsls)) next.delete(idsubsls);
-    else next.add(idsubsls);
-    updateJorongState(idsls, { checkedSubsls: next });
+    const nextTerdampak = new Set(cur.checkedSubsls);
+    const nextRagu = new Set(cur.raguSubsls);
+    if (status === "terdampak") {
+      if (nextTerdampak.has(idsubsls)) {
+        nextTerdampak.delete(idsubsls);
+      } else {
+        nextTerdampak.add(idsubsls);
+        nextRagu.delete(idsubsls);
+      }
+    } else {
+      if (nextRagu.has(idsubsls)) {
+        nextRagu.delete(idsubsls);
+      } else {
+        nextRagu.add(idsubsls);
+        nextTerdampak.delete(idsubsls);
+      }
+    }
+    updateJorongState(idsls, { checkedSubsls: nextTerdampak, raguSubsls: nextRagu });
+  }
+
+  function setPerkiraanKkSubsls(idsls: string, idsubsls: string, value: string) {
+    const cur = getJorongState(idsls);
+    const next = { ...cur.perkiraanKkSubsls };
+    if (value === "") {
+      next[idsubsls] = "";
+    } else {
+      const num = Math.max(0, Math.floor(Number(value)));
+      next[idsubsls] = Number.isFinite(num) ? num : "";
+    }
+    updateJorongState(idsls, { perkiraanKkSubsls: next });
   }
 
   function toggleIndikator(idsls: string, key: string) {
@@ -5165,10 +5204,11 @@ export default function BencanaPage() {
   async function submitJorong(jorong: JorongItem) {
     if (!selectedNagariItem || !selectedKecamatan) return;
     const state = getJorongState(jorong.idsls);
-    if (state.seluruh === null) return;
-    if (!state.seluruh && state.checkedSubsls.size === 0) {
+    if (state.jawaban === null) return;
+    if (state.jawaban === "sebagian" && state.checkedSubsls.size === 0 && state.raguSubsls.size === 0) {
       updateJorongState(jorong.idsls, {
-        error: "Pilih minimal satu Sub SLS yang terdampak, atau tandai seluruh Sub SLS terdampak.",
+        error:
+          "Pilih minimal satu Sub SLS (terdampak atau ragu), atau tandai seluruh Sub SLS terdampak / tidak ada yang terdampak.",
       });
       return;
     }
@@ -5186,8 +5226,13 @@ export default function BencanaPage() {
           jorong: jorong.jorong,
           mitra_id: matchedMitra?.id ?? mitraIdManual,
           nama_mitra: namaInput.trim(),
-          seluruh_subsls_terdampak: state.seluruh,
+          seluruh_subsls_terdampak: state.jawaban === "seluruh",
+          tidak_ada_terdampak: state.jawaban === "tidak_ada",
           subsls_terdampak: Array.from(state.checkedSubsls),
+          subsls_ragu: Array.from(state.raguSubsls),
+          perkiraan_kk_subsls: Object.fromEntries(
+            Object.entries(state.perkiraanKkSubsls).filter(([, v]) => typeof v === "number")
+          ),
           indikator_dampak: Array.from(state.indikator),
           indikator_dampak_kk: Object.fromEntries(
             Array.from(state.indikator)
@@ -5602,18 +5647,20 @@ export default function BencanaPage() {
                             <p className="mt-2 text-sm text-ink">
                               Apakah seluruh Sub SLS Jorong ini terdampak?
                             </p>
-                            <div className="mt-2 flex gap-3">
+                            <div className="mt-2 flex flex-wrap gap-2">
                               <button
                                 type="button"
                                 onClick={() =>
                                   updateJorongState(jorong.idsls, {
-                                    seluruh: true,
+                                    jawaban: "seluruh",
                                     checkedSubsls: new Set(),
+                                    raguSubsls: new Set(),
+                                    perkiraanKkSubsls: {},
                                     error: null,
                                   })
                                 }
-                                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
-                                  state.seluruh === true
+                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                                  state.jawaban === "seluruh"
                                     ? "border-blue-700 bg-blue-700 text-white"
                                     : "border-line bg-white text-ink hover:border-blue-400"
                                 }`}
@@ -5624,46 +5671,112 @@ export default function BencanaPage() {
                                 type="button"
                                 onClick={() =>
                                   updateJorongState(jorong.idsls, {
-                                    seluruh: false,
+                                    jawaban: "sebagian",
                                     error: null,
                                   })
                                 }
-                                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
-                                  state.seluruh === false
+                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                                  state.jawaban === "sebagian"
                                     ? "border-blue-700 bg-blue-700 text-white"
                                     : "border-line bg-white text-ink hover:border-blue-400"
                                 }`}
                               >
                                 Tidak, sebagian
                               </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateJorongState(jorong.idsls, {
+                                    jawaban: "tidak_ada",
+                                    checkedSubsls: new Set(),
+                                    raguSubsls: new Set(),
+                                    perkiraanKkSubsls: {},
+                                    error: null,
+                                  })
+                                }
+                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                                  state.jawaban === "tidak_ada"
+                                    ? "border-rust-600 bg-rust-600 text-white"
+                                    : "border-line bg-white text-ink hover:border-rust-300"
+                                }`}
+                              >
+                                Tidak ada yang terdampak
+                              </button>
                             </div>
 
-                            {state.seluruh === false && (
+                            {state.jawaban === "sebagian" && (
                               <div className="mt-3">
                                 <p className="text-sm font-medium text-ink">
-                                  Centang Sub SLS yang terdampak:
+                                  Tandai tiap Sub SLS: Terdampak, Ragu, atau biarkan (tidak terdampak):
                                 </p>
                                 <ul className="mt-2 flex flex-col gap-1.5">
-                                  {jorong.subsls.map((s) => (
-                                    <li key={s.idsubsls}>
-                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-blue-400">
-                                        <input
-                                          type="checkbox"
-                                          checked={state.checkedSubsls.has(s.idsubsls)}
-                                          onChange={() => toggleSubsls(jorong.idsls, s.idsubsls)}
-                                          className="h-4 w-4 accent-blue-700"
-                                        />
-                                        <span className="text-sm text-ink">
-                                          Sub SLS {s.sub_sls}
-                                        </span>
-                                      </label>
-                                    </li>
-                                  ))}
+                                  {jorong.subsls.map((s) => {
+                                    const statusSub = state.checkedSubsls.has(s.idsubsls)
+                                      ? "terdampak"
+                                      : state.raguSubsls.has(s.idsubsls)
+                                      ? "ragu"
+                                      : null;
+                                    return (
+                                      <li
+                                        key={s.idsubsls}
+                                        className="rounded-md border border-line bg-white px-3 py-2"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <span className="text-sm text-ink">Sub SLS {s.sub_sls}</span>
+                                          <div className="flex gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                toggleSubslsStatus(jorong.idsls, s.idsubsls, "terdampak")
+                                              }
+                                              className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                                                statusSub === "terdampak"
+                                                  ? "bg-blue-700 text-white"
+                                                  : "bg-gray-100 text-ink/60 hover:bg-gray-200"
+                                              }`}
+                                            >
+                                              Terdampak
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleSubslsStatus(jorong.idsls, s.idsubsls, "ragu")}
+                                              className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                                                statusSub === "ragu"
+                                                  ? "bg-amber-500 text-white"
+                                                  : "bg-gray-100 text-ink/60 hover:bg-gray-200"
+                                              }`}
+                                            >
+                                              Ragu
+                                            </button>
+                                          </div>
+                                        </div>
+                                        {statusSub && (
+                                          <div className="mt-1.5 flex items-center gap-2">
+                                            <label className="text-xs text-ink/60">
+                                              Perkiraan jumlah keluarga terdampak:
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              step={1}
+                                              value={state.perkiraanKkSubsls[s.idsubsls] ?? ""}
+                                              onChange={(e) =>
+                                                setPerkiraanKkSubsls(jorong.idsls, s.idsubsls, e.target.value)
+                                              }
+                                              placeholder="0"
+                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                                            />
+                                            <span className="text-xs text-ink/50">KK</span>
+                                          </div>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               </div>
                             )}
 
-                            {state.seluruh !== null && (
+                            {(state.jawaban === "seluruh" || state.jawaban === "sebagian") && (
                               <div className="mt-3">
                                 <p className="text-sm font-medium text-ink">
                                   Indikator dampak (opsional, boleh lebih dari satu)
@@ -5708,7 +5821,7 @@ export default function BencanaPage() {
                               </div>
                             )}
 
-                            {state.seluruh !== null && (
+                            {state.jawaban !== null && (
                               <div className="mt-3">
                                 <label className="text-sm font-medium text-ink">
                                   Catatan (opsional)
@@ -5730,7 +5843,7 @@ export default function BencanaPage() {
                               </p>
                             )}
 
-                            {state.seluruh !== null && (
+                            {state.jawaban !== null && (
                               <button
                                 type="button"
                                 disabled={state.submitting}
