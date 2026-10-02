@@ -947,14 +947,19 @@ function MonitoringMagangSection({ data }: { data: MonitoringMagangRow[] }) {
   );
 }
 
-// Header kolom tabel dengan 3 kontrol terpisah -- cari (🔍), filter (▽),
-// urut (⇅) -- masing-masing buka popover sendiri supaya tidak tumpang
-// tindih/susah diklik. Popover dipasang `position: fixed` (posisi dihitung
-// dari lokasi tombol saat diklik) supaya TIDAK terpotong oleh
-// overflow-auto pembungkus tabel, dan otomatis tertutup kalau tabelnya
-// discroll atau jendela di-resize.
-type ThKontrolJenis = "search" | "filter" | "sort";
-
+// Header kolom tabel dengan kontrol cari (🔍), filter (▽), urut (⇅) --
+// (2 Okt 2026) SEMUA kontrol yang relevan utk kolom itu ditampilkan
+// SEKALIGUS dalam 1 popover gabungan (dulu: menu pilih salah satu dulu,
+// baru buka popover kontrol itu sendiri -- tidak bisa kombinasi, mis.
+// urutkan SEKALIGUS filter dalam 1x buka). Popover dipasang
+// `position: fixed` (posisi dihitung dari lokasi tombol saat diklik)
+// supaya TIDAK terpotong oleh overflow-auto pembungkus tabel, dan
+// otomatis tertutup kalau tabelnya discroll, jendela di-resize, atau
+// diklik di luar popover. Urutkan/Cari berlaku LANGSUNG saat
+// diklik/diketik (popover TIDAK otomatis tertutup) supaya bisa lanjut
+// atur kontrol lain di popover yang sama; Filter tetap pola draft+Terapkan
+// (perlu klik Terapkan dulu) spy tidak nge-refetch/filter ulang tiap 1
+// checkbox dicentang.
 function ThKontrol({
   label,
   className,
@@ -970,29 +975,18 @@ function ThKontrol({
   filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
   sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
-  // Satu tombol "⋮" per kolom (bukan 3 ikon terpisah) supaya header tetap
-  // rapi. Diklik -> kalau kolom itu punya lebih dari 1 kontrol, muncul
-  // menu pilihan (Cari/Filter/Urutkan) dulu; kalau cuma 1 kontrol yg
-  // relevan, langsung ke kontrol itu. Popover `position: fixed` (posisi
-  // dihitung dari lokasi tombol saat diklik) supaya tidak terpotong
-  // overflow-auto pembungkus tabel, dan otomatis tertutup kalau tabelnya
-  // discroll atau jendela di-resize.
-  const jenisTersedia: ThKontrolJenis[] = [
-    ...(search ? (["search"] as const) : []),
-    ...(filter ? (["filter"] as const) : []),
-    ...(sort ? (["sort"] as const) : []),
-  ];
+  const adaKontrol = !!search || !!filter || !!sort;
 
-  const [tampil, setTampil] = useState<"menu" | ThKontrolJenis | null>(null);
+  const [terbuka, setTerbuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [filterDraft, setFilterDraft] = useState<Set<string>>(new Set());
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!tampil) return;
+    if (!terbuka) return;
     function tutupJikaDiluar(e: Event) {
       if (popoverRef.current && e.target instanceof Node && popoverRef.current.contains(e.target)) return;
-      setTampil(null);
+      setTerbuka(false);
     }
     document.addEventListener("mousedown", tutupJikaDiluar);
     document.addEventListener("scroll", tutupJikaDiluar, true);
@@ -1002,44 +996,39 @@ function ThKontrol({
       document.removeEventListener("scroll", tutupJikaDiluar, true);
       window.removeEventListener("resize", tutupJikaDiluar);
     };
-  }, [tampil]);
+  }, [terbuka]);
 
   function bukaAksi(e: React.MouseEvent<HTMLButtonElement>) {
-    if (tampil) {
-      setTampil(null);
+    if (terbuka) {
+      setTerbuka(false);
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 224;
+    const lebar = 240;
     setPos({
       top: rect.bottom + 4,
       left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)),
     });
     if (filter) setFilterDraft(new Set(filter.selected));
-    setTampil(jenisTersedia.length === 1 ? jenisTersedia[0] : "menu");
+    setTerbuka(true);
   }
 
   const searchAktif = !!search?.value;
   const filterAktif = !!filter && filter.selected.size > 0;
   const aksiAktif = searchAktif || filterAktif || !!sort?.active;
-
-  const LABEL_JENIS: Record<ThKontrolJenis, string> = {
-    search: "🔍 Cari",
-    filter: "▽ Filter",
-    sort: sort?.active ? (sort.dir === "asc" ? "▲ Urutkan" : "▼ Urutkan") : "⇅ Urutkan",
-  };
+  const banyakBagian = [!!sort, !!search, !!filter].filter(Boolean).length > 1;
 
   return (
     <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-1.5">
         <span className="truncate">{label}</span>
-        {jenisTersedia.length > 0 && (
+        {adaKontrol && (
           <button
             type="button"
             title="Aksi kolom"
             onClick={bukaAksi}
             className={`shrink-0 rounded p-1 text-xs leading-none transition ${
-              aksiAktif || tampil ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
+              aksiAktif || terbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
             }`}
           >
             ⋮
@@ -1047,170 +1036,123 @@ function ThKontrol({
         )}
       </div>
 
-      {tampil === "menu" && pos && (
+      {terbuka && pos && (
         <div
           ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-          className="z-50 rounded-md border border-line bg-white p-1 text-left font-normal normal-case text-ink shadow-lg"
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 240 }}
+          className="z-50 flex flex-col gap-2 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
         >
-          {jenisTersedia.map((j) => (
-            <button
-              key={j}
-              type="button"
-              onClick={() => setTampil(j)}
-              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
-            >
-              <span>{LABEL_JENIS[j]}</span>
-              {j === "search" && searchAktif && <span className="text-[10px] text-blue-600">aktif</span>}
-              {j === "filter" && filterAktif && <span className="text-[10px] text-blue-600">aktif</span>}
-              {j === "sort" && sort?.active && <span className="text-[10px] text-blue-600">aktif</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tampil === "search" && search && pos && (
-        <div
-          ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-          className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
-        >
-          {jenisTersedia.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setTampil("menu")}
-              className="mb-1.5 text-[10px] font-medium text-ink/50 hover:text-ink/80"
-            >
-              ← Kembali
-            </button>
-          )}
-          <input
-            autoFocus
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setTampil(null);
-            }}
-            placeholder={search.placeholder ?? "Ketik kata kunci..."}
-            className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-          />
-          <p className="mt-1 text-[10px] text-ink/50">Tekan Enter untuk mencari</p>
-          {search.value && (
-            <button
-              type="button"
-              onClick={() => {
-                search.onChange("");
-                setTampil(null);
-              }}
-              className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
-            >
-              Hapus pencarian
-            </button>
-          )}
-        </div>
-      )}
-
-      {tampil === "filter" && filter && pos && (
-        <div
-          ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-          className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
-        >
-          {jenisTersedia.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setTampil("menu")}
-              className="mb-1.5 text-[10px] font-medium text-ink/50 hover:text-ink/80"
-            >
-              ← Kembali
-            </button>
-          )}
-          <div className="max-h-52 overflow-y-auto">
-            {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
-            <div className="flex flex-col gap-1">
-              {filter.options.map((opt) => (
-                <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
-                  <input
-                    type="checkbox"
-                    checked={filterDraft.has(opt)}
-                    onChange={() => {
-                      setFilterDraft((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(opt)) next.delete(opt);
-                        else next.add(opt);
-                        return next;
-                      });
-                    }}
-                    className="h-3.5 w-3.5 shrink-0 accent-blue-600"
-                  />
-                  <span className="truncate">{opt}</span>
-                </label>
-              ))}
+          {sort && (
+            <div className={banyakBagian ? "border-b border-line pb-2" : ""}>
+              {banyakBagian && (
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Urutkan</p>
+              )}
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={sort.onAsc}
+                  className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
+                    sort.active && sort.dir === "asc" ? "bg-blue-50 font-medium text-blue-700" : ""
+                  }`}
+                >
+                  ▲ Urut naik (A-Z)
+                </button>
+                <button
+                  type="button"
+                  onClick={sort.onDesc}
+                  className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
+                    sort.active && sort.dir === "desc" ? "bg-blue-50 font-medium text-blue-700" : ""
+                  }`}
+                >
+                  ▼ Urut turun (Z-A)
+                </button>
+                {sort.active && (
+                  <button
+                    type="button"
+                    onClick={sort.onReset}
+                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
+                  >
+                    ✕ Reset urutan
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
-            <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
-              Bersihkan
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                filter.onApply(filterDraft);
-                setTampil(null);
-              }}
-              className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
-            >
-              Terapkan
-            </button>
-          </div>
-        </div>
-      )}
-
-      {tampil === "sort" && sort && pos && (
-        <div
-          ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-          className="z-50 rounded-md border border-line bg-white p-1 text-left font-normal normal-case text-ink shadow-lg"
-        >
-          {jenisTersedia.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setTampil("menu")}
-              className="mb-1 block w-full px-2 py-1 text-left text-[10px] font-medium text-ink/50 hover:text-ink/80"
-            >
-              ← Kembali
-            </button>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              sort.onAsc();
-              setTampil(null);
-            }}
-            className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
-          >
-            ▲ Urut naik (A-Z)
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              sort.onDesc();
-              setTampil(null);
-            }}
-            className="block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50"
-          >
-            ▼ Urut turun (Z-A)
-          </button>
-          {sort.active && (
+
+          {search && (
+            <div className={filter ? "border-b border-line pb-2" : ""}>
+              {banyakBagian && (
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Cari</p>
+              )}
+              <input
+                autoFocus={!sort && !filter}
+                value={search.value}
+                onChange={(e) => search.onChange(e.target.value)}
+                placeholder={search.placeholder ?? "Ketik kata kunci..."}
+                className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              />
+              {search.value && (
+                <button
+                  type="button"
+                  onClick={() => search.onChange("")}
+                  className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
+                >
+                  Hapus pencarian
+                </button>
+              )}
+            </div>
+          )}
+
+          {filter && (
+            <div>
+              {banyakBagian && (
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Filter</p>
+              )}
+              <div className="max-h-44 overflow-y-auto">
+                {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
+                <div className="flex flex-col gap-1">
+                  {filter.options.map((opt) => (
+                    <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
+                      <input
+                        type="checkbox"
+                        checked={filterDraft.has(opt)}
+                        onChange={() => {
+                          setFilterDraft((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(opt)) next.delete(opt);
+                            else next.add(opt);
+                            return next;
+                          });
+                        }}
+                        className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                      />
+                      <span className="truncate">{opt}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
+                <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
+                  Bersihkan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => filter.onApply(filterDraft)}
+                  className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
+                >
+                  Terapkan
+                </button>
+              </div>
+            </div>
+          )}
+
+          {banyakBagian && (
             <button
               type="button"
-              onClick={() => {
-                sort.onReset();
-                setTampil(null);
-              }}
-              className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
+              onClick={() => setTerbuka(false)}
+              className="w-full rounded px-2 py-1 text-center text-[10px] font-medium text-ink/50 hover:bg-gray-50 hover:text-ink/80"
             >
-              ✕ Reset urutan
+              Tutup
             </button>
           )}
         </div>
