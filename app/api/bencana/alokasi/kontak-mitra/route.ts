@@ -1,8 +1,12 @@
 // app/api/bencana/alokasi/kontak-mitra/route.ts
 //
 // "Kartu Mitra Perlu Dihubungi" di tab Alokasi Petugas -- daftar MITRA aktif
-// yang BELUM konfirmasi ikut pendataan bencana (pendaftaran_bencana_konfirmasi
-// = false), supaya admin tahu siapa yang masih perlu dihubungi & ditawarkan.
+// yang (a) BELUM konfirmasi ikut pendataan bencana
+// (pendaftaran_bencana_konfirmasi = false, SAMA dgn kolom "Mengajukan Diri" di
+// tab Kegiatan Petugas) DAN (b) SUDAH di-plot ke minimal 1 Sub SLS kegiatan
+// bencana (ada baris di bencana_alokasi_subsls dgn ppl_id = id-nya). Kalau
+// mitra belum di-plot sama sekali, belum perlu dihubungi -- baru relevan
+// begitu dia di-plot tapi belum tercatat bersedia secara resmi.
 //
 // GET  -> daftar mitra tsb (nama, no_hp, kecamatan, status kontak terakhir).
 // POST { petugas_id, status: "diterima" | "menolak" | null, catatan? }
@@ -50,7 +54,22 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ data: data ?? [] });
+  // Saring lagi: hanya yang SUDAH di-plot ke minimal 1 Sub SLS (ppl_id di
+  // bencana_alokasi_subsls) -- lihat komentar di atas.
+  const kandidat = data ?? [];
+  if (kandidat.length === 0) return NextResponse.json({ data: [] });
+
+  const idList = kandidat.map((p) => p.id);
+  const { data: plotRows, error: errPlot } = await supabase
+    .from("bencana_alokasi_subsls")
+    .select("ppl_id")
+    .in("ppl_id", idList);
+  if (errPlot) return NextResponse.json({ error: errPlot.message }, { status: 500 });
+
+  const sudahDiplot = new Set((plotRows ?? []).map((r) => r.ppl_id as number));
+  const hasil = kandidat.filter((p) => sudahDiplot.has(p.id));
+
+  return NextResponse.json({ data: hasil });
 }
 
 export async function POST(req: NextRequest) {

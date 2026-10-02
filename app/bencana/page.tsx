@@ -2465,7 +2465,9 @@ function KegiatanPetugasSection() {
         Nama: r.nama,
         "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
         "Mengajukan Diri Kegiatan Bencana": r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak",
-        "Sudah Plotting": r.sudah_plotting ? `Ya (${r.jumlah_subsls_diplot} Sub SLS)` : "Belum",
+        "Sudah Plotting (ke Kegiatan Bencana)": r.sudah_plotting
+          ? `Ya (${r.jumlah_subsls_diplot} Sub SLS)`
+          : "Belum",
       };
       for (const k of KEGIATAN_LAIN_DAFTAR) baris[k] = r.kegiatan_lain.includes(k) ? "Ya" : "";
       return baris;
@@ -2492,8 +2494,9 @@ function KegiatanPetugasSection() {
           Status kesediaan &amp; keterlibatan seluruh petugas (organik &amp; mitra) di kegiatan pendataan
           bencana maupun kegiatan lain yang berjalan bersamaan. Kolom &ldquo;Status Kepegawaian&rdquo;,
           &ldquo;Mengajukan Diri&rdquo;, dan kelima kolom kegiatan lain BISA DIEDIT langsung di tabel ini
-          (klik checkbox/pilihan, otomatis tersimpan). Kolom &ldquo;Sudah Plotting&rdquo; murni informasi
-          (dihitung dari jumlah Sub SLS yang sudah di-plot ke petugas ini di tab Alokasi Petugas) --
+          (klik checkbox/pilihan, otomatis tersimpan). Kolom &ldquo;Sudah Plotting (ke Kegiatan
+          Bencana)&rdquo; murni informasi (dihitung dari jumlah Sub SLS yang sudah di-plot ke petugas ini
+          di tab Alokasi Petugas, khusus kegiatan pendataan bencana) --
           BUKAN tombol/penugasan, hanya penanda supaya terlihat sekilas siapa yang belum kebagian
           wilayah.
         </p>
@@ -2537,7 +2540,7 @@ function KegiatanPetugasSection() {
                 filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
               />
               <ThKontrol
-                label="Sudah Plotting"
+                label="Sudah Plotting (ke Kegiatan Bencana)"
                 filter={{ options: opsiPlotting, selected: plottingSel, onApply: setPlottingSel }}
               />
               {KEGIATAN_LAIN_DAFTAR.map((k) => (

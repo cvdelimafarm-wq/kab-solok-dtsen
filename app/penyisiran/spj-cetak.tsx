@@ -39,6 +39,17 @@ async function apiFetch(path: string, token: string) {
   return data;
 }
 
+async function apiPost(path: string, token: string, body: Record<string, unknown>) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Gagal (${res.status})`);
+  return data;
+}
+
 function hariIniStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -125,7 +136,14 @@ export function SpjCetakTab({ token, onSessionExpired }: { token: string; onSess
   const [dokumenDipilih, setDokumenDipilih] = useState<Set<JenisDokumen>>(new Set(JENIS_DOKUMEN));
   const [pengelompokan, setPengelompokan] = useState<Pengelompokan>("per_orang");
   const [generating, setGenerating] = useState(false);
+  // (2 Okt 2026) Fase proses klik "Generate PDF" -- dibagi 2 supaya label
+  // tombol & keterangan jelas: "lengkapi" = memanggil buat-otomatis-semua
+  // (scoped ke petugasDipilih) utk melengkapi Kwitansi/Visum/Surat
+  // Pernyataan yg belum ada SEBELUM PDF disusun, "generate" = menyusun &
+  // mengunduh PDF-nya. Lihat komentar besar di handleGenerate.
+  const [fase, setFase] = useState<"lengkapi" | "generate" | null>(null);
   const [hasilInfo, setHasilInfo] = useState<string | null>(null);
+  const [lengkapiInfo, setLengkapiInfo] = useState<string | null>(null);
 
   const guardError = useCallback(
     (e: unknown) => {
@@ -232,12 +250,37 @@ export function SpjCetakTab({ token, onSessionExpired }: { token: string; onSess
     setGenerating(true);
     setErrMsg(null);
     setHasilInfo(null);
+    setLengkapiInfo(null);
+    const petugasTarget = Array.from(petugasDipilih).map((key) => {
+      const [jenis, idStr] = key.split(":");
+      return { jenis, id: Number(idStr) };
+    });
     try {
+      // (2 Okt 2026) Langkah 1: lengkapi dulu Kwitansi/Visum/Surat
+      // Pernyataan yg BELUM ADA utk petugas yg DICENTANG di wizard ini
+      // (bukan seluruh kabupaten -- `petugas` dikirim supaya
+      // buat-otomatis-semua HANYA memproses mereka, lihat komentar di
+      // app/api/penyisiran/spj/buat-otomatis-semua/route.ts), supaya tidak
+      // ada yg kelewat cetak cuma krn lupa klik "Buat Otomatis" manual di
+      // tab Visum/Kwitansi/Surat Keterangan satu-satu -- sesuai laporan
+      // user sebelumnya soal PPL yg dokumennya belum lengkap saat dicetak.
+      // Best-effort & SENGAJA tidak menghentikan proses kalau langkah ini
+      // gagal (mis. jaringan) -- generate PDF tetap lanjut spt sebelum
+      // fitur ini ada (dokumen yg blm lengkap cuma dilewati spt biasa).
+      setFase("lengkapi");
+      try {
+        const hasilLengkapi = await apiPost("/api/penyisiran/spj/buat-otomatis-semua", token, { petugas: petugasTarget });
+        if ((hasilLengkapi?.total_dibuat ?? 0) > 0 || (hasilLengkapi?.total_diperbaiki ?? 0) > 0) {
+          setLengkapiInfo(`🪄 ${hasilLengkapi.ringkasan}`);
+        }
+      } catch {
+        // Diamkan -- kalau penyebabnya sesi kedaluwarsa, langkah generate
+        // di bawah ini akan gagal jg dgn error yg sama & ditangani guardError.
+      }
+
+      setFase("generate");
       const nama = await unduhHasilCetak(token, {
-        petugas: Array.from(petugasDipilih).map((key) => {
-          const [jenis, idStr] = key.split(":");
-          return { jenis, id: Number(idStr) };
-        }),
+        petugas: petugasTarget,
         tanggal_mulai: tanggalMulai,
         tanggal_selesai: tanggalSelesai,
         dokumen: Array.from(dokumenDipilih),
@@ -248,6 +291,7 @@ export function SpjCetakTab({ token, onSessionExpired }: { token: string; onSess
       guardError(e);
     } finally {
       setGenerating(false);
+      setFase(null);
     }
   }
 
@@ -517,9 +561,18 @@ export function SpjCetakTab({ token, onSessionExpired }: { token: string; onSess
               disabled={generating || preview.tersedia === 0}
               className="rounded-md bg-navy-700 px-4 py-2 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-50"
             >
-              {generating ? "Menyusun PDF..." : "🖨️ Generate PDF"}
+              {fase === "lengkapi" ? "Melengkapi dokumen..." : fase === "generate" ? "Menyusun PDF..." : "🖨️ Generate PDF"}
             </button>
           </div>
+          <p className="mt-1.5 text-right text-[10px] text-ink/40">
+            Dokumen Kwitansi/Visum/Surat Pernyataan yang belum ada akan dilengkapi otomatis dulu (khusus petugas yang
+            dicentang) sebelum PDF disusun.
+          </p>
+          {lengkapiInfo && (
+            <p className="mt-1.5 rounded-md border border-moss-200 bg-moss-100/40 p-2 text-[11px] text-moss-700">
+              {lengkapiInfo}
+            </p>
+          )}
         </div>
       )}
     </div>

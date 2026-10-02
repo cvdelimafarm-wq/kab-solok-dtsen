@@ -44,6 +44,17 @@
 // dgn buat-otomatis/route.ts) -- krn pasangan (petugas, ST) di sini
 // LANGSUNG diambil dari spj_surat_tugas_petugas itu sendiri (sumber
 // kebenaran kepemilikan), bukan dari input body yg perlu divalidasi.
+//
+// (2 Okt 2026) Opsional body.petugas: [{jenis, id}] -- kalau dikirim,
+// HANYA pasangan (petugas, ST) milik petugas-petugas itu yg diproses
+// (bukan SELURUH sistem). Dipakai wizard "Cetak SPJ" (app/penyisiran/
+// spj-cetak.tsx, SpjCetakTab.handleGenerate) supaya SEBELUM menyusun PDF,
+// Kwitansi/Visum/Surat Pernyataan yg belum lengkap dilengkapi dulu --
+// tapi DIBATASI ke petugas yg sedang dicentang di wizard itu saja (bukan
+// seluruh kabupaten), supaya tidak lambat/boros tiap kali generate. Kalau
+// body.petugas tidak dikirim/kosong, perilaku lama dipertahankan (proses
+// SEMUA pasangan) -- dipakai tombol "🔁 Jalankan untuk SEMUA petugas
+// sekaligus" di tab Monitoring SPJ.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -92,6 +103,24 @@ export async function POST(req: NextRequest) {
   const tarifPerHariInput = Number(body?.tarif_per_hari);
   const tarifPerHari = Number.isFinite(tarifPerHariInput) && tarifPerHariInput > 0 ? tarifPerHariInput : TARIF_TRANSLOK_PER_HARI_DEFAULT;
 
+  // Filter opsional ke petugas tertentu saja -- lihat komentar besar di
+  // atas file ini. Kunci dicocokkan sbg "jenis:id" (id dinormalisasi jadi
+  // string spy konsisten dgn petugas_id yg juga string di tabel).
+  const petugasFilterMentah: unknown[] = Array.isArray(body?.petugas) ? body.petugas : [];
+  const petugasFilter = new Set(
+    petugasFilterMentah
+      .map((p) => {
+        if (!p || typeof p !== "object") return null;
+        const jenis = (p as { jenis?: unknown }).jenis;
+        const id = (p as { id?: unknown }).id;
+        if ((jenis !== "penyisiran" && jenis !== "tetangga") || (typeof id !== "number" && typeof id !== "string")) {
+          return null;
+        }
+        return `${jenis}:${id}`;
+      })
+      .filter((k): k is string => k !== null)
+  );
+
   // Setiap pasangan (Surat Tugas, petugas) yg ada di sistem -- 1 org bisa
   // muncul >1 kali kalau py >1 Surat Tugas (masing2 diproses terpisah,
   // sama seperti kalau diklik manual per-ST).
@@ -99,7 +128,11 @@ export async function POST(req: NextRequest) {
     .from("spj_surat_tugas_petugas")
     .select("surat_tugas_id, petugas_jenis, petugas_id");
   if (errTautan) return NextResponse.json({ error: errTautan.message }, { status: 500 });
-  const tautan = (tautanRaw ?? []) as { surat_tugas_id: number; petugas_jenis: SpjPetugasJenis; petugas_id: string }[];
+  const tautanSemua = (tautanRaw ?? []) as { surat_tugas_id: number; petugas_jenis: SpjPetugasJenis; petugas_id: string }[];
+  const tautan =
+    petugasFilter.size > 0
+      ? tautanSemua.filter((t) => petugasFilter.has(`${t.petugas_jenis}:${t.petugas_id}`))
+      : tautanSemua;
 
   if (tautan.length === 0) {
     return NextResponse.json({
@@ -107,9 +140,14 @@ export async function POST(req: NextRequest) {
       total_pasangan: 0,
       total_dibuat: 0,
       total_diperbaiki: 0,
+      total_dihapus_usang: 0,
       hasil_per_jenis: [],
       butuh_perhatian: [],
-      ringkasan: "Belum ada Surat Tugas yang ditautkan ke petugas mana pun.",
+      dihapus_krn_usang: [],
+      ringkasan:
+        petugasFilter.size > 0
+          ? "Tidak ada Surat Tugas yang ditautkan ke petugas yang dipilih."
+          : "Belum ada Surat Tugas yang ditautkan ke petugas mana pun.",
     });
   }
 
