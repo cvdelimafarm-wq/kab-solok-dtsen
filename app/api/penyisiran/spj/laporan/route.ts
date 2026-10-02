@@ -470,15 +470,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Isi jumlah minimal 1 utk salah satu status kunjungan (tidak boleh semuanya 0)." }, { status: 400 });
     }
 
+    // (2 Okt 2026) Permintaan user: formulir Laporan Susulan WAJIB menanyakan
+    // SELURUH variabel yang sama dgn laporan rekan2 yg tepat waktu (mode
+    // "template" biasa) -- bukan cuma rekapStatusKunjungan. Rekap Identifikasi
+    // (ada/tidak_ada/ragu/belum, dari tab Identifikasi Jorong/Tetangga) adalah
+    // variabel KEDUA yg ikut ditampilkan di RekapLaporanPreviewBox & dihitung
+    // laporanTemplateBolehDisimpan() utk laporan normal -- di sini TETAP
+    // opsional (boleh 0 semua, konsisten dgn aturan: sejak 20 Sept 2026
+    // Identifikasi bukan lagi syarat wajib, Penyisiran Usaha di atas sudah
+    // cukup), tapi field-nya harus ada supaya petugas yg memang melakukan
+    // Identifikasi jg bisa mencatatnya -- bukan dipaksa hilang begitu saja.
+    const rekapIdentifikasiManualMentah =
+      body?.rekap_identifikasi_manual && typeof body.rekap_identifikasi_manual === "object"
+        ? body.rekap_identifikasi_manual
+        : {};
+    const rekapIdentifikasiManual = { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 };
+    for (const k of Object.keys(rekapIdentifikasiManual) as (keyof typeof rekapIdentifikasiManual)[]) {
+      const v = Number((rekapIdentifikasiManualMentah as Record<string, unknown>)[k]);
+      rekapIdentifikasiManual[k] = Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+    }
+    const totalAktivitasManual = Object.values(rekapIdentifikasiManual).reduce((a, b) => a + b, 0);
+
     const catatanKeterlambatan = typeof body?.catatan_keterlambatan === "string" ? body.catatan_keterlambatan.trim() : "";
     if (!catatanKeterlambatan) {
       return NextResponse.json({ error: "Alasan keterlambatan wajib diisi." }, { status: 400 });
     }
 
-    const lokasiManualMentah = body?.lokasi_manual && typeof body.lokasi_manual === "object" ? body.lokasi_manual : {};
-    const kecManual = typeof (lokasiManualMentah as Record<string, unknown>).kecamatan === "string" ? (lokasiManualMentah as Record<string, string>).kecamatan.trim() : "";
-    const nagariManual = typeof (lokasiManualMentah as Record<string, unknown>).nagari === "string" ? (lokasiManualMentah as Record<string, string>).nagari.trim() : "";
-    const jorongManual = typeof (lokasiManualMentah as Record<string, unknown>).jorong === "string" ? (lokasiManualMentah as Record<string, string>).jorong.trim() : "";
+    // Lokasi SEKARANG berupa DAFTAR (bukan 1 set kec/nagari/jorong tunggal)
+    // -- laporan rekan yg tepat waktu bisa mencatat BEBERAPA lokasi dlm 1
+    // hari (lihat lokasiPenyisiran/RekapTemplate di hitungRekapTemplate()),
+    // jadi formulir susulan jg harus bisa menampung itu. Tiap baris wajib
+    // py `jumlah` KK > 0 utk dihitung -- baris yg kosong/jumlah 0 dilewati.
+    const lokasiManualMentah = Array.isArray(body?.lokasi_manual) ? body.lokasi_manual : [];
+    const lokasiManual = (lokasiManualMentah as unknown[])
+      .map((row) => {
+        const r = (row && typeof row === "object" ? row : {}) as Record<string, unknown>;
+        const kec = typeof r.kecamatan === "string" ? r.kecamatan.trim() : "";
+        const nagari = typeof r.nagari === "string" ? r.nagari.trim() : "";
+        const jorong = typeof r.jorong === "string" ? r.jorong.trim() : "";
+        const jumlahRaw = Number(r.jumlah);
+        const jumlah = Number.isFinite(jumlahRaw) && jumlahRaw > 0 ? Math.round(jumlahRaw) : 0;
+        return { kec, nagari, jorong, jumlah };
+      })
+      .filter((row) => row.jumlah > 0 && (row.kec || row.nagari || row.jorong));
 
     // Jumlah Dokumentasi tetap DIHITUNG LIVE dari foto yg benar2 diupload
     // (bukan manual) -- kalau petugas sudah/mau upload foto utk tanggal
@@ -491,26 +525,28 @@ export async function POST(req: NextRequest) {
       .eq("petugas_id", session.petugasId)
       .eq("tanggal", tanggal);
 
+    // lokasiPenyisiran = sumber lokasi UTAMA yg dipakai PDF (lihat
+    // lokasiUtama() di lib/pdf/laporan.ts) sejak Penyisiran Usaha jadi
+    // wajib -- daftar lokasi manual di atas diisikan ke sini. `lokasi`
+    // (identifikasi) sengaja dibiarkan kosong: itu cuma FALLBACK kalau
+    // lokasiPenyisiran kosong, jadi tidak perlu ditanyakan dobel ke petugas.
+    const lokasiPenyisiranManual = lokasiManual.map((row) => ({
+      kecNama: row.kec || null,
+      nagariNama: row.nagari || null,
+      slsNama: row.jorong || null,
+      subslsKode: null,
+      waktuMulai: null,
+      waktuSelesai: null,
+      jumlah: row.jumlah,
+    }));
+
     rekapSnapshot = {
       lokasi: [],
-      rekapIdentifikasi: { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 },
-      totalAktivitas: 0,
+      rekapIdentifikasi: rekapIdentifikasiManual,
+      totalAktivitas: totalAktivitasManual,
       jumlahDokumentasi: jumlahDokumentasi ?? 0,
       rekapStatusKunjungan: rekapManual,
-      lokasiPenyisiran:
-        kecManual || nagariManual || jorongManual
-          ? [
-              {
-                kecNama: kecManual || null,
-                nagariNama: nagariManual || null,
-                slsNama: jorongManual || null,
-                subslsKode: null,
-                waktuMulai: null,
-                waktuSelesai: null,
-                jumlah: totalManual,
-              },
-            ]
-          : [],
+      lokasiPenyisiran: lokasiPenyisiranManual,
       diisiSusulan: true,
       catatanKeterlambatan,
       diisiSusulanPada: new Date().toISOString(),

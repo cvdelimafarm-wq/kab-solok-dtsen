@@ -2422,6 +2422,27 @@ const KUNCI_STATUS_SUSULAN = [
   "tidak_ada_usaha",
 ] as const;
 
+// Rekap Identifikasi (tab Identifikasi Jorong/Tetangga) -- SAMA persis dgn
+// kunci rekapIdentifikasi pd RekapLaporanPreview/laporan normal, supaya
+// Laporan Susulan menanyakan variabel yg sama (permintaan user 2 Okt 2026).
+const KUNCI_IDENTIFIKASI_SUSULAN = ["ada", "tidak_ada", "ragu", "belum"] as const;
+const LABEL_IDENTIFIKASI_SUSULAN: Record<string, string> = {
+  ada: "Ada",
+  tidak_ada: "Tidak Ada",
+  ragu: "Ragu",
+  belum: "Belum",
+};
+
+// Satu baris lokasi (jorong/nagari/kecamatan) + jumlah KK -- bisa >1 baris
+// per hari, sama spt lokasiPenyisiran pd laporan normal (lihat lokasiUtama()
+// di lib/pdf/laporan.ts).
+interface LokasiSusulanRow {
+  kecamatan: string;
+  nagari: string;
+  jorong: string;
+  jumlah: string;
+}
+
 interface HariKerjaCalonSusulan {
   tanggal: string;
   suratTugasId: number;
@@ -2564,9 +2585,17 @@ function LaporanSusulanForm({
 }) {
   const [pilihIdx, setPilihIdx] = useState(0);
   const [rekapManual, setRekapManual] = useState<Record<string, string>>({});
-  const [kecamatan, setKecamatan] = useState("");
-  const [nagari, setNagari] = useState("");
-  const [jorong, setJorong] = useState("");
+  // (2 Okt 2026) Rekap Identifikasi (Ada/Tidak Ada/Ragu/Belum) -- permintaan
+  // user: formulir Laporan Susulan harus menanyakan SELURUH variabel yg
+  // sama dgn laporan rekan2 yg tepat waktu (bukan cuma status kunjungan).
+  // Ini variabel dari tab Identifikasi Jorong/Tetangga, SENGAJA opsional
+  // (boleh 0 semua) krn sejak 20 Sept 2026 Identifikasi bukan lagi syarat
+  // wajib -- Penyisiran Usaha di atas sudah cukup -- tapi tetap disediakan
+  // kolomnya utk petugas yg memang melakukannya.
+  const [rekapIdentifikasiManual, setRekapIdentifikasiManual] = useState<Record<string, string>>({});
+  // Lokasi SEKARANG daftar (bisa lebih dari 1 lokasi/hari, sama spt
+  // lokasiPenyisiran pd laporan normal) -- mulai dgn 1 baris kosong.
+  const [lokasiRows, setLokasiRows] = useState<LokasiSusulanRow[]>([{ kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
   const [catatanKeterlambatan, setCatatanKeterlambatan] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2580,6 +2609,25 @@ function LaporanSusulanForm({
       const v = Number(rekapManual[k]);
       return a + (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
     }, 0);
+  }
+
+  function totalIdentifikasiManual(): number {
+    return KUNCI_IDENTIFIKASI_SUSULAN.reduce((a, k) => {
+      const v = Number(rekapIdentifikasiManual[k]);
+      return a + (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+    }, 0);
+  }
+
+  function ubahLokasiRow(idx: number, field: keyof LokasiSusulanRow, value: string) {
+    setLokasiRows((prev) => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)));
+  }
+
+  function tambahLokasiRow() {
+    setLokasiRows((prev) => [...prev, { kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
+  }
+
+  function hapusLokasiRow(idx: number) {
+    setLokasiRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -2607,15 +2655,24 @@ function LaporanSusulanForm({
           tanggal: dipilih.tanggal,
           susulan: true,
           rekap_manual: Object.fromEntries(KUNCI_STATUS_SUSULAN.map((k) => [k, Number(rekapManual[k]) || 0])),
-          lokasi_manual: { kecamatan: kecamatan.trim(), nagari: nagari.trim(), jorong: jorong.trim() },
+          rekap_identifikasi_manual: Object.fromEntries(
+            KUNCI_IDENTIFIKASI_SUSULAN.map((k) => [k, Number(rekapIdentifikasiManual[k]) || 0])
+          ),
+          lokasi_manual: lokasiRows
+            .map((row) => ({
+              kecamatan: row.kecamatan.trim(),
+              nagari: row.nagari.trim(),
+              jorong: row.jorong.trim(),
+              jumlah: Number(row.jumlah) || 0,
+            }))
+            .filter((row) => row.jumlah > 0 && (row.kecamatan || row.nagari || row.jorong)),
           catatan_keterlambatan: catatanKeterlambatan.trim(),
         }),
       });
       setSukses(`Laporan Susulan utk ${formatTanggal(dipilih.tanggal)} berhasil disimpan.`);
       setRekapManual({});
-      setKecamatan("");
-      setNagari("");
-      setJorong("");
+      setRekapIdentifikasiManual({});
+      setLokasiRows([{ kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
       setCatatanKeterlambatan("");
       setPilihIdx(0);
       onDone(dipilih.suratTugasId, dipilih.tanggal);
@@ -2685,29 +2742,87 @@ function LaporanSusulanForm({
       </div>
 
       <div>
-        <p className="mb-1 text-[10px] font-medium text-ink/50">Lokasi (opsional, cuma catatan tambahan)</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <input
-            type="text"
-            value={kecamatan}
-            onChange={(e) => setKecamatan(e.target.value)}
-            placeholder="Kecamatan"
-            className="rounded-md border border-line px-2 py-1.5 text-xs"
-          />
-          <input
-            type="text"
-            value={nagari}
-            onChange={(e) => setNagari(e.target.value)}
-            placeholder="Nagari"
-            className="rounded-md border border-line px-2 py-1.5 text-xs"
-          />
-          <input
-            type="text"
-            value={jorong}
-            onChange={(e) => setJorong(e.target.value)}
-            placeholder="Jorong/Sub SLS"
-            className="rounded-md border border-line px-2 py-1.5 text-xs"
-          />
+        <p className="mb-1 text-[10px] font-medium text-ink/50">
+          Rekap Identifikasi (tab Identifikasi Jorong/Tetangga) -- opsional, isi 0/kosong kalau Anda tidak melakukan
+          Identifikasi pada tanggal ini
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {KUNCI_IDENTIFIKASI_SUSULAN.map((k) => (
+            <div
+              key={k}
+              className="flex items-center justify-between gap-1.5 rounded-md border border-line bg-white px-2 py-1.5"
+            >
+              <span className="text-[11px] text-ink/70">{LABEL_IDENTIFIKASI_SUSULAN[k]}</span>
+              <input
+                type="number"
+                min={0}
+                value={rekapIdentifikasiManual[k] ?? ""}
+                onChange={(e) => setRekapIdentifikasiManual((prev) => ({ ...prev, [k]: e.target.value }))}
+                placeholder="0"
+                className="w-14 rounded-md border border-line px-1.5 py-1 text-right text-xs"
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-1 text-[10px] text-ink/40">Total: {totalIdentifikasiManual()} usaha/keluarga</p>
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-[10px] font-medium text-ink/50">
+            Lokasi (boleh lebih dari 1 baris kalau pindah lokasi pada hari yang sama)
+          </p>
+          <button
+            type="button"
+            onClick={tambahLokasiRow}
+            className="rounded-full border border-moss-200 bg-moss-50 px-2 py-0.5 text-[10px] font-semibold text-moss-900 hover:bg-moss-100"
+          >
+            + Tambah Lokasi
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          {lokasiRows.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-2 gap-1.5 sm:grid-cols-[1fr_1fr_1fr_90px_auto]">
+              <input
+                type="text"
+                value={row.kecamatan}
+                onChange={(e) => ubahLokasiRow(idx, "kecamatan", e.target.value)}
+                placeholder="Kecamatan"
+                className="rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+              <input
+                type="text"
+                value={row.nagari}
+                onChange={(e) => ubahLokasiRow(idx, "nagari", e.target.value)}
+                placeholder="Nagari"
+                className="rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+              <input
+                type="text"
+                value={row.jorong}
+                onChange={(e) => ubahLokasiRow(idx, "jorong", e.target.value)}
+                placeholder="Jorong/Sub SLS"
+                className="rounded-md border border-line px-2 py-1.5 text-xs"
+              />
+              <input
+                type="number"
+                min={0}
+                value={row.jumlah}
+                onChange={(e) => ubahLokasiRow(idx, "jumlah", e.target.value)}
+                placeholder="Jml KK"
+                className="rounded-md border border-line px-2 py-1.5 text-right text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => hapusLokasiRow(idx)}
+                disabled={lokasiRows.length <= 1}
+                className="rounded-md border border-line px-2 py-1.5 text-[11px] text-ink/50 hover:border-rust-200 hover:text-rust-700 disabled:cursor-default disabled:opacity-30"
+                title="Hapus baris ini"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
