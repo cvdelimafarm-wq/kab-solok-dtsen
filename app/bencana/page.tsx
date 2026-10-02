@@ -343,7 +343,13 @@ function SaranMitraTombol({
   const tier2 = useMemo(
     () =>
       pplOptions
-        .filter((p) => !p.pendaftaran_bencana_konfirmasi && p.kegiatan_lain.includes("PES SE2026"))
+        // (p.kegiatan_lain ?? []) -- JAGA-JAGA konsisten dgn statusKesediaanPpl()
+        // di atas: field ini SELALU array dari API, tapi kalau browser masih
+        // menjalankan JS versi baru dgn JSON hasil fetch yg sempat ke-cache dari
+        // versi lama (sblm kegiatan_lain ditambahkan ke respons), field ini bisa
+        // undefined sesaat -- lihat crash "Cannot read properties of undefined
+        // (reading 'includes')" yg dilaporkan user pasca deploy fitur ini.
+        .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026"))
         .sort((a, b) => (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0)),
     [pplOptions, bebanDraftPerPpl]
   );

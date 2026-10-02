@@ -46,6 +46,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, roleUntukJenis, type SpjSession } from "@/lib/spjAuth";
 import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";
+import { daftarHariKerjaPetugas } from "@/lib/spjHariKerja";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,58 @@ function supabaseAdmin() {
   if (!serviceRoleKey) return null;
   return createClient(supabaseUrl, serviceRoleKey);
 }
+
+// Tanggal HARI INI menurut zona waktu Asia/Jakarta (WIB) -- formula SAMA
+// persis dgn tanggalBesokJakarta() di app/api/penyisiran/update/route.ts
+// (cuma tanpa +1 hari), dipakai menggerbangi Laporan Susulan (lihat
+// komentar besar "LAPORAN SUSULAN" di bawah) supaya tanggalnya harus
+// benar2 SUDAH LEWAT, bukan hari ini/mendatang.
+function hariIniJakarta(): string {
+  const jakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  return jakarta.toISOString().slice(0, 10);
+}
+
+// ---------- LAPORAN SUSULAN ----------
+//
+// (2 Okt 2026) Fitur BARU -- permintaan user: "SEKARANG ADA KENDALA
+// INDISIPLIN PETUGAS DALAM MEMBUAT LAPORAN" -- petugas lupa/telat mengisi
+// status_kunjungan (tab Penyisiran Usaha) di HARI yang sama, jadi saat mau
+// bikin Laporan utk tanggal yg sudah lewat, mode "template" biasa ditolak
+// krn tidak ada aktivitas Penyisiran yg tercatat PADA TANGGAL ITU (lihat
+// lib/spjLaporanAturan.ts) -- padahal petugas MUNGKIN SAJA benar2 bekerja
+// hari itu, cuma telat mencatatnya di sistem.
+//
+// Jalan keluarnya BUKAN menghitung ulang dari penyisiran_usaha/riwayat
+// (datanya memang tidak ada/terlewat dicatat), tapi membiarkan petugas
+// mengisi REKAP JUMLAH SECARA MANUAL (dari ingatan/catatan lapangan
+// sendiri) utk tanggal yg sudah lewat -- PERSIS sesuai keputusan user saat
+// ditanya: "buat menu Laporan Terlewat, bentuknya formulir, pilih tanggal,
+// jumlah diisi manual sesuai format laporan (boleh menarik data sbg
+// referensi, tapi nilai yg disimpan tetap yg diisi manual)".
+//
+// SUPAYA TETAP BISA DIPERTANGGUNGJAWABKAN (bukan sekadar re-buka pintu
+// fabrikasi yg sudah sengaja ditutup lib/spjLaporanAturan.ts), fitur ini
+// diberi 3 pagar:
+//  1. Tanggal WAJIB salah satu dari Hari Tugas yg SUDAH DITAG petugas ybs
+//     sendiri (daftarHariKerjaPetugas) -- tidak bisa asal pilih tanggal yg
+//     bahkan tidak pernah ditugaskan.
+//  2. Tanggal WAJIB sudah lewat (< hari ini WIB) -- bukan utk tanggal
+//     hari ini/mendatang (itu jalurnya mode "template"/"bebas" biasa).
+//  3. HANYA utk tanggal yg BELUM PERNAH ada Laporan -- bukan jalan utk
+//     menimpa Laporan yg sudah ada.
+// Hasilnya tetap mode "template" (DB enum tdk perlu diubah) tapi
+// rekap_snapshot ditandai `diisiSusulan: true` + `catatanKeterlambatan` +
+// `diisiSusulanPada` (kapan SEBENARNYA diisi, beda dari `tanggal` yg
+// diklaim) -- supaya PDF (lib/pdf/laporan.ts) & siapa pun yg audit
+// belakangan SELALU bisa membedakan laporan susulan dari laporan yg
+// benar2 diisi real-time, TIDAK PERNAH menyamarkannya sbg data asli.
+const KUNCI_STATUS_SUSULAN = [
+  "ditemukan",
+  "tidak_ditemukan",
+  "tidak_bisa",
+  "sudah_didata_se2026",
+  "tidak_ada_usaha",
+] as const;
 
 function tanggalBerikutnya(iso: string): string {
   const d = new Date(iso + "T00:00:00Z");
@@ -347,12 +400,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const suratTugasId = Number(body?.surat_tugas_id);
   const tanggal = String(body?.tanggal || "").trim();
+  const susulan = body?.susulan === true;
   const mode = body?.mode === "bebas" ? "bebas" : "template";
   const narasi = typeof body?.narasi === "string" ? body.narasi.trim() : "";
 
   if (!Number.isFinite(suratTugasId)) return NextResponse.json({ error: "Surat Tugas tidak valid." }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return NextResponse.json({ error: "Tanggal wajib diisi." }, { status: 400 });
-  if (mode === "bebas" && !narasi) {
+  if (mode === "bebas" && !narasi && !susulan) {
     return NextResponse.json({ error: "Narasi wajib diisi utk mode Narasi Bebas." }, { status: 400 });
   }
 
@@ -361,7 +415,107 @@ export async function POST(req: NextRequest) {
 
   let rekapSnapshot: unknown = null;
 
-  if (mode === "template") {
+  if (susulan) {
+    // Pagar 1: tanggal wajib sudah lewat (lihat komentar besar "LAPORAN
+    // SUSULAN" di atas file ini).
+    const hariIni = hariIniJakarta();
+    if (tanggal >= hariIni) {
+      return NextResponse.json(
+        { error: "Laporan Susulan hanya utk tanggal yang SUDAH LEWAT. Utk hari ini/mendatang, pakai form Laporan biasa." },
+        { status: 400 }
+      );
+    }
+
+    // Pagar 2: tanggal wajib salah satu Hari Tugas yg memang sudah ditag
+    // petugas ini sendiri (bukan asal pilih tanggal).
+    const hariKerja = await daftarHariKerjaPetugas(supabase, session);
+    if (!hariKerja.tanggal.includes(tanggal)) {
+      return NextResponse.json(
+        {
+          error:
+            "Tanggal ini bukan Hari Tugas yang Anda tandai sendiri di Perencanaan Lapangan. " +
+            "Laporan Susulan hanya boleh utk tanggal yang memang sudah ditag sbg Hari Tugas.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Pagar 3: hanya utk tanggal yg BELUM PERNAH ada Laporan -- bukan
+    // jalan menimpa Laporan yg sudah ada (edit Laporan yg sudah ada pakai
+    // form biasa, bukan form susulan ini).
+    const { data: laporanAda, error: errLaporanAda } = await supabase
+      .from("spj_laporan")
+      .select("id")
+      .eq("surat_tugas_id", suratTugasId)
+      .eq("petugas_jenis", session.jenis)
+      .eq("petugas_id", session.petugasId)
+      .eq("tanggal", tanggal)
+      .maybeSingle();
+    if (errLaporanAda) return NextResponse.json({ error: errLaporanAda.message }, { status: 500 });
+    if (laporanAda) {
+      return NextResponse.json(
+        { error: "Laporan utk tanggal ini sudah ada -- Laporan Susulan hanya utk tanggal yang belum pernah dilaporkan." },
+        { status: 400 }
+      );
+    }
+
+    const rekapManualMentah = body?.rekap_manual && typeof body.rekap_manual === "object" ? body.rekap_manual : {};
+    const rekapManual: Record<string, number> = {};
+    for (const k of KUNCI_STATUS_SUSULAN) {
+      const v = Number((rekapManualMentah as Record<string, unknown>)[k]);
+      rekapManual[k] = Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+    }
+    const totalManual = Object.values(rekapManual).reduce((a, b) => a + b, 0);
+    if (totalManual <= 0) {
+      return NextResponse.json({ error: "Isi jumlah minimal 1 utk salah satu status kunjungan (tidak boleh semuanya 0)." }, { status: 400 });
+    }
+
+    const catatanKeterlambatan = typeof body?.catatan_keterlambatan === "string" ? body.catatan_keterlambatan.trim() : "";
+    if (!catatanKeterlambatan) {
+      return NextResponse.json({ error: "Alasan keterlambatan wajib diisi." }, { status: 400 });
+    }
+
+    const lokasiManualMentah = body?.lokasi_manual && typeof body.lokasi_manual === "object" ? body.lokasi_manual : {};
+    const kecManual = typeof (lokasiManualMentah as Record<string, unknown>).kecamatan === "string" ? (lokasiManualMentah as Record<string, string>).kecamatan.trim() : "";
+    const nagariManual = typeof (lokasiManualMentah as Record<string, unknown>).nagari === "string" ? (lokasiManualMentah as Record<string, string>).nagari.trim() : "";
+    const jorongManual = typeof (lokasiManualMentah as Record<string, unknown>).jorong === "string" ? (lokasiManualMentah as Record<string, string>).jorong.trim() : "";
+
+    // Jumlah Dokumentasi tetap DIHITUNG LIVE dari foto yg benar2 diupload
+    // (bukan manual) -- kalau petugas sudah/mau upload foto utk tanggal
+    // ini via tab Dokumentasi, biar tetap ikut tercatat di kartu angka.
+    const { count: jumlahDokumentasi } = await supabase
+      .from("spj_dokumentasi_foto")
+      .select("id", { count: "exact", head: true })
+      .eq("surat_tugas_id", suratTugasId)
+      .eq("petugas_jenis", session.jenis)
+      .eq("petugas_id", session.petugasId)
+      .eq("tanggal", tanggal);
+
+    rekapSnapshot = {
+      lokasi: [],
+      rekapIdentifikasi: { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 },
+      totalAktivitas: 0,
+      jumlahDokumentasi: jumlahDokumentasi ?? 0,
+      rekapStatusKunjungan: rekapManual,
+      lokasiPenyisiran:
+        kecManual || nagariManual || jorongManual
+          ? [
+              {
+                kecNama: kecManual || null,
+                nagariNama: nagariManual || null,
+                slsNama: jorongManual || null,
+                subslsKode: null,
+                waktuMulai: null,
+                waktuSelesai: null,
+                jumlah: totalManual,
+              },
+            ]
+          : [],
+      diisiSusulan: true,
+      catatanKeterlambatan,
+      diisiSusulanPada: new Date().toISOString(),
+    };
+  } else if (mode === "template") {
     let rekap: RekapTemplate;
     try {
       rekap = await hitungRekapTemplate(supabase, session, cek.nama, suratTugasId, tanggal);

@@ -58,6 +58,15 @@ export interface LaporanRekapSnapshot {
   // app/api/penyisiran/spj/laporan/route.ts.
   rekapStatusKunjungan?: Record<string, number>;
   lokasiPenyisiran?: LaporanLokasiRow[];
+  // (2 Okt 2026) "Laporan Susulan" -- lihat komentar besar "LAPORAN SUSULAN"
+  // di app/api/penyisiran/spj/laporan/route.ts. BEDA dgn estimasiDefault
+  // (data.estimasiDefault, murni tampilan PDF, TIDAK PERNAH ditulis ke DB):
+  // di sini rekapStatusKunjungan ASLI diisi manual oleh petugas sendiri &
+  // BENAR2 tersimpan ke database -- diisiSusulan cuma PENANDA JUJUR supaya
+  // dokumen ini tidak disalahartikan sbg hasil penarikan otomatis sistem.
+  diisiSusulan?: boolean;
+  /** Alasan keterlambatan yg WAJIB diisi petugas saat membuat Laporan Susulan -- ditampilkan di Catatan. */
+  catatanKeterlambatan?: string | null;
 }
 
 export type PetugasJenisLaporan = "penyisiran" | "tetangga";
@@ -472,6 +481,13 @@ function gambarKonten(
   // ---------- 3 kartu angka ----------
   const modeTemplate = data.mode === "template" && !!data.rekap;
   const estimasi = modeTemplate && !!data.estimasiDefault;
+  // (2 Okt 2026) "Laporan Susulan" -- lihat komentar besar "LAPORAN SUSULAN"
+  // di app/api/penyisiran/spj/laporan/route.ts. Beda dgn `estimasi`: di sini
+  // rekap ASLI diisi manual oleh petugas sendiri & benar2 tersimpan di DB,
+  // jadi narasi TIDAK memakai kata "estimasi"/"belum dilaporkan" -- hanya
+  // ditandai jujur sbg laporan yang dibuat belakangan (susulan), beserta
+  // alasan keterlambatannya.
+  const susulan = modeTemplate && !!(data.rekap as LaporanRekapSnapshot)?.diisiSusulan;
   const pml = adalahPml(data);
   const lok = modeTemplate ? lokasiUtama(data.rekap as LaporanRekapSnapshot) : [];
   const labelKartuKeluarga = estimasi && pml ? "KELUARGA DIAWASI" : "KELUARGA DIKUNJUNGI";
@@ -528,6 +544,26 @@ function gambarKonten(
           `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
             `demikian, seluruh rangkaian perjalanan dinas pada tanggal tersebut dilaksanakan dalam satu hari.`,
         ];
+  } else if (susulan) {
+    // (2 Okt 2026) Laporan Susulan -- rekap ASLI (benar2 diisi manual oleh
+    // petugas sendiri & tersimpan di DB), tapi narasi SENGAJA menyebut
+    // eksplisit "disusun kemudian/susulan" + alasan keterlambatan supaya
+    // pembaca dokumen tidak mengira ini dicatat tepat waktu di lapangan.
+    const rekapSusulan = data.rekap as LaporanRekapSnapshot;
+    const wilayah = wilayahTugasTeks(lok);
+    const kegiatan = KEGIATAN_LABEL[data.petugasJenis];
+    const jumlahKeluarga = keluargaDikunjungi(rekapSusulan);
+    const alasan = rekapSusulan.catatanKeterlambatan?.trim() || "-";
+    paragraf = [
+      `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas} melaksanakan tugas ${kegiatan} ` +
+        `di wilayah ${wilayah === "-" ? "tugas yang telah ditetapkan" : wilayah}. Kegiatan ini dilaksanakan dalam rangka ` +
+        `menjalankan tugas sebagai ${data.peranLabel}.`,
+      `Selama pelaksanaan kegiatan, ${data.namaPetugas} mengunjungi ${jumlahKeluarga} keluarga yang usahanya telah ` +
+        `terdata pada pendataan SE2026. Laporan atas kegiatan tanggal ini DISUSUN KEMUDIAN (susulan) oleh petugas, ` +
+        `dengan alasan keterlambatan sebagai berikut: "${alasan}".`,
+      `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
+        `demikian, seluruh rangkaian perjalanan dinas pada tanggal tersebut dilaksanakan dalam satu hari.`,
+    ];
   } else if (modeTemplate) {
     const rekap = data.rekap as LaporanRekapSnapshot;
     const wilayah = wilayahTugasTeks(lok);
@@ -797,7 +833,12 @@ function gambarKonten(
     ? `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}. ` +
       `Pada tanggal ini petugas BELUM mengisi laporan rinci di sistem -- jumlah keluarga yang ditampilkan merupakan ` +
       `ESTIMASI MINIMUM sesuai ketentuan pelaporan SPJ, bukan hasil pencatatan langsung petugas.`
-    : `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}.`;
+    : susulan
+      ? `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}. ` +
+        `Laporan ini merupakan LAPORAN SUSULAN yang dibuat/diisi oleh petugas setelah tanggal pelaksanaan, dengan alasan ` +
+        `keterlambatan: "${rekap.catatanKeterlambatan?.trim() || "-"}". Seluruh data pada laporan ` +
+        `ini diisi secara manual oleh petugas yang bersangkutan.`
+      : `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}.`;
   const prefiks = "Catatan: ";
   const lebarPrefiks = c.fontBold.widthOfTextAtSize(prefiks, CATATAN_SIZE);
   teks(c, prefiks, CONTENT_L, y, CATATAN_SIZE, { bold: true, color: TEXT_SEC });
