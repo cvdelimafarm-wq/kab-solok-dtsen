@@ -13,6 +13,17 @@
 // petugas ini bertugas) -- dipakai FE utk ikon warning "belum konfirmasi" /
 // "beban ganda" di kolom PPL, Langkah 4 kertas kerja plotting.
 //
+// (2 Okt 2026) lat/lng petugas + titik_subsls (RPC bencana_subsls_titik_jarak,
+// ~191 baris) ditambahkan -- permintaan user: popover "Saran" di kolom PPL
+// Langkah 4 diurutkan berdasarkan JARAK (garis lurus/haversine, dihitung di
+// FE) dari lokasi rumah tiap kandidat PPL ke Sub SLS baris itu, BUKAN beban
+// kerja lagi. Sengaja garis lurus (bukan OSRM) krn popover ini bisa dibuka
+// berkali-kali sambil admin mem-plot banyak baris -- konsisten dgn alasan tab
+// "Penyisiran Usaha" jg pakai haversine utk jarak yg sering dihitung ulang
+// (lihat komentar di lib/jarakJalan.ts). Jarak akhir SESUDAH PPL benar2
+// diplot (disimpan di bencana_alokasi_subsls.jarak_km) tetap pakai OSRM kalau
+// tersedia -- popover Saran ini murni bantuan memilih, bukan nilai resmi.
+//
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya di
 // aplikasi ini (tidak ada sistem login sama sekali di /bencana).
 
@@ -39,8 +50,17 @@ export async function GET(req: NextRequest) {
   const hariKerja = Number.isFinite(hariKerjaRaw) && hariKerjaRaw > 0 ? Math.min(Math.round(hariKerjaRaw), 24) : 24;
 
   try {
-    const [kertasRes, ringkasanPplRes, ringkasanPmlRes, ringkasanKorwilRes, kebutuhanRes, petugasRes, sampelRes, kegiatanLainRes] =
-      await Promise.all([
+    const [
+      kertasRes,
+      ringkasanPplRes,
+      ringkasanPmlRes,
+      ringkasanKorwilRes,
+      kebutuhanRes,
+      petugasRes,
+      sampelRes,
+      kegiatanLainRes,
+      titikSubslsRes,
+    ] = await Promise.all([
         supabase.rpc("bencana_kertas_kerja_alokasi"),
         supabase.rpc("bencana_ringkasan_beban_ppl"),
         supabase.rpc("bencana_ringkasan_beban_pml"),
@@ -49,11 +69,12 @@ export async function GET(req: NextRequest) {
         supabase
           .from("bencana_petugas")
           .select(
-            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi"
+            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, lat, lng"
           )
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),
         supabase.from("bencana_petugas_kegiatan_lain").select("petugas_id, kegiatan"),
+        supabase.rpc("bencana_subsls_titik_jarak"),
       ]);
 
     if (kertasRes.error) return NextResponse.json({ error: kertasRes.error.message }, { status: 500 });
@@ -64,6 +85,7 @@ export async function GET(req: NextRequest) {
     if (petugasRes.error) return NextResponse.json({ error: petugasRes.error.message }, { status: 500 });
     if (sampelRes.error) return NextResponse.json({ error: sampelRes.error.message }, { status: 500 });
     if (kegiatanLainRes.error) return NextResponse.json({ error: kegiatanLainRes.error.message }, { status: 500 });
+    if (titikSubslsRes.error) return NextResponse.json({ error: titikSubslsRes.error.message }, { status: 500 });
 
     const sampelData = (sampelRes.data ?? []) as { termasuk_sampel: boolean }[];
 
@@ -88,6 +110,7 @@ export async function GET(req: NextRequest) {
       jumlah_calon_sampel: sampelData.length,
       jumlah_sampel_terpilih: sampelData.filter((r) => r.termasuk_sampel).length,
       hari_kerja: hariKerja,
+      titik_subsls: titikSubslsRes.data ?? [],
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";

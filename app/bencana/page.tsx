@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { haversineKm } from "@/lib/jarakJalan";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -162,7 +163,14 @@ type PetugasRingkas = {
   alamat_kecamatan: string | null;
   pendaftaran_bencana_konfirmasi: boolean;
   kegiatan_lain: string[];
+  lat: number | null;
+  lng: number | null;
 };
+
+// Titik koordinat (centroid/geotag) per Sub SLS -- dipakai utk menghitung
+// jarak garis lurus (haversine) dari lokasi rumah kandidat PPL ke Sub SLS
+// baris itu, utk pengurutan popover "Saran" Langkah 4 (lihat jarakJalan.ts).
+type TitikSubsls = { idsubsls: string; lat: number | null; lng: number | null };
 
 // Status "kesediaan ikut pendataan bencana" utk seorang PPL yg sudah diplot,
 // dipakai utk ikon warning di kolom PPL Langkah 4:
@@ -296,11 +304,18 @@ function SaranMitraTombol({
   bebanDraftPerPpl,
   pplTerpilihId,
   onPilih,
+  subslsPoint,
 }: {
   pplOptions: PetugasRingkas[];
   bebanDraftPerPpl: Map<number, number>;
   pplTerpilihId: number | null;
   onPilih: (id: number) => void;
+  // (2 Okt 2026) Titik koordinat Sub SLS baris ini -- dipakai utk mengurutkan
+  // tier1/tier2 berdasarkan jarak garis lurus (haversine) dari lokasi rumah
+  // tiap kandidat PPL ke Sub SLS ini, BUKAN beban kerja lagi (lihat
+  // jarakDraftPerPpl di bawah & komentar di route.ts/jarakJalan.ts). null
+  // kalau titik Sub SLS belum tersedia -> fallback ke urutan semula.
+  subslsPoint: { lat: number; lng: number } | null;
 }) {
   const [buka, setBuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -333,12 +348,39 @@ function SaranMitraTombol({
     setBuka(true);
   }
 
+  // (2 Okt 2026) Jarak garis lurus (haversine) dari lokasi rumah tiap
+  // kandidat PPL ke Sub SLS baris ini -- dihitung sekali per render popover
+  // di sini (FE, bukan OSRM/BE) krn popover ini bisa dibuka berkali-kali
+  // sambil admin mem-plot banyak baris; null kalau lokasi PPL atau titik Sub
+  // SLS belum tersedia (lokasi_status bukan "riil", atau lat/lng kosong) --
+  // kandidat begini ditaruh di urutan paling akhir, bukan dibuang.
+  const jarakPerPpl = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const p of pplOptions) {
+      if (!subslsPoint || p.lokasi_status !== "riil" || typeof p.lat !== "number" || typeof p.lng !== "number") {
+        map.set(p.id, null);
+        continue;
+      }
+      map.set(p.id, haversineKm(p.lat, p.lng, subslsPoint.lat, subslsPoint.lng));
+    }
+    return map;
+  }, [pplOptions, subslsPoint]);
+
+  // Urutan: jarak ascending dulu (kandidat tanpa jarak terhitung ditaruh
+  // paling akhir), lalu beban kerja sbg tie-breaker (konsisten dgn perilaku
+  // lama sblm fitur jarak ini ada).
+  function bandingkanJarakLaluBeban(a: PetugasRingkas, b: PetugasRingkas) {
+    const jarakA = jarakPerPpl.get(a.id) ?? null;
+    const jarakB = jarakPerPpl.get(b.id) ?? null;
+    if (jarakA !== null && jarakB !== null && jarakA !== jarakB) return jarakA - jarakB;
+    if (jarakA !== null && jarakB === null) return -1;
+    if (jarakA === null && jarakB !== null) return 1;
+    return (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0);
+  }
+
   const tier1 = useMemo(
-    () =>
-      pplOptions
-        .filter((p) => p.pendaftaran_bencana_konfirmasi)
-        .sort((a, b) => (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0)),
-    [pplOptions, bebanDraftPerPpl]
+    () => pplOptions.filter((p) => p.pendaftaran_bencana_konfirmasi).sort(bandingkanJarakLaluBeban),
+    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
   );
   const tier2 = useMemo(
     () =>
@@ -350,8 +392,8 @@ function SaranMitraTombol({
         // undefined sesaat -- lihat crash "Cannot read properties of undefined
         // (reading 'includes')" yg dilaporkan user pasca deploy fitur ini.
         .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026"))
-        .sort((a, b) => (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0)),
-    [pplOptions, bebanDraftPerPpl]
+        .sort(bandingkanJarakLaluBeban),
+    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
   );
 
   function pilih(id: number) {
@@ -383,7 +425,7 @@ function SaranMitraTombol({
             warna="text-moss-700"
             daftar={tier1}
             pplTerpilihId={pplTerpilihId}
-            bebanDraftPerPpl={bebanDraftPerPpl}
+            jarakPerPpl={jarakPerPpl}
             onPilih={pilih}
             kosong="Belum ada mitra yang mengajukan diri."
           />
@@ -393,7 +435,7 @@ function SaranMitraTombol({
             warna="text-blue-700"
             daftar={tier2}
             pplTerpilihId={pplTerpilihId}
-            bebanDraftPerPpl={bebanDraftPerPpl}
+            jarakPerPpl={jarakPerPpl}
             onPilih={pilih}
             kosong="Tidak ada kandidat cadangan dari peserta PES SE2026."
           />
@@ -408,7 +450,7 @@ function SaranMitraKelompok({
   warna,
   daftar,
   pplTerpilihId,
-  bebanDraftPerPpl,
+  jarakPerPpl,
   onPilih,
   kosong,
 }: {
@@ -416,7 +458,7 @@ function SaranMitraKelompok({
   warna: string;
   daftar: PetugasRingkas[];
   pplTerpilihId: number | null;
-  bebanDraftPerPpl: Map<number, number>;
+  jarakPerPpl: Map<number, number | null>;
   onPilih: (id: number) => void;
   kosong: string;
 }) {
@@ -447,7 +489,12 @@ function SaranMitraKelompok({
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-semibold text-navy-900">{p.nama}</p>
                   <p className="text-[10px] text-ink/40">
-                    Beban saat ini: {(bebanDraftPerPpl.get(p.id) ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                    {(() => {
+                      const jarak = jarakPerPpl.get(p.id) ?? null;
+                      return jarak === null
+                        ? "Jarak tidak tersedia (lokasi belum riil)"
+                        : `± ${jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km dari Sub SLS ini`;
+                    })()}
                   </p>
                 </div>
                 <button
@@ -2912,6 +2959,7 @@ function AlokasiPetugasSection() {
   const [ringkasanKorwil, setRingkasanKorwil] = useState<RingkasanKorwilRow[]>([]);
   const [kebutuhan, setKebutuhan] = useState<KebutuhanRow[]>([]);
   const [petugasList, setPetugasList] = useState<PetugasRingkas[]>([]);
+  const [titikSubsls, setTitikSubsls] = useState<TitikSubsls[]>([]);
   const [hariKerjaInput, setHariKerjaInput] = useState(24);
   const [detailKebutuhanTerbuka, setDetailKebutuhanTerbuka] = useState<Set<string>>(new Set());
   const [optimasiTerbuka, setOptimasiTerbuka] = useState(false);
@@ -3040,6 +3088,7 @@ function AlokasiPetugasSection() {
     setRingkasanKorwil(json.ringkasan_korwil ?? []);
     setKebutuhan(json.kebutuhan_petugas ?? []);
     setPetugasList(json.petugas ?? []);
+    setTitikSubsls(json.titik_subsls ?? []);
     setHariKerjaDipakai(json.hari_kerja ?? hariKerja);
   }
 
@@ -3456,6 +3505,15 @@ function AlokasiPetugasSection() {
         .sort((a, b) => a.nama.localeCompare(b.nama)),
     [petugasList]
   );
+  // Titik koordinat per Sub SLS (idsubsls -> lat/lng), utk popover "Saran"
+  // Langkah 4 menghitung jarak ke Sub SLS baris yg sedang diisi.
+  const titikSubslsMap = useMemo(() => {
+    const map = new Map<string, { lat: number; lng: number }>();
+    for (const t of titikSubsls) {
+      if (typeof t.lat === "number" && typeof t.lng === "number") map.set(t.idsubsls, { lat: t.lat, lng: t.lng });
+    }
+    return map;
+  }, [titikSubsls]);
   const korwilOptions = useMemo(
     () => petugasList.filter((p) => p.peran === "korwil").sort((a, b) => a.nama.localeCompare(b.nama)),
     [petugasList]
@@ -5731,6 +5789,7 @@ function AlokasiPetugasSection() {
                           bebanDraftPerPpl={bebanDraftPerPpl}
                           pplTerpilihId={draftPplId}
                           onPilih={(id) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: id }))}
+                          subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
                         />
                         {statusKesediaan?.tipe === "belum_konfirmasi" && (
                           <IkonStatusKesediaanPpl status={statusKesediaan} />
