@@ -150,10 +150,6 @@ interface Penugasan {
   nama: string;
   suratTugasId: number;
   nomorSt: string;
-  // Tanggal ST diterbitkan/ditandatangani (spj_surat_tugas.tanggal_terbit,
-  // dirambatkan lewat RPC spj_matriks_kelengkapan) -- dipakai sbg field
-  // "Tanggal" pada Kwitansi cetak-gabungan, lihat lib/pdf/kwitansi.ts.
-  tanggalTerbitSt: string;
   tanggalMulaiEfektif: string;
   tanggalList: string[];
 }
@@ -164,7 +160,6 @@ interface BarisMatriksMentah {
   nama: string;
   surat_tugas_id: number;
   nomor_st: string;
-  tanggal_terbit: string;
   tanggal: string;
 }
 
@@ -314,7 +309,6 @@ export async function POST(req: NextRequest) {
         nama: b.nama,
         suratTugasId: b.surat_tugas_id,
         nomorSt: b.nomor_st,
-        tanggalTerbitSt: b.tanggal_terbit,
         tanggalMulaiEfektif: b.tanggal,
         tanggalList: [],
       };
@@ -341,6 +335,10 @@ export async function POST(req: NextRequest) {
   const bersihkanTmpDirIni = () => fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 
   const dilewati: string[] = [];
+  // (2 Okt 2026) Daftar Laporan yg tercetak sbg ESTIMASI MINIMUM (bukan
+  // skip/dilewati) -- lihat blok "laporan" di bawah & komentar besar di
+  // lib/pdf/laporan.ts (field `estimasiDefault`).
+  const estimasiDibuat: string[] = [];
 
   // ------------------------------------------------------------------
   // Grup terbuka (per mode pengelompokan) -- lihat catatan perombakan
@@ -602,7 +600,7 @@ export async function POST(req: NextRequest) {
           for (const k of kList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
             const bytes = await buatPdfKwitansi({
               nomorSt: p.nomorSt,
-              tanggalTerbitSt: p.tanggalTerbitSt,
+              tanggalSpd: k.tanggal_spd,
               nominal: Number(k.nominal),
               terbilang: k.terbilang,
               untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
@@ -673,7 +671,34 @@ export async function POST(req: NextRequest) {
               });
               await tambahKeGrup({ petugasKey, petugasNama: p.nama, jenis: "laporan", tanggal: tgl, urutanTanggal: tgl }, bytes);
             } else {
-              dilewati.push(`Laporan ${tgl} -- ${p.nama} (${p.nomorSt})`);
+              // (2 Okt 2026) Hari Tugas tgl ini SUDAH ditautkan ke ST (makanya
+              // muncul di p.tanggalList) tapi petugas BELUM mengisi laporan
+              // sama sekali -- DULU dilewati/hilang dari cetakan, SEKARANG
+              // tetap dibuatkan 1 halaman Laporan dgn ESTIMASI MINIMUM
+              // (keluarga dikunjungi/diawasi = minimum sesuai kebijakan
+              // pelaporan SPJ yg sama dgn aktivitas rendah, lihat
+              // MINIMUM_KELUARGA_DIKUNJUNGI) supaya SPJ tetap bisa diajukan
+              // tanpa petugas harus balik ke lapangan mengisi laporan lama.
+              // TIDAK ditulis ke spj_laporan sama sekali (murni tampilan PDF
+              // saat ini dicetak) & ditandai JELAS "estimasi" di badan
+              // dokumennya sendiri (Uraian & Catatan, lihat
+              // lib/pdf/laporan.ts) supaya tidak disalahartikan sbg laporan
+              // asli isian petugas. Wording dibedakan PPL ("dikunjungi") vs
+              // PML ("diawasi") sesuai permintaan user -- peranLabel sudah
+              // dihitung di atas dari jabatan akun (labelJabatanDokumenSpj).
+              const bytes = await buatPdfLaporan({
+                nomorSt: p.nomorSt,
+                namaPetugas: namaAkun,
+                peranLabel,
+                petugasJenis: p.petugasJenis,
+                tanggal: tgl,
+                mode: "template",
+                narasi: null,
+                rekap: { lokasi: [], rekapIdentifikasi: { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 }, totalAktivitas: 0, jumlahDokumentasi: 0 },
+                estimasiDefault: true,
+              });
+              await tambahKeGrup({ petugasKey, petugasNama: p.nama, jenis: "laporan", tanggal: tgl, urutanTanggal: tgl }, bytes);
+              estimasiDibuat.push(`Laporan ${tgl} -- ${p.nama} (${p.nomorSt})`);
             }
           }
 
@@ -781,7 +806,7 @@ export async function POST(req: NextRequest) {
     // ------------------------------------------------------------------
     // Kirim hasil -- STREAMING dari disk, bukan menahan semuanya sbg 1
     // buffer raksasa di RAM dulu (lihat catatan perombakan 27 Sep 2026).
-    if (hasilFiles.length === 1 && dilewati.length === 0) {
+    if (hasilFiles.length === 1 && dilewati.length === 0 && estimasiDibuat.length === 0) {
       const satu = hasilFiles[0];
       const ukuran = (await fsp.stat(satu.path)).size;
       const nodeStream = fs.createReadStream(satu.path);
@@ -809,6 +834,15 @@ export async function POST(req: NextRequest) {
       zip.file(
         "_dokumen_dilewati.txt",
         "Dokumen berikut TIDAK tersedia di sistem & TIDAK ikut dicetak (belum diisi/diupload):\n\n" + dilewati.join("\n")
+      );
+    }
+    if (estimasiDibuat.length > 0) {
+      zip.file(
+        "_laporan_estimasi_minimum.txt",
+        "Laporan berikut BELUM diisi petugas di sistem sampai saat dicetak -- tetap disertakan dalam PDF " +
+          "dengan ESTIMASI MINIMUM (jumlah keluarga sesuai ketentuan pelaporan SPJ), BUKAN hasil isian/" +
+          "pencatatan asli petugas. Lihat catatan di badan masing-masing halaman Laporan tsb:\n\n" +
+          estimasiDibuat.join("\n")
       );
     }
     const zipNodeStream = zip.generateNodeStream({ type: "nodebuffer", streamFiles: true, compression: "DEFLATE" });

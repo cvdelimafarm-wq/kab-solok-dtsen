@@ -71,6 +71,20 @@ export interface LaporanPdfData {
   mode: "template" | "bebas";
   narasi: string | null;
   rekap: LaporanRekapSnapshot | null;
+  // (2 Okt 2026) true -> tanggal ini SUDAH ditandai Hari Tugas (ada Surat
+  // Tugas yg menaunginya) tapi laporan BELUM PERNAH diisi petugas sama
+  // sekali -- dipakai app/api/penyisiran/spj/cetak/route.ts supaya tanggal
+  // tsb TETAP tercetak di PDF gabungan (bukan hilang/"dilewati") dgn
+  // ESTIMASI MINIMUM (keluarga dikunjungi/diawasi = MINIMUM_KELUARGA_DIKUNJUNGI)
+  // sesuai kebijakan pelaporan SPJ yg sama dgn laporan ber-aktivitas rendah
+  // (lihat keluargaDikunjungi()) -- TIDAK PERNAH ditulis ke database (murni
+  // tampilan saat PDF digenerate), dan harus TAMPIL BERBEDA & JELAS di
+  // badan laporan (Uraian & Catatan) supaya tidak bisa disalahartikan sbg
+  // laporan asli yg sudah diisi petugas sendiri. Kalau true, `rekap` boleh
+  // berisi objek kosong (lokasi:[] dkk) -- field2 granularnya diabaikan,
+  // seksi "Data Hasil Penyisiran" disembunyikan total krn memang tidak ada
+  // data rinci utk ditampilkan.
+  estimasiDefault?: boolean;
 }
 
 // ---------- Ukuran halaman & warna ----------
@@ -196,6 +210,23 @@ function keluargaDikunjungi(rekap: LaporanRekapSnapshot): number {
   const total = nilai.length > 0 ? nilai.reduce((a, b) => a + b, 0) : rekap.totalAktivitas;
   if (total <= 0) return total;
   return Math.max(total, MINIMUM_KELUARGA_DIKUNJUNGI);
+}
+
+/** Angka "keluarga" yg ditampilkan di kartu/Uraian/Ringkasan -- SAMA dgn
+ * keluargaDikunjungi() utk laporan asli (termasuk aturan minimum-5 kalau
+ * ada aktivitas rendah), TAPI kalau `estimasiDefault` true (laporan belum
+ * diisi SAMA SEKALI), LANGSUNG pakai MINIMUM_KELUARGA_DIKUNJUNGI -- beda
+ * dgn keluargaDikunjungi() yg kalau total=0 tetap mengembalikan 0 (itu
+ * utk laporan ASLI yg memang tidak ada kunjungan; di sini totalnya bukan
+ * "0 beneran", tapi "belum dilaporkan", jadi aturan minimum tetap berlaku). */
+function jumlahKeluargaTampil(data: LaporanPdfData): number {
+  if (data.estimasiDefault) return MINIMUM_KELUARGA_DIKUNJUNGI;
+  return keluargaDikunjungi(data.rekap as LaporanRekapSnapshot);
+}
+
+/** PML tidak "mengunjungi" keluarga sendiri -- dia mengawasi pelaksanaan kunjungan PPL. Dicek dari peranLabel ("PML", lihat labelJabatanDokumenSpj) HANYA dipakai utk membedakan wording estimasi default (lihat `estimasiDefault` di atas) -- laporan ASLI yg memang diisi petugas (template biasa dari rekap_snapshot asli) TIDAK disentuh sama sekali oleh fungsi ini, tetap pakai wording "dikunjungi" spt sebelumnya (di luar lingkup permintaan ini). */
+function adalahPml(data: LaporanPdfData): boolean {
+  return data.peranLabel === "PML";
 }
 
 /** Baris tabel "Kartu Keluarga per Status Kunjungan" -- hanya status yg jumlahnya > 0, urutan tetap (bukan urutan kemunculan). */
@@ -440,10 +471,13 @@ function gambarKonten(
 
   // ---------- 3 kartu angka ----------
   const modeTemplate = data.mode === "template" && !!data.rekap;
+  const estimasi = modeTemplate && !!data.estimasiDefault;
+  const pml = adalahPml(data);
   const lok = modeTemplate ? lokasiUtama(data.rekap as LaporanRekapSnapshot) : [];
+  const labelKartuKeluarga = estimasi && pml ? "KELUARGA DIAWASI" : "KELUARGA DIKUNJUNGI";
   const kartu: [string, string][] = modeTemplate
     ? [
-        [String(keluargaDikunjungi(data.rekap as LaporanRekapSnapshot)), "KELUARGA DIKUNJUNGI"],
+        [String(jumlahKeluargaTampil(data)), labelKartuKeluarga],
         ["1", "HARI PELAKSANAAN"],
         [String(jumlahWilayah(lok)), "WILAYAH PENYISIRAN"],
       ]
@@ -466,7 +500,35 @@ function gambarKonten(
   y += GAP_SECTIONTITLE_TO_BODY;
 
   let paragraf: string[];
-  if (modeTemplate) {
+  if (estimasi) {
+    // (2 Okt 2026) Hari Tugas ini SUDAH ditandai tapi petugas BELUM mengisi
+    // laporan sama sekali -- narasi SENGAJA dibuat beda & eksplisit
+    // menyebut "estimasi"/"belum dilaporkan" (bukan meniru narasi laporan
+    // asli spt di atas) supaya pembaca dokumen tidak mengira ini hasil
+    // isian petugas sendiri. Kata kerja dibedakan PPL ("mengunjungi") vs
+    // PML ("mengawasi pelaksanaan kunjungan") sesuai permintaan user.
+    const kegiatan = KEGIATAN_LABEL[data.petugasJenis];
+    const jumlahKeluarga = jumlahKeluargaTampil(data);
+    paragraf = pml
+      ? [
+          `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas} bertugas melaksanakan ` +
+            `pengawasan atas kegiatan ${kegiatan} sesuai Hari Tugas yang telah ditetapkan.`,
+          `Rincian lokasi & hasil pengawasan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. Sesuai ` +
+            `ketentuan minimum pelaporan SPJ, jumlah keluarga yang diawasi pelaksanaan kunjungannya pada tanggal ini ` +
+            `dicatat sejumlah ${jumlahKeluarga} keluarga sebagai estimasi minimum, bukan hasil pencatatan rinci petugas.`,
+          `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
+            `demikian, seluruh rangkaian perjalanan dinas pada tanggal tersebut dilaksanakan dalam satu hari.`,
+        ]
+      : [
+          `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas} bertugas melaksanakan ${kegiatan} ` +
+            `sesuai Hari Tugas yang telah ditetapkan.`,
+          `Rincian lokasi & hasil kunjungan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. Sesuai ` +
+            `ketentuan minimum pelaporan SPJ, jumlah keluarga yang dikunjungi pada tanggal ini dicatat sejumlah ` +
+            `${jumlahKeluarga} keluarga sebagai estimasi minimum, bukan hasil pencatatan rinci petugas.`,
+          `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
+            `demikian, seluruh rangkaian perjalanan dinas pada tanggal tersebut dilaksanakan dalam satu hari.`,
+        ];
+  } else if (modeTemplate) {
     const rekap = data.rekap as LaporanRekapSnapshot;
     const wilayah = wilayahTugasTeks(lok);
     const kegiatan = KEGIATAN_LABEL[data.petugasJenis];
@@ -510,12 +572,23 @@ function gambarKonten(
   y = judulSeksi(c, y, "RINGKASAN PELAKSANAAN");
   y += GAP_SECTIONTITLE_TO_TABEL;
 
+  // `estimasi && pml` (BUKAN `pml` saja) -- wording "mengawasi"/"diawasi" di
+  // sini SENGAJA dibatasi hanya utk estimasi default. Laporan PML ASLI yg
+  // memang diisi petugas (rekap_snapshot nyata) TIDAK disentuh & tetap
+  // pakai wording "kunjungan" spt sebelumnya -- di luar lingkup permintaan
+  // ini (sistem memang belum membedakan aktivitas PPL/PML utk laporan asli).
+  const estimasiPml = estimasi && pml;
   const kegiatanLabel = KEGIATAN_LABEL[data.petugasJenis];
   const pasangan: [string, string][] = [
     ["Wilayah tugas", wilayahTugasTeks(lok)],
     ["Kegiatan", kegiatanLabel],
-    ["Objek kunjungan", "Keluarga yang usahanya telah terdata pada SE2026"],
-    ["Jumlah kunjungan", `${keluargaDikunjungi(rekap)} keluarga`],
+    [
+      estimasiPml ? "Objek pengawasan" : "Objek kunjungan",
+      estimasiPml
+        ? "Pelaksanaan kunjungan PPL terhadap keluarga yang usahanya telah terdata pada SE2026"
+        : "Keluarga yang usahanya telah terdata pada SE2026",
+    ],
+    [estimasiPml ? "Jumlah diawasi" : "Jumlah kunjungan", `${jumlahKeluargaTampil(data)} keluarga`],
     ["Pola perjalanan", "Pulang-pergi dari kedudukan"],
     ["Pelaksanaan", "Selesai pada hari yang sama"],
   ];
@@ -568,10 +641,11 @@ function gambarKonten(
   garisV(c, CONTENT_R, ringkasanTop, y, LINE, 0.6);
   garisV(c, CONTENT_MID, ringkasanTop, y, LINE, 0.6);
 
-  // ---------- Data Hasil Penyisiran (opsional -- disembunyikan kalau kosong) ----------
+  // ---------- Data Hasil Penyisiran (opsional -- disembunyikan kalau kosong, SELALU disembunyikan utk estimasi default krn memang tidak ada data rinci) ----------
   const baitStatus = baitStatusKunjungan(rekap);
   const lokBaris = baitLokasi(lok, batasLokasi);
-  const adaDataHasil = baitStatus.length > 0 || rekap.totalAktivitas > 0 || lokBaris.length > 0 || rekap.jumlahDokumentasi > 0;
+  const adaDataHasil =
+    !estimasi && (baitStatus.length > 0 || rekap.totalAktivitas > 0 || lokBaris.length > 0 || rekap.jumlahDokumentasi > 0);
 
   if (adaDataHasil) {
     y += GAP_ANTAR_SEKSI;
@@ -714,8 +788,16 @@ function gambarKonten(
 
   // ---------- Catatan ----------
   y += GAP_BEFORE_CATATAN;
-  const catatanTeks =
-    `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}.`;
+  // (2 Okt 2026) Penanda eksplisit utk estimasi default -- SENGAJA
+  // ditambahkan di kalimat Catatan (bukan cuma Uraian) supaya terlihat
+  // jelas di bagian manapun pembaca dokumen lihat duluan, bahwa angka
+  // keluarga di laporan ini BUKAN hasil isian/pencatatan petugas, melainkan
+  // estimasi minimum krn laporan belum diisi sampai dokumen ini dicetak.
+  const catatanTeks = estimasi
+    ? `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}. ` +
+      `Pada tanggal ini petugas BELUM mengisi laporan rinci di sistem -- jumlah keluarga yang ditampilkan merupakan ` +
+      `ESTIMASI MINIMUM sesuai ketentuan pelaporan SPJ, bukan hasil pencatatan langsung petugas.`
+    : `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}.`;
   const prefiks = "Catatan: ";
   const lebarPrefiks = c.fontBold.widthOfTextAtSize(prefiks, CATATAN_SIZE);
   teks(c, prefiks, CONTENT_L, y, CATATAN_SIZE, { bold: true, color: TEXT_SEC });

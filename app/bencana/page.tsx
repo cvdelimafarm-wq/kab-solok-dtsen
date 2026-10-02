@@ -269,6 +269,184 @@ function BadgeKegiatanLain({ kegiatan }: { kegiatan: string }) {
   );
 }
 
+// (2 Okt 2026) Tombol "💡 Saran" di kolom PPL Langkah 4 -- permintaan user
+// "tambahkan tombol kolom saran mitra yang diambil dari daftar Mengajukan
+// Diri sebagai tier 1 dan PES SE2026 sebagai tier 2". Popover kecil (pola &
+// perilaku tutup sama dgn IkonStatusKesediaanPpl/ThKontrol) berisi 2
+// kelompok kandidat PPL (dari pplOptions yg SAMA dgn isi dropdown Combobox
+// di kolom ini, jadi tidak pernah menyarankan org di luar daftar resmi):
+//   - Tier 1: pendaftaran_bencana_konfirmasi = true (sudah mengajukan diri
+//     ikut pendataan bencana lewat form self-report).
+//   - Tier 2: BELUM mengajukan diri TAPI terdaftar ikut kegiatan "PES
+//     SE2026" (kegiatan_lain) -- dipakai sbg cadangan kalau Tier 1 kosong/
+//     tidak cukup, sesuai permintaan user.
+// Tiap kelompok diurutkan dari beban draft PALING RINGAN dulu (konsisten
+// dgn semangat "beban rendah" yg sudah dipakai di saran rebalancing
+// Langkah 3) supaya saran yg muncul duluan jg membantu pemerataan beban,
+// bukan cuma asal urutan nama.
+//
+// SENGAJA tombol SARAN, bukan plotting otomatis -- klik nama HANYA mengisi
+// draftPpl (field yg sama persis dgn kalau admin pilih manual dari
+// Combobox), TETAP perlu "Simpan Perubahan" & TETAP bisa diganti lagi
+// sebelum itu. Konsisten dgn aturan baku proyek ini: tidak ada fitur
+// alokasi otomatis/algoritmik utk PPL/PML/Korwil -- keputusan akhir selalu
+// di tangan admin lewat klik manual.
+function SaranMitraTombol({
+  pplOptions,
+  bebanDraftPerPpl,
+  pplTerpilihId,
+  onPilih,
+}: {
+  pplOptions: PetugasRingkas[];
+  bebanDraftPerPpl: Map<number, number>;
+  pplTerpilihId: number | null;
+  onPilih: (id: number) => void;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 280;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+  }
+
+  const tier1 = useMemo(
+    () =>
+      pplOptions
+        .filter((p) => p.pendaftaran_bencana_konfirmasi)
+        .sort((a, b) => (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0)),
+    [pplOptions, bebanDraftPerPpl]
+  );
+  const tier2 = useMemo(
+    () =>
+      pplOptions
+        .filter((p) => !p.pendaftaran_bencana_konfirmasi && p.kegiatan_lain.includes("PES SE2026"))
+        .sort((a, b) => (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0)),
+    [pplOptions, bebanDraftPerPpl]
+  );
+
+  function pilih(id: number) {
+    onPilih(id);
+    setBuka(false);
+  }
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        title="Lihat saran mitra: Tier 1 dari yang sudah Mengajukan Diri, Tier 2 dari peserta PES SE2026"
+        className="shrink-0 rounded-full bg-moss-100 px-1.5 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-200"
+      >
+        💡 Saran
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
+          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+        >
+          <p className="mb-1.5 text-[10px] text-ink/50">
+            Saran murni bantuan memilih (bukan plotting otomatis) -- klik nama utk mengisi kolom PPL, tetap perlu
+            &quot;Simpan Perubahan&quot;.
+          </p>
+          <SaranMitraKelompok
+            judul="Tier 1 — Mengajukan Diri"
+            warna="text-moss-700"
+            daftar={tier1}
+            pplTerpilihId={pplTerpilihId}
+            bebanDraftPerPpl={bebanDraftPerPpl}
+            onPilih={pilih}
+            kosong="Belum ada mitra yang mengajukan diri."
+          />
+          <div className="my-1.5 border-t border-line" />
+          <SaranMitraKelompok
+            judul="Tier 2 — Ikut PES SE2026"
+            warna="text-blue-700"
+            daftar={tier2}
+            pplTerpilihId={pplTerpilihId}
+            bebanDraftPerPpl={bebanDraftPerPpl}
+            onPilih={pilih}
+            kosong="Tidak ada kandidat cadangan dari peserta PES SE2026."
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SaranMitraKelompok({
+  judul,
+  warna,
+  daftar,
+  pplTerpilihId,
+  bebanDraftPerPpl,
+  onPilih,
+  kosong,
+}: {
+  judul: string;
+  warna: string;
+  daftar: PetugasRingkas[];
+  pplTerpilihId: number | null;
+  bebanDraftPerPpl: Map<number, number>;
+  onPilih: (id: number) => void;
+  kosong: string;
+}) {
+  const BATAS_TAMPIL = 8;
+  return (
+    <div>
+      <p className={`text-[10px] font-semibold uppercase tracking-wide ${warna}`}>{judul}</p>
+      {daftar.length === 0 ? (
+        <p className="mt-0.5 text-[11px] text-ink/40">{kosong}</p>
+      ) : (
+        <ul className="mt-0.5 space-y-0.5">
+          {daftar.slice(0, BATAS_TAMPIL).map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onPilih(p.id)}
+                disabled={p.id === pplTerpilihId}
+                className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-paper/70 disabled:cursor-default disabled:bg-paper/40 disabled:text-ink/40"
+                title={p.id === pplTerpilihId ? "Sudah dipilih di baris ini" : `Pilih ${p.nama} utk Sub SLS ini`}
+              >
+                <span className="truncate">{p.nama}</span>
+                <span className="ml-1.5 shrink-0 text-[10px] text-ink/40">
+                  {(bebanDraftPerPpl.get(p.id) ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {daftar.length > BATAS_TAMPIL && (
+        <p className="mt-0.5 text-[10px] text-ink/40">+{daftar.length - BATAS_TAMPIL} lainnya (persempit lewat pencarian PPL kalau perlu).</p>
+      )}
+    </div>
+  );
+}
+
 // Rincian satu laporan identifikasi jorong (mitra) yg jadi SUMBER estimasi
 // KK terdampak utk sebuah Sub SLS -- dipakai popover "Sumber data KK
 // Terdampak" di Kertas Kerja Beban, supaya admin bisa lihat langsung siapa
@@ -5523,6 +5701,12 @@ function AlokasiPetugasSection() {
                           options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
                           placeholder="Plot ke PPL..."
                           className="w-48"
+                        />
+                        <SaranMitraTombol
+                          pplOptions={pplOptions}
+                          bebanDraftPerPpl={bebanDraftPerPpl}
+                          pplTerpilihId={draftPplId}
+                          onPilih={(id) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: id }))}
                         />
                         {statusKesediaan?.tipe === "belum_konfirmasi" && (
                           <IkonStatusKesediaanPpl status={statusKesediaan} />
