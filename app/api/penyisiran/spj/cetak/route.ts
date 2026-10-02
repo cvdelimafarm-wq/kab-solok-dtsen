@@ -429,6 +429,23 @@ export async function POST(req: NextRequest) {
         dilewati.push(`Kwitansi -- ${p.nama} (${p.nomorSt})`);
       }
 
+      // (2 Okt 2026, perbaikan) Tanggal terbit ST -- SATU nilai tetap per
+      // Surat Tugas (kolom spj_surat_tugas.tanggal_terbit, migrasi 29 Sep
+      // 2026), BUKAN tanggal_spd per-baris spj_kwitansi yg bisa berbeda2
+      // antar segmen kalau 1 ST dipecah jadi beberapa Kwitansi -- lihat
+      // komentar besar di KwitansiPdfData/lib/pdf/kwitansi.ts. Sebelum
+      // perbaikan ini, route Cetak SPJ (gabungan/bulk) masih terlewat
+      // memakai field lama `tanggalSpd` yg SUDAH DIHAPUS dari
+      // KwitansiPdfData sejak perbaikan itu -- bikin build Next.js gagal
+      // (type error "tanggalSpd does not exist in type KwitansiPdfData").
+      // Pola fallback SAMA PERSIS dgn app/api/penyisiran/spj/kwitansi/[id]/
+      // pdf/route.ts (download kwitansi satuan) supaya kedua jalur cetak
+      // (satuan & gabungan) selalu konsisten.
+      const { data: stTerbitRaw } = dokumenDipilih.includes("kwitansi")
+        ? await supabase.from("spj_surat_tugas").select("tanggal_terbit").eq("id", p.suratTugasId).maybeSingle()
+        : { data: null };
+      const tanggalTerbitSt = (stTerbitRaw as { tanggal_terbit: string | null } | null)?.tanggal_terbit ?? null;
+
       const { data: vListRaw } = dokumenDipilih.includes("visum")
         ? await supabase
             .from("spj_visum")
@@ -600,7 +617,7 @@ export async function POST(req: NextRequest) {
           for (const k of kList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
             const bytes = await buatPdfKwitansi({
               nomorSt: p.nomorSt,
-              tanggalSpd: k.tanggal_spd,
+              tanggalTerbitSt: tanggalTerbitSt ?? k.tanggal_spd,
               nominal: Number(k.nominal),
               terbilang: k.terbilang,
               untukPerjalananDinasPada: k.untuk_perjalanan_dinas_pada,
