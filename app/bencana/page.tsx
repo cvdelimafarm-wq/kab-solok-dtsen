@@ -427,23 +427,41 @@ function SaranMitraKelompok({
       {daftar.length === 0 ? (
         <p className="mt-0.5 text-[11px] text-ink/40">{kosong}</p>
       ) : (
-        <ul className="mt-0.5 space-y-0.5">
-          {daftar.slice(0, BATAS_TAMPIL).map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => onPilih(p.id)}
-                disabled={p.id === pplTerpilihId}
-                className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-paper/70 disabled:cursor-default disabled:bg-paper/40 disabled:text-ink/40"
-                title={p.id === pplTerpilihId ? "Sudah dipilih di baris ini" : `Pilih ${p.nama} utk Sub SLS ini`}
+        // (2 Okt 2026) Redesain atas masukan user: nama ditulis MENONJOL/jelas
+        // (bukan teks biasa di dalam satu tombol besar yg kurang kelihatan bisa
+        // diklik), DISERTAI tombol "Terapkan" eksplisit terpisah -- klik tombol
+        // itu yg mengisi draftPpl (otomatis ikut mengisi dropdown Combobox PPL
+        // di baris ybs, krn keduanya SATU state yg sama, lihat onPilih di
+        // SaranMitraTombol). Baris yg SUDAH terpilih ditandai jelas (latar +
+        // label "✓ Dipilih") drpd tombol disabled polos spt sebelumnya.
+        <ul className="mt-0.5 space-y-1">
+          {daftar.slice(0, BATAS_TAMPIL).map((p) => {
+            const sudahDipilih = p.id === pplTerpilihId;
+            return (
+              <li
+                key={p.id}
+                className={`flex items-center justify-between gap-2 rounded-md px-1.5 py-1 ${
+                  sudahDipilih ? "bg-moss-50" : "hover:bg-paper/70"
+                }`}
               >
-                <span className="truncate">{p.nama}</span>
-                <span className="ml-1.5 shrink-0 text-[10px] text-ink/40">
-                  {(bebanDraftPerPpl.get(p.id) ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })}
-                </span>
-              </button>
-            </li>
-          ))}
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold text-navy-900">{p.nama}</p>
+                  <p className="text-[10px] text-ink/40">
+                    Beban saat ini: {(bebanDraftPerPpl.get(p.id) ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPilih(p.id)}
+                  disabled={sudahDipilih}
+                  className="shrink-0 rounded-full bg-moss-50 px-2 py-1 text-[10px] font-semibold text-moss-900 hover:bg-moss-100 disabled:cursor-default disabled:bg-paper disabled:text-ink/40"
+                  title={sudahDipilih ? "Sudah dipilih di baris ini" : `Pilih ${p.nama} utk Sub SLS ini`}
+                >
+                  {sudahDipilih ? "✓ Dipilih" : "Terapkan"}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
       {daftar.length > BATAS_TAMPIL && (
