@@ -20,6 +20,11 @@
 // bencana_petugas_master_data_demografi. Untuk petugas organik (BPS), field
 // ini kosong (bukan bagian rekrutmen mitra).
 //
+// status_pendaftaran_bencana: true kalau nama petugas ini match dgn daftar
+// self-report "sudah mengajukan diri ikut pendataan bencana" -- lihat migrasi
+// bencana_petugas_pendaftaran_dan_kegiatan_lain. Ini cuma sinyal kesediaan
+// awal, bukan penugasan resmi.
+//
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
 
 import { NextResponse } from "next/server";
@@ -44,7 +49,7 @@ export async function GET() {
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status"
+      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status, pendaftaran_bencana_konfirmasi"
     )
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -86,6 +91,7 @@ export async function GET() {
       pekerjaan: p.pekerjaan,
       bisa_mengendarai_motor: p.bisa_mengendarai_motor,
       punya_kendaraan_bermotor: p.punya_kendaraan_bermotor,
+      pendaftaran_bencana_konfirmasi: p.pendaftaran_bencana_konfirmasi,
     };
   });
 

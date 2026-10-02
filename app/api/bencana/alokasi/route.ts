@@ -7,6 +7,12 @@
 // parametrized oleh query ?hari_kerja=, ikut terbatas ke wilayah sampel),
 // dan daftar ringkas seluruh petugas (utk dropdown assign manual PPL/PML/Korwil).
 //
+// Daftar petugas ini juga disertai pendaftaran_bencana_konfirmasi (apakah nama
+// ybs match dgn daftar self-report "sudah mengajukan diri ikut pendataan
+// bencana") dan kegiatan_lain (daftar kegiatan/survei LAIN yg sudah menandai
+// petugas ini bertugas) -- dipakai FE utk ikon warning "belum konfirmasi" /
+// "beban ganda" di kolom PPL, Langkah 4 kertas kerja plotting.
+//
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya di
 // aplikasi ini (tidak ada sistem login sama sekali di /bencana).
 
@@ -33,7 +39,7 @@ export async function GET(req: NextRequest) {
   const hariKerja = Number.isFinite(hariKerjaRaw) && hariKerjaRaw > 0 ? Math.min(Math.round(hariKerjaRaw), 24) : 24;
 
   try {
-    const [kertasRes, ringkasanPplRes, ringkasanPmlRes, ringkasanKorwilRes, kebutuhanRes, petugasRes, sampelRes] =
+    const [kertasRes, ringkasanPplRes, ringkasanPmlRes, ringkasanKorwilRes, kebutuhanRes, petugasRes, sampelRes, kegiatanLainRes] =
       await Promise.all([
         supabase.rpc("bencana_kertas_kerja_alokasi"),
         supabase.rpc("bencana_ringkasan_beban_ppl"),
@@ -42,9 +48,12 @@ export async function GET(req: NextRequest) {
         supabase.rpc("bencana_kebutuhan_petugas", { hari_kerja: hariKerja }),
         supabase
           .from("bencana_petugas")
-          .select("id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan")
+          .select(
+            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi"
+          )
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),
+        supabase.from("bencana_petugas_kegiatan_lain").select("petugas_id, kegiatan"),
       ]);
 
     if (kertasRes.error) return NextResponse.json({ error: kertasRes.error.message }, { status: 500 });
@@ -54,8 +63,20 @@ export async function GET(req: NextRequest) {
     if (kebutuhanRes.error) return NextResponse.json({ error: kebutuhanRes.error.message }, { status: 500 });
     if (petugasRes.error) return NextResponse.json({ error: petugasRes.error.message }, { status: 500 });
     if (sampelRes.error) return NextResponse.json({ error: sampelRes.error.message }, { status: 500 });
+    if (kegiatanLainRes.error) return NextResponse.json({ error: kegiatanLainRes.error.message }, { status: 500 });
 
     const sampelData = (sampelRes.data ?? []) as { termasuk_sampel: boolean }[];
+
+    const kegiatanLainByPetugas = new Map<number, string[]>();
+    for (const row of (kegiatanLainRes.data ?? []) as { petugas_id: number; kegiatan: string }[]) {
+      const arr = kegiatanLainByPetugas.get(row.petugas_id) ?? [];
+      arr.push(row.kegiatan);
+      kegiatanLainByPetugas.set(row.petugas_id, arr);
+    }
+    const petugasDenganKegiatanLain = (petugasRes.data ?? []).map((p) => ({
+      ...p,
+      kegiatan_lain: kegiatanLainByPetugas.get(p.id) ?? [],
+    }));
 
     return NextResponse.json({
       kertas_kerja: kertasRes.data ?? [],
@@ -63,7 +84,7 @@ export async function GET(req: NextRequest) {
       ringkasan_pml: ringkasanPmlRes.data ?? [],
       ringkasan_korwil: ringkasanKorwilRes.data ?? [],
       kebutuhan_petugas: kebutuhanRes.data ?? [],
-      petugas: petugasRes.data ?? [],
+      petugas: petugasDenganKegiatanLain,
       jumlah_calon_sampel: sampelData.length,
       jumlah_sampel_terpilih: sampelData.filter((r) => r.termasuk_sampel).length,
       hari_kerja: hariKerja,
