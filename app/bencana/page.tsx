@@ -1209,6 +1209,12 @@ function MonitoringMagangSection({ data }: { data: MonitoringMagangRow[] }) {
 // atur kontrol lain di popover yang sama; Filter tetap pola draft+Terapkan
 // (perlu klik Terapkan dulu) spy tidak nge-refetch/filter ulang tiap 1
 // checkbox dicentang.
+// (2 Okt 2026) Redesain atas masukan user: dulu Cari ikut jadi salah satu
+// tab di dalam popover titik-tiga (⋮) bersama Urutkan/Filter -- user minta
+// Cari dipisah jadi ikon 🔍 TERSENDIRI di samping ⋮ (langsung kelihatan &
+// klik 1x, tidak perlu buka ⋮ dulu), sedangkan Urutkan & Filter tetap
+// digabung dalam 1 popover ⋮ seperti sebelumnya. Dua popover independen,
+// tapi 1 listener "klik di luar" yang menutup salah satu/keduanya.
 function ThKontrol({
   label,
   className,
@@ -1224,7 +1230,11 @@ function ThKontrol({
   filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
   sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
-  const adaKontrol = !!search || !!filter || !!sort;
+  const adaAksi = !!sort || !!filter;
+
+  const [cariTerbuka, setCariTerbuka] = useState(false);
+  const [cariPos, setCariPos] = useState<{ top: number; left: number } | null>(null);
+  const cariRef = useRef<HTMLDivElement>(null);
 
   const [terbuka, setTerbuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -1232,9 +1242,12 @@ function ThKontrol({
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!terbuka) return;
+    if (!cariTerbuka && !terbuka) return;
     function tutupJikaDiluar(e: Event) {
-      if (popoverRef.current && e.target instanceof Node && popoverRef.current.contains(e.target)) return;
+      const target = e.target;
+      if (cariRef.current && target instanceof Node && cariRef.current.contains(target)) return;
+      if (popoverRef.current && target instanceof Node && popoverRef.current.contains(target)) return;
+      setCariTerbuka(false);
       setTerbuka(false);
     }
     document.addEventListener("mousedown", tutupJikaDiluar);
@@ -1245,7 +1258,19 @@ function ThKontrol({
       document.removeEventListener("scroll", tutupJikaDiluar, true);
       window.removeEventListener("resize", tutupJikaDiluar);
     };
-  }, [terbuka]);
+  }, [cariTerbuka, terbuka]);
+
+  function bukaCari(e: React.MouseEvent<HTMLButtonElement>) {
+    if (cariTerbuka) {
+      setCariTerbuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 220;
+    setCariPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)) });
+    setTerbuka(false);
+    setCariTerbuka(true);
+  }
 
   function bukaAksi(e: React.MouseEvent<HTMLButtonElement>) {
     if (terbuka) {
@@ -1259,153 +1284,170 @@ function ThKontrol({
       left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)),
     });
     if (filter) setFilterDraft(new Set(filter.selected));
+    setCariTerbuka(false);
     setTerbuka(true);
   }
 
   const searchAktif = !!search?.value;
   const filterAktif = !!filter && filter.selected.size > 0;
-  const aksiAktif = searchAktif || filterAktif || !!sort?.active;
-  const banyakBagian = [!!sort, !!search, !!filter].filter(Boolean).length > 1;
+  const aksiAktif = filterAktif || !!sort?.active;
+  const banyakBagian = !!sort && !!filter;
 
   return (
     <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
-      <div className="flex items-center justify-between gap-1.5">
+      <div className="flex items-center justify-between gap-1">
         <span className="truncate">{label}</span>
-        {adaKontrol && (
-          <button
-            type="button"
-            title="Aksi kolom"
-            onClick={bukaAksi}
-            className={`shrink-0 rounded p-1 text-xs leading-none transition ${
-              aksiAktif || terbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
-            }`}
-          >
-            ⋮
-          </button>
-        )}
-      </div>
-
-      {terbuka && pos && (
-        <div
-          ref={popoverRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 240 }}
-          className="z-50 flex flex-col gap-2 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
-        >
-          {sort && (
-            <div className={banyakBagian ? "border-b border-line pb-2" : ""}>
-              {banyakBagian && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Urutkan</p>
-              )}
-              <div className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  onClick={sort.onAsc}
-                  className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
-                    sort.active && sort.dir === "asc" ? "bg-blue-50 font-medium text-blue-700" : ""
-                  }`}
-                >
-                  ▲ Urut naik (A-Z)
-                </button>
-                <button
-                  type="button"
-                  onClick={sort.onDesc}
-                  className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
-                    sort.active && sort.dir === "desc" ? "bg-blue-50 font-medium text-blue-700" : ""
-                  }`}
-                >
-                  ▼ Urut turun (Z-A)
-                </button>
-                {sort.active && (
-                  <button
-                    type="button"
-                    onClick={sort.onReset}
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
-                  >
-                    ✕ Reset urutan
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
+        <div className="flex shrink-0 items-center gap-0.5">
           {search && (
-            <div className={filter ? "border-b border-line pb-2" : ""}>
-              {banyakBagian && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Cari</p>
-              )}
-              <input
-                autoFocus={!sort && !filter}
-                value={search.value}
-                onChange={(e) => search.onChange(e.target.value)}
-                placeholder={search.placeholder ?? "Ketik kata kunci..."}
-                className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
-              {search.value && (
-                <button
-                  type="button"
-                  onClick={() => search.onChange("")}
-                  className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
+            <div ref={cariRef} className="relative">
+              <button
+                type="button"
+                title="Cari di kolom ini"
+                onClick={bukaCari}
+                className={`shrink-0 rounded p-1 text-xs leading-none transition ${
+                  searchAktif || cariTerbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
+                }`}
+              >
+                🔍
+              </button>
+              {cariTerbuka && cariPos && (
+                <div
+                  style={{ position: "fixed", top: cariPos.top, left: cariPos.left, width: 220 }}
+                  className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
                 >
-                  Hapus pencarian
-                </button>
-              )}
-            </div>
-          )}
-
-          {filter && (
-            <div>
-              {banyakBagian && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Filter</p>
-              )}
-              <div className="max-h-44 overflow-y-auto">
-                {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
-                <div className="flex flex-col gap-1">
-                  {filter.options.map((opt) => (
-                    <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
-                      <input
-                        type="checkbox"
-                        checked={filterDraft.has(opt)}
-                        onChange={() => {
-                          setFilterDraft((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(opt)) next.delete(opt);
-                            else next.add(opt);
-                            return next;
-                          });
-                        }}
-                        className="h-3.5 w-3.5 shrink-0 accent-blue-600"
-                      />
-                      <span className="truncate">{opt}</span>
-                    </label>
-                  ))}
+                  <input
+                    autoFocus
+                    value={search.value}
+                    onChange={(e) => search.onChange(e.target.value)}
+                    placeholder={search.placeholder ?? "Ketik kata kunci..."}
+                    className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                  />
+                  {search.value && (
+                    <button
+                      type="button"
+                      onClick={() => search.onChange("")}
+                      className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
+                    >
+                      Hapus pencarian
+                    </button>
+                  )}
                 </div>
-              </div>
-              <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
-                <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
-                  Bersihkan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => filter.onApply(filterDraft)}
-                  className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
-                >
-                  Terapkan
-                </button>
-              </div>
+              )}
             </div>
           )}
 
-          {banyakBagian && (
-            <button
-              type="button"
-              onClick={() => setTerbuka(false)}
-              className="w-full rounded px-2 py-1 text-center text-[10px] font-medium text-ink/50 hover:bg-gray-50 hover:text-ink/80"
-            >
-              Tutup
-            </button>
+          {adaAksi && (
+            <div ref={popoverRef} className="relative">
+              <button
+                type="button"
+                title="Urutkan / filter kolom ini"
+                onClick={bukaAksi}
+                className={`shrink-0 rounded p-1 text-xs leading-none transition ${
+                  aksiAktif || terbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
+                }`}
+              >
+                ⋮
+              </button>
+              {terbuka && pos && (
+                <div
+                  style={{ position: "fixed", top: pos.top, left: pos.left, width: 240 }}
+                  className="z-50 flex flex-col gap-2 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
+                >
+                  {sort && (
+                    <div className={banyakBagian ? "border-b border-line pb-2" : ""}>
+                      {banyakBagian && (
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Urutkan</p>
+                      )}
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          onClick={sort.onAsc}
+                          className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
+                            sort.active && sort.dir === "asc" ? "bg-blue-50 font-medium text-blue-700" : ""
+                          }`}
+                        >
+                          ▲ Urut naik (A-Z)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={sort.onDesc}
+                          className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
+                            sort.active && sort.dir === "desc" ? "bg-blue-50 font-medium text-blue-700" : ""
+                          }`}
+                        >
+                          ▼ Urut turun (Z-A)
+                        </button>
+                        {sort.active && (
+                          <button
+                            type="button"
+                            onClick={sort.onReset}
+                            className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
+                          >
+                            ✕ Reset urutan
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {filter && (
+                    <div>
+                      {banyakBagian && (
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Filter</p>
+                      )}
+                      <div className="max-h-44 overflow-y-auto">
+                        {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
+                        <div className="flex flex-col gap-1">
+                          {filter.options.map((opt) => (
+                            <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
+                              <input
+                                type="checkbox"
+                                checked={filterDraft.has(opt)}
+                                onChange={() => {
+                                  setFilterDraft((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(opt)) next.delete(opt);
+                                    else next.add(opt);
+                                    return next;
+                                  });
+                                }}
+                                className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                              />
+                              <span className="truncate">{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
+                        <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
+                          Bersihkan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => filter.onApply(filterDraft)}
+                          className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
+                        >
+                          Terapkan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {banyakBagian && (
+                    <button
+                      type="button"
+                      onClick={() => setTerbuka(false)}
+                      className="w-full rounded px-2 py-1 text-center text-[10px] font-medium text-ink/50 hover:bg-gray-50 hover:text-ink/80"
+                    >
+                      Tutup
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
     </th>
   );
 }
@@ -2157,7 +2199,21 @@ function MasterPetugasSection() {
   const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
   const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
 
-  const [sortKey, setSortKey] = useState<"nama" | "umur" | null>(null);
+  // (2 Okt 2026) Cari per-kolom utk kolom teks/kategori berkardinalitas
+  // tinggi (banyak nilai berbeda) -- Kecamatan/Nagari/Jorong/Pendidikan/
+  // Pekerjaan. Kolom boolean/status kecil (Status, Peran, Aktif, Jenis
+  // Kelamin, Bisa Motor, Status Pendaftaran) sengaja TIDAK diberi cari/urut
+  // krn nilainya cuma segelintir -- filter centang yang sudah ada sudah
+  // cukup & lebih cepat dipakai utk kolom begitu.
+  const [kecamatanSearch, setKecamatanSearch] = useState("");
+  const [nagariSearch, setNagariSearch] = useState("");
+  const [jorongSearch, setJorongSearch] = useState("");
+  const [pendidikanSearch, setPendidikanSearch] = useState("");
+  const [pekerjaanSearch, setPekerjaanSearch] = useState("");
+
+  const [sortKey, setSortKey] = useState<
+    "nama" | "umur" | "kecamatan" | "nagari" | "jorong" | "pendidikan" | "pekerjaan" | null
+  >(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
@@ -2192,11 +2248,11 @@ function MasterPetugasSection() {
   const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
   const opsiPendaftaran = ["Sudah Mendaftar", "Belum Mendaftar"];
 
-  function sortAsc(key: "nama" | "umur") {
+  function sortAsc(key: NonNullable<typeof sortKey>) {
     setSortKey(key);
     setSortDir("asc");
   }
-  function sortDesc(key: "nama" | "umur") {
+  function sortDesc(key: NonNullable<typeof sortKey>) {
     setSortKey(key);
     setSortDir("desc");
   }
@@ -2206,6 +2262,11 @@ function MasterPetugasSection() {
 
   const filtered = useMemo(() => {
     const kw = search.trim().toLowerCase();
+    const kwKecamatan = kecamatanSearch.trim().toLowerCase();
+    const kwNagari = nagariSearch.trim().toLowerCase();
+    const kwJorong = jorongSearch.trim().toLowerCase();
+    const kwPendidikan = pendidikanSearch.trim().toLowerCase();
+    const kwPekerjaan = pekerjaanSearch.trim().toLowerCase();
     let hasil = rows.filter((r) => {
       if (kw && !r.nama.toLowerCase().includes(kw)) return false;
       if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra")) return false;
@@ -2227,6 +2288,11 @@ function MasterPetugasSection() {
         !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar")
       )
         return false;
+      if (kwKecamatan && !kecamatanTampil(r).toLowerCase().includes(kwKecamatan)) return false;
+      if (kwNagari && !nagariTampil(r).toLowerCase().includes(kwNagari)) return false;
+      if (kwJorong && !jorongTampil(r).toLowerCase().includes(kwJorong)) return false;
+      if (kwPendidikan && !(r.pendidikan || "Tidak ada data").toLowerCase().includes(kwPendidikan)) return false;
+      if (kwPekerjaan && !(r.pekerjaan || "Tidak ada data").toLowerCase().includes(kwPekerjaan)) return false;
       return true;
     });
 
@@ -2235,6 +2301,11 @@ function MasterPetugasSection() {
         let cmp = 0;
         if (sortKey === "nama") cmp = a.nama.localeCompare(b.nama, "id");
         else if (sortKey === "umur") cmp = (a.umur ?? -1) - (b.umur ?? -1);
+        else if (sortKey === "kecamatan") cmp = kecamatanTampil(a).localeCompare(kecamatanTampil(b), "id");
+        else if (sortKey === "nagari") cmp = nagariTampil(a).localeCompare(nagariTampil(b), "id");
+        else if (sortKey === "jorong") cmp = jorongTampil(a).localeCompare(jorongTampil(b), "id");
+        else if (sortKey === "pendidikan") cmp = (a.pendidikan || "").localeCompare(b.pendidikan || "", "id");
+        else if (sortKey === "pekerjaan") cmp = (a.pekerjaan || "").localeCompare(b.pekerjaan || "", "id");
         return sortDir === "asc" ? cmp : -cmp;
       });
     }
@@ -2254,6 +2325,11 @@ function MasterPetugasSection() {
     pekerjaanSel,
     motorSel,
     pendaftaranSel,
+    kecamatanSearch,
+    nagariSearch,
+    jorongSearch,
+    pendidikanSearch,
+    pekerjaanSearch,
     sortKey,
     sortDir,
   ]);
@@ -2344,10 +2420,40 @@ function MasterPetugasSection() {
               <ThKontrol label="Aktif" filter={{ options: opsiAktif, selected: aktifSel, onApply: setAktifSel }} />
               <ThKontrol
                 label="Kecamatan"
+                search={{ value: kecamatanSearch, onChange: setKecamatanSearch, placeholder: "Cari kecamatan..." }}
                 filter={{ options: opsiKecamatan, selected: kecamatanSel, onApply: setKecamatanSel }}
+                sort={{
+                  active: sortKey === "kecamatan",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("kecamatan"),
+                  onDesc: () => sortDesc("kecamatan"),
+                  onReset: sortReset,
+                }}
               />
-              <ThKontrol label="Nagari" filter={{ options: opsiNagari, selected: nagariSel, onApply: setNagariSel }} />
-              <ThKontrol label="Jorong" filter={{ options: opsiJorong, selected: jorongSel, onApply: setJorongSel }} />
+              <ThKontrol
+                label="Nagari"
+                search={{ value: nagariSearch, onChange: setNagariSearch, placeholder: "Cari nagari..." }}
+                filter={{ options: opsiNagari, selected: nagariSel, onApply: setNagariSel }}
+                sort={{
+                  active: sortKey === "nagari",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("nagari"),
+                  onDesc: () => sortDesc("nagari"),
+                  onReset: sortReset,
+                }}
+              />
+              <ThKontrol
+                label="Jorong"
+                search={{ value: jorongSearch, onChange: setJorongSearch, placeholder: "Cari jorong..." }}
+                filter={{ options: opsiJorong, selected: jorongSel, onApply: setJorongSel }}
+                sort={{
+                  active: sortKey === "jorong",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("jorong"),
+                  onDesc: () => sortDesc("jorong"),
+                  onReset: sortReset,
+                }}
+              />
               <ThKontrol
                 label="Umur"
                 sort={{
@@ -2361,11 +2467,27 @@ function MasterPetugasSection() {
               <ThKontrol label="Jenis Kelamin" filter={{ options: opsiJk, selected: jkSel, onApply: setJkSel }} />
               <ThKontrol
                 label="Pendidikan"
+                search={{ value: pendidikanSearch, onChange: setPendidikanSearch, placeholder: "Cari pendidikan..." }}
                 filter={{ options: opsiPendidikan, selected: pendidikanSel, onApply: setPendidikanSel }}
+                sort={{
+                  active: sortKey === "pendidikan",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("pendidikan"),
+                  onDesc: () => sortDesc("pendidikan"),
+                  onReset: sortReset,
+                }}
               />
               <ThKontrol
                 label="Pekerjaan"
+                search={{ value: pekerjaanSearch, onChange: setPekerjaanSearch, placeholder: "Cari pekerjaan..." }}
                 filter={{ options: opsiPekerjaan, selected: pekerjaanSel, onApply: setPekerjaanSel }}
+                sort={{
+                  active: sortKey === "pekerjaan",
+                  dir: sortDir,
+                  onAsc: () => sortAsc("pekerjaan"),
+                  onDesc: () => sortDesc("pekerjaan"),
+                  onReset: sortReset,
+                }}
               />
               <ThKontrol
                 label="Bisa Motor"
@@ -2977,6 +3099,21 @@ function AlokasiPetugasSection() {
   const [sampelStatusFilter, setSampelStatusFilter] = useState<"" | "sudah" | "belum">("");
   const [sampelDataFilter, setSampelDataFilter] = useState<"" | "lengkap" | "belum">("");
   const [sampelSearch, setSampelSearch] = useState("");
+  // (2 Okt 2026) Sama spt tabel Beban: cari sudah ditopang kotak gabungan di
+  // atas tabel, titik-tiga kolom Nagari/Jorong-SLS/Sub SLS cukup Urutkan.
+  const [sampelSortKey, setSampelSortKey] = useState<"nagari" | "jorong" | "subsls" | null>(null);
+  const [sampelSortDir, setSampelSortDir] = useState<"asc" | "desc">("asc");
+  function sampelSortAsc(key: NonNullable<typeof sampelSortKey>) {
+    setSampelSortKey(key);
+    setSampelSortDir("asc");
+  }
+  function sampelSortDesc(key: NonNullable<typeof sampelSortKey>) {
+    setSampelSortKey(key);
+    setSampelSortDir("desc");
+  }
+  function sampelSortReset() {
+    setSampelSortKey(null);
+  }
   const [sampelPage, setSampelPage] = useState(1);
   const [sampelBusyId, setSampelBusyId] = useState<string | null>(null);
   const [sampelBulkBusy, setSampelBulkBusy] = useState(false);
@@ -2995,10 +3132,24 @@ function AlokasiPetugasSection() {
   const [statusPlotFilter, setStatusPlotFilter] = useState<"" | "sudah" | "belum">("");
   const [hanyaBerubahFilter, setHanyaBerubahFilter] = useState(false);
   const [search, setSearch] = useState("");
+  // (2 Okt 2026) Cari khusus Kecamatan -- field ini TIDAK ikut kotak cari
+  // gabungan "Cari Nagari/Jorong/Sub SLS" di atas (yg cuma menyasar 3 kolom
+  // itu), jadi diberi kotak cari sendiri di titik-tiganya.
+  const [kecamatanHeaderSearch, setKecamatanHeaderSearch] = useState("");
   const [page, setPage] = useState(1);
   const [alokasiPageSize, setAlokasiPageSize] = useState<number>(ALOKASI_PAGE_SIZE);
   const [sortKey, setSortKey] = useState<
-    "kecamatan" | "skor_beban_pendataan" | "skor_jarak" | "skor_beban_akhir" | "beban_ppl" | null
+    | "kecamatan"
+    | "nagari"
+    | "jorong"
+    | "subsls"
+    | "skor_beban_pendataan"
+    | "skor_jarak"
+    | "skor_beban_akhir"
+    | "beban_ppl"
+    | "ppl"
+    | "pml"
+    | null
   >(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [modeFokus, setModeFokus] = useState(false);
@@ -3019,6 +3170,23 @@ function AlokasiPetugasSection() {
   const [draftKkTerdampak, setDraftKkTerdampak] = useState<Record<string, number>>({});
   const [bebanKecFilter, setBebanKecFilter] = useState("");
   const [bebanSearch, setBebanSearch] = useState("");
+  // (2 Okt 2026) Urutkan per kolom Nagari/Jorong-SLS/Sub SLS -- kolom ini
+  // TIDAK diberi ikon cari sendiri krn sudah ditopang kotak "Cari
+  // Nagari/Jorong/Sub SLS" gabungan di atas tabel (bebanSearch), supaya
+  // tidak dobel.
+  const [bebanSortKey, setBebanSortKey] = useState<"nagari" | "jorong" | "subsls" | null>(null);
+  const [bebanSortDir, setBebanSortDir] = useState<"asc" | "desc">("asc");
+  function bebanSortAsc(key: NonNullable<typeof bebanSortKey>) {
+    setBebanSortKey(key);
+    setBebanSortDir("asc");
+  }
+  function bebanSortDesc(key: NonNullable<typeof bebanSortKey>) {
+    setBebanSortKey(key);
+    setBebanSortDir("desc");
+  }
+  function bebanSortReset() {
+    setBebanSortKey(null);
+  }
   const [bebanSimpanBusy, setBebanSimpanBusy] = useState(false);
   const [bebanError, setBebanError] = useState<string | null>(null);
   const [bebanTerbuka, setBebanTerbuka] = useState(false);
@@ -3394,7 +3562,7 @@ function AlokasiPetugasSection() {
   );
   const filteredBeban = useMemo(() => {
     const q = bebanSearch.trim().toLowerCase();
-    return bebanRows.filter((r) => {
+    let hasil = bebanRows.filter((r) => {
       if (bebanKecFilter && r.kecamatan !== bebanKecFilter) return false;
       if (
         q &&
@@ -3405,7 +3573,17 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-  }, [bebanRows, bebanKecFilter, bebanSearch]);
+    if (bebanSortKey) {
+      hasil = [...hasil].sort((a, b) => {
+        let cmp = 0;
+        if (bebanSortKey === "nagari") cmp = a.nagari.localeCompare(b.nagari, "id");
+        else if (bebanSortKey === "jorong") cmp = a.sls.localeCompare(b.sls, "id");
+        else if (bebanSortKey === "subsls") cmp = a.sub_sls.localeCompare(b.sub_sls, "id");
+        return bebanSortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return hasil;
+  }, [bebanRows, bebanKecFilter, bebanSearch, bebanSortKey, bebanSortDir]);
   const bebanTotalPages = Math.max(1, Math.ceil(filteredBeban.length / BEBAN_PAGE_SIZE));
   const [bebanPage, setBebanPageState] = useState(1);
   const bebanPageClamped = Math.min(bebanPage, bebanTotalPages);
@@ -3468,7 +3646,7 @@ function AlokasiPetugasSection() {
   );
   const filteredSampel = useMemo(() => {
     const q = sampelSearch.trim().toLowerCase();
-    return calonSampel.filter((r) => {
+    let hasil = calonSampel.filter((r) => {
       if (sampelKecFilter && r.kecamatan !== sampelKecFilter) return false;
       if (sampelStatusFilter === "sudah" && !r.termasuk_sampel) return false;
       if (sampelStatusFilter === "belum" && r.termasuk_sampel) return false;
@@ -3483,7 +3661,17 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelDataFilter, sampelSearch]);
+    if (sampelSortKey) {
+      hasil = [...hasil].sort((a, b) => {
+        let cmp = 0;
+        if (sampelSortKey === "nagari") cmp = a.nagari.localeCompare(b.nagari, "id");
+        else if (sampelSortKey === "jorong") cmp = a.sls.localeCompare(b.sls, "id");
+        else if (sampelSortKey === "subsls") cmp = a.sub_sls.localeCompare(b.sub_sls, "id");
+        return sampelSortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return hasil;
+  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelDataFilter, sampelSearch, sampelSortKey, sampelSortDir]);
   const jumlahSampelTerpilih = useMemo(() => calonSampel.filter((r) => r.termasuk_sampel).length, [calonSampel]);
   const sampelTotalPages = Math.max(1, Math.ceil(filteredSampel.length / SAMPEL_PAGE_SIZE));
   const sampelPageClamped = Math.min(sampelPage, sampelTotalPages);
@@ -3797,6 +3985,7 @@ function AlokasiPetugasSection() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const kwKec = kecamatanHeaderSearch.trim().toLowerCase();
     return kertasKerja.filter((r) => {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
       const draftPplId = draftPpl[r.idsubsls] ?? null;
@@ -3811,6 +4000,7 @@ function AlokasiPetugasSection() {
       if (statusPlotFilter === "belum" && draftPplId) return false;
       if (statusBebanFilter && toneBarisAlokasi(r) !== statusBebanFilter) return false;
       if (hanyaBerubahFilter && draftPplId === (r.ppl_id ?? null)) return false;
+      if (kwKec && !r.kecamatan.toLowerCase().includes(kwKec)) return false;
       if (
         q &&
         !r.nagari.toLowerCase().includes(q) &&
@@ -3831,6 +4021,7 @@ function AlokasiPetugasSection() {
     statusBebanFilter,
     hanyaBerubahFilter,
     search,
+    kecamatanHeaderSearch,
     draftPpl,
     draftPmlByPpl,
     bebanDraftPerPpl,
@@ -3846,6 +4037,12 @@ function AlokasiPetugasSection() {
       switch (sortKey) {
         case "kecamatan":
           return r.kecamatan;
+        case "nagari":
+          return r.nagari;
+        case "jorong":
+          return r.sls;
+        case "subsls":
+          return r.sub_sls;
         case "skor_beban_pendataan":
           return r.skor_beban_pendataan;
         case "skor_jarak":
@@ -3855,6 +4052,20 @@ function AlokasiPetugasSection() {
         case "beban_ppl": {
           const pplId = draftPpl[r.idsubsls] ?? null;
           return pplId ? bebanDraftPerPpl.get(pplId) ?? 0 : -1;
+        }
+        // (2 Okt 2026) PPL/PML diurutkan berdasar NAMA dari penugasan draft
+        // saat ini (bukan dari r.ppl_id tersimpan), konsisten dgn "beban_ppl"
+        // di atas & dgn kolom PPL/PML yg memang menampilkan draft, bukan data
+        // tersimpan -- baris yg belum diplot ditaruh di awal ("" selalu
+        // paling kecil scr abjad).
+        case "ppl": {
+          const pplId = draftPpl[r.idsubsls] ?? null;
+          return pplId ? petugasList.find((p) => p.id === pplId)?.nama ?? "" : "";
+        }
+        case "pml": {
+          const pplId = draftPpl[r.idsubsls] ?? null;
+          const pmlId = pplId ? pmlDraftUntukPpl(pplId) : null;
+          return pmlId ? petugasList.find((p) => p.id === pmlId)?.nama ?? "" : "";
         }
         default:
           return 0;
@@ -3868,7 +4079,7 @@ function AlokasiPetugasSection() {
       }
       return (va - vb) * arah;
     });
-  }, [filtered, sortKey, sortDir, draftPpl, bebanDraftPerPpl]);
+  }, [filtered, sortKey, sortDir, draftPpl, bebanDraftPerPpl, draftPmlByPpl, petugasList]);
 
   function toggleSort(key: NonNullable<typeof sortKey>) {
     if (sortKey === key) {
@@ -4306,15 +4517,33 @@ function AlokasiPetugasSection() {
                     <th className="px-3 py-2 font-medium">Kecamatan</th>
                     <ThKontrol
                       label="Nagari"
-                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                      sort={{
+                        active: bebanSortKey === "nagari",
+                        dir: bebanSortDir,
+                        onAsc: () => bebanSortAsc("nagari"),
+                        onDesc: () => bebanSortDesc("nagari"),
+                        onReset: bebanSortReset,
+                      }}
                     />
                     <ThKontrol
                       label="Jorong/SLS"
-                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                      sort={{
+                        active: bebanSortKey === "jorong",
+                        dir: bebanSortDir,
+                        onAsc: () => bebanSortAsc("jorong"),
+                        onDesc: () => bebanSortDesc("jorong"),
+                        onReset: bebanSortReset,
+                      }}
                     />
                     <ThKontrol
                       label="Sub SLS"
-                      search={{ value: bebanSearch, onChange: (v) => { setBebanSearch(v); setBebanPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                      sort={{
+                        active: bebanSortKey === "subsls",
+                        dir: bebanSortDir,
+                        onAsc: () => bebanSortAsc("subsls"),
+                        onDesc: () => bebanSortDesc("subsls"),
+                        onReset: bebanSortReset,
+                      }}
                     />
                     <th className="px-3 py-2 font-medium">KK Total</th>
                     <th className="px-3 py-2 font-medium">KK Terdampak</th>
@@ -4612,15 +4841,33 @@ function AlokasiPetugasSection() {
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
                 <ThKontrol
                   label="Nagari"
-                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  sort={{
+                    active: sampelSortKey === "nagari",
+                    dir: sampelSortDir,
+                    onAsc: () => sampelSortAsc("nagari"),
+                    onDesc: () => sampelSortDesc("nagari"),
+                    onReset: sampelSortReset,
+                  }}
                 />
                 <ThKontrol
                   label="Jorong/SLS"
-                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  sort={{
+                    active: sampelSortKey === "jorong",
+                    dir: sampelSortDir,
+                    onAsc: () => sampelSortAsc("jorong"),
+                    onDesc: () => sampelSortDesc("jorong"),
+                    onReset: sampelSortReset,
+                  }}
                 />
                 <ThKontrol
                   label="Sub SLS"
-                  search={{ value: sampelSearch, onChange: (v) => { setSampelSearch(v); setSampelPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  sort={{
+                    active: sampelSortKey === "subsls",
+                    dir: sampelSortDir,
+                    onAsc: () => sampelSortAsc("subsls"),
+                    onDesc: () => sampelSortDesc("subsls"),
+                    onReset: sampelSortReset,
+                  }}
                 />
                 <ThKontrol
                   label="Data KK"
@@ -5603,6 +5850,7 @@ function AlokasiPetugasSection() {
                 {!modeFokus && (
                   <ThKontrol
                     label="Kecamatan"
+                    search={{ value: kecamatanHeaderSearch, onChange: (v) => { setKecamatanHeaderSearch(v); setPage(1); }, placeholder: "Cari kecamatan..." }}
                     sort={{
                       active: sortKey === "kecamatan",
                       dir: sortDir,
@@ -5615,17 +5863,35 @@ function AlokasiPetugasSection() {
                 {!modeFokus && (
                   <ThKontrol
                     label="Nagari"
-                    search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                    sort={{
+                      active: sortKey === "nagari",
+                      dir: sortDir,
+                      onAsc: () => sortAsc("nagari"),
+                      onDesc: () => sortDesc("nagari"),
+                      onReset: sortReset,
+                    }}
                   />
                 )}
                 <ThKontrol
                   label="Jorong/SLS"
-                  search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  sort={{
+                    active: sortKey === "jorong",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("jorong"),
+                    onDesc: () => sortDesc("jorong"),
+                    onReset: sortReset,
+                  }}
                 />
                 <ThKontrol
                   label="Sub SLS"
                   stickyLeft
-                  search={{ value: search, onChange: (v) => { setSearch(v); setPage(1); }, placeholder: "Cari Nagari/Jorong/Sub SLS..." }}
+                  sort={{
+                    active: sortKey === "subsls",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("subsls"),
+                    onDesc: () => sortDesc("subsls"),
+                    onReset: sortReset,
+                  }}
                 />
                 {!modeFokus && (
                   <ThKontrol
@@ -5679,6 +5945,13 @@ function AlokasiPetugasSection() {
                       setPage(1);
                     },
                   }}
+                  sort={{
+                    active: sortKey === "ppl",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("ppl"),
+                    onDesc: () => sortDesc("ppl"),
+                    onReset: sortReset,
+                  }}
                 />
                 <ThKontrol
                   label="Beban Petugas"
@@ -5702,6 +5975,13 @@ function AlokasiPetugasSection() {
                       setPmlFilterLangkah4(p ? p.id : "");
                       setPage(1);
                     },
+                  }}
+                  sort={{
+                    active: sortKey === "pml",
+                    dir: sortDir,
+                    onAsc: () => sortAsc("pml"),
+                    onDesc: () => sortDesc("pml"),
+                    onReset: sortReset,
                   }}
                 />
                 {!modeFokus && <th className="px-3 py-2 font-medium">Korwil</th>}
