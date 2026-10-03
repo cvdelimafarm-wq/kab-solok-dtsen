@@ -56,11 +56,23 @@ export async function GET() {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   }
 
+  // (3 Okt 2026) Kolom tambahan -- permintaan user: tampilan default tabel
+  // "Kegiatan Petugas" di FE TETAP seperti semula, tapi ditambah pilihan
+  // centang kolom opsional (alamat, no HP, peran & PML atasan, dst.) kalau
+  // admin mau lihat lebih detail. Field2 ini SEKALIAN diambil di sini
+  // (bukan request terpisah) supaya togglenya instan, tanpa fetch ulang.
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
-    .select("id, nama, status_kepegawaian, peran, aktif, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja")
+    .select(
+      "id, nama, status_kepegawaian, peran, atasan_id, aktif, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, alamat_kecamatan, alamat_nagari, no_hp, umur, jenis_kelamin, pendidikan, pekerjaan, status_kontak_pendaftaran_bencana"
+    )
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Nama PML atasan (kolom tambahan "Peran & PML Atasan") -- dicari dari
+  // daftar petugas yg SAMA (tidak perlu query terpisah), konsisten dgn pola
+  // lookup atasan_id di tempat lain (mis. Langkah 3 Susunan Tim).
+  const namaById = new Map((petugas ?? []).map((p) => [p.id, p.nama as string]));
 
   const { data: kegiatanRows, error: errKegiatan } = await supabase
     .from("bencana_petugas_kegiatan_lain")
@@ -98,6 +110,16 @@ export async function GET() {
     kegiatan_lain: kegiatanMap.get(p.id) ?? [],
     sudah_plotting: (plottingCount.get(p.id) ?? 0) > 0,
     jumlah_subsls_diplot: plottingCount.get(p.id) ?? 0,
+    // (3 Okt 2026) Field "kolom tambahan" -- lihat komentar di atas.
+    alamat_kecamatan: p.alamat_kecamatan,
+    alamat_nagari: p.alamat_nagari,
+    no_hp: p.no_hp,
+    pml_nama: p.atasan_id ? namaById.get(p.atasan_id) ?? null : null,
+    umur: p.umur,
+    jenis_kelamin: p.jenis_kelamin,
+    pendidikan: p.pendidikan,
+    pekerjaan: p.pekerjaan,
+    status_kontak_pendaftaran_bencana: p.status_kontak_pendaftaran_bencana,
   }));
 
   return NextResponse.json({ data, kegiatan_valid: KEGIATAN_LAIN_VALID });

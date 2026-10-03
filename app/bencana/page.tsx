@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 
@@ -2866,7 +2866,88 @@ type KegiatanPetugasRow = {
   kegiatan_lain: string[];
   sudah_plotting: boolean;
   jumlah_subsls_diplot: number;
+  // (3 Okt 2026) "Kolom tambahan" -- permintaan user: tampilan default
+  // tabel ini TETAP spt semula, tapi admin bisa centang utk MENAMBAHKAN
+  // info ini sbg kolom ekstra (lihat KOLOM_TAMBAHAN_DAFTAR & kolomTambahan
+  // di bawah). Semuanya ikut terambil dari GET yg sama (tidak ada request
+  // terpisah) supaya togglenya instan.
+  alamat_kecamatan: string | null;
+  alamat_nagari: string | null;
+  no_hp: string | null;
+  pml_nama: string | null;
+  umur: number | null;
+  jenis_kelamin: string | null;
+  pendidikan: string | null;
+  pekerjaan: string | null;
+  status_kontak_pendaftaran_bencana: string | null;
 };
+
+// (3 Okt 2026) Daftar kolom opsional tabel "Kegiatan Petugas" -- lihat
+// komentar di KegiatanPetugasRow. `label` = teks header & checkbox
+// picker; `render(r)` = isi sel-nya (dibuat function per-kolom supaya
+// gampang tambah kolom baru tanpa ubah struktur tabel).
+const KOLOM_TAMBAHAN_DAFTAR: {
+  key: string;
+  label: string;
+  render: (r: KegiatanPetugasRow) => ReactNode;
+  // teks polos utk Export Excel (json_to_sheet butuh value primitif, bukan
+  // JSX spt `render` di atas)
+  text: (r: KegiatanPetugasRow) => string;
+}[] = [
+  {
+    key: "alamat",
+    label: "Alamat (Kecamatan/Nagari)",
+    render: (r) =>
+      r.alamat_kecamatan || r.alamat_nagari
+        ? `${r.alamat_nagari ?? "-"}, ${r.alamat_kecamatan ?? "-"}`
+        : <span className="text-ink/30">-</span>,
+    text: (r) => (r.alamat_kecamatan || r.alamat_nagari ? `${r.alamat_nagari ?? "-"}, ${r.alamat_kecamatan ?? "-"}` : ""),
+  },
+  {
+    key: "no_hp",
+    label: "No. HP",
+    render: (r) => r.no_hp || <span className="text-ink/30">-</span>,
+    text: (r) => r.no_hp ?? "",
+  },
+  {
+    key: "peran_pml",
+    label: "Peran & PML Atasan",
+    render: (r) => (
+      <span>
+        {r.peran ? r.peran.toUpperCase() : <span className="text-ink/30">belum ada peran</span>}
+        {r.peran === "ppl" && (
+          <span className="text-ink/50"> · PML: {r.pml_nama ?? <span className="text-ink/30">belum ada</span>}</span>
+        )}
+      </span>
+    ),
+    text: (r) => `${r.peran ? r.peran.toUpperCase() : "belum ada peran"}${r.peran === "ppl" ? ` (PML: ${r.pml_nama ?? "belum ada"})` : ""}`,
+  },
+  { key: "umur", label: "Umur", render: (r) => r.umur ?? <span className="text-ink/30">-</span>, text: (r) => (r.umur != null ? String(r.umur) : "") },
+  {
+    key: "jenis_kelamin",
+    label: "Jenis Kelamin",
+    render: (r) => r.jenis_kelamin || <span className="text-ink/30">-</span>,
+    text: (r) => r.jenis_kelamin ?? "",
+  },
+  {
+    key: "pendidikan",
+    label: "Pendidikan",
+    render: (r) => r.pendidikan || <span className="text-ink/30">-</span>,
+    text: (r) => r.pendidikan ?? "",
+  },
+  {
+    key: "pekerjaan",
+    label: "Pekerjaan",
+    render: (r) => r.pekerjaan || <span className="text-ink/30">-</span>,
+    text: (r) => r.pekerjaan ?? "",
+  },
+  {
+    key: "status_kontak",
+    label: "Status Kontak Pendaftaran",
+    render: (r) => r.status_kontak_pendaftaran_bencana || <span className="text-ink/30">-</span>,
+    text: (r) => r.status_kontak_pendaftaran_bencana ?? "",
+  },
+];
 
 function KegiatanPetugasSection() {
   const [loading, setLoading] = useState(true);
@@ -2893,6 +2974,11 @@ function KegiatanPetugasSection() {
 
   const [sortKey, setSortKey] = useState<"nama" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // (3 Okt 2026) "Kolom Tambahan" -- permintaan user: tampilan default
+  // tabel ini tetap spt semula (set kosong di bawah), admin centang sendiri
+  // kalau mau tambah info spt alamat/no HP/dll (lihat KOLOM_TAMBAHAN_DAFTAR).
+  const [kolomTambahan, setKolomTambahan] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     muatUlang();
@@ -3135,6 +3221,10 @@ function KegiatanPetugasSection() {
   }, [rows, search, statusSel, pendaftaranSel, rekomendasiPmlSel, redFlagSel, plottingSel, kegiatanSel, sortKey, sortDir]);
 
   function handleExport() {
+    // (3 Okt 2026) Kolom tambahan yg SEDANG dicentang/ditampilkan ikut
+    // masuk Excel juga (konsisten dgn apa yg kelihatan di layar) -- kalau
+    // tidak ada yg dicentang, hasil export persis spt sebelumnya.
+    const kolomTambahanAktif = KOLOM_TAMBAHAN_DAFTAR.filter((k) => kolomTambahan.has(k.key));
     const dataRows = filtered.map((r) => {
       const baris: Record<string, string> = {
         Nama: r.nama,
@@ -3147,6 +3237,7 @@ function KegiatanPetugasSection() {
           : "Belum",
       };
       for (const k of KEGIATAN_LAIN_DAFTAR) baris[k] = r.kegiatan_lain.includes(k) ? "Ya" : "";
+      for (const k of kolomTambahanAktif) baris[k.label] = k.text(r);
       return baris;
     });
     const ws = XLSX.utils.json_to_sheet(dataRows);
@@ -3158,6 +3249,7 @@ function KegiatanPetugasSection() {
       { wch: 16 },
       { wch: 18 },
       ...KEGIATAN_LAIN_DAFTAR.map(() => ({ wch: 16 })),
+      ...kolomTambahanAktif.map(() => ({ wch: 20 })),
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Kegiatan Petugas");
@@ -3196,7 +3288,40 @@ function KegiatanPetugasSection() {
         </p>
       </section>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {/* (3 Okt 2026) "+ Kolom Tambahan" -- permintaan user: tampilan
+            default tabel ini tetap spt semula, tapi bisa ditambah kolom
+            info lain (alamat, no HP, dst.) lewat centang di sini. Dipakai
+            <details>/<summary> (bukan state buka/tutup + listener klik-luar
+            spt ThKontrol) krn lebih sederhana & cukup utk kebutuhan ini. */}
+        <details className="group relative">
+          <summary className="cursor-pointer list-none rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50">
+            + Kolom Tambahan{kolomTambahan.size > 0 ? ` (${kolomTambahan.size})` : ""}
+          </summary>
+          <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-line bg-white p-2 text-xs shadow-lg">
+            <p className="mb-1.5 px-1 text-[11px] font-medium text-ink/50">
+              Centang info tambahan yang mau ditampilkan sebagai kolom ekstra:
+            </p>
+            {KOLOM_TAMBAHAN_DAFTAR.map((k) => (
+              <label key={k.key} className="flex items-center gap-1.5 rounded px-1 py-1 hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={kolomTambahan.has(k.key)}
+                  onChange={(e) =>
+                    setKolomTambahan((prev) => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(k.key);
+                      else next.delete(k.key);
+                      return next;
+                    })
+                  }
+                  className="h-3.5 w-3.5 accent-blue-600"
+                />
+                <span className="text-ink/80">{k.label}</span>
+              </label>
+            ))}
+          </div>
+        </details>
         <button
           type="button"
           onClick={handleExport}
@@ -3252,6 +3377,14 @@ function KegiatanPetugasSection() {
                     onApply: (next) => setKegiatanSel((prev) => ({ ...prev, [k]: next })),
                   }}
                 />
+              ))}
+              {/* (3 Okt 2026) Kolom tambahan yg dicentang lewat "+ Kolom
+                  Tambahan" -- ditaruh di UJUNG supaya tidak mengganggu
+                  urutan kolom default yg sudah ada. */}
+              {KOLOM_TAMBAHAN_DAFTAR.filter((k) => kolomTambahan.has(k.key)).map((k) => (
+                <th key={k.key} className="px-3 py-2 font-medium">
+                  {k.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -3360,12 +3493,20 @@ function KegiatanPetugasSection() {
                       </td>
                     );
                   })}
+                  {KOLOM_TAMBAHAN_DAFTAR.filter((k) => kolomTambahan.has(k.key)).map((k) => (
+                    <td key={k.key} className="px-3 py-2 text-ink/80">
+                      {k.render(r)}
+                    </td>
+                  ))}
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6 + KEGIATAN_LAIN_DAFTAR.length} className="px-3 py-6 text-center text-ink/50">
+                <td
+                  colSpan={6 + KEGIATAN_LAIN_DAFTAR.length + kolomTambahan.size}
+                  className="px-3 py-6 text-center text-ink/50"
+                >
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
