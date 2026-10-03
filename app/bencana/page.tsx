@@ -16,7 +16,7 @@ import { haversineKm } from "@/lib/jarakJalan";
 //     jorong, termasuk penanda konflik antar mitra.
 // ------------------------------------------------------------------------
 
-type SubslsItem = { idsubsls: string; sub_sls: string };
+type SubslsItem = { idsubsls: string; sub_sls: string; lat: number | null; lng: number | null };
 type JorongItem = { idsls: string; jorong: string; subsls: SubslsItem[] };
 type NagariItem = { iddesa: string; nagari: string; daftar_awal: boolean; jorong: JorongItem[] };
 type KecamatanItem = { kecamatan: string; nagari: NagariItem[] };
@@ -7010,7 +7010,28 @@ export default function BencanaPage() {
                                         className="rounded-md border border-line bg-white px-3 py-2"
                                       >
                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <span className="text-sm text-ink">Sub SLS {s.sub_sls}</span>
+                                          <span className="flex items-center gap-1.5 text-sm text-ink">
+                                            Sub SLS {s.sub_sls}
+                                            {/* (3 Okt 2026) Tombol lihat peta sekilas -- permintaan mitra/admin
+                                                supaya bisa cek cepat di citra satelit apakah lokasi Sub SLS ini
+                                                masuk akal terdampak banjir (dekat sungai/dataran rendah) SEBELUM
+                                                menandai Terdampak/Ragu. Buka Google Maps di tab baru (bukan peta
+                                                tertanam di halaman) -- lebih ringan utk mitra yg mengisi dari HP
+                                                di lapangan dgn koneksi terbatas, & mitra sudah pasti familiar
+                                                dgn aplikasi Maps-nya sendiri. Disembunyikan kalau titik Sub SLS
+                                                ini belum tersedia (null). */}
+                                            {s.lat != null && s.lng != null && (
+                                              <a
+                                                href={`https://www.google.com/maps?q=${s.lat},${s.lng}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                title="Lihat lokasi Sub SLS ini di peta (cek sekilas kemungkinan area banjir)"
+                                                className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-100"
+                                              >
+                                                🗺️ Lihat Peta
+                                              </a>
+                                            )}
+                                          </span>
                                           <div className="flex gap-1.5">
                                             <button
                                               type="button"

@@ -4,6 +4,14 @@
 // fitur publik "Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi".
 // Tidak ada gate autentikasi -- endpoint ini SENGAJA publik (mitra mengisi
 // tanpa login).
+//
+// (3 Okt 2026) Tiap Sub SLS disertai lat/lng (RPC bencana_subsls_titik_jarak,
+// SAMA PERSIS dgn yg dipakai popover "Saran" di tab Alokasi Petugas) --
+// dipakai FE utk tombol "Lihat Peta" per baris Sub SLS di tab Identifikasi,
+// supaya mitra bisa cek sekilas di peta (citra satelit) apakah lokasi itu
+// masuk akal terdampak banjir (dekat sungai/dataran rendah) sebelum
+// menandai status. null kalau titik Sub SLS itu belum tersedia -> tombol
+// disembunyikan baris ybs (lihat SubslsList di FE).
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -63,8 +71,17 @@ export async function GET() {
       if (page.length < PAGE_SIZE) break;
     }
 
+    const { data: titikData, error: titikError } = await supabase.rpc("bencana_subsls_titik_jarak");
+    if (titikError) {
+      return NextResponse.json({ error: titikError.message }, { status: 500 });
+    }
+    const titikMap = new Map<string, { lat: number; lng: number }>();
+    for (const t of (titikData ?? []) as { idsubsls: string; lat: number | null; lng: number | null }[]) {
+      if (typeof t.lat === "number" && typeof t.lng === "number") titikMap.set(t.idsubsls, { lat: t.lat, lng: t.lng });
+    }
+
     // Susun pohon: kecamatan -> nagari -> jorong (idsls) -> daftar sub SLS
-    type SubslsItem = { idsubsls: string; sub_sls: string };
+    type SubslsItem = { idsubsls: string; sub_sls: string; lat: number | null; lng: number | null };
     type JorongItem = { idsls: string; jorong: string; subsls: SubslsItem[] };
     type NagariItem = {
       iddesa: string;
@@ -95,7 +112,8 @@ export async function GET() {
         nag.jorong.push(jor);
       }
 
-      jor.subsls.push({ idsubsls: row.idsubsls, sub_sls: row.sub_sls });
+      const titik = titikMap.get(row.idsubsls) ?? null;
+      jor.subsls.push({ idsubsls: row.idsubsls, sub_sls: row.sub_sls, lat: titik?.lat ?? null, lng: titik?.lng ?? null });
     }
 
     return NextResponse.json({ data: Array.from(kecMap.values()) });
