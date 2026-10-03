@@ -4116,8 +4116,20 @@ function AlokasiPetugasSection() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(draftVal ? { idsubsls: r.idsubsls, ppl_id: draftVal } : { idsubsls: r.idsubsls, buka_kunci: true }),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || `Gagal menyimpan plot ${r.sub_sls}.`);
+        // (3 Okt 2026) Dulu kalau respons gagal TAPI body-nya bukan JSON yg
+        // valid (mis. halaman error platform/hosting, bukan dari handler
+        // kita), res.json() di sini ikut melempar -- pesannya jadi syntax
+        // error yg membingungkan ("Unexpected token...") drpd pesan yg jelas
+        // row mana yg gagal. Sekarang ditangkap dulu supaya SELALU bisa kasih
+        // konteks baris + kode HTTP, bahkan kalau server tidak kasih field
+        // "error" sama sekali.
+        const json: { error?: string; [k: string]: unknown } | null = await res.json().catch(() => null);
+        if (!res.ok) {
+          const detail = json?.error
+            ? `: ${json.error}`
+            : ` (server tidak memberi detail error, kode HTTP ${res.status})`;
+          throw new Error(`Gagal menyimpan plot Sub SLS ${r.sub_sls} di ${r.nagari} (idsubsls ${r.idsubsls})${detail}`);
+        }
       }
 
       const serverPmlByPpl = new Map<number, number | null>();
@@ -4134,8 +4146,14 @@ function AlokasiPetugasSection() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ petugas_id: pplId, peran: "ppl", atasan_id: draftVal }),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Gagal menyimpan PML.");
+        const json: { error?: string; [k: string]: unknown } | null = await res.json().catch(() => null);
+        if (!res.ok) {
+          const namaPpl = petugasList.find((p) => p.id === pplId)?.nama ?? `id ${pplId}`;
+          const detail = json?.error
+            ? `: ${json.error}`
+            : ` (server tidak memberi detail error, kode HTTP ${res.status})`;
+          throw new Error(`Gagal menyimpan PML untuk ${namaPpl}${detail}`);
+        }
       }
 
       // Semua baris yg berhasil disimpan sudah resmi jadi plot server --
