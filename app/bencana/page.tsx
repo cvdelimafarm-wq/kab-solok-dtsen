@@ -4191,6 +4191,16 @@ function AlokasiPetugasSection() {
     () => kandidatTier2.filter((p) => bebanDraftPerPpl.has(p.id)).length,
     [kandidatTier2, bebanDraftPerPpl]
   );
+  // (3 Okt 2026) Permintaan user: angka "Jumlah PPL terpilih" sempat
+  // membingungkan krn jauh lebih besar dari (Tier 1 terpakai + Tier 2
+  // terpakai) -- WAJAR, bukan bug: popover Saran/Auto Plot CUMA
+  // menyarankan dari pool Tier 1/2, tapi admin tetap bebas plot manual
+  // lewat dropdown PPL siapa saja (termasuk yg ditandai Rekomendasi
+  // PML/Red Flag, atau yg belum "Mengajukan Diri" & bukan peserta PES
+  // SE2026 -- jadi tidak masuk tier manapun). Selisih itu dihitung eksplisit
+  // di sini supaya angkanya kelihatan jelas nyambung: terpilih = tier1 +
+  // tier2 + di-luar-tier.
+  const jumlahDiluarTier = Math.max(0, jumlahPplDiplotDraft - jumlahTier1Terpakai - jumlahTier2Terpakai);
 
   // "Optimasi Beban" -- MURNI INFORMASI, tidak ada tombol terapkan/pindah di
   // sini. Cuma menyarankan Sub SLS mana yg PALING besar kontribusinya ke
@@ -6137,18 +6147,25 @@ function AlokasiPetugasSection() {
           {/* (3 Okt 2026) Permintaan user: ringkasan jumlah PPL terpilih +
               utilisasi pool kandidat Tier 1/Tier 2 (dikecualikan rekomendasi
               PML/red flag) di baris yg sama dgn "Rata-rata beban per PPL",
-              supaya kelihatan sekilas tanpa buka popover Saran satu-satu. */}
+              supaya kelihatan sekilas tanpa buka popover Saran satu-satu.
+              (revisi) "Di luar Tier 1/2" ditambahkan supaya angkanya jelas
+              nyambung (terpilih = tier1 + tier2 + di-luar-tier) -- sebelumnya
+              sempat membingungkan krn jumlah PPL terpilih jauh lebih besar
+              drpd (tier1 + tier2) tanpa penjelasan ke mana sisanya. */}
           <span
             className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70"
-            title="Jumlah PPL yg sudah punya >=1 Sub SLS di draft saat ini, dan berapa dari pool kandidat Tier 1/Tier 2 (dikecualikan Rekomendasi PML/Red Flag) yg sudah terpakai"
+            title="Jumlah PPL terpilih = Tier 1 terpakai + Tier 2 terpakai + di luar Tier 1/2. Popover Saran/Auto Plot cuma menyarankan dari pool Tier 1/2, tapi admin tetap bisa plot manual lewat dropdown siapa saja -- termasuk yg ditandai Rekomendasi PML/Red Flag atau yg tidak masuk tier manapun, itu yg masuk hitungan 'di luar Tier 1/2'."
           >
-            · Jumlah PPL terpilih: <strong className="text-blue-950">{jumlahPplDiplotDraft}</strong>
-            · Kandidat Tier 1:{" "}
+            · Jumlah PPL terpilih: <strong className="text-blue-950">{jumlahPplDiplotDraft}</strong> (
+            <strong className="text-blue-950">{jumlahTier1Terpakai}</strong> Tier 1 +{" "}
+            <strong className="text-blue-950">{jumlahTier2Terpakai}</strong> Tier 2 +{" "}
+            <strong className="text-blue-950">{jumlahDiluarTier}</strong> di luar Tier 1/2)
+            · Kandidat Tier 1 terpakai:{" "}
             <strong className="text-blue-950">
               {jumlahTier1Terpakai}/{kandidatTier1.length}
             </strong>{" "}
             (kecuali PML)
-            · Kandidat Tier 2:{" "}
+            · Kandidat Tier 2 terpakai:{" "}
             <strong className="text-blue-950">
               {jumlahTier2Terpakai}/{kandidatTier2.length}
             </strong>{" "}
