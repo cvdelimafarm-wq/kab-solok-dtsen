@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 
@@ -519,49 +520,66 @@ function SaranMitraTombol({
       >
         💡 Saran
       </button>
-      {buka && pos && (
-        <div
-          style={{
-            position: "fixed",
-            top: pos.top ?? undefined,
-            bottom: pos.bottom ?? undefined,
-            left: pos.left,
-            width: 280,
-            maxHeight: pos.maxHeight,
-          }}
-          className="z-50 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className="mb-1.5 text-[10px] text-ink/50">
-            Saran murni bantuan memilih (bukan plotting otomatis), dibatasi radius {BATAS_JARAK_SARAN_KM} km -- klik
-            nama utk mengisi kolom PPL, tetap perlu &quot;Simpan Perubahan&quot;.
-          </p>
-          <SaranMitraKelompok
-            judul="Tier 1 — Mengajukan Diri"
-            warna="text-moss-700"
-            daftar={tier1}
-            pplTerpilihId={pplTerpilihId}
-            jarakPerPpl={jarakPerPpl}
-            bebanDraftPerPpl={bebanDraftPerPpl}
-            rataBebanTetap={rataBebanTetap}
-            adaTitikSubsls={subslsPoint !== null}
-            onPilih={pilih}
-            kosong={tier1Kosong}
-          />
-          <div className="my-1.5 border-t border-line" />
-          <SaranMitraKelompok
-            judul="Tier 2 — Ikut PES SE2026"
-            warna="text-blue-700"
-            daftar={tier2}
-            pplTerpilihId={pplTerpilihId}
-            jarakPerPpl={jarakPerPpl}
-            bebanDraftPerPpl={bebanDraftPerPpl}
-            rataBebanTetap={rataBebanTetap}
-            adaTitikSubsls={subslsPoint !== null}
-            onPilih={pilih}
-            kosong={tier2Kosong}
-          />
-        </div>
-      )}
+      {buka &&
+        pos &&
+        createPortal(
+          // (3 Okt 2026, revisi 2) Dipindah ke React Portal (document.body)
+          // -- sebelumnya panel ini tetap anak DOM dari <td> baris tabel
+          // walau posisinya `position: fixed`, jadi dia masih IKUT MEWARISI
+          // CSS dari leluhurnya. Di "Tampilan Padat" ada aturan
+          // `.tabel-alokasi-padat td { font-size: 11px !important;
+          // line-height: 1.25 !important }` yg ikut ke-WARIS ke teks di
+          // dalam panel ini (krn font-size/line-height itu properti yg
+          // diwariskan), bikin baris-baris daftar kandidat jadi rapat &
+          // kelihatan "tumpang tindih"/kepotong (dilaporkan user: "kenapa
+          // masih begini saat pilih tampilan padat"). Portal ke document.body
+          // membuat panel ini jadi saudara dari <body>, bukan lagi turunan
+          // tabel, jadi lepas total dari override CSS tabel manapun -- sama
+          // sekalian menghapus semua jenis clipping/stacking-context dari
+          // leluhur tabel (overflow-auto, sticky z-index, dst).
+          <div
+            style={{
+              position: "fixed",
+              top: pos.top ?? undefined,
+              bottom: pos.bottom ?? undefined,
+              left: pos.left,
+              width: 280,
+              maxHeight: pos.maxHeight,
+            }}
+            className="z-50 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case leading-normal shadow-lg"
+          >
+            <p className="mb-1.5 text-[10px] text-ink/50">
+              Saran murni bantuan memilih (bukan plotting otomatis), dibatasi radius {BATAS_JARAK_SARAN_KM} km -- klik
+              nama utk mengisi kolom PPL, tetap perlu &quot;Simpan Perubahan&quot;.
+            </p>
+            <SaranMitraKelompok
+              judul="Tier 1 — Mengajukan Diri"
+              warna="text-moss-700"
+              daftar={tier1}
+              pplTerpilihId={pplTerpilihId}
+              jarakPerPpl={jarakPerPpl}
+              bebanDraftPerPpl={bebanDraftPerPpl}
+              rataBebanTetap={rataBebanTetap}
+              adaTitikSubsls={subslsPoint !== null}
+              onPilih={pilih}
+              kosong={tier1Kosong}
+            />
+            <div className="my-1.5 border-t border-line" />
+            <SaranMitraKelompok
+              judul="Tier 2 — Ikut PES SE2026"
+              warna="text-blue-700"
+              daftar={tier2}
+              pplTerpilihId={pplTerpilihId}
+              jarakPerPpl={jarakPerPpl}
+              bebanDraftPerPpl={bebanDraftPerPpl}
+              rataBebanTetap={rataBebanTetap}
+              adaTitikSubsls={subslsPoint !== null}
+              onPilih={pilih}
+              kosong={tier2Kosong}
+            />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -2200,58 +2218,67 @@ function Combobox({
         placeholder={placeholder}
         className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-ink/40"
       />
-      {open && !disabled && pos && (
-        <div
-          style={{
-            position: "fixed",
-            top: pos.top ?? undefined,
-            bottom: pos.bottom ?? undefined,
-            left: pos.left,
-            width: Math.max(pos.width, 192),
-            maxHeight: pos.maxHeight,
-          }}
-          className="z-50 overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg"
-        >
-          {allowClear && (
-            <button
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(null);
-                setOpen(false);
-                setQuery("");
-              }}
-              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-blue-50"
-            >
-              {placeholder}
-            </button>
-          )}
-          {filtered.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              disabled={o.disabled}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                if (o.disabled) return;
-                onChange(o.value);
-                setOpen(false);
-                setQuery("");
-              }}
-              className={`block w-full px-2 py-1.5 text-left ${
-                o.disabled
-                  ? "cursor-not-allowed text-ink/30"
-                  : o.value === value
-                  ? "bg-blue-50 font-medium text-blue-900 hover:bg-blue-100"
-                  : "text-ink hover:bg-blue-50"
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-          {filtered.length === 0 && <div className="px-2 py-1.5 text-ink/40">Tidak ditemukan.</div>}
-        </div>
-      )}
+      {open &&
+        !disabled &&
+        pos &&
+        createPortal(
+          // (3 Okt 2026, revisi 2) Portal ke document.body -- alasan sama
+          // dgn SaranMitraTombol: walau sudah `position: fixed`, panel ini
+          // masih anak DOM dari <td> baris tabel, jadi masih ikut mewarisi
+          // override CSS "Tampilan Padat" (font-size/line-height). Portal
+          // melepaskannya total dari tabel.
+          <div
+            style={{
+              position: "fixed",
+              top: pos.top ?? undefined,
+              bottom: pos.bottom ?? undefined,
+              left: pos.left,
+              width: Math.max(pos.width, 192),
+              maxHeight: pos.maxHeight,
+            }}
+            className="z-50 overflow-y-auto rounded-md border border-line bg-white text-xs leading-normal shadow-lg"
+          >
+            {allowClear && (
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(null);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-blue-50"
+              >
+                {placeholder}
+              </button>
+            )}
+            {filtered.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                disabled={o.disabled}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  if (o.disabled) return;
+                  onChange(o.value);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className={`block w-full px-2 py-1.5 text-left ${
+                  o.disabled
+                    ? "cursor-not-allowed text-ink/30"
+                    : o.value === value
+                    ? "bg-blue-50 font-medium text-blue-900 hover:bg-blue-100"
+                    : "text-ink hover:bg-blue-50"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="px-2 py-1.5 text-ink/40">Tidak ditemukan.</div>}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
