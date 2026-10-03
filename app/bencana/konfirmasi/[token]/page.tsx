@@ -28,6 +28,10 @@ type WilayahKerjaRow = {
   sub_sls: string;
   kk_total: number;
   kk_terdampak_estimasi: number;
+  // (3 Okt 2026) true kalau estimasi 0 di atas BUKAN krn benar2 nol KK
+  // terdampak, tapi krn mitra blm mengisi indikator dampak KK saat
+  // Identifikasi Jorong -- lihat komentar route.ts.
+  kk_terdampak_belum_lengkap: boolean;
 };
 
 type KonfirmasiInfo = {
@@ -130,6 +134,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
   const sudahJawab = info.status_kontak_pendaftaran_bencana !== null;
   const tampilkanForm = !sudahJawab || ubahJawaban;
   const totalKkTerdampak = info.wilayah_kerja.reduce((n, r) => n + r.kk_terdampak_estimasi, 0);
+  const adaYangBelumLengkap = info.wilayah_kerja.some((r) => r.kk_terdampak_belum_lengkap);
 
   return (
     <main className="mx-auto min-h-screen max-w-lg px-6 py-10">
@@ -201,7 +206,8 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
             <>
               <p className="mt-1.5 text-ink/70">
                 {info.wilayah_kerja.length} Sub SLS, perkiraan total {totalKkTerdampak.toLocaleString("id-ID")} KK
-                terdampak:
+                terdampak
+                {adaYangBelumLengkap && " (sebagian data perkiraan belum lengkap, lihat tabel di bawah)"}:
               </p>
               <div className="mt-2 overflow-x-auto rounded-md border border-line">
                 <table className="w-full text-left text-xs">
@@ -221,12 +227,27 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                         <td className="px-2 py-1.5">{r.nagari}</td>
                         <td className="px-2 py-1.5">{r.sls}</td>
                         <td className="px-2 py-1.5 text-right">{r.kk_total.toLocaleString("id-ID")}</td>
-                        <td className="px-2 py-1.5 text-right">{r.kk_terdampak_estimasi.toLocaleString("id-ID")}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          {r.kk_terdampak_belum_lengkap ? (
+                            <span className="italic text-ink/40" title="Mitra belum mengisi perkiraan jumlah KK terdampak untuk Jorong ini saat identifikasi.">
+                              Data belum lengkap
+                            </span>
+                          ) : (
+                            r.kk_terdampak_estimasi.toLocaleString("id-ID")
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {adaYangBelumLengkap && (
+                <p className="mt-1.5 text-[11px] text-ink/50">
+                  &ldquo;Data belum lengkap&rdquo; artinya wilayah ini sudah tercatat terdampak, tapi mitra yang
+                  melakukan identifikasi belum mengisi perkiraan jumlah KK terdampak -- bukan berarti wilayah ini
+                  tidak ada KK terdampak.
+                </p>
+              )}
             </>
           )}
         </div>

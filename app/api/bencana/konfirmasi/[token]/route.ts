@@ -80,6 +80,13 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     sub_sls: string;
     kk_total: number;
     kk_terdampak_estimasi: number;
+    // (3 Okt 2026) true kalau angka kk_terdampak_estimasi = 0 BUKAN krn
+    // benar2 nol KK terdampak, tapi krn indikator dampak KK di form
+    // Identifikasi Jorong blm diisi mitra -- lihat komentar panjang di
+    // bawah. FE menampilkan "Data belum lengkap" (bukan "0") kalau true,
+    // supaya mitra/petugas tidak salah paham wilayahnya dikira tidak
+    // terdampak.
+    kk_terdampak_belum_lengkap: boolean;
   }[] = [];
 
   if (idsubslsList.length > 0) {
@@ -89,13 +96,48 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     const { data: bebanRows, error: errBeban } = await supabase.rpc("bencana_kertas_kerja_beban");
     if (errBeban) return NextResponse.json({ error: errBeban.message }, { status: 500 });
     const idsubslsSet = new Set(idsubslsList);
-    wilayahKerja = ((bebanRows ?? []) as typeof wilayahKerja).filter((r) => idsubslsSet.has(r.idsubsls));
+    type BebanRow = {
+      idsubsls: string;
+      kecamatan: string;
+      nagari: string;
+      sls: string;
+      sub_sls: string;
+      kk_total: number;
+      kk_terdampak_estimasi: number;
+      kk_terdampak_manual: boolean;
+    };
+    // (3 Okt 2026) kk_terdampak_belum_lengkap = (estimasi 0 DAN bukan hasil
+    // koreksi manual admin). Baris2 di RPC ini SUDAH pasti is_terdampak
+    // (bencana_kertas_kerja_beban() hanya kembalikan Sub SLS terdampak),
+    // jadi estimasi 0 di sini CUMA bisa terjadi kalau total KK terdampak
+    // Jorong-nya 0 -- yg akar sebabnya adalah mitra blm mengisi bagian
+    // "indikator dampak" (jumlah KK per indikator) saat Identifikasi
+    // Jorong, BUKAN krn Jorong itu benar2 tidak ada KK terdampak (kalau
+    // benar2 tidak ada, mitra akan menjawab "tidak ada yang terdampak" dan
+    // Sub SLS itu tidak akan is_terdampak / tidak muncul di RPC ini sama
+    // sekali). Lihat bencana_skor_beban_subsls() & bencana_monitoring_
+    // jorong() di database utk rumus lengkapnya.
+    wilayahKerja = ((bebanRows ?? []) as BebanRow[])
+      .filter((r) => idsubslsSet.has(r.idsubsls))
+      .map((r) => ({
+        idsubsls: r.idsubsls,
+        kecamatan: r.kecamatan,
+        nagari: r.nagari,
+        sls: r.sls,
+        sub_sls: r.sub_sls,
+        kk_total: r.kk_total,
+        kk_terdampak_estimasi: r.kk_terdampak_estimasi,
+        kk_terdampak_belum_lengkap: r.kk_terdampak_estimasi === 0 && !r.kk_terdampak_manual,
+      }));
 
     // Sub SLS yg diplot tapi TIDAK TERDAMPAK (tidak muncul di RPC beban,
     // yg hanya mengembalikan Sub SLS terdampak) -- tetap ditampilkan,
     // lewat join langsung ke bencana_wilayah + bencana_kk_subsls, dgn
     // kk_terdampak_estimasi dianggap 0 (bukan dihapus dari daftar, supaya
     // "perkiraan wilayah kerja" tetap lengkap sesuai yg benar2 diplot).
+    // Beda dgn kasus "belum_lengkap" di atas -- di sini Sub SLS-nya memang
+    // TIDAK ditandai terdampak sama sekali, jadi 0 di sini adalah nilai yg
+    // benar (bukan data kosong), kk_terdampak_belum_lengkap = false.
     const idsubslsSudahAda = new Set(wilayahKerja.map((r) => r.idsubsls));
     const sisaIdsubsls = idsubslsList.filter((id) => !idsubslsSudahAda.has(id));
     if (sisaIdsubsls.length > 0) {
@@ -115,6 +157,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
           sub_sls: w.sub_sls as string,
           kk_total: kkMap.get(w.idsubsls as string) ?? 0,
           kk_terdampak_estimasi: 0,
+          kk_terdampak_belum_lengkap: false,
         });
       }
     }
