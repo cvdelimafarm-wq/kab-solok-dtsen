@@ -3132,6 +3132,16 @@ function KegiatanPetugasSection() {
   // kalau mau tambah info spt alamat/no HP/dll (lihat KOLOM_TAMBAHAN_DAFTAR).
   const [kolomTambahan, setKolomTambahan] = useState<Set<string>>(new Set());
 
+  // (3 Okt 2026) Tombol "Muat Ulang" -- permintaan user: refresh data tabel
+  // ini TANPA mereset filter yang sedang aktif (search/status/dll di atas).
+  // `refreshing` SENGAJA dipisah dari `loading` -- `loading` cuma dipakai
+  // utk layar "Memuat..." SEBELUM data pertama kali tampil (lihat `if
+  // (loading) return ...` di bawah); kalau dipakai ulang di sini, klik
+  // "Muat Ulang" akan menyembunyikan seluruh tabel (termasuk filter yg lagi
+  // aktif) selama fetch berjalan, padahal maunya tabel & filter tetap
+  // kelihatan, cuma datanya yg diganti pas fetch selesai.
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     muatUlang();
   }, []);
@@ -3147,6 +3157,15 @@ function KegiatanPetugasSection() {
       setLoadError(e instanceof Error ? e.message : "Gagal memuat data kegiatan petugas.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await muatUlang();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -3441,6 +3460,18 @@ function KegiatanPetugasSection() {
       </section>
 
       <div className="flex items-center justify-end gap-2">
+        {/* (3 Okt 2026) "Muat Ulang" -- refresh data tabel tanpa mereset
+            filter yang sedang aktif (search/status/dll); lihat handleRefresh
+            & komentar di state `refreshing` di atas. */}
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Muat ulang data tabel ini, filter yang sedang aktif tidak berubah"
+          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {refreshing ? "⟳ Memuat..." : "⟳ Muat Ulang"}
+        </button>
         {/* (3 Okt 2026) "+ Kolom Tambahan" -- permintaan user: tampilan
             default tabel ini tetap spt semula, tapi bisa ditambah kolom
             info lain (alamat, no HP, dst.) lewat centang di sini. Dipakai
