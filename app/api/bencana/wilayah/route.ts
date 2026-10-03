@@ -15,6 +15,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +72,14 @@ export async function GET() {
       if (page.length < PAGE_SIZE) break;
     }
 
-    const { data: titikData, error: titikError } = await supabase.rpc("bencana_subsls_titik_jarak");
+    // (3 Okt 2026) rpcSemua, BUKAN supabase.rpc() langsung -- PERSIS bug yg
+    // sama dgn bencana_wilayah di atas (lihat komentar paginasi .range()
+    // di atas) tapi sempat lolos di baris ini: RPC ini jg > 1000 baris
+    // (1084), jadi tanpa paging ~84 Sub SLS kehilangan titiknya di SETIAP
+    // request -- ini yg bikin tombol "Lihat Peta" & popover "Saran" di tab
+    // Alokasi Petugas tampil "belum tersedia" utk sebagian Sub SLS scr terus-
+    // menerus. Lihat lib/supabaseRpc.ts utk kronologi lengkap.
+    const { data: titikData, error: titikError } = await rpcSemua(supabase, "bencana_subsls_titik_jarak");
     if (titikError) {
       return NextResponse.json({ error: titikError.message }, { status: 500 });
     }

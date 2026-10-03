@@ -34,6 +34,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,7 +80,10 @@ export async function GET(req: NextRequest) {
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),
         supabase.from("bencana_petugas_kegiatan_lain").select("petugas_id, kegiatan"),
-        supabase.rpc("bencana_subsls_titik_jarak"),
+        // (3 Okt 2026) rpcSemua, BUKAN supabase.rpc() langsung -- RPC ini
+        // mengembalikan 1084 baris, melewati batas 1000 baris/request
+        // PostgREST (lihat lib/supabaseRpc.ts utk kronologi bug-nya).
+        rpcSemua(supabase, "bencana_subsls_titik_jarak"),
       ]);
 
     if (kertasRes.error) return NextResponse.json({ error: kertasRes.error.message }, { status: 500 });

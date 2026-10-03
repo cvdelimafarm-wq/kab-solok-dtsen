@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
+import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -120,10 +121,17 @@ export async function POST(req: NextRequest) {
     let jarak_status = "tanpa_data";
 
     if (ppl.lokasi_status === "riil" && typeof ppl.lat === "number" && typeof ppl.lng === "number") {
-      const { data: centroidRows } = await supabase.rpc("bencana_subsls_titik_jarak");
-      const titik = ((centroidRows ?? []) as { idsubsls: string; lat: number | null; lng: number | null }[]).find(
-        (c) => c.idsubsls === idsubsls
+      // (3 Okt 2026) rpcSemua, BUKAN supabase.rpc() langsung -- AKAR
+      // PENYEBAB bug "Skor Jarak" yg tetap "belum tersedia" walau PPL yg
+      // diplot sudah lokasi riil (mis. laporan MINDA SUSANTI): RPC ini 1084
+      // baris, melewati batas 1000 baris/request PostgREST, jadi .find() di
+      // bawah ini bisa gagal menemukan idsubsls ybs kalau dia kebetulan ada
+      // di 84 baris terakhir yg terpotong. Lihat lib/supabaseRpc.ts.
+      const { data: centroidRows } = await rpcSemua<{ idsubsls: string; lat: number | null; lng: number | null }>(
+        supabase,
+        "bencana_subsls_titik_jarak"
       );
+      const titik = (centroidRows ?? []).find((c) => c.idsubsls === idsubsls);
       if (titik && typeof titik.lat === "number" && typeof titik.lng === "number") {
         const asal = { lat: ppl.lat, lng: ppl.lng };
         const tujuan = { lat: titik.lat, lng: titik.lng };

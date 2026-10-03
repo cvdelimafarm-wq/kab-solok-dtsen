@@ -29,6 +29,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +52,10 @@ export async function GET() {
   }
   const [bebanRes, titikRes] = await Promise.all([
     supabase.rpc("bencana_kertas_kerja_beban"),
-    supabase.rpc("bencana_subsls_titik_jarak"),
+    // (3 Okt 2026) rpcSemua, BUKAN supabase.rpc() langsung -- lihat
+    // lib/supabaseRpc.ts: RPC ini 1084 baris, melewati batas 1000
+    // baris/request PostgREST.
+    rpcSemua(supabase, "bencana_subsls_titik_jarak"),
   ]);
   if (bebanRes.error) return NextResponse.json({ error: bebanRes.error.message }, { status: 500 });
   if (titikRes.error) return NextResponse.json({ error: titikRes.error.message }, { status: 500 });
