@@ -1651,6 +1651,35 @@ type MitraKontakRow = {
   jadwal_pelatihan_dipilih: string | null;
 };
 
+// (3 Okt 2026) Kartu admin "🏕️ Tawaran Menginap" -- lihat
+// app/api/bencana/alokasi/tawaran-menginap/route.ts (CRUD tawaran, dipanggil
+// admin) & app/api/bencana/menginap/[token]/route.ts +
+// app/bencana/menginap/[token]/page.tsx (halaman publik per kandidat).
+// Beda dgn MitraKontakRow/token di atas: di sini token-nya PER KANDIDAT PER
+// TAWARAN (bencana_tawaran_menginap_kandidat.token), BUKAN token petugas --
+// 1 petugas bisa ditawari lebih dari 1 tawaran pada waktu berbeda.
+type TawaranMenginapKandidat = {
+  id: number;
+  petugas_id: number;
+  nama: string;
+  no_hp: string | null;
+  nilai_kinerja: number | null;
+  alamat_kecamatan: string | null;
+  alamat_nagari: string | null;
+  token: string;
+  status: "bersedia" | "tidak_bersedia" | null;
+  catatan: string | null;
+  dijawab_pada: string | null;
+};
+type TawaranMenginap = {
+  id: number;
+  kecamatan: string;
+  nagari: string | null;
+  keterangan: string;
+  dibuat_pada: string;
+  kandidat: TawaranMenginapKandidat[];
+};
+
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
   { key: "korban", label: "Korban meninggal, hilang, atau luka" },
   { key: "hunian_rusak", label: "Hunian rusak / terendam" },
@@ -4775,6 +4804,16 @@ function AlokasiPetugasSection() {
   // & tombol "Pakai estimasi Langkah 2". Default 133 dipertahankan supaya
   // perilaku lama tidak berubah sebelum admin sengaja menggantinya.
   const [totalPplAsumsi, setTotalPplAsumsi] = useState(133);
+  // (3 Okt 2026) Dulu hardcode BATAS_RADIUS_KM=7 & BATAS_SELISIH_SKOR=20 di
+  // dalam hitungSaranAutoPlot() -- permintaan user: dijadikan bisa diubah
+  // admin lewat input di Langkah 4 (sama pola dgn totalPplAsumsi di atas),
+  // supaya kalau cakupan jangkauan default kurang (banyak baris yg "tidak
+  // ada kandidat" krn semua kandidat dlm radius 7km sudah penuh atau Sub SLS
+  // itu memang >7km dari kandidat manapun), admin bisa perlebar radius &/
+  // menaikkan toleransi beban TANPA ubah kode. Default 7 & 20 dipertahankan
+  // supaya perilaku lama tidak berubah sebelum admin sengaja menggantinya.
+  const [jarakMaksimalAutoPlot, setJarakMaksimalAutoPlot] = useState(7);
+  const [selisihBebanMaksimalAutoPlot, setSelisihBebanMaksimalAutoPlot] = useState(20);
   const [detailKebutuhanTerbuka, setDetailKebutuhanTerbuka] = useState<Set<string>>(new Set());
   const [optimasiTerbuka, setOptimasiTerbuka] = useState(false);
   function toggleDetailKebutuhan(kecamatan: string) {
@@ -4966,6 +5005,22 @@ function AlokasiPetugasSection() {
   // Konfirmasi" diklik -- id petugas yg link-nya baru disalin, dibersihkan
   // otomatis sesudah 2 detik.
   const [kontakLinkTersalinId, setKontakLinkTersalinId] = useState<number | null>(null);
+
+  // Kartu admin "🏕️ Tawaran Menginap" -- lihat definisi TawaranMenginap di
+  // atas & komentar panjang di dekat kandidatPplDasar/KEGIATAN_LAIN_TAWARAN
+  // di bawah utk kriteria pool kandidatnya.
+  const [tawaranTerbuka, setTawaranTerbuka] = useState(false);
+  const [tawaranList, setTawaranList] = useState<TawaranMenginap[] | null>(null);
+  const [tawaranBuatBaruTerbuka, setTawaranBuatBaruTerbuka] = useState(false);
+  const [tawaranKecamatanBaru, setTawaranKecamatanBaru] = useState("");
+  const [tawaranNagariBaru, setTawaranNagariBaru] = useState("");
+  const [tawaranKeteranganBaru, setTawaranKeteranganBaru] = useState("");
+  const [tawaranKandidatDipilih, setTawaranKandidatDipilih] = useState<Set<number>>(new Set());
+  const [tawaranKecFilterBaru, setTawaranKecFilterBaru] = useState("");
+  const [tawaranNagariFilterBaru, setTawaranNagariFilterBaru] = useState("");
+  const [tawaranSimpanBusy, setTawaranSimpanBusy] = useState(false);
+  const [tawaranSimpanError, setTawaranSimpanError] = useState<string | null>(null);
+  const [tawaranLinkTersalinId, setTawaranLinkTersalinId] = useState<number | null>(null);
   async function salinLinkKonfirmasi(id: number, token: string) {
     const link = `${window.location.origin}/bencana/konfirmasi/${token}`;
     try {
@@ -5063,11 +5118,25 @@ function AlokasiPetugasSection() {
     setHariKerjaDipakai(json.hari_kerja ?? hariKerja);
   }
 
+  async function muatTawaranMenginap() {
+    const res = await fetch("/api/bencana/alokasi/tawaran-menginap", { cache: "no-store" });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Gagal memuat daftar tawaran menginap.");
+    setTawaranList(json.data ?? []);
+  }
+
   async function muatSemua(hariKerja: number) {
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja), muatKontak(), muatPengaturanBeban()]);
+      await Promise.all([
+        muatBeban(),
+        muatSampel(),
+        muatData(hariKerja),
+        muatKontak(),
+        muatPengaturanBeban(),
+        muatTawaranMenginap(),
+      ]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Gagal memuat data alokasi.");
     } finally {
@@ -6113,6 +6182,148 @@ function AlokasiPetugasSection() {
     return hasil;
   }, [kandidatTerbuka, kandidatPplDasar, kandidatKecFilter, kandidatNagariFilter, kertasKerja, titikSubslsMap, efektifPplId, petugasList]);
 
+  // (3 Okt 2026) Pool kandidat utk kartu "🏕️ Tawaran Menginap" -- kriteria
+  // SENGAJA lebih ketat dari kandidatPplDasar/tier1/tier2 di atas, sesuai
+  // kriteria eligibility yg dipakai analisis ketimpangan distribusi
+  // (lihat "Analisis Ketimpangan Distribusi Petugas Bencana.xlsx", sheet
+  // "Direktori Kandidat Pool"): (sudah "Mengajukan Diri" ATAU peserta PES
+  // SE2026, krn PES batal jadi bisa dipindah) DAN TIDAK ikut
+  // NTP/SITASI 2026/GC Mix Method (kalau ikut salah satu itu sebaiknya
+  // TIDAK ditawari skema menginap -- bentrok jadwal) DAN tidak red flag
+  // kinerja DAN masih aktif. TIDAK mengecualikan rekomendasi_pml di sini --
+  // beda dgn kandidatPplDasar -- krn skema menginap adalah soal kesediaan
+  // personal, bukan soal plot PPL biasa.
+  const KEGIATAN_LAIN_DIKECUALIKAN_TAWARAN = ["SPDT NTP 2026", "SITASI 2026", "GC Mix Method"];
+  const tawaranPplDasar = useMemo(
+    () =>
+      pplOptions.filter(
+        (p) =>
+          p.aktif &&
+          !p.red_flag_kinerja &&
+          (p.pendaftaran_bencana_konfirmasi || (p.kegiatan_lain ?? []).includes("PES SE2026")) &&
+          !(p.kegiatan_lain ?? []).some((k) => KEGIATAN_LAIN_DIKECUALIKAN_TAWARAN.includes(k))
+      ),
+    [pplOptions]
+  );
+  const tawaranKecOpsiBaru = useMemo(
+    () =>
+      Array.from(new Set(tawaranPplDasar.map((p) => p.alamat_kecamatan).filter((v): v is string => !!v))).sort(
+        (a, b) => a.localeCompare(b, "id")
+      ),
+    [tawaranPplDasar]
+  );
+  const tawaranNagariOpsiBaru = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tawaranPplDasar
+            .filter((p) => !tawaranKecFilterBaru || p.alamat_kecamatan === tawaranKecFilterBaru)
+            .map((p) => p.alamat_nagari)
+            .filter((v): v is string => !!v)
+        )
+      ).sort((a, b) => a.localeCompare(b, "id")),
+    [tawaranPplDasar, tawaranKecFilterBaru]
+  );
+  const tawaranKandidatPilihanList = useMemo(() => {
+    const dasar = tawaranPplDasar.filter(
+      (p) =>
+        (!tawaranKecFilterBaru || p.alamat_kecamatan === tawaranKecFilterBaru) &&
+        (!tawaranNagariFilterBaru || p.alamat_nagari === tawaranNagariFilterBaru)
+    );
+    return [...dasar].sort(
+      (a, b) => (b.nilai_kinerja ?? -1) - (a.nilai_kinerja ?? -1) || a.nama.localeCompare(b.nama, "id")
+    );
+  }, [tawaranPplDasar, tawaranKecFilterBaru, tawaranNagariFilterBaru]);
+
+  function toggleTawaranKandidat(id: number) {
+    setTawaranKandidatDipilih((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function buatTawaranMenginap() {
+    setTawaranSimpanError(null);
+    if (!tawaranKecamatanBaru.trim()) {
+      setTawaranSimpanError("Kecamatan wajib diisi.");
+      return;
+    }
+    if (!tawaranKeteranganBaru.trim()) {
+      setTawaranSimpanError("Keterangan kebutuhan wajib diisi.");
+      return;
+    }
+    if (tawaranKandidatDipilih.size === 0) {
+      setTawaranSimpanError("Pilih minimal 1 kandidat utk ditawari.");
+      return;
+    }
+    setTawaranSimpanBusy(true);
+    try {
+      const res = await fetch("/api/bencana/alokasi/tawaran-menginap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kecamatan: tawaranKecamatanBaru.trim(),
+          nagari: tawaranNagariBaru.trim() || undefined,
+          keterangan: tawaranKeteranganBaru.trim(),
+          petugas_ids: Array.from(tawaranKandidatDipilih),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal membuat tawaran menginap.");
+      setTawaranKecamatanBaru("");
+      setTawaranNagariBaru("");
+      setTawaranKeteranganBaru("");
+      setTawaranKandidatDipilih(new Set());
+      setTawaranKecFilterBaru("");
+      setTawaranNagariFilterBaru("");
+      setTawaranBuatBaruTerbuka(false);
+      await muatTawaranMenginap();
+    } catch (err) {
+      setTawaranSimpanError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
+    } finally {
+      setTawaranSimpanBusy(false);
+    }
+  }
+
+  // "0812..." -> "62812...", "+62812..."/"62812..." dibiarkan -- format yg
+  // dipahami wa.me.
+  function normalisasiNoHp(noHp: string): string {
+    const digits = noHp.replace(/[^0-9]/g, "");
+    if (digits.startsWith("62")) return digits;
+    if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+    return `62${digits}`;
+  }
+
+  async function salinLinkMenginap(kandidatId: number, token: string) {
+    const link = `${window.location.origin}/bencana/menginap/${token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      window.prompt("Gagal menyalin otomatis -- salin manual link ini:", link);
+      return;
+    }
+    setTawaranLinkTersalinId(kandidatId);
+    setTimeout(() => setTawaranLinkTersalinId((cur) => (cur === kandidatId ? null : cur)), 2000);
+  }
+
+  // (3 Okt 2026) Permintaan user: bukan broadcast otomatis ke semua nomor
+  // sekaligus (WhatsApp tidak punya API publik utk itu tanpa WhatsApp
+  // Business API resmi + approval Meta) -- tapi per-kandidat, admin cukup
+  // klik 1x, WA Web/App terbuka dgn chat ke nomor itu & pesan (incl. link
+  // konfirmasi) SUDAH terisi di kotak chat, admin tinggal klik "Kirim" di
+  // WhatsApp itu sendiri.
+  function bukaWaMenginap(k: TawaranMenginapKandidat, t: TawaranMenginap) {
+    if (!k.no_hp) return;
+    const link = `${window.location.origin}/bencana/menginap/${k.token}`;
+    const pesan =
+      `Assalamualaikum ${k.nama}, BPS Kabupaten Solok ingin menawarkan Anda ikut pendataan bencana di ` +
+      `Kecamatan ${t.kecamatan}${t.nagari ? `, Nagari ${t.nagari}` : ""} dengan skema BERSEDIA MENGINAP di lokasi ` +
+      `pendataan (krn kekurangan petugas yg dekat). Mohon konfirmasi kesediaan lewat link berikut: ${link}`;
+    window.open(`https://wa.me/${normalisasiNoHp(k.no_hp)}?text=${encodeURIComponent(pesan)}`, "_blank");
+  }
+
   // Klik rekomendasi Sub SLS terdekat di kartu kandidat -- pindah ke
   // Langkah 4 & langsung ke baris itu (sama pola dgn navigasiKeBebanTeratas
   // / SarankanWilayahTombol); kalau masih kosong, SEKALIAN isi draft PPL
@@ -6177,8 +6388,14 @@ function AlokasiPetugasSection() {
   // tersimpan ke server sesudah "Simpan Perubahan" ditekan, konsisten dgn
   // aturan baku proyek ini (lihat komentar SaranMitraTombol).
   function hitungSaranAutoPlot(): Record<string, number> {
-    const BATAS_RADIUS_KM = 7;
-    const BATAS_SELISIH_SKOR = 20;
+    // (3 Okt 2026) BATAS_RADIUS_KM & BATAS_SELISIH_SKOR dulu konstanta tetap
+    // di sini -- sekarang dibaca dari state jarakMaksimalAutoPlot &
+    // selisihBebanMaksimalAutoPlot (bisa diubah admin, lihat input di
+    // Langkah 4 dekat tombol "Auto Plot"). LEBAR_PITA_KM (lebar tiap tahap
+    // perlebaran pita jarak) TETAP konstanta -- bukan parameter yg diminta
+    // bisa diubah, cuma detail internal algoritma.
+    const BATAS_RADIUS_KM = jarakMaksimalAutoPlot;
+    const BATAS_SELISIH_SKOR = selisihBebanMaksimalAutoPlot;
     const LEBAR_PITA_KM = 1;
 
     const workingBeban = new Map(bebanDraftPerPpl);
@@ -6788,6 +7005,260 @@ function AlokasiPetugasSection() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* ===== KARTU TAWARAN MENGINAP ===== */}
+      <section className="rounded-md border border-teal-200 bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setTawaranTerbuka((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+        >
+          <div>
+            <h2 className="font-medium text-blue-950">🏕️ Tawaran Menginap</h2>
+            <p className="mt-1 text-xs text-ink/60">
+              Tawarkan pendataan jarak jauh dengan skema bersedia menginap di lokasi, utk kebutuhan yang kekurangan
+              petugas dekat. Kesediaan dicatat di sini dulu -- plot resminya tetap admin yang tentukan manual.
+            </p>
+          </div>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-medium text-teal-800">
+              {tawaranList?.length ?? 0} tawaran
+            </span>
+            <span className="text-slate-400">{tawaranTerbuka ? "▾" : "▸"}</span>
+          </span>
+        </button>
+
+        {tawaranTerbuka && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setTawaranBuatBaruTerbuka((v) => !v)}
+              className="rounded-md border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-100"
+            >
+              {tawaranBuatBaruTerbuka ? "✕ Batal Buat Tawaran" : "+ Buat Tawaran Baru"}
+            </button>
+
+            {tawaranBuatBaruTerbuka && (
+              <div className="mt-3 rounded-md border border-teal-200 bg-teal-50/40 p-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="text-xs text-ink/70">
+                    Kecamatan (kebutuhan) <span className="text-rust-600">*</span>
+                    <input
+                      type="text"
+                      value={tawaranKecamatanBaru}
+                      onChange={(e) => setTawaranKecamatanBaru(e.target.value)}
+                      placeholder="mis. Kubung"
+                      className="mt-1 w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-teal-400"
+                    />
+                  </label>
+                  <label className="text-xs text-ink/70">
+                    Nagari (opsional)
+                    <input
+                      type="text"
+                      value={tawaranNagariBaru}
+                      onChange={(e) => setTawaranNagariBaru(e.target.value)}
+                      placeholder="mis. Selayo"
+                      className="mt-1 w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-teal-400"
+                    />
+                  </label>
+                </div>
+                <label className="mt-2 block text-xs text-ink/70">
+                  Keterangan kebutuhan <span className="text-rust-600">*</span>
+                  <textarea
+                    value={tawaranKeteranganBaru}
+                    onChange={(e) => setTawaranKeteranganBaru(e.target.value)}
+                    rows={2}
+                    placeholder="mis. Jorong Sawah Sudut kekurangan petugas dekat, 3 Sub SLS belum ada PPL."
+                    className="mt-1 w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-teal-400"
+                  />
+                </label>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <select
+                    value={tawaranKecFilterBaru}
+                    onChange={(e) => {
+                      setTawaranKecFilterBaru(e.target.value);
+                      setTawaranNagariFilterBaru("");
+                    }}
+                    className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-400"
+                  >
+                    <option value="">Filter domisili: Semua Kecamatan</option>
+                    {tawaranKecOpsiBaru.map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={tawaranNagariFilterBaru}
+                    onChange={(e) => setTawaranNagariFilterBaru(e.target.value)}
+                    className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-400"
+                  >
+                    <option value="">Semua Nagari</option>
+                    {tawaranNagariOpsiBaru.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-ink/50">
+                    {tawaranKandidatDipilih.size} kandidat dipilih dari {tawaranKandidatPilihanList.length} ditampilkan
+                  </span>
+                </div>
+
+                <p className="mt-2 text-[11px] text-ink/50">
+                  Pool kandidat: sudah "Mengajukan Diri" atau peserta PES SE2026, tidak ikut NTP/SITASI 2026/GC Mix
+                  Method, tidak red flag kinerja, masih aktif.
+                </p>
+
+                <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-line bg-white">
+                  {tawaranKandidatPilihanList.length === 0 ? (
+                    <p className="p-3 text-sm text-ink/50">Tidak ada kandidat yang cocok dengan filter ini.</p>
+                  ) : (
+                    tawaranKandidatPilihanList.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex cursor-pointer items-start gap-2 border-b border-line px-3 py-2 text-sm last:border-b-0 hover:bg-gray-50"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={tawaranKandidatDipilih.has(p.id)}
+                          onChange={() => toggleTawaranKandidat(p.id)}
+                        />
+                        <span className="flex-1">
+                          <span className="font-medium text-ink" style={{ color: warnaNilaiKinerja(p.nilai_kinerja) }}>
+                            {p.nama}
+                          </span>{" "}
+                          <span className="text-xs text-ink/60">
+                            {[p.alamat_kecamatan, p.alamat_nagari].filter(Boolean).join(" · ") || "Domisili tidak tercatat"}
+                          </span>
+                          {p.kegiatan_lain.length > 0 && (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {p.kegiatan_lain.map((k) => (
+                                <BadgeKegiatanLain key={k} kegiatan={k} />
+                              ))}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                          style={{ backgroundColor: warnaNilaiKinerja(p.nilai_kinerja) ?? "#9CA3AF" }}
+                        >
+                          {p.nilai_kinerja != null ? `Nilai ${p.nilai_kinerja}` : "Belum Dinilai"}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                {tawaranSimpanError && <p className="mt-2 text-xs text-rust-600">{tawaranSimpanError}</p>}
+
+                <button
+                  type="button"
+                  disabled={tawaranSimpanBusy}
+                  onClick={buatTawaranMenginap}
+                  className="mt-3 rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {tawaranSimpanBusy ? "Menyimpan..." : "Kirim Tawaran ke Kandidat Terpilih"}
+                </button>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col gap-3">
+              {tawaranList === null ? (
+                <p className="text-sm text-ink/50">Memuat...</p>
+              ) : tawaranList.length === 0 ? (
+                <p className="text-sm text-ink/50">Belum ada tawaran menginap yang dibuat.</p>
+              ) : (
+                tawaranList.map((t) => {
+                  const jumlahBersedia = t.kandidat.filter((k) => k.status === "bersedia").length;
+                  const jumlahTidak = t.kandidat.filter((k) => k.status === "tidak_bersedia").length;
+                  const jumlahMenunggu = t.kandidat.length - jumlahBersedia - jumlahTidak;
+                  return (
+                    <div key={t.id} className="rounded-md border border-line p-3 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-ink">
+                            Kecamatan {t.kecamatan}
+                            {t.nagari ? `, Nagari ${t.nagari}` : ""}
+                          </p>
+                          <p className="mt-0.5 whitespace-pre-line text-xs text-ink/60">{t.keterangan}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                          {jumlahBersedia > 0 && (
+                            <span className="rounded-full bg-moss-100 px-2 py-0.5 text-[10px] font-medium text-moss-700">
+                              {jumlahBersedia} bersedia
+                            </span>
+                          )}
+                          {jumlahTidak > 0 && (
+                            <span className="rounded-full bg-rust-100 px-2 py-0.5 text-[10px] font-medium text-rust-700">
+                              {jumlahTidak} tidak bersedia
+                            </span>
+                          )}
+                          {jumlahMenunggu > 0 && (
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60">
+                              {jumlahMenunggu} menunggu
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 flex flex-col gap-1.5 border-t border-line pt-2">
+                        {t.kandidat.map((k) => (
+                          <div key={k.id} className="flex flex-wrap items-center gap-2 text-xs">
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                k.status === "bersedia"
+                                  ? "bg-moss-100 text-moss-700"
+                                  : k.status === "tidak_bersedia"
+                                  ? "bg-rust-100 text-rust-700"
+                                  : "bg-gray-100 text-ink/60"
+                              }`}
+                            >
+                              {k.status === "bersedia" ? "Bersedia" : k.status === "tidak_bersedia" ? "Tidak" : "Menunggu"}
+                            </span>
+                            <span className="font-medium text-ink" style={{ color: warnaNilaiKinerja(k.nilai_kinerja) }}>
+                              {k.nama}
+                            </span>
+                            <span className="text-ink/50">{k.no_hp || "No HP tidak ada"}</span>
+                            {k.status === "tidak_bersedia" && k.catatan && (
+                              <span className="text-ink/40">-- &ldquo;{k.catatan}&rdquo;</span>
+                            )}
+                            <span className="ml-auto flex shrink-0 gap-1">
+                              <button
+                                type="button"
+                                onClick={() => salinLinkMenginap(k.id, k.token)}
+                                title="Salin link konfirmasi menginap (halaman publik) utk kandidat ini"
+                                className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+                              >
+                                {tawaranLinkTersalinId === k.id ? "✓ Tersalin!" : "📋 Salin Link"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!k.no_hp}
+                                onClick={() => bukaWaMenginap(k, t)}
+                                title={
+                                  k.no_hp
+                                    ? "Buka WhatsApp Web/App dgn pesan + link sudah terisi -- tinggal klik Kirim"
+                                    : "No HP kandidat ini tidak tercatat"
+                                }
+                                className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                💬 Buka WA
+                              </button>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </section>
@@ -8137,7 +8608,7 @@ function AlokasiPetugasSection() {
               type="button"
               onClick={handleAutoPlot}
               disabled={jumlahBelumDiplot === 0}
-              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat HANYA dari Tier 1 (Mengajukan Diri) + Tier 2 (peserta PES SE2026). Diproses per pita jarak melebar (<1 km dulu, baru <2 km, dst. sampai maks. 7 km dari Sub SLS) & beban akhir maks. 20 skor di atas rata-rata; kalau ada beberapa kandidat sama-sama dekat, baris2 disebar rata ke mereka (bukan diborong 1 orang). Baris yg tidak ada kandidat memenuhi syarat itu sampai 7 km DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
+              title={`Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat HANYA dari Tier 1 (Mengajukan Diri) + Tier 2 (peserta PES SE2026). Diproses per pita jarak melebar (<1 km dulu, baru <2 km, dst. sampai maks. ${jarakMaksimalAutoPlot} km dari Sub SLS) & beban akhir maks. ${selisihBebanMaksimalAutoPlot} skor di atas rata-rata; kalau ada beberapa kandidat sama-sama dekat, baris2 disebar rata ke mereka (bukan diborong 1 orang). Baris yg tidak ada kandidat memenuhi syarat itu sampai ${jarakMaksimalAutoPlot} km DILEWATI (tidak dipaksa) -- perlebar "Jarak maks." & "Toleransi beban" di bawah kalau mau cakupannya lebih luas. TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan.`}
               className="rounded-md border border-gold-400 bg-gold-100 px-3 py-1.5 text-sm font-medium text-gold-600 transition hover:bg-gold-400/20 disabled:opacity-40"
             >
               🤖 Auto Plot {jumlahBelumDiplot > 0 ? `(${jumlahBelumDiplot} kosong)` : ""}
@@ -8183,6 +8654,41 @@ function AlokasiPetugasSection() {
                 Pakai estimasi Langkah 2 ({totalKebutuhan.ppl})
               </button>
             )}
+          </span>
+          {/* (3 Okt 2026) Permintaan user: cakupan jangkauan "Auto Plot" (radius
+              jarak maksimal & toleransi beban di atas rata-rata) dulu konstanta
+              tetap di kode (7 km / 20 skor) -- sekarang bisa diubah admin
+              langsung di sini, supaya kalau banyak baris "dilewati" (tidak ada
+              kandidat yg lolos radius/beban default) admin bisa perlebar
+              cakupannya sendiri tanpa minta ubah kode. Berlaku jg utk tombol
+              "Auto Plot" di atas (lihat hitungSaranAutoPlot). */}
+          <span
+            className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70"
+            title="Mengatur seberapa jauh & seberapa berat 'Auto Plot' boleh mengisi saran -- perlebar kalau banyak baris kosong yg dilewati krn tidak ada kandidat yg lolos batas default."
+          >
+            · Auto Plot — Jarak maks.:{" "}
+            <input
+              type="number"
+              min={1}
+              max={50}
+              step={0.5}
+              value={jarakMaksimalAutoPlot}
+              onChange={(e) => setJarakMaksimalAutoPlot(Math.max(1, Number(e.target.value) || 1))}
+              title="Radius pencarian kandidat Auto Plot dari lokasi rumah ke titik Sub SLS (km) -- default 7 km. Perlebar kalau mau Auto Plot menjangkau kandidat yg lebih jauh."
+              className="w-14 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />{" "}
+            km · Toleransi beban:{" "}
+            <input
+              type="number"
+              min={0}
+              max={500}
+              step={5}
+              value={selisihBebanMaksimalAutoPlot}
+              onChange={(e) => setSelisihBebanMaksimalAutoPlot(Math.max(0, Number(e.target.value) || 0))}
+              title="Selisih maksimal skor beban akhir PPL di ATAS rata-rata (rataBebanTetap) yg masih boleh diisi Auto Plot -- default 20. Naikkan kalau mau Auto Plot berani mengisi kandidat yg sudah agak penuh."
+              className="w-16 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />{" "}
+            skor di atas rata-rata
           </span>
           {/* (3 Okt 2026) Permintaan user: ringkasan jumlah PPL terpilih +
               utilisasi pool kandidat Tier 1/Tier 2 (dikecualikan rekomendasi
