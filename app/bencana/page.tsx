@@ -3180,6 +3180,14 @@ function AlokasiPetugasSection() {
   const [petugasList, setPetugasList] = useState<PetugasRingkas[]>([]);
   const [titikSubsls, setTitikSubsls] = useState<TitikSubsls[]>([]);
   const [hariKerjaInput, setHariKerjaInput] = useState(24);
+  // (3 Okt 2026) Dulu hardcode "const TOTAL_PPL_TETAP = 133" -- permintaan
+  // user: dijadikan bisa diubah admin (bukan angka tetap di kode), supaya
+  // "Rata-rata beban per PPL" di Langkah 4 bisa dihitung ulang dgn asumsi
+  // jumlah PPL yg berbeda (mis. disamakan dgn "Kebutuhan PPL (estimasi)"
+  // hasil Langkah 2, atau skenario what-if lain) -- lihat input di Langkah 4
+  // & tombol "Pakai estimasi Langkah 2". Default 133 dipertahankan supaya
+  // perilaku lama tidak berubah sebelum admin sengaja menggantinya.
+  const [totalPplAsumsi, setTotalPplAsumsi] = useState(133);
   const [detailKebutuhanTerbuka, setDetailKebutuhanTerbuka] = useState<Set<string>>(new Set());
   const [optimasiTerbuka, setOptimasiTerbuka] = useState(false);
   function toggleDetailKebutuhan(kecamatan: string) {
@@ -3838,8 +3846,7 @@ function AlokasiPetugasSection() {
     () => kertasKerja.reduce((s, r) => s + r.skor_beban_pendataan, 0),
     [kertasKerja]
   );
-  const TOTAL_PPL_TETAP = 133;
-  const rataBebanTetap = totalSkorWilayahTugas / TOTAL_PPL_TETAP;
+  const rataBebanTetap = totalPplAsumsi > 0 ? totalSkorWilayahTugas / totalPplAsumsi : 0;
 
   // Beban draft per PPL (skor beban pendataan, TANPA jarak -- jarak riil
   // baru dihitung server sesudah plot benar2 disimpan): dihitung ulang
@@ -4285,13 +4292,13 @@ function AlokasiPetugasSection() {
             label="Total Skor Beban"
             nilai={Math.round(totalSkorWilayahTugas)}
           />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Asumsi Jumlah PPL (bisa diubah)" nilai={totalPplAsumsi} />
           <MiniStat warna="bg-blue-50 text-blue-900" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
         </div>
         <p className="mt-2 text-[11px] text-ink/50">
-          {jumlahPplDiplotDraft} dari {TOTAL_PPL_TETAP} PPL sudah punya plot (draft) · {jumlahBelumDiplot} dari{" "}
+          {jumlahPplDiplotDraft} dari {totalPplAsumsi} PPL sudah punya plot (draft) · {jumlahBelumDiplot} dari{" "}
           {kertasKerja.length} Sub SLS belum diplot
           {jumlahPerubahanPending > 0 && <> · {jumlahPerubahanPending} perubahan belum disimpan</>}
         </p>
@@ -4679,14 +4686,21 @@ function AlokasiPetugasSection() {
                         <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
                         <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
                         <td className="px-3 py-2 font-medium text-ink">
-                          <span className="flex items-center gap-1.5">
-                            {r.sls}
-                            {/* (3 Okt 2026) Tombol lihat peta sekilas -- permintaan user, sama
-                                spt di tab Identifikasi: cek cepat citra satelit sebelum
-                                mengoreksi KK Total/Terdampak manual. Disembunyikan kalau titik
-                                Sub SLS baris ini belum tersedia (null). */}
+                          {/* (3 Okt 2026) items-start+justify-between (bukan items-center biasa)
+                              -- nama Jorong yg panjang bisa patah ke 2 baris di layar sempit,
+                              dan tombol "Lihat Peta" tetap rapi nempel rata kanan (shrink-0,
+                              tidak ikut patah/melayang di tengah) drpd mengambang di sebelah
+                              teks yg tinggi barisnya berubah-ubah. Permintaan user. */}
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="min-w-0">{r.sls}</span>
                             {r.lat != null && r.lng != null && (
-                              <PetaSekilasTombol lat={r.lat} lng={r.lng} label={`Jorong ${r.sls} / Sub SLS ${r.sub_sls}`} />
+                              <span className="shrink-0">
+                                <PetaSekilasTombol
+                                  lat={r.lat}
+                                  lng={r.lng}
+                                  label={`Jorong ${r.sls} / Sub SLS ${r.sub_sls}`}
+                                />
+                              </span>
                             )}
                           </span>
                         </td>
@@ -5654,10 +5668,36 @@ function AlokasiPetugasSection() {
           </button>
         </div>
 
+        {/* (3 Okt 2026) Permintaan user: dulu pembagi "rata-rata beban per PPL"
+            hardcode 133 di kode, tidak bisa diubah dari UI. Sekarang jumlah
+            PPL-nya (totalPplAsumsi) bisa diketik ulang langsung di sini --
+            rata-rata (rataBebanTetap) otomatis hitung ulang krn dia turunan
+            dari totalPplAsumsi. Tombol "Pakai estimasi Langkah 2" menyalin
+            cepat dari totalKebutuhan.ppl (hasil Langkah 2) tanpa perlu
+            mengetik manual kalau admin mau menyamakan asumsi dgn Langkah 2. */}
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
-          <span className="text-xs text-ink/70">
-            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷ {TOTAL_PPL_TETAP} PPL tetap):{" "}
+          <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70">
+            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷{" "}
+            <input
+              type="number"
+              min={1}
+              value={totalPplAsumsi}
+              onChange={(e) => setTotalPplAsumsi(Math.max(1, Math.round(Number(e.target.value) || 1)))}
+              title="Asumsi jumlah PPL -- ubah angka ini utk menghitung ulang rata-rata beban dgn skenario jumlah PPL yg berbeda"
+              className="w-16 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />{" "}
+            PPL):{" "}
             <strong className="text-blue-950">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
+            {totalKebutuhan.ppl > 0 && totalKebutuhan.ppl !== totalPplAsumsi && (
+              <button
+                type="button"
+                onClick={() => setTotalPplAsumsi(totalKebutuhan.ppl)}
+                className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-200"
+                title="Samakan asumsi jumlah PPL dgn hasil estimasi Langkah 2"
+              >
+                Pakai estimasi Langkah 2 ({totalKebutuhan.ppl})
+              </button>
+            )}
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
