@@ -1733,6 +1733,7 @@ function ThKontrol({
   freeze,
   search,
   filter,
+  filter2,
   sort,
 }: {
   label: string;
@@ -1745,9 +1746,17 @@ function ThKontrol({
   freeze?: { left: number; width: number };
   search?: { value: string; onChange: (v: string) => void; placeholder?: string };
   filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
+  // (3 Okt 2026) Grup filter KEDUA yg independen dlm popover ⋮ yg SAMA --
+  // permintaan user: filter "Penilaian Kinerja" di kolom PPL Langkah 4,
+  // DI SAMPING filter nama PPL yg sudah ada (`filter`), bukan menggantinya.
+  // Dibuat terpisah (bukan menambah dimensi ke `filter`) supaya SELURUH
+  // pemanggil ThKontrol lain yg sudah pakai `filter` tidak perlu diubah --
+  // `filter2` punya label SENDIRI (selalu ditampilkan) persis supaya kedua
+  // grup tidak tertukar saat keduanya sekaligus ada.
+  filter2?: { label: string; options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
   sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
-  const adaAksi = !!sort || !!filter;
+  const adaAksi = !!sort || !!filter || !!filter2;
 
   const [cariTerbuka, setCariTerbuka] = useState(false);
   const [cariPos, setCariPos] = useState<{ top: number; left: number } | null>(null);
@@ -1756,6 +1765,7 @@ function ThKontrol({
   const [terbuka, setTerbuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [filterDraft, setFilterDraft] = useState<Set<string>>(new Set());
+  const [filter2Draft, setFilter2Draft] = useState<Set<string>>(new Set());
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1801,14 +1811,15 @@ function ThKontrol({
       left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)),
     });
     if (filter) setFilterDraft(new Set(filter.selected));
+    if (filter2) setFilter2Draft(new Set(filter2.selected));
     setCariTerbuka(false);
     setTerbuka(true);
   }
 
   const searchAktif = !!search?.value;
-  const filterAktif = !!filter && filter.selected.size > 0;
+  const filterAktif = (!!filter && filter.selected.size > 0) || (!!filter2 && filter2.selected.size > 0);
   const aksiAktif = filterAktif || !!sort?.active;
-  const banyakBagian = !!sort && !!filter;
+  const banyakBagian = [!!sort, !!filter, !!filter2].filter(Boolean).length > 1;
 
   return (
     <th
@@ -1913,9 +1924,11 @@ function ThKontrol({
                   )}
 
                   {filter && (
-                    <div>
-                      {banyakBagian && (
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Filter</p>
+                    <div className={filter2 ? "border-b border-line pb-2" : ""}>
+                      {(banyakBagian || filter2) && (
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                          {filter2 ? "Filter: Nama" : "Filter"}
+                        </p>
                       )}
                       <div className="max-h-44 overflow-y-auto">
                         {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
@@ -1947,6 +1960,47 @@ function ThKontrol({
                         <button
                           type="button"
                           onClick={() => filter.onApply(filterDraft)}
+                          className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
+                        >
+                          Terapkan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {filter2 && (
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">{filter2.label}</p>
+                      <div className="max-h-44 overflow-y-auto">
+                        {filter2.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
+                        <div className="flex flex-col gap-1">
+                          {filter2.options.map((opt) => (
+                            <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
+                              <input
+                                type="checkbox"
+                                checked={filter2Draft.has(opt)}
+                                onChange={() => {
+                                  setFilter2Draft((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(opt)) next.delete(opt);
+                                    else next.add(opt);
+                                    return next;
+                                  });
+                                }}
+                                className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                              />
+                              <span className="truncate">{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
+                        <button type="button" onClick={() => setFilter2Draft(new Set())} className="text-[10px] text-ink/60 hover:underline">
+                          Bersihkan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => filter2.onApply(filter2Draft)}
                           className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
                         >
                           Terapkan
@@ -4655,6 +4709,10 @@ function AlokasiPetugasSection() {
 
   const [kecFilter, setKecFilter] = useState("");
   const [pplFilter, setPplFilter] = useState<number | "">("");
+  // (3 Okt 2026) Filter kolom PPL (⋮) grup KEDUA -- permintaan user: filter
+  // baris Langkah 4 menurut penilaian kinerja PPL yg SEDANG terpasang di
+  // baris itu (draft-aware, lewat efektifPplId, sama spt filter nama PPL).
+  const [nilaiKinerjaPplFilter, setNilaiKinerjaPplFilter] = useState<Set<string>>(new Set());
   const [pmlFilterLangkah4, setPmlFilterLangkah4] = useState<number | "">("");
   const [dataFilter, setDataFilter] = useState<"" | "lengkap" | "belum">("");
   const [statusBebanFilter, setStatusBebanFilter] = useState<"" | BalanceTone>("");
@@ -5761,6 +5819,7 @@ function AlokasiPetugasSection() {
     setKecamatanHeaderSearch("");
     setKecFilter("");
     setPplFilter("");
+    setNilaiKinerjaPplFilter(new Set());
     setPmlFilterLangkah4("");
     setDataFilter("");
     setStatusBebanFilter("");
@@ -5980,6 +6039,10 @@ function AlokasiPetugasSection() {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
       const draftPplId = efektifPplId(r);
       if (pplFilter && draftPplId !== pplFilter) return false;
+      if (nilaiKinerjaPplFilter.size > 0) {
+        const nilaiPpl = draftPplId ? petugasList.find((p) => p.id === draftPplId)?.nilai_kinerja ?? null : null;
+        if (!nilaiKinerjaPplFilter.has(labelNilaiKinerja(nilaiPpl))) return false;
+      }
       if (pmlFilterLangkah4) {
         const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
         if (draftPmlId !== pmlFilterLangkah4) return false;
@@ -6005,6 +6068,7 @@ function AlokasiPetugasSection() {
     kertasKerja,
     kecFilter,
     pplFilter,
+    nilaiKinerjaPplFilter,
     pmlFilterLangkah4,
     dataFilter,
     statusPlotFilter,
@@ -6016,6 +6080,7 @@ function AlokasiPetugasSection() {
     draftPmlByPpl,
     bebanDraftPerPpl,
     rataBebanTetap,
+    petugasList,
   ]);
 
   // Sorting: kolom yg bisa diurutkan diambil dari kunci sortKey. "beban_ppl"
@@ -8241,6 +8306,20 @@ function AlokasiPetugasSection() {
                       const nama = Array.from(next)[0];
                       const p = nama ? petugasList.find((x) => x.nama === nama) : null;
                       setPplFilter(p ? p.id : "");
+                      setPage(1);
+                    },
+                  }}
+                  // (3 Okt 2026) Grup filter kedua -- permintaan user: filter
+                  // baris menurut penilaian kinerja PPL yg sedang terpasang
+                  // (draft-aware, lihat efektifPplId di `filtered`).
+                  filter2={{
+                    label: "Penilaian Kinerja",
+                    options: Array.from(
+                      new Set(petugasList.filter((p) => p.peran === "ppl").map((p) => labelNilaiKinerja(p.nilai_kinerja)))
+                    ).sort((a, b) => a.localeCompare(b, "id")),
+                    selected: nilaiKinerjaPplFilter,
+                    onApply: (next) => {
+                      setNilaiKinerjaPplFilter(next);
                       setPage(1);
                     },
                   }}
