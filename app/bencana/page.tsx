@@ -252,28 +252,39 @@ function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaa
       <button type="button" onClick={toggle} title={judul} className={`text-sm leading-none ${warna}`}>
         ⚠️
       </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
-          className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className={`font-semibold ${warna}`}>{judul}</p>
-          {status.tipe === "belum_konfirmasi" ? (
-            <p className="mt-1 text-ink/70">
-              Nama ini tidak ada di daftar self-report kesediaan ikut pendataan bencana. Perlu dihubungi utk ditawarkan
-              &amp; diminta konfirmasi kesediaannya.
-              {status.kegiatanLain.length > 0 && (
-                <> Catatan: sudah bertugas juga di {status.kegiatanLain.join(", ")}.</>
-              )}
-            </p>
-          ) : (
-            <p className="mt-1 text-ink/70">
-              Sudah konfirmasi ikut pendataan bencana, tapi juga sudah bertugas di{" "}
-              <b>{status.kegiatanLain.join(", ")}</b>. Boleh saja dirangkap, tapi beban kerjanya bertambah.
-            </p>
-          )}
-        </div>
-      )}
+      {buka &&
+        pos &&
+        // (3 Okt 2026) Dipindah ke React Portal (document.body) -- dilaporkan
+        // user: popover ini "ketutup" di "Tampilan Padat". SEBELUMNYA panel
+        // ini anak DOM dari <td> baris tabel walau sudah `position: fixed`,
+        // jadi tetap ikut mewarisi CSS tabel leluhurnya & ketiban stacking
+        // context sel-sel sticky (z-30) di sampingnya -- persis bug yg sama
+        // yg sudah diperbaiki sebelumnya utk SaranMitraTombol/Combobox/
+        // ThKontrol/IkonNilaiKinerja (lihat komentar di situ). Portal ke
+        // document.body melepaskan panel ini total dari tabel.
+        createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
+            className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case leading-normal shadow-lg"
+          >
+            <p className={`font-semibold ${warna}`}>{judul}</p>
+            {status.tipe === "belum_konfirmasi" ? (
+              <p className="mt-1 text-ink/70">
+                Nama ini tidak ada di daftar self-report kesediaan ikut pendataan bencana. Perlu dihubungi utk
+                ditawarkan &amp; diminta konfirmasi kesediaannya.
+                {status.kegiatanLain.length > 0 && (
+                  <> Catatan: sudah bertugas juga di {status.kegiatanLain.join(", ")}.</>
+                )}
+              </p>
+            ) : (
+              <p className="mt-1 text-ink/70">
+                Sudah konfirmasi ikut pendataan bencana, tapi juga sudah bertugas di{" "}
+                <b>{status.kegiatanLain.join(", ")}</b>. Boleh saja dirangkap, tapi beban kerjanya bertambah.
+              </p>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -671,6 +682,15 @@ function SaranMitraKelompok({
                       </p>
                     );
                   })()}
+                  {/* (3 Okt 2026) Nilai kinerja (angka) + ikon catatan --
+                      permintaan user: kandidat di popover Saran ini jg perlu
+                      kelihatan penilaian kinerjanya, bukan cuma jarak & beban. */}
+                  <p className="mt-0.5 flex items-center gap-1 text-[10px]">
+                    <span className="font-bold" style={{ color: warnaNilaiKinerja(p.nilai_kinerja) }}>
+                      Nilai: {p.nilai_kinerja ?? "Belum Dinilai"}
+                    </span>
+                    <IkonNilaiKinerja nilai={p.nilai_kinerja} catatan={p.catatan_kinerja} />
+                  </p>
                 </div>
                 <button
                   type="button"
