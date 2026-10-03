@@ -80,8 +80,10 @@ export async function GET(req: NextRequest) {
             // bedakan warning "belum konfirmasi" vs "menolak" di kolom PPL
             // Langkah 4 (lihat statusKesediaanPpl() & IkonStatusKesediaanPpl
             // di page.tsx), sesudah mitra bisa menolak sendiri lewat halaman
-            // publik /bencana/konfirmasi/[token].
-            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, rekomendasi_pml, red_flag_kinerja, lat, lng, nilai_kinerja, catatan_kinerja"
+            // publik /bencana/konfirmasi/[token]. alamat_nagari ditambahkan
+            // -- dipakai filter kecamatan/nagari di kartu "🎯 Kandidat PPL
+            // Siap Ditawari".
+            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, alamat_nagari, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, rekomendasi_pml, red_flag_kinerja, lat, lng, nilai_kinerja, catatan_kinerja"
           )
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),

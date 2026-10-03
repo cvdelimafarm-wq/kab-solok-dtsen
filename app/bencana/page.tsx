@@ -169,6 +169,9 @@ type PetugasRingkas = {
   lokasi_status: "riil" | "tanpa_data" | "perkiraan_nagari";
   aktif: boolean;
   alamat_kecamatan: string | null;
+  // (3 Okt 2026) Dipakai filter Kecamatan/Nagari di kartu "🎯 Kandidat PPL
+  // Siap Ditawari".
+  alamat_nagari: string | null;
   pendaftaran_bencana_konfirmasi: boolean;
   // (3 Okt 2026) Dipakai utk bedakan "belum pernah ditanya" vs "sudah
   // ditanya tapi menolak" di statusKesediaanPpl() -- sesudah mitra bisa
@@ -6012,6 +6015,113 @@ function AlokasiPetugasSection() {
     await muatData(hariKerjaDipakai).catch(() => {});
   }
 
+  // (3 Okt 2026) Kartu "🎯 Kandidat PPL Siap Ditawari" -- permintaan user:
+  // daftar mitra yg SUDAH mengajukan diri (pendaftaran_bencana_konfirmasi),
+  // BUKAN direkomendasikan jadi PML & TIDAK red flag kinerja (jadi benar2
+  // kandidat PPL yg layak ditawari wilayah), bisa difilter Kecamatan/Nagari
+  // (domisili), diurutkan NILAI KINERJA TERTINGGI dulu, lengkap rekomendasi
+  // 1 Sub SLS TERDEKAT dari lokasi rumahnya & info apakah Sub SLS itu sudah
+  // terisi PPL lain atau masih kosong -- sama persis logika jarak garis
+  // lurus/haversine di SarankanWilayahTombol, cuma dihitung SEKALI per
+  // kandidat di sini (bukan popover per baris tabel).
+  const [kandidatTerbuka, setKandidatTerbuka] = useState(false);
+  const [kandidatKecFilter, setKandidatKecFilter] = useState("");
+  const [kandidatNagariFilter, setKandidatNagariFilter] = useState("");
+
+  const kandidatPplDasar = useMemo(
+    () => pplOptions.filter((p) => p.pendaftaran_bencana_konfirmasi && !p.rekomendasi_pml && !p.red_flag_kinerja),
+    [pplOptions]
+  );
+  const kandidatKecOpsi = useMemo(
+    () =>
+      Array.from(new Set(kandidatPplDasar.map((p) => p.alamat_kecamatan).filter((v): v is string => !!v))).sort(
+        (a, b) => a.localeCompare(b, "id")
+      ),
+    [kandidatPplDasar]
+  );
+  const kandidatNagariOpsi = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          kandidatPplDasar
+            .filter((p) => !kandidatKecFilter || p.alamat_kecamatan === kandidatKecFilter)
+            .map((p) => p.alamat_nagari)
+            .filter((v): v is string => !!v)
+        )
+      ).sort((a, b) => a.localeCompare(b, "id")),
+    [kandidatPplDasar, kandidatKecFilter]
+  );
+
+  type SlsTerdekatKandidat = {
+    idsubsls: string;
+    kecamatan: string;
+    nagari: string;
+    sls: string;
+    sub_sls: string;
+    jarak: number;
+    terisi: boolean;
+    namaPplTerisi: string | null;
+  };
+  type KandidatPplRow = PetugasRingkas & { slsTerdekat: SlsTerdekatKandidat | null };
+
+  // Dihitung HANYA saat kartu dibuka -- scan jarak ke SELURUH Sub SLS utk
+  // SETIAP kandidat (bisa puluhan x ribuan haversine) sayang kalau diulang
+  // tiap render padahal kartunya tertutup, sama prinsipnya dgn
+  // SarankanWilayahTombol.
+  const kandidatPplList = useMemo((): KandidatPplRow[] => {
+    if (!kandidatTerbuka) return [];
+    const dasar = kandidatPplDasar.filter(
+      (p) =>
+        (!kandidatKecFilter || p.alamat_kecamatan === kandidatKecFilter) &&
+        (!kandidatNagariFilter || p.alamat_nagari === kandidatNagariFilter)
+    );
+    // Dedupe per idsubsls dulu -- Sub SLS yg sudah dipecah punya BEBERAPA
+    // baris kertasKerja (1 per bagian/PPL), cukup 1 wakil per idsubsls.
+    const wakilPerSubsls = new Map<string, KertasKerjaRow>();
+    for (const r of kertasKerja) {
+      if (!wakilPerSubsls.has(r.idsubsls)) wakilPerSubsls.set(r.idsubsls, r);
+    }
+    const semuaSubsls = Array.from(wakilPerSubsls.values());
+
+    const hasil = dasar.map((p) => {
+      let slsTerdekat: SlsTerdekatKandidat | null = null;
+      if (p.lokasi_status === "riil" && typeof p.lat === "number" && typeof p.lng === "number") {
+        let terbaik: { r: KertasKerjaRow; jarak: number } | null = null;
+        for (const r of semuaSubsls) {
+          const titik = titikSubslsMap.get(r.idsubsls);
+          if (!titik) continue;
+          const jarak = haversineKm(p.lat, p.lng, titik.lat, titik.lng);
+          if (!terbaik || jarak < terbaik.jarak) terbaik = { r, jarak };
+        }
+        if (terbaik) {
+          const pplIdTerisi = efektifPplId(terbaik.r);
+          slsTerdekat = {
+            idsubsls: terbaik.r.idsubsls,
+            kecamatan: terbaik.r.kecamatan,
+            nagari: terbaik.r.nagari,
+            sls: terbaik.r.sls,
+            sub_sls: terbaik.r.sub_sls,
+            jarak: terbaik.jarak,
+            terisi: !!pplIdTerisi,
+            namaPplTerisi: pplIdTerisi ? petugasList.find((x) => x.id === pplIdTerisi)?.nama ?? null : null,
+          };
+        }
+      }
+      return { ...p, slsTerdekat };
+    });
+    hasil.sort((a, b) => (b.nilai_kinerja ?? -1) - (a.nilai_kinerja ?? -1) || a.nama.localeCompare(b.nama, "id"));
+    return hasil;
+  }, [kandidatTerbuka, kandidatPplDasar, kandidatKecFilter, kandidatNagariFilter, kertasKerja, titikSubslsMap, efektifPplId, petugasList]);
+
+  // Klik rekomendasi Sub SLS terdekat di kartu kandidat -- pindah ke
+  // Langkah 4 & langsung ke baris itu (sama pola dgn navigasiKeBebanTeratas
+  // / SarankanWilayahTombol); kalau masih kosong, SEKALIAN isi draft PPL
+  // ybs ke sana (kosong=true), konsisten dgn perilaku "📍 Wilayah Lain".
+  function pilihSlsTerdekatKandidat(pplId: number, sls: SlsTerdekatKandidat) {
+    setLangkahAktif(4);
+    navigasiKeSubsls(sls.idsubsls, !sls.terisi, pplId);
+  }
+
   // (3 Okt 2026) "Auto Plot" -- permintaan admin: isi otomatis baris yg
   // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
   // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
@@ -6534,6 +6644,153 @@ function AlokasiPetugasSection() {
           </p>
         </div>
       )}
+
+      {/* ===== KARTU KANDIDAT PPL SIAP DITAWARI ===== */}
+      <section className="rounded-md border border-indigo-200 bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setKandidatTerbuka((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+        >
+          <div>
+            <h2 className="font-medium text-blue-950">🎯 Kandidat PPL Siap Ditawari</h2>
+            <p className="mt-1 text-xs text-ink/60">
+              Mitra yang sudah mengajukan diri, bukan direkomendasikan jadi PML, dan tidak red flag kinerja --
+              diurutkan nilai kinerja tertinggi, lengkap rekomendasi Sub SLS terdekat.
+            </p>
+          </div>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-800">
+              {kandidatPplDasar.length} kandidat
+            </span>
+            <span className="text-slate-400">{kandidatTerbuka ? "▾" : "▸"}</span>
+          </span>
+        </button>
+
+        {kandidatTerbuka && (
+          <div className="mt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={kandidatKecFilter}
+                onChange={(e) => {
+                  setKandidatKecFilter(e.target.value);
+                  setKandidatNagariFilter("");
+                }}
+                className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+              >
+                <option value="">Semua Kecamatan</option>
+                {kandidatKecOpsi.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={kandidatNagariFilter}
+                onChange={(e) => setKandidatNagariFilter(e.target.value)}
+                className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+              >
+                <option value="">Semua Nagari</option>
+                {kandidatNagariOpsi.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              {(kandidatKecFilter || kandidatNagariFilter) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKandidatKecFilter("");
+                    setKandidatNagariFilter("");
+                  }}
+                  className="text-xs text-ink/50 underline hover:text-ink/70"
+                >
+                  Bersihkan filter
+                </button>
+              )}
+              <span className="ml-auto text-xs text-ink/50">{kandidatPplList.length} ditampilkan</span>
+            </div>
+
+            {kandidatPplList.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/50">
+                Tidak ada kandidat yang cocok dengan filter ini.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                {kandidatPplList.map((p) => (
+                  <div key={p.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-ink" style={{ color: warnaNilaiKinerja(p.nilai_kinerja) }}>
+                          {p.nama}
+                        </p>
+                        <p className="text-xs text-ink/60">
+                          {[p.alamat_kecamatan, p.alamat_nagari].filter(Boolean).join(" · ") || "Domisili tidak tercatat"}
+                        </p>
+                      </div>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                          style={{ backgroundColor: warnaNilaiKinerja(p.nilai_kinerja) ?? "#9CA3AF" }}
+                        >
+                          {p.nilai_kinerja != null ? `Nilai ${p.nilai_kinerja}` : "Belum Dinilai"}
+                        </span>
+                        <IkonNilaiKinerja nilai={p.nilai_kinerja} catatan={p.catatan_kinerja} />
+                      </span>
+                    </div>
+
+                    {p.kegiatan_lain.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {p.kegiatan_lain.map((k) => (
+                          <BadgeKegiatanLain key={k} kegiatan={k} />
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-2 border-t border-line pt-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink/40">
+                        📍 Sub SLS Terdekat
+                      </p>
+                      {p.slsTerdekat === null ? (
+                        <p className="mt-0.5 text-xs text-ink/40">
+                          Lokasi rumah belum riil/terverifikasi -- jarak tidak bisa diperkirakan.
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => pilihSlsTerdekatKandidat(p.id, p.slsTerdekat!)}
+                          title={
+                            p.slsTerdekat.terisi
+                              ? "Lihat baris ini (sudah ada PPL-nya)"
+                              : "Plot kandidat ini ke Sub SLS ini & langsung ke baris itu"
+                          }
+                          className="mt-1 flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left hover:bg-gray-50"
+                        >
+                          <span className="truncate text-xs text-ink/80">
+                            {p.slsTerdekat.kecamatan} · {p.slsTerdekat.nagari} · {p.slsTerdekat.sls} ·{" "}
+                            {p.slsTerdekat.sub_sls}
+                            <span className="ml-1.5 text-ink/40">
+                              ({p.slsTerdekat.jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km)
+                            </span>
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              p.slsTerdekat.terisi ? "bg-blue-100 text-blue-700" : "bg-moss-100 text-moss-700"
+                            }`}
+                          >
+                            {p.slsTerdekat.terisi ? `Sudah Terisi — ${p.slsTerdekat.namaPplTerisi ?? "?"}` : "Masih Kosong"}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ===== KARTU MITRA PERLU DIHUBUNGI (BELUM MENDAFTAR) ===== */}
       <section className="rounded-md border border-amber-200 bg-white p-4">
