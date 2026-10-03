@@ -179,6 +179,10 @@ type PetugasRingkas = {
   kegiatan_lain: string[];
   lat: number | null;
   lng: number | null;
+  // (3 Okt 2026) Hasil penilaian kinerja mitra SE2026 -- dipakai Langkah 4
+  // utk warna gradasi nama PPL & ikon nilai/catatan (lihat IkonNilaiKinerja).
+  nilai_kinerja: number | null;
+  catatan_kinerja: string | null;
 };
 
 // Titik koordinat (centroid/geotag) per Sub SLS -- dipakai utk menghitung
@@ -703,6 +707,227 @@ function SaranMitraKelompok({
       {daftar.length > BATAS_TAMPIL && (
         <p className="mt-0.5 text-[10px] text-ink/40">+{daftar.length - BATAS_TAMPIL} lainnya (persempit lewat pencarian PPL kalau perlu).</p>
       )}
+    </div>
+  );
+}
+
+// (3 Okt 2026) "📍 Wilayah Lain" -- permintaan user: KEBALIKAN dari
+// SaranMitraTombol (yg menyarankan PPL utk satu Sub SLS tetap), tombol ini
+// menyarankan Sub SLS LAIN utk PPL yg SEDANG aktif/terpilih di baris ini --
+// 5 Sub SLS terdekat yg masih KOSONG (klik -> pindah ke sana SEKALIAN isi
+// draft PPL yg sama ke sana) & 5 Sub SLS terdekat yg SUDAH terisi (klik ->
+// CUMA pindah, tidak mengubah apa pun, krn sudah ada PPL lain di sana).
+// Jarak dihitung garis lurus (haversine) dari lokasi rumah PPL ybs ke titik
+// tiap Sub SLS -- pola & alasan SAMA PERSIS dgn SaranMitraTombol (lihat
+// komentar di sana & di lib/jarakJalan.ts), cuma arah pencariannya dibalik.
+function SarankanWilayahTombol({
+  petugas,
+  kertasKerja,
+  efektifPplId,
+  titikSubslsMap,
+  idsubslsSaatIni,
+  onPilih,
+}: {
+  // PPL yg SEDANG aktif/terpilih di baris INI -- bukan PPL baris tujuan.
+  // undefined -> dirender null oleh pemanggil (lihat Langkah 4), jadi di
+  // sini selalu dianggap ADA kalau komponen ini sempat dipanggil.
+  petugas: PetugasRingkas | undefined;
+  // Daftar LENGKAP (bukan yg sedang difilter/dihalaman) -- supaya Sub SLS
+  // terdekat tetap ketemu walau sedang disaring/di halaman lain di tabel.
+  kertasKerja: KertasKerjaRow[];
+  efektifPplId: (r: KertasKerjaRow) => number | null;
+  titikSubslsMap: Map<string, { lat: number; lng: number }>;
+  idsubslsSaatIni: string;
+  // kosong=true -> Sub SLS yg diklik BELUM ada PPL (parent WAJIB isi draft
+  // PPL ybs ke sana SEKALIAN pindah); kosong=false -> sudah ada PPL (parent
+  // CUMA pindah/scroll, draft tidak diubah).
+  onPilih: (idsubsls: string, kosong: boolean) => void;
+}) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number | null; bottom: number | null; left: number; maxHeight: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  function hitungPosisi(rect: DOMRect) {
+    const lebar = 300;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8));
+    const TINGGI_IDEAL = 360;
+    const ruangBawah = window.innerHeight - rect.bottom - 8;
+    const ruangAtas = rect.top - 8;
+    if (ruangBawah >= TINGGI_IDEAL || ruangBawah >= ruangAtas) {
+      setPos({ top: rect.bottom + 4, bottom: null, left, maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangBawah)) });
+    } else {
+      setPos({ top: null, bottom: Math.max(8, window.innerHeight - rect.top + 4), left, maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangAtas)) });
+    }
+  }
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    function reposisiSaatScroll() {
+      if (ref.current) hitungPosisi(ref.current.getBoundingClientRect());
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", reposisiSaatScroll, true);
+    window.addEventListener("resize", reposisiSaatScroll);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", reposisiSaatScroll, true);
+      window.removeEventListener("resize", reposisiSaatScroll);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    hitungPosisi(e.currentTarget.getBoundingClientRect());
+    setBuka(true);
+  }
+
+  // (3 Okt 2026) Dihitung HANYA saat panel benar2 dibuka (bukan tiap render
+  // baris) -- scan + haversine ke SELURUH Sub SLS sampel bisa ratusan baris,
+  // sayang kalau diulang tiap render padahal panelnya tertutup.
+  const kandidat = useMemo(() => {
+    if (!buka) return null;
+    if (!petugas || petugas.lokasi_status !== "riil" || typeof petugas.lat !== "number" || typeof petugas.lng !== "number") {
+      return "lokasi_belum_ada" as const;
+    }
+    const asalLat = petugas.lat;
+    const asalLng = petugas.lng;
+    // Dedupe per idsubsls dulu -- Sub SLS yg sudah dipecah punya BEBERAPA
+    // baris kertasKerja (satu per bagian/PPL), cukup 1 wakil per idsubsls
+    // utk daftar "Sub SLS terdekat" ini (lokasinya sama, titik yg sama).
+    const wakilPerSubsls = new Map<string, KertasKerjaRow>();
+    for (const r of kertasKerja) {
+      if (r.idsubsls === idsubslsSaatIni) continue;
+      if (!wakilPerSubsls.has(r.idsubsls)) wakilPerSubsls.set(r.idsubsls, r);
+    }
+    const denganJarak: { r: KertasKerjaRow; jarak: number; terisi: boolean }[] = [];
+    for (const r of wakilPerSubsls.values()) {
+      const titik = titikSubslsMap.get(r.idsubsls);
+      if (!titik || typeof titik.lat !== "number" || typeof titik.lng !== "number") continue;
+      denganJarak.push({
+        r,
+        jarak: haversineKm(asalLat, asalLng, titik.lat, titik.lng),
+        // Sub SLS yg sudah dipecah SELALU dianggap "terisi" (porsi_kk !==
+        // null -> efektifPplId langsung balik r.ppl_id tersimpan, tanpa
+        // perlu draft) -- wakilnya cukup 1 bagian saja, status ini sama utk
+        // semua bagian lain dr idsubsls yg sama.
+        terisi: !!efektifPplId(r),
+      });
+    }
+    denganJarak.sort((a, b) => a.jarak - b.jarak);
+    return {
+      kosong: denganJarak.filter((x) => !x.terisi).slice(0, 5),
+      terisi: denganJarak.filter((x) => x.terisi).slice(0, 5),
+    };
+  }, [buka, petugas, kertasKerja, efektifPplId, titikSubslsMap, idsubslsSaatIni]);
+
+  if (!petugas) return null;
+
+  function pilih(idsubsls: string, kosong: boolean) {
+    onPilih(idsubsls, kosong);
+    setBuka(false);
+  }
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        title={`Sarankan Sub SLS lain utk ${petugas.nama}: 5 terdekat yg masih kosong + 5 terdekat yg sudah terisi (jarak garis lurus dari lokasi rumah)`}
+        className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+      >
+        📍 Wilayah Lain
+      </button>
+      {buka &&
+        pos &&
+        createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top ?? undefined, bottom: pos.bottom ?? undefined, left: pos.left, width: 300, maxHeight: pos.maxHeight }}
+            className="z-50 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case leading-normal shadow-lg"
+          >
+            <p className="mb-1.5 text-[10px] text-ink/50">
+              Sub SLS lain terdekat dari lokasi rumah <span className="font-semibold">{petugas.nama}</span> -- klik utk
+              langsung pindah ke baris itu.
+            </p>
+            {kandidat === "lokasi_belum_ada" ? (
+              <p className="px-1 py-1 text-xs text-ink/50">
+                Lokasi rumah {petugas.nama} belum riil/terverifikasi -- jarak tidak bisa diperkirakan.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-moss-700">5 Terdekat — Masih Kosong</p>
+                  {!kandidat || kandidat.kosong.length === 0 ? (
+                    <p className="mt-0.5 text-[11px] text-ink/40">Tidak ada Sub SLS kosong di sekitar sini.</p>
+                  ) : (
+                    <ul className="mt-0.5 space-y-0.5">
+                      {kandidat.kosong.map(({ r, jarak }) => (
+                        <li key={r.idsubsls}>
+                          <button
+                            type="button"
+                            // onMouseDown, bukan onClick -- panel ini portal ke
+                            // document.body, sama persis alasannya dgn tombol
+                            // "Terapkan" di SaranMitraKelompok (lihat komentar
+                            // di sana): listener "klik di luar" (mousedown)
+                            // akan menutup panel ini SEBELUM event click
+                            // sempat menyala kalau dipasang di onClick.
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              pilih(r.idsubsls, true);
+                            }}
+                            className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left hover:bg-moss-50"
+                          >
+                            <span className="truncate text-ink/80">
+                              {r.nagari} · {r.sls} · {r.sub_sls}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-ink/40">
+                              {jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="mt-2 border-t border-line pt-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">5 Terdekat — Sudah Terisi</p>
+                  {!kandidat || kandidat.terisi.length === 0 ? (
+                    <p className="mt-0.5 text-[11px] text-ink/40">Tidak ada Sub SLS terisi di sekitar sini.</p>
+                  ) : (
+                    <ul className="mt-0.5 space-y-0.5">
+                      {kandidat.terisi.map(({ r, jarak }) => (
+                        <li key={r.idsubsls}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              pilih(r.idsubsls, false);
+                            }}
+                            className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left hover:bg-blue-50"
+                          >
+                            <span className="truncate text-ink/80">
+                              {r.nagari} · {r.sls} · {r.sub_sls}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-ink/40">
+                              {jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -2118,6 +2343,7 @@ function Combobox({
   disabled,
   className,
   allowClear = true,
+  warnaTeks,
 }: {
   value: number | null;
   onChange: (v: number | null) => void;
@@ -2126,6 +2352,11 @@ function Combobox({
   disabled?: boolean;
   className?: string;
   allowClear?: boolean;
+  // (3 Okt 2026) Warna teks nama yg SEDANG terpilih (bukan warna opsi di
+  // dropdown) -- dipakai Langkah 4 utk gradasi merah->hijau tua sesuai nilai
+  // kinerja PPL terpilih. Opsional, default-nya tidak dipakai Combobox lain
+  // (PML/Korwil) supaya tidak berubah perilakunya.
+  warnaTeks?: (value: number | null) => string | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -2234,6 +2465,7 @@ function Combobox({
           }
         }}
         placeholder={placeholder}
+        style={!disabled && value != null ? { color: warnaTeks?.(value) } : undefined}
         className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-ink/40"
       />
       {open &&
@@ -2298,6 +2530,228 @@ function Combobox({
           document.body
         )}
     </div>
+  );
+}
+
+// (3 Okt 2026) Warna gradasi nilai kinerja mitra (hasil SE2026, 1-5, 5 =
+// paling baik) -- 5 warna "jangkar" TERPISAH (bukan interpolasi RGB
+// kontinu dari 2 warna ujung), krn nilai_kinerja selalu bilangan bulat
+// (CHECK 1-5 di DB) & interpolasi lurus merah->hijau lewat titik tengah
+// selalu menghasilkan warna coklat kusam (merah+hijau = coklat). 3 dari 5
+// jangkar diambil dari palet brand (rust-500/gold-400/moss-700 di
+// tailwind.config.ts), 2 transisi (oranye & hijau muda) dipilih manual
+// supaya gradasinya tetap mulus dari mata.
+const WARNA_NILAI_KINERJA: Record<number, string> = {
+  1: "#A6432D", // rust-500 -- merah, kurang baik
+  2: "#BF7A2E", // oranye transisi
+  3: "#C08829", // gold-400 -- kuning keemasan, cukup
+  4: "#6B9C4A", // hijau muda transisi
+  5: "#2C5940", // moss-700 -- hijau tua, paling baik
+};
+function warnaNilaiKinerja(nilai: number | null | undefined): string | undefined {
+  if (nilai == null) return undefined;
+  return WARNA_NILAI_KINERJA[Math.round(nilai)] ?? undefined;
+}
+
+// Ikon kecil "📝" utk lihat catatan penilaian kinerja mitra (hasil xlsx
+// "Penilaian Kinerja Survei" SE2026) -- diklik utk buka popover singkat
+// berisi nilai & catatan lengkap. Dipakai di 3 tempat: Master Petugas,
+// kolom tambahan "Nilai Kinerja" di Kegiatan Petugas, & Langkah 4 Alokasi
+// Petugas. Popover portal ke document.body (pola sama dgn Combobox/
+// ThKontrol) supaya tidak terpotong overflow tabel & lepas dari override
+// CSS "Tampilan Padat" (font-size/line-height).
+function IkonNilaiKinerja({ nilai, catatan }: { nilai: number | null; catatan: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function tutupJikaDiluar(e: Event) {
+      const target = e.target;
+      if (ref.current && target instanceof Node && ref.current.contains(target)) return;
+      setOpen(false);
+    }
+    function reposisi() {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const lebar = 260;
+      setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", reposisi, true);
+    window.addEventListener("resize", reposisi);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", reposisi, true);
+      window.removeEventListener("resize", reposisi);
+    };
+  }, [open]);
+
+  if (nilai == null) {
+    return (
+      <span className="shrink-0 text-[10px] text-ink/30" title="Belum ada hasil penilaian kinerja">
+        —
+      </span>
+    );
+  }
+
+  const warna = warnaNilaiKinerja(nilai);
+
+  return (
+    <span className="relative inline-flex shrink-0">
+      <button
+        ref={ref}
+        type="button"
+        title="Lihat nilai & catatan penilaian kinerja"
+        onClick={() => {
+          if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            const lebar = 260;
+            setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+          }
+          setOpen((v) => !v);
+        }}
+        className="shrink-0 rounded p-0.5 text-xs leading-none text-blue-400 hover:bg-blue-50 hover:text-blue-700"
+      >
+        📝
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
+            className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case text-ink shadow-lg"
+          >
+            <p className="font-semibold" style={{ color: warna }}>
+              Nilai Kinerja: {nilai} / 5
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-ink/70">
+              {catatan || <span className="text-ink/40">Tidak ada catatan.</span>}
+            </p>
+          </div>,
+          document.body
+        )}
+    </span>
+  );
+}
+
+// (3 Okt 2026) Tombol filter MANDIRI (bukan bagian dari <th> spt ThKontrol)
+// -- dipakai utk kolom tambahan yg "ditempel di nama" (alamat & nilai
+// kinerja, lihat tempelDiNama di KOLOM_TAMBAHAN_DAFTAR), yg TIDAK punya
+// <th> sendiri krn tidak dirender sbg kolom terpisah di tabel. Meniru
+// popover filter ThKontrol (posisi fixed, klik-luar/scroll menutup) tapi
+// lepas total dari struktur tabel -- dipasang di panel "+ Kolom Tambahan".
+function BtnFilterKolomTambahan({
+  label,
+  options,
+  selected,
+  onApply,
+}: {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onApply: (next: Set<string>) => void;
+}) {
+  const [terbuka, setTerbuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [draft, setDraft] = useState<Set<string>>(new Set());
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!terbuka) return;
+    function tutupJikaDiluar(e: Event) {
+      const target = e.target;
+      if (ref.current && target instanceof Node && ref.current.contains(target)) return;
+      if (popoverRef.current && target instanceof Node && popoverRef.current.contains(target)) return;
+      setTerbuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [terbuka]);
+
+  const aktif = selected.size > 0;
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        ref={ref}
+        type="button"
+        title={`Filter ${label}`}
+        onClick={(e) => {
+          if (terbuka) {
+            setTerbuka(false);
+            return;
+          }
+          const rect = e.currentTarget.getBoundingClientRect();
+          const lebar = 220;
+          setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)) });
+          setDraft(new Set(selected));
+          setTerbuka(true);
+        }}
+        className={`shrink-0 rounded p-1 text-[11px] leading-none transition ${
+          aktif || terbuka ? "bg-blue-600 text-white" : "text-blue-400 hover:bg-blue-100 hover:text-blue-900"
+        }`}
+      >
+        ⚲{aktif ? ` (${selected.size})` : ""}
+      </button>
+      {terbuka &&
+        pos &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 220 }}
+            className="z-50 flex flex-col gap-2 rounded-md border border-line bg-white p-2 text-left text-xs normal-case text-ink shadow-lg"
+          >
+            <div className="max-h-44 overflow-y-auto">
+              {options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
+              <div className="flex flex-col gap-1">
+                {options.map((opt) => (
+                  <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
+                    <input
+                      type="checkbox"
+                      checked={draft.has(opt)}
+                      onChange={() => {
+                        setDraft((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(opt)) next.delete(opt);
+                          else next.add(opt);
+                          return next;
+                        });
+                      }}
+                      className="h-3.5 w-3.5 shrink-0 accent-blue-600"
+                    />
+                    <span className="truncate">{opt}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 border-t border-line pt-2">
+              <button type="button" onClick={() => setDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
+                Bersihkan
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onApply(draft);
+                  setTerbuka(false);
+                }}
+                className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
+              >
+                Terapkan
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+    </span>
   );
 }
 
@@ -2583,6 +3037,9 @@ type MasterPetugasRow = {
   // (3 Okt 2026) read-only di sini -- diedit lewat tab Kegiatan Petugas.
   rekomendasi_pml: boolean;
   red_flag_kinerja: boolean;
+  // (3 Okt 2026) Hasil penilaian kinerja mitra SE2026 -- read-only di sini.
+  nilai_kinerja: number | null;
+  catatan_kinerja: string | null;
 };
 
 // (3 Okt 2026) Satu kolom gabungan "Rekomendasi" di Master Petugas utk 2 flag
@@ -2608,6 +3065,12 @@ function jorongTampil(r: MasterPetugasRow): string {
 function boolTampil(v: boolean | null): string {
   return v === true ? "Ya" : v === false ? "Tidak" : "Tidak ada data";
 }
+// (3 Okt 2026) Label filter/tampil utk kolom "Penilaian Kinerja" (hasil
+// SE2026) -- dipakai Master Petugas & opsi filter kolom tambahan "Nilai
+// Kinerja" di Kegiatan Petugas.
+function labelNilaiKinerja(nilai: number | null): string {
+  return nilai != null ? `Nilai ${nilai}` : "Belum Dinilai";
+}
 
 function MasterPetugasSection() {
   const [loading, setLoading] = useState(true);
@@ -2627,6 +3090,8 @@ function MasterPetugasSection() {
   const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
   const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
   const [rekomendasiSel, setRekomendasiSel] = useState<Set<string>>(new Set());
+  // (3 Okt 2026) Filter kolom baru "Penilaian Kinerja" (hasil SE2026).
+  const [nilaiKinerjaSel, setNilaiKinerjaSel] = useState<Set<string>>(new Set());
 
   // (2 Okt 2026) Cari per-kolom utk kolom teks/kategori berkardinalitas
   // tinggi (banyak nilai berbeda) -- Kecamatan/Nagari/Jorong/Pendidikan/
@@ -2677,6 +3142,7 @@ function MasterPetugasSection() {
   const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
   const opsiPendaftaran = ["Sudah Mendaftar", "Belum Mendaftar"];
   const opsiRekomendasi = ["Rekomendasi PML", "Red Flag Kinerja", "Tidak Ada"];
+  const opsiNilaiKinerja = opsiUnik((r) => labelNilaiKinerja(r.nilai_kinerja));
 
   function sortAsc(key: NonNullable<typeof sortKey>) {
     setSortKey(key);
@@ -2719,6 +3185,7 @@ function MasterPetugasSection() {
       )
         return false;
       if (rekomendasiSel.size > 0 && !rekomendasiLabelsRow(r).some((l) => rekomendasiSel.has(l))) return false;
+      if (nilaiKinerjaSel.size > 0 && !nilaiKinerjaSel.has(labelNilaiKinerja(r.nilai_kinerja))) return false;
       if (kwKecamatan && !kecamatanTampil(r).toLowerCase().includes(kwKecamatan)) return false;
       if (kwNagari && !nagariTampil(r).toLowerCase().includes(kwNagari)) return false;
       if (kwJorong && !jorongTampil(r).toLowerCase().includes(kwJorong)) return false;
@@ -2757,6 +3224,7 @@ function MasterPetugasSection() {
     motorSel,
     pendaftaranSel,
     rekomendasiSel,
+    nilaiKinerjaSel,
     kecamatanSearch,
     nagariSearch,
     jorongSearch,
@@ -2785,12 +3253,14 @@ function MasterPetugasSection() {
       "Rekomendasi PML": r.rekomendasi_pml ? "Ya" : "",
       "Red Flag Kinerja": r.red_flag_kinerja ? "Ya" : "",
       "No HP": r.no_hp ?? "",
+      "Nilai Kinerja": r.nilai_kinerja ?? "",
+      "Catatan Kinerja": r.catatan_kinerja ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
     ws["!cols"] = [
       { wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
       { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 30 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master Petugas");
@@ -2936,6 +3406,10 @@ function MasterPetugasSection() {
                 label="Rekomendasi"
                 filter={{ options: opsiRekomendasi, selected: rekomendasiSel, onApply: setRekomendasiSel }}
               />
+              <ThKontrol
+                label="Penilaian Kinerja"
+                filter={{ options: opsiNilaiKinerja, selected: nilaiKinerjaSel, onApply: setNilaiKinerjaSel }}
+              />
             </tr>
           </thead>
           <tbody>
@@ -2988,11 +3462,28 @@ function MasterPetugasSection() {
                     {!r.rekomendasi_pml && !r.red_flag_kinerja && <span className="text-ink/30">—</span>}
                   </div>
                 </td>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1">
+                    {r.nilai_kinerja != null ? (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+                        style={{ backgroundColor: warnaNilaiKinerja(r.nilai_kinerja) }}
+                      >
+                        Nilai {r.nilai_kinerja}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-ink/50">
+                        Belum Dinilai
+                      </span>
+                    )}
+                    <IkonNilaiKinerja nilai={r.nilai_kinerja} catatan={r.catatan_kinerja} />
+                  </span>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={15} className="px-3 py-6 text-center text-ink/50">
+                <td colSpan={16} className="px-3 py-6 text-center text-ink/50">
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
@@ -3050,6 +3541,10 @@ type KegiatanPetugasRow = {
   pendidikan: string | null;
   pekerjaan: string | null;
   status_kontak_pendaftaran_bencana: string | null;
+  // (3 Okt 2026) Hasil penilaian kinerja mitra SE2026 -- kolom tambahan
+  // "Nilai Kinerja" (lihat KOLOM_TAMBAHAN_DAFTAR), read-only di sini.
+  nilai_kinerja: number | null;
+  catatan_kinerja: string | null;
 };
 
 // (3 Okt 2026) Daftar kolom opsional tabel "Kegiatan Petugas" -- lihat
@@ -3059,19 +3554,53 @@ type KegiatanPetugasRow = {
 const KOLOM_TAMBAHAN_DAFTAR: {
   key: string;
   label: string;
+  // (3 Okt 2026) true -> kolom ini TIDAK dirender sbg kolom <th>/<td>
+  // terpisah di ujung tabel (spt kolom tambahan lain) -- kalau dicentang,
+  // `render(r)` ditaruk LANGSUNG di sebelah nama petugas (lihat sel Nama di
+  // KegiatanPetugasSection). Permintaan user utk "alamat" & "nilai kinerja".
+  tempelDiNama?: boolean;
   render: (r: KegiatanPetugasRow) => ReactNode;
   // teks polos utk Export Excel (json_to_sheet butuh value primitif, bukan
-  // JSX spt `render` di atas)
+  // JSX spt `render` di atas) -- JUGA dipakai sbg basis opsi filter kolom
+  // tambahan (lihat opsiKolomTambahan di KegiatanPetugasSection).
   text: (r: KegiatanPetugasRow) => string;
 }[] = [
   {
     key: "alamat",
     label: "Alamat (Kecamatan/Nagari)",
+    tempelDiNama: true,
     render: (r) =>
-      r.alamat_kecamatan || r.alamat_nagari
-        ? `${r.alamat_nagari ?? "-"}, ${r.alamat_kecamatan ?? "-"}`
-        : <span className="text-ink/30">-</span>,
+      r.alamat_kecamatan || r.alamat_nagari ? (
+        <span className="ml-1.5 whitespace-nowrap align-middle text-[11px] font-normal text-ink/50">
+          ({r.alamat_nagari ?? "-"}, {r.alamat_kecamatan ?? "-"})
+        </span>
+      ) : null,
     text: (r) => (r.alamat_kecamatan || r.alamat_nagari ? `${r.alamat_nagari ?? "-"}, ${r.alamat_kecamatan ?? "-"}` : ""),
+  },
+  {
+    key: "nilai_kinerja",
+    label: "Nilai Kinerja",
+    tempelDiNama: true,
+    render: (r) => (
+      <span className="ml-1.5 inline-flex items-center gap-1 align-middle">
+        {r.nilai_kinerja != null ? (
+          <span
+            className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
+            style={{ backgroundColor: warnaNilaiKinerja(r.nilai_kinerja) }}
+            title={`Nilai Kinerja: ${r.nilai_kinerja} / 5`}
+          >
+            {r.nilai_kinerja}
+          </span>
+        ) : (
+          <span className="text-[10px] text-ink/30">Belum Dinilai</span>
+        )}
+        <IkonNilaiKinerja nilai={r.nilai_kinerja} catatan={r.catatan_kinerja} />
+      </span>
+    ),
+    text: (r) =>
+      r.nilai_kinerja != null
+        ? `Nilai ${r.nilai_kinerja}${r.catatan_kinerja ? ` (${r.catatan_kinerja})` : ""}`
+        : "Belum Dinilai",
   },
   {
     key: "no_hp",
@@ -3149,6 +3678,12 @@ function KegiatanPetugasSection() {
   // tabel ini tetap spt semula (set kosong di bawah), admin centang sendiri
   // kalau mau tambah info spt alamat/no HP/dll (lihat KOLOM_TAMBAHAN_DAFTAR).
   const [kolomTambahan, setKolomTambahan] = useState<Set<string>>(new Set());
+  // (3 Okt 2026) Filter per kolom tambahan -- permintaan user: SELURUH
+  // kolom tambahan (termasuk yg "ditempel di nama", lihat tempelDiNama di
+  // KOLOM_TAMBAHAN_DAFTAR) bisa difilter. Satu Set per key, independen dari
+  // apakah kolomnya SEDANG ditampilkan (kolomTambahan) -- supaya admin bisa
+  // filter by Nilai Kinerja/Alamat walau kolomnya tidak dicentang tampil.
+  const [kolomTambahanFilter, setKolomTambahanFilter] = useState<Record<string, Set<string>>>({});
 
   // (3 Okt 2026) Tombol "Muat Ulang" -- permintaan user: refresh data tabel
   // ini TANPA mereset filter yang sedang aktif (search/status/dll di atas).
@@ -3358,6 +3893,13 @@ function KegiatanPetugasSection() {
   const opsiRedFlag = ["Red Flag", "Tidak"];
   const opsiPlotting = ["Sudah Plotting", "Belum Plotting"];
 
+  // (3 Okt 2026) Opsi filter kolom tambahan -- basisnya `text(r)` yg sama
+  // dipakai Export Excel, teks kosong diganti label "(Kosong)" supaya tetap
+  // bisa dipilih di daftar filter (bukan hilang begitu saja).
+  function opsiKolomTambahan(k: (typeof KOLOM_TAMBAHAN_DAFTAR)[number]): string[] {
+    return Array.from(new Set(rows.map((r) => k.text(r) || "(Kosong)"))).sort((a, b) => a.localeCompare(b, "id"));
+  }
+
   function sortAsc(key: "nama") {
     setSortKey(key);
     setSortDir("asc");
@@ -3396,6 +3938,13 @@ function KegiatanPetugasSection() {
           if (!sel.has(label)) return false;
         }
       }
+      // (3 Okt 2026) Filter kolom tambahan -- berlaku terlepas dari apakah
+      // kolomnya sedang dicentang tampil (lihat komentar di state
+      // kolomTambahanFilter di atas).
+      for (const k of KOLOM_TAMBAHAN_DAFTAR) {
+        const sel = kolomTambahanFilter[k.key];
+        if (sel && sel.size > 0 && !sel.has(k.text(r) || "(Kosong)")) return false;
+      }
       return true;
     });
 
@@ -3407,7 +3956,19 @@ function KegiatanPetugasSection() {
     }
 
     return hasil;
-  }, [rows, search, statusSel, pendaftaranSel, rekomendasiPmlSel, redFlagSel, plottingSel, kegiatanSel, sortKey, sortDir]);
+  }, [
+    rows,
+    search,
+    statusSel,
+    pendaftaranSel,
+    rekomendasiPmlSel,
+    redFlagSel,
+    plottingSel,
+    kegiatanSel,
+    kolomTambahanFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   function handleExport() {
     // (3 Okt 2026) Kolom tambahan yg SEDANG dicentang/ditampilkan ikut
@@ -3499,27 +4060,37 @@ function KegiatanPetugasSection() {
           <summary className="cursor-pointer list-none rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50">
             + Kolom Tambahan{kolomTambahan.size > 0 ? ` (${kolomTambahan.size})` : ""}
           </summary>
-          <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-line bg-white p-2 text-xs shadow-lg">
+          <div className="absolute right-0 z-30 mt-1 w-72 rounded-md border border-line bg-white p-2 text-xs shadow-lg">
             <p className="mb-1.5 px-1 text-[11px] font-medium text-ink/50">
-              Centang info tambahan yang mau ditampilkan sebagai kolom ekstra:
+              Centang info tambahan yang mau ditampilkan. &ldquo;Alamat&rdquo; &amp; &ldquo;Nilai
+              Kinerja&rdquo; ditaruh di sebelah nama (bukan kolom tersendiri); sisanya jadi kolom di
+              ujung tabel. Semua bisa difilter lewat tombol ⚲ di sampingnya.
             </p>
             {KOLOM_TAMBAHAN_DAFTAR.map((k) => (
-              <label key={k.key} className="flex items-center gap-1.5 rounded px-1 py-1 hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={kolomTambahan.has(k.key)}
-                  onChange={(e) =>
-                    setKolomTambahan((prev) => {
-                      const next = new Set(prev);
-                      if (e.target.checked) next.add(k.key);
-                      else next.delete(k.key);
-                      return next;
-                    })
-                  }
-                  className="h-3.5 w-3.5 accent-blue-600"
+              <div key={k.key} className="flex items-center gap-1.5 rounded px-1 py-1 hover:bg-gray-50">
+                <label className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={kolomTambahan.has(k.key)}
+                    onChange={(e) =>
+                      setKolomTambahan((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(k.key);
+                        else next.delete(k.key);
+                        return next;
+                      })
+                    }
+                    className="h-3.5 w-3.5 accent-blue-600"
+                  />
+                  <span className="truncate text-ink/80">{k.label}</span>
+                </label>
+                <BtnFilterKolomTambahan
+                  label={k.label}
+                  options={opsiKolomTambahan(k)}
+                  selected={kolomTambahanFilter[k.key] ?? new Set()}
+                  onApply={(next) => setKolomTambahanFilter((prev) => ({ ...prev, [k.key]: next }))}
                 />
-                <span className="text-ink/80">{k.label}</span>
-              </label>
+              </div>
             ))}
           </div>
         </details>
@@ -3547,10 +4118,6 @@ function KegiatanPetugasSection() {
                   onDesc: () => sortDesc("nama"),
                   onReset: sortReset,
                 }}
-              />
-              <ThKontrol
-                label="Status Kepegawaian"
-                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
               />
               <ThKontrol
                 label="Mengajukan Diri"
@@ -3581,12 +4148,28 @@ function KegiatanPetugasSection() {
               ))}
               {/* (3 Okt 2026) Kolom tambahan yg dicentang lewat "+ Kolom
                   Tambahan" -- ditaruh di UJUNG supaya tidak mengganggu
-                  urutan kolom default yg sudah ada. */}
-              {KOLOM_TAMBAHAN_DAFTAR.filter((k) => kolomTambahan.has(k.key)).map((k) => (
-                <th key={k.key} className="px-3 py-2 font-medium">
-                  {k.label}
-                </th>
+                  urutan kolom default yg sudah ada. Kolom "tempelDiNama"
+                  (alamat, nilai kinerja) TIDAK dapat <th> di sini sama
+                  sekali -- isinya ditempel langsung di sel Nama (lihat
+                  <tbody> di bawah). Sisanya dibungkus ThKontrol (bukan
+                  <th> polos lagi) supaya punya filter sendiri. */}
+              {KOLOM_TAMBAHAN_DAFTAR.filter((k) => !k.tempelDiNama && kolomTambahan.has(k.key)).map((k) => (
+                <ThKontrol
+                  key={k.key}
+                  label={k.label}
+                  filter={{
+                    options: opsiKolomTambahan(k),
+                    selected: kolomTambahanFilter[k.key] ?? new Set(),
+                    onApply: (next) => setKolomTambahanFilter((prev) => ({ ...prev, [k.key]: next })),
+                  }}
+                />
               ))}
+              {/* (3 Okt 2026) "Status Kepegawaian" dipindah ke PALING UJUNG
+                  (permintaan user), sesudah kolom tambahan. */}
+              <ThKontrol
+                label="Status Kepegawaian"
+                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
+              />
             </tr>
           </thead>
           <tbody>
@@ -3597,20 +4180,17 @@ function KegiatanPetugasSection() {
               const kunciRedFlag = `${r.id}:red_flag`;
               return (
                 <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={r.status_kepegawaian}
-                      disabled={busy.has(kunciStatus)}
-                      onChange={(e) => ubahStatusKepegawaian(r.id, e.target.value as "organik" | "mitra")}
-                      className="rounded border border-line bg-white px-1.5 py-1 text-xs disabled:opacity-50"
-                    >
-                      <option value="organik">Organik</option>
-                      <option value="mitra">Mitra</option>
-                    </select>
-                    {errSel.has(kunciStatus) && (
-                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciStatus)}</p>
-                    )}
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">
+                    <span className="inline-flex flex-wrap items-center">
+                      {r.nama}
+                      {/* (3 Okt 2026) Kolom tambahan "tempelDiNama" (alamat,
+                          nilai kinerja) -- kalau dicentang, ditempel LANGSUNG
+                          di sebelah nama (bukan kolom terpisah). Urutannya
+                          ikut urutan di KOLOM_TAMBAHAN_DAFTAR. */}
+                      {KOLOM_TAMBAHAN_DAFTAR.filter((k) => k.tempelDiNama && kolomTambahan.has(k.key)).map((k) => (
+                        <span key={k.key}>{k.render(r)}</span>
+                      ))}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     <label className="flex items-center gap-1.5">
@@ -3694,18 +4274,38 @@ function KegiatanPetugasSection() {
                       </td>
                     );
                   })}
-                  {KOLOM_TAMBAHAN_DAFTAR.filter((k) => kolomTambahan.has(k.key)).map((k) => (
+                  {KOLOM_TAMBAHAN_DAFTAR.filter((k) => !k.tempelDiNama && kolomTambahan.has(k.key)).map((k) => (
                     <td key={k.key} className="px-3 py-2 text-ink/80">
                       {k.render(r)}
                     </td>
                   ))}
+                  {/* (3 Okt 2026) "Status Kepegawaian" dipindah ke PALING
+                      UJUNG (permintaan user), sejalan dgn <th>-nya di atas. */}
+                  <td className="px-3 py-2">
+                    <select
+                      value={r.status_kepegawaian}
+                      disabled={busy.has(kunciStatus)}
+                      onChange={(e) => ubahStatusKepegawaian(r.id, e.target.value as "organik" | "mitra")}
+                      className="rounded border border-line bg-white px-1.5 py-1 text-xs disabled:opacity-50"
+                    >
+                      <option value="organik">Organik</option>
+                      <option value="mitra">Mitra</option>
+                    </select>
+                    {errSel.has(kunciStatus) && (
+                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciStatus)}</p>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={6 + KEGIATAN_LAIN_DAFTAR.length + kolomTambahan.size}
+                  colSpan={
+                    6 +
+                    KEGIATAN_LAIN_DAFTAR.length +
+                    KOLOM_TAMBAHAN_DAFTAR.filter((k) => !k.tempelDiNama && kolomTambahan.has(k.key)).length
+                  }
                   className="px-3 py-6 text-center text-ink/50"
                 >
                   Tidak ada petugas yang cocok dengan filter saat ini.
@@ -4067,6 +4667,10 @@ function AlokasiPetugasSection() {
   const [kecamatanHeaderSearch, setKecamatanHeaderSearch] = useState("");
   const [page, setPage] = useState(1);
   const [alokasiPageSize, setAlokasiPageSize] = useState<number>(ALOKASI_PAGE_SIZE);
+  // (3 Okt 2026) "📍 Wilayah Lain" -- idsubsls tujuan yg SEDANG menunggu
+  // discroll-ke (lihat SarankanWilayahTombol & efek scroll di bawah `paged`).
+  // null = tidak ada navigasi yg sedang berjalan.
+  const [scrollTargetIdsubsls, setScrollTargetIdsubsls] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<
     | "kecamatan"
     | "nagari"
@@ -5143,6 +5747,29 @@ function AlokasiPetugasSection() {
     });
   }
 
+  // (3 Okt 2026) "📍 Wilayah Lain" (SarankanWilayahTombol) -- pindah ke Sub
+  // SLS LAIN & (kalau kosong) sekalian isi draft PPL yg sama ke sana.
+  // SEMUA filter & nomor halaman di-reset dulu SEBELUM pindah -- tabel
+  // Langkah 4 TIDAK virtualized (baris yg tersaring filter/halaman lain
+  // sama sekali tidak dirender ke DOM), jadi baris tujuan BISA SAJA ada di
+  // filter/halaman yg berbeda dari baris asal & harus dibuat "kelihatan"
+  // dulu sebelum bisa discroll ke sana -- efek scroll sesudah `paged`
+  // (di bawah) yg benar2 melakukan scroll-nya, sesudah `page` ikut
+  // ter-update ke halaman yg tepat.
+  function navigasiKeSubsls(idsubsls: string, kosong: boolean, pplIdUtkIsi: number) {
+    setSearch("");
+    setKecamatanHeaderSearch("");
+    setKecFilter("");
+    setPplFilter("");
+    setPmlFilterLangkah4("");
+    setDataFilter("");
+    setStatusBebanFilter("");
+    setStatusPlotFilter("");
+    setHanyaBerubahFilter(false);
+    if (kosong) ubahDraftPpl(idsubsls, pplIdUtkIsi);
+    setScrollTargetIdsubsls(idsubsls);
+  }
+
   // (3 Okt 2026) "Auto Plot" -- permintaan admin: isi otomatis baris yg
   // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
   // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
@@ -5492,6 +6119,43 @@ function AlokasiPetugasSection() {
   // jadi ditangani terpisah drpd lewat slice biasa.
   const paged =
     alokasiPageSize === Infinity ? sorted : sorted.slice((pageClamped - 1) * alokasiPageSize, pageClamped * alokasiPageSize);
+
+  // (3 Okt 2026) Efek scroll utk "📍 Wilayah Lain" (lihat navigasiKeSubsls
+  // & SarankanWilayahTombol) -- jalan dlm 2 tahap krn `page` butuh 1 siklus
+  // render dulu sblm `paged` (yg benar2 dirender ke <tr>) ikut berubah:
+  //  1. idsubsls tujuan belum di halaman yg sedang aktif -> pindah halaman
+  //     dulu (setPage), effect ini jalan ulang sesudah render berikutnya.
+  //  2. sudah di halaman yg benar -> baris tujuan seharusnya SUDAH ada di
+  //     DOM -- scrollIntoView + highlight sekilas, lalu bersihkan target.
+  useEffect(() => {
+    if (!scrollTargetIdsubsls) return;
+    const idx = sorted.findIndex((r) => r.idsubsls === scrollTargetIdsubsls);
+    if (idx === -1) {
+      // Seharusnya tidak terjadi (semua filter sudah direset di
+      // navigasiKeSubsls) -- batalkan saja drpd nyangkut menunggu selamanya.
+      setScrollTargetIdsubsls(null);
+      return;
+    }
+    const targetPage = alokasiPageSize === Infinity ? 1 : Math.floor(idx / alokasiPageSize) + 1;
+    if (pageClamped !== targetPage) {
+      setPage(targetPage);
+      return;
+    }
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`tr[data-idsubsls="${CSS.escape(scrollTargetIdsubsls)}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        const warnaAsli = el.style.backgroundColor;
+        el.style.backgroundColor = "#DCEADF"; // moss-100 -- highlight sekilas
+        el.style.transition = "background-color 0.3s";
+        setTimeout(() => {
+          el.style.backgroundColor = warnaAsli;
+        }, 1800);
+      }
+      setScrollTargetIdsubsls(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [scrollTargetIdsubsls, sorted, alokasiPageSize, pageClamped]);
 
   function handleExport() {
     const dataRows = filtered.map((r) => ({
@@ -7710,7 +8374,11 @@ function AlokasiPetugasSection() {
                       })()
                     : null;
                 return (
-                  <tr key={`${r.idsubsls}-${r.ppl_id ?? "x"}`} className={`border-t border-line ${bgBaris}`}>
+                  <tr
+                    key={`${r.idsubsls}-${r.ppl_id ?? "x"}`}
+                    data-idsubsls={r.idsubsls}
+                    className={`border-t border-line ${bgBaris}`}
+                  >
                     {!modeFokus && (
                       <td
                         className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
@@ -7804,7 +8472,20 @@ function AlokasiPetugasSection() {
                           <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
                             ✂️ Pecahan
                           </span>
-                          <span className="text-ink/80">{r.ppl_nama}</span>
+                          {/* (3 Okt 2026) Warna nama gradasi merah->hijau tua
+                              sesuai nilai_kinerja PPL ybs (5 = terbaik) --
+                              permintaan user. `undefined` (nilai belum ada)
+                              otomatis jatuh balik ke warna teks bawaan. */}
+                          <span
+                            className="font-medium text-ink/80"
+                            style={{ color: warnaNilaiKinerja(petugasDraftPpl?.nilai_kinerja ?? null) }}
+                          >
+                            {r.ppl_nama}
+                          </span>
+                          <IkonNilaiKinerja
+                            nilai={petugasDraftPpl?.nilai_kinerja ?? null}
+                            catatan={petugasDraftPpl?.catatan_kinerja ?? null}
+                          />
                           <span className="text-xs text-ink/50">({r.porsi_kk?.toLocaleString("id-ID")} KK)</span>
                           {statusKesediaan?.tipe === "belum_konfirmasi" && (
                             <IkonStatusKesediaanPpl status={statusKesediaan} />
@@ -7828,7 +8509,17 @@ function AlokasiPetugasSection() {
                               options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
                               placeholder="Plot ke PPL..."
                               className="w-48"
+                              // (3 Okt 2026) Warna teks nama PPL terpilih,
+                              // gradasi merah->hijau tua sesuai nilai_kinerja
+                              // -- permintaan user, lihat warnaNilaiKinerja.
+                              warnaTeks={(id) => warnaNilaiKinerja(petugasList.find((p) => p.id === id)?.nilai_kinerja ?? null)}
                             />
+                            {draftPplId && (
+                              <IkonNilaiKinerja
+                                nilai={petugasDraftPpl?.nilai_kinerja ?? null}
+                                catatan={petugasDraftPpl?.catatan_kinerja ?? null}
+                              />
+                            )}
                             <SaranMitraTombol
                               pplOptions={pplOptions}
                               bebanDraftPerPpl={bebanDraftPerPpl}
@@ -7837,6 +8528,21 @@ function AlokasiPetugasSection() {
                               onPilih={(id) => ubahDraftPpl(r.idsubsls, id)}
                               subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
                             />
+                            {/* (3 Okt 2026) "📍 Wilayah Lain" -- KEBALIKAN dari
+                                tombol Saran di atas: menyarankan Sub SLS LAIN
+                                utk PPL yg SEDANG aktif di baris ini (bukan
+                                menyarankan PPL utk baris ini). Cuma muncul
+                                kalau baris ini sudah ada PPL-nya. */}
+                            {draftPplId && (
+                              <SarankanWilayahTombol
+                                petugas={petugasDraftPpl}
+                                kertasKerja={kertasKerja}
+                                efektifPplId={efektifPplId}
+                                titikSubslsMap={titikSubslsMap}
+                                idsubslsSaatIni={r.idsubsls}
+                                onPilih={(idsubslsTujuan, kosong) => navigasiKeSubsls(idsubslsTujuan, kosong, draftPplId)}
+                              />
+                            )}
                             {statusKesediaan?.tipe === "belum_konfirmasi" && (
                               <IkonStatusKesediaanPpl status={statusKesediaan} />
                             )}

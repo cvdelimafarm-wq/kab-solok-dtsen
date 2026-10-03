@@ -64,7 +64,7 @@ export async function GET() {
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, status_kepegawaian, peran, atasan_id, aktif, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, alamat_kecamatan, alamat_nagari, no_hp, umur, jenis_kelamin, pendidikan, pekerjaan, status_kontak_pendaftaran_bencana"
+      "id, nama, status_kepegawaian, peran, atasan_id, aktif, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, alamat_kecamatan, alamat_nagari, no_hp, umur, jenis_kelamin, pendidikan, pekerjaan, status_kontak_pendaftaran_bencana, nilai_kinerja, catatan_kinerja"
     )
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -120,6 +120,10 @@ export async function GET() {
     pendidikan: p.pendidikan,
     pekerjaan: p.pekerjaan,
     status_kontak_pendaftaran_bencana: p.status_kontak_pendaftaran_bencana,
+    // (3 Okt 2026) Nilai & catatan kinerja SE2026 -- kolom tambahan "Nilai"
+    // di tab ini (read-only, lihat KOLOM_TAMBAHAN_DAFTAR di page.tsx).
+    nilai_kinerja: p.nilai_kinerja,
+    catatan_kinerja: p.catatan_kinerja,
   }));
 
   return NextResponse.json({ data, kegiatan_valid: KEGIATAN_LAIN_VALID });

@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         supabase
           .from("bencana_petugas")
           .select(
-            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, lat, lng"
+            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, lat, lng, nilai_kinerja, catatan_kinerja"
           )
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),

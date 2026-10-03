@@ -53,7 +53,7 @@ export async function GET() {
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja"
+      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, nilai_kinerja, catatan_kinerja"
     )
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -98,6 +98,10 @@ export async function GET() {
       pendaftaran_bencana_konfirmasi: p.pendaftaran_bencana_konfirmasi,
       rekomendasi_pml: p.rekomendasi_pml,
       red_flag_kinerja: p.red_flag_kinerja,
+      // (3 Okt 2026) Hasil penilaian kinerja mitra SE2026 (xlsx "Penilaian
+      // Kinerja Survei") -- read-only di tab Master Petugas.
+      nilai_kinerja: p.nilai_kinerja,
+      catatan_kinerja: p.catatan_kinerja,
     };
   });
 
