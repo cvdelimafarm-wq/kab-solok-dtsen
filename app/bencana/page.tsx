@@ -170,6 +170,12 @@ type PetugasRingkas = {
   aktif: boolean;
   alamat_kecamatan: string | null;
   pendaftaran_bencana_konfirmasi: boolean;
+  // (3 Okt 2026) Dipakai utk bedakan "belum pernah ditanya" vs "sudah
+  // ditanya tapi menolak" di statusKesediaanPpl() -- sesudah mitra bisa
+  // menolak sendiri lewat halaman publik /bencana/konfirmasi/[token], bukan
+  // cuma dicatat admin manual lewat kartu "Mitra Perlu Dihubungi".
+  status_kontak_pendaftaran_bencana: "diterima" | "menolak" | null;
+  catatan_penolakan_pendaftaran_bencana: string | null;
   // (3 Okt 2026) 2 flag manual (diisi admin di tab Kegiatan Petugas) --
   // dipakai utk MENGECUALIKAN mitra ybs dari Tier 1/2 popover "Saran" & dari
   // kandidat "Auto Plot" (lihat tier1/tier2 di SaranMitraTombol & kandidat
@@ -192,16 +198,27 @@ type TitikSubsls = { idsubsls: string; lat: number | null; lng: number | null };
 
 // Status "kesediaan ikut pendataan bencana" utk seorang PPL yg sudah diplot,
 // dipakai utk ikon warning di kolom PPL Langkah 4:
+//  - "menolak": SUDAH ditawarkan (lewat kartu "Mitra Perlu Dihubungi" admin
+//    ATAU mitra isi sendiri lewat halaman publik /bencana/konfirmasi/
+//    [token]) TAPI jawabannya TIDAK BERSEDIA -- perlu ditindaklanjuti:
+//    lepas dari baris yg diplot & cari pengganti (lihat IkonStatusKesediaanPpl
+//    & hapusPplKarenaMenolak di AlokasiPetugasSection).
 //  - "belum_konfirmasi": namanya tidak ada di daftar self-report konfirmasi
 //    kesediaan ikut pendataan bencana -> perlu dihubungi & ditawarkan.
 //  - "beban_ganda": sudah konfirmasi ikut pendataan bencana, TAPI juga sudah
 //    ditandai (tag) di kegiatan/survei lain -> boleh saja, tapi beban kerja
 //    petugas itu nambah, jadi perlu diberi tahu di depan.
-type StatusKesediaanPpl = { tipe: "belum_konfirmasi" | "beban_ganda"; kegiatanLain: string[] } | null;
+type StatusKesediaanPpl =
+  | { tipe: "menolak"; catatan: string | null; kegiatanLain: string[] }
+  | { tipe: "belum_konfirmasi" | "beban_ganda"; kegiatanLain: string[] }
+  | null;
 
 function statusKesediaanPpl(p: PetugasRingkas | undefined): StatusKesediaanPpl {
   if (!p) return null;
   const kegiatanLain = p.kegiatan_lain ?? [];
+  if (p.status_kontak_pendaftaran_bencana === "menolak") {
+    return { tipe: "menolak", catatan: p.catatan_penolakan_pendaftaran_bencana, kegiatanLain };
+  }
   if (!p.pendaftaran_bencana_konfirmasi) return { tipe: "belum_konfirmasi", kegiatanLain };
   if (kegiatanLain.length > 0) return { tipe: "beban_ganda", kegiatanLain };
   return null;
@@ -211,7 +228,21 @@ function statusKesediaanPpl(p: PetugasRingkas | undefined): StatusKesediaanPpl {
 // yg menjelaskan kenapa warning muncul. Sengaja dibuat SANGAT ringan (bukan
 // modal penuh layar): posisi fixed dihitung dari lokasi klik, tutup sendiri
 // kalau klik di luar/scroll/resize -- pola yg sama dgn popover ThKontrol.
-function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaanPpl> }) {
+function IkonStatusKesediaanPpl({
+  status,
+  onLihatBaris,
+  onHapusPpl,
+}: {
+  status: NonNullable<StatusKesediaanPpl>;
+  // (3 Okt 2026) Khusus tipe "menolak" -- permintaan user: klik "detail"
+  // merujuk ke baris Sub SLS tempat PPL ini diplot (dipakai Langkah 4 lewat
+  // navigasiKeBebanTeratas), & tombol "Hapus PPL Ini" yg sekaligus melepas
+  // PPL dari SEMUA baris yg dipegangnya & reset status kesediaannya (lihat
+  // hapusPplKarenaMenolak di AlokasiPetugasSection). Opsional -- undefined
+  // kalau dipanggil dari konteks tanpa akses ke fungsi2 itu.
+  onLihatBaris?: () => void;
+  onHapusPpl?: () => void;
+}) {
   const [buka, setBuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -243,9 +274,13 @@ function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaa
     setBuka(true);
   }
 
-  const warna = status.tipe === "belum_konfirmasi" ? "text-rust-600" : "text-orange-500";
+  const warna = status.tipe === "menolak" || status.tipe === "belum_konfirmasi" ? "text-rust-600" : "text-orange-500";
   const judul =
-    status.tipe === "belum_konfirmasi" ? "Belum konfirmasi ikut pendataan bencana" : "Sudah bertugas di kegiatan lain";
+    status.tipe === "menolak"
+      ? "Mitra menolak ikut pendataan bencana"
+      : status.tipe === "belum_konfirmasi"
+      ? "Belum konfirmasi ikut pendataan bencana"
+      : "Sudah bertugas di kegiatan lain";
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -268,7 +303,45 @@ function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaa
             className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case leading-normal shadow-lg"
           >
             <p className={`font-semibold ${warna}`}>{judul}</p>
-            {status.tipe === "belum_konfirmasi" ? (
+            {status.tipe === "menolak" ? (
+              <>
+                <p className="mt-1 text-ink/70">
+                  Sudah ditawarkan ikut pendataan bencana, tapi mitra ini menjawab <b>tidak bersedia</b>.
+                  {status.catatan && <> Alasan: &ldquo;{status.catatan}&rdquo;.</>}
+                </p>
+                <p className="mt-1 text-ink/70">
+                  Sebaiknya dilepas dari baris yg diplot &amp; dicarikan pengganti.
+                </p>
+                {(onLihatBaris || onHapusPpl) && (
+                  <div className="mt-2 flex gap-1.5">
+                    {onLihatBaris && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuka(false);
+                          onLihatBaris();
+                        }}
+                        className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-medium text-ink/70 hover:bg-gray-200"
+                      >
+                        Lihat Baris
+                      </button>
+                    )}
+                    {onHapusPpl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBuka(false);
+                          onHapusPpl();
+                        }}
+                        className="rounded-full bg-rust-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-rust-700"
+                      >
+                        Hapus PPL Ini
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : status.tipe === "belum_konfirmasi" ? (
               <p className="mt-1 text-ink/70">
                 Nama ini tidak ada di daftar self-report kesediaan ikut pendataan bencana. Perlu dihubungi utk
                 ditawarkan &amp; diminta konfirmasi kesediaannya.
@@ -341,10 +414,10 @@ function SaranMitraTombol({
   // (3 Okt 2026) Rata-rata beban tim (total skor wilayah tugas / asumsi
   // jumlah PPL) -- dipakai di sini SEMATA utk mewarnai/menandai skor beban
   // tiap kandidat di popover (lihat balanceInfo), SAMA seperti warna yg
-  // dipakai di panel "Keseimbangan Beban per PPL". TIDAK mengubah urutan
-  // tier1/tier2 (tetap jarak dulu) -- keputusan tetap di tangan admin, cuma
-  // sekarang kelihatan jelas kalau kandidat terdekat ternyata sudah
-  // kelebihan beban, sesuai masukan user.
+  // dipakai di panel "Keseimbangan Beban per PPL". Keputusan tetap di tangan
+  // admin, cuma sekarang kelihatan jelas kalau kandidat terdekat ternyata
+  // sudah kelebihan beban, sesuai masukan user. (Urutan tier1/tier2 sendiri
+  // skrg nilai kinerja dulu baru jarak -- lihat bandingkanJarakLaluBeban.)
   rataBebanTetap: number;
   pplTerpilihId: number | null;
   onPilih: (id: number) => void;
@@ -458,10 +531,16 @@ function SaranMitraTombol({
     return map;
   }, [pplOptions, subslsPoint]);
 
-  // Urutan: jarak ascending dulu (kandidat tanpa jarak terhitung ditaruh
-  // paling akhir), lalu beban kerja sbg tie-breaker (konsisten dgn perilaku
-  // lama sblm fitur jarak ini ada).
+  // (3 Okt 2026, revisi) Urutan DIUBAH -- permintaan user: nilai kinerja
+  // (nilai_kinerja) jadi kriteria PERTAMA/utama (tertinggi duluan, yang
+  // belum dinilai ditaruh paling akhir), BARU SESUDAH itu jarak ascending
+  // (kandidat tanpa jarak terhitung ditaruh paling akhir), lalu beban kerja
+  // sbg tie-breaker terakhir -- urutan jarak->beban ini SAMA spt sblmnya,
+  // cuma nilai kinerja disisipkan sbg lapis paling depan.
   function bandingkanJarakLaluBeban(a: PetugasRingkas, b: PetugasRingkas) {
+    const nilaiA = a.nilai_kinerja ?? -1;
+    const nilaiB = b.nilai_kinerja ?? -1;
+    if (nilaiA !== nilaiB) return nilaiB - nilaiA;
     const jarakA = jarakPerPpl.get(a.id) ?? null;
     const jarakB = jarakPerPpl.get(b.id) ?? null;
     if (jarakA !== null && jarakB !== null && jarakA !== jarakB) return jarakA - jarakB;
@@ -1560,6 +1639,13 @@ type MitraKontakRow = {
   status_kontak_pendaftaran_bencana: "diterima" | "menolak" | null;
   catatan_penolakan_pendaftaran_bencana: string | null;
   dikontak_pendaftaran_bencana_at: string | null;
+  // (3 Okt 2026) token: dipakai utk tombol "📋 Salin Link Konfirmasi" --
+  // link publik /bencana/konfirmasi/[token] supaya mitra bisa isi sendiri
+  // (lihat app/bencana/konfirmasi/[token]/page.tsx), tanpa admin harus
+  // mencatat manual hasil telepon/WA lewat radio Terima/Menolak di bawah
+  // (meski radio itu tetap bisa dipakai kalau admin yg menelepon duluan).
+  token: string;
+  jadwal_pelatihan_dipilih: string | null;
 };
 
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
@@ -4873,6 +4959,21 @@ function AlokasiPetugasSection() {
   // Draft pilihan "Menolak" yg belum disimpan (menunggu catatan diisi) --
   // supaya klik radio Menolak TIDAK langsung submit tanpa alasan.
   const [kontakMenolakDraft, setKontakMenolakDraft] = useState<Record<number, string>>({});
+  // (3 Okt 2026) Feedback sekilas "Tersalin!" sesudah tombol "📋 Salin Link
+  // Konfirmasi" diklik -- id petugas yg link-nya baru disalin, dibersihkan
+  // otomatis sesudah 2 detik.
+  const [kontakLinkTersalinId, setKontakLinkTersalinId] = useState<number | null>(null);
+  async function salinLinkKonfirmasi(id: number, token: string) {
+    const link = `${window.location.origin}/bencana/konfirmasi/${token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      window.prompt("Gagal menyalin otomatis -- salin manual link ini:", link);
+      return;
+    }
+    setKontakLinkTersalinId(id);
+    setTimeout(() => setKontakLinkTersalinId((cur) => (cur === id ? null : cur)), 2000);
+  }
 
   async function muatBeban() {
     const res = await fetch("/api/bencana/alokasi/beban", { cache: "no-store" });
@@ -5874,6 +5975,43 @@ function AlokasiPetugasSection() {
     navigasiKeSubsls(baris.idsubsls, false, efektifPplId(baris) ?? 0);
   }
 
+  // (3 Okt 2026) "Hapus PPL Ini" -- permintaan user: dipanggil dari warning
+  // ⚠️ "menolak" (IkonStatusKesediaanPpl, lihat statusKesediaanPpl) saat
+  // seorang PPL yg sudah diplot ternyata TIDAK BERSEDIA (via kartu "Mitra
+  // Perlu Dihubungi" ATAU mitra isi sendiri lewat halaman publik
+  // /bencana/konfirmasi/[token]). Satu klik melakukan 2 hal sekaligus:
+  //   1. Lepas PPL ini dari SEMUA baris yg sedang dipegangnya (draftPpl saja,
+  //      spt tombol "lepas" lain di tabel ini -- TETAP perlu "Simpan
+  //      Perubahan" admin utk benar2 tersimpan ke server, konsisten dgn
+  //      aturan baku proyek ini).
+  //   2. Reset status kesediaannya (pendaftaran_bencana_konfirmasi,
+  //      status_kontak_pendaftaran_bencana, dst kembali ke "belum pernah
+  //      ditanya") LEWAT simpanStatusKontak(id, null) yg SUDAH ADA -- field
+  //      ini LANGSUNG tersimpan ke server (bukan draft), sama spt tombol
+  //      "batalkan" di kartu "Mitra Perlu Dihubungi". Dgn begini nama ybs
+  //      otomatis "menghilang dari status mengajukan diri" & muncul lagi di
+  //      kartu "Mitra Perlu Dihubungi" / bisa ditawarkan ulang / dicarikan
+  //      pengganti lewat tombol 💡 Saran di baris yg baru kosong itu.
+  async function hapusPplKarenaMenolak(pplId: number) {
+    const nama = petugasList.find((p) => p.id === pplId)?.nama ?? `#${pplId}`;
+    if (
+      !window.confirm(
+        `Lepas ${nama} dari SEMUA baris Sub SLS yg sedang dipegangnya & reset status kesediaannya? Baris2 yg dilepas tetap perlu "Simpan Perubahan" utk tersimpan.`
+      )
+    ) {
+      return;
+    }
+    for (const r of kertasKerja) {
+      if (efektifPplId(r) === pplId) ubahDraftPpl(r.idsubsls, null);
+    }
+    // simpanStatusKontak LANGSUNG tersimpan ke server (bukan draft) &
+    // memuat ulang kontakRows -- muatData jg dipanggil sesudahnya di sini
+    // supaya petugasList (sumber statusKesediaanPpl utk warning ⚠️ Langkah
+    // 4) ikut segar, bukan menampilkan status "menolak" yg sudah usang.
+    await simpanStatusKontak(pplId, null);
+    await muatData(hariKerjaDipakai).catch(() => {});
+  }
+
   // (3 Okt 2026) "Auto Plot" -- permintaan admin: isi otomatis baris yg
   // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
   // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
@@ -5964,13 +6102,19 @@ function AlokasiPetugasSection() {
       let adaPerubahan = true;
       while (adaPerubahan) {
         adaPerubahan = false;
-        // Kandidat PALING RINGAN beban-nya SAAT INI dapat giliran duluan di
-        // tiap putaran -- inti pemerataannya: siapa pun yg sedang paling
-        // longgar yg "jalan" mengambil baris terdekatnya, bukan selalu
-        // kandidat yg sama dari awal sampai akhir.
-        const urutanKandidat = [...kandidat].sort(
-          (a, b) => (workingBeban.get(a.id) ?? 0) - (workingBeban.get(b.id) ?? 0)
-        );
+        // (3 Okt 2026, revisi #4) Permintaan user: nilai kinerja jadi
+        // kriteria PERTAMA giliran (tertinggi duluan, blm dinilai paling
+        // akhir) -- SESUDAH itu baru beban-nya SAAT INI (paling ringan
+        // duluan, spt sblmnya) sbg tie-breaker pemerataan antar kandidat yg
+        // nilainya sama. Jadi tiap putaran: performa terbaik "jalan" duluan
+        // mengambil baris terdekatnya; di antara yg performanya sama,
+        // siapa pun yg sedang paling longgar dapat giliran duluan.
+        const urutanKandidat = [...kandidat].sort((a, b) => {
+          const nilaiA = a.nilai_kinerja ?? -1;
+          const nilaiB = b.nilai_kinerja ?? -1;
+          if (nilaiA !== nilaiB) return nilaiB - nilaiA;
+          return (workingBeban.get(a.id) ?? 0) - (workingBeban.get(b.id) ?? 0);
+        });
         for (const p of urutanKandidat) {
           const pilihan = pasangan
             .filter((x) => x.pplId === p.id && x.jarak <= pita && !sudahDiplot.has(x.idsubsls))
@@ -6439,11 +6583,23 @@ function AlokasiPetugasSection() {
                           : "border-line bg-white"
                       }`}
                     >
-                      <p className="font-medium text-ink">{m.nama}</p>
-                      <p className="text-xs text-ink/60">
-                        {m.no_hp || "No HP tidak ada"}
-                        {m.alamat_kecamatan && <> · {m.alamat_kecamatan}</>}
-                      </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-ink">{m.nama}</p>
+                          <p className="text-xs text-ink/60">
+                            {m.no_hp || "No HP tidak ada"}
+                            {m.alamat_kecamatan && <> · {m.alamat_kecamatan}</>}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => salinLinkKonfirmasi(m.id, m.token)}
+                          title="Salin link konfirmasi kesediaan (halaman publik) utk dikirim ke mitra ini lewat WA"
+                          className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+                        >
+                          {kontakLinkTersalinId === m.id ? "✓ Tersalin!" : "📋 Salin Link"}
+                        </button>
+                      </div>
 
                       <div className="mt-2 flex items-center gap-3 text-xs">
                         <label className="flex cursor-pointer items-center gap-1">
@@ -8626,8 +8782,12 @@ function AlokasiPetugasSection() {
                             catatan={petugasDraftPpl?.catatan_kinerja ?? null}
                           />
                           <span className="text-xs text-ink/50">({r.porsi_kk?.toLocaleString("id-ID")} KK)</span>
-                          {statusKesediaan?.tipe === "belum_konfirmasi" && (
-                            <IkonStatusKesediaanPpl status={statusKesediaan} />
+                          {(statusKesediaan?.tipe === "belum_konfirmasi" || statusKesediaan?.tipe === "menolak") && (
+                            <IkonStatusKesediaanPpl
+                              status={statusKesediaan}
+                              onLihatBaris={draftPplId ? () => navigasiKeBebanTeratas("ppl", draftPplId) : undefined}
+                              onHapusPpl={draftPplId ? () => hapusPplKarenaMenolak(draftPplId) : undefined}
+                            />
                           )}
                           {statusKesediaan &&
                             statusKesediaan.kegiatanLain.map((k) => <BadgeKegiatanLain key={k} kegiatan={k} />)}
@@ -8682,8 +8842,12 @@ function AlokasiPetugasSection() {
                                 onPilih={(idsubslsTujuan, kosong) => navigasiKeSubsls(idsubslsTujuan, kosong, draftPplId)}
                               />
                             )}
-                            {statusKesediaan?.tipe === "belum_konfirmasi" && (
-                              <IkonStatusKesediaanPpl status={statusKesediaan} />
+                            {(statusKesediaan?.tipe === "belum_konfirmasi" || statusKesediaan?.tipe === "menolak") && (
+                              <IkonStatusKesediaanPpl
+                                status={statusKesediaan}
+                                onLihatBaris={draftPplId ? () => navigasiKeBebanTeratas("ppl", draftPplId) : undefined}
+                                onHapusPpl={draftPplId ? () => hapusPplKarenaMenolak(draftPplId) : undefined}
+                              />
                             )}
                             {statusKesediaan &&
                               statusKesediaan.kegiatanLain.map((k) => (

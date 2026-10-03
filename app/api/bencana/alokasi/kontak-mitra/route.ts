@@ -45,7 +45,11 @@ export async function GET() {
   const { data, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, no_hp, alamat_kecamatan, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, dikontak_pendaftaran_bencana_at"
+      // (3 Okt 2026) token & jadwal_pelatihan_dipilih ditambahkan -- dipakai
+      // FE utk tombol "📋 Salin Link Konfirmasi" (link publik
+      // /bencana/konfirmasi/[token]) & menampilkan jadwal pelatihan yg sudah
+      // dipilih mitra kalau sudah konfirmasi lewat link itu sendiri.
+      "id, nama, no_hp, alamat_kecamatan, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, dikontak_pendaftaran_bencana_at, token, jadwal_pelatihan_dipilih"
     )
     .eq("status_kepegawaian", "mitra")
     .eq("aktif", true)
