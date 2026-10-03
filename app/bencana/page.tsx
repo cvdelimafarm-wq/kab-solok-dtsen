@@ -1418,6 +1418,7 @@ function ThKontrol({
   label,
   className,
   stickyLeft,
+  freeze,
   search,
   filter,
   sort,
@@ -1425,6 +1426,11 @@ function ThKontrol({
   label: string;
   className?: string;
   stickyLeft?: boolean;
+  // (3 Okt 2026) Versi sticky-left dgn offset & lebar TERTENTU (bukan cuma
+  // left-0) -- dipakai saat beberapa kolom dibekukan sekaligus berurutan
+  // (lihat LEBAR_FREEZE_ALOKASI). Beda dgn stickyLeft (yg selalu left-0,
+  // dipakai tabel lain yg cuma 1 kolom dibekukan).
+  freeze?: { left: number; width: number };
   search?: { value: string; onChange: (v: string) => void; placeholder?: string };
   filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
   sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
@@ -1493,7 +1499,12 @@ function ThKontrol({
   const banyakBagian = !!sort && !!filter;
 
   return (
-    <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
+    <th
+      className={`px-3 py-2 font-medium ${
+        freeze ? "sticky z-30 bg-blue-50" : stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""
+      } ${className ?? ""}`}
+      style={freeze ? { left: freeze.left, width: freeze.width, minWidth: freeze.width, maxWidth: freeze.width } : undefined}
+    >
       <div className="flex items-center justify-between gap-1">
         <span className="truncate">{label}</span>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -1963,6 +1974,40 @@ function LegendaStatusBeban({ withBelum = false }: { withBelum?: boolean }) {
 const ALOKASI_PAGE_SIZE = 25;
 const SAMPEL_PAGE_SIZE = 25;
 const BEBAN_PAGE_SIZE = 25;
+
+// (3 Okt 2026) "Freeze kolom" tabel Langkah 4 -- permintaan user: dulu cuma
+// kolom Sub SLS yg dibekukan (sticky) saat geser ke kanan, sekarang
+// diperluas SAMPAI kolom PPL (identitas wilayah + skor2 + PPL yg sedang
+// dipegang tetap kelihatan sambil geser lihat Pecah/Beban Petugas/PML/
+// Korwil/Status). Lebar HARUS fixed (bukan auto) -- offset `left` kumulatif
+// antar kolom sticky dihitung dari ini. Teks panjang DIBUNGKUS (wrap),
+// bukan dipotong, supaya datanya tidak hilang dari pandangan -- baris cuma
+// jadi lebih tinggi kalau kepanjangan, bukan kehilangan info.
+const LEBAR_FREEZE_ALOKASI = {
+  kecamatan: 96,
+  nagari: 104,
+  jorong: 84,
+  subsls: 100,
+  datakk: 76,
+  skorBebanPendataan: 92,
+  skorJarak: 150,
+  skorBebanAkhir: 88,
+  ppl: 300,
+} as const;
+type KolomFreezeAlokasi = keyof typeof LEBAR_FREEZE_ALOKASI;
+function hitungOffsetFreezeAlokasi(modeFokus: boolean): Record<KolomFreezeAlokasi, number> {
+  // Urutan HARUS sama dgn urutan kolom di <thead>/<tbody> tabel Langkah 4.
+  const urutan: KolomFreezeAlokasi[] = modeFokus
+    ? ["jorong", "subsls", "skorBebanAkhir", "ppl"]
+    : ["kecamatan", "nagari", "jorong", "subsls", "datakk", "skorBebanPendataan", "skorJarak", "skorBebanAkhir", "ppl"];
+  const offset = {} as Record<KolomFreezeAlokasi, number>;
+  let akumulasi = 0;
+  for (const k of urutan) {
+    offset[k] = akumulasi;
+    akumulasi += LEBAR_FREEZE_ALOKASI[k];
+  }
+  return offset;
+}
 const BOBOT_KK_TERDAMPAK = 1;
 const BOBOT_KK_TIDAK_TERDAMPAK = 0.12428;
 
@@ -3693,6 +3738,9 @@ function AlokasiPetugasSection() {
   >(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [modeFokus, setModeFokus] = useState(false);
+  // (3 Okt 2026) "Tampilan Padat" -- lihat komentar di dekat tabel Langkah 4.
+  const [tampilanPadat, setTampilanPadat] = useState(false);
+  const freezeOffsetAlokasi = hitungOffsetFreezeAlokasi(modeFokus);
   const [diffTerbuka, setDiffTerbuka] = useState(false);
 
   // Draft plotting Sub SLS->PPL & PPL->PML: TIDAK submit ke server tiap
@@ -3726,11 +3774,23 @@ function AlokasiPetugasSection() {
   const [pecahBusy, setPecahBusy] = useState(false);
   const [pecahError, setPecahError] = useState<string | null>(null);
   const [gabungBusyId, setGabungBusyId] = useState<string | null>(null);
+  // (3 Okt 2026) Umpan balik "Gabung Kembali" LANGSUNG di baris ybs (bukan
+  // cuma `simpanError` di toolbar atas, yg jauh dari baris & sering tidak
+  // disadari admin krn tabelnya panjang & berpaginasi -- ini akar laporan
+  // "setelah split tidak bisa hapus split", padahal aksinya SEBENARNYA
+  // berhasil/gagal dgn jelas, cuma pesannya tidak terlihat). null = tidak
+  // ada pesan ditampilkan. Dibersihkan otomatis saat mulai aksi baru di
+  // baris lain atau sesudah beberapa detik.
+  const [gabungInfo, setGabungInfo] = useState<{ idsubsls: string; teks: string; tipe: "ok" | "error" } | null>(
+    null
+  );
   // (3 Okt 2026) "Reset Semua Plotting": hapus SELURUH plotting PPL (termasuk
   // Sub SLS yg sudah dipecah) sekali jalan -- aksi destruktif, digerbangi PIN
   // statis (app ini tidak punya sistem login sama sekali) supaya tidak
   // kepencet tidak sengaja.
   const [modalReset, setModalReset] = useState(false);
+  const [resetKecamatan, setResetKecamatan] = useState(""); // "" = semua kecamatan
+  const [resetNagari, setResetNagari] = useState(""); // "" = semua nagari di kecamatan terpilih
   const [resetPin, setResetPin] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -3916,6 +3976,7 @@ function AlokasiPetugasSection() {
 
   async function handleGabungKembali(idsubsls: string) {
     setGabungBusyId(idsubsls);
+    setGabungInfo(null);
     try {
       const res = await fetch("/api/bencana/alokasi/pecah", {
         method: "POST",
@@ -3925,8 +3986,16 @@ function AlokasiPetugasSection() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal menggabungkan kembali Sub SLS.");
       await muatData(hariKerjaDipakai);
+      // (3 Okt 2026) Sesudah muatData, baris ini sudah BUKAN lagi "dipecah"
+      // (porsi_kk null) -- jadi kembali ke 1 baris belum terplot spt biasa.
+      // Pesan sukses ditaruh di idsubsls yg SAMA supaya tetap ketemu baris
+      // itu (kalau tidak kesaring filter) & meyakinkan admin aksinya jalan,
+      // bukan diam2 gagal.
+      setGabungInfo({ idsubsls, teks: "Berhasil digabungkan kembali -- Sub SLS ini kembali belum terplot.", tipe: "ok" });
     } catch (err) {
-      setSimpanError(err instanceof Error ? err.message : "Gagal menggabungkan kembali Sub SLS.");
+      const pesan = err instanceof Error ? err.message : "Gagal menggabungkan kembali Sub SLS.";
+      setGabungInfo({ idsubsls, teks: pesan, tipe: "error" });
+      setSimpanError(pesan);
     } finally {
       setGabungBusyId(null);
     }
@@ -3939,7 +4008,7 @@ function AlokasiPetugasSection() {
       const res = await fetch("/api/bencana/alokasi/reset-semua", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: resetPin }),
+        body: JSON.stringify({ pin: resetPin, kecamatan: resetKecamatan || null, nagari: resetNagari || null }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mereset plotting.");
@@ -3948,6 +4017,8 @@ function AlokasiPetugasSection() {
       setAutoPlotSubsls(new Set());
       setModalReset(false);
       setResetPin("");
+      setResetKecamatan("");
+      setResetNagari("");
       await muatData(hariKerjaDipakai);
     } catch (err) {
       setResetError(err instanceof Error ? err.message : "Gagal mereset plotting.");
@@ -4357,6 +4428,15 @@ function AlokasiPetugasSection() {
   const kecamatanOptions = useMemo(
     () => Array.from(new Set(kertasKerja.map((r) => r.kecamatan))).sort(),
     [kertasKerja]
+  );
+  // (3 Okt 2026) Lingkup "Reset Semua Plotting" -- nagari HANYA muncul
+  // sbg penyempit DI DALAM kecamatan yg dipilih di modal reset.
+  const nagariOptionsUntukReset = useMemo(
+    () =>
+      resetKecamatan
+        ? Array.from(new Set(kertasKerja.filter((r) => r.kecamatan === resetKecamatan).map((r) => r.nagari))).sort()
+        : [],
+    [kertasKerja, resetKecamatan]
   );
   // PPL: wajib mitra, belum berperan lain (atau sudah PPL, utk dipindah Sub SLS-nya)
   const pplOptions = useMemo(
@@ -6558,6 +6638,8 @@ function AlokasiPetugasSection() {
               onClick={() => {
                 setResetError(null);
                 setResetPin("");
+                setResetKecamatan("");
+                setResetNagari("");
                 setModalReset(true);
               }}
               title="Hapus SELURUH plotting PPL (termasuk yg sudah dipecah) -- butuh PIN"
@@ -6573,9 +6655,52 @@ function AlokasiPetugasSection() {
             <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
               <h3 className="font-medium text-rust-700">Reset Semua Plotting</h3>
               <p className="mt-1 text-xs text-ink/60">
-                Ini akan menghapus SELURUH penugasan PPL utk SEMUA Sub SLS (termasuk yg sudah dipecah) dan tidak bisa
-                dibatalkan. Masukkan PIN utk melanjutkan.
+                Hapus penugasan PPL (termasuk Sub SLS yg sudah dipecah) utk lingkup di bawah ini. Tidak bisa
+                dibatalkan sesudah dijalankan.
               </p>
+
+              <label className="mt-3 block text-xs font-medium text-ink/70">Lingkup</label>
+              <div className="mt-1 flex flex-col gap-1.5">
+                <select
+                  value={resetKecamatan}
+                  onChange={(e) => {
+                    setResetKecamatan(e.target.value);
+                    setResetNagari(""); // ganti kecamatan -> nagari lama (kecamatan beda) tidak relevan lagi
+                  }}
+                  className="w-full rounded border border-line px-2 py-1.5 text-sm"
+                >
+                  <option value="">Semua Kecamatan</option>
+                  {kecamatanOptions.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={resetNagari}
+                  onChange={(e) => setResetNagari(e.target.value)}
+                  disabled={!resetKecamatan}
+                  className="w-full rounded border border-line px-2 py-1.5 text-sm disabled:bg-gray-50 disabled:text-ink/40"
+                >
+                  <option value="">
+                    {resetKecamatan ? `Semua Nagari di ${resetKecamatan}` : "Pilih Kecamatan dulu (opsional)"}
+                  </option>
+                  {nagariOptionsUntukReset.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1.5 text-xs font-medium text-rust-700">
+                {resetNagari
+                  ? `Akan mereset: Sub SLS di Nagari ${resetNagari}, Kecamatan ${resetKecamatan} saja.`
+                  : resetKecamatan
+                  ? `Akan mereset: SELURUH Sub SLS di Kecamatan ${resetKecamatan} saja.`
+                  : "Akan mereset: SELURUH Sub SLS di SEMUA kecamatan."}
+              </p>
+
+              <label className="mt-3 block text-xs font-medium text-ink/70">PIN</label>
               <input
                 type="password"
                 inputMode="numeric"
@@ -6583,7 +6708,7 @@ function AlokasiPetugasSection() {
                 onChange={(e) => setResetPin(e.target.value)}
                 placeholder="PIN"
                 autoFocus
-                className="mt-3 w-full rounded border border-line px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded border border-line px-2 py-1.5 text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && resetPin && !resetBusy) handleResetSemuaPlotting();
                 }}
@@ -6650,6 +6775,14 @@ function AlokasiPetugasSection() {
 
         {simpanError && (
           <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{simpanError}</p>
+        )}
+        {/* (3 Okt 2026) Cadangan pesan sukses "Gabung Kembali" DI SINI JUGA
+            (selain di baris ybs, lihat kolom "Pecah") -- kalau baris itu jadi
+            kesaring filter aktif (mis. "Status Plot: sudah") sesudah berhasil
+            digabungkan (jadi belum terplot), admin tetap lihat konfirmasinya
+            di toolbar atas ini, tidak terkesan aksinya diam2 gagal. */}
+        {gabungInfo?.tipe === "ok" && (
+          <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-xs text-moss-700">✓ {gabungInfo.teks}</p>
         )}
         {kertasKerja.length === 0 && (
           <p className="mt-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-700">
@@ -6899,13 +7032,40 @@ function AlokasiPetugasSection() {
           </div>
         </div>
 
-        <div className="mt-2 max-h-[70vh] overflow-auto rounded-md border border-line">
+        {/* (3 Okt 2026) "Tampilan Padat": permintaan user supaya tabel
+            Langkah 4 lebih mirip spreadsheet -- baris lebih rapat & teks
+            lebih kecil, jadi lebih banyak baris kelihatan sekali pandang.
+            Diterapkan lewat <style> + className pembungkus (bukan mengubah
+            tiap className px-3 py-2 satu-satu di ~14 kolom) supaya aman &
+            kecil risikonya; override pakai !important krn Tailwind utility
+            padding/text-size yg sudah ada juga spesifik. */}
+        <style>{`
+          .tabel-alokasi-padat th, .tabel-alokasi-padat td {
+            padding-top: 2px !important;
+            padding-bottom: 2px !important;
+            font-size: 11px !important;
+            line-height: 1.25 !important;
+          }
+        `}</style>
+        <div className="mt-2 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setTampilanPadat((v) => !v)}
+            className="rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink/70 hover:bg-gray-50"
+            title="Baris lebih rapat & teks lebih kecil -- supaya lebih banyak baris kelihatan sekaligus, mirip spreadsheet"
+          >
+            {tampilanPadat ? "☰ Tampilan Normal" : "☰ Tampilan Padat"}
+          </button>
+        </div>
+
+        <div className={`mt-2 max-h-[70vh] overflow-auto rounded-md border border-line ${tampilanPadat ? "tabel-alokasi-padat" : ""}`}>
           <table className="w-full min-w-[1450px] text-left text-sm">
             <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
               <tr>
                 {!modeFokus && (
                   <ThKontrol
                     label="Kecamatan"
+                    freeze={{ left: freezeOffsetAlokasi.kecamatan, width: LEBAR_FREEZE_ALOKASI.kecamatan }}
                     search={{ value: kecamatanHeaderSearch, onChange: (v) => { setKecamatanHeaderSearch(v); setPage(1); }, placeholder: "Cari kecamatan..." }}
                     sort={{
                       active: sortKey === "kecamatan",
@@ -6919,6 +7079,7 @@ function AlokasiPetugasSection() {
                 {!modeFokus && (
                   <ThKontrol
                     label="Nagari"
+                    freeze={{ left: freezeOffsetAlokasi.nagari, width: LEBAR_FREEZE_ALOKASI.nagari }}
                     sort={{
                       active: sortKey === "nagari",
                       dir: sortDir,
@@ -6930,6 +7091,7 @@ function AlokasiPetugasSection() {
                 )}
                 <ThKontrol
                   label="Jorong/SLS"
+                  freeze={{ left: freezeOffsetAlokasi.jorong, width: LEBAR_FREEZE_ALOKASI.jorong }}
                   sort={{
                     active: sortKey === "jorong",
                     dir: sortDir,
@@ -6940,7 +7102,7 @@ function AlokasiPetugasSection() {
                 />
                 <ThKontrol
                   label="Sub SLS"
-                  stickyLeft
+                  freeze={{ left: freezeOffsetAlokasi.subsls, width: LEBAR_FREEZE_ALOKASI.subsls }}
                   sort={{
                     active: sortKey === "subsls",
                     dir: sortDir,
@@ -6952,12 +7114,14 @@ function AlokasiPetugasSection() {
                 {!modeFokus && (
                   <ThKontrol
                     label="Data KK"
+                    freeze={{ left: freezeOffsetAlokasi.datakk, width: LEBAR_FREEZE_ALOKASI.datakk }}
                     filter={{ options: DATA_KK_OPSI, selected: dataFilterSelected, onApply: terapkanDataFilter }}
                   />
                 )}
                 {!modeFokus && (
                   <ThKontrol
                     label="Skor Beban Pendataan"
+                    freeze={{ left: freezeOffsetAlokasi.skorBebanPendataan, width: LEBAR_FREEZE_ALOKASI.skorBebanPendataan }}
                     sort={{
                       active: sortKey === "skor_beban_pendataan",
                       dir: sortDir,
@@ -6970,6 +7134,7 @@ function AlokasiPetugasSection() {
                 {!modeFokus && (
                   <ThKontrol
                     label="Skor Jarak"
+                    freeze={{ left: freezeOffsetAlokasi.skorJarak, width: LEBAR_FREEZE_ALOKASI.skorJarak }}
                     sort={{
                       active: sortKey === "skor_jarak",
                       dir: sortDir,
@@ -6981,6 +7146,7 @@ function AlokasiPetugasSection() {
                 )}
                 <ThKontrol
                   label="Skor Beban Akhir"
+                  freeze={{ left: freezeOffsetAlokasi.skorBebanAkhir, width: LEBAR_FREEZE_ALOKASI.skorBebanAkhir }}
                   sort={{
                     active: sortKey === "skor_beban_akhir",
                     dir: sortDir,
@@ -6991,6 +7157,7 @@ function AlokasiPetugasSection() {
                 />
                 <ThKontrol
                   label="PPL"
+                  freeze={{ left: freezeOffsetAlokasi.ppl, width: LEBAR_FREEZE_ALOKASI.ppl }}
                   filter={{
                     options: petugasList.filter((p) => p.peran === "ppl").map((p) => p.nama),
                     selected: pplFilter ? new Set([petugasList.find((p) => p.id === pplFilter)?.nama ?? ""]) : new Set(),
@@ -7121,20 +7288,55 @@ function AlokasiPetugasSection() {
                     : null;
                 return (
                   <tr key={`${r.idsubsls}-${r.ppl_id ?? "x"}`} className={`border-t border-line ${bgBaris}`}>
-                    {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
-                    {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.nagari}</td>}
-                    <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
-                    <td className={`sticky left-0 z-10 px-3 py-2 text-ink/80 ${bgBaris}`}>{r.sub_sls}</td>
                     {!modeFokus && (
-                      <td className="px-3 py-2">
+                      <td
+                        className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
+                        style={{ left: freezeOffsetAlokasi.kecamatan, width: LEBAR_FREEZE_ALOKASI.kecamatan, minWidth: LEBAR_FREEZE_ALOKASI.kecamatan, maxWidth: LEBAR_FREEZE_ALOKASI.kecamatan }}
+                      >
+                        {r.kecamatan}
+                      </td>
+                    )}
+                    {!modeFokus && (
+                      <td
+                        className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
+                        style={{ left: freezeOffsetAlokasi.nagari, width: LEBAR_FREEZE_ALOKASI.nagari, minWidth: LEBAR_FREEZE_ALOKASI.nagari, maxWidth: LEBAR_FREEZE_ALOKASI.nagari }}
+                      >
+                        {r.nagari}
+                      </td>
+                    )}
+                    <td
+                      className={`sticky z-10 px-3 py-2 font-medium text-ink ${bgBaris}`}
+                      style={{ left: freezeOffsetAlokasi.jorong, width: LEBAR_FREEZE_ALOKASI.jorong, minWidth: LEBAR_FREEZE_ALOKASI.jorong, maxWidth: LEBAR_FREEZE_ALOKASI.jorong }}
+                    >
+                      {r.sls}
+                    </td>
+                    <td
+                      className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
+                      style={{ left: freezeOffsetAlokasi.subsls, width: LEBAR_FREEZE_ALOKASI.subsls, minWidth: LEBAR_FREEZE_ALOKASI.subsls, maxWidth: LEBAR_FREEZE_ALOKASI.subsls }}
+                    >
+                      {r.sub_sls}
+                    </td>
+                    {!modeFokus && (
+                      <td
+                        className={`sticky z-10 px-3 py-2 ${bgBaris}`}
+                        style={{ left: freezeOffsetAlokasi.datakk, width: LEBAR_FREEZE_ALOKASI.datakk, minWidth: LEBAR_FREEZE_ALOKASI.datakk, maxWidth: LEBAR_FREEZE_ALOKASI.datakk }}
+                      >
                         <BadgeDataKk punya={r.punya_data_kk} />
                       </td>
                     )}
                     {!modeFokus && (
-                      <td className="px-3 py-2 text-ink/80">{r.skor_beban_pendataan.toLocaleString("id-ID")}</td>
+                      <td
+                        className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
+                        style={{ left: freezeOffsetAlokasi.skorBebanPendataan, width: LEBAR_FREEZE_ALOKASI.skorBebanPendataan, minWidth: LEBAR_FREEZE_ALOKASI.skorBebanPendataan, maxWidth: LEBAR_FREEZE_ALOKASI.skorBebanPendataan }}
+                      >
+                        {r.skor_beban_pendataan.toLocaleString("id-ID")}
+                      </td>
                     )}
                     {!modeFokus && (
-                      <td className="px-3 py-2 text-ink/80">
+                      <td
+                        className={`sticky z-10 px-3 py-2 text-ink/80 ${bgBaris}`}
+                        style={{ left: freezeOffsetAlokasi.skorJarak, width: LEBAR_FREEZE_ALOKASI.skorJarak, minWidth: LEBAR_FREEZE_ALOKASI.skorJarak, maxWidth: LEBAR_FREEZE_ALOKASI.skorJarak }}
+                      >
                         {skorJarakResmi ? (
                           <span
                             title={`Jarak RESMI dihitung dari titik Sub SLS ke lokasi rumah petugas (OSRM/garis lurus), dikali perkiraan ${r.jumlah_hari_kerja} hari kerja (PP tiap hari, tidak menginap)`}
@@ -7164,8 +7366,16 @@ function AlokasiPetugasSection() {
                         )}
                       </td>
                     )}
-                    <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
-                    <td className="px-3 py-2">
+                    <td
+                      className={`sticky z-10 px-3 py-2 font-medium text-ink ${bgBaris}`}
+                      style={{ left: freezeOffsetAlokasi.skorBebanAkhir, width: LEBAR_FREEZE_ALOKASI.skorBebanAkhir, minWidth: LEBAR_FREEZE_ALOKASI.skorBebanAkhir, maxWidth: LEBAR_FREEZE_ALOKASI.skorBebanAkhir }}
+                    >
+                      {r.skor_beban_akhir.toLocaleString("id-ID")}
+                    </td>
+                    <td
+                      className={`sticky z-10 px-3 py-2 ${bgBaris}`}
+                      style={{ left: freezeOffsetAlokasi.ppl, width: LEBAR_FREEZE_ALOKASI.ppl, minWidth: LEBAR_FREEZE_ALOKASI.ppl, maxWidth: LEBAR_FREEZE_ALOKASI.ppl }}
+                    >
                       {dipecah ? (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
@@ -7181,7 +7391,13 @@ function AlokasiPetugasSection() {
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-1.5">
+                          {/* (3 Okt 2026) flex-wrap -- kolom PPL sekarang lebar FIXED
+                              (lihat LEBAR_FREEZE_ALOKASI, dibekukan/sticky), jadi kalau
+                              Combobox + tombol Saran + ikon kesediaan/kegiatan lain
+                              kebetulan tidak muat satu baris, biar TURUN ke baris
+                              baru di dalam sel ini (sel jadi lebih tinggi) -- BUKAN
+                              meluber keluar sel/menimpa kolom sebelahnya. */}
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <Combobox
                               disabled={pplOptions.length === 0}
                               value={draftPplId ?? null}
@@ -7271,6 +7487,16 @@ function AlokasiPetugasSection() {
                         >
                           ✂️ Pecah
                         </button>
+                      )}
+                      {gabungInfo && gabungInfo.idsubsls === r.idsubsls && (
+                        <p
+                          className={`mt-1 max-w-[12rem] text-[10px] font-medium ${
+                            gabungInfo.tipe === "ok" ? "text-moss-600" : "text-rust-600"
+                          }`}
+                        >
+                          {gabungInfo.tipe === "ok" ? "✓ " : "⚠ "}
+                          {gabungInfo.teks}
+                        </p>
                       )}
                     </td>
                     <td className="px-3 py-2">
