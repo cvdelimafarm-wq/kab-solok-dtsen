@@ -340,7 +340,17 @@ function SaranMitraTombol({
   subslsPoint: { lat: number; lng: number } | null;
 }) {
   const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // (3 Okt 2026) top/bottom dibuat saling eksklusif (salah satu null) supaya
+  // panel bisa "dibalik" ke ATAS tombol kalau ruang di bawah tidak cukup --
+  // dilaporkan user: "pop up saran ketutup" utk baris dekat ujung bawah area
+  // scroll tabel Langkah 4. maxHeight dihitung dari ruang yg benar2 tersedia
+  // (bukan konstanta max-h-80 tetap) biar panel tidak ikut terpotong lagi.
+  const [pos, setPos] = useState<{
+    top: number | null;
+    bottom: number | null;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   // (3 Okt 2026) Batas jarak saran -- user minta kandidat yg jaraknya SUDAH
@@ -376,7 +386,25 @@ function SaranMitraTombol({
     }
     const rect = e.currentTarget.getBoundingClientRect();
     const lebar = 280;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8));
+    // (3 Okt 2026) Tinggi "ideal" panel -- selaras dgn max-h-80 (320px) yg
+    // dipakai sebelumnya. Kalau ruang DI BAWAH tombol tidak cukup (dan ruang
+    // di ATAS lebih luas), panel ditampilkan di atas tombol (anchor ke
+    // `bottom`, bukan `top`) supaya tidak terpotong oleh tepi bawah viewport
+    // / area scroll tabel -- dilaporkan user: "pop up saran ketutup".
+    const TINGGI_IDEAL = 320;
+    const ruangBawah = window.innerHeight - rect.bottom - 8;
+    const ruangAtas = rect.top - 8;
+    if (ruangBawah >= TINGGI_IDEAL || ruangBawah >= ruangAtas) {
+      setPos({ top: rect.bottom + 4, bottom: null, left, maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangBawah)) });
+    } else {
+      setPos({
+        top: null,
+        bottom: Math.max(8, window.innerHeight - rect.top + 4),
+        left,
+        maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangAtas)),
+      });
+    }
     setBuka(true);
   }
 
@@ -477,8 +505,15 @@ function SaranMitraTombol({
       </button>
       {buka && pos && (
         <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
-          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
+          style={{
+            position: "fixed",
+            top: pos.top ?? undefined,
+            bottom: pos.bottom ?? undefined,
+            left: pos.left,
+            width: 280,
+            maxHeight: pos.maxHeight,
+          }}
+          className="z-50 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
         >
           <p className="mb-1.5 text-[10px] text-ink/50">
             Saran murni bantuan memilih (bukan plotting otomatis), dibatasi radius {BATAS_JARAK_SARAN_KM} km -- klik
@@ -2044,18 +2079,70 @@ function Combobox({
   const [query, setQuery] = useState("");
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
+  // (3 Okt 2026) Dropdown ini sebelumnya `position: absolute` terhadap
+  // wrapRef -- gampang TERPOTONG oleh ancestor `overflow-auto` (area scroll
+  // tabel Langkah 4) kalau baris-nya dekat ujung bawah area scroll itu,
+  // berapa pun z-index-nya (overflow clipping tidak peduli z-index).
+  // Dilaporkan user: "dropdon ppl ketutup". Fix: pakai `position: fixed` +
+  // koordinat dihitung dari getBoundingClientRect(), dengan clamp horizontal
+  // DAN vertikal (dibalik ke atas kalau ruang bawah tidak cukup) -- pola yg
+  // sama persis dgn SaranMitraTombol/ThKontrol di file ini.
+  const [pos, setPos] = useState<{
+    left: number;
+    width: number;
+    top: number | null;
+    bottom: number | null;
+    maxHeight: number;
+  } | null>(null);
+
   const selected = options.find((o) => o.value === value) ?? null;
+
+  function hitungPosisi() {
+    if (!wrapRef.current) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const TINGGI_IDEAL = 224; // selaras dgn max-h-56 (224px) yg dipakai sebelumnya
+    const ruangBawah = window.innerHeight - rect.bottom - 8;
+    const ruangAtas = rect.top - 8;
+    if (ruangBawah >= TINGGI_IDEAL || ruangBawah >= ruangAtas) {
+      setPos({
+        left: rect.left,
+        width: rect.width,
+        top: rect.bottom + 4,
+        bottom: null,
+        maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangBawah)),
+      });
+    } else {
+      setPos({
+        left: rect.left,
+        width: rect.width,
+        top: null,
+        bottom: Math.max(8, window.innerHeight - rect.top + 4),
+        maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangAtas)),
+      });
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
-    function onClickOutside(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQuery("");
-      }
+    function tutup() {
+      setOpen(false);
+      setQuery("");
     }
+    function onClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) tutup();
+    }
+    // Karena panel kini `position: fixed` (bukan lagi anak `overflow-auto`
+    // ancestor-nya), posisinya TIDAK ikut bergerak otomatis saat area scroll
+    // tabel di-scroll -- jadi ditutup saja saat scroll/resize, sama seperti
+    // pola popover lain di file ini (SaranMitraTombol/ThKontrol).
     document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("scroll", tutup, true);
+    window.addEventListener("resize", tutup);
+    return () => {
+      document.removeEventListener("mousedown", onClickOutside);
+      document.removeEventListener("scroll", tutup, true);
+      window.removeEventListener("resize", tutup);
+    };
   }, [open]);
 
   const q = query.trim().toLowerCase();
@@ -2068,11 +2155,13 @@ function Combobox({
         disabled={disabled}
         value={open ? query : selected?.label ?? ""}
         onFocus={() => {
+          hitungPosisi();
           setOpen(true);
           setQuery("");
         }}
         onChange={(e) => {
           setQuery(e.target.value);
+          hitungPosisi();
           setOpen(true);
         }}
         onKeyDown={(e) => {
@@ -2085,8 +2174,18 @@ function Combobox({
         placeholder={placeholder}
         className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-ink/40"
       />
-      {open && !disabled && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full min-w-[12rem] overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg">
+      {open && !disabled && pos && (
+        <div
+          style={{
+            position: "fixed",
+            top: pos.top ?? undefined,
+            bottom: pos.bottom ?? undefined,
+            left: pos.left,
+            width: Math.max(pos.width, 192),
+            maxHeight: pos.maxHeight,
+          }}
+          className="z-50 overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg"
+        >
           {allowClear && (
             <button
               type="button"
