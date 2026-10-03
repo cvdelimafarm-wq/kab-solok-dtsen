@@ -336,6 +336,16 @@ function SaranMitraTombol({
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
+  // (3 Okt 2026) Batas jarak saran -- user minta kandidat yg jaraknya SUDAH
+  // DIKETAHUI (lokasi riil, bukan "tidak tersedia") tapi lebih dari 20 km
+  // dari Sub SLS ini TIDAK disarankan lagi (sebelumnya daftar ini tidak
+  // dibatasi jarak sama sekali). Kandidat yg jaraknya BELUM diketahui (lokasi
+  // blm riil, atau titik Sub SLS ini sendiri blm tersedia) TETAP ditampilkan
+  // (bukan dibuang) -- cuma tidak bisa diurutkan, biar admin msh bisa pilih
+  // manual kalau memang cuma itu kandidatnya, sesuai semangat "saran = bantuan,
+  // bukan keputusan otomatis".
+  const BATAS_JARAK_SARAN_KM = 20;
+
   useEffect(() => {
     if (!buka) return;
     function tutupJikaDiluar(e: Event) {
@@ -401,11 +411,21 @@ function SaranMitraTombol({
     () => pplOptions.filter((p) => !p.rekomendasi_pml && !p.red_flag_kinerja),
     [pplOptions]
   );
-  const tier1 = useMemo(
-    () => pplOptionsDisaranan.filter((p) => p.pendaftaran_bencana_konfirmasi).sort(bandingkanJarakLaluBeban),
-    [pplOptionsDisaranan, bebanDraftPerPpl, jarakPerPpl]
+  // Kandidat yg jaraknya SUDAH diketahui TAPI lebih dari BATAS_JARAK_SARAN_KM
+  // dibuang; yg jaraknya belum diketahui (null) TETAP lolos filter ini.
+  function dalamBatasJarak(p: PetugasRingkas) {
+    const jarak = jarakPerPpl.get(p.id) ?? null;
+    return jarak === null || jarak <= BATAS_JARAK_SARAN_KM;
+  }
+  const tier1Semua = useMemo(
+    () => pplOptionsDisaranan.filter((p) => p.pendaftaran_bencana_konfirmasi),
+    [pplOptionsDisaranan]
   );
-  const tier2 = useMemo(
+  const tier1 = useMemo(
+    () => tier1Semua.filter(dalamBatasJarak).sort(bandingkanJarakLaluBeban),
+    [tier1Semua, bebanDraftPerPpl, jarakPerPpl]
+  );
+  const tier2Semua = useMemo(
     () =>
       pplOptionsDisaranan
         // (p.kegiatan_lain ?? []) -- JAGA-JAGA konsisten dgn statusKesediaanPpl()
@@ -414,10 +434,24 @@ function SaranMitraTombol({
         // versi lama (sblm kegiatan_lain ditambahkan ke respons), field ini bisa
         // undefined sesaat -- lihat crash "Cannot read properties of undefined
         // (reading 'includes')" yg dilaporkan user pasca deploy fitur ini.
-        .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026"))
-        .sort(bandingkanJarakLaluBeban),
-    [pplOptionsDisaranan, bebanDraftPerPpl, jarakPerPpl]
+        .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026")),
+    [pplOptionsDisaranan]
   );
+  const tier2 = useMemo(
+    () => tier2Semua.filter(dalamBatasJarak).sort(bandingkanJarakLaluBeban),
+    [tier2Semua, bebanDraftPerPpl, jarakPerPpl]
+  );
+  // (3 Okt 2026) Pesan "kosong" dibedakan: tidak ada kandidat sama sekali vs
+  // ada kandidat tapi semua di luar radius 20 km (biar admin tahu alasannya,
+  // bukan dikira tidak ada mitra sama sekali).
+  const tier1Kosong =
+    tier1Semua.length === 0
+      ? "Belum ada mitra yang mengajukan diri."
+      : `Ada ${tier1Semua.length} mitra yang mengajukan diri, tapi semuanya lebih dari ${BATAS_JARAK_SARAN_KM} km dari Sub SLS ini.`;
+  const tier2Kosong =
+    tier2Semua.length === 0
+      ? "Tidak ada kandidat cadangan dari peserta PES SE2026."
+      : `Ada ${tier2Semua.length} kandidat PES SE2026, tapi semuanya lebih dari ${BATAS_JARAK_SARAN_KM} km dari Sub SLS ini.`;
 
   function pilih(id: number) {
     onPilih(id);
@@ -429,7 +463,7 @@ function SaranMitraTombol({
       <button
         type="button"
         onClick={toggle}
-        title="Lihat saran mitra: Tier 1 dari yang sudah Mengajukan Diri, Tier 2 dari peserta PES SE2026"
+        title={`Lihat saran mitra (maks ${BATAS_JARAK_SARAN_KM} km): Tier 1 dari yang sudah Mengajukan Diri, Tier 2 dari peserta PES SE2026`}
         className="shrink-0 rounded-full bg-moss-100 px-1.5 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-200"
       >
         💡 Saran
@@ -440,8 +474,8 @@ function SaranMitraTombol({
           className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
         >
           <p className="mb-1.5 text-[10px] text-ink/50">
-            Saran murni bantuan memilih (bukan plotting otomatis) -- klik nama utk mengisi kolom PPL, tetap perlu
-            &quot;Simpan Perubahan&quot;.
+            Saran murni bantuan memilih (bukan plotting otomatis), dibatasi radius {BATAS_JARAK_SARAN_KM} km -- klik
+            nama utk mengisi kolom PPL, tetap perlu &quot;Simpan Perubahan&quot;.
           </p>
           <SaranMitraKelompok
             judul="Tier 1 — Mengajukan Diri"
@@ -451,8 +485,9 @@ function SaranMitraTombol({
             jarakPerPpl={jarakPerPpl}
             bebanDraftPerPpl={bebanDraftPerPpl}
             rataBebanTetap={rataBebanTetap}
+            adaTitikSubsls={subslsPoint !== null}
             onPilih={pilih}
-            kosong="Belum ada mitra yang mengajukan diri."
+            kosong={tier1Kosong}
           />
           <div className="my-1.5 border-t border-line" />
           <SaranMitraKelompok
@@ -463,8 +498,9 @@ function SaranMitraTombol({
             jarakPerPpl={jarakPerPpl}
             bebanDraftPerPpl={bebanDraftPerPpl}
             rataBebanTetap={rataBebanTetap}
+            adaTitikSubsls={subslsPoint !== null}
             onPilih={pilih}
-            kosong="Tidak ada kandidat cadangan dari peserta PES SE2026."
+            kosong={tier2Kosong}
           />
         </div>
       )}
@@ -480,6 +516,7 @@ function SaranMitraKelompok({
   jarakPerPpl,
   bebanDraftPerPpl,
   rataBebanTetap,
+  adaTitikSubsls,
   onPilih,
   kosong,
 }: {
@@ -490,6 +527,13 @@ function SaranMitraKelompok({
   jarakPerPpl: Map<number, number | null>;
   bebanDraftPerPpl: Map<number, number>;
   rataBebanTetap: number;
+  // (3 Okt 2026) Dipakai HANYA utk membedakan pesan kalau jarak tidak
+  // tersedia -- false berarti titik Sub SLS baris ini sendiri belum ada,
+  // jadi SEMUA kandidat (bukan cuma satu org) pasti tanpa jarak; true berarti
+  // titik Sub SLS-nya ada tapi kandidat ybs yg lokasi rumahnya belum riil.
+  // Ditambahkan supaya laporan "jarak kosong tapi lokasi mitra sudah riil di
+  // database" lebih gampang dilacak lewat pesan yg ditampilkan sendiri.
+  adaTitikSubsls: boolean;
   onPilih: (id: number) => void;
   kosong: string;
 }) {
@@ -522,9 +566,12 @@ function SaranMitraKelompok({
                   <p className="text-[10px] text-ink/40">
                     {(() => {
                       const jarak = jarakPerPpl.get(p.id) ?? null;
-                      return jarak === null
-                        ? "Jarak tidak tersedia (lokasi belum riil)"
-                        : `± ${jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km dari Sub SLS ini`;
+                      if (jarak !== null) {
+                        return `± ${jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km dari Sub SLS ini`;
+                      }
+                      return adaTitikSubsls
+                        ? "Jarak tidak tersedia (lokasi mitra ini belum riil)"
+                        : "Jarak tidak tersedia (titik Sub SLS ini belum tersedia)";
                     })()}
                   </p>
                   {/* (3 Okt 2026) Skor beban SAAT INI (termasuk perubahan draft
