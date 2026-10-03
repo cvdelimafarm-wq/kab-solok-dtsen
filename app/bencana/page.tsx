@@ -115,6 +115,13 @@ type KertasKerjaRow = {
   kk_total: number;
   punya_data_kk: boolean;
   skor_beban_pendataan: number;
+  // (3 Okt 2026) Pecah Sub SLS: null = baris biasa (1 Sub SLS = 1 PPL, tidak
+  // berubah). Terisi = ini SALAH SATU bagian dari Sub SLS yg dipecah ke
+  // beberapa PPL -- jumlah KK langsung yg jadi tanggung jawab PPL baris ini
+  // (skor_beban_pendataan/skor_jarak/skor_beban_akhir di baris ini SUDAH
+  // diprorata server sesuai porsi_kk / kk_total, lihat bencana_kertas_
+  // kerja_alokasi()). Beberapa baris bisa berbagi idsubsls yg sama.
+  porsi_kk: number | null;
   jarak_km: number | null;
   jarak_status: "riil" | "tanpa_data";
   jumlah_hari_kerja: number;
@@ -3435,6 +3442,165 @@ function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n:
   );
 }
 
+// (3 Okt 2026) Modal "Pecah Sub SLS" -- memecah 1 Sub SLS yg skor beban
+// pendataannya sangat besar ke beberapa PPL sekaligus, masing2 memegang
+// SEBAGIAN KK secara langsung (basis "Jumlah KK langsung", bukan
+// persentase/skor mentah -- keputusan admin saat fitur ini didesain).
+// Minimal 2 PPL, total KK yg dibagi tidak boleh melebihi KK Total Sub SLS
+// ini. Skor beban/jarak tiap bagian diprorata OTOMATIS oleh server
+// (bencana_kertas_kerja_alokasi()) -- modal ini cuma mengumpulkan
+// {ppl_id, porsi_kk} per baris, tidak menghitung skor sendiri.
+function ModalPecahSubSls({
+  row,
+  pplOptions,
+  sudahDipecahSebelumnya,
+  busy,
+  error,
+  onBatal,
+  onSimpan,
+}: {
+  row: KertasKerjaRow;
+  pplOptions: PetugasRingkas[];
+  sudahDipecahSebelumnya: KertasKerjaRow[];
+  busy: boolean;
+  error: string | null;
+  onBatal: () => void;
+  onSimpan: (pembagian: { ppl_id: number; porsi_kk: number }[]) => void;
+}) {
+  type Baris = { id: number; ppl_id: number | null; porsi_kk: string };
+  const [baris, setBaris] = useState<Baris[]>(() => {
+    if (sudahDipecahSebelumnya.length > 0) {
+      return sudahDipecahSebelumnya.map((r, i) => ({
+        id: i,
+        ppl_id: r.ppl_id,
+        porsi_kk: String(r.porsi_kk ?? ""),
+      }));
+    }
+    return [
+      { id: 0, ppl_id: row.ppl_id, porsi_kk: "" },
+      { id: 1, ppl_id: null, porsi_kk: "" },
+    ];
+  });
+  const idSeq = useRef(baris.length);
+
+  const totalDibagi = baris.reduce((s, b) => s + (Number(b.porsi_kk) || 0), 0);
+  const sisa = row.kk_total - totalDibagi;
+
+  function tambahBaris() {
+    setBaris((prev) => [...prev, { id: idSeq.current++, ppl_id: null, porsi_kk: "" }]);
+  }
+  function hapusBaris(id: number) {
+    setBaris((prev) => prev.filter((b) => b.id !== id));
+  }
+  function ubahPpl(id: number, pplId: number | null) {
+    setBaris((prev) => prev.map((b) => (b.id === id ? { ...b, ppl_id: pplId } : b)));
+  }
+  function ubahPorsi(id: number, nilai: string) {
+    setBaris((prev) => prev.map((b) => (b.id === id ? { ...b, porsi_kk: nilai } : b)));
+  }
+
+  const siapDisimpan =
+    baris.length >= 2 &&
+    baris.every((b) => b.ppl_id !== null && Number(b.porsi_kk) > 0) &&
+    new Set(baris.map((b) => b.ppl_id)).size === baris.length &&
+    totalDibagi > 0 &&
+    totalDibagi <= row.kk_total;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+        <h3 className="font-medium text-blue-950">
+          Pecah Sub SLS {row.sub_sls} — {row.nagari}
+        </h3>
+        <p className="mt-1 text-xs text-ink/60">
+          Bagi beban Sub SLS ini (KK Total: {row.kk_total.toLocaleString("id-ID")}, skor beban pendataan:{" "}
+          {row.skor_beban_pendataan.toLocaleString("id-ID")}) ke beberapa PPL sekaligus. Masukkan jumlah KK LANGSUNG
+          yang jadi tanggung jawab tiap PPL -- skor beban & skor jarak tiap bagian dihitung otomatis secara
+          proporsional.
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          {baris.map((b) => (
+            <div key={b.id} className="flex items-center gap-1.5">
+              <Combobox
+                value={b.ppl_id}
+                onChange={(v) => ubahPpl(b.id, v)}
+                options={pplOptions.map((p) => ({ value: p.id, label: p.nama }))}
+                placeholder="Pilih PPL..."
+                className="flex-1"
+              />
+              <input
+                type="number"
+                min={1}
+                value={b.porsi_kk}
+                onChange={(e) => ubahPorsi(b.id, e.target.value)}
+                placeholder="Jumlah KK"
+                className="w-28 rounded border border-line px-2 py-1 text-sm"
+              />
+              <span className="text-xs text-ink/50">KK</span>
+              {baris.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => hapusBaris(b.id)}
+                  className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={tambahBaris}
+          className="mt-2 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink/70 hover:bg-gray-200"
+        >
+          + Tambah PPL
+        </button>
+
+        <div
+          className={`mt-3 rounded-md px-3 py-2 text-xs ${
+            sisa < 0 ? "bg-rust-50 text-rust-700" : sisa === 0 ? "bg-moss-50 text-moss-700" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          Total dibagi: {totalDibagi.toLocaleString("id-ID")} KK dari {row.kk_total.toLocaleString("id-ID")} KK Total.{" "}
+          {sisa < 0
+            ? `Kelebihan ${Math.abs(sisa).toLocaleString("id-ID")} KK -- kurangi dulu.`
+            : sisa > 0
+            ? `Sisa ${sisa.toLocaleString("id-ID")} KK belum dibagi ke siapa pun.`
+            : "Sudah terbagi habis."}
+        </div>
+
+        {error && <div className="mt-2 rounded-md bg-rust-50 px-3 py-2 text-xs text-rust-700">{error}</div>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onBatal}
+            disabled={busy}
+            className="rounded-md border border-line px-3 py-1.5 text-sm text-ink/70 hover:bg-gray-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            disabled={!siapDisimpan || busy}
+            onClick={() =>
+              onSimpan(
+                baris.map((b) => ({ ppl_id: b.ppl_id as number, porsi_kk: Number(b.porsi_kk) }))
+              )
+            }
+            className="rounded-md bg-blue-950 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-900 disabled:opacity-40"
+          >
+            {busy ? "Menyimpan..." : "Simpan Pembagian"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AlokasiPetugasSection() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -3533,6 +3699,16 @@ function AlokasiPetugasSection() {
   // dropdown dipilih (supaya bisa trial-error lihat keseimbangan beban dulu).
   // Baru terkirim ke server sekaligus saat tombol "Simpan Perubahan" ditekan.
   const [draftPpl, setDraftPpl] = useState<Record<string, number | null>>({});
+  // (3 Okt 2026) Baris Pecah Sub SLS (porsi_kk != null) SELALU dianggap
+  // sudah final/tersimpan ke ppl_id-nya sendiri -- TIDAK PERNAH lewat
+  // draftPpl (dropdown Langkah 4 disembunyikan utk baris ini, lihat render
+  // tabel). Dipakai di SEMUA tempat yg sebelumnya baca `draftPpl[idsubsls]`
+  // langsung, supaya "Simpan Perubahan" tidak salah mengira baris pecahan
+  // "dilepas" (null) lalu mengirim buka_kunci yg akan menghapus SELURUH
+  // pecahannya.
+  function efektifPplId(r: KertasKerjaRow): number | null {
+    return r.porsi_kk !== null ? r.ppl_id : draftPpl[r.idsubsls] ?? null;
+  }
   const [draftPmlByPpl, setDraftPmlByPpl] = useState<Record<number, number | null>>({});
   const [simpanBusy, setSimpanBusy] = useState(false);
   const [simpanError, setSimpanError] = useState<string | null>(null);
@@ -3540,6 +3716,16 @@ function AlokasiPetugasSection() {
   // default di server, dipakai utk menghitung PERKIRAAN Skor Jarak di kolom
   // Langkah 4 sblm plot tersimpan.
   const [pembagiJarakKm, setPembagiJarakKm] = useState(5);
+  // (3 Okt 2026) "Pecah Sub SLS": modal terpisah dari mekanisme draft di
+  // atas -- langsung tersimpan ke server begitu "Simpan Pembagian" ditekan
+  // (TIDAK ikut tombol "Simpan Perubahan"), krn bentuk datanya beda (1
+  // idsubsls -> banyak ppl_id, tidak cocok dgn draftPpl yg cuma menyimpan 1
+  // ppl_id per idsubsls). modalPecah menyimpan baris Sub SLS yg sedang
+  // dipecah/diedit pembagiannya (null = modal tertutup).
+  const [modalPecah, setModalPecah] = useState<KertasKerjaRow | null>(null);
+  const [pecahBusy, setPecahBusy] = useState(false);
+  const [pecahError, setPecahError] = useState<string | null>(null);
+  const [gabungBusyId, setGabungBusyId] = useState<string | null>(null);
   // (3 Okt 2026) "Auto Plot": idsubsls baris yg PPL-nya diisi oleh saran
   // otomatis (handleAutoPlot) dan BELUM ditinjau/disetujui admin -- dipakai
   // utk highlight baris warna cokelat (gold-100) + tombol Setujui/Batalkan.
@@ -3700,6 +3886,44 @@ function AlokasiPetugasSection() {
     }
   }
 
+  async function handleSimpanPecahan(idsubsls: string, pembagian: { ppl_id: number; porsi_kk: number }[]) {
+    setPecahBusy(true);
+    setPecahError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/pecah", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idsubsls, pembagian }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan pembagian Sub SLS.");
+      setModalPecah(null);
+      await muatData(hariKerjaDipakai);
+    } catch (err) {
+      setPecahError(err instanceof Error ? err.message : "Gagal menyimpan pembagian Sub SLS.");
+    } finally {
+      setPecahBusy(false);
+    }
+  }
+
+  async function handleGabungKembali(idsubsls: string) {
+    setGabungBusyId(idsubsls);
+    try {
+      const res = await fetch("/api/bencana/alokasi/pecah", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idsubsls, gabung_kembali: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menggabungkan kembali Sub SLS.");
+      await muatData(hariKerjaDipakai);
+    } catch (err) {
+      setSimpanError(err instanceof Error ? err.message : "Gagal menggabungkan kembali Sub SLS.");
+    } finally {
+      setGabungBusyId(null);
+    }
+  }
+
   async function handleToggleSampel(idsubsls: string, checked: boolean) {
     setSampelBusyId(idsubsls);
     setSampelError(null);
@@ -3780,6 +4004,7 @@ function AlokasiPetugasSection() {
     setSimpanError(null);
     try {
       for (const r of kertasKerja) {
+        if (r.porsi_kk !== null) continue; // baris pecahan -- tidak ikut "Simpan Perubahan", kelola lewat modal Pecah
         const draftVal = draftPpl[r.idsubsls] ?? null;
         const serverVal = r.ppl_id ?? null;
         if (draftVal === serverVal) continue;
@@ -3796,7 +4021,7 @@ function AlokasiPetugasSection() {
       for (const r of kertasKerja) {
         if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
       }
-      const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+      const pplIdsDipakai = new Set(kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v));
       for (const pplId of pplIdsDipakai) {
         const draftVal = draftPmlByPpl[pplId] ?? null;
         const serverVal = serverPmlByPpl.get(pplId) ?? null;
@@ -4143,8 +4368,8 @@ function AlokasiPetugasSection() {
   // sama) -- TANPA angka beban di dalam label. Beban ditampilkan di kolom
   // "Beban Petugas" tersendiri, dihitung ulang real-time dari draftPpl.
   function infoPplUntukBaris(p: PetugasRingkas, row: KertasKerjaRow): string {
-    const diKec = kertasKerja.filter((k) => draftPpl[k.idsubsls] === p.id && k.kecamatan === row.kecamatan).length;
-    const diNagari = kertasKerja.filter((k) => draftPpl[k.idsubsls] === p.id && k.nagari === row.nagari).length;
+    const diKec = kertasKerja.filter((k) => efektifPplId(k) === p.id && k.kecamatan === row.kecamatan).length;
+    const diNagari = kertasKerja.filter((k) => efektifPplId(k) === p.id && k.nagari === row.nagari).length;
     if (diNagari > 0) return `${p.nama} — ${diNagari} Sub SLS di nagari ini`;
     if (diKec > 0) return `${p.nama} — ${diKec} Sub SLS di kecamatan ini`;
     return p.nama;
@@ -4165,7 +4390,10 @@ function AlokasiPetugasSection() {
   const bebanDraftPerPpl = useMemo(() => {
     const map = new Map<number, number>();
     for (const r of kertasKerja) {
-      const pid = draftPpl[r.idsubsls];
+      // efektifPplId: baris pecahan (porsi_kk != null) selalu pakai ppl_id
+      // tersimpannya sendiri -- skor_beban_pendataan baris itu SUDAH
+      // diprorata server sesuai porsi_kk, jadi tinggal dijumlah apa adanya.
+      const pid = efektifPplId(r);
       if (pid) map.set(pid, (map.get(pid) ?? 0) + r.skor_beban_pendataan);
     }
     return map;
@@ -4188,13 +4416,15 @@ function AlokasiPetugasSection() {
   // draftPmlByPpl berubah supaya batasnya kerasa langsung saat trial-error.
   const jumlahPplPerPmlDraft = useMemo(() => {
     const map = new Map<number, number>();
-    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    const pplIdsDipakai = new Set(
+      kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v)
+    );
     for (const pplId of pplIdsDipakai) {
       const pmlId = draftPmlByPpl[pplId] ?? null;
       if (pmlId) map.set(pmlId, (map.get(pmlId) ?? 0) + 1);
     }
     return map;
-  }, [draftPpl, draftPmlByPpl]);
+  }, [kertasKerja, draftPpl, draftPmlByPpl]);
 
   // Jumlah PPL (yg sudah punya draft plot) per status beban -- dipakai utk
   // ringkasan chip yg bisa diklik utk memfilter tabel Langkah 4.
@@ -4273,7 +4503,7 @@ function AlokasiPetugasSection() {
       .sort((a, b) => a[1] - b[1]);
     return overloaded.slice(0, 5).map(([pplId, beban]) => {
       const rowsPpl = kertasKerja
-        .filter((r) => (draftPpl[r.idsubsls] ?? null) === pplId)
+        .filter((r) => efektifPplId(r) === pplId && r.porsi_kk === null)
         .sort((a, b) => b.skor_beban_pendataan - a.skor_beban_pendataan);
       const kandidat = underloaded[0];
       return {
@@ -4342,13 +4572,14 @@ function AlokasiPetugasSection() {
   const jumlahPerubahanPending = useMemo(() => {
     let n = 0;
     for (const r of kertasKerja) {
+      if (r.porsi_kk !== null) continue; // baris pecahan -- selalu dianggap final, bukan draft
       if ((draftPpl[r.idsubsls] ?? null) !== (r.ppl_id ?? null)) n++;
     }
     const serverPmlByPpl = new Map<number, number | null>();
     for (const r of kertasKerja) {
       if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
     }
-    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    const pplIdsDipakai = new Set(kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v));
     for (const pplId of pplIdsDipakai) {
       if ((draftPmlByPpl[pplId] ?? null) !== (serverPmlByPpl.get(pplId) ?? null)) n++;
     }
@@ -4365,6 +4596,7 @@ function AlokasiPetugasSection() {
       return petugasList.find((p) => p.id === id)?.nama ?? `#${id}`;
     };
     for (const r of kertasKerja) {
+      if (r.porsi_kk !== null) continue; // baris pecahan -- selalu dianggap final, bukan draft
       const draftVal = draftPpl[r.idsubsls] ?? null;
       const serverVal = r.ppl_id ?? null;
       if (draftVal !== serverVal) {
@@ -4375,7 +4607,7 @@ function AlokasiPetugasSection() {
     for (const r of kertasKerja) {
       if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
     }
-    const pplIdsDipakai = new Set(Object.values(draftPpl).filter((v): v is number => !!v));
+    const pplIdsDipakai = new Set(kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v));
     for (const pplId of pplIdsDipakai) {
       const draftVal = draftPmlByPpl[pplId] ?? null;
       const serverVal = serverPmlByPpl.get(pplId) ?? null;
@@ -4392,7 +4624,7 @@ function AlokasiPetugasSection() {
     [kertasKerja]
   );
   const jumlahBelumDiplot = useMemo(
-    () => kertasKerja.filter((r) => !(draftPpl[r.idsubsls] ?? null)).length,
+    () => kertasKerja.filter((r) => !efektifPplId(r)).length,
     [kertasKerja, draftPpl]
   );
 
@@ -4476,7 +4708,7 @@ function AlokasiPetugasSection() {
     );
     if (kandidat.length === 0) return hasil;
 
-    const belumDiplot = kertasKerja.filter((r) => !(draftPpl[r.idsubsls] ?? null));
+    const belumDiplot = kertasKerja.filter((r) => !efektifPplId(r));
 
     // Jarak tiap pasangan (baris, kandidat) dlm radius 7 km dihitung SEKALI
     // di awal -- dipakai berulang kali di tiap pita, bukan dihitung ulang
@@ -4606,7 +4838,7 @@ function AlokasiPetugasSection() {
   // beban PETUGAS, bukan beban per-Sub-SLS. Baris tanpa PPL dianggap tone
   // "netral" (dipakai jg oleh filter "Status Plot").
   function toneBarisAlokasi(r: KertasKerjaRow): BalanceTone | "belum" {
-    const pplId = draftPpl[r.idsubsls] ?? null;
+    const pplId = efektifPplId(r);
     if (!pplId) return "belum";
     const beban = bebanDraftPerPpl.get(pplId) ?? 0;
     return balanceInfo(beban, rataBebanTetap).tone;
@@ -4617,7 +4849,7 @@ function AlokasiPetugasSection() {
     const kwKec = kecamatanHeaderSearch.trim().toLowerCase();
     return kertasKerja.filter((r) => {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
-      const draftPplId = draftPpl[r.idsubsls] ?? null;
+      const draftPplId = efektifPplId(r);
       if (pplFilter && draftPplId !== pplFilter) return false;
       if (pmlFilterLangkah4) {
         const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
@@ -4679,7 +4911,7 @@ function AlokasiPetugasSection() {
         case "skor_beban_akhir":
           return r.skor_beban_akhir;
         case "beban_ppl": {
-          const pplId = draftPpl[r.idsubsls] ?? null;
+          const pplId = efektifPplId(r);
           return pplId ? bebanDraftPerPpl.get(pplId) ?? 0 : -1;
         }
         // (2 Okt 2026) PPL/PML diurutkan berdasar NAMA dari penugasan draft
@@ -4688,11 +4920,11 @@ function AlokasiPetugasSection() {
         // tersimpan -- baris yg belum diplot ditaruh di awal ("" selalu
         // paling kecil scr abjad).
         case "ppl": {
-          const pplId = draftPpl[r.idsubsls] ?? null;
+          const pplId = efektifPplId(r);
           return pplId ? petugasList.find((p) => p.id === pplId)?.nama ?? "" : "";
         }
         case "pml": {
-          const pplId = draftPpl[r.idsubsls] ?? null;
+          const pplId = efektifPplId(r);
           const pmlId = pplId ? pmlDraftUntukPpl(pplId) : null;
           return pmlId ? petugasList.find((p) => p.id === pmlId)?.nama ?? "" : "";
         }
@@ -4772,6 +5004,7 @@ function AlokasiPetugasSection() {
       "Jumlah Hari Kerja (PP)": r.jumlah_hari_kerja,
       "Skor Jarak": r.skor_jarak,
       "Skor Beban Akhir": r.skor_beban_akhir,
+      "Porsi KK (kalau dipecah)": r.porsi_kk ?? "",
       PPL: r.ppl_nama ?? "",
       PML: r.pml_nama ?? "",
       Korwil: r.korwil_nama ?? "",
@@ -6750,28 +6983,48 @@ function AlokasiPetugasSection() {
             </thead>
             <tbody>
               {paged.map((r) => {
-                const draftPplId = draftPpl[r.idsubsls] ?? null;
-                const berubah = draftPplId !== (r.ppl_id ?? null);
+                // (3 Okt 2026) Pecah Sub SLS: baris ini salah satu bagian dari
+                // Sub SLS yg dipecah -- ppl_id SUDAH final/tersimpan (bukan
+                // draft), jadi tidak lewat mekanisme draftPpl sama sekali.
+                // CATATAN keterbatasan: kolom "Beban Petugas" & ranking di
+                // popover "Saran" dihitung dari bebanDraftPerPpl, yg cuma
+                // menjumlah baris yg draftPpl-nya diisi lewat dropdown --
+                // porsi KK dari Sub SLS yg dipecah TIDAK ikut tersjumlah di
+                // situ (makanya kolom itu bisa tampil "-" utk baris pecahan).
+                // Angka yg benar2 akurat (termasuk pecahan) ada di panel
+                // "Ringkasan Beban" per PPL/PML/Korwil -- itu dihitung server.
+                const dipecah = r.porsi_kk !== null;
+                const draftPplId = dipecah ? r.ppl_id : draftPpl[r.idsubsls] ?? null;
+                const berubah = dipecah ? false : draftPplId !== (r.ppl_id ?? null);
                 const bebanPpl = draftPplId ? bebanDraftPerPpl.get(draftPplId) ?? 0 : null;
                 const info = bebanPpl != null ? balanceInfo(bebanPpl, rataBebanTetap) : null;
                 const delta = bebanPpl != null && rataBebanTetap > 0 ? bebanPpl - rataBebanTetap : null;
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
-                const isSaranAutoPlot = autoPlotSubsls.has(r.idsubsls);
-                const bgBaris = isSaranAutoPlot ? "bg-gold-100" : berubah ? "bg-orange-50/50" : "bg-white";
+                const isSaranAutoPlot = !dipecah && autoPlotSubsls.has(r.idsubsls);
+                const bgBaris = dipecah
+                  ? "bg-indigo-50/60"
+                  : isSaranAutoPlot
+                  ? "bg-gold-100"
+                  : berubah
+                  ? "bg-orange-50/50"
+                  : "bg-white";
                 const petugasDraftPpl = draftPplId ? petugasList.find((x) => x.id === draftPplId) : undefined;
                 const statusKesediaan = statusKesediaanPpl(petugasDraftPpl);
                 // Skor Jarak: nilai RESMI (OSRM) cuma valid kalau draft PPL
                 // saat ini SAMA dgn PPL yg benar2 tersimpan di server & jarak
-                // riilnya sudah dihitung. Selain itu (baru dipilih/diubah di
-                // draft, atau belum pernah dihitung sama sekali) tampilkan
-                // PERKIRAAN garis lurus (haversine) spt popover "Saran", biar
-                // admin langsung lihat gambaran begitu memilih PPL -- bukan
-                // menunggu simpan + proses OSRM.
-                const skorJarakResmi = r.jarak_status === "riil" && draftPplId === r.ppl_id;
+                // riilnya sudah dihitung (baris pecahan SELALU dianggap final
+                // krn tidak ada draft utk itu). Selain itu (baru dipilih/
+                // diubah di draft, atau belum pernah dihitung sama sekali)
+                // tampilkan PERKIRAAN garis lurus (haversine) spt popover
+                // "Saran", biar admin langsung lihat gambaran begitu memilih
+                // PPL -- bukan menunggu simpan + proses OSRM.
+                const skorJarakResmi = dipecah
+                  ? r.jarak_status === "riil"
+                  : r.jarak_status === "riil" && draftPplId === r.ppl_id;
                 const titikBarisIni = titikSubslsMap.get(r.idsubsls) ?? null;
                 const skorJarakEstimasi =
-                  !skorJarakResmi && petugasDraftPpl && titikBarisIni && petugasDraftPpl.lokasi_status === "riil" &&
+                  !dipecah && !skorJarakResmi && petugasDraftPpl && titikBarisIni && petugasDraftPpl.lokasi_status === "riil" &&
                   typeof petugasDraftPpl.lat === "number" && typeof petugasDraftPpl.lng === "number"
                     ? (() => {
                         const jarakKm = haversineKm(petugasDraftPpl.lat as number, petugasDraftPpl.lng as number, titikBarisIni.lat, titikBarisIni.lng);
@@ -6779,7 +7032,7 @@ function AlokasiPetugasSection() {
                       })()
                     : null;
                 return (
-                  <tr key={r.idsubsls} className={`border-t border-line ${bgBaris}`}>
+                  <tr key={`${r.idsubsls}-${r.ppl_id ?? "x"}`} className={`border-t border-line ${bgBaris}`}>
                     {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
                     {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.nagari}</td>}
                     <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
@@ -6825,64 +7078,104 @@ function AlokasiPetugasSection() {
                     )}
                     <td className="px-3 py-2 font-medium text-ink">{r.skor_beban_akhir.toLocaleString("id-ID")}</td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <Combobox
-                          disabled={pplOptions.length === 0}
-                          value={draftPplId ?? null}
-                          onChange={(val) => ubahDraftPpl(r.idsubsls, val)}
-                          options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
-                          placeholder="Plot ke PPL..."
-                          className="w-48"
-                        />
-                        <SaranMitraTombol
-                          pplOptions={pplOptions}
-                          bebanDraftPerPpl={bebanDraftPerPpl}
-                          rataBebanTetap={rataBebanTetap}
-                          pplTerpilihId={draftPplId}
-                          onPilih={(id) => ubahDraftPpl(r.idsubsls, id)}
-                          subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
-                        />
-                        {statusKesediaan?.tipe === "belum_konfirmasi" && (
-                          <IkonStatusKesediaanPpl status={statusKesediaan} />
-                        )}
-                        {statusKesediaan &&
-                          statusKesediaan.kegiatanLain.map((k) => (
-                            <BadgeKegiatanLain key={k} kegiatan={k} />
-                          ))}
-                        {draftPplId && (
+                      {dipecah ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
+                            ✂️ Pecahan
+                          </span>
+                          <span className="text-ink/80">{r.ppl_nama}</span>
+                          <span className="text-xs text-ink/50">({r.porsi_kk?.toLocaleString("id-ID")} KK)</span>
+                          {statusKesediaan?.tipe === "belum_konfirmasi" && (
+                            <IkonStatusKesediaanPpl status={statusKesediaan} />
+                          )}
+                          {statusKesediaan &&
+                            statusKesediaan.kegiatanLain.map((k) => <BadgeKegiatanLain key={k} kegiatan={k} />)}
                           <button
                             type="button"
-                            onClick={() => ubahDraftPpl(r.idsubsls, null)}
-                            title="Lepas plot Sub SLS ini (belum tersimpan sampai Simpan Perubahan ditekan)"
+                            onClick={() => setModalPecah(r)}
                             className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
                           >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                      {isSaranAutoPlot && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <span
-                            className="rounded-full bg-gold-400/20 px-2 py-0.5 text-[10px] font-medium text-gold-600"
-                            title="Saran otomatis Auto Plot: PPL terdekat yg bebannya paling mendekati rata-rata. BELUM final -- tinjau lalu Setujui atau Batalkan."
-                          >
-                            🤖 Saran Auto Plot
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setujuiAutoPlot(r.idsubsls)}
-                            className="rounded-full bg-moss-100 px-2 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-500 hover:text-white"
-                          >
-                            ✓ Setujui
+                            Edit Pembagian
                           </button>
                           <button
                             type="button"
-                            onClick={() => batalkanAutoPlot(r.idsubsls)}
-                            className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                            disabled={gabungBusyId === r.idsubsls}
+                            onClick={() => handleGabungKembali(r.idsubsls)}
+                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200 disabled:opacity-50"
                           >
-                            ✕ Batalkan
+                            {gabungBusyId === r.idsubsls ? "Menggabungkan..." : "Gabung Kembali"}
                           </button>
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <Combobox
+                              disabled={pplOptions.length === 0}
+                              value={draftPplId ?? null}
+                              onChange={(val) => ubahDraftPpl(r.idsubsls, val)}
+                              options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
+                              placeholder="Plot ke PPL..."
+                              className="w-48"
+                            />
+                            <SaranMitraTombol
+                              pplOptions={pplOptions}
+                              bebanDraftPerPpl={bebanDraftPerPpl}
+                              rataBebanTetap={rataBebanTetap}
+                              pplTerpilihId={draftPplId}
+                              onPilih={(id) => ubahDraftPpl(r.idsubsls, id)}
+                              subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
+                            />
+                            {statusKesediaan?.tipe === "belum_konfirmasi" && (
+                              <IkonStatusKesediaanPpl status={statusKesediaan} />
+                            )}
+                            {statusKesediaan &&
+                              statusKesediaan.kegiatanLain.map((k) => (
+                                <BadgeKegiatanLain key={k} kegiatan={k} />
+                              ))}
+                            {draftPplId && (
+                              <button
+                                type="button"
+                                onClick={() => ubahDraftPpl(r.idsubsls, null)}
+                                title="Lepas plot Sub SLS ini (belum tersimpan sampai Simpan Perubahan ditekan)"
+                                className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                              >
+                                ✕
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setModalPecah(r)}
+                              title="Pecah Sub SLS ini ke beberapa PPL sekaligus (skor beban yg sangat besar)"
+                              className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100"
+                            >
+                              ✂️ Pecah
+                            </button>
+                          </div>
+                          {isSaranAutoPlot && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span
+                                className="rounded-full bg-gold-400/20 px-2 py-0.5 text-[10px] font-medium text-gold-600"
+                                title="Saran otomatis Auto Plot: PPL terdekat yg bebannya paling mendekati rata-rata. BELUM final -- tinjau lalu Setujui atau Batalkan."
+                              >
+                                🤖 Saran Auto Plot
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setujuiAutoPlot(r.idsubsls)}
+                                className="rounded-full bg-moss-100 px-2 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-500 hover:text-white"
+                              >
+                                ✓ Setujui
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => batalkanAutoPlot(r.idsubsls)}
+                                className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                              >
+                                ✕ Batalkan
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -6947,6 +7240,23 @@ function AlokasiPetugasSection() {
             </tbody>
           </table>
         </div>
+
+        {modalPecah && (
+          <ModalPecahSubSls
+            row={modalPecah}
+            pplOptions={pplOptions}
+            sudahDipecahSebelumnya={kertasKerja.filter(
+              (x) => x.idsubsls === modalPecah.idsubsls && x.porsi_kk !== null
+            )}
+            busy={pecahBusy}
+            error={pecahError}
+            onBatal={() => {
+              setModalPecah(null);
+              setPecahError(null);
+            }}
+            onSimpan={(pembagian) => handleSimpanPecahan(modalPecah.idsubsls, pembagian)}
+          />
+        )}
 
         {sorted.length > 0 && (
           <div className="mt-2 flex items-center justify-between text-sm text-ink/60">

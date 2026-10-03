@@ -48,22 +48,24 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body?.buka_kunci === true) {
+      // (3 Okt 2026) .select() biasa (BUKAN .maybeSingle()) -- kalau Sub SLS
+      // ini sudah dipecah (Pecah Sub SLS) bisa ada LEBIH DARI SATU baris
+      // (satu per PPL); .maybeSingle() akan error kalau >1 baris cocok.
       const { data: existing } = await supabase
         .from("bencana_alokasi_subsls")
         .select("ppl_id")
-        .eq("idsubsls", idsubsls)
-        .maybeSingle();
+        .eq("idsubsls", idsubsls);
 
       const { error } = await supabase.from("bencana_alokasi_subsls").delete().eq("idsubsls", idsubsls);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-      if (existing?.ppl_id) {
+      for (const id of Array.from(new Set((existing ?? []).map((r) => r.ppl_id).filter((v): v is number => v != null)))) {
         const { count } = await supabase
           .from("bencana_alokasi_subsls")
           .select("id", { count: "exact", head: true })
-          .eq("ppl_id", existing.ppl_id);
+          .eq("ppl_id", id);
         if (!count) {
-          await supabase.from("bencana_petugas").update({ peran: null }).eq("id", existing.ppl_id);
+          await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id);
         }
       }
 
@@ -147,11 +149,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // (3 Okt 2026) Constraint unik sekarang (idsubsls, ppl_id) -- BUKAN lagi
+    // idsubsls saja (lihat migrasi Pecah Sub SLS, porsi_kk). Kalau PPL diganti
+    // (idsubsls sama, ppl_id beda dari sebelumnya), onConflict "idsubsls" tidak
+    // match apa pun -> perlu hapus dulu baris lama Sub SLS ini yg ppl_id-nya
+    // BEDA, baru upsert dgn conflict target (idsubsls, ppl_id). Ini jg otomatis
+    // membersihkan Sub SLS yg sebelumnya dipecah (>1 baris) kalau plot ulang
+    // manual lewat dropdown biasa -- jadi tidak akan nyisa baris pecahan lama.
+    const { error: errBersih } = await supabase
+      .from("bencana_alokasi_subsls")
+      .delete()
+      .eq("idsubsls", idsubsls)
+      .neq("ppl_id", pplId);
+    if (errBersih) return NextResponse.json({ error: errBersih.message }, { status: 500 });
+
     const { error: errUpsert } = await supabase
       .from("bencana_alokasi_subsls")
       .upsert(
-        { idsubsls, ppl_id: pplId, jarak_km, jarak_metode, jarak_status, terkunci: true },
-        { onConflict: "idsubsls" }
+        { idsubsls, ppl_id: pplId, jarak_km, jarak_metode, jarak_status, terkunci: true, porsi_kk: null },
+        { onConflict: "idsubsls,ppl_id" }
       );
     if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });
 
