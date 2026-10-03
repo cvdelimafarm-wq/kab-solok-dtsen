@@ -4381,6 +4381,14 @@ function AlokasiPetugasSection() {
   // red_flag_kinerja (lihat tab Kegiatan Petugas) DIKECUALIKAN dari saran --
   // sama spt popover "Saran" Tier 1/2.
   //
+  // (3 Okt 2026, revisi #2) Permintaan user: pool kandidat Auto Plot
+  // DIPERSEMPIT jadi PERSIS gabungan Tier 1 (sudah "Mengajukan Diri") +
+  // Tier 2 (peserta PES SE2026) -- kandidatTier1/kandidatTier2 yg sama dgn
+  // yg dipakai popover "Saran" & ringkasan di baris "Rata-rata beban per
+  // PPL". Mitra yg TIDAK termasuk tier manapun (belum mengajukan diri & bukan
+  // peserta PES SE2026) TIDAK LAGI ikut dipilih Auto Plot -- kalau memang
+  // mau dipakai, admin tetap bisa plot manual lewat dropdown PPL.
+  //
   // Baris diproses dari skor beban TERBESAR dulu (mirip bin-packing) supaya
   // baris "berat" kebagian kandidat terbaik duluan, sisanya yg lebih ringan
   // lebih fleksibel dicocokkan belakangan.
@@ -4397,13 +4405,8 @@ function AlokasiPetugasSection() {
     const workingBeban = new Map(bebanDraftPerPpl);
     const hasil: Record<string, number> = {};
 
-    const kandidat = pplOptions.filter(
-      (p) =>
-        p.lokasi_status === "riil" &&
-        typeof p.lat === "number" &&
-        typeof p.lng === "number" &&
-        !p.rekomendasi_pml &&
-        !p.red_flag_kinerja
+    const kandidat = [...kandidatTier1, ...kandidatTier2].filter(
+      (p) => p.lokasi_status === "riil" && typeof p.lat === "number" && typeof p.lng === "number"
     );
     if (kandidat.length === 0) return hasil;
 
@@ -6097,7 +6100,7 @@ function AlokasiPetugasSection() {
               type="button"
               onClick={handleAutoPlot}
               disabled={jumlahBelumDiplot === 0}
-              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat dibatasi radius maks. 7 km dari Sub SLS & beban akhir maks. 20 skor di atas rata-rata; baris yg tidak ada kandidat memenuhi dua syarat itu DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
+              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat HANYA dari Tier 1 (Mengajukan Diri) + Tier 2 (peserta PES SE2026), dibatasi radius maks. 7 km dari Sub SLS & beban akhir maks. 20 skor di atas rata-rata; baris yg tidak ada kandidat memenuhi semua syarat itu DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
               className="rounded-md border border-gold-400 bg-gold-100 px-3 py-1.5 text-sm font-medium text-gold-600 transition hover:bg-gold-400/20 disabled:opacity-40"
             >
               🤖 Auto Plot {jumlahBelumDiplot > 0 ? `(${jumlahBelumDiplot} kosong)` : ""}
