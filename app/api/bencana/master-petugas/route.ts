@@ -25,6 +25,10 @@
 // bencana_petugas_pendaftaran_dan_kegiatan_lain. Ini cuma sinyal kesediaan
 // awal, bukan penugasan resmi.
 //
+// (3 Okt 2026) rekomendasi_pml & red_flag_kinerja ditampilkan READ-ONLY di
+// sini (sama spt pendaftaran_bencana_konfirmasi) -- diedit lewat tab
+// "Kegiatan Petugas" (lihat PATCH di app/api/bencana/kegiatan-petugas/route.ts).
+//
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
 
 import { NextResponse } from "next/server";
@@ -49,7 +53,7 @@ export async function GET() {
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status, pendaftaran_bencana_konfirmasi"
+      "id, nama, status_kepegawaian, peran, aktif, alamat_kecamatan, alamat_nagari, no_hp, idsubsls_1303, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, lokasi_status, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja"
     )
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -92,6 +96,8 @@ export async function GET() {
       bisa_mengendarai_motor: p.bisa_mengendarai_motor,
       punya_kendaraan_bermotor: p.punya_kendaraan_bermotor,
       pendaftaran_bencana_konfirmasi: p.pendaftaran_bencana_konfirmasi,
+      rekomendasi_pml: p.rekomendasi_pml,
+      red_flag_kinerja: p.red_flag_kinerja,
     };
   });
 

@@ -162,6 +162,12 @@ type PetugasRingkas = {
   aktif: boolean;
   alamat_kecamatan: string | null;
   pendaftaran_bencana_konfirmasi: boolean;
+  // (3 Okt 2026) 2 flag manual (diisi admin di tab Kegiatan Petugas) --
+  // dipakai utk MENGECUALIKAN mitra ybs dari Tier 1/2 popover "Saran" & dari
+  // kandidat "Auto Plot" (lihat tier1/tier2 di SaranMitraTombol & kandidat
+  // di hitungSaranAutoPlot). Tetap bisa diplot manual lewat dropdown.
+  rekomendasi_pml: boolean;
+  red_flag_kinerja: boolean;
   kegiatan_lain: string[];
   lat: number | null;
   lng: number | null;
@@ -378,13 +384,21 @@ function SaranMitraTombol({
     return (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0);
   }
 
+  // (3 Okt 2026) Mitra yg ditandai rekomendasi_pml / red_flag_kinerja (tab
+  // Kegiatan Petugas) DIKECUALIKAN dari kedua tier -- bukan dihapus dari
+  // pplOptions (Combobox tetap menampilkannya, admin tetap bisa plot manual
+  // kalau benar2 mau), cuma tidak lagi DISARANKAN di sini.
+  const pplOptionsDisaranan = useMemo(
+    () => pplOptions.filter((p) => !p.rekomendasi_pml && !p.red_flag_kinerja),
+    [pplOptions]
+  );
   const tier1 = useMemo(
-    () => pplOptions.filter((p) => p.pendaftaran_bencana_konfirmasi).sort(bandingkanJarakLaluBeban),
-    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
+    () => pplOptionsDisaranan.filter((p) => p.pendaftaran_bencana_konfirmasi).sort(bandingkanJarakLaluBeban),
+    [pplOptionsDisaranan, bebanDraftPerPpl, jarakPerPpl]
   );
   const tier2 = useMemo(
     () =>
-      pplOptions
+      pplOptionsDisaranan
         // (p.kegiatan_lain ?? []) -- JAGA-JAGA konsisten dgn statusKesediaanPpl()
         // di atas: field ini SELALU array dari API, tapi kalau browser masih
         // menjalankan JS versi baru dgn JSON hasil fetch yg sempat ke-cache dari
@@ -393,7 +407,7 @@ function SaranMitraTombol({
         // (reading 'includes')" yg dilaporkan user pasca deploy fitur ini.
         .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026"))
         .sort(bandingkanJarakLaluBeban),
-    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
+    [pplOptionsDisaranan, bebanDraftPerPpl, jarakPerPpl]
   );
 
   function pilih(id: number) {
@@ -2263,7 +2277,21 @@ type MasterPetugasRow = {
   bisa_mengendarai_motor: boolean | null;
   punya_kendaraan_bermotor: boolean | null;
   pendaftaran_bencana_konfirmasi: boolean;
+  // (3 Okt 2026) read-only di sini -- diedit lewat tab Kegiatan Petugas.
+  rekomendasi_pml: boolean;
+  red_flag_kinerja: boolean;
 };
+
+// (3 Okt 2026) Satu kolom gabungan "Rekomendasi" di Master Petugas utk 2 flag
+// manual (diedit di tab Kegiatan Petugas) -- bisa dua-duanya aktif sekaligus
+// (jarang, tp mungkin), jadi dikembalikan array label, bukan 1 nilai.
+function rekomendasiLabelsRow(r: MasterPetugasRow): string[] {
+  const labels: string[] = [];
+  if (r.rekomendasi_pml) labels.push("Rekomendasi PML");
+  if (r.red_flag_kinerja) labels.push("Red Flag Kinerja");
+  if (labels.length === 0) labels.push("Tidak Ada");
+  return labels;
+}
 
 function kecamatanTampil(r: MasterPetugasRow): string {
   return r.kecamatan_wilayah || r.alamat_kecamatan || "Tidak ada data";
@@ -2295,6 +2323,7 @@ function MasterPetugasSection() {
   const [pekerjaanSel, setPekerjaanSel] = useState<Set<string>>(new Set());
   const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
   const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
+  const [rekomendasiSel, setRekomendasiSel] = useState<Set<string>>(new Set());
 
   // (2 Okt 2026) Cari per-kolom utk kolom teks/kategori berkardinalitas
   // tinggi (banyak nilai berbeda) -- Kecamatan/Nagari/Jorong/Pendidikan/
@@ -2344,6 +2373,7 @@ function MasterPetugasSection() {
   const opsiPekerjaan = opsiUnik((r) => r.pekerjaan || "Tidak ada data");
   const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
   const opsiPendaftaran = ["Sudah Mendaftar", "Belum Mendaftar"];
+  const opsiRekomendasi = ["Rekomendasi PML", "Red Flag Kinerja", "Tidak Ada"];
 
   function sortAsc(key: NonNullable<typeof sortKey>) {
     setSortKey(key);
@@ -2385,6 +2415,7 @@ function MasterPetugasSection() {
         !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar")
       )
         return false;
+      if (rekomendasiSel.size > 0 && !rekomendasiLabelsRow(r).some((l) => rekomendasiSel.has(l))) return false;
       if (kwKecamatan && !kecamatanTampil(r).toLowerCase().includes(kwKecamatan)) return false;
       if (kwNagari && !nagariTampil(r).toLowerCase().includes(kwNagari)) return false;
       if (kwJorong && !jorongTampil(r).toLowerCase().includes(kwJorong)) return false;
@@ -2422,6 +2453,7 @@ function MasterPetugasSection() {
     pekerjaanSel,
     motorSel,
     pendaftaranSel,
+    rekomendasiSel,
     kecamatanSearch,
     nagariSearch,
     jorongSearch,
@@ -2447,12 +2479,15 @@ function MasterPetugasSection() {
       "Bisa Mengendarai Motor": boolTampil(r.bisa_mengendarai_motor),
       "Punya Kendaraan Bermotor": boolTampil(r.punya_kendaraan_bermotor),
       "Status Pendaftaran Bencana": r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar",
+      "Rekomendasi PML": r.rekomendasi_pml ? "Ya" : "",
+      "Red Flag Kinerja": r.red_flag_kinerja ? "Ya" : "",
       "No HP": r.no_hp ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(dataRows);
     ws["!cols"] = [
       { wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
+      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Master Petugas");
@@ -2594,6 +2629,10 @@ function MasterPetugasSection() {
                 label="Status Pendaftaran"
                 filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
               />
+              <ThKontrol
+                label="Rekomendasi"
+                filter={{ options: opsiRekomendasi, selected: rekomendasiSel, onApply: setRekomendasiSel }}
+              />
             </tr>
           </thead>
           <tbody>
@@ -2625,11 +2664,32 @@ function MasterPetugasSection() {
                     </span>
                   )}
                 </td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {r.rekomendasi_pml && (
+                      <span
+                        className="rounded-full bg-gold-100 px-2 py-0.5 text-[11px] font-medium text-gold-600"
+                        title="Direkomendasikan jadi PML -- dikecualikan dari popover Saran & Auto Plot di tab Alokasi Petugas. Diedit di tab Kegiatan Petugas."
+                      >
+                        🎯 Rekomendasi PML
+                      </span>
+                    )}
+                    {r.red_flag_kinerja && (
+                      <span
+                        className="rounded-full bg-rust-100 px-2 py-0.5 text-[11px] font-medium text-rust-700"
+                        title="Ditandai kinerja kurang baik -- dikecualikan dari popover Saran & Auto Plot di tab Alokasi Petugas. Diedit di tab Kegiatan Petugas."
+                      >
+                        🚩 Red Flag
+                      </span>
+                    )}
+                    {!r.rekomendasi_pml && !r.red_flag_kinerja && <span className="text-ink/30">—</span>}
+                  </div>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-6 text-center text-ink/50">
+                <td colSpan={15} className="px-3 py-6 text-center text-ink/50">
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
@@ -2658,6 +2718,18 @@ type KegiatanPetugasRow = {
   peran: string | null;
   aktif: boolean;
   pendaftaran_bencana_konfirmasi: boolean;
+  // (3 Okt 2026) 2 flag manual tambahan -- permintaan user:
+  // - rekomendasi_pml: mitra yg DIREKOMENDASIKAN jadi PML (bukan PPL).
+  //   Dipakai utk MENGECUALIKAN mitra ybs dari Tier 1/2 popover "Saran" &
+  //   dari kandidat "Auto Plot" di Langkah 4 tab Alokasi Petugas (tetap bisa
+  //   dipilih manual lewat dropdown kalau admin benar2 mau).
+  // - red_flag_kinerja: mitra dgn catatan kinerja buruk (diisi MANUAL oleh
+  //   admin di sini, BUKAN dihitung otomatis) -- dikecualikan dari Tier 1/2
+  //   & Auto Plot dgn alasan yg sama (jangan disarankan lagi).
+  // Keduanya cuma BISA DIEDIT di tab ini (sama spt pendaftaran_bencana_
+  // konfirmasi) -- ditampilkan read-only di tab Master Petugas.
+  rekomendasi_pml: boolean;
+  red_flag_kinerja: boolean;
   kegiatan_lain: string[];
   sudah_plotting: boolean;
   jumlah_subsls_diplot: number;
@@ -2677,6 +2749,8 @@ function KegiatanPetugasSection() {
   const [search, setSearch] = useState("");
   const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
   const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
+  const [rekomendasiPmlSel, setRekomendasiPmlSel] = useState<Set<string>>(new Set());
+  const [redFlagSel, setRedFlagSel] = useState<Set<string>>(new Set());
   const [plottingSel, setPlottingSel] = useState<Set<string>>(new Set());
   const [kegiatanSel, setKegiatanSel] = useState<Record<string, Set<string>>>(() => {
     const awal: Record<string, Set<string>> = {};
@@ -2769,6 +2843,56 @@ function KegiatanPetugasSection() {
     }
   }
 
+  async function ubahRekomendasiPml(id: number, nilai: boolean) {
+    const kunci = `${id}:rekomendasi_pml`;
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, rekomendasi_pml: nilai } : r)));
+    setBusy((prev) => new Set(prev).add(kunci));
+    tandaiError(kunci, null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, rekomendasi_pml: nilai }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan rekomendasi PML.");
+    } catch (e) {
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, rekomendasi_pml: !nilai } : r)));
+      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(kunci);
+        return next;
+      });
+    }
+  }
+
+  async function ubahRedFlag(id: number, nilai: boolean) {
+    const kunci = `${id}:red_flag`;
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, red_flag_kinerja: nilai } : r)));
+    setBusy((prev) => new Set(prev).add(kunci));
+    tandaiError(kunci, null);
+    try {
+      const res = await fetch("/api/bencana/kegiatan-petugas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: id, red_flag_kinerja: nilai }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menyimpan red flag.");
+    } catch (e) {
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, red_flag_kinerja: !nilai } : r)));
+      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(kunci);
+        return next;
+      });
+    }
+  }
+
   async function ubahKegiatanLain(id: number, kegiatan: string, aktif: boolean) {
     const kunci = `${id}:${kegiatan}`;
     setRows((prev) =>
@@ -2822,6 +2946,8 @@ function KegiatanPetugasSection() {
 
   const opsiStatus = opsiUnik((r) => (r.status_kepegawaian === "organik" ? "Organik" : "Mitra"));
   const opsiPendaftaran = ["Sudah Mengajukan Diri", "Belum Mengajukan Diri"];
+  const opsiRekomendasiPml = ["Direkomendasikan PML", "Tidak"];
+  const opsiRedFlag = ["Red Flag", "Tidak"];
   const opsiPlotting = ["Sudah Plotting", "Belum Plotting"];
 
   function sortAsc(key: "nama") {
@@ -2847,6 +2973,12 @@ function KegiatanPetugasSection() {
         !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mengajukan Diri" : "Belum Mengajukan Diri")
       )
         return false;
+      if (
+        rekomendasiPmlSel.size > 0 &&
+        !rekomendasiPmlSel.has(r.rekomendasi_pml ? "Direkomendasikan PML" : "Tidak")
+      )
+        return false;
+      if (redFlagSel.size > 0 && !redFlagSel.has(r.red_flag_kinerja ? "Red Flag" : "Tidak")) return false;
       if (plottingSel.size > 0 && !plottingSel.has(r.sudah_plotting ? "Sudah Plotting" : "Belum Plotting"))
         return false;
       for (const k of KEGIATAN_LAIN_DAFTAR) {
@@ -2867,7 +2999,7 @@ function KegiatanPetugasSection() {
     }
 
     return hasil;
-  }, [rows, search, statusSel, pendaftaranSel, plottingSel, kegiatanSel, sortKey, sortDir]);
+  }, [rows, search, statusSel, pendaftaranSel, rekomendasiPmlSel, redFlagSel, plottingSel, kegiatanSel, sortKey, sortDir]);
 
   function handleExport() {
     const dataRows = filtered.map((r) => {
@@ -2875,6 +3007,8 @@ function KegiatanPetugasSection() {
         Nama: r.nama,
         "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
         "Mengajukan Diri Kegiatan Bencana": r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak",
+        "Rekomendasi PML": r.rekomendasi_pml ? "Ya" : "",
+        "Red Flag Kinerja": r.red_flag_kinerja ? "Ya" : "",
         "Sudah Plotting (ke Kegiatan Bencana)": r.sudah_plotting
           ? `Ya (${r.jumlah_subsls_diplot} Sub SLS)`
           : "Belum",
@@ -2883,7 +3017,15 @@ function KegiatanPetugasSection() {
       return baris;
     });
     const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws["!cols"] = [{ wch: 26 }, { wch: 16 }, { wch: 26 }, { wch: 18 }, ...KEGIATAN_LAIN_DAFTAR.map(() => ({ wch: 16 }))];
+    ws["!cols"] = [
+      { wch: 26 },
+      { wch: 16 },
+      { wch: 26 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      ...KEGIATAN_LAIN_DAFTAR.map(() => ({ wch: 16 })),
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Kegiatan Petugas");
     XLSX.writeFile(wb, "kegiatan_petugas.xlsx");
@@ -2903,12 +3045,18 @@ function KegiatanPetugasSection() {
         <p className="mt-1 text-sm text-ink/70">
           Status kesediaan &amp; keterlibatan seluruh petugas (organik &amp; mitra) di kegiatan pendataan
           bencana maupun kegiatan lain yang berjalan bersamaan. Kolom &ldquo;Status Kepegawaian&rdquo;,
-          &ldquo;Mengajukan Diri&rdquo;, dan kelima kolom kegiatan lain BISA DIEDIT langsung di tabel ini
-          (klik checkbox/pilihan, otomatis tersimpan). Kolom &ldquo;Sudah Plotting (ke Kegiatan
-          Bencana)&rdquo; murni informasi (dihitung dari jumlah Sub SLS yang sudah di-plot ke petugas ini
-          di tab Alokasi Petugas, khusus kegiatan pendataan bencana) --
-          BUKAN tombol/penugasan, hanya penanda supaya terlihat sekilas siapa yang belum kebagian
-          wilayah.
+          &ldquo;Mengajukan Diri&rdquo;, &ldquo;Rekomendasi PML&rdquo;, &ldquo;Red Flag Kinerja&rdquo;, dan
+          kelima kolom kegiatan lain BISA DIEDIT langsung di tabel ini (klik checkbox/pilihan, otomatis
+          tersimpan). Kolom &ldquo;Sudah Plotting (ke Kegiatan Bencana)&rdquo; murni informasi (dihitung
+          dari jumlah Sub SLS yang sudah di-plot ke petugas ini di tab Alokasi Petugas, khusus kegiatan
+          pendataan bencana) -- BUKAN tombol/penugasan, hanya penanda supaya terlihat sekilas siapa yang
+          belum kebagian wilayah.
+        </p>
+        <p className="mt-1 text-xs text-ink/50">
+          &ldquo;Rekomendasi PML&rdquo; &amp; &ldquo;Red Flag Kinerja&rdquo;: mitra yang ditandai salah
+          satu TIDAK akan muncul lagi di popover &ldquo;💡 Saran&rdquo; (Tier 1/2) maupun fitur
+          &ldquo;🤖 Auto Plot&rdquo; di Langkah 4 tab Alokasi Petugas -- tetap bisa diplot manual lewat
+          dropdown kalau admin benar-benar mau.
         </p>
         <p className="mt-2 text-xs text-ink/50">
           Menampilkan {filtered.length} dari {rows.length} petugas.
@@ -2950,6 +3098,14 @@ function KegiatanPetugasSection() {
                 filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
               />
               <ThKontrol
+                label="Rekomendasi PML"
+                filter={{ options: opsiRekomendasiPml, selected: rekomendasiPmlSel, onApply: setRekomendasiPmlSel }}
+              />
+              <ThKontrol
+                label="Red Flag Kinerja"
+                filter={{ options: opsiRedFlag, selected: redFlagSel, onApply: setRedFlagSel }}
+              />
+              <ThKontrol
                 label="Sudah Plotting (ke Kegiatan Bencana)"
                 filter={{ options: opsiPlotting, selected: plottingSel, onApply: setPlottingSel }}
               />
@@ -2970,6 +3126,8 @@ function KegiatanPetugasSection() {
             {filtered.map((r) => {
               const kunciStatus = `${r.id}:status`;
               const kunciMendaftar = `${r.id}:mendaftar`;
+              const kunciRekomendasiPml = `${r.id}:rekomendasi_pml`;
+              const kunciRedFlag = `${r.id}:red_flag`;
               return (
                 <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
@@ -3002,6 +3160,36 @@ function KegiatanPetugasSection() {
                     </label>
                     {errSel.has(kunciMendaftar) && (
                       <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciMendaftar)}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={r.rekomendasi_pml}
+                        disabled={busy.has(kunciRekomendasiPml)}
+                        onChange={(e) => ubahRekomendasiPml(r.id, e.target.checked)}
+                        className="h-3.5 w-3.5 accent-gold-400 disabled:opacity-50"
+                      />
+                      <span className="text-xs text-ink/70">{r.rekomendasi_pml ? "Ya" : "Tidak"}</span>
+                    </label>
+                    {errSel.has(kunciRekomendasiPml) && (
+                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciRekomendasiPml)}</p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={r.red_flag_kinerja}
+                        disabled={busy.has(kunciRedFlag)}
+                        onChange={(e) => ubahRedFlag(r.id, e.target.checked)}
+                        className="h-3.5 w-3.5 accent-rust-500 disabled:opacity-50"
+                      />
+                      <span className="text-xs text-ink/70">{r.red_flag_kinerja ? "Ya" : "Tidak"}</span>
+                    </label>
+                    {errSel.has(kunciRedFlag) && (
+                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciRedFlag)}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -3044,7 +3232,7 @@ function KegiatanPetugasSection() {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4 + KEGIATAN_LAIN_DAFTAR.length} className="px-3 py-6 text-center text-ink/50">
+                <td colSpan={6 + KEGIATAN_LAIN_DAFTAR.length} className="px-3 py-6 text-center text-ink/50">
                   Tidak ada petugas yang cocok dengan filter saat ini.
                 </td>
               </tr>
@@ -3267,6 +3455,18 @@ function AlokasiPetugasSection() {
   const [draftPmlByPpl, setDraftPmlByPpl] = useState<Record<number, number | null>>({});
   const [simpanBusy, setSimpanBusy] = useState(false);
   const [simpanError, setSimpanError] = useState<string | null>(null);
+  // Pembagi skor jarak (lihat muatPengaturanBeban) -- default 5 sama dgn
+  // default di server, dipakai utk menghitung PERKIRAAN Skor Jarak di kolom
+  // Langkah 4 sblm plot tersimpan.
+  const [pembagiJarakKm, setPembagiJarakKm] = useState(5);
+  // (3 Okt 2026) "Auto Plot": idsubsls baris yg PPL-nya diisi oleh saran
+  // otomatis (handleAutoPlot) dan BELUM ditinjau/disetujui admin -- dipakai
+  // utk highlight baris warna cokelat (gold-100) + tombol Setujui/Batalkan.
+  // SENGAJA bukan plotting final: draftPpl-nya sama persis spt kalau admin
+  // pilih manual, jadi tetap lewat alur draft -> "Simpan Perubahan" yg sama,
+  // konsisten dgn aturan baku proyek ini (tidak ada alokasi otomatis yg
+  // mengikat, keputusan akhir selalu admin).
+  const [autoPlotSubsls, setAutoPlotSubsls] = useState<Set<string>>(new Set());
 
   // Draft koreksi Kertas Kerja Beban (KK Total & KK Terdampak per Sub SLS):
   // sama seperti draft plotting -- input lokal dulu, baru dikirim batch
@@ -3311,6 +3511,22 @@ function AlokasiPetugasSection() {
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
     setBebanRows(json.data ?? []);
+  }
+
+  // (3 Okt 2026) Dipakai utk menghitung PERKIRAAN Skor Jarak di kolom "Skor
+  // Jarak" Langkah 4 SEBELUM plot benar2 tersimpan (lihat kolom Skor Jarak
+  // di tabel Langkah 4) -- rumus HARUS sama dgn yg dipakai server
+  // (bencana_kertas_kerja_alokasi): skor_jarak = jarak_km / pembagi_jarak_km
+  // x jumlah_hari_kerja. Nilai pembagi ini admin-configurable (menu "Kelola
+  // Perkiraan Beban Tugas"), jadi diambil dari server, BUKAN di-hardcode.
+  async function muatPengaturanBeban() {
+    const res = await fetch("/api/bencana/pengaturan-beban");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
+    const rows = (json.data ?? []) as { kunci: string; nilai: number }[];
+    const p = rows.find((r) => r.kunci === "pembagi_jarak_km");
+    const nilai = p ? Number(p.nilai) : NaN;
+    if (Number.isFinite(nilai) && nilai > 0) setPembagiJarakKm(nilai);
   }
 
   async function muatKontak() {
@@ -3369,7 +3585,7 @@ function AlokasiPetugasSection() {
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja), muatKontak()]);
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja), muatKontak(), muatPengaturanBeban()]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Gagal memuat data alokasi.");
     } finally {
@@ -3464,6 +3680,7 @@ function AlokasiPetugasSection() {
     }
     setDraftPpl(nextPpl);
     setDraftPmlByPpl(nextPml);
+    setAutoPlotSubsls(new Set());
     setSimpanError(null);
   }
 
@@ -3502,6 +3719,9 @@ function AlokasiPetugasSection() {
         if (!res.ok) throw new Error(json.error || "Gagal menyimpan PML.");
       }
 
+      // Semua baris yg berhasil disimpan sudah resmi jadi plot server --
+      // saran Auto Plot yg ikut tersimpan tidak perlu ditinjau lagi.
+      setAutoPlotSubsls(new Set());
       await muatData(hariKerjaDipakai);
     } catch (err) {
       setSimpanError(err instanceof Error ? err.message : "Gagal menyimpan perubahan.");
@@ -4044,6 +4264,124 @@ function AlokasiPetugasSection() {
     () => kertasKerja.filter((r) => !(draftPpl[r.idsubsls] ?? null)).length,
     [kertasKerja, draftPpl]
   );
+
+  // Ubah draftPpl SATU baris (dipakai Combobox/SaranMitraTombol/tombol lepas
+  // di tabel Langkah 4) -- sekalian lepas tanda "Saran Auto Plot" baris itu
+  // kalau ada, krn begitu admin pilih manual, pilihan itu bukan saran lagi.
+  function ubahDraftPpl(idsubsls: string, val: number | null) {
+    setDraftPpl((prev) => ({ ...prev, [idsubsls]: val }));
+    setAutoPlotSubsls((prev) => {
+      if (!prev.has(idsubsls)) return prev;
+      const next = new Set(prev);
+      next.delete(idsubsls);
+      return next;
+    });
+  }
+
+  // (3 Okt 2026) "Auto Plot" -- permintaan admin: isi otomatis baris yg
+  // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
+  // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
+  // PPL -- sama persis dgn dasar urutan popover "Saran") dan (2) total
+  // beban PPL ybs tetap dlm rentang wajar dari rata-rata (pakai ambang
+  // Seimbang/Perhatian yg sama dgn balanceInfo, <=15% lalu <=35% di atas
+  // rata-rata) -- baru kalau tidak ada kandidat yg lolos ambang itu, jatuh
+  // ke kandidat TERDEKAT apa adanya supaya baris tetap terisi (toh ini
+  // CUMA SARAN, bukan keputusan final). Kandidat yg ditandai
+  // rekomendasi_pml atau red_flag_kinerja (lihat tab Kegiatan Petugas)
+  // DIKECUALIKAN dari saran -- sama spt popover "Saran" Tier 1/2.
+  //
+  // Baris diproses dari skor beban TERBESAR dulu (mirip bin-packing) supaya
+  // baris "berat" kebagian kandidat terbaik duluan, sisanya yg lebih ringan
+  // lebih fleksibel dicocokkan belakangan.
+  //
+  // SENGAJA TIDAK auto-save & TIDAK menyentuh PML/Korwil -- hasilnya cuma
+  // mengisi draftPpl (persis spt pilih manual) + ditandai di autoPlotSubsls
+  // utk highlight baris cokelat & tombol Setujui/Batalkan; baru benar2
+  // tersimpan ke server sesudah "Simpan Perubahan" ditekan, konsisten dgn
+  // aturan baku proyek ini (lihat komentar SaranMitraTombol).
+  function hitungSaranAutoPlot(): Record<string, number> {
+    const workingBeban = new Map(bebanDraftPerPpl);
+    const hasil: Record<string, number> = {};
+
+    const kandidat = pplOptions.filter(
+      (p) =>
+        p.lokasi_status === "riil" &&
+        typeof p.lat === "number" &&
+        typeof p.lng === "number" &&
+        !p.rekomendasi_pml &&
+        !p.red_flag_kinerja
+    );
+    if (kandidat.length === 0) return hasil;
+
+    const belumDiplot = kertasKerja
+      .filter((r) => !(draftPpl[r.idsubsls] ?? null))
+      .slice()
+      .sort((a, b) => b.skor_beban_pendataan - a.skor_beban_pendataan);
+
+    for (const r of belumDiplot) {
+      const titik = titikSubslsMap.get(r.idsubsls);
+      if (!titik) continue; // Sub SLS tanpa koordinat -- tidak bisa dihitung jaraknya, dilewati.
+
+      const terurut = kandidat
+        .map((p) => ({ p, jarak: haversineKm(p.lat as number, p.lng as number, titik.lat, titik.lng) }))
+        .sort((a, b) => a.jarak - b.jarak);
+
+      const pilihan =
+        terurut.find(({ p }) => {
+          const proyeksi = (workingBeban.get(p.id) ?? 0) + r.skor_beban_pendataan;
+          return balanceInfo(proyeksi, rataBebanTetap).tone !== "kelebihan";
+        }) ?? terurut[0];
+
+      hasil[r.idsubsls] = pilihan.p.id;
+      workingBeban.set(pilihan.p.id, (workingBeban.get(pilihan.p.id) ?? 0) + r.skor_beban_pendataan);
+    }
+
+    return hasil;
+  }
+
+  function handleAutoPlot() {
+    const saran = hitungSaranAutoPlot();
+    const idSubslsTerisi = Object.keys(saran);
+    if (idSubslsTerisi.length === 0) return;
+    setDraftPpl((prev) => ({ ...prev, ...saran }));
+    setAutoPlotSubsls((prev) => {
+      const next = new Set(prev);
+      for (const id of idSubslsTerisi) next.add(id);
+      return next;
+    });
+  }
+
+  function setujuiAutoPlot(idsubsls: string) {
+    setAutoPlotSubsls((prev) => {
+      if (!prev.has(idsubsls)) return prev;
+      const next = new Set(prev);
+      next.delete(idsubsls);
+      return next;
+    });
+  }
+
+  function batalkanAutoPlot(idsubsls: string) {
+    setDraftPpl((prev) => ({ ...prev, [idsubsls]: null }));
+    setAutoPlotSubsls((prev) => {
+      if (!prev.has(idsubsls)) return prev;
+      const next = new Set(prev);
+      next.delete(idsubsls);
+      return next;
+    });
+  }
+
+  function setujuiSemuaAutoPlot() {
+    setAutoPlotSubsls(new Set());
+  }
+
+  function batalkanSemuaAutoPlot() {
+    setDraftPpl((prev) => {
+      const next = { ...prev };
+      for (const id of autoPlotSubsls) next[id] = null;
+      return next;
+    });
+    setAutoPlotSubsls(new Set());
+  }
   const kecamatanTanpaDataPenuh = useMemo(
     () => kebutuhan.filter((k) => k.jumlah_subsls_tanpa_data_kk === k.jumlah_subsls).map((k) => k.kecamatan),
     [kebutuhan]
@@ -5658,14 +5996,25 @@ function AlokasiPetugasSection() {
               server. Baru tersimpan sesudah menekan &quot;Simpan Perubahan&quot;.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={filtered.length === 0}
-            className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
-          >
-            Export ke Excel
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAutoPlot}
+              disabled={jumlahBelumDiplot === 0}
+              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- berdasar jarak terdekat & keseimbangan beban. TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
+              className="rounded-md border border-gold-400 bg-gold-100 px-3 py-1.5 text-sm font-medium text-gold-600 transition hover:bg-gold-400/20 disabled:opacity-40"
+            >
+              🤖 Auto Plot {jumlahBelumDiplot > 0 ? `(${jumlahBelumDiplot} kosong)` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={filtered.length === 0}
+              className="rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
+            >
+              Export ke Excel
+            </button>
+          </div>
         </div>
 
         {/* (3 Okt 2026) Permintaan user: dulu pembagi "rata-rata beban per PPL"
@@ -5727,6 +6076,31 @@ function AlokasiPetugasSection() {
             </button>
           </span>
         </div>
+
+        {autoPlotSubsls.size > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-gold-400 bg-gold-100 px-3 py-2 text-xs text-gold-600">
+            <span>
+              🤖 <strong>{autoPlotSubsls.size}</strong> baris diisi dari saran Auto Plot (baris berwarna cokelat di
+              tabel bawah) — belum final, tinjau dulu sebelum menyimpan.
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={batalkanSemuaAutoPlot}
+                className="rounded-md border border-gold-400 bg-white px-2.5 py-1 font-medium text-gold-600 hover:bg-gold-100"
+              >
+                ✕ Batalkan Semua Saran
+              </button>
+              <button
+                type="button"
+                onClick={setujuiSemuaAutoPlot}
+                className="rounded-md bg-moss-500 px-2.5 py-1 font-medium text-white hover:bg-moss-700"
+              >
+                ✓ Setujui Semua Saran
+              </button>
+            </span>
+          </div>
+        )}
 
         {diffTerbuka && daftarPerubahanPending.length > 0 && (
           <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-blue-100 bg-blue-50/40 p-2">
@@ -6169,9 +6543,27 @@ function AlokasiPetugasSection() {
                 const delta = bebanPpl != null && rataBebanTetap > 0 ? bebanPpl - rataBebanTetap : null;
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
-                const bgBaris = berubah ? "bg-orange-50/50" : "bg-white";
+                const isSaranAutoPlot = autoPlotSubsls.has(r.idsubsls);
+                const bgBaris = isSaranAutoPlot ? "bg-gold-100" : berubah ? "bg-orange-50/50" : "bg-white";
                 const petugasDraftPpl = draftPplId ? petugasList.find((x) => x.id === draftPplId) : undefined;
                 const statusKesediaan = statusKesediaanPpl(petugasDraftPpl);
+                // Skor Jarak: nilai RESMI (OSRM) cuma valid kalau draft PPL
+                // saat ini SAMA dgn PPL yg benar2 tersimpan di server & jarak
+                // riilnya sudah dihitung. Selain itu (baru dipilih/diubah di
+                // draft, atau belum pernah dihitung sama sekali) tampilkan
+                // PERKIRAAN garis lurus (haversine) spt popover "Saran", biar
+                // admin langsung lihat gambaran begitu memilih PPL -- bukan
+                // menunggu simpan + proses OSRM.
+                const skorJarakResmi = r.jarak_status === "riil" && draftPplId === r.ppl_id;
+                const titikBarisIni = titikSubslsMap.get(r.idsubsls) ?? null;
+                const skorJarakEstimasi =
+                  !skorJarakResmi && petugasDraftPpl && titikBarisIni && petugasDraftPpl.lokasi_status === "riil" &&
+                  typeof petugasDraftPpl.lat === "number" && typeof petugasDraftPpl.lng === "number"
+                    ? (() => {
+                        const jarakKm = haversineKm(petugasDraftPpl.lat as number, petugasDraftPpl.lng as number, titikBarisIni.lat, titikBarisIni.lng);
+                        return { jarakKm, skor: (jarakKm / pembagiJarakKm) * r.jumlah_hari_kerja };
+                      })()
+                    : null;
                 return (
                   <tr key={r.idsubsls} className={`border-t border-line ${bgBaris}`}>
                     {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
@@ -6188,14 +6580,30 @@ function AlokasiPetugasSection() {
                     )}
                     {!modeFokus && (
                       <td className="px-3 py-2 text-ink/80">
-                        {r.jarak_status === "riil" ? (
+                        {skorJarakResmi ? (
                           <span
-                            title={`Jarak dihitung dari titik Sub SLS ke lokasi rumah petugas (OSRM/garis lurus), dikali perkiraan ${r.jumlah_hari_kerja} hari kerja (PP tiap hari, tidak menginap)`}
+                            title={`Jarak RESMI dihitung dari titik Sub SLS ke lokasi rumah petugas (OSRM/garis lurus), dikali perkiraan ${r.jumlah_hari_kerja} hari kerja (PP tiap hari, tidak menginap)`}
                           >
                             {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km × {r.jumlah_hari_kerja} hari)
                           </span>
+                        ) : skorJarakEstimasi ? (
+                          <span
+                            className="text-amber-700"
+                            title="PERKIRAAN garis lurus (haversine) dari lokasi rumah PPL ke titik Sub SLS -- belum final. Nilai resmi (rute OSRM) dihitung ulang sesudah 'Simpan Perubahan' ditekan."
+                          >
+                            ≈ {skorJarakEstimasi.skor.toLocaleString("id-ID", { maximumFractionDigits: 2 })} (
+                            {skorJarakEstimasi.jarakKm.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km ×{" "}
+                            {r.jumlah_hari_kerja} hari)
+                          </span>
                         ) : (
-                          <span className="text-xs text-ink/40" title="Lokasi rumah petugas blm diisi/diverifikasi">
+                          <span
+                            className="text-xs text-ink/40"
+                            title={
+                              draftPplId
+                                ? "Lokasi rumah PPL ini blm diisi/diverifikasi -- jarak tidak bisa diperkirakan"
+                                : "Belum dipilih PPL / lokasi rumah petugas blm diisi-diverifikasi"
+                            }
+                          >
                             ⚪ belum tersedia
                           </span>
                         )}
@@ -6207,7 +6615,7 @@ function AlokasiPetugasSection() {
                         <Combobox
                           disabled={pplOptions.length === 0}
                           value={draftPplId ?? null}
-                          onChange={(val) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: val }))}
+                          onChange={(val) => ubahDraftPpl(r.idsubsls, val)}
                           options={pplOptions.map((p) => ({ value: p.id, label: infoPplUntukBaris(p, r) }))}
                           placeholder="Plot ke PPL..."
                           className="w-48"
@@ -6216,7 +6624,7 @@ function AlokasiPetugasSection() {
                           pplOptions={pplOptions}
                           bebanDraftPerPpl={bebanDraftPerPpl}
                           pplTerpilihId={draftPplId}
-                          onPilih={(id) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: id }))}
+                          onPilih={(id) => ubahDraftPpl(r.idsubsls, id)}
                           subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
                         />
                         {statusKesediaan?.tipe === "belum_konfirmasi" && (
@@ -6229,7 +6637,7 @@ function AlokasiPetugasSection() {
                         {draftPplId && (
                           <button
                             type="button"
-                            onClick={() => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: null }))}
+                            onClick={() => ubahDraftPpl(r.idsubsls, null)}
                             title="Lepas plot Sub SLS ini (belum tersimpan sampai Simpan Perubahan ditekan)"
                             className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
                           >
@@ -6237,6 +6645,30 @@ function AlokasiPetugasSection() {
                           </button>
                         )}
                       </div>
+                      {isSaranAutoPlot && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className="rounded-full bg-gold-400/20 px-2 py-0.5 text-[10px] font-medium text-gold-600"
+                            title="Saran otomatis Auto Plot: PPL terdekat yg bebannya paling mendekati rata-rata. BELUM final -- tinjau lalu Setujui atau Batalkan."
+                          >
+                            🤖 Saran Auto Plot
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setujuiAutoPlot(r.idsubsls)}
+                            className="rounded-full bg-moss-100 px-2 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-500 hover:text-white"
+                          >
+                            ✓ Setujui
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => batalkanAutoPlot(r.idsubsls)}
+                            className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                          >
+                            ✕ Batalkan
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {bebanPpl != null ? (

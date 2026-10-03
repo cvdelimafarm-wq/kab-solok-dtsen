@@ -17,6 +17,11 @@
 //   lewat PUT, divalidasi terhadap whitelist KEGIATAN_LAIN_VALID di bawah.
 // - status_kepegawaian: "organik"/"mitra" -- BISA DIEDIT di sini (PATCH),
 //   padahal field ini TIDAK bisa diedit di endpoint manapun sebelumnya.
+// - rekomendasi_pml & red_flag_kinerja (3 Okt 2026): 2 flag manual -- BISA
+//   DIEDIT di sini (PATCH). Dipakai FE (tab Alokasi Petugas) utk
+//   MENGECUALIKAN mitra ybs dari popover "Saran" Tier 1/2 & fitur
+//   "Auto Plot" di Langkah 4 (tetap bisa diplot manual lewat dropdown).
+//   Ditampilkan read-only di Master Petugas.
 //
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
 
@@ -53,7 +58,7 @@ export async function GET() {
 
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
-    .select("id, nama, status_kepegawaian, peran, aktif, pendaftaran_bencana_konfirmasi")
+    .select("id, nama, status_kepegawaian, peran, aktif, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja")
     .order("nama");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -88,6 +93,8 @@ export async function GET() {
     peran: p.peran,
     aktif: p.aktif,
     pendaftaran_bencana_konfirmasi: p.pendaftaran_bencana_konfirmasi,
+    rekomendasi_pml: p.rekomendasi_pml,
+    red_flag_kinerja: p.red_flag_kinerja,
     kegiatan_lain: kegiatanMap.get(p.id) ?? [],
     sudah_plotting: (plottingCount.get(p.id) ?? 0) > 0,
     jumlah_subsls_diplot: plottingCount.get(p.id) ?? 0,
@@ -131,6 +138,20 @@ export async function PATCH(req: NextRequest) {
       );
     }
     update.pendaftaran_bencana_konfirmasi = body.pendaftaran_bencana_konfirmasi;
+  }
+
+  if (body.rekomendasi_pml !== undefined) {
+    if (typeof body.rekomendasi_pml !== "boolean") {
+      return NextResponse.json({ error: "rekomendasi_pml harus true/false." }, { status: 400 });
+    }
+    update.rekomendasi_pml = body.rekomendasi_pml;
+  }
+
+  if (body.red_flag_kinerja !== undefined) {
+    if (typeof body.red_flag_kinerja !== "boolean") {
+      return NextResponse.json({ error: "red_flag_kinerja harus true/false." }, { status: 400 });
+    }
+    update.red_flag_kinerja = body.red_flag_kinerja;
   }
 
   if (Object.keys(update).length === 0) {

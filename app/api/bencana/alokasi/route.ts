@@ -24,6 +24,11 @@
 // diplot (disimpan di bencana_alokasi_subsls.jarak_km) tetap pakai OSRM kalau
 // tersedia -- popover Saran ini murni bantuan memilih, bukan nilai resmi.
 //
+// (3 Okt 2026) rekomendasi_pml & red_flag_kinerja ditambahkan ke daftar
+// petugas -- dua flag manual (diisi admin di tab Kegiatan Petugas) dipakai
+// FE utk MENGECUALIKAN mitra ybs dari popover "Saran" Tier 1/2 & fitur
+// "Auto Plot" di Langkah 4 (tetap bisa diplot manual lewat dropdown).
+//
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya di
 // aplikasi ini (tidak ada sistem login sama sekali di /bencana).
 
@@ -69,7 +74,7 @@ export async function GET(req: NextRequest) {
         supabase
           .from("bencana_petugas")
           .select(
-            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, lat, lng"
+            "id, nama, peran, status_kepegawaian, sumber_roster, atasan_id, lokasi_status, aktif, alamat_kecamatan, pendaftaran_bencana_konfirmasi, rekomendasi_pml, red_flag_kinerja, lat, lng"
           )
           .order("nama"),
         supabase.rpc("bencana_daftar_calon_sampel"),
