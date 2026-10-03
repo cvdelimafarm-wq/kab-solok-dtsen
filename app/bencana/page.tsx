@@ -363,35 +363,16 @@ function SaranMitraTombol({
   // bukan keputusan otomatis".
   const BATAS_JARAK_SARAN_KM = 20;
 
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
+  // (3 Okt 2026) Dipisah dari toggle() biar bisa dipakai ULANG saat scroll
+  // (lihat useEffect di bawah) -- bukan cuma saat panel pertama dibuka.
+  function hitungPosisi(rect: DOMRect) {
     const lebar = 280;
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8));
-    // (3 Okt 2026) Tinggi "ideal" panel -- selaras dgn max-h-80 (320px) yg
-    // dipakai sebelumnya. Kalau ruang DI BAWAH tombol tidak cukup (dan ruang
-    // di ATAS lebih luas), panel ditampilkan di atas tombol (anchor ke
-    // `bottom`, bukan `top`) supaya tidak terpotong oleh tepi bawah viewport
-    // / area scroll tabel -- dilaporkan user: "pop up saran ketutup".
+    // Tinggi "ideal" panel -- selaras dgn max-h-80 (320px) yg dipakai
+    // sebelumnya. Kalau ruang DI BAWAH tombol tidak cukup (dan ruang di ATAS
+    // lebih luas), panel ditampilkan di atas tombol (anchor ke `bottom`,
+    // bukan `top`) supaya tidak terpotong oleh tepi bawah viewport / area
+    // scroll tabel -- dilaporkan user: "pop up saran ketutup".
     const TINGGI_IDEAL = 320;
     const ruangBawah = window.innerHeight - rect.bottom - 8;
     const ruangAtas = rect.top - 8;
@@ -405,6 +386,41 @@ function SaranMitraTombol({
         maxHeight: Math.max(120, Math.min(TINGGI_IDEAL, ruangAtas)),
       });
     }
+  }
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    // (3 Okt 2026, revisi) SEBELUMNYA scroll apa pun langsung MENUTUP panel.
+    // Ternyata itu sumber bug lain: tombol "Saran" yg baru menerima fokus
+    // (klik) dekat tepi area scroll tabel bisa memicu browser auto-scroll
+    // ("scroll into view") SEGERA setelah panel dibuka -- scroll itu sendiri
+    // langsung menutupnya lagi, membuat panel kelihatan "kepotong"/separuh
+    // (dilaporkan user lewat screenshot: panel teks kepotong di sisi kiri).
+    // Fix: REPOSISI ulang panel saat scroll (bukan ditutup) -- konsisten dgn
+    // perbaikan yg sama di Combobox PPL.
+    function reposisiSaatScroll() {
+      if (ref.current) hitungPosisi(ref.current.getBoundingClientRect());
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", reposisiSaatScroll, true);
+    window.addEventListener("resize", reposisiSaatScroll);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", reposisiSaatScroll, true);
+      window.removeEventListener("resize", reposisiSaatScroll);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    hitungPosisi(e.currentTarget.getBoundingClientRect());
     setBuka(true);
   }
 
@@ -2124,24 +2140,34 @@ function Combobox({
 
   useEffect(() => {
     if (!open) return;
-    function tutup() {
-      setOpen(false);
-      setQuery("");
-    }
     function onClickOutside(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) tutup();
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
     }
-    // Karena panel kini `position: fixed` (bukan lagi anak `overflow-auto`
-    // ancestor-nya), posisinya TIDAK ikut bergerak otomatis saat area scroll
-    // tabel di-scroll -- jadi ditutup saja saat scroll/resize, sama seperti
-    // pola popover lain di file ini (SaranMitraTombol/ThKontrol).
+    // (3 Okt 2026, revisi) Percobaan pertama: TUTUP dropdown setiap kali ada
+    // scroll apa pun (sama seperti pola SaranMitraTombol/ThKontrol). Ternyata
+    // ini salah utk Combobox: dropdown dibuka lewat onFocus() pada <input>,
+    // dan browser SERING otomatis men-scroll input itu ke pandangan
+    // ("scroll into view on focus") kalau baris-nya dekat tepi area scroll
+    // tabel -- scroll bawaan itu terjadi SEGERA setelah dropdown dibuka,
+    // jadi langsung menutupnya lagi di detik yg sama, membuat dropdown
+    // kelihatan seperti TIDAK PERNAH muncul (dilaporkan user: "tidakbisa
+    // dropdown nama ppl"). SaranMitraTombol tidak kena masalah ini krn
+    // dibuka lewat onClick tombol, bukan fokus <input>, jadi tidak memicu
+    // auto-scroll serupa. Fix: REPOSISI ulang panel saat scroll (bukan
+    // ditutup) -- panel tetap terbuka & ikut pindah mengikuti posisi input.
+    function onScroll() {
+      hitungPosisi();
+    }
     document.addEventListener("mousedown", onClickOutside);
-    document.addEventListener("scroll", tutup, true);
-    window.addEventListener("resize", tutup);
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("mousedown", onClickOutside);
-      document.removeEventListener("scroll", tutup, true);
-      window.removeEventListener("resize", tutup);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [open]);
 
