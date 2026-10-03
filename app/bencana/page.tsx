@@ -3726,6 +3726,14 @@ function AlokasiPetugasSection() {
   const [pecahBusy, setPecahBusy] = useState(false);
   const [pecahError, setPecahError] = useState<string | null>(null);
   const [gabungBusyId, setGabungBusyId] = useState<string | null>(null);
+  // (3 Okt 2026) "Reset Semua Plotting": hapus SELURUH plotting PPL (termasuk
+  // Sub SLS yg sudah dipecah) sekali jalan -- aksi destruktif, digerbangi PIN
+  // statis (app ini tidak punya sistem login sama sekali) supaya tidak
+  // kepencet tidak sengaja.
+  const [modalReset, setModalReset] = useState(false);
+  const [resetPin, setResetPin] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   // (3 Okt 2026) "Auto Plot": idsubsls baris yg PPL-nya diisi oleh saran
   // otomatis (handleAutoPlot) dan BELUM ditinjau/disetujui admin -- dipakai
   // utk highlight baris warna cokelat (gold-100) + tombol Setujui/Batalkan.
@@ -3921,6 +3929,30 @@ function AlokasiPetugasSection() {
       setSimpanError(err instanceof Error ? err.message : "Gagal menggabungkan kembali Sub SLS.");
     } finally {
       setGabungBusyId(null);
+    }
+  }
+
+  async function handleResetSemuaPlotting() {
+    setResetBusy(true);
+    setResetError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/reset-semua", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: resetPin }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal mereset plotting.");
+      setDraftPpl({});
+      setDraftPmlByPpl({});
+      setAutoPlotSubsls(new Set());
+      setModalReset(false);
+      setResetPin("");
+      await muatData(hariKerjaDipakai);
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : "Gagal mereset plotting.");
+    } finally {
+      setResetBusy(false);
     }
   }
 
@@ -6521,8 +6553,63 @@ function AlokasiPetugasSection() {
             >
               {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setResetError(null);
+                setResetPin("");
+                setModalReset(true);
+              }}
+              title="Hapus SELURUH plotting PPL (termasuk yg sudah dipecah) -- butuh PIN"
+              className="rounded-md border border-rust-200 bg-rust-50 px-3 py-1.5 text-xs font-medium text-rust-700 transition hover:bg-rust-100"
+            >
+              🗑️ Reset Semua Plotting
+            </button>
           </span>
         </div>
+
+        {modalReset && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
+              <h3 className="font-medium text-rust-700">Reset Semua Plotting</h3>
+              <p className="mt-1 text-xs text-ink/60">
+                Ini akan menghapus SELURUH penugasan PPL utk SEMUA Sub SLS (termasuk yg sudah dipecah) dan tidak bisa
+                dibatalkan. Masukkan PIN utk melanjutkan.
+              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                value={resetPin}
+                onChange={(e) => setResetPin(e.target.value)}
+                placeholder="PIN"
+                autoFocus
+                className="mt-3 w-full rounded border border-line px-2 py-1.5 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && resetPin && !resetBusy) handleResetSemuaPlotting();
+                }}
+              />
+              {resetError && <div className="mt-2 rounded-md bg-rust-50 px-3 py-2 text-xs text-rust-700">{resetError}</div>}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={resetBusy}
+                  onClick={() => setModalReset(false)}
+                  className="rounded-md border border-line px-3 py-1.5 text-sm text-ink/70 hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={!resetPin || resetBusy}
+                  onClick={handleResetSemuaPlotting}
+                  className="rounded-md bg-rust-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rust-700 disabled:opacity-40"
+                >
+                  {resetBusy ? "Mereset..." : "Reset Sekarang"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {autoPlotSubsls.size > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-gold-400 bg-gold-100 px-3 py-2 text-xs text-gold-600">
@@ -6922,6 +7009,7 @@ function AlokasiPetugasSection() {
                     onReset: sortReset,
                   }}
                 />
+                <th className="px-3 py-2 font-medium">Pecah</th>
                 <ThKontrol
                   label="Beban Petugas"
                   sort={{
@@ -7090,21 +7178,6 @@ function AlokasiPetugasSection() {
                           )}
                           {statusKesediaan &&
                             statusKesediaan.kegiatanLain.map((k) => <BadgeKegiatanLain key={k} kegiatan={k} />)}
-                          <button
-                            type="button"
-                            onClick={() => setModalPecah(r)}
-                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
-                          >
-                            Edit Pembagian
-                          </button>
-                          <button
-                            type="button"
-                            disabled={gabungBusyId === r.idsubsls}
-                            onClick={() => handleGabungKembali(r.idsubsls)}
-                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200 disabled:opacity-50"
-                          >
-                            {gabungBusyId === r.idsubsls ? "Menggabungkan..." : "Gabung Kembali"}
-                          </button>
                         </div>
                       ) : (
                         <>
@@ -7142,14 +7215,6 @@ function AlokasiPetugasSection() {
                                 ✕
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setModalPecah(r)}
-                              title="Pecah Sub SLS ini ke beberapa PPL sekaligus (skor beban yg sangat besar)"
-                              className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100"
-                            >
-                              ✂️ Pecah
-                            </button>
                           </div>
                           {isSaranAutoPlot && (
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -7176,6 +7241,36 @@ function AlokasiPetugasSection() {
                             </div>
                           )}
                         </>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {dipecah ? (
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setModalPecah(r)}
+                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
+                          >
+                            Edit Pembagian
+                          </button>
+                          <button
+                            type="button"
+                            disabled={gabungBusyId === r.idsubsls}
+                            onClick={() => handleGabungKembali(r.idsubsls)}
+                            className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-ink/60 hover:bg-gray-200 disabled:opacity-50"
+                          >
+                            {gabungBusyId === r.idsubsls ? "Menggabungkan..." : "Gabung Kembali"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setModalPecah(r)}
+                          title="Pecah Sub SLS ini ke beberapa PPL sekaligus (skor beban yg sangat besar)"
+                          className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100"
+                        >
+                          ✂️ Pecah
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -7232,7 +7327,7 @@ function AlokasiPetugasSection() {
               })}
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={modeFokus ? 7 : 13} className="px-3 py-4 text-center text-ink/50">
+                  <td colSpan={modeFokus ? 8 : 14} className="px-3 py-4 text-center text-ink/50">
                     Tidak ada data yang cocok dengan filter.
                   </td>
                 </tr>
