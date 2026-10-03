@@ -3760,6 +3760,13 @@ function AlokasiPetugasSection() {
   const [draftPmlByPpl, setDraftPmlByPpl] = useState<Record<number, number | null>>({});
   const [simpanBusy, setSimpanBusy] = useState(false);
   const [simpanError, setSimpanError] = useState<string | null>(null);
+  // (3 Okt 2026) Progres "Simpan Perubahan" -- permintaan user: tombolnya
+  // tampilkan persentase berjalan (bukan cuma teks statis "Menyimpan...")
+  // krn tiap baris/PML dikirim SATU PER SATU ke server (satu request per
+  // baris, bukan 1 request borongan), jadi bisa lama kalau perubahannya
+  // banyak -- admin perlu tahu ini masih jalan & sudah sejauh mana, bukan
+  // macet. null = tidak sedang menyimpan.
+  const [simpanProgress, setSimpanProgress] = useState<{ selesai: number; total: number } | null>(null);
   // Pembagi skor jarak (lihat muatPengaturanBeban) -- default 5 sama dgn
   // default di server, dipakai utk menghitung PERKIRAAN Skor Jarak di kolom
   // Langkah 4 sblm plot tersimpan.
@@ -4106,11 +4113,37 @@ function AlokasiPetugasSection() {
     setSimpanBusy(true);
     setSimpanError(null);
     try {
-      for (const r of kertasKerja) {
-        if (r.porsi_kk !== null) continue; // baris pecahan -- tidak ikut "Simpan Perubahan", kelola lewat modal Pecah
+      // (3 Okt 2026) Daftar "yg perlu dikirim" dikumpulkan DULU (bukan
+      // difilter sambil jalan spt sebelumnya) supaya totalnya diketahui di
+      // awal -- dipakai utk persentase progres di tombol "Simpan Perubahan"
+      // (lihat simpanProgress). Tiap baris/PML tetap 1 request terpisah ke
+      // server (bukan borongan), jadi progresnya nyata, bukan kira-kira.
+      const daftarReassign = kertasKerja.filter((r) => {
+        if (r.porsi_kk !== null) return false; // baris pecahan -- kelola lewat modal Pecah
         const draftVal = draftPpl[r.idsubsls] ?? null;
         const serverVal = r.ppl_id ?? null;
-        if (draftVal === serverVal) continue;
+        return draftVal !== serverVal;
+      });
+
+      const serverPmlByPpl = new Map<number, number | null>();
+      for (const r of kertasKerja) {
+        if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
+      }
+      const pplIdsDipakai = Array.from(
+        new Set(kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v))
+      );
+      const daftarPml = pplIdsDipakai.filter((pplId) => {
+        const draftVal = draftPmlByPpl[pplId] ?? null;
+        const serverVal = serverPmlByPpl.get(pplId) ?? null;
+        return draftVal !== serverVal;
+      });
+
+      const total = daftarReassign.length + daftarPml.length;
+      let selesai = 0;
+      if (total > 0) setSimpanProgress({ selesai, total });
+
+      for (const r of daftarReassign) {
+        const draftVal = draftPpl[r.idsubsls] ?? null;
         const res = await fetch("/api/bencana/alokasi/reassign", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -4130,17 +4163,12 @@ function AlokasiPetugasSection() {
             : ` (server tidak memberi detail error, kode HTTP ${res.status})`;
           throw new Error(`Gagal menyimpan plot Sub SLS ${r.sub_sls} di ${r.nagari} (idsubsls ${r.idsubsls})${detail}`);
         }
+        selesai++;
+        setSimpanProgress({ selesai, total });
       }
 
-      const serverPmlByPpl = new Map<number, number | null>();
-      for (const r of kertasKerja) {
-        if (r.ppl_id) serverPmlByPpl.set(r.ppl_id, r.pml_id ?? null);
-      }
-      const pplIdsDipakai = new Set(kertasKerja.map((r) => efektifPplId(r)).filter((v): v is number => !!v));
-      for (const pplId of pplIdsDipakai) {
+      for (const pplId of daftarPml) {
         const draftVal = draftPmlByPpl[pplId] ?? null;
-        const serverVal = serverPmlByPpl.get(pplId) ?? null;
-        if (draftVal === serverVal) continue;
         const res = await fetch("/api/bencana/alokasi/susunan-tim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -4154,6 +4182,8 @@ function AlokasiPetugasSection() {
             : ` (server tidak memberi detail error, kode HTTP ${res.status})`;
           throw new Error(`Gagal menyimpan PML untuk ${namaPpl}${detail}`);
         }
+        selesai++;
+        setSimpanProgress({ selesai, total });
       }
 
       // Semua baris yg berhasil disimpan sudah resmi jadi plot server --
@@ -4168,6 +4198,7 @@ function AlokasiPetugasSection() {
       await muatData(hariKerjaDipakai).catch(() => {});
     } finally {
       setSimpanBusy(false);
+      setSimpanProgress(null);
     }
   }
 
@@ -6649,7 +6680,15 @@ function AlokasiPetugasSection() {
               onClick={handleSimpanPerubahan}
               className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
             >
-              {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
+              {simpanBusy
+                ? simpanProgress && simpanProgress.total > 0
+                  ? // (3 Okt 2026) Permintaan user: tombol tampilkan persentase
+                    // berjalan selagi menyimpan (bukan cuma teks statis),
+                    // krn tiap baris dikirim satu-satu ke server & bisa
+                    // lama kalau perubahannya banyak.
+                    `Menyimpan... ${Math.round((simpanProgress.selesai / simpanProgress.total) * 100)}% (${simpanProgress.selesai}/${simpanProgress.total})`
+                  : "Menyimpan..."
+                : "💾 Simpan Perubahan"}
             </button>
             <button
               type="button"
