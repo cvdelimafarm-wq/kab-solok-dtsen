@@ -27,9 +27,30 @@
 //         jorong + jumlah KK total & perkiraan KK terdampak (dari RPC
 //         bencana_kertas_kerja_beban(), SAMA dgn yg dipakai "Kertas Kerja
 //         Beban" admin -- supaya angkanya konsisten, tidak dihitung ulang
-//         dgn rumus lain di sini).
-// POST -> submit jawaban { bersedia: boolean, jadwal_pelatihan?: string,
+//         dgn rumus lain di sini). Juga mengembalikan field2 identitas yg
+//         dipakai FE utk mendeteksi "data belum lengkap" (lihat PATCH).
+// POST  -> submit jawaban { bersedia: boolean, jadwal_pelatihan?: string,
 //         alasan?: string }.
+// PATCH -> (3 Okt 2026) "Lengkapi Data Anda" -- permintaan user: selain
+//         jawab Bersedia/Tidak Bersedia, halaman ini jg menawarkan petugas
+//         melengkapi SENDIRI data dirinya yg masih kosong di roster, BEDA
+//         per orang ("tergantung orangnya" -- FE cuma menampilkan field yg
+//         benar2 kosong utk petugas ybs, lihat halaman):
+//           - lat/lng (lokasi rumah): SAMA persis dgn /bencana/lokasi/[token]
+//             (lokasi_status -> 'riil') -- disatukan ke sini supaya petugas
+//             tidak perlu buka 2 link berbeda. Link /bencana/lokasi/[token]
+//             TETAP ada & masih berfungsi (tidak dihapus).
+//           - no_hp.
+//           - umur, jenis_kelamin, pendidikan, pekerjaan,
+//             bisa_mengendarai_motor, punya_kendaraan_bermotor -- field
+//             "demografi" hasil rekrutmen mitra yg SEBELUM ini TIDAK BISA
+//             diedit lewat endpoint manapun (read-only di tab Master
+//             Petugas/Kegiatan Petugas). FE hanya menawarkan field2 ini utk
+//             petugas status_kepegawaian='mitra' (utk 'organik' field ini
+//             memang bukan bagian rekrutmen mitra, lihat komentar di
+//             app/api/bencana/master-petugas/route.ts).
+//         Semua field OPSIONAL per request (whitelist ketat, hanya field yg
+//         dikirim yg diupdate) -- petugas boleh isi sebagian & lanjut nanti.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -38,6 +59,32 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const JADWAL_VALID = ["7 Oktober 2026", "8 Oktober 2026"] as const;
+
+// (3 Okt 2026) Whitelist pendidikan/pekerjaan -- SAMA persis dgn nilai yg
+// sudah ada di data hasil rekrutmen mitra (dicek langsung lewat query ke
+// bencana_petugas), supaya isian baru dari halaman ini konsisten dgn data
+// lama & tetap kompatibel dgn filter "Pendidikan"/"Pekerjaan" di tab Master
+// Petugas / Kegiatan Petugas (keduanya derive opsi filter dari nilai unik yg
+// ada, bukan dari enum tetap -- lihat opsiUnik() di page.tsx).
+const PENDIDIKAN_VALID = [
+  "Tamat SD/Sederajat",
+  "Tamat SMP/Sederajat",
+  "Tamat SMA/Sederajat",
+  "Tamat D1/D2/D3",
+  "Tamat D4/S1",
+  "Tamat S2",
+  "Tamat S3",
+] as const;
+
+const PEKERJAAN_VALID = [
+  "Wiraswasta",
+  "Mengurus Rumah Tangga",
+  "Pelajar / Mahasiswa",
+  "Kader PKK / Karang Taruna / Kader Lainnya",
+  "Pegawai / Guru Honorer",
+  "Aparat Desa / Kelurahan",
+  "Lainnya",
+] as const;
 
 function supabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -56,7 +103,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   const { data: petugas, error } = await supabase
     .from("bencana_petugas")
     .select(
-      "id, nama, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih"
+      // (3 Okt 2026) no_hp, lokasi_status, umur, jenis_kelamin, pendidikan,
+      // pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor
+      // ditambahkan -- dipakai FE utk deteksi & tampilkan section
+      // "Lengkapi Data Anda" (lihat PATCH di atas).
+      "id, nama, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih, no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor"
     )
     .eq("token", token)
     .maybeSingle();
@@ -167,11 +218,21 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   return NextResponse.json({
     data: {
       nama: petugas.nama,
+      status_kepegawaian: petugas.status_kepegawaian,
       pendaftaran_bencana_konfirmasi: petugas.pendaftaran_bencana_konfirmasi,
       status_kontak_pendaftaran_bencana: petugas.status_kontak_pendaftaran_bencana,
       catatan_penolakan_pendaftaran_bencana: petugas.catatan_penolakan_pendaftaran_bencana,
       jadwal_pelatihan_dipilih: petugas.jadwal_pelatihan_dipilih,
       wilayah_kerja: wilayahKerja,
+      // (3 Okt 2026) utk section "Lengkapi Data Anda" -- lihat komentar PATCH.
+      no_hp: petugas.no_hp,
+      lokasi_status: petugas.lokasi_status,
+      umur: petugas.umur,
+      jenis_kelamin: petugas.jenis_kelamin,
+      pendidikan: petugas.pendidikan,
+      pekerjaan: petugas.pekerjaan,
+      bisa_mengendarai_motor: petugas.bisa_mengendarai_motor,
+      punya_kendaraan_bermotor: petugas.punya_kendaraan_bermotor,
     },
   });
 }
@@ -214,4 +275,104 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
   if (!data) return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
 
   return NextResponse.json({ ok: true, nama: data.nama });
+}
+
+// PATCH { lat?, lng?, no_hp?, umur?, jenis_kelamin?, pendidikan?, pekerjaan?,
+//        bisa_mengendarai_motor?, punya_kendaraan_bermotor? }
+// -> "Lengkapi Data Anda" (lihat komentar panjang di atas). Setiap field
+// OPSIONAL & divalidasi SENDIRI2 -- hanya field yg benar2 dikirim (!==
+// undefined) yg masuk ke update, supaya petugas bisa isi sebagian dulu.
+// Scope-nya SELALU lewat token (bukan petugas_id) -- link ini cuma boleh
+// mengubah data baris petugas pemilik token itu sendiri.
+export async function PATCH(req: NextRequest, context: { params: Promise<{ token: string }> }) {
+  const { token } = await context.params;
+  const supabase = supabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Data tidak valid." }, { status: 400 });
+  }
+
+  const update: Record<string, unknown> = {};
+
+  // Lokasi rumah -- SAMA persis dgn POST /api/bencana/lokasi/[token] (lihat
+  // komentar di file itu utk alasan dipakai utk skor jarak Langkah 4).
+  if (body.lat !== undefined || body.lng !== undefined) {
+    const lat = typeof body.lat === "number" && Number.isFinite(body.lat) ? body.lat : null;
+    const lng = typeof body.lng === "number" && Number.isFinite(body.lng) ? body.lng : null;
+    if (lat === null || lng === null) {
+      return NextResponse.json({ error: "Koordinat tidak valid." }, { status: 400 });
+    }
+    update.lat = lat;
+    update.lng = lng;
+    update.lokasi_status = "riil";
+    update.lokasi_diperbarui_at = new Date().toISOString();
+  }
+
+  if (body.no_hp !== undefined) {
+    const v = typeof body.no_hp === "string" ? body.no_hp.trim() : "";
+    if (!v) return NextResponse.json({ error: "No HP tidak boleh kosong." }, { status: 400 });
+    update.no_hp = v;
+  }
+
+  if (body.umur !== undefined) {
+    const v = Number(body.umur);
+    if (!Number.isFinite(v) || v < 15 || v > 90) {
+      return NextResponse.json({ error: "Umur tidak valid (isi antara 15-90 tahun)." }, { status: 400 });
+    }
+    update.umur = Math.round(v);
+  }
+
+  if (body.jenis_kelamin !== undefined) {
+    if (body.jenis_kelamin !== "Lk" && body.jenis_kelamin !== "Pr") {
+      return NextResponse.json({ error: "Jenis kelamin harus Laki-laki atau Perempuan." }, { status: 400 });
+    }
+    update.jenis_kelamin = body.jenis_kelamin;
+  }
+
+  if (body.pendidikan !== undefined) {
+    if (!(PENDIDIKAN_VALID as readonly string[]).includes(body.pendidikan)) {
+      return NextResponse.json({ error: "Pilihan pendidikan tidak dikenal." }, { status: 400 });
+    }
+    update.pendidikan = body.pendidikan;
+  }
+
+  if (body.pekerjaan !== undefined) {
+    if (!(PEKERJAAN_VALID as readonly string[]).includes(body.pekerjaan)) {
+      return NextResponse.json({ error: "Pilihan pekerjaan tidak dikenal." }, { status: 400 });
+    }
+    update.pekerjaan = body.pekerjaan;
+  }
+
+  if (body.bisa_mengendarai_motor !== undefined) {
+    if (typeof body.bisa_mengendarai_motor !== "boolean") {
+      return NextResponse.json({ error: "Jawaban 'bisa mengendarai motor' tidak valid." }, { status: 400 });
+    }
+    update.bisa_mengendarai_motor = body.bisa_mengendarai_motor;
+  }
+
+  if (body.punya_kendaraan_bermotor !== undefined) {
+    if (typeof body.punya_kendaraan_bermotor !== "boolean") {
+      return NextResponse.json({ error: "Jawaban 'punya kendaraan bermotor' tidak valid." }, { status: 400 });
+    }
+    update.punya_kendaraan_bermotor = body.punya_kendaraan_bermotor;
+  }
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: "Tidak ada data yang diisi." }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from("bencana_petugas")
+    .update(update)
+    .eq("token", token)
+    .select("nama")
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
+
+  return NextResponse.json({ ok: true });
 }
