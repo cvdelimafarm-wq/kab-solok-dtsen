@@ -308,12 +308,21 @@ function BadgeKegiatanLain({ kegiatan }: { kegiatan: string }) {
 function SaranMitraTombol({
   pplOptions,
   bebanDraftPerPpl,
+  rataBebanTetap,
   pplTerpilihId,
   onPilih,
   subslsPoint,
 }: {
   pplOptions: PetugasRingkas[];
   bebanDraftPerPpl: Map<number, number>;
+  // (3 Okt 2026) Rata-rata beban tim (total skor wilayah tugas / asumsi
+  // jumlah PPL) -- dipakai di sini SEMATA utk mewarnai/menandai skor beban
+  // tiap kandidat di popover (lihat balanceInfo), SAMA seperti warna yg
+  // dipakai di panel "Keseimbangan Beban per PPL". TIDAK mengubah urutan
+  // tier1/tier2 (tetap jarak dulu) -- keputusan tetap di tangan admin, cuma
+  // sekarang kelihatan jelas kalau kandidat terdekat ternyata sudah
+  // kelebihan beban, sesuai masukan user.
+  rataBebanTetap: number;
   pplTerpilihId: number | null;
   onPilih: (id: number) => void;
   // (2 Okt 2026) Titik koordinat Sub SLS baris ini -- dipakai utk mengurutkan
@@ -440,6 +449,8 @@ function SaranMitraTombol({
             daftar={tier1}
             pplTerpilihId={pplTerpilihId}
             jarakPerPpl={jarakPerPpl}
+            bebanDraftPerPpl={bebanDraftPerPpl}
+            rataBebanTetap={rataBebanTetap}
             onPilih={pilih}
             kosong="Belum ada mitra yang mengajukan diri."
           />
@@ -450,6 +461,8 @@ function SaranMitraTombol({
             daftar={tier2}
             pplTerpilihId={pplTerpilihId}
             jarakPerPpl={jarakPerPpl}
+            bebanDraftPerPpl={bebanDraftPerPpl}
+            rataBebanTetap={rataBebanTetap}
             onPilih={pilih}
             kosong="Tidak ada kandidat cadangan dari peserta PES SE2026."
           />
@@ -465,6 +478,8 @@ function SaranMitraKelompok({
   daftar,
   pplTerpilihId,
   jarakPerPpl,
+  bebanDraftPerPpl,
+  rataBebanTetap,
   onPilih,
   kosong,
 }: {
@@ -473,6 +488,8 @@ function SaranMitraKelompok({
   daftar: PetugasRingkas[];
   pplTerpilihId: number | null;
   jarakPerPpl: Map<number, number | null>;
+  bebanDraftPerPpl: Map<number, number>;
+  rataBebanTetap: number;
   onPilih: (id: number) => void;
   kosong: string;
 }) {
@@ -510,6 +527,23 @@ function SaranMitraKelompok({
                         : `± ${jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km dari Sub SLS ini`;
                     })()}
                   </p>
+                  {/* (3 Okt 2026) Skor beban SAAT INI (termasuk perubahan draft
+                      yg belum disimpan) ditampilkan BOLD + diwarnai sesuai
+                      balanceInfo -- supaya kelihatan jelas kalau kandidat
+                      terdekat ternyata beban kerjanya SUDAH kelebihan, bukan
+                      cuma diam-diam tetap nangkring di urutan atas. Saran ini
+                      tetap murni bantuan: tidak menyingkirkan kandidat
+                      kelebihan beban dari daftar, admin yg memutuskan. */}
+                  {(() => {
+                    const beban = bebanDraftPerPpl.get(p.id) ?? 0;
+                    const info = balanceInfo(beban, rataBebanTetap);
+                    return (
+                      <p className={`text-[10px] font-bold ${info.cls}`}>
+                        Beban: {beban.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                        {info.tone !== "netral" ? ` (${info.label})` : ""}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <button
                   type="button"
@@ -4118,6 +4152,36 @@ function AlokasiPetugasSection() {
 
   const jumlahPplDiplotDraft = useMemo(() => bebanDraftPerPpl.size, [bebanDraftPerPpl]);
 
+  // (3 Okt 2026) Ringkasan pool kandidat Tier 1/Tier 2 (sama definisinya dgn
+  // tier1/tier2 di SaranMitraTombol & kandidat Auto Plot: dikecualikan yg
+  // ditandai rekomendasi_pml/red_flag_kinerja) -- ditampilkan di baris
+  // "Rata-rata beban per PPL" supaya admin lihat sekilas berapa dari pool
+  // itu yg SUDAH kepakai (punya >=1 Sub SLS di draft saat ini) dari berapa
+  // total yg TERSEDIA, tanpa perlu buka popover Saran satu-satu.
+  const pplDisarananTanpaPml = useMemo(
+    () => pplOptions.filter((p) => !p.rekomendasi_pml && !p.red_flag_kinerja),
+    [pplOptions]
+  );
+  const kandidatTier1 = useMemo(
+    () => pplDisarananTanpaPml.filter((p) => p.pendaftaran_bencana_konfirmasi),
+    [pplDisarananTanpaPml]
+  );
+  const kandidatTier2 = useMemo(
+    () =>
+      pplDisarananTanpaPml.filter(
+        (p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026")
+      ),
+    [pplDisarananTanpaPml]
+  );
+  const jumlahTier1Terpakai = useMemo(
+    () => kandidatTier1.filter((p) => bebanDraftPerPpl.has(p.id)).length,
+    [kandidatTier1, bebanDraftPerPpl]
+  );
+  const jumlahTier2Terpakai = useMemo(
+    () => kandidatTier2.filter((p) => bebanDraftPerPpl.has(p.id)).length,
+    [kandidatTier2, bebanDraftPerPpl]
+  );
+
   // "Optimasi Beban" -- MURNI INFORMASI, tidak ada tombol terapkan/pindah di
   // sini. Cuma menyarankan Sub SLS mana yg PALING besar kontribusinya ke
   // beban PPL yg kelebihan, dan PPL mana yg (saat ini) beban-nya paling
@@ -4282,13 +4346,20 @@ function AlokasiPetugasSection() {
   // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
   // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
   // PPL -- sama persis dgn dasar urutan popover "Saran") dan (2) total
-  // beban PPL ybs tetap dlm rentang wajar dari rata-rata (pakai ambang
-  // Seimbang/Perhatian yg sama dgn balanceInfo, <=15% lalu <=35% di atas
-  // rata-rata) -- baru kalau tidak ada kandidat yg lolos ambang itu, jatuh
-  // ke kandidat TERDEKAT apa adanya supaya baris tetap terisi (toh ini
-  // CUMA SARAN, bukan keputusan final). Kandidat yg ditandai
-  // rekomendasi_pml atau red_flag_kinerja (lihat tab Kegiatan Petugas)
-  // DIKECUALIKAN dari saran -- sama spt popover "Saran" Tier 1/2.
+  // beban PPL ybs sesudah ditambah baris ini.
+  //
+  // (3 Okt 2026, revisi) Permintaan user: DUA BATAS KERAS (bukan lagi ambang
+  // balanceInfo yg longgar + fallback ke terdekat apa adanya) --
+  //   - radius maksimal BATAS_RADIUS_KM dari lokasi rumah PPL ke titik Sub
+  //     SLS (jarak garis lurus/haversine, sama spt popover Saran);
+  //   - total beban PPL ybs SESUDAH ditambah baris ini maksimal
+  //     BATAS_SELISIH_SKOR skor DI ATAS rata-rata (rataBebanTetap).
+  // Kalau TIDAK ADA kandidat yg lolos KEDUA batas itu, baris tsb DILEWATI
+  // (tidak dipaksa diisi kandidat terdekat apa adanya spt versi sebelumnya)
+  // -- konsisten dgn sifat fitur ini yg CUMA mengisi yg kosong & CUMA saran,
+  // bukan alokasi otomatis paksa. Kandidat yg ditandai rekomendasi_pml atau
+  // red_flag_kinerja (lihat tab Kegiatan Petugas) DIKECUALIKAN dari saran --
+  // sama spt popover "Saran" Tier 1/2.
   //
   // Baris diproses dari skor beban TERBESAR dulu (mirip bin-packing) supaya
   // baris "berat" kebagian kandidat terbaik duluan, sisanya yg lebih ringan
@@ -4300,6 +4371,9 @@ function AlokasiPetugasSection() {
   // tersimpan ke server sesudah "Simpan Perubahan" ditekan, konsisten dgn
   // aturan baku proyek ini (lihat komentar SaranMitraTombol).
   function hitungSaranAutoPlot(): Record<string, number> {
+    const BATAS_RADIUS_KM = 7;
+    const BATAS_SELISIH_SKOR = 20;
+
     const workingBeban = new Map(bebanDraftPerPpl);
     const hasil: Record<string, number> = {};
 
@@ -4324,13 +4398,15 @@ function AlokasiPetugasSection() {
 
       const terurut = kandidat
         .map((p) => ({ p, jarak: haversineKm(p.lat as number, p.lng as number, titik.lat, titik.lng) }))
+        .filter(({ jarak }) => jarak <= BATAS_RADIUS_KM)
         .sort((a, b) => a.jarak - b.jarak);
 
-      const pilihan =
-        terurut.find(({ p }) => {
-          const proyeksi = (workingBeban.get(p.id) ?? 0) + r.skor_beban_pendataan;
-          return balanceInfo(proyeksi, rataBebanTetap).tone !== "kelebihan";
-        }) ?? terurut[0];
+      const pilihan = terurut.find(({ p }) => {
+        const proyeksi = (workingBeban.get(p.id) ?? 0) + r.skor_beban_pendataan;
+        return proyeksi <= rataBebanTetap + BATAS_SELISIH_SKOR;
+      });
+
+      if (!pilihan) continue; // tidak ada kandidat dlm radius 7 km & skor wajar -- baris ini DILEWATI, bukan dipaksa.
 
       hasil[r.idsubsls] = pilihan.p.id;
       workingBeban.set(pilihan.p.id, (workingBeban.get(pilihan.p.id) ?? 0) + r.skor_beban_pendataan);
@@ -6001,7 +6077,7 @@ function AlokasiPetugasSection() {
               type="button"
               onClick={handleAutoPlot}
               disabled={jumlahBelumDiplot === 0}
-              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- berdasar jarak terdekat & keseimbangan beban. TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
+              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat dibatasi radius maks. 7 km dari Sub SLS & beban akhir maks. 20 skor di atas rata-rata; baris yg tidak ada kandidat memenuhi dua syarat itu DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
               className="rounded-md border border-gold-400 bg-gold-100 px-3 py-1.5 text-sm font-medium text-gold-600 transition hover:bg-gold-400/20 disabled:opacity-40"
             >
               🤖 Auto Plot {jumlahBelumDiplot > 0 ? `(${jumlahBelumDiplot} kosong)` : ""}
@@ -6047,6 +6123,26 @@ function AlokasiPetugasSection() {
                 Pakai estimasi Langkah 2 ({totalKebutuhan.ppl})
               </button>
             )}
+          </span>
+          {/* (3 Okt 2026) Permintaan user: ringkasan jumlah PPL terpilih +
+              utilisasi pool kandidat Tier 1/Tier 2 (dikecualikan rekomendasi
+              PML/red flag) di baris yg sama dgn "Rata-rata beban per PPL",
+              supaya kelihatan sekilas tanpa buka popover Saran satu-satu. */}
+          <span
+            className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70"
+            title="Jumlah PPL yg sudah punya >=1 Sub SLS di draft saat ini, dan berapa dari pool kandidat Tier 1/Tier 2 (dikecualikan Rekomendasi PML/Red Flag) yg sudah terpakai"
+          >
+            · Jumlah PPL terpilih: <strong className="text-blue-950">{jumlahPplDiplotDraft}</strong>
+            · Kandidat Tier 1:{" "}
+            <strong className="text-blue-950">
+              {jumlahTier1Terpakai}/{kandidatTier1.length}
+            </strong>{" "}
+            (kecuali PML)
+            · Kandidat Tier 2:{" "}
+            <strong className="text-blue-950">
+              {jumlahTier2Terpakai}/{kandidatTier2.length}
+            </strong>{" "}
+            (kecuali PML)
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
@@ -6623,6 +6719,7 @@ function AlokasiPetugasSection() {
                         <SaranMitraTombol
                           pplOptions={pplOptions}
                           bebanDraftPerPpl={bebanDraftPerPpl}
+                          rataBebanTetap={rataBebanTetap}
                           pplTerpilihId={draftPplId}
                           onPilih={(id) => ubahDraftPpl(r.idsubsls, id)}
                           subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
