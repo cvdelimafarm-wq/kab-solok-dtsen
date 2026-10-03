@@ -3541,7 +3541,7 @@ function AlokasiPetugasSection() {
   const [kontakMenolakDraft, setKontakMenolakDraft] = useState<Record<number, string>>({});
 
   async function muatBeban() {
-    const res = await fetch("/api/bencana/alokasi/beban");
+    const res = await fetch("/api/bencana/alokasi/beban", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
     setBebanRows(json.data ?? []);
@@ -3554,7 +3554,7 @@ function AlokasiPetugasSection() {
   // x jumlah_hari_kerja. Nilai pembagi ini admin-configurable (menu "Kelola
   // Perkiraan Beban Tugas"), jadi diambil dari server, BUKAN di-hardcode.
   async function muatPengaturanBeban() {
-    const res = await fetch("/api/bencana/pengaturan-beban");
+    const res = await fetch("/api/bencana/pengaturan-beban", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
     const rows = (json.data ?? []) as { kunci: string; nilai: number }[];
@@ -3564,7 +3564,7 @@ function AlokasiPetugasSection() {
   }
 
   async function muatKontak() {
-    const res = await fetch("/api/bencana/alokasi/kontak-mitra");
+    const res = await fetch("/api/bencana/alokasi/kontak-mitra", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat daftar mitra perlu dihubungi.");
     setKontakRows(json.data ?? []);
@@ -3595,14 +3595,24 @@ function AlokasiPetugasSection() {
   }
 
   async function muatSampel() {
-    const res = await fetch("/api/bencana/alokasi/sampel");
+    const res = await fetch("/api/bencana/alokasi/sampel", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat daftar calon wilayah sampel.");
     setCalonSampel(json.data ?? []);
   }
 
+  // (3 Okt 2026) cache:"no-store" ditambahkan -- ditemukan bug: popover
+  // "Saran" sempat menampilkan "lokasi belum riil" utk mitra yg SUDAH
+  // mengisi lokasi rumahnya di database (dicek langsung lewat SQL),
+  // penyebabnya fetch ini tidak eksplisit minta data segar jadi browser bisa
+  // menyajikan response lama dari cache HTTP-nya sendiri (persis pola yg
+  // sudah pernah bikin crash "Cannot read properties of undefined" versi
+  // kegiatan_lain dulu -- lihat komentar tier2 di SaranMitraTombol). Route
+  // ini sendiri sudah `dynamic = "force-dynamic"` di server, tapi itu cuma
+  // mencegah Next.js men-cache di sisi server -- tidak mencegah BROWSER
+  // meng-cache response fetch() ini sendiri.
   async function muatData(hariKerja: number) {
-    const res = await fetch(`/api/bencana/alokasi?hari_kerja=${hariKerja}`);
+    const res = await fetch(`/api/bencana/alokasi?hari_kerja=${hariKerja}`, { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat data alokasi.");
     setKertasKerja(json.kertas_kerja ?? []);
