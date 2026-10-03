@@ -5849,6 +5849,31 @@ function AlokasiPetugasSection() {
     setScrollTargetIdsubsls(idsubsls);
   }
 
+  // (3 Okt 2026) Klik baris "Keseimbangan Beban Tim" (Per PPL/PML/Korwil) --
+  // permintaan user: dari situ langsung loncat ke baris Sub SLS TERATAS yg
+  // dipegang PPL/PML/Korwil ybs di tabel Langkah 4, bukan cuma lihat angka
+  // beban. "Teratas" = baris PERTAMA pada urutan asli kertasKerja (dari RPC,
+  // sebelum disaring/diurutkan apa pun) yg secara efektif dipegang
+  // PPL/PML/Korwil ini. Panel "Keseimbangan Beban Tim" kelihatan di SEMUA
+  // langkah (tidak digerbang langkahAktif, lihat komentar di deklarasinya),
+  // jadi pindah ke Langkah 4 dulu sebelum navigasiKeSubsls (yg reset filter +
+  // scroll + highlight -- sama persis dgn yg dipakai SarankanWilayahTombol).
+  function navigasiKeBebanTeratas(scope: "ppl" | "pml" | "korwil", id: number) {
+    const baris = kertasKerja.find((r) => {
+      const pplId = efektifPplId(r);
+      if (pplId == null) return false;
+      if (scope === "ppl") return pplId === id;
+      const pmlId = pmlDraftUntukPpl(pplId);
+      if (scope === "pml") return pmlId === id;
+      if (pmlId == null) return false;
+      const korwilId = petugasList.find((p) => p.id === pmlId)?.atasan_id ?? null;
+      return korwilId === id;
+    });
+    if (!baris) return;
+    setLangkahAktif(4);
+    navigasiKeSubsls(baris.idsubsls, false, efektifPplId(baris) ?? 0);
+  }
+
   // (3 Okt 2026) "Auto Plot" -- permintaan admin: isi otomatis baris yg
   // BELUM diplot sama sekali (TIDAK PERNAH menimpa pilihan yg sudah ada),
   // berdasar (1) jarak terdekat (haversine, titik Sub SLS ke lokasi rumah
@@ -7511,7 +7536,12 @@ function AlokasiPetugasSection() {
                     const maxSkor = Math.max(...ringkasanPpl.map((x) => x.total_skor_beban_akhir), 1);
                     const pct = Math.min(100, Math.round((r.total_skor_beban_akhir / maxSkor) * 100));
                     return (
-                      <div key={r.ppl_id} className="flex items-center gap-2 text-sm">
+                      <div
+                        key={r.ppl_id}
+                        onClick={() => navigasiKeBebanTeratas("ppl", r.ppl_id)}
+                        title="Klik untuk ke baris Sub SLS teratas milik PPL ini (Langkah 4)"
+                        className="flex cursor-pointer items-center gap-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                      >
                         <span className="w-40 shrink-0 truncate text-ink/80" title={r.ppl_nama}>
                           {r.ppl_nama}
                         </span>
@@ -7553,7 +7583,12 @@ function AlokasiPetugasSection() {
                     const maxSkor = Math.max(...ringkasanPml.map((x) => x.total_skor_beban_akhir), 1);
                     const pct = Math.min(100, Math.round((r.total_skor_beban_akhir / maxSkor) * 100));
                     return (
-                      <div key={r.pml_id} className="flex items-center gap-2 text-sm">
+                      <div
+                        key={r.pml_id}
+                        onClick={() => navigasiKeBebanTeratas("pml", r.pml_id)}
+                        title="Klik untuk ke baris Sub SLS teratas milik tim PML ini (Langkah 4)"
+                        className="flex cursor-pointer items-center gap-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                      >
                         <span className="flex w-40 shrink-0 items-center gap-1 truncate text-ink/80" title={r.pml_nama}>
                           {r.pml_nama}
                           {r.jumlah_ppl > 0 && r.jumlah_ppl < KAPASITAS_IDEAL_MIN_PPL_PER_PML && (
@@ -7595,7 +7630,12 @@ function AlokasiPetugasSection() {
                     const maxSkor = Math.max(...ringkasanKorwil.map((x) => x.total_skor_beban_akhir), 1);
                     const pct = Math.min(100, Math.round((r.total_skor_beban_akhir / maxSkor) * 100));
                     return (
-                      <div key={r.korwil_id} className="flex items-center gap-2 text-sm">
+                      <div
+                        key={r.korwil_id}
+                        onClick={() => navigasiKeBebanTeratas("korwil", r.korwil_id)}
+                        title="Klik untuk ke baris Sub SLS teratas milik tim Korwil ini (Langkah 4)"
+                        className="flex cursor-pointer items-center gap-2 rounded-md text-sm transition-colors hover:bg-gray-50"
+                      >
                         <span className="w-40 shrink-0 truncate text-ink/80" title={r.korwil_nama}>
                           {r.korwil_nama}
                         </span>
@@ -8842,9 +8882,12 @@ function AlokasiPetugasSection() {
 }
 
 export default function BencanaPage() {
+  // (3 Okt 2026) Default dibuka langsung ke tab "Alokasi Petugas" --
+  // permintaan user: ini tab yg paling sering dipakai sehari-hari (plotting
+  // PPL ke Sub SLS), jadi tidak perlu klik tab lagi stlh buka halaman.
   const [tab, setTab] = useState<
     "identifikasi" | "monitoring" | "alokasi" | "master" | "kegiatan-petugas" | "pengaturan"
-  >("identifikasi");
+  >("alokasi");
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
