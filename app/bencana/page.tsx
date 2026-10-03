@@ -670,7 +670,25 @@ function SaranMitraKelompok({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onPilih(p.id)}
+                  // (3 Okt 2026, revisi) DULU onClick -- rusak sejak panel
+                  // "Saran" dipindah ke React Portal (document.body): tombol
+                  // ini jadi bukan lagi anak DOM dari `ref` SaranMitraTombol,
+                  // jadi listener "klik di luar utk menutup" (mousedown di
+                  // document) menganggap klik di sini sbg "di luar" & langsung
+                  // MENUTUP (unmount) panel ini SEBELUM event "click" sempat
+                  // nyala -- di React/DOM, kalau elemen target sudah dicabut
+                  // dari DOM antara mousedown & mouseup, event click-nya
+                  // batal, jadi onPilih tidak pernah terpanggil (dropdown PPL
+                  // tidak kewarat terisi, dilaporkan user). Fix: pindah ke
+                  // onMouseDown + preventDefault (pola sama persis dgn opsi
+                  // Combobox) -- handler milik TOMBOL INI SENDIRI jalan
+                  // duluan (sebelum event bubble ke listener document), jadi
+                  // onPilih sempat terpanggil sebelum panel ditutup.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (sudahDipilih) return;
+                    onPilih(p.id);
+                  }}
                   disabled={sudahDipilih}
                   className="shrink-0 rounded-full bg-moss-50 px-2 py-1 text-[10px] font-semibold text-moss-900 hover:bg-moss-100 disabled:cursor-default disabled:bg-paper disabled:text-ink/40"
                   title={sudahDipilih ? "Sudah dipilih di baris ini" : `Pilih ${p.nama} utk Sub SLS ini`}
@@ -2040,7 +2058,7 @@ function LegendaStatusBeban({ withBelum = false }: { withBelum?: boolean }) {
   );
 }
 
-const ALOKASI_PAGE_SIZE = 25;
+const ALOKASI_PAGE_SIZE = 20;
 const SAMPEL_PAGE_SIZE = 25;
 const BEBAN_PAGE_SIZE = 25;
 
@@ -3757,10 +3775,12 @@ const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4; label: string; ikon: () => JSX.Elemen
 ];
 
 // Sidebar "rel langkah" -- 4 lingkaran bernomor tersambung garis putus-putus,
-// mencerminkan alur kerja Langkah 1-4. Diklik utk scroll halus ke section
-// terkait; lingkaran yg sedang kelihatan di layar otomatis ditandai aktif
-// (lihat IntersectionObserver di AlokasiPetugasSection). Disembunyikan di
-// layar sempit (<lg) supaya tidak mendesak tabel yg sudah lebar.
+// mencerminkan alur kerja Langkah 1-4. (3 Okt 2026, revisi) Sekarang
+// berfungsi sbg SUB-TAB beneran: diklik utk GANTI section yg dirender
+// (cuma 1 section aktif dlm satu waktu -- lihat langkahAktif &
+// {langkahAktif === n && (...)} di AlokasiPetugasSection), bukan lagi
+// scroll-spy ke halaman panjang berisi semua section sekaligus. Disembunyikan
+// di layar sempit (<lg) supaya tidak mendesak tabel yg sudah lebar.
 function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n: 1 | 2 | 3 | 4) => void }) {
   return (
     <aside className="hidden shrink-0 lg:block lg:w-36">
@@ -5007,51 +5027,48 @@ function AlokasiPetugasSection() {
   const langkah3Ref = useRef<HTMLElement | null>(null);
   const langkah4Ref = useRef<HTMLElement | null>(null);
   const [langkahAktif, setLangkahAktif] = useState<1 | 2 | 3 | 4>(1);
+  // Dipakai buat SKIP scroll-into-view pas pertama kali halaman ini
+  // dirender (langkahAktif awalnya 1 juga) -- cuma mau scroll kalau
+  // langkahAktif benar2 BERUBAH krn diklik/filter, bukan tiap mount.
+  const pertamaKaliRef = useRef(true);
 
-  // Sidebar "rel langkah" (4 lingkaran bernomor di kiri) -- diklik utk
-  // scroll halus ke section terkait, dan otomatis menandai langkah mana
-  // yg lagi kelihatan di layar pakai IntersectionObserver (bukan dipilih
-  // manual), supaya tetap sinkron walau user scroll bebas.
+  // (3 Okt 2026) Sidebar "rel langkah" (4 lingkaran bernomor di kiri) --
+  // permintaan user: dulu ke-4 section (Langkah 1-4) SEMUANYA dirender
+  // sekaligus di satu halaman panjang, sidebar cuma scroll-spy (klik =
+  // scroll halus ke section terkait, lalu IntersectionObserver otomatis
+  // menandai section mana yg lagi kelihatan). Sekarang diubah jadi SUB-TAB
+  // beneran: cuma SATU section (sesuai langkahAktif) yg dirender tiap saat
+  // -- jadi pas buka Langkah 4, Langkah 1-3 TIDAK ikut dirender/discroll
+  // lewati sama sekali (lihat {langkahAktif === 1 && (...)} dkk di bawah).
+  // IntersectionObserver jadi tidak relevan lagi (cuma ada 1 section yg
+  // di-mount tiap saat) -- diganti scroll-ke-atas-section SETELAH tab
+  // berganti (useEffect di bawah), supaya posisi scroll tetap masuk akal
+  // walau sebelumnya user scroll jauh ke bawah di tab lain.
   useEffect(() => {
-    const target = [
-      { ref: langkah1Ref, n: 1 as const },
-      { ref: langkah2Ref, n: 2 as const },
-      { ref: langkah3Ref, n: 3 as const },
-      { ref: langkah4Ref, n: 4 as const },
-    ];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const terlihat = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (!terlihat) return;
-        const cocok = target.find((t) => t.ref.current === terlihat.target);
-        if (cocok) setLangkahAktif(cocok.n);
-      },
-      { rootMargin: "-15% 0px -60% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] }
-    );
-    target.forEach((t) => {
-      if (t.ref.current) observer.observe(t.ref.current);
-    });
-    return () => observer.disconnect();
-  }, [loading]);
-
-  function scrollKeLangkah(n: 1 | 2 | 3 | 4) {
-    const ref = n === 1 ? langkah1Ref : n === 2 ? langkah2Ref : n === 3 ? langkah3Ref : langkah4Ref;
+    if (pertamaKaliRef.current) {
+      pertamaKaliRef.current = false;
+      return;
+    }
+    const ref =
+      langkahAktif === 1 ? langkah1Ref : langkahAktif === 2 ? langkah2Ref : langkahAktif === 3 ? langkah3Ref : langkah4Ref;
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [langkahAktif]);
+
+  function pilihLangkah(n: 1 | 2 | 3 | 4) {
+    setLangkahAktif(n);
   }
 
   function filterKeStatusBeban(tone: BalanceTone | "") {
     setStatusBebanFilter(tone);
     setStatusPlotFilter("");
     setPage(1);
-    langkah4Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setLangkahAktif(4);
   }
   function filterKeBelumDiplot() {
     setStatusBebanFilter("");
     setStatusPlotFilter("belum");
     setPage(1);
-    langkah4Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setLangkahAktif(4);
   }
 
   const jumlahPerubahanPending = useMemo(() => {
@@ -5523,7 +5540,7 @@ function AlokasiPetugasSection() {
 
   return (
     <div className="mt-6 flex gap-6">
-      <SidebarLangkah aktif={langkahAktif} onPilih={scrollKeLangkah} />
+      <SidebarLangkah aktif={langkahAktif} onPilih={pilihLangkah} />
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
       <section className="rounded-md border border-blue-100 bg-white p-4">
@@ -6110,7 +6127,10 @@ function AlokasiPetugasSection() {
         )}
       </section>
 
-      {/* ===== LANGKAH 1: WILAYAH SAMPEL ===== */}
+      {/* ===== LANGKAH 1: WILAYAH SAMPEL =====
+          (3 Okt 2026) Sub-tab beneran -- cuma dirender kalau langkahAktif
+          === 1 (lihat komentar di deklarasi langkahAktif di atas). */}
+      {langkahAktif === 1 && (
       <section ref={langkah1Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -6317,8 +6337,10 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+      )}
 
       {/* ===== LANGKAH 2: KEBUTUHAN PETUGAS ===== */}
+      {langkahAktif === 2 && (
       <section ref={langkah2Ref} className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -6462,8 +6484,10 @@ function AlokasiPetugasSection() {
           </table>
         </div>
       </section>
+      )}
 
       {/* ===== LANGKAH 3: SUSUNAN TIM (MANUAL, TANPA PENGELOMPOKAN OTOMATIS) ===== */}
+      {langkahAktif === 3 && (
       <section ref={langkah3Ref} className="rounded-md border border-line bg-white p-4">
         <h2 className="font-medium text-blue-950">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
         <p className="mt-1 text-xs text-ink/60">
@@ -6708,8 +6732,12 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+      )}
 
-      {/* ===== VISUALISASI KESEIMBANGAN BEBAN ===== */}
+      {/* ===== VISUALISASI KESEIMBANGAN BEBAN =====
+          (3 Okt 2026) SENGAJA dibiarkan selalu terlihat (tidak digerbang
+          langkahAktif) -- ini panel ringkasan, bukan salah satu Langkah
+          1-4, sama spt panel "Ringkasan Alokasi Petugas" di paling atas. */}
       {(ringkasanPpl.length > 0 || ringkasanPml.length > 0 || ringkasanKorwil.length > 0) && (
         <section className="rounded-md border border-line bg-white p-4">
           <h2 className="font-medium text-blue-950">Keseimbangan Beban Tim</h2>
@@ -6891,6 +6919,7 @@ function AlokasiPetugasSection() {
       )}
 
       {/* ===== LANGKAH 4: KERTAS KERJA PLOTTING SUB SLS -> PPL ===== */}
+      {langkahAktif === 4 && (
       <section ref={langkah4Ref}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -7298,9 +7327,11 @@ function AlokasiPetugasSection() {
               }}
               className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
             >
-              <option value={25}>25</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={30}>30</option>
+              <option value={40}>40</option>
               <option value={50}>50</option>
-              <option value={100}>100</option>
               <option value="semua">Semua</option>
             </select>
             <span>baris</span>
@@ -7999,6 +8030,7 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+      )}
       </div>
     </div>
   );
