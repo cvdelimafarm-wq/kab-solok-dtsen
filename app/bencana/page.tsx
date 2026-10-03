@@ -4436,9 +4436,27 @@ function AlokasiPetugasSection() {
   // peserta PES SE2026) TIDAK LAGI ikut dipilih Auto Plot -- kalau memang
   // mau dipakai, admin tetap bisa plot manual lewat dropdown PPL.
   //
-  // Baris diproses dari skor beban TERBESAR dulu (mirip bin-packing) supaya
-  // baris "berat" kebagian kandidat terbaik duluan, sisanya yg lebih ringan
-  // lebih fleksibel dicocokkan belakangan.
+  // (3 Okt 2026, revisi #3) Permintaan user: ganti dari "nearest-available
+  // polos per baris" (versi lama) jadi PITA JARAK BERTAHAP yg melebar, dgn
+  // pemerataan antar kandidat yg sama-sama dekat:
+  //   1. Proses baris dlm pita <1 km dulu -- SEMUA baris sekaligus, bukan 1
+  //      per 1 dari yg skornya terbesar lagi. Tiap PUTARAN dlm pita yg sama,
+  //      kandidat yg beban-nya SAAT INI paling ringan dapat giliran "ambil"
+  //      1 baris terdekatnya duluan (bukan kandidat yg sama terus) -- kalau
+  //      ada beberapa kandidat sama-sama dekat ke sekumpulan baris, baris2
+  //      itu jadi TERSEBAR ke mereka, bukan diborong 1 orang sampai sisanya
+  //      "terlempar" ke pita yg lebih jauh.
+  //   2. Beban maksimal (rataBebanTetap + BATAS_SELISIH_SKOR) tetap dicek
+  //      SETIAP kali sebelum sebuah baris diambil -- kandidat yg sudah penuh
+  //      di-skip (tidak dapat giliran lagi), TIDAK menghentikan kandidat
+  //      lain yg masih longgar.
+  //   3. Begitu dlm 1 putaran penuh TIDAK ADA LAGI baris yg bisa diambil di
+  //      pita ini (baris dlm pita habis, ATAU semua kandidat dlm pita ini
+  //      sudah capai batas beban), pita diperlebar +1 km, ulangi dari (1),
+  //      sampai maksimal BATAS_RADIUS_KM.
+  // Baris yg sampai pita 7 km tetap tidak dapat kandidat (semua kandidat dlm
+  // radius sudah penuh/tidak ada) DILEWATI, bukan dipaksa -- konsisten dgn
+  // sifat fitur ini: cuma mengisi yg memang masuk akal, bukan alokasi paksa.
   //
   // SENGAJA TIDAK auto-save & TIDAK menyentuh PML/Korwil -- hasilnya cuma
   // mengisi draftPpl (persis spt pilih manual) + ditandai di autoPlotSubsls
@@ -4448,6 +4466,7 @@ function AlokasiPetugasSection() {
   function hitungSaranAutoPlot(): Record<string, number> {
     const BATAS_RADIUS_KM = 7;
     const BATAS_SELISIH_SKOR = 20;
+    const LEBAR_PITA_KM = 1;
 
     const workingBeban = new Map(bebanDraftPerPpl);
     const hasil: Record<string, number> = {};
@@ -4457,29 +4476,51 @@ function AlokasiPetugasSection() {
     );
     if (kandidat.length === 0) return hasil;
 
-    const belumDiplot = kertasKerja
-      .filter((r) => !(draftPpl[r.idsubsls] ?? null))
-      .slice()
-      .sort((a, b) => b.skor_beban_pendataan - a.skor_beban_pendataan);
+    const belumDiplot = kertasKerja.filter((r) => !(draftPpl[r.idsubsls] ?? null));
 
+    // Jarak tiap pasangan (baris, kandidat) dlm radius 7 km dihitung SEKALI
+    // di awal -- dipakai berulang kali di tiap pita, bukan dihitung ulang
+    // (haversine) tiap putaran.
+    const pasangan: { idsubsls: string; skor: number; jarak: number; pplId: number }[] = [];
     for (const r of belumDiplot) {
       const titik = titikSubslsMap.get(r.idsubsls);
-      if (!titik) continue; // Sub SLS tanpa koordinat -- tidak bisa dihitung jaraknya, dilewati.
+      if (!titik) continue; // Sub SLS tanpa koordinat -- tidak bisa dihitung jaraknya, dilewati total.
+      for (const p of kandidat) {
+        const jarak = haversineKm(p.lat as number, p.lng as number, titik.lat, titik.lng);
+        if (jarak <= BATAS_RADIUS_KM) {
+          pasangan.push({ idsubsls: r.idsubsls, skor: r.skor_beban_pendataan, jarak, pplId: p.id });
+        }
+      }
+    }
 
-      const terurut = kandidat
-        .map((p) => ({ p, jarak: haversineKm(p.lat as number, p.lng as number, titik.lat, titik.lng) }))
-        .filter(({ jarak }) => jarak <= BATAS_RADIUS_KM)
-        .sort((a, b) => a.jarak - b.jarak);
+    const sudahDiplot = new Set<string>();
 
-      const pilihan = terurut.find(({ p }) => {
-        const proyeksi = (workingBeban.get(p.id) ?? 0) + r.skor_beban_pendataan;
-        return proyeksi <= rataBebanTetap + BATAS_SELISIH_SKOR;
-      });
+    for (let pita = LEBAR_PITA_KM; pita <= BATAS_RADIUS_KM; pita += LEBAR_PITA_KM) {
+      let adaPerubahan = true;
+      while (adaPerubahan) {
+        adaPerubahan = false;
+        // Kandidat PALING RINGAN beban-nya SAAT INI dapat giliran duluan di
+        // tiap putaran -- inti pemerataannya: siapa pun yg sedang paling
+        // longgar yg "jalan" mengambil baris terdekatnya, bukan selalu
+        // kandidat yg sama dari awal sampai akhir.
+        const urutanKandidat = [...kandidat].sort(
+          (a, b) => (workingBeban.get(a.id) ?? 0) - (workingBeban.get(b.id) ?? 0)
+        );
+        for (const p of urutanKandidat) {
+          const pilihan = pasangan
+            .filter((x) => x.pplId === p.id && x.jarak <= pita && !sudahDiplot.has(x.idsubsls))
+            .sort((a, b) => a.jarak - b.jarak)[0];
+          if (!pilihan) continue; // tidak ada baris tersisa dlm pita ini buat kandidat ini.
 
-      if (!pilihan) continue; // tidak ada kandidat dlm radius 7 km & skor wajar -- baris ini DILEWATI, bukan dipaksa.
+          const proyeksi = (workingBeban.get(p.id) ?? 0) + pilihan.skor;
+          if (proyeksi > rataBebanTetap + BATAS_SELISIH_SKOR) continue; // kandidat ini sudah penuh -- skip, bukan berhenti total.
 
-      hasil[r.idsubsls] = pilihan.p.id;
-      workingBeban.set(pilihan.p.id, (workingBeban.get(pilihan.p.id) ?? 0) + r.skor_beban_pendataan);
+          hasil[pilihan.idsubsls] = p.id;
+          sudahDiplot.add(pilihan.idsubsls);
+          workingBeban.set(p.id, proyeksi);
+          adaPerubahan = true; // masih ada kemungkinan baris lain di pita ini -- putaran berikutnya dicoba lagi.
+        }
+      }
     }
 
     return hasil;
@@ -6147,7 +6188,7 @@ function AlokasiPetugasSection() {
               type="button"
               onClick={handleAutoPlot}
               disabled={jumlahBelumDiplot === 0}
-              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat HANYA dari Tier 1 (Mengajukan Diri) + Tier 2 (peserta PES SE2026), dibatasi radius maks. 7 km dari Sub SLS & beban akhir maks. 20 skor di atas rata-rata; baris yg tidak ada kandidat memenuhi semua syarat itu DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
+              title="Isi otomatis SARAN plot utk baris yg BELUM diplot sama sekali -- kandidat HANYA dari Tier 1 (Mengajukan Diri) + Tier 2 (peserta PES SE2026). Diproses per pita jarak melebar (<1 km dulu, baru <2 km, dst. sampai maks. 7 km dari Sub SLS) & beban akhir maks. 20 skor di atas rata-rata; kalau ada beberapa kandidat sama-sama dekat, baris2 disebar rata ke mereka (bukan diborong 1 orang). Baris yg tidak ada kandidat memenuhi syarat itu sampai 7 km DILEWATI (tidak dipaksa). TIDAK menimpa pilihan yg sudah ada, dan TIDAK langsung tersimpan -- baris hasil saran ditandai cokelat, perlu ditinjau & disetujui, baru ikut tersimpan saat 'Simpan Perubahan' ditekan."
               className="rounded-md border border-gold-400 bg-gold-100 px-3 py-1.5 text-sm font-medium text-gold-600 transition hover:bg-gold-400/20 disabled:opacity-40"
             >
               🤖 Auto Plot {jumlahBelumDiplot > 0 ? `(${jumlahBelumDiplot} kosong)` : ""}
