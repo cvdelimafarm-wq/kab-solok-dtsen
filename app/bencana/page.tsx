@@ -1096,6 +1096,10 @@ type KertasKerjaBebanRow = {
   // jadi true (ditampilkan sbg "NO", bukan angka).
   kk_wawancara: number | null;
   kk_wawancara_tidak_terdampak: boolean;
+  // (3 Okt 2026) Titik koordinat Sub SLS ini, utk tombol "Lihat Peta" di
+  // sebelah nama Jorong -- null kalau titiknya belum tersedia.
+  lat: number | null;
+  lng: number | null;
 };
 
 // Selisih di atas ini (KK) antara data verifikasi resmi per Jorong vs total
@@ -4674,7 +4678,18 @@ function AlokasiPetugasSection() {
                       >
                         <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
                         <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
-                        <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
+                        <td className="px-3 py-2 font-medium text-ink">
+                          <span className="flex items-center gap-1.5">
+                            {r.sls}
+                            {/* (3 Okt 2026) Tombol lihat peta sekilas -- permintaan user, sama
+                                spt di tab Identifikasi: cek cepat citra satelit sebelum
+                                mengoreksi KK Total/Terdampak manual. Disembunyikan kalau titik
+                                Sub SLS baris ini belum tersedia (null). */}
+                            {r.lat != null && r.lng != null && (
+                              <PetaSekilasTombol lat={r.lat} lng={r.lng} label={`Jorong ${r.sls} / Sub SLS ${r.sub_sls}`} />
+                            )}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">

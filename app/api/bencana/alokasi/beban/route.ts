@@ -12,6 +12,11 @@
 // (bencana_kk_subsls_override) supaya nilai ASLI tetap tersimpan &
 // bisa dikembalikan kapan saja.
 //
+// (3 Okt 2026) Tiap baris disertai lat/lng (RPC bencana_subsls_titik_jarak,
+// SAMA dgn yg dipakai popover "Saran" & tombol "Lihat Peta" di tab
+// Identifikasi) -- dipakai FE utk tombol "Lihat Peta" di sebelah nama
+// Jorong, supaya admin bisa cek sekilas citra satelit saat mengoreksi KK.
+//
 // GET  -> RPC bencana_kertas_kerja_beban() (hanya Sub SLS terdampak).
 // POST { idsubsls, kk_total_override: number|null, kk_terdampak_override: number|null }
 //      -> upsert override utk SATU Sub SLS. Kalau KEDUANYA null, baris
@@ -44,9 +49,24 @@ export async function GET() {
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   }
-  const { data, error } = await supabase.rpc("bencana_kertas_kerja_beban");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data ?? [] });
+  const [bebanRes, titikRes] = await Promise.all([
+    supabase.rpc("bencana_kertas_kerja_beban"),
+    supabase.rpc("bencana_subsls_titik_jarak"),
+  ]);
+  if (bebanRes.error) return NextResponse.json({ error: bebanRes.error.message }, { status: 500 });
+  if (titikRes.error) return NextResponse.json({ error: titikRes.error.message }, { status: 500 });
+
+  const titikMap = new Map<string, { lat: number; lng: number }>();
+  for (const t of (titikRes.data ?? []) as { idsubsls: string; lat: number | null; lng: number | null }[]) {
+    if (typeof t.lat === "number" && typeof t.lng === "number") titikMap.set(t.idsubsls, { lat: t.lat, lng: t.lng });
+  }
+
+  const data = ((bebanRes.data ?? []) as { idsubsls: string }[]).map((r) => {
+    const titik = titikMap.get(r.idsubsls) ?? null;
+    return { ...r, lat: titik?.lat ?? null, lng: titik?.lng ?? null };
+  });
+
+  return NextResponse.json({ data });
 }
 
 export async function POST(req: NextRequest) {
