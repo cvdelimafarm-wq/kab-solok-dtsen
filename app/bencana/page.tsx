@@ -942,6 +942,99 @@ function IkonVerifikasiJorong({
   );
 }
 
+// (3 Okt 2026) Tombol "Lihat Peta" per baris Sub SLS di tab Identifikasi --
+// awalnya buka Google Maps di tab baru, user minta diganti jadi popover
+// kecil langsung di halaman (cukup "cek sekilas", tidak perlu pindah
+// halaman/aplikasi). Pakai iframe embed Google Maps (`output=embed`, TIDAK
+// butuh API key -- trik publik yg sama dgn tombol "Share/Embed" biasa di
+// Google Maps, beda dari Maps Embed API resmi yg berbayar). Tetap sediakan
+// link "Buka di Google Maps" di bawah iframe utk yg mau lihat lebih detail/
+// zoom/satelit penuh di aplikasi aslinya.
+function PetaSekilasTombol({ lat, lng, label }: { lat: number; lng: number; label: string }) {
+  const [buka, setBuka] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!buka) return;
+    function tutupJikaDiluar(e: Event) {
+      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+      setBuka(false);
+    }
+    document.addEventListener("mousedown", tutupJikaDiluar);
+    document.addEventListener("scroll", tutupJikaDiluar, true);
+    window.addEventListener("resize", tutupJikaDiluar);
+    return () => {
+      document.removeEventListener("mousedown", tutupJikaDiluar);
+      document.removeEventListener("scroll", tutupJikaDiluar, true);
+      window.removeEventListener("resize", tutupJikaDiluar);
+    };
+  }, [buka]);
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (buka) {
+      setBuka(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const lebar = 280;
+    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
+    setBuka(true);
+  }
+
+  const srcEmbed = `https://www.google.com/maps?q=${lat},${lng}&z=16&output=embed`;
+  const linkPenuh = `https://www.google.com/maps?q=${lat},${lng}`;
+
+  return (
+    <div ref={ref} className="relative inline-block shrink-0">
+      <button
+        type="button"
+        onClick={toggle}
+        title="Lihat lokasi Sub SLS ini di peta (cek sekilas kemungkinan area banjir)"
+        className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium transition ${
+          buka ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+        }`}
+      >
+        🗺️ Lihat Peta
+      </button>
+      {buka && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
+          className="z-50 overflow-hidden rounded-md border border-line bg-white normal-case shadow-lg"
+        >
+          <div className="flex items-center justify-between border-b border-line px-2 py-1">
+            <p className="truncate text-[11px] font-medium text-ink/70">{label}</p>
+            <button
+              type="button"
+              onClick={() => setBuka(false)}
+              className="shrink-0 px-1 text-xs text-ink/40 hover:text-ink/70"
+              title="Tutup"
+            >
+              ✕
+            </button>
+          </div>
+          <iframe
+            src={srcEmbed}
+            width="280"
+            height="220"
+            style={{ border: 0, display: "block" }}
+            loading="lazy"
+            title={`Peta lokasi ${label}`}
+          />
+          <a
+            href={linkPenuh}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block border-t border-line px-2 py-1.5 text-center text-[10px] font-medium text-blue-600 hover:bg-blue-50"
+          >
+            Buka di Google Maps ↗
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type CalonSampelRow = {
   idsubsls: string;
   kecamatan: string;
@@ -7015,21 +7108,11 @@ export default function BencanaPage() {
                                             {/* (3 Okt 2026) Tombol lihat peta sekilas -- permintaan mitra/admin
                                                 supaya bisa cek cepat di citra satelit apakah lokasi Sub SLS ini
                                                 masuk akal terdampak banjir (dekat sungai/dataran rendah) SEBELUM
-                                                menandai Terdampak/Ragu. Buka Google Maps di tab baru (bukan peta
-                                                tertanam di halaman) -- lebih ringan utk mitra yg mengisi dari HP
-                                                di lapangan dgn koneksi terbatas, & mitra sudah pasti familiar
-                                                dgn aplikasi Maps-nya sendiri. Disembunyikan kalau titik Sub SLS
-                                                ini belum tersedia (null). */}
+                                                menandai Terdampak/Ragu. Popover kecil langsung di halaman (bukan
+                                                tab baru) -- cukup utk "cek sekilas", lihat PetaSekilasTombol.
+                                                Disembunyikan kalau titik Sub SLS ini belum tersedia (null). */}
                                             {s.lat != null && s.lng != null && (
-                                              <a
-                                                href={`https://www.google.com/maps?q=${s.lat},${s.lng}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                title="Lihat lokasi Sub SLS ini di peta (cek sekilas kemungkinan area banjir)"
-                                                className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-100"
-                                              >
-                                                🗺️ Lihat Peta
-                                              </a>
+                                              <PetaSekilasTombol lat={s.lat} lng={s.lng} label={`Sub SLS ${s.sub_sls}`} />
                                             )}
                                           </span>
                                           <div className="flex gap-1.5">
