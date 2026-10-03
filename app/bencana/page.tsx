@@ -7638,12 +7638,23 @@ function AlokasiPetugasSection() {
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
                 const isSaranAutoPlot = !dipecah && autoPlotSubsls.has(r.idsubsls);
+                // (3 Okt 2026) Permintaan user: baris ditandai HIJAU kalau
+                // sudah teralokasi (sudah punya PPL di draft saat ini, tanpa
+                // perubahan yg belum disimpan) -- supaya sekilas kelihatan
+                // mana yg sudah kebagian petugas vs yg masih kosong (putih).
+                // Diletakkan PALING TERAKHIR (prioritas paling rendah) krn
+                // dipecah/auto-plot/berubah sudah sama2 berarti "ada PPL"
+                // juga, tapi warnanya dipakai utk menandai status LAIN yg
+                // lebih spesifik -- jangan sampai ketimpa hijau.
+                const sudahTeralokasi = !dipecah && !isSaranAutoPlot && !berubah && draftPplId !== null;
                 const bgBaris = dipecah
                   ? "bg-indigo-50/60"
                   : isSaranAutoPlot
                   ? "bg-gold-100"
                   : berubah
                   ? "bg-orange-50/50"
+                  : sudahTeralokasi
+                  ? "bg-moss-50/60"
                   : "bg-white";
                 const petugasDraftPpl = draftPplId ? petugasList.find((x) => x.id === draftPplId) : undefined;
                 const statusKesediaan = statusKesediaanPpl(petugasDraftPpl);
