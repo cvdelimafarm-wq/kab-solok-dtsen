@@ -2,7 +2,6 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { haversineKm } from "@/lib/jarakJalan";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -16,7 +15,7 @@ import { haversineKm } from "@/lib/jarakJalan";
 //     jorong, termasuk penanda konflik antar mitra.
 // ------------------------------------------------------------------------
 
-type SubslsItem = { idsubsls: string; sub_sls: string; lat: number | null; lng: number | null };
+type SubslsItem = { idsubsls: string; sub_sls: string };
 type JorongItem = { idsls: string; jorong: string; subsls: SubslsItem[] };
 type NagariItem = { iddesa: string; nagari: string; daftar_awal: boolean; jorong: JorongItem[] };
 type KecamatanItem = { kecamatan: string; nagari: NagariItem[] };
@@ -29,16 +28,6 @@ type MitraItem = {
   no_telp: string | null;
   saran_iddesa: string | null;
   saran_in_scope: boolean;
-};
-
-type PegawaiMagangItem = { id: number; nama: string };
-
-type MonitoringMagangRow = {
-  id: number;
-  nama: string;
-  jumlah_hari_ini: number;
-  jumlah_total: number;
-  terakhir_diisi: string | null;
 };
 
 type MonitoringNagariRow = {
@@ -65,7 +54,6 @@ type MonitoringJorongRow = {
   jumlah_identifikasi: number;
   jumlah_bilang_seluruh: number;
   jumlah_bilang_sebagian: number;
-  jumlah_bilang_tidak_ada: number;
   konflik_jorong: boolean;
   subsls_terdampak_gabungan: string[];
   jumlah_subsls_terdampak_gabungan: number;
@@ -117,7 +105,6 @@ type KertasKerjaRow = {
   skor_beban_pendataan: number;
   jarak_km: number | null;
   jarak_status: "riil" | "tanpa_data";
-  jumlah_hari_kerja: number;
   skor_jarak: number;
   skor_beban_akhir: number;
   terkunci: boolean;
@@ -161,879 +148,7 @@ type PetugasRingkas = {
   lokasi_status: "riil" | "tanpa_data" | "perkiraan_nagari";
   aktif: boolean;
   alamat_kecamatan: string | null;
-  pendaftaran_bencana_konfirmasi: boolean;
-  kegiatan_lain: string[];
-  lat: number | null;
-  lng: number | null;
 };
-
-// Titik koordinat (centroid/geotag) per Sub SLS -- dipakai utk menghitung
-// jarak garis lurus (haversine) dari lokasi rumah kandidat PPL ke Sub SLS
-// baris itu, utk pengurutan popover "Saran" Langkah 4 (lihat jarakJalan.ts).
-type TitikSubsls = { idsubsls: string; lat: number | null; lng: number | null };
-
-// Status "kesediaan ikut pendataan bencana" utk seorang PPL yg sudah diplot,
-// dipakai utk ikon warning di kolom PPL Langkah 4:
-//  - "belum_konfirmasi": namanya tidak ada di daftar self-report konfirmasi
-//    kesediaan ikut pendataan bencana -> perlu dihubungi & ditawarkan.
-//  - "beban_ganda": sudah konfirmasi ikut pendataan bencana, TAPI juga sudah
-//    ditandai (tag) di kegiatan/survei lain -> boleh saja, tapi beban kerja
-//    petugas itu nambah, jadi perlu diberi tahu di depan.
-type StatusKesediaanPpl = { tipe: "belum_konfirmasi" | "beban_ganda"; kegiatanLain: string[] } | null;
-
-function statusKesediaanPpl(p: PetugasRingkas | undefined): StatusKesediaanPpl {
-  if (!p) return null;
-  const kegiatanLain = p.kegiatan_lain ?? [];
-  if (!p.pendaftaran_bencana_konfirmasi) return { tipe: "belum_konfirmasi", kegiatanLain };
-  if (kegiatanLain.length > 0) return { tipe: "beban_ganda", kegiatanLain };
-  return null;
-}
-
-// Ikon warning ringan di kolom PPL (Langkah 4) -- klik utk buka popover kecil
-// yg menjelaskan kenapa warning muncul. Sengaja dibuat SANGAT ringan (bukan
-// modal penuh layar): posisi fixed dihitung dari lokasi klik, tutup sendiri
-// kalau klik di luar/scroll/resize -- pola yg sama dgn popover ThKontrol.
-function IkonStatusKesediaanPpl({ status }: { status: NonNullable<StatusKesediaanPpl> }) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 260;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-  }
-
-  const warna = status.tipe === "belum_konfirmasi" ? "text-rust-600" : "text-orange-500";
-  const judul =
-    status.tipe === "belum_konfirmasi" ? "Belum konfirmasi ikut pendataan bencana" : "Sudah bertugas di kegiatan lain";
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button type="button" onClick={toggle} title={judul} className={`text-sm leading-none ${warna}`}>
-        ⚠️
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 260 }}
-          className="z-50 rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className={`font-semibold ${warna}`}>{judul}</p>
-          {status.tipe === "belum_konfirmasi" ? (
-            <p className="mt-1 text-ink/70">
-              Nama ini tidak ada di daftar self-report kesediaan ikut pendataan bencana. Perlu dihubungi utk ditawarkan
-              &amp; diminta konfirmasi kesediaannya.
-              {status.kegiatanLain.length > 0 && (
-                <> Catatan: sudah bertugas juga di {status.kegiatanLain.join(", ")}.</>
-              )}
-            </p>
-          ) : (
-            <p className="mt-1 text-ink/70">
-              Sudah konfirmasi ikut pendataan bencana, tapi juga sudah bertugas di{" "}
-              <b>{status.kegiatanLain.join(", ")}</b>. Boleh saja dirangkap, tapi beban kerjanya bertambah.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Satu badge kecil PER kegiatan lain (bukan satu ikon gabungan) -- supaya
-// pas admin sedang mem-plot PPL, langsung kelihatan tanpa perlu klik
-// kegiatan APA SAJA yg sudah dipegang petugas itu (mis. "PES SE2026" dan
-// "SPDT NTP 2026" tampil terpisah, bukan digabung jadi satu teks). Admin
-// yg memutuskan sendiri tetap plot dobel (merangkap) atau pilih petugas
-// lain -- badge ini murni informasi, bukan larangan otomatis.
-function BadgeKegiatanLain({ kegiatan }: { kegiatan: string }) {
-  return (
-    <span
-      title={`Petugas ini sudah bertugas/terdaftar di kegiatan "${kegiatan}". Boleh saja dirangkap (merangkap), tapi pertimbangkan beban kerjanya -- putuskan tetap plot dobel atau koreksi ke petugas lain.`}
-      className="shrink-0 rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-medium text-orange-700"
-    >
-      ⚠ {kegiatan}
-    </span>
-  );
-}
-
-// (2 Okt 2026) Tombol "💡 Saran" di kolom PPL Langkah 4 -- permintaan user
-// "tambahkan tombol kolom saran mitra yang diambil dari daftar Mengajukan
-// Diri sebagai tier 1 dan PES SE2026 sebagai tier 2". Popover kecil (pola &
-// perilaku tutup sama dgn IkonStatusKesediaanPpl/ThKontrol) berisi 2
-// kelompok kandidat PPL (dari pplOptions yg SAMA dgn isi dropdown Combobox
-// di kolom ini, jadi tidak pernah menyarankan org di luar daftar resmi):
-//   - Tier 1: pendaftaran_bencana_konfirmasi = true (sudah mengajukan diri
-//     ikut pendataan bencana lewat form self-report).
-//   - Tier 2: BELUM mengajukan diri TAPI terdaftar ikut kegiatan "PES
-//     SE2026" (kegiatan_lain) -- dipakai sbg cadangan kalau Tier 1 kosong/
-//     tidak cukup, sesuai permintaan user.
-// Tiap kelompok diurutkan dari beban draft PALING RINGAN dulu (konsisten
-// dgn semangat "beban rendah" yg sudah dipakai di saran rebalancing
-// Langkah 3) supaya saran yg muncul duluan jg membantu pemerataan beban,
-// bukan cuma asal urutan nama.
-//
-// SENGAJA tombol SARAN, bukan plotting otomatis -- klik nama HANYA mengisi
-// draftPpl (field yg sama persis dgn kalau admin pilih manual dari
-// Combobox), TETAP perlu "Simpan Perubahan" & TETAP bisa diganti lagi
-// sebelum itu. Konsisten dgn aturan baku proyek ini: tidak ada fitur
-// alokasi otomatis/algoritmik utk PPL/PML/Korwil -- keputusan akhir selalu
-// di tangan admin lewat klik manual.
-function SaranMitraTombol({
-  pplOptions,
-  bebanDraftPerPpl,
-  pplTerpilihId,
-  onPilih,
-  subslsPoint,
-}: {
-  pplOptions: PetugasRingkas[];
-  bebanDraftPerPpl: Map<number, number>;
-  pplTerpilihId: number | null;
-  onPilih: (id: number) => void;
-  // (2 Okt 2026) Titik koordinat Sub SLS baris ini -- dipakai utk mengurutkan
-  // tier1/tier2 berdasarkan jarak garis lurus (haversine) dari lokasi rumah
-  // tiap kandidat PPL ke Sub SLS ini, BUKAN beban kerja lagi (lihat
-  // jarakDraftPerPpl di bawah & komentar di route.ts/jarakJalan.ts). null
-  // kalau titik Sub SLS belum tersedia -> fallback ke urutan semula.
-  subslsPoint: { lat: number; lng: number } | null;
-}) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 280;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-  }
-
-  // (2 Okt 2026) Jarak garis lurus (haversine) dari lokasi rumah tiap
-  // kandidat PPL ke Sub SLS baris ini -- dihitung sekali per render popover
-  // di sini (FE, bukan OSRM/BE) krn popover ini bisa dibuka berkali-kali
-  // sambil admin mem-plot banyak baris; null kalau lokasi PPL atau titik Sub
-  // SLS belum tersedia (lokasi_status bukan "riil", atau lat/lng kosong) --
-  // kandidat begini ditaruh di urutan paling akhir, bukan dibuang.
-  const jarakPerPpl = useMemo(() => {
-    const map = new Map<number, number | null>();
-    for (const p of pplOptions) {
-      if (!subslsPoint || p.lokasi_status !== "riil" || typeof p.lat !== "number" || typeof p.lng !== "number") {
-        map.set(p.id, null);
-        continue;
-      }
-      map.set(p.id, haversineKm(p.lat, p.lng, subslsPoint.lat, subslsPoint.lng));
-    }
-    return map;
-  }, [pplOptions, subslsPoint]);
-
-  // Urutan: jarak ascending dulu (kandidat tanpa jarak terhitung ditaruh
-  // paling akhir), lalu beban kerja sbg tie-breaker (konsisten dgn perilaku
-  // lama sblm fitur jarak ini ada).
-  function bandingkanJarakLaluBeban(a: PetugasRingkas, b: PetugasRingkas) {
-    const jarakA = jarakPerPpl.get(a.id) ?? null;
-    const jarakB = jarakPerPpl.get(b.id) ?? null;
-    if (jarakA !== null && jarakB !== null && jarakA !== jarakB) return jarakA - jarakB;
-    if (jarakA !== null && jarakB === null) return -1;
-    if (jarakA === null && jarakB !== null) return 1;
-    return (bebanDraftPerPpl.get(a.id) ?? 0) - (bebanDraftPerPpl.get(b.id) ?? 0);
-  }
-
-  const tier1 = useMemo(
-    () => pplOptions.filter((p) => p.pendaftaran_bencana_konfirmasi).sort(bandingkanJarakLaluBeban),
-    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
-  );
-  const tier2 = useMemo(
-    () =>
-      pplOptions
-        // (p.kegiatan_lain ?? []) -- JAGA-JAGA konsisten dgn statusKesediaanPpl()
-        // di atas: field ini SELALU array dari API, tapi kalau browser masih
-        // menjalankan JS versi baru dgn JSON hasil fetch yg sempat ke-cache dari
-        // versi lama (sblm kegiatan_lain ditambahkan ke respons), field ini bisa
-        // undefined sesaat -- lihat crash "Cannot read properties of undefined
-        // (reading 'includes')" yg dilaporkan user pasca deploy fitur ini.
-        .filter((p) => !p.pendaftaran_bencana_konfirmasi && (p.kegiatan_lain ?? []).includes("PES SE2026"))
-        .sort(bandingkanJarakLaluBeban),
-    [pplOptions, bebanDraftPerPpl, jarakPerPpl]
-  );
-
-  function pilih(id: number) {
-    onPilih(id);
-    setBuka(false);
-  }
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={toggle}
-        title="Lihat saran mitra: Tier 1 dari yang sudah Mengajukan Diri, Tier 2 dari peserta PES SE2026"
-        className="shrink-0 rounded-full bg-moss-100 px-1.5 py-0.5 text-[10px] font-medium text-moss-700 hover:bg-moss-200"
-      >
-        💡 Saran
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
-          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className="mb-1.5 text-[10px] text-ink/50">
-            Saran murni bantuan memilih (bukan plotting otomatis) -- klik nama utk mengisi kolom PPL, tetap perlu
-            &quot;Simpan Perubahan&quot;.
-          </p>
-          <SaranMitraKelompok
-            judul="Tier 1 — Mengajukan Diri"
-            warna="text-moss-700"
-            daftar={tier1}
-            pplTerpilihId={pplTerpilihId}
-            jarakPerPpl={jarakPerPpl}
-            onPilih={pilih}
-            kosong="Belum ada mitra yang mengajukan diri."
-          />
-          <div className="my-1.5 border-t border-line" />
-          <SaranMitraKelompok
-            judul="Tier 2 — Ikut PES SE2026"
-            warna="text-blue-700"
-            daftar={tier2}
-            pplTerpilihId={pplTerpilihId}
-            jarakPerPpl={jarakPerPpl}
-            onPilih={pilih}
-            kosong="Tidak ada kandidat cadangan dari peserta PES SE2026."
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SaranMitraKelompok({
-  judul,
-  warna,
-  daftar,
-  pplTerpilihId,
-  jarakPerPpl,
-  onPilih,
-  kosong,
-}: {
-  judul: string;
-  warna: string;
-  daftar: PetugasRingkas[];
-  pplTerpilihId: number | null;
-  jarakPerPpl: Map<number, number | null>;
-  onPilih: (id: number) => void;
-  kosong: string;
-}) {
-  const BATAS_TAMPIL = 8;
-  return (
-    <div>
-      <p className={`text-[10px] font-semibold uppercase tracking-wide ${warna}`}>{judul}</p>
-      {daftar.length === 0 ? (
-        <p className="mt-0.5 text-[11px] text-ink/40">{kosong}</p>
-      ) : (
-        // (2 Okt 2026) Redesain atas masukan user: nama ditulis MENONJOL/jelas
-        // (bukan teks biasa di dalam satu tombol besar yg kurang kelihatan bisa
-        // diklik), DISERTAI tombol "Terapkan" eksplisit terpisah -- klik tombol
-        // itu yg mengisi draftPpl (otomatis ikut mengisi dropdown Combobox PPL
-        // di baris ybs, krn keduanya SATU state yg sama, lihat onPilih di
-        // SaranMitraTombol). Baris yg SUDAH terpilih ditandai jelas (latar +
-        // label "✓ Dipilih") drpd tombol disabled polos spt sebelumnya.
-        <ul className="mt-0.5 space-y-1">
-          {daftar.slice(0, BATAS_TAMPIL).map((p) => {
-            const sudahDipilih = p.id === pplTerpilihId;
-            return (
-              <li
-                key={p.id}
-                className={`flex items-center justify-between gap-2 rounded-md px-1.5 py-1 ${
-                  sudahDipilih ? "bg-moss-50" : "hover:bg-paper/70"
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-[12px] font-semibold text-navy-900">{p.nama}</p>
-                  <p className="text-[10px] text-ink/40">
-                    {(() => {
-                      const jarak = jarakPerPpl.get(p.id) ?? null;
-                      return jarak === null
-                        ? "Jarak tidak tersedia (lokasi belum riil)"
-                        : `± ${jarak.toLocaleString("id-ID", { maximumFractionDigits: 1 })} km dari Sub SLS ini`;
-                    })()}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onPilih(p.id)}
-                  disabled={sudahDipilih}
-                  className="shrink-0 rounded-full bg-moss-50 px-2 py-1 text-[10px] font-semibold text-moss-900 hover:bg-moss-100 disabled:cursor-default disabled:bg-paper disabled:text-ink/40"
-                  title={sudahDipilih ? "Sudah dipilih di baris ini" : `Pilih ${p.nama} utk Sub SLS ini`}
-                >
-                  {sudahDipilih ? "✓ Dipilih" : "Terapkan"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {daftar.length > BATAS_TAMPIL && (
-        <p className="mt-0.5 text-[10px] text-ink/40">+{daftar.length - BATAS_TAMPIL} lainnya (persempit lewat pencarian PPL kalau perlu).</p>
-      )}
-    </div>
-  );
-}
-
-// Rincian satu laporan identifikasi jorong (mitra) yg jadi SUMBER estimasi
-// KK terdampak utk sebuah Sub SLS -- dipakai popover "Sumber data KK
-// Terdampak" di Kertas Kerja Beban, supaya admin bisa lihat langsung siapa
-// lapor berapa & jenis kerusakan apa sebelum mengoreksi angka.
-type RincianSumberKk = {
-  nama_mitra: string;
-  indikator_dampak: string[];
-  total_kk: number;
-  catatan: string | null;
-  dibuat_pada: string;
-};
-
-type SumberKkTerdampak = {
-  idsls: string;
-  jorong: string;
-  sub_sls: string;
-  rincian: RincianSumberKk[];
-  jumlah_laporan: number;
-  rata_rata: number;
-  maksimum: number;
-};
-
-function labelIndikatorDampak(key: string): string {
-  return INDIKATOR_DAMPAK.find((i) => i.key === key)?.label ?? key;
-}
-
-// Ikon "cari tahu sumber data" di kolom KK Terdampak (Kertas Kerja Beban) --
-// klik utk buka popover berisi rincian tiap laporan mitra (nama, jumlah KK,
-// jenis kerusakan) yg mencakup Sub SLS ini, + tombol pintas "Terapkan
-// rata-rata"/"Terapkan maksimum" utk mengisi kolom KK Terdampak dari angka
-// itu (opsi ketik manual tetap ada di kolom inputnya, tidak berubah). Data
-// di-fetch sekali per Sub SLS saat pertama kali dibuka (bukan saat tabel
-// dimuat) supaya tetap ringan & cepat -- pola popover sama dgn ThKontrol /
-// IkonStatusKesediaanPpl.
-function IkonSumberKkTerdampak({
-  idsubsls,
-  onTerapkan,
-}: {
-  idsubsls: string;
-  onTerapkan: (nilai: number) => void;
-}) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [data, setData] = useState<SumberKkTerdampak | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  async function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 300;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-    if (!data && !loading) {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/bencana/alokasi/beban/sumber?idsubsls=${encodeURIComponent(idsubsls)}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Gagal memuat sumber data KK terdampak.");
-        setData(json);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
-      } finally {
-        setLoading(false);
-      }
-    }
-  }
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={toggle}
-        title="Cari tahu dari mana data KK terdampak diperoleh"
-        className="text-sm leading-none text-blue-600 hover:text-blue-900"
-      >
-        🔎
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 300 }}
-          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className="font-semibold text-ink">Sumber data KK Terdampak</p>
-          {loading && <p className="mt-1 text-ink/60">Memuat...</p>}
-          {error && <p className="mt-1 text-rust-600">{error}</p>}
-          {data && !loading && !error && (
-            <>
-              {data.jumlah_laporan === 0 ? (
-                <p className="mt-1 text-ink/60">
-                  Belum ada laporan identifikasi jorong yang mencakup Sub SLS ini.
-                </p>
-              ) : (
-                <>
-                  <ul className="mt-1.5 space-y-1.5">
-                    {data.rincian.map((r, i) => (
-                      <li key={i} className="border-b border-line/60 pb-1.5 last:border-0">
-                        <span className="font-medium text-ink">{r.nama_mitra}</span>
-                        <span className="text-ink/70"> : {r.total_kk} KK</span>
-                        {r.indikator_dampak.length > 0 && (
-                          <p className="text-[10px] text-ink/50">
-                            {r.indikator_dampak.map(labelIndikatorDampak).join(", ")}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onTerapkan(data.rata_rata);
-                        setBuka(false);
-                      }}
-                      className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-900 hover:bg-blue-100"
-                    >
-                      Terapkan rata-rata ({data.rata_rata})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onTerapkan(data.maksimum);
-                        setBuka(false);
-                      }}
-                      className="rounded-full bg-orange-50 px-2 py-1 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
-                    >
-                      Terapkan maksimum ({data.maksimum})
-                    </button>
-                  </div>
-                  <p className="mt-1.5 text-[10px] text-ink/40">Atau ketik manual langsung di kolom KK Terdampak.</p>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-type MitraCalon = {
-  id: number;
-  nama: string;
-  no_telp: string | null;
-  alamat_kecamatan: string | null;
-  alamat_desa: string | null;
-  posisi: string | null;
-  status_seleksi: string | null;
-};
-
-type RekomendasiMitra = { tier1: MitraCalon[]; tier2: MitraCalon[]; tier3: MitraCalon[] };
-
-// Tombol bantuan (❓) di samping kolom "Nama Mitra" pada form Identifikasi --
-// MURNI rekomendasi/bantuan keputusan, bukan penugasan otomatis: nama hanya
-// terisi ke kolom kalau admin/mitra sendiri yang klik "Pilih nama ini".
-//
-// Skala prioritas: (1) Nagari yang sama & terdaftar Diterima di kegiatan
-// lain (Sensus 2026) -> (2) Kecamatan yang sama & terdaftar Diterima ->
-// (3) Nagari yang sama tapi belum/tidak terdaftar di kegiatan lain.
-function IkonRekomendasiMitra({
-  iddesa,
-  kecamatan,
-  onPilih,
-}: {
-  iddesa: string;
-  kecamatan: string;
-  onPilih: (nama: string) => void;
-}) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [data, setData] = useState<RekomendasiMitra | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dikueriUntuk, setDikueriUntuk] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  async function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 320;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-    if (!iddesa || !kecamatan) return;
-    const kunci = `${iddesa}|${kecamatan}`;
-    if (dikueriUntuk === kunci && data) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/bencana/rekomendasi-mitra?iddesa=${encodeURIComponent(iddesa)}&kecamatan=${encodeURIComponent(
-          kecamatan
-        )}`
-      );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal memuat rekomendasi mitra.");
-      setData(json);
-      setDikueriUntuk(kunci);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function Daftar({ list }: { list: MitraCalon[] }) {
-    if (list.length === 0) return <p className="text-ink/40">Tidak ada.</p>;
-    return (
-      <ul className="space-y-1">
-        {list.map((m) => (
-          <li key={m.id} className="flex items-center justify-between gap-2 border-b border-line/60 pb-1 last:border-0">
-            <div className="min-w-0">
-              <p className="truncate font-medium text-ink">
-                {m.nama}
-                {m.no_telp ? ` (${m.no_telp})` : ""}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                onPilih(m.nama);
-                setBuka(false);
-              }}
-              className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-900 hover:bg-blue-100"
-            >
-              Pilih
-            </button>
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  return (
-    <div ref={ref} className="relative inline-block shrink-0 align-middle">
-      <button
-        type="button"
-        onClick={toggle}
-        title="Rekomendasi nama mitra untuk Nagari ini"
-        className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs font-bold leading-none text-blue-900 hover:bg-blue-200"
-      >
-        ?
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 320 }}
-          className="z-50 max-h-96 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className="font-semibold text-ink">Rekomendasi Nama Mitra untuk dihubungi</p>
-          {!iddesa || !kecamatan ? (
-            <p className="mt-1 text-ink/60">Pilih Kecamatan dan Nagari dulu di bawah.</p>
-          ) : loading ? (
-            <p className="mt-1 text-ink/60">Memuat...</p>
-          ) : error ? (
-            <p className="mt-1 text-rust-600">{error}</p>
-          ) : (
-            data && (
-              <div className="mt-1.5 flex flex-col gap-2.5">
-                <div>
-                  <p className="mb-1 font-medium text-moss-700">
-                    1) Nagari sama &amp; terdaftar kegiatan lain (Sensus 2026)
-                  </p>
-                  <Daftar list={data.tier1} />
-                </div>
-                <div>
-                  <p className="mb-1 font-medium text-blue-900">
-                    2) Kecamatan sama &amp; terdaftar kegiatan lain
-                  </p>
-                  <Daftar list={data.tier2} />
-                </div>
-                <div>
-                  <p className="mb-1 font-medium text-orange-700">
-                    3) Nagari sama, belum/tidak terdaftar kegiatan lain
-                  </p>
-                  <Daftar list={data.tier3} />
-                </div>
-                <p className="border-t border-line pt-1.5 text-[10px] text-ink/40">
-                  Hanya rekomendasi -- klik &quot;Pilih&quot; untuk mengisi kolom Nama
-                  Mitra, atau tetap ketik nama lain secara manual.
-                </p>
-              </div>
-            )
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Ikon "bandingkan dgn data verifikasi" (🧭) di baris Sub SLS yang Jorong-nya
-// SUDAH ADA data verifikasi resmi (lihat bencana_kk_terdampak_verifikasi_jorong
-// & AMBANG_SELISIH_VERIFIKASI_JORONG). Beda dgn IkonSumberKkTerdampak, ikon
-// ini TIDAK fetch ke server -- seluruh datanya (rincian tiap Sub SLS
-// se-Jorong + nilai draft terkini) sudah ada di memory (bebanRows +
-// draftKkTerdampak), jadi popovernya murni hitung ulang lokal & langsung
-// ikut berubah kalau admin sedang mengetik koreksi manual.
-function IkonVerifikasiJorong({
-  namaJorong,
-  verifikasiTotal,
-  totalJorongLive,
-  rincianSub,
-  bedaSignifikan,
-}: {
-  namaJorong: string;
-  verifikasiTotal: number;
-  totalJorongLive: number;
-  rincianSub: { sub_sls: string; nilai: number }[];
-  bedaSignifikan: boolean;
-}) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 280;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-  }
-
-  const selisih = totalJorongLive - verifikasiTotal;
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={toggle}
-        title="Bandingkan dengan data verifikasi resmi per Jorong"
-        className={`text-sm leading-none ${bedaSignifikan ? "text-rust-600" : "text-slate-400 hover:text-slate-600"}`}
-      >
-        🧭
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
-          className="z-50 max-h-80 overflow-y-auto rounded-md border border-line bg-white p-2.5 text-left text-xs normal-case shadow-lg"
-        >
-          <p className="font-semibold text-ink">Verifikasi Jorong {namaJorong}</p>
-          <p className="mt-1 text-ink/70">
-            Data awal KK terdampak (verifikasi resmi): <b>{verifikasiTotal}</b>
-          </p>
-          <p className="text-ink/70">
-            Jumlah menurut aplikasi (total semua Sub SLS di Jorong ini): <b>{totalJorongLive}</b>
-          </p>
-          {bedaSignifikan && (
-            <p className="mt-1 font-medium text-rust-600">
-              Selisih {selisih > 0 ? "+" : ""}
-              {selisih} KK -- lebih dari {AMBANG_SELISIH_VERIFIKASI_JORONG}, mohon ditinjau ulang manual.
-            </p>
-          )}
-          <p className="mt-2 font-medium text-ink/70">Rincian tiap Sub SLS (menurut aplikasi):</p>
-          <ul className="mt-1 space-y-0.5">
-            {rincianSub.map((s) => (
-              <li key={s.sub_sls} className="flex justify-between text-ink/70">
-                <span>Sub SLS {s.sub_sls}</span>
-                <span className="font-medium text-ink">{s.nilai}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// (3 Okt 2026) Tombol "Lihat Peta" per baris Sub SLS di tab Identifikasi --
-// awalnya buka Google Maps di tab baru, user minta diganti jadi popover
-// kecil langsung di halaman (cukup "cek sekilas", tidak perlu pindah
-// halaman/aplikasi). Pakai iframe embed Google Maps (`output=embed`, TIDAK
-// butuh API key -- trik publik yg sama dgn tombol "Share/Embed" biasa di
-// Google Maps, beda dari Maps Embed API resmi yg berbayar). Tetap sediakan
-// link "Buka di Google Maps" di bawah iframe utk yg mau lihat lebih detail/
-// zoom/satelit penuh di aplikasi aslinya.
-function PetaSekilasTombol({ lat, lng, label }: { lat: number; lng: number; label: string }) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!buka) return;
-    function tutupJikaDiluar(e: Event) {
-      if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
-      setBuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [buka]);
-
-  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
-    if (buka) {
-      setBuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 280;
-    setPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - lebar - 8)) });
-    setBuka(true);
-  }
-
-  const srcEmbed = `https://www.google.com/maps?q=${lat},${lng}&z=16&output=embed`;
-  const linkPenuh = `https://www.google.com/maps?q=${lat},${lng}`;
-
-  return (
-    <div ref={ref} className="relative inline-block shrink-0">
-      <button
-        type="button"
-        onClick={toggle}
-        title="Lihat lokasi Sub SLS ini di peta (cek sekilas kemungkinan area banjir)"
-        className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium transition ${
-          buka ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-        }`}
-      >
-        🗺️ Lihat Peta
-      </button>
-      {buka && pos && (
-        <div
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: 280 }}
-          className="z-50 overflow-hidden rounded-md border border-line bg-white normal-case shadow-lg"
-        >
-          <div className="flex items-center justify-between border-b border-line px-2 py-1">
-            <p className="truncate text-[11px] font-medium text-ink/70">{label}</p>
-            <button
-              type="button"
-              onClick={() => setBuka(false)}
-              className="shrink-0 px-1 text-xs text-ink/40 hover:text-ink/70"
-              title="Tutup"
-            >
-              ✕
-            </button>
-          </div>
-          <iframe
-            src={srcEmbed}
-            width="280"
-            height="220"
-            style={{ border: 0, display: "block" }}
-            loading="lazy"
-            title={`Peta lokasi ${label}`}
-          />
-          <a
-            href={linkPenuh}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block border-t border-line px-2 py-1.5 text-center text-[10px] font-medium text-blue-600 hover:bg-blue-50"
-          >
-            Buka di Google Maps ↗
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
 
 type CalonSampelRow = {
   idsubsls: string;
@@ -1069,7 +184,6 @@ type RingkasanKorwilRow = {
 // terdampak, sbg variabel input skor_beban_pendataan (bisa dikoreksi manual).
 type KertasKerjaBebanRow = {
   idsubsls: string;
-  idsls: string;
   kecamatan: string;
   nagari: string;
   sls: string;
@@ -1083,49 +197,6 @@ type KertasKerjaBebanRow = {
   kk_total_manual: boolean;
   kk_terdampak_manual: boolean;
   punya_data_kk: boolean;
-  // Data verifikasi lapangan resmi (Januari 2026) jumlah keluarga terdampak
-  // PER JORONG -- null kalau Jorong ybs belum ada datanya. Dipakai utk
-  // membandingkan thd total kk_terdampak (dijumlah per Jorong) & menandai
-  // Sub SLS yg selisihnya jauh sbg perlu ditinjau ulang manual.
-  verifikasi_total_keluarga: number | null;
-  // "KK Terdampak (Wawancara Sub SLS)" -- angka PER SUB SLS langsung dari
-  // field perkiraan KK yg diisi mitra/anak magang scr spesifik per Sub SLS
-  // (beda dari kk_terdampak_estimasi yg cuma rata-rata per Jorong). null
-  // kalau belum ada laporan yg spesifik menyebut Sub SLS ini; kalau Jorong
-  // ybs ada laporan "tidak ada yg terdampak", kk_wawancara_tidak_terdampak
-  // jadi true (ditampilkan sbg "NO", bukan angka).
-  kk_wawancara: number | null;
-  kk_wawancara_tidak_terdampak: boolean;
-  // (3 Okt 2026) Titik koordinat Sub SLS ini, utk tombol "Lihat Peta" di
-  // sebelah nama Jorong -- null kalau titiknya belum tersedia.
-  lat: number | null;
-  lng: number | null;
-};
-
-// Selisih di atas ini (KK) antara data verifikasi resmi per Jorong vs total
-// kk_terdampak aplikasi (dijumlah per Jorong) dianggap signifikan -> baris2
-// Sub SLS di Jorong itu ditandai merah utk ditinjau ulang manual.
-const AMBANG_SELISIH_VERIFIKASI_JORONG = 15;
-
-type PengaturanBebanRow = {
-  kunci: string;
-  nilai: number;
-  label: string;
-  keterangan: string | null;
-  updated_at: string;
-};
-
-// Baris "Kartu Mitra Perlu Dihubungi" -- mitra aktif yang BELUM konfirmasi
-// ikut pendataan bencana (pendaftaran_bencana_konfirmasi = false), perlu
-// dihubungi utk ditawarkan & dicatat hasilnya (diterima/menolak).
-type MitraKontakRow = {
-  id: number;
-  nama: string;
-  no_hp: string | null;
-  alamat_kecamatan: string | null;
-  status_kontak_pendaftaran_bencana: "diterima" | "menolak" | null;
-  catatan_penolakan_pendaftaran_bencana: string | null;
-  dikontak_pendaftaran_bencana_at: string | null;
 };
 
 const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
@@ -1141,13 +212,8 @@ const INDIKATOR_DAMPAK: { key: string; label: string }[] = [
 ];
 
 type JorongLocalState = {
-  // "seluruh" = seluruh Sub SLS terdampak, "sebagian" = sebagian (dipilih di
-  // checklist Sub SLS), "tidak_ada" = TIDAK ADA Sub SLS yang terdampak di
-  // Jorong ini sama sekali.
-  jawaban: "seluruh" | "sebagian" | "tidak_ada" | null;
-  checkedSubsls: Set<string>; // Sub SLS yg YAKIN terdampak (dipilih saat jawaban="sebagian")
-  raguSubsls: Set<string>; // Sub SLS yg RAGU/belum yakin terdampak atau tidak
-  perkiraanKkSubsls: Record<string, number | "">; // perkiraan jumlah KELUARGA terdampak PER Sub SLS (checkedSubsls & raguSubsls)
+  seluruh: boolean | null;
+  checkedSubsls: Set<string>;
   indikator: Set<string>;
   indikatorKk: Record<string, number | "">;
   catatan: string;
@@ -1158,10 +224,8 @@ type JorongLocalState = {
 
 function emptyJorongState(): JorongLocalState {
   return {
-    jawaban: null,
+    seluruh: null,
     checkedSubsls: new Set(),
-    raguSubsls: new Set(),
-    perkiraanKkSubsls: {},
     indikator: new Set(),
     indikatorKk: {},
     catatan: "",
@@ -1224,327 +288,28 @@ function MiniStat({ warna, label, nilai }: { warna: string; label: string; nilai
   );
 }
 
-// Monitoring Magang -- ditaruh paling atas tab Monitoring. Menghitung
-// hasil identifikasi (per-Jorong) yang masuk HARI INI per pegawai magang,
-// termasuk pegawai magang yang hari ini belum mengisi sama sekali (0)
-// supaya kelihatan siapa yang belum submit. Nama yang belum pernah ada di
-// Identifikasi (belum didampingi magang) tidak muncul di sini -- itu
-// bukan masalah, kolomnya memang opsional.
-function MonitoringMagangSection({ data }: { data: MonitoringMagangRow[] }) {
-  if (data.length === 0) {
-    return (
-      <section className="rounded-md border border-line bg-white p-4">
-        <h3 className="font-medium text-blue-950">👩‍🎓 Monitoring Magang</h3>
-        <p className="mt-1 text-sm text-ink/60">
-          Belum ada nama pegawai magang yang tercatat. Nama akan muncul di sini
-          begitu diisi lewat kolom &quot;Nama Pegawai Magang&quot; pada form
-          Identifikasi.
-        </p>
-      </section>
-    );
-  }
-
-  const totalHariIni = data.reduce((sum, m) => sum + m.jumlah_hari_ini, 0);
-  const belumIsiHariIni = data.filter((m) => m.jumlah_hari_ini === 0).length;
-
-  return (
-    <section className="rounded-md border border-line bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-medium text-blue-950">👩‍🎓 Monitoring Magang</h3>
-        <span className="shrink-0 rounded-full bg-moss-100 px-3 py-1 text-xs font-medium text-moss-700">
-          {totalHariIni} hasil identifikasi masuk hari ini
-        </span>
-      </div>
-      <p className="mt-1 text-xs text-ink/60">
-        Jumlah hasil identifikasi (per-Jorong) yang dimasukkan tiap pegawai
-        magang hari ini.{" "}
-        {belumIsiHariIni > 0 && (
-          <span className="text-orange-700">
-            {belumIsiHariIni} pegawai magang belum mengisi hari ini.
-          </span>
-        )}
-      </p>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {data.map((m) => (
-          <div
-            key={m.id}
-            className={`rounded-md border px-3 py-2 ${
-              m.jumlah_hari_ini > 0
-                ? "border-moss-200 bg-moss-50"
-                : "border-line bg-gray-50"
-            }`}
-          >
-            <p className="truncate text-sm font-medium text-ink" title={m.nama}>
-              {m.nama}
-            </p>
-            <p
-              className={`text-lg font-semibold ${
-                m.jumlah_hari_ini > 0 ? "text-moss-700" : "text-ink/40"
-              }`}
-            >
-              {m.jumlah_hari_ini}
-              <span className="ml-1 text-xs font-normal text-ink/50">hari ini</span>
-            </p>
-            <p className="text-xs text-ink/50">Total keseluruhan: {m.jumlah_total}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// Header kolom tabel dengan kontrol cari (🔍), filter (▽), urut (⇅) --
-// (2 Okt 2026) SEMUA kontrol yang relevan utk kolom itu ditampilkan
-// SEKALIGUS dalam 1 popover gabungan (dulu: menu pilih salah satu dulu,
-// baru buka popover kontrol itu sendiri -- tidak bisa kombinasi, mis.
-// urutkan SEKALIGUS filter dalam 1x buka). Popover dipasang
-// `position: fixed` (posisi dihitung dari lokasi tombol saat diklik)
-// supaya TIDAK terpotong oleh overflow-auto pembungkus tabel, dan
-// otomatis tertutup kalau tabelnya discroll, jendela di-resize, atau
-// diklik di luar popover. Urutkan/Cari berlaku LANGSUNG saat
-// diklik/diketik (popover TIDAK otomatis tertutup) supaya bisa lanjut
-// atur kontrol lain di popover yang sama; Filter tetap pola draft+Terapkan
-// (perlu klik Terapkan dulu) spy tidak nge-refetch/filter ulang tiap 1
-// checkbox dicentang.
-// (2 Okt 2026) Redesain atas masukan user: dulu Cari ikut jadi salah satu
-// tab di dalam popover titik-tiga (⋮) bersama Urutkan/Filter -- user minta
-// Cari dipisah jadi ikon 🔍 TERSENDIRI di samping ⋮ (langsung kelihatan &
-// klik 1x, tidak perlu buka ⋮ dulu), sedangkan Urutkan & Filter tetap
-// digabung dalam 1 popover ⋮ seperti sebelumnya. Dua popover independen,
-// tapi 1 listener "klik di luar" yang menutup salah satu/keduanya.
-function ThKontrol({
+// Header kolom tabel yg bisa diklik utk sorting (panah menunjukkan arah
+// aktif). `active` dibanding di pemanggil krn generic key-nya beda2 per
+// tabel.
+function ThSort({
   label,
+  active,
+  dir,
+  onClick,
   className,
-  stickyLeft,
-  search,
-  filter,
-  sort,
 }: {
   label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
   className?: string;
-  stickyLeft?: boolean;
-  search?: { value: string; onChange: (v: string) => void; placeholder?: string };
-  filter?: { options: string[]; selected: Set<string>; onApply: (next: Set<string>) => void };
-  sort?: { active: boolean; dir: "asc" | "desc"; onAsc: () => void; onDesc: () => void; onReset: () => void };
 }) {
-  const adaAksi = !!sort || !!filter;
-
-  const [cariTerbuka, setCariTerbuka] = useState(false);
-  const [cariPos, setCariPos] = useState<{ top: number; left: number } | null>(null);
-  const cariRef = useRef<HTMLDivElement>(null);
-
-  const [terbuka, setTerbuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [filterDraft, setFilterDraft] = useState<Set<string>>(new Set());
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!cariTerbuka && !terbuka) return;
-    function tutupJikaDiluar(e: Event) {
-      const target = e.target;
-      if (cariRef.current && target instanceof Node && cariRef.current.contains(target)) return;
-      if (popoverRef.current && target instanceof Node && popoverRef.current.contains(target)) return;
-      setCariTerbuka(false);
-      setTerbuka(false);
-    }
-    document.addEventListener("mousedown", tutupJikaDiluar);
-    document.addEventListener("scroll", tutupJikaDiluar, true);
-    window.addEventListener("resize", tutupJikaDiluar);
-    return () => {
-      document.removeEventListener("mousedown", tutupJikaDiluar);
-      document.removeEventListener("scroll", tutupJikaDiluar, true);
-      window.removeEventListener("resize", tutupJikaDiluar);
-    };
-  }, [cariTerbuka, terbuka]);
-
-  function bukaCari(e: React.MouseEvent<HTMLButtonElement>) {
-    if (cariTerbuka) {
-      setCariTerbuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 220;
-    setCariPos({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)) });
-    setTerbuka(false);
-    setCariTerbuka(true);
-  }
-
-  function bukaAksi(e: React.MouseEvent<HTMLButtonElement>) {
-    if (terbuka) {
-      setTerbuka(false);
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const lebar = 240;
-    setPos({
-      top: rect.bottom + 4,
-      left: Math.max(8, Math.min(rect.right - lebar, window.innerWidth - lebar - 8)),
-    });
-    if (filter) setFilterDraft(new Set(filter.selected));
-    setCariTerbuka(false);
-    setTerbuka(true);
-  }
-
-  const searchAktif = !!search?.value;
-  const filterAktif = !!filter && filter.selected.size > 0;
-  const aksiAktif = filterAktif || !!sort?.active;
-  const banyakBagian = !!sort && !!filter;
-
   return (
-    <th className={`px-3 py-2 font-medium ${stickyLeft ? "sticky left-0 z-30 bg-blue-50" : ""} ${className ?? ""}`}>
-      <div className="flex items-center justify-between gap-1">
-        <span className="truncate">{label}</span>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {search && (
-            <div ref={cariRef} className="relative">
-              <button
-                type="button"
-                title="Cari di kolom ini"
-                onClick={bukaCari}
-                className={`shrink-0 rounded p-1 text-xs leading-none transition ${
-                  searchAktif || cariTerbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
-                }`}
-              >
-                🔍
-              </button>
-              {cariTerbuka && cariPos && (
-                <div
-                  style={{ position: "fixed", top: cariPos.top, left: cariPos.left, width: 220 }}
-                  className="z-50 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
-                >
-                  <input
-                    autoFocus
-                    value={search.value}
-                    onChange={(e) => search.onChange(e.target.value)}
-                    placeholder={search.placeholder ?? "Ketik kata kunci..."}
-                    className="w-full rounded-md border border-line px-2 py-1.5 text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                  />
-                  {search.value && (
-                    <button
-                      type="button"
-                      onClick={() => search.onChange("")}
-                      className="mt-1 text-[10px] font-medium text-blue-600 hover:underline"
-                    >
-                      Hapus pencarian
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {adaAksi && (
-            <div ref={popoverRef} className="relative">
-              <button
-                type="button"
-                title="Urutkan / filter kolom ini"
-                onClick={bukaAksi}
-                className={`shrink-0 rounded p-1 text-xs leading-none transition ${
-                  aksiAktif || terbuka ? "bg-blue-600 text-white" : "text-blue-300 hover:bg-blue-100 hover:text-blue-900"
-                }`}
-              >
-                ⋮
-              </button>
-              {terbuka && pos && (
-                <div
-                  style={{ position: "fixed", top: pos.top, left: pos.left, width: 240 }}
-                  className="z-50 flex flex-col gap-2 rounded-md border border-line bg-white p-2 text-left font-normal normal-case text-ink shadow-lg"
-                >
-                  {sort && (
-                    <div className={banyakBagian ? "border-b border-line pb-2" : ""}>
-                      {banyakBagian && (
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Urutkan</p>
-                      )}
-                      <div className="flex flex-col gap-0.5">
-                        <button
-                          type="button"
-                          onClick={sort.onAsc}
-                          className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
-                            sort.active && sort.dir === "asc" ? "bg-blue-50 font-medium text-blue-700" : ""
-                          }`}
-                        >
-                          ▲ Urut naik (A-Z)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={sort.onDesc}
-                          className={`block w-full rounded px-2 py-1.5 text-left text-xs hover:bg-blue-50 ${
-                            sort.active && sort.dir === "desc" ? "bg-blue-50 font-medium text-blue-700" : ""
-                          }`}
-                        >
-                          ▼ Urut turun (Z-A)
-                        </button>
-                        {sort.active && (
-                          <button
-                            type="button"
-                            onClick={sort.onReset}
-                            className="block w-full rounded px-2 py-1.5 text-left text-xs text-ink/60 hover:bg-gray-50"
-                          >
-                            ✕ Reset urutan
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {filter && (
-                    <div>
-                      {banyakBagian && (
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink/40">Filter</p>
-                      )}
-                      <div className="max-h-44 overflow-y-auto">
-                        {filter.options.length === 0 && <p className="px-1 py-1 text-xs text-ink/50">Tidak ada data.</p>}
-                        <div className="flex flex-col gap-1">
-                          {filter.options.map((opt) => (
-                            <label key={opt} className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-blue-50">
-                              <input
-                                type="checkbox"
-                                checked={filterDraft.has(opt)}
-                                onChange={() => {
-                                  setFilterDraft((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(opt)) next.delete(opt);
-                                    else next.add(opt);
-                                    return next;
-                                  });
-                                }}
-                                className="h-3.5 w-3.5 shrink-0 accent-blue-600"
-                              />
-                              <span className="truncate">{opt}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2 border-t border-line pt-2">
-                        <button type="button" onClick={() => setFilterDraft(new Set())} className="text-[10px] text-ink/60 hover:underline">
-                          Bersihkan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => filter.onApply(filterDraft)}
-                          className="ml-auto rounded bg-blue-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-blue-600"
-                        >
-                          Terapkan
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {banyakBagian && (
-                    <button
-                      type="button"
-                      onClick={() => setTerbuka(false)}
-                      className="w-full rounded px-2 py-1 text-center text-[10px] font-medium text-ink/50 hover:bg-gray-50 hover:text-ink/80"
-                    >
-                      Tutup
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+    <th className={`px-3 py-2 font-medium ${className ?? ""}`}>
+      <button type="button" onClick={onClick} className="flex items-center gap-1 hover:text-orange-800">
+        {label}
+        <span className={active ? "text-orange-800" : "text-orange-300"}>{active && dir === "asc" ? "▲" : "▼"}</span>
+      </button>
     </th>
   );
 }
@@ -1644,14 +409,14 @@ function RekapSubslsSection({
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="font-medium text-blue-950">{title}</h2>
+          <h2 className="font-medium text-orange-900">{title}</h2>
           {subtitle && <p className="text-xs text-ink/60">{subtitle}</p>}
         </div>
         <button
           type="button"
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
+          className="shrink-0 rounded-md border border-orange-700 bg-white px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-40"
         >
           Export ke Excel
         </button>
@@ -1666,7 +431,7 @@ function RekapSubslsSection({
               setKecFilter(e.target.value);
               setPage(1);
             }}
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
           >
             <option value="">Semua kecamatan</option>
             {kecamatanOptions.map((k) => (
@@ -1684,7 +449,7 @@ function RekapSubslsSection({
               setStatusFilter(e.target.value as "" | JorongStatus);
               setPage(1);
             }}
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
           >
             <option value="">Semua status</option>
             <option value="terdampak">Terdampak</option>
@@ -1701,14 +466,14 @@ function RekapSubslsSection({
               setPage(1);
             }}
             placeholder="Ketik kata kunci..."
-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
           />
         </div>
       </div>
 
       <div className="mt-2 overflow-x-auto rounded-md border border-line">
         <table className="w-full min-w-[820px] text-left text-sm">
-          <thead className="bg-blue-50 text-blue-600">
+          <thead className="bg-orange-50 text-orange-600">
             <tr>
               <th className="px-3 py-2 font-medium">Kecamatan</th>
               <th className="px-3 py-2 font-medium">Nagari</th>
@@ -1818,7 +583,7 @@ function balanceInfo(skor: number, rata: number): BalanceInfo {
       tone: "kelebihan",
     };
   }
-  return { label: "Beban Rendah", cls: "text-violet-600", barCls: "bg-violet-400", dotCls: "bg-violet-400", tone: "rendah" };
+  return { label: "Beban Rendah", cls: "text-orange-600", barCls: "bg-orange-400", dotCls: "bg-orange-400", tone: "rendah" };
 }
 
 const LEGENDA_STATUS_BEBAN: { tone: BalanceTone; label: string; keterangan: string }[] = [
@@ -1842,7 +607,7 @@ function LegendaStatusBeban({ withBelum = false }: { withBelum?: boolean }) {
                 ? "bg-amber-500"
                 : it.tone === "kelebihan"
                 ? "bg-rust-500"
-                : "bg-violet-400"
+                : "bg-orange-400"
             }`}
           />
           {it.label}
@@ -1936,7 +701,7 @@ function Combobox({
           }
         }}
         placeholder={placeholder}
-        className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-ink/40"
+        className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400 disabled:bg-gray-50 disabled:text-ink/40"
       />
       {open && !disabled && (
         <div className="absolute z-20 mt-1 max-h-56 w-full min-w-[12rem] overflow-y-auto rounded-md border border-line bg-white text-xs shadow-lg">
@@ -1949,7 +714,7 @@ function Combobox({
                 setOpen(false);
                 setQuery("");
               }}
-              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-blue-50"
+              className="block w-full px-2 py-1.5 text-left text-ink/40 hover:bg-orange-50"
             >
               {placeholder}
             </button>
@@ -1970,8 +735,8 @@ function Combobox({
                 o.disabled
                   ? "cursor-not-allowed text-ink/30"
                   : o.value === value
-                  ? "bg-blue-50 font-medium text-blue-900 hover:bg-blue-100"
-                  : "text-ink hover:bg-blue-50"
+                  ? "bg-orange-50 font-medium text-orange-700 hover:bg-orange-100"
+                  : "text-ink hover:bg-orange-50"
               }`}
             >
               {o.label}
@@ -1981,1188 +746,6 @@ function Combobox({
         </div>
       )}
     </div>
-  );
-}
-
-const PENGATURAN_BEBAN_DEFAULT: Record<string, number> = {
-  bobot_kk_terdampak: 1,
-  bobot_kk_tidak_terdampak: 0.1428,
-  pembagi_jarak_km: 5,
-  menit_per_kk_tidak_terdampak: 3,
-  menit_per_kk_terdampak: 20,
-  jam_kerja_per_hari: 5,
-};
-
-function PengaturanBebanSection() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [rows, setRows] = useState<PengaturanBebanRow[]>([]);
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [simpanBusy, setSimpanBusy] = useState(false);
-  const [simpanError, setSimpanError] = useState<string | null>(null);
-  const [simpanSukses, setSimpanSukses] = useState(false);
-
-  async function muat() {
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/bencana/pengaturan-beban");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
-      const data: PengaturanBebanRow[] = json.data ?? [];
-      setRows(data);
-      setDraft((prev) => {
-        // Jangan timpa draft yg sedang diketik user kalau ini refetch setelah simpan.
-        const next: Record<string, string> = {};
-        for (const r of data) {
-          next[r.kunci] = prev[r.kunci] !== undefined ? prev[r.kunci] : String(r.nilai);
-        }
-        return next;
-      });
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Gagal memuat pengaturan beban.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    muat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function nilaiAsli(kunci: string): number {
-    const r = rows.find((x) => x.kunci === kunci);
-    return r ? r.nilai : PENGATURAN_BEBAN_DEFAULT[kunci] ?? 0;
-  }
-
-  function draftNum(kunci: string): number {
-    const v = Number(draft[kunci]);
-    return Number.isFinite(v) ? v : nilaiAsli(kunci);
-  }
-
-  const adaPerubahan = rows.some((r) => draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai));
-
-  function batalkanPerubahan() {
-    const next: Record<string, string> = {};
-    for (const r of rows) next[r.kunci] = String(r.nilai);
-    setDraft(next);
-    setSimpanError(null);
-    setSimpanSukses(false);
-  }
-
-  async function simpanPerubahan() {
-    setSimpanBusy(true);
-    setSimpanError(null);
-    setSimpanSukses(false);
-    try {
-      const berubah = rows.filter((r) => draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai));
-      for (const r of berubah) {
-        const nilai = Number(draft[r.kunci]);
-        if (!Number.isFinite(nilai) || nilai <= 0) {
-          throw new Error(`Nilai "${r.label}" harus berupa angka lebih besar dari 0.`);
-        }
-        const res = await fetch("/api/bencana/pengaturan-beban", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kunci: r.kunci, nilai }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || `Gagal menyimpan "${r.label}".`);
-      }
-      await muat();
-      setSimpanSukses(true);
-    } catch (e) {
-      setSimpanError(e instanceof Error ? e.message : "Gagal menyimpan pengaturan.");
-    } finally {
-      setSimpanBusy(false);
-    }
-  }
-
-  // Simulasi contoh perhitungan pakai nilai draft (belum tentu tersimpan)
-  // supaya admin bisa lihat dampaknya SEBELUM menekan "Simpan Perubahan".
-  const contohKkTerdampak = 5;
-  const contohKkTidakTerdampak = 145;
-  const contohJarakKm = 12;
-  const bobotTerdampak = draftNum("bobot_kk_terdampak");
-  const bobotTidakTerdampak = draftNum("bobot_kk_tidak_terdampak");
-  const pembagiJarak = draftNum("pembagi_jarak_km") || 1;
-  const menitTerdampak = draftNum("menit_per_kk_terdampak");
-  const menitTidakTerdampak = draftNum("menit_per_kk_tidak_terdampak");
-  const jamKerja = draftNum("jam_kerja_per_hari") || 1;
-  const contohSkorBebanPendataan =
-    contohKkTerdampak * bobotTerdampak + contohKkTidakTerdampak * bobotTidakTerdampak;
-  const contohMenitDibutuhkan = contohKkTerdampak * menitTerdampak + contohKkTidakTerdampak * menitTidakTerdampak;
-  const contohHariKerja = Math.max(1, Math.ceil(contohMenitDibutuhkan / (jamKerja * 60)));
-  const contohSkorJarak = (contohJarakKm / pembagiJarak) * contohHariKerja;
-  const contohSkorBebanAkhir = contohSkorBebanPendataan + contohSkorJarak;
-
-  if (loading) {
-    return <p className="mt-6 text-sm text-ink/60">Memuat pengaturan beban...</p>;
-  }
-  if (loadError) {
-    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-sm text-rust-700">{loadError}</p>;
-  }
-
-  return (
-    <div className="mt-6 flex flex-col gap-6">
-      <section className="rounded-md border border-blue-100 bg-white p-4">
-        <h2 className="font-medium text-blue-950">Kelola Perkiraan Beban Tugas</h2>
-        <p className="mt-1 text-sm text-ink/70">
-          Bobot &amp; parameter di bawah ini menentukan perhitungan{" "}
-          <strong>skor beban pendataan</strong>, <strong>skor jarak</strong>, dan{" "}
-          <strong>skor beban akhir</strong> di seluruh tab Alokasi Petugas (Langkah 1-4,
-          Ringkasan, dan Kebutuhan Petugas per Kecamatan). Perubahan di sini{" "}
-          <strong>langsung berdampak</strong> pada semua perhitungan tersebut begitu
-          disimpan.
-        </p>
-
-        <div className="mt-4 flex flex-col gap-4">
-          {rows.map((r) => (
-            <div key={r.kunci} className="rounded-md border border-line bg-gray-50/60 p-3">
-              <label className="text-sm font-medium text-ink">{r.label}</label>
-              {r.keterangan && <p className="mt-0.5 text-xs text-ink/60">{r.keterangan}</p>}
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="number"
-                  step="any"
-                  min={0}
-                  value={draft[r.kunci] ?? String(r.nilai)}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, [r.kunci]: e.target.value }))}
-                  className="w-32 rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                />
-                {draft[r.kunci] !== undefined && draft[r.kunci] !== String(r.nilai) && (
-                  <span className="text-xs text-orange-600">
-                    belum disimpan (semula {r.nilai})
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={!adaPerubahan || simpanBusy}
-            onClick={batalkanPerubahan}
-            className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:bg-gray-50 disabled:opacity-40"
-          >
-            ↺ Batalkan Perubahan
-          </button>
-          <button
-            type="button"
-            disabled={!adaPerubahan || simpanBusy}
-            onClick={simpanPerubahan}
-            className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
-          >
-            {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
-          </button>
-          {simpanSukses && !adaPerubahan && (
-            <span className="text-xs font-medium text-moss-700">
-              ✓ Tersimpan. Perhitungan beban di tab Alokasi Petugas sudah memakai nilai baru.
-            </span>
-          )}
-        </div>
-        {simpanError && (
-          <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{simpanError}</p>
-        )}
-      </section>
-
-      <section className="rounded-md border border-line bg-white p-4">
-        <h3 className="font-medium text-blue-950">Simulasi Contoh Perhitungan</h3>
-        <p className="mt-1 text-xs text-ink/60">
-          Pratinjau memakai nilai di atas (termasuk yang belum disimpan), supaya Bapak/Ibu
-          bisa cek dampaknya dulu sebelum menyimpan.
-        </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="rounded-md border border-line bg-gray-50/60 p-3 text-xs text-ink/70">
-            <p className="font-medium text-ink">Contoh Sub SLS</p>
-            <p className="mt-1">{contohKkTerdampak} KK terdampak, {contohKkTidakTerdampak} KK tidak terdampak, jarak {contohJarakKm} km</p>
-            <p className="mt-2">
-              Skor beban pendataan = {contohKkTerdampak} × {bobotTerdampak} + {contohKkTidakTerdampak} × {bobotTidakTerdampak}
-              {" = "}
-              <strong className="text-blue-900">{contohSkorBebanPendataan.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
-            </p>
-            <p className="mt-1">
-              Menit dibutuhkan = {contohKkTerdampak} × {menitTerdampak} + {contohKkTidakTerdampak} × {menitTidakTerdampak}
-              {" = "}
-              <strong className="text-blue-900">{contohMenitDibutuhkan.toLocaleString("id-ID")}</strong> menit
-            </p>
-            <p className="mt-1">
-              Jumlah hari kerja = CEIL({contohMenitDibutuhkan} ÷ ({jamKerja} × 60))
-              {" = "}
-              <strong className="text-blue-900">{contohHariKerja}</strong> hari (PP {contohHariKerja}×)
-            </p>
-            <p className="mt-1">
-              Skor jarak = ({contohJarakKm} ÷ {pembagiJarak}) × {contohHariKerja}
-              {" = "}
-              <strong className="text-blue-900">{contohSkorJarak.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
-            </p>
-            <p className="mt-1">
-              Skor beban akhir ={" "}
-              <strong className="text-blue-900">{contohSkorBebanAkhir.toLocaleString("id-ID", { maximumFractionDigits: 2 })}</strong>
-            </p>
-          </div>
-          <div className="rounded-md border border-line bg-gray-50/60 p-3 text-xs text-ink/70">
-            <p className="font-medium text-ink">Rumus yang dipakai sistem</p>
-            <ul className="mt-1.5 flex flex-col gap-1">
-              <li>
-                Skor beban pendataan = (KK terdampak × <em>Bobot Keluarga Terdampak</em>) +
-                (KK tidak terdampak × <em>Bobot Keluarga Tidak Terdampak</em>)
-              </li>
-              <li>
-                Jumlah hari kerja = CEIL((KK terdampak × <em>Menit per KK Terdampak</em> + KK
-                tidak terdampak × <em>Menit per KK Tidak Terdampak</em>) ÷ (<em>Jam Kerja
-                Efektif per Hari</em> × 60)), minimal 1 hari
-              </li>
-              <li>
-                Skor jarak = (jarak tempuh (km) ÷ <em>Pembagi Jarak (km)</em>) × jumlah hari
-                kerja &mdash; petugas PP tiap hari kerja (tidak menginap), jadi kalau volume KK
-                butuh &gt;1 hari, PP-nya ikut dihitung &gt;1×
-              </li>
-              <li>Skor beban akhir = skor beban pendataan + skor jarak</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------------
-// Tab "Master Petugas": daftar identitas + demografi semua petugas (organik
-// & mitra), read-only, dengan berbagai filter per kolom (pola ThKontrol yg
-// sama dgn tab Alokasi Petugas).
-//
-// Domisili (kecamatan/nagari/jorong) diutamakan dari HASIL JOIN koordinat
-// (kecamatan_wilayah/nagari_wilayah/alamat_jorong, via idsubsls_1303 hasil
-// matching rekrutmen mitra -> bencana_wilayah) -- "usahakan matching dengan
-// koordinat" sesuai permintaan. Kalau tidak ada Sub SLS yg cocok, fallback
-// ke alamat self-report (alamat_kecamatan/alamat_nagari); jorong tidak
-// punya data self-report jadi tampil "Tidak ada data" kalau tidak ke-join.
-// ------------------------------------------------------------------------
-
-type MasterPetugasRow = {
-  id: number;
-  nama: string;
-  status_kepegawaian: string;
-  peran: string | null;
-  aktif: boolean;
-  no_hp: string | null;
-  alamat_kecamatan: string | null;
-  alamat_nagari: string | null;
-  kecamatan_wilayah: string | null;
-  nagari_wilayah: string | null;
-  alamat_jorong: string | null;
-  idsubsls_1303: string | null;
-  lokasi_status: string | null;
-  umur: number | null;
-  jenis_kelamin: string | null;
-  pendidikan: string | null;
-  pekerjaan: string | null;
-  bisa_mengendarai_motor: boolean | null;
-  punya_kendaraan_bermotor: boolean | null;
-  pendaftaran_bencana_konfirmasi: boolean;
-};
-
-function kecamatanTampil(r: MasterPetugasRow): string {
-  return r.kecamatan_wilayah || r.alamat_kecamatan || "Tidak ada data";
-}
-function nagariTampil(r: MasterPetugasRow): string {
-  return r.nagari_wilayah || r.alamat_nagari || "Tidak ada data";
-}
-function jorongTampil(r: MasterPetugasRow): string {
-  return r.alamat_jorong || "Tidak ada data";
-}
-function boolTampil(v: boolean | null): string {
-  return v === true ? "Ya" : v === false ? "Tidak" : "Tidak ada data";
-}
-
-function MasterPetugasSection() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [rows, setRows] = useState<MasterPetugasRow[]>([]);
-
-  const [search, setSearch] = useState("");
-  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
-  const [peranSel, setPeranSel] = useState<Set<string>>(new Set());
-  const [aktifSel, setAktifSel] = useState<Set<string>>(new Set());
-  const [kecamatanSel, setKecamatanSel] = useState<Set<string>>(new Set());
-  const [nagariSel, setNagariSel] = useState<Set<string>>(new Set());
-  const [jorongSel, setJorongSel] = useState<Set<string>>(new Set());
-  const [jkSel, setJkSel] = useState<Set<string>>(new Set());
-  const [pendidikanSel, setPendidikanSel] = useState<Set<string>>(new Set());
-  const [pekerjaanSel, setPekerjaanSel] = useState<Set<string>>(new Set());
-  const [motorSel, setMotorSel] = useState<Set<string>>(new Set());
-  const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
-
-  // (2 Okt 2026) Cari per-kolom utk kolom teks/kategori berkardinalitas
-  // tinggi (banyak nilai berbeda) -- Kecamatan/Nagari/Jorong/Pendidikan/
-  // Pekerjaan. Kolom boolean/status kecil (Status, Peran, Aktif, Jenis
-  // Kelamin, Bisa Motor, Status Pendaftaran) sengaja TIDAK diberi cari/urut
-  // krn nilainya cuma segelintir -- filter centang yang sudah ada sudah
-  // cukup & lebih cepat dipakai utk kolom begitu.
-  const [kecamatanSearch, setKecamatanSearch] = useState("");
-  const [nagariSearch, setNagariSearch] = useState("");
-  const [jorongSearch, setJorongSearch] = useState("");
-  const [pendidikanSearch, setPendidikanSearch] = useState("");
-  const [pekerjaanSearch, setPekerjaanSearch] = useState("");
-
-  const [sortKey, setSortKey] = useState<
-    "nama" | "umur" | "kecamatan" | "nagari" | "jorong" | "pendidikan" | "pekerjaan" | null
-  >(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  useEffect(() => {
-    (async () => {
-      setLoadError(null);
-      try {
-        const res = await fetch("/api/bencana/master-petugas");
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Gagal memuat data master petugas.");
-        setRows(json.data ?? []);
-      } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Gagal memuat data master petugas.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  function opsiUnik(nilai: (r: MasterPetugasRow) => string): string[] {
-    return Array.from(new Set(rows.map(nilai))).sort((a, b) => a.localeCompare(b, "id"));
-  }
-
-  const opsiStatus = opsiUnik((r) => (r.status_kepegawaian === "organik" ? "Organik" : "Mitra"));
-  const opsiPeran = opsiUnik((r) => (r.peran ? r.peran.toUpperCase() : "Belum Ada Peran"));
-  const opsiAktif = ["Aktif", "Nonaktif"];
-  const opsiKecamatan = opsiUnik(kecamatanTampil);
-  const opsiNagari = opsiUnik(nagariTampil);
-  const opsiJorong = opsiUnik(jorongTampil);
-  const opsiJk = opsiUnik((r) => (r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "Tidak ada data"));
-  const opsiPendidikan = opsiUnik((r) => r.pendidikan || "Tidak ada data");
-  const opsiPekerjaan = opsiUnik((r) => r.pekerjaan || "Tidak ada data");
-  const opsiMotor = ["Ya", "Tidak", "Tidak ada data"];
-  const opsiPendaftaran = ["Sudah Mendaftar", "Belum Mendaftar"];
-
-  function sortAsc(key: NonNullable<typeof sortKey>) {
-    setSortKey(key);
-    setSortDir("asc");
-  }
-  function sortDesc(key: NonNullable<typeof sortKey>) {
-    setSortKey(key);
-    setSortDir("desc");
-  }
-  function sortReset() {
-    setSortKey(null);
-  }
-
-  const filtered = useMemo(() => {
-    const kw = search.trim().toLowerCase();
-    const kwKecamatan = kecamatanSearch.trim().toLowerCase();
-    const kwNagari = nagariSearch.trim().toLowerCase();
-    const kwJorong = jorongSearch.trim().toLowerCase();
-    const kwPendidikan = pendidikanSearch.trim().toLowerCase();
-    const kwPekerjaan = pekerjaanSearch.trim().toLowerCase();
-    let hasil = rows.filter((r) => {
-      if (kw && !r.nama.toLowerCase().includes(kw)) return false;
-      if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra")) return false;
-      if (peranSel.size > 0 && !peranSel.has(r.peran ? r.peran.toUpperCase() : "Belum Ada Peran")) return false;
-      if (aktifSel.size > 0 && !aktifSel.has(r.aktif ? "Aktif" : "Nonaktif")) return false;
-      if (kecamatanSel.size > 0 && !kecamatanSel.has(kecamatanTampil(r))) return false;
-      if (nagariSel.size > 0 && !nagariSel.has(nagariTampil(r))) return false;
-      if (jorongSel.size > 0 && !jorongSel.has(jorongTampil(r))) return false;
-      if (
-        jkSel.size > 0 &&
-        !jkSel.has(r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "Tidak ada data")
-      )
-        return false;
-      if (pendidikanSel.size > 0 && !pendidikanSel.has(r.pendidikan || "Tidak ada data")) return false;
-      if (pekerjaanSel.size > 0 && !pekerjaanSel.has(r.pekerjaan || "Tidak ada data")) return false;
-      if (motorSel.size > 0 && !motorSel.has(boolTampil(r.bisa_mengendarai_motor))) return false;
-      if (
-        pendaftaranSel.size > 0 &&
-        !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar")
-      )
-        return false;
-      if (kwKecamatan && !kecamatanTampil(r).toLowerCase().includes(kwKecamatan)) return false;
-      if (kwNagari && !nagariTampil(r).toLowerCase().includes(kwNagari)) return false;
-      if (kwJorong && !jorongTampil(r).toLowerCase().includes(kwJorong)) return false;
-      if (kwPendidikan && !(r.pendidikan || "Tidak ada data").toLowerCase().includes(kwPendidikan)) return false;
-      if (kwPekerjaan && !(r.pekerjaan || "Tidak ada data").toLowerCase().includes(kwPekerjaan)) return false;
-      return true;
-    });
-
-    if (sortKey) {
-      hasil = [...hasil].sort((a, b) => {
-        let cmp = 0;
-        if (sortKey === "nama") cmp = a.nama.localeCompare(b.nama, "id");
-        else if (sortKey === "umur") cmp = (a.umur ?? -1) - (b.umur ?? -1);
-        else if (sortKey === "kecamatan") cmp = kecamatanTampil(a).localeCompare(kecamatanTampil(b), "id");
-        else if (sortKey === "nagari") cmp = nagariTampil(a).localeCompare(nagariTampil(b), "id");
-        else if (sortKey === "jorong") cmp = jorongTampil(a).localeCompare(jorongTampil(b), "id");
-        else if (sortKey === "pendidikan") cmp = (a.pendidikan || "").localeCompare(b.pendidikan || "", "id");
-        else if (sortKey === "pekerjaan") cmp = (a.pekerjaan || "").localeCompare(b.pekerjaan || "", "id");
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return hasil;
-  }, [
-    rows,
-    search,
-    statusSel,
-    peranSel,
-    aktifSel,
-    kecamatanSel,
-    nagariSel,
-    jorongSel,
-    jkSel,
-    pendidikanSel,
-    pekerjaanSel,
-    motorSel,
-    pendaftaranSel,
-    kecamatanSearch,
-    nagariSearch,
-    jorongSearch,
-    pendidikanSearch,
-    pekerjaanSearch,
-    sortKey,
-    sortDir,
-  ]);
-
-  function handleExport() {
-    const dataRows = filtered.map((r) => ({
-      Nama: r.nama,
-      "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
-      Peran: r.peran ? r.peran.toUpperCase() : "",
-      Aktif: r.aktif ? "Aktif" : "Nonaktif",
-      Kecamatan: kecamatanTampil(r),
-      Nagari: nagariTampil(r),
-      Jorong: jorongTampil(r),
-      Umur: r.umur ?? "",
-      "Jenis Kelamin": r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "",
-      Pendidikan: r.pendidikan ?? "",
-      Pekerjaan: r.pekerjaan ?? "",
-      "Bisa Mengendarai Motor": boolTampil(r.bisa_mengendarai_motor),
-      "Punya Kendaraan Bermotor": boolTampil(r.punya_kendaraan_bermotor),
-      "Status Pendaftaran Bencana": r.pendaftaran_bencana_konfirmasi ? "Sudah Mendaftar" : "Belum Mendaftar",
-      "No HP": r.no_hp ?? "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws["!cols"] = [
-      { wch: 26 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-      { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Master Petugas");
-    XLSX.writeFile(wb, "master_petugas.xlsx");
-  }
-
-  if (loading) {
-    return <p className="mt-6 text-ink/60">Memuat data master petugas...</p>;
-  }
-  if (loadError) {
-    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>;
-  }
-
-  return (
-    <div className="mt-6 flex flex-col gap-3">
-      <section className="rounded-md border border-line bg-white p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-blue-400">Master Petugas</p>
-        <p className="mt-1 text-sm text-ink/70">
-          Daftar identitas &amp; demografi seluruh petugas (organik &amp; mitra). Kolom Kecamatan/Nagari/Jorong
-          diutamakan dari hasil pencocokan (matching) koordinat domisili petugas ke wilayah Sub SLS; kalau tidak ada
-          Sub SLS yang cocok, kecamatan/nagari memakai data isian awal (self-report) dan Jorong tampil
-          &ldquo;Tidak ada data&rdquo;. Data umur, jenis kelamin, pendidikan, pekerjaan, dan kendaraan bermotor
-          berasal dari data rekrutmen mitra sehingga untuk petugas organik (BPS) kolom tersebut kosong.
-        </p>
-        <p className="mt-2 text-xs text-ink/50">
-          Menampilkan {filtered.length} dari {rows.length} petugas.
-        </p>
-      </section>
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleExport}
-          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50"
-        >
-          ⬇ Unduh Excel
-        </button>
-      </div>
-
-      <div className="max-h-[70vh] overflow-auto rounded-md border border-line">
-        <table className="w-full min-w-[1500px] text-left text-sm">
-          <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
-            <tr>
-              <ThKontrol
-                label="Nama"
-                stickyLeft
-                search={{ value: search, onChange: setSearch, placeholder: "Cari nama..." }}
-                sort={{
-                  active: sortKey === "nama",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("nama"),
-                  onDesc: () => sortDesc("nama"),
-                  onReset: sortReset,
-                }}
-              />
-              <th className="px-3 py-2 font-medium">No HP</th>
-              <ThKontrol
-                label="Status"
-                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
-              />
-              <ThKontrol label="Peran" filter={{ options: opsiPeran, selected: peranSel, onApply: setPeranSel }} />
-              <ThKontrol label="Aktif" filter={{ options: opsiAktif, selected: aktifSel, onApply: setAktifSel }} />
-              <ThKontrol
-                label="Kecamatan"
-                search={{ value: kecamatanSearch, onChange: setKecamatanSearch, placeholder: "Cari kecamatan..." }}
-                filter={{ options: opsiKecamatan, selected: kecamatanSel, onApply: setKecamatanSel }}
-                sort={{
-                  active: sortKey === "kecamatan",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("kecamatan"),
-                  onDesc: () => sortDesc("kecamatan"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Nagari"
-                search={{ value: nagariSearch, onChange: setNagariSearch, placeholder: "Cari nagari..." }}
-                filter={{ options: opsiNagari, selected: nagariSel, onApply: setNagariSel }}
-                sort={{
-                  active: sortKey === "nagari",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("nagari"),
-                  onDesc: () => sortDesc("nagari"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Jorong"
-                search={{ value: jorongSearch, onChange: setJorongSearch, placeholder: "Cari jorong..." }}
-                filter={{ options: opsiJorong, selected: jorongSel, onApply: setJorongSel }}
-                sort={{
-                  active: sortKey === "jorong",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("jorong"),
-                  onDesc: () => sortDesc("jorong"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Umur"
-                sort={{
-                  active: sortKey === "umur",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("umur"),
-                  onDesc: () => sortDesc("umur"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol label="Jenis Kelamin" filter={{ options: opsiJk, selected: jkSel, onApply: setJkSel }} />
-              <ThKontrol
-                label="Pendidikan"
-                search={{ value: pendidikanSearch, onChange: setPendidikanSearch, placeholder: "Cari pendidikan..." }}
-                filter={{ options: opsiPendidikan, selected: pendidikanSel, onApply: setPendidikanSel }}
-                sort={{
-                  active: sortKey === "pendidikan",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("pendidikan"),
-                  onDesc: () => sortDesc("pendidikan"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Pekerjaan"
-                search={{ value: pekerjaanSearch, onChange: setPekerjaanSearch, placeholder: "Cari pekerjaan..." }}
-                filter={{ options: opsiPekerjaan, selected: pekerjaanSel, onApply: setPekerjaanSel }}
-                sort={{
-                  active: sortKey === "pekerjaan",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("pekerjaan"),
-                  onDesc: () => sortDesc("pekerjaan"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Bisa Motor"
-                filter={{ options: opsiMotor, selected: motorSel, onApply: setMotorSel }}
-              />
-              <ThKontrol
-                label="Status Pendaftaran"
-                filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
-              />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
-                <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
-                <td className="px-3 py-2 text-ink/80">{r.no_hp || "—"}</td>
-                <td className="px-3 py-2">{r.status_kepegawaian === "organik" ? "Organik" : "Mitra"}</td>
-                <td className="px-3 py-2">{r.peran ? r.peran.toUpperCase() : "—"}</td>
-                <td className="px-3 py-2">{r.aktif ? "Aktif" : "Nonaktif"}</td>
-                <td className="px-3 py-2">{kecamatanTampil(r)}</td>
-                <td className="px-3 py-2">{nagariTampil(r)}</td>
-                <td className="px-3 py-2">{jorongTampil(r)}</td>
-                <td className="px-3 py-2">{r.umur ?? "—"}</td>
-                <td className="px-3 py-2">
-                  {r.jenis_kelamin === "Lk" ? "Laki-laki" : r.jenis_kelamin === "Pr" ? "Perempuan" : "—"}
-                </td>
-                <td className="px-3 py-2">{r.pendidikan ?? "—"}</td>
-                <td className="px-3 py-2">{r.pekerjaan ?? "—"}</td>
-                <td className="px-3 py-2">{boolTampil(r.bisa_mengendarai_motor)}</td>
-                <td className="px-3 py-2">
-                  {r.pendaftaran_bencana_konfirmasi ? (
-                    <span className="rounded-full bg-moss-100 px-2 py-0.5 text-xs font-medium text-moss-700">
-                      Sudah Mendaftar
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-ink/50">
-                      Belum Mendaftar
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={14} className="px-3 py-6 text-center text-ink/50">
-                  Tidak ada petugas yang cocok dengan filter saat ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// 5 kegiatan lain yang dikenal aplikasi -- HARUS sama persis dgn whitelist
-// KEGIATAN_LAIN_VALID di app/api/bencana/kegiatan-petugas/route.ts.
-const KEGIATAN_LAIN_DAFTAR = [
-  "PES SE2026",
-  "SPDT NTP 2026",
-  "SITASI 2026",
-  "SKSPPI/SKLNPT/SKTNP/SKNP",
-  "GC Mix Method",
-] as const;
-
-type KegiatanPetugasRow = {
-  id: number;
-  nama: string;
-  status_kepegawaian: "organik" | "mitra";
-  peran: string | null;
-  aktif: boolean;
-  pendaftaran_bencana_konfirmasi: boolean;
-  kegiatan_lain: string[];
-  sudah_plotting: boolean;
-  jumlah_subsls_diplot: number;
-};
-
-function KegiatanPetugasSection() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [rows, setRows] = useState<KegiatanPetugasRow[]>([]);
-  // Kunci busy per sel yang sedang disimpan, format `${petugasId}:${field}`,
-  // supaya checkbox/select lain tetap bisa dipakai saat satu sel lain masih
-  // menyimpan -- dan errSel menyimpan pesan error PER SEL (bukan global)
-  // supaya satu gagal simpan tidak mengganggu baris lain.
-  const [busy, setBusy] = useState<Set<string>>(new Set());
-  const [errSel, setErrSel] = useState<Map<string, string>>(new Map());
-
-  const [search, setSearch] = useState("");
-  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
-  const [pendaftaranSel, setPendaftaranSel] = useState<Set<string>>(new Set());
-  const [plottingSel, setPlottingSel] = useState<Set<string>>(new Set());
-  const [kegiatanSel, setKegiatanSel] = useState<Record<string, Set<string>>>(() => {
-    const awal: Record<string, Set<string>> = {};
-    for (const k of KEGIATAN_LAIN_DAFTAR) awal[k] = new Set<string>();
-    return awal;
-  });
-
-  const [sortKey, setSortKey] = useState<"nama" | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  useEffect(() => {
-    muatUlang();
-  }, []);
-
-  async function muatUlang() {
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/bencana/kegiatan-petugas");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal memuat data kegiatan petugas.");
-      setRows(json.data ?? []);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Gagal memuat data kegiatan petugas.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function tandaiError(kunci: string, pesan: string | null) {
-    setErrSel((prev) => {
-      const next = new Map(prev);
-      if (pesan) next.set(kunci, pesan);
-      else next.delete(kunci);
-      return next;
-    });
-  }
-
-  async function ubahStatusKepegawaian(id: number, status: "organik" | "mitra") {
-    const kunci = `${id}:status`;
-    const sebelum = rows.find((r) => r.id === id)?.status_kepegawaian;
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status_kepegawaian: status } : r)));
-    setBusy((prev) => new Set(prev).add(kunci));
-    tandaiError(kunci, null);
-    try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ petugas_id: id, status_kepegawaian: status }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status kepegawaian.");
-    } catch (e) {
-      if (sebelum) setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status_kepegawaian: sebelum } : r)));
-      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
-    } finally {
-      setBusy((prev) => {
-        const next = new Set(prev);
-        next.delete(kunci);
-        return next;
-      });
-    }
-  }
-
-  async function ubahMendaftar(id: number, nilai: boolean) {
-    const kunci = `${id}:mendaftar`;
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, pendaftaran_bencana_konfirmasi: nilai } : r))
-    );
-    setBusy((prev) => new Set(prev).add(kunci));
-    tandaiError(kunci, null);
-    try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ petugas_id: id, pendaftaran_bencana_konfirmasi: nilai }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status pendaftaran.");
-    } catch (e) {
-      setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, pendaftaran_bencana_konfirmasi: !nilai } : r))
-      );
-      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
-    } finally {
-      setBusy((prev) => {
-        const next = new Set(prev);
-        next.delete(kunci);
-        return next;
-      });
-    }
-  }
-
-  async function ubahKegiatanLain(id: number, kegiatan: string, aktif: boolean) {
-    const kunci = `${id}:${kegiatan}`;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              kegiatan_lain: aktif
-                ? Array.from(new Set([...r.kegiatan_lain, kegiatan]))
-                : r.kegiatan_lain.filter((k) => k !== kegiatan),
-            }
-          : r
-      )
-    );
-    setBusy((prev) => new Set(prev).add(kunci));
-    tandaiError(kunci, null);
-    try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ petugas_id: id, kegiatan, aktif }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal menyimpan kegiatan.");
-    } catch (e) {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                kegiatan_lain: aktif
-                  ? r.kegiatan_lain.filter((k) => k !== kegiatan)
-                  : Array.from(new Set([...r.kegiatan_lain, kegiatan])),
-              }
-            : r
-        )
-      );
-      tandaiError(kunci, e instanceof Error ? e.message : "Gagal menyimpan.");
-    } finally {
-      setBusy((prev) => {
-        const next = new Set(prev);
-        next.delete(kunci);
-        return next;
-      });
-    }
-  }
-
-  function opsiUnik(nilai: (r: KegiatanPetugasRow) => string): string[] {
-    return Array.from(new Set(rows.map(nilai))).sort((a, b) => a.localeCompare(b, "id"));
-  }
-
-  const opsiStatus = opsiUnik((r) => (r.status_kepegawaian === "organik" ? "Organik" : "Mitra"));
-  const opsiPendaftaran = ["Sudah Mengajukan Diri", "Belum Mengajukan Diri"];
-  const opsiPlotting = ["Sudah Plotting", "Belum Plotting"];
-
-  function sortAsc(key: "nama") {
-    setSortKey(key);
-    setSortDir("asc");
-  }
-  function sortDesc(key: "nama") {
-    setSortKey(key);
-    setSortDir("desc");
-  }
-  function sortReset() {
-    setSortKey(null);
-  }
-
-  const filtered = useMemo(() => {
-    const kw = search.trim().toLowerCase();
-    let hasil = rows.filter((r) => {
-      if (kw && !r.nama.toLowerCase().includes(kw)) return false;
-      if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra"))
-        return false;
-      if (
-        pendaftaranSel.size > 0 &&
-        !pendaftaranSel.has(r.pendaftaran_bencana_konfirmasi ? "Sudah Mengajukan Diri" : "Belum Mengajukan Diri")
-      )
-        return false;
-      if (plottingSel.size > 0 && !plottingSel.has(r.sudah_plotting ? "Sudah Plotting" : "Belum Plotting"))
-        return false;
-      for (const k of KEGIATAN_LAIN_DAFTAR) {
-        const sel = kegiatanSel[k];
-        if (sel && sel.size > 0) {
-          const label = r.kegiatan_lain.includes(k) ? "Ikut" : "Tidak Ikut";
-          if (!sel.has(label)) return false;
-        }
-      }
-      return true;
-    });
-
-    if (sortKey === "nama") {
-      hasil = [...hasil].sort((a, b) => {
-        const cmp = a.nama.localeCompare(b.nama, "id");
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return hasil;
-  }, [rows, search, statusSel, pendaftaranSel, plottingSel, kegiatanSel, sortKey, sortDir]);
-
-  function handleExport() {
-    const dataRows = filtered.map((r) => {
-      const baris: Record<string, string> = {
-        Nama: r.nama,
-        "Status Kepegawaian": r.status_kepegawaian === "organik" ? "Organik" : "Mitra",
-        "Mengajukan Diri Kegiatan Bencana": r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak",
-        "Sudah Plotting (ke Kegiatan Bencana)": r.sudah_plotting
-          ? `Ya (${r.jumlah_subsls_diplot} Sub SLS)`
-          : "Belum",
-      };
-      for (const k of KEGIATAN_LAIN_DAFTAR) baris[k] = r.kegiatan_lain.includes(k) ? "Ya" : "";
-      return baris;
-    });
-    const ws = XLSX.utils.json_to_sheet(dataRows);
-    ws["!cols"] = [{ wch: 26 }, { wch: 16 }, { wch: 26 }, { wch: 18 }, ...KEGIATAN_LAIN_DAFTAR.map(() => ({ wch: 16 }))];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Kegiatan Petugas");
-    XLSX.writeFile(wb, "kegiatan_petugas.xlsx");
-  }
-
-  if (loading) {
-    return <p className="mt-6 text-ink/60">Memuat data kegiatan petugas...</p>;
-  }
-  if (loadError) {
-    return <p className="mt-6 rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>;
-  }
-
-  return (
-    <div className="mt-6 flex flex-col gap-3">
-      <section className="rounded-md border border-line bg-white p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-blue-400">Kegiatan Petugas</p>
-        <p className="mt-1 text-sm text-ink/70">
-          Status kesediaan &amp; keterlibatan seluruh petugas (organik &amp; mitra) di kegiatan pendataan
-          bencana maupun kegiatan lain yang berjalan bersamaan. Kolom &ldquo;Status Kepegawaian&rdquo;,
-          &ldquo;Mengajukan Diri&rdquo;, dan kelima kolom kegiatan lain BISA DIEDIT langsung di tabel ini
-          (klik checkbox/pilihan, otomatis tersimpan). Kolom &ldquo;Sudah Plotting (ke Kegiatan
-          Bencana)&rdquo; murni informasi (dihitung dari jumlah Sub SLS yang sudah di-plot ke petugas ini
-          di tab Alokasi Petugas, khusus kegiatan pendataan bencana) --
-          BUKAN tombol/penugasan, hanya penanda supaya terlihat sekilas siapa yang belum kebagian
-          wilayah.
-        </p>
-        <p className="mt-2 text-xs text-ink/50">
-          Menampilkan {filtered.length} dari {rows.length} petugas.
-        </p>
-      </section>
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleExport}
-          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-blue-50"
-        >
-          ⬇ Unduh Excel
-        </button>
-      </div>
-
-      <div className="max-h-[70vh] overflow-auto rounded-md border border-line">
-        <table className="w-full min-w-[1500px] text-left text-sm">
-          <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
-            <tr>
-              <ThKontrol
-                label="Nama"
-                stickyLeft
-                search={{ value: search, onChange: setSearch, placeholder: "Cari nama..." }}
-                sort={{
-                  active: sortKey === "nama",
-                  dir: sortDir,
-                  onAsc: () => sortAsc("nama"),
-                  onDesc: () => sortDesc("nama"),
-                  onReset: sortReset,
-                }}
-              />
-              <ThKontrol
-                label="Status Kepegawaian"
-                filter={{ options: opsiStatus, selected: statusSel, onApply: setStatusSel }}
-              />
-              <ThKontrol
-                label="Mengajukan Diri"
-                filter={{ options: opsiPendaftaran, selected: pendaftaranSel, onApply: setPendaftaranSel }}
-              />
-              <ThKontrol
-                label="Sudah Plotting (ke Kegiatan Bencana)"
-                filter={{ options: opsiPlotting, selected: plottingSel, onApply: setPlottingSel }}
-              />
-              {KEGIATAN_LAIN_DAFTAR.map((k) => (
-                <ThKontrol
-                  key={k}
-                  label={k}
-                  filter={{
-                    options: ["Ikut", "Tidak Ikut"],
-                    selected: kegiatanSel[k],
-                    onApply: (next) => setKegiatanSel((prev) => ({ ...prev, [k]: next })),
-                  }}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r) => {
-              const kunciStatus = `${r.id}:status`;
-              const kunciMendaftar = `${r.id}:mendaftar`;
-              return (
-                <tr key={r.id} className="border-t border-line hover:bg-blue-50/40">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium">{r.nama}</td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={r.status_kepegawaian}
-                      disabled={busy.has(kunciStatus)}
-                      onChange={(e) => ubahStatusKepegawaian(r.id, e.target.value as "organik" | "mitra")}
-                      className="rounded border border-line bg-white px-1.5 py-1 text-xs disabled:opacity-50"
-                    >
-                      <option value="organik">Organik</option>
-                      <option value="mitra">Mitra</option>
-                    </select>
-                    {errSel.has(kunciStatus) && (
-                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciStatus)}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={r.pendaftaran_bencana_konfirmasi}
-                        disabled={busy.has(kunciMendaftar)}
-                        onChange={(e) => ubahMendaftar(r.id, e.target.checked)}
-                        className="h-3.5 w-3.5 accent-blue-600 disabled:opacity-50"
-                      />
-                      <span className="text-xs text-ink/70">
-                        {r.pendaftaran_bencana_konfirmasi ? "Ya" : "Tidak"}
-                      </span>
-                    </label>
-                    {errSel.has(kunciMendaftar) && (
-                      <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciMendaftar)}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.sudah_plotting ? (
-                      <span
-                        title="Murni informasi -- plotting dilakukan di tab Alokasi Petugas, bukan di sini."
-                        className="rounded-full bg-moss-100 px-2 py-0.5 text-xs font-medium text-moss-700"
-                      >
-                        Ya ({r.jumlah_subsls_diplot} Sub SLS)
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-ink/50">
-                        Belum
-                      </span>
-                    )}
-                  </td>
-                  {KEGIATAN_LAIN_DAFTAR.map((k) => {
-                    const kunciK = `${r.id}:${k}`;
-                    const ikut = r.kegiatan_lain.includes(k);
-                    return (
-                      <td key={k} className="px-3 py-2">
-                        <label className="flex items-center gap-1.5">
-                          <input
-                            type="checkbox"
-                            checked={ikut}
-                            disabled={busy.has(kunciK)}
-                            onChange={(e) => ubahKegiatanLain(r.id, k, e.target.checked)}
-                            className="h-3.5 w-3.5 accent-blue-600 disabled:opacity-50"
-                          />
-                          <span className="text-xs text-ink/70">{ikut ? "Ikut" : "—"}</span>
-                        </label>
-                        {errSel.has(kunciK) && (
-                          <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciK)}</p>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={4 + KEGIATAN_LAIN_DAFTAR.length} className="px-3 py-6 text-center text-ink/50">
-                  Tidak ada petugas yang cocok dengan filter saat ini.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// Ikon outline putih sederhana utk sidebar "rel langkah" -- SATU warna
-// (currentColor/putih) saja, tidak berwarna-warni, supaya konsisten dipakai
-// di atas lingkaran biru (aktif) maupun abu-abu (tidak aktif).
-function IkonLangkah1() {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 15l9-3.5 9 3.5 9-3.5v21l-9 3.5-9-3.5-9 3.5V15z" />
-      <path d="M14 11.5v21M23 15v21" />
-      <path d="M33 7c4.6 0 8.4 3.6 8.4 8.2 0 6.3-8.4 14.8-8.4 14.8s-8.4-8.5-8.4-14.8C24.6 10.6 28.4 7 33 7z" />
-      <circle cx="33" cy="15.4" r="2.6" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function IkonLangkah2() {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 5h15l8 8v27a2 2 0 01-2 2H11a2 2 0 01-2-2V7a2 2 0 012-2z" />
-      <path d="M26 5v8h8" />
-      <path d="M14 29v-6M19 29v-10.5M24 29v-4.5" />
-      <circle cx="34.5" cy="34.5" r="6.6" strokeDasharray="2 2.6" />
-      <circle cx="34.5" cy="34.5" r="2.3" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function IkonLangkah3() {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="17" cy="13" r="4" />
-      <path d="M8 27c0-5.2 4-8.6 9-8.6s9 3.4 9 8.6" />
-      <circle cx="33" cy="10.5" r="3.1" />
-      <path d="M27.5 19.5c0-3.4 2.5-5.6 5.5-5.6s5.5 2.2 5.5 5.6" />
-      <path d="M5 33.5c0-4.4 4.6-7.5 10-7.5s10 3.1 10 7.5v3.5H5v-3.5z" />
-      <circle cx="37.5" cy="30" r="6.2" strokeDasharray="1.9 2.3" />
-      <circle cx="37.5" cy="30" r="2.1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-function IkonLangkah4() {
-  return (
-    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 5h16l8 8v25a2 2 0 01-2 2H9a2 2 0 01-2-2V7a2 2 0 012-2z" />
-      <path d="M25 5v8h8" />
-      <path d="M12.5 22.5h13M12.5 27.5h13M12.5 32.5h8.5" />
-      <path d="M38.5 21.5l4 4-13 13-4.7 1 1-4.8z" />
-    </svg>
-  );
-}
-
-const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4; label: string; ikon: () => JSX.Element }[] = [
-  { n: 1, label: "Pilih Wilayah Sampel", ikon: IkonLangkah1 },
-  { n: 2, label: "Kebutuhan Petugas per Kecamatan", ikon: IkonLangkah2 },
-  { n: 3, label: "Susunan Tim (Korwil, PML, PPL)", ikon: IkonLangkah3 },
-  { n: 4, label: "Kertas Kerja Plotting Sub SLS ke PPL", ikon: IkonLangkah4 },
-];
-
-// Sidebar "rel langkah" -- 4 lingkaran bernomor tersambung garis putus-putus,
-// mencerminkan alur kerja Langkah 1-4. Diklik utk scroll halus ke section
-// terkait; lingkaran yg sedang kelihatan di layar otomatis ditandai aktif
-// (lihat IntersectionObserver di AlokasiPetugasSection). Disembunyikan di
-// layar sempit (<lg) supaya tidak mendesak tabel yg sudah lebar.
-function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n: 1 | 2 | 3 | 4) => void }) {
-  return (
-    <aside className="hidden shrink-0 lg:block lg:w-36">
-      <div className="sticky top-6 flex flex-col items-center pt-1">
-        {LANGKAH_SIDEBAR.map((l, i) => {
-          const Ikon = l.ikon;
-          const isAktif = aktif === l.n;
-          return (
-            <div key={l.n} className="flex flex-col items-center">
-              <button
-                type="button"
-                onClick={() => onPilih(l.n)}
-                title={`Langkah ${l.n} — ${l.label}`}
-                className="group relative flex flex-col items-center"
-              >
-                <span
-                  className={`absolute -top-2 left-1/2 z-10 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${
-                    isAktif ? "bg-blue-800" : "bg-blue-300"
-                  }`}
-                >
-                  {l.n}
-                </span>
-                <span
-                  className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
-                    isAktif
-                      ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-300/60"
-                      : "bg-blue-300 text-white group-hover:bg-blue-400"
-                  }`}
-                >
-                  <span className="h-7 w-7">
-                    <Ikon />
-                  </span>
-                </span>
-              </button>
-              <p
-                className={`mt-2 max-w-[8rem] text-center text-[11px] font-semibold leading-tight ${
-                  isAktif ? "text-blue-950" : "text-blue-300"
-                }`}
-              >
-                {l.label}
-              </p>
-              {i < LANGKAH_SIDEBAR.length - 1 && <div className="my-2.5 h-5 border-l-2 border-dotted border-blue-200" />}
-            </div>
-          );
-        })}
-      </div>
-    </aside>
   );
 }
 
@@ -3178,16 +761,7 @@ function AlokasiPetugasSection() {
   const [ringkasanKorwil, setRingkasanKorwil] = useState<RingkasanKorwilRow[]>([]);
   const [kebutuhan, setKebutuhan] = useState<KebutuhanRow[]>([]);
   const [petugasList, setPetugasList] = useState<PetugasRingkas[]>([]);
-  const [titikSubsls, setTitikSubsls] = useState<TitikSubsls[]>([]);
   const [hariKerjaInput, setHariKerjaInput] = useState(24);
-  // (3 Okt 2026) Dulu hardcode "const TOTAL_PPL_TETAP = 133" -- permintaan
-  // user: dijadikan bisa diubah admin (bukan angka tetap di kode), supaya
-  // "Rata-rata beban per PPL" di Langkah 4 bisa dihitung ulang dgn asumsi
-  // jumlah PPL yg berbeda (mis. disamakan dgn "Kebutuhan PPL (estimasi)"
-  // hasil Langkah 2, atau skenario what-if lain) -- lihat input di Langkah 4
-  // & tombol "Pakai estimasi Langkah 2". Default 133 dipertahankan supaya
-  // perilaku lama tidak berubah sebelum admin sengaja menggantinya.
-  const [totalPplAsumsi, setTotalPplAsumsi] = useState(133);
   const [detailKebutuhanTerbuka, setDetailKebutuhanTerbuka] = useState<Set<string>>(new Set());
   const [optimasiTerbuka, setOptimasiTerbuka] = useState(false);
   function toggleDetailKebutuhan(kecamatan: string) {
@@ -3202,23 +776,7 @@ function AlokasiPetugasSection() {
 
   const [sampelKecFilter, setSampelKecFilter] = useState("");
   const [sampelStatusFilter, setSampelStatusFilter] = useState<"" | "sudah" | "belum">("");
-  const [sampelDataFilter, setSampelDataFilter] = useState<"" | "lengkap" | "belum">("");
   const [sampelSearch, setSampelSearch] = useState("");
-  // (2 Okt 2026) Sama spt tabel Beban: cari sudah ditopang kotak gabungan di
-  // atas tabel, titik-tiga kolom Nagari/Jorong-SLS/Sub SLS cukup Urutkan.
-  const [sampelSortKey, setSampelSortKey] = useState<"nagari" | "jorong" | "subsls" | null>(null);
-  const [sampelSortDir, setSampelSortDir] = useState<"asc" | "desc">("asc");
-  function sampelSortAsc(key: NonNullable<typeof sampelSortKey>) {
-    setSampelSortKey(key);
-    setSampelSortDir("asc");
-  }
-  function sampelSortDesc(key: NonNullable<typeof sampelSortKey>) {
-    setSampelSortKey(key);
-    setSampelSortDir("desc");
-  }
-  function sampelSortReset() {
-    setSampelSortKey(null);
-  }
   const [sampelPage, setSampelPage] = useState(1);
   const [sampelBusyId, setSampelBusyId] = useState<string | null>(null);
   const [sampelBulkBusy, setSampelBulkBusy] = useState(false);
@@ -3237,24 +795,10 @@ function AlokasiPetugasSection() {
   const [statusPlotFilter, setStatusPlotFilter] = useState<"" | "sudah" | "belum">("");
   const [hanyaBerubahFilter, setHanyaBerubahFilter] = useState(false);
   const [search, setSearch] = useState("");
-  // (2 Okt 2026) Cari khusus Kecamatan -- field ini TIDAK ikut kotak cari
-  // gabungan "Cari Nagari/Jorong/Sub SLS" di atas (yg cuma menyasar 3 kolom
-  // itu), jadi diberi kotak cari sendiri di titik-tiganya.
-  const [kecamatanHeaderSearch, setKecamatanHeaderSearch] = useState("");
   const [page, setPage] = useState(1);
   const [alokasiPageSize, setAlokasiPageSize] = useState<number>(ALOKASI_PAGE_SIZE);
   const [sortKey, setSortKey] = useState<
-    | "kecamatan"
-    | "nagari"
-    | "jorong"
-    | "subsls"
-    | "skor_beban_pendataan"
-    | "skor_jarak"
-    | "skor_beban_akhir"
-    | "beban_ppl"
-    | "ppl"
-    | "pml"
-    | null
+    "kecamatan" | "skor_beban_pendataan" | "skor_jarak" | "skor_beban_akhir" | "beban_ppl" | null
   >(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [modeFokus, setModeFokus] = useState(false);
@@ -3275,73 +819,15 @@ function AlokasiPetugasSection() {
   const [draftKkTerdampak, setDraftKkTerdampak] = useState<Record<string, number>>({});
   const [bebanKecFilter, setBebanKecFilter] = useState("");
   const [bebanSearch, setBebanSearch] = useState("");
-  // (2 Okt 2026) Urutkan per kolom Nagari/Jorong-SLS/Sub SLS -- kolom ini
-  // TIDAK diberi ikon cari sendiri krn sudah ditopang kotak "Cari
-  // Nagari/Jorong/Sub SLS" gabungan di atas tabel (bebanSearch), supaya
-  // tidak dobel.
-  const [bebanSortKey, setBebanSortKey] = useState<"nagari" | "jorong" | "subsls" | null>(null);
-  const [bebanSortDir, setBebanSortDir] = useState<"asc" | "desc">("asc");
-  function bebanSortAsc(key: NonNullable<typeof bebanSortKey>) {
-    setBebanSortKey(key);
-    setBebanSortDir("asc");
-  }
-  function bebanSortDesc(key: NonNullable<typeof bebanSortKey>) {
-    setBebanSortKey(key);
-    setBebanSortDir("desc");
-  }
-  function bebanSortReset() {
-    setBebanSortKey(null);
-  }
   const [bebanSimpanBusy, setBebanSimpanBusy] = useState(false);
   const [bebanError, setBebanError] = useState<string | null>(null);
   const [bebanTerbuka, setBebanTerbuka] = useState(false);
-
-  // Kartu "Mitra Perlu Dihubungi" -- lihat komentar di MitraKontakRow & di
-  // app/api/bencana/alokasi/kontak-mitra/route.ts.
-  const [kontakRows, setKontakRows] = useState<MitraKontakRow[]>([]);
-  const [kontakTerbuka, setKontakTerbuka] = useState(true);
-  const [kontakBusyId, setKontakBusyId] = useState<number | null>(null);
-  const [kontakError, setKontakError] = useState<string | null>(null);
-  // Draft pilihan "Menolak" yg belum disimpan (menunggu catatan diisi) --
-  // supaya klik radio Menolak TIDAK langsung submit tanpa alasan.
-  const [kontakMenolakDraft, setKontakMenolakDraft] = useState<Record<number, string>>({});
 
   async function muatBeban() {
     const res = await fetch("/api/bencana/alokasi/beban");
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
     setBebanRows(json.data ?? []);
-  }
-
-  async function muatKontak() {
-    const res = await fetch("/api/bencana/alokasi/kontak-mitra");
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || "Gagal memuat daftar mitra perlu dihubungi.");
-    setKontakRows(json.data ?? []);
-  }
-
-  async function simpanStatusKontak(id: number, status: "diterima" | "menolak" | null, catatan?: string) {
-    setKontakBusyId(id);
-    setKontakError(null);
-    try {
-      const res = await fetch("/api/bencana/alokasi/kontak-mitra", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ petugas_id: id, status, catatan }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Gagal menyimpan status kontak.");
-      setKontakMenolakDraft((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      await muatKontak();
-    } catch (err) {
-      setKontakError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
-    } finally {
-      setKontakBusyId(null);
-    }
   }
 
   async function muatSampel() {
@@ -3361,7 +847,6 @@ function AlokasiPetugasSection() {
     setRingkasanKorwil(json.ringkasan_korwil ?? []);
     setKebutuhan(json.kebutuhan_petugas ?? []);
     setPetugasList(json.petugas ?? []);
-    setTitikSubsls(json.titik_subsls ?? []);
     setHariKerjaDipakai(json.hari_kerja ?? hariKerja);
   }
 
@@ -3369,7 +854,7 @@ function AlokasiPetugasSection() {
     setLoading(true);
     setLoadError(null);
     try {
-      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja), muatKontak()]);
+      await Promise.all([muatBeban(), muatSampel(), muatData(hariKerja)]);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Gagal memuat data alokasi.");
     } finally {
@@ -3667,7 +1152,7 @@ function AlokasiPetugasSection() {
   );
   const filteredBeban = useMemo(() => {
     const q = bebanSearch.trim().toLowerCase();
-    let hasil = bebanRows.filter((r) => {
+    return bebanRows.filter((r) => {
       if (bebanKecFilter && r.kecamatan !== bebanKecFilter) return false;
       if (
         q &&
@@ -3678,17 +1163,7 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-    if (bebanSortKey) {
-      hasil = [...hasil].sort((a, b) => {
-        let cmp = 0;
-        if (bebanSortKey === "nagari") cmp = a.nagari.localeCompare(b.nagari, "id");
-        else if (bebanSortKey === "jorong") cmp = a.sls.localeCompare(b.sls, "id");
-        else if (bebanSortKey === "subsls") cmp = a.sub_sls.localeCompare(b.sub_sls, "id");
-        return bebanSortDir === "asc" ? cmp : -cmp;
-      });
-    }
-    return hasil;
-  }, [bebanRows, bebanKecFilter, bebanSearch, bebanSortKey, bebanSortDir]);
+  }, [bebanRows, bebanKecFilter, bebanSearch]);
   const bebanTotalPages = Math.max(1, Math.ceil(filteredBeban.length / BEBAN_PAGE_SIZE));
   const [bebanPage, setBebanPageState] = useState(1);
   const bebanPageClamped = Math.min(bebanPage, bebanTotalPages);
@@ -3706,44 +1181,6 @@ function AlokasiPetugasSection() {
     return Math.round((terdampak * BOBOT_KK_TERDAMPAK + tidakTerdampak * BOBOT_KK_TIDAK_TERDAMPAK) * 100) / 100;
   }
 
-  // Semua baris Sub SLS dikelompokkan per Jorong (idsls) -- dipakai popover
-  // "🧭 Verifikasi Jorong" utk menampilkan rincian tiap Sub SLS se-Jorong.
-  // Dari SELURUH bebanRows (bukan cuma yg tampil di halaman/filter saat ini),
-  // supaya perbandingannya selalu lengkap walau tabel sedang difilter.
-  const subRowsPerJorong = useMemo(() => {
-    const map = new Map<string, KertasKerjaBebanRow[]>();
-    for (const r of bebanRows) {
-      const arr = map.get(r.idsls) ?? [];
-      arr.push(r);
-      map.set(r.idsls, arr);
-    }
-    return map;
-  }, [bebanRows]);
-
-  // Total KK terdampak LIVE per Jorong (dijumlah dari draft/nilai terkini tiap
-  // Sub SLS-nya) -- dibandingkan dgn verifikasi_total_keluarga (data
-  // verifikasi resmi) utk menentukan baris mana yg perlu ditandai merah.
-  const totalTerdampakPerJorongLive = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of bebanRows) {
-      const nilai = draftKkTerdampak[r.idsubsls] ?? r.kk_terdampak_estimasi;
-      map.set(r.idsls, Math.round(((map.get(r.idsls) ?? 0) + nilai) * 100) / 100);
-    }
-    return map;
-  }, [bebanRows, draftKkTerdampak]);
-
-  // Jumlah baris Sub SLS yg Jorong-nya selisih >15 KK dari data verifikasi --
-  // dipakai badge & legenda di atas tabel Kertas Kerja Beban.
-  const jumlahBarisBedaVerifikasi = useMemo(() => {
-    let n = 0;
-    for (const r of bebanRows) {
-      if (r.verifikasi_total_keluarga == null) continue;
-      const totalJorong = totalTerdampakPerJorongLive.get(r.idsls) ?? 0;
-      if (Math.abs(totalJorong - r.verifikasi_total_keluarga) > AMBANG_SELISIH_VERIFIKASI_JORONG) n++;
-    }
-    return n;
-  }, [bebanRows, totalTerdampakPerJorongLive]);
-
   // ---- Turunan: wilayah sampel ----
   const kecamatanOptionsSampel = useMemo(
     () => Array.from(new Set(calonSampel.map((r) => r.kecamatan))).sort(),
@@ -3751,12 +1188,10 @@ function AlokasiPetugasSection() {
   );
   const filteredSampel = useMemo(() => {
     const q = sampelSearch.trim().toLowerCase();
-    let hasil = calonSampel.filter((r) => {
+    return calonSampel.filter((r) => {
       if (sampelKecFilter && r.kecamatan !== sampelKecFilter) return false;
       if (sampelStatusFilter === "sudah" && !r.termasuk_sampel) return false;
       if (sampelStatusFilter === "belum" && r.termasuk_sampel) return false;
-      if (sampelDataFilter === "lengkap" && !r.punya_data_kk) return false;
-      if (sampelDataFilter === "belum" && r.punya_data_kk) return false;
       if (
         q &&
         !r.nagari.toLowerCase().includes(q) &&
@@ -3766,17 +1201,7 @@ function AlokasiPetugasSection() {
         return false;
       return true;
     });
-    if (sampelSortKey) {
-      hasil = [...hasil].sort((a, b) => {
-        let cmp = 0;
-        if (sampelSortKey === "nagari") cmp = a.nagari.localeCompare(b.nagari, "id");
-        else if (sampelSortKey === "jorong") cmp = a.sls.localeCompare(b.sls, "id");
-        else if (sampelSortKey === "subsls") cmp = a.sub_sls.localeCompare(b.sub_sls, "id");
-        return sampelSortDir === "asc" ? cmp : -cmp;
-      });
-    }
-    return hasil;
-  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelDataFilter, sampelSearch, sampelSortKey, sampelSortDir]);
+  }, [calonSampel, sampelKecFilter, sampelStatusFilter, sampelSearch]);
   const jumlahSampelTerpilih = useMemo(() => calonSampel.filter((r) => r.termasuk_sampel).length, [calonSampel]);
   const sampelTotalPages = Math.max(1, Math.ceil(filteredSampel.length / SAMPEL_PAGE_SIZE));
   const sampelPageClamped = Math.min(sampelPage, sampelTotalPages);
@@ -3798,15 +1223,6 @@ function AlokasiPetugasSection() {
         .sort((a, b) => a.nama.localeCompare(b.nama)),
     [petugasList]
   );
-  // Titik koordinat per Sub SLS (idsubsls -> lat/lng), utk popover "Saran"
-  // Langkah 4 menghitung jarak ke Sub SLS baris yg sedang diisi.
-  const titikSubslsMap = useMemo(() => {
-    const map = new Map<string, { lat: number; lng: number }>();
-    for (const t of titikSubsls) {
-      if (typeof t.lat === "number" && typeof t.lng === "number") map.set(t.idsubsls, { lat: t.lat, lng: t.lng });
-    }
-    return map;
-  }, [titikSubsls]);
   const korwilOptions = useMemo(
     () => petugasList.filter((p) => p.peran === "korwil").sort((a, b) => a.nama.localeCompare(b.nama)),
     [petugasList]
@@ -3846,7 +1262,8 @@ function AlokasiPetugasSection() {
     () => kertasKerja.reduce((s, r) => s + r.skor_beban_pendataan, 0),
     [kertasKerja]
   );
-  const rataBebanTetap = totalPplAsumsi > 0 ? totalSkorWilayahTugas / totalPplAsumsi : 0;
+  const TOTAL_PPL_TETAP = 133;
+  const rataBebanTetap = totalSkorWilayahTugas / TOTAL_PPL_TETAP;
 
   // Beban draft per PPL (skor beban pendataan, TANPA jarak -- jarak riil
   // baru dihitung server sesudah plot benar2 disimpan): dihitung ulang
@@ -3936,45 +1353,7 @@ function AlokasiPetugasSection() {
     });
   }, [bebanDraftPerPpl, rataBebanTetap, kertasKerja, draftPpl, petugasList]);
 
-  const langkah1Ref = useRef<HTMLElement | null>(null);
-  const langkah2Ref = useRef<HTMLElement | null>(null);
-  const langkah3Ref = useRef<HTMLElement | null>(null);
   const langkah4Ref = useRef<HTMLElement | null>(null);
-  const [langkahAktif, setLangkahAktif] = useState<1 | 2 | 3 | 4>(1);
-
-  // Sidebar "rel langkah" (4 lingkaran bernomor di kiri) -- diklik utk
-  // scroll halus ke section terkait, dan otomatis menandai langkah mana
-  // yg lagi kelihatan di layar pakai IntersectionObserver (bukan dipilih
-  // manual), supaya tetap sinkron walau user scroll bebas.
-  useEffect(() => {
-    const target = [
-      { ref: langkah1Ref, n: 1 as const },
-      { ref: langkah2Ref, n: 2 as const },
-      { ref: langkah3Ref, n: 3 as const },
-      { ref: langkah4Ref, n: 4 as const },
-    ];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const terlihat = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (!terlihat) return;
-        const cocok = target.find((t) => t.ref.current === terlihat.target);
-        if (cocok) setLangkahAktif(cocok.n);
-      },
-      { rootMargin: "-15% 0px -60% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] }
-    );
-    target.forEach((t) => {
-      if (t.ref.current) observer.observe(t.ref.current);
-    });
-    return () => observer.disconnect();
-  }, [loading]);
-
-  function scrollKeLangkah(n: 1 | 2 | 3 | 4) {
-    const ref = n === 1 ? langkah1Ref : n === 2 ? langkah2Ref : n === 3 ? langkah3Ref : langkah4Ref;
-    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   function filterKeStatusBeban(tone: BalanceTone | "") {
     setStatusBebanFilter(tone);
     setStatusPlotFilter("");
@@ -4089,7 +1468,6 @@ function AlokasiPetugasSection() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const kwKec = kecamatanHeaderSearch.trim().toLowerCase();
     return kertasKerja.filter((r) => {
       if (kecFilter && r.kecamatan !== kecFilter) return false;
       const draftPplId = draftPpl[r.idsubsls] ?? null;
@@ -4104,7 +1482,6 @@ function AlokasiPetugasSection() {
       if (statusPlotFilter === "belum" && draftPplId) return false;
       if (statusBebanFilter && toneBarisAlokasi(r) !== statusBebanFilter) return false;
       if (hanyaBerubahFilter && draftPplId === (r.ppl_id ?? null)) return false;
-      if (kwKec && !r.kecamatan.toLowerCase().includes(kwKec)) return false;
       if (
         q &&
         !r.nagari.toLowerCase().includes(q) &&
@@ -4125,7 +1502,6 @@ function AlokasiPetugasSection() {
     statusBebanFilter,
     hanyaBerubahFilter,
     search,
-    kecamatanHeaderSearch,
     draftPpl,
     draftPmlByPpl,
     bebanDraftPerPpl,
@@ -4141,12 +1517,6 @@ function AlokasiPetugasSection() {
       switch (sortKey) {
         case "kecamatan":
           return r.kecamatan;
-        case "nagari":
-          return r.nagari;
-        case "jorong":
-          return r.sls;
-        case "subsls":
-          return r.sub_sls;
         case "skor_beban_pendataan":
           return r.skor_beban_pendataan;
         case "skor_jarak":
@@ -4156,20 +1526,6 @@ function AlokasiPetugasSection() {
         case "beban_ppl": {
           const pplId = draftPpl[r.idsubsls] ?? null;
           return pplId ? bebanDraftPerPpl.get(pplId) ?? 0 : -1;
-        }
-        // (2 Okt 2026) PPL/PML diurutkan berdasar NAMA dari penugasan draft
-        // saat ini (bukan dari r.ppl_id tersimpan), konsisten dgn "beban_ppl"
-        // di atas & dgn kolom PPL/PML yg memang menampilkan draft, bukan data
-        // tersimpan -- baris yg belum diplot ditaruh di awal ("" selalu
-        // paling kecil scr abjad).
-        case "ppl": {
-          const pplId = draftPpl[r.idsubsls] ?? null;
-          return pplId ? petugasList.find((p) => p.id === pplId)?.nama ?? "" : "";
-        }
-        case "pml": {
-          const pplId = draftPpl[r.idsubsls] ?? null;
-          const pmlId = pplId ? pmlDraftUntukPpl(pplId) : null;
-          return pmlId ? petugasList.find((p) => p.id === pmlId)?.nama ?? "" : "";
         }
         default:
           return 0;
@@ -4183,7 +1539,7 @@ function AlokasiPetugasSection() {
       }
       return (va - vb) * arah;
     });
-  }, [filtered, sortKey, sortDir, draftPpl, bebanDraftPerPpl, draftPmlByPpl, petugasList]);
+  }, [filtered, sortKey, sortDir, draftPpl, bebanDraftPerPpl]);
 
   function toggleSort(key: NonNullable<typeof sortKey>) {
     if (sortKey === key) {
@@ -4192,38 +1548,6 @@ function AlokasiPetugasSection() {
       setSortKey(key);
       setSortDir("desc");
     }
-    setPage(1);
-  }
-
-  // Dipakai popover "Urutkan" ThKontrol -- pilih arah langsung (bukan toggle)
-  // supaya opsi "Urut naik"/"Urut turun"/"Reset urutan" selalu jelas maknanya.
-  function sortAsc(key: NonNullable<typeof sortKey>) {
-    setSortKey(key);
-    setSortDir("asc");
-    setPage(1);
-  }
-  function sortDesc(key: NonNullable<typeof sortKey>) {
-    setSortKey(key);
-    setSortDir("desc");
-    setPage(1);
-  }
-  function sortReset() {
-    setSortKey(null);
-    setPage(1);
-  }
-
-  // Adapter Data KK: state asli `dataFilter` cuma 1 nilai ("" | "lengkap" |
-  // "belum"), tapi popover filter ThKontrol berbasis multi-pilih (Set).
-  // Dikonversi dua arah supaya popovernya tetap konsisten dgn checkbox-list
-  // di mockup walau di baliknya cuma single-value.
-  const DATA_KK_OPSI = ["Lengkap", "Belum Ada Data"];
-  const dataFilterSelected = new Set<string>(
-    dataFilter === "lengkap" ? ["Lengkap"] : dataFilter === "belum" ? ["Belum Ada Data"] : DATA_KK_OPSI
-  );
-  function terapkanDataFilter(next: Set<string>) {
-    if (next.size === 0 || next.size === DATA_KK_OPSI.length) setDataFilter("");
-    else if (next.has("Lengkap")) setDataFilter("lengkap");
-    else setDataFilter("belum");
     setPage(1);
   }
 
@@ -4243,8 +1567,6 @@ function AlokasiPetugasSection() {
       "Status Data KK": r.punya_data_kk ? "Lengkap" : "Belum Ada Data",
       "KK Total": r.kk_total,
       "Skor Beban Kerja Pendataan (tanpa jarak)": r.skor_beban_pendataan,
-      "Jarak (km)": r.jarak_km ?? "",
-      "Jumlah Hari Kerja (PP)": r.jumlah_hari_kerja,
       "Skor Jarak": r.skor_jarak,
       "Skor Beban Akhir": r.skor_beban_akhir,
       PPL: r.ppl_nama ?? "",
@@ -4279,26 +1601,24 @@ function AlokasiPetugasSection() {
   }
 
   return (
-    <div className="mt-6 flex gap-6">
-      <SidebarLangkah aktif={langkahAktif} onPilih={scrollKeLangkah} />
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
+    <div className="mt-6 flex flex-col gap-6">
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
-      <section className="rounded-md border border-blue-100 bg-white p-4">
-        <h2 className="font-medium text-blue-950">Ringkasan Alokasi Petugas</h2>
+      <section className="rounded-md border border-orange-100 bg-white p-4">
+        <h2 className="font-medium text-orange-900">Ringkasan Alokasi Petugas</h2>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Sub SLS Sampel" nilai={kertasKerja.length} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Sub SLS Sampel" nilai={kertasKerja.length} />
           <MiniStat
-            warna="bg-blue-50 text-blue-900"
+            warna="bg-orange-50 text-orange-700"
             label="Total Skor Beban"
             nilai={Math.round(totalSkorWilayahTugas)}
           />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Asumsi Jumlah PPL (bisa diubah)" nilai={totalPplAsumsi} />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="PPL Tetap Tersedia" nilai={TOTAL_PPL_TETAP} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
         </div>
         <p className="mt-2 text-[11px] text-ink/50">
-          {jumlahPplDiplotDraft} dari {totalPplAsumsi} PPL sudah punya plot (draft) · {jumlahBelumDiplot} dari{" "}
+          {jumlahPplDiplotDraft} dari {TOTAL_PPL_TETAP} PPL sudah punya plot (draft) · {jumlahBelumDiplot} dari{" "}
           {kertasKerja.length} Sub SLS belum diplot
           {jumlahPerubahanPending > 0 && <> · {jumlahPerubahanPending} perubahan belum disimpan</>}
         </p>
@@ -4329,9 +1649,9 @@ function AlokasiPetugasSection() {
           <button
             type="button"
             onClick={() => filterKeStatusBeban("rendah")}
-            className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
+            className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
           >
-            🟣 {statusPplCounts.rendah} rendah
+            🟠 {statusPplCounts.rendah} rendah
           </button>
           <button
             type="button"
@@ -4357,146 +1677,6 @@ function AlokasiPetugasSection() {
         </div>
       )}
 
-      {/* ===== KARTU MITRA PERLU DIHUBUNGI (BELUM MENDAFTAR) ===== */}
-      <section className="rounded-md border border-amber-200 bg-white p-4">
-        <button
-          type="button"
-          onClick={() => setKontakTerbuka((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 text-left"
-        >
-          <div>
-            <h2 className="font-medium text-blue-950">📞 Mitra Perlu Dihubungi (Belum Mendaftar)</h2>
-            <p className="mt-1 text-xs text-ink/60">
-              Mitra aktif yang belum konfirmasi kesediaan ikut pendataan bencana. Hubungi, tawarkan, lalu catat
-              hasilnya di sini.
-            </p>
-          </div>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-              {kontakRows.length} perlu dihubungi
-            </span>
-            <span className="text-slate-400">{kontakTerbuka ? "▾" : "▸"}</span>
-          </span>
-        </button>
-
-        {kontakError && <p className="mt-2 text-xs text-rust-600">{kontakError}</p>}
-
-        {kontakTerbuka && (
-          <div className="mt-3">
-            {kontakRows.length === 0 ? (
-              <p className="text-sm text-ink/50">
-                Semua mitra aktif sudah konfirmasi kesediaan ikut pendataan bencana.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {kontakRows.map((m) => {
-                  const busy = kontakBusyId === m.id;
-                  const draftCatatan = kontakMenolakDraft[m.id];
-                  const sedangIsiMenolak = draftCatatan !== undefined;
-                  const pilihan = sedangIsiMenolak ? "menolak" : m.status_kontak_pendaftaran_bencana;
-                  return (
-                    <div
-                      key={m.id}
-                      className={`rounded-md border p-3 text-sm ${
-                        pilihan === "menolak"
-                          ? "border-rust-200 bg-rust-50/40"
-                          : pilihan === "diterima"
-                          ? "border-moss-200 bg-moss-50/40"
-                          : "border-line bg-white"
-                      }`}
-                    >
-                      <p className="font-medium text-ink">{m.nama}</p>
-                      <p className="text-xs text-ink/60">
-                        {m.no_hp || "No HP tidak ada"}
-                        {m.alamat_kecamatan && <> · {m.alamat_kecamatan}</>}
-                      </p>
-
-                      <div className="mt-2 flex items-center gap-3 text-xs">
-                        <label className="flex cursor-pointer items-center gap-1">
-                          <input
-                            type="radio"
-                            name={`kontak-${m.id}`}
-                            checked={pilihan === "diterima"}
-                            disabled={busy}
-                            onChange={() => simpanStatusKontak(m.id, "diterima")}
-                          />
-                          Terima
-                        </label>
-                        <label className="flex cursor-pointer items-center gap-1">
-                          <input
-                            type="radio"
-                            name={`kontak-${m.id}`}
-                            checked={pilihan === "menolak"}
-                            disabled={busy}
-                            onChange={() =>
-                              setKontakMenolakDraft((prev) => ({
-                                ...prev,
-                                [m.id]: m.catatan_penolakan_pendaftaran_bencana ?? "",
-                              }))
-                            }
-                          />
-                          Menolak
-                        </label>
-                        {m.status_kontak_pendaftaran_bencana && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => simpanStatusKontak(m.id, null)}
-                            className="ml-auto text-[10px] text-ink/40 underline hover:text-ink/60"
-                          >
-                            batalkan
-                          </button>
-                        )}
-                      </div>
-
-                      {pilihan === "menolak" && (
-                        <div className="mt-2">
-                          <textarea
-                            value={draftCatatan ?? m.catatan_penolakan_pendaftaran_bencana ?? ""}
-                            onChange={(e) =>
-                              setKontakMenolakDraft((prev) => ({ ...prev, [m.id]: e.target.value }))
-                            }
-                            placeholder="Alasan menolak (wajib diisi)..."
-                            rows={2}
-                            className="w-full rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
-                          />
-                          {sedangIsiMenolak && (
-                            <div className="mt-1 flex gap-1.5">
-                              <button
-                                type="button"
-                                disabled={busy || !(draftCatatan ?? "").trim()}
-                                onClick={() => simpanStatusKontak(m.id, "menolak", draftCatatan)}
-                                className="rounded-full bg-rust-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-rust-700 disabled:opacity-40"
-                              >
-                                Simpan
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  setKontakMenolakDraft((prev) => {
-                                    const next = { ...prev };
-                                    delete next[m.id];
-                                    return next;
-                                  })
-                                }
-                                className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-medium text-ink/60 hover:bg-gray-200"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
       {/* ===== KERTAS KERJA BEBAN: KOREKSI DATA KK ===== */}
       <section className="rounded-md border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -4515,30 +1695,16 @@ function AlokasiPetugasSection() {
               </p>
             </span>
           </button>
-          <span className="flex shrink-0 items-center gap-1.5">
-            {jumlahBarisBedaVerifikasi > 0 && (
-              <span className="rounded-full bg-rust-100 px-3 py-1 text-xs font-medium text-rust-700">
-                🧭 {jumlahBarisBedaVerifikasi} Sub SLS beda &gt;{AMBANG_SELISIH_VERIFIKASI_JORONG} dari verifikasi
-              </span>
-            )}
-            {!bebanTerbuka && (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length}{" "}
-                Sub SLS terkoreksi manual
-              </span>
-            )}
-          </span>
+          {!bebanTerbuka && (
+            <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length} Sub
+              SLS terkoreksi manual
+            </span>
+          )}
         </div>
 
         {bebanTerbuka && (
           <div className="mt-3">
-            {jumlahBarisBedaVerifikasi > 0 && (
-              <p className="mb-2 rounded-md border border-rust-100 bg-rust-50 px-3 py-2 text-xs text-rust-700">
-                Baris berwarna merah = total KK Terdampak Jorong ybs (dijumlah semua Sub SLS-nya) selisih lebih dari{" "}
-                {AMBANG_SELISIH_VERIFIKASI_JORONG} KK dari data verifikasi resmi lapangan. Klik ikon 🧭 pada baris
-                tsb utk lihat rinciannya. Ini hanya penanda utk ditinjau ulang manual — bukan koreksi otomatis.
-              </p>
-            )}
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span className="text-xs text-ink/70">
                 {bebanRows.filter((r) => r.kk_total_manual || r.kk_terdampak_manual).length} dari {bebanRows.length}{" "}
@@ -4590,7 +1756,7 @@ function AlokasiPetugasSection() {
                     setBebanKecFilter(e.target.value);
                     setBebanPage(1);
                   }}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                 >
                   <option value="">Semua kecamatan</option>
                   {kecamatanOptionsBeban.map((k) => (
@@ -4609,57 +1775,21 @@ function AlokasiPetugasSection() {
                     setBebanPage(1);
                   }}
                   placeholder="Ketik kata kunci..."
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                 />
               </div>
             </div>
 
             <div className="mt-2 overflow-x-auto rounded-md border border-line">
-              <table className="w-full min-w-[1350px] text-left text-sm">
+              <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <th className="px-3 py-2 font-medium">Kecamatan</th>
-                    <ThKontrol
-                      label="Nagari"
-                      sort={{
-                        active: bebanSortKey === "nagari",
-                        dir: bebanSortDir,
-                        onAsc: () => bebanSortAsc("nagari"),
-                        onDesc: () => bebanSortDesc("nagari"),
-                        onReset: bebanSortReset,
-                      }}
-                    />
-                    <ThKontrol
-                      label="Jorong/SLS"
-                      sort={{
-                        active: bebanSortKey === "jorong",
-                        dir: bebanSortDir,
-                        onAsc: () => bebanSortAsc("jorong"),
-                        onDesc: () => bebanSortDesc("jorong"),
-                        onReset: bebanSortReset,
-                      }}
-                    />
-                    <ThKontrol
-                      label="Sub SLS"
-                      sort={{
-                        active: bebanSortKey === "subsls",
-                        dir: bebanSortDir,
-                        onAsc: () => bebanSortAsc("subsls"),
-                        onDesc: () => bebanSortDesc("subsls"),
-                        onReset: bebanSortReset,
-                      }}
-                    />
+                    <th className="px-3 py-2 font-medium">Nagari</th>
+                    <th className="px-3 py-2 font-medium">Jorong/SLS</th>
+                    <th className="px-3 py-2 font-medium">Sub SLS</th>
                     <th className="px-3 py-2 font-medium">KK Total</th>
                     <th className="px-3 py-2 font-medium">KK Terdampak</th>
-                    <th className="px-3 py-2 font-medium">
-                      KK Terdampak (Wawancara Sub SLS)
-                      <span
-                        className="ml-1 cursor-help text-ink/40"
-                        title="Angka spesifik per Sub SLS dari hasil wawancara mitra/anak magang (field perkiraan KK per Sub SLS saat Identifikasi), bukan rata-rata per Jorong. 'NO' = Jorong ybs sudah ada laporan 'tidak ada yang terdampak'. '-' = belum ada laporan spesifik sampai level Sub SLS ini."
-                      >
-                        ⓘ
-                      </span>
-                    </th>
                     <th className="px-3 py-2 font-medium">KK Tidak Terdampak</th>
                     <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
                     <th className="px-3 py-2 font-medium">Aksi</th>
@@ -4672,38 +1802,11 @@ function AlokasiPetugasSection() {
                     const tidakTerdampak = Math.max(total - terdampak, 0);
                     const skorLive = skorLiveBeban(r.idsubsls, r.kk_total, r.kk_terdampak_estimasi);
                     const berubah = total !== r.kk_total || terdampak !== r.kk_terdampak_estimasi;
-                    const totalJorongLive = totalTerdampakPerJorongLive.get(r.idsls) ?? terdampak;
-                    const bedaSignifikanJorong =
-                      r.verifikasi_total_keluarga != null &&
-                      Math.abs(totalJorongLive - r.verifikasi_total_keluarga) > AMBANG_SELISIH_VERIFIKASI_JORONG;
                     return (
-                      <tr
-                        key={r.idsubsls}
-                        className={`border-t border-line ${
-                          bedaSignifikanJorong ? "bg-rust-50" : berubah ? "bg-orange-50/50" : ""
-                        }`}
-                      >
+                      <tr key={r.idsubsls} className={`border-t border-line ${berubah ? "bg-orange-50/50" : ""}`}>
                         <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
                         <td className="px-3 py-2 text-ink/80">{r.nagari}</td>
-                        <td className="px-3 py-2 font-medium text-ink">
-                          {/* (3 Okt 2026) items-start+justify-between (bukan items-center biasa)
-                              -- nama Jorong yg panjang bisa patah ke 2 baris di layar sempit,
-                              dan tombol "Lihat Peta" tetap rapi nempel rata kanan (shrink-0,
-                              tidak ikut patah/melayang di tengah) drpd mengambang di sebelah
-                              teks yg tinggi barisnya berubah-ubah. Permintaan user. */}
-                          <span className="flex items-start justify-between gap-2">
-                            <span className="min-w-0">{r.sls}</span>
-                            {r.lat != null && r.lng != null && (
-                              <span className="shrink-0">
-                                <PetaSekilasTombol
-                                  lat={r.lat}
-                                  lng={r.lng}
-                                  label={`Jorong ${r.sls} / Sub SLS ${r.sub_sls}`}
-                                />
-                              </span>
-                            )}
-                          </span>
-                        </td>
+                        <td className="px-3 py-2 font-medium text-ink">{r.sls}</td>
                         <td className="px-3 py-2 text-ink/80">{r.sub_sls}</td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
@@ -4715,7 +1818,7 @@ function AlokasiPetugasSection() {
                                 const val = Math.max(0, Number(e.target.value) || 0);
                                 setDraftKkTotal((prev) => ({ ...prev, [r.idsubsls]: val }));
                               }}
-                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
                             />
                             {r.kk_total_manual && (
                               <span
@@ -4737,26 +1840,8 @@ function AlokasiPetugasSection() {
                                 const val = Math.max(0, Number(e.target.value) || 0);
                                 setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: val }));
                               }}
-                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
+                              className="w-20 rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
                             />
-                            <IkonSumberKkTerdampak
-                              idsubsls={r.idsubsls}
-                              onTerapkan={(nilai) =>
-                                setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: nilai }))
-                              }
-                            />
-                            {r.verifikasi_total_keluarga != null && (
-                              <IkonVerifikasiJorong
-                                namaJorong={r.sls}
-                                verifikasiTotal={r.verifikasi_total_keluarga}
-                                totalJorongLive={totalJorongLive}
-                                bedaSignifikan={bedaSignifikanJorong}
-                                rincianSub={(subRowsPerJorong.get(r.idsls) ?? []).map((s) => ({
-                                  sub_sls: s.sub_sls,
-                                  nilai: draftKkTerdampak[s.idsubsls] ?? s.kk_terdampak_estimasi,
-                                }))}
-                              />
-                            )}
                             {r.kk_terdampak_manual && (
                               <span
                                 className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-medium text-slate-700"
@@ -4766,36 +1851,6 @@ function AlokasiPetugasSection() {
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          {r.kk_wawancara_tidak_terdampak ? (
-                            <span
-                              className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
-                              title="Jorong ini sudah ada laporan 'tidak ada yang terdampak' dari mitra/anak magang."
-                            >
-                              NO
-                            </span>
-                          ) : r.kk_wawancara != null ? (
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium text-ink">
-                                {r.kk_wawancara.toLocaleString("id-ID")}
-                              </span>
-                              {terdampak !== r.kk_wawancara && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDraftKkTerdampak((prev) => ({ ...prev, [r.idsubsls]: r.kk_wawancara as number }))
-                                  }
-                                  title="Pakai angka wawancara ini sbg KK Terdampak"
-                                  className="shrink-0 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-900 hover:bg-blue-100"
-                                >
-                                  pakai
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-ink/30">-</span>
-                          )}
                         </td>
                         <td className="px-3 py-2 text-ink/80">{tidakTerdampak.toLocaleString("id-ID")}</td>
                         <td className="px-3 py-2 font-medium text-ink">
@@ -4868,10 +1923,10 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 1: WILAYAH SAMPEL ===== */}
-      <section ref={langkah1Ref} className="rounded-md border border-line bg-white p-4">
+      <section className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-blue-950">Langkah 1 — Pilih Wilayah Sampel</h2>
+            <h2 className="font-medium text-orange-900">Langkah 1 — Pilih Wilayah Sampel</h2>
             <p className="mt-1 text-xs text-ink/60">
               Centang Sub SLS terdampak mana yang benar-benar akan dijadikan wilayah sampel pendataan. Sub SLS yang
               tidak dicentang di sini tidak akan muncul di kertas kerja plotting Langkah 4 dan tidak ikut dihitung di
@@ -4885,7 +1940,7 @@ function AlokasiPetugasSection() {
 
         {sampelError && <p className="mt-2 rounded-md bg-rust-100 px-3 py-2 text-xs text-rust-700">{sampelError}</p>}
 
-        <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line bg-blue-50/40 p-3 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line bg-orange-50/40 p-3 sm:grid-cols-4">
           <div>
             <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
             <select
@@ -4894,7 +1949,7 @@ function AlokasiPetugasSection() {
                 setSampelKecFilter(e.target.value);
                 setSampelPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua kecamatan</option>
               {kecamatanOptionsSampel.map((k) => (
@@ -4912,7 +1967,7 @@ function AlokasiPetugasSection() {
                 setSampelStatusFilter(e.target.value as "" | "sudah" | "belum");
                 setSampelPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua</option>
               <option value="sudah">Sudah dicentang</option>
@@ -4928,7 +1983,7 @@ function AlokasiPetugasSection() {
                 setSampelPage(1);
               }}
               placeholder="Ketik kata kunci..."
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             />
           </div>
           <div className="flex items-end gap-1.5">
@@ -4936,7 +1991,7 @@ function AlokasiPetugasSection() {
               type="button"
               disabled={sampelBulkBusy || filteredSampel.length === 0}
               onClick={() => handleCentangSemuaFiltered(true, filteredSampel)}
-              className="flex-1 rounded-md bg-blue-500 px-2 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
+              className="flex-1 rounded-md bg-orange-500 px-2 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
             >
               ✓ Centang Semua
             </button>
@@ -4957,59 +2012,14 @@ function AlokasiPetugasSection() {
 
         <div className="mt-3 overflow-x-auto rounded-md border border-line">
           <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-blue-50 text-blue-600">
+            <thead className="bg-orange-50 text-orange-600">
               <tr>
                 <th className="w-10 px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
-                <ThKontrol
-                  label="Nagari"
-                  sort={{
-                    active: sampelSortKey === "nagari",
-                    dir: sampelSortDir,
-                    onAsc: () => sampelSortAsc("nagari"),
-                    onDesc: () => sampelSortDesc("nagari"),
-                    onReset: sampelSortReset,
-                  }}
-                />
-                <ThKontrol
-                  label="Jorong/SLS"
-                  sort={{
-                    active: sampelSortKey === "jorong",
-                    dir: sampelSortDir,
-                    onAsc: () => sampelSortAsc("jorong"),
-                    onDesc: () => sampelSortDesc("jorong"),
-                    onReset: sampelSortReset,
-                  }}
-                />
-                <ThKontrol
-                  label="Sub SLS"
-                  sort={{
-                    active: sampelSortKey === "subsls",
-                    dir: sampelSortDir,
-                    onAsc: () => sampelSortAsc("subsls"),
-                    onDesc: () => sampelSortDesc("subsls"),
-                    onReset: sampelSortReset,
-                  }}
-                />
-                <ThKontrol
-                  label="Data KK"
-                  filter={{
-                    options: ["Lengkap", "Belum Ada Data"],
-                    selected: new Set(
-                      sampelDataFilter === "lengkap"
-                        ? ["Lengkap"]
-                        : sampelDataFilter === "belum"
-                        ? ["Belum Ada Data"]
-                        : ["Lengkap", "Belum Ada Data"]
-                    ),
-                    onApply: (next) => {
-                      if (next.size === 0 || next.size === 2) setSampelDataFilter("");
-                      else if (next.has("Lengkap")) setSampelDataFilter("lengkap");
-                      else setSampelDataFilter("belum");
-                      setSampelPage(1);
-                    },
-                  }}
-                />
+                <th className="px-3 py-2 font-medium">Nagari</th>
+                <th className="px-3 py-2 font-medium">Jorong/SLS</th>
+                <th className="px-3 py-2 font-medium">Sub SLS</th>
+                <th className="px-3 py-2 font-medium">Data KK</th>
                 <th className="px-3 py-2 font-medium">Skor Beban Pendataan</th>
               </tr>
             </thead>
@@ -5022,7 +2032,7 @@ function AlokasiPetugasSection() {
                       checked={r.termasuk_sampel}
                       disabled={sampelBusyId === r.idsubsls}
                       onChange={(e) => handleToggleSampel(r.idsubsls, e.target.checked)}
-                      className="h-4 w-4 accent-blue-500"
+                      className="h-4 w-4 accent-orange-500"
                     />
                   </td>
                   <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>
@@ -5076,14 +2086,14 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 2: KEBUTUHAN PETUGAS ===== */}
-      <section ref={langkah2Ref} className="rounded-md border border-line bg-white p-4">
+      <section className="rounded-md border border-line bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-medium text-blue-950">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
+            <h2 className="font-medium text-orange-900">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
             <p className="mt-1 text-xs text-ink/60">
-              Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. Bobot KK terdampak,
-              KK tidak terdampak, dan jarak rumah petugas bisa diatur di tab &quot;⚙️ Kelola Perkiraan Beban&quot;.
-              Kapasitas dihitung dari ±15 menit/kuesioner, ±5 jam kerja/hari.
+              Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. 1 kuesioner BENCANA-K
+              (KK terdampak) berbobot 1, 1 listing KK tidak terdampak berbobot 0,12428, jarak rumah petugas berbobot
+              1 per 5 KM. Kapasitas dihitung dari ±15 menit/kuesioner, ±5 jam kerja/hari.
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -5095,13 +2105,13 @@ function AlokasiPetugasSection() {
                 max={24}
                 value={hariKerjaInput}
                 onChange={(e) => setHariKerjaInput(Math.min(24, Math.max(1, Number(e.target.value) || 1)))}
-                className="mt-1 w-28 rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                className="mt-1 w-28 rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
               />
             </div>
             <button
               type="button"
               onClick={handleTerapkanHariKerja}
-              className="rounded-md border border-blue-700 bg-white px-3 py-2 text-sm font-medium text-blue-900 transition hover:bg-blue-50"
+              className="rounded-md border border-orange-700 bg-white px-3 py-2 text-sm font-medium text-orange-700 transition hover:bg-orange-50"
             >
               Hitung Ulang
             </button>
@@ -5109,9 +2119,9 @@ function AlokasiPetugasSection() {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Total PPL Dibutuhkan (estimasi)" nilai={totalKebutuhan.ppl} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Total PML Dibutuhkan (estimasi)" nilai={totalKebutuhan.pml} />
+          <MiniStat warna="bg-orange-50 text-orange-700" label="Total Korwil Dibutuhkan (estimasi)" nilai={totalKebutuhan.korwil} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PPL Sudah Diplot" nilai={ringkasanPpl.length} />
         </div>
         <p className="mt-1.5 text-[11px] text-ink/50">
@@ -5121,7 +2131,7 @@ function AlokasiPetugasSection() {
 
         <div className="mt-3 overflow-x-auto rounded-md border border-line">
           <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="bg-blue-50 text-blue-600">
+            <thead className="bg-orange-50 text-orange-600">
               <tr>
                 <th className="px-3 py-2 font-medium"></th>
                 <th className="px-3 py-2 font-medium">Kecamatan</th>
@@ -5173,7 +2183,7 @@ function AlokasiPetugasSection() {
                       <td className="px-3 py-2 text-ink/80">{k.jumlah_korwil_dibutuhkan}</td>
                     </tr>
                     {terbuka && (
-                      <tr className="border-t border-line bg-blue-50/30">
+                      <tr className="border-t border-line bg-orange-50/30">
                         <td colSpan={9} className="px-4 py-3">
                           <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
                             Detail Perhitungan — {k.kecamatan}
@@ -5221,8 +2231,8 @@ function AlokasiPetugasSection() {
       </section>
 
       {/* ===== LANGKAH 3: SUSUNAN TIM (MANUAL, TANPA PENGELOMPOKAN OTOMATIS) ===== */}
-      <section ref={langkah3Ref} className="rounded-md border border-line bg-white p-4">
-        <h2 className="font-medium text-blue-950">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
+      <section className="rounded-md border border-line bg-white p-4">
+        <h2 className="font-medium text-orange-900">Langkah 3 — Susunan Tim (Korwil, PML, PPL)</h2>
         <p className="mt-1 text-xs text-ink/60">
           Semua jenjang ditetapkan manual satu per satu, tidak ada pengelompokan otomatis. Korwil wajib pegawai
           organik. PML boleh organik atau mitra. PPL wajib mitra (diplot lewat kertas kerja Langkah 4).
@@ -5249,7 +2259,7 @@ function AlokasiPetugasSection() {
                   if (korwilBaruId) handleSusunanTim(korwilBaruId, "korwil", null);
                   setKorwilBaruId("");
                 }}
-                className="shrink-0 rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                className="shrink-0 rounded-md bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
               >
                 Tambah
               </button>
@@ -5300,7 +2310,7 @@ function AlokasiPetugasSection() {
                   if (pmlBaruId) handleSusunanTim(pmlBaruId, "pml", null);
                   setPmlBaruId("");
                 }}
-                className="shrink-0 rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                className="shrink-0 rounded-md bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
               >
                 Tambah
               </button>
@@ -5469,7 +2479,7 @@ function AlokasiPetugasSection() {
       {/* ===== VISUALISASI KESEIMBANGAN BEBAN ===== */}
       {(ringkasanPpl.length > 0 || ringkasanPml.length > 0 || ringkasanKorwil.length > 0) && (
         <section className="rounded-md border border-line bg-white p-4">
-          <h2 className="font-medium text-blue-950">Keseimbangan Beban Tim</h2>
+          <h2 className="font-medium text-orange-900">Keseimbangan Beban Tim</h2>
           <p className="mt-1 text-xs text-ink/60">
             Diperbarui otomatis setiap kali ada plot Sub SLS atau perubahan susunan tim. Hijau = beban mendekati
             rata-rata (selisih ≤15%). Oranye = beban rendah. Merah = kelebihan beban.
@@ -5651,7 +2661,7 @@ function AlokasiPetugasSection() {
       <section ref={langkah4Ref}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium text-blue-950">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
+            <h2 className="font-medium text-orange-900">Langkah 4 — Kertas Kerja Plotting Sub SLS ke PPL</h2>
             <p className="text-xs text-ink/60">
               {filtered.length} dari {kertasKerja.length} baris wilayah sampel. Pilih PPL &amp; PML bebas dulu
               (trial-error) — kolom &quot;Beban Petugas&quot; langsung berubah tiap kali memilih, TANPA tersimpan ke
@@ -5662,42 +2672,16 @@ function AlokasiPetugasSection() {
             type="button"
             onClick={handleExport}
             disabled={filtered.length === 0}
-            className="shrink-0 rounded-md border border-blue-700 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:opacity-40"
+            className="shrink-0 rounded-md border border-orange-700 bg-white px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-40"
           >
             Export ke Excel
           </button>
         </div>
 
-        {/* (3 Okt 2026) Permintaan user: dulu pembagi "rata-rata beban per PPL"
-            hardcode 133 di kode, tidak bisa diubah dari UI. Sekarang jumlah
-            PPL-nya (totalPplAsumsi) bisa diketik ulang langsung di sini --
-            rata-rata (rataBebanTetap) otomatis hitung ulang krn dia turunan
-            dari totalPplAsumsi. Tombol "Pakai estimasi Langkah 2" menyalin
-            cepat dari totalKebutuhan.ppl (hasil Langkah 2) tanpa perlu
-            mengetik manual kalau admin mau menyamakan asumsi dgn Langkah 2. */}
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
-          <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70">
-            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷{" "}
-            <input
-              type="number"
-              min={1}
-              value={totalPplAsumsi}
-              onChange={(e) => setTotalPplAsumsi(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-              title="Asumsi jumlah PPL -- ubah angka ini utk menghitung ulang rata-rata beban dgn skenario jumlah PPL yg berbeda"
-              className="w-16 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-            />{" "}
-            PPL):{" "}
-            <strong className="text-blue-950">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
-            {totalKebutuhan.ppl > 0 && totalKebutuhan.ppl !== totalPplAsumsi && (
-              <button
-                type="button"
-                onClick={() => setTotalPplAsumsi(totalKebutuhan.ppl)}
-                className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-200"
-                title="Samakan asumsi jumlah PPL dgn hasil estimasi Langkah 2"
-              >
-                Pakai estimasi Langkah 2 ({totalKebutuhan.ppl})
-              </button>
-            )}
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-orange-100 bg-orange-50/60 px-3 py-2">
+          <span className="text-xs text-ink/70">
+            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷ {TOTAL_PPL_TETAP} PPL tetap):{" "}
+            <strong className="text-orange-900">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
           </span>
           <span className="ml-auto flex items-center gap-2">
             {jumlahPerubahanPending > 0 && (
@@ -5721,7 +2705,7 @@ function AlokasiPetugasSection() {
               type="button"
               disabled={jumlahPerubahanPending === 0 || simpanBusy}
               onClick={handleSimpanPerubahan}
-              className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
+              className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
             >
               {simpanBusy ? "Menyimpan..." : "💾 Simpan Perubahan"}
             </button>
@@ -5729,7 +2713,7 @@ function AlokasiPetugasSection() {
         </div>
 
         {diffTerbuka && daftarPerubahanPending.length > 0 && (
-          <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-blue-100 bg-blue-50/40 p-2">
+          <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-orange-100 bg-orange-50/40 p-2">
             <ul className="flex flex-col gap-1 text-xs text-ink/70">
               {daftarPerubahanPending.map((d, i) => (
                 <li key={i}>
@@ -5796,7 +2780,7 @@ function AlokasiPetugasSection() {
             }}
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${
               !statusBebanFilter && !statusPlotFilter && !hanyaBerubahFilter
-                ? "bg-blue-500 text-white"
+                ? "bg-orange-500 text-white"
                 : "bg-gray-100 text-ink/60 hover:bg-gray-200"
             }`}
           >
@@ -5824,10 +2808,10 @@ function AlokasiPetugasSection() {
             type="button"
             onClick={() => filterKeStatusBeban(statusBebanFilter === "rendah" ? "" : "rendah")}
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-              statusBebanFilter === "rendah" ? "bg-violet-500 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100"
+              statusBebanFilter === "rendah" ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-700 hover:bg-orange-100"
             }`}
           >
-            🟣 PPL Beban Rendah
+            🟠 PPL Beban Rendah
           </button>
           <button
             type="button"
@@ -5874,7 +2858,7 @@ function AlokasiPetugasSection() {
                 setAlokasiPageSize(e.target.value === "semua" ? Infinity : Number(e.target.value));
                 setPage(1);
               }}
-              className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
+              className="rounded-md border border-line bg-white px-2 py-1 text-xs outline-none focus:border-orange-400"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -5894,7 +2878,7 @@ function AlokasiPetugasSection() {
                 setKecFilter(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua kecamatan</option>
               {kecamatanOptions.map((k) => (
@@ -5938,13 +2922,13 @@ function AlokasiPetugasSection() {
                 setStatusBebanFilter(e.target.value as "" | BalanceTone);
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua</option>
               <option value="seimbang">🟢 Seimbang</option>
               <option value="perhatian">🟡 Perhatian</option>
               <option value="kelebihan">🔴 Kelebihan</option>
-              <option value="rendah">🟣 Beban Rendah</option>
+              <option value="rendah">🟠 Beban Rendah</option>
             </select>
           </div>
           <div>
@@ -5955,7 +2939,7 @@ function AlokasiPetugasSection() {
                 setStatusPlotFilter(e.target.value as "" | "sudah" | "belum");
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua</option>
               <option value="sudah">Sudah diplot</option>
@@ -5970,7 +2954,7 @@ function AlokasiPetugasSection() {
                 setDataFilter(e.target.value as "" | "lengkap" | "belum");
                 setPage(1);
               }}
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             >
               <option value="">Semua</option>
               <option value="lengkap">Data Lengkap</option>
@@ -5986,178 +2970,52 @@ function AlokasiPetugasSection() {
                 setPage(1);
               }}
               placeholder="Ketik kata kunci..."
-              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
             />
           </div>
         </div>
 
         <div className="mt-2 max-h-[70vh] overflow-auto rounded-md border border-line">
           <table className="w-full min-w-[1450px] text-left text-sm">
-            <thead className="sticky top-0 z-20 bg-blue-50 text-blue-600">
+            <thead className="sticky top-0 z-20 bg-orange-50 text-orange-600">
               <tr>
+                {!modeFokus && <th className="px-3 py-2 font-medium">Kecamatan</th>}
+                {!modeFokus && <th className="px-3 py-2 font-medium">Nagari</th>}
+                <th className="px-3 py-2 font-medium">Jorong/SLS</th>
+                <th className="sticky left-0 z-30 bg-orange-50 px-3 py-2 font-medium">Sub SLS</th>
+                {!modeFokus && <th className="px-3 py-2 font-medium">Data KK</th>}
                 {!modeFokus && (
-                  <ThKontrol
-                    label="Kecamatan"
-                    search={{ value: kecamatanHeaderSearch, onChange: (v) => { setKecamatanHeaderSearch(v); setPage(1); }, placeholder: "Cari kecamatan..." }}
-                    sort={{
-                      active: sortKey === "kecamatan",
-                      dir: sortDir,
-                      onAsc: () => sortAsc("kecamatan"),
-                      onDesc: () => sortDesc("kecamatan"),
-                      onReset: sortReset,
-                    }}
-                  />
-                )}
-                {!modeFokus && (
-                  <ThKontrol
-                    label="Nagari"
-                    sort={{
-                      active: sortKey === "nagari",
-                      dir: sortDir,
-                      onAsc: () => sortAsc("nagari"),
-                      onDesc: () => sortDesc("nagari"),
-                      onReset: sortReset,
-                    }}
-                  />
-                )}
-                <ThKontrol
-                  label="Jorong/SLS"
-                  sort={{
-                    active: sortKey === "jorong",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("jorong"),
-                    onDesc: () => sortDesc("jorong"),
-                    onReset: sortReset,
-                  }}
-                />
-                <ThKontrol
-                  label="Sub SLS"
-                  stickyLeft
-                  sort={{
-                    active: sortKey === "subsls",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("subsls"),
-                    onDesc: () => sortDesc("subsls"),
-                    onReset: sortReset,
-                  }}
-                />
-                {!modeFokus && (
-                  <ThKontrol
-                    label="Data KK"
-                    filter={{ options: DATA_KK_OPSI, selected: dataFilterSelected, onApply: terapkanDataFilter }}
-                  />
-                )}
-                {!modeFokus && (
-                  <ThKontrol
+                  <ThSort
                     label="Skor Beban Pendataan"
-                    sort={{
-                      active: sortKey === "skor_beban_pendataan",
-                      dir: sortDir,
-                      onAsc: () => sortAsc("skor_beban_pendataan"),
-                      onDesc: () => sortDesc("skor_beban_pendataan"),
-                      onReset: sortReset,
-                    }}
+                    active={sortKey === "skor_beban_pendataan"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("skor_beban_pendataan")}
                   />
                 )}
                 {!modeFokus && (
-                  <ThKontrol
+                  <ThSort
                     label="Skor Jarak"
-                    sort={{
-                      active: sortKey === "skor_jarak",
-                      dir: sortDir,
-                      onAsc: () => sortAsc("skor_jarak"),
-                      onDesc: () => sortDesc("skor_jarak"),
-                      onReset: sortReset,
-                    }}
+                    active={sortKey === "skor_jarak"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("skor_jarak")}
                   />
                 )}
-                <ThKontrol
+                <ThSort
                   label="Skor Beban Akhir"
-                  sort={{
-                    active: sortKey === "skor_beban_akhir",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("skor_beban_akhir"),
-                    onDesc: () => sortDesc("skor_beban_akhir"),
-                    onReset: sortReset,
-                  }}
+                  active={sortKey === "skor_beban_akhir"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("skor_beban_akhir")}
                 />
-                <ThKontrol
-                  label="PPL"
-                  filter={{
-                    options: petugasList.filter((p) => p.peran === "ppl").map((p) => p.nama),
-                    selected: pplFilter ? new Set([petugasList.find((p) => p.id === pplFilter)?.nama ?? ""]) : new Set(),
-                    onApply: (next) => {
-                      const nama = Array.from(next)[0];
-                      const p = nama ? petugasList.find((x) => x.nama === nama) : null;
-                      setPplFilter(p ? p.id : "");
-                      setPage(1);
-                    },
-                  }}
-                  sort={{
-                    active: sortKey === "ppl",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("ppl"),
-                    onDesc: () => sortDesc("ppl"),
-                    onReset: sortReset,
-                  }}
-                />
-                <ThKontrol
+                <th className="px-3 py-2 font-medium">PPL</th>
+                <ThSort
                   label="Beban Petugas"
-                  sort={{
-                    active: sortKey === "beban_ppl",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("beban_ppl"),
-                    onDesc: () => sortDesc("beban_ppl"),
-                    onReset: sortReset,
-                  }}
+                  active={sortKey === "beban_ppl"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("beban_ppl")}
                 />
-                <ThKontrol
-                  label="PML"
-                  filter={{
-                    options: petugasList.filter((p) => p.peran === "pml").map((p) => p.nama),
-                    selected:
-                      pmlFilterLangkah4 ? new Set([petugasList.find((p) => p.id === pmlFilterLangkah4)?.nama ?? ""]) : new Set(),
-                    onApply: (next) => {
-                      const nama = Array.from(next)[0];
-                      const p = nama ? petugasList.find((x) => x.nama === nama) : null;
-                      setPmlFilterLangkah4(p ? p.id : "");
-                      setPage(1);
-                    },
-                  }}
-                  sort={{
-                    active: sortKey === "pml",
-                    dir: sortDir,
-                    onAsc: () => sortAsc("pml"),
-                    onDesc: () => sortDesc("pml"),
-                    onReset: sortReset,
-                  }}
-                />
+                <th className="px-3 py-2 font-medium">PML</th>
                 {!modeFokus && <th className="px-3 py-2 font-medium">Korwil</th>}
-                <ThKontrol
-                  label="Status"
-                  filter={{
-                    options: ["Seimbang", "Perhatian", "Kelebihan Beban", "Beban Rendah"],
-                    selected: new Set(
-                      statusBebanFilter === "seimbang"
-                        ? ["Seimbang"]
-                        : statusBebanFilter === "perhatian"
-                        ? ["Perhatian"]
-                        : statusBebanFilter === "kelebihan"
-                        ? ["Kelebihan Beban"]
-                        : statusBebanFilter === "rendah"
-                        ? ["Beban Rendah"]
-                        : ["Seimbang", "Perhatian", "Kelebihan Beban", "Beban Rendah"]
-                    ),
-                    onApply: (next) => {
-                      if (next.size === 0 || next.size === 4) setStatusBebanFilter("");
-                      else if (next.has("Seimbang")) setStatusBebanFilter("seimbang");
-                      else if (next.has("Perhatian")) setStatusBebanFilter("perhatian");
-                      else if (next.has("Kelebihan Beban")) setStatusBebanFilter("kelebihan");
-                      else if (next.has("Beban Rendah")) setStatusBebanFilter("rendah");
-                      setPage(1);
-                    },
-                  }}
-                />
+                <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -6170,8 +3028,6 @@ function AlokasiPetugasSection() {
                 const draftPmlId = draftPplId ? pmlDraftUntukPpl(draftPplId) : null;
                 const korwilNama = korwilNamaUntukPml(draftPmlId);
                 const bgBaris = berubah ? "bg-orange-50/50" : "bg-white";
-                const petugasDraftPpl = draftPplId ? petugasList.find((x) => x.id === draftPplId) : undefined;
-                const statusKesediaan = statusKesediaanPpl(petugasDraftPpl);
                 return (
                   <tr key={r.idsubsls} className={`border-t border-line ${bgBaris}`}>
                     {!modeFokus && <td className="px-3 py-2 text-ink/80">{r.kecamatan}</td>}
@@ -6189,10 +3045,8 @@ function AlokasiPetugasSection() {
                     {!modeFokus && (
                       <td className="px-3 py-2 text-ink/80">
                         {r.jarak_status === "riil" ? (
-                          <span
-                            title={`Jarak dihitung dari titik Sub SLS ke lokasi rumah petugas (OSRM/garis lurus), dikali perkiraan ${r.jumlah_hari_kerja} hari kerja (PP tiap hari, tidak menginap)`}
-                          >
-                            {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km × {r.jumlah_hari_kerja} hari)
+                          <span title="Jarak dihitung dari centroid Sub SLS ke lokasi rumah petugas (OSRM/garis lurus)">
+                            {r.skor_jarak.toLocaleString("id-ID")} ({r.jarak_km?.toLocaleString("id-ID")} km)
                           </span>
                         ) : (
                           <span className="text-xs text-ink/40" title="Lokasi rumah petugas blm diisi/diverifikasi">
@@ -6212,20 +3066,6 @@ function AlokasiPetugasSection() {
                           placeholder="Plot ke PPL..."
                           className="w-48"
                         />
-                        <SaranMitraTombol
-                          pplOptions={pplOptions}
-                          bebanDraftPerPpl={bebanDraftPerPpl}
-                          pplTerpilihId={draftPplId}
-                          onPilih={(id) => setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: id }))}
-                          subslsPoint={titikSubslsMap.get(r.idsubsls) ?? null}
-                        />
-                        {statusKesediaan?.tipe === "belum_konfirmasi" && (
-                          <IkonStatusKesediaanPpl status={statusKesediaan} />
-                        )}
-                        {statusKesediaan &&
-                          statusKesediaan.kegiatanLain.map((k) => (
-                            <BadgeKegiatanLain key={k} kegiatan={k} />
-                          ))}
                         {draftPplId && (
                           <button
                             type="button"
@@ -6329,19 +3169,15 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
-      </div>
     </div>
   );
 }
 
 export default function BencanaPage() {
-  const [tab, setTab] = useState<
-    "identifikasi" | "monitoring" | "alokasi" | "master" | "kegiatan-petugas" | "pengaturan"
-  >("identifikasi");
+  const [tab, setTab] = useState<"identifikasi" | "monitoring" | "alokasi">("identifikasi");
 
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
-  const [magangList, setMagangList] = useState<PegawaiMagangItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -6349,7 +3185,6 @@ export default function BencanaPage() {
   const [namaInput, setNamaInput] = useState("");
   const [mitraIdManual, setMitraIdManual] = useState<number | null>(null);
   const [saranDipakai, setSaranDipakai] = useState(false);
-  const [namaMagangInput, setNamaMagangInput] = useState("");
 
   // Filter wilayah (selalu dapat diubah bebas)
   const [selectedKecamatan, setSelectedKecamatan] = useState("");
@@ -6370,24 +3205,20 @@ export default function BencanaPage() {
   const [monError, setMonError] = useState<string | null>(null);
   const [monNagari, setMonNagari] = useState<MonitoringNagariRow[]>([]);
   const [monJorong, setMonJorong] = useState<MonitoringJorongRow[]>([]);
-  const [monMagang, setMonMagang] = useState<MonitoringMagangRow[]>([]);
 
   useEffect(() => {
     async function loadAwal() {
       try {
-        const [wRes, mRes, pmRes] = await Promise.all([
+        const [wRes, mRes] = await Promise.all([
           fetch("/api/bencana/wilayah"),
           fetch("/api/bencana/mitra"),
-          fetch("/api/bencana/pegawai-magang"),
         ]);
         const wJson = await wRes.json();
         const mJson = await mRes.json();
-        const pmJson = await pmRes.json();
         if (!wRes.ok) throw new Error(wJson.error || "Gagal memuat daftar wilayah.");
         if (!mRes.ok) throw new Error(mJson.error || "Gagal memuat daftar mitra.");
         setWilayah(wJson.data ?? []);
         setMitraList(mJson.data ?? []);
-        if (pmRes.ok) setMagangList(pmJson.data ?? []);
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Gagal memuat data awal.");
       } finally {
@@ -6408,7 +3239,6 @@ export default function BencanaPage() {
         if (!res.ok) throw new Error(json.error || "Gagal memuat monitoring.");
         setMonNagari(json.nagari ?? []);
         setMonJorong(json.jorong ?? []);
-        setMonMagang(json.magang ?? []);
       } catch (err) {
         setMonError(err instanceof Error ? err.message : "Gagal memuat monitoring.");
       } finally {
@@ -6417,20 +3247,6 @@ export default function BencanaPage() {
     }
     loadMonitoring();
   }, [tab]);
-
-  // Tambahkan nama pegawai magang ke daftar lokal (optimis) begitu dipakai
-  // di suatu submit, supaya form berikutnya (jorong lain di nagari yang
-  // sama) langsung lihat nama itu di dropdown tanpa perlu reload. Server
-  // (route gate/jorong) yang menyimpan permanen ke bencana_pegawai_magang.
-  function catatNamaMagangLokal(nama: string) {
-    const trimmed = nama.trim();
-    if (!trimmed) return;
-    setMagangList((prev) =>
-      prev.some((m) => m.nama.trim().toLowerCase() === trimmed.toLowerCase())
-        ? prev
-        : [...prev, { id: -Date.now(), nama: trimmed }].sort((a, b) => a.nama.localeCompare(b.nama))
-    );
-  }
 
   const matchedMitra = useMemo(() => {
     const nama = namaInput.trim().toLowerCase();
@@ -6504,7 +3320,6 @@ export default function BencanaPage() {
           nagari: selectedNagariItem.nagari,
           mitra_id: matchedMitra?.id ?? mitraIdManual,
           nama_mitra: namaInput.trim(),
-          nama_pegawai_magang: namaMagangInput.trim() || null,
           ada_jorong_terdampak: jawaban,
           catatan: gateCatatan,
         }),
@@ -6512,7 +3327,6 @@ export default function BencanaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mengirim jawaban.");
       setGateSubmitted(true);
-      catatNamaMagangLokal(namaMagangInput);
     } catch (err) {
       setGateError(err instanceof Error ? err.message : "Gagal mengirim jawaban.");
       setGateAnswer(null);
@@ -6532,41 +3346,12 @@ export default function BencanaPage() {
     }));
   }
 
-  // Tandai SATU Sub SLS sbg "terdampak" atau "ragu" -- saling eksklusif (pilih
-  // salah satu akan menghapus tanda dari status yg lain), klik ulang pada
-  // status yg sama akan membatalkannya (kembali ke "tidak ditandai").
-  function toggleSubslsStatus(idsls: string, idsubsls: string, status: "terdampak" | "ragu") {
+  function toggleSubsls(idsls: string, idsubsls: string) {
     const cur = getJorongState(idsls);
-    const nextTerdampak = new Set(cur.checkedSubsls);
-    const nextRagu = new Set(cur.raguSubsls);
-    if (status === "terdampak") {
-      if (nextTerdampak.has(idsubsls)) {
-        nextTerdampak.delete(idsubsls);
-      } else {
-        nextTerdampak.add(idsubsls);
-        nextRagu.delete(idsubsls);
-      }
-    } else {
-      if (nextRagu.has(idsubsls)) {
-        nextRagu.delete(idsubsls);
-      } else {
-        nextRagu.add(idsubsls);
-        nextTerdampak.delete(idsubsls);
-      }
-    }
-    updateJorongState(idsls, { checkedSubsls: nextTerdampak, raguSubsls: nextRagu });
-  }
-
-  function setPerkiraanKkSubsls(idsls: string, idsubsls: string, value: string) {
-    const cur = getJorongState(idsls);
-    const next = { ...cur.perkiraanKkSubsls };
-    if (value === "") {
-      next[idsubsls] = "";
-    } else {
-      const num = Math.max(0, Math.floor(Number(value)));
-      next[idsubsls] = Number.isFinite(num) ? num : "";
-    }
-    updateJorongState(idsls, { perkiraanKkSubsls: next });
+    const next = new Set(cur.checkedSubsls);
+    if (next.has(idsubsls)) next.delete(idsubsls);
+    else next.add(idsubsls);
+    updateJorongState(idsls, { checkedSubsls: next });
   }
 
   function toggleIndikator(idsls: string, key: string) {
@@ -6597,11 +3382,10 @@ export default function BencanaPage() {
   async function submitJorong(jorong: JorongItem) {
     if (!selectedNagariItem || !selectedKecamatan) return;
     const state = getJorongState(jorong.idsls);
-    if (state.jawaban === null) return;
-    if (state.jawaban === "sebagian" && state.checkedSubsls.size === 0 && state.raguSubsls.size === 0) {
+    if (state.seluruh === null) return;
+    if (!state.seluruh && state.checkedSubsls.size === 0) {
       updateJorongState(jorong.idsls, {
-        error:
-          "Pilih minimal satu Sub SLS (terdampak atau ragu), atau tandai seluruh Sub SLS terdampak / tidak ada yang terdampak.",
+        error: "Pilih minimal satu Sub SLS yang terdampak, atau tandai seluruh Sub SLS terdampak.",
       });
       return;
     }
@@ -6619,14 +3403,8 @@ export default function BencanaPage() {
           jorong: jorong.jorong,
           mitra_id: matchedMitra?.id ?? mitraIdManual,
           nama_mitra: namaInput.trim(),
-          nama_pegawai_magang: namaMagangInput.trim() || null,
-          seluruh_subsls_terdampak: state.jawaban === "seluruh",
-          tidak_ada_terdampak: state.jawaban === "tidak_ada",
+          seluruh_subsls_terdampak: state.seluruh,
           subsls_terdampak: Array.from(state.checkedSubsls),
-          subsls_ragu: Array.from(state.raguSubsls),
-          perkiraan_kk_subsls: Object.fromEntries(
-            Object.entries(state.perkiraanKkSubsls).filter(([, v]) => typeof v === "number")
-          ),
           indikator_dampak: Array.from(state.indikator),
           indikator_dampak_kk: Object.fromEntries(
             Array.from(state.indikator)
@@ -6639,7 +3417,6 @@ export default function BencanaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mengirim data jorong.");
       updateJorongState(jorong.idsls, { submitting: false, submitted: true, error: null });
-      catatNamaMagangLokal(namaMagangInput);
     } catch (err) {
       updateJorongState(jorong.idsls, {
         submitting: false,
@@ -6791,17 +3568,11 @@ export default function BencanaPage() {
   return (
     <main
       className={`mx-auto min-h-screen px-5 py-10 ${
-        tab === "alokasi" || tab === "master" || tab === "kegiatan-petugas"
-          ? "max-w-[1800px]"
-          : tab === "monitoring"
-          ? "max-w-6xl"
-          : tab === "pengaturan"
-          ? "max-w-4xl"
-          : "max-w-2xl"
+        tab === "alokasi" ? "max-w-[1800px]" : tab === "monitoring" ? "max-w-6xl" : "max-w-2xl"
       }`}
     >
-      <p className="text-sm font-medium text-blue-400">BPS Kabupaten Solok</p>
-      <h1 className="mt-1 text-2xl font-semibold text-blue-950">
+      <p className="text-sm font-medium text-orange-400">BPS Kabupaten Solok</p>
+      <h1 className="mt-1 text-2xl font-semibold text-orange-900">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>
       <p className="mt-2 text-sm text-ink/70">
@@ -6811,14 +3582,14 @@ export default function BencanaPage() {
         masing-masing.
       </p>
 
-      <div className="mt-6 flex gap-1 rounded-md bg-blue-50 p-1">
+      <div className="mt-6 flex gap-1 rounded-md bg-orange-50 p-1">
         <button
           type="button"
           onClick={() => setTab("identifikasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "identifikasi"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
+              ? "bg-white text-orange-900 shadow-sm"
+              : "text-orange-400 hover:text-orange-600"
           }`}
         >
           Identifikasi
@@ -6828,8 +3599,8 @@ export default function BencanaPage() {
           onClick={() => setTab("monitoring")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "monitoring"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
+              ? "bg-white text-orange-900 shadow-sm"
+              : "text-orange-400 hover:text-orange-600"
           }`}
         >
           Monitoring Hasil Identifikasi
@@ -6839,59 +3610,20 @@ export default function BencanaPage() {
           onClick={() => setTab("alokasi")}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
             tab === "alokasi"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
+              ? "bg-white text-orange-900 shadow-sm"
+              : "text-orange-400 hover:text-orange-600"
           }`}
         >
           Alokasi Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("master")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "master"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Master Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("kegiatan-petugas")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "kegiatan-petugas"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Kegiatan Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("pengaturan")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "pengaturan"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          ⚙️ Kelola Perkiraan Beban
         </button>
       </div>
 
       {tab === "alokasi" ? (
         <AlokasiPetugasSection />
-      ) : tab === "master" ? (
-        <MasterPetugasSection />
-      ) : tab === "kegiatan-petugas" ? (
-        <KegiatanPetugasSection />
-      ) : tab === "pengaturan" ? (
-        <PengaturanBebanSection />
       ) : tab === "identifikasi" ? (
         <div className="mt-6 flex flex-col gap-6">
           <section className="rounded-md border border-line bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-blue-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-orange-400">
               Kriteria Kode 1: Terdampak
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/80">
@@ -6909,15 +3641,7 @@ export default function BencanaPage() {
           <section className="flex flex-col gap-4">
             <div>
               <label className="text-sm font-medium text-ink">
-                Nama Mitra <span className="text-rust-500">*</span>
-                <IkonRekomendasiMitra
-                  iddesa={selectedIddesa}
-                  kecamatan={selectedKecamatan}
-                  onPilih={(nama) => {
-                    setNamaInput(nama);
-                    setMitraIdManual(null);
-                  }}
-                />
+                Nama Bapak/Ibu <span className="text-rust-500">*</span>
               </label>
               <input
                 list="daftar-mitra"
@@ -6927,7 +3651,7 @@ export default function BencanaPage() {
                   setMitraIdManual(null);
                 }}
                 placeholder="Pilih dari daftar atau ketik nama"
-                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
               />
               <datalist id="daftar-mitra">
                 {mitraList.map((m) => (
@@ -6935,31 +3659,11 @@ export default function BencanaPage() {
                 ))}
               </datalist>
               {matchedMitra?.saran_in_scope && matchedMitra.saran_iddesa && (
-                <p className="mt-1 text-xs text-blue-400">
+                <p className="mt-1 text-xs text-orange-400">
                   Wilayah tugas disarankan berdasarkan alamat: {matchedMitra.alamat_desa},{" "}
                   {matchedMitra.alamat_kecamatan}. Filter di bawah dapat diubah bebas.
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-ink">Nama Pegawai Magang</label>
-              <input
-                list="daftar-magang"
-                value={namaMagangInput}
-                onChange={(e) => setNamaMagangInput(e.target.value)}
-                placeholder="Isi jika didampingi pegawai magang (opsional)"
-                className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
-              <datalist id="daftar-magang">
-                {magangList.map((m) => (
-                  <option key={m.id} value={m.nama} />
-                ))}
-              </datalist>
-              <p className="mt-1 text-xs text-ink/50">
-                Pilih dari daftar kalau sudah pernah diisi sebelumnya (supaya nama
-                konsisten/tidak typo), atau ketik nama baru kalau belum pernah ada.
-              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -6970,7 +3674,7 @@ export default function BencanaPage() {
                 <select
                   value={selectedKecamatan}
                   onChange={(e) => handleKecamatanChange(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                 >
                   <option value="">Pilih kecamatan</option>
                   {kecamatanOptions.map((k) => (
@@ -6988,7 +3692,7 @@ export default function BencanaPage() {
                   value={selectedIddesa}
                   onChange={(e) => handleNagariChange(e.target.value)}
                   disabled={!selectedKecamatan}
-                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
                 >
                   <option value="">Pilih nagari</option>
                   {nagariOptions.map((n) => (
@@ -7017,7 +3721,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(true)}
-                      className="flex-1 rounded-md bg-blue-700 px-4 py-2.5 font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
+                      className="flex-1 rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
                     >
                       Ya, ada
                     </button>
@@ -7025,7 +3729,7 @@ export default function BencanaPage() {
                       type="button"
                       disabled={gateSubmitting}
                       onClick={() => submitGate(false)}
-                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-blue-400 disabled:opacity-60"
+                      className="flex-1 rounded-md border border-line bg-white px-4 py-2.5 font-medium text-ink transition hover:border-orange-400 disabled:opacity-60"
                     >
                       Tidak ada
                     </button>
@@ -7038,7 +3742,7 @@ export default function BencanaPage() {
                       value={gateCatatan}
                       onChange={(e) => setGateCatatan(e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                      className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                     />
                   </div>
                   {gateError && (
@@ -7072,7 +3776,7 @@ export default function BencanaPage() {
                         key={jorong.idsls}
                         className="rounded-md border border-line bg-white p-4"
                       >
-                        <p className="font-medium text-blue-950">{jorong.jorong}</p>
+                        <p className="font-medium text-orange-900">{jorong.jorong}</p>
 
                         {state.submitted ? (
                           <p className="mt-2 rounded-md bg-moss-100 px-3 py-2 text-sm text-moss-700">
@@ -7083,22 +3787,20 @@ export default function BencanaPage() {
                             <p className="mt-2 text-sm text-ink">
                               Apakah seluruh Sub SLS Jorong ini terdampak?
                             </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
+                            <div className="mt-2 flex gap-3">
                               <button
                                 type="button"
                                 onClick={() =>
                                   updateJorongState(jorong.idsls, {
-                                    jawaban: "seluruh",
+                                    seluruh: true,
                                     checkedSubsls: new Set(),
-                                    raguSubsls: new Set(),
-                                    perkiraanKkSubsls: {},
                                     error: null,
                                   })
                                 }
-                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
-                                  state.jawaban === "seluruh"
-                                    ? "border-blue-700 bg-blue-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-blue-400"
+                                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                                  state.seluruh === true
+                                    ? "border-orange-700 bg-orange-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-orange-400"
                                 }`}
                               >
                                 Ya, seluruhnya
@@ -7107,123 +3809,46 @@ export default function BencanaPage() {
                                 type="button"
                                 onClick={() =>
                                   updateJorongState(jorong.idsls, {
-                                    jawaban: "sebagian",
+                                    seluruh: false,
                                     error: null,
                                   })
                                 }
-                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
-                                  state.jawaban === "sebagian"
-                                    ? "border-blue-700 bg-blue-700 text-white"
-                                    : "border-line bg-white text-ink hover:border-blue-400"
+                                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                                  state.seluruh === false
+                                    ? "border-orange-700 bg-orange-700 text-white"
+                                    : "border-line bg-white text-ink hover:border-orange-400"
                                 }`}
                               >
-                                Ya, sebagian
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  updateJorongState(jorong.idsls, {
-                                    jawaban: "tidak_ada",
-                                    checkedSubsls: new Set(),
-                                    raguSubsls: new Set(),
-                                    perkiraanKkSubsls: {},
-                                    error: null,
-                                  })
-                                }
-                                className={`min-w-[140px] flex-1 rounded-md border px-3 py-2 text-sm font-medium transition ${
-                                  state.jawaban === "tidak_ada"
-                                    ? "border-rust-600 bg-rust-600 text-white"
-                                    : "border-line bg-white text-ink hover:border-rust-300"
-                                }`}
-                              >
-                                Tidak ada yang terdampak
+                                Tidak, sebagian
                               </button>
                             </div>
 
-                            {state.jawaban === "sebagian" && (
+                            {state.seluruh === false && (
                               <div className="mt-3">
                                 <p className="text-sm font-medium text-ink">
-                                  Tandai tiap Sub SLS: Terdampak, Ragu, atau biarkan (tidak terdampak):
+                                  Centang Sub SLS yang terdampak:
                                 </p>
                                 <ul className="mt-2 flex flex-col gap-1.5">
-                                  {jorong.subsls.map((s) => {
-                                    const statusSub = state.checkedSubsls.has(s.idsubsls)
-                                      ? "terdampak"
-                                      : state.raguSubsls.has(s.idsubsls)
-                                      ? "ragu"
-                                      : null;
-                                    return (
-                                      <li
-                                        key={s.idsubsls}
-                                        className="rounded-md border border-line bg-white px-3 py-2"
-                                      >
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <span className="flex items-center gap-1.5 text-sm text-ink">
-                                            Sub SLS {s.sub_sls}
-                                            {/* (3 Okt 2026) Tombol lihat peta sekilas -- permintaan mitra/admin
-                                                supaya bisa cek cepat di citra satelit apakah lokasi Sub SLS ini
-                                                masuk akal terdampak banjir (dekat sungai/dataran rendah) SEBELUM
-                                                menandai Terdampak/Ragu. Popover kecil langsung di halaman (bukan
-                                                tab baru) -- cukup utk "cek sekilas", lihat PetaSekilasTombol.
-                                                Disembunyikan kalau titik Sub SLS ini belum tersedia (null). */}
-                                            {s.lat != null && s.lng != null && (
-                                              <PetaSekilasTombol lat={s.lat} lng={s.lng} label={`Sub SLS ${s.sub_sls}`} />
-                                            )}
-                                          </span>
-                                          <div className="flex gap-1.5">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                toggleSubslsStatus(jorong.idsls, s.idsubsls, "terdampak")
-                                              }
-                                              className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                                                statusSub === "terdampak"
-                                                  ? "bg-blue-700 text-white"
-                                                  : "bg-gray-100 text-ink/60 hover:bg-gray-200"
-                                              }`}
-                                            >
-                                              Terdampak
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => toggleSubslsStatus(jorong.idsls, s.idsubsls, "ragu")}
-                                              className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                                                statusSub === "ragu"
-                                                  ? "bg-amber-500 text-white"
-                                                  : "bg-gray-100 text-ink/60 hover:bg-gray-200"
-                                              }`}
-                                            >
-                                              Ragu
-                                            </button>
-                                          </div>
-                                        </div>
-                                        {statusSub && (
-                                          <div className="mt-1.5 flex items-center gap-2">
-                                            <label className="text-xs text-ink/60">
-                                              Perkiraan jumlah keluarga terdampak:
-                                            </label>
-                                            <input
-                                              type="number"
-                                              min={0}
-                                              step={1}
-                                              value={state.perkiraanKkSubsls[s.idsubsls] ?? ""}
-                                              onChange={(e) =>
-                                                setPerkiraanKkSubsls(jorong.idsls, s.idsubsls, e.target.value)
-                                              }
-                                              placeholder="0"
-                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                                            />
-                                            <span className="text-xs text-ink/50">KK</span>
-                                          </div>
-                                        )}
-                                      </li>
-                                    );
-                                  })}
+                                  {jorong.subsls.map((s) => (
+                                    <li key={s.idsubsls}>
+                                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
+                                        <input
+                                          type="checkbox"
+                                          checked={state.checkedSubsls.has(s.idsubsls)}
+                                          onChange={() => toggleSubsls(jorong.idsls, s.idsubsls)}
+                                          className="h-4 w-4 accent-orange-700"
+                                        />
+                                        <span className="text-sm text-ink">
+                                          Sub SLS {s.sub_sls}
+                                        </span>
+                                      </label>
+                                    </li>
+                                  ))}
                                 </ul>
                               </div>
                             )}
 
-                            {(state.jawaban === "seluruh" || state.jawaban === "sebagian") && (
+                            {state.seluruh !== null && (
                               <div className="mt-3">
                                 <p className="text-sm font-medium text-ink">
                                   Indikator dampak (opsional, boleh lebih dari satu)
@@ -7233,12 +3858,12 @@ export default function BencanaPage() {
                                     const checked = state.indikator.has(ind.key);
                                     return (
                                       <li key={ind.key}>
-                                        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-blue-400">
+                                        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-line bg-white px-3 py-2 transition hover:border-orange-400">
                                           <input
                                             type="checkbox"
                                             checked={checked}
                                             onChange={() => toggleIndikator(jorong.idsls, ind.key)}
-                                            className="mt-0.5 h-4 w-4 shrink-0 accent-blue-700"
+                                            className="mt-0.5 h-4 w-4 shrink-0 accent-orange-700"
                                           />
                                           <span className="text-sm text-ink">{ind.label}</span>
                                         </label>
@@ -7256,7 +3881,7 @@ export default function BencanaPage() {
                                                 setIndikatorKk(jorong.idsls, ind.key, e.target.value)
                                               }
                                               placeholder="0"
-                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                                              className="w-24 rounded-md border border-line bg-white px-2 py-1 text-sm outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                                             />
                                             <span className="text-xs text-ink/50">KK</span>
                                           </div>
@@ -7268,7 +3893,7 @@ export default function BencanaPage() {
                               </div>
                             )}
 
-                            {state.jawaban !== null && (
+                            {state.seluruh !== null && (
                               <div className="mt-3">
                                 <label className="text-sm font-medium text-ink">
                                   Catatan (opsional)
@@ -7279,7 +3904,7 @@ export default function BencanaPage() {
                                     updateJorongState(jorong.idsls, { catatan: e.target.value })
                                   }
                                   rows={2}
-                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                                  className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400"
                                 />
                               </div>
                             )}
@@ -7290,12 +3915,12 @@ export default function BencanaPage() {
                               </p>
                             )}
 
-                            {state.jawaban !== null && (
+                            {state.seluruh !== null && (
                               <button
                                 type="button"
                                 disabled={state.submitting}
                                 onClick={() => submitJorong(jorong)}
-                                className="mt-3 w-full rounded-md bg-blue-700 px-4 py-2.5 font-medium text-white transition hover:bg-blue-600 disabled:opacity-60"
+                                className="mt-3 w-full rounded-md bg-orange-700 px-4 py-2.5 font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
                               >
                                 {state.submitting ? "Mengirim..." : "Simpan data Jorong ini"}
                               </button>
@@ -7318,18 +3943,16 @@ export default function BencanaPage() {
             <p className="rounded-md bg-rust-100 px-3 py-2 text-sm text-rust-700">{monError}</p>
           ) : (
             <>
-              <MonitoringMagangSection data={monMagang} />
-
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-blue-950">Progress Identifikasi</h2>
+                  <h2 className="text-lg font-semibold text-orange-900">Progress Identifikasi</h2>
                   <p className="text-sm text-ink/60">
                     Rekap pelaksanaan identifikasi Jorong/Sub SLS terdampak bencana
                     hidrometeorologi akhir 2025, mencakup seluruh {totalNagariMon} nagari
                     di Kabupaten Solok.
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-blue-900 px-3 py-1.5 text-xs font-medium text-white">
+                <span className="shrink-0 rounded-full bg-orange-900 px-3 py-1.5 text-xs font-medium text-white">
                   Data terakhir diperbarui: {formatTanggal(lastUpdatedMon)}
                 </span>
               </div>
@@ -7337,7 +3960,7 @@ export default function BencanaPage() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <StatCard
                   ikon="📍"
-                  warna="bg-blue-100 text-blue-900"
+                  warna="bg-blue-100 text-blue-700"
                   label="Jumlah Kecamatan"
                   nilai={totalKecamatanMon}
                 />
@@ -7380,7 +4003,7 @@ export default function BencanaPage() {
               </div>
 
               <section className="rounded-md border border-line bg-white p-4">
-                <h3 className="font-medium text-blue-950">Progress Identifikasi Jorong</h3>
+                <h3 className="font-medium text-orange-900">Progress Identifikasi Jorong</h3>
                 <div className="mt-3 flex items-center gap-3">
                   <div className="h-3 flex-1 overflow-hidden rounded-full bg-orange-50">
                     <div
@@ -7409,7 +4032,7 @@ export default function BencanaPage() {
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <section className="rounded-md border border-line bg-white p-4">
-                  <h3 className="font-medium text-blue-950">Progress per Kecamatan</h3>
+                  <h3 className="font-medium text-orange-900">Progress per Kecamatan</h3>
                   <div className="mt-3 overflow-x-auto">
                     <table className="w-full min-w-[420px] text-left text-sm">
                       <thead className="text-xs text-ink/50">
@@ -7449,7 +4072,7 @@ export default function BencanaPage() {
                 <div className="flex flex-col gap-4">
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-blue-950">Nagari Belum Diidentifikasi</h3>
+                      <h3 className="font-medium text-orange-900">Nagari Belum Diidentifikasi</h3>
                       <span className="text-xs text-ink/50">{nagariBelumList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
@@ -7470,7 +4093,7 @@ export default function BencanaPage() {
 
                   <section className="rounded-md border border-line bg-white p-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-blue-950">Nagari dengan Konflik Data</h3>
+                      <h3 className="font-medium text-orange-900">Nagari dengan Konflik Data</h3>
                       <span className="text-xs text-ink/50">{nagariKonflikList.length} nagari</span>
                     </div>
                     <ul className="mt-2 flex max-h-40 flex-col gap-1.5 overflow-y-auto">
