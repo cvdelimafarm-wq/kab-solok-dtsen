@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 import UndanganAdminCard from "./UndanganAdminCard";
+import ReportKonfirmasiWilayah from "./ReportKonfirmasiWilayah";
 import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
@@ -7082,6 +7083,8 @@ function AlokasiPetugasSection() {
     <div className="mt-6 flex gap-6">
       <SidebarLangkah aktif={langkahAktif} onPilih={pilihLangkah} />
       <div className="flex min-w-0 flex-1 flex-col gap-6">
+      {/* ===== REPORT KONFIRMASI PETUGAS PER WILAYAH (bagian atas, selalu terlihat) ===== */}
+      <ReportKonfirmasiWilayah />
       {/* ===== RINGKASAN ALOKASI PETUGAS (selalu terlihat) ===== */}
       <section className="rounded-md border border-blue-100 bg-white p-4">
         <h2 className="font-medium text-blue-950">Ringkasan Alokasi Petugas</h2>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 
 // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
 // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
@@ -19,9 +20,18 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Usulan Update Data DTSEN - Kabupaten Solok",
-  description:
-    "Aplikasi pengusulan update data DTSEN oleh Wali Jorong, verifikasi Wali Nagari, dan pemeriksaan BPS Kabupaten Solok.",
+  metadataBase: new URL(ALAMAT_DASAR),
+  title: { default: NAMA_PORTAL, template: "%s · BPS Kabupaten Solok" },
+  description: DESKRIPSI_PORTAL,
+  applicationName: NAMA_PORTAL,
+  openGraph: {
+    type: "website",
+    siteName: NAMA_PORTAL,
+    locale: "id_ID",
+    title: NAMA_PORTAL,
+    description: DESKRIPSI_PORTAL,
+  },
+  twitter: { card: "summary_large_image", title: NAMA_PORTAL, description: DESKRIPSI_PORTAL },
 };
 
 export default function RootLayout({

@@ -1,7 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./logout-button";
+import Link from "next/link";
 import BrandBps from "@/app/components/BrandBps";
+import { metaHalaman } from "@/lib/halaman";
+
+export const metadata = metaHalaman(
+  "Usulan Update Data DTSEN",
+  "Pengusulan update data DTSEN oleh Wali Jorong, verifikasi Wali Nagari, dan pemeriksaan BPS Kabupaten Solok."
+);
 
 export default async function DashboardLayout({
   children,
@@ -14,7 +21,7 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/login?next=/dashboard");
   }
 
   const { data: profile } = await supabase
@@ -39,7 +46,12 @@ export default async function DashboardLayout({
                 : "Operator Wali Nagari"}
             </p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-sm font-medium text-navy-400 hover:text-navy-700">
+              Portal
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
