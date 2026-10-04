@@ -626,6 +626,15 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
               </p>
             ) : (
               <>
+                <div
+                  role="note"
+                  className="flex items-start gap-2.5 rounded-xl border-2 border-[#F59E0B] bg-[#FEF3E2] px-3.5 py-3 text-[#7A3E06]"
+                >
+                  <span aria-hidden className="mt-0.5 text-lg leading-none">⚠️</span>
+                  <p className="text-[13px] font-extrabold uppercase leading-snug tracking-wide">
+                    Alokasi ini hanya perkiraan, dapat bergeser sesuai dengan temuan kondisi riil saat pendataan
+                  </p>
+                </div>
                 {info.wilayah_kerja.map((r, i) => (
                   <div key={r.idsubsls} className="flex items-center gap-3 rounded-[10px] bg-[#F6F8FB] p-3">
                     <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-[#E3EBF6] text-[13px] font-extrabold text-[#0F3D7A]">
@@ -654,10 +663,6 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     </div>
                   </div>
                 ))}
-                <p className="rounded-lg bg-[#FEF3E2] px-3 py-2 text-xs font-semibold leading-relaxed text-[#8A4B08]">
-                  Catatan: perkiraan wilayah kerja ini <b>dapat berubah</b> sesuai kondisi riil dan beban kerja yang
-                  ditemukan di lapangan.
-                </p>
                 <p className="text-xs leading-relaxed text-[#55657D]">
                   Angka di atas merupakan perkiraan awal (perkiraan total {totalKkTerdampak.toLocaleString("id-ID")} KK
                   terdampak).
