@@ -20,7 +20,7 @@ index d53eb4b..4830e32 100644
            tawaran: k
              ? {
 diff --git a/app/bencana/UndanganAdminCard.tsx b/app/bencana/UndanganAdminCard.tsx
-index ba399f9..54a2c5f 100644
+index ba399f9..25a3e17 100644
 --- a/app/bencana/UndanganAdminCard.tsx
 +++ b/app/bencana/UndanganAdminCard.tsx
 @@ -57,6 +57,7 @@ type Baris = {
@@ -44,7 +44,7 @@ index ba399f9..54a2c5f 100644
      return h;
    }, [semua]);
    const jmlGrup = useMemo(() => semua.filter((r) => !!r.grup_wa_at).length, [semua]);
-+  const jmlMenunggu = useMemo(() => semua.filter((r) => !!r.broadcast_at && !r.grup_wa_at).length, [semua]);
++  const jmlMenunggu = useMemo(() => semua.filter((r) => !!r.broadcast_at && !r.grup_wa_at && r.status_kontak !== "menolak").length, [semua]);
    const tampil = useMemo(
      () =>
        semua
@@ -52,7 +52,7 @@ index ba399f9..54a2c5f 100644
 -        .filter((r) => filterGrup === "semua" || (filterGrup === "sudah" ? !!r.grup_wa_at : !r.grup_wa_at))
 +        .filter((r) =>
 +          filterGrup === "semua" ||
-+          (filterGrup === "sudah" ? !!r.grup_wa_at : filterGrup === "menunggu" ? !!r.broadcast_at && !r.grup_wa_at : !r.grup_wa_at)
++          (filterGrup === "sudah" ? !!r.grup_wa_at : filterGrup === "menunggu" ? !!r.broadcast_at && !r.grup_wa_at && r.status_kontak !== "menolak" : !r.grup_wa_at)
 +        )
          .sort((a, b) => a.nama.localeCompare(b.nama, "id")),
      [semua, filter, filterGrup]
@@ -61,7 +61,7 @@ index ba399f9..54a2c5f 100644
          {r.wa_pribadi_jumlah > 0 && ` · WA pribadi ${r.wa_pribadi_jumlah}x (terakhir ${waktuRingkas(r.wa_pribadi_at)})`}
          {r.akun_dibuat_at && ` · akun dibuat ${waktuRingkas(r.akun_dibuat_at)}`}
          {r.grup_wa_at && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Sudah masuk grup WA</span>}
-+        {r.broadcast_at && !r.grup_wa_at && (
++        {r.broadcast_at && !r.grup_wa_at && r.status_kontak !== "menolak" && (
 +          <span
 +            className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
 +            title={`Broadcast ajakan gabung grup dikirim ${waktuRingkas(r.broadcast_at)}`}
