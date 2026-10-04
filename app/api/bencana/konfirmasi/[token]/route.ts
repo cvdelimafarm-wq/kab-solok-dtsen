@@ -19,6 +19,14 @@
 //     kontak" oleh kartu admin, konsisten dgn makna kolom yg sudah ada).
 //   - jadwal_pelatihan_dipilih (BARU, 3 Okt 2026): '7 Oktober 2026' |
 //     '8 Oktober 2026', diisi kalau Bersedia.
+//     (4 Okt 2026) Sekarang CHECKBOX, kedua tanggal terpilih otomatis --
+//     pelatihan cuma 1 hari di SALAH SATU tanggal, jadi isinya = tanggal2
+//     yg petugas SANGGUP hadiri (bisa 1 atau 2, dipisah ", ", mis.
+//     '7 Oktober 2026, 8 Oktober 2026'); panitia yg menentukan hari
+//     finalnya sesudah melihat jawaban semua petugas.
+//   - perkiraan_hari_libur (BARU, 4 Okt 2026, text[]): tanggal2
+//     (YYYY-MM-DD) dlm 10-31 Okt 2026 yg diperkirakan petugas LIBUR/tidak
+//     bisa mendata; hari kerja = sisanya. NULL = belum diisi.
 //
 // GET  -> info petugas (nama, status saat ini) + "perkiraan wilayah kerja"
 //         (Sub SLS yg SUDAH di-plot resmi ke petugas ini di
@@ -29,7 +37,8 @@
 //         Beban" admin -- supaya angkanya konsisten, tidak dihitung ulang
 //         dgn rumus lain di sini). Juga mengembalikan field2 identitas yg
 //         dipakai FE utk mendeteksi "data belum lengkap" (lihat PATCH).
-// POST  -> submit jawaban { bersedia: boolean, jadwal_pelatihan?: string,
+// POST  -> submit jawaban { bersedia: boolean, jadwal_pelatihan?: string[],
+//         hari_libur?: string[] (wajib array, boleh kosong, kalau bersedia),
 //         alasan?: string }.
 // PATCH -> (3 Okt 2026) "Lengkapi Data Anda" -- permintaan user: selain
 //         jawab Bersedia/Tidak Bersedia, halaman ini jg menawarkan petugas
@@ -59,6 +68,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const JADWAL_VALID = ["7 Oktober 2026", "8 Oktober 2026"] as const;
+
+// (4 Okt 2026) Grup WhatsApp koordinasi petugas -- HANYA dikembalikan GET
+// kalau petugas sudah konfirmasi Bersedia (supaya tidak ikut tampil di
+// halaman utk yg belum/tidak bersedia).
+const WA_GROUP_URL = "https://chat.whatsapp.com/FAvu1HMdKh15QhhhxRy4Ki";
+
+// (4 Okt 2026) Rentang pendataan lapangan -- tanggal hari kerja/libur yg
+// boleh dipilih petugas.
+const TANGGAL_PENDATAAN_VALID: string[] = Array.from({ length: 22 }, (_, i) => `2026-10-${String(10 + i).padStart(2, "0")}`);
 
 // (3 Okt 2026) Whitelist pendidikan/pekerjaan -- SAMA persis dgn nilai yg
 // sudah ada di data hasil rekrutmen mitra (dicek langsung lewat query ke
@@ -107,7 +125,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       // pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor
       // ditambahkan -- dipakai FE utk deteksi & tampilkan section
       // "Lengkapi Data Anda" (lihat PATCH di atas).
-      "id, nama, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih, no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor"
+      "id, nama, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih, perkiraan_hari_libur, no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor"
     )
     .eq("token", token)
     .maybeSingle();
@@ -223,6 +241,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       status_kontak_pendaftaran_bencana: petugas.status_kontak_pendaftaran_bencana,
       catatan_penolakan_pendaftaran_bencana: petugas.catatan_penolakan_pendaftaran_bencana,
       jadwal_pelatihan_dipilih: petugas.jadwal_pelatihan_dipilih,
+      perkiraan_hari_libur: petugas.perkiraan_hari_libur as string[] | null,
+      wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" ? WA_GROUP_URL : null,
       wilayah_kerja: wilayahKerja,
       // (3 Okt 2026) utk section "Lengkapi Data Anda" -- lihat komentar PATCH.
       no_hp: petugas.no_hp,
@@ -256,10 +276,21 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
   };
 
   if (body.bersedia) {
-    if (!(JADWAL_VALID as readonly string[]).includes(body.jadwal_pelatihan)) {
-      return NextResponse.json({ error: "Jadwal pelatihan (7 atau 8 Oktober 2026) wajib dipilih." }, { status: 400 });
+    // jadwal_pelatihan: array tanggal yg disanggupi (checkbox); string
+    // tunggal tetap diterima utk kompatibilitas klien lama.
+    const jadwalRaw: unknown[] = Array.isArray(body.jadwal_pelatihan) ? body.jadwal_pelatihan : [body.jadwal_pelatihan];
+    const jadwal = JADWAL_VALID.filter((j) => jadwalRaw.includes(j));
+    if (jadwal.length === 0 || jadwalRaw.some((j) => !(JADWAL_VALID as readonly string[]).includes(j as string))) {
+      return NextResponse.json({ error: "Pilih minimal 1 tanggal pelatihan (7 dan/atau 8 Oktober 2026)." }, { status: 400 });
     }
-    update.jadwal_pelatihan_dipilih = body.jadwal_pelatihan;
+    if (
+      !Array.isArray(body.hari_libur) ||
+      body.hari_libur.some((t: unknown) => typeof t !== "string" || !TANGGAL_PENDATAAN_VALID.includes(t))
+    ) {
+      return NextResponse.json({ error: "Perkiraan hari libur tidak valid (harus dlm 10-31 Oktober 2026)." }, { status: 400 });
+    }
+    update.jadwal_pelatihan_dipilih = jadwal.join(", ");
+    update.perkiraan_hari_libur = Array.from(new Set(body.hari_libur as string[])).sort();
     update.catatan_penolakan_pendaftaran_bencana = null;
   } else {
     const alasan = typeof body.alasan === "string" ? body.alasan.trim() : "";
@@ -268,6 +299,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
     }
     update.catatan_penolakan_pendaftaran_bencana = alasan;
     update.jadwal_pelatihan_dipilih = null;
+    update.perkiraan_hari_libur = null;
   }
 
   const { data, error } = await supabase.from("bencana_petugas").update(update).eq("token", token).select("nama").maybeSingle();
