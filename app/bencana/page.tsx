@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
+import UndanganAdminCard from "./UndanganAdminCard";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -7301,6 +7302,16 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+
+      {/* ===== KARTU UNDANGAN KONFIRMASI (link WA grup, monitoring, domisili jauh, plot kosong) ===== */}
+      <UndanganAdminCard
+        onLihatBaris={(id) => navigasiKeBebanTeratas("ppl", id)}
+        onBerubah={() => {
+          muatData(hariKerjaDipakai).catch(() => {});
+          muatTawaranMenginap().catch(() => {});
+          muatKontak().catch(() => {});
+        }}
+      />
 
       {/* ===== KARTU TAWARAN MENGINAP ===== */}
       <section className="rounded-md border border-teal-200 bg-white p-4">

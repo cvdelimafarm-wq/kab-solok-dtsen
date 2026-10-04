@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, use as usePromise } from "react";
+import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Konfirmasi Kesediaan Ikut Pendataan
@@ -50,6 +51,8 @@ type KonfirmasiInfo = {
   perkiraan_hari_libur: string[] | null;
   // (4 Okt 2026) hanya terisi kalau status 'diterima'.
   wa_group_url: string | null;
+  // (4 Okt 2026) sudah membuat akun (PIN)? Grup WA baru tampil setelah akun ada.
+  punya_akun: boolean;
   wilayah_kerja: WilayahKerjaRow[];
   // (3 Okt 2026) dipakai utk section "📝 Lengkapi Data Anda" -- lihat komentar
   // panjang di route.ts. FE hanya menampilkan field yg BENAR2 kosong,
@@ -368,20 +371,6 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
   const perluFormTeks = perluNoHp || perluUmur || perluJk || perluPendidikan || perluPekerjaan || perluMotor || perluKendaraan;
   const adaDataBelumLengkap = perluLokasi || perluFormTeks;
 
-  const tombolWa = info.wa_group_url ? (
-    <a
-      href={info.wa_group_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-3 flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#1E7A4C] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#176540]"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z" />
-      </svg>
-      Gabung Grup WhatsApp Petugas
-    </a>
-  ) : null;
-
   return (
     <main
       className="min-h-screen bg-[#F1F4F8] pb-10 text-[#13213A]"
@@ -441,12 +430,6 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     di salah satu tanggal tersebut. Perkiraan hari kerja {jumlahHariKerja} hari, libur {jumlahHariLibur}{" "}
                     hari (10–31 Okt 2026), minimal 5 jam kerja per hari.
                   </p>
-                  {info.wa_group_url && (
-                    <>
-                      <p className="mt-3 font-semibold">Langkah berikutnya: silakan gabung ke grup WhatsApp petugas.</p>
-                      {tombolWa}
-                    </>
-                  )}
                 </>
               ) : (
                 <>
@@ -464,6 +447,18 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                 Ubah jawaban
               </button>
             </div>
+          )}
+
+          {/* ===== BUAT AKUN (setelah bersedia) -- grup WA baru terbuka setelah akun dibuat ===== */}
+          {diterima && !ubahJawaban && (
+            <BuatAkunPanel
+              jenis="biasa"
+              token={token}
+              nama={info.nama}
+              punyaAkun={info.punya_akun}
+              waUrl={info.wa_group_url}
+              onSelesai={muat}
+            />
           )}
 
           {/* ===== LANGKAH 1: TANGGAL PELATIHAN (CHECKBOX) ===== */}

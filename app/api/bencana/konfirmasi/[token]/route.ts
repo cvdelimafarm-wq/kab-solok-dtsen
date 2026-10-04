@@ -63,16 +63,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { WA_GROUP_URL, punyaAkun } from "@/lib/undangan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const JADWAL_VALID = ["7 Oktober 2026", "8 Oktober 2026"] as const;
 
-// (4 Okt 2026) Grup WhatsApp koordinasi petugas -- HANYA dikembalikan GET
-// kalau petugas sudah konfirmasi Bersedia (supaya tidak ikut tampil di
-// halaman utk yg belum/tidak bersedia).
-const WA_GROUP_URL = "https://chat.whatsapp.com/FAvu1HMdKh15QhhhxRy4Ki";
+// (4 Okt 2026) Grup WhatsApp koordinasi petugas (WA_GROUP_URL di lib/undangan.ts)
+// -- HANYA dikembalikan GET kalau petugas sudah konfirmasi Bersedia DAN sudah
+// membuat akun (nama + PIN) lewat panel "Buat Akun".
 
 // (4 Okt 2026) Rentang pendataan lapangan -- tanggal hari kerja/libur yg
 // boleh dipilih petugas.
@@ -233,16 +233,19 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     wilayahKerja.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id"));
   }
 
+  const sudahAkun = await punyaAkun(supabase, petugas.id as number);
+
   return NextResponse.json({
     data: {
       nama: petugas.nama,
+      punya_akun: sudahAkun,
       status_kepegawaian: petugas.status_kepegawaian,
       pendaftaran_bencana_konfirmasi: petugas.pendaftaran_bencana_konfirmasi,
       status_kontak_pendaftaran_bencana: petugas.status_kontak_pendaftaran_bencana,
       catatan_penolakan_pendaftaran_bencana: petugas.catatan_penolakan_pendaftaran_bencana,
       jadwal_pelatihan_dipilih: petugas.jadwal_pelatihan_dipilih,
       perkiraan_hari_libur: petugas.perkiraan_hari_libur as string[] | null,
-      wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" ? WA_GROUP_URL : null,
+      wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       wilayah_kerja: wilayahKerja,
       // (3 Okt 2026) utk section "Lengkapi Data Anda" -- lihat komentar PATCH.
       no_hp: petugas.no_hp,

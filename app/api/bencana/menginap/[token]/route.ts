@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { WA_GROUP_URL, punyaAkun } from "@/lib/undangan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   const { data: kandidat, error } = await supabase
     .from("bencana_tawaran_menginap_kandidat")
     .select(
-      "id, status, catatan, dijawab_pada, bencana_petugas(nama), bencana_tawaran_menginap(kecamatan, nagari, keterangan)"
+      "id, petugas_id, status, catatan, dijawab_pada, bencana_petugas(nama), bencana_tawaran_menginap(kecamatan, nagari, keterangan)"
     )
     .eq("token", token)
     .maybeSingle();
@@ -53,9 +54,14 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     keterangan: string;
   } | null;
 
+  // (4 Okt 2026) WA grup baru tampil setelah bersedia & membuat akun (PIN).
+  const sudahAkun = await punyaAkun(supabase, kandidat.petugas_id as number);
+
   return NextResponse.json({
     data: {
       nama: petugas?.nama ?? "",
+      punya_akun: sudahAkun,
+      wa_group_url: kandidat.status === "bersedia" && sudahAkun ? WA_GROUP_URL : null,
       kecamatan: tawaran?.kecamatan ?? "",
       nagari: tawaran?.nagari ?? null,
       keterangan: tawaran?.keterangan ?? "",
@@ -100,6 +106,37 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
+
+  // (4 Okt 2026) Petugas yg SUDAH diplot lalu menolak menginap -> plotnya jadi kosong
+  // karena penolakan: tandai juga di status kesediaan umum supaya peringatan
+  // "menolak" di Langkah 4 (Alokasi Petugas) muncul. Kalau kemudian berubah
+  // pikiran (bersedia), penanda otomatis itu dibersihkan lagi.
+  const { data: kand } = await supabase
+    .from("bencana_tawaran_menginap_kandidat")
+    .select("petugas_id")
+    .eq("token", token)
+    .maybeSingle();
+  const pid = kand?.petugas_id as number | undefined;
+  if (pid) {
+    const { count } = await supabase.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("ppl_id", pid);
+    if (body.bersedia === false && count && count > 0) {
+      await supabase
+        .from("bencana_petugas")
+        .update({
+          status_kontak_pendaftaran_bencana: "menolak",
+          catatan_penolakan_pendaftaran_bencana: `Tidak bersedia menginap: ${update.catatan as string}`,
+          dikontak_pendaftaran_bencana_at: new Date().toISOString(),
+        })
+        .eq("id", pid);
+    } else if (body.bersedia === true) {
+      await supabase
+        .from("bencana_petugas")
+        .update({ status_kontak_pendaftaran_bencana: null, catatan_penolakan_pendaftaran_bencana: null })
+        .eq("id", pid)
+        .eq("status_kontak_pendaftaran_bencana", "menolak")
+        .like("catatan_penolakan_pendaftaran_bencana", "Tidak bersedia menginap%");
+    }
+  }
 
   const petugas = data.bencana_petugas as unknown as { nama: string } | null;
   return NextResponse.json({ ok: true, nama: petugas?.nama ?? "" });

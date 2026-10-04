@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, use as usePromise } from "react";
+import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Tawaran Pendataan Bencana dengan Skema
@@ -20,6 +21,9 @@ import { useEffect, useRef, useState, use as usePromise } from "react";
 
 type MenginapInfo = {
   nama: string;
+  // (4 Okt 2026) akun PIN & grup WA (grup hanya terisi jika bersedia + akun sudah ada)
+  punya_akun: boolean;
+  wa_group_url: string | null;
   kecamatan: string;
   nagari: string | null;
   keterangan: string;
@@ -218,6 +222,18 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
                 Ubah jawaban
               </button>
             </div>
+          )}
+
+          {/* ===== BUAT AKUN (setelah bersedia) ===== */}
+          {bersedia && !ubahJawaban && (
+            <BuatAkunPanel
+              jenis="menginap"
+              token={token}
+              nama={info.nama}
+              punyaAkun={info.punya_akun}
+              waUrl={info.wa_group_url}
+              onSelesai={muat}
+            />
           )}
 
           {/* ===== LANGKAH 1: SKEMA MENGINAP ===== */}
