@@ -92,6 +92,8 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ubahJawaban, setUbahJawaban] = useState(false);
+  // Modal info: tampil SETIAP halaman dibuka (sengaja tanpa penyimpanan browser), tutup dgn tombol OK.
+  const [modalAwal, setModalAwal] = useState(true);
   // (4 Okt 2026) jawaban rinci -- lihat komentar POST di app/api/bencana/menginap/[token]/route.ts
   const [pilihan, setPilihan] = useState<"" | "bersedia" | "tidak">("");
   const [pola, setPola] = useState<"" | "penuh" | "akhir_pekan">("");
@@ -211,6 +213,39 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
 
   return (
     <main className="min-h-screen bg-[#F1F4F8] pb-10 text-[#13213A]" style={fontStyle}>
+      {modalAwal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-5"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="judul-modal-menginap"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <h2 id="judul-modal-menginap" className="text-base font-extrabold text-[#0F3D7A]">
+              Tawaran Menginap
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#13213A]">
+              Halo, <strong>{info.nama}</strong>. Terima kasih sudah mendaftar. Kami menawarkan Anda mendata KK terdampak bencana di{" "}
+              <strong>{lokasi}</strong>, Kec. {info.kecamatan}, dengan menginap di kontrakan yang disediakan BPS bersama rekan PPL lain.
+            </p>
+            <p className="mt-3 rounded-lg bg-[#F1F4F8] px-3 py-2.5 text-sm leading-relaxed text-[#13213A]">
+              Informasi lebih lanjut silakan hubungi <strong>M. Iqbal Hadi</strong>{" "}
+              <a href="https://wa.me/6281341760592" target="_blank" rel="noopener noreferrer" className="font-bold text-[#0F3D7A] underline">
+                081341760592
+              </a>
+              .
+            </p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setModalAwal(false)}
+              className="mt-4 w-full rounded-xl bg-[#0F3D7A] py-3 text-sm font-bold text-white active:bg-[#0B2F5E]"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
