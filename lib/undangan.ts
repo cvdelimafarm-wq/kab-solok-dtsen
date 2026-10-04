@@ -25,7 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type Db = SupabaseClient<any, any, any>;
 
 // Grup WhatsApp koordinasi petugas -- baru ditampilkan SETELAH petugas bersedia & membuat akun.
-export const WA_GROUP_URL = "https://chat.whatsapp.com/FAvu1HMdKh15QhhhxRy4Ki";
+export const WA_GROUP_URL = "https://chat.whatsapp.com/Hf1noxD5zhUDNZQ02P7CVo?s=cl&p=a&mlu=0";
 
 export const MAKS_GAGAL = 5;
 export const KUNCI_MENIT = 30;
