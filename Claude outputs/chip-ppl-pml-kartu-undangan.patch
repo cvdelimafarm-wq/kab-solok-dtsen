@@ -1,0 +1,18 @@
+diff --git a/app/bencana/UndanganAdminCard.tsx b/app/bencana/UndanganAdminCard.tsx
+index e170c88..be34f4a 100644
+--- a/app/bencana/UndanganAdminCard.tsx
++++ b/app/bencana/UndanganAdminCard.tsx
+@@ -414,6 +414,13 @@ export default function UndanganAdminCard({
+                           <div className="flex flex-wrap items-center justify-between gap-2">
+                             <div className="min-w-0">
+                               <span className="text-sm font-medium text-blue-950">{r.nama}</span>
++                              <span
++                                className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${
++                                  r.peran === "pml" ? "bg-purple-100 text-purple-800" : "bg-sky-100 text-sky-800"
++                                }`}
++                              >
++                                {r.peran === "pml" ? "PML" : "PPL"}
++                              </span>
+                               <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : r.peran === "pml" ? `konfirmasi PML (${r.jumlah_ppl} PPL)` : "konfirmasi biasa"}</span>
+                             </div>
+                             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${BADGE[st].kelas}`}>{BADGE[st].label}</span>

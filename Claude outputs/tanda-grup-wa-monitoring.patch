@@ -1,0 +1,134 @@
+diff --git a/app/api/bencana/alokasi/undangan/route.ts b/app/api/bencana/alokasi/undangan/route.ts
+index ed9a2eb..d53eb4b 100644
+--- a/app/api/bencana/alokasi/undangan/route.ts
++++ b/app/api/bencana/alokasi/undangan/route.ts
+@@ -128,7 +128,7 @@ export async function GET() {
+ 
+     const { data: undRaw } = await db
+       .from("bencana_undangan")
+-      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at");
++      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at, bergabung_grup_wa_at");
+     const und = new Map<number, Record<string, unknown>>();
+     for (const u of (undRaw ?? []) as Record<string, unknown>[]) und.set(u.petugas_id as number, u);
+ 
+@@ -172,6 +172,7 @@ export async function GET() {
+           wa_pribadi_at: (u?.wa_pribadi_at as string | null) ?? null,
+           wa_pribadi_jumlah: (u?.wa_pribadi_jumlah as number | null) ?? 0,
+           akun_dibuat_at: (u?.akun_dibuat_at as string | null) ?? null,
++          grup_wa_at: (u?.bergabung_grup_wa_at as string | null) ?? null,
+           terkunci: kunciAktif.has(`verif:${nk}`) || kunciAktif.has(`pin:${nk}`),
+           tawaran: k
+             ? {
+@@ -299,6 +300,16 @@ export async function POST(req: NextRequest) {
+     const { data: p } = await db.from("bencana_petugas").select("id, nama, status_kontak_pendaftaran_bencana").eq("id", petugasId).maybeSingle();
+     if (!p) return NextResponse.json({ error: "Petugas tidak ditemukan." }, { status: 404 });
+ 
++    // (4 Okt 2026) Tandai petugas sudah / belum masuk grup WA (dicek admin dari daftar anggota grup).
++    if (aksi === "grup_wa") {
++      const bergabung = body?.bergabung !== false;
++      const { error } = await db
++        .from("bencana_undangan")
++        .upsert({ petugas_id: petugasId, bergabung_grup_wa_at: bergabung ? new Date().toISOString() : null }, { onConflict: "petugas_id" });
++      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
++      return NextResponse.json({ ok: true });
++    }
++
+     if (aksi === "wa_pribadi") {
+       const { data: lama } = await db.from("bencana_undangan").select("wa_pribadi_jumlah").eq("petugas_id", petugasId).maybeSingle();
+       const { error } = await db
+diff --git a/app/bencana/UndanganAdminCard.tsx b/app/bencana/UndanganAdminCard.tsx
+index be34f4a..ba399f9 100644
+--- a/app/bencana/UndanganAdminCard.tsx
++++ b/app/bencana/UndanganAdminCard.tsx
+@@ -56,6 +56,7 @@ type Baris = {
+   wa_pribadi_at: string | null;
+   wa_pribadi_jumlah: number;
+   akun_dibuat_at: string | null;
++  grup_wa_at: string | null; // waktu ditandai sudah masuk grup WA
+   terkunci: boolean;
+   tawaran: Tawaran | null;
+ };
+@@ -147,6 +148,7 @@ export default function UndanganAdminCard({
+   const [busyId, setBusyId] = useState<number | null>(null);
+   const [info, setInfo] = useState<string | null>(null);
+   const [filter, setFilter] = useState<Status | "semua">("semua");
++  const [filterGrup, setFilterGrup] = useState<"semua" | "sudah" | "belum">("semua");
+   const [threshold, setThreshold] = useState(10);
+   const [dipilih, setDipilih] = useState<Set<number>>(new Set());
+   const [buatBusy, setBuatBusy] = useState(false);
+@@ -194,6 +196,14 @@ export default function UndanganAdminCard({
+     setBusyId(null);
+   }
+ 
++  async function tandaiGrupWa(r: Baris, bergabung: boolean) {
++    setBusyId(r.id);
++    setError(null);
++    setInfo(null);
++    if (await kirim({ aksi: "grup_wa", petugas_id: r.id, bergabung })) await muat();
++    setBusyId(null);
++  }
++
+   async function kirimWaPribadi(r: Baris) {
+     const no = nomorWa(r.no_hp);
+     if (!no) {
+@@ -253,9 +263,14 @@ export default function UndanganAdminCard({
+     for (const r of semua) h[statusBaris(r)]++;
+     return h;
+   }, [semua]);
++  const jmlGrup = useMemo(() => semua.filter((r) => !!r.grup_wa_at).length, [semua]);
+   const tampil = useMemo(
+-    () => semua.filter((r) => filter === "semua" || statusBaris(r) === filter).sort((a, b) => a.nama.localeCompare(b.nama, "id")),
+-    [semua, filter]
++    () =>
++      semua
++        .filter((r) => filter === "semua" || statusBaris(r) === filter)
++        .filter((r) => filterGrup === "semua" || (filterGrup === "sudah" ? !!r.grup_wa_at : !r.grup_wa_at))
++        .sort((a, b) => a.nama.localeCompare(b.nama, "id")),
++    [semua, filter, filterGrup]
+   );
+   const jauh = useMemo(
+     () =>
+@@ -303,6 +318,15 @@ export default function UndanganAdminCard({
+             💬 {r.wa_pribadi_jumlah > 0 ? "Kirim WA pribadi lagi" : "Kirim WA pribadi"}
+           </button>
+         )}
++        <button
++          type="button"
++          disabled={busy}
++          onClick={() => tandaiGrupWa(r, !r.grup_wa_at)}
++          title={r.grup_wa_at ? "Batalkan tanda sudah masuk grup WA" : "Tandai sudah masuk grup WA (cek di daftar anggota grup)"}
++          className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
++        >
++          {r.grup_wa_at ? "↩ Batalkan tanda grup WA" : "✓ Tandai sudah masuk grup WA"}
++        </button>
+         {r.terkunci && (
+           <button
+             type="button"
+@@ -334,6 +358,7 @@ export default function UndanganAdminCard({
+         {r.dibaca_at ? `Dibaca ${waktuRingkas(r.dibaca_at)}` : "Belum membuka undangan"}
+         {r.wa_pribadi_jumlah > 0 && ` · WA pribadi ${r.wa_pribadi_jumlah}x (terakhir ${waktuRingkas(r.wa_pribadi_at)})`}
+         {r.akun_dibuat_at && ` · akun dibuat ${waktuRingkas(r.akun_dibuat_at)}`}
++        {r.grup_wa_at && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Sudah masuk grup WA</span>}
+         {r.terkunci && " · TERKUNCI (salah berulang)"}
+         {!r.no_hp && " · nomor HP kosong"}
+       </p>
+@@ -405,6 +430,19 @@ export default function UndanganAdminCard({
+                       </button>
+                     ))}
+                   </div>
++                  <div className="flex flex-wrap items-center gap-1.5">
++                    <span className="text-[11px] font-medium text-slate-500">Grup WA:</span>
++                    {(["semua", "sudah", "belum"] as const).map((g) => (
++                      <button
++                        key={g}
++                        type="button"
++                        onClick={() => setFilterGrup(g)}
++                        className={`rounded-full px-3 py-1 text-xs font-medium ${filterGrup === g ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
++                      >
++                        {g === "semua" ? "Semua" : g === "sudah" ? `Sudah masuk (${jmlGrup})` : `Belum masuk (${semua.length - jmlGrup})`}
++                      </button>
++                    ))}
++                  </div>
+                   <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+                     {tampil.length === 0 && <p className="text-xs text-slate-500">Tidak ada petugas pada filter ini.</p>}
+                     {tampil.map((r) => {
