@@ -3840,6 +3840,30 @@ const KOLOM_TAMBAHAN_DAFTAR: {
   },
 ];
 
+// (4 Okt 2026) Kotak monitoring di atas tabel "Kegiatan Petugas" -- permintaan
+// user: tampilkan jumlah REAL-TIME (ikut berubah begitu admin mencentang /
+// melepas "Rekomendasi PML" di tabel) lalu kotaknya bisa DIKLIK utk otomatis
+// memfilter tabel. Definisi (dihitung dari seluruh baris, bukan hasil
+// filter):
+//   - pml      = "Rekomendasi PML" tercentang.
+//   - ppl      = TIDAK dicentang Rekomendasi PML (calon PPL).
+//   - ppl_lain / pml_lain = grup di atas yg ikut >=1 dari 5 kegiatan lain.
+type TileKegiatan = "pml" | "ppl" | "ppl_lain" | "pml_lain";
+
+function cocokTileKegiatan(r: KegiatanPetugasRow, t: TileKegiatan): boolean {
+  const adaLain = r.kegiatan_lain.length > 0;
+  switch (t) {
+    case "pml":
+      return r.rekomendasi_pml;
+    case "ppl":
+      return !r.rekomendasi_pml;
+    case "ppl_lain":
+      return !r.rekomendasi_pml && adaLain;
+    case "pml_lain":
+      return r.rekomendasi_pml && adaLain;
+  }
+}
+
 function KegiatanPetugasSection() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -3862,6 +3886,9 @@ function KegiatanPetugasSection() {
     for (const k of KEGIATAN_LAIN_DAFTAR) awal[k] = new Set<string>();
     return awal;
   });
+  // (4 Okt 2026) Kotak monitoring yg sedang aktif sbg filter (lihat
+  // TileKegiatan). null = tidak ada.
+  const [tileAktif, setTileAktif] = useState<TileKegiatan | null>(null);
 
   const [sortKey, setSortKey] = useState<"nama" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -4108,6 +4135,7 @@ function KegiatanPetugasSection() {
     const kw = search.trim().toLowerCase();
     let hasil = rows.filter((r) => {
       if (kw && !r.nama.toLowerCase().includes(kw)) return false;
+      if (tileAktif && !cocokTileKegiatan(r, tileAktif)) return false;
       if (statusSel.size > 0 && !statusSel.has(r.status_kepegawaian === "organik" ? "Organik" : "Mitra"))
         return false;
       if (
@@ -4158,9 +4186,39 @@ function KegiatanPetugasSection() {
     plottingSel,
     kegiatanSel,
     kolomTambahanFilter,
+    tileAktif,
     sortKey,
     sortDir,
   ]);
+
+  // (4 Okt 2026) Jumlah utk kotak monitoring -- dihitung dari `rows` (bukan
+  // `filtered`) & ikut update otomatis krn checkbox Rekomendasi PML mengubah
+  // `rows` secara optimistic begitu diklik.
+  const ringkasanTile = useMemo(() => {
+    const hitung = (t: TileKegiatan) => rows.filter((r) => cocokTileKegiatan(r, t)).length;
+    return { pml: hitung("pml"), ppl: hitung("ppl"), ppl_lain: hitung("ppl_lain"), pml_lain: hitung("pml_lain") };
+  }, [rows]);
+
+  // Klik kotak = tampilkan PERSIS data yg dihitung kotak itu, jadi semua
+  // filter lain direset dulu (kalau tidak, angka di kotak dan jumlah baris
+  // di tabel bisa beda). Klik kotak yg sama sekali lagi = matikan filternya.
+  function klikTile(t: TileKegiatan) {
+    if (tileAktif === t) {
+      setTileAktif(null);
+      return;
+    }
+    const awal: Record<string, Set<string>> = {};
+    for (const k of KEGIATAN_LAIN_DAFTAR) awal[k] = new Set<string>();
+    setSearch("");
+    setStatusSel(new Set());
+    setPendaftaranSel(new Set());
+    setRekomendasiPmlSel(new Set());
+    setRedFlagSel(new Set());
+    setPlottingSel(new Set());
+    setKegiatanSel(awal);
+    setKolomTambahanFilter({});
+    setTileAktif(t);
+  }
 
   function handleExport() {
     // (3 Okt 2026) Kolom tambahan yg SEDANG dicentang/ditampilkan ikut
@@ -4229,6 +4287,60 @@ function KegiatanPetugasSection() {
           Menampilkan {filtered.length} dari {rows.length} petugas.
         </p>
       </section>
+
+      {/* (4 Okt 2026) Kotak monitoring real-time -- klik utk otomatis
+          memfilter tabel, klik lagi utk mematikan. Lihat TileKegiatan. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {(
+          [
+            {
+              key: "pml",
+              label: "PML Tercentang",
+              hint: "Rekomendasi PML dicentang",
+              warna: "bg-moss-50 text-moss-700",
+              ring: "ring-moss-500",
+            },
+            {
+              key: "ppl",
+              label: "PPL",
+              hint: "Tidak dicentang Rekomendasi PML",
+              warna: "bg-blue-50 text-blue-900",
+              ring: "ring-blue-500",
+            },
+            {
+              key: "ppl_lain",
+              label: "PPL Ikut Kegiatan Lain",
+              hint: "PPL yang ikut ≥1 kegiatan lain",
+              warna: "bg-orange-50 text-orange-700",
+              ring: "ring-orange-500",
+            },
+            {
+              key: "pml_lain",
+              label: "PML Ikut Kegiatan Lain",
+              hint: "PML tercentang yang ikut ≥1 kegiatan lain",
+              warna: "bg-rust-100 text-rust-700",
+              ring: "ring-rust-500",
+            },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            aria-pressed={tileAktif === t.key}
+            onClick={() => klikTile(t.key)}
+            title={`${t.hint} -- klik untuk menampilkan datanya di tabel${tileAktif === t.key ? " (klik lagi untuk mematikan filter)" : ""}`}
+            className={`rounded-md px-3 py-2 text-left transition hover:brightness-95 ${t.warna} ${
+              tileAktif === t.key ? `ring-2 ${t.ring}` : ""
+            }`}
+          >
+            <span className="block text-xs font-medium">{t.label}</span>
+            <span className="block text-lg font-semibold">{ringkasanTile[t.key]}</span>
+            <span className="block text-[10px] opacity-70">
+              {tileAktif === t.key ? "Filter aktif · klik lagi untuk mematikan" : "Klik untuk memfilter"}
+            </span>
+          </button>
+        ))}
+      </div>
 
       <div className="flex items-center justify-end gap-2">
         {/* (3 Okt 2026) "Muat Ulang" -- refresh data tabel tanpa mereset
