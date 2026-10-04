@@ -5067,6 +5067,41 @@ function AlokasiPetugasSection() {
   const [resetPin, setResetPin] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  // (4 Okt 2026) "Impor Plotting (Excel)": terapkan plotting PPL (+ atasan PML)
+  // dari file Excel sekaligus. Lihat app/api/bencana/alokasi/impor/route.ts.
+  type ImporRingkasan = {
+    timpa: boolean;
+    baris_plotting: number;
+    sub_sls_baru: number;
+    sub_sls_ditimpa: number;
+    sub_sls_sudah_sama: number;
+    sub_sls_dilewati: number;
+    sub_sls_ditolak: number;
+    pml_baru: number;
+    atasan_diset: number;
+    atasan_dilewati: number;
+    baris_dihapus: number;
+  };
+  type ImporHasil = {
+    ringkasan: ImporRingkasan;
+    dilewati: { baris: string; pesan: string }[];
+    masalah: { baris: string; pesan: string }[];
+    jumlah_dilewati: number;
+    jumlah_masalah: number;
+  };
+  const [modalImpor, setModalImpor] = useState(false);
+  const [imporFile, setImporFile] = useState<{
+    nama: string;
+    plotting: { idsubsls: string; ppl_id: number | string; porsi_kk: number | string | null }[];
+    tim: { ppl_id: number | string; pml_id: number | string }[];
+    kosong: number;
+  } | null>(null);
+  const [imporTimpa, setImporTimpa] = useState(false);
+  const [imporPin, setImporPin] = useState("");
+  const [imporBusy, setImporBusy] = useState(false);
+  const [imporError, setImporError] = useState<string | null>(null);
+  const [imporPratinjau, setImporPratinjau] = useState<ImporHasil | null>(null);
+  const [imporSelesai, setImporSelesai] = useState<ImporHasil | null>(null);
   // (3 Okt 2026) "Auto Plot": idsubsls baris yg PPL-nya diisi oleh saran
   // otomatis (handleAutoPlot) dan BELUM ditinjau/disetujui admin -- dipakai
   // utk highlight baris warna cokelat (gold-100) + tombol Setujui/Batalkan.
@@ -5342,6 +5377,152 @@ function AlokasiPetugasSection() {
       setResetError(err instanceof Error ? err.message : "Gagal mereset plotting.");
     } finally {
       setResetBusy(false);
+    }
+  }
+
+  // ---- Impor Plotting (Excel) -------------------------------------------
+  function handleUnduhTemplateImpor() {
+    const namaPetugas = new Map(petugasList.map((p) => [p.id, p.nama]));
+    const barisPlot = [...kertasKerja]
+      .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.idsubsls.localeCompare(b.idsubsls))
+      .map((r) => ({
+        idsubsls: r.idsubsls,
+        Kecamatan: r.kecamatan,
+        Nagari: r.nagari,
+        "Jorong/SLS": r.sls,
+        "Sub SLS": r.sub_sls,
+        "KK Total": r.kk_total,
+        "ID PPL": r.ppl_id ?? "",
+        "Nama PPL (info, tidak dibaca)": r.ppl_nama ?? "",
+        "Porsi KK (isi HANYA jika Sub SLS dipecah ke >1 PPL)": r.porsi_kk ?? "",
+      }));
+    const wsPlot = XLSX.utils.json_to_sheet(barisPlot);
+    wsPlot["!cols"] = [{ wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 10 }, { wch: 9 }, { wch: 9 }, { wch: 28 }, { wch: 22 }];
+    const pplIds = Array.from(new Set(kertasKerja.map((r) => r.ppl_id).filter((v): v is number => v != null)));
+    const barisTim = pplIds
+      .map((id) => {
+        const p = petugasList.find((x) => x.id === id);
+        return {
+          "ID PPL": id,
+          "Nama PPL (info, tidak dibaca)": namaPetugas.get(id) ?? "",
+          "ID PML": p?.atasan_id ?? "",
+          "Nama PML (info, tidak dibaca)": p?.atasan_id ? namaPetugas.get(p.atasan_id) ?? "" : "",
+        };
+      })
+      .sort((a, b) => String(a["Nama PPL (info, tidak dibaca)"]).localeCompare(String(b["Nama PPL (info, tidak dibaca)"])));
+    const wsTim = XLSX.utils.json_to_sheet(barisTim.length ? barisTim : [{ "ID PPL": "", "Nama PPL (info, tidak dibaca)": "", "ID PML": "", "Nama PML (info, tidak dibaca)": "" }]);
+    wsTim["!cols"] = [{ wch: 9 }, { wch: 28 }, { wch: 9 }, { wch: 28 }];
+    const petunjuk = [
+      ["PETUNJUK IMPOR PLOTTING"],
+      [""],
+      ["Sheet 'Plotting': isi kolom 'ID PPL' (angka, lihat sheet 'Daftar Petugas') pada baris Sub SLS yang ingin diplot. Baris dengan ID PPL kosong diabaikan."],
+      ["Kolom lain (Kecamatan, Nagari, dst.) hanya info; yang dibaca hanya 'idsubsls', 'ID PPL', dan 'Porsi KK'."],
+      ["Sub SLS yang dipecah ke beberapa PPL: tulis satu baris per PPL dengan idsubsls yang sama, dan isi 'Porsi KK' (jumlah KK langsung) di SEMUA barisnya."],
+      ["Sheet 'Tim' (opsional): 'ID PML' = atasan dari 'ID PPL' pada baris itu. PML akan otomatis diberi peran PML."],
+      ["Di aplikasi: centang 'Timpa' untuk mengganti plotting yang sudah ada; tanpa centang, hanya Sub SLS yang masih kosong yang diisi."],
+      ["Aturan: PPL wajib mitra aktif dan belum berperan PML/Korwil; Sub SLS harus berstatus wilayah sampel."],
+    ].map((r) => ({ Petunjuk: r[0] }));
+    const wsInfo = XLSX.utils.json_to_sheet(petunjuk);
+    wsInfo["!cols"] = [{ wch: 130 }];
+    const wsPetugas = XLSX.utils.json_to_sheet(
+      [...petugasList]
+        .filter((p) => p.aktif)
+        .sort((a, b) => a.nama.localeCompare(b.nama))
+        .map((p) => ({
+          "ID": p.id,
+          Nama: p.nama,
+          Status: p.status_kepegawaian,
+          "Peran Saat Ini": p.peran ?? "",
+          Kecamatan: p.alamat_kecamatan ?? "",
+          Nagari: p.alamat_nagari ?? "",
+        }))
+    );
+    wsPetugas["!cols"] = [{ wch: 7 }, { wch: 30 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 24 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsPlot, "Plotting");
+    XLSX.utils.book_append_sheet(wb, wsTim, "Tim");
+    XLSX.utils.book_append_sheet(wb, wsPetugas, "Daftar Petugas");
+    XLSX.utils.book_append_sheet(wb, wsInfo, "Petunjuk");
+    XLSX.writeFile(wb, "template_impor_plotting.xlsx");
+  }
+
+  async function handlePilihFileImpor(file: File | null) {
+    setImporError(null);
+    setImporPratinjau(null);
+    setImporSelesai(null);
+    setImporFile(null);
+    if (!file) return;
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const norm = (v: unknown) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const cari = (kunciSheet: string) =>
+        wb.SheetNames.find((n) => norm(n) === kunciSheet) ?? wb.SheetNames.find((n) => norm(n).includes(kunciSheet));
+      const namaPlot = cari("plotting") ?? wb.SheetNames[0];
+      const namaTim = cari("tim");
+      const bacaSheet = (nama: string) => XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[nama], { defval: "" });
+      const ambil = (row: Record<string, unknown>, cocok: (k: string) => boolean) => {
+        const kunci = Object.keys(row).find((k) => cocok(norm(k)));
+        return kunci ? row[kunci] : "";
+      };
+      let kosong = 0;
+      const plotting: NonNullable<typeof imporFile>["plotting"] = [];
+      for (const row of bacaSheet(namaPlot)) {
+        const idsubsls = String(ambil(row, (k) => k === "idsubsls") ?? "").trim();
+        const ppl = ambil(row, (k) => k === "idppl" || k === "pplid");
+        if (!idsubsls) continue;
+        if (ppl === "" || ppl == null) {
+          kosong++;
+          continue;
+        }
+        const porsi = ambil(row, (k) => k.startsWith("porsikk"));
+        plotting.push({ idsubsls, ppl_id: typeof ppl === "number" ? ppl : String(ppl).trim(), porsi_kk: porsi === "" ? null : (porsi as number | string) });
+      }
+      const tim: NonNullable<typeof imporFile>["tim"] = [];
+      if (namaTim && namaTim !== namaPlot) {
+        for (const row of bacaSheet(namaTim)) {
+          const ppl = ambil(row, (k) => k === "idppl" || k === "pplid");
+          const pml = ambil(row, (k) => k === "idpml" || k === "pmlid");
+          if (ppl === "" || pml === "") continue;
+          tim.push({ ppl_id: typeof ppl === "number" ? ppl : String(ppl).trim(), pml_id: typeof pml === "number" ? pml : String(pml).trim() });
+        }
+      }
+      if (plotting.length === 0 && tim.length === 0) {
+        setImporError("Tidak ada baris berisi ID PPL di file ini. Unduh template dulu untuk melihat format yang dibaca.");
+        return;
+      }
+      const baru = { nama: file.name, plotting, tim, kosong };
+      setImporFile(baru);
+      await jalankanImpor(baru, imporTimpa, true);
+    } catch (err) {
+      setImporError(err instanceof Error ? err.message : "Gagal membaca file Excel.");
+    }
+  }
+
+  async function jalankanImpor(file: NonNullable<typeof imporFile>, timpa: boolean, simulasi: boolean) {
+    setImporBusy(true);
+    setImporError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/impor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plotting: file.plotting, tim: file.tim, timpa, simulasi, pin: imporPin }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal memproses impor.");
+      if (simulasi) {
+        setImporPratinjau(json);
+      } else {
+        setImporSelesai(json);
+        setImporPratinjau(null);
+        setDraftPpl({});
+        setDraftPmlByPpl({});
+        setAutoPlotSubsls(new Set());
+        await muatData(hariKerjaDipakai);
+      }
+    } catch (err) {
+      setImporError(err instanceof Error ? err.message : "Gagal memproses impor.");
+    } finally {
+      setImporBusy(false);
     }
   }
 
@@ -8877,8 +9058,170 @@ function AlokasiPetugasSection() {
             >
               🗑️ Reset Semua Plotting
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImporError(null);
+                setImporFile(null);
+                setImporPratinjau(null);
+                setImporSelesai(null);
+                setImporPin("");
+                setImporTimpa(false);
+                setModalImpor(true);
+              }}
+              title="Terapkan plotting PPL (dan atasan PML) dari file Excel sekaligus"
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/80 transition hover:bg-gray-50"
+            >
+              📥 Impor Plotting (Excel)
+            </button>
           </span>
         </div>
+
+        {modalImpor && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+              <h3 className="font-medium text-ink">📥 Impor Plotting dari Excel</h3>
+              <p className="mt-1 text-xs text-ink/60">
+                Isi kolom <strong>ID PPL</strong> per Sub SLS (sheet Plotting) dan, kalau perlu, <strong>ID PML</strong>{" "}
+                (sheet Tim). Unduh template untuk format yang dibaca — template sudah berisi plotting saat ini.
+              </p>
+              <button
+                type="button"
+                onClick={handleUnduhTemplateImpor}
+                className="mt-2 rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink/80 hover:bg-gray-50"
+              >
+                ⬇ Unduh Template
+              </button>
+
+              {!imporSelesai && (
+                <>
+                  <label className="mt-4 block text-xs font-medium text-ink/70">File Excel (.xlsx)</label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => handlePilihFileImpor(e.target.files?.[0] ?? null)}
+                    disabled={imporBusy}
+                    className="mt-1 block w-full text-xs"
+                  />
+
+                  <label className="mt-3 flex items-start gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={imporTimpa}
+                      disabled={imporBusy}
+                      onChange={(e) => {
+                        setImporTimpa(e.target.checked);
+                        setImporPratinjau(null);
+                        if (imporFile) jalankanImpor(imporFile, e.target.checked, true);
+                      }}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <strong>Timpa plotting yang sudah ada</strong>
+                      <span className="block text-xs text-ink/60">
+                        {imporTimpa
+                          ? "Sub SLS yang ada di file DIGANTI sesuai file (PPL lama dihapus dari Sub SLS itu); atasan PPL ikut diganti. Sub SLS yang tidak ada di file tidak disentuh."
+                          : "Tidak dicentang: hanya mengisi Sub SLS yang masih KOSONG. Yang sudah terplot dan atasan PPL yang sudah terisi dilewati."}
+                      </span>
+                    </span>
+                  </label>
+
+                  {imporTimpa && (
+                    <>
+                      <label className="mt-3 block text-xs font-medium text-ink/70">PIN (wajib untuk Timpa)</label>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        value={imporPin}
+                        onChange={(e) => setImporPin(e.target.value)}
+                        placeholder="PIN"
+                        className="mt-1 w-full rounded border border-line px-2 py-1.5 text-sm"
+                      />
+                    </>
+                  )}
+                </>
+              )}
+
+              {imporFile && !imporSelesai && (
+                <p className="mt-3 text-xs text-ink/60">
+                  File <strong>{imporFile.nama}</strong>: {imporFile.plotting.length} baris plotting
+                  {imporFile.tim.length > 0 ? `, ${imporFile.tim.length} baris tim` : ""}
+                  {imporFile.kosong > 0 ? ` (${imporFile.kosong} baris tanpa ID PPL diabaikan)` : ""}.
+                </p>
+              )}
+
+              {imporBusy && <p className="mt-3 text-xs text-ink/60">Memproses...</p>}
+
+              {(imporPratinjau || imporSelesai) &&
+                (() => {
+                  const h = (imporSelesai ?? imporPratinjau)!;
+                  const r = h.ringkasan;
+                  return (
+                    <div className="mt-3 rounded-md border border-line bg-gray-50 px-3 py-2 text-xs text-ink">
+                      <p className="font-medium">{imporSelesai ? "✅ Impor selesai" : "Pratinjau (belum ada yang disimpan)"}</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        <li>Sub SLS diisi baru: <strong>{r.sub_sls_baru}</strong></li>
+                        {r.timpa && <li>Sub SLS ditimpa: <strong>{r.sub_sls_ditimpa}</strong> (baris PPL lama dihapus: {r.baris_dihapus})</li>}
+                        <li>Sub SLS sudah sama dengan file: {r.sub_sls_sudah_sama}</li>
+                        {!r.timpa && <li>Sub SLS dilewati karena sudah terplot: <strong>{r.sub_sls_dilewati}</strong></li>}
+                        <li>Sub SLS ditolak (ada masalah): <strong>{r.sub_sls_ditolak}</strong></li>
+                        <li>PML baru diberi peran: {r.pml_baru}; atasan PPL diatur: {r.atasan_diset}{!r.timpa && r.atasan_dilewati > 0 ? `; dilewati (sudah punya atasan): ${r.atasan_dilewati}` : ""}</li>
+                      </ul>
+                      {h.masalah.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-medium text-rust-700">Masalah ({h.jumlah_masalah})</summary>
+                          <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-4">
+                            {h.masalah.map((m, i) => (
+                              <li key={i}><strong>{m.baris}</strong>: {m.pesan}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      {h.dilewati.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-medium">Dilewati ({h.jumlah_dilewati})</summary>
+                          <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-4">
+                            {h.dilewati.map((m, i) => (
+                              <li key={i}><strong>{m.baris}</strong>: {m.pesan}</li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              {imporError && <div className="mt-2 rounded-md bg-rust-50 px-3 py-2 text-xs text-rust-700">{imporError}</div>}
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={imporBusy}
+                  onClick={() => setModalImpor(false)}
+                  className="rounded-md border border-line px-3 py-1.5 text-sm text-ink/70 hover:bg-gray-50"
+                >
+                  {imporSelesai ? "Tutup" : "Batal"}
+                </button>
+                {!imporSelesai && (
+                  <button
+                    type="button"
+                    disabled={
+                      !imporFile ||
+                      !imporPratinjau ||
+                      imporBusy ||
+                      (imporTimpa && !imporPin) ||
+                      (imporPratinjau.ringkasan.sub_sls_baru + imporPratinjau.ringkasan.sub_sls_ditimpa + imporPratinjau.ringkasan.atasan_diset + imporPratinjau.ringkasan.pml_baru === 0)
+                    }
+                    onClick={() => imporFile && jalankanImpor(imporFile, imporTimpa, false)}
+                    className="rounded-md bg-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-40"
+                  >
+                    {imporBusy ? "Menerapkan..." : "Terapkan Impor"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {modalReset && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
