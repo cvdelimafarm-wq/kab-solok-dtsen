@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use as usePromise } from "react";
+import { useEffect, useRef, useState, use as usePromise } from "react";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Konfirmasi Kesediaan Ikut Pendataan
@@ -126,6 +126,18 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ubahJawaban, setUbahJawaban] = useState(false);
+  // Setelah klik "Saya Bersedia", kartu status + tombol WA muncul di ATAS halaman;
+  // layar otomatis digulir ke sana supaya petugas langsung melihatnya.
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+  const [gulirKeBanner, setGulirKeBanner] = useState(false);
+  useEffect(() => {
+    if (!gulirKeBanner) return;
+    const t = setTimeout(() => {
+      bannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setGulirKeBanner(false);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [gulirKeBanner]);
 
   // (4 Okt 2026) Kedua tanggal pelatihan tercentang otomatis.
   const [jadwalDipilih, setJadwalDipilih] = useState<string[]>(PILIHAN_JADWAL.map((j) => j.nilai));
@@ -217,6 +229,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
         setUbahJawaban(false);
         setModeTolak(false);
         await muat();
+        if (bersedia) setGulirKeBanner(true);
       }
     } catch {
       setError("Gagal mengirim jawaban. Periksa koneksi internet, lalu coba lagi.");
@@ -414,7 +427,8 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
           {/* ===== STATUS JAWABAN (kalau sudah menjawab) ===== */}
           {sudahJawab && !ubahJawaban && (
             <div
-              className={`rounded-[14px] border p-4 text-sm ${
+              ref={bannerRef}
+              className={`scroll-mt-4 rounded-[14px] border p-4 text-sm ${
                 diterima ? "border-[#CFE3D7] bg-[#F1FAF5] text-[#1E5E3C]" : "border-rust-200 bg-rust-50 text-rust-700"
               }`}
             >
@@ -424,7 +438,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                   <p className="mt-1.5 leading-relaxed">
                     Tanggal pelatihan yang Anda sanggupi: <b>{info.jadwal_pelatihan_dipilih}</b>. Pelatihan hanya 1 hari
                     di salah satu tanggal tersebut. Perkiraan hari kerja {jumlahHariKerja} hari, libur {jumlahHariLibur}{" "}
-                    hari (10–31 Okt 2026).
+                    hari (10–31 Okt 2026), minimal 5 jam kerja per hari.
                   </p>
                   {info.wa_group_url && (
                     <>
@@ -522,6 +536,9 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
               tanggal yang <b>libur</b> (tidak bisa mendata) untuk menandainya. Ini hanya perkiraan awal, boleh berubah
               nanti.
             </p>
+            <p className="rounded-lg bg-[#EAF1FB] px-3 py-2 text-[13px] font-semibold leading-relaxed text-[#0F3D7A]">
+              Setiap hari kerja diperkirakan <b>minimal 5 jam kerja per hari</b>.
+            </p>
 
             <div className="grid grid-cols-7 gap-1.5 text-center">
               {HARI_SINGKAT.map((h) => (
@@ -544,7 +561,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     onClick={() => toggleLibur(t.iso)}
                     className={`flex h-11 items-center justify-center rounded-lg border-2 text-sm font-extrabold ${
                       libur
-                        ? "border-[#D5DDE8] bg-[#E9EDF2] text-[#8795A9] line-through"
+                        ? "border-[#E0605A] bg-[#FDE8E6] text-[#C0392B] line-through"
                         : "border-[#0F3D7A] bg-[#EAF1FB] text-[#0F3D7A]"
                     } ${tampilkanForm ? "cursor-pointer" : "cursor-default"}`}
                   >
@@ -559,16 +576,16 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                 <span className="h-3 w-3 rounded-sm border-2 border-[#0F3D7A] bg-[#EAF1FB]" /> Hari kerja
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded-sm border-2 border-[#D5DDE8] bg-[#E9EDF2]" /> Libur
+                <span className="h-3 w-3 rounded-sm border-2 border-[#E0605A] bg-[#FDE8E6]" /> Libur (merah, dicoret)
               </span>
             </div>
 
             <div className="flex items-center justify-between rounded-lg bg-[#F6F8FB] px-3 py-2.5 text-sm">
               <span>
-                <b className="text-[#0F3D7A]">{jumlahHariKerja}</b> hari kerja
+                <b className="text-[#0F3D7A]">{jumlahHariKerja}</b> hari kerja (min. 5 jam/hari)
               </span>
               <span>
-                <b className="text-[#55657D]">{jumlahHariLibur}</b> hari libur
+                <b className="text-[#C0392B]">{jumlahHariLibur}</b> hari libur
               </span>
             </div>
 
@@ -633,6 +650,10 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     </div>
                   </div>
                 ))}
+                <p className="rounded-lg bg-[#FEF3E2] px-3 py-2 text-xs font-semibold leading-relaxed text-[#8A4B08]">
+                  Catatan: perkiraan wilayah kerja ini <b>dapat berubah</b> sesuai kondisi riil dan beban kerja yang
+                  ditemukan di lapangan.
+                </p>
                 <p className="text-xs leading-relaxed text-[#55657D]">
                   Angka di atas merupakan perkiraan awal (perkiraan total {totalKkTerdampak.toLocaleString("id-ID")} KK
                   terdampak).
@@ -665,6 +686,19 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                 teks: (
                   <>
                     Pendataan menggunakan aplikasi <strong>FASIH Mobile</strong>.
+                  </>
+                ),
+              },
+              {
+                ikon: (
+                  <>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </>
+                ),
+                teks: (
+                  <>
+                    Bekerja <strong>5–7 jam kerja per hari</strong>.
                   </>
                 ),
               },
