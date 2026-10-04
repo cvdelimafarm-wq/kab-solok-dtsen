@@ -103,7 +103,14 @@ export async function GET() {
       if (!kandTerakhir.has(pid)) kandTerakhir.set(pid, k);
     }
 
-    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys()]));
+    // (4 Okt 2026) PML (peran 'pml' yg membawahi PPL) ikut dipantau: mereka juga diundang lewat /undangan.
+    const { data: bawahanRaw } = await db.from("bencana_petugas").select("atasan_id").not("atasan_id", "is", null);
+    const jmlPpl = new Map<number, number>();
+    for (const b of (bawahanRaw ?? []) as { atasan_id: number }[]) jmlPpl.set(b.atasan_id, (jmlPpl.get(b.atasan_id) ?? 0) + 1);
+    const { data: pmlRaw } = await db.from("bencana_petugas").select("id").eq("peran", "pml").eq("aktif", true).eq("status_kepegawaian", "mitra");
+    const pmlIds = new Set(((pmlRaw ?? []) as { id: number }[]).map((x) => x.id).filter((id) => (jmlPpl.get(id) ?? 0) > 0));
+
+    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys(), ...pmlIds]));
     if (idSemua.length === 0) return NextResponse.json({ data: [], cadangan: {} });
 
     const petugasMap = new Map<number, PetugasRow>();
@@ -147,6 +154,8 @@ export async function GET() {
           status_kontak: p.status_kontak_pendaftaran_bencana,
           sudah_konfirmasi: p.pendaftaran_bencana_konfirmasi,
           catatan_menolak: p.catatan_penolakan_pendaftaran_bencana,
+          peran: pmlIds.has(p.id) ? ("pml" as const) : ("ppl" as const),
+          jumlah_ppl: jmlPpl.get(p.id) ?? 0,
           jumlah_plot: j?.jumlah_plot ?? 0,
           jarak_maks_km: j?.jarak_maks_km ?? null,
           jarak_semua_riil: j?.semua_riil ?? true,

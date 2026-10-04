@@ -7,7 +7,7 @@
 // jadi tidak perlu login. Akun hanya bisa dibuat kalau SUDAH bersedia & BELUM
 // punya akun (reset PIN lewat admin).
 //
-// POST { jenis: "biasa" | "menginap", token, pin }
+// POST { jenis: "biasa" | "menginap" | "pml", token, pin }   (pml = token bencana_petugas, sama dgn biasa)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
   const body = await req.json().catch(() => null);
-  const jenis = body?.jenis === "menginap" ? "menginap" : body?.jenis === "biasa" ? "biasa" : null;
+  const jenis = body?.jenis === "menginap" ? "menginap" : body?.jenis === "biasa" || body?.jenis === "pml" ? "biasa" : null;
   const token = typeof body?.token === "string" ? body.token.trim() : "";
   const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
   if (!jenis || !token) return NextResponse.json({ error: "Permintaan tidak lengkap." }, { status: 400 });

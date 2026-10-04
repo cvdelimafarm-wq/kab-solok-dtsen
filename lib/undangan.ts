@@ -123,6 +123,7 @@ export async function cariPetugasByNama(db: Db, nama: string): Promise<PetugasUn
 }
 
 export type Tujuan =
+  | { tipe: "pml"; path: string }
   | { tipe: "menginap"; path: string }
   | { tipe: "biasa"; path: string }
   | { tipe: "belum"; path: null };
@@ -136,6 +137,12 @@ export async function tentukanTujuan(db: Db, petugas: PetugasUndangan): Promise<
     .order("dibuat_pada", { ascending: false })
     .limit(1);
   if (kand && kand.length > 0) return { tipe: "menginap", path: `/bencana/menginap/${kand[0].token}` };
+  // (4 Okt 2026) PML: tidak memegang Sub SLS sebagai PPL, tapi membawahi PPL -> halaman konfirmasi PML.
+  const { data: peran } = await db.from("bencana_petugas").select("peran").eq("id", petugas.id).maybeSingle();
+  if (peran?.peran === "pml") {
+    const { count: bawahan } = await db.from("bencana_petugas").select("id", { count: "exact", head: true }).eq("atasan_id", petugas.id);
+    if (bawahan && bawahan > 0) return { tipe: "pml", path: `/bencana/pml/${petugas.token}` };
+  }
   const { count } = await db.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("ppl_id", petugas.id);
   if (count && count > 0) return { tipe: "biasa", path: `/bencana/konfirmasi/${petugas.token}` };
   return { tipe: "belum", path: null };

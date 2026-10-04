@@ -8,7 +8,7 @@ import { useState } from "react";
 // jika akun sudah ada). Akun dipakai untuk masuk lagi lewat /undangan.
 
 type Props = {
-  jenis: "biasa" | "menginap";
+  jenis: "biasa" | "menginap" | "pml";
   token: string;
   nama: string;
   punyaAkun: boolean;

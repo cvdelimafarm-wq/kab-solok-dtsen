@@ -41,6 +41,8 @@ type Baris = {
   status_kontak: "diterima" | "menolak" | null;
   sudah_konfirmasi: boolean;
   catatan_menolak: string | null;
+  peran: "ppl" | "pml";
+  jumlah_ppl: number;
   jumlah_plot: number;
   jarak_maks_km: number | null;
   jarak_semua_riil: boolean;
@@ -243,7 +245,7 @@ export default function UndanganAdminCard({
     }
   }
 
-  const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran), [rows]);
+  const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran || r.peran === "pml"), [rows]);
   const hitung = useMemo(() => {
     const h: Record<Status, number> = { belum_dibuka: 0, dibaca: 0, bersedia: 0, pulang_pergi: 0, menolak: 0 };
     for (const r of semua) h[statusBaris(r)]++;
@@ -401,7 +403,7 @@ export default function UndanganAdminCard({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm font-medium text-blue-950">{r.nama}</span>
-                              <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : "konfirmasi biasa"}</span>
+                              <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : r.peran === "pml" ? `konfirmasi PML (${r.jumlah_ppl} PPL)` : "konfirmasi biasa"}</span>
                             </div>
                             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${BADGE[st].kelas}`}>{BADGE[st].label}</span>
                           </div>
