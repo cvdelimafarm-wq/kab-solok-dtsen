@@ -153,3 +153,20 @@ export async function punyaAkun(db: Db, petugasId: number): Promise<boolean> {
   const { data } = await db.from("bencana_undangan").select("pin_hash").eq("petugas_id", petugasId).maybeSingle();
   return !!data?.pin_hash;
 }
+
+/** Masih ada data yg dibutuhkan utk analisis wilayah tugas yg belum diisi? (lokasi GPS riil, HP, profil, kendaraan, dll.) */
+export async function dataBelumLengkap(db: Db, petugasId: number): Promise<boolean> {
+  const { data } = await db
+    .from("bencana_petugas")
+    .select(
+      "no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor, punya_hp_android, pernah_capi"
+    )
+    .eq("id", petugasId)
+    .maybeSingle();
+  if (!data) return false;
+  const d = data as Record<string, unknown>;
+  if (d.lokasi_status !== "riil") return true;
+  return ["no_hp", "umur", "jenis_kelamin", "pendidikan", "pekerjaan", "bisa_mengendarai_motor", "punya_kendaraan_bermotor", "punya_hp_android", "pernah_capi"].some(
+    (k) => d[k] === null || d[k] === undefined || d[k] === ""
+  );
+}

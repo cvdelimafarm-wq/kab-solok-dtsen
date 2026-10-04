@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import BrandBps from "@/app/components/BrandBps";
+import DaftarLengkapiForm from "./DaftarLengkapiForm";
 
 // ------------------------------------------------------------------------
 // (4 Okt 2026) Halaman publik "Undangan Konfirmasi Bersama" -- 1 link untuk
@@ -76,6 +77,10 @@ export default function UndanganPage() {
   // true begitu lolos verifikasi & sedang berpindah halaman: tombol TETAP terkunci
   // supaya petugas tidak menekan "Buka Undangan" lagi selagi halaman tujuan dimuat.
   const [pindah, setPindah] = useState(false);
+  // (4 Okt 2026) Formulir "Daftar / Lengkapi Data" di bawah kartu login.
+  const [bukaDaftar, setBukaDaftar] = useState(false);
+  // Lolos verifikasi tetapi data belum lengkap: ditahan di sini supaya formulir Lengkapi Data tampil dulu.
+  const [lengkapi, setLengkapi] = useState<{ nama: string; path: string | null } | null>(null);
 
   function reset() {
     setError(null);
@@ -108,7 +113,10 @@ export default function UndanganPage() {
       if (json?.kolom) setKolom(json.kolom as Kolom);
       if (typeof json?.sisa_percobaan === "number") setSisa(json.sisa_percobaan);
       if (json?.terkunci_sampai) setTerkunciSampai(json.terkunci_sampai as string);
-      if (json?.ok) {
+      if (json?.ok && json.perlu_lengkapi) {
+        setLengkapi({ nama: json.nama as string, path: (json.path as string | null) ?? null });
+        setBukaDaftar(true);
+      } else if (json?.ok) {
         selesai(json);
       } else if (json?.error) {
         setError(json.error as string);
@@ -262,6 +270,38 @@ export default function UndanganPage() {
           </form>
         )}
 
+        {!bukaDaftar ? (
+          <button
+            type="button"
+            onClick={() => setBukaDaftar(true)}
+            className="flex w-full items-center justify-between rounded-[14px] border border-dashed border-[#0F3D7A]/40 bg-white px-4 py-3 text-left shadow-sm"
+          >
+            <span>
+              <span className="block text-[14px] font-extrabold text-[#0F3D7A]">Data belum ditemukan?</span>
+              <span className="block text-[12px] text-slate-600">Daftar / Lengkapi Data (NIK, lokasi rumah, dll.)</span>
+            </span>
+            <span className="text-[18px] font-extrabold text-[#0F3D7A]">→</span>
+          </button>
+        ) : (
+          <DaftarLengkapiForm
+            namaAwal={lengkapi?.nama ?? nama}
+            nikAwal={lengkapi ? nik : ""}
+            emailAwal={lengkapi ? email : ""}
+            tglAwal={lengkapi ? tgl : ""}
+            pesan={
+              lengkapi
+                ? "Identitas Anda terverifikasi, tetapi ada data untuk analisis wilayah tugas yang belum lengkap (misalnya lokasi rumah). Mohon dilengkapi dulu; Anda juga bisa melewatinya."
+                : undefined
+            }
+            onSelesai={selesai}
+            onTutup={() => {
+              setBukaDaftar(false);
+              setLengkapi(null);
+            }}
+            onLewati={lengkapi ? () => selesai(lengkapi) : undefined}
+          />
+        )}
+
         {kolom && (
           <div className={`${KARTU} space-y-2`}>
             <div className="text-[15px] font-extrabold text-[#13213A]">
@@ -270,6 +310,11 @@ export default function UndanganPage() {
             {(Object.keys(LABEL_KOLOM) as (keyof Kolom)[]).map((k) => (
               <BarisStatus key={k} label={LABEL_KOLOM[k]} status={kolom[k]} />
             ))}
+            {kolom.nama === "salah" && !bukaDaftar && (
+              <p className="pt-1 text-[13px] text-slate-700">
+                Nama tidak ditemukan? Gunakan tombol <b>“Data belum ditemukan? Daftar / Lengkapi Data”</b> di bawah.
+              </p>
+            )}
             {adaSalah && sisa !== null && (
               <p className="pt-1 text-[13px] text-slate-700">
                 Perbaiki kolom yang bertanda merah lalu coba lagi. Sisa percobaan:{" "}

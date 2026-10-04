@@ -23,6 +23,7 @@ import {
   cariPetugasByNama,
   catatGagal,
   cekKunci,
+  dataBelumLengkap,
   emailValid,
   nikValid,
   normEmail,
@@ -133,7 +134,10 @@ export async function POST(req: NextRequest) {
     if (errSimpan) return NextResponse.json({ error: errSimpan.message }, { status: 500 });
 
     const tujuan = await tentukanTujuan(db, petugas);
-    return NextResponse.json({ ok: true, kolom, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path });
+    // (4 Okt 2026) Data utk analisis wilayah tugas belum lengkap -> halaman menawarkan formulir Lengkapi Data
+    // (bisa dilewati) sebelum membuka undangan.
+    const perluLengkapi = await dataBelumLengkap(db, petugas.id);
+    return NextResponse.json({ ok: true, kolom, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path, perlu_lengkapi: perluLengkapi });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
     return NextResponse.json({ error: message }, { status: 500 });
