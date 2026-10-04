@@ -43,6 +43,8 @@ type PetugasRow = {
   status_kontak_pendaftaran_bencana: "diterima" | "menolak" | null;
   pendaftaran_bencana_konfirmasi: boolean;
   catatan_penolakan_pendaftaran_bencana: string | null;
+  dikontak_pendaftaran_bencana_at: string | null;
+  jadwal_pelatihan_dipilih: string | null;
   alamat_kecamatan: string | null;
   alamat_nagari: string | null;
   nilai_kinerja: number | null;
@@ -118,7 +120,7 @@ export async function GET() {
       const { data } = await db
         .from("bencana_petugas")
         .select(
-          "id, nama, no_hp, token, status_kontak_pendaftaran_bencana, pendaftaran_bencana_konfirmasi, catatan_penolakan_pendaftaran_bencana, alamat_kecamatan, alamat_nagari, nilai_kinerja"
+          "id, nama, no_hp, token, status_kontak_pendaftaran_bencana, pendaftaran_bencana_konfirmasi, catatan_penolakan_pendaftaran_bencana, dikontak_pendaftaran_bencana_at, jadwal_pelatihan_dipilih, alamat_kecamatan, alamat_nagari, nilai_kinerja"
         )
         .in("id", idSemua.slice(i, i + 200));
       for (const p of (data ?? []) as PetugasRow[]) petugasMap.set(p.id, p);
@@ -154,6 +156,9 @@ export async function GET() {
           status_kontak: p.status_kontak_pendaftaran_bencana,
           sudah_konfirmasi: p.pendaftaran_bencana_konfirmasi,
           catatan_menolak: p.catatan_penolakan_pendaftaran_bencana,
+          // waktu petugas menjawab (tawaran menginap: dijawab_pada; reguler/PML: waktu kontak) + jadwal pelatihan reguler/PML
+          dijawab_at: ((k?.dijawab_pada as string | null) ?? (p.status_kontak_pendaftaran_bencana ? p.dikontak_pendaftaran_bencana_at : null)) ?? null,
+          jadwal_reguler: p.jadwal_pelatihan_dipilih,
           peran: pmlIds.has(p.id) ? ("pml" as const) : ("ppl" as const),
           jumlah_ppl: jmlPpl.get(p.id) ?? 0,
           jumlah_plot: j?.jumlah_plot ?? 0,

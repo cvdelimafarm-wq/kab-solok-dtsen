@@ -41,6 +41,8 @@ type Baris = {
   status_kontak: "diterima" | "menolak" | null;
   sudah_konfirmasi: boolean;
   catatan_menolak: string | null;
+  dijawab_at: string | null;
+  jadwal_reguler: string | null;
   peran: "ppl" | "pml";
   jumlah_ppl: number;
   jumlah_plot: number;
@@ -138,7 +140,7 @@ export default function UndanganAdminCard({
   onBerubah?: () => void;
 }) {
   const [terbuka, setTerbuka] = useState(false);
-  const [bagian, setBagian] = useState<"monitor" | "jauh" | "kosong">("monitor");
+  const [bagian, setBagian] = useState<"monitor" | "jawaban" | "jauh" | "kosong">("monitor");
   const [rows, setRows] = useState<Baris[] | null>(null);
   const [cadangan, setCadangan] = useState<Record<number, Cadangan[]>>({});
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +265,14 @@ export default function UndanganAdminCard({
     [semua, threshold]
   );
   const belumDitawari = jauh.filter((r) => !r.tawaran);
+  // Monitoring persetujuan & penolakan: dipisah per jawaban, terbaru di atas.
+  const urutTerbaru = (a: Baris, b: Baris) => (b.dijawab_at ?? "").localeCompare(a.dijawab_at ?? "");
+  const menyetujui = useMemo(() => semua.filter((r) => statusBaris(r) === "bersedia").sort(urutTerbaru), [semua]); // eslint-disable-line react-hooks/exhaustive-deps
+  const menolakList = useMemo(
+    () => semua.filter((r) => statusBaris(r) === "menolak" || statusBaris(r) === "pulang_pergi").sort(urutTerbaru),
+    [semua] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const jenisLabel = (r: Baris) => (r.tawaran ? "Tawaran menginap" : r.peran === "pml" ? "PML" : "PPL reguler");
   const kosong = useMemo(() => semua.filter((r) => r.jumlah_plot > 0 && statusBaris(r) === "menolak"), [semua]);
 
   function toggle(id: number) {
@@ -376,6 +386,7 @@ export default function UndanganAdminCard({
             <>
               <div className="flex flex-wrap gap-2">
                 {bagianBtn("monitor", "Monitoring", semua.length)}
+                {bagianBtn("jawaban", "Persetujuan & penolakan", menyetujui.length + menolakList.length)}
                 {bagianBtn("jauh", "Domisili jauh", jauh.length)}
                 {bagianBtn("kosong", "Plot kosong karena penolakan", kosong.length)}
               </div>
@@ -415,6 +426,98 @@ export default function UndanganAdminCard({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {bagian === "jawaban" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {(
+                      [
+                        ["Diundang", semua.length, "bg-slate-50 text-slate-800"],
+                        ["Bersedia", hitung.bersedia, "bg-emerald-50 text-emerald-800"],
+                        ["Pulang-pergi", hitung.pulang_pergi, "bg-amber-50 text-amber-800"],
+                        ["Menolak", hitung.menolak, "bg-red-50 text-red-800"],
+                        ["Belum menjawab", hitung.belum_dibuka + hitung.dibaca, "bg-slate-50 text-slate-800"],
+                      ] as [string, number, string][]
+                    ).map(([label, n, kelas]) => (
+                      <div key={label} className={`rounded-md border border-slate-200 px-3 py-2 ${kelas}`}>
+                        <div className="text-[11px] font-medium">{label}</div>
+                        <div className="text-lg font-bold">{n}</div>
+                        {label !== "Diundang" && semua.length > 0 && <div className="text-[11px] opacity-75">{Math.round((n / semua.length) * 100)}%</div>}
+                      </div>
+                    ))}
+                  </div>
+                  {semua.length > 0 && (
+                    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100" title="Bersedia / pulang-pergi / menolak / belum menjawab">
+                      <div className="bg-emerald-500" style={{ width: `${(hitung.bersedia / semua.length) * 100}%` }} />
+                      <div className="bg-amber-400" style={{ width: `${(hitung.pulang_pergi / semua.length) * 100}%` }} />
+                      <div className="bg-red-500" style={{ width: `${(hitung.menolak / semua.length) * 100}%` }} />
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    Rincian jenis undangan: {(["PPL reguler", "Tawaran menginap", "PML"] as const).map((j) => {
+                      const sub = semua.filter((r) => jenisLabel(r) === j);
+                      const ya = sub.filter((r) => statusBaris(r) === "bersedia").length;
+                      const tdk = sub.filter((r) => statusBaris(r) === "menolak" || statusBaris(r) === "pulang_pergi").length;
+                      return `${j}: ${sub.length} (bersedia ${ya}, menolak ${tdk})`;
+                    }).join(" · ")}
+                  </p>
+
+                  <div>
+                    <h3 className="mb-1 text-sm font-semibold text-emerald-800">Menyetujui ({menyetujui.length})</h3>
+                    <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                      {menyetujui.length === 0 && <p className="text-xs text-slate-500">Belum ada yang menyetujui.</p>}
+                      {menyetujui.map((r) => (
+                        <div key={r.id} className="rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-blue-950">{r.nama}</span>
+                            <span className="text-[11px] text-slate-600">
+                              {jenisLabel(r)} · {r.dijawab_at ? waktuRingkas(r.dijawab_at) : "-"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            Pelatihan: {(r.tawaran?.jadwal_pelatihan ?? r.jadwal_reguler) || "-"}
+                            {r.tawaran?.pola_menginap && ` · ${r.tawaran.pola_menginap === "penuh" ? "menginap penuh" : "pulang saat akhir pekan"}`}
+                            {r.akun_dibuat_at ? " · akun sudah dibuat" : " · belum buat PIN"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="mb-1 text-sm font-semibold text-red-800">Menolak ({menolakList.length})</h3>
+                    <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                      {menolakList.length === 0 && <p className="text-xs text-slate-500">Belum ada yang menolak.</p>}
+                      {menolakList.map((r) => {
+                        const ppDia = statusBaris(r) === "pulang_pergi";
+                        return (
+                          <div key={r.id} className={`rounded-md border px-3 py-2 ${ppDia ? "border-amber-200 bg-amber-50/60" : "border-red-200 bg-red-50/60"}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-blue-950">{r.nama}</span>
+                              <span className="text-[11px] text-slate-600">
+                                {jenisLabel(r)} · {r.dijawab_at ? waktuRingkas(r.dijawab_at) : "-"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-700">
+                              {ppDia ? "Tidak menginap, tetap bersedia pulang-pergi" : "Tidak bersedia"}
+                              {r.tawaran?.alasan_kategori ? ` · kategori: ${r.tawaran.alasan_kategori}` : ""}
+                            </p>
+                            <p className="text-[11px] text-slate-600">Alasan: {r.tawaran?.catatan ?? r.catatan_menolak ?? "-"}</p>
+                            {r.jumlah_plot > 0 && !ppDia && (
+                              <p className="mt-0.5 text-[11px] font-medium text-red-700">
+                                Masih memegang {r.jumlah_plot} Sub SLS: perlu diganti.{" "}
+                                <button type="button" onClick={() => onLihatBaris?.(r.id)} className="underline">
+                                  Lihat baris
+                                </button>
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
