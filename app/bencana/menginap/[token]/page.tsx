@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, use as usePromise } from "react";
 import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 import LengkapiDataPanel from "../../undangan/LengkapiDataPanel";
+import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
@@ -94,6 +95,8 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
   const [ubahJawaban, setUbahJawaban] = useState(false);
   // Modal info: tampil SETIAP halaman dibuka (sengaja tanpa penyimpanan browser), tutup dgn tombol OK.
   const [modalAwal, setModalAwal] = useState(true);
+  // Modal "pastikan semua tahapan selesai" -- muncul begitu petugas menyatakan bersedia.
+  const [modalSelesaikan, setModalSelesaikan] = useState(false);
   // (4 Okt 2026) jawaban rinci -- lihat komentar POST di app/api/bencana/menginap/[token]/route.ts
   const [pilihan, setPilihan] = useState<"" | "bersedia" | "tidak">("");
   const [pola, setPola] = useState<"" | "penuh" | "akhir_pekan">("");
@@ -179,7 +182,8 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
       } else {
         setUbahJawaban(false);
         await muat();
-        setGulirKeBanner(true);
+        if (bersedia) setModalSelesaikan(true);
+        else setGulirKeBanner(true);
       }
     } catch {
       setError("Gagal mengirim jawaban. Periksa koneksi internet, lalu coba lagi.");
@@ -213,6 +217,9 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
 
   return (
     <main className="min-h-screen bg-[#F1F4F8] pb-10 text-[#13213A]" style={fontStyle}>
+      {modalSelesaikan && !modalAwal && !info.punya_akun && (
+        <ModalSelesaikan nama={info.nama} onOk={() => setModalSelesaikan(false)} />
+      )}
       {modalAwal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-5"

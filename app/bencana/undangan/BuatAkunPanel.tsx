@@ -57,7 +57,7 @@ export default function BuatAkunPanel({ jenis, token, nama, punyaAkun, waUrl, on
 
   if (punyaAkun) {
     return (
-      <section className="rounded-[14px] border border-[#CFE3D7] bg-[#F1FAF5] p-4 text-sm text-[#1E5E3C] shadow-sm">
+      <section id="kartu-buat-pin" className="scroll-mt-4 rounded-[14px] border border-[#CFE3D7] bg-[#F1FAF5] p-4 text-sm text-[#1E5E3C] shadow-sm">
         <p className="text-[16px] font-extrabold">✓ Akun Anda sudah dibuat</p>
         <p className="mt-1 leading-relaxed">
           Untuk membuka halaman ini lagi, masuk lewat link undangan dengan nama <b>{nama}</b> dan PIN Anda.
@@ -73,7 +73,7 @@ export default function BuatAkunPanel({ jenis, token, nama, punyaAkun, waUrl, on
   }
 
   return (
-    <section className="rounded-[14px] border-2 border-[#0F3D7A]/20 bg-white p-4 shadow-sm">
+    <section id="kartu-buat-pin" className="scroll-mt-4 rounded-[14px] border-2 border-[#0F3D7A]/20 bg-white p-4 shadow-sm">
       <h2 className="text-[17px] font-extrabold text-[#13213A]">Buat akun Anda</h2>
       <p className="mt-1 text-[13px] leading-relaxed text-[#44546C]">
         Terima kasih sudah bersedia. Buat PIN 4 digit sebagai akun (nama: <b>{nama}</b>). Setelah itu Anda dapat bergabung ke grup WhatsApp petugas.

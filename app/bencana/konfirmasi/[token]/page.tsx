@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, use as usePromise } from "react";
 import BuatAkunPanel from "../../undangan/BuatAkunPanel";
+import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
@@ -135,6 +136,8 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
   // layar otomatis digulir ke sana supaya petugas langsung melihatnya.
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const [gulirKeBanner, setGulirKeBanner] = useState(false);
+  // Modal "pastikan semua tahapan selesai" -- muncul begitu petugas menyatakan bersedia.
+  const [modalSelesaikan, setModalSelesaikan] = useState(false);
   useEffect(() => {
     if (!gulirKeBanner) return;
     const t = setTimeout(() => {
@@ -234,7 +237,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
         setUbahJawaban(false);
         setModeTolak(false);
         await muat();
-        if (bersedia) setGulirKeBanner(true);
+        if (bersedia) setModalSelesaikan(true);
       }
     } catch {
       setError("Gagal mengirim jawaban. Periksa koneksi internet, lalu coba lagi.");
@@ -382,6 +385,10 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
         rel="stylesheet"
       />
+
+      {modalSelesaikan && !info.punya_akun && (
+        <ModalSelesaikan nama={info.nama} onOk={() => setModalSelesaikan(false)} />
+      )}
 
       <div className="mx-auto max-w-lg">
         {/* ===== HEADER ===== */}
