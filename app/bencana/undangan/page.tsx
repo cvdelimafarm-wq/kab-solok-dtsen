@@ -80,7 +80,7 @@ export default function UndanganPage() {
   // (4 Okt 2026) Formulir "Daftar / Lengkapi Data" di bawah kartu login.
   const [bukaDaftar, setBukaDaftar] = useState(false);
   // Lolos verifikasi tetapi data belum lengkap: ditahan di sini supaya formulir Lengkapi Data tampil dulu.
-  const [lengkapi, setLengkapi] = useState<{ nama: string; path: string | null } | null>(null);
+  const [lengkapi, setLengkapi] = useState<{ nama: string; path: string | null; petugasId: number | null } | null>(null);
 
   function reset() {
     setError(null);
@@ -114,7 +114,7 @@ export default function UndanganPage() {
       if (typeof json?.sisa_percobaan === "number") setSisa(json.sisa_percobaan);
       if (json?.terkunci_sampai) setTerkunciSampai(json.terkunci_sampai as string);
       if (json?.ok && json.perlu_lengkapi) {
-        setLengkapi({ nama: json.nama as string, path: (json.path as string | null) ?? null });
+        setLengkapi({ nama: json.nama as string, path: (json.path as string | null) ?? null, petugasId: typeof json.petugas_id === "number" ? json.petugas_id : null });
         setBukaDaftar(true);
       } else if (json?.ok) {
         selesai(json);
@@ -277,14 +277,14 @@ export default function UndanganPage() {
             className="flex w-full items-center justify-between rounded-[14px] border border-dashed border-[#0F3D7A]/40 bg-white px-4 py-3 text-left shadow-sm"
           >
             <span>
-              <span className="block text-[14px] font-extrabold text-[#0F3D7A]">Data belum ditemukan?</span>
-              <span className="block text-[12px] text-slate-600">Daftar / Lengkapi Data (NIK, lokasi rumah, dll.)</span>
+              <span className="block text-[14px] font-extrabold text-[#0F3D7A]">Data belum lengkap?</span>
+              <span className="block text-[12px] text-slate-600">Lengkapi Data (pilih nama, lokasi rumah, dll.)</span>
             </span>
             <span className="text-[18px] font-extrabold text-[#0F3D7A]">→</span>
           </button>
         ) : (
           <DaftarLengkapiForm
-            namaAwal={lengkapi?.nama ?? nama}
+            pilihanAwal={lengkapi?.petugasId ? `p:${lengkapi.petugasId}` : ""}
             nikAwal={lengkapi ? nik : ""}
             emailAwal={lengkapi ? email : ""}
             tglAwal={lengkapi ? tgl : ""}
@@ -298,7 +298,7 @@ export default function UndanganPage() {
               setBukaDaftar(false);
               setLengkapi(null);
             }}
-            onLewati={lengkapi ? () => selesai(lengkapi) : undefined}
+            onLewati={lengkapi ? () => selesai({ nama: lengkapi.nama, path: lengkapi.path }) : undefined}
           />
         )}
 
@@ -312,7 +312,7 @@ export default function UndanganPage() {
             ))}
             {kolom.nama === "salah" && !bukaDaftar && (
               <p className="pt-1 text-[13px] text-slate-700">
-                Nama tidak ditemukan? Gunakan tombol <b>“Data belum ditemukan? Daftar / Lengkapi Data”</b> di bawah.
+                Nama tidak ditemukan? Gunakan tombol <b>“Data belum lengkap? Lengkapi Data”</b> di bawah, lalu pilih nama Anda dari daftar.
               </p>
             )}
             {adaSalah && sisa !== null && (

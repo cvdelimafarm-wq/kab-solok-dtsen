@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     // (4 Okt 2026) Data utk analisis wilayah tugas belum lengkap -> halaman menawarkan formulir Lengkapi Data
     // (bisa dilewati) sebelum membuka undangan.
     const perluLengkapi = await dataBelumLengkap(db, petugas.id);
-    return NextResponse.json({ ok: true, kolom, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path, perlu_lengkapi: perluLengkapi });
+    return NextResponse.json({ ok: true, kolom, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path, perlu_lengkapi: perluLengkapi, petugas_id: petugas.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
     return NextResponse.json({ error: message }, { status: 500 });
