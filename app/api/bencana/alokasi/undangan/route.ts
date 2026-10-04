@@ -94,7 +94,7 @@ export async function GET() {
 
     const { data: kandRaw, error: errKand } = await db
       .from("bencana_tawaran_menginap_kandidat")
-      .select("id, tawaran_id, petugas_id, token, status, catatan, dijawab_pada, dibuat_pada, bencana_tawaran_menginap(kecamatan, nagari)")
+      .select("id, tawaran_id, petugas_id, token, status, catatan, dijawab_pada, dibuat_pada, pola_menginap, jadwal_pelatihan, perkiraan_hari_libur, teman_menginap, alasan_kategori, bersedia_pulang_pergi, bencana_tawaran_menginap(kecamatan, nagari)")
       .order("dibuat_pada", { ascending: false });
     if (errKand) return NextResponse.json({ error: errKand.message }, { status: 500 });
     const kandTerakhir = new Map<number, Record<string, unknown>>();
@@ -167,6 +167,12 @@ export async function GET() {
                 catatan: (k.catatan as string | null) ?? null,
                 dijawab_pada: (k.dijawab_pada as string | null) ?? null,
                 dibuat_pada: k.dibuat_pada as string,
+                pola_menginap: (k.pola_menginap as string | null) ?? null,
+                jadwal_pelatihan: (k.jadwal_pelatihan as string[] | null) ?? null,
+                perkiraan_hari_libur: (k.perkiraan_hari_libur as string[] | null) ?? null,
+                teman_menginap: (k.teman_menginap as string | null) ?? null,
+                alasan_kategori: (k.alasan_kategori as string | null) ?? null,
+                bersedia_pulang_pergi: (k.bersedia_pulang_pergi as boolean | null) ?? null,
                 kecamatan: tw?.kecamatan ?? null,
                 nagari: tw?.nagari ?? null,
               }
@@ -176,7 +182,7 @@ export async function GET() {
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
     // ---- Usulan cadangan utk petugas yg menolak & masih memegang plot.
-    const menolak = rows.filter((r) => r.jumlah_plot > 0 && (r.status_kontak === "menolak" || r.tawaran?.status === "tidak_bersedia"));
+    const menolak = rows.filter((r) => r.jumlah_plot > 0 && (r.status_kontak === "menolak" || (r.tawaran?.status === "tidak_bersedia" && r.tawaran.bersedia_pulang_pergi !== true)));
     const cadangan: Record<number, { id: number; nama: string; no_hp: string | null; nagari: string | null; kecamatan: string | null; nilai_kinerja: number | null; kedekatan: string }[]> = {};
     if (menolak.length > 0) {
       const { data: calon } = await db

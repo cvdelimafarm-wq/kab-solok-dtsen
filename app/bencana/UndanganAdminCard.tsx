@@ -22,6 +22,12 @@ type Tawaran = {
   catatan: string | null;
   dijawab_pada: string | null;
   dibuat_pada: string;
+  pola_menginap: string | null;
+  jadwal_pelatihan: string[] | null;
+  perkiraan_hari_libur: string[] | null;
+  teman_menginap: string | null;
+  alasan_kategori: string | null;
+  bersedia_pulang_pergi: boolean | null;
   kecamatan: string | null;
   nagari: string | null;
 };
@@ -52,7 +58,7 @@ type Baris = {
 
 type Cadangan = { id: number; nama: string; no_hp: string | null; nagari: string | null; kecamatan: string | null; nilai_kinerja: number | null; kedekatan: string };
 
-type Status = "belum_dibuka" | "dibaca" | "bersedia" | "menolak";
+type Status = "belum_dibuka" | "dibaca" | "bersedia" | "pulang_pergi" | "menolak";
 
 const JAM_TOLAK = 24;
 // Alamat resmi link undangan (tetap, tidak bergantung alamat tempat admin membuka halaman).
@@ -61,7 +67,7 @@ const URL_UNDANGAN = "https://bps-solokkab.up.railway.app/undangan";
 function statusBaris(r: Baris): Status {
   if (r.tawaran) {
     if (r.tawaran.status === "bersedia") return "bersedia";
-    if (r.tawaran.status === "tidak_bersedia") return "menolak";
+    if (r.tawaran.status === "tidak_bersedia") return r.tawaran.bersedia_pulang_pergi === true ? "pulang_pergi" : "menolak";
   } else {
     if (r.status_kontak === "menolak") return "menolak";
     if (r.status_kontak === "diterima") return "bersedia";
@@ -95,8 +101,31 @@ const BADGE: Record<Status, { label: string; kelas: string }> = {
   belum_dibuka: { label: "Belum dibuka", kelas: "bg-slate-100 text-slate-700" },
   dibaca: { label: "Sudah dibaca", kelas: "bg-amber-100 text-amber-800" },
   bersedia: { label: "Bersedia", kelas: "bg-emerald-100 text-emerald-800" },
+  pulang_pergi: { label: "Pulang-pergi", kelas: "bg-amber-100 text-amber-800" },
   menolak: { label: "Menolak", kelas: "bg-red-100 text-red-800" },
 };
+
+function DetailJawaban({ t }: { t: Tawaran }) {
+  if (!t.status) return null;
+  const tgl = (a: string[] | null) => (a && a.length ? a.map((x) => x.slice(8, 10)).join(", ") : "-");
+  if (t.status === "bersedia") {
+    return (
+      <div className="mt-1 space-y-0.5 text-[11px] text-slate-700">
+        <p>Pola: {t.pola_menginap === "penuh" ? "menginap penuh selama pendataan" : t.pola_menginap === "pulang_akhir_pekan" ? "pulang saat akhir pekan" : (t.pola_menginap ?? "-")}</p>
+        <p>Pelatihan: {t.jadwal_pelatihan?.length ? t.jadwal_pelatihan.join(", ") : "-"} · Perkiraan libur (tgl Okt): {tgl(t.perkiraan_hari_libur)}</p>
+        {t.teman_menginap && <p>Teman menginap: {t.teman_menginap}</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1 space-y-0.5 text-[11px] text-slate-700">
+      <p>
+        Tidak bersedia menginap{t.alasan_kategori ? ` (${t.alasan_kategori})` : ""} ·{" "}
+        {t.bersedia_pulang_pergi === true ? "tetap bersedia pulang-pergi" : t.bersedia_pulang_pergi === false ? "tidak bersedia pulang-pergi" : "pulang-pergi: -"}
+      </p>
+    </div>
+  );
+}
 
 export default function UndanganAdminCard({
   onLihatBaris,
@@ -215,7 +244,7 @@ export default function UndanganAdminCard({
 
   const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran), [rows]);
   const hitung = useMemo(() => {
-    const h: Record<Status, number> = { belum_dibuka: 0, dibaca: 0, bersedia: 0, menolak: 0 };
+    const h: Record<Status, number> = { belum_dibuka: 0, dibaca: 0, bersedia: 0, pulang_pergi: 0, menolak: 0 };
     for (const r of semua) h[statusBaris(r)]++;
     return h;
   }, [semua]);
@@ -351,7 +380,7 @@ export default function UndanganAdminCard({
               {bagian === "monitor" && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-1.5">
-                    {(["semua", "belum_dibuka", "dibaca", "bersedia", "menolak"] as const).map((f) => (
+                    {(["semua", "belum_dibuka", "dibaca", "bersedia", "pulang_pergi", "menolak"] as const).map((f) => (
                       <button
                         key={f}
                         type="button"
@@ -376,6 +405,7 @@ export default function UndanganAdminCard({
                             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${BADGE[st].kelas}`}>{BADGE[st].label}</span>
                           </div>
                           <Keterangan r={r} />
+                          {r.tawaran && <DetailJawaban t={r.tawaran} />}
                           <div className="mt-2">
                             <Aksi r={r} />
                           </div>
@@ -441,6 +471,8 @@ export default function UndanganAdminCard({
                       const warna =
                         st === "bersedia"
                           ? "border-emerald-400 bg-emerald-50"
+                          : st === "pulang_pergi"
+                          ? "border-amber-400 bg-amber-50"
                           : st === "menolak"
                           ? "border-red-400 bg-red-50"
                           : st === "dibaca"
@@ -461,11 +493,12 @@ export default function UndanganAdminCard({
                               <p className="text-[11px] text-slate-500">Domisili: {[r.alamat_nagari, r.alamat_kecamatan].filter(Boolean).join(", ") || "-"}</p>
                             </div>
                             <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${st ? BADGE[st].kelas : "bg-slate-100 text-slate-700"}`}>
-                              {st ? (st === "bersedia" ? "Bersedia menginap" : st === "menolak" ? "Menolak menginap" : BADGE[st].label) : "Belum ditawari"}
+                              {st ? (st === "bersedia" ? "Bersedia menginap" : st === "pulang_pergi" ? "Tidak menginap, bersedia pulang-pergi" : st === "menolak" ? "Menolak menginap" : BADGE[st].label) : "Belum ditawari"}
                             </span>
                           </div>
                           {r.tawaran && <Keterangan r={r} />}
-                          {r.tawaran?.status === "tidak_bersedia" && r.tawaran.catatan && <p className="mt-1 text-[11px] text-red-700">Alasan: {r.tawaran.catatan}</p>}
+                          {r.tawaran && <DetailJawaban t={r.tawaran} />}
+                          {r.tawaran?.status === "tidak_bersedia" && r.tawaran.catatan && <p className={`mt-1 text-[11px] ${r.tawaran.bersedia_pulang_pergi ? "text-amber-800" : "text-red-700"}`}>Alasan: {r.tawaran.catatan}</p>}
                           {r.tawaran && (
                             <div className="mt-2">
                               <Aksi r={r} />
