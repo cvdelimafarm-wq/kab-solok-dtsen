@@ -128,7 +128,7 @@ export async function GET() {
 
     const { data: undRaw } = await db
       .from("bencana_undangan")
-      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at");
+      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at, bergabung_grup_wa_at");
     const und = new Map<number, Record<string, unknown>>();
     for (const u of (undRaw ?? []) as Record<string, unknown>[]) und.set(u.petugas_id as number, u);
 
@@ -172,6 +172,7 @@ export async function GET() {
           wa_pribadi_at: (u?.wa_pribadi_at as string | null) ?? null,
           wa_pribadi_jumlah: (u?.wa_pribadi_jumlah as number | null) ?? 0,
           akun_dibuat_at: (u?.akun_dibuat_at as string | null) ?? null,
+          grup_wa_at: (u?.bergabung_grup_wa_at as string | null) ?? null,
           terkunci: kunciAktif.has(`verif:${nk}`) || kunciAktif.has(`pin:${nk}`),
           tawaran: k
             ? {
@@ -298,6 +299,16 @@ export async function POST(req: NextRequest) {
 
     const { data: p } = await db.from("bencana_petugas").select("id, nama, status_kontak_pendaftaran_bencana").eq("id", petugasId).maybeSingle();
     if (!p) return NextResponse.json({ error: "Petugas tidak ditemukan." }, { status: 404 });
+
+    // (4 Okt 2026) Tandai petugas sudah / belum masuk grup WA (dicek admin dari daftar anggota grup).
+    if (aksi === "grup_wa") {
+      const bergabung = body?.bergabung !== false;
+      const { error } = await db
+        .from("bencana_undangan")
+        .upsert({ petugas_id: petugasId, bergabung_grup_wa_at: bergabung ? new Date().toISOString() : null }, { onConflict: "petugas_id" });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
 
     if (aksi === "wa_pribadi") {
       const { data: lama } = await db.from("bencana_undangan").select("wa_pribadi_jumlah").eq("petugas_id", petugasId).maybeSingle();

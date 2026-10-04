@@ -56,6 +56,7 @@ type Baris = {
   wa_pribadi_at: string | null;
   wa_pribadi_jumlah: number;
   akun_dibuat_at: string | null;
+  grup_wa_at: string | null; // waktu ditandai sudah masuk grup WA
   terkunci: boolean;
   tawaran: Tawaran | null;
 };
@@ -147,6 +148,7 @@ export default function UndanganAdminCard({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [filter, setFilter] = useState<Status | "semua">("semua");
+  const [filterGrup, setFilterGrup] = useState<"semua" | "sudah" | "belum">("semua");
   const [threshold, setThreshold] = useState(10);
   const [dipilih, setDipilih] = useState<Set<number>>(new Set());
   const [buatBusy, setBuatBusy] = useState(false);
@@ -191,6 +193,14 @@ export default function UndanganAdminCard({
       await muat();
       if (aksi === "tolak") onBerubah?.();
     }
+    setBusyId(null);
+  }
+
+  async function tandaiGrupWa(r: Baris, bergabung: boolean) {
+    setBusyId(r.id);
+    setError(null);
+    setInfo(null);
+    if (await kirim({ aksi: "grup_wa", petugas_id: r.id, bergabung })) await muat();
     setBusyId(null);
   }
 
@@ -253,9 +263,14 @@ export default function UndanganAdminCard({
     for (const r of semua) h[statusBaris(r)]++;
     return h;
   }, [semua]);
+  const jmlGrup = useMemo(() => semua.filter((r) => !!r.grup_wa_at).length, [semua]);
   const tampil = useMemo(
-    () => semua.filter((r) => filter === "semua" || statusBaris(r) === filter).sort((a, b) => a.nama.localeCompare(b.nama, "id")),
-    [semua, filter]
+    () =>
+      semua
+        .filter((r) => filter === "semua" || statusBaris(r) === filter)
+        .filter((r) => filterGrup === "semua" || (filterGrup === "sudah" ? !!r.grup_wa_at : !r.grup_wa_at))
+        .sort((a, b) => a.nama.localeCompare(b.nama, "id")),
+    [semua, filter, filterGrup]
   );
   const jauh = useMemo(
     () =>
@@ -303,6 +318,15 @@ export default function UndanganAdminCard({
             💬 {r.wa_pribadi_jumlah > 0 ? "Kirim WA pribadi lagi" : "Kirim WA pribadi"}
           </button>
         )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => tandaiGrupWa(r, !r.grup_wa_at)}
+          title={r.grup_wa_at ? "Batalkan tanda sudah masuk grup WA" : "Tandai sudah masuk grup WA (cek di daftar anggota grup)"}
+          className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {r.grup_wa_at ? "↩ Batalkan tanda grup WA" : "✓ Tandai sudah masuk grup WA"}
+        </button>
         {r.terkunci && (
           <button
             type="button"
@@ -334,6 +358,7 @@ export default function UndanganAdminCard({
         {r.dibaca_at ? `Dibaca ${waktuRingkas(r.dibaca_at)}` : "Belum membuka undangan"}
         {r.wa_pribadi_jumlah > 0 && ` · WA pribadi ${r.wa_pribadi_jumlah}x (terakhir ${waktuRingkas(r.wa_pribadi_at)})`}
         {r.akun_dibuat_at && ` · akun dibuat ${waktuRingkas(r.akun_dibuat_at)}`}
+        {r.grup_wa_at && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Sudah masuk grup WA</span>}
         {r.terkunci && " · TERKUNCI (salah berulang)"}
         {!r.no_hp && " · nomor HP kosong"}
       </p>
@@ -405,6 +430,19 @@ export default function UndanganAdminCard({
                       </button>
                     ))}
                   </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-slate-500">Grup WA:</span>
+                    {(["semua", "sudah", "belum"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setFilterGrup(g)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${filterGrup === g ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                      >
+                        {g === "semua" ? "Semua" : g === "sudah" ? `Sudah masuk (${jmlGrup})` : `Belum masuk (${semua.length - jmlGrup})`}
+                      </button>
+                    ))}
+                  </div>
                   <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
                     {tampil.length === 0 && <p className="text-xs text-slate-500">Tidak ada petugas pada filter ini.</p>}
                     {tampil.map((r) => {
@@ -414,6 +452,13 @@ export default function UndanganAdminCard({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm font-medium text-blue-950">{r.nama}</span>
+                              <span
+                                className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                  r.peran === "pml" ? "bg-purple-100 text-purple-800" : "bg-sky-100 text-sky-800"
+                                }`}
+                              >
+                                {r.peran === "pml" ? "PML" : "PPL"}
+                              </span>
                               <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : r.peran === "pml" ? `konfirmasi PML (${r.jumlah_ppl} PPL)` : "konfirmasi biasa"}</span>
                             </div>
                             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${BADGE[st].kelas}`}>{BADGE[st].label}</span>
