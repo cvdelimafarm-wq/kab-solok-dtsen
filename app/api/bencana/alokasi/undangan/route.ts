@@ -1,7 +1,7 @@
 // app/api/bencana/alokasi/undangan/route.ts
 //
 // (4 Okt 2026) API ADMIN utk kartu "Undangan Konfirmasi" di tab Alokasi Petugas
-// (lihat app/bencana/UndanganAdminCard.tsx). Sisi publiknya: /bencana/undangan
+// (lihat app/bencana/UndanganAdminCard.tsx). Sisi publiknya: /undangan
 // (+ app/api/bencana/undangan/*).
 //
 // GET  -> 1 baris per petugas yg SUDAH diplot ATAU pernah ditawari menginap:

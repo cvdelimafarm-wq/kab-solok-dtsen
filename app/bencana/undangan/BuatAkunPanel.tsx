@@ -5,7 +5,7 @@ import { useState } from "react";
 // (4 Okt 2026) Panel "Buat Akun" (nama + PIN 4 digit) -- tampil di halaman
 // konfirmasi biasa & tawaran menginap SETELAH petugas menyatakan bersedia.
 // Grup WhatsApp baru dibuka setelah akun dibuat (waUrl dikirim server hanya
-// jika akun sudah ada). Akun dipakai untuk masuk lagi lewat /bencana/undangan.
+// jika akun sudah ada). Akun dipakai untuk masuk lagi lewat /undangan.
 
 type Props = {
   jenis: "biasa" | "menginap";

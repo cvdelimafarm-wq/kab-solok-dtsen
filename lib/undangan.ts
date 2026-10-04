@@ -7,11 +7,11 @@
 //
 // SUMBER DATA PEMBANDING (tidak menyalin data pribadi ke tabel baru):
 //   - NIK & email  : bencana_mitra (dicocokkan lewat nama yg sudah dinormalisasi).
-//   - Tanggal lahir: DITURUNKAN dari NIK (digit 7-12 = hhbbtt, perempuan hh+40).
-//     Abad tidak tersimpan di NIK, jadi yg dicek hanya hari, bulan, dan 2 digit
-//     tahun -- cukup utk verifikasi, & tidak butuh tabel tanggal lahir terpisah.
-//   - Kalau NIK petugas TIDAK ADA di sumber, kolom NIK & tanggal lahir tidak bisa
-//     dicek -> statusnya 'belum_ada': diisi sendiri oleh petugas & disimpan di
+//   - Tanggal lahir: bencana_mitra.tanggal_lahir -- tanggal EKSPLISIT dari data yg
+//     dikirim admin (4 Okt 2026), BUKAN diturunkan dari NIK (tanggal di NIK bisa
+//     berbeda dgn tanggal lahir riil).
+//   - Kalau NIK / email / tanggal lahir petugas TIDAK ADA di sumber, kolom itu tidak
+//     bisa dicek -> statusnya 'belum_ada': diisi sendiri oleh petugas & disimpan di
 //     bencana_undangan (tabel RLS-on, hanya service role), tanpa dinilai benar/salah.
 //
 // PEMBATAS: tiap percobaan verifikasi / login PIN yg salah dihitung per kunci
@@ -59,24 +59,6 @@ export function tanggalValid(iso: string): boolean {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d && y >= 1930 && y <= 2012;
-}
-
-/** Hari, bulan, tahun(2 digit) dari NIK; perempuan = hari + 40. */
-export function tanggalDariNik(nik: string): { d: number; m: number; yy: number } | null {
-  if (!nikValid(nik)) return null;
-  let d = Number(nik.slice(6, 8));
-  if (d > 40) d -= 40;
-  const m = Number(nik.slice(8, 10));
-  const yy = Number(nik.slice(10, 12));
-  if (d < 1 || d > 31 || m < 1 || m > 12) return null;
-  return { d, m, yy };
-}
-
-export function cocokTanggalDenganNik(nik: string, iso: string): boolean {
-  const t = tanggalDariNik(nik);
-  if (!t || !tanggalValid(iso)) return false;
-  const [y, m, d] = iso.split("-").map(Number);
-  return d === t.d && m === t.m && y % 100 === t.yy;
 }
 
 // ---------- PIN ----------

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 // ------------------------------------------------------------------------
 // (4 Okt 2026) Kartu admin "Undangan Konfirmasi" di tab Alokasi Petugas.
-// Sisi publik: /bencana/undangan (1 link utk WA grup, verifikasi nama + NIK +
+// Sisi publik: /undangan (1 link utk WA grup, verifikasi nama + NIK +
 // email + tanggal lahir). API: /api/bencana/alokasi/undangan.
 //
 // 3 bagian:
@@ -55,6 +55,8 @@ type Cadangan = { id: number; nama: string; no_hp: string | null; nagari: string
 type Status = "belum_dibuka" | "dibaca" | "bersedia" | "menolak";
 
 const JAM_TOLAK = 24;
+// Alamat resmi link undangan (tetap, tidak bergantung alamat tempat admin membuka halaman).
+const URL_UNDANGAN = "https://bps-solokkab.up.railway.app/undangan";
 
 function statusBaris(r: Baris): Status {
   if (r.tawaran) {
@@ -164,7 +166,7 @@ export default function UndanganAdminCard({
       setError(`${r.nama}: nomor HP belum ada / tidak valid.`);
       return;
     }
-    const link = `${window.location.origin}/bencana/undangan`;
+    const link = URL_UNDANGAN;
     const menginap = !!r.tawaran;
     const teks = menginap
       ? `Halo ${r.nama}, dari BPS Kabupaten Solok. Ada tawaran pendataan bencana dengan skema menginap untuk Anda. Silakan buka ${link}, isi nama, NIK, email, dan tanggal lahir untuk membuka tawarannya. Terima kasih.`
@@ -176,7 +178,7 @@ export default function UndanganAdminCard({
   }
 
   async function salinLinkUndangan() {
-    const link = `${window.location.origin}/bencana/undangan`;
+    const link = URL_UNDANGAN;
     try {
       await navigator.clipboard.writeText(link);
       setInfo("Link undangan tersalin. Tempel di WA grup.");

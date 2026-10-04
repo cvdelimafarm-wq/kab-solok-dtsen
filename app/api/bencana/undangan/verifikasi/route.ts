@@ -23,7 +23,6 @@ import {
   cariPetugasByNama,
   catatGagal,
   cekKunci,
-  cocokTanggalDenganNik,
   emailValid,
   nikValid,
   normEmail,
@@ -84,17 +83,19 @@ export async function POST(req: NextRequest) {
       kolom = { nama: "salah", nik: "belum_dicek", email: "belum_dicek", tanggal_lahir: "belum_dicek" };
     } else {
       const kunciNama = normNama(namaInput);
-      const { data: mitraSemua } = await db.from("bencana_mitra").select("nama, nik, email");
+      const { data: mitraSemua } = await db.from("bencana_mitra").select("nama, nik, email, tanggal_lahir");
       const baris = (mitraSemua ?? []).filter((m) => normNama(m.nama as string) === kunciNama);
       const nikSumber = baris.map((m) => normNik((m.nik as string) ?? "")).filter(nikValid);
       const emailSumber = baris.map((m) => normEmail((m.email as string) ?? "")).filter((e) => e !== "");
+      // Tanggal lahir = tanggal EKSPLISIT dari data yg dikirim admin (bencana_mitra.tanggal_lahir),
+      // BUKAN diturunkan dari NIK (tanggal di NIK bisa berbeda dgn tanggal lahir riil).
+      const tglSumber = baris.map((m) => ((m.tanggal_lahir as string | null) ?? "").slice(0, 10)).filter((t) => t !== "");
 
       kolom = {
         nama: "benar",
         nik: nikSumber.length === 0 ? "belum_ada" : nikSumber.includes(nik) ? "benar" : "salah",
         email: emailSumber.length === 0 ? "belum_ada" : emailSumber.includes(email) ? "benar" : "salah",
-        tanggal_lahir:
-          nikSumber.length === 0 ? "belum_ada" : nikSumber.some((n) => cocokTanggalDenganNik(n, tgl)) ? "benar" : "salah",
+        tanggal_lahir: tglSumber.length === 0 ? "belum_ada" : tglSumber.includes(tgl) ? "benar" : "salah",
       };
       belumAda = (["nik", "email", "tanggal_lahir"] as const).filter((k) => kolom[k] === "belum_ada");
     }
