@@ -1,0 +1,91 @@
+diff --git a/app/api/bencana/alokasi/undangan/route.ts b/app/api/bencana/alokasi/undangan/route.ts
+index d53eb4b..4830e32 100644
+--- a/app/api/bencana/alokasi/undangan/route.ts
++++ b/app/api/bencana/alokasi/undangan/route.ts
+@@ -128,7 +128,7 @@ export async function GET() {
+ 
+     const { data: undRaw } = await db
+       .from("bencana_undangan")
+-      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at, bergabung_grup_wa_at");
++      .select("petugas_id, diverifikasi_at, terakhir_masuk_at, wa_pribadi_at, wa_pribadi_jumlah, akun_dibuat_at, bergabung_grup_wa_at, broadcast_grup_wa_at");
+     const und = new Map<number, Record<string, unknown>>();
+     for (const u of (undRaw ?? []) as Record<string, unknown>[]) und.set(u.petugas_id as number, u);
+ 
+@@ -173,6 +173,7 @@ export async function GET() {
+           wa_pribadi_jumlah: (u?.wa_pribadi_jumlah as number | null) ?? 0,
+           akun_dibuat_at: (u?.akun_dibuat_at as string | null) ?? null,
+           grup_wa_at: (u?.bergabung_grup_wa_at as string | null) ?? null,
++          broadcast_at: (u?.broadcast_grup_wa_at as string | null) ?? null,
+           terkunci: kunciAktif.has(`verif:${nk}`) || kunciAktif.has(`pin:${nk}`),
+           tawaran: k
+             ? {
+diff --git a/app/bencana/UndanganAdminCard.tsx b/app/bencana/UndanganAdminCard.tsx
+index ba399f9..54a2c5f 100644
+--- a/app/bencana/UndanganAdminCard.tsx
++++ b/app/bencana/UndanganAdminCard.tsx
+@@ -57,6 +57,7 @@ type Baris = {
+   wa_pribadi_jumlah: number;
+   akun_dibuat_at: string | null;
+   grup_wa_at: string | null; // waktu ditandai sudah masuk grup WA
++  broadcast_at: string | null; // waktu broadcast ajakan gabung grup dikirim (WA pribadi)
+   terkunci: boolean;
+   tawaran: Tawaran | null;
+ };
+@@ -148,7 +149,7 @@ export default function UndanganAdminCard({
+   const [busyId, setBusyId] = useState<number | null>(null);
+   const [info, setInfo] = useState<string | null>(null);
+   const [filter, setFilter] = useState<Status | "semua">("semua");
+-  const [filterGrup, setFilterGrup] = useState<"semua" | "sudah" | "belum">("semua");
++  const [filterGrup, setFilterGrup] = useState<"semua" | "sudah" | "menunggu" | "belum">("semua");
+   const [threshold, setThreshold] = useState(10);
+   const [dipilih, setDipilih] = useState<Set<number>>(new Set());
+   const [buatBusy, setBuatBusy] = useState(false);
+@@ -264,11 +265,15 @@ export default function UndanganAdminCard({
+     return h;
+   }, [semua]);
+   const jmlGrup = useMemo(() => semua.filter((r) => !!r.grup_wa_at).length, [semua]);
++  const jmlMenunggu = useMemo(() => semua.filter((r) => !!r.broadcast_at && !r.grup_wa_at).length, [semua]);
+   const tampil = useMemo(
+     () =>
+       semua
+         .filter((r) => filter === "semua" || statusBaris(r) === filter)
+-        .filter((r) => filterGrup === "semua" || (filterGrup === "sudah" ? !!r.grup_wa_at : !r.grup_wa_at))
++        .filter((r) =>
++          filterGrup === "semua" ||
++          (filterGrup === "sudah" ? !!r.grup_wa_at : filterGrup === "menunggu" ? !!r.broadcast_at && !r.grup_wa_at : !r.grup_wa_at)
++        )
+         .sort((a, b) => a.nama.localeCompare(b.nama, "id")),
+     [semua, filter, filterGrup]
+   );
+@@ -359,6 +364,14 @@ export default function UndanganAdminCard({
+         {r.wa_pribadi_jumlah > 0 && ` · WA pribadi ${r.wa_pribadi_jumlah}x (terakhir ${waktuRingkas(r.wa_pribadi_at)})`}
+         {r.akun_dibuat_at && ` · akun dibuat ${waktuRingkas(r.akun_dibuat_at)}`}
+         {r.grup_wa_at && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">✓ Sudah masuk grup WA</span>}
++        {r.broadcast_at && !r.grup_wa_at && (
++          <span
++            className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
++            title={`Broadcast ajakan gabung grup dikirim ${waktuRingkas(r.broadcast_at)}`}
++          >
++            📨 Broadcast terkirim · menunggu bergabung grup
++          </span>
++        )}
+         {r.terkunci && " · TERKUNCI (salah berulang)"}
+         {!r.no_hp && " · nomor HP kosong"}
+       </p>
+@@ -432,14 +445,14 @@ export default function UndanganAdminCard({
+                   </div>
+                   <div className="flex flex-wrap items-center gap-1.5">
+                     <span className="text-[11px] font-medium text-slate-500">Grup WA:</span>
+-                    {(["semua", "sudah", "belum"] as const).map((g) => (
++                    {(["semua", "sudah", "menunggu", "belum"] as const).map((g) => (
+                       <button
+                         key={g}
+                         type="button"
+                         onClick={() => setFilterGrup(g)}
+                         className={`rounded-full px-3 py-1 text-xs font-medium ${filterGrup === g ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                       >
+-                        {g === "semua" ? "Semua" : g === "sudah" ? `Sudah masuk (${jmlGrup})` : `Belum masuk (${semua.length - jmlGrup})`}
++                        {g === "semua" ? "Semua" : g === "sudah" ? `Sudah masuk (${jmlGrup})` : g === "menunggu" ? `Broadcast terkirim, menunggu (${jmlMenunggu})` : `Belum masuk (${semua.length - jmlGrup})`}
+                       </button>
+                     ))}
+                   </div>

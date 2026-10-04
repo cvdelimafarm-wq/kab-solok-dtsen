@@ -1,0 +1,763 @@
+diff --git a/app/atur-pin/layout.tsx b/app/atur-pin/layout.tsx
+new file mode 100644
+index 0000000..db252cf
+--- /dev/null
++++ b/app/atur-pin/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Atur Nomor HP dan PIN",
++  "Aktivasi akun dengan kode dari BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/bencana/layout.tsx b/app/bencana/layout.tsx
+new file mode 100644
+index 0000000..8eb5b05
+--- /dev/null
++++ b/app/bencana/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Pendataan Bencana",
++  "Identifikasi wilayah terdampak bencana, konfirmasi, dan penugasan petugas pendataan BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/bencana/opengraph-image.tsx b/app/bencana/opengraph-image.tsx
+new file mode 100644
+index 0000000..870e261
+--- /dev/null
++++ b/app/bencana/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Pendataan Bencana";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Pendataan Bencana", "Identifikasi wilayah terdampak dan penugasan petugas");
++}
+diff --git a/app/bencana/undangan/layout.tsx b/app/bencana/undangan/layout.tsx
+new file mode 100644
+index 0000000..1b092be
+--- /dev/null
++++ b/app/bencana/undangan/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Pendaftaran Petugas Pendataan Bencana",
++  "Lengkapi data dan bergabung ke grup WhatsApp petugas pendataan bencana BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/bencana/undangan/opengraph-image.tsx b/app/bencana/undangan/opengraph-image.tsx
+new file mode 100644
+index 0000000..440d3a6
+--- /dev/null
++++ b/app/bencana/undangan/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Pendaftaran Petugas Pendataan Bencana";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Pendaftaran Petugas Pendataan Bencana", "Lengkapi data dan bergabung ke grup WhatsApp petugas");
++}
+diff --git a/app/dashboard/layout.tsx b/app/dashboard/layout.tsx
+index b185b1f..c370cd1 100644
+--- a/app/dashboard/layout.tsx
++++ b/app/dashboard/layout.tsx
+@@ -1,7 +1,14 @@
+ import { redirect } from "next/navigation";
+ import { createClient } from "@/lib/supabase/server";
+ import LogoutButton from "./logout-button";
++import Link from "next/link";
+ import BrandBps from "@/app/components/BrandBps";
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Usulan Update Data DTSEN",
++  "Pengusulan update data DTSEN oleh Wali Jorong, verifikasi Wali Nagari, dan pemeriksaan BPS Kabupaten Solok."
++);
+ 
+ export default async function DashboardLayout({
+   children,
+@@ -14,7 +21,7 @@ export default async function DashboardLayout({
+   } = await supabase.auth.getUser();
+ 
+   if (!user) {
+-    redirect("/login");
++    redirect("/login?next=/dashboard");
+   }
+ 
+   const { data: profile } = await supabase
+@@ -39,7 +46,12 @@ export default async function DashboardLayout({
+                 : "Operator Wali Nagari"}
+             </p>
+           </div>
+-          <LogoutButton />
++          <div className="flex items-center gap-4">
++            <Link href="/" className="text-sm font-medium text-navy-400 hover:text-navy-700">
++              Portal
++            </Link>
++            <LogoutButton />
++          </div>
+         </div>
+       </header>
+       <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
+diff --git a/app/dashboard/logout-button.tsx b/app/dashboard/logout-button.tsx
+index 2ed3168..3d72f0a 100644
+--- a/app/dashboard/logout-button.tsx
++++ b/app/dashboard/logout-button.tsx
+@@ -3,7 +3,11 @@
+ import { useRouter } from "next/navigation";
+ import { createClient } from "@/lib/supabase/client";
+ 
+-export default function LogoutButton() {
++export default function LogoutButton({
++  className = "text-sm font-medium text-navy-400 hover:text-navy-700",
++}: {
++  className?: string;
++}) {
+   const router = useRouter();
+   const supabase = createClient();
+ 
+@@ -16,7 +20,7 @@ export default function LogoutButton() {
+   return (
+     <button
+       onClick={handleLogout}
+-      className="text-sm font-medium text-navy-400 hover:text-navy-700"
++      className={className}
+     >
+       Keluar
+     </button>
+diff --git a/app/dashboard/opengraph-image.tsx b/app/dashboard/opengraph-image.tsx
+new file mode 100644
+index 0000000..3b6cf00
+--- /dev/null
++++ b/app/dashboard/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Usulan Update Data DTSEN";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Usulan Update Data DTSEN", "Pengusulan, verifikasi Wali Nagari, dan pemeriksaan BPS");
++}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index 01fdfa7..e2bce00 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -1,6 +1,7 @@
+ import type { Metadata, Viewport } from "next";
+ import { Plus_Jakarta_Sans } from "next/font/google";
+ import "./globals.css";
++import { ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
+ 
+ // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
+ // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
+@@ -19,9 +20,18 @@ const jakarta = Plus_Jakarta_Sans({
+ });
+ 
+ export const metadata: Metadata = {
+-  title: "Usulan Update Data DTSEN - Kabupaten Solok",
+-  description:
+-    "Aplikasi pengusulan update data DTSEN oleh Wali Jorong, verifikasi Wali Nagari, dan pemeriksaan BPS Kabupaten Solok.",
++  metadataBase: new URL(ALAMAT_DASAR),
++  title: { default: NAMA_PORTAL, template: "%s · BPS Kabupaten Solok" },
++  description: DESKRIPSI_PORTAL,
++  applicationName: NAMA_PORTAL,
++  openGraph: {
++    type: "website",
++    siteName: NAMA_PORTAL,
++    locale: "id_ID",
++    title: NAMA_PORTAL,
++    description: DESKRIPSI_PORTAL,
++  },
++  twitter: { card: "summary_large_image", title: NAMA_PORTAL, description: DESKRIPSI_PORTAL },
+ };
+ 
+ export default function RootLayout({
+diff --git a/app/login/layout.tsx b/app/login/layout.tsx
+new file mode 100644
+index 0000000..e02ac4c
+--- /dev/null
++++ b/app/login/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Masuk",
++  "Masuk dengan nomor HP dan PIN untuk mengakses aplikasi BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/login/page.tsx b/app/login/page.tsx
+index 879fffb..990931e 100644
+--- a/app/login/page.tsx
++++ b/app/login/page.tsx
+@@ -33,74 +33,111 @@ export default function LoginPage() {
+       return;
+     }
+ 
+-    router.push("/dashboard");
++    // Arahkan sesuai peran: Operator Wali Nagari -> dashboard DTSEN; staf BPS/admin -> portal.
++    // Kalau tadinya membuka halaman yang butuh login (?next=/...), kembali ke halaman itu.
++    const next = new URLSearchParams(window.location.search).get("next");
++    const nextAman = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
++    let tujuan = nextAman;
++    if (!tujuan) {
++      const { data: auth } = await supabase.auth.getUser();
++      const { data: profile } = auth.user
++        ? await supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle()
++        : { data: null };
++      tujuan = profile?.role === "operator_nagari" ? "/dashboard" : "/";
++    }
++
++    router.push(tujuan);
+     router.refresh();
+   }
+ 
+   return (
+-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16">
+-      <BrandBps className="text-sm font-medium text-navy-400" ukuran={40} />
+-      <h1 className="mt-2 text-2xl font-semibold text-navy-900">
+-        Masuk ke dashboard
+-      </h1>
+-      <p className="mt-1 text-sm text-ink/60">
+-        Untuk Operator Wali Nagari dan petugas BPS.
+-      </p>
+-
+-      <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
++    <main className="grid min-h-screen bg-paper lg:grid-cols-2">
++      <aside className="hidden flex-col justify-between bg-gradient-to-br from-navy-700 to-navy-900 p-10 text-white lg:flex">
+         <div>
+-          <label htmlFor="nomor_hp" className="text-sm font-medium text-ink">
+-            Nomor HP
+-          </label>
+-          <input
+-            id="nomor_hp"
+-            type="tel"
+-            inputMode="numeric"
+-            placeholder="08xxxxxxxxxx"
+-            required
+-            value={nomorHp}
+-            onChange={(e) => setNomorHp(e.target.value)}
+-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-ink outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+-          />
+-        </div>
+-        <div>
+-          <label htmlFor="pin" className="text-sm font-medium text-ink">
+-            PIN (6 digit)
+-          </label>
+-          <input
+-            id="pin"
+-            type="password"
+-            inputMode="numeric"
+-            maxLength={6}
+-            required
+-            value={pin}
+-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+-            className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-ink tracking-widest outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
+-          />
++          <BrandBps kotakPutih ukuran={40} className="text-sm font-semibold" teksClassName="text-white" />
++          <h2 className="mt-10 text-3xl font-bold leading-tight">
++            Portal Layanan
++            <br />
++            BPS Kabupaten Solok
++          </h2>
++          <p className="mt-3 max-w-sm text-sm text-navy-100">
++            Masuk sekali, langsung diarahkan ke aplikasi sesuai peran Anda.
++          </p>
++          <ul className="mt-6 list-disc space-y-1 pl-5 text-sm text-navy-100">
++            <li>Operator Wali Nagari: Dashboard Usulan DTSEN</li>
++            <li>Staf &amp; admin BPS: Portal dan seluruh monitoring</li>
++          </ul>
+         </div>
++        <p className="text-xs text-navy-100/70">&copy; BPS Kabupaten Solok</p>
++      </aside>
+ 
+-        {error && (
+-          <p className="rounded-md bg-rust-100 px-3 py-2 text-sm text-rust-700">
+-            {error}
+-          </p>
+-        )}
++      <section className="flex items-center justify-center px-6 py-12">
++        <div className="w-full max-w-sm">
++          <div className="lg:hidden">
++            <BrandBps className="text-sm font-medium text-navy-400" ukuran={36} />
++          </div>
++          <h1 className="mt-6 text-2xl font-bold text-navy-900 lg:mt-0">Masuk</h1>
++          <p className="mt-1 text-sm text-ink/60">Gunakan nomor HP dan PIN 6 digit Anda.</p>
++
++          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
++            <div>
++              <label htmlFor="nomor_hp" className="text-sm font-medium text-ink">
++                Nomor HP
++              </label>
++              <input
++                id="nomor_hp"
++                type="tel"
++                inputMode="numeric"
++                autoComplete="tel"
++                placeholder="08xxxxxxxxxx"
++                required
++                value={nomorHp}
++                onChange={(e) => setNomorHp(e.target.value)}
++                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2.5 text-ink outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
++              />
++            </div>
++            <div>
++              <label htmlFor="pin" className="text-sm font-medium text-ink">
++                PIN (6 digit)
++              </label>
++              <input
++                id="pin"
++                type="password"
++                inputMode="numeric"
++                autoComplete="current-password"
++                maxLength={6}
++                required
++                value={pin}
++                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
++                className="mt-1 w-full rounded-lg border border-line bg-white px-3 py-2.5 tracking-widest text-ink outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
++              />
++            </div>
++
++            {error && <p className="rounded-lg bg-rust-100 px-3 py-2 text-sm text-rust-700">{error}</p>}
+ 
+-        <button
+-          type="submit"
+-          disabled={loading}
+-          className="mt-2 rounded-md bg-navy-700 px-4 py-2.5 font-medium text-white transition hover:bg-navy-600 disabled:opacity-60"
+-        >
+-          {loading ? "Memproses..." : "Masuk"}
+-        </button>
+-      </form>
++            <button
++              type="submit"
++              disabled={loading}
++              className="mt-1 rounded-lg bg-navy-700 px-4 py-3 font-semibold text-white transition hover:bg-navy-600 disabled:opacity-60"
++            >
++              {loading ? "Memproses..." : "Masuk"}
++            </button>
++          </form>
+ 
+-      <p className="mt-6 text-xs text-ink/50">
+-        Belum pernah atur PIN?{" "}
+-        <Link href="/atur-pin" className="font-medium text-navy-400 hover:text-navy-700">
+-          Atur nomor HP &amp; PIN di sini
+-        </Link>{" "}
+-        menggunakan kode aktivasi dari BPS Kabupaten Solok.
+-      </p>
++          <p className="mt-6 text-xs leading-relaxed text-ink/60">
++            Belum punya PIN?{" "}
++            <Link href="/atur-pin" className="font-semibold text-navy-400 hover:text-navy-700">
++              Atur nomor HP &amp; PIN
++            </Link>{" "}
++            dengan kode aktivasi dari BPS Kabupaten Solok. Lupa PIN? Hubungi admin BPS.
++          </p>
++          <p className="mt-4 text-xs">
++            <Link href="/" className="font-medium text-navy-400 hover:text-navy-700">
++              ← Kembali ke portal
++            </Link>
++          </p>
++        </div>
++      </section>
+     </main>
+   );
+ }
+diff --git a/app/opengraph-image.tsx b/app/opengraph-image.tsx
+new file mode 100644
+index 0000000..be63d01
+--- /dev/null
++++ b/app/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Portal Layanan BPS Kabupaten Solok";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Portal Layanan BPS Kabupaten Solok", "Satu pintu aplikasi pendataan dan pemantauan");
++}
+diff --git a/app/page.tsx b/app/page.tsx
+index ad5c275..78b5e6f 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -1,32 +1,137 @@
+ import Link from "next/link";
++import { createClient } from "@/lib/supabase/server";
++import BrandBps from "@/app/components/BrandBps";
++import LogoutButton from "@/app/dashboard/logout-button";
++import { DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
++
++// Portal: pintu masuk semua aplikasi BPS Kabupaten Solok. Tiap aplikasi tetap
++// memakai mekanisme akses masing-masing (login Supabase untuk DTSEN; link unik
++// untuk Wali Jorong & petugas bencana; login personal untuk penyisiran).
++type Kartu = {
++  ikon: string;
++  judul: string;
++  uraian: string;
++  href: string;
++  label: string;
++  tag: string;
++  perluLogin?: boolean;
++};
++
++export default async function PortalPage() {
++  const supabase = await createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  let nama: string | null = null;
++  if (user) {
++    const { data: profile } = await supabase
++      .from("profiles")
++      .select("nama")
++      .eq("id", user.id)
++      .maybeSingle();
++    nama = profile?.nama ?? user.email ?? null;
++  }
++
++  const kartu: Kartu[] = [
++    {
++      ikon: "🏘️",
++      judul: "Usulan Update Data DTSEN",
++      uraian:
++        "Operator Wali Nagari menerbitkan surat keterangan, BPS memeriksa dan menetapkan status akhir.",
++      href: user ? "/dashboard" : "/login?next=/dashboard",
++      label: user ? "Buka dashboard" : "Masuk untuk membuka",
++      tag: "Perlu login",
++      perluLogin: true,
++    },
++    {
++      ikon: "🌊",
++      judul: "Pendataan Bencana",
++      uraian: "Identifikasi wilayah terdampak, undangan petugas, lokasi tugas, dan monitoring alokasi.",
++      href: "/bencana",
++      label: "Buka halaman",
++      tag: "Akses sesuai tautan",
++    },
++    {
++      ikon: "📈",
++      judul: "Seruti",
++      uraian: "Progres lapangan Seruti per wilayah dan petugas, serta pemeriksaan kualitas data.",
++      href: "/seruti",
++      label: "Buka Seruti",
++      tag: "Akses sesuai peran",
++    },
++    {
++      ikon: "🧭",
++      judul: "Penyisiran Usaha SE2026",
++      uraian: "Checklist petugas lapangan, identifikasi PPL, dan monitoring penyisiran.",
++      href: "/penyisiran",
++      label: "Buka penyisiran",
++      tag: "Login petugas",
++    },
++  ];
+ 
+-export default function HomePage() {
+   return (
+-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-16">
+-      <p className="text-sm font-medium text-navy-400">
+-        Badan Pusat Statistik Kabupaten Solok
+-      </p>
+-      <h1 className="mt-3 text-3xl font-semibold leading-tight text-navy-900 sm:text-4xl">
+-        Usulan Update Data DTSEN
+-      </h1>
+-      <p className="mt-4 max-w-lg text-ink/80">
+-        Alur pengusulan data kemiskinan warga: Wali Jorong mengisi lembar
+-        identifikasi, Operator Wali Nagari menerbitkan surat keterangan, dan
+-        BPS memeriksa serta memberi status akhir.
+-      </p>
++    <main className="min-h-screen bg-paper">
++      <section className="bg-gradient-to-br from-navy-700 to-navy-900 px-6 pb-20 pt-8 text-white">
++        <div className="mx-auto max-w-4xl">
++          <div className="flex items-start justify-between gap-4">
++            <BrandBps
++              kotakPutih
++              ukuran={36}
++              className="text-sm font-semibold"
++              teksClassName="text-white"
++            />
++            {user && (
++              <div className="text-right text-xs text-navy-100">
++                <p className="font-medium text-white">{nama}</p>
++                <LogoutButton className="mt-0.5 text-xs font-medium text-gold-100 hover:text-white" />
++              </div>
++            )}
++          </div>
++          <h1 className="mt-10 text-3xl font-bold leading-tight sm:text-4xl">{NAMA_PORTAL}</h1>
++          <p className="mt-3 max-w-xl text-sm text-navy-100 sm:text-base">{DESKRIPSI_PORTAL}</p>
++          {!user && (
++            <Link
++              href="/login"
++              className="mt-6 inline-block rounded-lg bg-gold-400 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-gold-600"
++            >
++              Masuk dengan Nomor HP &amp; PIN →
++            </Link>
++          )}
++        </div>
++      </section>
+ 
+-      <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+-        <Link
+-          href="/login"
+-          className="rounded-md bg-navy-700 px-5 py-3 text-center font-medium text-white transition hover:bg-navy-600"
+-        >
+-          Masuk sebagai Operator Nagari / BPS
+-        </Link>
+-      </div>
++      <section className="mx-auto -mt-12 grid max-w-4xl gap-4 px-6 sm:grid-cols-2">
++        {kartu.map((k) => (
++          <Link
++            key={k.judul}
++            href={k.href}
++            className="group rounded-xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
++          >
++            <span className="grid h-10 w-10 place-items-center rounded-lg bg-navy-50 text-xl">{k.ikon}</span>
++            <h2 className="mt-3 text-base font-semibold text-navy-700">{k.judul}</h2>
++            <p className="mt-1 text-sm text-ink/70">{k.uraian}</p>
++            <div className="mt-4 flex items-center justify-between">
++              <span
++                className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
++                  k.perluLogin ? "bg-gold-100 text-gold-600" : "bg-moss-100 text-moss-700"
++                }`}
++              >
++                {k.tag}
++              </span>
++              <span className="text-sm font-semibold text-navy-400 group-hover:text-navy-700">{k.label} →</span>
++            </div>
++          </Link>
++        ))}
++      </section>
+ 
+-      <p className="mt-6 text-sm text-ink/60">
+-        Wali Jorong mengakses lembar isian melalui tautan unik yang diberikan
+-        oleh BPS Kabupaten Solok, tanpa perlu login.
++      <p className="mx-auto max-w-4xl px-6 pb-12 pt-6 text-xs text-ink/60">
++        Wali Jorong dan petugas bencana membuka aplikasi lewat tautan unik dari BPS Kabupaten Solok, tanpa perlu login di
++        sini. Petugas bencana yang belum mendaftar dapat membuka{" "}
++        <Link href="/undangan" className="font-medium text-navy-400 hover:text-navy-700">
++          halaman pendaftaran petugas
++        </Link>
++        .
+       </p>
+     </main>
+   );
+diff --git a/app/penyisiran/layout.tsx b/app/penyisiran/layout.tsx
+new file mode 100644
+index 0000000..8e242e1
+--- /dev/null
++++ b/app/penyisiran/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Penyisiran Usaha SE2026",
++  "Checklist petugas lapangan dan identifikasi penyisiran usaha Sensus Ekonomi 2026, BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/penyisiran/opengraph-image.tsx b/app/penyisiran/opengraph-image.tsx
+new file mode 100644
+index 0000000..35cd8d2
+--- /dev/null
++++ b/app/penyisiran/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Penyisiran Usaha SE2026";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Penyisiran Usaha SE2026", "Checklist petugas lapangan dan identifikasi");
++}
+diff --git a/app/seruti/layout.tsx b/app/seruti/layout.tsx
+new file mode 100644
+index 0000000..62f9fba
+--- /dev/null
++++ b/app/seruti/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Seruti",
++  "Pemantauan progres dan kualitas data lapangan Seruti BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/seruti/opengraph-image.tsx b/app/seruti/opengraph-image.tsx
+new file mode 100644
+index 0000000..174d8d8
+--- /dev/null
++++ b/app/seruti/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Seruti";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Seruti", "Pemantauan progres dan kualitas data lapangan");
++}
+diff --git a/app/undangan/layout.tsx b/app/undangan/layout.tsx
+new file mode 100644
+index 0000000..1b092be
+--- /dev/null
++++ b/app/undangan/layout.tsx
+@@ -0,0 +1,10 @@
++import { metaHalaman } from "@/lib/halaman";
++
++export const metadata = metaHalaman(
++  "Pendaftaran Petugas Pendataan Bencana",
++  "Lengkapi data dan bergabung ke grup WhatsApp petugas pendataan bencana BPS Kabupaten Solok."
++);
++
++export default function Layout({ children }: { children: React.ReactNode }) {
++  return children;
++}
+diff --git a/app/undangan/opengraph-image.tsx b/app/undangan/opengraph-image.tsx
+new file mode 100644
+index 0000000..440d3a6
+--- /dev/null
++++ b/app/undangan/opengraph-image.tsx
+@@ -0,0 +1,10 @@
++import { ogImage } from "@/lib/ogImage";
++
++export const runtime = "nodejs";
++export const alt = "Pendaftaran Petugas Pendataan Bencana";
++export const size = { width: 1200, height: 630 };
++export const contentType = "image/png";
++
++export default function Image() {
++  return ogImage("Pendaftaran Petugas Pendataan Bencana", "Lengkapi data dan bergabung ke grup WhatsApp petugas");
++}
+diff --git a/lib/halaman.ts b/lib/halaman.ts
+new file mode 100644
+index 0000000..d090703
+--- /dev/null
++++ b/lib/halaman.ts
+@@ -0,0 +1,30 @@
++import type { Metadata } from "next";
++
++// Nama portal & alamat dasar. Alamat dasar dipakai Next.js untuk membuat URL
++// absolut gambar pratinjau link (WhatsApp, Telegram, dll).
++export const NAMA_PORTAL = "Portal Layanan BPS Kabupaten Solok";
++export const DESKRIPSI_PORTAL =
++  "Satu pintu aplikasi pendataan dan pemantauan BPS Kabupaten Solok: usulan data DTSEN, pendataan bencana, Seruti, dan penyisiran usaha.";
++export const ALAMAT_DASAR =
++  process.env.NEXT_PUBLIC_SITE_URL ?? "https://bps-solokkab.up.railway.app";
++
++/**
++ * Metadata per halaman supaya pratinjau link (judul + deskripsi) sesuai isi
++ * halaman, bukan judul portal untuk semua link. Gambar pratinjau diambil dari
++ * file opengraph-image.tsx di folder halaman yang bersangkutan.
++ */
++export function metaHalaman(judul: string, deskripsi: string): Metadata {
++  const judulLengkap = `${judul} · BPS Kabupaten Solok`;
++  return {
++    title: judul,
++    description: deskripsi,
++    openGraph: {
++      type: "website",
++      siteName: NAMA_PORTAL,
++      locale: "id_ID",
++      title: judulLengkap,
++      description: deskripsi,
++    },
++    twitter: { card: "summary_large_image", title: judulLengkap, description: deskripsi },
++  };
++}
+diff --git a/lib/ogImage.tsx b/lib/ogImage.tsx
+new file mode 100644
+index 0000000..2da8ca9
+--- /dev/null
++++ b/lib/ogImage.tsx
+@@ -0,0 +1,54 @@
++import { ImageResponse } from "next/og";
++import { readFile } from "node:fs/promises";
++import { join } from "node:path";
++
++// Gambar pratinjau link 1200x630: logo BPS + judul halaman. Dibuat otomatis
++// (tidak perlu membuat gambar manual). Dipanggil dari opengraph-image.tsx.
++export async function ogImage(judul: string, sub: string) {
++  let logo: string | null = null;
++  try {
++    const buf = await readFile(join(process.cwd(), "public", "logo-bps.png"));
++    logo = `data:image/png;base64,${buf.toString("base64")}`;
++  } catch {
++    logo = null; // tanpa logo kalau file tidak terbaca; gambar tetap jadi
++  }
++
++  return new ImageResponse(
++    (
++      <div
++        style={{
++          width: "100%",
++          height: "100%",
++          display: "flex",
++          flexDirection: "column",
++          justifyContent: "space-between",
++          padding: "64px 72px",
++          background: "linear-gradient(135deg, #1E2A47 0%, #141C31 100%)",
++          color: "#ffffff",
++        }}
++      >
++        <div style={{ display: "flex", alignItems: "center" }}>
++          {logo && (
++            // eslint-disable-next-line @next/next/no-img-element
++            <img
++              src={logo}
++              alt=""
++              height={84}
++              style={{ height: 84, background: "#fff", borderRadius: 14, padding: 10 }}
++            />
++          )}
++          <div style={{ display: "flex", flexDirection: "column", marginLeft: logo ? 24 : 0 }}>
++            <span style={{ fontSize: 26, opacity: 0.75 }}>Badan Pusat Statistik</span>
++            <span style={{ fontSize: 34, fontWeight: 700 }}>Kabupaten Solok</span>
++          </div>
++        </div>
++        <div style={{ display: "flex", flexDirection: "column" }}>
++          <div style={{ fontSize: 70, fontWeight: 700, lineHeight: 1.15 }}>{judul}</div>
++          <div style={{ marginTop: 22, fontSize: 30, color: "#D3DAEB", lineHeight: 1.35 }}>{sub}</div>
++        </div>
++        <div style={{ display: "flex", height: 8, width: 160, background: "#C08829", borderRadius: 4 }} />
++      </div>
++    ),
++    { width: 1200, height: 630 }
++  );
++}
