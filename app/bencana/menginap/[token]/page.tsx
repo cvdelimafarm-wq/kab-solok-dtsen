@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, use as usePromise } from "react";
 import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 import LengkapiDataPanel from "../../undangan/LengkapiDataPanel";
+import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Tawaran Pendataan Bencana dengan Skema
@@ -220,7 +221,7 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
         {/* ===== HEADER ===== */}
         <header className="flex flex-col gap-3.5 bg-[#0F3D7A] px-5 pb-11 pt-[22px] text-white">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold tracking-wide">BPS Kabupaten Solok</span>
+            <BrandBps className="min-w-0" teksClassName="text-[13px] font-bold leading-tight tracking-wide" ukuran={30} kotakPutih />
             <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold">Tawaran Kegiatan</span>
           </div>
           <h1 className="text-[25px] font-extrabold leading-tight">Tawaran Pendataan Pascabencana dengan Skema Menginap</h1>

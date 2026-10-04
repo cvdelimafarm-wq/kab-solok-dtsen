@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { normalizePhone, emailFromPhone } from "@/lib/phone";
+import BrandBps from "@/app/components/BrandBps";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,9 +39,7 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16">
-      <p className="text-sm font-medium text-navy-400">
-        BPS Kabupaten Solok
-      </p>
+      <BrandBps className="text-sm font-medium text-navy-400" ukuran={40} />
       <h1 className="mt-2 text-2xl font-semibold text-navy-900">
         Masuk ke dashboard
       </h1>

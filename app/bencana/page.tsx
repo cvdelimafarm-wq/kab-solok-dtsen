@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 import UndanganAdminCard from "./UndanganAdminCard";
+import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -10743,7 +10744,7 @@ export default function BencanaPage() {
           : "max-w-2xl"
       }`}
     >
-      <p className="text-sm font-medium text-blue-400">BPS Kabupaten Solok</p>
+      <BrandBps className="text-sm font-medium text-blue-400" ukuran={36} />
       <h1 className="mt-1 text-2xl font-semibold text-blue-950">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>

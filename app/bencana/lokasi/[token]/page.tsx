@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use as usePromise } from "react";
+import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Tetapkan Lokasi Rumah Saya" utk petugas
@@ -118,7 +119,7 @@ export default function LokasiPetugasPage({ params }: { params: Promise<{ token:
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16 text-center">
-      <p className="text-sm font-medium text-orange-400">BPS Kabupaten Solok</p>
+      <BrandBps className="justify-center text-sm font-medium text-orange-400" ukuran={40} />
       <h1 className="mt-1 text-xl font-semibold text-orange-900">Tetapkan Lokasi Rumah</h1>
       <p className="mt-3 text-sm text-ink/70">
         Halo <span className="font-semibold text-ink">{info.nama}</span>, mohon tekan tombol di bawah

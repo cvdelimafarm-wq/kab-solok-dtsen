@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
 // (4 Okt 2026) Halaman publik "Undangan Konfirmasi Bersama" -- 1 link untuk
@@ -145,7 +146,7 @@ export default function UndanganPage() {
     <div className="min-h-screen bg-[#EEF2F8]">
       <div className="bg-[#0F3D7A] px-4 pb-6 pt-6 text-white">
         <div className="mx-auto max-w-md">
-          <div className="text-[12px] font-bold uppercase tracking-wider text-blue-200">BPS Kabupaten Solok</div>
+          <BrandBps className="text-blue-200" teksClassName="text-[12px] font-bold uppercase leading-tight tracking-wider" ukuran={30} kotakPutih />
           <h1 className="mt-1 text-[22px] font-extrabold leading-tight">Undangan Konfirmasi Petugas Pendataan Bencana</h1>
           <p className="mt-1 text-[14px] text-blue-100">
             Masukkan data diri Anda untuk membuka undangan. Data ini hanya dipakai untuk memastikan bahwa yang membuka adalah Anda sendiri.

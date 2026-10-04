@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./logout-button";
+import BrandBps from "@/app/components/BrandBps";
 
 export default async function DashboardLayout({
   children,
@@ -27,13 +28,14 @@ export default async function DashboardLayout({
       <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <div>
-            <p className="text-sm font-medium text-navy-400">
+            <BrandBps className="text-sm font-medium text-navy-400" ukuran={32} />
+            <p className="mt-1 text-sm font-medium text-navy-400">
               Usulan Update Data DTSEN
             </p>
             <p className="text-xs text-ink/50">
               {profile?.nama ?? user.email} &middot;{" "}
               {profile?.role === "bps"
-                ? "BPS Kabupaten Solok"
+                ? "Badan Pusat Statistik Kabupaten Solok"
                 : "Operator Wali Nagari"}
             </p>
           </div>

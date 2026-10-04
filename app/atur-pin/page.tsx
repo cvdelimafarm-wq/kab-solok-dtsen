@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import BrandBps from "@/app/components/BrandBps";
 
 const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL!;
 
@@ -103,9 +104,7 @@ export default function AturPinPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16">
-      <p className="text-sm font-medium text-navy-400">
-        BPS Kabupaten Solok
-      </p>
+      <BrandBps className="text-sm font-medium text-navy-400" ukuran={40} />
       <h1 className="mt-2 text-2xl font-semibold text-navy-900">
         Atur akun Operator Nagari
       </h1>
