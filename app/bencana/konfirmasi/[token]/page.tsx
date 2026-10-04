@@ -104,6 +104,7 @@ const PILIHAN_PEKERJAAN = [
   "Lainnya",
 ];
 
+const URL_KUESIONER = "/kuesioner-pendataan-bencana.pdf";
 const KARTU = "rounded-[14px] bg-white p-4 shadow-sm";
 const JUDUL_KARTU = "text-[17px] font-extrabold text-[#13213A]";
 const INPUT_TEKS =
@@ -704,7 +705,12 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
               },
               {
                 ikon: <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4" />,
-                teks: <>Contoh kuesioner dibagikan saat pelatihan.</>,
+                teks: (
+                  <>
+                    Pelajari <strong>kuesioner pendataan</strong> lebih dulu (lihat kartu Kuesioner di bawah); pembahasan
+                    pengisian dilakukan saat pelatihan.
+                  </>
+                ),
               },
             ].map((t, i) => (
               <div key={i} className="flex items-start gap-3">
@@ -716,6 +722,32 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                 <p className="text-sm leading-relaxed">{t.teks}</p>
               </div>
             ))}
+          </section>
+
+          {/* ===== KUESIONER ===== */}
+          <section className={`${KARTU} flex flex-col gap-3`}>
+            <h2 className={JUDUL_KARTU}>Kuesioner Pendataan</h2>
+            <p className="text-[13px] leading-relaxed text-[#44546C]">
+              Kuesioner Pendataan Daerah Terdampak Bencana ABT Sumatera 2026 (Keluarga). Silakan dibaca lebih dulu
+              supaya lebih siap saat pelatihan.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={URL_KUESIONER}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-[#0F3D7A] px-4 py-2.5 text-sm font-extrabold text-white hover:bg-[#0B2F5F]"
+              >
+                Buka Kuesioner (PDF)
+              </a>
+              <a
+                href={URL_KUESIONER}
+                download="Kuesioner Pendataan Daerah Terdampak Bencana ABT Sumatera 2026 - Keluarga.pdf"
+                className="flex min-h-[44px] items-center justify-center rounded-xl border-2 border-[#0F3D7A] bg-white px-4 py-2.5 text-sm font-extrabold text-[#0F3D7A] hover:bg-[#EAF1FB]"
+              >
+                Unduh
+              </a>
+            </div>
           </section>
 
           {/* ===== LENGKAPI DATA ANDA ===== */}
