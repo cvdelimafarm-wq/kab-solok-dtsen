@@ -6,6 +6,11 @@ import { useState } from "react";
 // konfirmasi biasa & tawaran menginap SETELAH petugas menyatakan bersedia.
 // Grup WhatsApp baru dibuka setelah akun dibuat (waUrl dikirim server hanya
 // jika akun sudah ada). Akun dipakai untuk masuk lagi lewat /undangan.
+//
+// (4 Okt 2026) Panel ini hanya dirender setelah petugas menekan "bersedia".
+// Selama link grup WA ada (= bersedia + akun sudah dibuat), SETIAP halaman
+// dibuka muncul modal "Silakan bergabung ke Grup WA". Sengaja tanpa
+// penyimpanan browser: tampil lagi tiap halaman dibuka / dimuat ulang.
 
 type Props = {
   jenis: "biasa" | "menginap" | "pml";
@@ -21,6 +26,7 @@ export default function BuatAkunPanel({ jenis, token, nama, punyaAkun, waUrl, on
   const [pin2, setPin2] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalWaTutup, setModalWaTutup] = useState(false);
 
   async function simpan(e: React.FormEvent) {
     e.preventDefault();
@@ -55,8 +61,47 @@ export default function BuatAkunPanel({ jenis, token, nama, punyaAkun, waUrl, on
     </a>
   ) : null;
 
+  // z-[45]: di bawah modal info lain (z-50) sehingga modal info ditutup dulu.
+  const modalWa =
+    waUrl && !modalWaTutup ? (
+      <div
+        className="fixed inset-0 z-[45] flex items-center justify-center bg-black/55 px-5"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="judul-modal-gabung-wa"
+      >
+        <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <h2 id="judul-modal-gabung-wa" className="text-base font-extrabold text-[#0F3D7A]">
+            Silakan bergabung ke Grup WA
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-[#13213A]">
+            Halo, <strong>{nama}</strong>. Terima kasih sudah menyatakan bersedia. Silakan bergabung ke grup WhatsApp petugas
+            untuk menerima informasi pelatihan dan penugasan. Abaikan tombol ini bila Anda sudah bergabung.
+          </p>
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setModalWaTutup(true)}
+            className="mt-4 block w-full rounded-xl bg-[#1E7A4C] py-3 text-center text-sm font-bold text-white active:bg-[#176540]"
+          >
+            Gabung Grup WhatsApp
+          </a>
+          <button
+            type="button"
+            onClick={() => setModalWaTutup(true)}
+            className="mt-2 w-full rounded-xl border border-[#C9D3E0] bg-white py-2.5 text-sm font-semibold text-[#33435C] active:bg-[#F1F4F8]"
+          >
+            Sudah bergabung / nanti
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   if (punyaAkun) {
     return (
+      <>
+      {modalWa}
       <section id="kartu-buat-pin" className="scroll-mt-4 rounded-[14px] border border-[#CFE3D7] bg-[#F1FAF5] p-4 text-sm text-[#1E5E3C] shadow-sm">
         <p className="text-[16px] font-extrabold">✓ Akun Anda sudah dibuat</p>
         <p className="mt-1 leading-relaxed">
@@ -69,6 +114,7 @@ export default function BuatAkunPanel({ jenis, token, nama, punyaAkun, waUrl, on
           </>
         )}
       </section>
+      </>
     );
   }
 
