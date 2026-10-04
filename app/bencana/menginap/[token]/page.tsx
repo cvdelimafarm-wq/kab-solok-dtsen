@@ -291,6 +291,14 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
         </div>
 
         <div className="flex flex-col gap-3 p-4">
+          {/* ===== PERINGATAN: ALOKASI HANYA PERKIRAAN ===== */}
+          <div role="note" className="flex items-start gap-2.5 rounded-xl border-2 border-[#F59E0B] bg-[#FEF3E2] px-3.5 py-3 text-[#7A3E06]">
+            <span aria-hidden className="mt-0.5 text-lg leading-none">⚠️</span>
+            <p className="text-[13px] font-extrabold uppercase leading-snug tracking-wide">
+              Alokasi ini hanya perkiraan, dapat bergeser sesuai dengan temuan kondisi riil saat pendataan
+            </p>
+          </div>
+
           {/* ===== STATUS JAWABAN ===== */}
           {sudahJawab && !ubahJawaban && (
             <div
