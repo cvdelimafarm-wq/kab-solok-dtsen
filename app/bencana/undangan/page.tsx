@@ -73,6 +73,9 @@ export default function UndanganPage() {
   const [sisa, setSisa] = useState<number | null>(null);
   const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState<{ nama: string; path: string | null } | null>(null);
+  // true begitu lolos verifikasi & sedang berpindah halaman: tombol TETAP terkunci
+  // supaya petugas tidak menekan "Buka Undangan" lagi selagi halaman tujuan dimuat.
+  const [pindah, setPindah] = useState(false);
 
   function reset() {
     setError(null);
@@ -84,7 +87,8 @@ export default function UndanganPage() {
   function selesai(json: { nama: string; path: string | null }) {
     if (json.path) {
       setBerhasil({ nama: json.nama, path: json.path });
-      window.location.href = json.path;
+      setPindah(true);
+      window.location.replace(json.path);
     } else {
       setBerhasil({ nama: json.nama, path: null });
     }
@@ -144,6 +148,13 @@ export default function UndanganPage() {
 
   return (
     <div className="min-h-screen bg-[#EEF2F8]">
+      {pindah && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#EEF2F8]/95 px-6 text-center">
+          <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#0F3D7A]/20 border-t-[#0F3D7A]" />
+          <p className="text-[16px] font-extrabold text-[#13213A]">Data terverifikasi{berhasil ? `, ${berhasil.nama}` : ""}</p>
+          <p className="text-[14px] text-slate-600">Membuka undangan Anda…</p>
+        </div>
+      )}
       <div className="bg-[#0F3D7A] px-4 pb-6 pt-6 text-white">
         <div className="mx-auto max-w-md">
           <BrandBps className="text-blue-200" teksClassName="text-[12px] font-bold uppercase leading-tight tracking-wider" ukuran={30} kotakPutih />
@@ -215,10 +226,10 @@ export default function UndanganPage() {
             </div>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || pindah}
               className="w-full rounded-lg bg-[#0F3D7A] px-4 py-3 text-[15px] font-extrabold text-white disabled:opacity-60"
             >
-              {busy ? "Memeriksa…" : "Buka Undangan"}
+              {pindah ? "Membuka undangan…" : busy ? "Memeriksa…" : "Buka Undangan"}
             </button>
           </form>
         ) : (
@@ -242,10 +253,10 @@ export default function UndanganPage() {
             </div>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || pindah}
               className="w-full rounded-lg bg-[#0F3D7A] px-4 py-3 text-[15px] font-extrabold text-white disabled:opacity-60"
             >
-              {busy ? "Memeriksa…" : "Masuk"}
+              {pindah ? "Membuka undangan…" : busy ? "Memeriksa…" : "Masuk"}
             </button>
             <p className="text-[12px] text-slate-500">Lupa PIN? Hubungi admin BPS Kabupaten Solok.</p>
           </form>

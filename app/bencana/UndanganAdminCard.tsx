@@ -23,7 +23,7 @@ type Tawaran = {
   dijawab_pada: string | null;
   dibuat_pada: string;
   pola_menginap: string | null;
-  jadwal_pelatihan: string[] | null;
+  jadwal_pelatihan: string | null; // teks, mis. "7 Oktober 2026, 8 Oktober 2026"
   perkiraan_hari_libur: string[] | null;
   teman_menginap: string | null;
   alasan_kategori: string | null;
@@ -107,12 +107,13 @@ const BADGE: Record<Status, { label: string; kelas: string }> = {
 
 function DetailJawaban({ t }: { t: Tawaran }) {
   if (!t.status) return null;
-  const tgl = (a: string[] | null) => (a && a.length ? a.map((x) => x.slice(8, 10)).join(", ") : "-");
+  const tgl = (a: string[] | null) =>
+    Array.isArray(a) && a.length ? a.map((x) => String(x).slice(8, 10) || String(x)).join(", ") : "-";
   if (t.status === "bersedia") {
     return (
       <div className="mt-1 space-y-0.5 text-[11px] text-slate-700">
         <p>Pola: {t.pola_menginap === "penuh" ? "menginap penuh selama pendataan" : t.pola_menginap === "pulang_akhir_pekan" ? "pulang saat akhir pekan" : (t.pola_menginap ?? "-")}</p>
-        <p>Pelatihan: {t.jadwal_pelatihan?.length ? t.jadwal_pelatihan.join(", ") : "-"} · Perkiraan libur (tgl Okt): {tgl(t.perkiraan_hari_libur)}</p>
+        <p>Pelatihan: {t.jadwal_pelatihan ? String(t.jadwal_pelatihan) : "-"} · Perkiraan libur (tgl Okt): {tgl(t.perkiraan_hari_libur)}</p>
         {t.teman_menginap && <p>Teman menginap: {t.teman_menginap}</p>}
       </div>
     );

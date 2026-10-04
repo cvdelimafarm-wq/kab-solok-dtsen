@@ -168,7 +168,7 @@ export async function GET() {
                 dijawab_pada: (k.dijawab_pada as string | null) ?? null,
                 dibuat_pada: k.dibuat_pada as string,
                 pola_menginap: (k.pola_menginap as string | null) ?? null,
-                jadwal_pelatihan: (k.jadwal_pelatihan as string[] | null) ?? null,
+                jadwal_pelatihan: (k.jadwal_pelatihan as string | null) ?? null,
                 perkiraan_hari_libur: (k.perkiraan_hari_libur as string[] | null) ?? null,
                 teman_menginap: (k.teman_menginap as string | null) ?? null,
                 alasan_kategori: (k.alasan_kategori as string | null) ?? null,
