@@ -38,6 +38,7 @@ type Baris = {
   no_hp: string | null;
   alamat_kecamatan: string | null;
   alamat_nagari: string | null;
+  alamat_detail?: string | null;
   status_kontak: "diterima" | "menolak" | null;
   sudah_konfirmasi: boolean;
   catatan_menolak: string | null;
@@ -46,6 +47,8 @@ type Baris = {
   peran: "ppl" | "pml";
   jumlah_ppl: number;
   jumlah_plot: number;
+  // (5 Okt 2026) PPL anggota tim yg tidak memegang Sub SLS (non-plot).
+  non_plot?: boolean;
   jarak_maks_km: number | null;
   jarak_semua_riil: boolean;
   idsubsls_terjauh: string | null;
@@ -92,6 +95,14 @@ function waktuRingkas(iso: string | null): string {
   } catch {
     return "-";
   }
+}
+
+// Alamat domisili petugas: detail (jika ada), Nagari, Kecamatan.
+function alamatLengkap(r: Baris): string {
+  const detail = r.alamat_detail?.trim();
+  const nagari = r.alamat_nagari?.trim();
+  const kec = r.alamat_kecamatan?.trim();
+  return [detail, nagari ? `Nagari ${nagari}` : null, kec ? `Kec. ${kec}` : null].filter(Boolean).join(", ");
 }
 
 function nomorWa(hp: string | null): string | null {
@@ -149,6 +160,7 @@ export default function UndanganAdminCard({
   const [info, setInfo] = useState<string | null>(null);
   const [filter, setFilter] = useState<Status | "semua">("semua");
   const [filterGrup, setFilterGrup] = useState<"semua" | "sudah" | "belum">("semua");
+  const [hanyaNonPlot, setHanyaNonPlot] = useState(false);
   const [threshold, setThreshold] = useState(10);
   const [dipilih, setDipilih] = useState<Set<number>>(new Set());
   const [buatBusy, setBuatBusy] = useState(false);
@@ -257,7 +269,8 @@ export default function UndanganAdminCard({
     }
   }
 
-  const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran || r.peran === "pml"), [rows]);
+  const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran || r.peran === "pml" || r.non_plot), [rows]);
+  const jmlNonPlot = useMemo(() => semua.filter((r) => r.non_plot).length, [semua]);
   const hitung = useMemo(() => {
     const h: Record<Status, number> = { belum_dibuka: 0, dibaca: 0, bersedia: 0, pulang_pergi: 0, menolak: 0 };
     for (const r of semua) h[statusBaris(r)]++;
@@ -269,8 +282,9 @@ export default function UndanganAdminCard({
       semua
         .filter((r) => filter === "semua" || statusBaris(r) === filter)
         .filter((r) => filterGrup === "semua" || (filterGrup === "sudah" ? !!r.grup_wa_at : !r.grup_wa_at))
+        .filter((r) => !hanyaNonPlot || !!r.non_plot)
         .sort((a, b) => a.nama.localeCompare(b.nama, "id")),
-    [semua, filter, filterGrup]
+    [semua, filter, filterGrup, hanyaNonPlot]
   );
   const jauh = useMemo(
     () =>
@@ -442,6 +456,14 @@ export default function UndanganAdminCard({
                         {g === "semua" ? "Semua" : g === "sudah" ? `Sudah masuk (${jmlGrup})` : `Belum masuk (${semua.length - jmlGrup})`}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => setHanyaNonPlot((v) => !v)}
+                      title="PPL anggota tim yang tidak memegang Sub SLS (non-plot)"
+                      className={`ml-2 rounded-full px-3 py-1 text-xs font-medium ${hanyaNonPlot ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-800 hover:bg-amber-100"}`}
+                    >
+                      PPL non-plot ({jmlNonPlot})
+                    </button>
                   </div>
                   <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
                     {tampil.length === 0 && <p className="text-xs text-slate-500">Tidak ada petugas pada filter ini.</p>}
@@ -459,10 +481,18 @@ export default function UndanganAdminCard({
                               >
                                 {r.peran === "pml" ? "PML" : "PPL"}
                               </span>
-                              <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : r.peran === "pml" ? `konfirmasi PML (${r.jumlah_ppl} PPL)` : "konfirmasi biasa"}</span>
+                              {r.non_plot && (
+                                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title="Anggota tim, tidak memegang Sub SLS">
+                                  NON-PLOT
+                                </span>
+                              )}
+                              <span className="ml-2 text-[11px] text-slate-500">{r.tawaran ? "tawaran menginap" : r.peran === "pml" ? `konfirmasi PML (${r.jumlah_ppl} PPL)` : r.non_plot ? "anggota tim tanpa plot" : "konfirmasi biasa"}</span>
                             </div>
                             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${BADGE[st].kelas}`}>{BADGE[st].label}</span>
                           </div>
+                          <p className="mt-1 text-[11px] text-slate-600">
+                            📍 {alamatLengkap(r) || <span className="italic text-slate-400">Alamat belum diisi</span>}
+                          </p>
                           <Keterangan r={r} />
                           {r.tawaran && <DetailJawaban t={r.tawaran} />}
                           <div className="mt-2">

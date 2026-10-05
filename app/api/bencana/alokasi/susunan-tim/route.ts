@@ -86,6 +86,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `${petugas.nama} bukan mitra. Aturan: PPL wajib mitra.` }, { status: 400 });
     }
 
+    // (5 Okt 2026) PPL NON-PLOT: anggota tim yg TIDAK memegang Sub SLS. Validasi wajib: tidak
+    // boleh terplot di wilayah manapun (bencana_alokasi_subsls), dan wajib punya PML (bergabung ke tim).
+    if (peran === "ppl" && body?.non_plot === true) {
+      const { data: plot, error: errPlot } = await supabase.from("bencana_alokasi_subsls").select("idsubsls").eq("ppl_id", petugasId);
+      if (errPlot) return NextResponse.json({ error: errPlot.message }, { status: 500 });
+      if ((plot ?? []).length > 0) {
+        return NextResponse.json(
+          { error: `${petugas.nama} sudah terplot di ${(plot ?? []).length} Sub SLS, jadi bukan PPL non-plot. PPL non-plot wajib tidak terplot di wilayah manapun.` },
+          { status: 400 }
+        );
+      }
+      if (typeof body?.atasan_id !== "number") {
+        return NextResponse.json({ error: "Pilih PML tim yang akan dimasuki PPL non-plot." }, { status: 400 });
+      }
+    }
+
     let atasanId: number | null = null;
     if (peran === "pml" || peran === "ppl") {
       atasanId = typeof body?.atasan_id === "number" ? body.atasan_id : null;

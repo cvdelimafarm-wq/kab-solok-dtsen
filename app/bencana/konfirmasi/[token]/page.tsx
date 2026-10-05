@@ -39,9 +39,16 @@ type WilayahKerjaRow = {
   // terdampak, tapi krn mitra blm mengisi indikator dampak KK saat
   // Identifikasi Jorong -- lihat komentar route.ts.
   kk_terdampak_belum_lengkap: boolean;
+  // (5 Okt 2026) sistem keroyokan: Sub SLS milik tim, bukan 1-1 ke PPL.
+  milik_saya?: boolean;
+  pemegang?: string[];
+  jarak_rumah_km?: number | null;
+  jarak_sumber?: "garis_lurus" | "alokasi" | null;
 };
 
 type KonfirmasiInfo = {
+  tim?: { pml: string | null; anggota: string[] };
+  lokasi_rumah_riil?: boolean;
   nama: string;
   status_kepegawaian: "organik" | "mitra";
   pendaftaran_bencana_konfirmasi: boolean;
@@ -616,7 +623,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
           {/* ===== PERKIRAAN WILAYAH KERJA ===== */}
           <section className={`${KARTU} flex flex-col gap-3`}>
             <div className="flex items-baseline justify-between">
-              <h2 className={JUDUL_KARTU}>Perkiraan wilayah kerja</h2>
+              <h2 className={JUDUL_KARTU}>Wilayah kerja tim</h2>
               <span className="text-xs font-bold text-[#55657D]">{info.wilayah_kerja.length} Sub SLS</span>
             </div>
             {info.wilayah_kerja.length === 0 ? (
@@ -635,6 +642,31 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     Alokasi ini hanya perkiraan, dapat bergeser sesuai dengan temuan kondisi riil saat pendataan
                   </p>
                 </div>
+                {info.tim && (info.tim.pml || info.tim.anggota.length > 0) && (
+                  <div className="rounded-xl border border-[#D5DDE8] bg-[#F6F8FB] px-3.5 py-3 text-[13px] leading-relaxed text-[#1F2D44]">
+                    <p className="font-bold text-[#0F3D7A]">Anda bekerja dalam tim (sistem keroyokan)</p>
+                    <p>
+                      Wilayah di bawah adalah <strong>seluruh Sub SLS sampel milik tim</strong>, bukan hanya satu wilayah per
+                      petugas. Pembagian kerja di lapangan diatur bersama dalam tim.
+                    </p>
+                    {info.tim.pml && (
+                      <p className="mt-1">
+                        <span className="text-[#55657D]">PML:</span> {info.tim.pml}
+                      </p>
+                    )}
+                    {info.tim.anggota.length > 0 && (
+                      <p>
+                        <span className="text-[#55657D]">Anggota PPL:</span> {info.tim.anggota.join(", ")}
+                      </p>
+                    )}
+                    {info.lokasi_rumah_riil === false && (
+                      <p className="mt-1 text-[#B45309]">
+                        Lokasi rumah Anda belum tercatat, sehingga jarak dari rumah belum bisa dihitung untuk semua wilayah.
+                        Lengkapi lokasi rumah pada bagian “Lengkapi Data Anda”.
+                      </p>
+                    )}
+                  </div>
+                )}
                 {info.wilayah_kerja.map((r, i) => (
                   <div key={r.idsubsls} className="flex items-center gap-3 rounded-[10px] bg-[#F6F8FB] p-3">
                     <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-[#E3EBF6] text-[13px] font-extrabold text-[#0F3D7A]">
@@ -645,6 +677,16 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                       <span className="text-xs text-[#55657D]">
                         Nagari {r.nagari} · Kec. {r.kecamatan}
                       </span>
+                      <span className="text-[11px] font-semibold text-[#0F3D7A]">
+                        {typeof r.jarak_rumah_km === "number"
+                          ? `📍 ± ${r.jarak_rumah_km.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km dari rumah Anda${r.jarak_sumber === "garis_lurus" ? " (garis lurus)" : ""}`
+                          : "📍 Jarak dari rumah belum tersedia"}
+                      </span>
+                      {r.pemegang && r.pemegang.length > 0 && (
+                        <span className="text-[11px] text-[#55657D]">
+                          {r.milik_saya ? "Wilayah awal Anda" : `Wilayah awal: ${r.pemegang.join(", ")}`}
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="text-[15px] font-extrabold">{r.kk_total.toLocaleString("id-ID")} KK</span>

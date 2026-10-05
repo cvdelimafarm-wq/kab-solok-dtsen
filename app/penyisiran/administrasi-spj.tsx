@@ -43,13 +43,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SLOT_LABELS, SLOT_URUTAN } from "@/lib/spjDokumentasi";
 import { AMBANG_DOKUMENTASI_HARIAN } from "@/lib/spjMatriks";
 import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";
-// (28 Sep 2026) terbilangRupiah dipakai KwitansiSetForm utk PREVIEW
-// read-only "Terbilang" di bawah kolom Nominal -- lihat komentar besar di
-// app/api/penyisiran/spj/kwitansi/route.ts kenapa field ini TIDAK LAGI
-// boleh diketik manual (nominal & terbilang pernah lepas sinkron, kasus
-// B-1259/13030/SS.330/2026). Aman diimpor ke komponen client krn
-// lib/spjFormat.ts murni fungsi format tanpa dependensi server.
-import { terbilangRupiah } from "@/lib/spjFormat";
 import {
   SpjDashboard,
   SpjMonitoring,
@@ -355,7 +348,7 @@ function AdministrasiPanel({
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [subTabPengelola, setSubTabPengelola] = useState<"dashboard" | "monitoring" | "cetak" | "arsip">("dashboard");
-  const [subTabSaya, setSubTabSaya] = useState<"ringkasan" | "isi" | "terlewat">("ringkasan");
+  const [subTabSaya, setSubTabSaya] = useState<"ringkasan" | "isi">("ringkasan");
   const [modalSelesai, setModalSelesai] = useState<{ tanggal: string; telat: number } | null>(null);
   // Supaya modal ucapan terima kasih cuma muncul SEKALI per (ST, tanggal)
   // dlm satu sesi browser -- bukan tiap kali petugas upload/edit sesuatu
@@ -521,7 +514,6 @@ function AdministrasiPanel({
             [
               ["ringkasan", "🏠 Ringkasan"],
               ["isi", "📝 Isi Dokumen"],
-              ["terlewat", "🕐 Laporan Terlewat"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -548,17 +540,14 @@ function AdministrasiPanel({
         </div>
       )}
       {pengelola && subTabPengelola === "monitoring" && (
-        <div className="space-y-3">
-          <JalankanSemuaPetugasBlok token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={monitoring.muat} />
-          <SpjMonitoring
-            baris={monitoring.baris}
-            loading={monitoring.loading}
-            token={sesi.token}
-            onSessionExpired={onSessionExpired}
-            sesiJenis={monitoring.sesiJenis}
-            sesiPetugasId={monitoring.sesiPetugasId}
-          />
-        </div>
+        <SpjMonitoring
+          baris={monitoring.baris}
+          loading={monitoring.loading}
+          token={sesi.token}
+          onSessionExpired={onSessionExpired}
+          sesiJenis={monitoring.sesiJenis}
+          sesiPetugasId={monitoring.sesiPetugasId}
+        />
       )}
       {pengelola && subTabPengelola === "cetak" && (
         <SpjCetakTab token={sesi.token} onSessionExpired={onSessionExpired} />
@@ -578,12 +567,6 @@ function AdministrasiPanel({
               (permintaan user) supaya sub-tab Isi Dokumen murni jadi rekap. ---------- */}
           <LaporanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
           <DokumentasiSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
-        </div>
-      )}
-
-      {!pengelola && subTabSaya === "terlewat" && (
-        <div className="space-y-3">
-          <LaporanSusulanSection token={sesi.token} onSessionExpired={onSessionExpired} onSelesai={cekDanTandaiSelesai} />
         </div>
       )}
 
@@ -1002,33 +985,25 @@ function GantiFileTombol({
 // /api/penyisiran/spj/buat-otomatis dgn `dokumen: [jenisDokumen]` (SATU
 // jenis saja per blok, sesuai section tempat blok ini dipasang).
 //
-// (25 Sep 2026, GANTI BALIK permintaan 24 Sep) Mode SET SEKARANG TETAP per
-// jenis dokumen (BUKAN lagi pilihan bebas user tiap klik spt sebelumnya,
-// lihat komentar panjang di app/api/penyisiran/spj/buat-otomatis/route.ts)
-// -- KETIGA jenis dokumen SEKARANG pakai SATU SET RENTANG YANG SAMA
-// ("per_rentang": tanggal Hari Tugas yg BERURUTAN digabung 1 SET, pecah
-// jadi SET baru begitu ada tanggal yg terputus). Kwitansi SEMPAT "1 lembar
-// per hari" pada 24 Sep 2026 tapi ternyata tidak dipakai, jadi dibalik lagi
-// ke per_rentang spt Visum/Surat Pernyataan (nominalnya = tarif x jumlah
-// hari dlm SET, bukan lagi selalu x1).
+// (24 Sep 2026, permintaan user) Mode SET SEKARANG TETAP per jenis dokumen
+// (BUKAN lagi pilihan bebas user tiap klik spt sebelumnya, lihat komentar
+// panjang di app/api/penyisiran/spj/buat-otomatis/route.ts):
+//   - Kwitansi           : SELALU "per_hari" -- 1 lembar Kwitansi per 1 hari
+//     kerja (supaya nominal per lembar tidak pernah ambigu).
+//   - Visum              : SELALU "per_rentang" -- 1 SET kalau tanggal
+//     Hari Tugas tersambung, pecah kalau ada tanggal yg terputus.
+//   - Surat Pernyataan   : SELALU mengikuti SET Visum yg SAMA (per_rentang)
+//     -- supaya jumlah & rentangnya PERSIS sama dgn Visum.
 // Jadi TIDAK ADA lagi pilihan mode di UI ini -- backend yg menentukan
-// otomatis sesuai jenisDokumen. Hasil (jumlah SET dibuat/sudah
-// konsisten/diperbaiki) & peringatan (mis. kecamatan wilayah tugas blm
-// tertaut, LENGKAP dgn navigasi ke menu terkait) ditampilkan LANGSUNG di
-// bawah tombol, TANPA perlu modal terpisah. (27 Sep 2026) SETIAP klik jg
-// otomatis mengecek & merapikan dulu SET lama yg tidak konsisten dgn
-// tanggal Hari Tugas saat ini -- lihat komentar besar di route.ts & field
-// `diperbaiki`/`perbaikan` di bawah.
+// otomatis sesuai jenisDokumen. Hasil (jumlah SET dibuat/sudah ada) &
+// peringatan (mis. kecamatan wilayah tugas blm tertaut, LENGKAP dgn
+// navigasi ke menu terkait) ditampilkan LANGSUNG di bawah tombol, TANPA
+// perlu modal terpisah.
 type JenisDokumenOtomatis = "kwitansi" | "visum" | "surat_keterangan";
 interface HasilBuatOtomatisDokumen {
   jenis: JenisDokumenOtomatis;
   dibuat: number;
   sudahAda: number;
-  // (27 Sep 2026) Jumlah SET yg TIDAK konsisten dgn tanggal Hari Tugas saat
-  // ini (msh terpecah per hari, atau blm diperluas) & sudah dirapikan
-  // ULANG otomatis sblm proses generate SET baru -- lihat komentar besar
-  // di app/api/penyisiran/spj/buat-otomatis/route.ts.
-  diperbaiki: number;
 }
 interface PeringatanBuatOtomatis {
   kode: string;
@@ -1036,37 +1011,10 @@ interface PeringatanBuatOtomatis {
   pesan: string;
   navigasi: { halaman: string; keterangan: string };
 }
-interface PerbaikanSetInfo {
-  jenis: JenisDokumenOtomatis;
-  tanggalMulai: string;
-  tanggalSelesai: string;
-  rentangSebelum: { tanggalMulai: string; tanggalSelesai: string }[];
-}
-// (28 Sep 2026) 1 entri per baris dokumen LAMA yg DIHAPUS TOTAL krn
-// rentang tanggalnya sudah tidak beririsan sama sekali dgn Hari Tugas
-// SAAT INI (mis. Hari Tugas 17-30 diganti jadi 18-30, baris lama 17-30
-// dihapus) -- lihat komentar besar di lib/spjSetHariTugas.ts. Beda dgn
-// PerbaikanSetInfo (baris lamanya masih dipakai, cuma diperluas/digabung).
-interface BarisUsangDihapusInfo {
-  jenis: JenisDokumenOtomatis;
-  tanggalMulai: string;
-  tanggalSelesai: string;
-}
 interface HasilBuatOtomatisRespons {
   ok: true;
   hasil: HasilBuatOtomatisDokumen[];
   peringatan: PeringatanBuatOtomatis[];
-  perbaikan: PerbaikanSetInfo[];
-  dihapus_krn_usang: BarisUsangDihapusInfo[];
-  ringkasan_proses: string;
-}
-
-function formatTglSingkat(iso: string): string {
-  const [, m, d] = iso.split("-");
-  return `${d}/${m}`;
-}
-function formatRentangSingkat(mulai: string, selesai: string): string {
-  return mulai === selesai ? formatTglSingkat(mulai) : `${formatTglSingkat(mulai)}-${formatTglSingkat(selesai)}`;
 }
 
 const KETERANGAN_SKEMA_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
@@ -1094,24 +1042,12 @@ function BuatOtomatisBlok({
   const [pesan, setPesan] = useState<string | null>(null);
   const [navigasi, setNavigasi] = useState<{ halaman: string; keterangan: string } | null>(null);
   const [gagal, setGagal] = useState(false);
-  // (27 Sep 2026) Detail SET yg dirapikan ulang (msh terpecah/blm
-  // diperluas) sblm generate -- ditampilkan terpisah dari `pesan` (yg
-  // tetap ringkasan 1 baris) supaya pengelola bisa lihat PERSIS SET mana &
-  // rentang sebelum/sesudahnya, bukan cuma jumlahnya.
-  const [perbaikanDetail, setPerbaikanDetail] = useState<PerbaikanSetInfo[]>([]);
-  // (28 Sep 2026) Baris LAMA yg dihapus TOTAL krn tanggalnya sudah tidak
-  // ada lagi di Hari Tugas saat ini (lihat komentar besar di
-  // lib/spjSetHariTugas.ts) -- ditampilkan terpisah dari perbaikanDetail
-  // krn beda makna (dihapus total vs digabung/diperluas).
-  const [dihapusDetail, setDihapusDetail] = useState<BarisUsangDihapusInfo[]>([]);
 
   async function handleKlik() {
     setBusy(true);
     setPesan(null);
     setNavigasi(null);
     setGagal(false);
-    setPerbaikanDetail([]);
-    setDihapusDetail([]);
     try {
       const hasil = (await apiFetch("/api/penyisiran/spj/buat-otomatis", token, {
         method: "POST",
@@ -1120,25 +1056,15 @@ function BuatOtomatisBlok({
 
       const peringatanJenis = hasil.peringatan.find((p) => p.jenis === jenisDokumen);
       const hasilJenis = hasil.hasil.find((h) => h.jenis === jenisDokumen);
-      const perbaikanJenis = (hasil.perbaikan ?? []).filter((p) => p.jenis === jenisDokumen);
-      const dihapusJenis = (hasil.dihapus_krn_usang ?? []).filter((d) => d.jenis === jenisDokumen);
-      setPerbaikanDetail(perbaikanJenis);
-      setDihapusDetail(dihapusJenis);
       if (peringatanJenis) {
         setGagal(true);
         setPesan(peringatanJenis.pesan);
         setNavigasi(peringatanJenis.navigasi);
       } else if (hasilJenis) {
         const bagian: string[] = [];
-        if (hasilJenis.diperbaiki > 0) bagian.push(`🔧 ${hasilJenis.diperbaiki} SET tidak konsisten dirapikan ulang`);
-        if (dihapusJenis.length > 0) bagian.push(`🗑 ${dihapusJenis.length} baris lama dihapus (tanggalnya sudah tidak ada lagi)`);
         if (hasilJenis.dibuat > 0) bagian.push(`${hasilJenis.dibuat} SET baru dibuat`);
-        if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah konsisten (tidak disentuh)`);
-        setPesan(
-          bagian.length > 0
-            ? bagian.join(", ") + "."
-            : "Tidak ada SET yang perlu dibuat -- semua sudah konsisten & lengkap."
-        );
+        if (hasilJenis.sudahAda > 0) bagian.push(`${hasilJenis.sudahAda} SET sudah ada sebelumnya (tidak ditimpa)`);
+        setPesan(bagian.length > 0 ? bagian.join(", ") + "." : "Tidak ada SET yang perlu dibuat.");
       } else {
         setPesan("Selesai.");
       }
@@ -1181,184 +1107,6 @@ function BuatOtomatisBlok({
             </span>
           )}
         </p>
-      )}
-      {perbaikanDetail.length > 0 && (
-        <div className="mt-1 rounded-md border border-amber-300/60 bg-amber-100/40 p-1.5 text-[10px] text-amber-900">
-          <p className="font-semibold">🔧 Rincian perbaikan (sebelum generate):</p>
-          <ul className="mt-0.5 list-disc pl-3.5">
-            {perbaikanDetail.map((p, i) => (
-              <li key={i}>
-                Jadi <b>{formatRentangSingkat(p.tanggalMulai, p.tanggalSelesai)}</b> (sebelumnya{" "}
-                {p.rentangSebelum.length > 1
-                  ? `${p.rentangSebelum.length} baris terpisah: ${p.rentangSebelum.map((r) => formatRentangSingkat(r.tanggalMulai, r.tanggalSelesai)).join(", ")}`
-                  : `1 baris ${formatRentangSingkat(p.rentangSebelum[0].tanggalMulai, p.rentangSebelum[0].tanggalSelesai)} yang belum diperluas`}
-                )
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {dihapusDetail.length > 0 && (
-        <div className="mt-1 rounded-md border border-rust-100 bg-rust-100/30 p-1.5 text-[10px] text-rust-700">
-          <p className="font-semibold">🗑 Baris lama dihapus (tanggalnya sudah tidak ada lagi di Hari Tugas saat ini):</p>
-          <ul className="mt-0.5 list-disc pl-3.5">
-            {dihapusDetail.map((d, i) => (
-              <li key={i}>{formatRentangSingkat(d.tanggalMulai, d.tanggalSelesai)}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// (28 Sep 2026) "Jalankan untuk SEMUA petugas sekaligus" -- versi BULK dari
-// BuatOtomatisBlok di atas, KHUSUS pengelola. Lihat komentar besar di
-// app/api/penyisiran/spj/buat-otomatis-semua/route.ts utk latar belakang
-// lengkap (laporan "PPL Ilham tidak ada spj lain selain ST" -> setelah cek
-// semua petugas, ternyata krn tombol "Buat Otomatis" ADA 3 terpisah per
-// jenis dokumen & gampang ada yg kelewat). Ditempatkan di tab "📋 Monitoring
-// SPJ" krn di sanalah pengelola memantau kelengkapan SEMUA petugas.
-interface HasilPerJenisSemua {
-  jenis: JenisDokumenOtomatis;
-  dibuat: number;
-  diperbaiki: number;
-  sudahAda: number;
-}
-interface ButuhPerhatianSemua {
-  petugas_jenis: "penyisiran" | "tetangga";
-  petugas_id: string;
-  nama: string | null;
-  surat_tugas_id: number;
-  nomor_st: string | null;
-  kode: string;
-  jenis?: JenisDokumenOtomatis;
-  pesan: string;
-  navigasi?: { halaman: string; keterangan: string };
-}
-// (28 Sep 2026) 1 entri per baris dokumen LAMA yg dihapus TOTAL di seluruh
-// proses "jalankan semua" -- lihat komentar besar di lib/spjSetHariTugas.ts
-// & BarisUsangDihapusInfo di atas.
-interface DihapusUsangSemua {
-  petugas_jenis: "penyisiran" | "tetangga";
-  petugas_id: string;
-  nama: string | null;
-  surat_tugas_id: number;
-  nomor_st: string | null;
-  jenis: JenisDokumenOtomatis;
-  tanggal_mulai: string;
-  tanggal_selesai: string;
-}
-interface HasilBuatOtomatisSemuaRespons {
-  ok: true;
-  total_pasangan: number;
-  total_dibuat: number;
-  total_diperbaiki: number;
-  total_dihapus_usang: number;
-  hasil_per_jenis: HasilPerJenisSemua[];
-  butuh_perhatian: ButuhPerhatianSemua[];
-  dihapus_krn_usang: DihapusUsangSemua[];
-  ringkasan: string;
-}
-
-const LABEL_JENIS_OTOMATIS: Record<JenisDokumenOtomatis, string> = {
-  kwitansi: "Kwitansi",
-  visum: "Visum",
-  surat_keterangan: "Surat Pernyataan",
-};
-
-function JalankanSemuaPetugasBlok({ token, onSessionExpired, onSelesai }: { token: string; onSessionExpired: () => void; onSelesai: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [hasil, setHasil] = useState<HasilBuatOtomatisSemuaRespons | null>(null);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  async function handleKlik() {
-    setBusy(true);
-    setErrMsg(null);
-    setHasil(null);
-    try {
-      const data = (await apiFetch("/api/penyisiran/spj/buat-otomatis-semua", token, {
-        method: "POST",
-        body: JSON.stringify({}),
-      })) as HasilBuatOtomatisSemuaRespons;
-      setHasil(data);
-      onSelesai();
-    } catch (e) {
-      const err = e as ApiError;
-      if (/sesi tidak valid|kedaluwarsa/i.test(err.message)) {
-        onSessionExpired();
-        return;
-      }
-      setErrMsg(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="rounded-md border border-dashed border-navy-400 bg-navy-50 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-bold text-navy-900">🔁 Jalankan untuk SEMUA petugas sekaligus</p>
-          <p className="mt-0.5 text-[11px] text-ink/50">
-            Membuat/merapikan Kwitansi, Visum &amp; Surat Pernyataan yang belum lengkap utk SELURUH petugas dalam satu klik -- supaya tidak ada yang
-            kelewat karena lupa klik tombol "Buat Otomatis" per jenis dokumen satu-satu.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleKlik}
-          disabled={busy}
-          className="shrink-0 rounded-md bg-navy-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-navy-700 disabled:opacity-60"
-        >
-          {busy ? "Memproses semua petugas..." : "Jalankan Sekarang"}
-        </button>
-      </div>
-
-      {errMsg && <p className="mt-2 rounded-md bg-rust-100/40 p-1.5 text-[11px] text-rust-700">⚠ {errMsg}</p>}
-
-      {hasil && (
-        <div className="mt-2 space-y-1.5">
-          <p className="rounded-md bg-emerald-100/40 p-1.5 text-[11px] text-emerald-800">✓ {hasil.ringkasan}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {hasil.hasil_per_jenis.map((h) => (
-              <span key={h.jenis} className="rounded-md border border-line bg-white px-2 py-1 text-[10px] text-ink/70">
-                <b className="text-navy-900">{LABEL_JENIS_OTOMATIS[h.jenis]}</b>: {h.dibuat} dibuat, {h.diperbaiki} dirapikan, {h.sudahAda} sudah ada
-              </span>
-            ))}
-          </div>
-          {hasil.butuh_perhatian.length > 0 && (
-            <div className="rounded-md border border-amber-300/60 bg-amber-100/40 p-2 text-[11px] text-amber-900">
-              <p className="font-semibold">⚠ {hasil.butuh_perhatian.length} butuh perhatian (tidak bisa diproses otomatis):</p>
-              <ul className="mt-1 list-disc space-y-1 pl-3.5">
-                {hasil.butuh_perhatian.map((b, i) => (
-                  <li key={i}>
-                    <b>{b.nama || `${b.petugas_jenis}:${b.petugas_id}`}</b>
-                    {b.nomor_st ? ` -- ST ${b.nomor_st}` : ""}
-                    {b.jenis ? ` (${LABEL_JENIS_OTOMATIS[b.jenis]})` : ""}: {b.pesan}
-                    {b.navigasi && <span className="block text-[10px] opacity-80">Navigasi: {b.navigasi.halaman} -- {b.navigasi.keterangan}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {hasil.dihapus_krn_usang.length > 0 && (
-            <div className="rounded-md border border-rust-100 bg-rust-100/30 p-2 text-[11px] text-rust-700">
-              <p className="font-semibold">
-                🗑 {hasil.dihapus_krn_usang.length} baris dokumen lama dihapus (tanggalnya sudah tidak ada lagi di Hari Tugas saat ini, mis. karena
-                rentang tanggal diubah/dipersempit):
-              </p>
-              <ul className="mt-1 list-disc space-y-1 pl-3.5">
-                {hasil.dihapus_krn_usang.map((d, i) => (
-                  <li key={i}>
-                    <b>{d.nama || `${d.petugas_jenis}:${d.petugas_id}`}</b>
-                    {d.nomor_st ? ` -- ST ${d.nomor_st}` : ""} ({LABEL_JENIS_OTOMATIS[d.jenis]}): {formatRentangSingkat(d.tanggal_mulai, d.tanggal_selesai)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
       )}
     </div>
   );
@@ -2392,467 +2140,6 @@ function LaporanForm({
   );
 }
 
-// ---------- Laporan Susulan (Terlewat) ----------
-//
-// (2 Okt 2026) Fitur BARU -- lihat komentar besar "LAPORAN SUSULAN" di
-// app/api/penyisiran/spj/laporan/route.ts utk rasional lengkap & 3 pagar
-// integritasnya. Dipicu permintaan user: "SEKARANG ADA KENDALA
-// INDISIPLIN PETUGAS DALAM MEMBUAT LAPORAN" -- petugas lupa/telat mengisi
-// status_kunjungan tab Penyisiran Usaha di hari yg sama, sehingga Laporan
-// mode Template biasa tertolak gerbang anti-fabrikasi (lib/spjLaporanAturan.ts).
-//
-// SKEMA PERSIS sesuai jawaban user saat ditanya (bukan opsi yg awalnya
-// ditawarkan): menu TERPISAH "Laporan Terlewat", bentuknya FORMULIR --
-// pilih tanggal (dropdown dibatasi), jumlah per status kunjungan diisi
-// MANUAL (boleh lihat data referensi Identifikasi/Dokumentasi di atasnya
-// lewat RekapLaporanPreviewBox yg sama dipakai form Laporan biasa, tapi
-// nilai yg BENAR2 disimpan tetap yg diketik manual). Akses: self-service,
-// HANYA kartu petugas yg login sendiri (bukan tool pengelola) -- karena
-// itu komponen ini TIDAK PERNAH dirender di cabang `pengelola` pada
-// AdministrasiPanel, hanya di tab "Saya" milik petugas. Dropdown tanggal
-// dibatasi HANYA ke Hari Tugas yang SUDAH DITAG petugas ybs sendiri
-// (daftarHariKerjaPetugas, sumber === "hari_tugas") -- utk jenis
-// "tetangga" (yg tidak pernah bisa menandai Hari Tugas, selalu sumber
-// "fallback_st_range") menu ini akan selalu tampil kosong, BUKAN bug.
-const KUNCI_STATUS_SUSULAN = [
-  "ditemukan",
-  "tidak_ditemukan",
-  "tidak_bisa",
-  "sudah_didata_se2026",
-  "tidak_ada_usaha",
-] as const;
-
-// Rekap Identifikasi (tab Identifikasi Jorong/Tetangga) -- SAMA persis dgn
-// kunci rekapIdentifikasi pd RekapLaporanPreview/laporan normal, supaya
-// Laporan Susulan menanyakan variabel yg sama (permintaan user 2 Okt 2026).
-const KUNCI_IDENTIFIKASI_SUSULAN = ["ada", "tidak_ada", "ragu", "belum"] as const;
-const LABEL_IDENTIFIKASI_SUSULAN: Record<string, string> = {
-  ada: "Ada",
-  tidak_ada: "Tidak Ada",
-  ragu: "Ragu",
-  belum: "Belum",
-};
-
-// Satu baris lokasi (jorong/nagari/kecamatan) + jumlah KK -- bisa >1 baris
-// per hari, sama spt lokasiPenyisiran pd laporan normal (lihat lokasiUtama()
-// di lib/pdf/laporan.ts).
-interface LokasiSusulanRow {
-  kecamatan: string;
-  nagari: string;
-  jorong: string;
-  jumlah: string;
-}
-
-interface HariKerjaCalonSusulan {
-  tanggal: string;
-  suratTugasId: number;
-  nomorSt: string;
-}
-
-function LaporanSusulanSection({
-  token,
-  onSessionExpired,
-  onSelesai,
-}: {
-  token: string;
-  onSessionExpired: () => void;
-  onSelesai: (suratTugasId: number, tanggal: string) => void;
-}) {
-  const [calon, setCalon] = useState<HariKerjaCalonSusulan[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
-  const [sumberBukanHariTugas, setSumberBukanHariTugas] = useState(false);
-
-  const guard = useCallback(
-    (fn: () => void) => {
-      try {
-        fn();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (/sesi tidak valid|kedaluwarsa/i.test(msg)) onSessionExpired();
-        else setErrMsg(msg);
-      }
-    },
-    [onSessionExpired]
-  );
-
-  const muat = useCallback(async () => {
-    setLoading(true);
-    setErrMsg(null);
-    try {
-      const [hariKerja, daftarLaporan] = await Promise.all([
-        apiFetch("/api/penyisiran/spj/hari-kerja-saya", token),
-        apiFetch("/api/penyisiran/spj/laporan", token),
-      ]);
-      // Pagar sesuai jawaban user (Q3): HANYA tanggal Hari Tugas yg sudah
-      // ditag -- kalau sumbernya "fallback_st_range" (jenis "tetangga"),
-      // TIDAK ADA tanggal yg eligible sama sekali (daftar kosong, bukan
-      // error) krn jenis ini memang tidak pernah bisa menandai Hari Tugas.
-      if (hariKerja?.sumber !== "hari_tugas") {
-        setSumberBukanHariTugas(true);
-        setCalon([]);
-        return;
-      }
-      setSumberBukanHariTugas(false);
-      const hariIni = tanggalHariIniWib();
-      const daftar = Array.isArray(daftarLaporan?.daftar) ? (daftarLaporan.daftar as LaporanSuratTugas[]) : [];
-      const tanggalList = Array.isArray(hariKerja?.tanggal) ? (hariKerja.tanggal as string[]) : [];
-      const hasil: HariKerjaCalonSusulan[] = [];
-      for (const t of tanggalList) {
-        if (t >= hariIni) continue; // Pagar: tanggal wajib sudah lewat.
-        const st = daftar.find((s) => t >= s.tanggal_mulai && t <= s.tanggal_selesai);
-        if (!st) continue; // Ditag sbg Hari Tugas tapi tidak ada Surat Tugas yg menaunginya -- lewati.
-        if (st.laporan.some((l) => l.tanggal === t)) continue; // Sudah ada Laporan utk tanggal ini -- bukan "terlewat".
-        hasil.push({ tanggal: t, suratTugasId: st.surat_tugas_id, nomorSt: st.nomor_st });
-      }
-      hasil.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
-      setCalon(hasil);
-    } catch (e) {
-      guard(() => {
-        throw e;
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [token, guard]);
-
-  useEffect(() => {
-    muat();
-  }, [muat]);
-
-  return (
-    <div className="rounded-lg border border-line bg-white p-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold text-navy-900">🕐 Laporan Terlewat (Susulan)</p>
-          <p className="mt-0.5 text-[11px] text-ink/50">
-            Utk tanggal Hari Tugas yang sudah ditag tapi belum sempat dibuat Laporannya tepat waktu.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={muat}
-          disabled={loading}
-          className="rounded-md border border-line px-2.5 py-1.5 text-[11px] font-medium text-ink/60 hover:border-navy-400 hover:text-navy-700 disabled:opacity-50"
-        >
-          {loading ? "Memuat..." : "↻ Muat Ulang"}
-        </button>
-      </div>
-
-      {errMsg && (
-        <p className="mb-2 rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-xs text-rust-700">⚠ {errMsg}</p>
-      )}
-
-      {sumberBukanHariTugas && (
-        <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
-          Menu ini hanya tersedia utk akun yang menandai Hari Tugas (tab Perencanaan Lapangan). Akun Anda belum
-          memiliki Hari Tugas yang ditag.
-        </p>
-      )}
-
-      {!sumberBukanHariTugas && calon && calon.length === 0 && !loading && (
-        <p className="rounded-md border border-dashed border-line p-3 text-center text-[11px] text-ink/40">
-          Tidak ada tanggal yang terlewat saat ini -- semua Hari Tugas yang sudah ditag &amp; sudah lewat sudah
-          memiliki Laporan.
-        </p>
-      )}
-
-      {!sumberBukanHariTugas && calon && calon.length > 0 && (
-        <LaporanSusulanForm
-          calon={calon}
-          token={token}
-          onDone={(suratTugasId, tanggal) => {
-            muat();
-            onSelesai(suratTugasId, tanggal);
-          }}
-          guard={guard}
-        />
-      )}
-    </div>
-  );
-}
-
-function LaporanSusulanForm({
-  calon,
-  token,
-  onDone,
-  guard,
-}: {
-  calon: HariKerjaCalonSusulan[];
-  token: string;
-  onDone: (suratTugasId: number, tanggal: string) => void;
-  guard: (fn: () => void) => void;
-}) {
-  const [pilihIdx, setPilihIdx] = useState(0);
-  const [rekapManual, setRekapManual] = useState<Record<string, string>>({});
-  // (2 Okt 2026) Rekap Identifikasi (Ada/Tidak Ada/Ragu/Belum) -- permintaan
-  // user: formulir Laporan Susulan harus menanyakan SELURUH variabel yg
-  // sama dgn laporan rekan2 yg tepat waktu (bukan cuma status kunjungan).
-  // Ini variabel dari tab Identifikasi Jorong/Tetangga, SENGAJA opsional
-  // (boleh 0 semua) krn sejak 20 Sept 2026 Identifikasi bukan lagi syarat
-  // wajib -- Penyisiran Usaha di atas sudah cukup -- tapi tetap disediakan
-  // kolomnya utk petugas yg memang melakukannya.
-  const [rekapIdentifikasiManual, setRekapIdentifikasiManual] = useState<Record<string, string>>({});
-  // Lokasi SEKARANG daftar (bisa lebih dari 1 lokasi/hari, sama spt
-  // lokasiPenyisiran pd laporan normal) -- mulai dgn 1 baris kosong.
-  const [lokasiRows, setLokasiRows] = useState<LokasiSusulanRow[]>([{ kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
-  const [catatanKeterlambatan, setCatatanKeterlambatan] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sukses, setSukses] = useState<string | null>(null);
-
-  const idxAman = pilihIdx < calon.length ? pilihIdx : 0;
-  const dipilih = calon[idxAman];
-
-  function totalManual(): number {
-    return KUNCI_STATUS_SUSULAN.reduce((a, k) => {
-      const v = Number(rekapManual[k]);
-      return a + (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
-    }, 0);
-  }
-
-  function totalIdentifikasiManual(): number {
-    return KUNCI_IDENTIFIKASI_SUSULAN.reduce((a, k) => {
-      const v = Number(rekapIdentifikasiManual[k]);
-      return a + (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
-    }, 0);
-  }
-
-  function ubahLokasiRow(idx: number, field: keyof LokasiSusulanRow, value: string) {
-    setLokasiRows((prev) => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)));
-  }
-
-  function tambahLokasiRow() {
-    setLokasiRows((prev) => [...prev, { kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
-  }
-
-  function hapusLokasiRow(idx: number) {
-    setLokasiRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSukses(null);
-    if (!dipilih) {
-      setError("Pilih tanggal terlebih dahulu.");
-      return;
-    }
-    if (totalManual() <= 0) {
-      setError("Isi jumlah minimal 1 utk salah satu status kunjungan (tidak boleh semuanya 0).");
-      return;
-    }
-    if (!catatanKeterlambatan.trim()) {
-      setError("Alasan keterlambatan wajib diisi.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await apiFetch("/api/penyisiran/spj/laporan", token, {
-        method: "POST",
-        body: JSON.stringify({
-          surat_tugas_id: dipilih.suratTugasId,
-          tanggal: dipilih.tanggal,
-          susulan: true,
-          rekap_manual: Object.fromEntries(KUNCI_STATUS_SUSULAN.map((k) => [k, Number(rekapManual[k]) || 0])),
-          rekap_identifikasi_manual: Object.fromEntries(
-            KUNCI_IDENTIFIKASI_SUSULAN.map((k) => [k, Number(rekapIdentifikasiManual[k]) || 0])
-          ),
-          lokasi_manual: lokasiRows
-            .map((row) => ({
-              kecamatan: row.kecamatan.trim(),
-              nagari: row.nagari.trim(),
-              jorong: row.jorong.trim(),
-              jumlah: Number(row.jumlah) || 0,
-            }))
-            .filter((row) => row.jumlah > 0 && (row.kecamatan || row.nagari || row.jorong)),
-          catatan_keterlambatan: catatanKeterlambatan.trim(),
-        }),
-      });
-      setSukses(`Laporan Susulan utk ${formatTanggal(dipilih.tanggal)} berhasil disimpan.`);
-      setRekapManual({});
-      setRekapIdentifikasiManual({});
-      setLokasiRows([{ kecamatan: "", nagari: "", jorong: "", jumlah: "" }]);
-      setCatatanKeterlambatan("");
-      setPilihIdx(0);
-      onDone(dipilih.suratTugasId, dipilih.tanggal);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (/sesi tidak valid|kedaluwarsa/i.test(msg)) {
-        guard(() => {
-          throw e;
-        });
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-2 space-y-2.5 rounded-md border border-line bg-paper/30 p-2.5">
-      <div>
-        <label className="mb-1 block text-[10px] font-medium text-ink/50">Tanggal Hari Tugas yang terlewat</label>
-        <select
-          value={idxAman}
-          onChange={(e) => {
-            setPilihIdx(Number(e.target.value));
-            setSukses(null);
-          }}
-          className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-        >
-          {calon.map((c, i) => (
-            <option key={`${c.suratTugasId}:${c.tanggal}`} value={i}>
-              {formatTanggal(c.tanggal)} -- {c.nomorSt}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {dipilih && (
-        <RekapLaporanPreviewBox suratTugasId={dipilih.suratTugasId} tanggal={dipilih.tanggal} token={token} />
-      )}
-
-      <div>
-        <p className="mb-1 text-[10px] font-medium text-ink/50">
-          Jumlah Keluarga per Status Kunjungan -- diisi MANUAL sesuai catatan/ingatan lapangan Anda sendiri (boleh
-          jadi beda dari preview data di atas, krn preview itu cuma menghitung aktivitas yg SEMPAT tercatat di
-          sistem)
-        </p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {KUNCI_STATUS_SUSULAN.map((k) => (
-            <div
-              key={k}
-              className="flex items-center justify-between gap-2 rounded-md border border-line bg-white px-2 py-1.5"
-            >
-              <span className="text-[11px] text-ink/70">{LABEL_STATUS_KUNJUNGAN[k]}</span>
-              <input
-                type="number"
-                min={0}
-                value={rekapManual[k] ?? ""}
-                onChange={(e) => setRekapManual((prev) => ({ ...prev, [k]: e.target.value }))}
-                placeholder="0"
-                className="w-20 rounded-md border border-line px-2 py-1 text-right text-xs"
-              />
-            </div>
-          ))}
-        </div>
-        <p className="mt-1 text-[10px] text-ink/40">Total: {totalManual()} keluarga</p>
-      </div>
-
-      <div>
-        <p className="mb-1 text-[10px] font-medium text-ink/50">
-          Rekap Identifikasi (tab Identifikasi Jorong/Tetangga) -- opsional, isi 0/kosong kalau Anda tidak melakukan
-          Identifikasi pada tanggal ini
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {KUNCI_IDENTIFIKASI_SUSULAN.map((k) => (
-            <div
-              key={k}
-              className="flex items-center justify-between gap-1.5 rounded-md border border-line bg-white px-2 py-1.5"
-            >
-              <span className="text-[11px] text-ink/70">{LABEL_IDENTIFIKASI_SUSULAN[k]}</span>
-              <input
-                type="number"
-                min={0}
-                value={rekapIdentifikasiManual[k] ?? ""}
-                onChange={(e) => setRekapIdentifikasiManual((prev) => ({ ...prev, [k]: e.target.value }))}
-                placeholder="0"
-                className="w-14 rounded-md border border-line px-1.5 py-1 text-right text-xs"
-              />
-            </div>
-          ))}
-        </div>
-        <p className="mt-1 text-[10px] text-ink/40">Total: {totalIdentifikasiManual()} usaha/keluarga</p>
-      </div>
-
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <p className="text-[10px] font-medium text-ink/50">
-            Lokasi (boleh lebih dari 1 baris kalau pindah lokasi pada hari yang sama)
-          </p>
-          <button
-            type="button"
-            onClick={tambahLokasiRow}
-            className="rounded-full border border-moss-200 bg-moss-50 px-2 py-0.5 text-[10px] font-semibold text-moss-900 hover:bg-moss-100"
-          >
-            + Tambah Lokasi
-          </button>
-        </div>
-        <div className="space-y-1.5">
-          {lokasiRows.map((row, idx) => (
-            <div key={idx} className="grid grid-cols-2 gap-1.5 sm:grid-cols-[1fr_1fr_1fr_90px_auto]">
-              <input
-                type="text"
-                value={row.kecamatan}
-                onChange={(e) => ubahLokasiRow(idx, "kecamatan", e.target.value)}
-                placeholder="Kecamatan"
-                className="rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-              <input
-                type="text"
-                value={row.nagari}
-                onChange={(e) => ubahLokasiRow(idx, "nagari", e.target.value)}
-                placeholder="Nagari"
-                className="rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-              <input
-                type="text"
-                value={row.jorong}
-                onChange={(e) => ubahLokasiRow(idx, "jorong", e.target.value)}
-                placeholder="Jorong/Sub SLS"
-                className="rounded-md border border-line px-2 py-1.5 text-xs"
-              />
-              <input
-                type="number"
-                min={0}
-                value={row.jumlah}
-                onChange={(e) => ubahLokasiRow(idx, "jumlah", e.target.value)}
-                placeholder="Jml KK"
-                className="rounded-md border border-line px-2 py-1.5 text-right text-xs"
-              />
-              <button
-                type="button"
-                onClick={() => hapusLokasiRow(idx)}
-                disabled={lokasiRows.length <= 1}
-                className="rounded-md border border-line px-2 py-1.5 text-[11px] text-ink/50 hover:border-rust-200 hover:text-rust-700 disabled:cursor-default disabled:opacity-30"
-                title="Hapus baris ini"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-[10px] font-medium text-ink/50">Alasan Keterlambatan (wajib)</label>
-        <textarea
-          value={catatanKeterlambatan}
-          onChange={(e) => setCatatanKeterlambatan(e.target.value)}
-          rows={2}
-          placeholder="Contoh: baru sempat mencatat di sistem karena kendala sinyal/teknis di lapangan..."
-          className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
-        />
-      </div>
-
-      {error && <p className="rounded-lg border border-rust-100 bg-rust-100/40 p-2 text-[11px] text-rust-700">⚠ {error}</p>}
-      {sukses && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-800">✓ {sukses}</p>
-      )}
-
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded-md bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-900 disabled:opacity-60"
-      >
-        {busy ? "Menyimpan..." : "Simpan Laporan Susulan"}
-      </button>
-    </form>
-  );
-}
-
 // ---------- Dokumentasi (5 slot foto/hari) ----------
 interface DokumentasiSt {
   surat_tugas_id: number;
@@ -3482,8 +2769,8 @@ function KwitansiSection({ token, jenis, onSessionExpired }: { token: string; je
         </button>
       </div>
       <p className="mb-2 text-[11px] text-ink/50">
-        Nominal diinput manual sesuai yang diterima. Terbilang SELALU mengikuti nominal secara otomatis (tidak bisa
-        diketik beda sendiri), supaya angka & terbilang tidak pernah tidak nyambung.
+        Nominal diinput manual sesuai yang diterima. Terbilang tersarankan otomatis dari nominal, boleh diubah kalau
+        perlu.
       </p>
 
       {errMsg && (
@@ -3679,14 +2966,7 @@ function KwitansiSetForm({
     if (hari > 0) setNominal(String(TARIF_TRANSLOK_PER_HARI_SARAN * hari));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tanggalMulaiSet, tanggalSelesaiSet]);
-  // (28 Sep 2026) "Terbilang" TIDAK LAGI state terpisah yg bisa lepas
-  // sinkron dari `nominal` (lihat komentar besar di
-  // app/api/penyisiran/spj/kwitansi/route.ts) -- SEKARANG murni turunan
-  // dihitung ULANG tiap render dari `nominal` yg SEDANG diketik, jadi
-  // MUSTAHIL beda dari yg nanti disimpan server (server jg menghitung
-  // ulang persis dari nominal yg sama, fungsi yg SAMA).
-  const nominalUntukPreview = Number(nominal);
-  const terbilangPreview = Number.isFinite(nominalUntukPreview) && nominalUntukPreview >= 0 ? terbilangRupiah(nominalUntukPreview) : "-";
+  const [terbilang, setTerbilang] = useState(existing?.terbilang ?? "");
   // untukPerjalananDinasPada HANYA relevan/dipakai utk jenis "tetangga" --
   // jenis "penyisiran" pakai st.untuk_perjalanan_dinas_pada_otomatis
   // (dihitung server, read-only, sama pola dgn Visum).
@@ -3736,9 +3016,7 @@ function KwitansiSetForm({
           id: existing?.id,
           surat_tugas_id: st.surat_tugas_id,
           nominal: nominalNum,
-          // "terbilang" TIDAK dikirim lagi -- server SELALU menghitung
-          // ulang sendiri dari `nominal` di atas (lihat komentar besar di
-          // app/api/penyisiran/spj/kwitansi/route.ts).
+          terbilang: terbilang.trim(),
           // untuk_perjalanan_dinas_pada cuma dipakai server utk jenis
           // "tetangga" -- jenis "penyisiran" SELALU dihitung ulang sendiri
           // di server (lihat app/api/penyisiran/spj/kwitansi/route.ts).
@@ -3843,17 +3121,16 @@ function KwitansiSetForm({
         </div>
       )}
       <div>
-        <label className="mb-1 block text-[10px] font-medium text-ink/50">Terbilang (otomatis, tidak bisa diketik manual)</label>
-        {/* (28 Sep 2026) READ-ONLY -- lihat komentar besar di
-            app/api/penyisiran/spj/kwitansi/route.ts kenapa field ini tidak
-            lagi boleh jadi input bebas: dulu bisa lepas sinkron dari
-            nominal (kasus B-1259/13030/SS.330/2026, Nominal "Rp. 170.000"
-            tp Terbilang "satu juta lima ratus tiga puluh ribu rupiah"
-            krn nominal sempat diganti tp terbilang lama ikut terkirim
-            tanpa disadari). SEKARANG cuma pratinjau -- angka yg BENAR2
-            disimpan dihitung ulang di server dari `nominal`, bukan dari
-            teks ini. */}
-        <p className="w-full rounded-md border border-line bg-paper/40 px-2 py-1.5 text-xs italic text-ink/60">{terbilangPreview}</p>
+        <label className="mb-1 block text-[10px] font-medium text-ink/50">
+          Terbilang (opsional, kosongkan utk otomatis dari nominal)
+        </label>
+        <input
+          type="text"
+          value={terbilang}
+          onChange={(e) => setTerbilang(e.target.value)}
+          placeholder="Otomatis dari nominal kalau dikosongkan"
+          className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
+        />
       </div>
       {error && <p className="text-[11px] text-rust-700">⚠ {error}</p>}
       <div className="flex items-center gap-2">

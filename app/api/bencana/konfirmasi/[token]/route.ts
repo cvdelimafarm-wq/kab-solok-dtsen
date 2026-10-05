@@ -125,22 +125,49 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       // pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor
       // ditambahkan -- dipakai FE utk deteksi & tampilkan section
       // "Lengkapi Data Anda" (lihat PATCH di atas).
-      "id, nama, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih, perkiraan_hari_libur, no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor"
+      "id, nama, peran, atasan_id, lat, lng, status_kepegawaian, aktif, pendaftaran_bencana_konfirmasi, status_kontak_pendaftaran_bencana, catatan_penolakan_pendaftaran_bencana, jadwal_pelatihan_dipilih, perkiraan_hari_libur, no_hp, lokasi_status, umur, jenis_kelamin, pendidikan, pekerjaan, bisa_mengendarai_motor, punya_kendaraan_bermotor"
     )
     .eq("token", token)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!petugas) return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
 
+  // (5 Okt 2026) SISTEM KEROYOKAN: wilayah kerja BUKAN lagi 1-1 ke PPL. Yang
+  // ditampilkan = SELURUH Sub SLS sampel milik TIM petugas ini, yaitu semua PPL
+  // yg satu PML (atasan_id sama) + PML-nya sendiri. Kalau petugas belum punya tim
+  // (tanpa atasan & bukan PML), tetap jatuh ke Sub SLS miliknya sendiri.
+  const atasanId = (petugas.atasan_id as number | null) ?? (petugas.peran === "pml" ? (petugas.id as number) : null);
+  let anggotaTim: { id: number; nama: string; peran: string | null }[] = [{ id: petugas.id as number, nama: petugas.nama as string, peran: (petugas.peran as string | null) ?? null }];
+  let pmlNama: string | null = petugas.peran === "pml" ? (petugas.nama as string) : null;
+  if (atasanId != null) {
+    const { data: tim } = await supabase
+      .from("bencana_petugas")
+      .select("id, nama, peran")
+      .or(`atasan_id.eq.${atasanId},id.eq.${atasanId}`);
+    anggotaTim = ((tim ?? []) as { id: number; nama: string; peran: string | null }[]).filter((t) => t.id != null);
+    if (!anggotaTim.some((t) => t.id === petugas.id)) {
+      anggotaTim.push({ id: petugas.id as number, nama: petugas.nama as string, peran: (petugas.peran as string | null) ?? null });
+    }
+    pmlNama = anggotaTim.find((t) => t.id === atasanId)?.nama ?? pmlNama;
+  }
+  const idTim = anggotaTim.map((t) => t.id);
+  const namaPpl = new Map(anggotaTim.map((t) => [t.id, t.nama]));
+
   // Wilayah kerja -- Sub SLS yg SUDAH diplot RESMI (tersimpan, bukan draft)
-  // ke petugas ini.
+  // ke seluruh PPL dalam tim.
   const { data: alokasiRows, error: errAlokasi } = await supabase
     .from("bencana_alokasi_subsls")
-    .select("idsubsls")
-    .eq("ppl_id", petugas.id);
+    .select("idsubsls, ppl_id, jarak_km")
+    .in("ppl_id", idTim);
   if (errAlokasi) return NextResponse.json({ error: errAlokasi.message }, { status: 500 });
 
   const idsubslsList = Array.from(new Set((alokasiRows ?? []).map((r) => r.idsubsls as string)));
+  const pemegang = new Map<string, number[]>(); // idsubsls -> ppl_id (bisa > 1 kalau dipecah)
+  const jarakAlokasiSaya = new Map<string, number>();
+  for (const r of (alokasiRows ?? []) as { idsubsls: string; ppl_id: number; jarak_km: number | string | null }[]) {
+    pemegang.set(r.idsubsls, [...(pemegang.get(r.idsubsls) ?? []), r.ppl_id]);
+    if (r.ppl_id === petugas.id && r.jarak_km != null) jarakAlokasiSaya.set(r.idsubsls, Number(r.jarak_km));
+  }
   let wilayahKerja: {
     idsubsls: string;
     kecamatan: string;
@@ -156,6 +183,12 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     // supaya mitra/petugas tidak salah paham wilayahnya dikira tidak
     // terdampak.
     kk_terdampak_belum_lengkap: boolean;
+    // (5 Okt 2026) sistem keroyokan: siapa saja PPL di tim yg memegang Sub SLS ini,
+    // apakah termasuk milik petugas ini, dan jaraknya dari RUMAH petugas ini.
+    milik_saya?: boolean;
+    pemegang?: string[];
+    jarak_rumah_km?: number | null;
+    jarak_sumber?: "garis_lurus" | "alokasi" | null;
   }[] = [];
 
   if (idsubslsList.length > 0) {
@@ -230,7 +263,51 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         });
       }
     }
-    wilayahKerja.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id"));
+    // Jarak dari rumah petugas ke tiap Sub SLS tim (garis lurus, haversine, ke titik
+    // pusat Sub SLS dari bencana_subsls_koordinat). Kalau lokasi rumah belum riil /
+    // koordinat Sub SLS belum ada: pakai jarak hasil plotting utk Sub SLS miliknya sendiri
+    // kalau ada, selain itu null (FE menulis "belum tersedia").
+    const homeLat = typeof petugas.lat === "number" ? (petugas.lat as number) : null;
+    const homeLng = typeof petugas.lng === "number" ? (petugas.lng as number) : null;
+    const rumahRiil = petugas.lokasi_status === "riil" && homeLat != null && homeLng != null;
+    const koord = new Map<string, { lat: number; lon: number }>();
+    if (rumahRiil) {
+      for (let i = 0; i < idsubslsList.length; i += 200) {
+        const { data: kd } = await supabase.from("bencana_subsls_koordinat").select("idsubsls, lat, lon").in("idsubsls", idsubslsList.slice(i, i + 200));
+        for (const k of (kd ?? []) as { idsubsls: string; lat: number | null; lon: number | null }[]) {
+          if (typeof k.lat === "number" && typeof k.lon === "number") koord.set(k.idsubsls, { lat: k.lat, lon: k.lon });
+        }
+      }
+    }
+    const rad = (d: number) => (d * Math.PI) / 180;
+    const haversineKm = (la1: number, lo1: number, la2: number, lo2: number) => {
+      const a = Math.sin(rad(la2 - la1) / 2) ** 2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2;
+      return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+    };
+    for (const w of wilayahKerja) {
+      const ids = pemegang.get(w.idsubsls) ?? [];
+      w.milik_saya = ids.includes(petugas.id as number);
+      w.pemegang = Array.from(new Set(ids.map((id) => namaPpl.get(id) ?? `#${id}`)));
+      const k = koord.get(w.idsubsls);
+      if (rumahRiil && k && homeLat != null && homeLng != null) {
+        w.jarak_rumah_km = Math.round(haversineKm(homeLat, homeLng, k.lat, k.lon) * 10) / 10;
+        w.jarak_sumber = "garis_lurus";
+      } else if (jarakAlokasiSaya.has(w.idsubsls)) {
+        w.jarak_rumah_km = Math.round((jarakAlokasiSaya.get(w.idsubsls) as number) * 10) / 10;
+        w.jarak_sumber = "alokasi";
+      } else {
+        w.jarak_rumah_km = null;
+        w.jarak_sumber = null;
+      }
+    }
+    // Urut: Sub SLS milik sendiri dulu, lalu menurut jarak terdekat dari rumah, lalu wilayah.
+    wilayahKerja.sort(
+      (a, b) =>
+        Number(!!b.milik_saya) - Number(!!a.milik_saya) ||
+        (a.jarak_rumah_km ?? 1e9) - (b.jarak_rumah_km ?? 1e9) ||
+        a.kecamatan.localeCompare(b.kecamatan, "id") ||
+        a.nagari.localeCompare(b.nagari, "id")
+    );
   }
 
   const sudahAkun = await punyaAkun(supabase, petugas.id as number);
@@ -247,6 +324,12 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       perkiraan_hari_libur: petugas.perkiraan_hari_libur as string[] | null,
       wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       wilayah_kerja: wilayahKerja,
+      // (5 Okt 2026) info tim keroyokan + status lokasi rumah (utk keterangan jarak).
+      tim: {
+        pml: pmlNama,
+        anggota: anggotaTim.filter((t) => t.peran !== "pml").map((t) => t.nama),
+      },
+      lokasi_rumah_riil: petugas.lokasi_status === "riil" && petugas.lat != null && petugas.lng != null,
       // (3 Okt 2026) utk section "Lengkapi Data Anda" -- lihat komentar PATCH.
       no_hp: petugas.no_hp,
       lokasi_status: petugas.lokasi_status,

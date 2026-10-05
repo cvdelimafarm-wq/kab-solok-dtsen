@@ -4969,6 +4969,8 @@ function AlokasiPetugasSection() {
   const [timError, setTimError] = useState<string | null>(null);
   const [korwilBaruId, setKorwilBaruId] = useState<number | "">("");
   const [pmlBaruId, setPmlBaruId] = useState<number | "">("");
+  const [nonPlotBaruId, setNonPlotBaruId] = useState<number | "">("");
+  const [nonPlotPmlId, setNonPlotPmlId] = useState<number | "">("");
 
   const [kecFilter, setKecFilter] = useState("");
   const [pplFilter, setPplFilter] = useState<number | "">("");
@@ -5824,6 +5826,27 @@ function AlokasiPetugasSection() {
     }
   }
 
+  // (5 Okt 2026) Tambah PPL NON-PLOT ke tim PML (validasi "tidak terplot di wilayah manapun" di server).
+  async function handleTambahNonPlot(petugasId: number, pmlId: number) {
+    setTimBusyId(petugasId);
+    setTimError(null);
+    try {
+      const res = await fetch("/api/bencana/alokasi/susunan-tim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ petugas_id: petugasId, peran: "ppl", atasan_id: pmlId, non_plot: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Gagal menambahkan PPL non-plot.");
+      setNonPlotBaruId("");
+      await muatData(hariKerjaDipakai);
+    } catch (err) {
+      setTimError(err instanceof Error ? err.message : "Gagal menambahkan PPL non-plot.");
+    } finally {
+      setTimBusyId(null);
+    }
+  }
+
   async function handleLepasPeran(petugasId: number) {
     setTimBusyId(petugasId);
     setTimError(null);
@@ -6017,6 +6040,23 @@ function AlokasiPetugasSection() {
   const calonPmlBaru = useMemo(
     () => petugasList.filter((p) => p.aktif && !p.peran).sort((a, b) => a.nama.localeCompare(b.nama)),
     [petugasList]
+  );
+  // (5 Okt 2026) PPL NON-PLOT: mitra aktif, belum berperan, dan TIDAK terplot di Sub SLS manapun
+  // (ringkasanPpl = daftar PPL yg memegang Sub SLS). Sudah-tergabung = peran PPL + punya PML tapi tanpa plot.
+  const pplTerplotIds = useMemo(() => new Set(ringkasanPpl.map((r) => r.ppl_id)), [ringkasanPpl]);
+  const calonNonPlot = useMemo(
+    () =>
+      petugasList
+        .filter((p) => p.aktif && p.status_kepegawaian === "mitra" && !p.peran && !pplTerplotIds.has(p.id))
+        .sort((a, b) => a.nama.localeCompare(b.nama)),
+    [petugasList, pplTerplotIds]
+  );
+  const pplNonPlot = useMemo(
+    () =>
+      petugasList
+        .filter((p) => p.peran === "ppl" && p.atasan_id != null && !pplTerplotIds.has(p.id))
+        .sort((a, b) => a.nama.localeCompare(b.nama)),
+    [petugasList, pplTerplotIds]
   );
 
   // Label dropdown PPL: HANYA nama + petunjuk kedekatan wilayah (jumlah Sub
@@ -8621,6 +8661,84 @@ function AlokasiPetugasSection() {
                 <li className="text-xs text-ink/40">Belum ada PPL yang diplot ke Sub SLS.</li>
               )}
             </ul>
+
+            {/* (5 Okt 2026) PPL NON-PLOT: anggota tim tanpa Sub SLS sendiri (sistem keroyokan). */}
+            <div className="mt-3 border-t border-line pt-3">
+              <h3 className="text-sm font-semibold text-ink">PPL Non-Plot ({pplNonPlot.length})</h3>
+              <p className="mt-1 text-[11px] text-ink/50">
+                Anggota tim yang tidak memegang Sub SLS sendiri. Syarat: tidak boleh terplot di wilayah manapun.
+              </p>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <Combobox
+                  value={nonPlotBaruId === "" ? null : nonPlotBaruId}
+                  onChange={(v) => setNonPlotBaruId(v ?? "")}
+                  options={calonNonPlot.map((p) => ({
+                    value: p.id,
+                    label: `${p.nama}${p.alamat_nagari ? ` — ${p.alamat_nagari}` : ""}`,
+                  }))}
+                  placeholder="+ Pilih calon PPL non-plot (mitra, belum terplot)..."
+                  className="w-full"
+                />
+                <Combobox
+                  value={nonPlotPmlId === "" ? null : nonPlotPmlId}
+                  onChange={(v) => setNonPlotPmlId(v ?? "")}
+                  options={pmlOptions.map((m) => {
+                    const jumlah = ringkasanPml.find((x) => x.pml_id === m.id)?.jumlah_ppl ?? 0;
+                    const penuh = jumlah >= KAPASITAS_MAX_PPL_PER_PML;
+                    return {
+                      value: m.id,
+                      label: `PML: ${m.nama}${penuh ? ` (penuh - ${KAPASITAS_MAX_PPL_PER_PML} PPL)` : ""}`,
+                      disabled: penuh,
+                    };
+                  })}
+                  placeholder="Masuk ke tim PML..."
+                  className="w-full"
+                />
+                <button
+                  type="button"
+                  disabled={!nonPlotBaruId || !nonPlotPmlId || timBusyId === nonPlotBaruId}
+                  onClick={() => {
+                    if (nonPlotBaruId && nonPlotPmlId) handleTambahNonPlot(nonPlotBaruId, nonPlotPmlId);
+                  }}
+                  className="rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  Tambah PPL Non-Plot
+                </button>
+              </div>
+              <ul className="mt-2 flex max-h-60 flex-col gap-1.5 overflow-y-auto">
+                {pplNonPlot.map((p) => (
+                  <li key={p.id} className="rounded-md bg-amber-50 px-2 py-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <p className="truncate font-medium text-ink">
+                        {p.nama} <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-800">non-plot</span>
+                      </p>
+                      <button
+                        type="button"
+                        disabled={timBusyId === p.id}
+                        onClick={() => handleLepasPeran(p.id)}
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-rust-600 hover:bg-rust-100"
+                      >
+                        lepas
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-ink/50">
+                      {[p.alamat_nagari, p.alamat_kecamatan].filter(Boolean).join(", ") || "alamat belum diisi"}
+                    </p>
+                    <Combobox
+                      value={p.atasan_id}
+                      onChange={(v) => {
+                        if (typeof v === "number") handleTambahNonPlot(p.id, v);
+                      }}
+                      disabled={timBusyId === p.id}
+                      options={pmlOptions.map((m) => ({ value: m.id, label: `PML: ${m.nama}` }))}
+                      placeholder="PML: belum dipilih..."
+                      className="mt-1 w-full"
+                    />
+                  </li>
+                ))}
+                {pplNonPlot.length === 0 && <li className="text-xs text-ink/40">Belum ada PPL non-plot.</li>}
+              </ul>
+            </div>
           </div>
         </div>
 

@@ -156,7 +156,25 @@ export async function GET(req: NextRequest) {
       pml_min: Number(k.jumlah_pml_dibutuhkan),
     }));
 
-    return NextResponse.json({ hari_kerja: hariKerja, kebutuhan, petugas });
+    // 7) (5 Okt 2026) SELURUH wilayah sampel (termasuk yg belum punya PPL terplot) supaya
+    //    monitoring jelas: tiap nagari tampil dgn jumlah Sub SLS sampel & berapa yg sudah terplot.
+    const { data: calon, error: errCalon } = await db.rpc("bencana_daftar_calon_sampel");
+    if (errCalon) return NextResponse.json({ error: errCalon.message }, { status: 500 });
+    const terplot = new Set(alok.map((a) => a.idsubsls));
+    const peta = new Map<string, { kecamatan: string; nagari: string; sampel: number; terplot: number }>();
+    for (const r of (calon ?? []) as { idsubsls: string; kecamatan: string; nagari: string; termasuk_sampel: boolean }[]) {
+      if (!r.termasuk_sampel) continue;
+      const kecamatan = String(r.kecamatan ?? "").trim().toUpperCase();
+      const nagari = String(r.nagari ?? "").trim().toUpperCase();
+      const kunci = `${kecamatan}|${nagari}`;
+      const cur = peta.get(kunci) ?? { kecamatan, nagari, sampel: 0, terplot: 0 };
+      cur.sampel += 1;
+      if (terplot.has(r.idsubsls)) cur.terplot += 1;
+      peta.set(kunci, cur);
+    }
+    const wilayahSampel = Array.from(peta.values());
+
+    return NextResponse.json({ hari_kerja: hariKerja, kebutuhan, petugas, wilayah_sampel: wilayahSampel });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
     return NextResponse.json({ error: message }, { status: 500 });

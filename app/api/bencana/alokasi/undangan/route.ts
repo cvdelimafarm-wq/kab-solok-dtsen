@@ -47,6 +47,7 @@ type PetugasRow = {
   jadwal_pelatihan_dipilih: string | null;
   alamat_kecamatan: string | null;
   alamat_nagari: string | null;
+  alamat_detail: string | null;
   nilai_kinerja: number | null;
 };
 
@@ -106,13 +107,21 @@ export async function GET() {
     }
 
     // (4 Okt 2026) PML (peran 'pml' yg membawahi PPL) ikut dipantau: mereka juga diundang lewat /undangan.
-    const { data: bawahanRaw } = await db.from("bencana_petugas").select("atasan_id").not("atasan_id", "is", null);
+    const { data: bawahanRaw } = await db.from("bencana_petugas").select("id, atasan_id").not("atasan_id", "is", null);
     const jmlPpl = new Map<number, number>();
-    for (const b of (bawahanRaw ?? []) as { atasan_id: number }[]) jmlPpl.set(b.atasan_id, (jmlPpl.get(b.atasan_id) ?? 0) + 1);
+    const atasanDari = new Map<number, number>(); // petugas_id -> atasan_id (PML)
+    for (const b of (bawahanRaw ?? []) as { id: number; atasan_id: number }[]) {
+      jmlPpl.set(b.atasan_id, (jmlPpl.get(b.atasan_id) ?? 0) + 1);
+      atasanDari.set(b.id, b.atasan_id);
+    }
     const { data: pmlRaw } = await db.from("bencana_petugas").select("id").eq("peran", "pml").eq("aktif", true).eq("status_kepegawaian", "mitra");
     const pmlIds = new Set(((pmlRaw ?? []) as { id: number }[]).map((x) => x.id).filter((id) => (jmlPpl.get(id) ?? 0) > 0));
 
-    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys(), ...pmlIds]));
+    // (5 Okt 2026) Petugas NON-PLOT yg sudah bergabung ke tim (punya PML/atasan) tetapi tidak
+    // memegang Sub SLS -- tetap dipantau di kartu ini (mis. PPL yg plotnya dilepas karena menolak
+    // atau anggota tim keroyokan tanpa Sub SLS sendiri).
+    const idNonPlotTim = Array.from(atasanDari.keys()).filter((id) => !jarak.has(id));
+    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys(), ...pmlIds, ...idNonPlotTim]));
     if (idSemua.length === 0) return NextResponse.json({ data: [], cadangan: {} });
 
     const petugasMap = new Map<number, PetugasRow>();
@@ -120,7 +129,7 @@ export async function GET() {
       const { data } = await db
         .from("bencana_petugas")
         .select(
-          "id, nama, no_hp, token, status_kontak_pendaftaran_bencana, pendaftaran_bencana_konfirmasi, catatan_penolakan_pendaftaran_bencana, dikontak_pendaftaran_bencana_at, jadwal_pelatihan_dipilih, alamat_kecamatan, alamat_nagari, nilai_kinerja"
+          "id, nama, no_hp, token, status_kontak_pendaftaran_bencana, pendaftaran_bencana_konfirmasi, catatan_penolakan_pendaftaran_bencana, dikontak_pendaftaran_bencana_at, jadwal_pelatihan_dipilih, alamat_kecamatan, alamat_nagari, alamat_detail, nilai_kinerja"
         )
         .in("id", idSemua.slice(i, i + 200));
       for (const p of (data ?? []) as PetugasRow[]) petugasMap.set(p.id, p);
@@ -153,6 +162,7 @@ export async function GET() {
           no_hp: p.no_hp,
           alamat_kecamatan: p.alamat_kecamatan,
           alamat_nagari: p.alamat_nagari,
+          alamat_detail: p.alamat_detail ?? null,
           status_kontak: p.status_kontak_pendaftaran_bencana,
           sudah_konfirmasi: p.pendaftaran_bencana_konfirmasi,
           catatan_menolak: p.catatan_penolakan_pendaftaran_bencana,
@@ -162,6 +172,9 @@ export async function GET() {
           peran: pmlIds.has(p.id) ? ("pml" as const) : ("ppl" as const),
           jumlah_ppl: jmlPpl.get(p.id) ?? 0,
           jumlah_plot: j?.jumlah_plot ?? 0,
+          // (5 Okt 2026) non-plot = bukan PML, tidak memegang Sub SLS, tetapi tercatat di tim (atasan_id terisi).
+          non_plot: !pmlIds.has(p.id) && (j?.jumlah_plot ?? 0) === 0 && atasanDari.has(p.id),
+          pml_nama: null as string | null,
           jarak_maks_km: j?.jarak_maks_km ?? null,
           jarak_semua_riil: j?.semua_riil ?? true,
           idsubsls_terjauh: j?.idsubsls_terjauh ?? null,

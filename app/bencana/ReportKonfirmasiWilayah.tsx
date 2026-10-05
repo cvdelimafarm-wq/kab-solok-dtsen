@@ -14,7 +14,8 @@ type StatusKonfirmasi = "belum_dibuka" | "dibaca" | "bersedia" | "pulang_pergi" 
 type Wil = { kecamatan: string; nagari: string; subsls: number };
 type PetugasRep = { id: number; nama: string; peran: "ppl" | "pml"; status: StatusKonfirmasi; wilayah: Wil[] };
 type Kebutuhan = { kecamatan: string; ppl_min: number; pml_min: number };
-type Respons = { hari_kerja: number; kebutuhan: Kebutuhan[]; petugas: PetugasRep[] };
+type WilSampel = { kecamatan: string; nagari: string; sampel: number; terplot: number };
+type Respons = { hari_kerja: number; kebutuhan: Kebutuhan[]; petugas: PetugasRep[]; wilayah_sampel?: WilSampel[] };
 
 type Hitung = {
   ppl: Set<number>;
@@ -54,6 +55,18 @@ function tambah(h: Hitung, p: PetugasRep) {
 
 function judul(s: string): string {
   return s.toLowerCase().replace(/(^|[\s(/-])([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase());
+}
+
+// (5 Okt 2026) terplot / sampel; merah kalau ada Sub SLS sampel yg belum punya PPL.
+function SubSls({ terplot, sampel }: { terplot: number; sampel: number }) {
+  if (sampel === 0) return <span className="text-ink/30">-</span>;
+  const kurang = sampel - terplot;
+  return (
+    <span className={kurang > 0 ? "font-medium text-rust-700" : "text-moss-700"}>
+      {terplot} / {sampel}
+      {kurang > 0 && <span className="ml-1 text-[10px]">({kurang} belum)</span>}
+    </span>
+  );
 }
 
 function Sel({ n, tone }: { n: { ppl: number; pml: number }; tone?: string }) {
@@ -110,15 +123,28 @@ export default function ReportKonfirmasiWilayah() {
       }
     }
     const kebutuhan = new Map((data?.kebutuhan ?? []).map((k) => [k.kecamatan, k]));
-    const namaKec = Array.from(new Set([...kec.keys(), ...kebutuhan.keys()])).sort((a, b) => a.localeCompare(b, "id"));
-    const baris = namaKec.map((k) => ({
-      kecamatan: k,
-      h: kec.get(k) ?? kosongHitung(),
-      min: kebutuhan.get(k)?.ppl_min ?? 0,
-      nagari: Array.from((nag.get(k) ?? new Map<string, Hitung>()).entries())
-        .map(([n, h]) => ({ nagari: n, h }))
-        .sort((a, b) => a.nagari.localeCompare(b.nagari, "id")),
-    }));
+    // (5 Okt 2026) Seluruh wilayah sampel ikut tampil, juga nagari yg belum ada PPL terplot.
+    const sampel = new Map<string, Map<string, WilSampel>>();
+    for (const w of data?.wilayah_sampel ?? []) {
+      const m = sampel.get(w.kecamatan) ?? new Map<string, WilSampel>();
+      m.set(w.nagari, w);
+      sampel.set(w.kecamatan, m);
+    }
+    const namaKec = Array.from(new Set([...kec.keys(), ...kebutuhan.keys(), ...sampel.keys()])).sort((a, b) => a.localeCompare(b, "id"));
+    const baris = namaKec.map((k) => {
+      const namaNagari = Array.from(new Set([...(nag.get(k)?.keys() ?? []), ...(sampel.get(k)?.keys() ?? [])]));
+      const rincian = namaNagari
+        .map((n) => ({ nagari: n, h: nag.get(k)?.get(n) ?? kosongHitung(), s: sampel.get(k)?.get(n) ?? null }))
+        .sort((a, b) => a.nagari.localeCompare(b.nagari, "id"));
+      const sub = Array.from(sampel.get(k)?.values() ?? []).reduce((acc, w) => ({ sampel: acc.sampel + w.sampel, terplot: acc.terplot + w.terplot }), { sampel: 0, terplot: 0 });
+      return {
+        kecamatan: k,
+        h: kec.get(k) ?? kosongHitung(),
+        min: kebutuhan.get(k)?.ppl_min ?? 0,
+        sub,
+        nagari: rincian,
+      };
+    });
     const minTotal = baris.reduce((s, b) => s + b.min, 0);
     return { baris, total: { h: tot, min: minTotal } };
   }, [data]);
@@ -147,7 +173,7 @@ export default function ReportKonfirmasiWilayah() {
         <div>
           <h2 className="font-medium text-blue-950">Report Konfirmasi Petugas per Wilayah</h2>
           <p className="text-[11px] text-ink/50">
-            Wilayah tugas (hasil plotting). &ldquo;Ditawarkan&rdquo; = PPL yang sudah diplot dan PML-nya.
+            Seluruh wilayah sampel (termasuk yang belum ada PPL terplot). &ldquo;Ditawarkan&rdquo; = PPL yang sudah diplot dan PML-nya.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -183,11 +209,15 @@ export default function ReportKonfirmasiWilayah() {
           {!data && !error && <p className="mt-3 text-sm text-ink/60">Memuat…</p>}
           {data && (
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[820px] text-sm">
+              <table className="w-full min-w-[920px] text-sm">
                 <thead>
                   <tr className="border-b border-blue-100 bg-blue-50 text-left text-xs text-blue-900">
                     <th rowSpan={2} className="px-2 py-1.5 align-bottom">
                       Wilayah (Kecamatan / Nagari)
+                    </th>
+                    <th rowSpan={2} className="px-2 py-1.5 text-center align-bottom">
+                      Sub SLS Sampel
+                      <div className="text-[10px] font-normal text-ink/50">terplot / sampel</div>
                     </th>
                     <th colSpan={2} className="px-2 py-1 text-center">
                       Ditawarkan
@@ -229,6 +259,9 @@ export default function ReportKonfirmasiWilayah() {
                               {judul(b.kecamatan)}
                             </button>
                           </td>
+                          <td className="px-2 py-1.5 text-center text-xs">
+                            <SubSls terplot={b.sub.terplot} sampel={b.sub.sampel} />
+                          </td>
                           <td className="px-2 py-1.5 text-center font-semibold">{b.h.ppl.size}</td>
                           <td className="px-2 py-1.5 text-center">{b.h.pml.size}</td>
                           <td className="px-2 py-1.5 text-center">
@@ -252,6 +285,9 @@ export default function ReportKonfirmasiWilayah() {
                           b.nagari.map((n) => (
                             <tr key={`${b.kecamatan}|${n.nagari}`} className="border-b border-blue-50 bg-blue-50/30 text-[13px]">
                               <td className="py-1 pl-8 pr-2 text-ink/80">{judul(n.nagari)}</td>
+                              <td className="px-2 py-1 text-center text-xs">
+                                {n.s ? <SubSls terplot={n.s.terplot} sampel={n.s.sampel} /> : <span className="text-ink/30">-</span>}
+                              </td>
                               <td className="px-2 py-1 text-center">{n.h.ppl.size}</td>
                               <td className="px-2 py-1 text-center">{n.h.pml.size}</td>
                               <td className="px-2 py-1 text-center">
@@ -275,6 +311,9 @@ export default function ReportKonfirmasiWilayah() {
                   })}
                   <tr className="border-t-2 border-blue-200 bg-blue-50 font-semibold">
                     <td className="px-2 py-1.5">Total (tanpa ganda)</td>
+                    <td className="px-2 py-1.5 text-center text-xs">
+                      <SubSls terplot={baris.reduce((s, b) => s + b.sub.terplot, 0)} sampel={baris.reduce((s, b) => s + b.sub.sampel, 0)} />
+                    </td>
                     <td className="px-2 py-1.5 text-center">{total.h.ppl.size}</td>
                     <td className="px-2 py-1.5 text-center">{total.h.pml.size}</td>
                     <td className="px-2 py-1.5 text-center">

@@ -145,6 +145,12 @@ export async function tentukanTujuan(db: Db, petugas: PetugasUndangan): Promise<
   }
   const { count } = await db.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("ppl_id", petugas.id);
   if (count && count > 0) return { tipe: "biasa", path: `/bencana/konfirmasi/${petugas.token}` };
+  // (5 Okt 2026) PPL NON-PLOT yg sudah bergabung ke tim (punya PML): tetap dapat halaman konfirmasi,
+  // yg menampilkan seluruh Sub SLS sampel timnya.
+  if (peran?.peran === "ppl") {
+    const { data: tim } = await db.from("bencana_petugas").select("atasan_id").eq("id", petugas.id).maybeSingle();
+    if (tim?.atasan_id) return { tipe: "biasa", path: `/bencana/konfirmasi/${petugas.token}` };
+  }
   return { tipe: "belum", path: null };
 }
 
