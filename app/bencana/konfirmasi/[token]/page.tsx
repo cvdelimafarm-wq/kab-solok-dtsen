@@ -49,6 +49,8 @@ type WilayahKerjaRow = {
 type KonfirmasiInfo = {
   // (5 Okt 2026) pesan pembatalan plotting (mis. PPL NTP); kalau ada, halaman hanya menampilkan pesan ini.
   pembatalan?: string | null;
+  // (5 Okt 2026) notifikasi perubahan alokasi (hilang setelah "Oke").
+  notifikasi?: { id: number; pesan: string; dibuat_at: string }[];
   tim?: { pml: string | null; anggota: string[] };
   lokasi_rumah_riil?: boolean;
   nama: string;
@@ -179,6 +181,22 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
   const [kendaraanInput, setKendaraanInput] = useState<"" | "ya" | "tidak">("");
   const [lengkapiBusy, setLengkapiBusy] = useState(false);
   const [lengkapiError, setLengkapiError] = useState<string | null>(null);
+
+  // (5 Okt 2026) Tandai notifikasi perubahan alokasi sudah dibaca (tombol "Oke").
+  const [notifBusy, setNotifBusy] = useState(false);
+  async function okeNotifikasi() {
+    setNotifBusy(true);
+    try {
+      const res = await fetch(`/api/bencana/konfirmasi/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aksi: "baca_notifikasi" }),
+      });
+      if (res.ok) setInfo((cur) => (cur ? { ...cur, notifikasi: [] } : cur));
+    } finally {
+      setNotifBusy(false);
+    }
+  }
 
   async function muat() {
     try {
@@ -442,6 +460,26 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="flex flex-col gap-3 p-4">
+          {/* ===== NOTIFIKASI PERUBAHAN ALOKASI (5 Okt 2026) ===== */}
+          {(info.notifikasi?.length ?? 0) > 0 && (
+            <div role="alert" className="rounded-[14px] border-2 border-[#F59E0B] bg-[#FEF3E2] p-4 shadow-sm">
+              <p className="text-[16px] font-extrabold text-[#7A3E06]">🔔 Ada perubahan alokasi untuk Anda</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-[14px] leading-relaxed text-[#5C3204]">
+                {info.notifikasi!.map((n) => (
+                  <li key={n.id}>{n.pesan}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                disabled={notifBusy}
+                onClick={okeNotifikasi}
+                className="mt-3 min-h-[44px] w-full rounded-xl bg-[#B45309] px-4 py-2.5 text-[15px] font-extrabold text-white disabled:opacity-60"
+              >
+                {notifBusy ? "Menyimpan…" : "Oke, saya mengerti"}
+              </button>
+            </div>
+          )}
+
           {/* ===== STATUS JAWABAN (kalau sudah menjawab) ===== */}
           {sudahJawab && !ubahJawaban && (
             <div

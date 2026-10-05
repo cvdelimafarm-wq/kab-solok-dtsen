@@ -313,6 +313,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   const sudahAkun = await punyaAkun(supabase, petugas.id as number);
   // (5 Okt 2026) Plotting dibatalkan (mis. PPL NTP) -> halaman konfirmasi hanya menampilkan pesan ini.
   const { data: batal } = await supabase.from("bencana_pembatalan_plot").select("pesan").eq("petugas_id", petugas.id).maybeSingle();
+  // (5 Okt 2026) Notifikasi perubahan alokasi utk PPL ini (dibuat trigger DB bencana_notifikasi),
+  // tampil sampai petugas menekan "Oke".
+  const { data: notifRows } = await supabase
+    .from("bencana_notifikasi")
+    .select("id, pesan, dibuat_at")
+    .eq("petugas_id", petugas.id)
+    .eq("untuk", "ppl")
+    .is("dibaca_at", null)
+    .order("dibuat_at", { ascending: true });
 
   return NextResponse.json({
     data: {
@@ -327,6 +336,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       wilayah_kerja: wilayahKerja,
       pembatalan: (batal?.pesan as string | undefined) ?? null,
+      notifikasi: (notifRows ?? []) as { id: number; pesan: string; dibuat_at: string }[],
       // (5 Okt 2026) info tim keroyokan + status lokasi rumah (utk keterangan jarak).
       tim: {
         pml: pmlNama,
@@ -354,6 +364,21 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
   }
 
   const body = await req.json().catch(() => null);
+
+  // (5 Okt 2026) Petugas menekan "Oke" pada notifikasi perubahan alokasi -> tidak ditampilkan lagi.
+  if (body?.aksi === "baca_notifikasi") {
+    const { data: p } = await supabase.from("bencana_petugas").select("id").eq("token", token).maybeSingle();
+    if (!p) return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
+    const { error: e } = await supabase
+      .from("bencana_notifikasi")
+      .update({ dibaca_at: new Date().toISOString() })
+      .eq("petugas_id", p.id)
+      .eq("untuk", "ppl")
+      .is("dibaca_at", null);
+    if (e) return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (typeof body?.bersedia !== "boolean") {
     return NextResponse.json({ error: "Jawaban kesediaan wajib diisi." }, { status: 400 });
   }

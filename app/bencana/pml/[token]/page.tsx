@@ -40,6 +40,7 @@ type Info = {
   ppl: PplBinaan[];
   // (5 Okt 2026) pemberitahuan PPL tim yg plotting-nya dibatalkan (hilang setelah PML menekan "Oke").
   pemberitahuan?: { nama: string; alasan: string; dialihkan_ke: string[] }[];
+  notifikasi?: { id: number; pesan: string; dibuat_at: string }[];
 };
 
 const JADWAL = ["7 Oktober 2026", "8 Oktober 2026"] as const;
@@ -89,7 +90,7 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aksi: "baca_pemberitahuan" }),
       });
-      if (res.ok) setInfo((cur) => (cur ? { ...cur, pemberitahuan: [] } : cur));
+      if (res.ok) setInfo((cur) => (cur ? { ...cur, pemberitahuan: [], notifikasi: [] } : cur));
       else setError("Gagal menyimpan. Coba lagi.");
     } catch {
       setError("Gagal menyimpan. Periksa koneksi internet.");
@@ -179,11 +180,11 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
         </div>
 
         <div className="mt-4 flex flex-col gap-3.5 px-4">
-          {(info.pemberitahuan?.length ?? 0) > 0 && (
+          {((info.pemberitahuan?.length ?? 0) > 0 || (info.notifikasi?.length ?? 0) > 0) && (
             <div role="alert" className={`${KARTU} border-2 border-red-300 bg-red-50`}>
               <p className="text-[16px] font-extrabold text-red-800">Pemberitahuan perubahan tim</p>
               <ul className="mt-2 space-y-2 text-[14px] leading-relaxed text-red-900">
-                {info.pemberitahuan!.map((p, i) => (
+                {(info.pemberitahuan ?? []).map((p, i) => (
                   <li key={p.nama + i}>
                     Mohon maaf, plotting wilayah tugas <strong>{p.nama}</strong> dibatalkan karena yang bersangkutan merupakan PPL NTP, sehingga
                     tidak lagi menjadi anggota tim Anda.
@@ -193,6 +194,9 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
                       </>
                     )}
                   </li>
+                ))}
+                {(info.notifikasi ?? []).map((n) => (
+                  <li key={`n${n.id}`}>{n.pesan}</li>
                 ))}
               </ul>
               <button

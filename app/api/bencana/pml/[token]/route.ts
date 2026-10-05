@@ -130,6 +130,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     pemberitahuan.push({ nama: (orang?.nama as string) ?? "-", alasan: b.alasan, dialihkan_ke: dialihkanKe });
   }
 
+  // (5 Okt 2026) Notifikasi perubahan alokasi tim (trigger DB bencana_notifikasi), hilang setelah "Oke".
+  const { data: notifRows } = await db
+    .from("bencana_notifikasi")
+    .select("id, pesan, dibuat_at")
+    .eq("petugas_id", pml.id)
+    .eq("untuk", "pml")
+    .is("dibaca_at", null)
+    .order("dibuat_at", { ascending: true });
+
   const sudahAkun = await punyaAkun(db, pml.id as number);
   return NextResponse.json({
     data: {
@@ -141,6 +150,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       wa_group_url: pml.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       ppl,
       pemberitahuan,
+      notifikasi: (notifRows ?? []) as { id: number; pesan: string; dibuat_at: string }[],
     },
   });
 }
@@ -162,6 +172,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       .eq("pml_id", p.id)
       .is("pml_dibaca_at", null);
     if (e) return NextResponse.json({ error: e.message }, { status: 500 });
+    const { error: e2 } = await db
+      .from("bencana_notifikasi")
+      .update({ dibaca_at: new Date().toISOString() })
+      .eq("petugas_id", p.id)
+      .eq("untuk", "pml")
+      .is("dibaca_at", null);
+    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
