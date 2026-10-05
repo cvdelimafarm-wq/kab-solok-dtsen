@@ -157,7 +157,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   // ke seluruh PPL dalam tim.
   // (5 Okt 2026) Plotting dua lapis: wilayah tim = Sub SLS milik PML tim (pml_id), termasuk yg BELUM ada
   // PPL-nya, ditambah Sub SLS yg dipegang anggota tim (jaga2 data lama tanpa pml_id).
-  let qAlokasi = supabase.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, jarak_km");
+  let qAlokasi = supabase.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, jarak_km, mode_kerja");
   qAlokasi = atasanId != null ? qAlokasi.or(`pml_id.eq.${atasanId},ppl_id.in.(${idTim.join(",")})`) : qAlokasi.in("ppl_id", idTim);
   const { data: alokasiRows, error: errAlokasi } = await qAlokasi;
   if (errAlokasi) return NextResponse.json({ error: errAlokasi.message }, { status: 500 });
@@ -165,6 +165,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   const idsubslsList = Array.from(new Set((alokasiRows ?? []).map((r) => r.idsubsls as string)));
   const pemegang = new Map<string, number[]>(); // idsubsls -> ppl_id (bisa > 1 kalau dipecah)
   const jarakAlokasiSaya = new Map<string, number>();
+  // (5 Okt 2026) Papan Tim: penanda PRIVATE (1 PPL) / KEROYOK (seluruh tim) per Sub SLS.
+  const modeKerja = new Map<string, string>();
+  for (const r of (alokasiRows ?? []) as { idsubsls: string; mode_kerja: string | null }[]) {
+    if (!modeKerja.has(r.idsubsls)) modeKerja.set(r.idsubsls, r.mode_kerja ?? "keroyok");
+  }
   for (const r of (alokasiRows ?? []) as { idsubsls: string; ppl_id: number | null; jarak_km: number | string | null }[]) {
     // (5 Okt 2026) baris tim tanpa PPL: Sub SLS tetap tampil, pemegang kosong ("belum ada PPL").
     if (r.ppl_id == null) {
@@ -193,6 +198,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     // apakah termasuk milik petugas ini, dan jaraknya dari RUMAH petugas ini.
     milik_saya?: boolean;
     pemegang?: string[];
+    mode_kerja?: string;
     jarak_rumah_km?: number | null;
     jarak_sumber?: "garis_lurus" | "alokasi" | null;
   }[] = [];
@@ -293,6 +299,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     for (const w of wilayahKerja) {
       const ids = pemegang.get(w.idsubsls) ?? [];
       w.milik_saya = ids.includes(petugas.id as number);
+      w.mode_kerja = modeKerja.get(w.idsubsls) ?? "keroyok";
       w.pemegang = Array.from(new Set(ids.map((id) => namaPpl.get(id) ?? `#${id}`)));
       const k = koord.get(w.idsubsls);
       if (rumahRiil && k && homeLat != null && homeLng != null) {

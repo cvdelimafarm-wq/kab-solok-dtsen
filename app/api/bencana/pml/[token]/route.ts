@@ -83,8 +83,14 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   const info = new Map<string, { kecamatan: string; nagari: string; sls: string; sub_sls: string }>();
   // (5 Okt 2026) Plotting dua lapis: Sub SLS milik tim (pml_id) yg belum ada PPL-nya ikut ditampilkan.
   const wilayahTanpaPpl: { idsubsls: string }[] = [];
+  // (5 Okt 2026) Papan Tim: PRIVATE / KEROYOK per Sub SLS.
+  const modeKerja = new Map<string, string>();
+  const denganMode = (id: string) => {
+    const w = info.get(id);
+    return w ? { ...w, mode_kerja: modeKerja.get(id) ?? "keroyok" } : undefined;
+  };
   {
-    let qAlok = db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id");
+    let qAlok = db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, mode_kerja");
     qAlok = ids.length > 0 ? qAlok.or(`pml_id.eq.${pml.id},ppl_id.in.(${ids.join(",")})`) : qAlok.eq("pml_id", pml.id);
     const { data: alok } = await qAlok;
     const idsubsls = Array.from(new Set((alok ?? []).map((a) => a.idsubsls as string)));
@@ -92,7 +98,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       const { data: w } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").in("idsubsls", idsubsls.slice(i, i + 200));
       for (const r of (w ?? []) as { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string }[]) info.set(r.idsubsls, r);
     }
-    for (const a of (alok ?? []) as { idsubsls: string; ppl_id: number | null }[]) {
+    for (const a of (alok ?? []) as { idsubsls: string; ppl_id: number | null; mode_kerja?: string | null }[]) {
+      if (!modeKerja.has(a.idsubsls)) modeKerja.set(a.idsubsls, a.mode_kerja ?? "keroyok");
       if (a.ppl_id == null || !ids.includes(a.ppl_id)) {
         if (a.ppl_id == null && !wilayahTanpaPpl.some((w) => w.idsubsls === a.idsubsls)) wilayahTanpaPpl.push({ idsubsls: a.idsubsls });
         continue;
@@ -109,7 +116,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     domisili: [b.alamat_nagari, b.alamat_kecamatan].filter(Boolean).join(", ") || null,
     status_konfirmasi: statusKonfirmasi(b.id as number, (b.status_kontak_pendaftaran_bencana as string | null) ?? null),
     wilayah: (wilayahPerPpl.get(b.id as number) ?? [])
-      .map((x) => info.get(x.idsubsls))
+      .map((x) => denganMode(x.idsubsls))
       .filter((x): x is NonNullable<typeof x> => !!x)
       .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id") || a.sls.localeCompare(b.sls, "id") || a.sub_sls.localeCompare(b.sub_sls)),
   }));
@@ -159,7 +166,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       ppl,
       // (5 Okt 2026) Sub SLS milik tim yg belum ada PPL penanggung jawabnya.
       wilayah_tanpa_ppl: wilayahTanpaPpl
-        .map((x) => info.get(x.idsubsls))
+        .map((x) => denganMode(x.idsubsls))
         .filter((x): x is NonNullable<typeof x> => !!x)
         .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id") || a.sls.localeCompare(b.sls, "id")),
       pemberitahuan,

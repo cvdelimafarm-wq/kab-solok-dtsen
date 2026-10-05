@@ -12,7 +12,8 @@ import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 // lalu buat PIN & gabung grup WA. Data lewat /api/bencana/pml/[token].
 // ------------------------------------------------------------------------
 
-type Wilayah = { kecamatan: string; nagari: string; sls: string; sub_sls: string };
+// (5 Okt 2026) mode_kerja: "private" (1 PPL) / "keroyok" (seluruh PPL tim) -- Papan Tim.
+type Wilayah = { kecamatan: string; nagari: string; sls: string; sub_sls: string; mode_kerja?: string };
 type StatusKonfirmasi = "bersedia" | "pulang_pergi" | "menolak" | "belum";
 type PplBinaan = {
   nama: string;
@@ -274,7 +275,14 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
                   <ul className="mt-2 space-y-0.5 border-t border-[#E4E9F0] pt-2 text-xs text-[#44546C]">
                     {p.wilayah.map((w, k) => (
                       <li key={k}>
-                        {w.sls} ({w.sub_sls}) · Nagari {w.nagari} · Kec. {w.kecamatan}
+                        {w.sls} ({w.sub_sls}) · Nagari {w.nagari} · Kec. {w.kecamatan}{" "}
+                        <span
+                          className={`rounded-full px-1.5 text-[10px] font-bold ${
+                            w.mode_kerja === "private" ? "bg-[#DDF3E4] text-[#1E6B3A]" : "bg-[#FEF3E2] text-[#8A4B08]"
+                          }`}
+                        >
+                          {w.mode_kerja === "private" ? "PRIVATE" : "KEROYOK"}
+                        </span>
                       </li>
                     ))}
                   </ul>

@@ -42,6 +42,8 @@ type WilayahKerjaRow = {
   // (5 Okt 2026) sistem keroyokan: Sub SLS milik tim, bukan 1-1 ke PPL.
   milik_saya?: boolean;
   pemegang?: string[];
+  // (5 Okt 2026) "private" = dikerjakan 1 PPL, "keroyok" = seluruh PPL tim.
+  mode_kerja?: string;
   jarak_rumah_km?: number | null;
   jarak_sumber?: "garis_lurus" | "alokasi" | null;
 };
@@ -744,6 +746,14 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                         <span className="text-[11px] text-[#55657D]">
                           {r.milik_saya ? "Wilayah awal Anda" : `Wilayah awal: ${r.pemegang.join(", ")}`}
                         </span>
+                      )}
+                      {/* (5 Okt 2026) Penanda Papan Tim: PRIVATE vs KEROYOK. */}
+                      {r.mode_kerja === "private" ? (
+                        <span className="w-fit rounded-full bg-[#DDF3E4] px-2 py-0.5 text-[10.5px] font-bold text-[#1E6B3A]">
+                          PRIVATE{r.pemegang && r.pemegang.length > 0 ? ` · ${r.milik_saya ? "Anda" : r.pemegang.join(", ")}` : ""}
+                        </span>
+                      ) : (
+                        <span className="w-fit rounded-full bg-[#FEF3E2] px-2 py-0.5 text-[10.5px] font-bold text-[#8A4B08]">KEROYOK · seluruh PPL tim</span>
                       )}
                       {/* (5 Okt 2026) Sub SLS milik tim tanpa PPL penanggung jawab (plotting dua lapis). */}
                       {r.pemegang && r.pemegang.length === 0 && (

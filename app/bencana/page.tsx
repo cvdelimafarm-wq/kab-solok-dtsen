@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 import UndanganAdminCard from "./UndanganAdminCard";
+// (5 Okt 2026) Langkah 5 "Papan Tim" (keroyokan, drag & drop).
+import PapanTim from "./PapanTim";
 import ReportKonfirmasiWilayah from "./ReportKonfirmasiWilayah";
 import BrandBps from "@/app/components/BrandBps";
 
@@ -4674,11 +4676,24 @@ function IkonLangkah4() {
   );
 }
 
-const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4; label: string; ikon: () => JSX.Element }[] = [
+function IkonLangkah5() {
+  return (
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="8" width="16" height="32" rx="2.5" />
+      <rect x="27" y="8" width="16" height="20" rx="2.5" />
+      <path d="M9 15h8M9 21h8M9 27h5M31 15h8M31 21h5" />
+      <path d="M27 36h12m0 0l-4-4m4 4l-4 4" />
+    </svg>
+  );
+}
+
+const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4 | 5; label: string; ikon: () => JSX.Element }[] = [
   { n: 1, label: "Pilih Wilayah Sampel", ikon: IkonLangkah1 },
   { n: 2, label: "Kebutuhan Petugas per Kecamatan", ikon: IkonLangkah2 },
   { n: 3, label: "Susunan Tim (Korwil, PML, PPL)", ikon: IkonLangkah3 },
   { n: 4, label: "Plotting Sub SLS ke Tim (PML) → PPL", ikon: IkonLangkah4 },
+  // (5 Okt 2026) Papan Tim keroyokan -- lihat app/bencana/PapanTim.tsx.
+  { n: 5, label: "Papan Tim (Keroyokan)", ikon: IkonLangkah5 },
 ];
 
 // Sidebar "rel langkah" -- 4 lingkaran bernomor tersambung garis putus-putus,
@@ -4688,7 +4703,7 @@ const LANGKAH_SIDEBAR: { n: 1 | 2 | 3 | 4; label: string; ikon: () => JSX.Elemen
 // {langkahAktif === n && (...)} di AlokasiPetugasSection), bukan lagi
 // scroll-spy ke halaman panjang berisi semua section sekaligus. Disembunyikan
 // di layar sempit (<lg) supaya tidak mendesak tabel yg sudah lebar.
-function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4; onPilih: (n: 1 | 2 | 3 | 4) => void }) {
+function SidebarLangkah({ aktif, onPilih }: { aktif: 1 | 2 | 3 | 4 | 5; onPilih: (n: 1 | 2 | 3 | 4 | 5) => void }) {
   return (
     <aside className="hidden shrink-0 lg:block lg:w-36">
       <div className="sticky top-6 flex flex-col items-center pt-1">
@@ -6240,7 +6255,7 @@ function AlokasiPetugasSection() {
   const langkah2Ref = useRef<HTMLElement | null>(null);
   const langkah3Ref = useRef<HTMLElement | null>(null);
   const langkah4Ref = useRef<HTMLElement | null>(null);
-  const [langkahAktif, setLangkahAktif] = useState<1 | 2 | 3 | 4>(1);
+  const [langkahAktif, setLangkahAktif] = useState<1 | 2 | 3 | 4 | 5>(1);
   // Dipakai buat SKIP scroll-into-view pas pertama kali halaman ini
   // dirender (langkahAktif awalnya 1 juga) -- cuma mau scroll kalau
   // langkahAktif benar2 BERUBAH krn diklik/filter, bukan tiap mount.
@@ -6268,7 +6283,7 @@ function AlokasiPetugasSection() {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [langkahAktif]);
 
-  function pilihLangkah(n: 1 | 2 | 3 | 4) {
+  function pilihLangkah(n: 1 | 2 | 3 | 4 | 5) {
     setLangkahAktif(n);
   }
 
@@ -10670,6 +10685,15 @@ function AlokasiPetugasSection() {
           </div>
         )}
       </section>
+      )}
+
+      {/* (5 Okt 2026) LANGKAH 5: PAPAN TIM (keroyokan) -- drag & drop PPL/Sub SLS antar tim,
+          penanda Private/Keroyok, skor total & rata-rata per PPL. Data sendiri (API papan-tim);
+          sesudah disimpan, data Langkah 1-4 ikut dimuat ulang. */}
+      {langkahAktif === 5 && (
+        <section ref={langkah4Ref}>
+          <PapanTim onBerubah={() => muatData(hariKerjaDipakai).catch(() => {})} />
+        </section>
       )}
       </div>
     </div>

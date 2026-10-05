@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup Papan Tim</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2A47;--navy2:#0F3D7A;--paper:#EEF3FA;--line:#D5DDE8;--ink:#13213A;--muted:#55657D;--moss:#1E7A4C;--mossbg:#DDF3E4;--gold:#8A4B08;--goldbg:#FEF3E2;--rust:#9B2C20;--rustbg:#FDE4E4;--vio:#5B21B6;--viobg:#EDE9FE}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px}
+.wrap{max-width:1320px;margin:0 auto;padding:16px}
+.note{background:#fff;border:2px dashed #94A3B8;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#334155}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+h2{margin:0;font-size:18px;color:var(--navy)}.sub{color:var(--muted);font-size:12px;margin-top:2px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 11px;font:inherit;font-weight:700;font-size:12px;cursor:pointer}
+.btn.navy{background:var(--navy2);color:#fff;border-color:var(--navy2)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 11px}.stat b{font-size:15px;display:block}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:8px}
+.board{display:grid;grid-template-columns:240px repeat(auto-fill,minmax(360px,1fr));gap:12px;margin-top:12px;align-items:start}
+.col{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.col.over{outline:3px dashed var(--navy2);outline-offset:-3px}
+.head{background:var(--navy);color:#fff;padding:10px 12px}
+.head .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.head .t b{font-size:15px}.head .s{font-size:11px;color:#C9D6EA;margin-top:3px}
+.score{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.score div{background:rgba(255,255,255,.1);border-radius:8px;padding:5px 8px;font-size:10.5px;color:#C9D6EA}
+.score div b{display:block;color:#fff;font-size:15px}
+.sec{padding:8px 10px;border-top:1px solid #E4E9F0}
+.sec h4{margin:0 0 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.ppl{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:6px 8px;margin-bottom:5px;background:#FAFBFD;cursor:grab}
+.ppl .n{font-weight:700}.ppl .a{font-size:10.5px;color:var(--muted)}
+.ppl .bb{font-size:11px;font-weight:800;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.ok{background:var(--mossbg);color:#1E6B3A}.warn{background:var(--goldbg);color:var(--gold)}.bad{background:var(--rustbg);color:var(--rust)}.low{background:var(--viobg);color:var(--vio)}
+.sl{border:1px solid var(--line);border-left-width:5px;border-radius:9px;padding:6px 8px;margin-bottom:5px;background:#fff;cursor:grab}
+.sl.keroyok{border-left-color:#D97706}.sl.private{border-left-color:#1E7A4C}.sl.dirty{background:#FFF7ED}
+.sl .r1{display:flex;justify-content:space-between;gap:6px;align-items:center}
+.sl .nm{font-weight:700}.sl .meta{font-size:10.5px;color:var(--muted);margin-top:2px}
+.tg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;font-size:10px;font-weight:800}
+.tg button{border:0;background:#fff;padding:3px 8px;cursor:pointer;font:inherit;font-weight:800;color:var(--muted)}
+.tg button.onK{background:#D97706;color:#fff}.tg button.onP{background:var(--moss);color:#fff}
+select{font:inherit;font-size:11px;border:1px solid var(--line);border-radius:6px;padding:2px 4px;margin-top:4px}
+select.err{border:2px solid var(--rust)}
+.mv{font-size:10.5px;color:var(--navy2);background:none;border:0;cursor:pointer;text-decoration:underline;padding:0;margin-left:6px}
+.empty{font-size:11px;color:var(--muted);padding:6px;text-align:center;border:1px dashed var(--line);border-radius:8px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:9px 14px;border-radius:10px;font-weight:700;display:none}
+.chg{font-size:11px;color:#C2410C;font-weight:700}
+@media (max-width:700px){.board{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<div class="note"><b>MOCKUP INTERAKTIF</b> — data contoh 3 tim nyata (Budi Pernandes, FERIANTO, Ilham), sebagian Sub SLS. Coba: <b>seret PPL / Sub SLS</b> ke kartu tim lain, toggle <b>Private/Keroyok</b>, pilih PPL untuk Private. Angka skor berubah langsung; "Simpan Perubahan" di sini hanya simulasi. Ketik <b>"setuju"</b> untuk mulai dikodekan.</div>
+<div class="top"><div><h2>Langkah 5 — Papan Tim (Keroyokan)</h2><div class="sub">Skor = skor beban akhir. Rata-rata/PPL = total tim ÷ jumlah PPL. Beban per PPL = Sub SLS private miliknya + (total keroyok ÷ jumlah PPL).</div></div>
+<div><span class="chg" id="chg"></span> <button class="btn" id="batal">Batalkan</button> <button class="btn navy" id="simpan">Simpan Perubahan</button></div></div>
+<div class="stats" id="stats"></div>
+<div class="legend"><span><span style="color:#1E7A4C">▌</span> Private (1 PPL)</span><span><span style="color:#D97706">▌</span> Keroyok (seluruh tim)</span><span class="bb ok" style="padding:1px 6px;border-radius:9px">≈ rata-rata</span><span class="bb warn" style="padding:1px 6px;border-radius:9px">+15–30%</span><span class="bb bad" style="padding:1px 6px;border-radius:9px">&gt; +30%</span><span class="bb low" style="padding:1px 6px;border-radius:9px">&lt; −30%</span></div>
+<div class="board" id="board"></div></div><div class="toast" id="toast"></div>
+<script>
+const P=(n,ng,kc)=>({n,ng,kc});
+const teams0=[
+{id:'budi',nama:'Budi Pernandes',ppl:[P('Rini Nofsiska Sari','-','Junjung Sirih'),P('Febri Handayani','Kuncia','X Koto Diatas'),P('Indri Septiadi','Talang','Gunung Talang'),P('Minda Susanti','Paninggahan','Junjung Sirih')],
+ sub:[['Jorong Gando','01','Paninggahan',120,154.84,'Rini Nofsiska Sari'],['Jorong Gando','05','Paninggahan',122,201.72,'Indri Septiadi'],['Jorong Ganting Padang Palak','01','Paninggahan',123,18.00,'Minda Susanti'],['Jorong Kampung Tangah','05','Paninggahan',188,27.28,'Minda Susanti'],['Jorong Kampung Tangah','06','Paninggahan',150,21.85,'Minda Susanti'],['Jorong Parumahan','02','Paninggahan',120,87.79,'Indri Septiadi'],['Jorong Subarang','01','Paninggahan',127,133.86,'Febri Handayani'],['Jorong Subarang','05','Paninggahan',153,81.43,'Rini Nofsiska Sari']]},
+{id:'feri',nama:'FERIANTO',ppl:[P('Yola Septya Syamsi','Koto Gaek Guguak','Gunung Talang'),P('Defitra Yeni','Koto Baru','Kubung'),P('Naila Sabatini','Cupak','Gunung Talang'),P('Biki Wabihamdika','Gantuang Ciri','Kubung')],
+ sub:[['Jorong Sawah Taluak','02','Cupak',129,19.13,'Defitra Yeni'],['Jorong Sungai Rotan','06','Cupak',170,28.09,'Naila Sabatini'],['Jorong Baringin','01','Gantuang Ciri',152,21.79,'Biki Wabihamdika'],['Jorong Markiyo','01','Gantuang Ciri',160,23.03,'Biki Wabihamdika'],['Jorong Bukik Kili','02','Koto Baru',176,32.44,'Defitra Yeni'],['Jorong Sukarami','02','Koto Gaek Guguk',207,69.10,'Yola Septya Syamsi'],['Jorong Sawah Sudut','05','Selayo',192,124.18,'Naila Sabatini'],['Jorong Koto Gadang','04','Talang',154,23.48,'Yola Septya Syamsi']]},
+{id:'ilham',nama:'Ilham',ppl:[P('Wahyuni Oktavia','Aie Dingin','Lembah Gumanti'),P('Elvika Oktasari','Surian','Pantai Cermin'),P('Gusna Wirda','Aie Dingin','Lembah Gumanti')],
+ sub:[['Jorong Data','01','Aie Dingin',143,72.48,'Wahyuni Oktavia'],['Jorong Data','02','Aie Dingin',121,69.36,'Wahyuni Oktavia'],['Jorong Koto','01','Aie Dingin',182,87.55,'Gusna Wirda'],['Jorong Koto','04','Aie Dingin',138,88.75,'Gusna Wirda'],['Jorong Koto Baru','01','Aie Dingin',161,46.31,'Gusna Wirda'],['Jorong Muaro Pisau Hilang','00','Lolo',208,31.43,'Elvika Oktasari'],['Jorong Sungai Indaruang','00','Lolo',148,21.49,'Elvika Oktasari']]}];
+let uid=0;const build=()=>{const t=JSON.parse(JSON.stringify(teams0));t.forEach(x=>{x.sub=x.sub.map(s=>({id:'s'+(uid++),sls:s[0],kode:s[1],ng:s[2],kk:s[3],skor:s[4],awal:s[5],ppl:s[5],mode:'keroyok',home:x.id,dirty:false}));x.ppl.forEach(p=>{p.home=x.id;p.dirty=false})});
+ // contoh: 2 Sub SLS private agar terlihat
+ t[0].sub[2].mode='private';t[2].sub[5].mode='private';return t};
+let teams=build(),unplot=[{id:'u1',sls:'Jorong Rimbo Data',kode:'05',ng:'Sumani',kk:96,skor:14.2,awal:null,ppl:null,mode:'keroyok',home:null,dirty:false}];
+const f=n=>n.toLocaleString('id-ID',{maximumFractionDigits:1});
+function hitung(t){const tot=t.sub.reduce((a,s)=>a+s.skor,0),n=t.ppl.length||1,ker=t.sub.filter(s=>s.mode==='keroyok').reduce((a,s)=>a+s.skor,0);
+ const per=t.ppl.map(p=>t.sub.filter(s=>s.mode==='private'&&s.ppl===p.n).reduce((a,s)=>a+s.skor,0)+ker/n);return{tot,avg:tot/n,per}}
+function tone(v,ref){const d=(v-ref)/ref;return d>.3?'bad':d>.15?'warn':d<-.3?'low':'ok'}
+function render(){const all=teams.map(hitung);const ref=all.reduce((a,x)=>a+x.tot,0)/teams.reduce((a,t)=>a+t.ppl.length,0);
+ document.getElementById('stats').innerHTML=`<div class="stat">Tim<b>${teams.length}</b></div><div class="stat">PPL<b>${teams.reduce((a,t)=>a+t.ppl.length,0)}</b></div><div class="stat">Sub SLS keroyok / private<b>${teams.flatMap(t=>t.sub).filter(s=>s.mode==='keroyok').length} / ${teams.flatMap(t=>t.sub).filter(s=>s.mode==='private').length}</b></div><div class="stat">Rata-rata beban/PPL (semua tim)<b>${f(ref)}</b></div>`;
+ let h=`<div class="col drop" data-team=""><div class="head"><div class="t"><b>Belum diplot</b><span>${unplot.length}</span></div><div class="s">Seret ke sini = lepas dari tim</div></div><div class="sec">${unplot.map(slHtml).join('')||'<div class="empty">kosong</div>'}</div></div>`;
+ teams.forEach((t,i)=>{const c=all[i];h+=`<div class="col drop" data-team="${t.id}"><div class="head"><div class="t"><b>PML: ${t.nama}</b><span>${t.ppl.length} PPL · ${t.sub.length} Sub SLS</span></div>
+ <div class="score"><div>Skor total tim<b>${f(c.tot)}</b></div><div>Rata-rata per PPL<b>${f(c.avg)}</b></div></div></div>
+ <div class="sec"><h4>PPL</h4>${t.ppl.map((p,j)=>`<div class="ppl" draggable="true" data-kind="ppl" data-team="${t.id}" data-name="${p.n}"><div><div class="n">${p.n}${p.dirty?' <span class="chg">•</span>':''}</div><div class="a">${p.ng==='-'?'':'Nagari '+p.ng+', '}Kec. ${p.kc}</div></div><span class="bb ${tone(c.per[j],ref)}" title="private + bagian keroyok">${f(c.per[j])}</span></div>`).join('')||'<div class="empty">belum ada PPL</div>'}</div>
+ <div class="sec"><h4>Sub SLS tim</h4>${t.sub.map(s=>slHtml(s,t)).join('')||'<div class="empty">belum ada Sub SLS</div>'}</div></div>`});
+ document.getElementById('board').innerHTML=h;
+ const n=teams.flatMap(t=>[...t.sub,...t.ppl]).filter(x=>x.dirty).length+unplot.filter(x=>x.dirty).length;
+ document.getElementById('chg').textContent=n?n+' perubahan belum disimpan':'';
+ const err=teams.some(t=>t.sub.some(s=>s.mode==='private'&&!s.ppl));document.getElementById('simpan').disabled=!n||err;bind()}
+function slHtml(s,t){const opts=t?t.ppl.map(p=>`<option ${s.ppl===p.n?'selected':''}>${p.n}</option>`).join(''):'';
+ const pm=s.mode==='private'?`<div><select data-ppl="${s.id}" class="${s.ppl&&t&&t.ppl.some(p=>p.n===s.ppl)?'':'err'}"><option value="">— pilih PPL —</option>${opts}</select></div>`:`<div class="meta">dikerjakan bersama seluruh PPL tim${s.awal?' · PPL awal: '+s.awal:''}</div>`;
+ return `<div class="sl ${s.mode} ${s.dirty?'dirty':''}" draggable="true" data-kind="sub" data-id="${s.id}"><div class="r1"><span class="nm">${s.sls} (${s.kode})</span>${t?`<span class="tg"><button data-mode="private" data-id="${s.id}" class="${s.mode==='private'?'onP':''}">PRIVATE</button><button data-mode="keroyok" data-id="${s.id}" class="${s.mode==='keroyok'?'onK':''}">KEROYOK</button></span>`:''}</div>
+ <div class="meta">Nagari ${s.ng} · ${s.kk} KK · skor <b>${f(s.skor)}</b>${s.dirty?' · <span class="chg">belum disimpan</span>':''}<button class="mv" data-move="${s.id}">pindahkan…</button></div>${t?pm:''}</div>`}
+function findSub(id){for(const t of teams){const s=t.sub.find(x=>x.id===id);if(s)return[s,t]}const s=unplot.find(x=>x.id===id);return[s,null]}
+function moveSub(id,to){const[s,from]=findSub(id);if(!s||(from?from.id:'')===to)return;(from?from.sub:unplot).splice((from?from.sub:unplot).indexOf(s),1);
+ if(!to){if(!confirm('Lepas Sub SLS ini dari tim (kembali belum diplot)?')){(from?from.sub:unplot).push(s);return}unplot.push(s)}else teams.find(t=>t.id===to).sub.push(s);
+ s.ppl=null;s.mode='keroyok';s.dirty=true;toast(`${s.sls} (${s.kode}) → ${to?teams.find(t=>t.id===to).nama:'Belum diplot'} · mode keroyok`);render()}
+function movePpl(name,fromId,to){if(!to||fromId===to)return;const from=teams.find(t=>t.id===fromId),p=from.ppl.find(x=>x.n===name);from.ppl.splice(from.ppl.indexOf(p),1);teams.find(t=>t.id===to).ppl.push(p);p.dirty=true;
+ let k=0;from.sub.forEach(s=>{if(s.ppl===name){s.ppl=null;if(s.mode==='private'){s.mode='keroyok';k++}s.dirty=true}});
+ toast(`${name} pindah ke tim ${teams.find(t=>t.id===to).nama}${k?' · '+k+' Sub SLS private-nya jadi keroyok di tim lama':''}`);render()}
+function bind(){document.querySelectorAll('[draggable]').forEach(el=>el.ondragstart=e=>{e.dataTransfer.setData('text/plain',JSON.stringify({kind:el.dataset.kind,id:el.dataset.id,name:el.dataset.name,team:el.dataset.team}))});
+ document.querySelectorAll('.drop').forEach(c=>{c.ondragover=e=>{e.preventDefault();c.classList.add('over')};c.ondragleave=()=>c.classList.remove('over');
+  c.ondrop=e=>{e.preventDefault();c.classList.remove('over');const d=JSON.parse(e.dataTransfer.getData('text/plain'));if(d.kind==='sub')moveSub(d.id,c.dataset.team);else movePpl(d.name,d.team,c.dataset.team)}});
+ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{const[s]=findSub(b.dataset.id);if(s.mode!==b.dataset.mode){s.mode=b.dataset.mode;if(s.mode==='keroyok')s.ppl=s.ppl;s.dirty=true;render()}});
+ document.querySelectorAll('[data-ppl]').forEach(sel=>sel.onchange=()=>{const[s]=findSub(sel.dataset.ppl);s.ppl=sel.value||null;s.dirty=true;render()});
+ document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const pil=prompt('Pindahkan ke tim (ketik nomor):\n0. Belum diplot\n'+teams.map((t,i)=>(i+1)+'. '+t.nama).join('\n'));if(pil===null)return;const i=+pil;moveSub(b.dataset.move,i===0?'':teams[i-1]?.id)})}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2600)}
+document.getElementById('batal').onclick=()=>{uid=0;teams=build();unplot=[{id:'u1',sls:'Jorong Rimbo Data',kode:'05',ng:'Sumani',kk:96,skor:14.2,awal:null,ppl:null,mode:'keroyok',home:null,dirty:false}];render()};
+document.getElementById('simpan').onclick=()=>{teams.forEach(t=>{t.sub.forEach(s=>s.dirty=false);t.ppl.forEach(p=>p.dirty=false)});unplot.forEach(s=>s.dirty=false);toast('(Simulasi) perubahan tersimpan · notifikasi terkirim ke PPL & PML terkait');render()};
+render();
+</script></body></html>
