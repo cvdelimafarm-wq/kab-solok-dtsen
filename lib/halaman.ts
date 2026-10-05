@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 // absolut gambar pratinjau link (WhatsApp, Telegram, dll).
 export const NAMA_PORTAL = "Portal Layanan BPS Kabupaten Solok";
 export const DESKRIPSI_PORTAL =
-  "Satu pintu aplikasi pendataan dan pemantauan BPS Kabupaten Solok: usulan data DTSEN, pendataan bencana, Seruti, dan penyisiran usaha.";
+  "Satu pintu aplikasi pendataan dan pemantauan BPS Kabupaten Solok: usulan data DTSEN, pendataan bencana, Seruti, penyisiran usaha, dan SIGAP (anggaran & SPJ).";
 export const ALAMAT_DASAR =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://bps-solokkab.up.railway.app";
 

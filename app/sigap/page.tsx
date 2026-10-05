@@ -1,5 +1,6 @@
 import Link from "next/link";
 import BrandBps from "@/app/components/BrandBps";
+import PanelSaya from "./PanelSaya";
 
 // (5 Okt 2026) Beranda portal SIGAP -- kerangka modul hulu ke hilir (skema: claude/skema-portal-keuangan.md
 // di project). Saat ini yg aktif baru Pelaksanaan > Transport Lokal (SPDT NTP & Pendataan Pascabencana).
@@ -16,7 +17,7 @@ const KELOMPOK: { judul: string; modul: Modul[] }[] = [
   {
     judul: "Pelaksanaan",
     modul: [
-      { ikon: "🛵", judul: "Transport Lokal", ket: "SPDT NTP 2026 · Pendataan Pascabencana. Realisasi harian, dokumentasi, SPJ.", href: "/sigap/masuk", aktif: true },
+      { ikon: "🛵", judul: "Transport Lokal", ket: "Semua kegiatan: hari kerja, laporan harian, 5 foto, arsip & unduh SPJ, admin & verifikasi.", href: "/sigap/masuk", aktif: true },
       { ikon: "✈️", judul: "Perjalanan Dinas Luar Kota", ket: "SPD, uang harian, penginapan." },
       { ikon: "💵", judul: "Honor", ket: "Honor output mitra, pengajar, narasumber." },
       { ikon: "📦", judul: "Pengadaan", ket: "Terhubung dengan modul kontrak." },
@@ -42,6 +43,8 @@ export default function SigapBeranda() {
         </div>
       </header>
       <div className="mx-auto -mt-8 max-w-5xl space-y-6 px-4">
+        {/* (5 Okt 2026) Menu sesuai peran akun yg masuk */}
+        <PanelSaya />
         {KELOMPOK.map((k) => (
           <section key={k.judul}>
             <h2 className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#55657D]">{k.judul}</h2>

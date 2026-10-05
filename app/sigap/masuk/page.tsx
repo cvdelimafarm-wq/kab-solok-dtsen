@@ -27,22 +27,37 @@ export default function SigapMasuk() {
   const [pinBaru, setPinBaru] = useState("");
   const [pinBaru2, setPinBaru2] = useState("");
 
+  // (5 Okt 2026) Satu pintu: sesudah masuk diarahkan ke portal SIGAP (menu sesuai peran) atau ke ?lanjut=.
+  function tujuan(): string {
+    try {
+      const l = new URLSearchParams(window.location.search).get("lanjut");
+      if (l && l.startsWith("/sigap")) return l;
+    } catch {
+      /* abaikan */
+    }
+    return "/sigap";
+  }
+
   useEffect(() => {
     try {
-      const t = localStorage.getItem(KUNCI_SESI);
-      if (t) window.location.replace(`/sigap/translok/${t}`);
+      const sampai = localStorage.getItem("sigap_sesi_sampai");
+      if (localStorage.getItem("sigap_sesi") && sampai && Date.parse(sampai) > Date.now()) window.location.replace(tujuan());
     } catch {
       /* penyimpanan tidak tersedia */
     }
   }, []);
 
-  function lanjut(token: string) {
+  function lanjut(token: string, sesi?: string, sampai?: string) {
     try {
       localStorage.setItem(KUNCI_SESI, token);
+      if (sesi && sampai) {
+        localStorage.setItem("sigap_sesi", sesi);
+        localStorage.setItem("sigap_sesi_sampai", sampai);
+      }
     } catch {
       /* abaikan */
     }
-    window.location.replace(`/sigap/translok/${token}`);
+    window.location.replace(sesi ? tujuan() : `/sigap/translok/${token}`);
   }
 
   async function kirim(body: Record<string, unknown>) {
@@ -64,7 +79,7 @@ export default function SigapMasuk() {
     e.preventDefault();
     const r = await kirim({ aksi: "masuk", nama, pin });
     if (!r) return;
-    if (r.json?.ok && r.json.token) return lanjut(r.json.token);
+    if (r.json?.ok && r.json.token) return lanjut(r.json.token, r.json.sesi, r.json.sampai);
     setError(
       (r.json?.error as string) ?? "Gagal masuk." + (typeof r.json?.sisa_percobaan === "number" ? ` Sisa percobaan: ${r.json.sisa_percobaan}.` : "")
     );
@@ -90,7 +105,7 @@ export default function SigapMasuk() {
     if (pinBaru !== pinBaru2) return setError("Kedua PIN tidak sama.");
     const r = await kirim({ aksi: "buat_pin", token: tokenDaftar, pin: pinBaru });
     if (!r) return;
-    if (r.json?.ok) return lanjut(tokenDaftar as string);
+    if (r.json?.ok) return lanjut(tokenDaftar as string, r.json.sesi, r.json.sampai);
     setError((r.json?.error as string) ?? "Gagal membuat PIN.");
   }
 
@@ -103,9 +118,9 @@ export default function SigapMasuk() {
         <div aria-hidden className="absolute -bottom-24 right-10 h-48 w-48 rounded-full bg-[#F5B841]/10" />
         <div className="relative mx-auto max-w-md">
           <BrandBps className="text-blue-100" teksClassName="text-[11.5px] font-bold uppercase leading-tight tracking-wider" ukuran={28} kotakPutih />
-          <p className="mt-6 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">SIGAP · Transport Lokal</p>
-          <h1 className="mt-1 text-[26px] font-extrabold leading-tight">Laporan &amp; Dokumentasi Harian Petugas</h1>
-          <p className="mt-1.5 text-[14px] text-blue-100">Laporan harian, dokumentasi &amp; arsip SPJ semua kegiatan</p>
+          <p className="mt-6 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">SIGAP · Masuk</p>
+          <h1 className="mt-1 text-[26px] font-extrabold leading-tight">Masuk ke SIGAP</h1>
+          <p className="mt-1.5 text-[14px] text-blue-100">Petugas, admin anggaran, PJ kegiatan &amp; bendahara — satu pintu, menu sesuai peran</p>
         </div>
       </div>
 

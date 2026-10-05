@@ -61,6 +61,15 @@ export default async function PortalPage() {
       tag: "Akses sesuai peran",
     },
     {
+      // (5 Okt 2026) Portal SIGAP ditambahkan ke menu utama -- permintaan user.
+      ikon: "💼",
+      judul: "SIGAP — Anggaran & SPJ",
+      uraian: "Transport lokal petugas (laporan harian, foto, arsip SPJ), admin anggaran, serta kelola peran & akses.",
+      href: "/sigap",
+      label: "Buka SIGAP",
+      tag: "Login nama + PIN",
+    },
+    {
       ikon: "🧭",
       judul: "Penyisiran Usaha SE2026",
       uraian: "Checklist petugas lapangan, identifikasi PPL, dan monitoring penyisiran.",

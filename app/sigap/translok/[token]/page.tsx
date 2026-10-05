@@ -153,6 +153,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   function keluar() {
     try {
       localStorage.removeItem(KUNCI_SESI);
+      localStorage.removeItem("sigap_sesi");
+      localStorage.removeItem("sigap_sesi_sampai");
     } catch {
       /* abaikan */
     }
@@ -341,7 +343,8 @@ function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string;
             Keluar
           </button>
         </div>
-        <p className="mt-5 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">{kecil}</p>
+        <a href="/sigap" className="mt-3 inline-block text-[11.5px] font-semibold text-blue-200 underline">← Portal SIGAP</a>
+        <p className="mt-3 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">{kecil}</p>
         <h1 className="mt-1 text-[23px] font-extrabold leading-tight">{judulBesar}</h1>
         {sub && <p className="mt-0.5 text-[13.5px] text-blue-100">{sub}</p>}
         {children}
@@ -867,6 +870,55 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);
   void hariIni;
+  // (5 Okt 2026) Unduh SPJ aktif -- permintaan user: memanggil /api/sigap/translok/<token>/dokumen,
+  // hasil (PDF gabungan / ZIP) diunduh lewat object URL dgn nama file dari header Content-Disposition.
+  const [proses, setProses] = useState(false);
+  const [galat, setGalat] = useState<string | null>(null);
+  const [catatan, setCatatan] = useState<string[]>([]);
+  const unduhSekarang = async () => {
+    if (proses || jenis.size === 0) return;
+    setProses(true);
+    setGalat(null);
+    setCatatan([]);
+    try {
+      // Token diambil dari URL halaman (/sigap/translok/<token>) supaya komponen lain tidak perlu diubah.
+      const token = decodeURIComponent(window.location.pathname.split("/").filter(Boolean).pop() ?? "");
+      const q = new URLSearchParams({
+        penugasan_id: String(pen.id),
+        jenis: JENIS_DOK.filter((j) => jenis.has(j.k)).map((j) => j.k).join(","),
+        kelompok: rentangPilih,
+        format,
+      });
+      const res = await fetch(`/api/sigap/translok/${encodeURIComponent(token)}/dokumen?${q.toString()}`, { cache: "no-store" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error ?? `Gagal membuat dokumen (${res.status}).`);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("content-disposition") ?? "";
+      const mUtf = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+      const mAscii = /filename="([^"]+)"/i.exec(cd);
+      const nama = mUtf ? decodeURIComponent(mUtf[1]) : mAscii ? mAscii[1] : format === "zip" ? "SPJ.zip" : "SPJ.pdf";
+      try {
+        const lewat = JSON.parse(decodeURIComponent(res.headers.get("x-spj-dilewati") ?? "%5B%5D"));
+        if (Array.isArray(lewat)) setCatatan(lewat.map(String));
+      } catch {
+        // header opsional -- abaikan bila tidak terbaca
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nama;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : "Gagal mengunduh.");
+    } finally {
+      setProses(false);
+    }
+  };
   const ubah = (k: string) =>
     setJenis((s) => {
       const n = new Set(s);
@@ -933,10 +985,26 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
           </div>
         </div>
 
-        <button type="button" disabled className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50">
-          ⬇ Unduh
+        <button
+          type="button"
+          onClick={unduhSekarang}
+          disabled={proses || jenis.size === 0}
+          className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50"
+        >
+          {proses ? "Menyiapkan dokumen…" : "⬇ Unduh"}
         </button>
-        <p className="mt-1.5 text-center text-[11.5px] text-[#6B7890]">Pembuatan PDF sedang disiapkan — tombol aktif setelah generator dokumen dipasang.</p>
+        {proses && <p className="mt-1.5 text-center text-[11.5px] text-[#6B7890]">Dokumen sedang dirakit, mohon tunggu (dokumentasi foto bisa agak lama).</p>}
+        {jenis.size === 0 && !proses && <p className="mt-1.5 text-center text-[11.5px] text-amber-700">Pilih minimal 1 jenis dokumen.</p>}
+        {galat && <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] font-semibold text-red-800">{galat}</p>}
+        {catatan.length > 0 && (
+          <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+            <p className="font-bold">Tidak ikut diunduh (data belum ada):</p>
+            {catatan.slice(0, 8).map((c) => (
+              <p key={c}>• {c}</p>
+            ))}
+            {catatan.length > 8 && <p>… dan {catatan.length - 8} lainnya</p>}
+          </div>
+        )}
       </div>
     </div>
   );

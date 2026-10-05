@@ -28,6 +28,7 @@ import {
   tanggalValid,
 } from "@/lib/undangan";
 import { penugasanAkun } from "@/lib/sigap";
+import { buatSesi, izinAkun } from "@/lib/sigapAkses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,12 @@ async function cariAkun(db: Db, nama: string): Promise<AkunRow[]> {
     semua.push(...((data ?? []) as AkunRow[]));
     if (!data || data.length < 1000) break;
   }
-  return semua.filter((a) => normNama(a.nama) === kunci);
+  const tepat = semua.filter((a) => normNama(a.nama) === kunci);
+  if (tepat.length > 0) return tepat;
+  // (5 Okt 2026) Nama di master kadang bergelar ("M. Iqbal Hadi, SST.") -> cocokkan juga tanpa gelar setelah koma.
+  const tanpaGelar = (x: string) => normNama(x.split(",")[0]);
+  const k2 = tanpaGelar(nama);
+  return semua.filter((a) => tanpaGelar(a.nama) === k2);
 }
 
 /** PIN akun: milik SIGAP, atau PIN undangan bencana bila akun terhubung ke petugas bencana. */
@@ -70,7 +76,13 @@ async function pinAkun(db: Db, a: AkunRow): Promise<{ hash: string; salt: string
   return null;
 }
 
-const PESAN_BELUM_DITUGASKAN = "Anda belum ditugaskan pada kegiatan transport lokal mana pun. Hubungi admin anggaran / PJ kegiatan.";
+const PESAN_BELUM_DITUGASKAN = "Anda belum ditugaskan pada kegiatan transport lokal mana pun dan belum punya peran di SIGAP. Hubungi admin anggaran / PJ kegiatan.";
+
+/** (5 Okt 2026) Boleh masuk bila punya penugasan aktif ATAU peran SIGAP (admin/PJ/bendahara/dll). */
+async function bolehMasuk(db: Db, akunId: number): Promise<boolean> {
+  if ((await penugasanAkun(db, akunId)).length > 0) return true;
+  return (await izinAkun(db, akunId)).peran.length > 0;
+}
 
 export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
@@ -102,9 +114,9 @@ export async function POST(req: NextRequest) {
         );
       }
       await resetGagal(db, kunci);
-      if ((await penugasanAkun(db, cocok[0].id)).length === 0) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
+      if (!(await bolehMasuk(db, cocok[0].id))) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", cocok[0].id);
-      return NextResponse.json({ ok: true, token: cocok[0].token, nama: cocok[0].nama });
+      return NextResponse.json({ ok: true, token: cocok[0].token, nama: cocok[0].nama, ...buatSesi(cocok[0].id) });
     }
 
     // ---------------- Verifikasi identitas (belum punya PIN) ----------------
@@ -128,8 +140,10 @@ export async function POST(req: NextRequest) {
       if (cocok.length === 0) {
         kolom = { nama: "salah", nik: "belum_dicek", email: "belum_dicek", tanggal_lahir: "belum_dicek" };
       } else {
-        const kunciNama = normNama(nama);
-        const { data: mitra } = await db.from("bencana_mitra").select("nama, nik, email, tanggal_lahir").ilike("nama", `%${nama.split(/\s+/)[0]}%`);
+        // Pembanding = baris mitra milik akun yg cocok (nama persis di master, termasuk gelar).
+        const kunciNama = normNama(cocok[0].nama);
+        const kataPertama = cocok[0].nama.trim().split(/\s+/)[0].replace(/[%_,]/g, "");
+        const { data: mitra } = await db.from("bencana_mitra").select("nama, nik, email, tanggal_lahir").ilike("nama", `%${kataPertama}%`);
         const baris = (mitra ?? []).filter((m) => normNama(m.nama as string) === kunciNama);
         const nikS = baris.map((m) => normNik((m.nik as string) ?? "")).filter(nikValid);
         const emailS = baris.map((m) => normEmail((m.email as string) ?? "")).filter((e) => e !== "");
@@ -147,7 +161,7 @@ export async function POST(req: NextRequest) {
       }
       await resetGagal(db, kunci);
       const a = cocok[0];
-      if ((await penugasanAkun(db, a.id)).length === 0) return NextResponse.json({ error: `Data Anda cocok. ${PESAN_BELUM_DITUGASKAN}` }, { status: 403 });
+      if (!(await bolehMasuk(db, a.id))) return NextResponse.json({ error: `Data Anda cocok. ${PESAN_BELUM_DITUGASKAN}` }, { status: 403 });
       // NIK yg belum tercatat di akun disimpan (isian petugas sendiri, sudah lolos verifikasi).
       if (kolom.nik === "belum_ada") await db.from("sigap_akun").update({ nik }).eq("id", a.id).is("nik", null);
       return NextResponse.json({ ok: true, kolom, token: a.token, nama: a.nama, punya_pin: !!(await pinAkun(db, a)) });
@@ -169,7 +183,7 @@ export async function POST(req: NextRequest) {
       const { hash, salt } = hashPin(pin);
       const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, akun_dibuat_at: new Date().toISOString() }).eq("id", a.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ ok: true, token });
+      return NextResponse.json({ ok: true, token, ...buatSesi(a.id as number) });
     }
 
     return NextResponse.json({ error: "Aksi tidak dikenal." }, { status: 400 });
