@@ -136,8 +136,19 @@ export async function POST(req: NextRequest) {
     const tujuan = await tentukanTujuan(db, petugas);
     // (4 Okt 2026) Data utk analisis wilayah tugas belum lengkap -> halaman menawarkan formulir Lengkapi Data
     // (bisa dilewati) sebelum membuka undangan.
-    const perluLengkapi = await dataBelumLengkap(db, petugas.id);
-    return NextResponse.json({ ok: true, kolom, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path, perlu_lengkapi: perluLengkapi, petugas_id: petugas.id });
+    // (5 Okt 2026) Plotting dibatalkan -> tidak perlu menawarkan Lengkapi Data; kirim pesan pembatalan.
+    const dibatalkan = tujuan.tipe === "dibatalkan";
+    const perluLengkapi = dibatalkan ? false : await dataBelumLengkap(db, petugas.id);
+    return NextResponse.json({
+      ok: true,
+      kolom,
+      nama: petugas.nama,
+      tipe: tujuan.tipe,
+      path: tujuan.path,
+      pesan: dibatalkan ? tujuan.pesan : null,
+      perlu_lengkapi: perluLengkapi,
+      petugas_id: petugas.id,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
     return NextResponse.json({ error: message }, { status: 500 });

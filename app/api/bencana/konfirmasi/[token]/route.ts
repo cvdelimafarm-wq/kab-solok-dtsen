@@ -311,6 +311,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   }
 
   const sudahAkun = await punyaAkun(supabase, petugas.id as number);
+  // (5 Okt 2026) Plotting dibatalkan (mis. PPL NTP) -> halaman konfirmasi hanya menampilkan pesan ini.
+  const { data: batal } = await supabase.from("bencana_pembatalan_plot").select("pesan").eq("petugas_id", petugas.id).maybeSingle();
 
   return NextResponse.json({
     data: {
@@ -324,6 +326,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       perkiraan_hari_libur: petugas.perkiraan_hari_libur as string[] | null,
       wa_group_url: petugas.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       wilayah_kerja: wilayahKerja,
+      pembatalan: (batal?.pesan as string | undefined) ?? null,
       // (5 Okt 2026) info tim keroyokan + status lokasi rumah (utk keterangan jarak).
       tim: {
         pml: pmlNama,

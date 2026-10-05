@@ -73,7 +73,8 @@ export default function UndanganPage() {
   const [kolom, setKolom] = useState<Kolom | null>(null);
   const [sisa, setSisa] = useState<number | null>(null);
   const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null);
-  const [berhasil, setBerhasil] = useState<{ nama: string; path: string | null } | null>(null);
+  // (5 Okt 2026) pesan = pesan pembatalan plotting dari server (mis. PPL NTP), ditampilkan kotak merah.
+  const [berhasil, setBerhasil] = useState<{ nama: string; path: string | null; pesan?: string | null } | null>(null);
   // true begitu lolos verifikasi & sedang berpindah halaman: tombol TETAP terkunci
   // supaya petugas tidak menekan "Buka Undangan" lagi selagi halaman tujuan dimuat.
   const [pindah, setPindah] = useState(false);
@@ -89,8 +90,10 @@ export default function UndanganPage() {
     setTerkunciSampai(null);
   }
 
-  function selesai(json: { nama: string; path: string | null }) {
-    if (json.path) {
+  function selesai(json: { nama: string; path: string | null; pesan?: string | null }) {
+    if (json.pesan) {
+      setBerhasil({ nama: json.nama, path: null, pesan: json.pesan });
+    } else if (json.path) {
       setBerhasil({ nama: json.nama, path: json.path });
       setPindah(true);
       window.location.replace(json.path);
@@ -197,7 +200,14 @@ export default function UndanganPage() {
           </button>
         </div>
 
-        {berhasil && !berhasil.path && (
+        {berhasil && berhasil.pesan && (
+          <div className={`${KARTU} border-2 border-red-300 bg-red-50`}>
+            <div className="text-[16px] font-extrabold text-red-800">Halo, {berhasil.nama}</div>
+            <p className="mt-1 text-[15px] font-semibold leading-relaxed text-red-900">{berhasil.pesan}</p>
+          </div>
+        )}
+
+        {berhasil && !berhasil.path && !berhasil.pesan && (
           <div className={`${KARTU} border border-amber-300`}>
             <div className="text-[16px] font-extrabold text-[#13213A]">Halo, {berhasil.nama}</div>
             <p className="mt-1 text-[14px] text-slate-700">

@@ -13,7 +13,23 @@ import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 // ------------------------------------------------------------------------
 
 type Wilayah = { kecamatan: string; nagari: string; sls: string; sub_sls: string };
-type PplBinaan = { nama: string; no_hp: string | null; domisili: string | null; wilayah: Wilayah[] };
+type StatusKonfirmasi = "bersedia" | "pulang_pergi" | "menolak" | "belum";
+type PplBinaan = {
+  nama: string;
+  no_hp: string | null;
+  domisili: string | null;
+  wilayah: Wilayah[];
+  // (5 Okt 2026) status konfirmasi kesediaan ikut pendataan bencana.
+  status_konfirmasi?: StatusKonfirmasi;
+};
+
+// Hijau = bersedia, kuning = bersedia pulang-pergi (tidak menginap), merah = menolak, abu = belum konfirmasi.
+const BADGE_KONFIRMASI: Record<StatusKonfirmasi, { label: string; kelas: string; ikon: string }> = {
+  bersedia: { label: "Bersedia", kelas: "bg-[#DDF3E4] text-[#1E6B3A] border-[#9AD3AE]", ikon: "✓" },
+  pulang_pergi: { label: "Bersedia pulang-pergi", kelas: "bg-[#FEF3E2] text-[#8A4B08] border-[#F5C27A]", ikon: "✓" },
+  menolak: { label: "Menolak", kelas: "bg-[#FDE4E4] text-[#9B1C1C] border-[#F2A9A9]", ikon: "✕" },
+  belum: { label: "Belum konfirmasi", kelas: "bg-[#EEF1F6] text-[#55657D] border-[#D5DDE8]", ikon: "…" },
+};
 type Info = {
   nama: string;
   status_kontak: "diterima" | "menolak" | null;
@@ -22,6 +38,8 @@ type Info = {
   punya_akun: boolean;
   wa_group_url: string | null;
   ppl: PplBinaan[];
+  // (5 Okt 2026) pemberitahuan PPL tim yg plotting-nya dibatalkan (hilang setelah PML menekan "Oke").
+  pemberitahuan?: { nama: string; alasan: string; dialihkan_ke: string[] }[];
 };
 
 const JADWAL = ["7 Oktober 2026", "8 Oktober 2026"] as const;
@@ -62,6 +80,23 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
     muat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  async function okePemberitahuan() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/bencana/pml/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aksi: "baca_pemberitahuan" }),
+      });
+      if (res.ok) setInfo((cur) => (cur ? { ...cur, pemberitahuan: [] } : cur));
+      else setError("Gagal menyimpan. Coba lagi.");
+    } catch {
+      setError("Gagal menyimpan. Periksa koneksi internet.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function kirim(bersedia: boolean) {
     setError(null);
@@ -144,6 +179,32 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
         </div>
 
         <div className="mt-4 flex flex-col gap-3.5 px-4">
+          {(info.pemberitahuan?.length ?? 0) > 0 && (
+            <div role="alert" className={`${KARTU} border-2 border-red-300 bg-red-50`}>
+              <p className="text-[16px] font-extrabold text-red-800">Pemberitahuan perubahan tim</p>
+              <ul className="mt-2 space-y-2 text-[14px] leading-relaxed text-red-900">
+                {info.pemberitahuan!.map((p, i) => (
+                  <li key={p.nama + i}>
+                    Mohon maaf, plotting wilayah tugas <strong>{p.nama}</strong> dibatalkan karena yang bersangkutan merupakan PPL NTP, sehingga
+                    tidak lagi menjadi anggota tim Anda.
+                    {p.dialihkan_ke.length > 0 && (
+                      <>
+                        {" "}Sub SLS-nya dialihkan ke <strong>{p.dialihkan_ke.join(", ")}</strong>.
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={okePemberitahuan}
+                className="mt-3 min-h-[44px] w-full rounded-xl bg-red-700 px-4 py-2.5 text-[15px] font-extrabold text-white disabled:opacity-60"
+              >
+                {busy ? "Menyimpan…" : "Oke, saya mengerti"}
+              </button>
+            </div>
+          )}
           {sudahJawab && !ubah && (
             <div ref={bannerRef} className={`${KARTU} border-2 ${diterima ? "border-[#1E7A4C]/40" : "border-[#C0392B]/30"}`}>
               <p className={`text-[16px] font-extrabold ${diterima ? "text-[#1E5E3C]" : "text-[#9B2C20]"}`}>
@@ -191,6 +252,15 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
                     <p className="text-[15px] font-bold">{p.nama}</p>
                     <p className="text-xs text-[#55657D]">Domisili: {p.domisili ?? "-"}</p>
                     {p.no_hp && <p className="text-xs text-[#55657D]">HP: {p.no_hp}</p>}
+                    {(() => {
+                      const b = BADGE_KONFIRMASI[p.status_konfirmasi ?? "belum"];
+                      return (
+                        <span className={`mt-1.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${b.kelas}`}>
+                          <span aria-hidden>{b.ikon}</span>
+                          {b.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <span className="shrink-0 text-xs font-bold text-[#0F3D7A]">{p.wilayah.length} Sub SLS</span>
                 </div>

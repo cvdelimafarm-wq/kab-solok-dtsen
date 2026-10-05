@@ -126,10 +126,22 @@ export type Tujuan =
   | { tipe: "pml"; path: string }
   | { tipe: "menginap"; path: string }
   | { tipe: "biasa"; path: string }
-  | { tipe: "belum"; path: null };
+  | { tipe: "belum"; path: null }
+  // (5 Okt 2026) Plotting dibatalkan admin (mis. PPL SPDT NTP 2026 tidak boleh rangkap bencana) --
+  // petugas tidak diarahkan ke mana pun, cukup ditampilkan pesan pembatalan.
+  | { tipe: "dibatalkan"; path: null; pesan: string };
+
+/** (5 Okt 2026) Pesan pembatalan plotting (tabel bencana_pembatalan_plot), null kalau tidak dibatalkan. */
+export async function pesanPembatalan(db: Db, petugasId: number): Promise<string | null> {
+  const { data } = await db.from("bencana_pembatalan_plot").select("pesan").eq("petugas_id", petugasId).maybeSingle();
+  return (data?.pesan as string | undefined) ?? null;
+}
 
 /** Halaman yg dibuka setelah masuk: tawaran menginap kalau ada, selain itu konfirmasi biasa kalau sudah diplot. */
 export async function tentukanTujuan(db: Db, petugas: PetugasUndangan): Promise<Tujuan> {
+  // (5 Okt 2026) Dicek PALING AWAL: petugas yg plotting-nya dibatalkan hanya melihat pesan pembatalan.
+  const pesan = await pesanPembatalan(db, petugas.id);
+  if (pesan) return { tipe: "dibatalkan", path: null, pesan };
   const { data: kand } = await db
     .from("bencana_tawaran_menginap_kandidat")
     .select("token")

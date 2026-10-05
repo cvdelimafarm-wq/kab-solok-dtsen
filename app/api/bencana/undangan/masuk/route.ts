@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
     const petugas = cocok[0];
     await db.from("bencana_undangan").update({ terakhir_masuk_at: new Date().toISOString() }).eq("petugas_id", petugas.id);
     const tujuan = await tentukanTujuan(db, petugas);
-    return NextResponse.json({ ok: true, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path });
+    // (5 Okt 2026) pesan = pesan pembatalan plotting (kalau tipe "dibatalkan").
+    return NextResponse.json({ ok: true, nama: petugas.nama, tipe: tujuan.tipe, path: tujuan.path, pesan: tujuan.tipe === "dibatalkan" ? tujuan.pesan : null });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
     return NextResponse.json({ error: message }, { status: 500 });

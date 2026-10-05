@@ -47,6 +47,8 @@ type WilayahKerjaRow = {
 };
 
 type KonfirmasiInfo = {
+  // (5 Okt 2026) pesan pembatalan plotting (mis. PPL NTP); kalau ada, halaman hanya menampilkan pesan ini.
+  pembatalan?: string | null;
   tim?: { pml: string | null; anggota: string[] };
   lokasi_rumah_riil?: boolean;
   nama: string;
@@ -351,6 +353,17 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
     );
   }
 
+  if (info.pembatalan) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16 text-center">
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-4">
+          <p className="text-[16px] font-extrabold text-red-800">Halo, {info.nama}</p>
+          <p className="mt-2 text-[15px] font-semibold leading-relaxed text-red-900">{info.pembatalan}</p>
+        </div>
+      </main>
+    );
+  }
+
   const sudahJawab = info.status_kontak_pendaftaran_bencana !== null;
   const tampilkanForm = !sudahJawab || ubahJawaban;
   const diterima = info.status_kontak_pendaftaran_bencana === "diterima";
@@ -644,7 +657,14 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                 </div>
                 {info.tim && (info.tim.pml || info.tim.anggota.length > 0) && (
                   <div className="rounded-xl border border-[#D5DDE8] bg-[#F6F8FB] px-3.5 py-3 text-[13px] leading-relaxed text-[#1F2D44]">
-                    <p className="font-bold text-[#0F3D7A]">Anda bekerja dalam tim (sistem keroyokan)</p>
+                    {/* (5 Okt 2026) "(sistem keroyokan)" ditebalkan, dibesarkan, dan di-highlight
+                        agar petugas langsung paham bekerja sebagai tim -- permintaan user. */}
+                    <p className="font-bold text-[#0F3D7A]">
+                      Anda bekerja dalam tim{" "}
+                      <span className="mt-1 inline-block rounded-md bg-[#FDE68A] px-2 py-0.5 text-[16px] font-extrabold uppercase tracking-wide text-[#7A2E0E] ring-1 ring-[#F59E0B]">
+                        (sistem keroyokan)
+                      </span>
+                    </p>
                     <p>
                       Wilayah di bawah adalah <strong>seluruh Sub SLS sampel milik tim</strong>, bukan hanya satu wilayah per
                       petugas. Pembagian kerja di lapangan diatur bersama dalam tim.

@@ -47,12 +47,38 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
 
   const { data: bawahan, error: errB } = await db
     .from("bencana_petugas")
-    .select("id, nama, no_hp, alamat_nagari, alamat_kecamatan")
+    .select("id, nama, no_hp, alamat_nagari, alamat_kecamatan, status_kontak_pendaftaran_bencana")
     .eq("atasan_id", pml.id)
     .order("nama");
   if (errB) return NextResponse.json({ error: errB.message }, { status: 500 });
 
   const ids = (bawahan ?? []).map((b) => b.id as number);
+
+  // (5 Okt 2026) Status konfirmasi kesediaan tiap PPL: bersedia / pulang_pergi / menolak / belum.
+  // Aturan SAMA dgn statusBaris() di kartu admin: kalau punya tawaran menginap, pakai jawaban tawaran terakhir;
+  // selain itu pakai status_kontak_pendaftaran_bencana (diterima/menolak/null).
+  const tawaranTerakhir = new Map<number, { status: string | null; pp: boolean | null }>();
+  if (ids.length > 0) {
+    const { data: kand } = await db
+      .from("bencana_tawaran_menginap_kandidat")
+      .select("petugas_id, status, bersedia_pulang_pergi, dibuat_pada")
+      .in("petugas_id", ids)
+      .order("dibuat_pada", { ascending: false });
+    for (const k of (kand ?? []) as { petugas_id: number; status: string | null; bersedia_pulang_pergi: boolean | null }[]) {
+      if (!tawaranTerakhir.has(k.petugas_id)) tawaranTerakhir.set(k.petugas_id, { status: k.status, pp: k.bersedia_pulang_pergi });
+    }
+  }
+  function statusKonfirmasi(id: number, kontak: string | null): "bersedia" | "pulang_pergi" | "menolak" | "belum" {
+    const t = tawaranTerakhir.get(id);
+    if (t) {
+      if (t.status === "bersedia") return "bersedia";
+      if (t.status === "tidak_bersedia") return t.pp === true ? "pulang_pergi" : "menolak";
+    } else {
+      if (kontak === "menolak") return "menolak";
+      if (kontak === "diterima") return "bersedia";
+    }
+    return "belum";
+  }
   const wilayahPerPpl = new Map<number, { idsubsls: string }[]>();
   const info = new Map<string, { kecamatan: string; nagari: string; sls: string; sub_sls: string }>();
   if (ids.length > 0) {
@@ -73,11 +99,36 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     nama: b.nama as string,
     no_hp: (b.no_hp as string | null) ?? null,
     domisili: [b.alamat_nagari, b.alamat_kecamatan].filter(Boolean).join(", ") || null,
+    status_konfirmasi: statusKonfirmasi(b.id as number, (b.status_kontak_pendaftaran_bencana as string | null) ?? null),
     wilayah: (wilayahPerPpl.get(b.id as number) ?? [])
       .map((x) => info.get(x.idsubsls))
       .filter((x): x is NonNullable<typeof x> => !!x)
       .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id") || a.sls.localeCompare(b.sls, "id") || a.sub_sls.localeCompare(b.sub_sls)),
   }));
+
+  // (5 Okt 2026) Pemberitahuan pembatalan plotting PPL di tim PML ini (mis. PPL NTP) -- permintaan user:
+  // PML diberi tahu lewat undangannya, dan berhenti tampil setelah PML menekan "Oke" (pml_dibaca_at).
+  // Sub SLS milik PPL yg dibatalkan sudah dialihkan ke anggota tim; nama pemegang barunya ikut ditampilkan.
+  const { data: batalRows } = await db
+    .from("bencana_pembatalan_plot")
+    .select("petugas_id, alasan, data_lama")
+    .eq("pml_id", pml.id)
+    .is("pml_dibaca_at", null);
+  const pemberitahuan: { nama: string; alasan: string; dialihkan_ke: string[] }[] = [];
+  for (const b of (batalRows ?? []) as { petugas_id: number; alasan: string; data_lama: { alokasi?: { id: number }[] } | null }[]) {
+    const { data: orang } = await db.from("bencana_petugas").select("nama").eq("id", b.petugas_id).maybeSingle();
+    const idAlokasi = (b.data_lama?.alokasi ?? []).map((a) => a.id).filter((x) => typeof x === "number");
+    let dialihkanKe: string[] = [];
+    if (idAlokasi.length > 0) {
+      const { data: kini } = await db.from("bencana_alokasi_subsls").select("ppl_id").in("id", idAlokasi);
+      const idBaru = Array.from(new Set((kini ?? []).map((k) => k.ppl_id as number)));
+      if (idBaru.length > 0) {
+        const { data: nm } = await db.from("bencana_petugas").select("nama").in("id", idBaru);
+        dialihkanKe = (nm ?? []).map((n) => n.nama as string).sort((x, y) => x.localeCompare(y, "id"));
+      }
+    }
+    pemberitahuan.push({ nama: (orang?.nama as string) ?? "-", alasan: b.alasan, dialihkan_ke: dialihkanKe });
+  }
 
   const sudahAkun = await punyaAkun(db, pml.id as number);
   return NextResponse.json({
@@ -89,6 +140,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       punya_akun: sudahAkun,
       wa_group_url: pml.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       ppl,
+      pemberitahuan,
     },
   });
 }
@@ -99,6 +151,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 
   const body = await req.json().catch(() => null);
+
+  // (5 Okt 2026) PML menekan "Oke" pada pemberitahuan pembatalan plotting -> tidak ditampilkan lagi.
+  if (body?.aksi === "baca_pemberitahuan") {
+    const { data: p } = await db.from("bencana_petugas").select("id, peran").eq("token", token).maybeSingle();
+    if (!p || p.peran !== "pml") return NextResponse.json({ error: "Link tidak ditemukan / tidak valid." }, { status: 404 });
+    const { error: e } = await db
+      .from("bencana_pembatalan_plot")
+      .update({ pml_dibaca_at: new Date().toISOString() })
+      .eq("pml_id", p.id)
+      .is("pml_dibaca_at", null);
+    if (e) return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (typeof body?.bersedia !== "boolean") return NextResponse.json({ error: "Jawaban kesediaan wajib diisi." }, { status: 400 });
 
   const { data: pml } = await db.from("bencana_petugas").select("id, peran").eq("token", token).maybeSingle();
