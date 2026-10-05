@@ -1,6 +1,7 @@
 "use client";
 
 import { use as usePromise, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import BrandBps from "@/app/components/BrandBps";
 
 // ------------------------------------------------------------------------
@@ -418,36 +419,64 @@ function PilihKegiatan({ data, pen, onPilih }: { data: Data; pen: Pen; onPilih: 
 }
 
 // ---------------- Langkah 1 ----------------
+// (6 Okt 2026) Verifikasi ALAMAT RUMAH (bukan lagi verifikasi lokasi HP): titik rumah dari master ditampilkan;
+// petugas menekan "Alamat sudah benar" ATAU "Ubah lokasi" (geser pin di peta). Tujuannya menambah akurasi jarak
+// (Visum & Surat Pernyataan Kendaraan Dinas), bukan mengelabui -- karena itu: perubahan > 5 km wajib beralasan,
+// > 50 km hanya lewat admin, maksimal 3x ubah, titik harus di wilayah Sumbar, dan semua perubahan dicatat (audit).
+const PetaRumah = dynamic(() => import("./PetaRumah"), {
+  ssr: false,
+  loading: () => <div className="h-64 w-full animate-pulse rounded-xl bg-[#EEF1F5]" />,
+});
+
+function jarakM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+const fmtKm = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
+
 function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data; onLanjut: () => Promise<void> }) {
-  // (6 Okt 2026) Tempat tinggal TIDAK diisi ulang -- permintaan user: kecamatan & koordinat diambil dari master,
-  // ditampilkan, lalu diverifikasi dgn lokasi HP saat ini. Selisih > 5 km -> alasan wajib.
-  const dom = data.akun.domisili;
   const sudah = data.akun.verifikasi;
+  const [dom, setDom] = useState(data.akun.domisili);
+  const [mode, setMode] = useState<"lihat" | "ubah">(data.akun.domisili ? "lihat" : "ubah");
   const [busy, setBusy] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
-  const [gps, setGps] = useState<{ lat: number; lng: number; akurasi: number } | null>(null);
-  const [gpsGagal, setGpsGagal] = useState<string | null>(null);
-  const [jarak, setJarak] = useState<number | null>(sudah?.jarak_m ?? null);
-  const [perluAlasan, setPerluAlasan] = useState(false);
-  const [alasan, setAlasan] = useState(sudah?.alasan ?? "");
   const [ok, setOk] = useState(!!sudah);
+  const [hasil, setHasil] = useState<{ jarak_m: number | null; alasan: string | null } | null>(sudah ? { jarak_m: sudah.jarak_m, alasan: sudah.alasan } : null);
+  // mode "ubah"
+  const [titik, setTitik] = useState<{ lat: number; lng: number } | null>(data.akun.domisili ? { lat: data.akun.domisili.lat, lng: data.akun.domisili.lng } : null);
+  const [sumberTitik, setSumberTitik] = useState<"peta" | "gps">("peta");
+  const [gps, setGps] = useState<{ lat: number; lng: number; akurasi: number } | null>(null);
+  const [gpsGalat, setGpsGalat] = useState<string | null>(null);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [alasan, setAlasan] = useState("");
 
-  async function kirim(lokasi: { lat: number; lng: number; akurasi: number } | null, teksAlasan: string) {
+  const jarakBaru = dom && titik ? Math.round(jarakM(dom, titik)) : null;
+  const jauh = jarakBaru != null && jarakBaru > 5000;
+  const terlaluJauh = jarakBaru != null && jarakBaru > 50000;
+  const luarSolok = titik != null && (titik.lat < -1.78 || titik.lat > -0.52 || titik.lng < 100.4 || titik.lng > 101.7);
+  const perluAlasan = jauh || luarSolok;
+  const alasanCukup = alasan.trim().length >= 15 && alasan.trim().split(/\s+/).length >= 3;
+  const bisaSimpan = !!titik && !busy && !terlaluJauh && (!perluAlasan || alasanCukup);
+
+  async function kirim(body: Record<string, unknown>) {
     setBusy(true);
     setGalat(null);
     try {
       const res = await fetch(`/api/sigap/translok/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aksi: "verifikasi_domisili", ...(lokasi ?? {}), alasan: teksAlasan }),
+        body: JSON.stringify({ aksi: "verifikasi_domisili", ...body }),
       });
       const json = await res.json().catch(() => ({}));
-      if (typeof json?.jarak_m === "number") setJarak(json.jarak_m);
-      if (!res.ok) {
-        if (json?.perlu_alasan) setPerluAlasan(true);
-        throw new Error(json?.error ?? "Gagal menyimpan.");
-      }
+      if (!res.ok) throw new Error(json?.error ?? "Gagal menyimpan.");
+      if (body.keputusan === "ubah" && titik) setDom({ lat: titik.lat, lng: titik.lng, sumber: sumberTitik === "gps" ? "diubah petugas (gps HP)" : "diubah petugas (peta)" });
+      setHasil({ jarak_m: typeof json?.jarak_m === "number" ? json.jarak_m : null, alasan: body.keputusan === "ubah" && perluAlasan ? alasan.trim() : null });
       setOk(true);
+      setMode("lihat");
     } catch (e) {
       setGalat(e instanceof Error ? e.message : "Gagal menyimpan.");
     } finally {
@@ -455,36 +484,43 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
     }
   }
 
-  function ambilLokasi() {
-    setGalat(null);
-    setGpsGagal(null);
+  function pakaiLokasiHp() {
+    setGpsGalat(null);
     if (!("geolocation" in navigator)) {
-      setGpsGagal("Perangkat tidak mendukung GPS.");
-      setPerluAlasan(true);
+      setGpsGalat("Perangkat tidak mendukung GPS. Geser pin di peta saja.");
       return;
     }
-    setBusy(true);
+    setGpsBusy(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const l = { lat: pos.coords.latitude, lng: pos.coords.longitude, akurasi: Math.round(pos.coords.accuracy) };
-        setGps(l);
-        setBusy(false);
-        kirim(l, alasan);
+        const g = { lat: pos.coords.latitude, lng: pos.coords.longitude, akurasi: Math.round(pos.coords.accuracy) };
+        setGps(g);
+        setTitik({ lat: g.lat, lng: g.lng });
+        setSumberTitik("gps");
+        setGpsBusy(false);
       },
       (err) => {
-        setBusy(false);
-        setGpsGagal(err.code === 1 ? "Izin lokasi ditolak. Izinkan lokasi di browser, lalu coba lagi." : "Lokasi tidak terbaca. Pastikan GPS aktif, lalu coba lagi.");
-        setPerluAlasan(true);
+        setGpsBusy(false);
+        setGpsGalat(err.code === 1 ? "Izin lokasi ditolak. Izinkan lokasi di browser, atau geser pin di peta saja." : "Lokasi HP tidak terbaca. Geser pin di peta saja.");
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   }
 
-  const km = jarak != null ? (jarak / 1000).toFixed(jarak < 10000 ? 1 : 0) : null;
-  const jauh = jarak != null && jarak > 5000;
+  function batalUbah() {
+    setMode("lihat");
+    setGalat(null);
+    setGpsGalat(null);
+    setAlasan("");
+    setGps(null);
+    setSumberTitik("peta");
+    setTitik(dom ? { lat: dom.lat, lng: dom.lng } : null);
+  }
+
   const peta = dom
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${dom.lng - 0.01}%2C${dom.lat - 0.007}%2C${dom.lng + 0.01}%2C${dom.lat + 0.007}&layer=mapnik&marker=${dom.lat}%2C${dom.lng}`
     : null;
+  const diubah = hasil?.jarak_m != null && hasil.jarak_m > 0;
 
   return (
     <>
@@ -501,56 +537,131 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
         </div>
         <p className="mt-3 text-[11px] font-bold text-[#6B7890]">Tempat tinggal terdaftar (tempat kedudukan)</p>
         <p className="text-[14px] font-extrabold">Kecamatan {data.akun.alamat_kecamatan ? judul(data.akun.alamat_kecamatan) : "–"}</p>
-        {dom ? (
-          <>
-            <div className="mt-2 overflow-hidden rounded-xl border border-[#E3E8F0]">
-              <iframe title="Peta tempat tinggal" src={peta as string} className="h-44 w-full" loading="lazy" />
-            </div>
-            <p className="mt-1 text-[11px] text-[#6B7890]">
-              Koordinat {dom.lat.toFixed(5)}, {dom.lng.toFixed(5)}
-              {dom.sumber ? ` · sumber: ${dom.sumber}` : ""} ·{" "}
-              <a href={`https://www.google.com/maps?q=${dom.lat},${dom.lng}`} target="_blank" rel="noreferrer" className="font-semibold text-[#0F3D7A] underline">
-                buka di Maps
-              </a>
-            </p>
-          </>
-        ) : (
-          <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-900">Koordinat tempat tinggal belum ada di data. Lokasi HP Anda saat verifikasi akan dicatat sebagai tempat tinggal.</p>
-        )}
-        <p className="mt-1 text-[11.5px] text-[#6B7890]">Dipakai di Visum &amp; Surat Pernyataan Kendaraan Dinas. Bila data salah, hubungi admin anggaran.</p>
+        {mode === "lihat" &&
+          (dom ? (
+            <>
+              <div className="mt-2 overflow-hidden rounded-xl border border-[#E3E8F0]">
+                <iframe title="Peta tempat tinggal" src={peta as string} className="h-44 w-full" loading="lazy" />
+              </div>
+              <p className="mt-1 text-[11px] text-[#6B7890]">
+                Koordinat {dom.lat.toFixed(5)}, {dom.lng.toFixed(5)}
+                {dom.sumber ? ` · sumber: ${dom.sumber}` : ""} ·{" "}
+                <a href={`https://www.google.com/maps?q=${dom.lat},${dom.lng}`} target="_blank" rel="noreferrer" className="font-semibold text-[#0F3D7A] underline">
+                  buka di Maps
+                </a>
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-900">Titik rumah belum ada di data. Tekan &ldquo;Ubah lokasi&rdquo; lalu tandai rumah Anda di peta.</p>
+          ))}
+        <p className="mt-1 text-[11.5px] text-[#6B7890]">Dipakai di Visum &amp; Surat Pernyataan Kendaraan Dinas.</p>
       </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <p className="text-[14px] font-extrabold">Verifikasi lokasi</p>
-        <p className="text-[12px] text-[#55657D]">Lakukan dari rumah. Lokasi HP dibandingkan dengan tempat tinggal terdaftar; bila berjarak lebih dari 5 km, tuliskan alasannya.</p>
-        {ok && !galat ? (
-          <p className={`mt-2 rounded-lg px-3 py-2 text-[12.5px] font-semibold ${jauh ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
-            ✓ Terverifikasi{km != null ? ` · jarak ${km} km dari tempat tinggal terdaftar` : " · tanpa lokasi HP"}
-            {jauh || jarak == null ? " · alasan tercatat" : ""}
-          </p>
+        <p className="text-[14px] font-extrabold">Verifikasi alamat rumah</p>
+        {mode === "lihat" ? (
+          <>
+            <p className="text-[12px] text-[#55657D]">
+              Periksa titik rumah di peta di atas. Bila sudah sesuai, tekan <b>Alamat sudah benar</b>. Bila meleset, tekan <b>Ubah lokasi</b> lalu geser pin ke rumah Anda.
+              Verifikasi ini hanya untuk menambah akurasi jarak, bukan untuk mengubah data seenaknya.
+            </p>
+            {ok && !galat && (
+              <p className={`mt-2 rounded-lg px-3 py-2 text-[12.5px] font-semibold ${diubah ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+                ✓ {diubah ? `Lokasi rumah diperbarui · bergeser ${fmtKm(hasil!.jarak_m as number)} dari titik terdaftar${hasil?.alasan ? " · alasan tercatat" : ""}` : "Alamat rumah terverifikasi"}
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={busy || !dom || ok}
+                onClick={() => kirim({ keputusan: "benar" })}
+                className="rounded-xl bg-[#0F3D7A] px-2 py-3 text-[13.5px] font-extrabold text-white disabled:opacity-40"
+              >
+                {busy ? "Menyimpan…" : ok ? "✓ Terverifikasi" : "✓ Alamat sudah benar"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setGalat(null);
+                  setMode("ubah");
+                }}
+                className="rounded-xl border-2 border-[#0F3D7A] bg-white px-2 py-3 text-[13.5px] font-extrabold text-[#0F3D7A] disabled:opacity-50"
+              >
+                ✎ Ubah lokasi
+              </button>
+            </div>
+          </>
         ) : (
-          <button type="button" disabled={busy} onClick={ambilLokasi} className="mt-2 w-full rounded-xl border-2 border-[#0F3D7A] bg-white py-2.5 text-[14px] font-extrabold text-[#0F3D7A] disabled:opacity-50">
-            {busy ? "Membaca lokasi…" : "📍 Verifikasi dengan lokasi saya sekarang"}
-          </button>
-        )}
-        {gps && km != null && !ok && <p className="mt-1.5 text-[12px] text-[#55657D]">Lokasi HP ±{gps.akurasi} m · jarak {km} km dari tempat tinggal terdaftar.</p>}
-        {gpsGagal && <p className="mt-1.5 text-[12px] font-semibold text-red-700">⚠ {gpsGagal}</p>}
-        {perluAlasan && !ok && (
-          <div className="mt-2">
-            <p className="text-[12px] font-bold text-red-800">{gpsGagal ? "Alasan lokasi tidak terbaca (wajib)" : `Alasan jarak ${km ?? "?"} km dari tempat tinggal (wajib)`}</p>
-            <textarea
-              value={alasan}
-              onChange={(e) => setAlasan(e.target.value)}
-              rows={2}
-              placeholder="Mis. sedang menginap di rumah orang tua; pindah domisili ke Nagari …"
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-[13.5px] outline-none focus:border-[#0F3D7A]"
-            />
-            <button type="button" disabled={busy || alasan.trim().length < 5} onClick={() => kirim(gps, alasan)} className="mt-1.5 w-full rounded-xl bg-[#0F3D7A] py-2.5 text-[13.5px] font-extrabold text-white disabled:opacity-40">
-              Kirim alasan
+          <>
+            <p className="text-[12px] text-[#55657D]">
+              Geser pin 📍 atau ketuk peta tepat di rumah tempat Anda tinggal. Lingkaran putus-putus = batas 5 km dari titik terdaftar; bila lebih jauh, alasan wajib diisi.
+            </p>
+            <div className="mt-2">
+              <PetaRumah
+                awal={dom ? { lat: dom.lat, lng: dom.lng } : null}
+                titik={titik}
+                onPindah={(lat, lng) => {
+                  setTitik({ lat, lng });
+                  setSumberTitik("peta");
+                  setGps(null);
+                }}
+              />
+            </div>
+            <button type="button" disabled={gpsBusy} onClick={pakaiLokasiHp} className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-[12.5px] font-bold text-slate-700 disabled:opacity-50">
+              {gpsBusy ? "Membaca lokasi HP…" : "📍 Pakai lokasi HP saya (bila sedang di rumah)"}
             </button>
-          </div>
+            {gpsGalat && <p className="mt-1.5 text-[12px] font-semibold text-red-700">⚠ {gpsGalat}</p>}
+            {titik && (
+              <p className="mt-2 text-[12px] text-[#55657D]">
+                Titik baru {titik.lat.toFixed(5)}, {titik.lng.toFixed(5)}
+                {gps ? ` (GPS HP ±${gps.akurasi} m)` : ""}
+                {jarakBaru != null ? ` · ${fmtKm(jarakBaru)} dari titik terdaftar` : ""}
+              </p>
+            )}
+            {terlaluJauh && <p className="mt-1.5 rounded-lg bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-800">Lebih dari 50 km dari titik terdaftar. Perpindahan sejauh ini tidak bisa diubah sendiri; hubungi admin anggaran.</p>}
+            {luarSolok && !terlaluJauh && <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-900">Titik ini di luar wilayah Kabupaten Solok. Jelaskan alasannya di bawah.</p>}
+            {perluAlasan && !terlaluJauh && (
+              <div className="mt-2">
+                <p className="text-[12px] font-bold text-red-800">{jauh ? `Alasan berpindah ${jarakBaru != null ? fmtKm(jarakBaru) : ""} dari titik terdaftar (wajib)` : "Alasan titik di luar Kabupaten Solok (wajib)"}</p>
+                <textarea
+                  value={alasan}
+                  onChange={(e) => setAlasan(e.target.value)}
+                  rows={2}
+                  placeholder="Mis. data lama salah, rumah sebenarnya di Nagari …; atau pindah domisili sejak …"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-[13.5px] outline-none focus:border-[#0F3D7A]"
+                />
+                <p className="mt-0.5 text-[11px] text-[#6B7890]">Minimal 15 karakter, tulis dengan jelas.</p>
+              </div>
+            )}
+            {galat && <p className="mt-1.5 text-[12px] font-semibold text-red-700">⚠ {galat}</p>}
+            <p className="mt-2 text-[11px] text-[#6B7890]">
+              Perubahan dicatat (titik lama &amp; baru, jarak, alasan) dan dapat diperiksa admin. Maksimal 3 kali ubah. Isi hanya titik rumah yang sebenarnya.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button type="button" disabled={busy} onClick={batalUbah} className="rounded-xl border-2 border-slate-300 bg-white px-2 py-3 text-[13.5px] font-extrabold text-slate-700 disabled:opacity-50">
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={!bisaSimpan}
+                onClick={() =>
+                  kirim({
+                    keputusan: "ubah",
+                    lat: titik!.lat,
+                    lng: titik!.lng,
+                    sumber: sumberTitik,
+                    alasan: alasan.trim(),
+                    ...(gps ? { gps_lat: gps.lat, gps_lng: gps.lng, gps_akurasi: gps.akurasi } : {}),
+                  })
+                }
+                className="rounded-xl bg-[#0F3D7A] px-2 py-3 text-[13.5px] font-extrabold text-white disabled:opacity-40"
+              >
+                {busy ? "Menyimpan…" : "Simpan lokasi baru"}
+              </button>
+            </div>
+          </>
         )}
-        {galat && !perluAlasan && <p className="mt-1.5 text-[12px] font-semibold text-red-700">⚠ {galat}</p>}
       </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm">
@@ -580,7 +691,7 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
         <p className="mt-1 text-[11.5px] text-[#6B7890]">Diatur oleh admin anggaran / PJ kegiatan. Satu tanggal hanya untuk satu kegiatan.</p>
       </section>
       <button type="button" disabled={busy || !ok} onClick={() => onLanjut()} className="w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50">
-        {ok ? "Data sudah benar, lanjut →" : "Verifikasi lokasi dulu untuk lanjut"}
+        {ok ? "Data sudah benar, lanjut →" : "Verifikasi alamat rumah dulu untuk lanjut"}
       </button>
     </>
   );
