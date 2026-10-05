@@ -1974,7 +1974,7 @@ function ThKontrol({
       style={freeze ? { left: freeze.left, width: freeze.width, minWidth: freeze.width, maxWidth: freeze.width } : undefined}
     >
       <div className="flex items-center justify-between gap-1">
-        <span className="truncate">{label}</span>
+        <span className="truncate" title={label}>{label}</span>
         <div className="flex shrink-0 items-center gap-0.5">
           {search && (
             <div ref={cariRef} className="relative">
@@ -3906,10 +3906,11 @@ function KegiatanPetugasSection() {
   const [sortKey, setSortKey] = useState<"nama" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // (3 Okt 2026) "Kolom Tambahan" -- permintaan user: tampilan default
-  // tabel ini tetap spt semula (set kosong di bawah), admin centang sendiri
-  // kalau mau tambah info spt alamat/no HP/dll (lihat KOLOM_TAMBAHAN_DAFTAR).
-  const [kolomTambahan, setKolomTambahan] = useState<Set<string>>(new Set());
+  // (3 Okt 2026) "Kolom Tambahan" -- admin centang sendiri kalau mau tambah
+  // info spt alamat/no HP/dll (lihat KOLOM_TAMBAHAN_DAFTAR).
+  // (5 Okt 2026) Permintaan user: "Alamat" & "Nilai Kinerja" sekarang TAMPIL
+  // SEJAK AWAL (default), tetap bisa dimatikan lewat "+ Kolom Tambahan".
+  const [kolomTambahan, setKolomTambahan] = useState<Set<string>>(new Set(["alamat", "nilai_kinerja"]));
   // (3 Okt 2026) Filter per kolom tambahan -- permintaan user: SELURUH
   // kolom tambahan (termasuk yg "ditempel di nama", lihat tempelDiNama di
   // KOLOM_TAMBAHAN_DAFTAR) bisa difilter. Satu Set per key, independen dari
@@ -4456,6 +4457,10 @@ function KegiatanPetugasSection() {
                 <ThKontrol
                   key={k}
                   label={k}
+                  /* (5 Okt 2026) Kolom kegiatan dipadatkan (permintaan user):
+                     padding & lebar header dipersempit, label panjang
+                     dipotong (teks lengkap muncul di tooltip). */
+                  className="!px-1.5 w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-xs"
                   filter={{
                     options: ["Ikut", "Tidak Ikut"],
                     selected: kegiatanSel[k],
@@ -4574,8 +4579,8 @@ function KegiatanPetugasSection() {
                     const kunciK = `${r.id}:${k}`;
                     const ikut = r.kegiatan_lain.includes(k);
                     return (
-                      <td key={k} className="px-3 py-2">
-                        <label className="flex items-center gap-1.5">
+                      <td key={k} className="w-[5.5rem] px-1.5 py-2 text-center">
+                        <label className="flex items-center justify-center" title={`${k}: ${ikut ? "Ikut" : "Tidak ikut"}`}>
                           <input
                             type="checkbox"
                             checked={ikut}
@@ -4583,7 +4588,7 @@ function KegiatanPetugasSection() {
                             onChange={(e) => ubahKegiatanLain(r.id, k, e.target.checked)}
                             className="h-3.5 w-3.5 accent-blue-600 disabled:opacity-50"
                           />
-                          <span className="text-xs text-ink/70">{ikut ? "Ikut" : "—"}</span>
+                          <span className="sr-only">{ikut ? "Ikut" : "Tidak ikut"}</span>
                         </label>
                         {errSel.has(kunciK) && (
                           <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciK)}</p>
