@@ -1,6 +1,6 @@
 // Kop identitas: logo BPS + nama lengkap instansi. Dipakai di header halaman petugas.
-// Logo: /public/logo-bps.svg -- (6 Okt 2026) versi vektor hasil penelusuran logo-bps.png (per warna), supaya
-// tetap tajam di semua ukuran & layar retina -- permintaan user. PNG lama tetap disimpan sbg cadangan.
+// Logo: /public/logo-bps.svg -- (6 Okt 2026) lambang resmi BPS (SVG vektor dari user, dirapikan: tanpa
+// ukuran pt tetap, + aria-label) supaya tajam di semua ukuran & layar retina. PNG lama disimpan sbg cadangan.
 export const NAMA_INSTANSI = "Badan Pusat Statistik Kabupaten Solok";
 
 export default function BrandBps({
