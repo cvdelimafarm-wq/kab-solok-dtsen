@@ -42,7 +42,7 @@ export default function SigapBeranda() {
           <p className="mt-2 max-w-xl text-[15px] text-blue-100">Sistem Informasi Gerak Anggaran &amp; Pertanggungjawaban — dari RAB, revisi, pelaksanaan, hingga SPJ.</p>
         </div>
       </header>
-      <div className="mx-auto -mt-8 max-w-5xl space-y-6 px-4">
+      <div className="relative z-10 mx-auto -mt-8 max-w-5xl space-y-6 px-4">
         {/* (5 Okt 2026) Menu sesuai peran akun yg masuk */}
         <PanelSaya />
         {KELOMPOK.map((k) => (

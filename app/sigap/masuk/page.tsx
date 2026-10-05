@@ -124,7 +124,8 @@ export default function SigapMasuk() {
         </div>
       </div>
 
-      <div className="mx-auto -mt-10 max-w-md space-y-3 px-4 pb-10">
+      {/* (6 Okt 2026) relative z-10: tab "Sudah/Belum punya PIN" sebelumnya tertutup header -- laporan user */}
+      <div className="relative z-10 mx-auto -mt-10 max-w-md space-y-3 px-4 pb-10">
         {!tokenDaftar && (
           <div className="flex rounded-2xl bg-white p-1 shadow-sm">
             {(["masuk", "daftar"] as const).map((m) => (

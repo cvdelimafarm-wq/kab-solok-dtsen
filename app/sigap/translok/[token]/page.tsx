@@ -207,7 +207,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             ))}
           </div>
         </Header>
-        <div className="mx-auto -mt-7 max-w-lg space-y-3 px-4">
+        <div className="relative z-10 mx-auto -mt-7 max-w-lg space-y-3 px-4">
           {langkah === 1 && <LangkahDataDiri token={token} data={data} onLanjut={async () => { await muat(); lanjut(); }} />}
           {langkah === 2 && (
             <>
@@ -277,7 +277,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         <p className="mt-2 text-[12.5px] text-blue-200">{pen.label_jabatan}</p>
       </Header>
 
-      <div className="mx-auto -mt-7 max-w-lg space-y-3 px-4">
+      <div className="relative z-10 mx-auto -mt-7 max-w-lg space-y-3 px-4">
         {pen.dikunci_at && (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-semibold text-emerald-900">
             ✓ SPJ kegiatan ini sudah diverifikasi &amp; dikunci admin. Data tidak dapat diubah lagi.
