@@ -99,7 +99,7 @@ export type Penugasan = {
   tarif: number;
   maks_hari: number | null;
   periode: { mulai: string | null; selesai: string | null };
-  surat_tugas: { nomor: string; tanggal_st: string | null; ada_file: boolean } | null;
+  surat_tugas: { nomor: string; tanggal_st: string | null; tujuan: string[]; ada_file: boolean } | null;
   dikunci_at: string | null;
 };
 
@@ -117,7 +117,7 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
     db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, tanggal_mulai, tanggal_selesai, aktif").in("id", kegIds),
     db.from("sigap_kegiatan_tarif").select("kegiatan_id, peran, tarif, label_jabatan, maks_hari_default").in("kegiatan_id", kegIds),
     stIds.length
-      ? db.from("sigap_surat_tugas").select("id, nomor_st, tanggal_st, tanggal_mulai, tanggal_selesai, file_path").in("id", stIds)
+      ? db.from("sigap_surat_tugas").select("id, nomor_st, tanggal_st, tanggal_mulai, tanggal_selesai, tujuan, file_path").in("id", stIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
   const hasil: Penugasan[] = [];
@@ -138,7 +138,7 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
         mulai: ((s?.tanggal_mulai as string | null) ?? null) || (k.tanggal_mulai as string | null),
         selesai: ((s?.tanggal_selesai as string | null) ?? null) || (k.tanggal_selesai as string | null),
       },
-      surat_tugas: s ? { nomor: s.nomor_st as string, tanggal_st: (s.tanggal_st as string | null) ?? null, ada_file: !!s.file_path } : null,
+      surat_tugas: s ? { nomor: s.nomor_st as string, tanggal_st: (s.tanggal_st as string | null) ?? null, tujuan: (s.tujuan as string[] | null) ?? [], ada_file: !!s.file_path } : null,
       dikunci_at: (p.dikunci_at as string | null) ?? null,
     });
   }

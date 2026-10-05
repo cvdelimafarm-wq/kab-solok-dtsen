@@ -33,7 +33,7 @@ type Pen = {
   tarif: number;
   maks_hari: number | null;
   periode: { mulai: string | null; selesai: string | null };
-  surat_tugas: { nomor: string; tanggal_st: string | null; ada_file: boolean } | null;
+  surat_tugas: { nomor: string; tanggal_st: string | null; tujuan: string[]; ada_file: boolean } | null;
   dikunci_at: string | null;
   hari_kerja: string[];
   hari: Hari[];
@@ -461,9 +461,14 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
                   {p.peran.toUpperCase()} · {p.periode.mulai && p.periode.selesai ? rentangPendek(p.periode.mulai, p.periode.selesai) : "periode belum ditetapkan"} ·{" "}
                   {p.maks_hari ? `maks ${p.maks_hari} hari` : "maks hari belum ditetapkan"} · {rupiah(p.tarif)}/hari
                 </p>
+                {p.surat_tugas && (
+                  <p className="text-[11.5px] text-[#55657D]">
+                    ST {p.surat_tugas.nomor} · Tujuan: {p.surat_tugas.tujuan.map(judul).join(", ") || "–"}
+                  </p>
+                )}
               </div>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${p.surat_tugas ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-                {p.surat_tugas ? "ST ✓" : "ST menunggu"}
+                {p.surat_tugas ? (p.surat_tugas.ada_file ? "ST ✓" : "ST (file menyusul)") : "ST menunggu"}
               </span>
             </div>
           ))}
@@ -803,7 +808,7 @@ function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
   const terlewat = pen.hari.filter((h) => h.kunci === "terlewat" && !h.lengkap);
   const info: Record<string, { s: string; chip: string; ok: boolean }> = {
     surat_tugas: pen.surat_tugas
-      ? { s: `No. ${pen.surat_tugas.nomor}`, chip: pen.surat_tugas.ada_file ? "Tersedia" : "Menunggu file", ok: pen.surat_tugas.ada_file }
+      ? { s: `No. ${pen.surat_tugas.nomor} · Tujuan ${pen.surat_tugas.tujuan.map(judul).join(", ") || "–"}`, chip: pen.surat_tugas.ada_file ? "Tersedia" : "Menunggu file", ok: pen.surat_tugas.ada_file }
       : { s: "Diupload admin anggaran", chip: "Menunggu", ok: false },
     kwitansi: { s: `${pen.kelompok.length} kelompok tanggal`, chip: `${pen.kelompok.length} dok`, ok: pen.kelompok.length > 0 },
     visum: { s: `${pen.kelompok.length} kelompok tanggal`, chip: `${pen.kelompok.length} dok`, ok: pen.kelompok.length > 0 },
