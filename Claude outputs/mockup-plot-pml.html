@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup Plot PML</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1E2A47;--navy2:#0F3D7A;--paper:#EEF3FA;--line:#D5DDE8;--ink:#13213A;--muted:#55657D;--gold:#B7791F;--goldbg:#FEF3E2;--moss:#1E7A4C;--mossbg:#DDF3E4;--rust:#9B2C20;--rustbg:#FDE4E4;--slatebg:#EEF1F6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.note{background:#fff;border:2px dashed #94A3B8;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#334155}
+.note b{color:var(--navy2)}
+h2{margin:0;font-size:18px;color:var(--navy)}
+.sub{color:var(--muted);font-size:12px;margin-top:3px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px}
+.flow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.step{background:var(--slatebg);border-radius:10px;padding:8px 12px;font-weight:700;font-size:12px}
+.step.on{background:var(--navy2);color:#fff}
+.arrow{color:var(--muted);font-weight:800}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.chip.on{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+.chip .n{opacity:.75;margin-left:4px}
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.team{border:1px solid var(--line);border-radius:12px;padding:11px;background:#FAFBFD}
+.team h4{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:6px}
+.team .meta{font-size:12px;color:var(--muted);margin-top:4px}
+.bar{height:8px;background:#E4E9F0;border-radius:99px;margin-top:8px;overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.legend{font-size:11px;color:var(--muted);margin-top:4px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 9px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn.rust{border-color:#F2A9A9;color:var(--rust)}
+.btn.rustfill{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn.gold{border-color:#F5C27A;color:#8A4B08;background:var(--goldbg)}
+.btn.navy{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+th{background:var(--navy);color:#fff;text-align:left;padding:8px;font-weight:700;font-size:11.5px;position:sticky;top:0}
+td{border-bottom:1px solid #E4E9F0;padding:8px;vertical-align:top}
+tr:hover td{background:#F8FAFD}
+select{font-family:inherit;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 6px;min-width:170px;background:#fff}
+select.req{border-color:var(--navy2);border-width:2px}
+select:disabled{background:#F1F4F8;color:#94A3B8}
+.badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:800;margin:2px 3px 0 0;border:1px solid transparent}
+.b-ok{background:var(--mossbg);color:#1E6B3A;border-color:#9AD3AE}
+.b-noppl{background:var(--goldbg);color:#8A4B08;border-color:#F5C27A}
+.b-nopml{background:var(--rustbg);color:var(--rust);border-color:#F2A9A9}
+.b-wait{background:#EDE9FE;color:#5B21B6;border-color:#C4B5FD}
+.b-none{background:var(--slatebg);color:var(--muted);border-color:var(--line)}
+.hint{font-size:11px;color:var(--muted);margin-top:3px}
+.acts{display:flex;gap:5px;flex-wrap:wrap}
+.modal{border:2px solid #F2A9A9;background:#FFF7F7;border-radius:14px;padding:14px;margin-top:14px;max-width:520px}
+.modal h3{margin:0 0 6px;color:var(--rust);font-size:15px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:10px}
+.rule{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px}
+.rule b{display:block;color:var(--navy2);margin-bottom:3px;font-size:12.5px}
+.tag{font-size:10px;font-weight:800;background:var(--navy2);color:#fff;border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:middle}
+@media (max-width:700px){table{display:block;overflow-x:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="note"><b>MOCKUP</b> — tampilan usulan, belum terhubung ke data. Nama &amp; angka contoh dari data saat ini. Silakan beri catatan, atau ketik <b>"setuju"</b> untuk mulai dikodekan.</div>
+
+<h2>Langkah 4 — Plotting Sub SLS ke Tim (PML) → PPL <span class="tag">BARU</span></h2>
+<div class="sub">Sub SLS diplot ke <b>PML dulu (wajib)</b>. Di dalam tim boleh ditandai PPL penanggung jawabnya (opsional). Jika PPL dilepas/menolak/dibatalkan, Sub SLS <b>tetap menempel ke PML</b>.</div>
+
+<div class="flow">
+  <span class="step">1. Pilih Wilayah Sampel</span><span class="arrow">→</span>
+  <span class="step">2. Kebutuhan Petugas</span><span class="arrow">→</span>
+  <span class="step">3. Susunan Tim</span><span class="arrow">→</span>
+  <span class="step on">4. Plot Sub SLS → PML → PPL</span>
+</div>
+
+<!-- RINGKASAN PER TIM -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
+    <div><b style="font-size:15px">Ringkasan per Tim (PML)</b><div class="sub">Klik kartu untuk memfilter tabel ke tim tersebut.</div></div>
+    <div class="legend"><span style="color:#1E7A4C">■</span> ada PPL &nbsp; <span style="color:#D97706">■</span> belum ada PPL</div>
+  </div>
+  <div class="teams">
+    <div class="team">
+      <h4>Yurneti <span class="badge b-ok">aktif</span></h4>
+      <div class="meta">4 PPL · 11 Sub SLS · 3 belum ada PPL</div>
+      <div class="bar"><i style="width:73%;background:#1E7A4C"></i><i style="width:27%;background:#D97706"></i></div>
+      <div class="acts" style="margin-top:8px"><button class="btn">Lihat</button><button class="btn rust">Lepas semua wilayah tim</button></div>
+    </div>
+    <div class="team">
+      <h4>Widya Verawati <span class="badge b-ok">aktif</span></h4>
+      <div class="meta">3 PPL · 12 Sub SLS · semua ada PPL</div>
+      <div class="bar"><i style="width:100%;background:#1E7A4C"></i></div>
+      <div class="acts" style="margin-top:8px"><button class="btn">Lihat</button><button class="btn rust">Lepas semua wilayah tim</button></div>
+    </div>
+    <div class="team">
+      <h4>Megawati <span class="badge b-wait">menunggu PML</span></h4>
+      <div class="meta">PML menolak · 3 PPL · 4 Sub SLS tetap milik tim</div>
+      <div class="bar"><i style="width:75%;background:#1E7A4C"></i><i style="width:25%;background:#D97706"></i></div>
+      <div class="acts" style="margin-top:8px"><button class="btn navy">Tunjuk PML pengganti</button><button class="btn rust">Lepas semua</button></div>
+    </div>
+    <div class="team" style="border-style:dashed">
+      <h4>Tanpa PML <span class="badge b-nopml">data lama</span></h4>
+      <div class="meta">18 Sub SLS dipegang PPL yang belum punya PML (mis. Rahmad Hidayat 17)</div>
+      <div class="acts" style="margin-top:8px"><button class="btn gold">Plot ke PML…</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- TABEL -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div><b style="font-size:15px">Kertas Kerja Plotting</b><div class="sub">Pilih PML dulu → daftar PPL otomatis menyempit ke anggota tim PML itu. Tersimpan setelah "Simpan Perubahan".</div></div>
+    <div class="acts"><button class="btn gold">🤖 Auto Plot ke PML</button><button class="btn">Export ke Excel</button><button class="btn navy">Simpan Perubahan (3)</button></div>
+  </div>
+  <div class="chips">
+    <span class="chip on">Semua <span class="n">196</span></span>
+    <span class="chip">Belum diplot ke PML <span class="n">0</span></span>
+    <span class="chip">Belum ada PPL <span class="n">9</span></span>
+    <span class="chip">Tim menunggu PML <span class="n">4</span></span>
+    <span class="chip">Tanpa PML (data lama) <span class="n">18</span></span>
+  </div>
+  <table>
+    <thead><tr><th>Sub SLS</th><th>KK terdampak</th><th>PML (tim) — wajib</th><th>PPL penanggung jawab — opsional</th><th>Status</th><th>Aksi</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Jorong Koto Baru (01)</b><div class="hint">Nagari Kampung Batu Dalam · Kec. Danau Kembar</div></td>
+        <td>24</td>
+        <td><select class="req"><option>Yurneti</option></select></td>
+        <td><select><option>Eka Ramadani</option><option>Fikri Mardiyani</option><option>Nelva Roza Oktakia</option><option>— belum ada PPL —</option></select><div class="hint">3,1 km dari rumah PPL</div></td>
+        <td><span class="badge b-ok">Lengkap</span></td>
+        <td class="acts"><button class="btn">Lepas PPL</button><button class="btn rust">Lepas dari tim</button></td>
+      </tr>
+      <tr>
+        <td><b>Jorong Bukik Kili (03)</b><div class="hint">Nagari Koto Laweh · Kec. Lembang Jaya</div></td>
+        <td>31</td>
+        <td><select class="req"><option>Yurneti</option></select></td>
+        <td><select><option>— belum ada PPL —</option><option>Eka Ramadani</option><option>Fikri Mardiyani</option><option>Nelva Roza Oktakia</option></select><div class="hint">PPL sebelumnya: Zahria Fitri Andini (dibatalkan, PPL NTP)</div></td>
+        <td><span class="badge b-noppl">Belum ada PPL</span></td>
+        <td class="acts"><button class="btn rust">Lepas dari tim</button></td>
+      </tr>
+      <tr>
+        <td><b>Jorong Aia Angek (06)</b><div class="hint">Nagari Batu Bajanjang · Kec. Tigo Lurah</div></td>
+        <td>18</td>
+        <td><select class="req"><option>Megawati (menolak)</option><option>— pilih PML pengganti —</option></select></td>
+        <td><select><option>Amelia</option><option>nopi nofila</option></select></td>
+        <td><span class="badge b-wait">Menunggu PML pengganti</span></td>
+        <td class="acts"><button class="btn">Lepas PPL</button><button class="btn rust">Lepas dari tim</button></td>
+      </tr>
+      <tr>
+        <td><b>Jorong Pasa (02)</b><div class="hint">Nagari Sirukam · Kec. Payung Sekaki</div></td>
+        <td>40</td>
+        <td><select class="req" style="border-color:#C0392B"><option>— pilih PML —</option><option>Hariston</option><option>Ilham</option><option>Reza Sativa</option></select></td>
+        <td><select disabled><option>Rahmad Hidayat</option></select><div class="hint">PPL belum punya PML — pilih PML dulu</div></td>
+        <td><span class="badge b-nopml">Tanpa PML</span></td>
+        <td class="acts"><button class="btn">Lepas PPL</button></td>
+      </tr>
+      <tr>
+        <td><b>Jorong Rimbo Data (05)</b><div class="hint">Nagari Sumani · Kec. X Koto Singkarak</div></td>
+        <td>12</td>
+        <td><select class="req" style="border-color:#C0392B"><option>— pilih PML —</option></select></td>
+        <td><select disabled><option>— pilih PML dulu —</option></select></td>
+        <td><span class="badge b-none">Belum diplot</span></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- MODAL KONFIRMASI LEPAS SEMUA -->
+<div class="modal">
+  <h3>Lepas semua wilayah tim Yurneti?</h3>
+  <div style="font-size:13px;line-height:1.55">11 Sub SLS akan kembali <b>belum diplot</b> dan PPL di dalamnya ikut dilepas dari Sub SLS tersebut. Anggota tim (PML &amp; PPL) <b>tidak</b> berubah. PML &amp; PPL terkait otomatis menerima notifikasi.</div>
+  <div class="acts" style="margin-top:10px"><button class="btn">Batal</button><button class="btn rustfill">Ya, lepas 11 Sub SLS</button></div>
+</div>
+
+<!-- ATURAN -->
+<div class="card">
+  <b style="font-size:15px">Aturan yang berlaku otomatis</b>
+  <div class="rules">
+    <div class="rule"><b>PPL menolak / dibatalkan / pindah tim</b>Sub SLS-nya tetap milik PML lama, status jadi "Belum ada PPL". Tidak perlu dialihkan manual.</div>
+    <div class="rule"><b>PML menolak / diganti</b>Wilayah &amp; PPL tim tetap; tim ditandai "Menunggu PML pengganti". PML baru mewarisi seluruh wilayah.</div>
+    <div class="rule"><b>Lepas PPL</b>Hanya mencopot penanggung jawab; Sub SLS tetap di tim.</div>
+    <div class="rule"><b>Lepas dari tim / Lepas semua</b>Satu-satunya cara Sub SLS kembali "belum diplot" (dengan konfirmasi).</div>
+    <div class="rule"><b>Halaman petugas</b>PPL &amp; PML tetap melihat seluruh wilayah tim (keroyokan); "milik saya" hanya penanda.</div>
+    <div class="rule"><b>Notifikasi</b>Setiap perubahan di atas memicu pemberitahuan ke PML &amp; PPL terkait (setelah trigger dipasang).</div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

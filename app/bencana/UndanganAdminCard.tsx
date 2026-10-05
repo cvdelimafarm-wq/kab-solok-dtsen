@@ -269,7 +269,11 @@ export default function UndanganAdminCard({
     }
   }
 
-  const semua = useMemo(() => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran || r.peran === "pml" || r.non_plot), [rows]);
+  // (5 Okt 2026) PPL yg menolak tetap dipantau di sini walau sudah keluar tim & tanpa plot.
+  const semua = useMemo(
+    () => (rows ?? []).filter((r) => r.jumlah_plot > 0 || r.tawaran || r.peran === "pml" || r.non_plot || r.status_kontak === "menolak"),
+    [rows]
+  );
   const jmlNonPlot = useMemo(() => semua.filter((r) => r.non_plot).length, [semua]);
   const hitung = useMemo(() => {
     const h: Record<Status, number> = { belum_dibuka: 0, dibaca: 0, bersedia: 0, pulang_pergi: 0, menolak: 0 };

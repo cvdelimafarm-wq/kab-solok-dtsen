@@ -38,6 +38,8 @@ type Info = {
   punya_akun: boolean;
   wa_group_url: string | null;
   ppl: PplBinaan[];
+  // (5 Okt 2026) Sub SLS milik tim yg belum ada PPL penanggung jawabnya (plotting dua lapis).
+  wilayah_tanpa_ppl?: Wilayah[];
   // (5 Okt 2026) pemberitahuan PPL tim yg plotting-nya dibatalkan (hilang setelah PML menekan "Oke").
   pemberitahuan?: { nama: string; alasan: string; dialihkan_ke: string[] }[];
   notifikasi?: { id: number; pesan: string; dibuat_at: string }[];
@@ -143,7 +145,7 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
   const menolak = info.status_kontak === "menolak";
   const sudahJawab = diterima || menolak;
   const tampilForm = !sudahJawab || ubah;
-  const totalSub = info.ppl.reduce((n, p) => n + p.wilayah.length, 0);
+  const totalSub = info.ppl.reduce((n, p) => n + p.wilayah.length, 0) + (info.wilayah_tanpa_ppl?.length ?? 0);
 
   return (
     <main className="min-h-screen bg-[#F1F4F8] pb-10 text-[#13213A]" style={fontStyle}>
@@ -279,6 +281,22 @@ export default function PmlPage({ params }: { params: Promise<{ token: string }>
                 )}
               </div>
             ))}
+            {(info.wilayah_tanpa_ppl?.length ?? 0) > 0 && (
+              <div className="rounded-[10px] border-2 border-dashed border-[#F5C27A] bg-[#FEF3E2] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[15px] font-bold text-[#8A4B08]">Wilayah tim yang belum ada PPL-nya</p>
+                  <span className="shrink-0 text-xs font-bold text-[#8A4B08]">{info.wilayah_tanpa_ppl!.length} Sub SLS</span>
+                </div>
+                <p className="text-xs text-[#8A4B08]">Tetap menjadi tanggung jawab tim Anda; pembagiannya diatur bersama dalam tim.</p>
+                <ul className="mt-2 space-y-0.5 border-t border-[#F5C27A] pt-2 text-xs text-[#5C3204]">
+                  {info.wilayah_tanpa_ppl!.map((w, k) => (
+                    <li key={k}>
+                      {w.sls} ({w.sub_sls}) · Nagari {w.nagari} · Kec. {w.kecamatan}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           {/* Form jawaban */}

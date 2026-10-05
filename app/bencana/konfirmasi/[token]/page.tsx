@@ -745,6 +745,10 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                           {r.milik_saya ? "Wilayah awal Anda" : `Wilayah awal: ${r.pemegang.join(", ")}`}
                         </span>
                       )}
+                      {/* (5 Okt 2026) Sub SLS milik tim tanpa PPL penanggung jawab (plotting dua lapis). */}
+                      {r.pemegang && r.pemegang.length === 0 && (
+                        <span className="text-[11px] font-semibold text-[#8A4B08]">Wilayah tim, belum ada PPL penanggung jawab</span>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="text-[15px] font-extrabold">{r.kk_total.toLocaleString("id-ID")} KK</span>

@@ -365,9 +365,12 @@ export async function POST(req: NextRequest) {
       t.baris.map((b) => {
         const lama = (alokasiAda.get(t.idsubsls) ?? []).find((a) => a.ppl_id === b.ppl_id);
         const jr = jarakHasil.get(`${t.idsubsls}|${b.ppl_id}`);
+        // (5 Okt 2026) Plotting dua lapis: tim (pml_id) = PML dari sheet Tim kalau ada, selain itu atasan PPL saat ini.
+        const pmlDariFile = atasanTulis.find((x) => x.ppl_id === b.ppl_id)?.pml_id ?? null;
         return {
           idsubsls: t.idsubsls,
           ppl_id: b.ppl_id,
+          pml_id: pmlDariFile ?? petugasMap.get(b.ppl_id)?.atasan_id ?? null,
           jarak_km: lama ? lama.jarak_km : jr?.jarak_km ?? null,
           jarak_metode: lama ? lama.jarak_metode : jr?.jarak_metode ?? null,
           jarak_status: lama ? lama.jarak_status ?? "tanpa_data" : jr?.jarak_status ?? "tanpa_data",
@@ -387,7 +390,8 @@ export async function POST(req: NextRequest) {
     for (const id of pplKehilangan) {
       const { count } = await supabase.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("ppl_id", id);
       if (!count && petugasMap.get(id)?.peran === "ppl") {
-        await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id);
+        // (5 Okt 2026) anggota tim (atasan_id terisi) tetap PPL non-plot.
+        await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id).is("atasan_id", null);
       }
     }
 

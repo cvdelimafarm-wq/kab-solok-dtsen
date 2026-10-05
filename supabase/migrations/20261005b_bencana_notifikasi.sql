@@ -93,3 +93,33 @@ end $$;
 drop trigger if exists bencana_notif_tim on public.bencana_petugas;
 create trigger bencana_notif_tim after update of atasan_id on public.bencana_petugas
   for each row execute function public.bencana_trg_notif_tim();
+
+-- (5 Okt 2026) PPL MENOLAK otomatis keluar tim begitu tidak memegang Sub SLS lagi.
+create or replace function public.bencana_keluarkan_jika_menolak(p_id bigint) returns void
+language sql security definer set search_path = public as $$
+  update bencana_petugas p set atasan_id = null
+  where p.id = p_id and p.atasan_id is not null and p.status_kontak_pendaftaran_bencana = 'menolak'
+    and not exists (select 1 from bencana_alokasi_subsls a where a.ppl_id = p.id)
+$$;
+create or replace function public.bencana_trg_menolak_petugas() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status_kontak_pendaftaran_bencana = 'menolak' and old.status_kontak_pendaftaran_bencana is distinct from 'menolak' then
+    perform bencana_keluarkan_jika_menolak(new.id);
+  end if;
+  return null;
+end $$;
+create or replace function public.bencana_trg_menolak_alokasi() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' or new.ppl_id is distinct from old.ppl_id then
+    perform bencana_keluarkan_jika_menolak(old.ppl_id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists bencana_menolak_petugas on public.bencana_petugas;
+create trigger bencana_menolak_petugas after update of status_kontak_pendaftaran_bencana on public.bencana_petugas
+  for each row execute function public.bencana_trg_menolak_petugas();
+drop trigger if exists bencana_menolak_alokasi on public.bencana_alokasi_subsls;
+create trigger bencana_menolak_alokasi after delete or update of ppl_id on public.bencana_alokasi_subsls
+  for each row execute function public.bencana_trg_menolak_alokasi();

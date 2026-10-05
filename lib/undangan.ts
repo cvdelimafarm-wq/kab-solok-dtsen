@@ -154,6 +154,9 @@ export async function tentukanTujuan(db: Db, petugas: PetugasUndangan): Promise<
   if (peran?.peran === "pml") {
     const { count: bawahan } = await db.from("bencana_petugas").select("id", { count: "exact", head: true }).eq("atasan_id", petugas.id);
     if (bawahan && bawahan > 0) return { tipe: "pml", path: `/bencana/pml/${petugas.token}` };
+    // (5 Okt 2026) Plotting dua lapis: PML yg sudah punya wilayah tim (walau belum ada PPL) juga diarahkan ke halaman PML.
+    const { count: wilTim } = await db.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("pml_id", petugas.id);
+    if (wilTim && wilTim > 0) return { tipe: "pml", path: `/bencana/pml/${petugas.token}` };
   }
   const { count } = await db.from("bencana_alokasi_subsls").select("id", { count: "exact", head: true }).eq("ppl_id", petugas.id);
   if (count && count > 0) return { tipe: "biasa", path: `/bencana/konfirmasi/${petugas.token}` };

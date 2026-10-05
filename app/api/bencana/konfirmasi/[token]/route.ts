@@ -155,16 +155,22 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
 
   // Wilayah kerja -- Sub SLS yg SUDAH diplot RESMI (tersimpan, bukan draft)
   // ke seluruh PPL dalam tim.
-  const { data: alokasiRows, error: errAlokasi } = await supabase
-    .from("bencana_alokasi_subsls")
-    .select("idsubsls, ppl_id, jarak_km")
-    .in("ppl_id", idTim);
+  // (5 Okt 2026) Plotting dua lapis: wilayah tim = Sub SLS milik PML tim (pml_id), termasuk yg BELUM ada
+  // PPL-nya, ditambah Sub SLS yg dipegang anggota tim (jaga2 data lama tanpa pml_id).
+  let qAlokasi = supabase.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, jarak_km");
+  qAlokasi = atasanId != null ? qAlokasi.or(`pml_id.eq.${atasanId},ppl_id.in.(${idTim.join(",")})`) : qAlokasi.in("ppl_id", idTim);
+  const { data: alokasiRows, error: errAlokasi } = await qAlokasi;
   if (errAlokasi) return NextResponse.json({ error: errAlokasi.message }, { status: 500 });
 
   const idsubslsList = Array.from(new Set((alokasiRows ?? []).map((r) => r.idsubsls as string)));
   const pemegang = new Map<string, number[]>(); // idsubsls -> ppl_id (bisa > 1 kalau dipecah)
   const jarakAlokasiSaya = new Map<string, number>();
-  for (const r of (alokasiRows ?? []) as { idsubsls: string; ppl_id: number; jarak_km: number | string | null }[]) {
+  for (const r of (alokasiRows ?? []) as { idsubsls: string; ppl_id: number | null; jarak_km: number | string | null }[]) {
+    // (5 Okt 2026) baris tim tanpa PPL: Sub SLS tetap tampil, pemegang kosong ("belum ada PPL").
+    if (r.ppl_id == null) {
+      if (!pemegang.has(r.idsubsls)) pemegang.set(r.idsubsls, []);
+      continue;
+    }
     pemegang.set(r.idsubsls, [...(pemegang.get(r.idsubsls) ?? []), r.ppl_id]);
     if (r.ppl_id === petugas.id && r.jarak_km != null) jarakAlokasiSaya.set(r.idsubsls, Number(r.jarak_km));
   }

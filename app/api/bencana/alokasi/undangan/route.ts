@@ -61,7 +61,8 @@ type JarakInfo = {
 };
 
 async function hitungJarak(db: Db, ids?: number[]): Promise<Map<number, JarakInfo>> {
-  let q = db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, jarak_km, jarak_status");
+  // (5 Okt 2026) baris tim tanpa PPL (ppl_id NULL) tidak dihitung per PPL.
+  let q = db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id, jarak_km, jarak_status").not("ppl_id", "is", null);
   if (ids && ids.length > 0) q = q.in("ppl_id", ids);
   const { data } = await q;
   const baris = (data ?? []) as { idsubsls: string; ppl_id: number; jarak_km: number | null; jarak_status: string | null }[];
@@ -115,13 +116,22 @@ export async function GET() {
       atasanDari.set(b.id, b.atasan_id);
     }
     const { data: pmlRaw } = await db.from("bencana_petugas").select("id").eq("peran", "pml").eq("aktif", true).eq("status_kepegawaian", "mitra");
-    const pmlIds = new Set(((pmlRaw ?? []) as { id: number }[]).map((x) => x.id).filter((id) => (jmlPpl.get(id) ?? 0) > 0));
+    // (5 Okt 2026) Plotting dua lapis: PML yg punya wilayah tim (walau PPL-nya habis) tetap dipantau.
+    const { data: pmlWilRaw } = await db.from("bencana_alokasi_subsls").select("pml_id").not("pml_id", "is", null);
+    const pmlPunyaWilayah = new Set(((pmlWilRaw ?? []) as { pml_id: number }[]).map((x) => x.pml_id));
+    const pmlIds = new Set(
+      ((pmlRaw ?? []) as { id: number }[]).map((x) => x.id).filter((id) => (jmlPpl.get(id) ?? 0) > 0 || pmlPunyaWilayah.has(id))
+    );
 
     // (5 Okt 2026) Petugas NON-PLOT yg sudah bergabung ke tim (punya PML/atasan) tetapi tidak
     // memegang Sub SLS -- tetap dipantau di kartu ini (mis. PPL yg plotnya dilepas karena menolak
     // atau anggota tim keroyokan tanpa Sub SLS sendiri).
     const idNonPlotTim = Array.from(atasanDari.keys()).filter((id) => !jarak.has(id));
-    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys(), ...pmlIds, ...idNonPlotTim]));
+    // (5 Okt 2026) PPL yg MENOLAK sudah dikeluarkan dari tim (tanpa plot & tanpa PML), tetapi tetap
+    // ditampilkan di monitoring (status "Menolak") -- permintaan user.
+    const { data: menolakRaw } = await db.from("bencana_petugas").select("id").eq("peran", "ppl").eq("status_kontak_pendaftaran_bencana", "menolak");
+    const idMenolak = ((menolakRaw ?? []) as { id: number }[]).map((x) => x.id);
+    const idSemua = Array.from(new Set([...jarak.keys(), ...kandTerakhir.keys(), ...pmlIds, ...idNonPlotTim, ...idMenolak]));
     if (idSemua.length === 0) return NextResponse.json({ data: [], cadangan: {} });
 
     const petugasMap = new Map<number, PetugasRow>();
@@ -173,7 +183,9 @@ export async function GET() {
           jumlah_ppl: jmlPpl.get(p.id) ?? 0,
           jumlah_plot: j?.jumlah_plot ?? 0,
           // (5 Okt 2026) non-plot = bukan PML, tidak memegang Sub SLS, tetapi tercatat di tim (atasan_id terisi).
-          non_plot: !pmlIds.has(p.id) && (j?.jumlah_plot ?? 0) === 0 && atasanDari.has(p.id),
+          // (5 Okt 2026) yg MENOLAK bukan non-plot (sudah keluar tim) -- permintaan user.
+          non_plot:
+            !pmlIds.has(p.id) && (j?.jumlah_plot ?? 0) === 0 && atasanDari.has(p.id) && p.status_kontak_pendaftaran_bencana !== "menolak",
           pml_nama: null as string | null,
           jarak_maks_km: j?.jarak_maks_km ?? null,
           jarak_semua_riil: j?.semua_riil ?? true,

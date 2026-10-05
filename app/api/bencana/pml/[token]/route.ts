@@ -81,14 +81,22 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
   }
   const wilayahPerPpl = new Map<number, { idsubsls: string }[]>();
   const info = new Map<string, { kecamatan: string; nagari: string; sls: string; sub_sls: string }>();
-  if (ids.length > 0) {
-    const { data: alok } = await db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id").in("ppl_id", ids);
+  // (5 Okt 2026) Plotting dua lapis: Sub SLS milik tim (pml_id) yg belum ada PPL-nya ikut ditampilkan.
+  const wilayahTanpaPpl: { idsubsls: string }[] = [];
+  {
+    let qAlok = db.from("bencana_alokasi_subsls").select("idsubsls, ppl_id");
+    qAlok = ids.length > 0 ? qAlok.or(`pml_id.eq.${pml.id},ppl_id.in.(${ids.join(",")})`) : qAlok.eq("pml_id", pml.id);
+    const { data: alok } = await qAlok;
     const idsubsls = Array.from(new Set((alok ?? []).map((a) => a.idsubsls as string)));
     for (let i = 0; i < idsubsls.length; i += 200) {
       const { data: w } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").in("idsubsls", idsubsls.slice(i, i + 200));
       for (const r of (w ?? []) as { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string }[]) info.set(r.idsubsls, r);
     }
-    for (const a of (alok ?? []) as { idsubsls: string; ppl_id: number }[]) {
+    for (const a of (alok ?? []) as { idsubsls: string; ppl_id: number | null }[]) {
+      if (a.ppl_id == null || !ids.includes(a.ppl_id)) {
+        if (a.ppl_id == null && !wilayahTanpaPpl.some((w) => w.idsubsls === a.idsubsls)) wilayahTanpaPpl.push({ idsubsls: a.idsubsls });
+        continue;
+      }
       const arr = wilayahPerPpl.get(a.ppl_id) ?? [];
       arr.push({ idsubsls: a.idsubsls });
       wilayahPerPpl.set(a.ppl_id, arr);
@@ -149,6 +157,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       punya_akun: sudahAkun,
       wa_group_url: pml.status_kontak_pendaftaran_bencana === "diterima" && sudahAkun ? WA_GROUP_URL : null,
       ppl,
+      // (5 Okt 2026) Sub SLS milik tim yg belum ada PPL penanggung jawabnya.
+      wilayah_tanpa_ppl: wilayahTanpaPpl
+        .map((x) => info.get(x.idsubsls))
+        .filter((x): x is NonNullable<typeof x> => !!x)
+        .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan, "id") || a.nagari.localeCompare(b.nagari, "id") || a.sls.localeCompare(b.sls, "id")),
       pemberitahuan,
       notifikasi: (notifRows ?? []) as { id: number; pesan: string; dibuat_at: string }[],
     },

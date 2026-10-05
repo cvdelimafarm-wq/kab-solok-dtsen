@@ -52,14 +52,24 @@ export async function POST(req: NextRequest) {
     // dilepas perannya kalau tidak lagi dipakai sesudah ganti pembagian.
     const { data: lama, error: errLama } = await supabase
       .from("bencana_alokasi_subsls")
-      .select("ppl_id")
+      .select("ppl_id, pml_id")
       .eq("idsubsls", idsubsls);
     if (errLama) return NextResponse.json({ error: errLama.message }, { status: 500 });
-    const ppl_id_lama = (lama ?? []).map((r) => r.ppl_id as number);
+    // (5 Okt 2026) ppl_id bisa NULL (baris "belum ada PPL" di plotting dua lapis) -> disaring.
+    const ppl_id_lama = (lama ?? []).map((r) => r.ppl_id as number | null).filter((v): v is number => v != null);
+    // (5 Okt 2026) Tim (PML) pemilik Sub SLS -- dipertahankan saat dipecah / digabung kembali.
+    const pmlLama = ((lama ?? []) as { pml_id: number | null }[]).map((r) => r.pml_id).find((v) => v != null) ?? null;
 
     if (body?.gabung_kembali === true) {
       const { error: errDel } = await supabase.from("bencana_alokasi_subsls").delete().eq("idsubsls", idsubsls);
       if (errDel) return NextResponse.json({ error: errDel.message }, { status: 500 });
+      // (5 Okt 2026) Gabung kembali TIDAK melepas Sub SLS dari timnya: tersisa 1 baris milik PML tanpa PPL.
+      if (pmlLama) {
+        const { error: errTim } = await supabase
+          .from("bencana_alokasi_subsls")
+          .insert({ idsubsls, pml_id: pmlLama, ppl_id: null, terkunci: true, porsi_kk: null });
+        if (errTim) return NextResponse.json({ error: errTim.message }, { status: 500 });
+      }
       await lepasPeranJikaTidakDipakaiLagi(supabase, ppl_id_lama);
       return NextResponse.json({ ok: true, digabungkan: true });
     }
@@ -124,7 +134,7 @@ export async function POST(req: NextRequest) {
     const pplIds = pembagian.map((p) => p.ppl_id);
     const { data: daftarPpl, error: errPpl } = await supabase
       .from("bencana_petugas")
-      .select("id, nama, peran, status_kepegawaian, aktif, lat, lng, lokasi_status")
+      .select("id, nama, peran, status_kepegawaian, aktif, lat, lng, lokasi_status, atasan_id")
       .in("id", pplIds);
     if (errPpl) return NextResponse.json({ error: errPpl.message }, { status: 500 });
     const pplMap = new Map((daftarPpl ?? []).map((p) => [p.id, p]));
@@ -193,6 +203,8 @@ export async function POST(req: NextRequest) {
       barisBaru.push({
         idsubsls,
         ppl_id: p.ppl_id,
+        // (5 Okt 2026) tim tetap tim lama; kalau Sub SLS belum punya tim, ikut tim PPL.
+        pml_id: pmlLama ?? ((ppl.atasan_id as number | null) ?? null),
         porsi_kk: p.porsi_kk,
         jarak_km,
         jarak_metode,
@@ -228,7 +240,8 @@ async function lepasPeranJikaTidakDipakaiLagi(supabase: any, pplIds: number[]) {
       .select("id", { count: "exact", head: true })
       .eq("ppl_id", id);
     if (!count) {
-      await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id);
+      // (5 Okt 2026) anggota tim (atasan_id terisi) tetap PPL non-plot.
+      await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id).is("atasan_id", null);
     }
   }
 }

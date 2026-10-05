@@ -74,7 +74,8 @@ export async function POST(req: NextRequest) {
     if (idsubslsLingkup) qSelect = qSelect.in("idsubsls", idsubslsLingkup);
     const { data: semua, error: errSemua } = await qSelect;
     if (errSemua) return NextResponse.json({ error: errSemua.message }, { status: 500 });
-    const pplIdTerdampak = Array.from(new Set((semua ?? []).map((r) => r.ppl_id as number)));
+    // (5 Okt 2026) ppl_id bisa NULL (Sub SLS milik tim tanpa PPL) -> disaring.
+    const pplIdTerdampak = Array.from(new Set((semua ?? []).map((r) => r.ppl_id as number | null).filter((v): v is number => v != null)));
     const jumlahDireset = (semua ?? []).length;
 
     let qDel = supabase.from("bencana_alokasi_subsls").delete();
@@ -91,7 +92,8 @@ export async function POST(req: NextRequest) {
         .select("id", { count: "exact", head: true })
         .eq("ppl_id", id);
       if (!count) {
-        await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id);
+        // (5 Okt 2026) anggota tim (atasan_id terisi) tetap PPL non-plot.
+        await supabase.from("bencana_petugas").update({ peran: null }).eq("id", id).is("atasan_id", null);
       }
     }
 
