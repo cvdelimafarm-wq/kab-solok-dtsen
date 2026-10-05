@@ -94,6 +94,13 @@ export interface LaporanPdfData {
   // seksi "Data Hasil Penyisiran" disembunyikan total krn memang tidak ada
   // data rinci utk ditampilkan.
   estimasiDefault?: boolean;
+  // (5 Okt 2026) Laporan mode "bebas" DIKONVERSI ke tampilan template -- permintaan user:
+  // "semua laporan narasi bebas dikonversi menjadi template". Diisi otomatis di
+  // buatPdfLaporan() (tidak ditulis ke DB). Angka keluarga memakai ESTIMASI MINIMUM yg
+  // sama dgn estimasiDefault & DITANDAI JUJUR di Uraian + Catatan bahwa petugas melapor
+  // dalam bentuk uraian bebas tanpa rincian kunjungan di sistem (bukan hasil pencatatan
+  // rinci). Narasi petugas tetap ditampilkan sbg "Catatan tambahan dari petugas".
+  dariNarasiBebas?: boolean;
 }
 
 // ---------- Ukuran halaman & warna ----------
@@ -529,7 +536,9 @@ function gambarKonten(
       ? [
           `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas} bertugas melaksanakan ` +
             `pengawasan atas kegiatan ${kegiatan} sesuai Hari Tugas yang telah ditetapkan.`,
-          `Rincian lokasi & hasil pengawasan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. Sesuai ` +
+          (data.dariNarasiBebas
+            ? `Petugas melaporkan kegiatan tanggal ini dalam bentuk uraian bebas, tanpa rincian pengawasan yang tercatat di sistem. Sesuai `
+            : `Rincian lokasi & hasil pengawasan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. Sesuai `) +
             `ketentuan minimum pelaporan SPJ, jumlah keluarga yang diawasi pelaksanaan kunjungannya pada tanggal ini ` +
             `dicatat sejumlah ${jumlahKeluarga} keluarga sebagai estimasi minimum, bukan hasil pencatatan rinci petugas.`,
           `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
@@ -538,8 +547,10 @@ function gambarKonten(
       : [
           `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas} bertugas melaksanakan ${kegiatan} ` +
             `sesuai Hari Tugas yang telah ditetapkan.`,
-          `Rincian lokasi & hasil kunjungan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. Sesuai ` +
-            `ketentuan minimum pelaporan SPJ, jumlah keluarga yang dikunjungi pada tanggal ini dicatat sejumlah ` +
+          (data.dariNarasiBebas
+            ? `Petugas melaporkan kegiatan tanggal ini dalam bentuk uraian bebas, tanpa rincian kunjungan yang tercatat di sistem. `
+            : `Rincian lokasi & hasil kunjungan belum dilaporkan secara rinci oleh petugas untuk tanggal ini. `) +
+            `Sesuai ketentuan minimum pelaporan SPJ, jumlah keluarga yang dikunjungi pada tanggal ini dicatat sejumlah ` +
             `${jumlahKeluarga} keluarga sebagai estimasi minimum, bukan hasil pencatatan rinci petugas.`,
           `Kegiatan dilaksanakan dengan pola pulang-pergi dari kedudukan dan diselesaikan pada hari yang sama. Dengan ` +
             `demikian, seluruh rangkaian perjalanan dinas pada tanggal tersebut dilaksanakan dalam satu hari.`,
@@ -831,7 +842,9 @@ function gambarKonten(
   // estimasi minimum krn laporan belum diisi sampai dokumen ini dicetak.
   const catatanTeks = estimasi
     ? `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}. ` +
-      `Pada tanggal ini petugas BELUM mengisi laporan rinci di sistem -- jumlah keluarga yang ditampilkan merupakan ` +
+      (data.dariNarasiBebas
+        ? `Pada tanggal ini petugas mengisi laporan dalam bentuk uraian bebas tanpa rincian kunjungan di sistem -- jumlah keluarga yang ditampilkan merupakan `
+        : `Pada tanggal ini petugas BELUM mengisi laporan rinci di sistem -- jumlah keluarga yang ditampilkan merupakan `) +
       `ESTIMASI MINIMUM sesuai ketentuan pelaporan SPJ, bukan hasil pencatatan langsung petugas.`
     : susulan
       ? `Laporan ini disusun sebagai laporan pelaksanaan perjalanan dinas pada ${formatTanggalIndoDenganHari(data.tanggal)}. ` +
@@ -866,7 +879,25 @@ function hitungTinggi(data: LaporanPdfData, konfig: Konfig, batasLokasi: number 
   return gambarKonten(konteksUkur, data, konfig, batasLokasi);
 }
 
-export async function buatPdfLaporan(data: LaporanPdfData): Promise<Uint8Array> {
+export async function buatPdfLaporan(dataAsli: LaporanPdfData): Promise<Uint8Array> {
+  // (5 Okt 2026) Mode "bebas" dikonversi ke tampilan template (lihat dariNarasiBebas).
+  const data: LaporanPdfData =
+    dataAsli.mode === "bebas"
+      ? {
+          ...dataAsli,
+          mode: "template",
+          rekap: {
+            lokasi: [],
+            rekapIdentifikasi: { ada: 0, tidak_ada: 0, ragu: 0, belum: 0 },
+            totalAktivitas: 0,
+            jumlahDokumentasi: 0,
+            rekapStatusKunjungan: {},
+            lokasiPenyisiran: [],
+          },
+          estimasiDefault: true,
+          dariNarasiBebas: true,
+        }
+      : dataAsli;
   const doc = await PDFDocument.create();
   const page = doc.addPage([PAGE_W, PAGE_H]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
