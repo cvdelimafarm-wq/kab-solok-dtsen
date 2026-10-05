@@ -139,6 +139,69 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ nama: s.nama, peran: s.peran, izin: s.izin, kegiatan: keg ?? [], hari_ini: hariIniWib() });
     }
 
+    // (6 Okt 2026) Beranda backoffice (layout layar lebar, saran desain user): angka & "perlu tindakan"
+    // dihitung dari data nyata kegiatan yg terlihat -- bukan angka contoh.
+    if (bagian === "beranda") {
+      const lihat = kegiatanTerlihat(s.izin);
+      let q = db.from("sigap_kegiatan").select("id, nama, tanggal_mulai, tanggal_selesai, aktif").eq("aktif", true).order("id");
+      if (lihat !== "semua") q = q.in("id", lihat.length ? lihat : [-1]);
+      const { data: kegs } = await q;
+      const hariIni = hariIniWib();
+      const per = [] as Record<string, unknown>[];
+      for (const k of kegs ?? []) {
+        const { baris } = await dataPenugasan(db, k.id as number);
+        const aktif = baris.filter((b) => b.aktif);
+        const st = await statusHarian(db, aktif.map((b) => b.id));
+        const realSet = new Set(st.real.map((r) => `${r.penugasan_id}|${r.tanggal}`));
+        let terlewat = 0,
+          kerjaHariIni = 0,
+          lengkapHariIni = 0,
+          belumPilih = 0,
+          siapKunci = 0,
+          terkunci = 0;
+        for (const b of aktif) {
+          const hk = st.hk.filter((h) => h.penugasan_id === b.id).map((h) => h.tanggal);
+          if (hk.length === 0) belumPilih++;
+          if (b.dikunci_at) terkunci++;
+          let lengkapAda = false;
+          for (const t of hk) {
+            const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni);
+            if (v === "terlewat") terlewat++;
+            if (v === "lengkap") lengkapAda = true;
+            if (t === hariIni) {
+              kerjaHariIni++;
+              if (v === "lengkap") lengkapHariIni++;
+            }
+          }
+          if (!b.dikunci_at && lengkapAda && !hk.some((t) => t >= hariIni) && (!k.tanggal_selesai || (k.tanggal_selesai as string) < hariIni)) siapKunci++;
+        }
+        per.push({
+          id: k.id,
+          nama: k.nama,
+          tanggal_mulai: k.tanggal_mulai,
+          tanggal_selesai: k.tanggal_selesai,
+          periode_kosong: !k.tanggal_mulai || !k.tanggal_selesai,
+          petugas: aktif.length,
+          st_tanpa_nomor: aktif.filter((b) => !b.st).length,
+          st_tanpa_file: aktif.filter((b) => b.st && !b.st.ada_file).length,
+          belum_pilih: belumPilih,
+          kerja_hari_ini: kerjaHariIni,
+          lengkap_hari_ini: lengkapHariIni,
+          terlewat,
+          siap_kunci: siapKunci,
+          terkunci,
+          boleh: {
+            monitoring: boleh(s.izin, "translok.monitoring", "lihat", k.id as number),
+            penugasan: boleh(s.izin, "translok.penugasan", "kelola", k.id as number),
+            kegiatan: boleh(s.izin, "translok.kegiatan", "kelola", k.id as number),
+            verifikasi: boleh(s.izin, "translok.verifikasi", "kelola", k.id as number),
+            izin: boleh(s.izin, "translok.izin_susulan", "kelola", k.id as number),
+          },
+        });
+      }
+      return NextResponse.json({ hari_ini: hariIni, kegiatan: per });
+    }
+
     if (bagian === "cari_akun") {
       if (!(boleh(s.izin, "translok.penugasan", "kelola") || boleh(s.izin, "akses.kelola", "kelola"))) return galat("Tidak punya izin.", 403);
       const q = (sp.get("q") ?? "").trim();

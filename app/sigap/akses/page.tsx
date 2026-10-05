@@ -6,11 +6,15 @@
 //  🎭 Peran & Izin (matriks menu × peran), 👤 Akun & Peran, 🧭 Daftar Portal & Menu, 🕘 Riwayat.
 // Peran & izin tidak di-hardcode; semua dibaca/diubah lewat /api/sigap/admin (bagian=akses / riwayat).
 // Read-only bila boleh_kelola = false.
+// (6 Okt 2026) Shell layar lebar yang sama dgn Admin (../admin/Shell): sidebar dgn "Peran dan akses" aktif,
+// topbar + palet Ctrl K; di HP tetap header navy + BarisTab -- saran desain widescreen user.
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, bacaSesi, keluar, keMasuk, pesanGalat, SesiBerakhir, type Ringkas } from "../admin/api";
 import { BarisTab, HeaderAdmin, LayarPenuh, Memuat, Pesan, Putar, type ItemTab } from "../admin/ui";
+import Shell from "../admin/Shell";
+import { daftarTindakan, type DataBeranda } from "../admin/Beranda";
 import type { DataAkses } from "./tipe";
 import PeranIzin from "./PeranIzin";
 import AkunPeranTab from "./AkunPeran";
@@ -29,6 +33,7 @@ export default function KelolaPeranAkses() {
   const [data, setData] = useState<DataAkses | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("izin");
+  const [beranda, setBeranda] = useState<DataBeranda | null>(null); // (6 Okt 2026) utk badge "perlu tindakan"
 
   const muat = useCallback(async () => {
     try {
@@ -47,7 +52,14 @@ export default function KelolaPeranAkses() {
       return;
     }
     muat();
+    // badge sidebar/lonceng: tidak wajib, galat diabaikan
+    ambil<DataBeranda>("beranda")
+      .then(setBeranda)
+      .catch(() => {
+        /* abaikan */
+      });
   }, [muat]);
+  const nTindakan = useMemo(() => (beranda ? daftarTindakan(beranda).length : null), [beranda]);
 
   if (galat && !data)
     return (
@@ -72,8 +84,9 @@ export default function KelolaPeranAkses() {
 
   const namaPeran = saya ? Array.from(new Set(saya.peran.map((p) => p.nama))) : [];
 
-  return (
-    <main className="min-h-screen bg-[#EEF2F8] pb-16 text-[#13213A]">
+  const labelTab = TAB.find((t) => t.kode === tab)?.label.replace(/^\S+\s/, "") ?? "";
+  const mobile = (
+    <>
       <HeaderAdmin
         kecil="Kelola Peran & Akses"
         judul="Siapa boleh membuka apa"
@@ -101,20 +114,60 @@ export default function KelolaPeranAkses() {
         </div>
       </HeaderAdmin>
       <BarisTab tab={TAB} aktif={tab} onPilih={setTab} />
-      <div className="mx-auto max-w-7xl space-y-3 px-3 pt-4 sm:px-5">
-        {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
-        {tab === "izin" ? (
-          <PeranIzin data={data} setData={setData} onMuatUlang={muat} />
-        ) : tab === "akun" ? (
-          <AkunPeranTab data={data} onMuatUlang={muat} />
-        ) : tab === "portal" ? (
-          <DaftarPortal data={data} />
-        ) : tab === "riwayat" ? (
-          <Riwayat />
-        ) : (
-          <Memuat />
-        )}
+    </>
+  );
+
+  const isi = (
+    <>
+      {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
+      {tab === "izin" ? (
+        <PeranIzin data={data} setData={setData} onMuatUlang={muat} />
+      ) : tab === "akun" ? (
+        <AkunPeranTab data={data} onMuatUlang={muat} />
+      ) : tab === "portal" ? (
+        <DaftarPortal data={data} />
+      ) : tab === "riwayat" ? (
+        <Riwayat />
+      ) : (
+        <Memuat />
+      )}
+    </>
+  );
+
+  // Ringkas belum ada (seharusnya tidak terjadi krn dimuat bersamaan) -> tampilan lama tanpa shell.
+  if (!saya)
+    return (
+      <main className="min-h-screen bg-[#EEF2F8] pb-16 text-[#13213A]">
+        {mobile}
+        <div className="mx-auto max-w-7xl space-y-3 px-3 pt-4 sm:px-5">{isi}</div>
+      </main>
+    );
+
+  return (
+    <Shell aktif="akses" jejak={["Peran dan akses", labelTab]} ringkas={saya} jumlahTindakan={nTindakan} mobile={mobile}>
+      {/* Judul + tab internal versi layar lebar */}
+      <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 lg:flex">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#8592A8]">Peran dan akses</p>
+          <h1 className="text-[17px] font-extrabold leading-tight">Siapa boleh membuka apa</h1>
+        </div>
+        {!data.boleh_kelola && <span className="mb-0.5 rounded-full bg-[#F1F4F8] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#55627A]">Mode lihat saja</span>}
       </div>
-    </main>
+      <div role="tablist" aria-label="Bagian Peran dan akses" className="hidden gap-1 border-b border-[#E3E8F0] lg:flex">
+        {TAB.map((t) => (
+          <button
+            key={t.kode}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.kode}
+            onClick={() => setTab(t.kode)}
+            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] font-bold transition ${tab === t.kode ? "border-[#0F3D7A] text-[#0F3D7A]" : "border-transparent text-[#6B7890] hover:text-[#0F3D7A]"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {isi}
+    </Shell>
   );
 }

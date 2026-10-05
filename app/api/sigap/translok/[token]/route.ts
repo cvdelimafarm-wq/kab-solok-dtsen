@@ -11,7 +11,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
+  BATAS_JARAK_M,
   BUCKET_SIGAP,
+  jarakMeter,
   JUMLAH_FOTO,
   akunDariToken,
   cekAksesIsian,
@@ -119,6 +121,9 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         identitas: akun.jenis === "organik" ? { label: "NIP", nilai: samarkan(akun.nip) } : { label: "NIK", nilai: samarkan(akun.nik) },
         alamat_kecamatan: akun.alamat_kecamatan,
         onboarding_selesai: !!akun.onboarding_selesai_at,
+        // (6 Okt 2026) koordinat tempat tinggal dari master + status verifikasi lokasi
+        domisili: akun.domisili_lat != null && akun.domisili_lng != null ? { lat: akun.domisili_lat, lng: akun.domisili_lng, sumber: akun.domisili_sumber } : null,
+        verifikasi: akun.verif_at ? { at: akun.verif_at, jarak_m: akun.verif_jarak_m, alasan: akun.verif_alasan } : null,
       },
       hari_ini: hariIni,
       penugasan: hasil,
@@ -150,6 +155,44 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       const { error } = await db.from("sigap_akun").update(ubah).eq("id", akun.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
+    }
+
+    // ---------------- (6 Okt 2026) Verifikasi tempat tinggal dgn lokasi HP ----------------
+    // Koordinat master ditampilkan; lokasi HP saat ini dibandingkan. Selisih > 5 km -> alasan wajib.
+    // Bila master belum punya koordinat, lokasi HP dicatat sbg tempat tinggal (sumber "gps petugas").
+    // Bila lokasi HP tidak bisa dibaca (izin ditolak / GPS mati), alasan wajib.
+    if (aksi === "verifikasi_domisili") {
+      const lat = Number(body?.lat);
+      const lng = Number(body?.lng);
+      const adaGps = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+      const akurasi = Number.isFinite(Number(body?.akurasi)) ? Number(body.akurasi) : null;
+      const alasan = typeof body?.alasan === "string" ? body.alasan.trim().slice(0, 500) : "";
+      let jarak: number | null = null;
+      const ubah: Record<string, unknown> = { verif_at: new Date().toISOString() };
+      if (adaGps) {
+        ubah.verif_lat = lat;
+        ubah.verif_lng = lng;
+        ubah.verif_akurasi_m = akurasi;
+        if (akun.domisili_lat != null && akun.domisili_lng != null) {
+          jarak = Math.round(jarakMeter(akun.domisili_lat, akun.domisili_lng, lat, lng));
+        } else {
+          ubah.domisili_lat = lat;
+          ubah.domisili_lng = lng;
+          ubah.domisili_sumber = "gps petugas";
+          jarak = 0;
+        }
+      }
+      const perluAlasan = !adaGps || (jarak != null && jarak > BATAS_JARAK_M);
+      if (perluAlasan && alasan.length < 5)
+        return NextResponse.json(
+          { error: adaGps ? `Lokasi Anda ${(jarak! / 1000).toFixed(1)} km dari tempat tinggal terdaftar. Tulis alasannya.` : "Lokasi HP tidak terbaca. Tulis alasannya.", perlu_alasan: true, jarak_m: jarak },
+          { status: 400 }
+        );
+      ubah.verif_jarak_m = jarak;
+      ubah.verif_alasan = perluAlasan ? alasan : null;
+      const { error } = await db.from("sigap_akun").update(ubah).eq("id", akun.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ ok: true, jarak_m: jarak, perlu_alasan: perluAlasan });
     }
 
     // ---------------- Rencana hari kerja ----------------

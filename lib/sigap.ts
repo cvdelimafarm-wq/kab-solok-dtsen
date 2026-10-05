@@ -78,13 +78,20 @@ export type Akun = {
   mitra_id: number | null;
   onboarding_selesai_at: string | null;
   aktif: boolean;
+  // (6 Okt 2026) koordinat tempat tinggal (master) & hasil verifikasi lokasi HP petugas
+  domisili_lat: number | null;
+  domisili_lng: number | null;
+  domisili_sumber: string | null;
+  verif_jarak_m: number | null;
+  verif_alasan: string | null;
+  verif_at: string | null;
 };
 
 export async function akunDariToken(db: Db, token: string): Promise<Akun | null> {
   if (!token || token.length < 16) return null;
   const { data } = await db
     .from("sigap_akun")
-    .select("id, nama, jenis, nik, nip, alamat_kecamatan, petugas_bencana_id, mitra_id, onboarding_selesai_at, aktif")
+    .select("id, nama, jenis, nik, nip, alamat_kecamatan, petugas_bencana_id, mitra_id, onboarding_selesai_at, aktif, domisili_lat, domisili_lng, domisili_sumber, verif_jarak_m, verif_alasan, verif_at")
     .eq("token", token)
     .maybeSingle();
   if (!data || !data.aktif) return null;
@@ -194,3 +201,16 @@ export async function cekAksesIsian(
   }
   return { penugasan: pen, tanggal, susulan: kunci.alasan === "izin" };
 }
+
+/** (6 Okt 2026) Jarak dua titik (meter), rumus haversine. */
+export function jarakMeter(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Batas selisih lokasi HP vs tempat tinggal sebelum alasan wajib diisi. */
+export const BATAS_JARAK_M = 5000;

@@ -4,6 +4,8 @@
 //
 // (5 Okt 2026) Komponen kecil bersama halaman Admin SIGAP & Kelola Peran & Akses -- gaya mengikuti
 // halaman petugas (header gradien navy, aksen emas, kartu putih rounded-2xl) -- permintaan user.
+// (6 Okt 2026) Di layar lebar (lg) kartu ikut gaya backoffice yang flat & tenang (saran desain user):
+// rounded-xl, garis tipis #E3E8F0, tanpa bayangan (konstanta KARTU_LG).
 
 import BrandBps from "@/app/components/BrandBps";
 
@@ -19,6 +21,8 @@ export const BTN_R =
   "inline-flex items-center justify-center gap-1 rounded-lg border-[1.5px] border-red-300 bg-white px-3 py-1.5 text-[12.5px] font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50";
 export const TH = "whitespace-nowrap bg-[#F4F6FA] px-3 py-2 text-left text-[11px] font-extrabold text-[#55627A]";
 export const TD = "border-t border-[#EEF1F5] px-3 py-2 align-middle";
+/** (6 Okt 2026) Gaya kartu layar lebar: flat, bertepi tipis. */
+export const KARTU_LG = "lg:rounded-xl lg:border lg:border-[#E3E8F0] lg:shadow-none";
 
 type Warna = "ok" | "wait" | "bad" | "mut" | "vio" | "navy";
 const CHIP: Record<Warna, string> = {
@@ -39,7 +43,7 @@ export function Chip({ w = "mut", children, title }: { w?: Warna; children: Reac
 
 export function Kartu({ judul, ket, kanan, children, className = "" }: { judul?: React.ReactNode; ket?: React.ReactNode; kanan?: React.ReactNode; children?: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl bg-white p-4 shadow-sm ${className}`}>
+    <section className={`rounded-2xl bg-white p-4 shadow-sm ${KARTU_LG} ${className}`}>
       {(judul || kanan) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {judul && <h3 className="text-[14px] font-extrabold">{judul}</h3>}
@@ -56,7 +60,7 @@ export function Kartu({ judul, ket, kanan, children, className = "" }: { judul?:
 /** Tabel di dalam kartu putih, scroll horizontal bila sempit. */
 export function TabelKartu({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`overflow-x-auto rounded-2xl bg-white shadow-sm ${className}`}>
+    <div className={`overflow-x-auto rounded-2xl bg-white shadow-sm ${KARTU_LG} ${className}`}>
       <table className="w-full border-collapse text-[12.5px]">{children}</table>
     </div>
   );
@@ -97,9 +101,9 @@ export function Memuat({ teks = "Memuat…" }: { teks?: string }) {
 
 export function KartuAngka({ label, nilai, ket, warna }: { label: string; nilai: React.ReactNode; ket?: React.ReactNode; warna?: string }) {
   return (
-    <div className="rounded-2xl bg-white p-3.5 shadow-sm">
+    <div className={`rounded-2xl bg-white p-3.5 shadow-sm ${KARTU_LG}`}>
       <p className="text-[11px] font-bold text-[#6B7890]">{label}</p>
-      <p className="mt-0.5 text-[22px] font-extrabold leading-tight" style={warna ? { color: warna } : undefined}>
+      <p className="mt-0.5 text-[22px] font-extrabold leading-tight lg:text-[19px]" style={warna ? { color: warna } : undefined}>
         {nilai}
       </p>
       {ket && <p className="text-[11px] font-semibold text-[#6B7890]">{ket}</p>}
