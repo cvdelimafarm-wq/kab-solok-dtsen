@@ -140,6 +140,8 @@ type KertasKerjaRow = {
   pml_nama: string | null;
   korwil_id: number | null;
   korwil_nama: string | null;
+  // (5 Okt 2026) Papan Tim: "private" (1 PPL) / "keroyok" (seluruh PPL tim); null = belum diplot.
+  mode_kerja?: "private" | "keroyok" | null;
 };
 
 type RingkasanPplRow = {
@@ -2412,8 +2414,14 @@ function BadgeDataKk({ punya }: { punya: boolean }) {
 type BalanceTone = "netral" | "seimbang" | "perhatian" | "kelebihan" | "rendah";
 type BalanceInfo = { label: string; cls: string; barCls: string; dotCls: string; tone: BalanceTone };
 
+// (5 Okt 2026) Permintaan user: "rata-rata" beban PER PPL BUKAN lagi mengacu ke
+// data riil (total skor ÷ jumlah PPL), melainkan AMBANG TETAP 160 skor per PPL.
+// Dipakai utk status keseimbangan per PPL & batas Auto Plot. Admin masih bisa
+// mengubah angkanya lewat input di Langkah 4 (default 160).
+const AMBANG_BEBAN_PER_PPL_DEFAULT = 160;
+
 // 4 tingkat (bukan 2) supaya ada jenjang peringatan sebelum "kelebihan":
-// dlm rentang +-15% dari rata-rata = Seimbang, 15%-35% lebih tinggi =
+// dlm rentang +-15% dari rata-rata (utk PPL: dari ambang 160) = Seimbang, 15%-35% lebih tinggi =
 // Perhatian (blm dianggap masalah, tp mulai perlu dilirik), >35% lebih
 // tinggi = Kelebihan Beban, di bawah rata-rata >15% = Beban Rendah.
 function balanceInfo(skor: number, rata: number): BalanceInfo {
@@ -4933,7 +4941,9 @@ function AlokasiPetugasSection() {
   // hasil Langkah 2, atau skenario what-if lain) -- lihat input di Langkah 4
   // & tombol "Pakai estimasi Langkah 2". Default 133 dipertahankan supaya
   // perilaku lama tidak berubah sebelum admin sengaja menggantinya.
-  const [totalPplAsumsi, setTotalPplAsumsi] = useState(133);
+  const [totalPplAsumsi] = useState(133);
+  // (5 Okt 2026) Ambang beban per PPL TETAP (default 160), bukan rata-rata data riil.
+  const [ambangBebanPerPpl, setAmbangBebanPerPpl] = useState<number>(AMBANG_BEBAN_PER_PPL_DEFAULT);
   // (3 Okt 2026) Dulu hardcode BATAS_RADIUS_KM=7 & BATAS_SELISIH_SKOR=20 di
   // dalam hitungSaranAutoPlot() -- permintaan user: dijadikan bisa diubah
   // admin lewat input di Langkah 4 (sama pola dgn totalPplAsumsi di atas),
@@ -4997,7 +5007,7 @@ function AlokasiPetugasSection() {
   const [dataFilter, setDataFilter] = useState<"" | "lengkap" | "belum">("");
   const [statusBebanFilter, setStatusBebanFilter] = useState<"" | BalanceTone>("");
   // (5 Okt 2026) + "tanpa_ppl" (tim tanpa PPL), "tanpa_pml" (PPL tanpa tim/data lama), "menunggu_pml" (PML menolak).
-  const [statusPlotFilter, setStatusPlotFilter] = useState<"" | "sudah" | "belum" | "tanpa_ppl" | "tanpa_pml" | "menunggu_pml">("");
+  const [statusPlotFilter, setStatusPlotFilter] = useState<"" | "sudah" | "belum" | "tanpa_ppl" | "tanpa_pml" | "menunggu_pml" | "private" | "keroyok">("");
   const [hanyaBerubahFilter, setHanyaBerubahFilter] = useState(false);
   const [search, setSearch] = useState("");
   // (2 Okt 2026) Cari khusus Kecamatan -- field ini TIDAK ikut kotak cari
@@ -5051,6 +5061,11 @@ function AlokasiPetugasSection() {
   function efektifPmlId(r: KertasKerjaRow): number | null {
     return draftPml[r.idsubsls] ?? null;
   }
+  // (5 Okt 2026) Mode kerja per Sub SLS (Papan Tim) -- draft, ikut "Simpan Perubahan".
+  const [draftMode, setDraftMode] = useState<Record<string, "private" | "keroyok">>({});
+  function efektifMode(r: KertasKerjaRow): "private" | "keroyok" {
+    return draftMode[r.idsubsls] ?? r.mode_kerja ?? "keroyok";
+  }
   // (5 Okt 2026) PML tim menolak -> tim "menunggu PML pengganti" (wilayah & PPL tetap).
   function pmlMenolak(pmlId: number | null): boolean {
     if (!pmlId) return false;
@@ -5063,7 +5078,10 @@ function AlokasiPetugasSection() {
     const pplId = draftPpl[r.idsubsls] ?? null;
     if (!pplId) return;
     const atasan = petugasList.find((p) => p.id === pplId)?.atasan_id ?? null;
-    if (!val || (atasan && atasan !== val)) setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: null }));
+    if (!val || (atasan && atasan !== val)) {
+      setDraftPpl((prev) => ({ ...prev, [r.idsubsls]: null }));
+      setDraftMode((prev) => ({ ...prev, [r.idsubsls]: "keroyok" }));
+    }
   }
   // (5 Okt 2026) Aksi tingkat tim -- LANGSUNG tersimpan (bukan draft), dgn konfirmasi:
   // "Lepas semua wilayah tim" & "Tunjuk PML pengganti" (PML baru mewarisi wilayah & PPL tim).
@@ -5435,6 +5453,7 @@ function AlokasiPetugasSection() {
       if (!res.ok) throw new Error(json.error || "Gagal mereset plotting.");
       setDraftPpl({});
       setDraftPml({});
+      setDraftMode({});
       setAutoPlotSubsls(new Set());
       setModalReset(false);
       setResetPin("");
@@ -5584,6 +5603,7 @@ function AlokasiPetugasSection() {
         setImporPratinjau(null);
         setDraftPpl({});
         setDraftPml({});
+      setDraftMode({});
         setAutoPlotSubsls(new Set());
         await muatData(hariKerjaDipakai);
       }
@@ -5653,6 +5673,14 @@ function AlokasiPetugasSection() {
       }
       return next;
     });
+    setDraftMode((prev) => {
+      const next: Record<string, "private" | "keroyok"> = {};
+      for (const r of kertasKerja) {
+        if (Object.prototype.hasOwnProperty.call(next, r.idsubsls)) continue;
+        next[r.idsubsls] = Object.prototype.hasOwnProperty.call(prev, r.idsubsls) ? prev[r.idsubsls] : r.mode_kerja ?? "keroyok";
+      }
+      return next;
+    });
   }, [kertasKerja]);
 
   function batalkanSemuaPerubahan() {
@@ -5664,6 +5692,7 @@ function AlokasiPetugasSection() {
     }
     setDraftPpl(nextPpl);
     setDraftPml(nextPml);
+    setDraftMode({});
     setAutoPlotSubsls(new Set());
     setSimpanError(null);
   }
@@ -5685,7 +5714,11 @@ function AlokasiPetugasSection() {
         if (sudah.has(r.idsubsls)) continue;
         const pmlBerubah = (draftPml[r.idsubsls] ?? null) !== (r.pml_id ?? null);
         const pplBerubah = r.porsi_kk === null && (draftPpl[r.idsubsls] ?? null) !== (r.ppl_id ?? null);
-        if (pmlBerubah || pplBerubah) {
+        const modeBerubah = (draftPml[r.idsubsls] ?? null) !== null && efektifMode(r) !== (r.mode_kerja ?? "keroyok");
+        if (r.porsi_kk === null && efektifMode(r) === "private" && (draftPml[r.idsubsls] ?? null) && !(draftPpl[r.idsubsls] ?? null)) {
+          throw new Error(`Sub SLS ${r.sls} (${r.sub_sls}) bertanda PRIVATE tapi belum dipilih PPL-nya.`);
+        }
+        if (pmlBerubah || pplBerubah || modeBerubah) {
           sudah.add(r.idsubsls);
           daftarReassign.push(r);
         }
@@ -5703,7 +5736,7 @@ function AlokasiPetugasSection() {
             ? { idsubsls: r.idsubsls, pml_id: pmlVal, hanya_pml: true } // Sub SLS dipecah: hanya tim yg diganti
             : !pplVal && !pmlVal
             ? { idsubsls: r.idsubsls, aksi: "lepas_tim" }
-            : { idsubsls: r.idsubsls, pml_id: pmlVal, ppl_id: pplVal };
+            : { idsubsls: r.idsubsls, pml_id: pmlVal, ppl_id: pplVal, mode_kerja: efektifMode(r) };
         const res = await fetch("/api/bencana/alokasi/reassign", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -6115,7 +6148,8 @@ function AlokasiPetugasSection() {
     () => kertasKerja.reduce((s, r) => s + r.skor_beban_pendataan, 0),
     [kertasKerja]
   );
-  const rataBebanTetap = totalPplAsumsi > 0 ? totalSkorWilayahTugas / totalPplAsumsi : 0;
+  // (5 Okt 2026) Ambang tetap per PPL (160), BUKAN total skor ÷ asumsi jumlah PPL.
+  const rataBebanTetap = ambangBebanPerPpl;
 
   // Beban draft per PPL (skor beban pendataan, TANPA jarak -- jarak riil
   // baru dihitung server sesudah plot benar2 disimpan): dihitung ulang
@@ -6158,7 +6192,7 @@ function AlokasiPetugasSection() {
       map.set(pmlId, (map.get(pmlId) ?? 0) + 1);
     }
     return map;
-  }, [kertasKerja, draftPpl, draftPml]);
+  }, [kertasKerja, draftPpl, draftPml, draftMode]);
 
   // Jumlah PPL (yg sudah punya draft plot) per status beban -- dipakai utk
   // ringkasan chip yg bisa diklik utk memfilter tabel Langkah 4.
@@ -6312,9 +6346,10 @@ function AlokasiPetugasSection() {
       if (dicek.has(r.idsubsls)) continue;
       dicek.add(r.idsubsls);
       if ((draftPml[r.idsubsls] ?? null) !== (r.pml_id ?? null)) n++;
+      else if ((draftPml[r.idsubsls] ?? null) !== null && efektifMode(r) !== (r.mode_kerja ?? "keroyok")) n++;
     }
     return n;
-  }, [kertasKerja, draftPpl, draftPml]);
+  }, [kertasKerja, draftPpl, draftPml, draftMode]);
 
   // Daftar rinci perubahan draft yg belum disimpan (bukan cuma angka) --
   // supaya admin bisa cek dulu sebelum menekan "Simpan Perubahan".
@@ -6343,13 +6378,16 @@ function AlokasiPetugasSection() {
       if (draftVal !== serverVal) {
         hasil.push({ label: `PML (tim) — ${r.sls} · ${r.sub_sls}`, dari: namaPetugas(serverVal), ke: namaPetugas(draftVal) });
       }
+      if (draftVal !== null && efektifMode(r) !== (r.mode_kerja ?? "keroyok")) {
+        hasil.push({ label: `Mode — ${r.sls} · ${r.sub_sls}`, dari: (r.mode_kerja ?? "keroyok").toUpperCase(), ke: efektifMode(r).toUpperCase() });
+      }
     }
     return hasil;
-  }, [kertasKerja, draftPpl, draftPml, petugasList]);
+  }, [kertasKerja, draftPpl, draftPml, draftMode, petugasList]);
 
   // (5 Okt 2026) Hitungan chip status plotting dua lapis (per Sub SLS, draft-aware).
   const jumlahStatusDuaLapis = useMemo(() => {
-    const hasil = { tanpa_ppl: 0, tanpa_pml: 0, menunggu_pml: 0 };
+    const hasil = { tanpa_ppl: 0, tanpa_pml: 0, menunggu_pml: 0, private: 0, keroyok: 0 };
     const dicek = new Set<string>();
     for (const r of kertasKerja) {
       if (dicek.has(r.idsubsls)) continue;
@@ -6359,10 +6397,11 @@ function AlokasiPetugasSection() {
       if (pml && !ppl) hasil.tanpa_ppl++;
       if (ppl && !pml) hasil.tanpa_pml++;
       if (pml && pmlMenolak(pml)) hasil.menunggu_pml++;
+      if (pml) hasil[efektifMode(r)]++;
     }
     return hasil;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kertasKerja, draftPml, draftPpl, petugasList]);
+  }, [kertasKerja, draftPml, draftPpl, draftMode, petugasList]);
 
   // (5 Okt 2026) Ringkasan per TIM (PML) dari data TERSIMPAN -- kartu di atas tabel Langkah 4.
   const ringkasanTim = useMemo(() => {
@@ -6413,6 +6452,8 @@ function AlokasiPetugasSection() {
   // kalau ada, krn begitu admin pilih manual, pilihan itu bukan saran lagi.
   function ubahDraftPpl(idsubsls: string, val: number | null) {
     setDraftPpl((prev) => ({ ...prev, [idsubsls]: val }));
+    // (5 Okt 2026) Tanpa PPL tidak bisa PRIVATE -> otomatis KEROYOK.
+    if (!val) setDraftMode((prev) => (prev[idsubsls] === "private" ? { ...prev, [idsubsls]: "keroyok" } : prev));
     // (5 Okt 2026) Sub SLS yg belum punya tim otomatis ikut tim (PML) PPL yg dipilih.
     if (val) {
       const atasan = petugasList.find((p) => p.id === val)?.atasan_id ?? null;
@@ -6953,11 +6994,8 @@ function AlokasiPetugasSection() {
     [kebutuhan]
   );
 
-  const rataBebanPpl = useMemo(() => {
-    if (ringkasanPpl.length === 0) return 0;
-    const total = ringkasanPpl.reduce((s, r) => s + r.total_skor_beban_akhir, 0);
-    return total / ringkasanPpl.length;
-  }, [ringkasanPpl]);
+  // (5 Okt 2026) Per PPL: patokan = ambang tetap (default 160), bukan rata-rata data riil.
+  const rataBebanPpl = ambangBebanPerPpl;
   const rataBebanPml = useMemo(() => {
     if (ringkasanPml.length === 0) return 0;
     return ringkasanPml.reduce((s, r) => s + r.total_skor_beban_akhir, 0) / ringkasanPml.length;
@@ -7012,6 +7050,8 @@ function AlokasiPetugasSection() {
       if (statusPlotFilter === "tanpa_ppl" && !(draftPmlIdBaris && !draftPplId)) return false;
       if (statusPlotFilter === "tanpa_pml" && !(draftPplId && !draftPmlIdBaris)) return false;
       if (statusPlotFilter === "menunggu_pml" && !(draftPmlIdBaris && pmlMenolak(draftPmlIdBaris))) return false;
+      if (statusPlotFilter === "private" && !(draftPmlIdBaris && efektifMode(r) === "private")) return false;
+      if (statusPlotFilter === "keroyok" && !(draftPmlIdBaris && efektifMode(r) === "keroyok")) return false;
       if (statusBebanFilter && toneBarisAlokasi(r) !== statusBebanFilter) return false;
       if (hanyaBerubahFilter && draftPplId === (r.ppl_id ?? null) && draftPmlIdBaris === (r.pml_id ?? null)) return false;
       if (kwKec && !r.kecamatan.toLowerCase().includes(kwKec)) return false;
@@ -7039,6 +7079,7 @@ function AlokasiPetugasSection() {
     kecamatanHeaderSearch,
     draftPpl,
     draftPml,
+    draftMode,
     bebanDraftPerPpl,
     rataBebanTetap,
     petugasList,
@@ -7243,7 +7284,7 @@ function AlokasiPetugasSection() {
             label="Total Skor Beban"
             nilai={Math.round(totalSkorWilayahTugas)}
           />
-          <MiniStat warna="bg-blue-50 text-blue-900" label="Asumsi Jumlah PPL (bisa diubah)" nilai={totalPplAsumsi} />
+          <MiniStat warna="bg-blue-50 text-blue-900" label="Ambang Beban per PPL (tetap)" nilai={ambangBebanPerPpl} />
           <MiniStat warna="bg-blue-50 text-blue-900" label="Kebutuhan PPL (estimasi)" nilai={totalKebutuhan.ppl} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="PML Ditetapkan" nilai={pmlOptions.length} />
           <MiniStat warna="bg-moss-50 text-moss-700" label="Korwil Ditetapkan" nilai={korwilOptions.length} />
@@ -8935,7 +8976,8 @@ function AlokasiPetugasSection() {
           <h2 className="font-medium text-blue-950">Keseimbangan Beban Tim</h2>
           <p className="mt-1 text-xs text-ink/60">
             Diperbarui otomatis setiap kali ada plot Sub SLS atau perubahan susunan tim. Hijau = beban mendekati
-            rata-rata (selisih ≤15%). Oranye = beban rendah. Merah = kelebihan beban.
+            patokan (selisih ≤15%; per PPL patokannya ambang tetap {ambangBebanPerPpl}, PML/Korwil rata-rata data).
+            Oranye = beban rendah. Merah = kelebihan beban.
           </p>
 
           {ringkasanPpl.length > 0 && (
@@ -8943,7 +8985,7 @@ function AlokasiPetugasSection() {
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/50">Per PPL</h3>
                 <span className="text-xs text-ink/60">
-                  Rata-rata: {rataBebanPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
+                  Ambang per PPL: {rataBebanPpl.toLocaleString("id-ID", { maximumFractionDigits: 1 })}
                 </span>
               </div>
               <div className="mt-1.5 flex max-h-64 flex-col gap-1.5 overflow-y-auto">
@@ -9168,7 +9210,7 @@ function AlokasiPetugasSection() {
             </p>
           </div>
           {timPesan && (
-            <p className={`mt-2 rounded px-2 py-1 text-xs ${timPesan.tipe === "ok" ? "bg-moss-50 text-moss-700" : "bg-rust-50 text-rust-700"}`}>
+            <p className={`mt-2 rounded px-2 py-1 text-xs ${timPesan.tipe === "ok" ? "bg-moss-100 text-moss-700" : "bg-rust-100 text-rust-700"}`}>
               {timPesan.tipe === "ok" ? "✓ " : "⚠ "}
               {timPesan.teks}
             </p>
@@ -9230,7 +9272,7 @@ function AlokasiPetugasSection() {
                           return;
                         jalankanAksiTim(t.pmlId, { aksi: "lepas_semua_tim", pml_id: t.pmlId }, `${t.jumlahSubsls} Sub SLS tim ${t.nama} dilepas.`);
                       }}
-                      className="rounded border border-rust-200 bg-white px-2 py-0.5 text-[11px] font-medium text-rust-700 hover:bg-rust-50 disabled:opacity-50"
+                      className="rounded border border-rust-100 bg-white px-2 py-0.5 text-[11px] font-medium text-rust-700 hover:bg-rust-100 disabled:opacity-50"
                     >
                       {timBusy === t.pmlId ? "Memproses..." : "Lepas semua wilayah tim"}
                     </button>
@@ -9265,7 +9307,7 @@ function AlokasiPetugasSection() {
               );
             })}
             {ringkasanTim.tanpaPml > 0 && (
-              <div className="rounded-md border border-dashed border-rust-200 bg-rust-50/40 p-2.5">
+              <div className="rounded-md border border-dashed border-rust-100 bg-rust-100/40 p-2.5">
                 <p className="text-sm font-semibold text-rust-700">Tanpa PML (data lama)</p>
                 <p className="mt-0.5 text-[11px] text-ink/60">
                   {ringkasanTim.tanpaPml} Sub SLS dipegang PPL yang belum punya PML. Pilih PML di kolom PML tabel.
@@ -9288,34 +9330,31 @@ function AlokasiPetugasSection() {
           </div>
         </div>
 
-        {/* (3 Okt 2026) Permintaan user: dulu pembagi "rata-rata beban per PPL"
-            hardcode 133 di kode, tidak bisa diubah dari UI. Sekarang jumlah
-            PPL-nya (totalPplAsumsi) bisa diketik ulang langsung di sini --
-            rata-rata (rataBebanTetap) otomatis hitung ulang krn dia turunan
-            dari totalPplAsumsi. Tombol "Pakai estimasi Langkah 2" menyalin
-            cepat dari totalKebutuhan.ppl (hasil Langkah 2) tanpa perlu
-            mengetik manual kalau admin mau menyamakan asumsi dgn Langkah 2. */}
+        {/* (5 Okt 2026) Permintaan user: patokan beban per PPL BUKAN lagi rata-rata
+            data riil (total skor ÷ jumlah PPL), melainkan AMBANG TETAP 160 per PPL.
+            Angkanya masih bisa diubah di sini (default 160); status keseimbangan per
+            PPL & batas Auto Plot (ambang + selisih maksimal) mengikuti angka ini. */}
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
           <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink/70">
-            Rata-rata beban per PPL (total skor {totalSkorWilayahTugas.toLocaleString("id-ID", { maximumFractionDigits: 0 })} ÷{" "}
+            Ambang beban per PPL (tetap, bukan rata-rata data riil):{" "}
             <input
               type="number"
               min={1}
-              value={totalPplAsumsi}
-              onChange={(e) => setTotalPplAsumsi(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-              title="Asumsi jumlah PPL -- ubah angka ini utk menghitung ulang rata-rata beban dgn skenario jumlah PPL yg berbeda"
+              value={ambangBebanPerPpl}
+              onChange={(e) =>
+                setAmbangBebanPerPpl(Math.max(1, Math.round(Number(e.target.value) || AMBANG_BEBAN_PER_PPL_DEFAULT)))
+              }
+              title="Ambang beban per PPL (default 160). Dipakai sbg patokan status keseimbangan per PPL & batas Auto Plot -- tidak mengikuti total skor ÷ jumlah PPL."
               className="w-16 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-            />{" "}
-            PPL):{" "}
-            <strong className="text-blue-950">{rataBebanTetap.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</strong>
-            {totalKebutuhan.ppl > 0 && totalKebutuhan.ppl !== totalPplAsumsi && (
+            />
+            {ambangBebanPerPpl !== AMBANG_BEBAN_PER_PPL_DEFAULT && (
               <button
                 type="button"
-                onClick={() => setTotalPplAsumsi(totalKebutuhan.ppl)}
+                onClick={() => setAmbangBebanPerPpl(AMBANG_BEBAN_PER_PPL_DEFAULT)}
                 className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-200"
-                title="Samakan asumsi jumlah PPL dgn hasil estimasi Langkah 2"
+                title="Kembalikan ambang ke 160"
               >
-                Pakai estimasi Langkah 2 ({totalKebutuhan.ppl})
+                Kembalikan ke {AMBANG_BEBAN_PER_PPL_DEFAULT}
               </button>
             )}
           </span>
@@ -9352,7 +9391,7 @@ function AlokasiPetugasSection() {
               title="Selisih maksimal skor beban akhir PPL di ATAS rata-rata (rataBebanTetap) yg masih boleh diisi Auto Plot -- default 20. Naikkan kalau mau Auto Plot berani mengisi kandidat yg sudah agak penuh."
               className="w-16 rounded-md border border-blue-200 bg-white px-1.5 py-0.5 text-xs font-medium text-ink outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />{" "}
-            skor di atas rata-rata
+            skor di atas ambang
           </span>
           {/* (3 Okt 2026) Permintaan user: ringkasan jumlah PPL terpilih +
               utilisasi pool kandidat Tier 1/Tier 2 (dikecualikan rekomendasi
@@ -9833,6 +9872,8 @@ function AlokasiPetugasSection() {
               ["tanpa_ppl", "🟠 Tim tanpa PPL", jumlahStatusDuaLapis.tanpa_ppl],
               ["tanpa_pml", "🔴 PPL tanpa PML", jumlahStatusDuaLapis.tanpa_pml],
               ["menunggu_pml", "🟣 Menunggu PML pengganti", jumlahStatusDuaLapis.menunggu_pml],
+              ["private", "🟩 Private", jumlahStatusDuaLapis.private],
+              ["keroyok", "🟧 Keroyok", jumlahStatusDuaLapis.keroyok],
             ] as const
           ).map(([k, label, n]) => (
             <button
@@ -10233,7 +10274,10 @@ function AlokasiPetugasSection() {
                 // "Ringkasan Beban" per PPL/PML/Korwil -- itu dihitung server.
                 const dipecah = r.porsi_kk !== null;
                 const draftPplId = dipecah ? r.ppl_id : draftPpl[r.idsubsls] ?? null;
-                const berubah = (dipecah ? false : draftPplId !== (r.ppl_id ?? null)) || (draftPml[r.idsubsls] ?? null) !== (r.pml_id ?? null);
+                const modeBaris = efektifMode(r);
+                const modeBerubah = efektifPmlId(r) !== null && modeBaris !== (r.mode_kerja ?? "keroyok");
+                const berubah =
+                  (dipecah ? false : draftPplId !== (r.ppl_id ?? null)) || (draftPml[r.idsubsls] ?? null) !== (r.pml_id ?? null) || modeBerubah;
                 const bebanPpl = draftPplId ? bebanDraftPerPpl.get(draftPplId) ?? 0 : null;
                 const info = bebanPpl != null ? balanceInfo(bebanPpl, rataBebanTetap) : null;
                 const delta = bebanPpl != null && rataBebanTetap > 0 ? bebanPpl - rataBebanTetap : null;
@@ -10584,6 +10628,27 @@ function AlokasiPetugasSection() {
                         placeholder="Pilih PML (tim)..."
                         className="w-40"
                       />
+                      {/* (5 Okt 2026) Mode kerja Papan Tim: PRIVATE (1 PPL) / KEROYOK (seluruh PPL tim). */}
+                      {draftPmlId && !dipecah && (
+                        <span className="mt-1 inline-flex overflow-hidden rounded-full border border-line text-[10px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setDraftMode((prev) => ({ ...prev, [r.idsubsls]: "private" }))}
+                            title="Hanya dikerjakan PPL di kolom PPL (wajib dipilih)"
+                            className={`px-2 py-0.5 ${modeBaris === "private" ? "bg-moss-500 text-white" : "bg-white text-ink/50"}`}
+                          >
+                            PRIVATE
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDraftMode((prev) => ({ ...prev, [r.idsubsls]: "keroyok" }))}
+                            title="Dikerjakan bersama seluruh PPL tim"
+                            className={`px-2 py-0.5 ${modeBaris === "keroyok" ? "bg-amber-500 text-white" : "bg-white text-ink/50"}`}
+                          >
+                            KEROYOK
+                          </button>
+                        </span>
+                      )}
                       {/* (5 Okt 2026) Lepas dari tim: satu2nya cara Sub SLS kembali "belum diplot" (selain Lepas semua). */}
                       {draftPmlId && (
                         <button
@@ -10599,7 +10664,7 @@ function AlokasiPetugasSection() {
                               ? "Sub SLS dipecah: gabung kembali dulu sebelum dilepas dari tim"
                               : "Lepas Sub SLS ini dari tim (PML & PPL dikosongkan, kembali belum diplot). Tersimpan setelah Simpan Perubahan."
                           }
-                          className="mt-1 block rounded-full border border-rust-200 bg-white px-2 py-0.5 text-[10px] font-medium text-rust-700 hover:bg-rust-50 disabled:opacity-40"
+                          className="mt-1 block rounded-full border border-rust-100 bg-white px-2 py-0.5 text-[10px] font-medium text-rust-700 hover:bg-rust-100 disabled:opacity-40"
                         >
                           ✕ Lepas dari tim
                         </button>
@@ -10614,11 +10679,14 @@ function AlokasiPetugasSection() {
                       <div className="flex flex-col gap-0.5">
                         {info && <span className={`font-medium ${info.cls}`}>{info.label}</span>}
                         {/* (5 Okt 2026) status plotting dua lapis */}
+                        {draftPmlId && modeBaris === "private" && !draftPplId && !dipecah && (
+                          <span className="w-fit rounded-full bg-rust-100 px-2 py-0.5 text-[10px] font-semibold text-rust-700">Private: pilih PPL!</span>
+                        )}
                         {draftPmlId && !draftPplId && !dipecah && (
                           <span className="w-fit rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold text-gold-600">Belum ada PPL</span>
                         )}
                         {draftPplId && !draftPmlId && (
-                          <span className="w-fit rounded-full bg-rust-50 px-2 py-0.5 text-[10px] font-semibold text-rust-700">Tanpa PML</span>
+                          <span className="w-fit rounded-full bg-rust-100 px-2 py-0.5 text-[10px] font-semibold text-rust-700">Tanpa PML</span>
                         )}
                         {pmlMenolak(draftPmlId) && (
                           <span className="w-fit rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Menunggu PML pengganti</span>

@@ -117,8 +117,20 @@ export async function GET(req: NextRequest) {
       kegiatan_lain: kegiatanLainByPetugas.get(p.id) ?? [],
     }));
 
+    // (5 Okt 2026) Papan Tim: mode_kerja (private/keroyok) per Sub SLS ditempel ke baris kertas kerja
+    // (RPC tidak diubah supaya tanda tangan fungsinya tetap).
+    const { data: modeRows } = await supabase.from("bencana_alokasi_subsls").select("idsubsls, mode_kerja");
+    const modeBy = new Map<string, string>();
+    for (const m of (modeRows ?? []) as { idsubsls: string; mode_kerja: string | null }[]) {
+      if (!modeBy.has(m.idsubsls)) modeBy.set(m.idsubsls, m.mode_kerja ?? "keroyok");
+    }
+    const kertasDenganMode = ((kertasRes.data ?? []) as { idsubsls: string }[]).map((r) => ({
+      ...r,
+      mode_kerja: modeBy.get(r.idsubsls) ?? null,
+    }));
+
     return NextResponse.json({
-      kertas_kerja: kertasRes.data ?? [],
+      kertas_kerja: kertasDenganMode,
       ringkasan_ppl: ringkasanPplRes.data ?? [],
       ringkasan_pml: ringkasanPmlRes.data ?? [],
       ringkasan_korwil: ringkasanKorwilRes.data ?? [],

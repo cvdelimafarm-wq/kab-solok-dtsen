@@ -32,6 +32,8 @@
 //                                           (sama dgn buka_kunci lama).
 //   { idsubsls, pml_id, hanya_pml:true } -> ganti tim utk Sub SLS yg dipecah.
 //   { aksi: "lepas_semua_tim", pml_id }  -> SELURUH Sub SLS tim kembali belum diplot.
+//   (5 Okt 2026) Semua bentuk di atas menerima mode_kerja opsional ("private"/"keroyok",
+//   Papan Tim). Tidak dikirim = mode lama dipertahankan. Private wajib ada PPL.
 //   { aksi: "ganti_pml", pml_lama, pml_baru } -> PML pengganti mewarisi
 //                                           seluruh wilayah & PPL tim lama.
 
@@ -68,7 +70,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "idsubsls wajib diisi." }, { status: 400 });
   }
 
+  // (5 Okt 2026) Mode kerja Papan Tim (private/keroyok); undefined = pertahankan mode lama.
+  const modeDiminta: "private" | "keroyok" | undefined =
+    body?.mode_kerja === "private" || body?.mode_kerja === "keroyok" ? body.mode_kerja : undefined;
+
   try {
+    const { data: modeLamaRows } = await supabase.from("bencana_alokasi_subsls").select("mode_kerja").eq("idsubsls", idsubsls).limit(1);
+    const modeLama = ((modeLamaRows ?? [])[0]?.mode_kerja as "private" | "keroyok" | undefined) ?? "keroyok";
+    const modeAkhir = modeDiminta ?? modeLama;
     // (5 Okt 2026) Lepas PPL saja: Sub SLS tetap milik tim (pml_id), baris pecahan digabung jadi 1 baris tanpa PPL.
     if (body?.aksi === "lepas_ppl") {
       const { data: ada } = await supabase.from("bencana_alokasi_subsls").select("ppl_id, pml_id").eq("idsubsls", idsubsls);
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest) {
       if (eDel) return NextResponse.json({ error: eDel.message }, { status: 500 });
       const { error: eIns } = await supabase
         .from("bencana_alokasi_subsls")
-        .insert({ idsubsls, pml_id: pmlAda, ppl_id: null, terkunci: true, porsi_kk: null });
+        .insert({ idsubsls, pml_id: pmlAda, ppl_id: null, terkunci: true, porsi_kk: null, mode_kerja: "keroyok" });
       if (eIns) return NextResponse.json({ error: eIns.message }, { status: 500 });
       return NextResponse.json({ ok: true, lepas_ppl: true });
     }
@@ -90,7 +99,7 @@ export async function POST(req: NextRequest) {
         const cek = await cekPml(supabase, pmlBaru);
         if (cek) return NextResponse.json({ error: cek }, { status: 400 });
       }
-      const { error } = await supabase.from("bencana_alokasi_subsls").update({ pml_id: pmlBaru }).eq("idsubsls", idsubsls);
+      const { error } = await supabase.from("bencana_alokasi_subsls").update({ pml_id: pmlBaru, mode_kerja: modeAkhir }).eq("idsubsls", idsubsls);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
@@ -146,13 +155,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // (5 Okt 2026) Plot ke tim saja (belum ada PPL).
+    // (5 Okt 2026) Plot ke tim saja (belum ada PPL) -- selalu KEROYOK (private wajib ada PPL).
     if (!pplId) {
+      if (modeDiminta === "private") {
+        return NextResponse.json({ error: "Sub SLS PRIVATE wajib dipilih PPL-nya." }, { status: 400 });
+      }
       const { error: eDel } = await supabase.from("bencana_alokasi_subsls").delete().eq("idsubsls", idsubsls);
       if (eDel) return NextResponse.json({ error: eDel.message }, { status: 500 });
       const { error: eIns } = await supabase
         .from("bencana_alokasi_subsls")
-        .insert({ idsubsls, pml_id: pmlDiminta, ppl_id: null, terkunci: true, porsi_kk: null });
+        .insert({ idsubsls, pml_id: pmlDiminta, ppl_id: null, terkunci: true, porsi_kk: null, mode_kerja: "keroyok" });
       if (eIns) return NextResponse.json({ error: eIns.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
@@ -250,7 +262,7 @@ export async function POST(req: NextRequest) {
     const { error: errUpsert } = await supabase
       .from("bencana_alokasi_subsls")
       .upsert(
-        { idsubsls, ppl_id: pplId, pml_id: pmlTujuan, jarak_km, jarak_metode, jarak_status, terkunci: true, porsi_kk: null },
+        { idsubsls, ppl_id: pplId, pml_id: pmlTujuan, jarak_km, jarak_metode, jarak_status, terkunci: true, porsi_kk: null, mode_kerja: modeAkhir },
         { onConflict: "idsubsls,ppl_id" }
       );
     if (errUpsert) return NextResponse.json({ error: errUpsert.message }, { status: 500 });

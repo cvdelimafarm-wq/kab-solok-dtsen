@@ -40,10 +40,10 @@ const judul = (s: string | null) => (s ? s.toLowerCase().replace(/\b\w/g, (c) =>
 function tone(v: number, ref: number): { cls: string; label: string } {
   if (!ref) return { cls: "bg-gray-100 text-ink/60", label: "" };
   const d = (v - ref) / ref;
-  if (d > 0.3) return { cls: "bg-rust-50 text-rust-700", label: "jauh di atas rata-rata" };
+  if (d > 0.3) return { cls: "bg-rust-100 text-rust-700", label: "jauh di atas rata-rata" };
   if (d > 0.15) return { cls: "bg-gold-100 text-gold-600", label: "di atas rata-rata" };
   if (d < -0.3) return { cls: "bg-violet-50 text-violet-700", label: "jauh di bawah rata-rata" };
-  return { cls: "bg-moss-50 text-moss-700", label: "seimbang" };
+  return { cls: "bg-moss-100 text-moss-700", label: "seimbang" };
 }
 
 export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
@@ -230,7 +230,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
     };
   }
 
-  if (error && !data) return <p className="rounded bg-rust-50 px-3 py-2 text-sm text-rust-700">{error}</p>;
+  if (error && !data) return <p className="rounded bg-rust-100 px-3 py-2 text-sm text-rust-700">{error}</p>;
   if (!papan || !data) return <p className="text-sm text-ink/60">Memuat Papan Tim…</p>;
 
   const q = cari.trim().toLowerCase();
@@ -268,7 +268,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
               <button
                 type="button"
                 onClick={() => setSub(s, { mode_kerja: "private" })}
-                className={`px-2 py-0.5 ${priv ? "bg-moss-600 text-white" : "bg-white text-ink/50"}`}
+                className={`px-2 py-0.5 ${priv ? "bg-moss-500 text-white" : "bg-white text-ink/50"}`}
               >
                 PRIVATE
               </button>
@@ -407,8 +407,8 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
         </div>
       </div>
 
-      {error && <p className="rounded bg-rust-50 px-3 py-2 text-xs text-rust-700">⚠ {error}</p>}
-      {info && <p className="rounded bg-moss-50 px-3 py-2 text-xs text-moss-700">✓ {info}</p>}
+      {error && <p className="rounded bg-rust-100 px-3 py-2 text-xs text-rust-700">⚠ {error}</p>}
+      {info && <p className="rounded bg-moss-100 px-3 py-2 text-xs text-moss-700">✓ {info}</p>}
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded-md border border-line bg-white px-2.5 py-1">
@@ -433,14 +433,14 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
       </div>
       <div className="flex flex-wrap gap-3 text-[11px] text-ink/60">
         <span>
-          <span className="text-moss-600">▌</span> Private (1 PPL)
+          <span className="text-moss-700">▌</span> Private (1 PPL)
         </span>
         <span>
           <span className="text-amber-500">▌</span> Keroyok (seluruh tim)
         </span>
-        <span className="rounded-full bg-moss-50 px-1.5 text-moss-700">seimbang</span>
+        <span className="rounded-full bg-moss-100 px-1.5 text-moss-700">seimbang</span>
         <span className="rounded-full bg-gold-100 px-1.5 text-gold-600">+15–30%</span>
-        <span className="rounded-full bg-rust-50 px-1.5 text-rust-700">&gt; +30%</span>
+        <span className="rounded-full bg-rust-100 px-1.5 text-rust-700">&gt; +30%</span>
         <span className="rounded-full bg-violet-50 px-1.5 text-violet-700">&lt; −30%</span>
       </div>
 
