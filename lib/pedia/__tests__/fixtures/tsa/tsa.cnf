@@ -1,0 +1,23 @@
+[ tsa ]
+default_tsa = tsa_config1
+[ tsa_config1 ]
+dir = .
+serial = ./tsaserial
+crypto_device = builtin
+signer_cert = ./tsa.pem
+#certs
+signer_key = ./tsa.key
+signer_digest = sha256
+default_policy = 1.2.3.4.1
+other_policies = 1.2.3.4.5.6
+digests = sha256
+accuracy = secs:1
+clock_precision_digits = 0
+ordering = yes
+tsa_name = yes
+ess_cert_id_chain = no
+ess_cert_id_alg = sha256
+[ v3_tsa ]
+extendedKeyUsage = critical,timeStamping
+basicConstraints = CA:FALSE
+keyUsage = critical,digitalSignature

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
   const akunId = sesiDariHeader(req.headers);
   if (!akunId) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
-  const { data: a } = await db.from("sigap_akun").select("id, nama, token, aktif").eq("id", akunId).maybeSingle();
+  const { data: a } = await db.from("sigap_akun").select("id, nama, token, aktif, jenis").eq("id", akunId).maybeSingle();
   if (!a || !a.aktif) return NextResponse.json({ error: "Akun tidak aktif." }, { status: 403 });
   const [pen, { peran, izin }] = await Promise.all([penugasanAkun(db, akunId), izinAkun(db, akunId)]);
   return NextResponse.json({
@@ -30,5 +30,7 @@ export async function GET(req: NextRequest) {
     admin: punyaAksesAdmin(izin),
     kelola_akses: boleh(izin, "akses.kelola", "kelola"),
     kontrak: boleh(izin, "kontrak.kelola", "lihat"), // (6 Okt 2026) portal Pengadaan & Kontrak
+    // (7 Okt 2026) SIGAP PEDIA: pegawai organik otomatis boleh membaca
+    pedia: a.jenis === "organik" || boleh(izin, "pedia.baca", "lihat") || boleh(izin, "pedia.kelola", "lihat"),
   });
 }

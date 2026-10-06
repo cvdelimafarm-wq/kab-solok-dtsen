@@ -9,9 +9,11 @@
 import { useEffect, useState } from "react";
 import { ambil, keluar, SesiBerakhir, type Ringkas } from "../admin/api";
 import { BarisTab, HeaderAdmin, type ItemTab } from "../admin/ui";
-import Shell from "../admin/Shell";
+import Shell, { type KodeMenu } from "../admin/Shell";
 
 export default function Bingkai<K extends string>({
+  aktif = "kontrak",
+  kecil = "SIGAP · Pengadaan & Kontrak",
   jejak,
   judul,
   sub,
@@ -21,6 +23,9 @@ export default function Bingkai<K extends string>({
   onTab,
   children,
 }: {
+  /** (7 Okt 2026) menu sidebar yg aktif & label kecil header HP -- dipakai juga oleh SIGAP PEDIA. */
+  aktif?: KodeMenu;
+  kecil?: string;
   jejak: string[];
   judul: React.ReactNode;
   sub?: React.ReactNode;
@@ -36,13 +41,13 @@ export default function Bingkai<K extends string>({
     ambil<Ringkas>("ringkas")
       .then(setRingkas)
       .catch((e) => {
-        if (!(e instanceof SesiBerakhir)) setRingkas({ nama: "", peran: [], izin: { "kontrak.kelola": { level: "lihat", semua: true, kegiatan: [] } }, kegiatan: [], hari_ini: new Date().toISOString().slice(0, 10) });
+        if (!(e instanceof SesiBerakhir)) setRingkas({ nama: "", peran: [], izin: {}, kegiatan: [], hari_ini: new Date().toISOString().slice(0, 10) });
       });
   }, []);
 
   const mobile = (
     <>
-      <HeaderAdmin kecil="SIGAP · Pengadaan & Kontrak" judul={judul} onKeluar={keluar} kanan={kanan?.(true)}>
+      <HeaderAdmin kecil={kecil} judul={judul} onKeluar={keluar} kanan={kanan?.(true)}>
         {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
       </HeaderAdmin>
       {tab && aktifTab && onTab && <BarisTab tab={tab} aktif={aktifTab} onPilih={onTab} />}
@@ -89,7 +94,7 @@ export default function Bingkai<K extends string>({
       </div>
     );
   return (
-    <Shell aktif="kontrak" jejak={jejak} ringkas={ringkas} pemilihKegiatan={false} mobile={mobile}>
+    <Shell aktif={aktif} jejak={jejak} ringkas={ringkas} pemilihKegiatan={false} mobile={mobile}>
       {isi}
     </Shell>
   );

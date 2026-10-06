@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { aksi, ambil, pesanGalat, rupiah, SesiBerakhir } from "./api";
+import { PanelRujukan } from "../pedia/komponen";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH } from "./ui";
 
 type Kegiatan = {
@@ -58,6 +59,8 @@ export default function TabKegiatan({
   return (
     <div className="space-y-3">
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
+      {/* (7 Okt 2026) Rujukan SIGAP PEDIA yg ditautkan ke kegiatan ini */}
+      {kegiatanId && <PanelRujukan jenis="kegiatan" refId={kegiatanId} kelola={data.boleh_kelola} />}
       {!data.boleh_kelola && <Pesan jenis="info">Mode lihat saja — Anda tidak punya izin mengelola kegiatan ini.</Pesan>}
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <FormKegiatan

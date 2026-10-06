@@ -18,6 +18,7 @@ import { bacaSesi, keMasuk, pesanGalat, SesiBerakhir, tglPanjang } from "../../a
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import Bingkai from "../Bingkai";
 import { aksiK, ambilK, unduhBerkas } from "../api";
+import { PanelRujukan } from "../../pedia/komponen";
 import { DAFTAR_DOKUMEN, DOK_TANGGAL, FIELD_MAK, FIELD_MASTER, JADWAL, angka, hitung, rp, terbilang, type Isian, type ItemIsian, type Penyedia } from "@/lib/kontrak/isi";
 
 type PenyediaDb = Penyedia & { id: number };
@@ -406,6 +407,8 @@ export default function HalamanPaket({ params }: { params: Promise<{ id: string 
 
         {/* Panel kanan: periksa + unduh */}
         <aside className="space-y-3 lg:sticky lg:top-[72px] lg:self-start">
+          {/* (7 Okt 2026) Rujukan SIGAP PEDIA utk paket ini */}
+          <PanelRujukan jenis="kontrak_paket" refId={Number(id)} />
           <Kartu judul="Periksa">
             {h.peringatan.length === 0 ? (
               <p className="text-[12.5px] font-semibold text-emerald-700">✓ Tidak ada temuan. Silakan verifikasi lalu unduh.</p>

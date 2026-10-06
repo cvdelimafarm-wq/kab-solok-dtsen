@@ -6,7 +6,7 @@ import { useDetak } from "./useDetak";
 // (5 Okt 2026) Portal SIGAP satu pintu -- permintaan user: sesudah masuk, kartu menu yang tampil
 // mengikuti peran & izin akun (Transport Lokal bila punya penugasan, Admin, Kelola Peran & Akses).
 
-type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean; kontrak?: boolean };
+type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean; kontrak?: boolean; pedia?: boolean };
 
 function bacaSesi(): string | null {
   try {
@@ -67,6 +67,8 @@ export default function PanelSaya() {
   if (saya?.admin) kartu.push({ ikon: "🛡", judul: "Admin Transport Lokal", ket: "Monitoring, penugasan & ST, kegiatan & tarif, verifikasi & kunci", href: "/sigap/admin" });
   // (6 Okt 2026) portal Pengadaan & Kontrak -- permintaan user (template kontrak dari mail merge)
   if (saya?.kontrak) kartu.push({ ikon: "📑", judul: "Pengadaan & Kontrak", ket: "Isi data paket (otomatis), unduh dokumen kontrak per dokumen", href: "/sigap/kontrak" });
+  // (7 Okt 2026) SIGAP PEDIA -- ensiklopedia konsultasi resmi
+  if (saya?.pedia) kartu.push({ ikon: "📚", judul: "SIGAP PEDIA", ket: "Tanya-jawab resmi HAI-DJPb, KPPN, Biro Keuangan — cari sebelum bertanya", href: "/sigap/pedia" });
   if (saya?.kelola_akses) kartu.push({ ikon: "🔐", judul: "Kelola Peran & Akses", ket: "Atur peran, izin per menu, dan akun", href: "/sigap/akses" });
 
   return (

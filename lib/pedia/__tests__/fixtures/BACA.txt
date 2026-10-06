@@ -1,0 +1,4 @@
+(7 Okt 2026) FIXTURE KHUSUS TEST SIGAP PEDIA.
+dkim.key dan tsa/tsa.key adalah kunci UJI buatan lokal (bukan milik instansi mana pun).
+Domain uji.kemenkeu.go.id pada contoh_dkim.eml fiktif; kunci publiknya hanya disajikan resolver palsu di test.
+Jangan dipakai untuk apa pun selain test.

@@ -13,8 +13,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak">;
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
@@ -25,7 +25,7 @@ export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string
 ];
 
 // ---------------------------------------------------------------- Ikon SVG inline kecil (tanpa dependensi)
-type NamaIkon = "beranda" | "buku" | "revisi" | "motor" | "pesawat" | "uang" | "paket" | "grafik" | "tautan" | "perisai" | "gembok" | "cari" | "lonceng" | "panah" | "panel";
+type NamaIkon = "beranda" | "buku" | "revisi" | "motor" | "pesawat" | "uang" | "paket" | "grafik" | "tautan" | "perisai" | "gembok" | "cari" | "lonceng" | "panah" | "panel" | "pedia" | "arsip";
 function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
   const isi: Record<NamaIkon, React.ReactNode> = {
     beranda: (
@@ -70,6 +70,19 @@ function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
     ),
     lonceng: <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21a2 2 0 0 0 4 0" />,
     panah: <path d="M6 9l6 6 6-6" />,
+    pedia: (
+      <>
+        <path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6.5A2.5 2.5 0 0 0 4 21.5z" />
+        <circle cx="12" cy="9.5" r="3" />
+        <path d="M14.2 11.7L16.5 14" />
+      </>
+    ),
+    arsip: (
+      <>
+        <rect x="3" y="4" width="18" height="5" rx="1" />
+        <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" />
+      </>
+    ),
     panel: (
       <>
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -209,6 +222,7 @@ export default function Shell({
   const subAdmin = useMemo(() => MENU_ADMIN.filter((m) => bolehKlien(ringkas.izin, m.menu, "lihat", kegId)), [ringkas.izin, kegId]);
   const bolehAkses = !!ringkas.izin["akses.kelola"];
   const bolehKontrak = !!ringkas.izin["kontrak.kelola"];
+  const bolehPediaKelola = ringkas.izin["pedia.kelola"]?.level === "kelola";
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
@@ -216,6 +230,8 @@ export default function Shell({
     const out: ItemPalet[] = [{ id: "m-beranda", grup: "Menu", label: "Beranda", ket: "ringkasan & perlu tindakan", jalankan: () => pindahMenu("beranda") }];
     for (const m of subAdmin) out.push({ id: `m-${m.kode}`, grup: "Menu", label: `Admin transport › ${m.label}`, jalankan: () => pindahMenu(m.kode) });
     if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kontrak") });
+    out.push({ id: "m-pedia", grup: "Menu", label: "SIGAP PEDIA", ket: "ensiklopedia konsultasi", jalankan: () => (window.location.href = "/sigap/pedia") });
+    if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/pedia/kelola") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
     out.push({ id: "m-portal", grup: "Menu", label: "Portal SIGAP", jalankan: () => (window.location.href = "/sigap") });
@@ -223,7 +239,7 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -267,6 +283,10 @@ export default function Shell({
             <ItemNav mini={mini} ikon="paket" label="Pengadaan" nonaktif ket="—" title="Akun Anda belum diberi akses Pengadaan & Kontrak" />
           )}
 
+          <LabelGrup mini={mini}>Referensi</LabelGrup>
+          <ItemNav mini={mini} ikon="pedia" label="SIGAP PEDIA" href="/sigap/pedia" aktif={aktif === "pedia"} title="Ensiklopedia konsultasi resmi" />
+          {bolehPediaKelola && <ItemNav mini={mini} ikon="arsip" label="Register & arsip bukti" href="/sigap/pedia/kelola" aktif={aktif === "pedia_kelola"} />}
+
           <LabelGrup mini={mini}>Monitoring</LabelGrup>
           <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
           <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
@@ -278,7 +298,7 @@ export default function Shell({
                 mini={mini}
                 ikon="perisai"
                 label="Admin transport lokal"
-                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak"}
+                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak" && aktif !== "pedia" && aktif !== "pedia_kelola"}
                 onClick={() => pindahMenu(subAdmin[0].kode)}
                 badge={adaTindakan ? jumlahTindakan : null}
               />

@@ -1,0 +1,28 @@
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=uji.kemenkeu.go.id;
+ h=Content-Type: MIME-Version: Message-ID: Date: Subject: To: From;
+ q=dns/txt; s=s2026; t=1791279189;
+ bh=1bePU7GVshJuOcVeQYykqbAn5crGO16xNmQn9omf0GA=;
+ b=QORpXrTpsIcxphyVQIGOKga57Bq1KHWBeLnKXTozuOBpVDf3AfKO/2hh6xWKxcTfCWt2eor2d
+ wPeezorNvauquVN4yUoEWSDF+trTLB7W8I/iaAgLF4PbVlCswHuWYQQmd1Z3gMw8YkE69uKYbyj
+ JzK9i6YTAO2VVvmS5nOrjo/gERUdEKIrSgrrHLnq+PWOVJVNLlxrknW8RLrmuCwT1Ganu2U1XiE
+ AXt+RZsUhN8ESHNwMT1C4o1s9srM0uP3/oX7wt7eert4agAGVbbPOtic/4ILQl1Z7DCjDhK4p6M
+ iEmrbrUNqN6XDYsXLR+KiUlc08ap70MXOTa01uQRGI9Q==
+From: HAI-DJPb <hai@uji.kemenkeu.go.id>
+To: pegawai@bps.go.id
+Subject: [Tiket 20261002-GTZWQS] Jawaban: SPD perjalanan PP harian
+Date: Fri, 02 Oct 2026 10:15:00 +0700
+Message-ID: <uji-20261002-GTZWQS@uji.kemenkeu.go.id>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BATAS"
+
+--BATAS
+Content-Type: text/plain; charset=utf-8
+
+Yth. Bapak/Ibu, terkait perjalanan dinas pulang-pergi harian, visum SPD mengacu PMK 113/PMK.05/2012.
+--BATAS
+Content-Type: application/pdf; name="lampiran.pdf"
+Content-Disposition: attachment; filename="lampiran.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSB1amkgbGFtcGlyYW4KJSVFT0YK
+--BATAS--
