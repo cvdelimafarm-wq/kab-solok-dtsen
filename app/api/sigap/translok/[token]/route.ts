@@ -5,20 +5,14 @@
 //
 // GET  -> { akun, hari_ini, penugasan:[{..., hari_kerja[], hari[], kelompok[], tanggal_kegiatan_lain[]}], lokasi_opsi, kecamatan_opsi }
 // POST { aksi:"profil", alamat_kecamatan?, selesai_onboarding? }
-// POST { aksi:"verifikasi_domisili", keputusan:"benar" | "ubah", lat?, lng?, sumber?, alasan?, gps_lat?, gps_lng?, gps_akurasi? }
 // POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap)
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
-  alasanWajar,
   BATAS_JARAK_M,
-  BATAS_PINDAH_MAKS_M,
-  BBOX_KAB_SOLOK,
-  BBOX_SUMBAR,
-  dalamBbox,
-  MAKS_UBAH_DOMISILI,
+  HK_AKTIF,
   BUCKET_SIGAP,
   jarakMeter,
   JUMLAH_FOTO,
@@ -62,7 +56,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     const hariIni = hariIniWib();
 
     const [{ data: hk }, { data: realisasi }, { data: foto }, { data: izin }] = await Promise.all([
-      db.from("sigap_hari_kerja").select("penugasan_id, tanggal").eq("akun_id", akun.id),
+      db.from("sigap_hari_kerja").select("penugasan_id, tanggal").eq("akun_id", akun.id).or(HK_AKTIF()),
       db.from("sigap_realisasi").select("penugasan_id, tanggal, lokasi, jumlah_realisasi, kendala, diperbarui_at").in("penugasan_id", ids),
       db.from("sigap_dokumentasi").select("penugasan_id, tanggal, slot, file_path, susulan, diunggah_at").in("penugasan_id", ids),
       db.from("sigap_izin_susulan").select("penugasan_id, tanggal, berlaku_sampai").in("penugasan_id", ids).gt("berlaku_sampai", new Date().toISOString()),
@@ -164,107 +158,42 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       return NextResponse.json({ ok: true });
     }
 
-    // ---------------- (6 Okt 2026) Verifikasi ALAMAT RUMAH ----------------
-    // Titik rumah dari master ditampilkan; petugas memilih:
-    //   keputusan "benar" -> titik terdaftar sudah sesuai.
-    //   keputusan "ubah"  -> petugas memindahkan titik (peta / GPS HP). Aturan anti-pemalsuan:
-    //     - koordinat harus valid & berada di Sumatera Barat; di luar Kab. Solok -> alasan wajib + ditandai;
-    //     - jarak dihitung ULANG di server (tidak percaya angka dari klien);
-    //     - > 5 km dari titik terdaftar -> alasan wajib (kalimat wajar, bukan ketikan asal);
-    //     - > 50 km -> tidak boleh diubah sendiri (hubungi admin anggaran);
-    //     - maksimal 3x ubah per akun; tidak bisa lagi setelah panduan awal selesai;
-    //     - bukti pendukung dicatat (sumber titik, GPS HP + akurasi, jarak HP-titik, IP, user agent),
-    //       dan SEMUA perubahan masuk sigap_audit (titik lama -> baru) agar admin dapat memeriksa.
+    // ---------------- (6 Okt 2026) Verifikasi tempat tinggal dgn lokasi HP ----------------
+    // Koordinat master ditampilkan; lokasi HP saat ini dibandingkan. Selisih > 5 km -> alasan wajib.
+    // Bila master belum punya koordinat, lokasi HP dicatat sbg tempat tinggal (sumber "gps petugas").
+    // Bila lokasi HP tidak bisa dibaca (izin ditolak / GPS mati), alasan wajib.
     if (aksi === "verifikasi_domisili") {
-      const keputusan = body?.keputusan;
-      const ada = akun.domisili_lat != null && akun.domisili_lng != null;
-      const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
-      const ua = (req.headers.get("user-agent") ?? "").slice(0, 200);
-      const sekarang = new Date().toISOString();
-
-      if (keputusan === "benar") {
-        if (!ada) return NextResponse.json({ error: "Titik rumah belum tercatat. Tekan \u201cUbah lokasi\u201d lalu tandai rumah Anda di peta." }, { status: 400 });
-        const { error } = await db
-          .from("sigap_akun")
-          .update({ verif_at: sekarang, verif_jarak_m: 0, verif_alasan: null, verif_lat: null, verif_lng: null, verif_akurasi_m: null })
-          .eq("id", akun.id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        await db.from("sigap_audit").insert({ akun_id: akun.id, aksi: "verifikasi_domisili", detail: { keputusan: "benar", titik: { lat: akun.domisili_lat, lng: akun.domisili_lng, sumber: akun.domisili_sumber }, ip, ua } });
-        return NextResponse.json({ ok: true, jarak_m: 0 });
-      }
-      if (keputusan !== "ubah") return NextResponse.json({ error: "Pilihan verifikasi tidak dikenali." }, { status: 400 });
-
-      if (akun.onboarding_selesai_at)
-        return NextResponse.json({ error: "Panduan awal sudah selesai. Perubahan titik rumah hanya bisa lewat admin anggaran." }, { status: 403 });
-
       const lat = Number(body?.lat);
       const lng = Number(body?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !dalamBbox(lat, lng, BBOX_SUMBAR))
-        return NextResponse.json({ error: "Titik tidak valid atau di luar Sumatera Barat. Tandai lokasi rumah yang sebenarnya." }, { status: 400 });
-      const latR = Math.round(lat * 1e6) / 1e6;
-      const lngR = Math.round(lng * 1e6) / 1e6;
-      const sumberTitik = body?.sumber === "gps" ? "gps" : "peta";
+      const adaGps = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+      const akurasi = Number.isFinite(Number(body?.akurasi)) ? Number(body.akurasi) : null;
       const alasan = typeof body?.alasan === "string" ? body.alasan.trim().slice(0, 500) : "";
-      const flags: string[] = [];
-
-      const luarSolok = !dalamBbox(latR, lngR, BBOX_KAB_SOLOK);
-      if (luarSolok) flags.push("luar_kab_solok");
-      const jarak = ada ? Math.round(jarakMeter(akun.domisili_lat as number, akun.domisili_lng as number, latR, lngR)) : null;
-      if (jarak != null && jarak > BATAS_PINDAH_MAKS_M)
+      let jarak: number | null = null;
+      const ubah: Record<string, unknown> = { verif_at: new Date().toISOString() };
+      if (adaGps) {
+        ubah.verif_lat = lat;
+        ubah.verif_lng = lng;
+        ubah.verif_akurasi_m = akurasi;
+        if (akun.domisili_lat != null && akun.domisili_lng != null) {
+          jarak = Math.round(jarakMeter(akun.domisili_lat, akun.domisili_lng, lat, lng));
+        } else {
+          ubah.domisili_lat = lat;
+          ubah.domisili_lng = lng;
+          ubah.domisili_sumber = "gps petugas";
+          jarak = 0;
+        }
+      }
+      const perluAlasan = !adaGps || (jarak != null && jarak > BATAS_JARAK_M);
+      if (perluAlasan && alasan.length < 5)
         return NextResponse.json(
-          { error: `Titik baru ${(jarak / 1000).toFixed(0)} km dari titik terdaftar. Perpindahan sejauh itu tidak bisa diubah sendiri; hubungi admin anggaran.`, jarak_m: jarak },
+          { error: adaGps ? `Lokasi Anda ${(jarak! / 1000).toFixed(1)} km dari tempat tinggal terdaftar. Tulis alasannya.` : "Lokasi HP tidak terbaca. Tulis alasannya.", perlu_alasan: true, jarak_m: jarak },
           { status: 400 }
         );
-      const perluAlasan = (jarak != null && jarak > BATAS_JARAK_M) || luarSolok;
-      if (perluAlasan && !alasanWajar(alasan))
-        return NextResponse.json(
-          { error: jarak != null && jarak > BATAS_JARAK_M ? `Titik baru ${(jarak / 1000).toFixed(1)} km dari titik terdaftar. Tulis alasan yang jelas (minimal 15 karakter).` : "Titik di luar Kabupaten Solok. Tulis alasan yang jelas (minimal 15 karakter).", perlu_alasan: true, jarak_m: jarak },
-          { status: 400 }
-        );
-
-      const { count } = await db.from("sigap_audit").select("id", { count: "exact", head: true }).eq("akun_id", akun.id).eq("aksi", "ubah_domisili");
-      if ((count ?? 0) >= MAKS_UBAH_DOMISILI)
-        return NextResponse.json({ error: `Titik rumah sudah diubah ${MAKS_UBAH_DOMISILI} kali. Perubahan berikutnya hanya lewat admin anggaran.` }, { status: 403 });
-
-      // bukti pendukung (opsional): lokasi HP saat mengubah
-      const gl = Number(body?.gps_lat);
-      const gg = Number(body?.gps_lng);
-      const ga = Number(body?.gps_akurasi);
-      const adaGps = Number.isFinite(gl) && Number.isFinite(gg) && dalamBbox(gl, gg, BBOX_SUMBAR);
-      const jarakHp = adaGps ? Math.round(jarakMeter(latR, lngR, gl, gg)) : null;
-      if (adaGps && jarakHp != null && jarakHp > 1000) flags.push("hp_jauh_dari_titik");
-      if (adaGps && Number.isFinite(ga) && ga > 200) flags.push("akurasi_gps_rendah");
-      if (sumberTitik === "gps" && !adaGps) flags.push("sumber_gps_tanpa_bukti");
-
-      const ubah: Record<string, unknown> = {
-        domisili_lat: latR,
-        domisili_lng: lngR,
-        domisili_sumber: sumberTitik === "gps" ? "diubah petugas (gps HP)" : "diubah petugas (peta)",
-        verif_at: sekarang,
-        verif_jarak_m: jarak ?? 0,
-        verif_alasan: perluAlasan ? alasan : alasan || null,
-        verif_lat: adaGps ? gl : null,
-        verif_lng: adaGps ? gg : null,
-        verif_akurasi_m: adaGps && Number.isFinite(ga) ? Math.round(ga) : null,
-      };
+      ubah.verif_jarak_m = jarak;
+      ubah.verif_alasan = perluAlasan ? alasan : null;
       const { error } = await db.from("sigap_akun").update(ubah).eq("id", akun.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      await db.from("sigap_audit").insert({
-        akun_id: akun.id,
-        aksi: "ubah_domisili",
-        detail: {
-          ke: (count ?? 0) + 1,
-          lama: ada ? { lat: akun.domisili_lat, lng: akun.domisili_lng, sumber: akun.domisili_sumber } : null,
-          baru: { lat: latR, lng: lngR, sumber: sumberTitik },
-          jarak_m: jarak,
-          alasan: alasan || null,
-          flags,
-          gps: adaGps ? { lat: gl, lng: gg, akurasi_m: Number.isFinite(ga) ? Math.round(ga) : null, jarak_ke_titik_m: jarakHp } : null,
-          ip,
-          ua,
-        },
-      });
-      return NextResponse.json({ ok: true, jarak_m: jarak ?? 0, perlu_alasan: perluAlasan });
+      return NextResponse.json({ ok: true, jarak_m: jarak, perlu_alasan: perluAlasan });
     }
 
     // ---------------- Rencana hari kerja ----------------
@@ -274,13 +203,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       if (!pen) return NextResponse.json({ error: "Anda tidak terdaftar pada kegiatan ini." }, { status: 403 });
       if (pen.dikunci_at) return NextResponse.json({ error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin." }, { status: 403 });
       if (!pen.periode.mulai || !pen.periode.selesai) return NextResponse.json({ error: "Periode kegiatan belum ditetapkan admin anggaran." }, { status: 400 });
-      const diminta = Array.from(new Set(((Array.isArray(body?.tanggal) ? body.tanggal : []) as unknown[]).filter(tanggalValid))).sort();
+      const dimintaMentah = Array.from(new Set(((Array.isArray(body?.tanggal) ? body.tanggal : []) as unknown[]).filter(tanggalValid))).sort();
+      // (6 Okt 2026) Tanggal uji coba (diatur admin) diabaikan dari rencana petugas.
+      const { data: uji } = await db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", pen.id).not("uji_coba_sampai", "is", null);
+      const ujiSet = new Set((uji ?? []).map((x) => x.tanggal as string));
+      const diminta = dimintaMentah.filter((t) => !ujiSet.has(t));
       const hariIni = hariIniWib();
       const periode = new Set(rentangTanggal(pen.periode.mulai, pen.periode.selesai));
       const luar = diminta.filter((t) => !periode.has(t));
       if (luar.length) return NextResponse.json({ error: `Tanggal di luar periode kegiatan: ${luar.join(", ")}.` }, { status: 400 });
 
-      const { data: lama } = await db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", pen.id);
+      const { data: lama } = await db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", pen.id).is("uji_coba_sampai", null); // (6 Okt 2026) baris uji coba tidak ikut diubah petugas
       const lamaSet = new Set((lama ?? []).map((x) => x.tanggal as string));
       const mintaSet = new Set(diminta);
       const tambah = diminta.filter((t) => !lamaSet.has(t));
@@ -300,11 +233,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       }
       // 1 tanggal = 1 kegiatan.
       if (tambah.length) {
-        const { data: bentrok } = await db.from("sigap_hari_kerja").select("tanggal").eq("akun_id", akun.id).neq("penugasan_id", pen.id).in("tanggal", tambah);
+        const { data: bentrok } = await db.from("sigap_hari_kerja").select("tanggal").eq("akun_id", akun.id).neq("penugasan_id", pen.id).in("tanggal", tambah).or(HK_AKTIF());
         if ((bentrok ?? []).length) return NextResponse.json({ error: `Tanggal sudah dipakai kegiatan lain: ${(bentrok ?? []).map((x) => x.tanggal).join(", ")}.` }, { status: 409 });
       }
       if (hapus.length) {
-        const { error } = await db.from("sigap_hari_kerja").delete().eq("penugasan_id", pen.id).in("tanggal", hapus);
+        const { error } = await db.from("sigap_hari_kerja").delete().eq("penugasan_id", pen.id).in("tanggal", hapus).is("uji_coba_sampai", null);
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
       if (tambah.length) {

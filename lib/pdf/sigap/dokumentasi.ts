@@ -29,6 +29,9 @@ async function perbaikiOrientasiFoto(bytes: Uint8Array, contentType: string): Pr
   }
 }
 
+/** (6 Okt 2026) Jenis foto per slot -- harus sama dgn SARAN_FOTO di app/sigap/translok/[token]/page.tsx. */
+export const LABEL_FOTO_SIGAP = ["Saat akan berangkat", "Tiba di lokasi sampel pertama", "Saat mendata", "Saat mau pulang", "Tiba di rumah"];
+
 export interface SigapFotoInput {
   slot: number;
   bytes: Uint8Array;
@@ -306,9 +309,9 @@ export async function buatPdfDokumentasiSigap(data: SigapDokumentasiData): Promi
     baris.forEach((k, idx) => {
       const x = offsetX + idx * (cardW + CARD_GAP);
       const nomorTampil = dariIdx + idx + 1;
-      // (5 Okt 2026) SIGAP tidak punya label baku per slot (saran foto di halaman petugas bebas) --
-      // kartu cukup diberi nomor slot.
-      const labelTxt = `Foto (slot ${k.item.slot})`;
+      // (6 Okt 2026) Slot kini = jenis foto yg DITANDAI petugas (Petugas di lokasi, Kegiatan di lapangan, ...)
+      // -- permintaan user; label sama dgn halaman petugas.
+      const labelTxt = LABEL_FOTO_SIGAP[k.item.slot - 1] ?? "Dokumentasi";
 
       // Outline kartu penuh + header berlatar lembut.
       kotak(x, cardTop, cardW, rowH, { border: LINE, borderWidth: 0.6 });

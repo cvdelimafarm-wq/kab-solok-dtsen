@@ -24,7 +24,7 @@
 // penyisiran lib/pdf/*.ts TIDAK diubah).
 
 import { PDFDocument } from "pdf-lib";
-import { BUCKET_SIGAP, JUMLAH_FOTO, hariIniWib, kelompokTanggal, type Db } from "@/lib/sigap";
+import { BUCKET_SIGAP, JUMLAH_FOTO, hariIniWib, kelompokTanggal, type Db, HK_AKTIF } from "@/lib/sigap";
 import { buatPdfKwitansiSigap } from "@/lib/pdf/sigap/kwitansi";
 import { buatPdfVisumSigap } from "@/lib/pdf/sigap/visum";
 import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
@@ -115,7 +115,7 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
     db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi").eq("id", pen.kegiatan_id).maybeSingle(),
     db.from("sigap_kegiatan_tarif").select("tarif, label_jabatan").eq("kegiatan_id", pen.kegiatan_id).eq("peran", pen.peran).maybeSingle(),
     stQuery,
-    db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", penugasanId),
+    db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", penugasanId).or(HK_AKTIF()), // (6 Okt 2026) hari uji coba kedaluwarsa diabaikan
     db.from("sigap_realisasi").select("tanggal, lokasi, jumlah_realisasi, kendala").eq("penugasan_id", penugasanId),
     db.from("sigap_dokumentasi").select("tanggal, slot, file_path").eq("penugasan_id", penugasanId),
     db.from("sigap_izin_susulan").select("tanggal, berlaku_sampai").eq("penugasan_id", penugasanId),

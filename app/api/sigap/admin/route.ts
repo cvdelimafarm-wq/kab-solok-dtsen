@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { JUMLAH_FOTO, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
+import { HK_AKTIF, JUMLAH_FOTO, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 
 export const runtime = "nodejs";
@@ -91,7 +91,7 @@ async function dataPenugasan(db: Db, kegiatanId: number) {
 async function statusHarian(db: Db, penIds: number[]) {
   if (penIds.length === 0) return { hk: [], real: [], foto: new Map<string, number>(), izin: [] as { penugasan_id: number; tanggal: string }[] };
   const [hk, real, fotoRows, izin] = await Promise.all([
-    semuaBaris<{ penugasan_id: number; tanggal: string }>((a, b) => db.from("sigap_hari_kerja").select("penugasan_id, tanggal").in("penugasan_id", penIds).order("id").range(a, b)),
+    semuaBaris<{ penugasan_id: number; tanggal: string }>((a, b) => db.from("sigap_hari_kerja").select("penugasan_id, tanggal").in("penugasan_id", penIds).or(HK_AKTIF()).order("id").range(a, b)),
     semuaBaris<{ penugasan_id: number; tanggal: string; jumlah_realisasi: number }>((a, b) =>
       db.from("sigap_realisasi").select("penugasan_id, tanggal, jumlah_realisasi").in("penugasan_id", penIds).order("id").range(a, b)
     ),
@@ -364,7 +364,7 @@ export async function POST(req: NextRequest) {
       if (!tanggalValid(tanggal) || tanggal >= hariIniWib()) return galat("Izin susulan hanya untuk tanggal yang sudah lewat.");
       const alasan = String(body?.alasan ?? "").trim();
       if (alasan.length < 5) return galat("Alasan wajib diisi (minimal 5 karakter).");
-      const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", pen.id).eq("tanggal", tanggal).maybeSingle();
+      const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", pen.id).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
       if (!hk) return galat("Tanggal itu bukan hari kerja petugas ini.");
       const tglSampai = body?.sampai === "besok" ? new Date(Date.now() + 86_400_000) : new Date();
       const sampai = new Date(`${hariIniWib(tglSampai)}T23:59:59.999+07:00`).toISOString();

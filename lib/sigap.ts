@@ -187,7 +187,7 @@ export async function cekAksesIsian(
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
   if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
   if (pen.dikunci_at) return { error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin.", status: 403 };
-  const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).maybeSingle();
+  const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
   if (!hk) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
   const kunci = await statusKunci(db, penugasanId, tanggal);
   if (!kunci.boleh) {
@@ -212,26 +212,12 @@ export function jarakMeter(lat1: number, lng1: number, lat2: number, lng2: numbe
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** Batas selisih titik rumah baru vs titik rumah terdaftar sebelum alasan wajib diisi. */
+/**
+ * (6 Okt 2026) Hari kerja UJI COBA (kolom sigap_hari_kerja.uji_coba_sampai) otomatis tidak terbaca setelah
+ * batas waktunya -- permintaan user. Data tidak dihapus; pakai filter ini di setiap pembacaan hari kerja:
+ *   query.or(HK_AKTIF())
+ */
+export const HK_AKTIF = () => `uji_coba_sampai.is.null,uji_coba_sampai.gt.${new Date().toISOString()}`;
+
+/** Batas selisih lokasi HP vs tempat tinggal sebelum alasan wajib diisi. */
 export const BATAS_JARAK_M = 5000;
-/** (6 Okt 2026) Verifikasi alamat rumah: perpindahan titik lebih jauh dari ini tidak boleh diubah sendiri (lewat admin anggaran). */
-export const BATAS_PINDAH_MAKS_M = 50000;
-/** Maksimal berapa kali petugas boleh mengubah titik rumahnya sendiri. */
-export const MAKS_UBAH_DOMISILI = 3;
-/** Kotak wilayah Provinsi Sumatera Barat (longgar) -- titik di luar ini ditolak. */
-export const BBOX_SUMBAR = { latMin: -3.4, latMax: 0.95, lngMin: 98.5, lngMax: 102.0 };
-/** Kotak wilayah Kabupaten Solok (longgar) -- titik di luarnya boleh, tetapi alasan wajib & ditandai di audit. */
-export const BBOX_KAB_SOLOK = { latMin: -1.78, latMax: -0.52, lngMin: 100.4, lngMax: 101.7 };
-export function dalamBbox(lat: number, lng: number, b: { latMin: number; latMax: number; lngMin: number; lngMax: number }): boolean {
-  return lat >= b.latMin && lat <= b.latMax && lng >= b.lngMin && lng <= b.lngMax;
-}
-/** Alasan harus berupa kalimat yang wajar (bukan ketikan asal / berulang). */
-export function alasanWajar(teks: string): boolean {
-  const t = teks.trim();
-  if (t.length < 15) return false;
-  const kata = t.split(/\s+/).filter(Boolean);
-  if (kata.length < 3) return false;
-  if (new Set(t.toLowerCase().replace(/[^a-z0-9]/g, "")).size < 6) return false;
-  if (new Set(kata.map((k) => k.toLowerCase())).size < 3) return false;
-  return true;
-}
