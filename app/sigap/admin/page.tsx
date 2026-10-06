@@ -16,6 +16,7 @@
 //  - URL ?tab=<kode>&kegiatan=<id> dihormati (dipakai link dari halaman Peran & akses / palet).
 
 import Link from "next/link";
+import { useDetak } from "../useDetak";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, bacaSesi, bolehKlien, keluar, keMasuk, pesanGalat, rentangPendek, SesiBerakhir, tglPanjang, type Ringkas } from "./api";
 import { BarisTab, HeaderAdmin, LayarPenuh, Pesan, Putar, type ItemTab } from "./ui";
@@ -35,6 +36,9 @@ const KUNCI_KEG = "sigap_admin_kegiatan"; // (5 Okt 2026) kegiatan terakhir dipi
 
 export default function AdminTransportLokal() {
   const [r, setR] = useState<Ringkas | null>(null);
+  // (6 Okt 2026) detak aktivitas utk log login & durasi
+  const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
+  useDetak({ sesi: sesiDetak }, "admin transport");
   const [galat, setGalat] = useState<string | null>(null);
   const [kegId, setKegId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("beranda");

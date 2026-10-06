@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDetak } from "./useDetak";
 
 // (5 Okt 2026) Portal SIGAP satu pintu -- permintaan user: sesudah masuk, kartu menu yang tampil
 // mengikuti peran & izin akun (Transport Lokal bila punya penugasan, Admin, Kelola Peran & Akses).
@@ -20,10 +21,13 @@ function bacaSesi(): string | null {
 export default function PanelSaya() {
   const [saya, setSaya] = useState<Saya | null>(null);
   const [status, setStatus] = useState<"memuat" | "tamu" | "masuk">("memuat");
+  const [sesiDetak, setSesiDetak] = useState<string | null>(null);
+  useDetak({ sesi: sesiDetak }, "portal"); // (6 Okt 2026) log login & durasi
 
   useEffect(() => {
     const sesi = bacaSesi();
     if (!sesi) return setStatus("tamu");
+    setSesiDetak(sesi);
     fetch("/api/sigap/saya", { headers: { Authorization: `Bearer ${sesi}` }, cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) throw new Error();

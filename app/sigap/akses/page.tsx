@@ -19,13 +19,16 @@ import type { DataAkses } from "./tipe";
 import PeranIzin from "./PeranIzin";
 import AkunPeranTab from "./AkunPeran";
 import { DaftarPortal, Riwayat } from "./PortalRiwayat";
+import LogLogin from "./LogLogin";
+import { useDetak } from "../useDetak";
 
-type Tab = "izin" | "akun" | "portal" | "riwayat";
+type Tab = "izin" | "akun" | "portal" | "riwayat" | "log";
 const TAB: ItemTab<Tab>[] = [
   { kode: "izin", label: "🎭 Peran & Izin" },
   { kode: "akun", label: "👤 Akun & Peran" },
   { kode: "portal", label: "🧭 Daftar Portal & Menu" },
   { kode: "riwayat", label: "🕘 Riwayat" },
+  { kode: "log", label: "🕒 Log Login" }, // (6 Okt 2026) terakhir login & durasi -- permintaan user
 ];
 
 export default function KelolaPeranAkses() {
@@ -33,6 +36,8 @@ export default function KelolaPeranAkses() {
   const [data, setData] = useState<DataAkses | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("izin");
+  const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
+  useDetak({ sesi: sesiDetak }, "kelola akses");
   const [beranda, setBeranda] = useState<DataBeranda | null>(null); // (6 Okt 2026) utk badge "perlu tindakan"
 
   const muat = useCallback(async () => {
@@ -128,6 +133,8 @@ export default function KelolaPeranAkses() {
         <DaftarPortal data={data} />
       ) : tab === "riwayat" ? (
         <Riwayat />
+      ) : tab === "log" ? (
+        <LogLogin />
       ) : (
         <Memuat />
       )}

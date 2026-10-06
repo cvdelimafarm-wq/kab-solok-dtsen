@@ -29,6 +29,7 @@ import {
 } from "@/lib/undangan";
 import { penugasanAkun } from "@/lib/sigap";
 import { buatSesi, izinAkun } from "@/lib/sigapAkses";
+import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +117,8 @@ export async function POST(req: NextRequest) {
       await resetGagal(db, kunci);
       if (!(await bolehMasuk(db, cocok[0].id))) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", cocok[0].id);
+      // (6 Okt 2026) log login: masuk = sesi baru
+      await catatAktivitas(db, cocok[0].id, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
       return NextResponse.json({ ok: true, token: cocok[0].token, nama: cocok[0].nama, ...buatSesi(cocok[0].id) });
     }
 
@@ -183,6 +186,8 @@ export async function POST(req: NextRequest) {
       const { hash, salt } = hashPin(pin);
       const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, akun_dibuat_at: new Date().toISOString() }).eq("id", a.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", a.id);
+      await catatAktivitas(db, a.id as number, { sesiBaru: true, cara: "buat_pin", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
       return NextResponse.json({ ok: true, token, ...buatSesi(a.id as number) });
     }
 

@@ -2,6 +2,7 @@
 
 import { use as usePromise, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BrandBps from "@/app/components/BrandBps";
+import { useDetak } from "../../useDetak";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -123,6 +124,7 @@ async function kirimJson(token: string, body: Record<string, unknown>) {
 // ======================================================================
 export default function SigapPetugas({ params }: { params: Promise<{ token: string }> }) {
   const { token } = usePromise(params);
+  useDetak({ token }, "transport lokal"); // (6 Okt 2026) log login & durasi
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [penId, setPenId] = useState<number | null>(null);

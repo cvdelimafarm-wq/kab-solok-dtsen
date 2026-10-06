@@ -306,6 +306,46 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ kegiatan, rows, boleh_kelola: perlu("translok.verifikasi", "kelola"), boleh_buka: boleh(s.izin, "translok.buka_kunci", "kelola", kegiatanId) });
     }
 
+    // (6 Okt 2026) Log login & durasi pemakaian -- permintaan user (izin Kelola Peran & Akses: lihat).
+    if (bagian === "log_login") {
+      if (!boleh(s.izin, "akses.kelola", "lihat")) return galat("Tidak punya izin melihat log login.", 403);
+      const akunId = Number(sp.get("akun_id")) || null;
+      if (akunId) {
+        const { data } = await db.from("sigap_log_sesi").select("id, mulai_at, terakhir_aktif_at, halaman, perangkat, cara").eq("akun_id", akunId).order("mulai_at", { ascending: false }).limit(100);
+        return NextResponse.json({ sesi: data ?? [] });
+      }
+      const hari = Math.min(90, Math.max(1, Number(sp.get("hari")) || 30));
+      const sejak = new Date(Date.now() - hari * 86_400_000).toISOString();
+      const log = await semuaBaris<{ akun_id: number; mulai_at: string; terakhir_aktif_at: string; perangkat: string | null; halaman: string | null }>((a, b) =>
+        db.from("sigap_log_sesi").select("akun_id, mulai_at, terakhir_aktif_at, perangkat, halaman").gte("terakhir_aktif_at", sejak).order("id").range(a, b)
+      );
+      const ids = Array.from(new Set(log.map((x) => x.akun_id)));
+      const akun = ids.length ? await semuaBaris<{ id: number; nama: string; jenis: string; terakhir_masuk_at: string | null }>((a, b) => db.from("sigap_akun").select("id, nama, jenis, terakhir_masuk_at").in("id", ids).range(a, b)) : [];
+      const pen = ids.length ? await semuaBaris<{ akun_id: number; peran: string; kegiatan_id: number }>((a, b) => db.from("sigap_penugasan").select("akun_id, peran, kegiatan_id").in("akun_id", ids).eq("aktif", true).range(a, b)) : [];
+      const tujuhHari = Date.now() - 7 * 86_400_000;
+      const rows = ids.map((id) => {
+        const l = log.filter((x) => x.akun_id === id).sort((a, b) => b.terakhir_aktif_at.localeCompare(a.terakhir_aktif_at));
+        const dur = (x: { mulai_at: string; terakhir_aktif_at: string }) => Math.max(0, Date.parse(x.terakhir_aktif_at) - Date.parse(x.mulai_at)) / 1000;
+        const a = akun.find((x) => x.id === id);
+        return {
+          akun_id: id,
+          nama: a?.nama ?? "?",
+          jenis: a?.jenis ?? "",
+          peran: Array.from(new Set(pen.filter((p) => p.akun_id === id).map((p) => p.peran.toUpperCase()))),
+          terakhir_masuk: a?.terakhir_masuk_at ?? null,
+          terakhir_aktif: l[0]?.terakhir_aktif_at ?? null,
+          durasi_terakhir_detik: l[0] ? Math.round(dur(l[0])) : 0,
+          jumlah_sesi: l.length,
+          total_detik: Math.round(l.reduce((t, x) => t + dur(x), 0)),
+          total_7hari_detik: Math.round(l.filter((x) => Date.parse(x.terakhir_aktif_at) >= tujuhHari).reduce((t, x) => t + dur(x), 0)),
+          perangkat: l[0]?.perangkat ?? null,
+          halaman: l[0]?.halaman ?? null,
+        };
+      });
+      rows.sort((x, y) => (y.terakhir_aktif ?? "").localeCompare(x.terakhir_aktif ?? ""));
+      return NextResponse.json({ hari, rows });
+    }
+
     if (bagian === "akses" || bagian === "riwayat") {
       if (!boleh(s.izin, "akses.kelola", "lihat")) return galat("Tidak punya izin Kelola Peran & Akses.", 403);
       if (bagian === "riwayat") {

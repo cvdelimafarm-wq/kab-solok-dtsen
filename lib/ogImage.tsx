@@ -4,10 +4,13 @@ import { join } from "node:path";
 
 // Gambar pratinjau link 1200x630: logo BPS + judul halaman. Dibuat otomatis
 // (tidak perlu membuat gambar manual). Dipanggil dari opengraph-image.tsx.
+// (6 Okt 2026) Logo = lambang resmi BPS (public/logo-bps-hd.png, hasil render tajam dari logo-bps.svg resmi;
+// sebelumnya logo-bps.png lama yg bergerigi) & tulisan instansi dibakukan: BADAN PUSAT STATISTIK /
+// KABUPATEN SOLOK, kapital, tebal, miring -- permintaan user.
 export async function ogImage(judul: string, sub: string) {
   let logo: string | null = null;
   try {
-    const buf = await readFile(join(process.cwd(), "public", "logo-bps.png"));
+    const buf = await readFile(join(process.cwd(), "public", "logo-bps-hd.png"));
     logo = `data:image/png;base64,${buf.toString("base64")}`;
   } catch {
     logo = null; // tanpa logo kalau file tidak terbaca; gambar tetap jadi
@@ -38,8 +41,9 @@ export async function ogImage(judul: string, sub: string) {
             />
           )}
           <div style={{ display: "flex", flexDirection: "column", marginLeft: logo ? 24 : 0 }}>
-            <span style={{ fontSize: 26, opacity: 0.75 }}>Badan Pusat Statistik</span>
-            <span style={{ fontSize: 34, fontWeight: 700 }}>Kabupaten Solok</span>
+            {/* Miring dibuat dgn skew krn font miring tidak tersedia di generator gambar */}
+            <span style={{ fontSize: 32, fontWeight: 700, letterSpacing: 1, transform: "skewX(-10deg)" }}>BADAN PUSAT STATISTIK</span>
+            <span style={{ fontSize: 32, fontWeight: 700, letterSpacing: 1, transform: "skewX(-10deg)" }}>KABUPATEN SOLOK</span>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
