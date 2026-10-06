@@ -31,17 +31,29 @@ export default function SigapMasuk() {
   function tujuan(): string {
     try {
       const l = new URLSearchParams(window.location.search).get("lanjut");
-      if (l && l.startsWith("/sigap")) return l;
+      if (l && l.startsWith("/") && !l.startsWith("//")) return l;
     } catch {
       /* abaikan */
     }
-    return "/sigap";
+    // (7 Okt 2026) portal satu login: sesudah masuk kembali ke beranda portal di halaman depan
+    return "/";
   }
 
   useEffect(() => {
     try {
       const sampai = localStorage.getItem("sigap_sesi_sampai");
-      if (localStorage.getItem("sigap_sesi") && sampai && Date.parse(sampai) > Date.now()) window.location.replace(tujuan());
+      if (localStorage.getItem("sigap_sesi") && sampai && Date.parse(sampai) > Date.now()) {
+        window.location.replace(tujuan());
+        return;
+      }
+      // (7 Okt 2026) portal satu login: form "masuk" pindah ke halaman depan; halaman ini tinggal utk
+      // "Belum punya PIN" (?mode=daftar: verifikasi identitas + buat PIN).
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("mode") === "daftar") setMode("daftar");
+      else {
+        const l = q.get("lanjut");
+        window.location.replace(l && l.startsWith("/") && !l.startsWith("//") ? `/?lanjut=${encodeURIComponent(l)}` : "/");
+      }
     } catch {
       /* penyimpanan tidak tersedia */
     }

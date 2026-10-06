@@ -27,8 +27,8 @@ import {
   resetGagal,
   tanggalValid,
 } from "@/lib/undangan";
-import { penugasanAkun } from "@/lib/sigap";
-import { buatSesi, izinAkun } from "@/lib/sigapAkses";
+import { buatSesi } from "@/lib/sigapAkses";
+import { bolehMasukPortal } from "@/lib/portal/server";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
 
 export const runtime = "nodejs";
@@ -42,7 +42,7 @@ function supabaseAdmin() {
 }
 type Db = NonNullable<ReturnType<typeof supabaseAdmin>>;
 
-type AkunRow = { id: number; nama: string; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null };
+type AkunRow = { id: number; nama: string; jenis: string | null; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null };
 
 /** Akun aktif dgn nama ternormalisasi sama persis (diambil per halaman, >1000 baris aman). */
 async function cariAkun(db: Db, nama: string): Promise<AkunRow[]> {
@@ -52,7 +52,7 @@ async function cariAkun(db: Db, nama: string): Promise<AkunRow[]> {
   for (let i = 0; i < 10000; i += 1000) {
     const { data } = await db
       .from("sigap_akun")
-      .select("id, nama, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id")
+      .select("id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id")
       .eq("aktif", true)
       .order("id")
       .range(i, i + 999);
@@ -77,12 +77,12 @@ async function pinAkun(db: Db, a: AkunRow): Promise<{ hash: string; salt: string
   return null;
 }
 
-const PESAN_BELUM_DITUGASKAN = "Anda belum ditugaskan pada kegiatan transport lokal mana pun dan belum punya peran di SIGAP. Hubungi admin anggaran / PJ kegiatan.";
+const PESAN_BELUM_DITUGASKAN = "Akun Anda belum punya tugas atau peran aktif di aplikasi mana pun. Hubungi admin anggaran / PJ kegiatan.";
 
-/** (5 Okt 2026) Boleh masuk bila punya penugasan aktif ATAU peran SIGAP (admin/PJ/bendahara/dll). */
-async function bolehMasuk(db: Db, akunId: number): Promise<boolean> {
-  if ((await penugasanAkun(db, akunId)).length > 0) return true;
-  return (await izinAkun(db, akunId)).peran.length > 0;
+/** (5 Okt 2026) Boleh masuk bila punya penugasan aktif ATAU peran SIGAP (admin/PJ/bendahara/dll).
+ *  (7 Okt 2026) Portal satu login: juga pegawai organik, petugas bencana & petugas penyisiran. */
+async function bolehMasuk(db: Db, a: AkunRow): Promise<boolean> {
+  return bolehMasukPortal(db, a);
 }
 
 export async function POST(req: NextRequest) {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
         );
       }
       await resetGagal(db, kunci);
-      if (!(await bolehMasuk(db, cocok[0].id))) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
+      if (!(await bolehMasuk(db, cocok[0]))) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", cocok[0].id);
       // (6 Okt 2026) log login: masuk = sesi baru
       await catatAktivitas(db, cocok[0].id, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
       }
       await resetGagal(db, kunci);
       const a = cocok[0];
-      if (!(await bolehMasuk(db, a.id))) return NextResponse.json({ error: `Data Anda cocok. ${PESAN_BELUM_DITUGASKAN}` }, { status: 403 });
+      if (!(await bolehMasuk(db, a))) return NextResponse.json({ error: `Data Anda cocok. ${PESAN_BELUM_DITUGASKAN}` }, { status: 403 });
       // NIK yg belum tercatat di akun disimpan (isian petugas sendiri, sudah lolos verifikasi).
       if (kolom.nik === "belum_ada") await db.from("sigap_akun").update({ nik }).eq("id", a.id).is("nik", null);
       return NextResponse.json({ ok: true, kolom, token: a.token, nama: a.nama, punya_pin: !!(await pinAkun(db, a)) });
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
       if (!pinValid(pin)) return NextResponse.json({ error: "PIN harus 4 digit angka." }, { status: 400 });
       const { data: a } = await db
         .from("sigap_akun")
-        .select("id, nama, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id")
+        .select("id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id")
         .eq("token", token)
         .maybeSingle();
       if (!a) return NextResponse.json({ error: "Sesi tidak valid. Ulangi verifikasi." }, { status: 404 });

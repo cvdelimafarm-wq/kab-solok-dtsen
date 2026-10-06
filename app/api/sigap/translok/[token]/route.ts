@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { PESAN_ARSIP } from "@/lib/portal/periode";
 import {
   BATAS_JARAK_M,
   HK_AKTIF,
@@ -202,6 +203,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       const pen = (await penugasanAkun(db, akun.id)).find((p) => p.id === penugasanId);
       if (!pen) return NextResponse.json({ error: "Anda tidak terdaftar pada kegiatan ini." }, { status: 403 });
       if (pen.dikunci_at) return NextResponse.json({ error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin." }, { status: 403 });
+      // (7 Okt 2026) portal satu login: kegiatan yg sudah lewat tgl selesai + masa tenggang = arsip baca-saja
+      if (pen.status_periode === "arsip") return NextResponse.json({ error: PESAN_ARSIP }, { status: 403 });
       if (!pen.periode.mulai || !pen.periode.selesai) return NextResponse.json({ error: "Periode kegiatan belum ditetapkan admin anggaran." }, { status: 400 });
       const dimintaMentah = Array.from(new Set(((Array.isArray(body?.tanggal) ? body.tanggal : []) as unknown[]).filter(tanggalValid))).sort();
       // (6 Okt 2026) Tanggal uji coba (diatur admin) diabaikan dari rencana petugas.

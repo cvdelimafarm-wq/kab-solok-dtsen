@@ -120,6 +120,10 @@ function kegiatanTerlihat(izin: PetaIzin): "semua" | number[] {
 }
 
 // ======================================================================
+// (7 Okt 2026) portal satu login: peran admin aplikasi & admin per aplikasi hanya dikelola Admin Aplikasi
+// (izin portal.kelola) -- permintaan user "di atas admin anggaran ada juga admin aplikasi".
+const PERAN_KHUSUS_ADMIN_APLIKASI = ["admin_aplikasi", "admin_delego", "admin_dtsen", "admin_bencana", "admin_penyisiran", "admin_seruti"];
+
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
@@ -617,6 +621,7 @@ export async function POST(req: NextRequest) {
         const level = body?.level === "kelola" || body?.level === "lihat" ? (body.level as string) : null;
         const { data: p } = await db.from("sigap_peran").select("kode").eq("id", peranId).maybeSingle();
         if (!p) return galat("Peran tidak ditemukan.", 404);
+        if (PERAN_KHUSUS_ADMIN_APLIKASI.includes(p.kode as string) && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Izin peran admin aplikasi hanya dapat diubah Admin Aplikasi.", 403);
         // Pengaman: admin anggaran harus tetap bisa mengelola akses (agar sistem tidak terkunci).
         if (p.kode === "admin_anggaran" && menu === "akses.kelola" && level !== "kelola") return galat("Izin Kelola Akses untuk Admin Anggaran tidak bisa dicabut.");
         if (level) {
@@ -636,6 +641,7 @@ export async function POST(req: NextRequest) {
         const kegiatanId = Number(body?.kegiatan_id) || null;
         const { data: p } = await db.from("sigap_peran").select("kode, butuh_lingkup").eq("id", peranId).maybeSingle();
         if (!p) return galat("Peran tidak ditemukan.", 404);
+        if (PERAN_KHUSUS_ADMIN_APLIKASI.includes(p.kode as string) && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Peran admin aplikasi hanya dapat diberikan Admin Aplikasi.", 403);
         if (p.butuh_lingkup && !kegiatanId) return galat("Peran ini perlu dipilih kegiatannya.");
         const { error } = await db.from("sigap_akun_peran").insert({ akun_id: akunId, peran_id: peranId, kegiatan_id: kegiatanId, diberi_oleh: oleh });
         if (error) return galat(error.message.includes("duplicate") ? "Akun sudah punya peran ini." : error.message, 400);
@@ -648,6 +654,11 @@ export async function POST(req: NextRequest) {
         const { data: x } = await db.from("sigap_akun_peran").select("id, akun_id, peran_id, kegiatan_id").eq("id", id).maybeSingle();
         if (!x) return galat("Data tidak ditemukan.", 404);
         const { data: p } = await db.from("sigap_peran").select("kode").eq("id", x.peran_id).maybeSingle();
+        if (PERAN_KHUSUS_ADMIN_APLIKASI.includes((p?.kode as string) ?? "") && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Peran admin aplikasi hanya dapat dicabut Admin Aplikasi.", 403);
+        if (p?.kode === "admin_aplikasi") {
+          const { count } = await db.from("sigap_akun_peran").select("id", { count: "exact", head: true }).eq("peran_id", x.peran_id);
+          if ((count ?? 0) <= 1) return galat("Admin Aplikasi minimal harus 1 orang.");
+        }
         if (p?.kode === "admin_anggaran") {
           const { count } = await db.from("sigap_akun_peran").select("id", { count: "exact", head: true }).eq("peran_id", x.peran_id);
           if ((count ?? 0) <= 1) return galat("Admin anggaran terakhir tidak bisa dicabut, supaya sistem tidak terkunci.");

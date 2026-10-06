@@ -36,6 +36,9 @@ type Pen = {
   periode: { mulai: string | null; selesai: string | null };
   surat_tugas: { nomor: string; tanggal_st: string | null; tujuan: string[]; ada_file: boolean } | null;
   dikunci_at: string | null;
+  // (7 Okt 2026) portal satu login: arsip = baca-saja (tgl selesai + masa tenggang lewat)
+  status_periode?: "belum_diatur" | "akan_datang" | "aktif" | "tenggang" | "arsip";
+  ditutup_pada?: string | null;
   hari_kerja: string[];
   hari: Hari[];
   kelompok: Kelompok[];
@@ -170,7 +173,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     } catch {
       /* abaikan */
     }
-    window.location.replace("/sigap/masuk");
+    window.location.replace("/"); // (7 Okt 2026) portal satu login
   }
 
   if (loadError)
@@ -290,6 +293,16 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </Header>
 
       <div className="relative z-10 mx-auto -mt-7 max-w-lg space-y-3 px-4">
+        {pen.status_periode === "arsip" && !pen.dikunci_at && (
+          <p className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[13px] font-semibold text-slate-700">
+            Kegiatan ini sudah ditutup{pen.ditutup_pada ? ` sejak ${pen.ditutup_pada}` : ""} dan menjadi arsip baca-saja. Bila perlu koreksi, hubungi PJ kegiatan atau admin anggaran.
+          </p>
+        )}
+        {pen.status_periode === "tenggang" && pen.ditutup_pada && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-900">
+            Kegiatan sudah selesai. Isian masih bisa dilengkapi s.d. {pen.ditutup_pada}, sesudah itu menjadi arsip baca-saja.
+          </p>
+        )}
         {pen.dikunci_at && (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-semibold text-emerald-900">
             ✓ SPJ kegiatan ini sudah diverifikasi &amp; dikunci admin. Data tidak dapat diubah lagi.
@@ -642,7 +655,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
   const lain = new Set(pen.tanggal_kegiatan_lain);
   const penuh = !!pen.maks_hari && pilih.size >= pen.maks_hari;
   const berubah = pilih.size !== pen.hari_kerja.length || pen.hari_kerja.some((t) => !pilih.has(t));
-  const terkunci = !!pen.dikunci_at;
+  const terkunci = !!pen.dikunci_at || pen.status_periode === "arsip";
 
   // Kelompokkan per bulan.
   const perBulan = new Map<string, string[]>();
@@ -834,7 +847,7 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
 }
 
 function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto" }) {
-  const boleh = !pen.dikunci_at && (hari.kunci === "hari_ini" || hari.kunci === "izin");
+  const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin");
   return (
     <>
       {hari.kunci !== "hari_ini" && (

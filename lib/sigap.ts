@@ -13,6 +13,7 @@
 //  - 1 tanggal = 1 kegiatan (unique akun_id+tanggal).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/periode";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Db = SupabaseClient<any, any, any>;
@@ -108,6 +109,9 @@ export type Penugasan = {
   periode: { mulai: string | null; selesai: string | null };
   surat_tugas: { nomor: string; tanggal_st: string | null; tujuan: string[]; ada_file: boolean } | null;
   dikunci_at: string | null;
+  // (7 Okt 2026) portal satu login: status periode (tgl selesai + masa tenggang) -- arsip = baca-saja utk petugas
+  status_periode: StatusPeriode;
+  ditutup_pada: string | null;
 };
 
 /** Semua penugasan aktif seorang akun (kegiatan aktif saja). */
@@ -121,13 +125,14 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
   const kegIds = Array.from(new Set(pen.map((p) => p.kegiatan_id as number)));
   const stIds = pen.map((p) => p.surat_tugas_id as number | null).filter((x): x is number => !!x);
   const [{ data: keg }, { data: tarif }, { data: st }] = await Promise.all([
-    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, tanggal_mulai, tanggal_selesai, aktif").in("id", kegIds),
+    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, tanggal_mulai, tanggal_selesai, aktif, hari_tenggang, dibuka_sampai").in("id", kegIds),
     db.from("sigap_kegiatan_tarif").select("kegiatan_id, peran, tarif, label_jabatan, maks_hari_default").in("kegiatan_id", kegIds),
     stIds.length
       ? db.from("sigap_surat_tugas").select("id, nomor_st, tanggal_st, tanggal_mulai, tanggal_selesai, tujuan, file_path").in("id", stIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
   const hasil: Penugasan[] = [];
+  const hariIni = hariIniWib();
   for (const p of pen) {
     const k = (keg ?? []).find((x) => x.id === p.kegiatan_id);
     if (!k || !k.aktif) continue;
@@ -147,6 +152,13 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
       },
       surat_tugas: s ? { nomor: s.nomor_st as string, tanggal_st: (s.tanggal_st as string | null) ?? null, tujuan: (s.tujuan as string[] | null) ?? [], ada_file: !!s.file_path } : null,
       dikunci_at: (p.dikunci_at as string | null) ?? null,
+      ...(() => {
+        const sp = statusPeriode(
+          { tanggal_mulai: k.tanggal_mulai as string | null, tanggal_selesai: k.tanggal_selesai as string | null, hari_tenggang: k.hari_tenggang as number | null, dibuka_sampai: k.dibuka_sampai as string | null },
+          hariIni
+        );
+        return { status_periode: sp.status, ditutup_pada: sp.ditutup };
+      })(),
     });
   }
   return hasil.sort((a, b) => a.kegiatan.nama.localeCompare(b.kegiatan.nama));
@@ -187,6 +199,8 @@ export async function cekAksesIsian(
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
   if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
   if (pen.dikunci_at) return { error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin.", status: 403 };
+  // (7 Okt 2026) arsip baca-saja sesudah tgl selesai + masa tenggang
+  if (pen.status_periode === "arsip") return { error: PESAN_ARSIP, status: 403 };
   const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
   if (!hk) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
   const kunci = await statusKunci(db, penugasanId, tanggal);

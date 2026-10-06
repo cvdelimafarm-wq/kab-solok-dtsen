@@ -38,12 +38,13 @@ export function hapusSesi() {
 
 export function keMasuk() {
   const path = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/sigap/admin";
-  window.location.replace(`/sigap/masuk?lanjut=${encodeURIComponent(path)}`);
+  // (7 Okt 2026) portal satu login: masuk di halaman depan, lalu kembali ke halaman ini
+  window.location.replace(`/?lanjut=${encodeURIComponent(path)}`);
 }
 
 export function keluar() {
   hapusSesi();
-  window.location.replace("/sigap/masuk");
+  window.location.replace("/");
 }
 
 function header(extra?: Record<string, string>): Record<string, string> {
