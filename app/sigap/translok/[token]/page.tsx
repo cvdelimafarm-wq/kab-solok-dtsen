@@ -312,17 +312,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </div>
 
       {/* ===== (6 Okt 2026) Tombol melayang pintasan Unduh SPJ -- permintaan user ===== */}
-      {!unduhFab && (
-        <button
-          type="button"
-          onClick={() => setUnduhFab(true)}
-          aria-label="Unduh SPJ"
-          className="fixed right-4 z-30 flex items-center gap-2 rounded-full bg-[#0F3D7A] py-3 pl-4 pr-5 text-[14px] font-extrabold text-white shadow-lg shadow-[#0F3D7A]/30 ring-4 ring-white/70 transition active:scale-95"
-          style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
-        >
-          <span className="text-[17px] leading-none">⬇</span> Unduh SPJ
-        </button>
-      )}
+      {!unduhFab && <TombolUnduhMelayang onKlik={() => setUnduhFab(true)} />}
       {unduhFab && <LembarUnduh pen={pen} hariIni={data.hari_ini} onTutup={() => setUnduhFab(false)} />}
 
       {/* ===== NAVIGASI BAWAH ===== */}
@@ -976,6 +966,132 @@ function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
       </button>
       {unduh && <LembarUnduh pen={pen} hariIni={data.hari_ini} onTutup={() => setUnduh(false)} />}
     </>
+  );
+}
+
+// ======================================================================
+// (6 Okt 2026) Tombol melayang "Unduh SPJ" yg bisa DIGESER dgn tekan-tahan -- permintaan user.
+//  - Ketuk biasa = buka lembar Unduh SPJ.
+//  - Tekan & tahan ±0,35 dtk (HP bergetar bila didukung) lalu geser = pindahkan tombol.
+//  - Posisi diingat di perangkat (localStorage, dicoba-tangkap) & selalu dijaga tetap di dalam layar.
+const KUNCI_POS_FAB = "sigap_fab_unduh_pos";
+function TombolUnduhMelayang({ onKlik }: { onKlik: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [seret, setSeret] = useState(false);
+  const st = useRef<{ timer: ReturnType<typeof setTimeout> | null; x0: number; y0: number; dx: number; dy: number; geser: boolean; batal: boolean }>({
+    timer: null,
+    x0: 0,
+    y0: 0,
+    dx: 0,
+    dy: 0,
+    geser: false,
+    batal: false,
+  });
+
+  const jepit = useCallback((x: number, y: number) => {
+    const el = ref.current;
+    const w = el?.offsetWidth ?? 150;
+    const h = el?.offsetHeight ?? 48;
+    const bawahAman = 72; // jangan menutupi navigasi bawah
+    return {
+      x: Math.min(Math.max(8, x), window.innerWidth - w - 8),
+      y: Math.min(Math.max(8, y), window.innerHeight - h - bawahAman),
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(KUNCI_POS_FAB) ?? "null");
+      if (v && typeof v.x === "number" && typeof v.y === "number") setPos(jepit(v.x, v.y));
+    } catch {
+      /* abaikan */
+    }
+    const ubah = () => setPos((p) => (p ? jepit(p.x, p.y) : p));
+    window.addEventListener("resize", ubah);
+    return () => window.removeEventListener("resize", ubah);
+  }, [jepit]);
+
+  function turun(e: React.PointerEvent<HTMLButtonElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const s = st.current;
+    s.x0 = e.clientX;
+    s.y0 = e.clientY;
+    s.dx = e.clientX - r.left;
+    s.dy = e.clientY - r.top;
+    s.geser = false;
+    s.batal = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    s.timer = setTimeout(() => {
+      s.geser = true;
+      setSeret(true);
+      try {
+        navigator.vibrate?.(25);
+      } catch {
+        /* abaikan */
+      }
+    }, 350);
+  }
+  function gerak(e: React.PointerEvent<HTMLButtonElement>) {
+    const s = st.current;
+    if (!s.geser) {
+      if (Math.hypot(e.clientX - s.x0, e.clientY - s.y0) > 10) {
+        s.batal = true; // bergerak sebelum tahan selesai -> bukan ketukan, bukan seret
+        if (s.timer) clearTimeout(s.timer);
+      }
+      return;
+    }
+    setPos(jepit(e.clientX - s.dx, e.clientY - s.dy));
+  }
+  function naik() {
+    const s = st.current;
+    if (s.timer) clearTimeout(s.timer);
+    if (s.geser) {
+      setSeret(false);
+      setPos((p) => {
+        try {
+          if (p) localStorage.setItem(KUNCI_POS_FAB, JSON.stringify(p));
+        } catch {
+          /* abaikan */
+        }
+        return p;
+      });
+    } else if (!s.batal) onKlik();
+    s.geser = false;
+  }
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-label="Unduh SPJ (tekan-tahan untuk memindahkan)"
+      onPointerDown={turun}
+      onPointerMove={gerak}
+      onPointerUp={naik}
+      onPointerCancel={() => {
+        const s = st.current;
+        if (s.timer) clearTimeout(s.timer);
+        s.geser = false;
+        setSeret(false);
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onKlik();
+        }
+      }}
+      className={`fixed z-30 flex select-none items-center gap-2 rounded-full bg-[#0F3D7A] py-3 pl-4 pr-5 text-[14px] font-extrabold text-white shadow-lg shadow-[#0F3D7A]/30 ring-4 ring-white/70 ${
+        seret ? "scale-110 cursor-grabbing opacity-90" : "transition active:scale-95"
+      }`}
+      style={{
+        touchAction: "none",
+        WebkitTouchCallout: "none",
+        ...(pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: "calc(76px + env(safe-area-inset-bottom))" }),
+      }}
+    >
+      <span className="text-[17px] leading-none">{seret ? "✥" : "⬇"}</span> {seret ? "Geser…" : "Unduh SPJ"}
+    </button>
   );
 }
 
