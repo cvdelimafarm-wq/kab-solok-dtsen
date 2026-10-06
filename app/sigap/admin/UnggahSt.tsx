@@ -146,17 +146,17 @@ export default function UnggahSt({ kegiatanId, baris, onSelesai }: { kegiatanId:
         role="button"
         tabIndex={0}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed px-4 py-5 text-center transition ${seret ? "border-[#0F3D7A] bg-[#E8EEF8]" : "border-[#9FB3D1] bg-[#F6F8FB] hover:bg-[#EEF2F8]"}`}
+        className={`cursor-pointer rounded-2xl border-2 border-dashed px-4 py-5 text-center transition ${seret ? "border-[#1F6FD1] bg-[#E3EEFB]" : "border-[#9FB3D1] bg-[#F8FAFC] hover:bg-[#F3F5F8]"}`}
       >
         <p className="text-[13px] font-bold">
           📄 {file ? file.name : <>Tarik file PDF ke sini atau <u>pilih file</u></>}
         </p>
-        <p className="mt-0.5 text-[11.5px] text-[#6B7890]">Sistem membaca nomor ST tiap halaman, memotong, dan menautkan ke petugasnya</p>
+        <p className="mt-0.5 text-[11.5px] text-[#7B8794]">Sistem membaca nomor ST tiap halaman, memotong, dan menautkan ke petugasnya</p>
         <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => pilihFile(e.target.files?.[0])} />
       </div>
 
       {tahap === "membaca" && (
-        <p className="mt-2 flex items-center gap-2 text-[12px] text-[#55627A]">
+        <p className="mt-2 flex items-center gap-2 text-[12px] text-[#4D5B6B]">
           <Putar kecil /> Membaca teks setiap halaman…
         </p>
       )}
@@ -196,7 +196,7 @@ export default function UnggahSt({ kegiatanId, baris, onSelesai }: { kegiatanId:
                     return (
                       <tr key={p.nomor} className="border-b border-slate-100 last:border-0">
                         <td className="px-2.5 py-1.5 font-semibold">{p.nomor}</td>
-                        <td className="px-2.5 py-1.5 text-[#6B7890]">hal. {p.halaman.map((h) => h + 1).join(", ")}</td>
+                        <td className="px-2.5 py-1.5 text-[#7B8794]">hal. {p.halaman.map((h) => h + 1).join(", ")}</td>
                         <td className="px-2.5 py-1.5">{b ? <Chip w="ok">{b.nama}</Chip> : <Chip w="wait">tidak ada di data ST</Chip>}</td>
                       </tr>
                     );
@@ -206,7 +206,7 @@ export default function UnggahSt({ kegiatanId, baris, onSelesai }: { kegiatanId:
             </div>
           )}
           {tidakCocok.length > 0 && (
-            <p className="text-[11.5px] text-[#6B7890]">Nomor yang tidak dikenali tidak disimpan. Isi dulu nomor ST petugasnya di tabel (tombol “Isi ST”), lalu unggah ulang.</p>
+            <p className="text-[11.5px] text-[#7B8794]">Nomor yang tidak dikenali tidak disimpan. Isi dulu nomor ST petugasnya di tabel (tombol “Isi ST”), lalu unggah ulang.</p>
           )}
         </div>
       )}

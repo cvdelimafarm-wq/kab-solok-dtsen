@@ -29,5 +29,6 @@ export async function GET(req: NextRequest) {
     izin,
     admin: punyaAksesAdmin(izin),
     kelola_akses: boleh(izin, "akses.kelola", "kelola"),
+    kontrak: boleh(izin, "kontrak.kelola", "lihat"), // (6 Okt 2026) portal Pengadaan & Kontrak
   });
 }

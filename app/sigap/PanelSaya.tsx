@@ -6,7 +6,7 @@ import { useDetak } from "./useDetak";
 // (5 Okt 2026) Portal SIGAP satu pintu -- permintaan user: sesudah masuk, kartu menu yang tampil
 // mengikuti peran & izin akun (Transport Lokal bila punya penugasan, Admin, Kelola Peran & Akses).
 
-type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean };
+type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean; kontrak?: boolean };
 
 function bacaSesi(): string | null {
   try {
@@ -65,6 +65,8 @@ export default function PanelSaya() {
   if (saya?.token_petugas)
     kartu.push({ ikon: "🛵", judul: "Transport Lokal", ket: `Laporan harian, 5 foto, hari kerja & arsip SPJ · ${saya.jumlah_penugasan} kegiatan`, href: `/sigap/translok/${saya.token_petugas}` });
   if (saya?.admin) kartu.push({ ikon: "🛡", judul: "Admin Transport Lokal", ket: "Monitoring, penugasan & ST, kegiatan & tarif, verifikasi & kunci", href: "/sigap/admin" });
+  // (6 Okt 2026) portal Pengadaan & Kontrak -- permintaan user (template kontrak dari mail merge)
+  if (saya?.kontrak) kartu.push({ ikon: "📑", judul: "Pengadaan & Kontrak", ket: "Isi data paket (otomatis), unduh dokumen kontrak per dokumen", href: "/sigap/kontrak" });
   if (saya?.kelola_akses) kartu.push({ ikon: "🔐", judul: "Kelola Peran & Akses", ket: "Atur peran, izin per menu, dan akun", href: "/sigap/akses" });
 
   return (

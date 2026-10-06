@@ -175,7 +175,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={6} className={`${TD} py-8 text-center text-[#6B7890]`}>
+              <td colSpan={6} className={`${TD} py-8 text-center text-[#7B8794]`}>
                 Tidak ada petugas yang cocok.
               </td>
             </tr>
@@ -187,13 +187,13 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
               <Fragment key={r.penugasan_id}>
                 <tr className={dikunci ? "bg-violet-50/40" : ""}>
                   <td className={TD}>
-                    <b>{r.nama}</b> <span className="text-[#6B7890]">· {r.peran.toUpperCase()}</span>
+                    <b>{r.nama}</b> <span className="text-[#7B8794]">· {r.peran.toUpperCase()}</span>
                   </td>
                   <td className={TD}>
                     <span className="whitespace-nowrap font-semibold">
                       {r.hari_dibayar} hari{r.kelompok.length > 1 ? ` · ${r.kelompok.length} kelompok` : ""}
                     </span>
-                    <span className="block text-[11px] text-[#6B7890]">
+                    <span className="block text-[11px] text-[#7B8794]">
                       {r.kelompok.length ? r.kelompok.map((k) => rentangPendek(k.mulai, k.selesai)).join("; ") : "–"}
                       {r.hari_kerja > r.hari_dibayar ? ` · ${r.hari_kerja - r.hari_dibayar} hari tidak dibayar` : ""}
                     </span>
@@ -213,7 +213,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
                     {dikunci ? (
                       <span title={r.dikunci_oleh ? `oleh ${r.dikunci_oleh}` : undefined}>
                         <Chip w="vio">🔒 dikunci {waktuWib(r.dikunci_at).replace(/ \d{4} .*/, "")}</Chip>
-                        {r.dikunci_oleh && <span className="block text-[10.5px] text-[#6B7890]">oleh {r.dikunci_oleh}</span>}
+                        {r.dikunci_oleh && <span className="block text-[10.5px] text-[#7B8794]">oleh {r.dikunci_oleh}</span>}
                       </span>
                     ) : r.belum_selesai ? (
                       <Chip w="wait">masih berjalan</Chip>
@@ -257,7 +257,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
                 )}
                 {bukaId === r.penugasan_id && (
                   <tr>
-                    <td colSpan={6} className="border-t border-[#EEF1F5] bg-red-50/50 px-3 py-2.5">
+                    <td colSpan={6} className="border-t border-[#EDF0F4] bg-red-50/50 px-3 py-2.5">
                       <form
                         className="flex flex-wrap items-center gap-2"
                         onSubmit={(e) => {

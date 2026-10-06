@@ -95,7 +95,7 @@ export default function AkunPeranTab({ data, onMuatUlang }: { data: DataAkses; o
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={6} className={`${TD} py-8 text-center text-[#6B7890]`}>
+              <td colSpan={6} className={`${TD} py-8 text-center text-[#7B8794]`}>
                 Tidak ada data.
               </td>
             </tr>
@@ -110,12 +110,12 @@ export default function AkunPeranTab({ data, onMuatUlang }: { data: DataAkses; o
                   <Chip w={warnaPeran(kode)}>{namaPeran(x.peran_id)}</Chip>
                 </td>
                 <td className={TD}>{namaKeg(x.kegiatan_id)}</td>
-                <td className={`${TD} text-[#55627A]`}>{x.diberi_oleh ?? "–"}</td>
-                <td className={`${TD} whitespace-nowrap text-[#55627A]`}>{waktuWib(x.dibuat_at)}</td>
+                <td className={`${TD} text-[#4D5B6B]`}>{x.diberi_oleh ?? "–"}</td>
+                <td className={`${TD} whitespace-nowrap text-[#4D5B6B]`}>{waktuWib(x.dibuat_at)}</td>
                 <td className={`${TD} text-right`}>
                   {kelola &&
                     (adminTerakhir ? (
-                      <span className="text-[11px] font-semibold text-[#8592A8]" title="Admin terakhir tidak bisa dicabut, supaya sistem tidak terkunci.">
+                      <span className="text-[11px] font-semibold text-[#7B8794]" title="Admin terakhir tidak bisa dicabut, supaya sistem tidak terkunci.">
                         terkunci*
                       </span>
                     ) : (
@@ -129,7 +129,7 @@ export default function AkunPeranTab({ data, onMuatUlang }: { data: DataAkses; o
           })}
         </tbody>
       </TabelKartu>
-      <p className="px-1 text-[11.5px] text-[#6B7890]">*Admin anggaran terakhir tidak bisa dicabut, supaya sistem tidak terkunci.</p>
+      <p className="px-1 text-[11.5px] text-[#7B8794]">*Admin anggaran terakhir tidak bisa dicabut, supaya sistem tidak terkunci.</p>
     </div>
   );
 }
@@ -199,10 +199,10 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
       <form onSubmit={beri} className="flex flex-wrap items-start gap-2">
         <div className="relative min-w-[220px] flex-1">
           {akun ? (
-            <div className="flex items-center gap-2 rounded-lg border border-[#0F3D7A]/40 bg-[#E8EEF8] px-2.5 py-1.5 text-[13px]">
+            <div className="flex items-center gap-2 rounded-lg border border-[#1F6FD1]/40 bg-[#E3EEFB] px-2.5 py-1.5 text-[13px]">
               <b className="flex-1 truncate">{akun.nama}</b>
-              <span className="text-[11px] text-[#55627A]">{akun.jenis}</span>
-              <button type="button" onClick={() => setAkun(null)} className="font-bold text-[#0F3D7A]" aria-label="Ganti akun">
+              <span className="text-[11px] text-[#4D5B6B]">{akun.jenis}</span>
+              <button type="button" onClick={() => setAkun(null)} className="font-bold text-[#1F6FD1]" aria-label="Ganti akun">
                 ×
               </button>
             </div>
@@ -211,8 +211,8 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
           )}
           {!akun && q.trim().length >= 2 && (
             <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-              {mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#6B7890]">Mencari…</p>}
-              {!mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#6B7890]">Tidak ditemukan.</p>}
+              {mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Mencari…</p>}
+              {!mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Tidak ditemukan.</p>}
               {hasil.map((a) => (
                 <button
                   key={a.id}
@@ -221,10 +221,10 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
                     setAkun(a);
                     setHasil([]);
                   }}
-                  className="flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2 text-left text-[12.5px] last:border-0 hover:bg-[#F6F8FB]"
+                  className="flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2 text-left text-[12.5px] last:border-0 hover:bg-[#F8FAFC]"
                 >
                   <b className="flex-1">{a.nama}</b>
-                  <span className="text-[11px] text-[#6B7890]">
+                  <span className="text-[11px] text-[#7B8794]">
                     {a.jenis}
                     {a.alamat_kecamatan ? ` · ${a.alamat_kecamatan}` : ""}
                   </span>
@@ -261,7 +261,7 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
           {busy ? "Menyimpan…" : "Beri peran"}
         </button>
       </form>
-      {peran?.keterangan && <p className="mt-2 text-[11.5px] text-[#6B7890]">{peran.nama}: {peran.keterangan}</p>}
+      {peran?.keterangan && <p className="mt-2 text-[11.5px] text-[#7B8794]">{peran.nama}: {peran.keterangan}</p>}
       {galat && (
         <div className="mt-2">
           <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>

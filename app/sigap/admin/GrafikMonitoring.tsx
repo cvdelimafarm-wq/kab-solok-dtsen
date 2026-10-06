@@ -21,10 +21,10 @@ export type BarisGrafik = { penugasan_id: number; tujuan: string[]; status: Reco
 const URUTAN: StatusHari[] = ["lengkap", "sebagian", "terlewat", "rencana"];
 export const WARNA_STATUS: Record<StatusHari, string> = { lengkap: "#059669", sebagian: "#FBBF24", terlewat: "#EF4444", rencana: "#CBD5E1" };
 const LABEL: Record<StatusHari, string> = { lengkap: "Lengkap", sebagian: "Sebagian / hari ini", terlewat: "Terlewat", rencana: "Rencana" };
-const TINTA = "#13213A";
-const TINTA_2 = "#55627A";
-const TINTA_3 = "#8592A8";
-const GRID = "#EEF1F5";
+const TINTA = "#14202E";
+const TINTA_2 = "#4D5B6B";
+const TINTA_3 = "#7B8794";
+const GRID = "#EDF0F4";
 const SURFACE = "#FFFFFF";
 
 /** Lebar kontainer (px) via ResizeObserver, supaya SVG digambar 1:1 (teks tidak ikut mengecil). */
@@ -99,7 +99,7 @@ export default function GrafikMonitoring({ tanggal, hariIni, rows }: { tanggal: 
   );
 }
 
-const KARTU = "rounded-2xl bg-white p-4 shadow-sm lg:rounded-xl lg:border lg:border-[#E3E8F0] lg:shadow-none";
+const KARTU = "rounded-2xl bg-white p-4 shadow-sm lg:rounded-xl lg:border lg:border-[#E3E8EE] lg:shadow-none";
 
 // ---------------------------------------------------------------- a. Tren harian
 export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hariIni: string; rows: BarisGrafik[] }) {
@@ -151,20 +151,20 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
     <section className={KARTU}>
       <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-[13.5px] font-extrabold">Tren harian</h3>
-        <span className="text-[11.5px] text-[#6B7890]">jumlah petugas per status laporan</span>
+        <span className="text-[11.5px] text-[#7B8794]">jumlah petugas per status laporan</span>
         <div className="flex-1" />
-        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-[#55627A]" aria-label="Legenda">
+        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-[#4D5B6B]" aria-label="Legenda">
           {statusTampil.map((s) => (
             <li key={s} className="flex items-center gap-1.5">
               <Swatch s={s} />
-              {LABEL[s]} <b className="font-bold text-[#13213A]">{total[s]}</b>
+              {LABEL[s]} <b className="font-bold text-[#14202E]">{total[s]}</b>
             </li>
           ))}
         </ul>
       </div>
       <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
         {n === 0 || per.every((p) => p.total === 0) ? (
-          <p className="flex h-[150px] items-center justify-center text-[12px] text-[#6B7890]">Belum ada hari kerja pada rentang ini.</p>
+          <p className="flex h-[150px] items-center justify-center text-[12px] text-[#7B8794]">Belum ada hari kerja pada rentang ini.</p>
         ) : (
           <>
             <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ringkasAria} className="block max-w-full" style={{ fontFamily: "inherit" }}>
@@ -172,8 +172,8 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
               {/* sorotan hari ini */}
               {iHari >= 0 && (
                 <g>
-                  <rect x={m.l + slot * iHari} y={m.t - 4} width={slot} height={ph + 4} fill="#0F3D7A" opacity={0.06} rx={3} />
-                  <text x={Math.min(W - m.r - 2, Math.max(m.l + 2, m.l + slot * iHari + slot / 2))} y={m.t - 7} textAnchor="middle" fontSize={11} fontWeight={700} fill="#0F3D7A">
+                  <rect x={m.l + slot * iHari} y={m.t - 4} width={slot} height={ph + 4} fill="#1F6FD1" opacity={0.06} rx={3} />
+                  <text x={Math.min(W - m.r - 2, Math.max(m.l + 2, m.l + slot * iHari + slot / 2))} y={m.t - 7} textAnchor="middle" fontSize={11} fontWeight={700} fill="#1F6FD1">
                     hari ini
                   </text>
                 </g>
@@ -218,7 +218,7 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
                 const bulan = i === 0 || tglAngka(p.t) <= tiapLabel;
                 return (
                   <g key={p.t}>
-                    <text x={cx} y={H - m.b + 15} textAnchor="middle" fontSize={11} fontWeight={i === iHari ? 800 : 500} fill={i === iHari ? "#0F3D7A" : TINTA_2}>
+                    <text x={cx} y={H - m.b + 15} textAnchor="middle" fontSize={11} fontWeight={i === iHari ? 800 : 500} fill={i === iHari ? "#1F6FD1" : TINTA_2}>
                       {tglAngka(p.t)}
                     </text>
                     {bulan && (
@@ -248,7 +248,7 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
             </svg>
             {h && (
               <div
-                className="pointer-events-none absolute top-1 z-10 w-[190px] rounded-lg border border-[#E3E8F0] bg-white px-2.5 py-2 text-[11.5px] shadow-md"
+                className="pointer-events-none absolute top-1 z-10 w-[190px] rounded-lg border border-[#E3E8EE] bg-white px-2.5 py-2 text-[11.5px] shadow-md"
                 style={{ left: Math.min(Math.max(0, xTip - 95), Math.max(0, W - 190)) }}
                 role="status"
               >
@@ -256,15 +256,15 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
                   {tglPanjang(h.t)}
                 </p>
                 {statusTampil.map((s) => (
-                  <p key={s} className="flex items-center gap-1.5 text-[#55627A]">
+                  <p key={s} className="flex items-center gap-1.5 text-[#4D5B6B]">
                     <Swatch s={s} />
                     <span className="flex-1">{LABEL[s]}</span>
-                    <b className="tabular-nums text-[#13213A]">{h.c[s]}</b>
+                    <b className="tabular-nums text-[#14202E]">{h.c[s]}</b>
                   </p>
                 ))}
-                <p className="mt-1 flex border-t border-[#EEF1F5] pt-1 text-[#55627A]">
+                <p className="mt-1 flex border-t border-[#EDF0F4] pt-1 text-[#4D5B6B]">
                   <span className="flex-1">Total petugas bekerja</span>
-                  <b className="tabular-nums text-[#13213A]">{h.total}</b>
+                  <b className="tabular-nums text-[#14202E]">{h.total}</b>
                 </p>
               </div>
             )}
@@ -325,17 +325,17 @@ export function KepatuhanKecamatan({ hariIni, rows }: { hariIni: string; rows: B
     <section className={KARTU}>
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-[13.5px] font-extrabold">Kepatuhan per kecamatan</h3>
-        <span className="text-[11.5px] text-[#6B7890]">% hari lengkap s.d. hari ini</span>
+        <span className="text-[11.5px] text-[#7B8794]">% hari lengkap s.d. hari ini</span>
         <div className="flex-1" />
         {totM > 0 && (
-          <span className="text-[11.5px] text-[#55627A]">
-            Total <b className="text-[#13213A]">{Math.round((totN / totM) * 100)}%</b> ({totN}/{totM})
+          <span className="text-[11.5px] text-[#4D5B6B]">
+            Total <b className="text-[#14202E]">{Math.round((totN / totM) * 100)}%</b> ({totN}/{totM})
           </span>
         )}
       </div>
       <div ref={ref} className="max-h-[260px] overflow-y-auto">
         {data.length === 0 ? (
-          <p className="flex h-[150px] items-center justify-center text-center text-[12px] text-[#6B7890]">Belum ada hari kerja yang sudah lewat untuk dihitung.</p>
+          <p className="flex h-[150px] items-center justify-center text-center text-[12px] text-[#7B8794]">Belum ada hari kerja yang sudah lewat untuk dihitung.</p>
         ) : (
           <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} className="block max-w-full" style={{ fontFamily: "inherit" }}>
             {data.map((d, i) => {
@@ -349,7 +349,7 @@ export function KepatuhanKecamatan({ hariIni, rows }: { hariIni: string; rows: B
                   <text x={lebarLabel} y={yb + tb / 2 + 4} textAnchor="end" fontSize={11.5} fill={TINTA}>
                     {potong(d.kec)}
                   </text>
-                  <rect x={bx} y={yb} width={bwMaks} height={tb} rx={4} fill="#F1F4F8" />
+                  <rect x={bx} y={yb} width={bwMaks} height={tb} rx={4} fill="#F3F5F8" />
                   {lebar > 0 && <path d={batangKanan(bx, yb, Math.max(lebar, 3), tb, 4)} fill={WARNA_STATUS.lengkap} />}
                   <text x={bx + bwMaks + 6} y={yb + tb / 2 + 4} fontSize={11} fill={TINTA_2} style={{ fontVariantNumeric: "tabular-nums" }}>
                     <tspan fontWeight={700} fill={TINTA}>
@@ -363,7 +363,7 @@ export function KepatuhanKecamatan({ hariIni, rows }: { hariIni: string; rows: B
           </svg>
         )}
       </div>
-      {kosong > 0 && <p className="mt-1.5 text-[11px] text-[#8592A8]">{kosong} kecamatan belum punya hari kerja yang sudah lewat.</p>}
+      {kosong > 0 && <p className="mt-1.5 text-[11px] text-[#7B8794]">{kosong} kecamatan belum punya hari kerja yang sudah lewat.</p>}
     </section>
   );
 }

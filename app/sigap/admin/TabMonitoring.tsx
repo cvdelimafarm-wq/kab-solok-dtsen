@@ -32,6 +32,7 @@ type Row = {
   terlewat: string[];
   izin: string[];
   dikunci: boolean;
+  no_hp?: string | null;
 };
 type Data = {
   tanggal: string[];
@@ -41,7 +42,7 @@ type Data = {
   boleh_izin: boolean;
 };
 
-const BERGARIS = { backgroundImage: "repeating-linear-gradient(135deg, #E3E8F0 0 3px, #F6F8FB 3px 6px)" };
+const BERGARIS = { backgroundImage: "repeating-linear-gradient(135deg, #E3E8EE 0 3px, #F8FAFC 3px 6px)" };
 function Sel({ s, izin, t }: { s: Status | undefined; izin: boolean; t: string }) {
   const kelas =
     s === "lengkap"
@@ -66,6 +67,29 @@ function Sel({ s, izin, t }: { s: Status | undefined; izin: boolean; t: string }
             ? "rencana"
             : "bukan hari kerja";
   return <span title={`${tglPanjang(t)}: ${ket}`} className={`inline-block h-[18px] w-[18px] rounded-[4px] ${kelas}`} style={s === "rencana" ? BERGARIS : undefined} />;
+}
+
+// (6 Okt 2026) Pengingat petugas -- desain user (tombol "Ingatkan"). Keputusan user: TIDAK dikirim otomatis;
+// tombol membuka WhatsApp dgn pesan siap kirim (admin menekan kirim sendiri), atau menyalin pesan bila
+// nomor HP tidak ada di master.
+function perluDiingatkan(r: Row, hariIni: string): boolean {
+  if (r.dikunci) return false;
+  return r.hari_kerja === 0 || r.status[hariIni] === "sebagian" || r.terlewat.some((t) => !r.izin.includes(t));
+}
+function pesanPengingat(r: Row, hariIni: string, namaKegiatan: string): string {
+  const poin: string[] = [];
+  if (r.hari_kerja === 0) poin.push("- Hari kerja belum dipilih. Mohon pilih hari kerja di SIGAP.");
+  if (r.status[hariIni] === "sebagian") poin.push(`- Laporan & 5 foto hari ini (${tglPanjang(hariIni)}) belum lengkap. Mohon dilengkapi sebelum pukul 23.59 WIB.`);
+  const lewat = r.terlewat.filter((t) => !r.izin.includes(t));
+  if (lewat.length) poin.push(`- ${lewat.length} hari kerja terlewat (${lewat.map((t) => tglPendek(t)).join(", ")}). Hari yang tidak lengkap tidak dibayarkan; hubungi admin bila ada kendala.`);
+  const asal = typeof window !== "undefined" ? window.location.origin : "";
+  return `Yth. ${r.nama},\n\nPengingat SIGAP (transport lokal ${namaKegiatan}):\n${poin.join("\n")}\n\nMasuk: ${asal}/sigap/masuk\n\nTerima kasih.\n— Admin Anggaran BPS Kabupaten Solok`;
+}
+function nomorWa(hp: string): string {
+  let d = hp.replace(/\D/g, "");
+  if (d.startsWith("0")) d = "62" + d.slice(1);
+  else if (d.startsWith("8")) d = "62" + d;
+  return d;
 }
 
 const LABEL_STATUS: Record<Status, { teks: string; w: "ok" | "wait" | "bad" | "mut" }> = {
@@ -108,6 +132,8 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
   const [izBusy, setIzBusy] = useState(false);
   const [izPesan, setIzPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [diingatkan, setDiingatkan] = useState<Set<number>>(new Set());
   // (6 Okt 2026) tampilan tabel/matriks + urutan kolom
   const [tampilan, setTampilan] = useState<"tabel" | "matriks">("tabel");
   const [urut, setUrut] = useState<{ kol: Kolom; naik: boolean }>({ kol: "nama", naik: true });
@@ -218,15 +244,63 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
     }
   }
 
+  // (6 Okt 2026) "Ingatkan": buka WhatsApp dgn pesan siap kirim, atau salin pesan bila tak ada nomor HP.
+  async function ingatkan(r: Row) {
+    if (!data) return;
+    const teks = pesanPengingat(r, data.hari_ini, kegiatan?.nama ?? "");
+    if (r.no_hp) {
+      window.open(`https://wa.me/${nomorWa(r.no_hp)}?text=${encodeURIComponent(teks)}`, "_blank", "noopener");
+      setToast(`WhatsApp dibuka untuk ${r.nama} — periksa lalu tekan kirim.`);
+    } else {
+      try {
+        await navigator.clipboard.writeText(teks);
+        setToast(`Nomor HP ${r.nama} tidak ada di master. Pesan disalin — tempel di WhatsApp/grup.`);
+      } catch {
+        setToast(`Nomor HP ${r.nama} tidak ada di master dan pesan tidak bisa disalin otomatis.`);
+      }
+    }
+    setDiingatkan((x) => new Set(x).add(r.penugasan_id));
+    setTimeout(() => setToast(null), 4000);
+  }
+  async function salinSemua(daftar: Row[]) {
+    if (!data || !daftar.length) return;
+    const teks = daftar.map((r) => pesanPengingat(r, data.hari_ini, kegiatan?.nama ?? "")).join("\n\n────────\n\n");
+    try {
+      await navigator.clipboard.writeText(teks);
+      setToast(`Pesan pengingat untuk ${daftar.length} petugas disalin.`);
+    } catch {
+      setToast("Pesan tidak bisa disalin otomatis di browser ini.");
+    }
+    setTimeout(() => setToast(null), 4000);
+  }
+
   if (galat && !data) return <Pesan onTutup={() => muat()}>{galat}</Pesan>;
   if (!data) return <Memuat />;
   const rk = data.ringkas;
+  const perluIngat = rows.filter((r) => perluDiingatkan(r, data.hari_ini));
   const nKolMatriks = 6 + (data.boleh_izin ? 1 : 0);
   const nKolTabel = 11;
 
   return (
     <div className="space-y-3">
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
+      {toast && (
+        <div role="status" aria-live="polite" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#14202E] px-4 py-2.5 text-[13px] text-white shadow-lg">
+          {toast}
+        </div>
+      )}
+      {perluIngat.length > 0 && (
+        <Pesan jenis="galat">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="flex-1">
+              <b>{perluIngat.length} petugas perlu diingatkan</b> (belum pilih hari kerja, laporan hari ini belum lengkap, atau ada hari terlewat).
+            </span>
+            <button type="button" className={BTN_O} onClick={() => salinSemua(perluIngat)}>
+              Salin pesan pengingat
+            </button>
+          </span>
+        </Pesan>
+      )}
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KartuAngka label="Petugas aktif" nilai={rk.petugas} ket={`${rk.pml} PML · ${rk.petugas - rk.pml} lainnya`} />
         <KartuAngka label="Sudah pilih hari kerja" nilai={rk.petugas - rk.belum_pilih} ket={`${rk.belum_pilih} belum`} />
@@ -252,12 +326,12 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
             ))}
           </select>
           <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} min-w-[160px] flex-1 sm:flex-none`} />
-          <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#55627A]">
+          <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4D5B6B]">
             <input type="checkbox" checked={penuh} onChange={(e) => setPenuh(e.target.checked)} disabled={!kegiatan?.tanggal_mulai || !kegiatan?.tanggal_selesai} />
             Seluruh periode (termasuk rencana)
           </label>
           <div className="flex-1" />
-          <span className="text-[11.5px] text-[#6B7890]">
+          <span className="text-[11.5px] text-[#7B8794]">
             {rows.length} dari {data.rows.length} petugas
           </span>
         </div>
@@ -268,12 +342,12 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <h3 className="text-[14px] font-extrabold">{tampilan === "tabel" ? "Tabel monitoring petugas" : "Matriks harian"}</h3>
         {tampilan === "matriks" && (
-          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] font-semibold text-[#6B7890]">
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] font-semibold text-[#7B8794]">
             <Sel s="lengkap" izin={false} t={hariIni} /> lengkap <Sel s="sebagian" izin={false} t={hariIni} /> sebagian/hari ini <Sel s="terlewat" izin={false} t={hariIni} /> terlewat{" "}
             <Sel s="terlewat" izin t={hariIni} /> terlewat + izin <Sel s="rencana" izin={false} t={hariIni} /> rencana <Sel s={undefined} izin={false} t={hariIni} /> bukan hari kerja
           </span>
         )}
-        {tampilan === "tabel" && <span className="text-[11.5px] text-[#6B7890]">klik judul kolom untuk mengurutkan · klik baris untuk detail</span>}
+        {tampilan === "tabel" && <span className="text-[11.5px] text-[#7B8794]">klik judul kolom untuk mengurutkan · klik baris untuk detail</span>}
         <div className="flex-1" />
         <div role="tablist" aria-label="Pilih tampilan" className="inline-flex rounded-lg border border-[#D5DCE7] bg-white p-0.5 text-[12px] font-bold">
           {(["tabel", "matriks"] as const).map((t) => (
@@ -283,7 +357,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
               role="tab"
               aria-selected={tampilan === t}
               onClick={() => gantiTampilan(t)}
-              className={`rounded-md px-3 py-1 transition ${tampilan === t ? "bg-[#0F3D7A] text-white" : "text-[#55627A] hover:text-[#0F3D7A]"}`}
+              className={`rounded-md px-3 py-1 transition ${tampilan === t ? "bg-[#1F6FD1] text-white" : "text-[#4D5B6B] hover:text-[#1F6FD1]"}`}
             >
               {t === "tabel" ? "Tabel" : "Matriks harian"}
             </button>
@@ -331,7 +405,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
           <tbody>
             {rowsUrut.length === 0 && (
               <tr>
-                <td colSpan={nKolTabel} className={`${TD} py-8 text-center text-[#6B7890]`}>
+                <td colSpan={nKolTabel} className={`${TD} py-8 text-center text-[#7B8794]`}>
                   Tidak ada petugas yang cocok dengan filter.
                 </td>
               </tr>
@@ -343,9 +417,9 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
               const pct = mt.persen == null ? null : Math.round(mt.persen * 100);
               return (
                 <Fragment key={r.penugasan_id}>
-                  <tr onClick={() => setBuka(terbuka ? null : r.penugasan_id)} className={`cursor-pointer hover:bg-[#F6F8FB] ${terbuka ? "bg-[#F6F8FB]" : ""}`}>
+                  <tr onClick={() => setBuka(terbuka ? null : r.penugasan_id)} className={`cursor-pointer hover:bg-[#F8FAFC] ${terbuka ? "bg-[#F8FAFC]" : ""}`}>
                     <td className={`${TD} whitespace-nowrap font-bold`}>
-                      <span className="mr-1 text-[10px] text-[#8592A8]">{terbuka ? "▾" : "▸"}</span>
+                      <span className="mr-1 text-[10px] text-[#7B8794]">{terbuka ? "▾" : "▸"}</span>
                       {r.nama}
                       {r.dikunci && (
                         <span className="ml-1" title="SPJ dikunci">
@@ -364,21 +438,21 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                         `${r.hari_kerja} / ${r.maks}`
                       ) : (
                         <>
-                          {r.hari_kerja} <span className="text-[11px] text-[#8592A8]">/ tanpa batas</span>
+                          {r.hari_kerja} <span className="text-[11px] text-[#7B8794]">/ tanpa batas</span>
                         </>
                       )}
                     </td>
                     <td className={`${TD} text-right tabular-nums`}>{r.lengkap}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{mt.sebagian || <span className="text-[#B4BFD0]">0</span>}</td>
+                    <td className={`${TD} text-right tabular-nums`}>{mt.sebagian || <span className="text-[#CDD5DE]">0</span>}</td>
                     <td className={`${TD} text-right tabular-nums`}>
-                      {r.terlewat.length ? <span className="font-bold text-red-700">{r.terlewat.length}</span> : <span className="text-[#B4BFD0]">0</span>}
+                      {r.terlewat.length ? <span className="font-bold text-red-700">{r.terlewat.length}</span> : <span className="text-[#CDD5DE]">0</span>}
                     </td>
                     <td className={`${TD} text-right`}>
                       {pct == null ? (
-                        <span className="text-[#B4BFD0]">–</span>
+                        <span className="text-[#CDD5DE]">–</span>
                       ) : (
                         <span className="inline-flex items-center justify-end gap-1.5" title={`${r.lengkap} dari ${mt.dasar} hari kerja s.d. hari ini lengkap`}>
-                          <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-[#F1F4F8] sm:inline-block" aria-hidden>
+                          <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-[#F3F5F8] sm:inline-block" aria-hidden>
                             <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: pct >= 80 ? "#059669" : pct >= 50 ? "#FBBF24" : "#EF4444" }} />
                           </span>
                           <b className="tabular-nums">{pct}%</b>
@@ -389,12 +463,22 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                       {mt.hariIni ? (
                         <Chip w={LABEL_STATUS[mt.hariIni].w}>{mt.hariIni === "sebagian" ? "belum lengkap" : LABEL_STATUS[mt.hariIni].teks}</Chip>
                       ) : (
-                        <span className="text-[11.5px] text-[#8592A8]">bukan hari kerja</span>
+                        <span className="text-[11.5px] text-[#7B8794]">bukan hari kerja</span>
                       )}
                     </td>
-                    <td className={`${TD} text-right`}>{r.izin.length ? <Chip w="vio">{r.izin.length} aktif</Chip> : <span className="text-[#B4BFD0]">–</span>}</td>
+                    <td className={`${TD} text-right`}>{r.izin.length ? <Chip w="vio">{r.izin.length} aktif</Chip> : <span className="text-[#CDD5DE]">–</span>}</td>
                     <td className={`${TD} whitespace-nowrap`} onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5">
+                        {perluDiingatkan(r, data.hari_ini) && (
+                          <button
+                            type="button"
+                            onClick={() => ingatkan(r)}
+                            className={`inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-[7px] border px-2.5 text-[12px] ${diingatkan.has(r.penugasan_id) ? "border-[#DFF2EC] text-[#12816A]" : "border-[#CDD5DE] bg-white hover:bg-[#F8FAFC]"}`}
+                            title={r.no_hp ? `Buka WhatsApp ke ${r.no_hp} dengan pesan siap kirim` : "Nomor HP tidak ada — pesan akan disalin"}
+                          >
+                            {diingatkan.has(r.penugasan_id) ? "✓ Diingatkan" : r.no_hp ? "Ingatkan" : "Salin pesan"}
+                          </button>
+                        )}
                         {/* izin susulan cepat bila ada tanggal terlewat; selain itu tombol Detail (baris juga bisa diklik) */}
                         {data.boleh_izin && tglIzinBerikut ? (
                           <button
@@ -408,7 +492,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                         ) : (
                           <button
                             type="button"
-                            className="px-1 text-[11.5px] font-bold text-[#0F3D7A] hover:underline"
+                            className="px-1 text-[11.5px] font-bold text-[#1F6FD1] hover:underline"
                             onClick={() => setBuka(terbuka ? null : r.penugasan_id)}
                             aria-expanded={terbuka}
                           >
@@ -434,9 +518,9 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
               <th className={TH}>
                 <div className="flex gap-[3px]">
                   {data.tanggal.map((t, i) => (
-                    <span key={t} className={`flex w-[18px] flex-col items-center leading-none ${t === data.hari_ini ? "text-[#0F3D7A]" : ""}`} title={tglPanjang(t)}>
-                      <span className="text-[8.5px] font-bold text-[#8592A8]">{i === 0 || tglAngka(t) === 1 ? bulanSingkat(t) : hariSingkat(t).slice(0, 2)}</span>
-                      <span className={`text-[10.5px] ${t === data.hari_ini ? "rounded bg-[#F5B841] px-0.5 text-[#1E2A47]" : ""}`}>{tglAngka(t)}</span>
+                    <span key={t} className={`flex w-[18px] flex-col items-center leading-none ${t === data.hari_ini ? "text-[#1F6FD1]" : ""}`} title={tglPanjang(t)}>
+                      <span className="text-[8.5px] font-bold text-[#7B8794]">{i === 0 || tglAngka(t) === 1 ? bulanSingkat(t) : hariSingkat(t).slice(0, 2)}</span>
+                      <span className={`text-[10.5px] ${t === data.hari_ini ? "rounded bg-[#D9971F] px-0.5 text-[#0E2A47]" : ""}`}>{tglAngka(t)}</span>
                     </span>
                   ))}
                   {data.tanggal.length === 0 && <span>Tanggal</span>}
@@ -450,7 +534,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={nKolMatriks} className={`${TD} py-8 text-center text-[#6B7890]`}>
+                <td colSpan={nKolMatriks} className={`${TD} py-8 text-center text-[#7B8794]`}>
                   Tidak ada petugas yang cocok dengan filter.
                 </td>
               </tr>
@@ -460,9 +544,9 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
               const tglIzinBerikut = r.terlewat.find((t) => !r.izin.includes(t));
               return (
                 <Fragment key={r.penugasan_id}>
-                  <tr onClick={() => setBuka(terbuka ? null : r.penugasan_id)} className={`cursor-pointer hover:bg-[#F6F8FB] ${terbuka ? "bg-[#F6F8FB]" : ""}`}>
+                  <tr onClick={() => setBuka(terbuka ? null : r.penugasan_id)} className={`cursor-pointer hover:bg-[#F8FAFC] ${terbuka ? "bg-[#F8FAFC]" : ""}`}>
                     <td className={`${TD} sticky left-0 z-10 bg-white font-bold`}>
-                      <span className="mr-1 text-[10px] text-[#8592A8]">{terbuka ? "▾" : "▸"}</span>
+                      <span className="mr-1 text-[10px] text-[#7B8794]">{terbuka ? "▾" : "▸"}</span>
                       {r.nama}
                       {r.dikunci && (
                         <span className="ml-1" title="SPJ dikunci">
@@ -516,7 +600,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
         <div ref={formRef}>
           <Kartu judul="Beri izin upload susulan" ket="Riwayat izin tercatat: siapa memberi, kapan, alasan.">
             {punyaTerlewat.length === 0 ? (
-              <p className="text-[12.5px] text-[#6B7890]">Tidak ada petugas dengan tanggal terlewat. 🎉</p>
+              <p className="text-[12.5px] text-[#7B8794]">Tidak ada petugas dengan tanggal terlewat. 🎉</p>
             ) : (
               <form onSubmit={beriIzin} className="flex flex-wrap items-center gap-2">
                 <select
@@ -587,7 +671,7 @@ function ThUrut({
   const aktif = urut.kol === kol;
   return (
     <th className={`${TH} ${kanan ? "text-right" : ""}`} aria-sort={aktif ? (urut.naik ? "ascending" : "descending") : "none"} title={title}>
-      <button type="button" onClick={() => onUrut(kol)} className={`inline-flex items-center gap-1 hover:text-[#0F3D7A] ${aktif ? "text-[#0F3D7A]" : ""}`}>
+      <button type="button" onClick={() => onUrut(kol)} className={`inline-flex items-center gap-1 hover:text-[#1F6FD1] ${aktif ? "text-[#1F6FD1]" : ""}`}>
         {children}
         <span aria-hidden className={`text-[9px] ${aktif ? "" : "opacity-30"}`}>
           {aktif ? (urut.naik ? "▲" : "▼") : "▲▼"}
@@ -601,15 +685,15 @@ function BarisDetail({ r, nKol, bolehIzin, onIzin }: { r: Row; nKol: number; bol
   const tgl = Object.keys(r.status).sort();
   return (
     <tr>
-      <td colSpan={nKol} className="border-t border-[#EEF1F5] bg-[#F6F8FB] px-3 py-3">
+      <td colSpan={nKol} className="border-t border-[#EDF0F4] bg-[#F8FAFC] px-3 py-3">
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <b>{r.nama}</b>
-          <span className="text-[#6B7890]">
+          <span className="text-[#7B8794]">
             · {r.peran.toUpperCase()} · tujuan {r.tujuan.join(", ") || "–"} · {r.hari_kerja} hari kerja{r.maks ? ` (maks ${r.maks})` : " (tanpa batas)"}
           </span>
         </div>
         {tgl.length === 0 ? (
-          <p className="mt-2 text-[12px] text-[#6B7890]">Petugas belum memilih hari kerja.</p>
+          <p className="mt-2 text-[12px] text-[#7B8794]">Petugas belum memilih hari kerja.</p>
         ) : (
           <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {tgl.map((t) => {
@@ -621,7 +705,7 @@ function BarisDetail({ r, nKol, bolehIzin, onIzin }: { r: Row; nKol: number; bol
                   <Chip w={LABEL_STATUS[s]?.w ?? "mut"}>{LABEL_STATUS[s]?.teks ?? s}</Chip>
                   {izin && <Chip w="vio">izin</Chip>}
                   {bolehIzin && s === "terlewat" && !izin && (
-                    <button type="button" onClick={() => onIzin(t)} className="text-[11px] font-bold text-[#0F3D7A] underline">
+                    <button type="button" onClick={() => onIzin(t)} className="text-[11px] font-bold text-[#1F6FD1] underline">
                       beri izin
                     </button>
                   )}

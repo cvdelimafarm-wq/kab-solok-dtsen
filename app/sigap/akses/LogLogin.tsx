@@ -94,7 +94,7 @@ export default function LogLogin() {
   if (!rows) return <Memuat />;
 
   const SortTh = ({ k, children }: { k: Urut; children: React.ReactNode }) => (
-    <th className={`${TH} cursor-pointer select-none hover:text-[#0F3D7A]`} onClick={() => setUrut(k)}>
+    <th className={`${TH} cursor-pointer select-none hover:text-[#1F6FD1]`} onClick={() => setUrut(k)}>
       {children}
       {urut === k ? " ▾" : ""}
     </th>
@@ -121,7 +121,7 @@ export default function LogLogin() {
           </div>
         }
       >
-        <p className="text-[11.5px] text-[#6B7890]">
+        <p className="text-[11.5px] text-[#7B8794]">
           Durasi = perkiraan waktu aktif (dari masuk s.d. aktivitas terakhir di halaman SIGAP). Jeda lebih dari 30 menit dihitung sebagai sesi baru. Pencatatan mulai 6 Okt 2026.
         </p>
       </Kartu>
@@ -142,7 +142,7 @@ export default function LogLogin() {
         <tbody>
           {tampil.length === 0 && (
             <tr>
-              <td colSpan={9} className={`${TD} py-8 text-center text-[#6B7890]`}>
+              <td colSpan={9} className={`${TD} py-8 text-center text-[#7B8794]`}>
                 Belum ada aktivitas tercatat pada rentang ini.
               </td>
             </tr>
@@ -151,7 +151,7 @@ export default function LogLogin() {
             const online = r.terakhir_aktif && Date.now() - Date.parse(r.terakhir_aktif) < 5 * 60_000;
             return (
               <Fragment key={r.akun_id}>
-                <tr className="cursor-pointer hover:bg-[#F6F8FB]" onClick={() => bukaDetail(r.akun_id)}>
+                <tr className="cursor-pointer hover:bg-[#F8FAFC]" onClick={() => bukaDetail(r.akun_id)}>
                   <td className={`${TD} font-semibold`}>
                     {online && <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" title="Sedang online" />}
                     {r.nama}
@@ -161,7 +161,7 @@ export default function LogLogin() {
                       {r.peran.length ? r.peran.map((p) => <Chip key={p} w="navy">{p}</Chip>) : <Chip>{r.jenis || "–"}</Chip>}
                     </span>
                   </td>
-                  <td className={`${TD} whitespace-nowrap text-[#55627A]`}>{r.terakhir_masuk ? waktuWib(r.terakhir_masuk) : "–"}</td>
+                  <td className={`${TD} whitespace-nowrap text-[#4D5B6B]`}>{r.terakhir_masuk ? waktuWib(r.terakhir_masuk) : "–"}</td>
                   <td className={`${TD} whitespace-nowrap`} title={r.terakhir_aktif ? waktuWib(r.terakhir_aktif) : ""}>
                     {relatif(r.terakhir_aktif)}
                   </td>
@@ -169,17 +169,17 @@ export default function LogLogin() {
                   <td className={TD}>{r.jumlah_sesi}</td>
                   <td className={`${TD} whitespace-nowrap`}>{durasi(r.total_7hari_detik)}</td>
                   <td className={`${TD} whitespace-nowrap font-semibold`}>{durasi(r.total_detik)}</td>
-                  <td className={`${TD} whitespace-nowrap text-[11.5px] text-[#55627A]`}>{r.perangkat ?? "–"}</td>
+                  <td className={`${TD} whitespace-nowrap text-[11.5px] text-[#4D5B6B]`}>{r.perangkat ?? "–"}</td>
                 </tr>
                 {buka === r.akun_id && (
                   <tr>
-                    <td colSpan={9} className="bg-[#F6F8FB] px-3 py-2">
+                    <td colSpan={9} className="bg-[#F8FAFC] px-3 py-2">
                       {!detail[r.akun_id] ? (
                         <Memuat teks="Memuat sesi…" />
                       ) : (
                         <table className="w-full text-[12px]">
                           <thead>
-                            <tr className="text-left text-[11px] text-[#6B7890]">
+                            <tr className="text-left text-[11px] text-[#7B8794]">
                               <th className="py-1 pr-3">Mulai</th>
                               <th className="py-1 pr-3">Terakhir aktif</th>
                               <th className="py-1 pr-3">Durasi</th>
@@ -190,7 +190,7 @@ export default function LogLogin() {
                           </thead>
                           <tbody>
                             {detail[r.akun_id].map((x) => (
-                              <tr key={x.id} className="border-t border-[#E3E8F0]">
+                              <tr key={x.id} className="border-t border-[#E3E8EE]">
                                 <td className="py-1 pr-3 whitespace-nowrap">{waktuWib(x.mulai_at)}</td>
                                 <td className="py-1 pr-3 whitespace-nowrap">{waktuWib(x.terakhir_aktif_at)}</td>
                                 <td className="py-1 pr-3 whitespace-nowrap">{durasi(Math.round((Date.parse(x.terakhir_aktif_at) - Date.parse(x.mulai_at)) / 1000))}</td>

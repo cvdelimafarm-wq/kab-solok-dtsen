@@ -67,17 +67,17 @@ export default function PaletPerintah({ buka, onTutup, item }: { buka: boolean; 
 
   let grupLalu = "";
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[#13213A]/30 px-4 pt-[12vh]" onMouseDown={onTutup}>
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[#14202E]/30 px-4 pt-[12vh]" onMouseDown={onTutup}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Palet perintah"
-        className="w-full max-w-[560px] overflow-hidden rounded-xl border border-[#E3E8F0] bg-white shadow-xl"
+        className="w-full max-w-[560px] overflow-hidden rounded-xl border border-[#E3E8EE] bg-white shadow-xl"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKey}
       >
-        <div className="flex items-center gap-2 border-b border-[#E3E8F0] px-3 py-2.5">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7890" strokeWidth="2" strokeLinecap="round" aria-hidden>
+        <div className="flex items-center gap-2 border-b border-[#E3E8EE] px-3 py-2.5">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7B8794" strokeWidth="2" strokeLinecap="round" aria-hidden>
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
           </svg>
@@ -86,22 +86,22 @@ export default function PaletPerintah({ buka, onTutup, item }: { buka: boolean; 
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Cari kegiatan, menu…"
-            className="flex-1 bg-transparent text-[13px] text-[#13213A] outline-none placeholder:text-[#8592A8]"
+            className="flex-1 bg-transparent text-[13px] text-[#14202E] outline-none placeholder:text-[#7B8794]"
             role="combobox"
             aria-expanded="true"
             aria-controls="palet-daftar"
             aria-activedescendant={hasil[pilih] ? `palet-${hasil[pilih].id}` : undefined}
           />
-          <kbd className="rounded border border-[#E3E8F0] px-1.5 text-[10.5px] text-[#6B7890]">Esc</kbd>
+          <kbd className="rounded border border-[#E3E8EE] px-1.5 text-[10.5px] text-[#7B8794]">Esc</kbd>
         </div>
         <ul id="palet-daftar" ref={listRef} role="listbox" className="max-h-[50vh] overflow-y-auto py-1">
-          {hasil.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-[#6B7890]">Tidak ada yang cocok dengan “{q}”.</li>}
+          {hasil.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-[#7B8794]">Tidak ada yang cocok dengan “{q}”.</li>}
           {hasil.map((x, i) => {
             const judulGrup = x.grup !== grupLalu ? x.grup : null;
             grupLalu = x.grup;
             return (
               <li key={x.id}>
-                {judulGrup && <p className="px-4 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-wider text-[#8592A8]">{judulGrup}</p>}
+                {judulGrup && <p className="px-4 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-wider text-[#7B8794]">{judulGrup}</p>}
                 <button
                   type="button"
                   id={`palet-${x.id}`}
@@ -110,11 +110,11 @@ export default function PaletPerintah({ buka, onTutup, item }: { buka: boolean; 
                   aria-selected={i === pilih}
                   onMouseEnter={() => setPilih(i)}
                   onClick={() => jalankan(x)}
-                  className={`flex w-full items-center gap-2 px-4 py-2 text-left text-[12.5px] ${i === pilih ? "bg-[#E8EEF8] text-[#0F3D7A]" : "text-[#13213A]"}`}
+                  className={`flex w-full items-center gap-2 px-4 py-2 text-left text-[12.5px] ${i === pilih ? "bg-[#E3EEFB] text-[#1F6FD1]" : "text-[#14202E]"}`}
                 >
                   <span className="min-w-0 flex-1 truncate font-semibold">{x.label}</span>
-                  {x.ket && <span className="shrink-0 text-[11px] text-[#6B7890]">{x.ket}</span>}
-                  {i === pilih && <span className="shrink-0 text-[11px] text-[#6B7890]">↵</span>}
+                  {x.ket && <span className="shrink-0 text-[11px] text-[#7B8794]">{x.ket}</span>}
+                  {i === pilih && <span className="shrink-0 text-[11px] text-[#7B8794]">↵</span>}
                 </button>
               </li>
             );

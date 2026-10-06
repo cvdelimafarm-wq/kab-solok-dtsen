@@ -112,7 +112,7 @@ export default function TabPenugasan({ kegiatanId }: { kegiatanId: number }) {
         kanan={
           <div className="flex flex-wrap items-center gap-2">
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama / no. ST…" className={`${INPUT} w-48`} />
-            <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#55627A]">
+            <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4D5B6B]">
               <input type="checkbox" checked={nonaktif} onChange={(e) => setNonaktif(e.target.checked)} /> tampilkan nonaktif
             </label>
           </div>
@@ -132,17 +132,17 @@ export default function TabPenugasan({ kegiatanId }: { kegiatanId: number }) {
         <tbody>
           {baris.length === 0 && (
             <tr>
-              <td colSpan={9} className={`${TD} py-8 text-center text-[#6B7890]`}>
+              <td colSpan={9} className={`${TD} py-8 text-center text-[#7B8794]`}>
                 Belum ada petugas{cari ? " yang cocok" : ""}.
               </td>
             </tr>
           )}
           {baris.map((b) => (
             <Fragment key={b.id}>
-              <tr className={`${b.aktif ? "" : "opacity-60"} ${ubahId === b.id ? "bg-[#F6F8FB]" : ""}`}>
+              <tr className={`${b.aktif ? "" : "opacity-60"} ${ubahId === b.id ? "bg-[#F8FAFC]" : ""}`}>
                 <td className={`${TD} font-bold`}>
                   {b.nama}
-                  {b.jenis === "organik" && <span className="ml-1 text-[10.5px] font-semibold text-[#6B7890]">(organik)</span>}
+                  {b.jenis === "organik" && <span className="ml-1 text-[10.5px] font-semibold text-[#7B8794]">(organik)</span>}
                   {b.dikunci_at && <span className="ml-1" title="SPJ dikunci">🔒</span>}
                 </td>
                 <td className={TD}>{b.peran.toUpperCase()}</td>
@@ -150,8 +150,8 @@ export default function TabPenugasan({ kegiatanId }: { kegiatanId: number }) {
                 <td className={`${TD} max-w-[180px] truncate`} title={b.st?.tujuan.join(", ")}>
                   {b.st?.tujuan.join(", ") || "–"}
                 </td>
-                <td className={`${TD} whitespace-nowrap`}>{b.st && (b.st.mulai || b.st.selesai) ? rentangPendek(b.st.mulai, b.st.selesai) : <span className="text-[#8592A8]">periode kegiatan</span>}</td>
-                <td className={`${TD} whitespace-nowrap`}>{b.maks_hari != null ? b.maks_hari : <span className="text-[#8592A8]">{b.maks_efektif != null ? `${b.maks_efektif} (default)` : "– (tanpa batas)"}</span>}</td>
+                <td className={`${TD} whitespace-nowrap`}>{b.st && (b.st.mulai || b.st.selesai) ? rentangPendek(b.st.mulai, b.st.selesai) : <span className="text-[#7B8794]">periode kegiatan</span>}</td>
+                <td className={`${TD} whitespace-nowrap`}>{b.maks_hari != null ? b.maks_hari : <span className="text-[#7B8794]">{b.maks_efektif != null ? `${b.maks_efektif} (default)` : "– (tanpa batas)"}</span>}</td>
                 <td className={TD}>
                   {b.st?.ada_file ? (
                     <button type="button" onClick={() => lihatSt(b.st!.id)} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100">
@@ -170,7 +170,7 @@ export default function TabPenugasan({ kegiatanId }: { kegiatanId: number }) {
               </tr>
               {ubahId === b.id && (
                 <tr>
-                  <td colSpan={9} className="border-t border-[#EEF1F5] bg-[#F6F8FB] px-3 py-3">
+                  <td colSpan={9} className="border-t border-[#EDF0F4] bg-[#F8FAFC] px-3 py-3">
                     <PanelUbah
                       b={b}
                       kelola={kelola}
@@ -244,7 +244,7 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
     }
   }
 
-  const label = "text-[11px] font-bold text-[#6B7890]";
+  const label = "text-[11px] font-bold text-[#7B8794]";
   return (
     <div className="space-y-2">
       {galat && (
@@ -385,10 +385,10 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
       <div className="flex flex-wrap items-start gap-2">
         <div className="relative min-w-[200px] flex-1">
           {pilih ? (
-            <div className="flex items-center gap-2 rounded-lg border border-[#0F3D7A]/40 bg-[#E8EEF8] px-2.5 py-1.5 text-[13px]">
+            <div className="flex items-center gap-2 rounded-lg border border-[#1F6FD1]/40 bg-[#E3EEFB] px-2.5 py-1.5 text-[13px]">
               <b className="flex-1 truncate">{pilih.nama}</b>
-              <span className="text-[11px] text-[#55627A]">{pilih.jenis}</span>
-              <button type="button" onClick={() => setPilih(null)} className="font-bold text-[#0F3D7A]" aria-label="Ganti akun">
+              <span className="text-[11px] text-[#4D5B6B]">{pilih.jenis}</span>
+              <button type="button" onClick={() => setPilih(null)} className="font-bold text-[#1F6FD1]" aria-label="Ganti akun">
                 ×
               </button>
             </div>
@@ -397,8 +397,8 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
           )}
           {!pilih && q.trim().length >= 2 && (
             <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-              {mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#6B7890]">Mencari…</p>}
-              {!mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#6B7890]">Tidak ditemukan.</p>}
+              {mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Mencari…</p>}
+              {!mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Tidak ditemukan.</p>}
               {hasil.map((a) => (
                 <button
                   key={a.id}
@@ -407,10 +407,10 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
                     setPilih(a);
                     setHasil([]);
                   }}
-                  className="flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2 text-left text-[12.5px] last:border-0 hover:bg-[#F6F8FB]"
+                  className="flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2 text-left text-[12.5px] last:border-0 hover:bg-[#F8FAFC]"
                 >
                   <b className="flex-1">{a.nama}</b>
-                  <span className="text-[11px] text-[#6B7890]">
+                  <span className="text-[11px] text-[#7B8794]">
                     {a.jenis}
                     {a.alamat_kecamatan ? ` · ${a.alamat_kecamatan}` : ""}
                   </span>
@@ -438,7 +438,7 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
           <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>
         </div>
       )}
-      <p className="mt-2 text-[11.5px] text-[#6B7890]">Bila akun sudah pernah ditugaskan di kegiatan ini, datanya diperbarui dan diaktifkan kembali.</p>
+      <p className="mt-2 text-[11.5px] text-[#7B8794]">Bila akun sudah pernah ditugaskan di kegiatan ini, datanya diperbarui dan diaktifkan kembali.</p>
     </Kartu>
   );
 }

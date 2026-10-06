@@ -19,7 +19,7 @@ export function DaftarPortal({ data }: { data: DataAkses }) {
   return (
     <div className="space-y-3">
       <Kartu judul="🚌 Transport Lokal (petugas)">
-        <p className="text-[12.5px] text-[#55627A]">Isi laporan, foto, hari kerja &amp; arsip SPJ. Tampil otomatis bagi akun yang punya penugasan aktif — tidak diatur lewat peran.</p>
+        <p className="text-[12.5px] text-[#4D5B6B]">Isi laporan, foto, hari kerja &amp; arsip SPJ. Tampil otomatis bagi akun yang punya penugasan aktif — tidak diatur lewat peran.</p>
       </Kartu>
       {grup.map((g) => (
         <Kartu key={g.portal} judul={`${ikonPortal(g.portal)} ${g.portal}`} ket={`${g.menu.length} menu`}>
@@ -37,8 +37,8 @@ export function DaftarPortal({ data }: { data: DataAkses }) {
                 {g.menu.map((m) => (
                   <tr key={m.kode}>
                     <td className={`${TD} font-bold`}>{m.nama}</td>
-                    <td className={`${TD} font-mono text-[11.5px] text-[#55627A]`}>{m.kode}</td>
-                    <td className={`${TD} text-[#55627A]`}>{m.keterangan ?? "–"}</td>
+                    <td className={`${TD} font-mono text-[11.5px] text-[#4D5B6B]`}>{m.kode}</td>
+                    <td className={`${TD} text-[#4D5B6B]`}>{m.keterangan ?? "–"}</td>
                     <td className={TD}>
                       <div className="flex flex-wrap gap-1">
                         {peranMenu(m.kode).map((x) => (
@@ -57,7 +57,7 @@ export function DaftarPortal({ data }: { data: DataAkses }) {
         </Kartu>
       ))}
       <Kartu judul="📊 RAB/POK · Revisi · Perjadin · Honor">
-        <p className="text-[12.5px] text-[#8592A8]">Menyusul — menunya otomatis muncul di sini saat modulnya dibuat.</p>
+        <p className="text-[12.5px] text-[#7B8794]">Menyusul — menunya otomatis muncul di sini saat modulnya dibuat.</p>
       </Kartu>
     </div>
   );
@@ -157,19 +157,19 @@ export function Riwayat() {
         <tbody>
           {tampil.length === 0 && (
             <tr>
-              <td colSpan={4} className={`${TD} py-8 text-center text-[#6B7890]`}>
+              <td colSpan={4} className={`${TD} py-8 text-center text-[#7B8794]`}>
                 Belum ada riwayat.
               </td>
             </tr>
           )}
           {tampil.map((r) => (
             <tr key={r.id}>
-              <td className={`${TD} whitespace-nowrap text-[#55627A]`}>{waktuWib(r.waktu)}</td>
+              <td className={`${TD} whitespace-nowrap text-[#4D5B6B]`}>{waktuWib(r.waktu)}</td>
               <td className={`${TD} whitespace-nowrap font-semibold`}>{r.oleh}</td>
               <td className={`${TD} whitespace-nowrap`}>
                 <Chip w={r.aksi.includes("kunci") ? "vio" : r.aksi.includes("cabut") ? "bad" : "navy"}>{LABEL_AKSI[r.aksi] ?? r.aksi}</Chip>
               </td>
-              <td className={`${TD} max-w-[520px] text-[11.5px] text-[#55627A]`} title={JSON.stringify(r.detail ?? {}, null, 1)}>
+              <td className={`${TD} max-w-[520px] text-[11.5px] text-[#4D5B6B]`} title={JSON.stringify(r.detail ?? {}, null, 1)}>
                 {ringkasDetail(r.detail)}
               </td>
             </tr>

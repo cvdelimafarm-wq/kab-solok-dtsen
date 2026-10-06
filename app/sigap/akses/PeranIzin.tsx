@@ -79,10 +79,10 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
             <th className={`${TH} sticky left-0 z-10 min-w-[220px]`}>Portal / menu</th>
             {data.peran.map((p) => (
               <th key={p.id} className={`${TH} min-w-[120px] text-center`}>
-                <span className="block text-[11.5px] text-[#13213A]">{p.nama}</span>
-                <span className="block font-semibold normal-case text-[#8592A8]">{p.butuh_lingkup ? "per kegiatan" : "semua kegiatan"}</span>
+                <span className="block text-[11.5px] text-[#14202E]">{p.nama}</span>
+                <span className="block font-semibold normal-case text-[#7B8794]">{p.butuh_lingkup ? "per kegiatan" : "semua kegiatan"}</span>
                 {kelola && (
-                  <button type="button" onClick={() => setFormPeran(p)} className="mt-0.5 text-[10.5px] font-bold text-[#0F3D7A] underline">
+                  <button type="button" onClick={() => setFormPeran(p)} className="mt-0.5 text-[10.5px] font-bold text-[#1F6FD1] underline">
                     ubah
                   </button>
                 )}
@@ -92,14 +92,14 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
         </thead>
         <tbody>
           <tr>
-            <td colSpan={data.peran.length + 1} className="border-t border-[#EEF1F5] bg-[#F6F8FB] px-3 py-2 font-extrabold">
+            <td colSpan={data.peran.length + 1} className="border-t border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2 font-extrabold">
               🚌 Transport Lokal (petugas)
             </td>
           </tr>
           <tr>
             <td className={`${TD} sticky left-0 z-10 bg-white`}>
               Isi laporan, foto, hari kerja, arsip SPJ saya
-              <span className="block text-[11px] text-[#6B7890]">Otomatis untuk akun yang punya penugasan aktif (tidak diatur di sini).</span>
+              <span className="block text-[11px] text-[#7B8794]">Otomatis untuk akun yang punya penugasan aktif (tidak diatur di sini).</span>
             </td>
             {data.peran.map((p) => (
               <td key={p.id} className={`${TD} text-center`}>
@@ -113,7 +113,7 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
                 <tr key={m.kode} className="hover:bg-[#FAFBFD]">
                   <td className={`${TD} sticky left-0 z-10 bg-white`}>
                     <span className="font-semibold">{m.nama}</span>
-                    {m.keterangan && <span className="block text-[11px] text-[#6B7890]">{m.keterangan}</span>}
+                    {m.keterangan && <span className="block text-[11px] text-[#7B8794]">{m.keterangan}</span>}
                   </td>
                   {data.peran.map((p) => {
                     const lv = level(p.id, m.kode);
@@ -156,13 +156,13 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
             </GrupPortal>
           ))}
           <tr>
-            <td colSpan={data.peran.length + 1} className="border-t border-[#EEF1F5] bg-[#F6F8FB] px-3 py-2 font-extrabold text-[#8592A8]">
+            <td colSpan={data.peran.length + 1} className="border-t border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2 font-extrabold text-[#7B8794]">
               📊 RAB/POK · Revisi · Perjadin · Honor (menyusul — otomatis muncul di sini saat modulnya dibuat)
             </td>
           </tr>
         </tbody>
       </TabelKartu>
-      <p className="px-1 text-[11.5px] text-[#6B7890]">Izin “Kelola Akses” milik Admin Anggaran dikunci, supaya selalu ada yang bisa mengatur akses.</p>
+      <p className="px-1 text-[11.5px] text-[#7B8794]">Izin “Kelola Akses” milik Admin Anggaran dikunci, supaya selalu ada yang bisa mengatur akses.</p>
     </div>
   );
 }
@@ -171,7 +171,7 @@ function GrupPortal({ judul, kolom, children }: { judul: string; kolom: number; 
   return (
     <>
       <tr>
-        <td colSpan={kolom} className="border-t border-[#EEF1F5] bg-[#F6F8FB] px-3 py-2 font-extrabold">
+        <td colSpan={kolom} className="border-t border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2 font-extrabold">
           {judul}
         </td>
       </tr>
@@ -204,7 +204,7 @@ function FormPeran({ peran, onTutup, onTersimpan }: { peran: Peran | null; onTut
     }
   }
 
-  const label = "text-[11.5px] font-bold text-[#6B7890]";
+  const label = "text-[11.5px] font-bold text-[#7B8794]";
   return (
     <Kartu judul={peran ? `Ubah peran: ${peran.nama}` : "Peran baru"} ket={peran ? `kode: ${peran.kode}${peran.sistem ? " · bawaan" : ""}` : "Izinnya diatur lewat matriks di bawah."}>
       <form onSubmit={simpan} className="grid max-w-2xl grid-cols-1 items-center gap-2 sm:grid-cols-[140px_1fr]">

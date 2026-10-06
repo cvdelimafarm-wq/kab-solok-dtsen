@@ -70,7 +70,7 @@ export default function KelolaPeranAkses() {
     return (
       <LayarPenuh>
         <Pesan>{galat}</Pesan>
-        <div className="flex gap-3 text-sm font-bold text-[#0F3D7A]">
+        <div className="flex gap-3 text-sm font-bold text-[#1F6FD1]">
           <Link href="/sigap/admin" className="underline">
             Ke Admin Transport Lokal
           </Link>
@@ -104,7 +104,7 @@ export default function KelolaPeranAkses() {
               </span>
             )}
             {namaPeran.map((p) => (
-              <span key={p} className="rounded-full bg-[#F5B841]/20 px-2.5 py-1 text-[11px] font-bold text-[#F5B841]">
+              <span key={p} className="rounded-full bg-[#D9971F]/20 px-2.5 py-1 text-[11px] font-bold text-[#D9971F]">
                 {p}
               </span>
             ))}
@@ -144,7 +144,7 @@ export default function KelolaPeranAkses() {
   // Ringkas belum ada (seharusnya tidak terjadi krn dimuat bersamaan) -> tampilan lama tanpa shell.
   if (!saya)
     return (
-      <main className="min-h-screen bg-[#EEF2F8] pb-16 text-[#13213A]">
+      <main className="min-h-screen bg-[#F3F5F8] pb-16 text-[#14202E]">
         {mobile}
         <div className="mx-auto max-w-7xl space-y-3 px-3 pt-4 sm:px-5">{isi}</div>
       </main>
@@ -155,12 +155,12 @@ export default function KelolaPeranAkses() {
       {/* Judul + tab internal versi layar lebar */}
       <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 lg:flex">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-[#8592A8]">Peran dan akses</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">Peran dan akses</p>
           <h1 className="text-[17px] font-extrabold leading-tight">Siapa boleh membuka apa</h1>
         </div>
-        {!data.boleh_kelola && <span className="mb-0.5 rounded-full bg-[#F1F4F8] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#55627A]">Mode lihat saja</span>}
+        {!data.boleh_kelola && <span className="mb-0.5 rounded-full bg-[#F3F5F8] px-2.5 py-0.5 text-[11.5px] font-semibold text-[#4D5B6B]">Mode lihat saja</span>}
       </div>
-      <div role="tablist" aria-label="Bagian Peran dan akses" className="hidden gap-1 border-b border-[#E3E8F0] lg:flex">
+      <div role="tablist" aria-label="Bagian Peran dan akses" className="hidden gap-1 border-b border-[#E3E8EE] lg:flex">
         {TAB.map((t) => (
           <button
             key={t.kode}
@@ -168,7 +168,7 @@ export default function KelolaPeranAkses() {
             role="tab"
             aria-selected={tab === t.kode}
             onClick={() => setTab(t.kode)}
-            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] font-bold transition ${tab === t.kode ? "border-[#0F3D7A] text-[#0F3D7A]" : "border-transparent text-[#6B7890] hover:text-[#0F3D7A]"}`}
+            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] font-bold transition ${tab === t.kode ? "border-[#1F6FD1] text-[#1F6FD1]" : "border-transparent text-[#7B8794] hover:text-[#1F6FD1]"}`}
           >
             {t.label}
           </button>

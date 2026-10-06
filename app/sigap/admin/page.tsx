@@ -139,10 +139,10 @@ export default function AdminTransportLokal() {
       <LayarPenuh>
         <Pesan>{galat}</Pesan>
         <div className="flex gap-3">
-          <button type="button" onClick={() => muat()} className="text-sm font-bold text-[#0F3D7A] underline">
+          <button type="button" onClick={() => muat()} className="text-sm font-bold text-[#1F6FD1] underline">
             Coba lagi
           </button>
-          <button type="button" onClick={keluar} className="text-sm font-bold text-[#0F3D7A] underline">
+          <button type="button" onClick={keluar} className="text-sm font-bold text-[#1F6FD1] underline">
             Masuk kembali
           </button>
         </div>
@@ -172,7 +172,7 @@ export default function AdminTransportLokal() {
               {r.nama}
             </span>
             {namaPeran.map((p) => (
-              <span key={p} className="rounded-full bg-[#F5B841]/20 px-2.5 py-1 text-[11px] font-bold text-[#F5B841]">
+              <span key={p} className="rounded-full bg-[#D9971F]/20 px-2.5 py-1 text-[11px] font-bold text-[#D9971F]">
                 {p}
               </span>
             ))}
@@ -189,7 +189,7 @@ export default function AdminTransportLokal() {
                   setKegBaru(false);
                   setKegId(Number(e.target.value) || null);
                 }}
-                className="max-w-[78vw] rounded-xl bg-white px-3 py-2 text-[13px] font-extrabold text-[#0F3D7A] shadow outline-none sm:max-w-md"
+                className="max-w-[78vw] rounded-xl bg-white px-3 py-2 text-[13px] font-extrabold text-[#1F6FD1] shadow outline-none sm:max-w-md"
               >
                 {r.kegiatan.map((k) => (
                   <option key={k.id} value={k.id}>
@@ -208,7 +208,7 @@ export default function AdminTransportLokal() {
             </button>
           )}
           {r.izin["akses.kelola"] && (
-            <Link href="/sigap/akses" className="rounded-full bg-[#F5B841] px-3 py-1.5 text-[12px] font-extrabold text-[#1E2A47] hover:brightness-105">
+            <Link href="/sigap/akses" className="rounded-full bg-[#D9971F] px-3 py-1.5 text-[12px] font-extrabold text-[#0E2A47] hover:brightness-105">
               🔐 Kelola Peran &amp; Akses
             </Link>
           )}
@@ -240,18 +240,18 @@ export default function AdminTransportLokal() {
       {tabAktif !== "beranda" && (
         <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 pb-1 lg:flex">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#8592A8]">{kegBaru ? "Admin transport" : labelTab ?? "Admin transport"}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">{kegBaru ? "Admin transport" : labelTab ?? "Admin transport"}</p>
             <h1 className="truncate text-[17px] font-extrabold leading-tight">{kegBaru ? "Kegiatan baru" : keg?.nama ?? "Belum ada kegiatan"}</h1>
           </div>
           {keg && !kegBaru && (
-            <span className="pb-0.5 text-[12px] text-[#6B7890]">
+            <span className="pb-0.5 text-[12px] text-[#7B8794]">
               Periode {rentangPendek(keg.tanggal_mulai, keg.tanggal_selesai)} · {tglPanjang(r.hari_ini)}
               {!keg.aktif && " · selesai"}
             </span>
           )}
           <div className="flex-1" />
           {bolehBuatKegiatan && !kegBaru && (
-            <button type="button" onClick={mulaiKegiatanBaru} className="rounded-lg border border-[#D5DCE7] bg-white px-3 py-1.5 text-[12px] font-bold text-[#0F3D7A] hover:border-[#0F3D7A]">
+            <button type="button" onClick={mulaiKegiatanBaru} className="rounded-lg border border-[#D5DCE7] bg-white px-3 py-1.5 text-[12px] font-bold text-[#1F6FD1] hover:border-[#1F6FD1]">
               ＋ Kegiatan baru
             </button>
           )}

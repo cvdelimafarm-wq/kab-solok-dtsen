@@ -74,7 +74,7 @@ export default function TabKegiatan({
           <TabelTarif kegiatanId={kegiatanId} tarif={data.tarif} kelola={data.boleh_kelola} onBerubah={muat} />
         ) : (
           <Kartu judul="Peran, tarif & maks hari">
-            <p className="text-[12.5px] text-[#6B7890]">Simpan data kegiatan terlebih dahulu, lalu atur peran &amp; tarifnya di sini.</p>
+            <p className="text-[12.5px] text-[#7B8794]">Simpan data kegiatan terlebih dahulu, lalu atur peran &amp; tarifnya di sini.</p>
           </Kartu>
         )}
       </div>
@@ -121,7 +121,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
     }
   }
 
-  const label = "text-[11.5px] font-bold text-[#6B7890]";
+  const label = "text-[11.5px] font-bold text-[#7B8794]";
   return (
     <Kartu judul={baru ? "Kegiatan baru" : "Data kegiatan"} ket={k ? `kode: ${k.kode}` : undefined}>
       <form onSubmit={simpan}>
@@ -223,7 +223,7 @@ function TabelTarif({ kegiatanId, tarif, kelola, onBerubah }: { kegiatanId: numb
   }
 
   const baris = (key: string) => (
-    <tr key={key} className="bg-[#F6F8FB]">
+    <tr key={key} className="bg-[#F8FAFC]">
       <td className={TD}>
         <input value={isi.peran} onChange={(e) => setIsi({ ...isi, peran: e.target.value })} className={`${INPUT} w-24`} placeholder="ppl" disabled={ubah !== "__baru"} aria-label="Kode peran" />
       </td>
@@ -259,7 +259,7 @@ function TabelTarif({ kegiatanId, tarif, kelola, onBerubah }: { kegiatanId: numb
         ) : undefined
       }
     >
-      <div className="overflow-x-auto rounded-xl border border-[#EEF1F5]">
+      <div className="overflow-x-auto rounded-xl border border-[#EDF0F4]">
         <table className="w-full border-collapse text-[12.5px]">
           <thead>
             <tr>
@@ -273,7 +273,7 @@ function TabelTarif({ kegiatanId, tarif, kelola, onBerubah }: { kegiatanId: numb
           <tbody>
             {tarif.length === 0 && ubah !== "__baru" && (
               <tr>
-                <td colSpan={5} className={`${TD} py-6 text-center text-[#6B7890]`}>
+                <td colSpan={5} className={`${TD} py-6 text-center text-[#7B8794]`}>
                   Belum ada peran. Tambahkan minimal satu (mis. PPL, PML) agar petugas bisa ditugaskan.
                 </td>
               </tr>
@@ -286,7 +286,7 @@ function TabelTarif({ kegiatanId, tarif, kelola, onBerubah }: { kegiatanId: numb
                   <td className={`${TD} font-bold`}>{t.peran.toUpperCase()}</td>
                   <td className={TD}>
                     {t.label_jabatan || "–"}
-                    {t.uraian_detail && <p className="text-[11px] text-[#6B7890]">{t.uraian_detail}</p>}
+                    {t.uraian_detail && <p className="text-[11px] text-[#7B8794]">{t.uraian_detail}</p>}
                   </td>
                   <td className={`${TD} whitespace-nowrap`}>{rupiah(Number(t.tarif))}</td>
                   <td className={`${TD} whitespace-nowrap`}>{t.maks_hari_default != null ? `${t.maks_hari_default} hari` : <Chip>tanpa batas</Chip>}</td>
@@ -304,7 +304,7 @@ function TabelTarif({ kegiatanId, tarif, kelola, onBerubah }: { kegiatanId: numb
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[11.5px] text-[#6B7890]">Maks hari per petugas bisa ditimpa per orang di tab Penugasan. Kode peran tidak bisa diubah setelah dibuat.</p>
+      <p className="mt-2 text-[11.5px] text-[#7B8794]">Maks hari per petugas bisa ditimpa per orang di tab Penugasan. Kode peran tidak bisa diubah setelah dibuat.</p>
       {pesan && (
         <div className="mt-2">
           <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>

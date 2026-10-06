@@ -240,6 +240,25 @@ export async function GET(req: NextRequest) {
           kerjaHariIni = 0,
           terlewat = 0,
           belumPilih = 0;
+        // (6 Okt 2026) No HP petugas utk tombol "Ingatkan" (buka WhatsApp dgn pesan siap kirim; tidak dikirim
+        // otomatis -- keputusan user). Sumber: bencana_petugas.no_hp, cadangan bencana_mitra.no_telp.
+        const hpAkun = new Map<number, string>();
+        {
+          const ids = Array.from(new Set(aktif.map((b) => b.akun_id)));
+          const ak = ids.length
+            ? await semuaBaris<{ id: number; mitra_id: number | null; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, mitra_id, petugas_bencana_id").in("id", ids).range(a, z))
+            : [];
+          const pIds = ak.map((x) => x.petugas_bencana_id).filter((x): x is number => !!x);
+          const mIds = ak.map((x) => x.mitra_id).filter((x): x is number => !!x);
+          const [pb, mb] = await Promise.all([
+            pIds.length ? semuaBaris<{ id: number; no_hp: string | null }>((a, z) => db.from("bencana_petugas").select("id, no_hp").in("id", pIds).range(a, z)) : Promise.resolve([]),
+            mIds.length ? semuaBaris<{ id: number; no_telp: string | null }>((a, z) => db.from("bencana_mitra").select("id, no_telp").in("id", mIds).range(a, z)) : Promise.resolve([]),
+          ]);
+          for (const x of ak) {
+            const hp = pb.find((p) => p.id === x.petugas_bencana_id)?.no_hp || mb.find((m) => m.id === x.mitra_id)?.no_telp || "";
+            if (hp && String(hp).replace(/\D/g, "").length >= 9) hpAkun.set(x.id, String(hp));
+          }
+        }
         const rows = aktif.map((b) => {
           const hk = new Set(st.hk.filter((h) => h.penugasan_id === b.id).map((h) => h.tanggal));
           if (hk.size === 0) belumPilih++;
@@ -266,6 +285,7 @@ export async function GET(req: NextRequest) {
             terlewat: terlewatTanggal,
             izin: st.izin.filter((i) => i.penugasan_id === b.id).map((i) => i.tanggal),
             dikunci: !!b.dikunci_at,
+            no_hp: hpAkun.get(b.akun_id) ?? null,
           };
         });
         return NextResponse.json({

@@ -13,8 +13,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses">;
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
@@ -25,7 +25,7 @@ export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string
 ];
 
 // ---------------------------------------------------------------- Ikon SVG inline kecil (tanpa dependensi)
-type NamaIkon = "beranda" | "buku" | "revisi" | "motor" | "pesawat" | "uang" | "paket" | "grafik" | "tautan" | "perisai" | "gembok" | "cari" | "lonceng" | "panah";
+type NamaIkon = "beranda" | "buku" | "revisi" | "motor" | "pesawat" | "uang" | "paket" | "grafik" | "tautan" | "perisai" | "gembok" | "cari" | "lonceng" | "panah" | "panel";
 function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
   const isi: Record<NamaIkon, React.ReactNode> = {
     beranda: (
@@ -70,6 +70,12 @@ function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
     ),
     lonceng: <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21a2 2 0 0 0 4 0" />,
     panah: <path d="M6 9l6 6 6-6" />,
+    panel: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M9 3v18" />
+      </>
+    ),
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
@@ -97,6 +103,7 @@ export default function Shell({
   onMenu,
   jumlahTindakan = null,
   aksiPalet = [],
+  pemilihKegiatan = true,
   mobile,
   children,
 }: {
@@ -111,6 +118,8 @@ export default function Shell({
   onMenu?: (k: KodeTabAdmin) => void;
   jumlahTindakan?: number | null;
   aksiPalet?: ItemPalet[];
+  /** (6 Okt 2026) false = sembunyikan pemilih kegiatan di topbar (mis. modul Pengadaan & Kontrak). */
+  pemilihKegiatan?: boolean;
   /** Header + tab versi HP (dirender hanya < lg). */
   mobile: React.ReactNode;
   children: React.ReactNode;
@@ -118,6 +127,24 @@ export default function Shell({
   const [tokenPetugas, setTokenPetugas] = useState<string | null>(null);
   const [palet, setPalet] = useState(false);
   const [menuAvatar, setMenuAvatar] = useState(false);
+  // (6 Okt 2026) Sidebar bisa diciutkan (68px, ikon saja) -- desain user; diingat per browser.
+  const [mini, setMini] = useState(false);
+  useEffect(() => {
+    try {
+      setMini(localStorage.getItem("sigap-mini") === "1");
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+  const ciutkan = () =>
+    setMini((m) => {
+      try {
+        localStorage.setItem("sigap-mini", m ? "0" : "1");
+      } catch {
+        /* abaikan */
+      }
+      return !m;
+    });
   const avatarRef = useRef<HTMLDivElement>(null);
 
   // (6 Okt 2026) Link "Transport lokal" ke halaman petugas milik pengguna bila ia punya penugasan.
@@ -181,12 +208,14 @@ export default function Shell({
 
   const subAdmin = useMemo(() => MENU_ADMIN.filter((m) => bolehKlien(ringkas.izin, m.menu, "lihat", kegId)), [ringkas.izin, kegId]);
   const bolehAkses = !!ringkas.izin["akses.kelola"];
+  const bolehKontrak = !!ringkas.izin["kontrak.kelola"];
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
   const itemPalet = useMemo<ItemPalet[]>(() => {
     const out: ItemPalet[] = [{ id: "m-beranda", grup: "Menu", label: "Beranda", ket: "ringkasan & perlu tindakan", jalankan: () => pindahMenu("beranda") }];
     for (const m of subAdmin) out.push({ id: `m-${m.kode}`, grup: "Menu", label: `Admin transport › ${m.label}`, jalankan: () => pindahMenu(m.kode) });
+    if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kontrak") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
     out.push({ id: "m-portal", grup: "Menu", label: "Portal SIGAP", jalankan: () => (window.location.href = "/sigap") });
@@ -194,73 +223,91 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
   return (
-    <main className="min-h-screen bg-[#EEF2F8] text-[#13213A] lg:flex lg:bg-[#F6F8FB]">
+    <main className="min-h-screen bg-[#F3F5F8] text-[#14202E] lg:flex">
       {/* ------------------------------------------------ Sidebar (layar lebar) */}
-      <aside className="sticky top-0 hidden h-screen self-start w-[228px] shrink-0 flex-col overflow-y-auto border-r border-[#E3E8F0] bg-white px-2.5 py-3 lg:flex">
-        <Link href="/sigap" className="mb-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[#F6F8FB]">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0F3D7A] text-[13px] font-extrabold text-white">S</span>
-          <span className="leading-tight">
-            <span className="block text-[13px] font-extrabold tracking-wide">SIGAP</span>
-            <span className="block text-[11px] text-[#6B7890]">BPS Kab. Solok</span>
+      {/* (6 Okt 2026) Sidebar navy sesuai desain "SIGAP · Monitoring kegiatan" dari user. */}
+      <aside
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col self-start overflow-y-auto bg-[#0E2A47] px-2.5 py-3.5 text-[#C9D6E6] transition-[width] lg:flex ${mini ? "w-[68px]" : "w-[232px]"}`}
+      >
+        <Link href="/sigap" className={`mb-3 flex items-center gap-2.5 rounded-lg px-2 pb-2 pt-1 ${mini ? "justify-center" : ""}`} title="Portal SIGAP">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-bps.svg" alt="" className="h-full w-full object-contain" />
           </span>
-        </Link>
-        <nav aria-label="Menu SIGAP" className="flex flex-col gap-0.5 text-[12.5px]">
-          <ItemNav ikon="beranda" label="Beranda" aktif={aktif === "beranda"} onClick={() => pindahMenu("beranda")} />
-
-          <LabelGrup>Perencanaan</LabelGrup>
-          <ItemNav ikon="buku" label="RAB / POK" segera />
-          <ItemNav ikon="revisi" label="Revisi" segera />
-
-          <LabelGrup>Pelaksanaan</LabelGrup>
-          {tokenPetugas ? (
-            <ItemNav ikon="motor" label="Transport lokal" href={`/sigap/translok/${tokenPetugas}`} title="Halaman petugas transport lokal Anda" />
-          ) : (
-            <ItemNav ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
+          {!mini && (
+            <span className="leading-tight">
+              <span className="block text-[16px] font-bold tracking-wide text-white">SIGAP</span>
+              <span className="block text-[11.5px] text-[#7F95AE]">BPS Kabupaten Solok</span>
+            </span>
           )}
-          <ItemNav ikon="pesawat" label="Perjadin" segera />
-          <ItemNav ikon="uang" label="Honor" segera />
-          <ItemNav ikon="paket" label="Pengadaan" segera />
+        </Link>
+        <nav aria-label="Menu SIGAP" className="flex flex-col gap-0.5 text-[13.5px]">
+          <ItemNav mini={mini} ikon="beranda" label="Beranda" aktif={aktif === "beranda"} onClick={() => pindahMenu("beranda")} />
 
-          <LabelGrup>Monitoring</LabelGrup>
-          <ItemNav ikon="grafik" label="Realisasi" segera />
-          <ItemNav ikon="tautan" label="Delego" segera />
+          <LabelGrup mini={mini}>Perencanaan</LabelGrup>
+          <ItemNav mini={mini} ikon="buku" label="RAB / POK" segera />
+          <ItemNav mini={mini} ikon="revisi" label="Revisi anggaran" segera />
 
-          {(subAdmin.length > 0 || bolehAkses) && <LabelGrup>Administrasi</LabelGrup>}
+          <LabelGrup mini={mini}>Pelaksanaan</LabelGrup>
+          {tokenPetugas ? (
+            <ItemNav mini={mini} ikon="motor" label="Transport lokal" href={`/sigap/translok/${tokenPetugas}`} title="Halaman petugas transport lokal Anda" />
+          ) : (
+            <ItemNav mini={mini} ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
+          )}
+          <ItemNav mini={mini} ikon="pesawat" label="Perjalanan dinas" segera />
+          <ItemNav mini={mini} ikon="uang" label="Honor" segera />
+          {bolehKontrak ? (
+            <ItemNav mini={mini} ikon="paket" label="Pengadaan" href="/sigap/kontrak" aktif={aktif === "kontrak"} title="Pengadaan & kontrak" />
+          ) : (
+            <ItemNav mini={mini} ikon="paket" label="Pengadaan" nonaktif ket="—" title="Akun Anda belum diberi akses Pengadaan & Kontrak" />
+          )}
+
+          <LabelGrup mini={mini}>Monitoring</LabelGrup>
+          <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
+          <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
+
+          {(subAdmin.length > 0 || bolehAkses) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
           {subAdmin.length > 0 && (
             <>
               <ItemNav
+                mini={mini}
                 ikon="perisai"
-                label="Admin transport"
-                induk={aktif !== "beranda" && aktif !== "akses"}
+                label="Admin transport lokal"
+                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak"}
                 onClick={() => pindahMenu(subAdmin[0].kode)}
                 badge={adaTindakan ? jumlahTindakan : null}
               />
-              <div className="ml-[22px] flex flex-col gap-0.5 border-l border-[#E3E8F0] pl-2">
-                {subAdmin.map((m) => (
-                  <button
-                    key={m.kode}
-                    type="button"
-                    onClick={() => pindahMenu(m.kode)}
-                    aria-current={aktif === m.kode ? "page" : undefined}
-                    className={`rounded-md px-2 py-1 text-left text-[12px] transition ${
-                      aktif === m.kode ? "bg-[#E8EEF8] font-bold text-[#0F3D7A]" : "text-[#55627A] hover:bg-[#F6F8FB] hover:text-[#0F3D7A]"
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              {!mini && (
+                <div className="ml-[19px] flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                  {subAdmin.map((m) => (
+                    <button
+                      key={m.kode}
+                      type="button"
+                      onClick={() => pindahMenu(m.kode)}
+                      aria-current={aktif === m.kode ? "page" : undefined}
+                      className={`rounded-md px-2 py-1 text-left text-[12.5px] transition ${
+                        aktif === m.kode ? "bg-[#163A60] font-semibold text-white shadow-[inset_3px_0_0_#5C9DEB]" : "text-[#C9D6E6] hover:bg-[#163A60] hover:text-white"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </>
           )}
-          {bolehAkses && <ItemNav ikon="gembok" label="Peran dan akses" href="/sigap/akses" aktif={aktif === "akses"} />}
+          {bolehAkses && <ItemNav mini={mini} ikon="gembok" label="Peran dan akses" href="/sigap/akses" aktif={aktif === "akses"} />}
         </nav>
         <div className="flex-1" />
-        <p className="px-2 pt-4 text-[10.5px] leading-snug text-[#8592A8]">Gerak Anggaran &amp; Pertanggungjawaban · TA {tahun}</p>
+        <div className="pt-3">
+          <ItemNav mini={mini} ikon="panel" label={mini ? "Lebarkan menu" : "Ciutkan menu"} onClick={ciutkan} />
+          {!mini && <p className="px-2.5 pt-2 text-[10.5px] leading-snug text-[#7F95AE]">Gerak Anggaran &amp; Pertanggungjawaban · TA {tahun}</p>}
+        </div>
       </aside>
 
       {/* ------------------------------------------------ Kolom kanan */}
@@ -269,27 +316,27 @@ export default function Shell({
         <div className="contents lg:hidden">{mobile}</div>
 
         {/* Topbar (layar lebar) */}
-        <header className="sticky top-0 z-30 hidden h-[52px] items-center gap-3 border-b border-[#E3E8F0] bg-white/95 px-5 backdrop-blur lg:flex">
+        <header className="sticky top-0 z-30 hidden h-[56px] items-center gap-3 border-b border-[#E3E8EE] bg-white px-6 lg:flex">
           <nav aria-label="Breadcrumb" className="flex min-w-0 shrink items-center gap-1.5 text-[12.5px]">
             {jejak.map((j, i) => (
               <span key={i} className="flex min-w-0 items-center gap-1.5">
-                {i > 0 && <span className="text-[#B4BFD0]">›</span>}
-                <span className={`truncate ${i === jejak.length - 1 ? "font-bold text-[#13213A]" : "text-[#6B7890]"}`}>{j}</span>
+                {i > 0 && <span className="text-[#7B8794]">/</span>}
+                <span className={`truncate ${i === jejak.length - 1 ? "font-semibold text-[#14202E]" : "text-[#7B8794]"}`}>{j}</span>
               </span>
             ))}
           </nav>
           <button
             type="button"
             onClick={() => setPalet(true)}
-            className="mx-2 flex min-w-[180px] max-w-[420px] flex-1 items-center gap-2 rounded-lg border border-[#E3E8F0] bg-[#F6F8FB] px-2.5 py-1.5 text-[12px] text-[#8592A8] transition hover:border-[#C9D6EA]"
+            className="mx-2 flex min-w-[180px] max-w-[420px] flex-1 items-center gap-2 rounded-lg border border-[#E3E8EE] bg-[#F8FAFC] px-2.5 py-1.5 text-[12px] text-[#7B8794] transition hover:border-[#CDD5DE]"
             aria-label="Cari kegiatan atau menu (Ctrl K)"
           >
             <Ikon n="cari" size={14} />
             <span className="flex-1 text-left">Cari kegiatan, menu…</span>
-            <kbd className="rounded border border-[#E3E8F0] bg-white px-1.5 text-[10.5px] font-semibold text-[#6B7890]">Ctrl K</kbd>
+            <kbd className="rounded border border-[#E3E8EE] bg-white px-1.5 text-[10.5px] font-semibold text-[#7B8794]">Ctrl K</kbd>
           </button>
           <div className="flex-1" />
-          {ringkas.kegiatan.length > 0 && (
+          {pemilihKegiatan && ringkas.kegiatan.length > 0 && (
             <label className="flex min-w-0 items-center">
               <span className="sr-only">Pilih kegiatan</span>
               <select
@@ -298,7 +345,7 @@ export default function Shell({
                   const id = Number(e.target.value);
                   if (id) pilihKegiatan(id);
                 }}
-                className="max-w-[260px] truncate rounded-lg border border-[#E3E8F0] bg-white px-2 py-1.5 text-[12px] font-bold text-[#0F3D7A] outline-none focus:border-[#0F3D7A]"
+                className="max-w-[260px] truncate rounded-lg border border-[#E3E8EE] bg-white px-2 py-1.5 text-[12px] font-bold text-[#1F6FD1] outline-none focus:border-[#1F6FD1]"
               >
                 {kegId == null && <option value="">Pilih kegiatan…</option>}
                 {ringkas.kegiatan.map((k) => (
@@ -310,13 +357,13 @@ export default function Shell({
               </select>
             </label>
           )}
-          <span className="shrink-0 rounded-lg border border-[#E3E8F0] px-2 py-1 text-[11.5px] font-semibold text-[#55627A]" title="Tahun anggaran">
+          <span className="shrink-0 rounded-lg border border-[#E3E8EE] px-2 py-1 text-[11.5px] font-semibold text-[#4D5B6B]" title="Tahun anggaran">
             TA {tahun}
           </span>
           <button
             type="button"
             onClick={() => pindahMenu("beranda")}
-            className="relative shrink-0 rounded-lg p-1.5 text-[#55627A] hover:bg-[#F6F8FB] hover:text-[#0F3D7A]"
+            className="relative shrink-0 rounded-lg p-1.5 text-[#4D5B6B] hover:bg-[#F8FAFC] hover:text-[#1F6FD1]"
             aria-label={adaTindakan ? `${jumlahTindakan} hal perlu tindakan — buka Beranda` : "Tidak ada yang perlu tindakan — buka Beranda"}
             title={adaTindakan ? `${jumlahTindakan} hal perlu tindakan` : "Tidak ada yang perlu tindakan"}
           >
@@ -334,23 +381,23 @@ export default function Shell({
               aria-haspopup="menu"
               aria-expanded={menuAvatar}
               title={ringkas.nama}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E8EEF8] text-[11.5px] font-extrabold text-[#0F3D7A] ring-[#F5B841] hover:ring-2"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#E3EEFB] text-[12.5px] font-bold text-[#1F6FD1] ring-[#5C9DEB] hover:ring-2"
             >
               {inisial(ringkas.nama)}
             </button>
             {menuAvatar && (
-              <div role="menu" className="absolute right-0 top-10 z-40 w-[240px] rounded-xl border border-[#E3E8F0] bg-white p-3 shadow-lg">
+              <div role="menu" className="absolute right-0 top-10 z-40 w-[240px] rounded-xl border border-[#E3E8EE] bg-white p-3 shadow-lg">
                 <p className="text-[13px] font-bold leading-tight">{ringkas.nama}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
-                  {namaPeran.length === 0 && <span className="text-[11.5px] text-[#6B7890]">Tanpa peran admin</span>}
+                  {namaPeran.length === 0 && <span className="text-[11.5px] text-[#7B8794]">Tanpa peran admin</span>}
                   {namaPeran.map((p) => (
-                    <span key={p} className="rounded-full bg-[#FDF3DC] px-2 py-0.5 text-[11px] font-bold text-[#8A5A00]">
+                    <span key={p} className="rounded-full bg-[#FBEFD6] px-2 py-0.5 text-[11px] font-bold text-[#9A6200]">
                       {p}
                     </span>
                   ))}
                 </div>
-                <div className="mt-3 border-t border-[#EEF1F5] pt-2">
-                  <Link href="/sigap" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#13213A] hover:bg-[#F6F8FB]">
+                <div className="mt-3 border-t border-[#EDF0F4] pt-2">
+                  <Link href="/sigap" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#14202E] hover:bg-[#F8FAFC]">
                     Portal SIGAP
                   </Link>
                   <button type="button" role="menuitem" onClick={keluar} className="block w-full rounded-md px-2 py-1.5 text-left text-[12.5px] font-bold text-red-700 hover:bg-red-50">
@@ -362,7 +409,7 @@ export default function Shell({
           </div>
         </header>
 
-        <div className="mx-auto max-w-7xl space-y-3 px-3 pb-16 pt-4 sm:px-5 lg:max-w-[1400px] lg:px-6 lg:pt-5">{children}</div>
+        <div className="mx-auto max-w-7xl space-y-3 px-3 pb-16 pt-4 sm:px-5 lg:max-w-[1440px] lg:px-6 lg:pt-[22px]">{children}</div>
       </div>
 
       <PaletPerintah buka={palet} onTutup={() => setPalet(false)} item={itemPalet} />
@@ -370,8 +417,9 @@ export default function Shell({
   );
 }
 
-function LabelGrup({ children }: { children: React.ReactNode }) {
-  return <p className="mx-2 mb-1 mt-3.5 text-[10.5px] font-bold uppercase tracking-wider text-[#8592A8]">{children}</p>;
+function LabelGrup({ children, mini }: { children: React.ReactNode; mini?: boolean }) {
+  if (mini) return <div className="mx-3 my-2 border-t border-white/10" aria-hidden />;
+  return <p className="mx-2.5 mb-1 mt-3.5 whitespace-nowrap text-[11.5px] text-[#7F95AE]">{children}</p>;
 }
 
 function ItemNav({
@@ -381,6 +429,7 @@ function ItemNav({
   induk = false,
   segera = false,
   nonaktif = false,
+  mini = false,
   ket,
   title,
   href,
@@ -390,10 +439,12 @@ function ItemNav({
   ikon: NamaIkon;
   label: string;
   aktif?: boolean;
-  /** Induk dari sub-item yang aktif: teks aksen tanpa pil. */
+  /** Induk dari sub-item yang aktif: teks putih tanpa latar. */
   induk?: boolean;
   segera?: boolean;
   nonaktif?: boolean;
+  /** Sidebar diciutkan: ikon saja, label jadi tooltip. */
+  mini?: boolean;
   ket?: string;
   title?: string;
   href?: string;
@@ -401,32 +452,41 @@ function ItemNav({
   badge?: number | null;
 }) {
   const mati = segera || nonaktif;
-  const kelas = `flex w-full items-center gap-2 rounded-lg px-2 py-[6px] text-left transition ${
-    aktif ? "bg-[#E8EEF8] font-bold text-[#0F3D7A]" : mati ? "cursor-default text-[#A3AEC0]" : induk ? "font-bold text-[#0F3D7A] hover:bg-[#F6F8FB]" : "text-[#3B4A63] hover:bg-[#F6F8FB] hover:text-[#0F3D7A]"
+  const kelas = `relative flex w-full items-center gap-2.5 whitespace-nowrap rounded-[7px] px-2.5 py-[7px] text-left transition ${mini ? "justify-center" : ""} ${
+    aktif
+      ? "bg-[#163A60] text-white shadow-[inset_3px_0_0_#5C9DEB]"
+      : mati
+        ? "cursor-default text-[#7F95AE]"
+        : induk
+          ? "font-semibold text-white hover:bg-[#163A60]"
+          : "text-[#C9D6E6] hover:bg-[#163A60] hover:text-white"
   }`;
+  const tip = title ?? (segera ? `${label} — segera hadir` : mini ? label : undefined);
   const isi = (
     <>
-      <Ikon n={ikon} />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {segera && <span className="rounded bg-[#F1F4F8] px-1.5 py-px text-[10.5px] font-semibold text-[#8592A8]">segera</span>}
-      {!segera && ket && <span className="text-[10.5px] text-[#A3AEC0]">{ket}</span>}
-      {badge != null && badge > 0 && <span className="rounded bg-amber-100 px-1.5 py-px text-[10.5px] font-bold text-amber-800">{badge}</span>}
+      <Ikon n={ikon} size={18} />
+      {!mini && <span className="min-w-0 flex-1 truncate">{label}</span>}
+      {!mini && segera && <span className="rounded-[10px] bg-white/[.08] px-[7px] py-px text-[11px] text-[#7F95AE]">segera</span>}
+      {!mini && !segera && ket && <span className="text-[11px] text-[#7F95AE]">{ket}</span>}
+      {badge != null && badge > 0 && (
+        <span className={`rounded-[10px] bg-[#D9971F] px-[7px] py-px text-[11px] font-semibold text-[#2B1C00] ${mini ? "absolute -right-0.5 -top-1 px-[5px] text-[10px]" : ""}`}>{badge}</span>
+      )}
     </>
   );
   if (mati)
     return (
-      <span className={kelas} aria-disabled="true" title={title ?? (segera ? `${label} — segera hadir` : undefined)}>
+      <span className={kelas} aria-disabled="true" title={tip}>
         {isi}
       </span>
     );
   if (href)
     return (
-      <Link href={href} className={kelas} aria-current={aktif ? "page" : undefined} title={title}>
+      <Link href={href} className={kelas} aria-current={aktif ? "page" : undefined} title={tip} aria-label={mini ? label : undefined}>
         {isi}
       </Link>
     );
   return (
-    <button type="button" onClick={onClick} className={kelas} aria-current={aktif ? "page" : undefined} title={title}>
+    <button type="button" onClick={onClick} className={kelas} aria-current={aktif ? "page" : undefined} title={tip} aria-label={mini ? label : undefined}>
       {isi}
     </button>
   );
