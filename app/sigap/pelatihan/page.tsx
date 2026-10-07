@@ -310,6 +310,79 @@ function ModalPerhatian({ tutup }: { tutup: () => void }) {
   );
 }
 
+/** (7 Okt 2026) Modal "Yeay": muncul sekali untuk tiap langkah yang baru selesai, lalu menunjuk langkah berikutnya. */
+type Rayakan = { selesai: { no: number; judul: string }[]; berikut: { kode: string; no: number; judul: string } | null; semua: boolean };
+function ModalSelesai({ r, tutup, lanjut }: { r: Rayakan; tutup: () => void; lanjut: (kode: string) => void }) {
+  const tombol = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    tombol.current?.focus();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && tutup();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [tutup]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={tutup}>
+      <div role="dialog" aria-modal="true" aria-labelledby="judul-selesai" className="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-[44px] leading-none" aria-hidden>
+          🎉
+        </div>
+        <h2 id="judul-selesai" className="mt-2 text-[20px] font-extrabold text-[#17623C]">
+          Yeay! {r.semua ? "Semua tahapan selesai" : "Tahapan selesai"}
+        </h2>
+        <p className="mt-2 text-[14.5px] leading-relaxed text-[#14202E]">
+          Kamu sudah menyelesaikan tahapan{r.selesai.length > 1 ? ":" : ""}
+        </p>
+        <ul className="mt-1.5 space-y-1">
+          {r.selesai.map((x) => (
+            <li key={x.no} className="rounded-lg bg-[#DDF3E6] px-3 py-1.5 text-[14px] font-bold text-[#17623C]">
+              ✓ {x.no}. {x.judul}
+            </li>
+          ))}
+        </ul>
+        {r.berikut ? (
+          <>
+            <p className="mt-3 text-[13.5px] text-[#55657D]">
+              Selanjutnya: <b className="text-[#14202E]">{r.berikut.no}. {r.berikut.judul}</b>
+            </p>
+            <button ref={tombol} type="button" onClick={() => lanjut(r.berikut!.kode)} className="mt-3 w-full rounded-xl bg-[#1F6FD1] px-4 py-3 text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0]">
+              Lanjut ke langkah berikutnya →
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-[13.5px] text-[#55657D]">{r.semua ? "Terima kasih, seluruh langkah pelatihan sudah kamu selesaikan." : "Langkah lain menyusul sesuai jadwal."}</p>
+            <button ref={tombol} type="button" onClick={tutup} className="mt-3 w-full rounded-xl bg-[#1E7A4C] px-4 py-3 text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#17623C]">
+              Tutup
+            </button>
+          </>
+        )}
+        {r.berikut && (
+          <button type="button" onClick={tutup} className="mt-2 w-full rounded-xl border border-[#CDD5DE] bg-white px-4 py-2.5 text-[14px] font-bold text-[#14202E] hover:bg-[#F8FAFC]">
+            Tutup
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const KUNCI_RAYAKAN = "sigap_pel_rayakan_";
+const bacaRayakan = (id: string): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(KUNCI_RAYAKAN + id) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+const simpanRayakan = (id: string, kode: string[]) => {
+  try {
+    localStorage.setItem(KUNCI_RAYAKAN + id, JSON.stringify(kode));
+  } catch {
+    /* penyimpanan browser diblokir: abaikan, modal bisa muncul lagi saat dibuka ulang */
+  }
+};
+
 type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolean; bisaSekarang: boolean; badan: React.ReactNode };
 
 export default function HalamanPelatihan() {
@@ -317,6 +390,12 @@ export default function HalamanPelatihan() {
   const router = useRouter();
   const [perhatian, setPerhatian] = useState(true); // tampil tiap halaman ini dibuka (khusus peserta)
   const tutupPerhatian = useCallback(() => setPerhatian(false), []);
+  const [rayakan, setRayakan] = useState<Rayakan | null>(null);
+  const tutupRayakan = useCallback(() => setRayakan(null), []);
+  const lanjutRayakan = useCallback((kode: string) => {
+    setRayakan(null);
+    setTimeout(() => document.getElementById(`langkah-${kode}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  }, []);
   const now = jam.sekarang();
   // (7 Okt 2026) /sigap/pelatihan = tab Langkah bagi peserta. Pengelola yang bukan peserta langsung dibawa ke Kelola Pelatihan.
   useEffect(() => {
@@ -452,6 +531,27 @@ export default function HalamanPelatihan() {
   });
   const nSelesai = gaya.filter((x) => x.g === "done").length;
 
+  // (7 Okt 2026) Modal "Yeay": langkah yang baru selesai (belum pernah dirayakan di browser ini) dirayakan sekali.
+  const kunciSelesai = langkah.filter((l) => l.selesai).map((l) => l.kode).join(",");
+  const idPeserta = peserta ? String(peserta.penugasan_id) : "";
+  const langkahRef = useRef(langkah);
+  langkahRef.current = langkah;
+  useEffect(() => {
+    if (!idPeserta || !kunciSelesai) return;
+    const sudah = bacaRayakan(idPeserta);
+    const baru = kunciSelesai.split(",").filter((k) => !sudah.includes(k));
+    if (!baru.length) return;
+    const semuaLangkah = langkahRef.current;
+    const nomor = (k: string) => semuaLangkah.findIndex((l) => l.kode === k) + 1;
+    const idxBerikut = semuaLangkah.findIndex((l) => !l.selesai && !l.terlewat);
+    simpanRayakan(idPeserta, [...sudah, ...baru]);
+    setRayakan({
+      selesai: baru.map((k) => ({ no: nomor(k), judul: semuaLangkah[nomor(k) - 1].judul })),
+      berikut: idxBerikut >= 0 ? { kode: semuaLangkah[idxBerikut].kode, no: idxBerikut + 1, judul: semuaLangkah[idxBerikut].judul } : null,
+      semua: semuaLangkah.every((l) => l.selesai),
+    });
+  }, [kunciSelesai, idPeserta]);
+
   const warnaBulat: Record<Gaya, string> = {
     done: "bg-[#1E7A4C] text-white",
     now: "bg-[#1F6FD1] text-white shadow-[0_0_0_4px_#D6E6FB]",
@@ -482,6 +582,7 @@ export default function HalamanPelatihan() {
       {data && peserta && (
         <>
           {perhatian && <ModalPerhatian tutup={tutupPerhatian} />}
+          {!perhatian && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
           <Kartu judul="Langkah Anda" kanan={<span className="text-[12px] font-semibold text-[#55657D]">{nSelesai} dari {langkah.length} selesai</span>}>
             <div className="h-2 overflow-hidden rounded-full bg-[#E3E8EE]">
               <div className="h-full rounded-full bg-[#1E7A4C] transition-all" style={{ width: `${(nSelesai / Math.max(1, langkah.length)) * 100}%` }} />
@@ -491,7 +592,7 @@ export default function HalamanPelatihan() {
               {langkah.map((l, i) => {
                 const { g, chip } = gaya[i];
                 return (
-                  <li key={l.kode} className="relative flex gap-3 pb-4 last:pb-0">
+                  <li key={l.kode} id={`langkah-${l.kode}`} className="relative flex gap-3 pb-4 last:pb-0">
                     {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#1E7A4C]" : "bg-[#E3E8EE]"}`} aria-hidden />}
                     <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
                       {g === "done" ? "✓" : g === "miss" ? "!" : i + 1}
