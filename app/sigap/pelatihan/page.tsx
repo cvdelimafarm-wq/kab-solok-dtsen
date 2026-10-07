@@ -166,7 +166,7 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
     async function putar() {
       try {
         if (!document.hidden) {
-          const d = await fetchJson<{ ada: boolean; ruang?: { id: number; status: string; judul: string } }>("/api/sigap/pelatihan/kuis");
+          const d = await fetchJson<{ ada: boolean; ruang?: { id: number; status: string; judul: string } }>(`/api/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`);
           if (batal) return;
           const aktif = !!d.ada && !!d.ruang && d.ruang.status !== "selesai";
           setLive({ aktif, status: d.ruang?.status ?? null, ruangId: d.ruang?.id ?? null, judul: d.ruang?.judul ?? null });
@@ -197,8 +197,8 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
   if (aktif)
     return (
       <>
-        <p className="text-[13px] font-semibold text-[#17623C]">{status === "lobi" ? "Kuis dibuka — ayo bergabung!" : "Kuis sedang berlangsung."}{judul ? ` · ${judul}` : ""}</p>
-        <Link href="/sigap/pelatihan/kuis?gabung=1" className={`${TOMBOL} w-full bg-[#46178F] text-white hover:bg-[#3a1275]`}>
+        <p className="text-[13px] font-semibold text-[#17623C]">{status === "lobi" ? "Adu Sigap dibuka — ayo bergabung!" : "Adu Sigap sedang berlangsung."}{judul ? ` · ${judul}` : ""}</p>
+        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}&gabung=1`} className={`${TOMBOL} w-full bg-[#46178F] text-white hover:bg-[#3a1275]`}>
           {k.sudah_gabung ? "🎮 Masuk kembali ke kuis →" : "🎮 Gabung kuis →"}
         </Link>
       </>
@@ -207,11 +207,11 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
     return (
       <>
         <p className={ket}>Anda sudah ikut kuis. Skor dicatat sebagai nilai tambahan.</p>
-        <Link href="/sigap/pelatihan/kuis" className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">Lihat hasil</Link>
+        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">Lihat hasil</Link>
       </>
     );
   if (k.ada_ruang_selesai) return <p className={ket}>Kuis sudah selesai dan Anda belum tercatat ikut.</p>;
-  return <p className={ket}>Kuis dibuka oleh admin saat sesi pelatihan. Tombol Gabung muncul otomatis di sini.</p>;
+  return <p className={ket}>Kuis dibuka oleh pemandu saat sesi pelatihan. Tombol Gabung muncul otomatis di sini.</p>;
 }
 
 /** Isi langkah Presensi: baca lokasi HP, tampilkan jarak ke lokasi pelatihan, tombol aktif bila dalam radius & jam presensi. */
@@ -476,7 +476,7 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
       ikon: "🎮",
       judul: kuisAktif.sudah_gabung ? "Adu Sigap sedang berlangsung" : "Adu Sigap dibuka — ayo bergabung!",
       teks: kuisAktif.sudah_gabung ? "Anda sudah bergabung. Kembali ke layar kuis bila tertutup." : "Tekan Gabung; kuis dipimpin admin di layar depan dan dijawab dari HP Anda.",
-      aksi: { label: kuisAktif.sudah_gabung ? "Masuk kembali ke kuis →" : "Gabung kuis →", href: "/sigap/pelatihan/kuis?gabung=1" },
+      aksi: { label: kuisAktif.sudah_gabung ? "Masuk kembali ke kuis →" : "Gabung kuis →", href: `/sigap/pelatihan/kuis?kelas=${kuisAktif.kelas ?? 1}&gabung=1` },
       terima,
       catatan,
     };

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     let kuis = null;
     if (peserta) {
       // (7 Okt 2026) Kuis Live: ringkasan utk langkah "Kuis Live" (null = belum ada kuis -> langkah disembunyikan). Gagal -> null.
-      kuis = await ringkasanKuisHub(db, kegiatanId, akun.id).catch(() => null);
+      kuis = await ringkasanKuisHub(db, kegiatanId, akun.id, peserta.kelas ?? null).catch(() => null);
       const [peng, pres] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatPresensiAkun(db, kegiatanId, akun.id)]);
       presensi = peng ? { ...pres, pengaturan: peng } : null;
       langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);

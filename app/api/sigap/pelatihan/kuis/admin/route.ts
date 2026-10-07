@@ -1,28 +1,55 @@
 // app/api/sigap/pelatihan/kuis/admin/route.ts
 //
-// (7 Okt 2026) SIGAP > Pelatihan > Kuis Live -- sisi ADMIN (Kelola Pelatihan).
-// Izin menu `pelatihan.kelola` (lihat = melihat layar host & rekap; kelola = bank soal, buka/lanjut/akhiri ruang).
+// (7-8 Okt 2026) SIGAP > Pelatihan > Adu Sigap -- sisi ADMIN (Kelola Pelatihan). Satu ruang per kelas (1-4), paralel.
+// Izin menu `pelatihan.kelola` (lihat = layar host, pantau live & rekap; kelola = bank soal, pengaturan kelas, Start/Pause/Restart/Stop).
 //
-// GET ?bagian=daftar                   -> kuis (jumlah soal, total detik) + ruang terakhir + izin
-// GET ?bagian=soal&kuis_id=            -> soal lengkap dgn kunci (izin kelola)
-// GET ?bagian=ruang[&ruang_id=]        -> keadaan layar host (ruang aktif / terakhir bila ruang_id kosong)
-// GET ?bagian=rekap&ruang_id=          -> rekap per peserta + statistik per soal
-// POST {aksi:"buat_kuis", judul} | {aksi:"ubah_judul", kuis_id, judul} | {aksi:"hapus_kuis", kuis_id}
-//      {aksi:"duplikat_kuis", kuis_id} | {aksi:"simpan_soal", kuis_id, soal:[{nomor,teks,opsi:[{kode,teks}],kunci,detik}]}
-//      {aksi:"buka_ruang", kuis_id} | {aksi:"lanjut", ruang_id, versi} | {aksi:"akhiri", ruang_id} | {aksi:"hapus_ruang", ruang_id}
+// GET ?bagian=daftar                   -> bank kuis (jumlah soal, topik) + pengaturan 4 kelas + riwayat ruang + izin
+// GET ?bagian=soal&kuis_id=            -> soal lengkap dgn kunci, topik, penjelasan (izin kelola)
+// GET ?bagian=ruang&kelas=N | &ruang_id= -> keadaan layar host
+// GET ?bagian=live                     -> ringkasan live keempat kelas (Pantau Live)
+// GET ?bagian=rekap&ruang_id=          -> rekap per peserta + statistik per soal (+ kunci, penjelasan)
+// POST {aksi:"buat_kuis", judul} | {aksi:"ubah_judul", kuis_id, judul} | {aksi:"hapus_kuis", kuis_id} | {aksi:"duplikat_kuis", kuis_id}
+//      {aksi:"simpan_soal", kuis_id, soal:[{nomor,teks,opsi:[{kode,teks}],kunci,detik,topik,penjelasan}]}
+//      {aksi:"simpan_kelas", kelas, kuis_id, pengaturan, soal_pilihan, acak_ulang}
+//      {aksi:"buka_ruang", kelas} | {aksi:"lanjut", ruang_id, versi} | {aksi:"jeda"|"lanjutkan"|"restart"|"akhiri"|"hapus_ruang", ruang_id}
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { MAKS_SOAL } from "@/lib/sigapTes";
-import { validasiKuisJson } from "@/lib/sigapKuis";
-import { akhiriRuang, bersihkanCache, daftarPeserta, keadaanHost, lanjutRuang, papanRuang, ruangById, ruangTerkini, sebaranRuang, soalKuis, type RuangBaris } from "@/lib/sigapKuisDb";
+import { TOPIK_UMUM, validasiKuisJson } from "@/lib/sigapKuis";
+import {
+  akhiriRuang,
+  bersihkanCache,
+  bukaRuang,
+  daftarPeserta,
+  jedaRuang,
+  keadaanHost,
+  konfigKelasSemua,
+  lanjutRuang,
+  lanjutkanRuang,
+  papanRuang,
+  restartRuang,
+  ringkasanLive,
+  ruangById,
+  ruangKelas,
+  sebaranRuang,
+  simpanKonfigKelas,
+  soalKuis,
+  soalMainRuang,
+  type RuangBaris,
+  kelasInstruktur,
+} from "@/lib/sigapKuisDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
+const kelasValid = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 4 ? n : null;
+};
 
 type KuisBaris = { id: number; kegiatan_id: number; judul: string; aktif: boolean; dibuat_at: string; diubah_at: string };
 
@@ -57,24 +84,31 @@ export async function GET(req: NextRequest) {
     if (bagian === "daftar") {
       const { data: kuis } = await db.from("sigap_kuis").select("id, judul, aktif, dibuat_at, diubah_at").eq("kegiatan_id", kegiatanId).order("id");
       const ids = (kuis ?? []).map((k) => Number(k.id));
-      const { data: soal } = ids.length ? await db.from("sigap_kuis_soal").select("kuis_id, detik").in("kuis_id", ids).limit(5000) : { data: [] as Record<string, unknown>[] };
-      const nSoal = new Map<number, { n: number; detik: number }>();
+      const { data: soal } = ids.length ? await db.from("sigap_kuis_soal").select("kuis_id, detik, topik").in("kuis_id", ids).limit(5000) : { data: [] as Record<string, unknown>[] };
+      const nSoal = new Map<number, { n: number; detik: number; topik: Record<string, number> }>();
       for (const s of soal ?? []) {
-        const e = nSoal.get(Number(s.kuis_id)) ?? { n: 0, detik: 0 };
+        const e = nSoal.get(Number(s.kuis_id)) ?? { n: 0, detik: 0, topik: {} };
         e.n++;
         e.detik += Number(s.detik);
+        const t = String(s.topik ?? "").trim() || TOPIK_UMUM;
+        e.topik[t] = (e.topik[t] ?? 0) + 1;
         nSoal.set(Number(s.kuis_id), e);
       }
-      const { data: ruang } = await db.from("sigap_kuis_ruang").select("id, kuis_id, status, soal_ke, dibuka_at, selesai_at").eq("kegiatan_id", kegiatanId).order("id", { ascending: false }).limit(200);
+      const { data: ruang } = await db.from("sigap_kuis_ruang").select("id, kuis_id, kelas, status, soal_ke, dibuka_at, selesai_at").eq("kegiatan_id", kegiatanId).order("id", { ascending: false }).limit(200);
       const rIds = (ruang ?? []).map((r) => Number(r.id));
       const { data: pes } = rIds.length ? await db.from("sigap_kuis_peserta").select("ruang_id").in("ruang_id", rIds).limit(20000) : { data: [] as Record<string, unknown>[] };
       const nPes = new Map<number, number>();
       for (const p of pes ?? []) nPes.set(Number(p.ruang_id), (nPes.get(Number(p.ruang_id)) ?? 0) + 1);
+      const { data: pen } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(3000);
+      const anggota: Record<number, number> = {};
+      for (const p of pen ?? []) if (p.kelas != null) anggota[Number(p.kelas)] = (anggota[Number(p.kelas)] ?? 0) + 1;
       return NextResponse.json({
         sekarang: now.toISOString(),
         boleh_kelola: bisaKelola,
         maks_soal: MAKS_SOAL,
-        kuis: (kuis ?? []).map((k) => ({ ...k, jumlah_soal: nSoal.get(Number(k.id))?.n ?? 0, total_detik: nSoal.get(Number(k.id))?.detik ?? 0 })),
+        kelas_saya: await kelasInstruktur(db, kegiatanId, akun.id),
+        kuis: (kuis ?? []).map((k) => ({ ...k, jumlah_soal: nSoal.get(Number(k.id))?.n ?? 0, total_detik: nSoal.get(Number(k.id))?.detik ?? 0, topik: nSoal.get(Number(k.id))?.topik ?? {} })),
+        kelas: (await konfigKelasSemua(db, kegiatanId)).map((k) => ({ ...k, anggota: anggota[k.kelas] ?? 0 })),
         ruang: (ruang ?? []).map((r) => ({ ...r, jumlah_peserta: nPes.get(Number(r.id)) ?? 0 })),
       });
     }
@@ -89,9 +123,14 @@ export async function GET(req: NextRequest) {
 
     if (bagian === "ruang") {
       const rid = req.nextUrl.searchParams.get("ruang_id");
-      const ruang = rid ? await ruangMilik(db, rid, kegiatanId) : await ruangTerkini(db, kegiatanId);
+      const kelas = Number(req.nextUrl.searchParams.get("kelas"));
+      const ruang = rid ? await ruangMilik(db, rid, kegiatanId) : Number.isInteger(kelas) && kelas >= 1 && kelas <= 4 ? await ruangKelas(db, kegiatanId, kelas) : null;
       if (!ruang) return NextResponse.json({ ada: false, sekarang: now.toISOString(), boleh_kelola: bisaKelola });
       return NextResponse.json({ ada: true, boleh_kelola: bisaKelola, ...(await keadaanHost(db, ruang, now)) });
+    }
+
+    if (bagian === "live") {
+      return NextResponse.json({ boleh_kelola: bisaKelola, ...(await ringkasanLive(db, kegiatanId, now)) });
     }
 
     if (bagian === "rekap") {
@@ -100,8 +139,8 @@ export async function GET(req: NextRequest) {
       bersihkanCache(`papan:${ruang.id}:`);
       bersihkanCache(`sebaran:${ruang.id}:`);
       bersihkanCache(`peserta:${ruang.id}`);
-      const [soal, papan, sebaran, ikut, kuis] = await Promise.all([soalKuis(db, ruang.kuis_id), papanRuang(db, ruang.id, ruang.versi), sebaranRuang(db, ruang.id, ruang.versi), daftarPeserta(db, ruang.id), db.from("sigap_kuis").select("judul").eq("id", ruang.kuis_id).maybeSingle()]);
-      const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(2000);
+      const [soal, papan, sebaran, ikut, kuis] = await Promise.all([soalMainRuang(db, ruang), papanRuang(db, ruang.id, ruang.versi), sebaranRuang(db, ruang.id, ruang.versi), daftarPeserta(db, ruang.id), db.from("sigap_kuis").select("judul").eq("id", ruang.kuis_id).maybeSingle()]);
+      const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).eq("kelas", ruang.kelas).limit(2000);
       const ids = Array.from(new Set((pen ?? []).map((p) => Number(p.akun_id)).concat(ikut.map((p) => p.akun_id))));
       const { data: ak } = ids.length ? await db.from("sigap_akun").select("id, nama, jenis").in("id", ids).limit(2000) : { data: [] as Record<string, unknown>[] };
       const infoAkun = new Map((ak ?? []).map((a) => [Number(a.id), { nama: String(a.nama), jenis: String(a.jenis) }]));
@@ -112,19 +151,19 @@ export async function GET(req: NextRequest) {
           const a = infoAkun.get(id);
           const p = poinPer.get(id);
           const t = infoPen.get(id);
-          return { akun_id: id, nama: a?.nama ?? "?", jenis_akun: a?.jenis ?? "mitra", peran: t?.peran ?? "", kelas: t?.kelas ?? null, ikut: !!p, poin: p?.poin ?? null, benar: p?.benar ?? null, menjawab: p?.menjawab ?? null, rata_waktu_ms: p?.rata_waktu_ms ?? null, peringkat: p?.peringkat ?? null };
+          return { akun_id: id, nama: a?.nama ?? "?", jenis_akun: a?.jenis ?? "mitra", peran: t?.peran ?? (a?.jenis ? "Inda/instruktur" : ""), kelas: t?.kelas ?? ruang.kelas, ikut: !!p, poin: p?.poin ?? null, benar: p?.benar ?? null, menjawab: p?.menjawab ?? null, rata_waktu_ms: p?.rata_waktu_ms ?? null, peringkat: p?.peringkat ?? null };
         })
         .sort((a, b) => (a.peringkat ?? 1e9) - (b.peringkat ?? 1e9) || (a.kelas ?? 9) - (b.kelas ?? 9) || a.nama.localeCompare(b.nama));
       return NextResponse.json({
         sekarang: now.toISOString(),
-        ruang: { id: ruang.id, kuis_id: ruang.kuis_id, judul: String(kuis.data?.judul ?? "Kuis"), status: ruang.status, dibuka_at: ruang.dibuka_at, selesai_at: ruang.selesai_at },
+        ruang: { id: ruang.id, kuis_id: ruang.kuis_id, kelas: ruang.kelas, judul: String(kuis.data?.judul ?? "Kuis"), status: ruang.status, dibuka_at: ruang.dibuka_at, selesai_at: ruang.selesai_at },
         jumlah_soal: soal.length,
         peserta,
         soal: soal.map((s) => {
           const x = sebaran[s.nomor] ?? { jumlah: {}, benar: 0, total: 0 };
           const jumlah: Record<string, number> = {};
           s.opsi.forEach((o) => (jumlah[o.kode] = x.jumlah[o.kode] ?? 0));
-          return { nomor: s.nomor, teks: s.teks, kunci: s.kunci, detik: s.detik, opsi: s.opsi, menjawab: x.total, benar: x.benar, persen_benar: ikut.length ? Math.round((x.benar / ikut.length) * 1000) / 10 : null, sebaran: jumlah };
+          return { nomor: s.nomor, teks: s.teks, topik: s.topik, penjelasan: s.penjelasan, kunci: s.kunci, detik: s.detik, opsi: s.opsi, menjawab: x.total, benar: x.benar, persen_benar: ikut.length ? Math.round((x.benar / ikut.length) * 1000) / 10 : null, sebaran: jumlah };
         }),
       });
     }
@@ -192,7 +231,7 @@ export async function POST(req: NextRequest) {
       const { data, error } = await db.from("sigap_kuis").insert({ kegiatan_id: kegiatanId, judul: `${kuis.judul} (salinan)`.slice(0, 150), dibuat_oleh: akun.id }).select("id").maybeSingle();
       if (error || !data) return galat(error?.message ?? "Gagal menyalin.", 500);
       if (soal.length) {
-        const { error: e2 } = await db.from("sigap_kuis_soal").insert(soal.map((s) => ({ kuis_id: data.id, nomor: s.nomor, teks: s.teks, opsi: s.opsi, kunci: s.kunci, detik: s.detik })));
+        const { error: e2 } = await db.from("sigap_kuis_soal").insert(soal.map((s) => ({ kuis_id: data.id, nomor: s.nomor, teks: s.teks, opsi: s.opsi, kunci: s.kunci, detik: s.detik, topik: s.topik, penjelasan: s.penjelasan })));
         if (e2) return galat(e2.message, 500);
       }
       await catatAudit(db, akun.id, "pelatihan_kuis_duplikat", { dari: kuis.id, kuis_id: data.id });
@@ -207,7 +246,7 @@ export async function POST(req: NextRequest) {
       const { soal, galat: daftarGalat } = validasiKuisJson(body?.soal);
       if (daftarGalat.length > 0) return NextResponse.json({ error: "Template soal belum benar.", rincian: daftarGalat.slice(0, 50) }, { status: 422 });
       if (soal.length === 0) return galat("Tidak ada soal yang terbaca.");
-      const baris = soal.map((s) => ({ kuis_id: kuis.id, nomor: s.nomor, teks: s.teks, opsi: s.opsi, kunci: s.kunci, detik: s.detik }));
+      const baris = soal.map((s) => ({ kuis_id: kuis.id, nomor: s.nomor, teks: s.teks, opsi: s.opsi, kunci: s.kunci, detik: s.detik, topik: s.topik, penjelasan: s.penjelasan }));
       const { error } = await db.from("sigap_kuis_soal").upsert(baris, { onConflict: "kuis_id,nomor" });
       if (error) return galat(error.message, 500);
       const { error: e2 } = await db.from("sigap_kuis_soal").delete().eq("kuis_id", kuis.id).not("nomor", "in", `(${soal.map((s) => s.nomor).join(",")})`);
@@ -218,28 +257,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, jumlah_soal: soal.length });
     }
 
-    if (aksi === "buka_ruang") {
-      const kuis = await kuisMilik(db, body?.kuis_id, kegiatanId);
-      if (!kuis) return galat("Kuis tidak ditemukan.", 404);
-      const soal = await soalKuis(db, kuis.id);
-      if (!soal.length) return galat("Kuis belum punya soal.", 409);
-      const { data, error } = await db.from("sigap_kuis_ruang").insert({ kuis_id: kuis.id, kegiatan_id: kegiatanId, status: "lobi", dibuka_oleh: akun.id }).select("id").maybeSingle();
-      if (error) {
-        if (error.code === "23505") return galat("Masih ada ruang kuis yang aktif. Akhiri dulu ruang tersebut.", 409);
-        return galat(error.message, 500);
-      }
-      bersihkanCache("ruang:");
-      await catatAudit(db, akun.id, "pelatihan_kuis_buka_ruang", { kuis_id: kuis.id, ruang_id: data?.id });
-      return NextResponse.json({ ok: true, ruang_id: data?.id });
+    if (aksi === "simpan_kelas") {
+      const kelas = kelasValid(body?.kelas);
+      if (kelas === null) return galat("Kelas tidak valid.");
+      const kuisId = body?.kuis_id === null || body?.kuis_id === undefined || body?.kuis_id === "" ? null : Number(body.kuis_id);
+      if (kuisId !== null && !Number.isInteger(kuisId)) return galat("Kuis tidak valid.");
+      const h = await simpanKonfigKelas(db, kegiatanId, kelas, { kuis_id: kuisId, pengaturan: body?.pengaturan, soal_pilihan: body?.soal_pilihan, acak_ulang: body?.acak_ulang === true }, akun.id, now);
+      if (!h.ok) return galat(h.error, h.status);
+      await catatAudit(db, akun.id, "pelatihan_kuis_atur_kelas", { kelas, kuis_id: kuisId, jumlah: h.konfig.soal_pilihan.length, mode: h.konfig.pengaturan.mode });
+      return NextResponse.json({ ok: true, konfig: h.konfig });
     }
 
-    if (aksi === "lanjut") {
+    if (aksi === "buka_ruang") {
+      const kelas = kelasValid(body?.kelas);
+      if (kelas === null) return galat("Kelas tidak valid.");
+      const h = await bukaRuang(db, kegiatanId, kelas, akun.id, now);
+      if (!h.ok) return galat(h.error, h.status);
+      await catatAudit(db, akun.id, "pelatihan_kuis_buka_ruang", { kelas, kuis_id: h.ruang.kuis_id, ruang_id: h.ruang.id });
+      return NextResponse.json({ ok: true, ruang_id: h.ruang.id, ...(await keadaanHost(db, h.ruang, now)) });
+    }
+
+    if (aksi === "lanjut" || aksi === "jeda" || aksi === "lanjutkan" || aksi === "restart") {
       const ruang = await ruangMilik(db, body?.ruang_id, kegiatanId);
       if (!ruang) return galat("Ruang tidak ditemukan.", 404);
-      const v = body?.versi === undefined || body?.versi === null ? null : Number(body.versi);
-      const h = await lanjutRuang(db, ruang.id, v !== null && Number.isInteger(v) ? v : null, now);
+      let h;
+      if (aksi === "lanjut") {
+        const v = body?.versi === undefined || body?.versi === null ? null : Number(body.versi);
+        h = await lanjutRuang(db, ruang.id, v !== null && Number.isInteger(v) ? v : null, now);
+      } else if (aksi === "jeda") h = await jedaRuang(db, ruang.id, now);
+      else if (aksi === "lanjutkan") h = await lanjutkanRuang(db, ruang.id, now);
+      else h = await restartRuang(db, ruang.id);
       if (!h.ok) return galat(h.error, h.status);
-      if (h.berubah) await catatAudit(db, akun.id, "pelatihan_kuis_lanjut", { ruang_id: ruang.id, status: h.ruang.status, soal_ke: h.ruang.soal_ke });
+      if (h.berubah) await catatAudit(db, akun.id, `pelatihan_kuis_${aksi}`, { ruang_id: ruang.id, kelas: ruang.kelas, status: h.ruang.status, soal_ke: h.ruang.soal_ke });
       return NextResponse.json({ ok: true, berubah: h.berubah, ...(await keadaanHost(db, h.ruang, now)) });
     }
 
@@ -247,18 +296,18 @@ export async function POST(req: NextRequest) {
       const ruang = await ruangMilik(db, body?.ruang_id, kegiatanId);
       if (!ruang) return galat("Ruang tidak ditemukan.", 404);
       const r = await akhiriRuang(db, ruang.id, now);
-      await catatAudit(db, akun.id, "pelatihan_kuis_akhiri", { ruang_id: ruang.id });
+      await catatAudit(db, akun.id, "pelatihan_kuis_akhiri", { ruang_id: ruang.id, kelas: ruang.kelas });
       return NextResponse.json({ ok: true, ...(r ? await keadaanHost(db, r, now) : {}) });
     }
 
     if (aksi === "hapus_ruang") {
       const ruang = await ruangMilik(db, body?.ruang_id, kegiatanId);
       if (!ruang) return galat("Ruang tidak ditemukan.", 404);
-      if (ruang.status !== "selesai") return galat("Akhiri ruang dulu sebelum dihapus.", 409);
+      if (ruang.status !== "selesai") return galat("Stop ruang dulu sebelum dihapus.", 409);
       const { error } = await db.from("sigap_kuis_ruang").delete().eq("id", ruang.id);
       if (error) return galat(error.message, 500);
       bersihkanCache("ruang:");
-      await catatAudit(db, akun.id, "pelatihan_kuis_hapus_ruang", { ruang_id: ruang.id, kuis_id: ruang.kuis_id });
+      await catatAudit(db, akun.id, "pelatihan_kuis_hapus_ruang", { ruang_id: ruang.id, kuis_id: ruang.kuis_id, kelas: ruang.kelas });
       return NextResponse.json({ ok: true });
     }
 
