@@ -382,7 +382,8 @@ function MonitoringBagian() {
   );
 }
 
-const STATUS_FILTER: Record<string, string> = { belum_mulai: "Belum mulai", mengerjakan: "Sedang mengerjakan", selesai: "Selesai", terlewat: "Terlewat" };
+const STATUS_FILTER: Record<string, string> = { belum_mulai: "belum mulai", mengerjakan: "sedang mengerjakan", selesai: "selesai", terlewat: "terlewat" };
+const labelStatusFilter = (v: string) => { const [j, st] = v.split(":"); return `${LABEL_JENIS_TES[j as JenisTes] ?? j}: ${STATUS_FILTER[st] ?? st}`; };
 
 function Monitoring() {
   const [data, setData] = useState<Monitor | null>(null);
@@ -420,12 +421,11 @@ function Monitoring() {
       if (jenis && p.jenis_akun !== jenis) return false;
       if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
       if (status) {
-        const adaCocok = DAFTAR_JENIS_TES.some((j) => {
-          const s = p.tes[j]?.status;
-          const norm = s === "belum_buka" || s === "buka" || s === "soal_belum_ada" ? "belum_mulai" : s;
-          return norm === status;
-        });
-        if (!adaCocok) return false;
+        // nilai filter = "<tes>:<status>" (mis. "pretest:belum_mulai") -> hanya tes yang dipilih yang dicek
+        const [j, st] = status.split(":") as [JenisTes, string];
+        const s0 = p.tes[j]?.status;
+        const norm = !s0 || s0 === "belum_buka" || s0 === "buka" || s0 === "soal_belum_ada" ? "belum_mulai" : s0;
+        if (norm !== st) return false;
       }
       return true;
     });
@@ -510,7 +510,7 @@ function Monitoring() {
   const total = baris.length;
   const semua = data.peserta.length;
   const persen = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
-  const filterAktif = [kelas && `Kelas ${kelas}`, peran && peran.toUpperCase(), jenis && (jenis === "organik" ? "Organik" : "Mitra"), status && (STATUS_FILTER[status] ?? status), cari && `“${cari}”`].filter(Boolean) as string[];
+  const filterAktif = [kelas && `Kelas ${kelas}`, peran && peran.toUpperCase(), jenis && (jenis === "organik" ? "Organik" : "Mitra"), status && labelStatusFilter(status), cari && `“${cari}”`].filter(Boolean) as string[];
   const adaFilter = filterAktif.length > 0;
   const resetFilter = () => {
     setKelas("");
@@ -550,10 +550,13 @@ function Monitoring() {
         </select>
         <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
           <option value="">Semua status</option>
-          <option value="belum_mulai">Belum mulai</option>
-          <option value="mengerjakan">Sedang mengerjakan</option>
-          <option value="selesai">Selesai</option>
-          <option value="terlewat">Terlewat</option>
+          {DAFTAR_JENIS_TES.map((j) => (
+            <optgroup key={j} label={LABEL_JENIS_TES[j]}>
+              {Object.entries(STATUS_FILTER).map(([k, v]) => (
+                <option key={`${j}:${k}`} value={`${j}:${k}`}>{LABEL_JENIS_TES[j]}: {v}</option>
+              ))}
+            </optgroup>
+          ))}
         </select>
         <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari nama" />
         {adaFilter && (
