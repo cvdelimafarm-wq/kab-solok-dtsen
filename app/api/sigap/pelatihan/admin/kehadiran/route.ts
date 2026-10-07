@@ -6,6 +6,7 @@
 // GET ?bagian=pengaturan              -> pengaturan presensi (titik, radius, jam, akurasi)
 // GET ?bagian=presensi                -> peserta x status presensi (hadir / ditolak / belum) + statistik
 // GET ?bagian=translok                -> peserta x foto Transport Lokal pada hari pelatihan
+// GET ?bagian=akses                  -> peserta x akses ke halaman Pelatihan (pertama kali), login terakhir, kontak (pengelola)
 // GET ?bagian=foto&penugasan_id=N     -> foto (tautan sementara 1 jam) seorang peserta
 // POST {aksi:"atur_presensi", lat, lng, radius_m, buka_at, tutup_at, akurasi_maks_m, tempat?}
 // POST {aksi:"presensi_manual", akun_id, alasan}   -> panitia mencatat hadir (mis. GPS gagal)
@@ -116,6 +117,53 @@ export async function GET(req: NextRequest) {
       const lengkap = peserta.filter((p) => p.slot.length >= total).length;
       const belum = peserta.filter((p) => p.slot.length === 0).length;
       return NextResponse.json({ sekarang: sekarang.toISOString(), tanggal: UNDANGAN.tanggal_iso, foto_total: total, stat: { peserta: peserta.length, lengkap, sebagian: peserta.length - lengkap - belum, belum }, peserta });
+    }
+
+    if (bagian === "akses") {
+      const bisaKelola = boleh(izin, "pelatihan.kelola", "kelola", kegiatanId);
+      const { data: ak2 } = akunIds.length
+        ? await db.from("sigap_akun").select("id, jenis, alamat_kecamatan, akun_dibuat_at, terakhir_masuk_at, petugas_bencana_id").in("id", akunIds).limit(2000)
+        : { data: [] as Record<string, unknown>[] };
+      const { data: lg } = await db.from("sigap_pelatihan_langkah").select("akun_id, kode, at").eq("kegiatan_id", kegiatanId).limit(20000);
+      const aksesAt = new Map<number, string>();
+      const undangan = new Set<number>();
+      for (const r of lg ?? []) {
+        if (r.kode === "akses") aksesAt.set(r.akun_id as number, r.at as string);
+        if (r.kode === "undangan") undangan.add(r.akun_id as number);
+      }
+      // kontak hanya untuk pengelola (data pribadi)
+      const hp = new Map<number, string>();
+      if (bisaKelola) {
+        const pbIds = (ak2 ?? []).map((a) => a.petugas_bencana_id as number | null).filter((x): x is number => !!x);
+        const { data: pb } = pbIds.length ? await db.from("bencana_petugas").select("id, no_hp").in("id", pbIds).limit(2000) : { data: [] as Record<string, unknown>[] };
+        const noHp = new Map((pb ?? []).map((x) => [x.id as number, (x.no_hp as string | null) ?? ""]));
+        for (const a of ak2 ?? []) {
+          const v = noHp.get(a.petugas_bencana_id as number);
+          if (v) hp.set(a.id as number, v);
+        }
+      }
+      const info = new Map((ak2 ?? []).map((a) => [a.id as number, a]));
+      const peserta = urut(
+        (pen ?? []).map((p) => {
+          const id = p.akun_id as number;
+          const a = info.get(id);
+          return {
+            akun_id: id,
+            nama: nama.get(id) ?? "?",
+            peran: p.peran as string,
+            kelas: (p.kelas as number | null) ?? null,
+            kecamatan: (a?.alamat_kecamatan as string | null) ?? null,
+            akun_dibuat: !!a?.akun_dibuat_at,
+            terakhir_masuk_at: (a?.terakhir_masuk_at as string | null) ?? null,
+            akses_pertama_at: aksesAt.get(id) ?? null,
+            undangan_dibuka: undangan.has(id),
+            hp: hp.get(id) ?? null,
+          };
+        })
+      );
+      const sudah = peserta.filter((p) => p.akses_pertama_at).length;
+      const belumMasuk = peserta.filter((p) => !p.akses_pertama_at && !p.terakhir_masuk_at).length;
+      return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_lihat_kontak: bisaKelola, stat: { peserta: peserta.length, sudah, belum: peserta.length - sudah, belum_pernah_masuk: belumMasuk }, peserta });
     }
 
     if (bagian === "foto") {

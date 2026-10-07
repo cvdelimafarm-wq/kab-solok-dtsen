@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN, statusTes } from "@/lib/sigapTes";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatPresensiAkun, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
+import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatPresensiAkun, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,6 +71,8 @@ export async function GET(req: NextRequest) {
       const [peng, pres] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatPresensiAkun(db, kegiatanId, akun.id)]);
       presensi = peng ? { ...pres, pengaturan: peng } : null;
       langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);
+      // (7 Okt 2026) akses pertama ke halaman Pelatihan dicatat utk monitoring "belum akses"
+      if (!langkah.sudah_akses) await catatLangkah(db, akun.id, kegiatanId, "akses").catch(() => {});
       const { data: a } = await db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle();
       tokenTranslok = (a?.token as string | undefined) ?? null;
     }

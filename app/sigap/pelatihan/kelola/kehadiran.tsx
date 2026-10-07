@@ -508,3 +508,184 @@ export function MonitoringTranslok() {
     </div>
   );
 }
+
+// ======================================================================
+// Monitoring akses pelatihan (siapa yang belum membuka halaman Pelatihan)
+// ======================================================================
+type AksesPes = {
+  akun_id: number;
+  nama: string;
+  peran: string;
+  kelas: number | null;
+  kecamatan: string | null;
+  akun_dibuat: boolean;
+  terakhir_masuk_at: string | null;
+  akses_pertama_at: string | null;
+  undangan_dibuka: boolean;
+  hp: string | null;
+};
+type RespAkses = { sekarang: string; boleh_lihat_kontak: boolean; stat: { peserta: number; sudah: number; belum: number; belum_pernah_masuk: number }; peserta: AksesPes[] };
+
+/** Nomor HP -> tautan WhatsApp (628…). Hanya membuka WhatsApp; pesan dikirim sendiri oleh pengelola. */
+const tautanWa = (hp: string) => {
+  const d = hp.replace(/\D/g, "");
+  const n = d.startsWith("0") ? `62${d.slice(1)}` : d.startsWith("62") ? d : `62${d}`;
+  return `https://wa.me/${n}`;
+};
+const tglJam = (iso: string) => {
+  const d = new Date(new Date(iso).getTime() + 7 * 3_600_000);
+  return `${d.getUTCDate()}/${d.getUTCMonth() + 1} ${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`;
+};
+
+export function MonitoringAkses() {
+  const { data, galat } = usePolling<RespAkses>(`${URL_KEHADIRAN}?bagian=akses`);
+  const [kelas, setKelas] = useState("");
+  const [peran, setPeran] = useState("");
+  const [status, setStatus] = useState("belum");
+  const [cari, setCari] = useState("");
+  const [salin, setSalin] = useState<string | null>(null);
+
+  const baris = useMemo(
+    () =>
+      (data?.peserta ?? []).filter(
+        (p) =>
+          (!kelas || String(p.kelas ?? "") === kelas) &&
+          (!peran || p.peran === peran) &&
+          (!status || (status === "belum" ? !p.akses_pertama_at : status === "belum_masuk" ? !p.akses_pertama_at && !p.terakhir_masuk_at : !!p.akses_pertama_at)) &&
+          (!cari || p.nama.toLowerCase().includes(cari.toLowerCase()))
+      ),
+    [data, kelas, peran, status, cari]
+  );
+
+  async function salinDaftar() {
+    const teks = baris.map((p, i) => `${i + 1}. ${p.nama} (Kelas ${p.kelas ?? "-"}, ${p.peran.toUpperCase()})`).join("\n");
+    try {
+      await navigator.clipboard.writeText(teks);
+      setSalin(`${baris.length} nama tersalin.`);
+    } catch {
+      setSalin("Gagal menyalin; gunakan Ekspor Excel.");
+    }
+    setTimeout(() => setSalin(null), 3000);
+  }
+
+  async function ekspor() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Kecamatan", "Akses pelatihan", "Akses pertama (WIB)", "Undangan dibuka", "Login terakhir (WIB)", "Akun dibuat", ...(data.boleh_lihat_kontak ? ["No. HP"] : [])]];
+    baris.forEach((p, i) =>
+      aoa.push([i + 1, p.nama, p.kelas ?? "", p.peran.toUpperCase(), p.kecamatan ?? "", p.akses_pertama_at ? "sudah" : "belum", p.akses_pertama_at ? waktuWib(p.akses_pertama_at) : "", p.undangan_dibuka ? "ya" : "tidak", p.terakhir_masuk_at ? waktuWib(p.terakhir_masuk_at) : "belum pernah", p.akun_dibuat ? "ya" : "belum", ...(data.boleh_lihat_kontak ? [p.hp ?? ""] : [])])
+    );
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 18 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 11 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Akses pelatihan");
+    XLSX.writeFile(wb, `Akses_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
+  if (!data) return <Memuat />;
+  const st = data.stat;
+  return (
+    <div className="space-y-3">
+      {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <KartuAngka label="Peserta" nilai={st.peserta} />
+        <KartuAngka label="Sudah akses" nilai={st.sudah} ket={`${st.peserta ? Math.round((st.sudah / st.peserta) * 100) : 0}%`} warna="#1E7A4C" />
+        <KartuAngka label="Belum akses" nilai={st.belum} warna="#C0392B" />
+        <KartuAngka label="Belum pernah login" nilai={st.belum_pernah_masuk} ket="belum masuk SIGAP sama sekali" warna="#9A6200" />
+      </div>
+      <Kartu
+        judul="Akses halaman Pelatihan"
+        ket={`${baris.length} dari ${data.peserta.length} · segar otomatis tiap 10 detik`}
+        kanan={
+          <span className="flex flex-wrap gap-1.5">
+            <button type="button" className={BTN_O} onClick={salinDaftar}>
+              📋 Salin nama
+            </button>
+            <button type="button" className={BTN_O} onClick={ekspor}>
+              ⬇ Ekspor Excel
+            </button>
+          </span>
+        }
+      >
+        {salin && <p className="mb-2 text-[12.5px] font-semibold text-[#17623C]">{salin}</p>}
+        <div className="mb-2 flex flex-wrap gap-2">
+          <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter akses">
+            <option value="belum">Belum akses</option>
+            <option value="belum_masuk">Belum pernah login</option>
+            <option value="sudah">Sudah akses</option>
+            <option value="">Semua</option>
+          </select>
+          <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
+            <option value="">Semua kelas</option>
+            {[1, 2, 3, 4].map((k) => (
+              <option key={k} value={k}>
+                Kelas {k}
+              </option>
+            ))}
+          </select>
+          <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
+            <option value="">Semua peran</option>
+            <option value="pml">PML</option>
+            <option value="ppl">PPL</option>
+          </select>
+          <input className={`${INPUT} min-w-[160px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
+        </div>
+        <TabelKartu className="!shadow-none">
+          <thead>
+            <tr>
+              <th className={TH}>Nama</th>
+              <th className={TH}>Kls</th>
+              <th className={TH}>Peran</th>
+              <th className={TH}>Kecamatan</th>
+              <th className={TH}>Akses pelatihan</th>
+              <th className={TH}>Login terakhir</th>
+              {data.boleh_lihat_kontak && <th className={TH}>Kontak</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {baris.map((p) => (
+              <tr key={p.akun_id}>
+                <td className={`${TD} font-semibold`}>{p.nama}</td>
+                <td className={TD}>{p.kelas ?? "–"}</td>
+                <td className={TD}>{p.peran.toUpperCase()}</td>
+                <td className={TD}>{p.kecamatan ?? "–"}</td>
+                <td className={TD}>
+                  {p.akses_pertama_at ? (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <Chip w="ok">sudah</Chip>
+                      <span className="text-[11.5px] tabular-nums text-[#55657D]">{tglJam(p.akses_pertama_at)}</span>
+                    </span>
+                  ) : (
+                    <Chip w="bad">belum akses</Chip>
+                  )}
+                </td>
+                <td className={`${TD} text-[12px]`}>
+                  {p.terakhir_masuk_at ? <span className="tabular-nums">{tglJam(p.terakhir_masuk_at)}</span> : <Chip w="wait">belum pernah login</Chip>}
+                </td>
+                {data.boleh_lihat_kontak && (
+                  <td className={TD}>
+                    {p.hp ? (
+                      <a href={tautanWa(p.hp)} target="_blank" rel="noreferrer" className="text-[12.5px] font-semibold text-[#1F6FD1] underline" title="Buka WhatsApp (pesan dikirim manual)">
+                        {p.hp}
+                      </a>
+                    ) : (
+                      <span className="text-[#7B8794]">–</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {baris.length === 0 && (
+              <tr>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>
+                  {status === "belum" ? "Semua peserta sudah mengakses halaman Pelatihan. 🎉" : "Tidak ada peserta yang cocok dengan filter."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </TabelKartu>
+      </Kartu>
+    </div>
+  );
+}

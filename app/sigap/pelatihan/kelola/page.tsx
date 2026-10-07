@@ -12,7 +12,7 @@ import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, waktuWib } from
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
-import { MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
+import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -349,11 +349,12 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
   return <Chip>{LABEL_PES[c.status] ?? c.status}</Chip>;
 }
 
-type SubMon = "tes" | "presensi" | "translok";
+type SubMon = "tes" | "akses" | "presensi" | "translok";
 function MonitoringBagian() {
   const [sub, setSub] = useState<SubMon>("tes");
   const item: { k: SubMon; label: string }[] = [
     { k: "tes", label: "📝 Pretest & Posttest" },
+    { k: "akses", label: "🚪 Akses Pelatihan" },
     { k: "presensi", label: "📍 Presensi" },
     { k: "translok", label: "🛵 Transport Lokal" },
   ];
@@ -373,6 +374,7 @@ function MonitoringBagian() {
           </button>
         ))}
       </div>
+      {sub === "akses" && <MonitoringAkses />}
       {sub === "tes" && <Monitoring />}
       {sub === "presensi" && <MonitoringPresensi />}
       {sub === "translok" && <MonitoringTranslok />}

@@ -179,11 +179,11 @@ export async function pesertaPelatihan(db: Db, akunId: number, kegiatanId: numbe
 export const JUMLAH_FOTO_TRANSLOK = 5;
 
 /** Catat sebuah langkah (idempoten; yang pertama menang). Kegagalan dicatat diam-diam: tidak boleh menghalangi alur utama. */
-export async function catatLangkah(db: Db, akunId: number, kegiatanId: number, kode: "undangan" | "instrumen"): Promise<void> {
+export async function catatLangkah(db: Db, akunId: number, kegiatanId: number, kode: "undangan" | "instrumen" | "akses"): Promise<void> {
   await db.from("sigap_pelatihan_langkah").upsert({ akun_id: akunId, kegiatan_id: kegiatanId, kode }, { onConflict: "akun_id,kegiatan_id,kode", ignoreDuplicates: true });
 }
 
-export type LangkahPeserta = { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] };
+export type LangkahPeserta = { sudah_akses: boolean; undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] };
 
 export async function muatLangkah(db: Db, akunId: number, kegiatanId: number, penugasanId: number, tanggalIso: string): Promise<LangkahPeserta> {
   const [{ data: l }, { data: f }, { data: k }] = await Promise.all([
@@ -194,7 +194,7 @@ export async function muatLangkah(db: Db, akunId: number, kegiatanId: number, pe
   const kode = new Set((l ?? []).map((x) => x.kode as string));
   const total = Number(k?.jumlah_foto) > 0 ? Number(k?.jumlah_foto) : JUMLAH_FOTO_TRANSLOK;
   const slot = [...new Set((f ?? []).map((x) => x.slot as number))].filter((x) => x >= 1 && x <= total).sort((a, b) => a - b);
-  return { undangan_dibuka: kode.has("undangan"), instrumen_diunduh: kode.has("instrumen"), foto: slot.length, foto_total: total, slot };
+  return { sudah_akses: kode.has("akses"), undangan_dibuka: kode.has("undangan"), instrumen_diunduh: kode.has("instrumen"), foto: slot.length, foto_total: total, slot };
 }
 
 // ---------------------------------------------------------------------------------------------
