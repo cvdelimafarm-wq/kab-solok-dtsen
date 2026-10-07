@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { penugasanAkun } from "@/lib/sigap";
 import { boleh, izinAkun, punyaAksesAdmin, sesiDariHeader } from "@/lib/sigapAkses";
+import { idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
   const { data: a } = await db.from("sigap_akun").select("id, nama, token, aktif, jenis").eq("id", akunId).maybeSingle();
   if (!a || !a.aktif) return NextResponse.json({ error: "Akun tidak aktif." }, { status: 403 });
   const [pen, { peran, izin }] = await Promise.all([penugasanAkun(db, akunId), izinAkun(db, akunId)]);
+  // (7 Okt 2026) Pelatihan PSP Pascabencana: kartu Undangan & Pelatihan hanya utk peserta; Kelola utk izin pelatihan.kelola
+  const kegPel = await idKegiatanPelatihan(db);
+  const pesertaPel = kegPel ? await pesertaPelatihan(db, akunId, kegPel) : null;
   return NextResponse.json({
     nama: a.nama,
     token_petugas: pen.length > 0 ? a.token : null,
@@ -31,6 +35,8 @@ export async function GET(req: NextRequest) {
     kelola_akses: boleh(izin, "akses.kelola", "kelola"),
     kontrak: boleh(izin, "kontrak.kelola", "lihat"), // (6 Okt 2026) portal Pengadaan & Kontrak
     // (7 Okt 2026) SIGAP PEDIA: pegawai organik otomatis boleh membaca
+    peserta_pelatihan: !!pesertaPel,
+    pelatihan_kelola: boleh(izin, "pelatihan.kelola", "lihat"),
     pedia: a.jenis === "organik" || boleh(izin, "pedia.baca", "lihat") || boleh(izin, "pedia.kelola", "lihat"),
   });
 }

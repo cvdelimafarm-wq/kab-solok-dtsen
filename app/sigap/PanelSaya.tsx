@@ -6,7 +6,7 @@ import { useDetak } from "./useDetak";
 // (5 Okt 2026) Portal SIGAP satu pintu -- permintaan user: sesudah masuk, kartu menu yang tampil
 // mengikuti peran & izin akun (Transport Lokal bila punya penugasan, Admin, Kelola Peran & Akses).
 
-type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean; kontrak?: boolean; pedia?: boolean };
+type Saya = { nama: string; token_petugas: string | null; jumlah_penugasan: number; peran: { nama: string }[]; admin: boolean; kelola_akses: boolean; kontrak?: boolean; pedia?: boolean; peserta_pelatihan?: boolean; pelatihan_kelola?: boolean };
 
 function bacaSesi(): string | null {
   try {
@@ -69,6 +69,12 @@ export default function PanelSaya() {
   if (saya?.kontrak) kartu.push({ ikon: "📑", judul: "Pengadaan & Kontrak", ket: "Isi data paket (otomatis), unduh dokumen kontrak per dokumen", href: "/sigap/kontrak" });
   // (7 Okt 2026) SIGAP PEDIA -- ensiklopedia konsultasi resmi
   if (saya?.pedia) kartu.push({ ikon: "📚", judul: "SIGAP PEDIA", ket: "Tanya-jawab resmi HAI-DJPb, KPPN, Biro Keuangan — cari sebelum bertanya", href: "/sigap/pedia" });
+  // (7 Okt 2026) Pelatihan PSP Pascabencana: undangan pribadi, pretest & posttest (peserta) + kelola (admin)
+  if (saya?.peserta_pelatihan) {
+    kartu.push({ ikon: "✉️", judul: "Undangan", ket: "Kelas, jadwal 8 Oktober, tempat & unduh PDF undangan", href: "/sigap/pelatihan/undangan" });
+    kartu.push({ ikon: "📝", judul: "Pelatihan", ket: "Pretest 09.00 & posttest 15.00 (masing-masing 15 menit)", href: "/sigap/pelatihan" });
+  }
+  if (saya?.pelatihan_kelola) kartu.push({ ikon: "📊", judul: "Kelola Pelatihan", ket: "Unggah soal, atur jadwal, monitoring peserta", href: "/sigap/pelatihan/kelola" });
   if (saya?.kelola_akses) kartu.push({ ikon: "🔐", judul: "Kelola Peran & Akses", ket: "Atur peran, izin per menu, dan akun", href: "/sigap/akses" });
 
   return (

@@ -13,8 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola">;
+// (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
@@ -223,6 +224,7 @@ export default function Shell({
   const bolehAkses = !!ringkas.izin["akses.kelola"];
   const bolehKontrak = !!ringkas.izin["kontrak.kelola"];
   const bolehPediaKelola = ringkas.izin["pedia.kelola"]?.level === "kelola";
+  const bolehPelatihanKelola = !!ringkas.izin["pelatihan.kelola"]; // (7 Okt 2026) Kelola Pelatihan
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
@@ -232,6 +234,8 @@ export default function Shell({
     if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kontrak") });
     out.push({ id: "m-pedia", grup: "Menu", label: "SIGAP PEDIA", ket: "ensiklopedia konsultasi", jalankan: () => (window.location.href = "/sigap/pedia") });
     if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/pedia/kelola") });
+    if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (undangan, pretest & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
+    if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/pelatihan/kelola") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
     out.push({ id: "m-portal", grup: "Menu", label: "Portal SIGAP", jalankan: () => (window.location.href = "/sigap") });
@@ -239,7 +243,7 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -275,6 +279,8 @@ export default function Shell({
           ) : (
             <ItemNav mini={mini} ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
           )}
+          {(tokenPetugas || bolehPelatihanKelola) && <ItemNav mini={mini} ikon="buku" label="Pelatihan" href="/sigap/pelatihan" aktif={aktif === "pelatihan"} title="Undangan, pretest & posttest pelatihan" />}
+          {bolehPelatihanKelola && <ItemNav mini={mini} ikon="grafik" label="Kelola pelatihan" href="/sigap/pelatihan/kelola" aktif={aktif === "pelatihan_kelola"} title="Soal, jadwal & monitoring tes" />}
           <ItemNav mini={mini} ikon="pesawat" label="Perjalanan dinas" segera />
           <ItemNav mini={mini} ikon="uang" label="Honor" segera />
           {bolehKontrak ? (
@@ -298,7 +304,7 @@ export default function Shell({
                 mini={mini}
                 ikon="perisai"
                 label="Admin transport lokal"
-                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak" && aktif !== "pedia" && aktif !== "pedia_kelola"}
+                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak" && aktif !== "pedia" && aktif !== "pedia_kelola" && aktif !== "pelatihan" && aktif !== "pelatihan_kelola"}
                 onClick={() => pindahMenu(subAdmin[0].kode)}
                 badge={adaTindakan ? jumlahTindakan : null}
               />
