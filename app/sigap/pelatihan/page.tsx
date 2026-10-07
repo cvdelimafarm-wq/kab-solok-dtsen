@@ -569,7 +569,7 @@ function KotakPemandu({ p, ke }: { p: Pemandu; ke: (kode: string) => void }) {
   );
 }
 
-type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolean; bisaSekarang: boolean; badan: React.ReactNode; /** langkah tambahan: tidak dihitung dalam progres & "semua selesai" */ tambahan?: boolean };
+type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolean; bisaSekarang: boolean; badan: React.ReactNode; /** langkah tambahan: tidak dihitung dalam progres & "semua selesai" */ tambahan?: boolean; /** (8 Okt 2026) punya tombol yang bisa ditekan: jangan diredupkan walau statusnya "Menyusul" */ tombolAktif?: boolean; /** (8 Okt 2026) paksa diredupkan (mis. langkah foto di luar hari pelatihan) */ redup?: boolean };
 
 export default function HalamanPelatihan() {
   const { data, galat, muat, jam } = useHub(30_000);
@@ -593,6 +593,9 @@ export default function HalamanPelatihan() {
   let langkah: Langkah[] = [];
   if (data && peserta && u) {
     const { mulai } = jendelaPelatihan(u);
+    // (8 Okt 2026) langkah foto "menyala" hanya pada HARI pelatihan (00.00-23.59 WIB); di luar itu diredupkan
+    const awalHari = new Date(`${u.tanggal_iso}T00:00:00+07:00`).getTime();
+    const hariPelatihan = now >= awalHari && now < awalHari + 24 * 3_600_000;
     const pre = data.tes.find((t) => t.jenis === "pretest");
     const post = data.tes.find((t) => t.jenis === "posttest");
     const L = data.langkah;
@@ -626,6 +629,8 @@ export default function HalamanPelatihan() {
         selesai,
         terlewat: false,
         bisaSekarang: now >= mulai,
+        tombolAktif: hariPelatihan && !!data.token_translok,
+        redup: !hariPelatihan,
         badan: (
           <>
             <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam="unggah sampai 23.59 WIB" />
@@ -803,7 +808,7 @@ export default function HalamanPelatihan() {
                     <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
                       {g === "done" ? "✓" : g === "miss" ? "!" : i + 1}
                     </span>
-                    <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-xl border border-[#BBD4F5] bg-[#F3F8FF] p-2.5" : ""} ${g === "wait" ? "opacity-70" : ""}`}>
+                    <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-xl border border-[#BBD4F5] bg-[#F3F8FF] p-2.5" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
                       <div className="flex flex-wrap items-center gap-1.5 text-[14px] font-bold">
                         {l.judul} <Chip w={chipW[g]}>{chip}</Chip>
                       </div>
