@@ -260,7 +260,7 @@ export const UNDANGAN = {
   hari_tanggal: "Kamis, 8 Oktober 2026",
   tanggal_iso: "2026-10-08",
   pukul: "08.00–16.00 WIB",
-  tempat: "Mami Hotel Solok",
+  tempat: "Mami Hotel",
   pakaian: "Pakaian sopan dan rapi: batik pada pembukaan dan penutupan; pakaian bebas dan rapi selama pelatihan berlangsung.",
   ketentuan: [
     "Hadir tepat waktu pada kelas yang telah ditetapkan dan mengikuti seluruh rangkaian kegiatan sesuai jadwal.",

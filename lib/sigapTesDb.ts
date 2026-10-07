@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { sesiDariHeader } from "@/lib/sigapAkses";
+import type { PengaturanPresensi } from "@/lib/sigapPresensi";
 import {
   KODE_KEGIATAN_PELATIHAN,
   bersihkanJawaban,
@@ -170,4 +171,52 @@ export async function pesertaPelatihan(db: Db, akunId: number, kegiatanId: numbe
   const { data } = await db.from("sigap_penugasan").select("id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("aktif", true).maybeSingle();
   if (!data) return null;
   return { penugasan_id: data.id as number, peran: data.peran as string, kelas: (data.kelas as number | null) ?? null };
+}
+
+// ---------------------------------------------------------------------------------------------
+// (7 Okt 2026) Langkah Pelatihan -- catatan "undangan dibuka" & "instrumen diunduh" + hitung foto transport lokal.
+// ---------------------------------------------------------------------------------------------
+export const JUMLAH_FOTO_TRANSLOK = 5;
+
+/** Catat sebuah langkah (idempoten; yang pertama menang). Kegagalan dicatat diam-diam: tidak boleh menghalangi alur utama. */
+export async function catatLangkah(db: Db, akunId: number, kegiatanId: number, kode: "undangan" | "instrumen"): Promise<void> {
+  await db.from("sigap_pelatihan_langkah").upsert({ akun_id: akunId, kegiatan_id: kegiatanId, kode }, { onConflict: "akun_id,kegiatan_id,kode", ignoreDuplicates: true });
+}
+
+export type LangkahPeserta = { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] };
+
+export async function muatLangkah(db: Db, akunId: number, kegiatanId: number, penugasanId: number, tanggalIso: string): Promise<LangkahPeserta> {
+  const [{ data: l }, { data: f }, { data: k }] = await Promise.all([
+    db.from("sigap_pelatihan_langkah").select("kode").eq("akun_id", akunId).eq("kegiatan_id", kegiatanId),
+    db.from("sigap_dokumentasi").select("slot").eq("kegiatan_id", kegiatanId).eq("penugasan_id", penugasanId).eq("tanggal", tanggalIso),
+    db.from("sigap_kegiatan").select("jumlah_foto").eq("id", kegiatanId).maybeSingle(),
+  ]);
+  const kode = new Set((l ?? []).map((x) => x.kode as string));
+  const total = Number(k?.jumlah_foto) > 0 ? Number(k?.jumlah_foto) : JUMLAH_FOTO_TRANSLOK;
+  const slot = [...new Set((f ?? []).map((x) => x.slot as number))].filter((x) => x >= 1 && x <= total).sort((a, b) => a - b);
+  return { undangan_dibuka: kode.has("undangan"), instrumen_diunduh: kode.has("instrumen"), foto: slot.length, foto_total: total, slot };
+}
+
+// ---------------------------------------------------------------------------------------------
+// (7 Okt 2026) Presensi di lokasi pelatihan.
+// ---------------------------------------------------------------------------------------------
+export async function muatPengaturanPresensi(db: Db, kegiatanId: number): Promise<PengaturanPresensi | null> {
+  const { data } = await db.from("sigap_pelatihan_pengaturan").select("*").eq("kegiatan_id", kegiatanId).maybeSingle();
+  if (!data) return null;
+  return {
+    lat: Number(data.presensi_lat),
+    lng: Number(data.presensi_lng),
+    radius_m: Number(data.presensi_radius_m),
+    buka_at: data.presensi_buka_at as string,
+    tutup_at: data.presensi_tutup_at as string,
+    akurasi_maks_m: Number(data.akurasi_maks_m),
+    tempat: (data.tempat as string | null) ?? null,
+  };
+}
+
+export type PresensiPeserta = { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean };
+
+export async function muatPresensiAkun(db: Db, kegiatanId: number, akunId: number): Promise<PresensiPeserta> {
+  const { data } = await db.from("sigap_pelatihan_presensi").select("at, jarak_m, manual").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).maybeSingle();
+  return { sudah: !!data, at: (data?.at as string | undefined) ?? null, jarak_m: data?.jarak_m != null ? Number(data.jarak_m) : null, manual: !!data?.manual };
 }

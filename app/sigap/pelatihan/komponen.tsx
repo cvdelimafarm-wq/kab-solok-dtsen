@@ -3,13 +3,14 @@
 // app/sigap/pelatihan/komponen.tsx
 //
 // (7 Okt 2026) SIGAP > Pelatihan -- bagian bersama halaman peserta: kerangka (header + tab
-// Undangan | Pelatihan), pengambil data hub, jam server & hitung mundur. Mockup disetujui user.
+// Undangan | Langkah | Instrumen | Transport Lokal), pengambil data hub, jam server & hitung mundur. Mockup disetujui user.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
 import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import { useDetak } from "../useDetak";
+import type { PengaturanPresensi } from "@/lib/sigapPresensi";
 import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
 
 export type TesHub = {
@@ -33,6 +34,11 @@ export type Hub = {
   peserta: { penugasan_id: number; peran: string; kelas: number | null } | null;
   undangan: typeof UNDANGAN;
   tes: TesHub[];
+  /** (7 Okt 2026) Langkah Pelatihan: null bila akun bukan peserta. */
+  langkah: { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] } | null;
+  /** (7 Okt 2026) Presensi di lokasi pelatihan: null bila akun bukan peserta / belum diatur. */
+  presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; pengaturan: PengaturanPresensi } | null;
+  token_translok: string | null;
   sekarang: string;
   kegiatan_id: number;
   boleh_lihat_kelola: boolean;
@@ -122,7 +128,7 @@ export function Kerangka({
   nama,
   children,
 }: {
-  aktif: "undangan" | "pelatihan";
+  aktif: "undangan" | "pelatihan" | "instrumen";
   judul: React.ReactNode;
   sub?: React.ReactNode;
   nama?: string;
@@ -131,6 +137,24 @@ export function Kerangka({
   const router = useRouter();
   const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
   useDetak({ sesi: sesiDetak }, "pelatihan");
+  // (7 Okt 2026) Tab "Transport Lokal" langsung menuju halaman transport lokal biasa milik peserta (bukan duplikasi):
+  // tokennya dari /api/sigap/saya; tab hanya muncul bila akun punya penugasan.
+  const [tokenTranslok, setTokenTranslok] = useState<string | null>(null);
+  useEffect(() => {
+    let batal = false;
+    fetchJson<{ token_petugas: string | null }>("/api/sigap/saya")
+      .then((d) => !batal && setTokenTranslok(d.token_petugas ?? null))
+      .catch(() => {});
+    return () => {
+      batal = true;
+    };
+  }, []);
+  const tab: { kode: "undangan" | "pelatihan" | "instrumen" | "translok"; label: string }[] = [
+    { kode: "undangan", label: "✉️ Undangan" },
+    { kode: "pelatihan", label: "🧭 Langkah" },
+    { kode: "instrumen", label: "📚 Instrumen" },
+    ...(tokenTranslok ? [{ kode: "translok" as const, label: "🛵 Transport Lokal" }] : []),
+  ];
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
@@ -149,12 +173,12 @@ export function Kerangka({
         {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
       </HeaderAdmin>
       <BarisTab
-        tab={[
-          { kode: "undangan" as const, label: "✉️ Undangan" },
-          { kode: "pelatihan" as const, label: "📝 Pelatihan" },
-        ]}
+        tab={tab}
         aktif={aktif}
-        onPilih={(k) => router.push(k === "undangan" ? "/sigap/pelatihan/undangan" : "/sigap/pelatihan")}
+        onPilih={(k) => {
+          if (k === "translok") window.location.href = `/sigap/translok/${tokenTranslok}`;
+          else router.push(k === "undangan" ? "/sigap/pelatihan/undangan" : k === "instrumen" ? "/sigap/pelatihan/instrumen" : "/sigap/pelatihan");
+        }}
       />
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">{children}</main>
     </div>

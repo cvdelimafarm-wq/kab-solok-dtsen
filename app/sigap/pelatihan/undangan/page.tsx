@@ -5,9 +5,9 @@
 // (7 Okt 2026) SIGAP > Pelatihan -- tab "Undangan": undangan pribadi (nama, peran, kelas, jadwal, tempat,
 // pakaian, ketentuan transpor lokal 5 foto) + unduh PDF. Pilihan user: "Halaman undangan pribadi + unduh PDF".
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { bukaBlob, pesanGalat } from "../../admin/api";
+import { bukaBlob, fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka, peranLabel, useHub } from "../komponen";
 
@@ -25,6 +25,14 @@ export default function HalamanUndangan() {
   const [unduh, setUnduh] = useState(false);
   const [galatPdf, setGalatPdf] = useState<string | null>(null);
   const u = data?.undangan;
+
+  // (7 Okt 2026) Langkah Pelatihan: halaman Undangan dibuka -> langkah 1 tercatat selesai (sekali per muat).
+  const sudahCatat = useRef(false);
+  useEffect(() => {
+    if (!data?.peserta || sudahCatat.current) return;
+    sudahCatat.current = true;
+    fetchJson("/api/sigap/pelatihan/langkah", { method: "POST", body: JSON.stringify({ kode: "undangan" }) }).catch(() => {});
+  }, [data]);
 
   async function bukaPdf() {
     setUnduh(true);
@@ -113,7 +121,7 @@ export default function HalamanUndangan() {
               </table>
             </div>
             <p className="mt-2 text-[12.5px] text-[#55657D]">
-              Pretest dibuka pukul 09.00 dan posttest pukul 15.00 WIB (masing-masing 15 menit) lewat menu{" "}
+              Pretest dan posttest (masing-masing 15 menit) dikerjakan lewat menu{" "}
               <Link href="/sigap/pelatihan" className="font-bold text-[#1F6FD1] underline">
                 Pelatihan
               </Link>

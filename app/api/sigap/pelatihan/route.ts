@@ -3,12 +3,13 @@
 // (7 Okt 2026) SIGAP > Pelatihan -- beranda peserta: data undangan pribadi + status pretest/posttest.
 // GET (Authorization: Bearer <sesi>) ->
 //   { nama, peserta: {peran, kelas} | null, undangan, tes: [{jenis, judul, buka_at, tutup_at, durasi_menit,
-//     status, jumlah_soal, sesi?, hasil_tertunda, skor?}], sekarang, boleh_lihat_kelola, boleh_kelola }
+//     status, jumlah_soal, sesi?, hasil_tertunda, skor?}], langkah: {undangan_dibuka, instrumen_diunduh, foto, foto_total}|null,
+//   token_translok|null, sekarang, boleh_lihat_kelola, boleh_kelola }
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN, statusTes } from "@/lib/sigapTes";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
+import { akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatPresensiAkun, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,12 +63,26 @@ export async function GET(req: NextRequest) {
         });
       }
     }
+    // (7 Okt 2026) Langkah Pelatihan: status undangan/instrumen/foto + token halaman Transport Lokal peserta.
+    let langkah = null;
+    let tokenTranslok: string | null = null;
+    let presensi = null;
+    if (peserta) {
+      const [peng, pres] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatPresensiAkun(db, kegiatanId, akun.id)]);
+      presensi = peng ? { ...pres, pengaturan: peng } : null;
+      langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);
+      const { data: a } = await db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle();
+      tokenTranslok = (a?.token as string | undefined) ?? null;
+    }
     return NextResponse.json({
       nama: akun.nama,
       jenis_akun: akun.jenis,
       peserta,
       undangan: UNDANGAN,
       tes,
+      langkah,
+      presensi,
+      token_translok: tokenTranslok,
       sekarang: sekarang.toISOString(),
       kegiatan_id: kegiatanId,
       boleh_lihat_kelola: boleh(izin, "pelatihan.kelola", "lihat", kegiatanId),

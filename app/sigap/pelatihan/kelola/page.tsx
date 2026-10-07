@@ -4,7 +4,7 @@
 //
 // (7 Okt 2026) SIGAP > Kelola Pelatihan -- tab "Soal & Jadwal" (unduh template Excel, unggah soal, atur jadwal
 // buka/durasi/tutup) dan tab "Monitoring" (statistik, per peserta, analisis per soal, ekspor Excel; segar tiap
-// 10 detik). Izin menu `pelatihan.kelola`: lihat = monitoring, kelola = soal & jadwal. Mockup disetujui user.
+// 10 detik; sub-tab Presensi & Transport Lokal ada di ./kehadiran.tsx). Izin menu `pelatihan.kelola`: lihat = monitoring, kelola = soal & jadwal. Mockup disetujui user.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DAFTAR_JENIS_TES, HEADER_TEMPLATE, LABEL_JENIS_TES, MAKS_SOAL, PETUNJUK_TEMPLATE, bacaBarisSoal, barisTemplate, type JenisTes, type SoalLengkap } from "@/lib/sigapTes";
@@ -12,6 +12,7 @@ import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, waktuWib } from
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
+import { MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -79,9 +80,12 @@ export default function KelolaPelatihan() {
             const t = ringkas.tes.find((x) => x.jenis === j);
             return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
           })}
+          <div className="lg:col-span-2">
+            <PengaturanPresensiKartu />
+          </div>
         </div>
       )}
-      {ringkas && tab === "monitoring" && <Monitoring />}
+      {ringkas && tab === "monitoring" && <MonitoringBagian />}
     </Bingkai>
   );
 }
@@ -343,6 +347,37 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
   }
   if (c.status === "terlewat") return <Chip w="bad">terlewat</Chip>;
   return <Chip>{LABEL_PES[c.status] ?? c.status}</Chip>;
+}
+
+type SubMon = "tes" | "presensi" | "translok";
+function MonitoringBagian() {
+  const [sub, setSub] = useState<SubMon>("tes");
+  const item: { k: SubMon; label: string }[] = [
+    { k: "tes", label: "📝 Pretest & Posttest" },
+    { k: "presensi", label: "📍 Presensi" },
+    { k: "translok", label: "🛵 Transport Lokal" },
+  ];
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5" role="tablist">
+        {item.map((x) => (
+          <button
+            key={x.k}
+            type="button"
+            role="tab"
+            aria-selected={sub === x.k}
+            onClick={() => setSub(x.k)}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold transition ${sub === x.k ? "bg-[#0F3D7A] text-white" : "bg-white text-[#55657D] ring-1 ring-[#CDD5DE] hover:bg-[#F8FAFC]"}`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      {sub === "tes" && <Monitoring />}
+      {sub === "presensi" && <MonitoringPresensi />}
+      {sub === "translok" && <MonitoringTranslok />}
+    </div>
+  );
 }
 
 function Monitoring() {
