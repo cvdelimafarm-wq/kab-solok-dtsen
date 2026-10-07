@@ -383,6 +383,109 @@ const simpanRayakan = (id: string, kode: string[]) => {
   }
 };
 
+/** (7 Okt 2026) Pemandu Langkah: satu kotak ringkas di atas daftar langkah -- apresiasi untuk yang sudah selesai + pengingat/arahan langkah berikutnya. */
+type Pemandu = { nada: "ok" | "ingat" | "info"; ikon: string; judul: string; teks?: string; aksi?: { label: string; href?: string; kode?: string }; terima?: string; catatan?: string; tertinggal?: string };
+const TERIMA: Record<string, string> = {
+  undangan: "Undangan sudah dibaca",
+  instrumen: "Instrumen sudah dipelajari",
+  pretest: "Pretest sudah dikerjakan",
+  hadir: "Presensi sudah tercatat",
+  posttest: "Posttest sudah dikerjakan",
+  foto: "Semua foto Transport Lokal sudah terunggah",
+};
+function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: number): Pemandu | null {
+  if (!langkah.length) return null;
+  const tes = (k: string) => data.tes.find((t) => t.jenis === k);
+  const L = data.langkah;
+  const no = (kode: string) => langkah.findIndex((l) => l.kode === kode) + 1;
+  // Apresiasi singkat: langkah selesai terakhir (urutan terjauh).
+  let idxTerakhir = -1;
+  langkah.forEach((l, i) => l.selesai && (idxTerakhir = i));
+  const terima = idxTerakhir >= 0 && !langkah.every((l) => l.selesai) ? `${TERIMA[langkah[idxTerakhir].kode] ?? langkah[idxTerakhir].judul} — terima kasih.` : undefined;
+  const terlewat = langkah.filter((l) => l.terlewat).map((l) => l.judul.replace(/^Kerjakan /, ""));
+  const catatan = terlewat.length ? `Terlewat: ${terlewat.join(", ")}. Hubungi panitia bila ada kendala.` : undefined;
+
+  if (langkah.every((l) => l.selesai))
+    return { nada: "ok", ikon: "🎉", judul: "Semua langkah sudah selesai", teks: "Terima kasih telah mengikuti pelatihan dengan baik. Tidak ada lagi yang perlu dikerjakan di sini." };
+
+  // Prioritas: langkah berbatas waktu yang sedang terbuka (tes/presensi), baru langkah pertama yang belum selesai.
+  const waktuTerbuka = langkah.find((l) => !l.selesai && !l.terlewat && l.bisaSekarang && ["pretest", "hadir", "posttest"].includes(l.kode));
+  const f = waktuTerbuka ?? langkah.find((l) => !l.selesai && !l.terlewat);
+  if (!f) return { nada: "info", ikon: "ℹ️", judul: "Tidak ada langkah yang menunggu", teks: "Langkah lainnya sudah selesai atau terlewat.", terima, catatan };
+  const n = no(f.kode);
+  // Langkah awal yang masih kosong, padahal langkah berbatas waktu sudah di depan mata: ingatkan pelan-pelan.
+  const kosong = langkah.slice(0, n - 1).filter((l) => !l.selesai && !l.terlewat && l.bisaSekarang).map((l) => `${langkah.indexOf(l) + 1}. ${l.judul}`);
+  const hasil = ((): Pemandu | null => {
+  switch (f.kode) {
+    case "undangan":
+      return { nada: "ingat", ikon: "🔔", judul: `Mulai dari langkah ${n}: baca undangan`, teks: "Kelas, jam, dan pakaian pelatihan ada di sana. Cukup dibuka sekali.", aksi: { label: "Buka Undangan →", href: "/sigap/pelatihan/undangan" }, terima, catatan };
+    case "instrumen":
+      return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: pelajari instrumen`, teks: "Unduh kuesioner dan buku pedoman agar siap saat pretest.", aksi: { label: "Buka Instrumen →", href: "/sigap/pelatihan/instrumen" }, terima, catatan };
+    case "pretest":
+    case "posttest": {
+      const t = tes(f.kode);
+      const nama = f.kode === "pretest" ? "Pretest" : "Posttest";
+      if (!t || t.status === "soal_belum_ada") return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: ${nama} menyusul`, teks: "Soal akan dikirim panitia.", terima, catatan };
+      if (t.status === "belum_buka") {
+        const sisa = (new Date(t.buka_at).getTime() - nowMs) / 1000;
+        return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: ${nama} dibuka ${waktuWib(t.buka_at)}`, teks: `Dibuka dalam ${formatSisa(sisa)}. ${t.jumlah_soal} soal · ${t.durasi_menit} menit sejak Mulai.`, terima, catatan };
+      }
+      if (t.status === "mengerjakan") return { nada: "ingat", ikon: "🔔", judul: `${nama} sedang Anda kerjakan`, teks: "Jawaban tersimpan otomatis. Lanjutkan sebelum waktu habis.", aksi: { label: "Lanjutkan mengerjakan →", href: `/sigap/pelatihan/tes/${t.jenis}` }, terima, catatan };
+      return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: ${nama} sedang dibuka`, teks: `Sesi ditutup dalam ${formatSisa((new Date(t.tutup_at).getTime() - nowMs) / 1000)}. ${t.jumlah_soal} soal · ${t.durasi_menit} menit sejak Mulai.`, aksi: { label: `Mulai ${nama} →`, href: `/sigap/pelatihan/tes/${t.jenis}` }, terima, catatan };
+    }
+    case "hadir": {
+      if (!data.presensi) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi menyusul`, teks: "Panitia belum mengatur presensi.", terima, catatan };
+      const buka = new Date(data.presensi.pengaturan.buka_at).getTime();
+      if (nowMs < buka) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi dibuka ${waktuWib(data.presensi.pengaturan.buka_at)}`, teks: "Presensi dilakukan di lokasi pelatihan dengan lokasi HP aktif.", terima, catatan };
+      return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: presensi sudah dibuka`, teks: `Lakukan presensi setelah tiba di lokasi, sampai pukul ${jamWib(data.presensi.pengaturan.tutup_at)} WIB. Aktifkan lokasi (GPS) di HP.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
+    }
+    case "foto": {
+      const total = L?.foto_total ?? 5;
+      if (nowMs < mulaiMs && (L?.foto ?? 0) === 0) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: foto Transport Lokal`, teks: `Unggah ${total} foto pada hari pelatihan; boleh bertahap, batas 23.59 WIB di hari yang sama.`, terima, catatan };
+      return {
+        nada: "ingat",
+        ikon: "🔔",
+        judul: `Langkah ${n}: lengkapi foto Transport Lokal`,
+        teks: (L?.foto ?? 0) > 0 ? `Baru ${L?.foto} dari ${total} foto. Lengkapi sebelum 23.59 WIB hari ini.` : `Unggah ${total} foto sebelum 23.59 WIB hari ini; boleh bertahap.`,
+        aksi: data.token_translok ? { label: "Buka Transport Lokal →", href: `/sigap/translok/${data.token_translok}` } : undefined,
+        terima,
+        catatan,
+      };
+    }
+    default:
+      return null;
+  }
+  })();
+  if (hasil && kosong.length) hasil.tertinggal = `Masih menunggu: ${kosong.join(" · ")}.`;
+  return hasil;
+}
+
+function KotakPemandu({ p, ke }: { p: Pemandu; ke: (kode: string) => void }) {
+  const warna = p.nada === "ok" ? "border-[#BFE5CD] bg-[#F1FAF4] text-[#17623C]" : p.nada === "ingat" ? "border-[#F0D58A] bg-[#FFF8E1] text-[#7A4F00]" : "border-[#BBD4F5] bg-[#F3F8FF] text-[#0F3D7A]";
+  return (
+    <div className={`rounded-xl border px-3.5 py-3 ${warna}`} role="status">
+      {p.terima && <p className="mb-1.5 text-[12.5px] font-bold text-[#17623C]">✓ {p.terima}</p>}
+      <p className="flex items-start gap-2 text-[14px] font-extrabold leading-snug">
+        <span aria-hidden>{p.ikon}</span>
+        <span>{p.judul}</span>
+      </p>
+      {p.teks && <p className="mt-1 pl-6 text-[13px] leading-relaxed text-[#14202E]">{p.teks}</p>}
+      {p.aksi &&
+        (p.aksi.href ? (
+          <Link href={p.aksi.href} className="ml-6 mt-2 inline-flex items-center rounded-lg bg-[#1F6FD1] px-3.5 py-2 text-[13px] font-extrabold text-white hover:bg-[#1A5DB0]">
+            {p.aksi.label}
+          </Link>
+        ) : (
+          <button type="button" onClick={() => ke(p.aksi!.kode!)} className="ml-6 mt-2 inline-flex items-center rounded-lg bg-[#1F6FD1] px-3.5 py-2 text-[13px] font-extrabold text-white hover:bg-[#1A5DB0]">
+            {p.aksi.label}
+          </button>
+        ))}
+      {p.tertinggal && <p className="mt-2 pl-6 text-[12px] font-semibold text-[#55657D]">{p.tertinggal}</p>}
+      {p.catatan && <p className="mt-2 pl-6 text-[12px] font-semibold text-[#C0392B]">{p.catatan}</p>}
+    </div>
+  );
+}
+
 type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolean; bisaSekarang: boolean; badan: React.ReactNode };
 
 export default function HalamanPelatihan() {
@@ -530,6 +633,7 @@ export default function HalamanPelatihan() {
     return { g: "wait", chip: "Menyusul" };
   });
   const nSelesai = gaya.filter((x) => x.g === "done").length;
+  const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai) : null;
 
   // (7 Okt 2026) Modal "Yeay": langkah yang baru selesai (belum pernah dirayakan di browser ini) dirayakan sekali.
   const kunciSelesai = langkah.filter((l) => l.selesai).map((l) => l.kode).join(",");
@@ -583,6 +687,7 @@ export default function HalamanPelatihan() {
         <>
           {perhatian && <ModalPerhatian tutup={tutupPerhatian} />}
           {!perhatian && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
+          {pemandu && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
           <Kartu judul="Langkah Anda" kanan={<span className="text-[12px] font-semibold text-[#55657D]">{nSelesai} dari {langkah.length} selesai</span>}>
             <div className="h-2 overflow-hidden rounded-full bg-[#E3E8EE]">
               <div className="h-full rounded-full bg-[#1E7A4C] transition-all" style={{ width: `${(nSelesai / Math.max(1, langkah.length)) * 100}%` }} />
