@@ -79,7 +79,7 @@ function perluDiingatkan(r: Row, hariIni: string): boolean {
 function pesanPengingat(r: Row, hariIni: string, namaKegiatan: string): string {
   const poin: string[] = [];
   if (r.hari_kerja === 0) poin.push("- Hari kerja belum dipilih. Mohon pilih hari kerja di SIGAP.");
-  if (r.status[hariIni] === "sebagian") poin.push(`- Laporan & 5 foto hari ini (${tglPanjang(hariIni)}) belum lengkap. Mohon dilengkapi sebelum pukul 23.59 WIB.`);
+  if (r.status[hariIni] === "sebagian") poin.push(`- Isian & dokumentasi hari ini (${tglPanjang(hariIni)}) belum lengkap. Mohon dilengkapi sebelum pukul 23.59 WIB.`);
   const lewat = r.terlewat.filter((t) => !r.izin.includes(t));
   if (lewat.length) poin.push(`- ${lewat.length} hari kerja terlewat (${lewat.map((t) => tglPendek(t)).join(", ")}). Hari yang tidak lengkap tidak dibayarkan; hubungi admin bila ada kendala.`);
   const asal = typeof window !== "undefined" ? window.location.origin : "";
@@ -304,7 +304,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KartuAngka label="Petugas aktif" nilai={rk.petugas} ket={`${rk.pml} PML · ${rk.petugas - rk.pml} lainnya`} />
         <KartuAngka label="Sudah pilih hari kerja" nilai={rk.petugas - rk.belum_pilih} ket={`${rk.belum_pilih} belum`} />
-        <KartuAngka label="Hari ini lengkap" nilai={`${rk.lengkap_hari_ini} / ${rk.kerja_hari_ini}`} ket="laporan + 5 foto" warna="#047857" />
+        <KartuAngka label="Hari ini lengkap" nilai={`${rk.lengkap_hari_ini} / ${rk.kerja_hari_ini}`} ket="isian + foto sesuai aturan kegiatan" warna="#047857" />
         <KartuAngka label="Hari terlewat (total)" nilai={rk.terlewat} ket="tidak masuk Kwitansi" warna="#B91C1C" />
       </div>
 

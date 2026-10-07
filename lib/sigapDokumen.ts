@@ -24,7 +24,7 @@
 // penyisiran lib/pdf/*.ts TIDAK diubah).
 
 import { PDFDocument } from "pdf-lib";
-import { BUCKET_SIGAP, JUMLAH_FOTO, hariIniWib, kelompokTanggal, type Db, HK_AKTIF } from "@/lib/sigap";
+import { BUCKET_SIGAP, aturanDari, hariLengkap, hariIniWib, kelompokTanggal, type AturanIsian, type Db, HK_AKTIF } from "@/lib/sigap";
 import { buatPdfKwitansiSigap } from "@/lib/pdf/sigap/kwitansi";
 import { buatPdfVisumSigap } from "@/lib/pdf/sigap/visum";
 import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
@@ -84,7 +84,7 @@ export type KelompokSpj = { mulai: string; selesai: string; jumlah_hari: number;
 export type DataSpj = {
   penugasan: { id: number; kegiatan_id: number; akun_id: number; peran: string; dikunci_at: string | null; dikunci_oleh: string | null };
   akun: { id: number; nama: string; jenis: "mitra" | "organik"; nik: string | null; nip: string | null; alamat_kecamatan: string | null };
-  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string };
+  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string } & AturanIsian;
   tarif: number;
   label_jabatan: string;
   suratTugas: { id: number; nomor_st: string; tanggal_st: string | null; tujuan: string[]; file_path: string | null } | null;
@@ -112,7 +112,7 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
 
   const [{ data: akun }, { data: keg }, { data: tarif }, { data: st }, { data: hk }, { data: real }, { data: foto }, { data: izin }, { data: final }] = await Promise.all([
     db.from("sigap_akun").select("id, nama, jenis, nik, nip, alamat_kecamatan").eq("id", pen.akun_id).maybeSingle(),
-    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi").eq("id", pen.kegiatan_id).maybeSingle(),
+    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, jenis, wajib_laporan, jumlah_foto").eq("id", pen.kegiatan_id).maybeSingle(),
     db.from("sigap_kegiatan_tarif").select("tarif, label_jabatan").eq("kegiatan_id", pen.kegiatan_id).eq("peran", pen.peran).maybeSingle(),
     stQuery,
     db.from("sigap_hari_kerja").select("tanggal").eq("penugasan_id", penugasanId).or(HK_AKTIF()), // (6 Okt 2026) hari uji coba kedaluwarsa diabaikan
@@ -129,6 +129,7 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
   const acuan = { hariIni: hariIniWib(acuanWaktu), waktu: acuanWaktu.toISOString(), dariKunci: !!dikunciAt };
 
   const tarifNum = Number(tarif?.tarif ?? 0);
+  const aturan = aturanDari(keg); // (7 Okt 2026) wajib laporan & jumlah foto per kegiatan
   const tanggalKerja = Array.from(new Set((hk ?? []).map((h) => String(h.tanggal).slice(0, 10)))).sort();
   const hari: HariSpj[] = tanggalKerja.map((t) => {
     const r = (real ?? []).find((x) => String(x.tanggal).slice(0, 10) === t);
@@ -144,7 +145,7 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
           kendala: (r.kendala as string | null) ?? null,
         }
       : null;
-    const lengkap = !!realisasi && new Set(f.map((x) => x.slot)).size >= JUMLAH_FOTO;
+    const lengkap = hariLengkap(!!realisasi, new Set(f.map((x) => x.slot)).size, aturan);
     return { tanggal: t, realisasi, foto: f, izinAktif, lengkap, dibayar: t >= acuan.hariIni || lengkap || izinAktif };
   });
   const kelompok = kelompokTanggal(hari.filter((h) => h.dibayar).map((h) => h.tanggal)).map((k) => ({ ...k, nominal: k.jumlah_hari * tarifNum }));
@@ -172,6 +173,7 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
       nama: String(keg.nama ?? ""),
       kode_anggaran: (keg.kode_anggaran as string | null) ?? null,
       satuan_realisasi: String(keg.satuan_realisasi ?? "") || "ruta",
+      ...aturan,
     },
     tarif: tarifNum,
     // Fallback label SAMA dgn penugasanAkun() di lib/sigap.ts.
@@ -349,7 +351,7 @@ export async function rakitUnit(
 
     for (const t of kel.tanggal) {
       const h = data.hari.find((x) => x.tanggal === t);
-      if (pilih.has("laporan")) {
+      if (pilih.has("laporan") && data.kegiatan.wajib_laporan) {
         if (h?.realisasi) {
           const bytes = await buatPdfLaporanSigap({
             kegiatanNama: data.kegiatan.nama,

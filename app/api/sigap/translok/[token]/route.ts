@@ -16,8 +16,8 @@ import {
   HK_AKTIF,
   BUCKET_SIGAP,
   jarakMeter,
-  JUMLAH_FOTO,
   akunDariToken,
+  hariLengkap,
   cekAksesIsian,
   hariIniWib,
   kelompokTanggal,
@@ -82,7 +82,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
           .sort((a, b) => a.slot - b.slot);
         const iz = (izin ?? []).find((x) => x.penugasan_id === p.id && x.tanggal === t);
         const kunci = t === hariIni ? "hari_ini" : iz ? "izin" : t > hariIni ? "akan_datang" : "terlewat";
-        const lengkap = !!r && f.length >= JUMLAH_FOTO;
+        const lengkap = hariLengkap(!!r, f.length, p.kegiatan); // (7 Okt 2026) aturan isian per kegiatan
         return { tanggal: t, realisasi: r, foto: f, kunci, lengkap, izin_sampai: (iz?.berlaku_sampai as string | undefined) ?? null };
       });
       // Hari dibayar: hari kerja yg belum lewat (masih bisa dilengkapi) + hari lampau yg lengkap / sedang izin susulan.
@@ -256,6 +256,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
     if (aksi === "realisasi") {
       const akses = await cekAksesIsian(db, akun.id, Number(body?.penugasan_id), body?.tanggal);
       if ("error" in akses) return NextResponse.json({ error: akses.error }, { status: akses.status });
+      // (7 Okt 2026) kegiatan tanpa laporan (mis. pelatihan) -- cukup dokumentasi
+      if (!akses.penugasan.kegiatan.wajib_laporan) return NextResponse.json({ error: "Kegiatan ini tidak memerlukan laporan harian; cukup unggah dokumentasi." }, { status: 400 });
       const lokasiRaw: unknown[] = Array.isArray(body?.lokasi) ? body.lokasi : [];
       const lokasi: Lokasi[] = lokasiRaw
         .map((l) => l as Record<string, unknown>)

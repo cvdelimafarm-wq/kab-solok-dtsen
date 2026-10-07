@@ -16,7 +16,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { HK_AKTIF, JUMLAH_FOTO, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
+import { HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 
 export const runtime = "nodejs";
@@ -65,7 +65,7 @@ async function dataPenugasan(db: Db, kegiatanId: number) {
           db.from("sigap_surat_tugas").select("id, nomor_st, tanggal_st, tanggal_mulai, tanggal_selesai, tujuan, file_path").in("id", stIds).range(a, b)
         )
       : Promise.resolve([]),
-    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, tanggal_mulai, tanggal_selesai, satuan_realisasi, aktif").eq("id", kegiatanId).maybeSingle(),
+    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, tanggal_mulai, tanggal_selesai, satuan_realisasi, aktif, jenis, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
     db.from("sigap_kegiatan_tarif").select("peran, tarif, label_jabatan, maks_hari_default").eq("kegiatan_id", kegiatanId),
   ]);
   const baris = pen.map((p) => {
@@ -106,8 +106,9 @@ async function statusHarian(db: Db, penIds: number[]) {
   return { hk, real, foto, izin };
 }
 
-function statusHari(adaReal: boolean, nFoto: number, tanggal: string, hariIni: string): "lengkap" | "sebagian" | "terlewat" | "rencana" {
-  if (adaReal && nFoto >= JUMLAH_FOTO) return "lengkap";
+function statusHari(adaReal: boolean, nFoto: number, tanggal: string, hariIni: string, aturan: AturanIsian): "lengkap" | "sebagian" | "terlewat" | "rencana" {
+  // (7 Okt 2026) aturan isian per kegiatan (wajib laporan & jumlah foto)
+  if (hariLengkap(adaReal, nFoto, aturan)) return "lengkap";
   if (tanggal > hariIni) return "rencana";
   if (tanggal === hariIni) return "sebagian";
   return "terlewat";
@@ -153,7 +154,8 @@ export async function GET(req: NextRequest) {
       const hariIni = hariIniWib();
       const per = [] as Record<string, unknown>[];
       for (const k of kegs ?? []) {
-        const { baris } = await dataPenugasan(db, k.id as number);
+        const { baris, kegiatan: kegDp } = await dataPenugasan(db, k.id as number);
+        const aturan = aturanDari(kegDp);
         const aktif = baris.filter((b) => b.aktif);
         const st = await statusHarian(db, aktif.map((b) => b.id));
         const realSet = new Set(st.real.map((r) => `${r.penugasan_id}|${r.tanggal}`));
@@ -169,7 +171,7 @@ export async function GET(req: NextRequest) {
           if (b.dikunci_at) terkunci++;
           let lengkapAda = false;
           for (const t of hk) {
-            const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni);
+            const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni, aturan);
             if (v === "terlewat") terlewat++;
             if (v === "lengkap") lengkapAda = true;
             if (t === hariIni) {
@@ -222,13 +224,14 @@ export async function GET(req: NextRequest) {
 
       if (bagian === "kegiatan") {
         const [{ data: keg }, { data: tarif }] = await Promise.all([
-          db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, tanggal_mulai, tanggal_selesai, satuan_realisasi, aktif").eq("id", kegiatanId).maybeSingle(),
+          db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, tanggal_mulai, tanggal_selesai, satuan_realisasi, aktif, jenis, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
           db.from("sigap_kegiatan_tarif").select("id, peran, uraian_detail, tarif, label_jabatan, maks_hari_default, urutan").eq("kegiatan_id", kegiatanId).order("urutan").order("peran"),
         ]);
         return NextResponse.json({ kegiatan: keg, tarif: tarif ?? [], boleh_kelola: perlu(menu, "kelola") });
       }
 
       const { kegiatan, baris, peranOpsi } = await dataPenugasan(db, kegiatanId);
+      const aturan = aturanDari(kegiatan);
       if (bagian === "penugasan") return NextResponse.json({ kegiatan, baris, peran_opsi: peranOpsi, boleh_kelola: perlu(menu, "kelola") });
 
       const aktif = baris.filter((b) => b.aktif);
@@ -268,7 +271,7 @@ export async function GET(req: NextRequest) {
           if (hk.size === 0) belumPilih++;
           const status: Record<string, string> = {};
           for (const t of hk) {
-            const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni);
+            const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni, aturan);
             status[t] = v;
             if (v === "terlewat") terlewat++;
             if (t === hariIni) {
@@ -307,12 +310,12 @@ export async function GET(req: NextRequest) {
         const hk = st.hk.filter((h) => h.penugasan_id === b.id).map((h) => h.tanggal);
         const izinSet = new Set(st.izin.filter((i) => i.penugasan_id === b.id).map((i) => i.tanggal));
         const dibayar = hk.filter((t) => {
-          const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni);
+          const v = statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni, aturan);
           return v === "lengkap" || (v !== "terlewat" && t >= hariIni) || izinSet.has(t);
         });
         const kelompok = kelompokTanggal(dibayar);
         const nLap = hk.filter((t) => realSet.has(`${b.id}|${t}`)).length;
-        const nDok = hk.filter((t) => (st.foto.get(`${b.id}|${t}`) ?? 0) >= JUMLAH_FOTO).length;
+        const nDok = hk.filter((t) => (st.foto.get(`${b.id}|${t}`) ?? 0) >= aturan.jumlah_foto).length;
         return {
           penugasan_id: b.id,
           nama: b.nama,
@@ -518,6 +521,13 @@ export async function POST(req: NextRequest) {
         satuan_realisasi: String(body?.satuan_realisasi ?? "").trim() || "ruta",
         aktif: body?.aktif !== false,
       };
+      // (7 Okt 2026) jenis kegiatan & aturan isian (wajib laporan, jumlah foto) -- hanya bila dikirim
+      if (body?.jenis !== undefined || body?.wajib_laporan !== undefined || body?.jumlah_foto !== undefined) {
+        const a = aturanDari({ jenis: body?.jenis, wajib_laporan: body?.wajib_laporan, jumlah_foto: body?.jumlah_foto });
+        isi.jenis = a.jenis;
+        isi.wajib_laporan = a.wajib_laporan;
+        isi.jumlah_foto = a.jumlah_foto;
+      }
       if (isi.tanggal_mulai && isi.tanggal_selesai && (isi.tanggal_mulai as string) > (isi.tanggal_selesai as string)) return galat("Tanggal mulai melewati tanggal selesai.");
       if (id) {
         const { error } = await db.from("sigap_kegiatan").update(isi).eq("id", id);

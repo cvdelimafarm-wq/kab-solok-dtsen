@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { BUCKET_SIGAP, JUMLAH_FOTO, akunDariToken, cekAksesIsian } from "@/lib/sigap";
+import { BUCKET_SIGAP, akunDariToken, cekAksesIsian } from "@/lib/sigap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +30,11 @@ type Db = NonNullable<ReturnType<typeof supabaseAdmin>>;
 async function cekAkses(db: Db, token: string, penugasanId: number, tanggal: unknown, slot: number) {
   const akun = await akunDariToken(db, token);
   if (!akun) return { error: "Sesi tidak valid. Silakan masuk kembali.", status: 404 } as const;
-  if (!Number.isInteger(slot) || slot < 1 || slot > JUMLAH_FOTO) return { error: "Slot foto tidak valid.", status: 400 } as const;
-  return cekAksesIsian(db, akun.id, penugasanId, tanggal);
+  if (!Number.isInteger(slot) || slot < 1 || slot > 10) return { error: "Slot foto tidak valid.", status: 400 } as const;
+  const akses = await cekAksesIsian(db, akun.id, penugasanId, tanggal);
+  // (7 Okt 2026) jumlah foto per kegiatan (Admin > Kegiatan, peran & tarif)
+  if (!("error" in akses) && slot > akses.penugasan.kegiatan.jumlah_foto) return { error: "Slot foto tidak valid.", status: 400 } as const;
+  return akses;
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ token: string }> }) {

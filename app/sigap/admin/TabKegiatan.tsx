@@ -8,6 +8,7 @@
 //  - kegiatanId = null -> mode "＋ Kegiatan baru" (hanya admin dgn lingkup semua kegiatan).
 // Read-only bila boleh_kelola = false.
 
+import { JENIS_KEGIATAN } from "@/lib/sigap";
 import { useCallback, useEffect, useState } from "react";
 import { aksi, ambil, pesanGalat, rupiah, SesiBerakhir } from "./api";
 import { PanelRujukan } from "../pedia/komponen";
@@ -22,6 +23,10 @@ type Kegiatan = {
   tanggal_selesai: string | null;
   satuan_realisasi: string | null;
   aktif: boolean;
+  // (7 Okt 2026) jenis kegiatan & aturan isian
+  jenis?: string;
+  wajib_laporan?: boolean;
+  jumlah_foto?: number;
 };
 type Tarif = { id: number; peran: string; uraian_detail: string | null; tarif: number; label_jabatan: string | null; maks_hari_default: number | null };
 type Data = { kegiatan: Kegiatan | null; tarif: Tarif[]; boleh_kelola: boolean };
@@ -94,6 +99,10 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
   const [selesai, setSelesai] = useState(k?.tanggal_selesai ?? "");
   const [satuan, setSatuan] = useState(k?.satuan_realisasi ?? "ruta");
   const [aktif, setAktif] = useState(k?.aktif ?? true);
+  // (7 Okt 2026) jenis kegiatan menentukan bawaan wajib laporan & jumlah foto (tetap bisa diubah) -- permintaan user
+  const [jenis, setJenis] = useState<string>(k?.jenis ?? "pendataan");
+  const [wajibLaporan, setWajibLaporan] = useState<boolean>(k?.wajib_laporan ?? true);
+  const [jumlahFoto, setJumlahFoto] = useState<string>(String(k?.jumlah_foto ?? 5));
   const [busy, setBusy] = useState(false);
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const baru = !k;
@@ -114,6 +123,9 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
         tanggal_selesai: selesai || null,
         satuan_realisasi: satuan.trim(),
         aktif,
+        jenis,
+        wajib_laporan: wajibLaporan,
+        jumlah_foto: Number(jumlahFoto) || 5,
       });
       setPesan({ jenis: "ok", teks: baru ? "Kegiatan baru dibuat." : "Data kegiatan disimpan." });
       await onTersimpan(r.id);
@@ -147,6 +159,43 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
           </div>
           <span className={label}>Satuan realisasi</span>
           <input value={satuan} onChange={(e) => setSatuan(e.target.value)} className={INPUT} disabled={!kelola} placeholder="ruta" />
+          <span className={label}>Jenis kegiatan</span>
+          <select
+            value={jenis}
+            onChange={(e) => {
+              const j = JENIS_KEGIATAN.find((x) => x.kode === e.target.value);
+              setJenis(e.target.value);
+              if (j) {
+                setWajibLaporan(j.wajib_laporan);
+                setJumlahFoto(String(j.jumlah_foto));
+              }
+            }}
+            className={INPUT}
+            disabled={!kelola}
+          >
+            {JENIS_KEGIATAN.map((j) => (
+              <option key={j.kode} value={j.kode}>
+                {j.label}
+              </option>
+            ))}
+          </select>
+          <span className={label}>Isian petugas</span>
+          <div className="flex flex-wrap items-center gap-3 text-[13px]">
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={wajibLaporan} onChange={(e) => setWajibLaporan(e.target.checked)} disabled={!kelola} /> Wajib laporan harian
+            </label>
+            <label className="flex items-center gap-1.5">
+              Foto per hari
+              <input
+                inputMode="numeric"
+                value={jumlahFoto}
+                onChange={(e) => setJumlahFoto(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                className={`${INPUT} w-14`}
+                disabled={!kelola}
+                aria-label="Jumlah foto per hari"
+              />
+            </label>
+          </div>
           <span className={label}>Status</span>
           <select value={aktif ? "1" : "0"} onChange={(e) => setAktif(e.target.value === "1")} className={INPUT} disabled={!kelola}>
             <option value="1">Aktif</option>

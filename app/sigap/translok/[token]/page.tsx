@@ -28,7 +28,8 @@ type Hari = {
 type Kelompok = { mulai: string; selesai: string; jumlah_hari: number; tanggal: string[]; nominal: number };
 type Pen = {
   id: number;
-  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string };
+  // (7 Okt 2026) jenis kegiatan & aturan isian (pelatihan: tanpa laporan)
+  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string; jenis?: string; wajib_laporan?: boolean; jumlah_foto?: number };
   peran: string;
   label_jabatan: string;
   tarif: number;
@@ -62,6 +63,9 @@ type Data = {
 type Tab = "hari_ini" | "hari_kerja" | "arsip";
 
 const JUMLAH_FOTO = 5;
+/** (7 Okt 2026) jumlah foto & wajib laporan mengikuti pengaturan kegiatan. */
+const nFoto = (pen: Pen) => pen.kegiatan.jumlah_foto ?? JUMLAH_FOTO;
+const wajibLaporan = (pen: Pen) => pen.kegiatan.wajib_laporan !== false;
 // (6 Okt 2026) Jenis foto baku urut perjalanan -- permintaan user (sama dgn lib/pdf/sigap/dokumentasi.ts).
 const SARAN_FOTO = ["Saat akan berangkat", "Tiba di lokasi sampel pertama", "Saat mendata", "Saat mau pulang", "Tiba di rumah"];
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -196,7 +200,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
 
   // ---------------- PANDUAN LOGIN PERTAMA ----------------
   if (langkah !== null) {
-    const JUDUL = ["Cek data diri & kegiatan", "Pilih hari kerja", "Laporan harian", "Dokumentasi 5 foto", "Arsip dokumen SPJ"];
+    const JUDUL = ["Cek data diri & kegiatan", "Pilih hari kerja", wajibLaporan(pen) ? "Laporan harian" : "Tanpa laporan", `Dokumentasi ${nFoto(pen)} foto`, "Arsip dokumen SPJ"];
     const lanjut = () => setLangkah((l) => (l ?? 1) + 1);
     const selesai = async () => {
       try {
@@ -233,12 +237,19 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           )}
           {langkah === 3 && (
             <>
-              <InfoLangkah
-                ikon="📝"
-                judul="Laporan diisi setiap hari kerja"
-                isi={`Pada setiap hari kerja, isi lokasi, jumlah ${pen.kegiatan.satuan_realisasi} dan kendala. Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
-              />
-              <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} hanya="laporan" />
+              {wajibLaporan(pen) ? (
+                <>
+                  <InfoLangkah
+                    ikon="📝"
+                    judul="Laporan diisi setiap hari kerja"
+                    isi={`Pada setiap hari kerja, isi lokasi, jumlah ${pen.kegiatan.satuan_realisasi} dan kendala. Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
+                  />
+                  <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} hanya="laporan" />
+                </>
+              ) : (
+                // (7 Okt 2026) kegiatan tanpa laporan (mis. pelatihan) -- permintaan user
+                <InfoLangkah ikon="ℹ️" judul="Kegiatan ini tanpa laporan harian" isi={`Untuk ${pen.kegiatan.nama} cukup unggah ${nFoto(pen)} foto dokumentasi pada hari kegiatan, paling lambat 23:59 WIB.`} />
+              )}
               <TombolLangkah onKembali={() => setLangkah(2)} onLanjut={lanjut} teks="Lanjut →" />
             </>
           )}
@@ -795,7 +806,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
             </span>
             <b>{rupiah(pilih.size * pen.tarif)}</b>
           </div>
-          <p className="text-[10.5px] text-[#8592A8]">Estimasi. Hanya hari dengan laporan + 5 foto lengkap yang dibayar.</p>
+          <p className="text-[10.5px] text-[#8592A8]">Estimasi. Hanya hari dengan {wajibLaporan(pen) ? "laporan + " : ""}{nFoto(pen)} foto lengkap yang dibayar.</p>
         </div>
       )}
 
@@ -867,7 +878,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
           <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, hubungi admin anggaran untuk izin susulan.</p>
         </div>
       )}
-      {hanya !== "foto" && <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />}
+      {hanya !== "foto" && wajibLaporan(pen) && <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />}
       {hanya !== "laporan" && <PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />}
     </>
   );
@@ -888,7 +899,7 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
             ? { t: "Terlewat", c: "bg-red-50 text-red-800" }
             : h.kunci === "akan_datang"
             ? { t: "Rencana", c: "bg-slate-100 text-slate-600" }
-            : { t: `${h.realisasi ? "Laporan ✓" : "Laporan –"} · ${h.foto.length}/5 foto`, c: "bg-amber-50 text-amber-800" };
+            : { t: `${wajibLaporan(pen) ? `${h.realisasi ? "Laporan ✓" : "Laporan –"} · ` : ""}${h.foto.length}/${nFoto(pen)} foto`, c: "bg-amber-50 text-amber-800" };
           const d = tglObj(h.tanggal);
           return (
             <div key={h.tanggal}>
@@ -928,7 +939,7 @@ const JENIS_DOK = [
 function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
   const [unduh, setUnduh] = useState(false);
   const nLaporan = pen.hari.filter((h) => h.realisasi).length;
-  const nDok = pen.hari.filter((h) => h.foto.length >= JUMLAH_FOTO).length;
+  const nDok = pen.hari.filter((h) => h.foto.length >= nFoto(pen)).length;
   const terlewat = pen.hari.filter((h) => h.kunci === "terlewat" && !h.lengkap);
   const info: Record<string, { s: string; chip: string; ok: boolean }> = {
     surat_tugas: pen.surat_tugas
@@ -937,7 +948,7 @@ function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
     kwitansi: { s: `${pen.kelompok.length} kelompok tanggal`, chip: `${pen.kelompok.length} dok`, ok: pen.kelompok.length > 0 },
     visum: { s: `${pen.kelompok.length} kelompok tanggal`, chip: `${pen.kelompok.length} dok`, ok: pen.kelompok.length > 0 },
     laporan: { s: `${nLaporan} hari terisi`, chip: `${nLaporan} dok`, ok: nLaporan > 0 },
-    dokumentasi: { s: `${nDok} hari lengkap 5 foto`, chip: `${nDok} dok`, ok: nDok > 0 },
+    dokumentasi: { s: `${nDok} hari lengkap ${nFoto(pen)} foto`, chip: `${nDok} dok`, ok: nDok > 0 },
     surat_pernyataan: { s: `${pen.kelompok.length} kelompok tanggal`, chip: `${pen.kelompok.length} dok`, ok: pen.kelompok.length > 0 },
   };
   return (
@@ -1440,7 +1451,8 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
   const [antre, setAntre] = useState<{ id: number; file: File; url: string; slot: number }[]>([]);
   const [massal, setMassal] = useState(false);
   const jml = hari.foto.length;
-  const persen = Math.round((jml / JUMLAH_FOTO) * 100);
+  const MAKS = nFoto(pen); // (7 Okt 2026) jumlah foto per kegiatan
+  const persen = Math.round((jml / MAKS) * 100);
 
   async function unggah(slot: number, file: File, tanpaMuat = false): Promise<boolean> {
     let berhasil = false;
@@ -1484,12 +1496,12 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
   function pilihBanyak(files: FileList | null) {
     if (!files || files.length === 0) return;
     antre.forEach((a) => URL.revokeObjectURL(a.url));
-    const kosong = Array.from({ length: JUMLAH_FOTO }, (_, i) => i + 1).filter((sl) => !hari.foto.some((f) => f.slot === sl));
+    const kosong = Array.from({ length: MAKS }, (_, i) => i + 1).filter((sl) => !hari.foto.some((f) => f.slot === sl));
     const daftar = Array.from(files)
       .filter((f) => /^image\//.test(f.type || "image/jpeg"))
-      .slice(0, JUMLAH_FOTO)
+      .slice(0, MAKS)
       .map((file, i) => ({ id: Date.now() + i, file, url: URL.createObjectURL(file), slot: kosong[i] ?? 0 }));
-    if (files.length > JUMLAH_FOTO) setGalat(`Maksimal ${JUMLAH_FOTO} foto; hanya ${JUMLAH_FOTO} foto pertama yang diambil.`);
+    if (files.length > MAKS) setGalat(`Maksimal ${MAKS} foto; hanya ${MAKS} foto pertama yang diambil.`);
     setAntre(daftar);
   }
 
@@ -1529,14 +1541,14 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[16px] font-extrabold">📷 Dokumentasi</p>
-          <p className="text-[12px] text-[#55657D]">Wajib {JUMLAH_FOTO} foto untuk tanggal ini</p>
+          <p className="text-[12px] text-[#55657D]">Wajib {MAKS} foto untuk tanggal ini</p>
         </div>
         <div className="relative h-14 w-14 shrink-0">
           <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
             <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E4E9F0" strokeWidth="3.5" />
-            <circle cx="18" cy="18" r="15.5" fill="none" stroke={jml >= JUMLAH_FOTO ? "#1E7A4C" : "#0F3D7A"} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(persen / 100) * 97.4} 97.4`} />
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke={jml >= MAKS ? "#1E7A4C" : "#0F3D7A"} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(persen / 100) * 97.4} 97.4`} />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[13px] font-extrabold">{jml}/{JUMLAH_FOTO}</span>
+          <span className="absolute inset-0 flex items-center justify-center text-[13px] font-extrabold">{jml}/{MAKS}</span>
         </div>
       </div>
 
@@ -1544,7 +1556,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
 
       {boleh && antre.length === 0 && (
         <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0F3D7A] px-3 py-3 text-[14px] font-extrabold text-white shadow">
-          📤 Pilih beberapa foto sekaligus (maks {JUMLAH_FOTO})
+          📤 Pilih beberapa foto sekaligus (maks {MAKS})
           <input
             type="file"
             accept="image/*"
@@ -1607,7 +1619,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {Array.from({ length: JUMLAH_FOTO }, (_, i) => i + 1).map((slot) => {
+        {Array.from({ length: MAKS }, (_, i) => i + 1).map((slot) => {
           const f = hari.foto.find((x) => x.slot === slot);
           const p = progres[slot];
           return (
@@ -1677,7 +1689,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
           );
         })}
       </div>
-      {boleh && jml < JUMLAH_FOTO && (
+      {boleh && jml < MAKS && (
         <p className="mt-2.5 text-[12px] text-[#55657D]">Ketuk kotak foto untuk memotret per jenis, atau pakai tombol "Pilih beberapa foto sekaligus" lalu tandai jenisnya. Foto otomatis dikecilkan agar hemat kuota.</p>
       )}
 

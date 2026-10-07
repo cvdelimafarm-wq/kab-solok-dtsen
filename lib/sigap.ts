@@ -19,6 +19,34 @@ import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/per
 export type Db = SupabaseClient<any, any, any>;
 
 export const JUMLAH_FOTO = 5;
+
+// (7 Okt 2026) Jenis kegiatan & aturan isian per kegiatan -- permintaan user: pelatihan cukup dokumentasi, tanpa laporan.
+// Dikelola di Admin Transport Lokal > Kegiatan, peran & tarif. Jenis mengisi bawaan; wajib_laporan & jumlah_foto tetap bisa diubah.
+export type JenisKegiatan = "pendataan" | "pelatihan" | "rapat" | "lainnya";
+export const JENIS_KEGIATAN: { kode: JenisKegiatan; label: string; wajib_laporan: boolean; jumlah_foto: number }[] = [
+  { kode: "pendataan", label: "Pendataan lapangan", wajib_laporan: true, jumlah_foto: 5 },
+  { kode: "pelatihan", label: "Pelatihan", wajib_laporan: false, jumlah_foto: 5 },
+  { kode: "rapat", label: "Rapat / pertemuan", wajib_laporan: false, jumlah_foto: 5 },
+  { kode: "lainnya", label: "Lainnya", wajib_laporan: true, jumlah_foto: 5 },
+];
+export type AturanIsian = { jenis: JenisKegiatan; wajib_laporan: boolean; jumlah_foto: number };
+export const ATURAN_BAWAAN: AturanIsian = { jenis: "pendataan", wajib_laporan: true, jumlah_foto: JUMLAH_FOTO };
+
+/** Aturan isian dari baris sigap_kegiatan (kolom boleh belum ada -> bawaan pendataan). */
+export function aturanDari(k: { jenis?: unknown; wajib_laporan?: unknown; jumlah_foto?: unknown } | null | undefined): AturanIsian {
+  const jenis = JENIS_KEGIATAN.some((j) => j.kode === k?.jenis) ? (k!.jenis as JenisKegiatan) : "pendataan";
+  const n = Number(k?.jumlah_foto);
+  return {
+    jenis,
+    wajib_laporan: typeof k?.wajib_laporan === "boolean" ? (k.wajib_laporan as boolean) : true,
+    jumlah_foto: Number.isInteger(n) && n >= 1 && n <= 10 ? n : JUMLAH_FOTO,
+  };
+}
+
+/** Hari dianggap lengkap: laporan (bila wajib) + foto sejumlah aturan. */
+export function hariLengkap(adaLaporan: boolean, jumlahFoto: number, a: AturanIsian): boolean {
+  return (!a.wajib_laporan || adaLaporan) && jumlahFoto >= a.jumlah_foto;
+}
 export const BUCKET_SIGAP = "sigap-files";
 
 /** Tanggal hari ini menurut WIB (Asia/Jakarta), format YYYY-MM-DD. */
@@ -101,7 +129,7 @@ export async function akunDariToken(db: Db, token: string): Promise<Akun | null>
 
 export type Penugasan = {
   id: number;
-  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string };
+  kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string } & AturanIsian;
   peran: string;
   label_jabatan: string;
   tarif: number;
@@ -125,7 +153,7 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
   const kegIds = Array.from(new Set(pen.map((p) => p.kegiatan_id as number)));
   const stIds = pen.map((p) => p.surat_tugas_id as number | null).filter((x): x is number => !!x);
   const [{ data: keg }, { data: tarif }, { data: st }] = await Promise.all([
-    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, tanggal_mulai, tanggal_selesai, aktif, hari_tenggang, dibuka_sampai").in("id", kegIds),
+    db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, satuan_realisasi, tanggal_mulai, tanggal_selesai, aktif, hari_tenggang, dibuka_sampai, jenis, wajib_laporan, jumlah_foto").in("id", kegIds),
     db.from("sigap_kegiatan_tarif").select("kegiatan_id, peran, tarif, label_jabatan, maks_hari_default").in("kegiatan_id", kegIds),
     stIds.length
       ? db.from("sigap_surat_tugas").select("id, nomor_st, tanggal_st, tanggal_mulai, tanggal_selesai, tujuan, file_path").in("id", stIds)
@@ -140,7 +168,7 @@ export async function penugasanAkun(db: Db, akunId: number): Promise<Penugasan[]
     const s = (st ?? []).find((x) => x.id === p.surat_tugas_id) as Record<string, unknown> | undefined;
     hasil.push({
       id: p.id as number,
-      kegiatan: { id: k.id, kode: k.kode, nama: k.nama, kode_anggaran: k.kode_anggaran, satuan_realisasi: k.satuan_realisasi ?? "ruta" },
+      kegiatan: { id: k.id, kode: k.kode, nama: k.nama, kode_anggaran: k.kode_anggaran, satuan_realisasi: k.satuan_realisasi ?? "ruta", ...aturanDari(k) },
       peran: p.peran as string,
       label_jabatan: (t?.label_jabatan as string) ?? `${String(p.peran).toUpperCase()} ${k.nama}`,
       tarif: Number(t?.tarif ?? 0),
