@@ -3,7 +3,7 @@
 // (7 Okt 2026) SIGAP > Pelatihan -- presensi peserta di lokasi pelatihan (radius 300 m dari Mami Hotel Solok).
 // POST json {lat, lng, akurasi} (Authorization: Bearer <sesi>) -> { ok:true, at, jarak_m } atau galat 4xx dgn { error, kode, jarak_m }.
 // Waktu & penilaian jarak SELALU di server (jam server + koordinat titik dari tabel pengaturan); sekali presensi per peserta.
-// Percobaan yang ditolak (di luar radius / GPS lemah) tetap dicatat utk monitoring panitia.
+// Titik lokasi: peserta diterima bila dalam radius SALAH SATU titik (Mami Hotel / Ully Hotel). Percobaan yang ditolak (di luar radius / GPS lemah) tetap dicatat utk monitoring panitia.
 
 import { NextRequest, NextResponse } from "next/server";
 import { nilaiPresensi, posisiValid } from "@/lib/sigapPresensi";
@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
 
     const sekarang = new Date();
     const h = nilaiPresensi(pos, peng, sekarang);
-    const baris = { kegiatan_id: kegiatanId, akun_id: akun.id, penugasan_id: peserta.penugasan_id, at: sekarang.toISOString(), lat: pos.lat, lng: pos.lng, akurasi_m: pos.akurasi, jarak_m: Math.round(h.jarak_m * 10) / 10 };
+    const baris = { kegiatan_id: kegiatanId, akun_id: akun.id, penugasan_id: peserta.penugasan_id, at: sekarang.toISOString(), lat: pos.lat, lng: pos.lng, akurasi_m: pos.akurasi, jarak_m: Number.isFinite(h.jarak_m) ? Math.round(h.jarak_m * 10) / 10 : null, titik_nama: h.titik_nama };
 
     if (h.kode !== "ok") {
       // catat percobaan ditolak (hanya saat jam presensi berjalan, supaya tidak menumpuk di luar jam)
       if (h.kode === "akurasi" || h.kode === "luar") await db.from("sigap_pelatihan_presensi").insert({ ...baris, diterima: false, alasan: h.kode === "luar" ? "di luar radius" : "akurasi GPS lemah" });
-      return galat(h.pesan, 422, { kode: h.kode, jarak_m: Math.round(h.jarak_m) });
+      return galat(h.pesan, 422, { kode: h.kode, jarak_m: Number.isFinite(h.jarak_m) ? Math.round(h.jarak_m) : null });
     }
 
     const { error } = await db.from("sigap_pelatihan_presensi").insert({ ...baris, diterima: true });
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       if (ulang.sudah) return NextResponse.json({ ok: true, sudah: true, at: ulang.at, jarak_m: ulang.jarak_m });
       return galat(error.message, 500);
     }
-    return NextResponse.json({ ok: true, sudah: false, at: baris.at, jarak_m: baris.jarak_m });
+    return NextResponse.json({ ok: true, sudah: false, at: baris.at, jarak_m: baris.jarak_m, titik: baris.titik_nama });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }

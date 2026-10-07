@@ -8,7 +8,7 @@
 // GET ?bagian=translok                -> peserta x foto Transport Lokal pada hari pelatihan
 // GET ?bagian=akses                  -> peserta x akses ke halaman Pelatihan (pertama kali), login terakhir, kontak (pengelola)
 // GET ?bagian=foto&penugasan_id=N     -> foto (tautan sementara 1 jam) seorang peserta
-// POST {aksi:"atur_presensi", lat, lng, radius_m, buka_at, tutup_at, akurasi_maks_m, tempat?}
+// POST {aksi:"atur_presensi", titik:[{nama,lat,lng,radius_m}] (1-5 titik), buka_at, tutup_at, akurasi_maks_m, tempat?}
 // POST {aksi:"presensi_manual", akun_id, alasan}   -> panitia mencatat hadir (mis. GPS gagal)
 
 import { NextRequest, NextResponse } from "next/server";
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const urut = <T extends { kelas: number | null; nama: string }>(a: T[]) => a.sort((x, y) => (x.kelas ?? 9) - (y.kelas ?? 9) || x.nama.localeCompare(y.nama));
 
     if (bagian === "presensi") {
-      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
+      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh, titik_nama").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
       const diterima = new Map<number, Record<string, unknown>>();
       const percobaan = new Map<number, Record<string, unknown>[]>();
       for (const r of rows ?? []) {
@@ -74,6 +74,7 @@ export async function GET(req: NextRequest) {
             status: d ? "hadir" : c.length ? "ditolak" : "belum",
             at: (d?.at as string | undefined) ?? null,
             jarak_m: d?.jarak_m != null ? Number(d.jarak_m) : null,
+            titik_nama: (d?.titik_nama as string | null | undefined) ?? null,
             manual: !!d?.manual,
             alasan: (d?.alasan as string | undefined) ?? null,
             dicatat_oleh: (d?.dicatat_oleh as string | undefined) ?? null,
@@ -199,24 +200,32 @@ export async function POST(req: NextRequest) {
     const aksi = String(body?.aksi ?? "");
 
     if (aksi === "atur_presensi") {
-      const lat = Number(body?.lat);
-      const lng = Number(body?.lng);
-      const radius = Number(body?.radius_m);
+      // (7 Okt 2026) 1-5 titik lokasi presensi; diterima bila dalam radius salah satunya.
+      const mentah = Array.isArray(body?.titik) ? (body.titik as unknown[]) : [];
+      if (mentah.length < 1 || mentah.length > 5) return galat("Isi 1 sampai 5 titik lokasi presensi.");
+      const titik: { nama: string; lat: number; lng: number; radius_m: number }[] = [];
+      for (let i = 0; i < mentah.length; i++) {
+        const t = (mentah[i] ?? {}) as Record<string, unknown>;
+        const nama = String(t.nama ?? "").trim().slice(0, 80);
+        const lat = Number(t.lat);
+        const lng = Number(t.lng);
+        const radius = Number(t.radius_m);
+        const no = `Titik ${i + 1}`;
+        if (!nama) return galat(`${no}: nama lokasi wajib diisi.`);
+        if (t.lat === "" || t.lat == null || !Number.isFinite(lat) || lat < -90 || lat > 90) return galat(`${no}: lintang (latitude) harus -90 s.d. 90.`);
+        if (t.lng === "" || t.lng == null || !Number.isFinite(lng) || lng < -180 || lng > 180) return galat(`${no}: bujur (longitude) harus -180 s.d. 180.`);
+        if (!Number.isInteger(radius) || radius < 10 || radius > 5000) return galat(`${no}: radius harus 10–5000 meter.`);
+        titik.push({ nama, lat, lng, radius_m: radius });
+      }
       const akurasi = Number(body?.akurasi_maks_m);
       const buka = bacaWaktu(body?.buka_at);
       const tutup = bacaWaktu(body?.tutup_at);
-      if (!Number.isFinite(lat) || lat < -90 || lat > 90) return galat("Lintang (latitude) harus -90 s.d. 90.");
-      if (!Number.isFinite(lng) || lng < -180 || lng > 180) return galat("Bujur (longitude) harus -180 s.d. 180.");
-      if (!Number.isInteger(radius) || radius < 10 || radius > 5000) return galat("Radius harus 10–5000 meter.");
       if (!Number.isInteger(akurasi) || akurasi < 10 || akurasi > 1000) return galat("Akurasi GPS maksimal harus 10–1000 meter.");
       if (!buka || !tutup) return galat("Jam buka/tutup presensi tidak valid.");
       if (tutup.getTime() <= buka.getTime()) return galat("Jam tutup harus setelah jam buka.");
       const sebelum = await muatPengaturanPresensi(db, kegiatanId);
       const baris = {
         kegiatan_id: kegiatanId,
-        presensi_lat: lat,
-        presensi_lng: lng,
-        presensi_radius_m: radius,
         presensi_buka_at: buka.toISOString(),
         presensi_tutup_at: tutup.toISOString(),
         akurasi_maks_m: akurasi,
@@ -225,7 +234,12 @@ export async function POST(req: NextRequest) {
       };
       const { error } = await db.from("sigap_pelatihan_pengaturan").upsert(baris, { onConflict: "kegiatan_id" });
       if (error) return galat(error.message, 500);
-      await catatAudit(db, akun.id, "pelatihan_atur_presensi", { sebelum, sesudah: baris });
+      // ganti seluruh daftar titik (hapus lama -> isi baru); riwayat presensi menyimpan titik_nama sendiri
+      const { error: eHapus } = await db.from("sigap_pelatihan_titik").delete().eq("kegiatan_id", kegiatanId);
+      if (eHapus) return galat(eHapus.message, 500);
+      const { error: eIsi } = await db.from("sigap_pelatihan_titik").insert(titik.map((t, i) => ({ kegiatan_id: kegiatanId, urut: i + 1, ...t, aktif: true })));
+      if (eIsi) return galat(eIsi.message, 500);
+      await catatAudit(db, akun.id, "pelatihan_atur_presensi", { sebelum, sesudah: { ...baris, titik } });
       return NextResponse.json({ ok: true });
     }
 

@@ -37,7 +37,7 @@ export type Hub = {
   /** (7 Okt 2026) Langkah Pelatihan: null bila akun bukan peserta. */
   langkah: { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] } | null;
   /** (7 Okt 2026) Presensi di lokasi pelatihan: null bila akun bukan peserta / belum diatur. */
-  presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; pengaturan: PengaturanPresensi } | null;
+  presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null; pengaturan: PengaturanPresensi } | null;
   token_translok: string | null;
   sekarang: string;
   kegiatan_id: number;

@@ -251,6 +251,15 @@ export function validasiSoalJson(input: unknown): HasilBacaSoal {
 }
 
 // ======================================================================
+// Pemberitahuan lokasi pembukaan (modal PERHATIAN di halaman Langkah) -- permintaan user 7 Okt 2026
+// ======================================================================
+export const PEMUKAAN = {
+  tempat: "Ully Hotel Solok",
+  jarak: "450 meter dari Mami Hotel",
+  maps: "https://maps.app.goo.gl/cfrCpteizYPPxDju8?g_st=iw",
+} as const;
+
+// ======================================================================
 // Info Undangan (sumber: Undangan B-409/13030/VS.230/2026 tanggal 6 Okt 2026)
 // ======================================================================
 export const UNDANGAN = {
@@ -260,7 +269,7 @@ export const UNDANGAN = {
   hari_tanggal: "Kamis, 8 Oktober 2026",
   tanggal_iso: "2026-10-08",
   pukul: "08.00–16.00 WIB",
-  tempat: "Mami Hotel",
+  tempat: "Mami Hotel Solok",
   pakaian: "Pakaian sopan dan rapi: batik pada pembukaan dan penutupan; pakaian bebas dan rapi selama pelatihan berlangsung.",
   ketentuan: [
     "Hadir tepat waktu pada kelas yang telah ditetapkan dan mengikuti seluruh rangkaian kegiatan sesuai jadwal.",

@@ -42,22 +42,22 @@ function usePolling<T>(url: string, ms = 10_000) {
 // ======================================================================
 type RespPengaturan = { sekarang: string; boleh_kelola: boolean; pengaturan: PengaturanPresensi | null };
 
+type TitikForm = { nama: string; lat: string; lng: string; radius: string };
+const TITIK_KOSONG: TitikForm = { nama: "", lat: "", lng: "", radius: "300" };
+
 export function PengaturanPresensiKartu() {
   const [d, setD] = useState<RespPengaturan | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [radius, setRadius] = useState("300");
+  // (7 Okt 2026) daftar titik presensi (1-5): diterima bila dalam radius SALAH SATU titik
+  const [titik, setTitik] = useState<TitikForm[]>([{ ...TITIK_KOSONG }]);
   const [akurasi, setAkurasi] = useState("100");
   const [buka, setBuka] = useState("");
   const [tutup, setTutup] = useState("");
   const [sibuk, setSibuk] = useState(false);
 
   const isi = (p: PengaturanPresensi) => {
-    setLat(String(p.lat));
-    setLng(String(p.lng));
-    setRadius(String(p.radius_m));
+    setTitik(p.titik.length ? p.titik.map((t) => ({ nama: t.nama, lat: String(t.lat), lng: String(t.lng), radius: String(t.radius_m) })) : [{ ...TITIK_KOSONG }]);
     setAkurasi(String(p.akurasi_maks_m));
     setBuka(keInputWib(p.buka_at));
     setTutup(keInputWib(p.tutup_at));
@@ -71,14 +71,15 @@ export function PengaturanPresensiKartu() {
       .catch((e) => !(e instanceof SesiBerakhir) && setGalat(pesanGalat(e)));
   }, []);
 
-  function pakaiLokasiSaya() {
+  const ubah = (i: number, k: keyof TitikForm, v: string) => setTitik((a) => a.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
+
+  function pakaiLokasiSaya(i: number) {
     setPesan(null);
     if (!("geolocation" in navigator)) return setPesan({ jenis: "galat", teks: "Browser ini tidak mendukung lokasi." });
     navigator.geolocation.getCurrentPosition(
       (p) => {
-        setLat(String(p.coords.latitude));
-        setLng(String(p.coords.longitude));
-        setPesan({ jenis: "ok", teks: `Titik diisi dari lokasi Anda (akurasi ±${Math.round(p.coords.accuracy)} m). Tekan Simpan untuk memakainya.` });
+        setTitik((a) => a.map((t, j) => (j === i ? { ...t, lat: String(p.coords.latitude), lng: String(p.coords.longitude) } : t)));
+        setPesan({ jenis: "ok", teks: `Titik ${i + 1} diisi dari lokasi Anda (akurasi ±${Math.round(p.coords.accuracy)} m). Tekan Simpan untuk memakainya.` });
       },
       () => setPesan({ jenis: "galat", teks: "Lokasi tidak terbaca. Izinkan lokasi pada browser." }),
       { enableHighAccuracy: true, timeout: 20_000 }
@@ -92,7 +93,13 @@ export function PengaturanPresensiKartu() {
       await fetchJson(URL_KEHADIRAN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aksi: "atur_presensi", lat: Number(lat.replace(",", ".")), lng: Number(lng.replace(",", ".")), radius_m: Number(radius), akurasi_maks_m: Number(akurasi), buka_at: buka, tutup_at: tutup }),
+        body: JSON.stringify({
+          aksi: "atur_presensi",
+          titik: titik.map((t) => ({ nama: t.nama, lat: t.lat.trim() === "" ? null : Number(t.lat.replace(",", ".")), lng: t.lng.trim() === "" ? null : Number(t.lng.replace(",", ".")), radius_m: Number(t.radius) })),
+          akurasi_maks_m: Number(akurasi),
+          buka_at: buka,
+          tutup_at: tutup,
+        }),
       });
       setPesan({ jenis: "ok", teks: "Pengaturan presensi tersimpan." });
     } catch (e) {
@@ -105,22 +112,61 @@ export function PengaturanPresensiKartu() {
   if (galat) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!d) return <Memuat />;
   const bisa = d.boleh_kelola;
-  const peta = lat && lng ? `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}` : null;
   return (
-    <Kartu judul="Presensi di lokasi pelatihan" ket={d.pengaturan?.tempat ?? ""}>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <label className="text-[11.5px] font-bold text-[#55657D]">
-          Lintang (latitude)
-          <input className={`${INPUT} mt-0.5 w-full`} value={lat} onChange={(e) => setLat(e.target.value)} disabled={!bisa} inputMode="decimal" />
-        </label>
-        <label className="text-[11.5px] font-bold text-[#55657D]">
-          Bujur (longitude)
-          <input className={`${INPUT} mt-0.5 w-full`} value={lng} onChange={(e) => setLng(e.target.value)} disabled={!bisa} inputMode="decimal" />
-        </label>
-        <label className="text-[11.5px] font-bold text-[#55657D]">
-          Radius (meter)
-          <input className={`${INPUT} mt-0.5 w-full`} value={radius} onChange={(e) => setRadius(e.target.value)} disabled={!bisa} inputMode="numeric" />
-        </label>
+    <Kartu judul="Presensi di lokasi pelatihan" ket={`${titik.length} titik lokasi · peserta cukup berada di salah satunya`}>
+      <div className="space-y-2.5">
+        {titik.map((t, i) => {
+          const peta = t.lat && t.lng ? `https://www.google.com/maps?q=${encodeURIComponent(`${t.lat},${t.lng}`)}` : null;
+          return (
+            <div key={i} className="rounded-xl border border-[#E3E8EE] bg-[#F9FAFC] p-2.5">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-extrabold text-[#0F3D7A]">Titik {i + 1}</span>
+                <span className="flex flex-wrap items-center gap-2 text-[12px]">
+                  {peta && (
+                    <a href={peta} target="_blank" rel="noreferrer" className="font-semibold text-[#1F6FD1] underline">
+                      Lihat di Google Maps
+                    </a>
+                  )}
+                  {bisa && (
+                    <button type="button" className="font-semibold text-[#1F6FD1] underline" onClick={() => pakaiLokasiSaya(i)}>
+                      📍 Pakai lokasi saya
+                    </button>
+                  )}
+                  {bisa && titik.length > 1 && (
+                    <button type="button" className="font-semibold text-[#C0392B] underline" onClick={() => setTitik((a) => a.filter((_, j) => j !== i))}>
+                      Hapus titik
+                    </button>
+                  )}
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-4">
+                <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-4">
+                  Nama lokasi
+                  <input className={`${INPUT} mt-0.5 w-full`} value={t.nama} onChange={(e) => ubah(i, "nama", e.target.value)} disabled={!bisa} placeholder="mis. Ully Hotel Solok" />
+                </label>
+                <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-2">
+                  Lintang (latitude)
+                  <input className={`${INPUT} mt-0.5 w-full`} value={t.lat} onChange={(e) => ubah(i, "lat", e.target.value)} disabled={!bisa} inputMode="decimal" />
+                </label>
+                <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-1">
+                  Bujur (longitude)
+                  <input className={`${INPUT} mt-0.5 w-full`} value={t.lng} onChange={(e) => ubah(i, "lng", e.target.value)} disabled={!bisa} inputMode="decimal" />
+                </label>
+                <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-1">
+                  Radius (meter)
+                  <input className={`${INPUT} mt-0.5 w-full`} value={t.radius} onChange={(e) => ubah(i, "radius", e.target.value)} disabled={!bisa} inputMode="numeric" />
+                </label>
+              </div>
+            </div>
+          );
+        })}
+        {bisa && titik.length < 5 && (
+          <button type="button" className={BTN_O} onClick={() => setTitik((a) => [...a, { ...TITIK_KOSONG }])}>
+            ＋ Tambah titik lokasi
+          </button>
+        )}
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <label className="text-[11.5px] font-bold text-[#55657D]">
           Presensi dibuka (WIB)
           <input type="datetime-local" className={`${INPUT} mt-0.5 w-full`} value={buka} onChange={(e) => setBuka(e.target.value)} disabled={!bisa} />
@@ -135,19 +181,11 @@ export function PengaturanPresensiKartu() {
         </label>
       </div>
       <p className="mt-2 text-[12px] text-[#7B8794]">
-        Peserta hanya bisa presensi bila berada dalam radius dari titik ini dan sinyal GPS-nya cukup akurat. Presensi sekali saja per peserta.{" "}
-        {peta && (
-          <a href={peta} target="_blank" rel="noreferrer" className="font-semibold text-[#1F6FD1] underline">
-            Lihat titik di Google Maps
-          </a>
-        )}
+        Peserta bisa presensi bila berada dalam radius salah satu titik di atas dan sinyal GPS-nya cukup akurat. Presensi sekali saja per peserta.
       </p>
       {pesan && <div className="mt-2"><Pesan jenis={pesan.jenis}>{pesan.teks}</Pesan></div>}
       {bisa && (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className={BTN_O} onClick={pakaiLokasiSaya}>
-            📍 Pakai lokasi saya sekarang
-          </button>
           <button type="button" className={BTN} onClick={simpan} disabled={sibuk}>
             {sibuk ? "Menyimpan…" : "Simpan"}
           </button>
@@ -168,6 +206,7 @@ type PresensiPes = {
   status: "hadir" | "ditolak" | "belum";
   at: string | null;
   jarak_m: number | null;
+  titik_nama: string | null;
   manual: boolean;
   alasan: string | null;
   dicatat_oleh: string | null;
@@ -213,12 +252,12 @@ export function MonitoringPresensi() {
   async function ekspor() {
     if (!data) return;
     const XLSX = await import("xlsx");
-    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Status", "Waktu presensi (WIB)", "Jarak (m)", "Cara", "Alasan/keterangan", "Percobaan ditolak"]];
+    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Status", "Waktu presensi (WIB)", "Lokasi", "Jarak (m)", "Cara", "Alasan/keterangan", "Percobaan ditolak"]];
     baris.forEach((p, i) =>
-      aoa.push([i + 1, p.nama, p.kelas ?? "", p.peran.toUpperCase(), p.status === "hadir" ? "Hadir" : p.status === "ditolak" ? "Ditolak (belum hadir)" : "Belum", p.at ? waktuWib(p.at) : "", p.jarak_m != null ? Math.round(p.jarak_m) : "", p.status === "hadir" ? (p.manual ? `Manual (${p.dicatat_oleh ?? ""})` : "Aplikasi") : "", p.alasan ?? "", p.percobaan])
+      aoa.push([i + 1, p.nama, p.kelas ?? "", p.peran.toUpperCase(), p.status === "hadir" ? "Hadir" : p.status === "ditolak" ? "Ditolak (belum hadir)" : "Belum", p.at ? waktuWib(p.at) : "", p.titik_nama ?? "", p.jarak_m != null ? Math.round(p.jarak_m) : "", p.status === "hadir" ? (p.manual ? `Manual (${p.dicatat_oleh ?? ""})` : "Aplikasi") : "", p.alasan ?? "", p.percobaan])
     );
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 12 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Presensi");
     XLSX.writeFile(wb, `Presensi_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -238,7 +277,7 @@ export function MonitoringPresensi() {
       </div>
       <Kartu
         judul="Presensi per peserta"
-        ket={`${baris.length} dari ${data.peserta.length} · segar otomatis tiap 10 detik${data.pengaturan ? ` · radius ${data.pengaturan.radius_m} m` : ""}`}
+        ket={`${baris.length} dari ${data.peserta.length} · segar otomatis tiap 10 detik${data.pengaturan ? ` · ${data.pengaturan.titik.map((t) => `${t.nama} ${t.radius_m} m`).join(" / ")}` : ""}`}
         kanan={
           <button type="button" className={BTN_O} onClick={ekspor}>
             ⬇ Ekspor Excel
@@ -301,7 +340,7 @@ export function MonitoringPresensi() {
                       <Chip w="wait">belum presensi</Chip>
                     )}
                   </td>
-                  <td className={`${TD} tabular-nums`}>{p.status === "hadir" ? (p.jarak_m != null ? teksJarak(p.jarak_m) : "–") : p.percobaan_jarak_m != null ? teksJarak(p.percobaan_jarak_m) : "–"}</td>
+                  <td className={`${TD} tabular-nums`}>{p.status === "hadir" ? (p.jarak_m != null ? `${teksJarak(p.jarak_m)}${p.titik_nama ? ` · ${p.titik_nama}` : ""}` : "–") : p.percobaan_jarak_m != null ? teksJarak(p.percobaan_jarak_m) : "–"}</td>
                   {data.boleh_kelola && (
                     <td className={TD}>
                       {p.status !== "hadir" && (

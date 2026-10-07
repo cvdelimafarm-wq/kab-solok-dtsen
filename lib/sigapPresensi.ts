@@ -5,10 +5,12 @@
 // Keputusan user: radius 300 m, presensi dibuka 06.00 s.d. 18.00 WIB di hari kegiatan, presensi sekali saja,
 // bila lokasi gagal terbaca panitia dapat mencatat presensi manual (dengan alasan).
 
+/** Satu titik lokasi presensi (mis. Mami Hotel, Ully Hotel) beserta radiusnya. */
+export type TitikPresensi = { nama: string; lat: number; lng: number; radius_m: number };
+
 export type PengaturanPresensi = {
-  lat: number;
-  lng: number;
-  radius_m: number;
+  /** Presensi diterima bila berada dalam radius SALAH SATU titik. */
+  titik: TitikPresensi[];
   buka_at: string; // ISO
   tutup_at: string; // ISO
   akurasi_maks_m: number;
@@ -31,7 +33,7 @@ export function jarakMeter(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 export type KodeNilaiPresensi = "ok" | "belum_buka" | "sudah_tutup" | "akurasi" | "luar";
-export type HasilNilaiPresensi = { kode: KodeNilaiPresensi; jarak_m: number; pesan: string };
+export type HasilNilaiPresensi = { kode: KodeNilaiPresensi; jarak_m: number; titik_nama: string | null; pesan: string };
 
 export function posisiValid(p: unknown): p is PosisiPeserta {
   if (!p || typeof p !== "object") return false;
@@ -47,14 +49,32 @@ const bulatkan = (n: number) => Math.round(n);
 const teksJarak = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace(".", ",")} km` : `${bulatkan(m)} m`);
 export { teksJarak };
 
-/** Nilai satu percobaan presensi. Urutan cek: jam -> akurasi GPS -> jarak. */
+/** Titik terdekat dari posisi peserta + jaraknya (meter) + apakah di dalam radius titik itu. */
+export function titikTerdekat(pos: { lat: number; lng: number }, titik: TitikPresensi[]): { titik: TitikPresensi; jarak_m: number; dalam: boolean } | null {
+  let terbaik: { titik: TitikPresensi; jarak_m: number; dalam: boolean } | null = null;
+  for (const t of titik) {
+    const j = jarakMeter(pos.lat, pos.lng, t.lat, t.lng);
+    const dalam = j <= t.radius_m;
+    // prioritas: titik yang melingkupi posisi (jarak terdekat); jika tidak ada, titik terdekat
+    if (!terbaik || (dalam && !terbaik.dalam) || (dalam === terbaik.dalam && j < terbaik.jarak_m)) terbaik = { titik: t, jarak_m: j, dalam };
+  }
+  return terbaik;
+}
+
+/** Ringkasan titik utk teks: "Mami Hotel Solok atau Ully Hotel Solok". */
+export const namaTitik = (titik: TitikPresensi[]) => titik.map((t) => t.nama).join(" atau ");
+
+/** Nilai satu percobaan presensi. Urutan cek: jam -> akurasi GPS -> jarak ke titik terdekat. */
 export function nilaiPresensi(pos: PosisiPeserta, p: PengaturanPresensi, sekarang: Date): HasilNilaiPresensi {
-  const jarak = jarakMeter(pos.lat, pos.lng, p.lat, p.lng);
   const t = sekarang.getTime();
-  if (t < new Date(p.buka_at).getTime()) return { kode: "belum_buka", jarak_m: jarak, pesan: "Presensi belum dibuka." };
-  if (t >= new Date(p.tutup_at).getTime()) return { kode: "sudah_tutup", jarak_m: jarak, pesan: "Presensi sudah ditutup. Hubungi panitia." };
+  const dekat = titikTerdekat(pos, p.titik);
+  const jarak = dekat?.jarak_m ?? Infinity;
+  const nama = dekat?.titik.nama ?? null;
+  if (!dekat) return { kode: "luar", jarak_m: jarak, titik_nama: null, pesan: "Titik lokasi presensi belum diatur panitia." };
+  if (t < new Date(p.buka_at).getTime()) return { kode: "belum_buka", jarak_m: jarak, titik_nama: nama, pesan: "Presensi belum dibuka." };
+  if (t >= new Date(p.tutup_at).getTime()) return { kode: "sudah_tutup", jarak_m: jarak, titik_nama: nama, pesan: "Presensi sudah ditutup. Hubungi panitia." };
   if (pos.akurasi > p.akurasi_maks_m)
-    return { kode: "akurasi", jarak_m: jarak, pesan: `Sinyal lokasi (GPS) lemah: akurasi ±${bulatkan(pos.akurasi)} m, maksimal ±${p.akurasi_maks_m} m. Pindah ke area terbuka lalu segarkan lokasi.` };
-  if (jarak > p.radius_m) return { kode: "luar", jarak_m: jarak, pesan: `Anda berada ${teksJarak(jarak)} dari lokasi, di luar radius ${p.radius_m} m.` };
-  return { kode: "ok", jarak_m: jarak, pesan: `Anda berada ${teksJarak(jarak)} dari lokasi (dalam radius ${p.radius_m} m).` };
+    return { kode: "akurasi", jarak_m: jarak, titik_nama: nama, pesan: `Sinyal lokasi (GPS) lemah: akurasi ±${bulatkan(pos.akurasi)} m, maksimal ±${p.akurasi_maks_m} m. Pindah ke area terbuka lalu segarkan lokasi.` };
+  if (!dekat.dalam) return { kode: "luar", jarak_m: jarak, titik_nama: nama, pesan: `Anda berada ${teksJarak(jarak)} dari ${nama} (titik terdekat), di luar radius ${dekat.titik.radius_m} m.` };
+  return { kode: "ok", jarak_m: jarak, titik_nama: nama, pesan: `Anda berada ${teksJarak(jarak)} dari ${nama} (dalam radius ${dekat.titik.radius_m} m).` };
 }

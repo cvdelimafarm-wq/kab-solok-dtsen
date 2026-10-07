@@ -201,12 +201,13 @@ export async function muatLangkah(db: Db, akunId: number, kegiatanId: number, pe
 // (7 Okt 2026) Presensi di lokasi pelatihan.
 // ---------------------------------------------------------------------------------------------
 export async function muatPengaturanPresensi(db: Db, kegiatanId: number): Promise<PengaturanPresensi | null> {
-  const { data } = await db.from("sigap_pelatihan_pengaturan").select("*").eq("kegiatan_id", kegiatanId).maybeSingle();
+  const [{ data }, { data: titik }] = await Promise.all([
+    db.from("sigap_pelatihan_pengaturan").select("*").eq("kegiatan_id", kegiatanId).maybeSingle(),
+    db.from("sigap_pelatihan_titik").select("nama, lat, lng, radius_m").eq("kegiatan_id", kegiatanId).eq("aktif", true).order("urut").order("id"),
+  ]);
   if (!data) return null;
   return {
-    lat: Number(data.presensi_lat),
-    lng: Number(data.presensi_lng),
-    radius_m: Number(data.presensi_radius_m),
+    titik: (titik ?? []).map((t) => ({ nama: t.nama as string, lat: Number(t.lat), lng: Number(t.lng), radius_m: Number(t.radius_m) })),
     buka_at: data.presensi_buka_at as string,
     tutup_at: data.presensi_tutup_at as string,
     akurasi_maks_m: Number(data.akurasi_maks_m),
@@ -214,9 +215,9 @@ export async function muatPengaturanPresensi(db: Db, kegiatanId: number): Promis
   };
 }
 
-export type PresensiPeserta = { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean };
+export type PresensiPeserta = { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null };
 
 export async function muatPresensiAkun(db: Db, kegiatanId: number, akunId: number): Promise<PresensiPeserta> {
-  const { data } = await db.from("sigap_pelatihan_presensi").select("at, jarak_m, manual").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).maybeSingle();
-  return { sudah: !!data, at: (data?.at as string | undefined) ?? null, jarak_m: data?.jarak_m != null ? Number(data.jarak_m) : null, manual: !!data?.manual };
+  const { data } = await db.from("sigap_pelatihan_presensi").select("at, jarak_m, manual, titik_nama").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).maybeSingle();
+  return { sudah: !!data, at: (data?.at as string | undefined) ?? null, jarak_m: data?.jarak_m != null ? Number(data.jarak_m) : null, manual: !!data?.manual, titik_nama: (data?.titik_nama as string | null | undefined) ?? null };
 }
