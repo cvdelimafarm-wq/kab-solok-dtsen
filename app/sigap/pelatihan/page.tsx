@@ -644,8 +644,8 @@ export default function HalamanPelatihan() {
             <p className="text-[13px] text-[#55657D]">
               {selesai ? `Semua ${slotIni.length} foto sudah terunggah.` : ada > 0 ? `Baru ${ada} dari ${slotIni.length} foto terunggah. Lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.` : petunjuk}
             </p>
+            {/* (8 Okt 2026) Tombol navigasi ke tempat unggah SELALU ada (juga sebelum hari pelatihan) -- permintaan user */}
             {data.token_translok &&
-              (now >= mulai || ada > 0) &&
               (selesai ? (
                 <a href={`/sigap/translok/${data.token_translok}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">
                   Buka kembali
