@@ -68,7 +68,7 @@ export default function KelolaPelatihan() {
       sub="Soal, jadwal, kuis live & monitoring · Pelatihan PSP Pascabencana 2026"
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
-        { kode: "kuis", label: "🎮 Kuis Live" },
+        { kode: "kuis", label: "🎮 Adu Sigap" },
         { kode: "monitoring", label: "Monitoring" },
       ]}
       aktifTab={tab}

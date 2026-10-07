@@ -451,7 +451,7 @@ const TERIMA: Record<string, string> = {
   instrumen: "Instrumen sudah dipelajari",
   pretest: "Pretest sudah dikerjakan",
   hadir: "Presensi sudah tercatat",
-  kuis: "Kuis Live sudah diikuti",
+  kuis: "Adu Sigap sudah diikuti",
   posttest: "Posttest sudah dikerjakan",
   foto: "Semua foto Transport Lokal sudah terunggah",
 };
@@ -474,7 +474,7 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
     return {
       nada: "ingat",
       ikon: "🎮",
-      judul: kuisAktif.sudah_gabung ? "Kuis Live sedang berlangsung" : "Kuis Live dibuka — ayo bergabung!",
+      judul: kuisAktif.sudah_gabung ? "Adu Sigap sedang berlangsung" : "Adu Sigap dibuka — ayo bergabung!",
       teks: kuisAktif.sudah_gabung ? "Anda sudah bergabung. Kembali ke layar kuis bila tertutup." : "Tekan Gabung; kuis dipimpin admin di layar depan dan dijawab dari HP Anda.",
       aksi: { label: kuisAktif.sudah_gabung ? "Masuk kembali ke kuis →" : "Gabung kuis →", href: "/sigap/pelatihan/kuis?gabung=1" },
       terima,
@@ -657,7 +657,7 @@ export default function HalamanPelatihan() {
         ? [
             {
               kode: "kuis",
-              judul: "Ikuti Kuis Live",
+              judul: "Ikuti Adu Sigap",
               selesai: data.kuis.pernah_ikut,
               terlewat: !data.kuis.pernah_ikut && data.kuis.ada_ruang_selesai && !data.kuis.ada_ruang_aktif,
               bisaSekarang: data.kuis.ada_ruang_aktif,

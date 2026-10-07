@@ -94,7 +94,7 @@ export default function KuisLive({ bisaKelolaAwal }: { bisaKelolaAwal?: boolean 
       {pesan && <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>}
 
       <Pesan jenis="info">
-        Kuis Live bergaya Kahoot: Anda memegang layar host (proyektor) dan menekan <b>Lanjut</b>; peserta menjawab dari HP lewat <b>SIGAP › Pelatihan › Langkah › Kuis Live</b> (otomatis dari akun, tanpa kode). Skor kuis dicatat sebagai <b>nilai tambahan</b> dan tidak mengubah nilai pretest/posttest.
+        <b>Adu Sigap</b> = kuis live bergaya Kahoot: Anda memegang layar host (proyektor) dan menekan <b>Lanjut</b>; peserta menjawab dari HP lewat <b>SIGAP › Pelatihan › Langkah › Adu Sigap</b> (otomatis dari akun, tanpa kode). Skor kuis dicatat sebagai <b>nilai tambahan</b> dan tidak mengubah nilai pretest/posttest.
       </Pesan>
 
       {aktif && (
@@ -227,7 +227,7 @@ function KartuKuis({ kuis, bisaKelola, ruangAktif, sudahDimainkan, sibuk, aksi, 
       const baris = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nama], { header: 1, defval: "", blankrows: false });
       setPratinjau({ ...bacaBarisKuis(baris), nama: f.name });
     } catch {
-      setPesan({ jenis: "galat", teks: "Berkas tidak dapat dibaca. Gunakan template .xlsx Kuis Live yang diunduh dari halaman ini." });
+      setPesan({ jenis: "galat", teks: "Berkas tidak dapat dibaca. Gunakan template .xlsx Adu Sigap yang diunduh dari halaman ini." });
     } finally {
       if (berkas.current) berkas.current.value = "";
     }

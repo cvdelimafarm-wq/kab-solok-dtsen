@@ -10,6 +10,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WARNA_OPSI } from "@/lib/sigapKuis";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
+import { efek, hentikanMusik, putarMusik, setSuaraAktif } from "../kuisSuara";
+
+const KUNCI_SUARA_HOST = "sigap_kuis_suara_host";
 
 export const URL_KUIS_ADMIN = "/api/sigap/pelatihan/kuis/admin";
 
@@ -46,6 +49,8 @@ export function LayarHost({ ruangId, bisaKelola, onTutup }: { ruangId: number; b
   const offset = useRef(0);
   const akar = useRef<HTMLDivElement>(null);
   const sibukRef = useRef(false);
+  const [suara, setSuara] = useState(true); // musik & efek layar host; bisa dibisukan (diingat di browser)
+  const statusSebelum = useRef("");
   useTick(200);
 
   const terapkan = useCallback((x: KeadaanHost) => {
@@ -130,17 +135,59 @@ export function LayarHost({ ruangId, bisaKelola, onTutup }: { ruangId: number; b
   const r = d?.ruang;
   const sisaDetik = r?.status === "soal" && r.batas_at ? Math.max(0, (new Date(r.batas_at).getTime() - jam()) / 1000) : 0;
   const total = d?.soal?.detik ?? 0;
+  // ---- musik & efek suara (disintesis di browser; lihat ../kuisSuara.ts) ----
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(KUNCI_SUARA_HOST) === "0") setSuara(false);
+    } catch {
+      /* abaikan */
+    }
+    return () => {
+      hentikanMusik();
+      setSuaraAktif(false);
+    };
+  }, []);
+  const statusR = r?.status ?? "";
+  useEffect(() => {
+    setSuaraAktif(suara);
+    if (!suara || !statusR) return;
+    if (statusR === "lobi") putarMusik("lobi");
+    else if (statusR === "soal") putarMusik("soal");
+    else hentikanMusik();
+  }, [suara, statusR, r?.soal_ke]);
+  useEffect(() => {
+    const sebelum = statusSebelum.current;
+    statusSebelum.current = statusR;
+    if (!sebelum || sebelum === statusR) return; // hanya saat perpindahan fase yang teramati
+    if (sebelum === "soal" && statusR === "jawaban") efek("habis");
+    if (statusR === "selesai") efek("fanfare");
+  }, [statusR]);
+  const detikBulat = Math.ceil(sisaDetik);
+  useEffect(() => {
+    if (statusR === "soal" && detikBulat >= 1 && detikBulat <= 5) efek("tik");
+  }, [detikBulat, statusR]);
+  function ubahSuara() {
+    const v = !suara;
+    setSuara(v);
+    try {
+      localStorage.setItem(KUNCI_SUARA_HOST, v ? "1" : "0");
+    } catch {
+      /* abaikan */
+    }
+  }
+
   const labelLanjut = !r ? "" : r.status === "lobi" ? "Mulai kuis ▶" : r.status === "soal" ? "Tampilkan jawaban ▶" : d?.ada_soal_berikut ? "Soal berikutnya ▶" : "Selesai · lihat podium 🏆";
 
   return (
-    <div ref={akar} className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-[#46178F] text-white" role="dialog" aria-label="Layar host Kuis Live">
+    <div ref={akar} className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-[#46178F] text-white" role="dialog" aria-label="Layar host Adu Sigap">
       {/* bilah atas */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3">
-        <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold">{r?.judul ?? "Kuis Live"}</span>
+        <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold">{r?.judul ?? "Adu Sigap"}</span>
         {r && r.status !== "lobi" && r.soal_ke > 0 && <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold">Soal {r.soal_ke} / {r.total}</span>}
         <span className="ml-auto flex items-center gap-2">
           <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold tabular-nums" title="Peserta bergabung">👥 {d?.jumlah_peserta ?? 0}</span>
           {r?.status === "soal" && <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold tabular-nums" title="Sudah menjawab">✋ {d?.menjawab ?? 0}/{d?.jumlah_peserta ?? 0}</span>}
+          <button type="button" onClick={ubahSuara} className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold hover:bg-white/25" aria-pressed={suara} title="Musik & efek suara">{suara ? "🔊 Suara" : "🔇 Bisu"}</button>
           <button type="button" onClick={layarPenuh} className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold hover:bg-white/25">⛶ Layar penuh</button>
           <button type="button" onClick={onTutup} className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold hover:bg-white/25">✕ Tutup layar</button>
         </span>
@@ -195,9 +242,10 @@ function Lobi({ d }: { d: KeadaanHost }) {
   const alamat = typeof window === "undefined" ? "" : `${window.location.origin}/sigap/pelatihan`;
   return (
     <div className="m-auto w-full text-center">
-      <p className="text-[clamp(1rem,2vw,1.4rem)] font-semibold text-white/80">Buka SIGAP di HP → Pelatihan → Langkah → Kuis Live → Gabung</p>
+      <p className="text-[clamp(1rem,2vw,1.4rem)] font-semibold text-white/80">Buka SIGAP di HP → Pelatihan → Langkah → Adu Sigap → Gabung</p>
       <p className="mt-1 text-[clamp(1rem,2.2vw,1.6rem)] font-bold text-[#FFD02B]">{alamat.replace(/^https?:\/\//, "")}</p>
-      <h1 className="mt-6 text-[clamp(2rem,6vw,4.5rem)] font-extrabold leading-tight">{d.ruang.judul}</h1>
+      <p className="mt-5 inline-block rounded-full bg-[#FFD02B] px-4 py-1 text-[clamp(0.9rem,1.8vw,1.3rem)] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP</p>
+      <h1 className="mt-3 text-[clamp(2rem,6vw,4.5rem)] font-extrabold leading-tight">{d.ruang.judul}</h1>
       <p className="mt-2 text-[clamp(1rem,2vw,1.4rem)] text-white/80">{d.ruang.total} soal · menunggu peserta bergabung</p>
       <p className="mt-6 text-[clamp(2.5rem,8vw,6rem)] font-extrabold tabular-nums">{d.jumlah_peserta}</p>
       <p className="text-[clamp(0.9rem,1.6vw,1.2rem)] font-semibold text-white/80">peserta sudah bergabung</p>

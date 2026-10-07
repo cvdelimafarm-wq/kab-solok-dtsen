@@ -11,6 +11,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WARNA_OPSI } from "@/lib/sigapKuis";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir } from "../../admin/api";
+import { efek, setSuaraAktif } from "../kuisSuara";
+
+const KUNCI_SUARA_HP = "sigap_kuis_suara_hp";
 
 const URL_KUIS = "/api/sigap/pelatihan/kuis";
 
@@ -43,6 +46,8 @@ export default function KuisPeserta() {
   const offset = useRef(0);
   const versiDetail = useRef("");
   const otoGabung = useRef(false);
+  const [suara, setSuara] = useState(false); // efek suara di HP: default MATI (ruangan pelatihan), diingat di browser
+  const bunyiTerakhir = useRef("");
   useTick(250);
 
   const ambilDetail = useCallback(async () => {
@@ -118,8 +123,31 @@ export default function KuisPeserta() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
 
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(KUNCI_SUARA_HP) === "1") {
+        setSuara(true);
+        setSuaraAktif(true);
+      }
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+  function ubahSuara() {
+    const v = !suara;
+    setSuara(v);
+    setSuaraAktif(v);
+    if (v) efek("klik");
+    try {
+      localStorage.setItem(KUNCI_SUARA_HP, v ? "1" : "0");
+    } catch {
+      /* abaikan */
+    }
+  }
+
   async function jawab(nomor: number, kode: string) {
     if (!ringan?.ada || kirim || dipilih?.nomor === nomor) return;
+    efek("klik");
     setKirim(true);
     setGalatAksi(null);
     setDipilih({ nomor, kode });
@@ -150,6 +178,26 @@ export default function KuisPeserta() {
   const sisa = r?.status === "soal" && r.batas_at ? Math.max(0, (new Date(r.batas_at).getTime() - jam()) / 1000) : 0;
   const pilihanSaya = soal && dipilih?.nomor === soal.nomor ? dipilih.kode : (saya?.jawaban?.pilihan ?? null);
 
+  // efek suara per fase (sekali per versi ruang, setelah keadaan pribadi siap)
+  const statusRuang = r?.status;
+  const adaSaya = !!saya?.gabung;
+  const benarSaya = saya?.jawaban?.benar;
+  const adaJawaban = !!saya?.jawaban;
+  const peringkatSaya = saya?.peringkat ?? null;
+  useEffect(() => {
+    if (!r || !adaSaya) return;
+    const kunci = `${r.id}:${r.versi}`;
+    if (bunyiTerakhir.current === kunci) return;
+    if (statusRuang === "jawaban") {
+      bunyiTerakhir.current = kunci;
+      efek(adaJawaban ? (benarSaya ? "benar" : "salah") : "habis");
+    } else if (statusRuang === "selesai") {
+      bunyiTerakhir.current = kunci;
+      efek(peringkatSaya != null && peringkatSaya <= 3 ? "fanfare" : "selesai");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r?.id, r?.versi, statusRuang, adaSaya, adaJawaban, benarSaya, peringkatSaya]);
+
   const kartu = "mx-auto w-full max-w-md rounded-2xl bg-white p-5 text-center text-[#14202E] shadow-xl";
   let isi: React.ReactNode;
 
@@ -167,6 +215,7 @@ export default function KuisPeserta() {
     isi = (
       <div className={`${kartu} m-auto`}>
         <p className="text-[40px]" aria-hidden>🎮</p>
+        <p className="mt-1 inline-block rounded-full bg-[#FFD02B] px-3 py-0.5 text-[12px] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP</p>
         <p className="mt-1 text-[19px] font-extrabold">{r.judul}</p>
         <p className="mt-1 text-[13.5px] text-[#55657D]">{r.status === "lobi" ? `${r.total} soal · pastikan HP siap, lalu tekan Gabung.` : "Kuis sudah berjalan. Gabung sekarang, Anda ikut mulai soal berikutnya."}</p>
         <button type="button" disabled={kirim} onClick={gabung} className="mt-4 w-full rounded-xl bg-[#1E7A4C] px-4 py-3.5 text-[17px] font-extrabold text-white shadow hover:bg-[#17623C] disabled:opacity-60">
@@ -304,6 +353,7 @@ export default function KuisPeserta() {
         <Link href="/sigap/pelatihan" className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold hover:bg-white/25">← Langkah</Link>
         {r && <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/90">{r.judul}</span>}
         {r && r.status !== "lobi" && r.soal_ke > 0 && <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold tabular-nums">{r.soal_ke}/{r.total}</span>}
+        <button type="button" onClick={ubahSuara} aria-pressed={suara} title="Efek suara" className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-[12.5px] font-bold hover:bg-white/25">{suara ? "🔊" : "🔇"}</button>
         {saya?.gabung && <span className="shrink-0 rounded-full bg-[#FFD02B] px-3 py-1 text-[12.5px] font-extrabold tabular-nums text-[#2B0F55]">⭐ {saya.total_poin ?? 0}</span>}
       </div>
       {galat && <p className="mx-auto mb-2 w-full max-w-3xl rounded-lg bg-[#E21B3C] px-3 py-2 text-[13px] font-semibold">{galat}</p>}
