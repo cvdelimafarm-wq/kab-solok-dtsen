@@ -12,6 +12,7 @@ import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, waktuWib } from
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
+import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
@@ -32,7 +33,7 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring";
+type TabK = "soal" | "monitoring" | "kuis";
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
@@ -52,7 +53,7 @@ export default function KelolaPelatihan() {
     muat();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring") setTab("monitoring");
+      if (t === "monitoring" || t === "kuis") setTab(t);
     } catch {
       /* abaikan */
     }
@@ -64,9 +65,10 @@ export default function KelolaPelatihan() {
       kecil="SIGAP · Kelola Pelatihan"
       jejak={["Pelatihan", "Kelola"]}
       judul="Kelola Pelatihan"
-      sub="Soal, jadwal & monitoring · Pelatihan PSP Pascabencana 2026"
+      sub="Soal, jadwal, kuis live & monitoring · Pelatihan PSP Pascabencana 2026"
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
+        { kode: "kuis", label: "🎮 Kuis Live" },
         { kode: "monitoring", label: "Monitoring" },
       ]}
       aktifTab={tab}
@@ -85,6 +87,7 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
+      {ringkas && tab === "kuis" && <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian />}
     </Bingkai>
   );

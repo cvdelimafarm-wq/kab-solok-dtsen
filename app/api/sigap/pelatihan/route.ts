@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN, statusTes } from "@/lib/sigapTes";
+import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatPresensiAkun, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -67,7 +68,10 @@ export async function GET(req: NextRequest) {
     let langkah = null;
     let tokenTranslok: string | null = null;
     let presensi = null;
+    let kuis = null;
     if (peserta) {
+      // (7 Okt 2026) Kuis Live: ringkasan utk langkah "Kuis Live" (null = belum ada kuis -> langkah disembunyikan). Gagal -> null.
+      kuis = await ringkasanKuisHub(db, kegiatanId, akun.id).catch(() => null);
       const [peng, pres] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatPresensiAkun(db, kegiatanId, akun.id)]);
       presensi = peng ? { ...pres, pengaturan: peng } : null;
       langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);
@@ -84,6 +88,7 @@ export async function GET(req: NextRequest) {
       tes,
       langkah,
       presensi,
+      kuis,
       token_translok: tokenTranslok,
       sekarang: sekarang.toISOString(),
       kegiatan_id: kegiatanId,
