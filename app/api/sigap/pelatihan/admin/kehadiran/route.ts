@@ -49,8 +49,9 @@ export async function GET(req: NextRequest) {
     // daftar peserta (penugasan aktif) + nama
     const { data: pen } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(2000);
     const akunIds = (pen ?? []).map((p) => p.akun_id as number);
-    const { data: ak } = akunIds.length ? await db.from("sigap_akun").select("id, nama").in("id", akunIds).limit(2000) : { data: [] as Record<string, unknown>[] };
+    const { data: ak } = akunIds.length ? await db.from("sigap_akun").select("id, nama, jenis").in("id", akunIds).limit(2000) : { data: [] as Record<string, unknown>[] };
     const nama = new Map((ak ?? []).map((a) => [a.id as number, a.nama as string]));
+    const jenisAkun = new Map((ak ?? []).map((a) => [a.id as number, (a.jenis as string | null) ?? "mitra"]));
     const urut = <T extends { kelas: number | null; nama: string }>(a: T[]) => a.sort((x, y) => (x.kelas ?? 9) - (y.kelas ?? 9) || x.nama.localeCompare(y.nama));
 
     if (bagian === "presensi") {
@@ -71,6 +72,7 @@ export async function GET(req: NextRequest) {
           return {
             akun_id: id,
             nama: nama.get(id) ?? "?",
+            jenis_akun: jenisAkun.get(id) ?? "mitra",
             peran: p.peran as string,
             kelas: (p.kelas as number | null) ?? null,
             status: d ? "hadir" : c.length ? "ditolak" : "belum",
@@ -110,6 +112,7 @@ export async function GET(req: NextRequest) {
             akun_id: p.akun_id as number,
             penugasan_id: p.id as number,
             nama: nama.get(p.akun_id as number) ?? "?",
+            jenis_akun: jenisAkun.get(p.akun_id as number) ?? "mitra",
             peran: p.peran as string,
             kelas: (p.kelas as number | null) ?? null,
             slot: e ? [...e.slot].filter((s) => s >= 1 && s <= total).sort((a, b) => a - b) : [],
@@ -153,6 +156,7 @@ export async function GET(req: NextRequest) {
           return {
             akun_id: id,
             nama: nama.get(id) ?? "?",
+            jenis_akun: jenisAkun.get(id) ?? "mitra",
             peran: p.peran as string,
             kelas: (p.kelas as number | null) ?? null,
             kecamatan: (a?.alamat_kecamatan as string | null) ?? null,

@@ -14,6 +14,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
+import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -386,16 +387,15 @@ function MonitoringBagian() {
 }
 
 const STATUS_FILTER: Record<string, string> = { belum_mulai: "belum mulai", mengerjakan: "sedang mengerjakan", selesai: "selesai", terlewat: "terlewat" };
-const labelStatusFilter = (v: string) => { const [j, st] = v.split(":"); return `${LABEL_JENIS_TES[j as JenisTes] ?? j}: ${STATUS_FILTER[st] ?? st}`; };
+/** Opsi status gabungan Pretest & Posttest ("<tes>:<status>"), dipakai bar filter; per tes dipakai judul kolom. */
+const opsiStatusTes = (j: JenisTes): Opsi[] => Object.entries(STATUS_FILTER).map(([k, v]) => ({ nilai: `${j}:${k}`, label: v }));
+const OPSI_STATUS_TES: Opsi[] = DAFTAR_JENIS_TES.flatMap((j) => Object.entries(STATUS_FILTER).map(([k, v]) => ({ nilai: `${j}:${k}`, label: `${LABEL_JENIS_TES[j]}: ${v}`, grup: LABEL_JENIS_TES[j] })));
+const normStatusTes = (s0: string | undefined) => (!s0 || s0 === "belum_buka" || s0 === "buka" || s0 === "soal_belum_ada" ? "belum_mulai" : s0);
 
 function Monitoring() {
   const [data, setData] = useState<Monitor | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
-  const [kelas, setKelas] = useState("");
-  const [jenis, setJenis] = useState("");
-  const [peran, setPeran] = useState("");
-  const [status, setStatus] = useState("");
-  const [cari, setCari] = useState("");
+  const f = useFilterMon();
   const [jenisAnalisis, setJenisAnalisis] = useState<JenisTes>("pretest");
   const jam = useJamServer();
   const { setujukan, sekarang } = jam;
@@ -418,21 +418,20 @@ function Monitoring() {
 
   const baris = useMemo(() => {
     if (!data) return [];
-    return data.peserta.filter((p) => {
-      if (kelas && String(p.kelas ?? "") !== kelas) return false;
-      if (peran && p.peran !== peran) return false;
-      if (jenis && p.jenis_akun !== jenis) return false;
-      if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
-      if (status) {
-        // nilai filter = "<tes>:<status>" (mis. "pretest:belum_mulai") -> hanya tes yang dipilih yang dicek
-        const [j, st] = status.split(":") as [JenisTes, string];
-        const s0 = p.tes[j]?.status;
-        const norm = !s0 || s0 === "belum_buka" || s0 === "buka" || s0 === "soal_belum_ada" ? "belum_mulai" : s0;
-        if (norm !== st) return false;
-      }
+    // status: nilai "<tes>:<status>"; dalam satu tes boleh beberapa status (atau), antar tes harus cocok semua (dan)
+    const perTes = new Map<string, Set<string>>();
+    f.status.forEach((v) => {
+      const [j, st] = v.split(":");
+      perTes.set(j, (perTes.get(j) ?? new Set()).add(st));
+    });
+    const lolos = data.peserta.filter((p) => {
+      if (!lolosDasar(f, p)) return false;
+      for (const [j, sts] of perTes) if (!sts.has(normStatusTes(p.tes[j as JenisTes]?.status))) return false;
       return true;
     });
-  }, [data, kelas, peran, jenis, status, cari]);
+    const naik = (p: Monitor["peserta"][number]) => (p.tes.pretest?.skor != null && p.tes.posttest?.skor != null ? p.tes.posttest.skor - p.tes.pretest.skor : null);
+    return urutkan(lolos, f.urut, { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, pretest: (p) => p.tes.pretest?.skor, posttest: (p) => p.tes.posttest?.skor, naik });
+  }, [data, f.jenis, f.kelas, f.peran, f.status, f.cari, f.urut]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Analisis per soal: kerangka soal dari server, angkanya dihitung ulang dari jawaban peserta yang lolos filter. */
   function analisisUntuk(j: JenisTes): Analisis[] {
@@ -490,7 +489,7 @@ function Monitoring() {
       wa["!cols"] = [{ wch: 6 }, { wch: 70 }, { wch: 7 }, { wch: 10 }, { wch: 8 }, { wch: 9 }];
       XLSX.utils.book_append_sheet(wb, wa, `Analisis ${LABEL_JENIS_TES[j]}`);
     }
-    XLSX.writeFile(wb, `Monitoring_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}${kelas || peran || jenis || status || cari ? "_filter" : ""}.xlsx`);
+    XLSX.writeFile(wb, `Monitoring_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}${f.adaFilter ? "_filter" : ""}.xlsx`);
   }
 
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
@@ -513,15 +512,7 @@ function Monitoring() {
   const total = baris.length;
   const semua = data.peserta.length;
   const persen = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
-  const filterAktif = [kelas && `Kelas ${kelas}`, peran && peran.toUpperCase(), jenis && (jenis === "organik" ? "Organik" : "Mitra"), status && labelStatusFilter(status), cari && `“${cari}”`].filter(Boolean) as string[];
-  const adaFilter = filterAktif.length > 0;
-  const resetFilter = () => {
-    setKelas("");
-    setPeran("");
-    setJenis("");
-    setStatus("");
-    setCari("");
-  };
+  const adaFilter = f.adaFilter;
   const analisis = analisisUntuk(jenisAnalisis);
   const selesaiAnalisis = baris.filter((p) => p.tes[jenisAnalisis]?.status === "selesai").length;
   const urut = [...analisis].filter((a) => a.persen_benar !== null).sort((a, b) => (a.persen_benar ?? 0) - (b.persen_benar ?? 0));
@@ -533,46 +524,7 @@ function Monitoring() {
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-[#E3E8EE]" role="group" aria-label="Filter monitoring">
-        <span className="text-[12.5px] font-bold text-[#55657D]">Filter:</span>
-        <select className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value)} aria-label="Filter jenis">
-          <option value="">Organik & Mitra</option>
-          <option value="organik">Organik</option>
-          <option value="mitra">Mitra</option>
-        </select>
-        <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
-          <option value="">Semua kelas</option>
-          {[1, 2, 3, 4].map((k) => (
-            <option key={k} value={k}>Kelas {k}</option>
-          ))}
-        </select>
-        <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
-          <option value="">Semua peran</option>
-          <option value="pml">PML</option>
-          <option value="ppl">PPL</option>
-        </select>
-        <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
-          <option value="">Semua status</option>
-          {DAFTAR_JENIS_TES.map((j) => (
-            <optgroup key={j} label={LABEL_JENIS_TES[j]}>
-              {Object.entries(STATUS_FILTER).map(([k, v]) => (
-                <option key={`${j}:${k}`} value={`${j}:${k}`}>{LABEL_JENIS_TES[j]}: {v}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari nama" />
-        {adaFilter && (
-          <button type="button" className={BTN_O} onClick={resetFilter}>
-            ✕ Reset filter
-          </button>
-        )}
-      </div>
-      {adaFilter && (
-        <p className="px-1 text-[12.5px] text-[#55657D]" aria-live="polite">
-          Kartu &amp; tabel di bawah hanya menghitung <b>{total}</b> dari {semua} peserta ({filterAktif.join(" · ")}).
-        </p>
-      )}
+      <BarFilterMonitoring f={f} total={total} semua={semua} statusOpsi={OPSI_STATUS_TES} catatan="Kartu & tabel di bawah hanya menghitung peserta ini." />
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-6">
         <KartuAngka label="Peserta" nilai={total} ket={adaFilter ? `dari ${semua}` : undefined} />
@@ -595,13 +547,13 @@ function Monitoring() {
         <TabelKartu className="!shadow-none">
           <thead>
             <tr>
-              <th className={TH}>Nama</th>
-              <th className={TH}>Kls</th>
-              <th className={TH}>Peran</th>
-              <th className={TH}>Jenis</th>
-              <th className={TH}>Pretest</th>
-              <th className={TH}>Posttest</th>
-              <th className={TH}>Naik</th>
+              <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
+              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
+              <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
+              <ThKontrol label="Pretest" filter={{ options: opsiStatusTes("pretest"), selected: new Set([...f.status].filter((v) => v.startsWith("pretest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("pretest:")), ...v])) }} sort={sortKolom(f, "pretest")} />
+              <ThKontrol label="Posttest" filter={{ options: opsiStatusTes("posttest"), selected: new Set([...f.status].filter((v) => v.startsWith("posttest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("posttest:")), ...v])) }} sort={sortKolom(f, "posttest")} />
+              <ThKontrol label="Naik" sort={sortKolom(f, "naik")} />
             </tr>
           </thead>
           <tbody>

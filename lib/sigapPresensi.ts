@@ -22,6 +22,13 @@ export type PosisiPeserta = { lat: number; lng: number; akurasi: number };
 /** Label 5 foto Transport Lokal (urut slot 1..5) utk tampilan ringkas. */
 export const LABEL_SLOT_FOTO = ["Berangkat", "Tiba di lokasi", "Kegiatan", "Pulang", "Tiba di rumah"] as const;
 
+/** (8 Okt 2026) Foto Transport Lokal dibagi dua langkah: slot 1-3 diunggah SEBELUM posttest, sisanya (4-5) SESUDAH posttest; boleh dicicil satu per satu. */
+export const FOTO_SEBELUM_POSTTEST = 3;
+export function bagiFoto(total: number): { awal: number[]; akhir: number[] } {
+  const semua = Array.from({ length: total }, (_, i) => i + 1);
+  return { awal: semua.filter((s) => s <= FOTO_SEBELUM_POSTTEST), akhir: semua.filter((s) => s > FOTO_SEBELUM_POSTTEST) };
+}
+
 /** Jarak dua titik (meter), rumus haversine. */
 export function jarakMeter(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6_371_000;

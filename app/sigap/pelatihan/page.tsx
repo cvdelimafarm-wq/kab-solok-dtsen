@@ -7,14 +7,14 @@
 // jam server. Mockup v2 disetujui user.
 //
 // Langkah: 1 baca undangan · 2 pelajari instrumen · 3 pretest · 4 hadiri pelatihan · (5 Kuis Live, tambahan: hanya tampil bila admin
-// sudah membuat kuis; tidak dihitung dalam progres) · posttest · foto Transport Lokal.
+// sudah membuat kuis; tidak dihitung dalam progres) · foto Transport Lokal 1-3 · posttest · foto Transport Lokal 4-5 (sejak 8 Okt 2026, boleh dicicil).
 // Status: selesai (hijau) / sekarang (biru; jendela tes terbuka atau langkah yang bisa dikerjakan) /
 //         berikutnya (biru; langkah pertama yang belum selesai) / menyusul (abu) / terlewat (merah).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LABEL_SLOT_FOTO, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
+import { LABEL_SLOT_FOTO, bagiFoto, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
 import { LABEL_JENIS_TES, PEMUKAAN } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
@@ -453,7 +453,8 @@ const TERIMA: Record<string, string> = {
   hadir: "Presensi sudah tercatat",
   kuis: "Adu Sigap sudah diikuti",
   posttest: "Posttest sudah dikerjakan",
-  foto: "Semua foto Transport Lokal sudah terunggah",
+  foto_awal: "Foto sebelum posttest sudah terunggah",
+  foto_akhir: "Semua foto Transport Lokal sudah terunggah",
 };
 function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: number): Pemandu | null {
   if (!langkah.length) return null;
@@ -515,14 +516,20 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
       if (nowMs < buka) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi dibuka ${waktuWib(data.presensi.pengaturan.buka_at)}`, teks: "Presensi dilakukan di lokasi pelatihan dengan lokasi HP aktif.", terima, catatan };
       return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: presensi sudah dibuka`, teks: `Lakukan presensi setelah tiba di lokasi, sampai pukul ${jamWib(data.presensi.pengaturan.tutup_at)} WIB. Aktifkan lokasi (GPS) di HP.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
     }
-    case "foto": {
+    case "foto_awal":
+    case "foto_akhir": {
       const total = L?.foto_total ?? 5;
-      if (nowMs < mulaiMs && (L?.foto ?? 0) === 0) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: foto Transport Lokal`, teks: `Unggah ${total} foto pada hari pelatihan; boleh bertahap, batas 23.59 WIB di hari yang sama.`, terima, catatan };
+      const { awal, akhir } = bagiFoto(total);
+      const rentang = f.kode === "foto_awal" ? awal : akhir;
+      const ada = rentang.filter((sl) => L?.slot.includes(sl)).length;
+      const sebelum = f.kode === "foto_awal";
+      const nama = sebelum ? "foto sebelum posttest" : "foto sesudah posttest";
+      if (nowMs < mulaiMs && ada === 0) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: ${nama}`, teks: `Unggah ${rentang.length} foto (${rentang.map((sl) => (LABEL_SLOT_FOTO[sl - 1] ?? `Foto ${sl}`).toLowerCase()).join(", ")}) pada hari pelatihan; boleh satu per satu, batas 23.59 WIB di hari yang sama.`, terima, catatan };
       return {
         nada: "ingat",
         ikon: "🔔",
-        judul: `Langkah ${n}: lengkapi foto Transport Lokal`,
-        teks: (L?.foto ?? 0) > 0 ? `Baru ${L?.foto} dari ${total} foto. Lengkapi sebelum 23.59 WIB hari ini.` : `Unggah ${total} foto sebelum 23.59 WIB hari ini; boleh bertahap.`,
+        judul: `Langkah ${n}: ${sebelum ? "unggah" : "lengkapi"} ${nama}`,
+        teks: ada > 0 ? `Baru ${ada} dari ${rentang.length} foto. Lengkapi sebelum 23.59 WIB hari ini.` : `Unggah ${rentang.length} foto (${rentang.map((sl) => (LABEL_SLOT_FOTO[sl - 1] ?? `Foto ${sl}`).toLowerCase()).join(", ")}); boleh satu per satu.`,
         aksi: data.token_translok ? { label: "Buka Transport Lokal →", href: `/sigap/translok/${data.token_translok}` } : undefined,
         terima,
         catatan,
@@ -607,7 +614,51 @@ export default function HalamanPelatihan() {
           {label}
         </Link>
       );
-    const fotoSelesai = (L?.foto ?? 0) >= (L?.foto_total ?? 5);
+    const fotoTotal = L?.foto_total ?? 5;
+    const { awal: slotAwal, akhir: slotAkhir } = bagiFoto(fotoTotal);
+    /** Satu langkah foto (cicil satu per satu): daftar slot yang jadi tanggung jawab langkah ini. */
+    const langkahFoto = (kode: "foto_awal" | "foto_akhir", slotIni: number[], judul: string, petunjuk: string): Langkah => {
+      const ada = slotIni.filter((sl) => L?.slot.includes(sl)).length;
+      const selesai = slotIni.length > 0 && ada >= slotIni.length;
+      return {
+        kode,
+        judul,
+        selesai,
+        terlewat: false,
+        bisaSekarang: now >= mulai,
+        badan: (
+          <>
+            <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam="unggah sampai 23.59 WIB" />
+            {L && (
+              <p className="mb-1 flex flex-wrap gap-1">
+                {slotIni.map((sl) => {
+                  const sudah = L.slot.includes(sl);
+                  return (
+                    <span key={sl} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${sudah ? "bg-[#DDF3E6] text-[#17623C]" : "bg-[#EEF1F5] text-[#7B8794]"}`}>
+                      {sudah ? "✓" : "○"} {LABEL_SLOT_FOTO[sl - 1] ?? `Foto ${sl}`}
+                    </span>
+                  );
+                })}
+              </p>
+            )}
+            <p className="text-[13px] text-[#55657D]">
+              {selesai ? `Semua ${slotIni.length} foto sudah terunggah.` : ada > 0 ? `Baru ${ada} dari ${slotIni.length} foto terunggah. Lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.` : petunjuk}
+            </p>
+            {data.token_translok &&
+              (now >= mulai || ada > 0) &&
+              (selesai ? (
+                <a href={`/sigap/translok/${data.token_translok}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">
+                  Buka kembali
+                </a>
+              ) : (
+                <a href={`/sigap/translok/${data.token_translok}`} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+                  {ada > 0 ? `Lengkapi foto yang kurang (${slotIni.length - ada}) →` : "Buka Transport Lokal →"}
+                </a>
+              ))}
+          </>
+        ),
+      };
+    };
     langkah = [
       {
         kode: "undangan",
@@ -666,49 +717,9 @@ export default function HalamanPelatihan() {
             } as Langkah,
           ]
         : []),
+      ...(slotAwal.length ? [langkahFoto("foto_awal", slotAwal, `Unggah ${slotAwal.length} foto sebelum Posttest`, "Boleh satu per satu: unggah yang sudah ada, lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.")] : []),
       tes(post, "Kerjakan Posttest", "posttest"),
-      {
-        kode: "foto",
-        judul: `Unggah ${L?.foto_total ?? 5} foto Transport Lokal`,
-        selesai: fotoSelesai,
-        terlewat: false,
-        bisaSekarang: now >= mulai,
-        badan: (
-          <>
-            <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam="unggah sampai 23.59 WIB" />
-            {L && (
-              <p className="mb-1 flex flex-wrap gap-1">
-                {Array.from({ length: L.foto_total }, (_, i) => i + 1).map((sl) => {
-                  const ada = L.slot.includes(sl);
-                  return (
-                    <span key={sl} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${ada ? "bg-[#DDF3E6] text-[#17623C]" : "bg-[#EEF1F5] text-[#7B8794]"}`}>
-                      {ada ? "✓" : "○"} {LABEL_SLOT_FOTO[sl - 1] ?? `Foto ${sl}`}
-                    </span>
-                  );
-                })}
-              </p>
-            )}
-            <p className="text-[13px] text-[#55657D]">
-              {fotoSelesai
-                ? `Semua ${L?.foto_total} foto sudah terunggah.`
-                : L && L.foto > 0
-                  ? `Baru ${L.foto} dari ${L.foto_total} foto terunggah. Lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.`
-                  : "Boleh bertahap: unggah yang sudah ada, lalu lengkapi yang kurang sebelum 23.59 WIB di hari yang sama."}
-            </p>
-            {data.token_translok &&
-              (now >= mulai || (L?.foto ?? 0) > 0) &&
-              (fotoSelesai ? (
-                <a href={`/sigap/translok/${data.token_translok}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">
-                  Buka kembali
-                </a>
-              ) : (
-                <a href={`/sigap/translok/${data.token_translok}`} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
-                  {L && L.foto > 0 ? `Lengkapi foto yang kurang (${L.foto_total - L.foto}) →` : "Buka Transport Lokal →"}
-                </a>
-              ))}
-          </>
-        ),
-      },
+      ...(slotAkhir.length ? [langkahFoto("foto_akhir", slotAkhir, `Unggah ${slotAkhir.length} foto sesudah Posttest`, "Boleh satu per satu; unggah setelah posttest selesai, sebelum 23.59 WIB di hari yang sama.")] : []),
     ];
   }
 

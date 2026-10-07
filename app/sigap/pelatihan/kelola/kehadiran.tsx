@@ -6,10 +6,11 @@
 // Mockup disetujui user (presensi radius 300 m dari Mami Hotel; jam 06.00-18.00; sekali saja; presensi manual panitia).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LABEL_SLOT_FOTO, teksJarak, type PengaturanPresensi } from "@/lib/sigapPresensi";
+import { LABEL_SLOT_FOTO, bagiFoto, teksJarak, type PengaturanPresensi } from "@/lib/sigapPresensi";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import ResetPin from "../../admin/ResetPin";
+import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon } from "./monitorKit";
 
 const URL_KEHADIRAN = "/api/sigap/pelatihan/admin/kehadiran";
 const jamWib = (iso: string) => {
@@ -202,6 +203,7 @@ export function PengaturanPresensiKartu() {
 type PresensiPes = {
   akun_id: number;
   nama: string;
+  jenis_akun: string;
   peran: string;
   kelas: number | null;
   status: "hadir" | "ditolak" | "belum";
@@ -220,19 +222,22 @@ type RespPresensi = { sekarang: string; boleh_kelola: boolean; pengaturan: Penga
 
 export function MonitoringPresensi() {
   const { data, galat, muat } = usePolling<RespPresensi>(`${URL_KEHADIRAN}?bagian=presensi`);
-  const [kelas, setKelas] = useState("");
-  const [peran, setPeran] = useState("");
-  const [status, setStatus] = useState("");
-  const [cari, setCari] = useState("");
+  const f = useFilterMon();
   const [buka, setBuka] = useState<number | null>(null);
   const [alasan, setAlasan] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
 
+  // dasar = lolos Jenis/Kelas/Peran/Nama (dipakai kartu, yang memerinci menurut status); baris = dasar + status + urutan
+  const dasar = useMemo(() => (data?.peserta ?? []).filter((p) => lolosDasar(f, p)), [data, f.jenis, f.kelas, f.peran, f.cari]); // eslint-disable-line react-hooks/exhaustive-deps
   const baris = useMemo(
     () =>
-      (data?.peserta ?? []).filter((p) => (!kelas || String(p.kelas ?? "") === kelas) && (!peran || p.peran === peran) && (!status || p.status === status) && (!cari || p.nama.toLowerCase().includes(cari.toLowerCase()))),
-    [data, kelas, peran, status, cari]
+      urutkan(
+        dasar.filter((p) => !f.status.size || f.status.has(p.status)),
+        f.urut,
+        { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, presensi: (p) => (p.status === "hadir" ? 0 : p.status === "ditolak" ? 1 : 2), jarak: (p) => (p.status === "hadir" ? p.jarak_m : p.percobaan_jarak_m) }
+      ),
+    [dasar, f.status, f.urut]
   );
 
   async function catatManual(akunId: number) {
@@ -266,12 +271,24 @@ export function MonitoringPresensi() {
 
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!data) return <Memuat />;
-  const st = data.stat;
+  // kartu mengikuti filter Jenis/Kelas/Peran/Nama (tanpa status, karena kartu memerinci status)
+  const st = { peserta: dasar.length, hadir: dasar.filter((p) => p.status === "hadir").length, ditolak: dasar.filter((p) => p.status === "ditolak").length, belum: dasar.filter((p) => p.status === "belum").length };
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <BarFilterMonitoring
+        f={f}
+        total={baris.length}
+        semua={data.peserta.length}
+        statusOpsi={[
+          { nilai: "hadir", label: "Sudah presensi" },
+          { nilai: "ditolak", label: "Ditolak" },
+          { nilai: "belum", label: "Belum mencoba" },
+        ]}
+        catatan="Kartu mengikuti filter jenis, kelas, peran & nama."
+      />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <KartuAngka label="Peserta" nilai={st.peserta} />
+        <KartuAngka label="Peserta" nilai={st.peserta} ket={f.adaFilter ? `dari ${data.peserta.length}` : undefined} />
         <KartuAngka label="Sudah presensi" nilai={st.hadir} ket={`${st.peserta ? Math.round((st.hadir / st.peserta) * 100) : 0}%`} warna="#1E7A4C" />
         <KartuAngka label="Belum presensi" nilai={st.belum + st.ditolak} warna="#9A6200" />
         <KartuAngka label="Ditolak (di luar radius/GPS)" nilai={st.ditolak} warna="#C0392B" />
@@ -285,37 +302,20 @@ export function MonitoringPresensi() {
           </button>
         }
       >
-        <div className="mb-2 flex flex-wrap gap-2">
-          <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
-            <option value="">Semua kelas</option>
-            {[1, 2, 3, 4].map((k) => (
-              <option key={k} value={k}>
-                Kelas {k}
-              </option>
-            ))}
-          </select>
-          <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
-            <option value="">Semua peran</option>
-            <option value="pml">PML</option>
-            <option value="ppl">PPL</option>
-          </select>
-          <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
-            <option value="">Semua status</option>
-            <option value="hadir">Sudah presensi</option>
-            <option value="ditolak">Ditolak</option>
-            <option value="belum">Belum mencoba</option>
-          </select>
-          <input className={`${INPUT} min-w-[160px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
-        </div>
         {pesan && <div className="mb-2"><Pesan jenis="galat">{pesan}</Pesan></div>}
         <TabelKartu className="!shadow-none">
           <thead>
             <tr>
-              <th className={TH}>Nama</th>
-              <th className={TH}>Kls</th>
-              <th className={TH}>Peran</th>
-              <th className={TH}>Presensi</th>
-              <th className={TH}>Jarak</th>
+              <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
+              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
+              <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
+              <ThKontrol
+                label="Presensi"
+                filter={{ options: [{ nilai: "hadir", label: "Sudah presensi" }, { nilai: "ditolak", label: "Ditolak" }, { nilai: "belum", label: "Belum mencoba" }], selected: f.status, onApply: f.setStatus }}
+                sort={sortKolom(f, "presensi")}
+              />
+              <ThKontrol label="Jarak" sort={sortKolom(f, "jarak")} />
               {data.boleh_kelola && <th className={TH}></th>}
             </tr>
           </thead>
@@ -326,6 +326,7 @@ export function MonitoringPresensi() {
                   <td className={`${TD} font-semibold`}>{p.nama}</td>
                   <td className={TD}>{p.kelas ?? "–"}</td>
                   <td className={TD}>{p.peran.toUpperCase()}</td>
+                  <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
                   <td className={TD}>
                     {p.status === "hadir" ? (
                       <span className="flex flex-wrap items-center gap-1.5">
@@ -354,7 +355,7 @@ export function MonitoringPresensi() {
                 </tr>
                 {buka === p.akun_id && (
                   <tr>
-                    <td className={TD} colSpan={6}>
+                    <td className={TD} colSpan={7}>
                       <div className="flex flex-wrap items-center gap-2">
                         <input className={`${INPUT} min-w-[220px] flex-1`} placeholder="Alasan wajib (mis. GPS tidak terbaca)" value={alasan} onChange={(e) => setAlasan(e.target.value)} />
                         <button type="button" className={BTN} disabled={sibuk || alasan.trim().length < 5} onClick={() => catatManual(p.akun_id)}>
@@ -368,7 +369,7 @@ export function MonitoringPresensi() {
             ))}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={6}>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>
                   Tidak ada peserta yang cocok dengan filter.
                 </td>
               </tr>
@@ -387,25 +388,47 @@ function FragmentBaris({ children }: { children: React.ReactNode }) {
 // ======================================================================
 // Monitoring Transport Lokal
 // ======================================================================
-type TranslokPes = { akun_id: number; penugasan_id: number; nama: string; peran: string; kelas: number | null; slot: number[]; terakhir_at: string | null };
+type TranslokPes = { akun_id: number; penugasan_id: number; nama: string; jenis_akun: string; peran: string; kelas: number | null; slot: number[]; terakhir_at: string | null };
 type RespTranslok = { sekarang: string; tanggal: string; foto_total: number; stat: { peserta: number; lengkap: number; sebagian: number; belum: number }; peserta: TranslokPes[] };
 type FotoAda = { slot: number; url: string | null; diunggah_at: string; susulan: boolean };
 
+const OPSI_STATUS_TRANSLOK = [
+  { nilai: "lengkap", label: "Lengkap" },
+  { nilai: "sebagian", label: "Sebagian" },
+  { nilai: "belum", label: "Belum unggah" },
+  { nilai: "awal_kurang", label: "Foto sebelum posttest belum lengkap" },
+  { nilai: "akhir_kurang", label: "Foto sesudah posttest belum lengkap" },
+];
+
 export function MonitoringTranslok() {
   const { data, galat } = usePolling<RespTranslok>(`${URL_KEHADIRAN}?bagian=translok`, 15_000);
-  const [kelas, setKelas] = useState("");
-  const [peran, setPeran] = useState("");
-  const [status, setStatus] = useState("");
-  const [cari, setCari] = useState("");
+  const f = useFilterMon();
   const [terbuka, setTerbuka] = useState<number | null>(null);
   const [foto, setFoto] = useState<FotoAda[] | null>(null);
   const [galatFoto, setGalatFoto] = useState<string | null>(null);
 
   const kategori = (p: TranslokPes, total: number) => (p.slot.length >= total ? "lengkap" : p.slot.length === 0 ? "belum" : "sebagian");
+  // (8 Okt 2026) foto dibagi: 3 sebelum posttest, sisanya sesudah posttest
+  const bagi = (p: TranslokPes, total: number) => {
+    const { awal, akhir } = bagiFoto(total);
+    return { awal: awal.filter((x) => p.slot.includes(x)).length, nAwal: awal.length, akhir: akhir.filter((x) => p.slot.includes(x)).length, nAkhir: akhir.length };
+  };
+  const cocokStatus = (p: TranslokPes, total: number) => {
+    if (!f.status.size) return true;
+    const b = bagi(p, total);
+    return [...f.status].some((v) => (v === "awal_kurang" ? b.awal < b.nAwal : v === "akhir_kurang" ? b.akhir < b.nAkhir : kategori(p, total) === v));
+  };
+  // dasar = Jenis/Kelas/Peran/Nama (kartu memerinci status); baris = dasar + status + urutan
+  const dasar = useMemo(() => (data?.peserta ?? []).filter((p) => lolosDasar(f, p)), [data, f.jenis, f.kelas, f.peran, f.cari]); // eslint-disable-line react-hooks/exhaustive-deps
   const baris = useMemo(() => {
     if (!data) return [];
-    return data.peserta.filter((p) => (!kelas || String(p.kelas ?? "") === kelas) && (!peran || p.peran === peran) && (!status || kategori(p, data.foto_total) === status) && (!cari || p.nama.toLowerCase().includes(cari.toLowerCase())));
-  }, [data, kelas, peran, status, cari]);
+    const total = data.foto_total;
+    return urutkan(
+      dasar.filter((p) => cocokStatus(p, total)),
+      f.urut,
+      { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, foto: (p) => p.slot.length, awal: (p) => bagi(p, total).awal, akhir: (p) => bagi(p, total).akhir, status: (p) => p.slot.length, terakhir: (p) => p.terakhir_at }
+    );
+  }, [data, dasar, f.status, f.urut]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function bukaFoto(p: TranslokPes) {
     if (terbuka === p.penugasan_id) return setTerbuka(null);
@@ -423,13 +446,13 @@ export function MonitoringTranslok() {
   async function ekspor() {
     if (!data) return;
     const XLSX = await import("xlsx");
-    const kepala = ["No", "Nama", "Kelas", "Peran", "Jumlah foto", ...Array.from({ length: data.foto_total }, (_, i) => LABEL_SLOT_FOTO[i] ?? `Foto ${i + 1}`), "Status", "Terakhir unggah (WIB)"];
+    const kepala = ["No", "Nama", "Jenis", "Kelas", "Peran", "Jumlah foto", "Foto sebelum posttest", "Foto sesudah posttest", ...Array.from({ length: data.foto_total }, (_, i) => LABEL_SLOT_FOTO[i] ?? `Foto ${i + 1}`), "Status", "Terakhir unggah (WIB)"];
     const aoa: (string | number)[][] = [kepala];
     baris.forEach((p, i) =>
-      aoa.push([i + 1, p.nama, p.kelas ?? "", p.peran.toUpperCase(), p.slot.length, ...Array.from({ length: data.foto_total }, (_, k) => (p.slot.includes(k + 1) ? "ada" : "")), kategori(p, data.foto_total), p.terakhir_at ? waktuWib(p.terakhir_at) : ""])
+      aoa.push([i + 1, p.nama, p.jenis_akun === "organik" ? "Organik" : "Mitra", p.kelas ?? "", p.peran.toUpperCase(), p.slot.length, `${bagi(p, data.foto_total).awal}/${bagi(p, data.foto_total).nAwal}`, `${bagi(p, data.foto_total).akhir}/${bagi(p, data.foto_total).nAkhir}`, ...Array.from({ length: data.foto_total }, (_, k) => (p.slot.includes(k + 1) ? "ada" : "")), kategori(p, data.foto_total), p.terakhir_at ? waktuWib(p.terakhir_at) : ""])
     );
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 11 }, ...Array.from({ length: data.foto_total }, () => ({ wch: 13 })), { wch: 11 }, { wch: 20 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, ...Array.from({ length: data.foto_total }, () => ({ wch: 13 })), { wch: 11 }, { wch: 20 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Transport Lokal");
     XLSX.writeFile(wb, `Translok_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -437,12 +460,21 @@ export function MonitoringTranslok() {
 
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!data) return <Memuat />;
-  const st = data.stat;
+  const stK = { peserta: dasar.length, lengkap: dasar.filter((p) => kategori(p, data.foto_total) === "lengkap").length, belum: dasar.filter((p) => kategori(p, data.foto_total) === "belum").length, sebagian: 0 };
+  stK.sebagian = stK.peserta - stK.lengkap - stK.belum;
+  const st = stK;
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <BarFilterMonitoring
+        f={f}
+        total={baris.length}
+        semua={data.peserta.length}
+        statusOpsi={OPSI_STATUS_TRANSLOK}
+        catatan="Kartu mengikuti filter jenis, kelas, peran & nama."
+      />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <KartuAngka label="Peserta" nilai={st.peserta} />
+        <KartuAngka label="Peserta" nilai={st.peserta} ket={f.adaFilter ? `dari ${data.peserta.length}` : undefined} />
         <KartuAngka label={`Foto lengkap (${data.foto_total}/${data.foto_total})`} nilai={st.lengkap} warna="#1E7A4C" />
         <KartuAngka label="Sebagian" nilai={st.sebagian} warna="#9A6200" />
         <KartuAngka label="Belum unggah" nilai={st.belum} warna="#C0392B" />
@@ -456,36 +488,16 @@ export function MonitoringTranslok() {
           </button>
         }
       >
-        <div className="mb-2 flex flex-wrap gap-2">
-          <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
-            <option value="">Semua kelas</option>
-            {[1, 2, 3, 4].map((k) => (
-              <option key={k} value={k}>
-                Kelas {k}
-              </option>
-            ))}
-          </select>
-          <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
-            <option value="">Semua peran</option>
-            <option value="pml">PML</option>
-            <option value="ppl">PPL</option>
-          </select>
-          <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
-            <option value="">Semua status</option>
-            <option value="lengkap">Lengkap</option>
-            <option value="sebagian">Sebagian</option>
-            <option value="belum">Belum unggah</option>
-          </select>
-          <input className={`${INPUT} min-w-[160px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
-        </div>
         <TabelKartu className="!shadow-none">
           <thead>
             <tr>
-              <th className={TH}>Nama</th>
-              <th className={TH}>Kls</th>
-              <th className={TH}>Foto</th>
-              <th className={TH}>Status</th>
-              <th className={TH}>Terakhir</th>
+              <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
+              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
+              <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
+              <ThKontrol label="Foto (sebelum | sesudah posttest)" sort={sortKolom(f, "foto")} />
+              <ThKontrol label="Status" filter={{ options: OPSI_STATUS_TRANSLOK, selected: f.status, onApply: f.setStatus }} sort={sortKolom(f, "status")} />
+              <ThKontrol label="Terakhir" sort={sortKolom(f, "terakhir")} />
             </tr>
           </thead>
           <tbody>
@@ -497,12 +509,14 @@ export function MonitoringTranslok() {
                   <tr className="cursor-pointer hover:bg-[#F8FAFC]" onClick={() => bukaFoto(p)}>
                     <td className={`${TD} font-semibold`}>{p.nama}</td>
                     <td className={TD}>{p.kelas ?? "–"}</td>
+                    <td className={TD}>{p.peran.toUpperCase()}</td>
+                    <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
                     <td className={TD}>
-                      <span className="flex items-center gap-0.5" title={`${p.slot.length} dari ${data.foto_total}`}>
+                      <span className="flex items-center gap-0.5" title={`${p.slot.length} dari ${data.foto_total}: sebelum posttest ${bagi(p, data.foto_total).awal}/${bagi(p, data.foto_total).nAwal}, sesudah posttest ${bagi(p, data.foto_total).akhir}/${bagi(p, data.foto_total).nAkhir}`}>
                         {Array.from({ length: data.foto_total }, (_, i) => (
-                          <i key={i} className={`inline-block h-3 w-3 rounded-[3px] ${p.slot.includes(i + 1) ? "bg-[#1E7A4C]" : "bg-[#E3E8EE]"}`} />
+                          <i key={i} className={`inline-block h-3 w-3 rounded-[3px] ${i + 1 === bagiFoto(data.foto_total).awal.length + 1 ? "ml-1.5" : ""} ${p.slot.includes(i + 1) ? "bg-[#1E7A4C]" : "bg-[#E3E8EE]"}`} />
                         ))}
-                        <span className="ml-1.5 text-[11.5px] tabular-nums text-[#55657D]">{p.slot.length}/{data.foto_total}</span>
+                        <span className="ml-1.5 text-[11.5px] tabular-nums text-[#55657D]">{bagi(p, data.foto_total).awal}/{bagi(p, data.foto_total).nAwal} | {bagi(p, data.foto_total).akhir}/{bagi(p, data.foto_total).nAkhir}</span>
                       </span>
                     </td>
                     <td className={TD}>
@@ -512,7 +526,7 @@ export function MonitoringTranslok() {
                   </tr>
                   {terbuka === p.penugasan_id && (
                     <tr>
-                      <td className={TD} colSpan={5}>
+                      <td className={TD} colSpan={7}>
                         {galatFoto && <Pesan jenis="galat">{galatFoto}</Pesan>}
                         {!foto && !galatFoto && <Memuat />}
                         {foto && foto.length === 0 && <p className="text-[12.5px] text-[#7B8794]">Belum ada foto.</p>}
@@ -537,7 +551,7 @@ export function MonitoringTranslok() {
             })}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={5}>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>
                   Tidak ada peserta yang cocok dengan filter.
                 </td>
               </tr>
@@ -555,6 +569,7 @@ export function MonitoringTranslok() {
 type AksesPes = {
   akun_id: number;
   nama: string;
+  jenis_akun: string;
   peran: string;
   kelas: number | null;
   kecamatan: string | null;
@@ -577,26 +592,33 @@ const tglJam = (iso: string) => {
   return `${d.getUTCDate()}/${d.getUTCMonth() + 1} ${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`;
 };
 
+const OPSI_STATUS_AKSES = [
+  { nilai: "belum", label: "Belum akses" },
+  { nilai: "belum_masuk", label: "Belum pernah login" },
+  { nilai: "sudah", label: "Sudah akses" },
+];
+
 export function MonitoringAkses() {
   const { data, galat } = usePolling<RespAkses>(`${URL_KEHADIRAN}?bagian=akses`);
-  const [kelas, setKelas] = useState("");
-  const [peran, setPeran] = useState("");
-  const [status, setStatus] = useState("belum");
-  const [cari, setCari] = useState("");
+  const f = useFilterMon(["belum"]); // bawaan: yang belum akses
   const [salin, setSalin] = useState<string | null>(null);
   const [resetPin, setResetPin] = useState<{ id: number; nama: string; hp: string | null } | null>(null); // (7 Okt 2026) dialog Reset PIN
 
+  // dasar = Jenis/Kelas/Peran/Nama/Kecamatan (kartu memerinci status); baris = dasar + status + urutan
+  const dasar = useMemo(
+    () => (data?.peserta ?? []).filter((p) => lolosDasar(f, p) && (!(f.kolom.kecamatan?.size) || f.kolom.kecamatan.has(p.kecamatan ?? "–"))),
+    [data, f.jenis, f.kelas, f.peran, f.cari, f.kolom] // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const baris = useMemo(
     () =>
-      (data?.peserta ?? []).filter(
-        (p) =>
-          (!kelas || String(p.kelas ?? "") === kelas) &&
-          (!peran || p.peran === peran) &&
-          (!status || (status === "belum" ? !p.akses_pertama_at : status === "belum_masuk" ? !p.akses_pertama_at && !p.terakhir_masuk_at : !!p.akses_pertama_at)) &&
-          (!cari || p.nama.toLowerCase().includes(cari.toLowerCase()))
+      urutkan(
+        dasar.filter((p) => !f.status.size || [...f.status].some((v) => (v === "belum" ? !p.akses_pertama_at : v === "belum_masuk" ? !p.akses_pertama_at && !p.terakhir_masuk_at : !!p.akses_pertama_at))),
+        f.urut,
+        { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, kecamatan: (p) => p.kecamatan, akses: (p) => p.akses_pertama_at, login: (p) => p.terakhir_masuk_at }
       ),
-    [data, kelas, peran, status, cari]
+    [dasar, f.status, f.urut]
   );
+  const opsiKecamatan = useMemo(() => [...new Set((data?.peserta ?? []).map((p) => p.kecamatan ?? "–"))].sort((a, b) => a.localeCompare(b, "id")), [data]);
 
   async function salinDaftar() {
     const teks = baris.map((p, i) => `${i + 1}. ${p.nama} (Kelas ${p.kelas ?? "-"}, ${p.peran.toUpperCase()})`).join("\n");
@@ -625,12 +647,21 @@ export function MonitoringAkses() {
 
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!data) return <Memuat />;
-  const st = data.stat;
+  const st = { peserta: dasar.length, sudah: dasar.filter((p) => p.akses_pertama_at).length, belum: dasar.filter((p) => !p.akses_pertama_at).length, belum_pernah_masuk: dasar.filter((p) => !p.akses_pertama_at && !p.terakhir_masuk_at).length };
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <BarFilterMonitoring
+        f={f}
+        total={baris.length}
+        semua={data.peserta.length}
+        statusOpsi={OPSI_STATUS_AKSES}
+        statusSemua="Semua akses"
+        statusLabel="Filter akses"
+        catatan="Kartu mengikuti filter jenis, kelas, peran, kecamatan & nama."
+      />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <KartuAngka label="Peserta" nilai={st.peserta} />
+        <KartuAngka label="Peserta" nilai={st.peserta} ket={f.adaFilter ? `dari ${data.peserta.length}` : undefined} />
         <KartuAngka label="Sudah akses" nilai={st.sudah} ket={`${st.peserta ? Math.round((st.sudah / st.peserta) * 100) : 0}%`} warna="#1E7A4C" />
         <KartuAngka label="Belum akses" nilai={st.belum} warna="#C0392B" />
         <KartuAngka label="Belum pernah login" nilai={st.belum_pernah_masuk} ket="belum masuk SIGAP sama sekali" warna="#9A6200" />
@@ -650,37 +681,16 @@ export function MonitoringAkses() {
         }
       >
         {salin && <p className="mb-2 text-[12.5px] font-semibold text-[#17623C]">{salin}</p>}
-        <div className="mb-2 flex flex-wrap gap-2">
-          <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter akses">
-            <option value="belum">Belum akses</option>
-            <option value="belum_masuk">Belum pernah login</option>
-            <option value="sudah">Sudah akses</option>
-            <option value="">Semua</option>
-          </select>
-          <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
-            <option value="">Semua kelas</option>
-            {[1, 2, 3, 4].map((k) => (
-              <option key={k} value={k}>
-                Kelas {k}
-              </option>
-            ))}
-          </select>
-          <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
-            <option value="">Semua peran</option>
-            <option value="pml">PML</option>
-            <option value="ppl">PPL</option>
-          </select>
-          <input className={`${INPUT} min-w-[160px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
-        </div>
         <TabelKartu className="!shadow-none">
           <thead>
             <tr>
-              <th className={TH}>Nama</th>
-              <th className={TH}>Kls</th>
-              <th className={TH}>Peran</th>
-              <th className={TH}>Kecamatan</th>
-              <th className={TH}>Akses pelatihan</th>
-              <th className={TH}>Login terakhir</th>
+              <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
+              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
+              <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
+              <ThKontrol label="Kecamatan" filter={{ options: opsiKecamatan, selected: f.kolom.kecamatan ?? new Set<string>(), onApply: (v) => f.setKolom("kecamatan", v) }} sort={sortKolom(f, "kecamatan")} />
+              <ThKontrol label="Akses pelatihan" filter={{ options: OPSI_STATUS_AKSES, selected: f.status, onApply: f.setStatus }} sort={sortKolom(f, "akses")} />
+              <ThKontrol label="Login terakhir" sort={sortKolom(f, "login")} />
               {data.boleh_lihat_kontak && <th className={TH}>Kontak</th>}
               {data.boleh_lihat_kontak && <th className={TH}>PIN</th>}
             </tr>
@@ -691,6 +701,7 @@ export function MonitoringAkses() {
                 <td className={`${TD} font-semibold`}>{p.nama}</td>
                 <td className={TD}>{p.kelas ?? "–"}</td>
                 <td className={TD}>{p.peran.toUpperCase()}</td>
+                <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
                 <td className={TD}>{p.kecamatan ?? "–"}</td>
                 <td className={TD}>
                   {p.akses_pertama_at ? (
@@ -727,8 +738,8 @@ export function MonitoringAkses() {
             ))}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={8}>
-                  {status === "belum" ? "Semua peserta sudah mengakses halaman Pelatihan. 🎉" : "Tidak ada peserta yang cocok dengan filter."}
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={9}>
+                  {f.status.size === 1 && f.status.has("belum") && dasar.length > 0 ? "Semua peserta sudah mengakses halaman Pelatihan. 🎉" : "Tidak ada peserta yang cocok dengan filter."}
                 </td>
               </tr>
             )}
