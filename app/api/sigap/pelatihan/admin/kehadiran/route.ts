@@ -8,6 +8,7 @@
 // GET ?bagian=translok                -> peserta x foto Transport Lokal pada hari pelatihan
 // GET ?bagian=akses                  -> peserta x akses ke halaman Pelatihan (pertama kali), login terakhir, kontak (pengelola)
 // GET ?bagian=foto&penugasan_id=N     -> foto (tautan sementara 1 jam) seorang peserta
+// POST {aksi:"reset_pin", akun_id}  -> PIN sementara utk peserta (tampil sekali)
 // POST {aksi:"atur_presensi", titik:[{nama,lat,lng,radius_m}] (1-5 titik), buka_at, tutup_at, akurasi_maks_m, tempat?}
 // POST {aksi:"presensi_manual", akun_id, alasan}   -> panitia mencatat hadir (mis. GPS gagal)
 
@@ -15,6 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN } from "@/lib/sigapTes";
+import { resetPinOlehAdmin } from "@/lib/sigapPin";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -241,6 +243,16 @@ export async function POST(req: NextRequest) {
       if (eIsi) return galat(eIsi.message, 500);
       await catatAudit(db, akun.id, "pelatihan_atur_presensi", { sebelum, sesudah: { ...baris, titik } });
       return NextResponse.json({ ok: true });
+    }
+
+    // (7 Okt 2026) Reset PIN peserta pelatihan -> PIN sementara (tampil sekali). Hanya peserta kegiatan ini.
+    if (aksi === "reset_pin") {
+      const akunId = Number(body?.akun_id);
+      const peserta = await pesertaPelatihan(db, akunId, kegiatanId);
+      if (!peserta) return galat("Peserta tidak ditemukan.", 404);
+      const r = await resetPinOlehAdmin(db, { akunId: akun.id, nama: akun.nama, adminAplikasi: boleh(izin, "portal.kelola", "kelola") }, akunId);
+      if (!r.ok) return galat(r.error, r.status);
+      return NextResponse.json({ ok: true, pin: r.pin, nama: r.nama, sampai: r.sampai, hp: r.hp });
     }
 
     if (aksi === "presensi_manual") {

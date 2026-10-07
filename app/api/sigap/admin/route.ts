@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
+import { resetPinOlehAdmin } from "@/lib/sigapPin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -601,6 +602,14 @@ export async function POST(req: NextRequest) {
       if (error) return galat(error.message, 500);
       await audit({ penugasan_id: pen.id, alasan });
       return NextResponse.json({ ok: true });
+    }
+
+    // ---------------- (7 Okt 2026) Reset PIN -> PIN sementara (tampil sekali) ----------------
+    if (aksi === "reset_pin") {
+      if (!(boleh(s.izin, "akses.kelola", "kelola") || boleh(s.izin, "translok.penugasan", "kelola") || boleh(s.izin, "portal.kelola", "kelola"))) return galat("Tidak punya izin mereset PIN.", 403);
+      const r = await resetPinOlehAdmin(db, { akunId: s.akunId, nama: s.nama, adminAplikasi: boleh(s.izin, "portal.kelola", "kelola") }, Number(body?.akun_id));
+      if (!r.ok) return galat(r.error, r.status);
+      return NextResponse.json({ ok: true, pin: r.pin, nama: r.nama, sampai: r.sampai, hp: r.hp });
     }
 
     // ---------------- Kelola Peran & Akses ----------------

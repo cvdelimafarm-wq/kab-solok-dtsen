@@ -22,6 +22,38 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modeHp = tampakNomorHp(id);
+  // (7 Okt 2026) Masuk dgn PIN sementara (hasil reset admin): wajib membuat PIN baru sebelum sesi disimpan.
+  const [ganti, setGanti] = useState<{ sesi: string; sampai: string; token: string } | null>(null);
+  const [pinBaru, setPinBaru] = useState("");
+  const [pinBaru2, setPinBaru2] = useState("");
+
+  function selesai(x: { sesi: string; sampai: string; token: string }) {
+    simpanSesi(x);
+    const lanjut = tujuanLanjut();
+    // /dashboard (DTSEN) butuh login nomor HP -> jangan diteruskan dari sesi nama + PIN.
+    if (lanjut && lanjut !== "/" && !lanjut.startsWith("/dashboard")) window.location.replace(lanjut);
+    else onMasuk();
+  }
+
+  async function simpanPinBaru(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!/^\d{4}$/.test(pinBaru)) return setError("PIN baru harus 4 digit angka.");
+    if (pinBaru === pin) return setError("PIN baru harus berbeda dari PIN sementara.");
+    if (pinBaru !== pinBaru2) return setError("Kedua PIN baru tidak sama.");
+    if (!ganti) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/sigap/masuk", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${ganti.sesi}` }, body: JSON.stringify({ aksi: "ganti_pin", pin_lama: pin, pin: pinBaru }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) return setError(j.error ?? "Gagal menyimpan PIN baru.");
+      selesai(ganti);
+    } catch {
+      setError("Gagal terhubung. Periksa koneksi internet.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function kirim(e: React.FormEvent) {
     e.preventDefault();
@@ -46,11 +78,11 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
         const sisa = typeof j.sisa_percobaan === "number" ? ` Sisa percobaan: ${j.sisa_percobaan}.` : "";
         return setError((j.error ?? "Gagal masuk.") + sisa);
       }
-      simpanSesi({ sesi: j.sesi, sampai: j.sampai, token: j.token });
-      const lanjut = tujuanLanjut();
-      // /dashboard (DTSEN) butuh login nomor HP -> jangan diteruskan dari sesi nama + PIN.
-      if (lanjut && lanjut !== "/" && !lanjut.startsWith("/dashboard")) window.location.replace(lanjut);
-      else onMasuk();
+      if (j.ganti_pin) {
+        setGanti({ sesi: j.sesi, sampai: j.sampai, token: j.token });
+        return;
+      }
+      selesai({ sesi: j.sesi, sampai: j.sampai, token: j.token });
     } catch {
       setError("Gagal terhubung. Periksa koneksi internet.");
     } finally {
@@ -89,6 +121,26 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
       </section>
 
       <section className="flex flex-[1_1_420px] items-center justify-center px-4 py-12">
+        {ganti ? (
+          <form onSubmit={simpanPinBaru} className="flex w-full max-w-[400px] flex-col gap-[18px] rounded-[14px] border border-[#E3E8EE] bg-white p-8">
+            <div>
+              <h2 className="text-[22px] font-bold">Buat PIN baru</h2>
+              <p className="mt-1 text-[13.5px] text-[#4D5B6B]">Anda masuk dengan PIN sementara. Buat PIN 4 digit milik Anda sendiri untuk melanjutkan.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="pin-baru" className="text-[13px] font-semibold text-[#4D5B6B]">PIN baru</label>
+              <input id="pin-baru" type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} className={`${INPUT} text-[18px] tracking-[0.4em]`} value={pinBaru} onChange={(e) => setPinBaru(e.target.value.replace(/\D/g, ""))} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="pin-baru2" className="text-[13px] font-semibold text-[#4D5B6B]">Ulangi PIN baru</label>
+              <input id="pin-baru2" type="password" inputMode="numeric" autoComplete="new-password" maxLength={4} className={`${INPUT} text-[18px] tracking-[0.4em]`} value={pinBaru2} onChange={(e) => setPinBaru2(e.target.value.replace(/\D/g, ""))} />
+            </div>
+            {error && <p className="rounded-lg border-l-4 border-[#C2412D] bg-[#FDECEA] px-3 py-2 text-[13px] text-[#8A2B1D]">{error}</p>}
+            <button type="submit" disabled={busy} className="h-12 rounded-lg bg-[#1E7A4C] text-[15px] font-semibold text-white transition hover:bg-[#17623C] disabled:opacity-60">
+              {busy ? "Menyimpan..." : "Simpan PIN & Masuk"}
+            </button>
+          </form>
+        ) : (
         <form onSubmit={kirim} className="flex w-full max-w-[400px] flex-col gap-[18px] rounded-[14px] border border-[#E3E8EE] bg-white p-8">
           <div>
             <h2 className="text-[22px] font-bold">Masuk</h2>
@@ -120,12 +172,17 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
           </button>
           <div className="flex justify-between text-[13px]">
             <Link href={modeHp ? "/atur-pin" : "/sigap/masuk?mode=daftar"} className="text-[#1F6FD1] hover:text-[#1A5DB0]">Belum punya PIN? Buat PIN</Link>
-            <span className="text-[#7B8794]" title="PIN direset oleh admin">Lupa PIN? Hubungi admin</span>
+            {modeHp ? (
+              <span className="text-[#7B8794]" title="PIN operator Wali Nagari direset oleh admin">Lupa PIN? Hubungi admin</span>
+            ) : (
+              <Link href="/sigap/masuk?mode=lupa" className="text-[#1F6FD1] hover:text-[#1A5DB0]">Lupa PIN?</Link>
+            )}
           </div>
           <p className="border-t border-[#E3E8EE] pt-3.5 text-xs leading-relaxed text-[#7B8794]">
             Operator Wali Nagari (Usulan DTSEN) masuk di sini dengan nomor HP. Tautan undangan lama (bencana, penyisiran) masih berlaku selama masa transisi.
           </p>
         </form>
+        )}
       </section>
     </div>
   );

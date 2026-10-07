@@ -14,7 +14,7 @@ const KUNCI_SESI = "sigap_token"; // (5 Okt 2026) token akun SIGAP (bukan token 
 type StatusKolom = "benar" | "salah" | "belum_ada" | "belum_dicek";
 
 export default function SigapMasuk() {
-  const [mode, setMode] = useState<"masuk" | "daftar">("masuk");
+  const [mode, setMode] = useState<"masuk" | "daftar" | "lupa">("masuk");
   const [nama, setNama] = useState("");
   const [pin, setPin] = useState("");
   const [nik, setNik] = useState("");
@@ -24,6 +24,7 @@ export default function SigapMasuk() {
   const [error, setError] = useState<string | null>(null);
   const [kolom, setKolom] = useState<Record<string, StatusKolom> | null>(null);
   const [tokenDaftar, setTokenDaftar] = useState<string | null>(null);
+  const [tiket, setTiket] = useState<string | null>(null); // (7 Okt 2026) tiket reset PIN mandiri (10 menit, sekali pakai)
   const [pinBaru, setPinBaru] = useState("");
   const [pinBaru2, setPinBaru2] = useState("");
 
@@ -50,6 +51,7 @@ export default function SigapMasuk() {
       // "Belum punya PIN" (?mode=daftar: verifikasi identitas + buat PIN).
       const q = new URLSearchParams(window.location.search);
       if (q.get("mode") === "daftar") setMode("daftar");
+      else if (q.get("mode") === "lupa") setMode("lupa");
       else {
         const l = q.get("lanjut");
         window.location.replace(l && l.startsWith("/") && !l.startsWith("//") ? `/?lanjut=${encodeURIComponent(l)}` : "/");
@@ -106,10 +108,36 @@ export default function SigapMasuk() {
     if (r.json?.ok) {
       if (r.json.punya_pin) {
         setMode("masuk");
-        setError("Data cocok dan Anda sudah punya PIN. Silakan masuk dengan nama + PIN.");
+        setError("Data cocok dan Anda sudah punya PIN. Silakan masuk dengan nama + PIN. Lupa PIN? Pilih \"Lupa PIN?\" di halaman masuk.");
       } else setTokenDaftar(r.json.token as string);
     } else if (r.json?.error) setError(r.json.error as string);
     else if (r.json?.kolom) setError(`Ada data yang tidak cocok.${typeof r.json?.sisa_percobaan === "number" ? ` Sisa percobaan: ${r.json.sisa_percobaan}.` : ""}`);
+  }
+
+  // (7 Okt 2026) Lupa PIN: verifikasi ulang identitas (min. 2 data pribadi cocok) -> pilih PIN baru
+  async function lupaVerifikasi(e: React.FormEvent) {
+    e.preventDefault();
+    setKolom(null);
+    const r = await kirim({ aksi: "lupa_verifikasi", nama, nik, email, tanggal_lahir: tgl });
+    if (!r) return;
+    if (r.json?.kolom) setKolom(r.json.kolom);
+    if (r.json?.ok) {
+      if (r.json.belum_punya_pin) {
+        setMode("daftar");
+        setError("Data cocok, tetapi Anda belum punya PIN. Silakan buat PIN di sini.");
+      } else setTiket(r.json.tiket as string);
+    } else if (r.json?.error) setError(r.json.error as string);
+    else if (r.json?.kolom) setError(`Ada data yang tidak cocok.${typeof r.json?.sisa_percobaan === "number" ? ` Sisa percobaan: ${r.json.sisa_percobaan}.` : ""}`);
+  }
+
+  async function resetPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (pinBaru !== pinBaru2) return setError("Kedua PIN tidak sama.");
+    const r = await kirim({ aksi: "reset_pin", tiket, pin: pinBaru });
+    if (!r) return;
+    if (r.json?.ok) return lanjut(r.json.token as string, r.json.sesi, r.json.sampai);
+    if (r.res.status === 410) setTiket(null); // tiket habis / sudah dipakai -> verifikasi ulang
+    setError((r.json?.error as string) ?? "Gagal menyimpan PIN baru.");
   }
 
   async function buatPin(e: React.FormEvent) {
@@ -138,7 +166,7 @@ export default function SigapMasuk() {
 
       {/* (6 Okt 2026) relative z-10: tab "Sudah/Belum punya PIN" sebelumnya tertutup header -- laporan user */}
       <div className="relative z-10 mx-auto -mt-10 max-w-md space-y-3 px-4 pb-10">
-        {!tokenDaftar && (
+        {!tokenDaftar && mode !== "lupa" && (
           <div className="flex rounded-2xl bg-white p-1 shadow-sm">
             {(["masuk", "daftar"] as const).map((m) => (
               <button
@@ -159,7 +187,47 @@ export default function SigapMasuk() {
 
         {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[13.5px] font-medium text-red-800">{error}</p>}
 
-        {tokenDaftar ? (
+        {tiket ? (
+          <form onSubmit={resetPin} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-[16px] font-extrabold">Data terverifikasi ✓</p>
+            <p className="text-[13.5px] text-slate-600">Buat PIN baru 4 angka. PIN lama tidak berlaku lagi. Selesaikan dalam 10 menit.</p>
+            <input className={INPUT} type="password" inputMode="numeric" maxLength={4} value={pinBaru} onChange={(e) => setPinBaru(e.target.value.replace(/\D/g, ""))} placeholder="PIN baru (4 angka)" autoComplete="new-password" required />
+            <input className={INPUT} type="password" inputMode="numeric" maxLength={4} value={pinBaru2} onChange={(e) => setPinBaru2(e.target.value.replace(/\D/g, ""))} placeholder="Ulangi PIN baru" autoComplete="new-password" required />
+            <button disabled={busy} className="w-full rounded-xl bg-[#1E7A4C] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-60">
+              {busy ? "Menyimpan…" : "Simpan PIN Baru & Masuk"}
+            </button>
+          </form>
+        ) : mode === "lupa" ? (
+          <form onSubmit={lupaVerifikasi} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-[16px] font-extrabold">Lupa PIN</p>
+            <p className="text-[13.5px] text-slate-600">Isi data diri Anda untuk memastikan ini benar-benar Anda, lalu buat PIN baru. Tidak perlu menghubungi admin.</p>
+            <input className={INPUT} value={nama} onChange={(e) => setNama(e.target.value)} placeholder="Nama lengkap" required />
+            <input className={INPUT} inputMode="numeric" maxLength={16} value={nik} onChange={(e) => setNik(e.target.value.replace(/\D/g, ""))} placeholder="NIK (16 digit)" required />
+            <input className={INPUT} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
+            <div>
+              <label className="mb-1 block text-[13px] font-bold text-slate-700">Tanggal lahir</label>
+              <input className={INPUT} type="date" value={tgl} onChange={(e) => setTgl(e.target.value)} required />
+            </div>
+            {kolom && (
+              <div className="grid grid-cols-2 gap-1.5">
+                {Object.entries(kolom).map(([k, s]) => (
+                  <span key={k} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ${s === "benar" ? "bg-emerald-50 text-emerald-800" : s === "salah" ? "bg-red-50 text-red-800" : "bg-slate-50 text-slate-600"}`}>
+                    {s === "benar" ? "✓" : s === "salah" ? "✕" : "–"} {labelKolom[k] ?? k}
+                  </span>
+                ))}
+              </div>
+            )}
+            <button disabled={busy} className="w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-60">
+              {busy ? "Memeriksa…" : "Verifikasi & Lanjut"}
+            </button>
+            <p className="text-center text-[12.5px] text-slate-500">
+              Data tidak cocok atau terkunci? Hubungi admin anggaran BPS Kabupaten Solok untuk PIN sementara. ·{" "}
+              <a href="/" className="font-semibold text-[#1F6FD1] underline">
+                Kembali masuk
+              </a>
+            </p>
+          </form>
+        ) : tokenDaftar ? (
           <form onSubmit={buatPin} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
             <p className="text-[16px] font-extrabold">Data terverifikasi ✓</p>
             <p className="text-[13.5px] text-slate-600">Buat PIN 4 angka. PIN ini dipakai setiap kali masuk SIGAP (dan undangan petugas).</p>
@@ -182,7 +250,12 @@ export default function SigapMasuk() {
             <button disabled={busy} className="w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-60">
               {busy ? "Memeriksa…" : "Masuk"}
             </button>
-            <p className="text-center text-[12px] text-slate-500">Lupa PIN? Hubungi admin anggaran BPS Kabupaten Solok.</p>
+            <p className="text-center text-[12px] text-slate-500">
+              Lupa PIN?{" "}
+              <a href="/sigap/masuk?mode=lupa" className="font-semibold text-[#1F6FD1] underline">
+                Reset sendiri di sini
+              </a>
+            </p>
           </form>
         ) : (
           <form onSubmit={verifikasi} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">

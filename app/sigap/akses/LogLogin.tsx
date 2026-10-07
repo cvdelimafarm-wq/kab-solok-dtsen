@@ -8,6 +8,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
+import ResetPin from "../admin/ResetPin";
 import { BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 
 type Baris = {
@@ -50,6 +51,7 @@ export default function LogLogin() {
   const [urut, setUrut] = useState<Urut>("aktif");
   const [buka, setBuka] = useState<number | null>(null);
   const [detail, setDetail] = useState<Record<number, Sesi[]>>({});
+  const [resetPin, setResetPin] = useState<{ id: number; nama: string } | null>(null); // (7 Okt 2026) dialog Reset PIN
 
   const muat = useCallback(async () => {
     try {
@@ -174,6 +176,12 @@ export default function LogLogin() {
                 {buka === r.akun_id && (
                   <tr>
                     <td colSpan={9} className="bg-[#F8FAFC] px-3 py-2">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <button type="button" className={BTN_O} onClick={() => setResetPin({ id: r.akun_id, nama: r.nama })}>
+                          🔑 Reset PIN
+                        </button>
+                        <span className="text-[11.5px] text-[#7B8794]">Membuat PIN sementara (24 jam) bila petugas lupa PIN dan reset mandiri tidak berhasil.</span>
+                      </div>
                       {!detail[r.akun_id] ? (
                         <Memuat teks="Memuat sesi…" />
                       ) : (
@@ -196,7 +204,7 @@ export default function LogLogin() {
                                 <td className="py-1 pr-3 whitespace-nowrap">{durasi(Math.round((Date.parse(x.terakhir_aktif_at) - Date.parse(x.mulai_at)) / 1000))}</td>
                                 <td className="py-1 pr-3">{x.halaman ?? "–"}</td>
                                 <td className="py-1 pr-3 whitespace-nowrap">{x.perangkat ?? "–"}</td>
-                                <td className="py-1">{x.cara === "masuk" ? "masuk (nama + PIN)" : x.cara === "buat_pin" ? "buat PIN" : "lanjut (sesi tersimpan)"}</td>
+                                <td className="py-1">{x.cara === "masuk" ? "masuk (nama + PIN)" : x.cara === "buat_pin" ? "buat PIN" : x.cara === "reset_pin" ? "reset PIN (lupa PIN)" : "lanjut (sesi tersimpan)"}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -210,6 +218,7 @@ export default function LogLogin() {
           })}
         </tbody>
       </TabelKartu>
+      {resetPin && <ResetPin url="/api/sigap/admin" akunId={resetPin.id} nama={resetPin.nama} tutup={() => setResetPin(null)} />}
     </div>
   );
 }

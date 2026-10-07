@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { LABEL_SLOT_FOTO, teksJarak, type PengaturanPresensi } from "@/lib/sigapPresensi";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
+import ResetPin from "../../admin/ResetPin";
 
 const URL_KEHADIRAN = "/api/sigap/pelatihan/admin/kehadiran";
 const jamWib = (iso: string) => {
@@ -583,6 +584,7 @@ export function MonitoringAkses() {
   const [status, setStatus] = useState("belum");
   const [cari, setCari] = useState("");
   const [salin, setSalin] = useState<string | null>(null);
+  const [resetPin, setResetPin] = useState<{ id: number; nama: string; hp: string | null } | null>(null); // (7 Okt 2026) dialog Reset PIN
 
   const baris = useMemo(
     () =>
@@ -680,6 +682,7 @@ export function MonitoringAkses() {
               <th className={TH}>Akses pelatihan</th>
               <th className={TH}>Login terakhir</th>
               {data.boleh_lihat_kontak && <th className={TH}>Kontak</th>}
+              {data.boleh_lihat_kontak && <th className={TH}>PIN</th>}
             </tr>
           </thead>
           <tbody>
@@ -713,11 +716,18 @@ export function MonitoringAkses() {
                     )}
                   </td>
                 )}
+                {data.boleh_lihat_kontak && (
+                  <td className={TD}>
+                    <button type="button" className={BTN_G} onClick={() => setResetPin({ id: p.akun_id, nama: p.nama, hp: p.hp })}>
+                      🔑 Reset PIN
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={8}>
                   {status === "belum" ? "Semua peserta sudah mengakses halaman Pelatihan. 🎉" : "Tidak ada peserta yang cocok dengan filter."}
                 </td>
               </tr>
@@ -725,6 +735,7 @@ export function MonitoringAkses() {
           </tbody>
         </TabelKartu>
       </Kartu>
+      {resetPin && <ResetPin url={URL_KEHADIRAN} akunId={resetPin.id} nama={resetPin.nama} hp={resetPin.hp} tutup={() => setResetPin(null)} />}
     </div>
   );
 }
