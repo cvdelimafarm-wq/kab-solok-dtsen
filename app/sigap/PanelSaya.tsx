@@ -72,7 +72,7 @@ export default function PanelSaya() {
   // (7 Okt 2026) Pelatihan PSP Pascabencana: undangan pribadi, pretest & posttest (peserta) + kelola (admin)
   if (saya?.peserta_pelatihan) {
     kartu.push({ ikon: "✉️", judul: "Undangan", ket: "Kelas, jadwal 8 Oktober, tempat & unduh PDF undangan", href: "/sigap/pelatihan/undangan" });
-    kartu.push({ ikon: "📝", judul: "Pelatihan", ket: "Soal pretest & posttest pelatihan (masing-masing 15 menit), jadwal buka tertera di dalam", href: "/sigap/pelatihan" });
+    kartu.push({ ikon: "📝", judul: "Pelatihan", ket: "Langkah Anda sampai pelatihan selesai: pretest, presensi, posttest, foto transport lokal", href: "/sigap/pelatihan" });
   }
   if (saya?.pelatihan_kelola) kartu.push({ ikon: "📊", judul: "Kelola Pelatihan", ket: "Unggah soal, atur jadwal, monitoring peserta", href: "/sigap/pelatihan/kelola" });
   if (saya?.kelola_akses) kartu.push({ ikon: "🔐", judul: "Kelola Peran & Akses", ket: "Atur peran, izin per menu, dan akun", href: "/sigap/akses" });

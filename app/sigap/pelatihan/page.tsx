@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LABEL_SLOT_FOTO, jarakMeter, teksJarak } from "@/lib/sigapPresensi";
 import { LABEL_JENIS_TES } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
@@ -274,7 +275,12 @@ type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolea
 
 export default function HalamanPelatihan() {
   const { data, galat, muat, jam } = useHub(30_000);
+  const router = useRouter();
   const now = jam.sekarang();
+  // (7 Okt 2026) /sigap/pelatihan = tab Langkah bagi peserta. Pengelola yang bukan peserta langsung dibawa ke Kelola Pelatihan.
+  useEffect(() => {
+    if (data && !data.peserta && data.boleh_lihat_kelola) router.replace("/sigap/pelatihan/kelola");
+  }, [data, router]);
   const u = data?.undangan;
   const peserta = data?.peserta ?? null;
 

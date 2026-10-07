@@ -234,7 +234,7 @@ export default function Shell({
     if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kontrak") });
     out.push({ id: "m-pedia", grup: "Menu", label: "SIGAP PEDIA", ket: "ensiklopedia konsultasi", jalankan: () => (window.location.href = "/sigap/pedia") });
     if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/pedia/kelola") });
-    if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (undangan, pretest & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
+    if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
     if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/pelatihan/kelola") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
@@ -279,7 +279,7 @@ export default function Shell({
           ) : (
             <ItemNav mini={mini} ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
           )}
-          {(tokenPetugas || bolehPelatihanKelola) && <ItemNav mini={mini} ikon="buku" label="Pelatihan" href="/sigap/pelatihan" aktif={aktif === "pelatihan"} title="Undangan, pretest & posttest pelatihan" />}
+          {(tokenPetugas || bolehPelatihanKelola) && <ItemNav mini={mini} ikon="buku" label="Pelatihan" href="/sigap/pelatihan" aktif={aktif === "pelatihan"} title="Langkah pelatihan: pretest, presensi, posttest" />}
           {bolehPelatihanKelola && <ItemNav mini={mini} ikon="grafik" label="Kelola pelatihan" href="/sigap/pelatihan/kelola" aktif={aktif === "pelatihan_kelola"} title="Soal, jadwal & monitoring tes" />}
           <ItemNav mini={mini} ikon="pesawat" label="Perjalanan dinas" segera />
           <ItemNav mini={mini} ikon="uang" label="Honor" segera />
