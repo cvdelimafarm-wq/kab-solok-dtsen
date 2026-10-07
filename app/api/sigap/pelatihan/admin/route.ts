@@ -122,6 +122,8 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
           skor: sesi?.skor !== null && sesi?.skor !== undefined ? Number(sesi.skor) : null,
           benar: sesi?.benar ?? null,
           total: sesi?.total ?? null,
+          // jawaban per nomor (hanya utk sesi selesai) -> dipakai monitoring utk menghitung ulang "Analisis per soal" sesuai filter
+          jawab: sesi?.selesai_at ? bersihkanJawaban(sesi.jawaban, soal) : null,
         };
       }
       return { akun_id: p.akun_id as number, nama: a?.nama ?? "?", jenis_akun: a?.jenis ?? "mitra", peran: p.peran as string, kelas: (p.kelas as number | null) ?? null, tes };

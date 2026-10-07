@@ -18,7 +18,7 @@ type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string;
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
 
 type StatusPes = "belum_mulai" | "mengerjakan" | "selesai" | "terlewat" | "soal_belum_ada" | "nonaktif" | "belum_buka" | "buka";
-type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; benar: number | null; total: number | null };
+type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; benar: number | null; total: number | null; jawab?: Record<string, string> | null };
 type Peserta = { akun_id: number; nama: string; jenis_akun: string; peran: string; kelas: number | null; tes: Partial<Record<JenisTes, CelTes>> };
 type Stat = { peserta: number; sudah_mulai: number; mengerjakan: number; selesai: number; belum_mulai: number; rata_skor: number | null; tertinggi: number | null; terendah: number | null };
 type Analisis = { nomor: number; teks: string; kunci: string; bobot: number; menjawab: number; benar: number; persen_benar: number | null; sebaran: Record<string, number> };
@@ -382,10 +382,13 @@ function MonitoringBagian() {
   );
 }
 
+const STATUS_FILTER: Record<string, string> = { belum_mulai: "Belum mulai", mengerjakan: "Sedang mengerjakan", selesai: "Selesai", terlewat: "Terlewat" };
+
 function Monitoring() {
   const [data, setData] = useState<Monitor | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [kelas, setKelas] = useState("");
+  const [jenis, setJenis] = useState("");
   const [peran, setPeran] = useState("");
   const [status, setStatus] = useState("");
   const [cari, setCari] = useState("");
@@ -414,6 +417,7 @@ function Monitoring() {
     return data.peserta.filter((p) => {
       if (kelas && String(p.kelas ?? "") !== kelas) return false;
       if (peran && p.peran !== peran) return false;
+      if (jenis && p.jenis_akun !== jenis) return false;
       if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
       if (status) {
         const adaCocok = DAFTAR_JENIS_TES.some((j) => {
@@ -425,19 +429,40 @@ function Monitoring() {
       }
       return true;
     });
-  }, [data, kelas, peran, status, cari]);
+  }, [data, kelas, peran, jenis, status, cari]);
+
+  /** Analisis per soal: kerangka soal dari server, angkanya dihitung ulang dari jawaban peserta yang lolos filter. */
+  function analisisUntuk(j: JenisTes): Analisis[] {
+    const selesai = baris.filter((p) => p.tes[j]?.status === "selesai");
+    return (data?.analisis[j] ?? []).map((a) => {
+      const sebaran: Record<string, number> = {};
+      Object.keys(a.sebaran).forEach((k) => (sebaran[k] = 0));
+      let menjawab = 0;
+      let benar = 0;
+      for (const p of selesai) {
+        const x = p.tes[j]?.jawab?.[String(a.nomor)];
+        if (x) {
+          menjawab++;
+          sebaran[x] = (sebaran[x] ?? 0) + 1;
+          if (x === a.kunci) benar++;
+        }
+      }
+      return { ...a, menjawab, benar, sebaran, persen_benar: selesai.length ? Math.round((benar / selesai.length) * 1000) / 10 : null };
+    });
+  }
 
   async function ekspor() {
     if (!data) return;
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)"]];
+    const aoa: (string | number)[][] = [["No", "Nama", "Jenis", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)"]];
     baris.forEach((p, i) => {
       const a = p.tes.pretest;
       const b = p.tes.posttest;
       aoa.push([
         i + 1,
         p.nama,
+        p.jenis_akun === "organik" ? "Organik" : "Mitra",
         p.kelas ?? "",
         p.peran.toUpperCase(),
         a ? (LABEL_PES[a.status] ?? a.status) : "",
@@ -454,24 +479,48 @@ function Monitoring() {
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws, "Peserta");
     for (const j of DAFTAR_JENIS_TES) {
-      const an = data.analisis[j] ?? [];
+      const an = analisisUntuk(j);
       const wa = XLSX.utils.aoa_to_sheet([["Soal", "Teks", "Kunci", "Menjawab", "Benar", "% benar"], ...an.map((a) => [a.nomor, a.teks, a.kunci, a.menjawab, a.benar, a.persen_benar ?? ""])]);
       wa["!cols"] = [{ wch: 6 }, { wch: 70 }, { wch: 7 }, { wch: 10 }, { wch: 8 }, { wch: 9 }];
       XLSX.utils.book_append_sheet(wb, wa, `Analisis ${LABEL_JENIS_TES[j]}`);
     }
-    XLSX.writeFile(wb, `Monitoring_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `Monitoring_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}${kelas || peran || jenis || status || cari ? "_filter" : ""}.xlsx`);
   }
 
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!data) return <Memuat />;
-  const pre = data.statistik.pretest;
-  const post = data.statistik.posttest;
-  const total = pre?.peserta ?? data.peserta.length;
-  const persen = (n: number | undefined) => (total > 0 ? Math.round(((n ?? 0) / total) * 100) : 0);
-  const analisis = data.analisis[jenisAnalisis] ?? [];
+  // Semua kartu di halaman ini dihitung dari `baris` (peserta yang lolos SEMUA filter), bukan dari angka server.
+  const hitung = (j: JenisTes) => {
+    const sel = baris.filter((p) => p.tes[j]?.status === "selesai");
+    const skor = sel.map((p) => p.tes[j]?.skor).filter((x): x is number => x != null);
+    const mengerjakan = baris.filter((p) => p.tes[j]?.status === "mengerjakan").length;
+    return {
+      selesai: sel.length,
+      mengerjakan,
+      belum: baris.length - sel.length - mengerjakan,
+      terlewat: baris.filter((p) => p.tes[j]?.status === "terlewat").length,
+      rata: skor.length ? Math.round((skor.reduce((x, y) => x + y, 0) / skor.length) * 100) / 100 : null,
+    };
+  };
+  const pre = hitung("pretest");
+  const post = hitung("posttest");
+  const total = baris.length;
+  const semua = data.peserta.length;
+  const persen = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const filterAktif = [kelas && `Kelas ${kelas}`, peran && peran.toUpperCase(), jenis && (jenis === "organik" ? "Organik" : "Mitra"), status && (STATUS_FILTER[status] ?? status), cari && `“${cari}”`].filter(Boolean) as string[];
+  const adaFilter = filterAktif.length > 0;
+  const resetFilter = () => {
+    setKelas("");
+    setPeran("");
+    setJenis("");
+    setStatus("");
+    setCari("");
+  };
+  const analisis = analisisUntuk(jenisAnalisis);
+  const selesaiAnalisis = baris.filter((p) => p.tes[jenisAnalisis]?.status === "selesai").length;
   const urut = [...analisis].filter((a) => a.persen_benar !== null).sort((a, b) => (a.persen_benar ?? 0) - (b.persen_benar ?? 0));
   const terendah = urut[0];
   const tertinggi = urut[urut.length - 1];
@@ -480,13 +529,52 @@ function Monitoring() {
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-[#E3E8EE]" role="group" aria-label="Filter monitoring">
+        <span className="text-[12.5px] font-bold text-[#55657D]">Filter:</span>
+        <select className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value)} aria-label="Filter jenis">
+          <option value="">Organik & Mitra</option>
+          <option value="organik">Organik</option>
+          <option value="mitra">Mitra</option>
+        </select>
+        <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
+          <option value="">Semua kelas</option>
+          {[1, 2, 3, 4].map((k) => (
+            <option key={k} value={k}>Kelas {k}</option>
+          ))}
+        </select>
+        <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
+          <option value="">Semua peran</option>
+          <option value="pml">PML</option>
+          <option value="ppl">PPL</option>
+        </select>
+        <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
+          <option value="">Semua status</option>
+          <option value="belum_mulai">Belum mulai</option>
+          <option value="mengerjakan">Sedang mengerjakan</option>
+          <option value="selesai">Selesai</option>
+          <option value="terlewat">Terlewat</option>
+        </select>
+        <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari nama" />
+        {adaFilter && (
+          <button type="button" className={BTN_O} onClick={resetFilter}>
+            ✕ Reset filter
+          </button>
+        )}
+      </div>
+      {adaFilter && (
+        <p className="px-1 text-[12.5px] text-[#55657D]" aria-live="polite">
+          Kartu &amp; tabel di bawah hanya menghitung <b>{total}</b> dari {semua} peserta ({filterAktif.join(" · ")}).
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-6">
-        <KartuAngka label="Peserta" nilai={total} />
-        <KartuAngka label="Pretest selesai" nilai={pre?.selesai ?? 0} ket={`${persen(pre?.selesai)}%`} warna="#1E7A4C" />
-        <KartuAngka label="Sedang mengerjakan" nilai={(pre?.mengerjakan ?? 0) + (post?.mengerjakan ?? 0)} warna="#1F6FD1" />
-        <KartuAngka label="Pretest belum mulai" nilai={pre?.belum_mulai ?? 0} warna="#9A6200" />
-        <KartuAngka label="Rata-rata pretest" nilai={fmt(pre?.rata_skor)} />
-        <KartuAngka label="Rata-rata posttest" nilai={fmt(post?.rata_skor)} ket={`selesai ${persen(post?.selesai)}%`} />
+        <KartuAngka label="Peserta" nilai={total} ket={adaFilter ? `dari ${semua}` : undefined} />
+        <KartuAngka label="Pretest selesai" nilai={pre.selesai} ket={`${persen(pre.selesai)}%`} warna="#1E7A4C" />
+        <KartuAngka label="Sedang mengerjakan" nilai={pre.mengerjakan + post.mengerjakan} ket={`pre ${pre.mengerjakan} · post ${post.mengerjakan}`} warna="#1F6FD1" />
+        <KartuAngka label="Pretest belum mulai" nilai={pre.belum} ket={pre.terlewat > 0 ? `${pre.terlewat} terlewat` : undefined} warna="#9A6200" />
+        <KartuAngka label="Rata-rata pretest" nilai={fmt(pre.rata)} ket={`${pre.selesai} peserta`} />
+        <KartuAngka label="Rata-rata posttest" nilai={fmt(post.rata)} ket={`selesai ${persen(post.selesai)}% (${post.selesai})`} />
       </div>
 
       <Kartu
@@ -494,37 +582,17 @@ function Monitoring() {
         ket={`${baris.length} dari ${data.peserta.length} · segar otomatis tiap 10 detik`}
         kanan={
           <button type="button" className={BTN_O} onClick={ekspor}>
-            ⬇ Ekspor Excel
+            ⬇ Ekspor Excel{adaFilter ? " (sesuai filter)" : ""}
           </button>
         }
       >
-        <div className="mb-2 flex flex-wrap gap-2">
-          <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
-            <option value="">Semua kelas</option>
-            {[1, 2, 3, 4].map((k) => (
-              <option key={k} value={k}>Kelas {k}</option>
-            ))}
-          </select>
-          <select className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Filter peran">
-            <option value="">Semua peran</option>
-            <option value="pml">PML</option>
-            <option value="ppl">PPL</option>
-          </select>
-          <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter status">
-            <option value="">Semua status</option>
-            <option value="belum_mulai">Belum mulai</option>
-            <option value="mengerjakan">Sedang mengerjakan</option>
-            <option value="selesai">Selesai</option>
-            <option value="terlewat">Terlewat</option>
-          </select>
-          <input className={`${INPUT} min-w-[160px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
-        </div>
         <TabelKartu className="!shadow-none">
           <thead>
             <tr>
               <th className={TH}>Nama</th>
               <th className={TH}>Kls</th>
               <th className={TH}>Peran</th>
+              <th className={TH}>Jenis</th>
               <th className={TH}>Pretest</th>
               <th className={TH}>Posttest</th>
               <th className={TH}>Naik</th>
@@ -540,6 +608,7 @@ function Monitoring() {
                   <td className={`${TD} font-semibold`}>{p.nama}</td>
                   <td className={TD}>{p.kelas ?? "–"}</td>
                   <td className={TD}>{p.peran.toUpperCase()}</td>
+                  <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
                   <td className={TD}><ChipStatus c={p.tes.pretest} jam={sekarang} /></td>
                   <td className={TD}><ChipStatus c={p.tes.posttest} jam={sekarang} /></td>
                   <td className={`${TD} tabular-nums ${naik != null ? (naik >= 0 ? "text-[#1E7A4C]" : "text-[#C0392B]") : "text-[#7B8794]"}`}>{naik != null ? `${naik > 0 ? "+" : ""}${fmt(naik)}` : "—"}</td>
@@ -548,7 +617,7 @@ function Monitoring() {
             })}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={6}>Tidak ada peserta yang cocok dengan filter.</td>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>Tidak ada peserta yang cocok dengan filter.</td>
               </tr>
             )}
           </tbody>
@@ -557,7 +626,7 @@ function Monitoring() {
 
       <Kartu
         judul="Analisis per soal"
-        ket="berdasarkan peserta yang sudah selesai"
+        ket={`berdasarkan ${selesaiAnalisis} peserta yang sudah selesai${adaFilter ? " (sesuai filter)" : ""}`}
         kanan={
           <select className={INPUT} value={jenisAnalisis} onChange={(e) => setJenisAnalisis(e.target.value as JenisTes)} aria-label="Pilih tes">
             {DAFTAR_JENIS_TES.map((j) => (
