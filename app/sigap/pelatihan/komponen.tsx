@@ -167,9 +167,9 @@ export function Kerangka({
     ...(tokenTranslok ? [{ kode: "translok" as const, label: "🛵 Transport Lokal" }] : []),
   ];
   return (
-    <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
+    <div className="min-h-screen bg-[#F5F8FE] text-[#1B2B4B]">
       <HeaderAdmin
-        kecil="SIGAP · Pelatihan PSP Pascabencana 2026"
+        kecil="Pelatihan PSP Pascabencana 2026"
         judul={judul}
         onKeluar={keluar}
         kanan={
@@ -177,11 +177,11 @@ export function Kerangka({
             <a href="/sigap" className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
               ← Portal
             </a>
-            {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-blue-100 sm:inline">{nama}</span>}
+            {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-[#A9BCD8] sm:inline">{nama}</span>}
           </>
         }
       >
-        {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
+        {sub && <p className="mt-1 text-[12.5px] text-[#A9BCD8]">{sub}</p>}
       </HeaderAdmin>
       <BarisTab
         tab={tab}

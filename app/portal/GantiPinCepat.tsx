@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { PIN_AWAL, alasanPinDitolak } from "@/lib/sigapMasukNama";
 import { bacaSesi } from "./sesi";
 
-const INPUT = "h-14 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-center text-[24px] tracking-[0.5em] text-[#14202E] outline-none transition focus:border-[#1F6FD1] focus:ring-4 focus:ring-[#1F6FD1]/10";
+const INPUT = "h-14 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-center text-[24px] tracking-[0.5em] text-[#14202E] outline-none transition focus:border-[#1F5FD1] focus:ring-4 focus:ring-[#1F5FD1]/10";
 
 /**
  * `sesi` = token sesi (bila belum disimpan di browser, mis. sesaat setelah masuk). Kosong -> memakai sesi tersimpan.

@@ -18,8 +18,8 @@ import { Kerangka, formatSisa, jamWib, useJamServer, useSaatLewat } from "../../
 
 type Keadaan = KeadaanTes;
 
-const WARNA_HIJAU = "#1E7A4C";
-const WARNA_MERAH = "#C0392B";
+const WARNA_HIJAU = "#13794B";
+const WARNA_MERAH = "#B42329";
 
 export default function HalamanTes() {
   const params = useParams<{ jenis: string }>();
@@ -229,10 +229,10 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const sisaTutup = (new Date(k.tes.tutup_at).getTime() - sekarang()) / 1000;
   const kartuUlang = k.bisa_ulang ? (
     <Kartu judul={`Kesempatan mengulang ${label}`}>
-      <p className="text-[13px] leading-relaxed text-[#55657D]">
+      <p className="text-[13px] leading-relaxed text-[#5B6B84]">
         Percobaan ke-{k.percobaan} dari maksimal {k.ulang_maks}. Anda boleh mengulang selama sesi masih terbuka (sampai pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>, {formatSisa(sisaTutup)} lagi). Nilai yang dipakai adalah <b>skor tertinggi</b> dari semua percobaan, jadi mengulang tidak menurunkan nilai Anda.
       </p>
-      <button type="button" className="mt-3 w-full rounded-xl bg-[#1F6FD1] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0] disabled:opacity-60" disabled={sibuk} onClick={() => setKonfirmasiUlang(true)}>
+      <button type="button" className="mt-3 w-full rounded-xl bg-[#1F5FD1] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8] disabled:opacity-60" disabled={sibuk} onClick={() => setKonfirmasiUlang(true)}>
         Ulangi {label} →
       </button>
     </Kartu>
@@ -247,8 +247,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {status === "nonaktif" && <Pesan jenis="info">Tes ini sedang tidak aktif.</Pesan>}
       {status === "belum_buka" && (
         <Kartu judul={`${label} belum dibuka`}>
-          <p className="text-[13px] text-[#55657D]">Terbuka otomatis pukul {jamWib(k.tes.buka_at)} WIB. Jangan tutup halaman ini; tombol Mulai muncul sendiri.</p>
-          <p className="mt-2 text-[28px] font-extrabold tabular-nums text-[#0F3D7A]">{formatSisa(sisaBuka)}</p>
+          <p className="text-[13px] text-[#5B6B84]">Terbuka otomatis pukul {jamWib(k.tes.buka_at)} WIB. Jangan tutup halaman ini; tombol Mulai muncul sendiri.</p>
+          <p className="mt-2 text-[28px] font-extrabold tabular-nums text-[#0F2A52]">{formatSisa(sisaBuka)}</p>
         </Kartu>
       )}
       {status === "terlewat" && <Pesan jenis="galat">Sesi {label} sudah ditutup pukul {jamWib(k.tes.tutup_at)} WIB dan Anda belum mengerjakannya.</Pesan>}
@@ -261,8 +261,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
             <li>Pilih satu jawaban per soal. Jawaban <b>tersimpan otomatis</b>; Anda dapat mengubahnya sebelum waktu habis.</li>
             <li>Waktu habis atau tombol Kirim ditekan: jawaban langsung dinilai. Skor &amp; pembahasan tampil setelah sesi ditutup.</li>
           </ul>
-          <p className="mt-2 text-[13px] font-semibold text-[#9A6200]">Sesi ditutup dalam {formatSisa(sisaTutup)}.</p>
-          <button type="button" onClick={mulai} disabled={sibuk} className="mt-3 w-full rounded-xl bg-[#1E7A4C] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#17623C] disabled:opacity-60">
+          <p className="mt-2 text-[13px] font-semibold text-[#8A6200]">Sesi ditutup dalam {formatSisa(sisaTutup)}.</p>
+          <button type="button" onClick={mulai} disabled={sibuk} className="mt-3 w-full rounded-xl bg-[#13794B] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#13794B] disabled:opacity-60">
             {sibuk ? "Memulai…" : `Mulai ${label} →`}
           </button>
         </Kartu>
@@ -271,12 +271,12 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {/* ------------------------------------------------ mengerjakan */}
       {mengerjakan && sekarangSoal && (
         <>
-          <div className="sticky top-[49px] z-10 flex items-center justify-between gap-2 rounded-xl border border-[#E3E8EE] bg-white px-3.5 py-2 shadow-sm">
-            <div className="text-[12.5px] text-[#55657D]">
-              Soal <b className="text-[#14202E]">{idx + 1}</b> dari {soal.length}
-              <span className="ml-2">{simpan === "menyimpan" ? "Menyimpan…" : simpan === "gagal" ? <b className="text-[#C0392B]">Gagal menyimpan, mencoba lagi…</b> : <span className="text-[#1E7A4C]">✓ tersimpan</span>}</span>
+          <div className="sticky top-[49px] z-10 flex items-center justify-between gap-2 rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2 shadow-sm">
+            <div className="text-[12.5px] text-[#5B6B84]">
+              Soal <b className="text-[#1B2B4B]">{idx + 1}</b> dari {soal.length}
+              <span className="ml-2">{simpan === "menyimpan" ? "Menyimpan…" : simpan === "gagal" ? <b className="text-[#B42329]">Gagal menyimpan, mencoba lagi…</b> : <span className="text-[#13794B]">✓ tersimpan</span>}</span>
             </div>
-            <div className={`text-[20px] font-extrabold tabular-nums ${sisaBatas < 60 ? "text-[#C0392B]" : "text-[#0F3D7A]"}`} aria-label="Sisa waktu">
+            <div className={`text-[20px] font-extrabold tabular-nums ${sisaBatas < 60 ? "text-[#B42329]" : "text-[#0F2A52]"}`} aria-label="Sisa waktu">
               ⏱ {formatSisa(sisaBatas)}
             </div>
           </div>
@@ -294,10 +294,10 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                     aria-checked={dipilih}
                     onClick={() => pilih(sekarangSoal.nomor, o.kode)}
                     className={`flex w-full items-start gap-2.5 rounded-xl border-2 px-3.5 py-2.5 text-left text-[14px] transition ${
-                      dipilih ? "border-[#1F6FD1] bg-[#E3EEFB] font-semibold" : "border-[#E3E8EE] bg-white hover:border-[#9DB9DE]"
+                      dipilih ? "border-[#1F5FD1] bg-[#E6EEFC] font-semibold" : "border-[#DDE6F3] bg-white hover:border-[#9DB9DE]"
                     }`}
                   >
-                    <span className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold ${dipilih ? "bg-[#1F6FD1] text-white" : "bg-[#EDF0F4] text-[#4D5B6B]"}`}>{o.kode}</span>
+                    <span className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold ${dipilih ? "bg-[#1F5FD1] text-white" : "bg-[#EDF0F4] text-[#4D5B6B]"}`}>{o.kode}</span>
                     <span className="min-w-0 flex-1 whitespace-pre-wrap">{o.teks}</span>
                   </button>
                 );
@@ -318,17 +318,17 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                     aria-label={`Soal ${s.nomor}: ${isi ? "sudah diisi" : "belum diisi"}${aktif ? ", sedang dibuka" : ""}`}
                     aria-current={aktif ? "step" : undefined}
                     className="flex h-9 w-9 items-center justify-center rounded-lg text-[13px] font-extrabold text-white"
-                    style={{ background: isi ? WARNA_HIJAU : WARNA_MERAH, outline: aktif ? "3px solid #0F3D7A" : "none", outlineOffset: 2 }}
+                    style={{ background: isi ? WARNA_HIJAU : WARNA_MERAH, outline: aktif ? "3px solid #0F2A52" : "none", outlineOffset: 2 }}
                   >
                     {s.nomor}
                   </button>
                 );
               })}
             </div>
-            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#55657D]">
+            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#5B6B84]">
               <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded" style={{ background: WARNA_HIJAU }} /> Sudah diisi</span>
               <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded" style={{ background: WARNA_MERAH }} /> Belum diisi</span>
-              <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded bg-white" style={{ outline: "2px solid #0F3D7A" }} /> Soal yang sedang dibuka</span>
+              <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-3 rounded bg-white" style={{ outline: "2px solid #0F2A52" }} /> Soal yang sedang dibuka</span>
             </div>
           </Kartu>
 
@@ -341,13 +341,13 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                 Berikutnya →
               </button>
             ) : (
-              <button type="button" className="flex-1 rounded-lg bg-[#1E7A4C] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#17623C]" onClick={() => setKonfirmasi(true)} disabled={sibuk}>
+              <button type="button" className="flex-1 rounded-lg bg-[#13794B] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#13794B]" onClick={() => setKonfirmasi(true)} disabled={sibuk}>
                 Kirim Jawaban
               </button>
             )}
           </div>
           {idx < soal.length - 1 && (
-            <button type="button" className="w-full rounded-lg border border-[#1E7A4C] bg-white px-3 py-2 text-[12.5px] font-bold text-[#1E7A4C] hover:bg-[#F1FAF5]" onClick={() => setKonfirmasi(true)} disabled={sibuk}>
+            <button type="button" className="w-full rounded-lg border border-[#13794B] bg-white px-3 py-2 text-[12.5px] font-bold text-[#13794B] hover:bg-[#F1FAF5]" onClick={() => setKonfirmasi(true)} disabled={sibuk}>
               Kirim Jawaban
             </button>
           )}
@@ -364,12 +364,12 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                 ) : (
                   <p className="mt-1.5 text-[13px] text-[#0E5E4E]">Semua {soal.length} soal sudah diisi.</p>
                 )}
-                <p className="mt-1.5 text-[12.5px] text-[#55657D]">Setelah dikirim, jawaban tidak dapat diubah.</p>
+                <p className="mt-1.5 text-[12.5px] text-[#5B6B84]">Setelah dikirim, jawaban tidak dapat diubah.</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" className={`${BTN_O} flex-1 !py-2.5`} onClick={() => setKonfirmasi(false)}>
                     Kembali
                   </button>
-                  <button type="button" className="flex-1 rounded-lg bg-[#1E7A4C] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#17623C] disabled:opacity-60" disabled={sibuk} onClick={() => kirim(false)}>
+                  <button type="button" className="flex-1 rounded-lg bg-[#13794B] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#13794B] disabled:opacity-60" disabled={sibuk} onClick={() => kirim(false)}>
                     {belum.length > 0 ? "Tetap kirim" : "Ya, kirim"}
                   </button>
                 </div>
@@ -382,11 +382,11 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {/* ------------------------------------------------ selesai */}
       {status === "selesai" && k.hasil_tertunda && (
         <Kartu judul="Jawaban Anda tersimpan ✓">
-          <p className="text-[13px] leading-relaxed text-[#55657D]">
+          <p className="text-[13px] leading-relaxed text-[#5B6B84]">
             {k.sesi?.terjawab ?? 0} dari {k.jumlah_soal} soal terjawab. Skor dan pembahasan benar/salah tampil setelah sesi ditutup pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>.
           </p>
-          <p className="mt-2 text-[22px] font-extrabold tabular-nums text-[#0F3D7A]">{formatSisa(sisaTutup)}</p>
-          {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#55657D]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
+          <p className="mt-2 text-[22px] font-extrabold tabular-nums text-[#0F2A52]">{formatSisa(sisaTutup)}</p>
+          {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#5B6B84]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
           <Link href="/sigap/pelatihan" className={`${BTN_O} mt-3`}>← Kembali ke Pelatihan</Link>
         </Kartu>
       )}
@@ -396,22 +396,22 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
           <Kartu judul={`Hasil ${label}`} ket={`Sesi ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
             <div className="flex items-end gap-5">
               <div>
-                <p className="text-[12px] text-[#7B8794]">Skor</p>
-                <p className="text-[40px] font-extrabold leading-none text-[#0F3D7A]">{k.hasil.skor}</p>
+                <p className="text-[12px] text-[#6B7A90]">Skor</p>
+                <p className="text-[40px] font-extrabold leading-none text-[#0F2A52]">{k.hasil.skor}</p>
               </div>
               <div>
-                <p className="text-[12px] text-[#7B8794]">Benar</p>
+                <p className="text-[12px] text-[#6B7A90]">Benar</p>
                 <p className="text-[22px] font-extrabold leading-none">{k.hasil.benar} / {k.hasil.total}</p>
               </div>
               {k.sesi?.selesai_at && (
                 <div>
-                  <p className="text-[12px] text-[#7B8794]">Waktu</p>
+                  <p className="text-[12px] text-[#6B7A90]">Waktu</p>
                   <p className="text-[22px] font-extrabold leading-none tabular-nums">{formatSisa((new Date(k.sesi.selesai_at).getTime() - new Date(k.sesi.mulai_at).getTime()) / 1000)}</p>
                 </div>
               )}
             </div>
             {k.percobaan > 1 && (
-              <p className="mt-2 text-[12.5px] text-[#55657D]">
+              <p className="mt-2 text-[12.5px] text-[#5B6B84]">
                 Skor tertinggi dari {k.percobaan} percobaan (pembahasan di bawah dari percobaan ke-{k.hasil.dari_percobaan}).
               </p>
             )}
@@ -429,11 +429,11 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                       <p className="min-w-0 flex-1 text-[13.5px] font-semibold leading-snug">{b.teks}</p>
                       {b.benar ? <Chip w="ok">Benar ✔</Chip> : b.jawab ? <Chip w="bad">Salah ✖</Chip> : <Chip w="mut">Kosong</Chip>}
                     </div>
-                    <p className="mt-1.5 text-[12.5px] text-[#55657D]">
+                    <p className="mt-1.5 text-[12.5px] text-[#5B6B84]">
                       Jawaban Anda: <b className={b.benar ? "text-[#0E5E4E]" : "text-[#7F241E]"}>{b.jawab ? `${b.jawab}. ${jawabO?.teks ?? ""}` : "tidak diisi"}</b>
                     </p>
                     {!b.benar && (
-                      <p className="text-[12.5px] text-[#55657D]">
+                      <p className="text-[12.5px] text-[#5B6B84]">
                         Kunci: <b className="text-[#0E5E4E]">{b.kunci}. {kunciO?.teks ?? ""}</b>
                       </p>
                     )}
@@ -449,7 +449,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
         <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true">
           <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
             <p className="text-[16px] font-extrabold">Ulangi {label} sekarang?</p>
-            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[12.5px] leading-relaxed text-[#55657D]">
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[12.5px] leading-relaxed text-[#5B6B84]">
               <li>Waktu dan jawaban dimulai dari awal (percobaan ke-{k.percobaan + 1} dari {k.ulang_maks}).</li>
               <li>Jawaban percobaan sebelumnya tetap tersimpan; nilai yang dipakai = skor tertinggi dari semua percobaan.</li>
               <li>Waktu mengerjakan paling lama {k.tes.durasi_menit} menit dan tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB.</li>
@@ -458,7 +458,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
               <button type="button" className={`${BTN_O} flex-1 !py-2.5`} onClick={() => setKonfirmasiUlang(false)}>
                 Batal
               </button>
-              <button type="button" className="flex-1 rounded-lg bg-[#1F6FD1] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#1A5DB0] disabled:opacity-60" disabled={sibuk} onClick={ulangi}>
+              <button type="button" className="flex-1 rounded-lg bg-[#1F5FD1] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#1A4FB8] disabled:opacity-60" disabled={sibuk} onClick={ulangi}>
                 {sibuk ? "Memulai…" : "Ya, ulangi"}
               </button>
             </div>

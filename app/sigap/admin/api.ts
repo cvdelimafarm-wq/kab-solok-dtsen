@@ -42,7 +42,14 @@ export function keMasuk() {
   window.location.replace(`/?lanjut=${encodeURIComponent(path)}`);
 }
 
-export function keluar() {
+export async function keluar() {
+  // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
+  try {
+    const { matikanPush } = await import("../../portal/pushKlien");
+    await Promise.race([matikanPush(), new Promise((r) => setTimeout(r, 2500))]);
+  } catch {
+    /* abaikan: keluar tetap jalan */
+  }
   hapusSesi();
   window.location.replace("/");
 }

@@ -5,6 +5,7 @@
 // (7 Okt 2026) SIGAP > Kelola Pelatihan -- tab "Soal & Jadwal" (unduh template Excel, unggah soal, atur jadwal
 // buka/durasi/tutup) dan tab "Monitoring" (statistik, per peserta, analisis per soal, ekspor Excel; segar tiap
 // 10 detik; sub-tab Presensi & Transport Lokal ada di ./kehadiran.tsx). Izin menu `pelatihan.kelola`: lihat = monitoring, kelola = soal & jadwal. Mockup disetujui user.
+// (8 Okt 2026) Tab "Notifikasi" (./notifikasi.tsx): kirim notifikasi push ke HP peserta (pengingat Posttest/presensi, dll).
 // (8 Okt 2026) Tab "Administrasi" (./administrasi.tsx): SPJ translok per kelas, daftar hadir & laporan; izin menu `pelatihan.administrasi`.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import PengumumanKelola from "./pengumuman";
+import NotifikasiKelola from "./notifikasi";
 import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
@@ -39,7 +41,7 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring" | "kuis" | "administrasi" | "pengumuman";
+type TabK = "soal" | "monitoring" | "kuis" | "administrasi" | "pengumuman" | "notifikasi";
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
@@ -59,7 +61,7 @@ export default function KelolaPelatihan() {
     muat();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring" || t === "kuis" || t === "administrasi" || t === "pengumuman") setTab(t);
+      if (t === "monitoring" || t === "kuis" || t === "administrasi" || t === "pengumuman" || t === "notifikasi") setTab(t);
     } catch {
       /* abaikan */
     }
@@ -76,6 +78,7 @@ export default function KelolaPelatihan() {
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Adu Sigap" },
         { kode: "pengumuman", label: "📢 Pengumuman" },
+        { kode: "notifikasi", label: "🔔 Notifikasi" },
         { kode: "monitoring", label: "Monitoring" },
         { kode: "administrasi", label: "🗂 Administrasi" },
       ]}
@@ -99,6 +102,7 @@ export default function KelolaPelatihan() {
         </div>
       )}
       {ringkas && tab === "pengumuman" && <PengumumanKelola />}
+      {ringkas && tab === "notifikasi" && <NotifikasiKelola />}
       {ringkas && tab === "kuis" && <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian />}
       {ringkas && tab === "administrasi" && <Administrasi />}

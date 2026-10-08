@@ -71,7 +71,7 @@ export function PulsaPeserta() {
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-bold uppercase tracking-wide text-[#B45309]">Pengisian pulsa</p>
             {sudah ? (
-              <p className="text-[14px] font-bold text-[#14202E]">
+              <p className="text-[14px] font-bold text-[#1B2B4B]">
                 {tampilHp(st.pulsa)} <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">✓ terkonfirmasi</span>
                 {st.diubah && <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">nomor khusus pulsa</span>}
               </p>
@@ -94,7 +94,7 @@ export function PulsaPeserta() {
                 📱 Nomor HP untuk pengisian pulsa
               </h2>
             </div>
-            <div className="space-y-3 px-5 py-4 text-[#14202E]">
+            <div className="space-y-3 px-5 py-4 text-[#1B2B4B]">
               {!modeLain && adaAsli ? (
                 <>
                   <p className="text-[13.5px] leading-relaxed">Pulsa akan diisi ke nomor HP Anda yang tercatat. Mohon periksa, apakah nomor ini benar dan aktif?</p>

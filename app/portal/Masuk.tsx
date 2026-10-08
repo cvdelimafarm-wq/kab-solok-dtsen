@@ -12,7 +12,7 @@ import { MIN_HURUF_CARI, pesanGalatMasuk, type Saran } from "@/lib/sigapMasukNam
 import GantiPinCepat from "./GantiPinCepat";
 import { simpanSesi, tujuanLanjut } from "./sesi";
 
-const INPUT = "h-12 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-[15px] text-[#14202E] outline-none transition focus:border-[#1F6FD1] focus:ring-4 focus:ring-[#1F6FD1]/10";
+const INPUT = "h-12 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-[15px] text-[#14202E] outline-none transition focus:border-[#1F5FD1] focus:ring-4 focus:ring-[#1F5FD1]/10";
 
 function tampakNomorHp(s: string): boolean {
   return /^[0-9+\-\s]{9,}$/.test(s.trim());
@@ -181,23 +181,22 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
 
   return (
     <div className="flex min-h-screen flex-wrap bg-[#F3F5F8] text-[#14202E]">
-      <section className="flex flex-[1_1_520px] flex-col justify-between gap-10 bg-[#0E2A47] px-8 py-10 text-white sm:px-16 sm:py-14">
+      <section className="flex flex-[1_1_520px] flex-col justify-between gap-10 bg-gradient-to-b from-[#1A4590] to-[#0F2A52] px-8 py-10 text-white sm:px-16 sm:py-14">
         <div className="flex items-center gap-3.5">
-          <div className="grid h-12 w-12 grid-cols-2 gap-[3px] rounded-[10px] bg-white p-[9px]">
-            <span className="rounded-sm bg-[#2D7DD2]" />
-            <span className="rounded-sm bg-[#5BB04B]" />
-            <span className="rounded-sm bg-[#F29D1F]" />
-            <span className="rounded-sm bg-[#2D7DD2] opacity-50" />
+          {/* logo selalu di atas latar putih (ubin putih di atas latar biru) */}
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/sigap-logo.png" alt="Logo SIGAP" width={48} height={46} className="h-full w-full object-contain" />
           </div>
-          <div className="text-[15px] font-bold italic leading-tight tracking-wide">
-            BADAN PUSAT STATISTIK
-            <br />
-            KABUPATEN SOLOK
+          <div className="leading-tight">
+            <div className="text-[22px] font-extrabold tracking-wide">SIGAP</div>
+            <div className="text-[12.5px] text-[#C9D6E6]">Sistem Integrasi Kegiatan BPS</div>
+            <div className="text-[11px] italic text-[#9FB4CF]">BPS Kabupaten Solok</div>
           </div>
         </div>
         <div className="max-w-[460px]">
-          <p className="mb-2.5 text-[13px] font-semibold tracking-[0.14em] text-[#D9971F]">PORTAL KERJA</p>
-          <h1 className="text-[30px] font-bold leading-tight sm:text-[38px]">Satu akun untuk semua aplikasi kerja</h1>
+          <p className="mb-2.5 text-[13px] font-semibold tracking-[0.14em] text-[#F4B400]">PORTAL KERJA</p>
+          <h1 className="text-[30px] font-bold leading-tight sm:text-[38px]">Satu akun untuk semua kegiatan BPS</h1>
           <p className="mt-4 text-[15px] leading-relaxed text-[#C9D6E6]">
             Masuk sekali. Menu yang tampil mengikuti peran Anda dan periode kegiatan yang sedang berjalan — transport lokal, pendataan bencana, penyisiran, DTSEN, SIGAP, dan lainnya.
           </p>
@@ -205,7 +204,7 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
         <ul className="hidden flex-col gap-2.5 text-[13.5px] text-[#C9D6E6] sm:flex">
           <li className="flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-[#3DBB98]" />Petugas &amp; mitra: menu tugas aktif + arsip SPJ</li>
           <li className="flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-[#5C9DEB]" />Pegawai: SIGAP PEDIA, kegiatan tim, administrasi</li>
-          <li className="flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-[#D9971F]" />Admin: pengelolaan sesuai aplikasi yang dipegang</li>
+          <li className="flex items-center gap-2.5"><span className="h-2 w-2 rounded-full bg-[#F4B400]" />Admin: pengelolaan sesuai aplikasi yang dipegang</li>
         </ul>
       </section>
 
@@ -327,15 +326,15 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
             />
           </div>
           {error && <p className="rounded-lg border-l-4 border-[#C2412D] bg-[#FDECEA] px-3 py-2 text-[13px] text-[#8A2B1D]">{error}</p>}
-          <button type="submit" disabled={busy} className="h-12 rounded-lg bg-[#1F6FD1] text-[15px] font-semibold text-white transition hover:bg-[#1A5DB0] disabled:opacity-60">
+          <button type="submit" disabled={busy} className="h-12 rounded-lg bg-[#1F5FD1] text-[15px] font-semibold text-white transition hover:bg-[#1A50B5] disabled:opacity-60">
             {busy ? "Memproses..." : "Masuk"}
           </button>
           <div className="flex justify-between text-[13px]">
-            <Link href={modeHp ? "/atur-pin" : "/sigap/masuk?mode=daftar"} className="text-[#1F6FD1] hover:text-[#1A5DB0]">Belum punya PIN? Buat PIN</Link>
+            <Link href={modeHp ? "/atur-pin" : "/sigap/masuk?mode=daftar"} className="text-[#1F5FD1] hover:text-[#1A50B5]">Belum punya PIN? Buat PIN</Link>
             {modeHp ? (
               <span className="text-[#7B8794]" title="PIN operator Wali Nagari direset oleh admin">Lupa PIN? Hubungi admin</span>
             ) : (
-              <Link href="/sigap/masuk?mode=lupa" className="text-[#1F6FD1] hover:text-[#1A5DB0]">Lupa PIN?</Link>
+              <Link href="/sigap/masuk?mode=lupa" className="text-[#1F5FD1] hover:text-[#1A50B5]">Lupa PIN?</Link>
             )}
           </div>
           <p className="border-t border-[#E3E8EE] pt-3.5 text-xs leading-relaxed text-[#7B8794]">

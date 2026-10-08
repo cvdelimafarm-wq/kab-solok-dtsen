@@ -16,6 +16,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
 import { kunciSudahLihat, type PengumumanPeserta } from "@/lib/sigapPengumuman";
+import { daftarTerlewat } from "@/lib/sigapTerlewat";
+import AktifkanNotifikasi from "@/app/portal/AktifkanNotifikasi";
 import { LABEL_JENIS_TES } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
@@ -36,17 +38,17 @@ function LabelHari({ tglIso, nowMs, jam }: { tglIso: string; nowMs: number; jam?
   const teks = `${NAMA_HARI[d.getUTCDay()]}, ${d.getUTCDate()} ${NAMA_BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   const pita =
     selisih === 0
-      ? { t: "HARI INI", c: "bg-[#1E7A4C] text-white" }
+      ? { t: "HARI INI", c: "bg-[#13794B] text-white" }
       : selisih === 1
-        ? { t: "BESOK", c: "bg-[#D9971F] text-white" }
+        ? { t: "BESOK", c: "bg-[#F4B400] text-[#0F2A52]" }
         : selisih === -1
           ? { t: "KEMARIN", c: "bg-[#8895A7] text-white" }
           : selisih > 1
-            ? { t: `${selisih} HARI LAGI`, c: "bg-[#1F6FD1] text-white" }
+            ? { t: `${selisih} HARI LAGI`, c: "bg-[#1F5FD1] text-white" }
             : { t: "SUDAH LEWAT", c: "bg-[#8895A7] text-white" };
   return (
-    <p className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] font-bold text-[#0F3D7A]">
-      <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold tracking-wide ${pita.c}`}>{pita.t}</span>
+    <p className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] font-bold text-[#0F2A52]">
+      <span className={`rounded-[7px] px-1.5 py-0.5 text-[10.5px] font-extrabold tracking-wide ${pita.c}`}>{pita.t}</span>
       <span>
         {teks}
         {jam ? ` · ${jam}` : ""}
@@ -55,8 +57,51 @@ function LabelHari({ tglIso, nowMs, jam }: { tglIso: string; nowMs: number; jam?
   );
 }
 
-const TOMBOL = "mt-2 inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-[13.5px] font-extrabold shadow-sm transition";
-const TOMBOL_O = `${TOMBOL} border border-[#CDD5DE] bg-white text-[#14202E] hover:bg-[#F8FAFC]`;
+/** Ikon garis ala mockup identitas SIGAP (22 px, stroke 1.8). */
+function Ikon({ n, className = "h-[22px] w-[22px]" }: { n: "lonceng" | "info" | "centang" | "daftar" | "awas"; className?: string }) {
+  const d: Record<string, React.ReactNode> = {
+    lonceng: (
+      <>
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" />
+      </>
+    ),
+    info: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5M12 8h.01" />
+      </>
+    ),
+    centang: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8 12.5 2.8 2.8L16 9.5" />
+      </>
+    ),
+    daftar: (
+      <>
+        <path d="M10 6h10M10 12h10M10 18h10" />
+        <path d="m3.5 6 1.5 1.5L7.5 5" />
+        <path d="m3.5 12 1.5 1.5L7.5 11" />
+        <circle cx="5" cy="18" r="1.6" />
+      </>
+    ),
+    awas: (
+      <>
+        <path d="M12 3 2 20h20z" />
+        <path d="M12 10v5M12 17.5h.01" />
+      </>
+    ),
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={`flex-none ${className}`} aria-hidden>
+      {d[n]}
+    </svg>
+  );
+}
+
+const TOMBOL = "mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[13px] px-4 py-2.5 text-[14px] font-extrabold transition sm:w-auto";
+const TOMBOL_O = `${TOMBOL} border border-[#CBD6E6] bg-white text-[#1B2B4B] hover:bg-[#F5F8FE]`;
 
 /** Jam mulai & selesai pelatihan (ms epoch) dari tanggal_iso + "pukul" undangan, mis. "08.00–16.00 WIB". */
 function jendelaPelatihan(u: Hub["undangan"]): { mulai: number; selesai: number } {
@@ -79,7 +124,7 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
 
   const judul = LABEL_JENIS_TES[t.jenis];
   const href = `/sigap/pelatihan/tes/${t.jenis}`;
-  const ket = "text-[13px] text-[#55657D]";
+  const ket = "text-[13px] text-[#5B6B84]";
   const tgl = <LabelHari tglIso={tglWib(new Date(t.buka_at).getTime())} nowMs={now} jam={`${jamWib(t.buka_at)}–${jamWib(t.tutup_at)} WIB`} />;
   const isi = (() => {
   switch (t.status) {
@@ -91,8 +136,8 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
           <p className={ket}>
             {t.jumlah_soal} soal · {t.durasi_menit} menit sejak Mulai.
           </p>
-          <p className="mt-1 text-[20px] font-extrabold tabular-nums text-[#0F3D7A]">Dibuka dalam {formatSisa(sisaBuka)}</p>
-          <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]`}>
+          <p className="mt-1 text-[20px] font-extrabold tabular-nums text-[#0F2A52]">Dibuka dalam {formatSisa(sisaBuka)}</p>
+          <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#DDE6F3] text-[#6B7A90]`}>
             Belum dibuka
           </button>
         </>
@@ -103,8 +148,8 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
           <p className={ket}>
             {t.jumlah_soal} soal · {t.durasi_menit} menit sejak Mulai. Yang terlambat mulai, waktunya berkurang.
           </p>
-          <p className="mt-1 text-[13px] font-semibold text-[#9A6200]">Sesi ditutup dalam {formatSisa(sisaTutup)}</p>
-          <Link href={href} className={`${TOMBOL} bg-[#1E7A4C] text-white hover:bg-[#17623C]`}>
+          <p className="mt-1 text-[13px] font-semibold text-[#8A6200]">Sesi ditutup dalam {formatSisa(sisaTutup)}</p>
+          <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
             Mulai {judul} →
           </Link>
         </>
@@ -115,8 +160,8 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
           <p className={ket}>
             Terjawab {t.sesi?.terjawab ?? 0} dari {t.jumlah_soal} soal. Jawaban tersimpan otomatis.
           </p>
-          <p className={`mt-1 text-[20px] font-extrabold tabular-nums ${sisaBatas < 60 ? "text-[#C0392B]" : "text-[#0F3D7A]"}`}>Sisa waktu {formatSisa(sisaBatas)}</p>
-          <Link href={href} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+          <p className={`mt-1 text-[20px] font-extrabold tabular-nums ${sisaBatas < 60 ? "text-[#B42329]" : "text-[#0F2A52]"}`}>Sisa waktu {formatSisa(sisaBatas)}</p>
+          <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
             Lanjutkan mengerjakan →
           </Link>
         </>
@@ -127,15 +172,15 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
           <p className={ket}>
             Jawaban tersimpan ({t.sesi?.terjawab ?? 0} dari {t.jumlah_soal} soal terjawab){(t.percobaan ?? 1) > 1 ? ` · percobaan ke-${t.percobaan}` : ""}.
           </p>
-          <p className="mt-1 text-[12.5px] font-semibold text-[#9A6200]">
+          <p className="mt-1 text-[12.5px] font-semibold text-[#8A6200]">
             Skor &amp; pembahasan tampil setelah sesi ditutup pukul {jamWib(t.tutup_at)} WIB ({formatSisa(sisaTutup)} lagi).
           </p>
           {t.bisa_ulang && (
             <>
-              <p className="mt-1.5 text-[12.5px] text-[#55657D]">
+              <p className="mt-1.5 text-[12.5px] text-[#5B6B84]">
                 Boleh mengulang (percobaan ke-{t.percobaan} dari {t.ulang_maks}); nilai yang dipakai = skor tertinggi.
               </p>
-              <Link href={href} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+              <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
                 Ulangi {judul} →
               </Link>
             </>
@@ -144,11 +189,11 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
       ) : (
         <>
           <p className={ket}>
-            Skor <b className="text-[17px] text-[#0F3D7A]">{t.skor ?? "–"}</b> · benar {t.benar ?? 0} dari {t.total ?? t.jumlah_soal} soal.
-            {(t.percobaan ?? 1) > 1 && <span className="text-[12px] text-[#7B8794]"> (tertinggi dari {t.percobaan} percobaan)</span>}
+            Skor <b className="text-[17px] text-[#0F2A52]">{t.skor ?? "–"}</b> · benar {t.benar ?? 0} dari {t.total ?? t.jumlah_soal} soal.
+            {(t.percobaan ?? 1) > 1 && <span className="text-[12px] text-[#6B7A90]"> (tertinggi dari {t.percobaan} percobaan)</span>}
           </p>
           {t.bisa_ulang && (
-            <Link href={href} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+            <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
               Ulangi {judul} →
             </Link>
           )}
@@ -211,12 +256,12 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
   const aktif = live ? live.aktif : k.ada_ruang_aktif;
   const status = live ? live.status : k.status;
   const judul = live?.judul ?? k.judul;
-  const ket = "text-[13px] text-[#55657D]";
+  const ket = "text-[13px] text-[#5B6B84]";
   if (aktif)
     return (
       <>
-        <p className="text-[13px] font-semibold text-[#17623C]">{status === "lobi" ? "Adu Sigap dibuka — ayo bergabung!" : "Adu Sigap sedang berlangsung."}{judul ? ` · ${judul}` : ""}</p>
-        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}&gabung=1`} className={`${TOMBOL} w-full bg-[#46178F] text-white hover:bg-[#3a1275]`}>
+        <p className="text-[13px] font-semibold text-[#13794B]">{status === "lobi" ? "Adu Sigap dibuka — ayo bergabung!" : "Adu Sigap sedang berlangsung."}{judul ? ` · ${judul}` : ""}</p>
+        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}&gabung=1`} className={`${TOMBOL} w-full bg-[#0F2A52] text-white hover:bg-[#0A1E3D]`}>
           {k.sudah_gabung ? "🎮 Masuk kembali ke kuis →" : "🎮 Gabung kuis →"}
         </Link>
       </>
@@ -225,7 +270,7 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
     return (
       <>
         <p className={ket}>Anda sudah ikut kuis. Skor dicatat sebagai nilai tambahan.</p>
-        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">Lihat hasil</Link>
+        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F5FD1] underline">Lihat hasil</Link>
       </>
     );
   if (k.ada_ruang_selesai) return <p className={ket}>Kuis sudah selesai dan Anda belum tercatat ikut.</p>;
@@ -300,7 +345,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
     }
   }
 
-  const ket = "text-[13px] text-[#55657D]";
+  const ket = "text-[13px] text-[#5B6B84]";
   // (7 Okt 2026) bisa lebih dari satu titik (Mami Hotel / Ully Hotel Solok): peserta cukup berada di salah satunya
   const lokasiTeks = peng.titik.length ? namaTitik(peng.titik) : tempat;
   const radiusTeks = [...new Set(peng.titik.map((t) => t.radius_m))].map((r) => `${r} m`).join(" / ") || "—";
@@ -309,7 +354,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   const ringkasSesi = banyak && (
     <p className="mb-1.5 flex flex-wrap gap-1">
       {kead.sesi.map((x) => {
-        const gaya = x.status === "selesai" ? "bg-[#DDF3E6] text-[#17623C]" : x.status === "terbuka" ? "bg-[#E3EEFB] text-[#0F3D7A]" : x.status === "terlewat" ? "bg-[#FBE4E1] text-[#B5352D]" : "bg-[#EEF1F5] text-[#7B8794]";
+        const gaya = x.status === "selesai" ? "bg-[#E3F6EC] text-[#13794B]" : x.status === "terbuka" ? "bg-[#E6EEFC] text-[#0F2A52]" : x.status === "terlewat" ? "bg-[#FDE8E8] text-[#B42329]" : "bg-[#EEF2F7] text-[#6B7A90]";
         const ikon = x.status === "selesai" ? "✓" : x.status === "terbuka" ? "●" : x.status === "terlewat" ? "✕" : "○";
         const teks = x.status === "selesai" ? `${x.at ? jamWib(x.at) : "–"} WIB` : x.status === "terbuka" ? `sampai ${jamWib(x.tutup_at)}` : x.status === "terlewat" ? "terlewat" : `${jamWib(x.buka_at)}–${jamWib(x.tutup_at)}`;
         return (
@@ -327,7 +372,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
     return (
       <>
         {ringkasSesi}
-        <p className="text-[13px] font-semibold text-[#17623C]">
+        <p className="text-[13px] font-semibold text-[#13794B]">
           {banyak
             ? `✓ Presensi hari ini lengkap (${kead.selesai} dari ${kead.total} sesi).`
             : `✓ Presensi tercatat pukul ${x.at ? jamWib(x.at) : "–"} WIB${x.manual ? " (dicatat panitia)" : x.jarak_m != null ? ` · ${teksJarak(x.jarak_m)} dari ${x.titik_nama ?? tempat}` : ""}.`}
@@ -345,16 +390,16 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
         {ringkasSesi}
         {b ? (
           <>
-            {kead.selesai > 0 && <p className="mb-1 text-[13px] font-semibold text-[#17623C]">✓ {kead.selesai} dari {kead.total} presensi hari ini sudah tercatat.</p>}
+            {kead.selesai > 0 && <p className="mb-1 text-[13px] font-semibold text-[#13794B]">✓ {kead.selesai} dari {kead.total} presensi hari ini sudah tercatat.</p>}
             <p className={ket}>
               {banyak ? `Presensi ${b.nama} dibuka` : "Presensi dibuka"} pukul {jamWib(b.buka_at)} WIB. Tombol aktif otomatis saat jam dibuka; Anda harus berada dalam radius {radiusTeks} dari {lokasiTeks}.
             </p>
-            <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]`}>
+            <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#DDE6F3] text-[#6B7A90]`}>
               Belum dibuka
             </button>
           </>
         ) : (
-          <p className="text-[13px] font-semibold text-[#C0392B]">
+          <p className="text-[13px] font-semibold text-[#B42329]">
             {banyak ? `Presensi ${kead.sesi.filter((x) => x.status === "terlewat").map((x) => x.nama).join(", ")} sudah ditutup dan belum tercatat untuk Anda.` : `Presensi sudah ditutup (pukul ${jamWib(kead.sesi[0].tutup_at)} WIB) dan belum tercatat untuk Anda.`} Hubungi panitia.
           </p>
         )}
@@ -372,10 +417,10 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
       <p className={ket}>
         Harus berada dalam radius {radiusTeks} dari {lokasiTeks}. {banyak ? `Presensi ${aktif.nama} dibuka` : "Presensi dibuka"} sampai pukul {jamWib(aktif.tutup_at)} WIB.
       </p>
-      {membaca && <p className="mt-1 text-[13px] font-semibold text-[#55657D]">Membaca lokasi Anda…</p>}
-      {gpsGalat && <p className="mt-1 text-[13px] font-semibold text-[#9A6200]">{gpsGalat}</p>}
+      {membaca && <p className="mt-1 text-[13px] font-semibold text-[#5B6B84]">Membaca lokasi Anda…</p>}
+      {gpsGalat && <p className="mt-1 text-[13px] font-semibold text-[#8A6200]">{gpsGalat}</p>}
       {pos && jarak != null && !membaca && (
-        <p className={`mt-1 text-[13px] font-semibold ${dalam ? "text-[#17623C]" : "text-[#C0392B]"}`}>
+        <p className={`mt-1 text-[13px] font-semibold ${dalam ? "text-[#13794B]" : "text-[#B42329]"}`}>
           {akurasiBuruk
             ? `Sinyal GPS lemah (±${Math.round(pos.akurasi)} m, maksimal ±${peng.akurasi_maks_m} m). Pindah ke area terbuka lalu segarkan lokasi.`
             : dalam
@@ -383,16 +428,16 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
               : `Anda berada ${teksJarak(jarak)} dari ${dekat!.titik.nama} (titik terdekat) — di luar radius ${dekat!.titik.radius_m} m. Datanglah ke lokasi lalu segarkan lokasi.`}
         </p>
       )}
-      {galatKirim && <p className="mt-1 text-[13px] font-semibold text-[#C0392B]">{galatKirim}</p>}
+      {galatKirim && <p className="mt-1 text-[13px] font-semibold text-[#B42329]">{galatKirim}</p>}
       <button
         type="button"
         disabled={!dalam || kirim || membaca}
         onClick={presensi}
-        className={`${TOMBOL} w-full ${dalam && !kirim && !membaca ? "bg-[#1E7A4C] text-white hover:bg-[#17623C]" : "cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]"}`}
+        className={`${TOMBOL} ${dalam && !kirim && !membaca ? "bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]" : "cursor-not-allowed bg-[#DDE6F3] text-[#6B7A90]"}`}
       >
         {kirim ? "Mencatat…" : dalam ? (banyak ? `✓ Presensi ${aktif.nama} sekarang` : "✓ Presensi sekarang") : "Presensi (belum di dalam radius)"}
       </button>
-      <button type="button" onClick={baca} disabled={membaca} className="mt-1.5 text-[12.5px] font-semibold text-[#1F6FD1] underline disabled:opacity-50">
+      <button type="button" onClick={baca} disabled={membaca} className="mt-1.5 text-[12.5px] font-semibold text-[#1F5FD1] underline disabled:opacity-50">
         ↻ Segarkan lokasi
       </button>
     </>
@@ -411,42 +456,42 @@ function ModalSelesai({ r, tutup, lanjut }: { r: Rayakan; tutup: () => void; lan
   }, [tutup]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={tutup}>
-      <div role="dialog" aria-modal="true" aria-labelledby="judul-selesai" className="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="judul-selesai" className="w-full max-w-sm rounded-[22px] bg-white p-5 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-[44px] leading-none" aria-hidden>
           🎉
         </div>
-        <h2 id="judul-selesai" className="mt-2 text-[20px] font-extrabold text-[#17623C]">
+        <h2 id="judul-selesai" className="mt-2 text-[20px] font-extrabold text-[#0F2A52]">
           Yeay! {r.semua ? "Semua tahapan selesai" : "Tahapan selesai"}
         </h2>
-        <p className="mt-2 text-[14.5px] leading-relaxed text-[#14202E]">
+        <p className="mt-2 text-[14.5px] leading-relaxed text-[#1B2B4B]">
           Kamu sudah menyelesaikan tahapan{r.selesai.length > 1 ? ":" : ""}
         </p>
         <ul className="mt-1.5 space-y-1">
           {r.selesai.map((x) => (
-            <li key={x.no} className="rounded-lg bg-[#DDF3E6] px-3 py-1.5 text-[14px] font-bold text-[#17623C]">
+            <li key={x.no} className="rounded-lg bg-[#E3F6EC] px-3 py-1.5 text-[14px] font-bold text-[#13794B]">
               ✓ {x.no}. {x.judul}
             </li>
           ))}
         </ul>
         {r.berikut ? (
           <>
-            <p className="mt-3 text-[13.5px] text-[#55657D]">
-              Selanjutnya: <b className="text-[#14202E]">{r.berikut.no}. {r.berikut.judul}</b>
+            <p className="mt-3 text-[13.5px] text-[#5B6B84]">
+              Selanjutnya: <b className="text-[#1B2B4B]">{r.berikut.no}. {r.berikut.judul}</b>
             </p>
-            <button ref={tombol} type="button" onClick={() => lanjut(r.berikut!.kode)} className="mt-3 w-full rounded-xl bg-[#1F6FD1] px-4 py-3 text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0]">
+            <button ref={tombol} type="button" onClick={() => lanjut(r.berikut!.kode)} className="mt-3 w-full rounded-[13px] bg-[#1F5FD1] px-4 py-3 text-[14.5px] font-extrabold text-white hover:bg-[#1A4FB8]">
               Lanjut ke langkah berikutnya →
             </button>
           </>
         ) : (
           <>
-            <p className="mt-3 text-[13.5px] text-[#55657D]">{r.semua ? "Terima kasih, seluruh langkah pelatihan sudah kamu selesaikan." : "Langkah lain menyusul sesuai jadwal."}</p>
-            <button ref={tombol} type="button" onClick={tutup} className="mt-3 w-full rounded-xl bg-[#1E7A4C] px-4 py-3 text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#17623C]">
+            <p className="mt-3 text-[13.5px] text-[#5B6B84]">{r.semua ? "Terima kasih, seluruh langkah pelatihan sudah kamu selesaikan." : "Langkah lain menyusul sesuai jadwal."}</p>
+            <button ref={tombol} type="button" onClick={tutup} className="mt-3 w-full rounded-[13px] bg-[#1F5FD1] px-4 py-3 text-[14.5px] font-extrabold text-white hover:bg-[#1A4FB8]">
               Tutup
             </button>
           </>
         )}
         {r.berikut && (
-          <button type="button" onClick={tutup} className="mt-2 w-full rounded-xl border border-[#CDD5DE] bg-white px-4 py-2.5 text-[14px] font-bold text-[#14202E] hover:bg-[#F8FAFC]">
+          <button type="button" onClick={tutup} className="mt-2 w-full rounded-[13px] border border-[#CBD6E6] bg-white px-4 py-2.5 text-[14px] font-bold text-[#1B2B4B] hover:bg-[#F5F8FE]">
             Tutup
           </button>
         )}
@@ -574,29 +619,62 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
   return hasil;
 }
 
-function KotakPemandu({ p, ke }: { p: Pemandu; ke: (kode: string) => void }) {
-  const warna = p.nada === "ok" ? "border-[#BFE5CD] bg-[#F1FAF4] text-[#17623C]" : p.nada === "ingat" ? "border-[#F0D58A] bg-[#FFF8E1] text-[#7A4F00]" : "border-[#BBD4F5] bg-[#F3F8FF] text-[#0F3D7A]";
+/** (8 Okt 2026) Peringatan merah: ada kegiatan pelatihan yang waktunya sudah ditutup dan belum dikerjakan -> pelatihan tidak lengkap. */
+function PeringatanTerlewat({ daftar }: { daftar: string[] }) {
+  if (daftar.length === 0) return null;
   return (
-    <div className={`rounded-xl border px-3.5 py-3 ${warna}`} role="status">
-      {p.terima && <p className="mb-1.5 text-[12.5px] font-bold text-[#17623C]">✓ {p.terima}</p>}
-      <p className="flex items-start gap-2 text-[14px] font-extrabold leading-snug">
-        <span aria-hidden>{p.ikon}</span>
-        <span>{p.judul}</span>
+    <div role="alert" className="rounded-[18px] border border-[#F2B8BA] bg-[#FDE8E8] px-4 py-3.5 text-[#7A1D22] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
+      <p className="flex items-start gap-2.5 text-[14.5px] font-extrabold leading-snug text-[#B42329]">
+        <Ikon n="awas" className="mt-px h-5 w-5" />
+        <span>Ada kegiatan pelatihan yang terlewat</span>
       </p>
-      {p.teks && <p className="mt-1 pl-6 text-[13px] leading-relaxed text-[#14202E]">{p.teks}</p>}
+      <p className="mt-1.5 pl-[30px] text-[13px] leading-relaxed">
+        Waktunya sudah ditutup, sehingga <b>kegiatan pelatihan Anda tidak lengkap</b>. Yang terlewat:
+      </p>
+      <ul className="mt-1 list-disc pl-12 text-[13px] font-semibold">
+        {daftar.map((x) => (
+          <li key={x}>{x}</li>
+        ))}
+      </ul>
+      <p className="mt-1.5 pl-[30px] text-[12.5px] leading-relaxed">Bila ada kendala (sinyal, lokasi HP, atau lainnya), segera hubungi panitia agar dapat ditinjau.</p>
+    </div>
+  );
+}
+
+function KotakPemandu({ p, ke }: { p: Pemandu; ke: (kode: string) => void }) {
+  // (8 Okt 2026) Mengikuti mockup "Tugas utama": kartu putih, petak ikon bergradasi biru, satu tombol biru penuh di bawah.
+  const label = p.nada === "ok" ? "SELESAI" : p.nada === "ingat" ? "LANGKAH BERIKUTNYA" : "INFO";
+  const ikon = p.nada === "ok" ? "centang" : p.nada === "ingat" ? "lonceng" : "info";
+  const petak = p.nada === "ok" ? "bg-[#13794B]" : p.nada === "ingat" ? "bg-gradient-to-br from-[#3B78E0] to-[#1A4590]" : "bg-gradient-to-br from-[#5B6B84] to-[#3A4A66]";
+  const tombol = "mt-3 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]";
+  return (
+    <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.1)]" role="status">
+      <div className="flex items-center gap-2">
+        <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">{label}</span>
+      </div>
+      {p.terima && <p className="mt-1.5 text-[12.5px] font-bold text-[#13794B]">✓ {p.terima}</p>}
+      <div className="mt-2.5 flex items-start gap-3">
+        <span className={`grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] text-white ${petak}`}>
+          <Ikon n={ikon} className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15.5px] font-extrabold leading-snug text-[#0F2A52]">{p.judul}</p>
+          {p.teks && <p className="mt-1 text-[12.5px] leading-relaxed text-[#5B6B84]">{p.teks}</p>}
+        </div>
+      </div>
       {p.aksi &&
         (p.aksi.href ? (
-          <Link href={p.aksi.href} className="ml-6 mt-2 inline-flex items-center rounded-lg bg-[#1F6FD1] px-3.5 py-2 text-[13px] font-extrabold text-white hover:bg-[#1A5DB0]">
+          <Link href={p.aksi.href} className={tombol}>
             {p.aksi.label}
           </Link>
         ) : (
-          <button type="button" onClick={() => ke(p.aksi!.kode!)} className="ml-6 mt-2 inline-flex items-center rounded-lg bg-[#1F6FD1] px-3.5 py-2 text-[13px] font-extrabold text-white hover:bg-[#1A5DB0]">
+          <button type="button" onClick={() => ke(p.aksi!.kode!)} className={tombol}>
             {p.aksi.label}
           </button>
         ))}
-      {p.tertinggal && <p className="mt-2 pl-6 text-[12px] font-semibold text-[#55657D]">{p.tertinggal}</p>}
-      {p.catatan && <p className="mt-2 pl-6 text-[12px] font-semibold text-[#C0392B]">{p.catatan}</p>}
-    </div>
+      {p.tertinggal && <p className="mt-2.5 text-[12px] font-semibold text-[#5B6B84]">{p.tertinggal}</p>}
+      {p.catatan && <p className="mt-2 text-[12px] font-semibold text-[#B42329]">{p.catatan}</p>}
+    </section>
   );
 }
 
@@ -638,11 +716,11 @@ export default function HalamanPelatihan() {
       selesai: t?.status === "selesai",
       terlewat: t?.status === "terlewat",
       bisaSekarang: t?.status === "buka" || t?.status === "mengerjakan",
-      badan: t ? <IsiTes t={t} sekarangMs={jam.sekarang} segarkan={muat} /> : <p className="text-[13px] text-[#55657D]">Belum dijadwalkan panitia.</p>,
+      badan: t ? <IsiTes t={t} sekarangMs={jam.sekarang} segarkan={muat} /> : <p className="text-[13px] text-[#5B6B84]">Belum dijadwalkan panitia.</p>,
     });
     const tautan = (href: string, label: string, selesai: boolean) =>
       selesai ? (
-        <Link href={href} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">
+        <Link href={href} className="mt-1 inline-block text-[12px] font-semibold text-[#1F5FD1] underline">
           Buka kembali
         </Link>
       ) : (
@@ -672,24 +750,24 @@ export default function HalamanPelatihan() {
                 {slotIni.map((sl) => {
                   const sudah = L.slot.includes(sl);
                   return (
-                    <span key={sl} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${sudah ? "bg-[#DDF3E6] text-[#17623C]" : "bg-[#EEF1F5] text-[#7B8794]"}`}>
+                    <span key={sl} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${sudah ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#EEF2F7] text-[#6B7A90]"}`}>
                       {sudah ? "✓" : "○"} {LABEL_SLOT_FOTO[sl - 1] ?? `Foto ${sl}`}
                     </span>
                   );
                 })}
               </p>
             )}
-            <p className="text-[13px] text-[#55657D]">
+            <p className="text-[13px] text-[#5B6B84]">
               {selesai ? `Semua ${slotIni.length} foto sudah terunggah.` : ada > 0 ? `Baru ${ada} dari ${slotIni.length} foto terunggah. Lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.` : petunjuk}
             </p>
             {/* (8 Okt 2026) Tombol navigasi ke tempat unggah SELALU ada (juga sebelum hari pelatihan) -- permintaan user */}
             {data.token_translok &&
               (selesai ? (
-                <a href={`/sigap/translok/${data.token_translok}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F6FD1] underline">
+                <a href={`/sigap/translok/${data.token_translok}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F5FD1] underline">
                   Buka kembali
                 </a>
               ) : (
-                <a href={`/sigap/translok/${data.token_translok}`} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+                <a href={`/sigap/translok/${data.token_translok}`} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
                   {ada > 0 ? `Lengkapi foto yang kurang (${slotIni.length - ada}) →` : "Buka Transport Lokal →"}
                 </a>
               ))}
@@ -706,7 +784,7 @@ export default function HalamanPelatihan() {
         bisaSekarang: true,
         badan: (
           <>
-            <p className="text-[13px] text-[#55657D]">Kelas, jam, dan pakaian.</p>
+            <p className="text-[13px] text-[#5B6B84]">Kelas, jam, dan pakaian.</p>
             {tautan("/sigap/pelatihan/undangan", "Buka Undangan", !!L?.undangan_dibuka)}
           </>
         ),
@@ -719,7 +797,7 @@ export default function HalamanPelatihan() {
         bisaSekarang: true,
         badan: (
           <>
-            <p className="text-[13px] text-[#55657D]">Kuesioner &amp; buku pedoman.</p>
+            <p className="text-[13px] text-[#5B6B84]">Kuesioner &amp; buku pedoman.</p>
             {tautan("/sigap/pelatihan/instrumen", "Buka Instrumen", !!L?.instrumen_diunduh)}
           </>
         ),
@@ -738,7 +816,7 @@ export default function HalamanPelatihan() {
             {data.presensi ? (
               <IsiPresensi pres={data.presensi} nowMs={now} tempat={data.presensi.pengaturan.tempat ?? u.tempat} segarkan={muat} />
             ) : (
-              <p className="text-[13px] text-[#55657D]">{u.tempat}. Presensi belum diatur panitia.</p>
+              <p className="text-[13px] text-[#5B6B84]">{u.tempat}. Presensi belum diatur panitia.</p>
             )}
           </>
         ),
@@ -774,6 +852,7 @@ export default function HalamanPelatihan() {
   const wajib = langkah.filter((l) => !l.tambahan);
   const nSelesai = wajib.filter((l) => l.selesai).length;
   const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai) : null;
+  const terlewatDaftar = data && peserta ? daftarTerlewat(langkah, data.presensi ? keadaanHari(data.presensi.hari, now).sesi : null) : [];
 
   // (7 Okt 2026) Modal "Yeay": langkah yang baru selesai (belum pernah dirayakan di browser ini) dirayakan sekali.
   const kunciSelesai = langkah.filter((l) => l.selesai).map((l) => l.kode).join(",");
@@ -822,10 +901,10 @@ export default function HalamanPelatihan() {
   }, [antrianPeng, posPeng, idPeserta]);
 
   const warnaBulat: Record<Gaya, string> = {
-    done: "bg-[#1E7A4C] text-white",
-    now: "bg-[#1F6FD1] text-white shadow-[0_0_0_4px_#D6E6FB]",
-    miss: "bg-[#C0392B] text-white",
-    wait: "bg-[#E3E8EE] text-[#55657D]",
+    done: "bg-[#19A463] text-white",
+    now: "bg-[#1F5FD1] text-white shadow-[0_0_0_4px_#DCE8FB]",
+    miss: "bg-[#B42329] text-white",
+    wait: "bg-[#E1E9F6] text-[#5B6B84]",
   };
   const chipW: Record<Gaya, "ok" | "navy" | "bad" | undefined> = { done: "ok", now: "navy", miss: "bad", wait: undefined };
 
@@ -842,7 +921,7 @@ export default function HalamanPelatihan() {
         <Pesan jenis="info">
           Akun Anda tidak terdaftar sebagai peserta Pelatihan PSP Pascabencana 2026, jadi langkah pelatihan, pretest, dan posttest tidak tersedia untuk Anda.{" "}
           {data.boleh_lihat_kelola && (
-            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F6FD1] underline">
+            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F5FD1] underline">
               Buka Kelola Pelatihan
             </Link>
           )}
@@ -852,23 +931,37 @@ export default function HalamanPelatihan() {
         <>
           {modalPeng && antrianPeng && <ModalPengumuman key={modalPeng.id} d={modalPeng} posisi={posPeng + 1} jumlah={antrianPeng.length} lanjut={lanjutPeng} />}
           {antrianPeng !== null && !modalPeng && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
+          <PeringatanTerlewat daftar={terlewatDaftar} />
+          <AktifkanNotifikasi />
           {pemandu && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
-          <Kartu judul="Langkah Anda" kanan={<span className="text-[12px] font-semibold text-[#55657D]">{nSelesai} dari {wajib.length} selesai</span>}>
-            <div className="h-2 overflow-hidden rounded-full bg-[#E3E8EE]">
-              <div className="h-full rounded-full bg-[#1E7A4C] transition-all" style={{ width: `${(nSelesai / Math.max(1, wajib.length)) * 100}%` }} />
+          <Kartu
+            judul={
+              <span className="flex items-center gap-2.5">
+                <span className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#EAF1FC] text-[#1F5FD1]">
+                  <Ikon n="daftar" className="h-5 w-5" />
+                </span>
+                Langkah Anda
+              </span>
+            }
+            kanan={<Chip w={nSelesai === wajib.length ? "ok" : "wait"}>{nSelesai} dari {wajib.length} selesai</Chip>}
+          >
+            <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${Math.max(1, wajib.length)}, minmax(0, 1fr))` }} role="img" aria-label={`${nSelesai} dari ${wajib.length} langkah selesai`}>
+              {wajib.map((l) => (
+                <span key={l.kode} className={`h-1.5 rounded-[3px] ${l.selesai ? "bg-[#19A463]" : l.terlewat ? "bg-[#E5484D]" : l.bisaSekarang ? "bg-[#1F5FD1]" : "bg-[#E1E9F6]"}`} />
+              ))}
             </div>
-            <p className="mt-1 text-[12px] text-[#7B8794]">Sekarang: {waktuWib(new Date(now).toISOString())}</p>
+            <p className="mt-2 text-[12px] text-[#6B7A90]">Sekarang: {waktuWib(new Date(now).toISOString())}</p>
             <ol className="mt-3">
               {langkah.map((l, i) => {
                 const { g, chip } = gaya[i];
                 return (
                   <li key={l.kode} id={`langkah-${l.kode}`} className="relative flex gap-3 pb-4 last:pb-0">
-                    {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#1E7A4C]" : "bg-[#E3E8EE]"}`} aria-hidden />}
+                    {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} aria-hidden />}
                     <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
                       {g === "done" ? "✓" : g === "miss" ? "!" : i + 1}
                     </span>
-                    <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-xl border border-[#BBD4F5] bg-[#F3F8FF] p-2.5" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[14px] font-bold">
+                    <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-[14px] border border-[#D6E4FA] bg-[#F5F8FE] p-3" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-extrabold text-[#0F2A52]">
                         {l.judul} <Chip w={chipW[g]}>{chip}</Chip>
                       </div>
                       <div className="mt-0.5">{l.badan}</div>
@@ -878,7 +971,7 @@ export default function HalamanPelatihan() {
               })}
             </ol>
           </Kartu>
-          <div className="rounded-xl border border-[#E3E8EE] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#55657D]">
+          <div className="rounded-[14px] border border-[#DDE6F3] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5B6B84]">
             Waktu mengikuti jam server. Skor &amp; pembahasan tampil setelah sesi tes ditutup; sebelum itu hanya tampil &ldquo;jawaban tersimpan&rdquo;.
           </div>
         </>

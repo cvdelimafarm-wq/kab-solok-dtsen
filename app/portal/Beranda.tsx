@@ -7,7 +7,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
+import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import GantiPinCepat from "./GantiPinCepat";
+import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 
@@ -25,13 +27,13 @@ const NADA: Record<string, string> = {
   aktif: "bg-[#E3F4EE] text-[#1E7A5E]",
   tenggang: "bg-[#FDF1DC] text-[#8A5A0B]",
   arsip: "bg-[#EDF1F5] text-[#4D5B6B]",
-  info: "bg-[#E8F1FC] text-[#1A5DB0]",
+  info: "bg-[#E8F1FC] text-[#1A50B5]",
   peringatan: "bg-[#FDECEA] text-[#8A2B1D]",
 };
 
 const GARIS: Record<Kartu["grup"], string> = {
-  tugas: "border-l-[#1F6FD1]",
-  kelola: "border-l-[#D9971F]",
+  tugas: "border-l-[#1F5FD1]",
+  kelola: "border-l-[#F4B400]",
   referensi: "border-l-[#3DBB98]",
   riwayat: "border-l-[#B8C2CE]",
 };
@@ -59,6 +61,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   }, [muat]);
 
   async function keluar() {
+    // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
+    await Promise.race([matikanPush(), new Promise((r) => setTimeout(r, 2500))]);
     hapusSemuaSesi();
     if (dtsen) await createClient().auth.signOut().catch(() => {});
     onKeluar();
@@ -94,9 +98,18 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
 
   return (
     <main className="min-h-screen bg-[#F3F5F8] pb-12 text-[#14202E]">
-      <header className="bg-[#0E2A47] px-4 pb-16 pt-5 text-white sm:px-8">
+      <header className="bg-gradient-to-b from-[#1A4590] to-[#0F2A52] px-4 pb-16 pt-5 text-white sm:px-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <span className="text-[12.5px] font-bold italic tracking-wide">BPS KABUPATEN SOLOK</span>
+          <span className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/sigap-logo.png" alt="Logo SIGAP" width={32} height={31} className="h-full w-full object-contain" />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-[15px] font-extrabold tracking-wide">SIGAP</span>
+              <span className="block text-[11px] text-[#C9D6E6]">BPS Kabupaten Solok</span>
+            </span>
+          </span>
           <button type="button" onClick={keluar} className="rounded-md border border-[#3A5675] px-3 py-1.5 text-[12.5px] text-[#C9D6E6] hover:bg-[#1C3D61]">
             Keluar
           </button>
@@ -116,6 +129,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       </header>
 
       <div className="relative z-10 mx-auto -mt-10 max-w-5xl space-y-6 px-4">
+        {data && <AktifkanNotifikasi />}
         {data?.pin_bawaan && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F0D9A0] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4A00]" role="alert">
             <span aria-hidden className="text-[20px]">⚠️</span>
@@ -171,7 +185,7 @@ function KartuItem({ k, sibuk, onSso }: { k: Kartu; sibuk: boolean; onSso: () =>
   const isi = (
     <div
       className={`flex h-full flex-col gap-2 rounded-xl border border-l-4 p-4 transition ${
-        gelap ? "border-[#0E2A47] border-l-[#D9971F] bg-[#0E2A47] text-white" : `border-[#E3E8EE] bg-white ${GARIS[k.grup]}`
+        gelap ? "border-[#0F2A52] border-l-[#F4B400] bg-[#0F2A52] text-white" : `border-[#E3E8EE] bg-white ${GARIS[k.grup]}`
       } ${k.href || k.sso ? "hover:-translate-y-0.5 hover:shadow-md" : "opacity-80"}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -180,7 +194,7 @@ function KartuItem({ k, sibuk, onSso }: { k: Kartu; sibuk: boolean; onSso: () =>
       </div>
       <p className={`text-[13px] leading-relaxed ${gelap ? "text-[#C9D6E6]" : "text-[#4D5B6B]"}`}>{k.uraian}</p>
       {(k.href || k.sso) && (
-        <span className={`mt-auto text-[13px] font-semibold ${gelap ? "text-[#F2C46D]" : "text-[#1F6FD1]"}`}>{sibuk ? "Membuka…" : `${k.label_aksi ?? "Buka"} →`}</span>
+        <span className={`mt-auto text-[13px] font-semibold ${gelap ? "text-[#F2C46D]" : "text-[#1F5FD1]"}`}>{sibuk ? "Membuka…" : `${k.label_aksi ?? "Buka"} →`}</span>
       )}
     </div>
   );

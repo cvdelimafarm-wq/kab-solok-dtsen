@@ -13,7 +13,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // (8 Okt 2026) PWA: warna bilah status HP saat dibuka sebagai aplikasi -- permintaan user
-  themeColor: "#0F3D7A",
+  // (8 Okt 2026) identitas visual SIGAP: navy #0F2A52
+  themeColor: "#0F2A52",
 };
 
 const jakarta = Plus_Jakarta_Sans({
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(ALAMAT_DASAR),
   title: { default: NAMA_PORTAL, template: "%s · BPS Kabupaten Solok" },
   description: DESKRIPSI_PORTAL,
-  applicationName: NAMA_PORTAL,
+  applicationName: "SIGAP",
   openGraph: {
     type: "website",
     siteName: NAMA_PORTAL,
@@ -34,8 +35,8 @@ export const metadata: Metadata = {
     title: NAMA_PORTAL,
     description: DESKRIPSI_PORTAL,
   },
-  // (8 Okt 2026) PWA: ikon & mode aplikasi di iPhone (manifest Android dari app/manifest.ts) -- permintaan user
-  icons: { icon: "/ikon/ikon-192.png", apple: "/ikon/apple-touch-icon.png" },
+  // (8 Okt 2026) PWA: mode aplikasi di iPhone (manifest dari app/manifest.ts). Ikon tab/layar utama dari berkas app/favicon.ico, app/icon.png,
+  // app/apple-icon.png (Next.js membuat tag-nya otomatis), jadi tidak diatur lagi di sini.
   appleWebApp: { capable: true, title: "SIGAP", statusBarStyle: "default" },
   twitter: { card: "summary_large_image", title: NAMA_PORTAL, description: DESKRIPSI_PORTAL },
 };

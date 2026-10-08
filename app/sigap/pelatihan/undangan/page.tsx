@@ -14,7 +14,7 @@ import { Kerangka, peranLabel, useHub } from "../komponen";
 function Baris({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex gap-3 border-b border-[#EDF0F4] py-2 text-[13.5px] last:border-0">
-      <dt className="w-24 shrink-0 text-[#7B8794]">{k}</dt>
+      <dt className="w-24 shrink-0 text-[#6B7A90]">{k}</dt>
       <dd className="min-w-0 flex-1 font-semibold">{v}</dd>
     </div>
   );
@@ -54,7 +54,7 @@ export default function HalamanUndangan() {
         <Pesan jenis="info">
           Akun Anda tidak terdaftar sebagai peserta pelatihan, sehingga undangan pribadi tidak tersedia.{" "}
           {data.boleh_lihat_kelola && (
-            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F6FD1] underline">
+            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F5FD1] underline">
               Buka Kelola Pelatihan
             </Link>
           )}
@@ -71,12 +71,12 @@ export default function HalamanUndangan() {
               <Baris k="Pukul" v={u.pukul} />
               <Baris k="Tempat" v={u.tempat} />
             </dl>
-            <p className="mt-2 rounded-lg bg-[#F6F8FB] px-3 py-2 text-[12.5px] leading-relaxed text-[#55657D]">
+            <p className="mt-2 rounded-lg bg-[#F6F8FB] px-3 py-2 text-[12.5px] leading-relaxed text-[#5B6B84]">
               <b>Pakaian:</b> {u.pakaian}
             </p>
           </Kartu>
 
-          <Kartu judul="Ketentuan transpor lokal" className="border-l-4 border-l-[#D9971F]">
+          <Kartu judul="Ketentuan transpor lokal" className="border-l-4 border-l-[#F4B400]">
             <p className="text-[13px] leading-relaxed">
               Seluruh peserta dibayarkan transpor lokal sehingga <b>wajib melampirkan 5 foto ber-time stamp</b>:
             </p>
@@ -89,7 +89,7 @@ export default function HalamanUndangan() {
             </ol>
             <p className="mt-2 text-[13px]">Seluruh foto diunggah lewat SIGAP, menu Transport Lokal.</p>
             {data.peserta && (
-              <Link href="/sigap" className="mt-2 inline-block text-[13px] font-bold text-[#1F6FD1] underline">
+              <Link href="/sigap" className="mt-2 inline-block text-[13px] font-bold text-[#1F5FD1] underline">
                 Buka menu Transport Lokal di portal
               </Link>
             )}
@@ -100,9 +100,9 @@ export default function HalamanUndangan() {
               <table className="w-full border-collapse text-[13px]">
                 <thead>
                   <tr>
-                    <th className="border-b border-[#CDD5DE] bg-[#F8FAFC] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Waktu (WIB)</th>
-                    <th className="border-b border-[#CDD5DE] bg-[#F8FAFC] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Materi</th>
-                    <th className="border-b border-[#CDD5DE] bg-[#F8FAFC] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Ket.</th>
+                    <th className="border-b border-[#CBD6E6] bg-[#F5F8FE] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Waktu (WIB)</th>
+                    <th className="border-b border-[#CBD6E6] bg-[#F5F8FE] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Materi</th>
+                    <th className="border-b border-[#CBD6E6] bg-[#F5F8FE] px-2.5 py-2 text-left text-[12px] font-semibold text-[#4D5B6B]">Ket.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -114,15 +114,15 @@ export default function HalamanUndangan() {
                           <div key={k}>{m}</div>
                         ))}
                       </td>
-                      <td className="px-2.5 py-2 text-[#55657D]">{j.ket}</td>
+                      <td className="px-2.5 py-2 text-[#5B6B84]">{j.ket}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="mt-2 text-[12.5px] text-[#55657D]">
+            <p className="mt-2 text-[12.5px] text-[#5B6B84]">
               Pretest dan posttest (masing-masing 15 menit) dikerjakan lewat menu{" "}
-              <Link href="/sigap/pelatihan" className="font-bold text-[#1F6FD1] underline">
+              <Link href="/sigap/pelatihan" className="font-bold text-[#1F5FD1] underline">
                 Pelatihan
               </Link>
               .
@@ -141,7 +141,7 @@ export default function HalamanUndangan() {
           <button type="button" onClick={bukaPdf} disabled={unduh} className={`${BTN} w-full !py-3 !text-[14px]`}>
             {unduh ? "Menyiapkan PDF…" : "⬇ Unduh PDF Undangan"}
           </button>
-          <p className="text-center text-[11.5px] text-[#7B8794]">
+          <p className="text-center text-[11.5px] text-[#6B7A90]">
             {u.ttd.jabatan}, {u.ttd.nama}
           </p>
         </>

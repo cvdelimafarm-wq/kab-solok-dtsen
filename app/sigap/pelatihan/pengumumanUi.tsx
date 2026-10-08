@@ -9,9 +9,9 @@ import { Fragment, useEffect, useRef } from "react";
 import { IKON_PENGUMUMAN, JUDUL_BAWAAN_PENGUMUMAN, uraiIsi, urlAman, type JenisPengumuman, type Sebaris } from "@/lib/sigapPengumuman";
 
 const GAYA: Record<JenisPengumuman, { ikon: string; judul: string }> = {
-  info: { ikon: "bg-[#E3EEFB]", judul: "text-[#0F3D7A]" },
-  perhatian: { ikon: "bg-[#FFF1CC]", judul: "text-[#9A6200]" },
-  penting: { ikon: "bg-[#FDECEA]", judul: "text-[#C0392B]" },
+  info: { ikon: "bg-[#E6EEFC]", judul: "text-[#0F2A52]" },
+  perhatian: { ikon: "bg-[#FFF1CC]", judul: "text-[#8A6200]" },
+  penting: { ikon: "bg-[#FDE8E8]", judul: "text-[#B42329]" },
 };
 
 function Potongan({ s }: { s: Sebaris }) {
@@ -22,7 +22,7 @@ function Potongan({ s }: { s: Sebaris }) {
       return <mark className="rounded px-0.5" style={{ background: "#FFE680" }}>{s.teks}</mark>;
     case "tautan":
       return (
-        <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-bold text-[#1F6FD1] underline">
+        <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-bold text-[#1F5FD1] underline">
           {s.teks}
         </a>
       );
@@ -35,7 +35,7 @@ function Potongan({ s }: { s: Sebaris }) {
 export function IsiPengumuman({ isi }: { isi: string }) {
   const blok = uraiIsi(isi);
   return (
-    <div className="space-y-2 text-[14.5px] leading-relaxed text-[#14202E]">
+    <div className="space-y-2 text-[14.5px] leading-relaxed text-[#1B2B4B]">
       {blok.map((b, i) =>
         b.tipe === "p" ? (
           <p key={i} className="whitespace-pre-line">
@@ -86,7 +86,7 @@ export function ModalPengumuman({ d, posisi, jumlah, lanjut, sebagaiPratinjau = 
           {IKON_PENGUMUMAN[d.jenis]}
         </span>
         <h2 className={`min-w-0 flex-1 break-words text-[18px] font-extrabold leading-tight ${g.judul}`}>{judul}</h2>
-        {jumlah > 1 && <span className="shrink-0 text-[11.5px] font-bold text-[#7B8794]">{posisi} dari {jumlah}</span>}
+        {jumlah > 1 && <span className="shrink-0 text-[11.5px] font-bold text-[#6B7A90]">{posisi} dari {jumlah}</span>}
       </div>
       {d.isi && (
         <div className="mt-3">
@@ -95,18 +95,18 @@ export function ModalPengumuman({ d, posisi, jumlah, lanjut, sebagaiPratinjau = 
       )}
       <div className="mt-3 flex flex-col gap-2">
         {d.tombol_label && d.tombol_url && urlAman(d.tombol_url) && (
-          <a href={d.tombol_url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1F6FD1] px-4 py-3 text-center text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0]">
+          <a href={d.tombol_url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1F5FD1] px-4 py-3 text-center text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8]">
             {d.tombol_label}
           </a>
         )}
-        <button ref={tombol} type="button" onClick={lanjut} className="w-full rounded-xl border border-[#CDD5DE] bg-white px-4 py-2.5 text-[14px] font-bold text-[#14202E] hover:bg-[#F8FAFC]">
+        <button ref={tombol} type="button" onClick={lanjut} className="w-full rounded-xl border border-[#CBD6E6] bg-white px-4 py-2.5 text-[14px] font-bold text-[#1B2B4B] hover:bg-[#F5F8FE]">
           {terakhir ? "Saya mengerti" : "Lanjut →"}
         </button>
       </div>
       {jumlah > 1 && (
         <div className="mt-3 flex justify-center gap-1.5" aria-hidden>
           {Array.from({ length: jumlah }, (_, i) => (
-            <i key={i} className={`block h-1.5 w-1.5 rounded-full ${i + 1 === posisi ? "bg-[#1F6FD1]" : "bg-[#CDD5DE]"}`} />
+            <i key={i} className={`block h-1.5 w-1.5 rounded-full ${i + 1 === posisi ? "bg-[#1F5FD1]" : "bg-[#CBD6E6]"}`} />
           ))}
         </div>
       )}
