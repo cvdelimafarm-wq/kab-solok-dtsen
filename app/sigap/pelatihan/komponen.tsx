@@ -12,6 +12,7 @@ import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
 import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
+import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
 
 export type TesHub = {
@@ -46,6 +47,8 @@ export type Hub = {
   presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null; hari: RingkasHari; pengaturan: PengaturanPresensi } | null;
   /** (7 Okt 2026) Kuis Live: null bila akun bukan peserta / belum ada kuis (langkah disembunyikan). */
   kuis: { ada_ruang_aktif: boolean; status: string | null; kelas: number | null; judul: string | null; sudah_gabung: boolean; pernah_ikut: boolean; ada_ruang_selesai: boolean; jadwal_at: string | null } | null;
+  /** (8 Okt 2026) Modal pengumuman yang tampil berurutan di halaman Langkah (diatur panitia). */
+  pengumuman: PengumumanPeserta[];
   token_translok: string | null;
   sekarang: string;
   kegiatan_id: number;

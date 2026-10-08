@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { keadaanHari, susunHari } from "@/lib/sigapPresensi";
+import { KOLOM_PENGUMUMAN, keBentukPeserta, tampilUntuk, type Pengumuman } from "@/lib/sigapPengumuman";
 import { UNDANGAN, statusTes } from "@/lib/sigapTes";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
@@ -94,6 +95,17 @@ export async function GET(req: NextRequest) {
       const { data: a } = await db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle();
       tokenTranslok = (a?.token as string | undefined) ?? null;
     }
+    // (8 Okt 2026) Modal pengumuman yang diatur panitia (Kelola Pelatihan > Pengumuman): hanya yang aktif, dalam jadwal, dan sesuai kelas/peran peserta.
+    // Gagal baca (mis. tabel belum ada) -> tanpa modal; tidak boleh menghalangi halaman Langkah.
+    let pengumuman: ReturnType<typeof keBentukPeserta>[] = [];
+    if (peserta) {
+      try {
+        const { data } = await db.from("sigap_pengumuman").select(KOLOM_PENGUMUMAN).eq("kegiatan_id", kegiatanId).eq("aktif", true).order("urut").order("id").limit(50);
+        pengumuman = ((data ?? []) as Pengumuman[]).filter((p) => tampilUntuk(p, peserta, sekarang)).map(keBentukPeserta);
+      } catch {
+        pengumuman = [];
+      }
+    }
     return NextResponse.json({
       nama: akun.nama,
       jenis_akun: akun.jenis,
@@ -103,6 +115,7 @@ export async function GET(req: NextRequest) {
       langkah,
       presensi,
       kuis,
+      pengumuman,
       token_translok: tokenTranslok,
       sekarang: sekarang.toISOString(),
       kegiatan_id: kegiatanId,

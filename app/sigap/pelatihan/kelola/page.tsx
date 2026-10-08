@@ -14,6 +14,7 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
+import PengumumanKelola from "./pengumuman";
 import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
@@ -38,7 +39,7 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring" | "kuis" | "administrasi";
+type TabK = "soal" | "monitoring" | "kuis" | "administrasi" | "pengumuman";
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
@@ -58,7 +59,7 @@ export default function KelolaPelatihan() {
     muat();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring" || t === "kuis" || t === "administrasi") setTab(t);
+      if (t === "monitoring" || t === "kuis" || t === "administrasi" || t === "pengumuman") setTab(t);
     } catch {
       /* abaikan */
     }
@@ -70,10 +71,11 @@ export default function KelolaPelatihan() {
       kecil="SIGAP · Kelola Pelatihan"
       jejak={["Pelatihan", "Kelola"]}
       judul="Kelola Pelatihan"
-      sub="Soal, jadwal, kuis live & monitoring · Pelatihan PSP Pascabencana 2026"
+      sub="Soal, jadwal, pengumuman, kuis live & monitoring · Pelatihan PSP Pascabencana 2026"
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Adu Sigap" },
+        { kode: "pengumuman", label: "📢 Pengumuman" },
         { kode: "monitoring", label: "Monitoring" },
         { kode: "administrasi", label: "🗂 Administrasi" },
       ]}
@@ -96,6 +98,7 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
+      {ringkas && tab === "pengumuman" && <PengumumanKelola />}
       {ringkas && tab === "kuis" && <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian />}
       {ringkas && tab === "administrasi" && <Administrasi />}

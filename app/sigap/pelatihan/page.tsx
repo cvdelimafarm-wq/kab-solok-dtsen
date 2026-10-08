@@ -15,10 +15,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
-import { LABEL_JENIS_TES, PEMUKAAN } from "@/lib/sigapTes";
+import { kunciSudahLihat, type PengumumanPeserta } from "@/lib/sigapPengumuman";
+import { LABEL_JENIS_TES } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
 import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
+import { ModalPengumuman } from "./pengumumanUi";
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -397,41 +399,6 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   );
 }
 
-/** (7 Okt 2026) Modal PERHATIAN: tampil setiap peserta membuka halaman Langkah (lokasi pembukaan berbeda dari tempat pelatihan). */
-function ModalPerhatian({ tutup }: { tutup: () => void }) {
-  const tombol = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    tombol.current?.focus();
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && tutup();
-    document.addEventListener("keydown", esc);
-    return () => document.removeEventListener("keydown", esc);
-  }, [tutup]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={tutup}>
-      <div role="dialog" aria-modal="true" aria-labelledby="judul-perhatian" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFF1CC] text-[20px]" aria-hidden>
-            ⚠️
-          </span>
-          <h2 id="judul-perhatian" className="text-[18px] font-extrabold tracking-wide text-[#9A6200]">
-            PERHATIAN
-          </h2>
-        </div>
-        <p className="mt-3 text-[15px] leading-relaxed text-[#14202E]">
-          <b>Pembukaan pelatihan dilakukan di {PEMUKAAN.tempat}</b>
-          <span className="text-[#55657D]"> ({PEMUKAAN.jarak}).</span>
-        </p>
-        <a href={PEMUKAAN.maps} target="_blank" rel="noopener noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1F6FD1] px-4 py-3 text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0]">
-          📍 Klik untuk buka Google Maps
-        </a>
-        <button ref={tombol} type="button" onClick={tutup} className="mt-2 w-full rounded-xl border border-[#CDD5DE] bg-white px-4 py-2.5 text-[14px] font-bold text-[#14202E] hover:bg-[#F8FAFC]">
-          Saya mengerti
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** (7 Okt 2026) Modal "Yeay": muncul sekali untuk tiap langkah yang baru selesai, lalu menunjuk langkah berikutnya. */
 type Rayakan = { selesai: { no: number; judul: string }[]; berikut: { kode: string; no: number; judul: string } | null; semua: boolean };
 function ModalSelesai({ r, tutup, lanjut }: { r: Rayakan; tutup: () => void; lanjut: (kode: string) => void }) {
@@ -638,8 +605,10 @@ type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolea
 export default function HalamanPelatihan() {
   const { data, galat, muat, jam } = useHub(30_000);
   const router = useRouter();
-  const [perhatian, setPerhatian] = useState(true); // tampil tiap halaman ini dibuka (khusus peserta)
-  const tutupPerhatian = useCallback(() => setPerhatian(false), []);
+  // (8 Okt 2026) Modal pengumuman dari panitia (Kelola Pelatihan > Pengumuman): antrian berurutan, ditentukan SEKALI saat data pertama
+  // tiba (supaya muat-ulang otomatis tiap 30 dtk tidak mengacak). Modal "sekali" yang sudah ditutup dicatat di browser.
+  const [antrianPeng, setAntrianPeng] = useState<PengumumanPeserta[] | null>(null);
+  const [posPeng, setPosPeng] = useState(0);
   const [rayakan, setRayakan] = useState<Rayakan | null>(null);
   const tutupRayakan = useCallback(() => setRayakan(null), []);
   const lanjutRayakan = useCallback((kode: string) => {
@@ -827,6 +796,31 @@ export default function HalamanPelatihan() {
     });
   }, [kunciSelesai, idPeserta]);
 
+  useEffect(() => {
+    if (antrianPeng !== null || !data || !idPeserta) return;
+    const sudahLihat = (p: PengumumanPeserta) => {
+      try {
+        return localStorage.getItem(kunciSudahLihat(idPeserta, p)) === "1";
+      } catch {
+        return false; // penyimpanan diblokir: tampilkan saja
+      }
+    };
+    setAntrianPeng((data.pengumuman ?? []).filter((p) => p.frekuensi === "tiap" || !sudahLihat(p)));
+  }, [antrianPeng, data, idPeserta]);
+  const modalPeng = antrianPeng && posPeng < antrianPeng.length ? antrianPeng[posPeng] : null;
+  const lanjutPeng = useCallback(() => {
+    if (!antrianPeng) return;
+    const p = antrianPeng[posPeng];
+    if (p && p.frekuensi === "sekali") {
+      try {
+        localStorage.setItem(kunciSudahLihat(idPeserta, p), "1");
+      } catch {
+        /* abaikan */
+      }
+    }
+    setPosPeng((x) => x + 1);
+  }, [antrianPeng, posPeng, idPeserta]);
+
   const warnaBulat: Record<Gaya, string> = {
     done: "bg-[#1E7A4C] text-white",
     now: "bg-[#1F6FD1] text-white shadow-[0_0_0_4px_#D6E6FB]",
@@ -856,8 +850,8 @@ export default function HalamanPelatihan() {
       )}
       {data && peserta && (
         <>
-          {perhatian && <ModalPerhatian tutup={tutupPerhatian} />}
-          {!perhatian && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
+          {modalPeng && antrianPeng && <ModalPengumuman key={modalPeng.id} d={modalPeng} posisi={posPeng + 1} jumlah={antrianPeng.length} lanjut={lanjutPeng} />}
+          {antrianPeng !== null && !modalPeng && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
           {pemandu && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
           <Kartu judul="Langkah Anda" kanan={<span className="text-[12px] font-semibold text-[#55657D]">{nSelesai} dari {wajib.length} selesai</span>}>
             <div className="h-2 overflow-hidden rounded-full bg-[#E3E8EE]">
