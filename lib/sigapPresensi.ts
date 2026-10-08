@@ -24,6 +24,8 @@ export type PengaturanPresensi = {
   hari: string[];
   /** Jadwal konkret = aturan sesi x hari kegiatan. */
   jadwal: SesiPresensi[];
+  /** (9 Okt 2026) Batas presensi SUSULAN (ISO): sesi yang sudah ditutup boleh disusul dari mana saja sampai waktu ini, tercatat TERLAMBAT. null = tidak ada. */
+  susulan_sampai?: string | null;
 };
 
 export type PosisiPeserta = { lat: number; lng: number; akurasi: number };
@@ -187,10 +189,10 @@ export function hariFokus(hari: string[], sekarangMs: number): string {
 }
 
 /** Rekam presensi diterima (satu per sesi per hari). */
-export type RekamPresensi = { tanggal: string; sesi_no: number; at: string; jarak_m: number | null; manual: boolean; titik_nama: string | null };
+export type RekamPresensi = { tanggal: string; sesi_no: number; at: string; jarak_m: number | null; manual: boolean; titik_nama: string | null; terlambat?: boolean };
 export type StatusSesi = "selesai" | "terbuka" | "menunggu" | "terlewat";
 /** Satu sesi hari ini beserta catatan presensi peserta (at != null = sudah tercatat). */
-export type SesiHari = SesiPresensi & { at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null };
+export type SesiHari = SesiPresensi & { at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null; terlambat?: boolean };
 export type RingkasHari = { tanggal: string; sesi_hari: SesiHari[] };
 
 export function susunHari(jadwal: SesiPresensi[], rekam: RekamPresensi[], sekarangMs: number): RingkasHari {
@@ -202,13 +204,16 @@ export function susunHari(jadwal: SesiPresensi[], rekam: RekamPresensi[], sekara
       .filter((s) => s.tanggal === tanggal)
       .map((s) => {
         const r = per.get(s.kunci);
-        return { ...s, at: r?.at ?? null, jarak_m: r?.jarak_m ?? null, manual: !!r?.manual, titik_nama: r?.titik_nama ?? null };
+        return { ...s, at: r?.at ?? null, jarak_m: r?.jarak_m ?? null, manual: !!r?.manual, titik_nama: r?.titik_nama ?? null, terlambat: !!r?.terlambat };
       }),
   };
 }
 
 export const statusSesi = (s: { at: string | null; buka_at: string; tutup_at: string }, ms: number): StatusSesi =>
   s.at ? "selesai" : ms >= new Date(s.tutup_at).getTime() ? "terlewat" : ms >= new Date(s.buka_at).getTime() ? "terbuka" : "menunggu";
+
+/** (9 Okt 2026) Presensi susulan masih dibuka pada waktu `ms`? */
+export const susulanTerbuka = (susulanSampai: string | null | undefined, ms: number) => !!susulanSampai && ms < new Date(susulanSampai).getTime();
 
 export type KeadaanHari = {
   sesi: (SesiHari & { status: StatusSesi })[];
@@ -222,10 +227,12 @@ export type KeadaanHari = {
   berikutnya: (SesiHari & { status: StatusSesi }) | null;
   /** Ada sesi yang tidak tercatat dan waktunya sudah lewat. */
   ada_terlewat: boolean;
+  /** (9 Okt 2026) Sesi terlewat yang masih bisa disusul (presensi terlambat, bebas lokasi) -- kosong bila susulan tidak dibuka. */
+  susulan: (SesiHari & { status: StatusSesi })[];
 };
 
 /** Keadaan presensi hari ini pada waktu `ms` (dihitung ulang di browser tiap detik). */
-export function keadaanHari(h: RingkasHari, ms: number): KeadaanHari {
+export function keadaanHari(h: RingkasHari, ms: number, susulanSampai?: string | null): KeadaanHari {
   const sesi = h.sesi_hari.map((s) => ({ ...s, status: statusSesi(s, ms) }));
   const selesai = sesi.filter((s) => s.status === "selesai").length;
   const aktif = sesi.find((s) => s.status === "terbuka") ?? null;
@@ -237,5 +244,6 @@ export function keadaanHari(h: RingkasHari, ms: number): KeadaanHari {
     aktif,
     berikutnya: aktif ? null : sesi.find((s) => s.status === "menunggu") ?? null,
     ada_terlewat: sesi.some((s) => s.status === "terlewat"),
+    susulan: susulanTerbuka(susulanSampai, ms) && !aktif ? sesi.filter((s) => s.status === "terlewat") : [],
   };
 }

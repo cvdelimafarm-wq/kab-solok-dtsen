@@ -51,14 +51,14 @@ export default function AdminAplikasiPage() {
 
   const muat = useCallback(async () => {
     if (!bacaSesi()) {
-      window.location.replace(`/?lanjut=${encodeURIComponent("/portal/admin")}`);
+      window.location.replace(`/?lanjut=${encodeURIComponent("/sigap/kelola/aplikasi")}`);
       return;
     }
     try {
       setData(await apiPortal<Data>("/api/portal/admin"));
       setError(null);
     } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return window.location.replace(`/?lanjut=${encodeURIComponent("/portal/admin")}`);
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return window.location.replace(`/?lanjut=${encodeURIComponent("/sigap/kelola/aplikasi")}`);
       setError(e instanceof Error ? e.message : "Gagal memuat.");
     }
   }, []);

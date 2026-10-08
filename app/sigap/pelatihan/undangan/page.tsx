@@ -54,7 +54,7 @@ export default function HalamanUndangan() {
         <Pesan jenis="info">
           Akun Anda tidak terdaftar sebagai peserta pelatihan, sehingga undangan pribadi tidak tersedia.{" "}
           {data.boleh_lihat_kelola && (
-            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F5FD1] underline">
+            <Link href="/sigap/kelola/pelatihan" className="font-bold text-[#1F5FD1] underline">
               Buka Kelola Pelatihan
             </Link>
           )}

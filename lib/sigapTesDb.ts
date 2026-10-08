@@ -326,6 +326,7 @@ export async function muatPengaturanPresensi(db: Db, kegiatanId: number): Promis
     sesi,
     hari,
     jadwal,
+    susulan_sampai: (data.presensi_susulan_sampai as string | null | undefined) ?? null,
   };
 }
 
@@ -359,7 +360,7 @@ export type PresensiPeserta = { sudah: boolean; at: string | null; jarak_m: numb
 
 /** (8 Okt 2026) Semua presensi DITERIMA seorang peserta (satu per sesi per hari), urut waktu. */
 export async function muatRekamPresensi(db: Db, kegiatanId: number, akunId: number): Promise<RekamPresensi[]> {
-  const { data } = await db.from("sigap_pelatihan_presensi").select("tanggal, sesi_no, at, jarak_m, manual, titik_nama").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).order("at", { ascending: true }).limit(200);
+  const { data } = await db.from("sigap_pelatihan_presensi").select("tanggal, sesi_no, at, jarak_m, manual, titik_nama, terlambat").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).order("at", { ascending: true }).limit(200);
   return (data ?? []).map((r) => ({
     tanggal: String(r.tanggal ?? "").slice(0, 10),
     sesi_no: Number(r.sesi_no ?? 1),
@@ -367,5 +368,6 @@ export async function muatRekamPresensi(db: Db, kegiatanId: number, akunId: numb
     jarak_m: r.jarak_m != null ? Number(r.jarak_m) : null,
     manual: !!r.manual,
     titik_nama: (r.titik_nama as string | null | undefined) ?? null,
+    terlambat: !!r.terlambat,
   }));
 }

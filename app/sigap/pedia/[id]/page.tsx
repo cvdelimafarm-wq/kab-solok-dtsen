@@ -40,7 +40,7 @@ export default function DetailPedia({ params }: { params: Promise<{ id: string }
             ← SIGAP PEDIA
           </Link>
           {d?.kelola && (
-            <Link href={`/sigap/pedia/kelola/${id}`} className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
+            <Link href={`/sigap/kelola/pedia/${id}`} className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
               Kelola & bukti
             </Link>
           )}

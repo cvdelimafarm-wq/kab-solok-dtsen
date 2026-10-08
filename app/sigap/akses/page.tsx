@@ -71,7 +71,7 @@ export default function KelolaPeranAkses() {
       <LayarPenuh>
         <Pesan>{galat}</Pesan>
         <div className="flex gap-3 text-sm font-bold text-[#1F6FD1]">
-          <Link href="/sigap/admin" className="underline">
+          <Link href="/sigap/kelola/translok" className="underline">
             Ke Admin Transport Lokal
           </Link>
           <button type="button" onClick={keluar} className="underline">
@@ -112,7 +112,7 @@ export default function KelolaPeranAkses() {
         }
       >
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Link href="/sigap/admin" className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
+          <Link href="/sigap/kelola/translok" className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
             ← Admin Transport Lokal
           </Link>
           {!data.boleh_kelola && <span className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-blue-100">Mode lihat saja</span>}

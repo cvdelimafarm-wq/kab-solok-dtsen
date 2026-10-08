@@ -126,7 +126,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
     try {
       if (baru || modeKoreksi) {
         const r = await aksiP<{ id: number; nomor_registrasi: string }>(modeKoreksi ? "koreksi" : "buat", { ...bodiForm(v), id: modeKoreksi ? Number(id) : undefined });
-        window.location.href = `/sigap/pedia/kelola/${r.id}?baru=${encodeURIComponent(r.nomor_registrasi)}`;
+        window.location.href = `/sigap/kelola/pedia/${r.id}?baru=${encodeURIComponent(r.nomor_registrasi)}`;
         return;
       }
       await aksiP("ubah", { id: Number(id), ...bodiForm(v) });
@@ -155,7 +155,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
       sub={baru ? "Nomor registrasi dibuat otomatis oleh database saat disimpan dan tidak bisa diubah." : e?.judul}
       kanan={(gelap) => (
         <>
-          <Link href="/sigap/pedia/kelola" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN_O}>
+          <Link href="/sigap/kelola/pedia" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN_O}>
             ← Register
           </Link>
           {!baru && (
@@ -252,7 +252,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
               <Pesan jenis="peringatan">
                 Entri ini digantikan oleh{" "}
                 {d.digantikan_oleh.map((g) => (
-                  <Link key={g.id} href={`/sigap/pedia/kelola/${g.id}`} className="font-semibold underline">
+                  <Link key={g.id} href={`/sigap/kelola/pedia/${g.id}`} className="font-semibold underline">
                     {g.nomor_registrasi}
                   </Link>
                 ))}
@@ -262,7 +262,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
             {d?.menggantikan && (
               <Pesan jenis="info">
                 Koreksi atas{" "}
-                <Link href={`/sigap/pedia/kelola/${d.menggantikan.id}`} className="font-semibold underline">
+                <Link href={`/sigap/kelola/pedia/${d.menggantikan.id}`} className="font-semibold underline">
                   {d.menggantikan.nomor_registrasi}
                 </Link>
                 .

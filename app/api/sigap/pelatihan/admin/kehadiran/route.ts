@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     if (bagian === "presensi") {
       const peng = await muatPengaturanPresensi(db, kegiatanId);
       // (8 Okt 2026) presensi per sesi pada hari fokus (hari ini bila hari kegiatan): lengkap = semua sesi tercatat, sebagian = sebagian
-      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, tanggal, sesi_no, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh, titik_nama").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
+      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, tanggal, sesi_no, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh, titik_nama, terlambat").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
       const hariFokusStr = peng ? susunHari(peng.jadwal, [], sekarang.getTime()).tanggal : null;
       const sesiHari = peng && hariFokusStr ? peng.jadwal.filter((x) => x.tanggal === hariFokusStr) : [];
       const diterima = new Map<number, Map<number, Record<string, unknown>>>(); // akun -> sesi_no -> baris
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
           const terakhir = c[c.length - 1];
           const sesi = sesiHari.map((x) => {
             const r = m?.get(x.no);
-            return { no: x.no, nama: x.nama, buka_at: x.buka_at, tutup_at: x.tutup_at, hadir: !!r, at: (r?.at as string | undefined) ?? null, jarak_m: r?.jarak_m != null ? Number(r.jarak_m) : null, titik_nama: (r?.titik_nama as string | null | undefined) ?? null, manual: !!r?.manual, alasan: (r?.alasan as string | undefined) ?? null, dicatat_oleh: (r?.dicatat_oleh as string | undefined) ?? null };
+            return { no: x.no, nama: x.nama, buka_at: x.buka_at, tutup_at: x.tutup_at, hadir: !!r, at: (r?.at as string | undefined) ?? null, jarak_m: r?.jarak_m != null ? Number(r.jarak_m) : null, titik_nama: (r?.titik_nama as string | null | undefined) ?? null, manual: !!r?.manual, terlambat: !!r?.terlambat, alasan: (r?.alasan as string | undefined) ?? null, dicatat_oleh: (r?.dicatat_oleh as string | undefined) ?? null };
           });
           const jumlahHadir = sesi.filter((x) => x.hadir).length;
           const d = sesi.find((x) => x.hadir) ?? null;
@@ -104,6 +104,7 @@ export async function GET(req: NextRequest) {
             jarak_m: d?.jarak_m ?? null,
             titik_nama: d?.titik_nama ?? null,
             manual: !!d?.manual,
+            terlambat: !!d?.terlambat,
             alasan: d?.alasan ?? null,
             dicatat_oleh: d?.dicatat_oleh ?? null,
             percobaan: c.length,

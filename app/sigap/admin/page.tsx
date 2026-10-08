@@ -208,7 +208,7 @@ export default function AdminTransportLokal() {
             </button>
           )}
           {r.izin["akses.kelola"] && (
-            <Link href="/sigap/akses" className="rounded-full bg-[#D9971F] px-3 py-1.5 text-[12px] font-extrabold text-[#0E2A47] hover:brightness-105">
+            <Link href="/sigap/kelola/akses" className="rounded-full bg-[#D9971F] px-3 py-1.5 text-[12px] font-extrabold text-[#0E2A47] hover:brightness-105">
               🔐 Kelola Peran &amp; Akses
             </Link>
           )}

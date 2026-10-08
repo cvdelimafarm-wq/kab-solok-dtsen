@@ -76,7 +76,7 @@ export default function SigapPedia() {
       sub="Ensiklopedia konsultasi resmi (HAI-DJPb, KPPN, Biro Keuangan BPS, dll). Cari dulu sebelum bertanya — jawabannya mungkin sudah ada."
       kanan={(gelap) =>
         data?.kelola ? (
-          <Link href="/sigap/pedia/kelola" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
+          <Link href="/sigap/kelola/pedia" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
             Register & arsip bukti
           </Link>
         ) : null

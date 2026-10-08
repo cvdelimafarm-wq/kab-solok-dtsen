@@ -42,7 +42,7 @@ export default function KelolaPedia() {
       judul="Register & arsip bukti"
       sub="Penatausahaan konsultasi resmi: nomor registrasi, bukti asli ber-SHA-256 & timestamp, verifikasi, Paket Bukti untuk Inspektorat."
       kanan={(gelap) => (
-        <Link href="/sigap/pedia/kelola/baru" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
+        <Link href="/sigap/kelola/pedia/baru" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN}>
           + Entri baru
         </Link>
       )}
@@ -203,7 +203,7 @@ function Register() {
               </thead>
               <tbody>
                 {tampil.map((e) => (
-                  <tr key={e.id} tabIndex={0} onClick={() => (window.location.href = `/sigap/pedia/kelola/${e.id}`)} onKeyDown={(x) => x.key === "Enter" && (window.location.href = `/sigap/pedia/kelola/${e.id}`)} className="cursor-pointer hover:bg-[#F8FAFC]">
+                  <tr key={e.id} tabIndex={0} onClick={() => (window.location.href = `/sigap/kelola/pedia/${e.id}`)} onKeyDown={(x) => x.key === "Enter" && (window.location.href = `/sigap/kelola/pedia/${e.id}`)} className="cursor-pointer hover:bg-[#F8FAFC]">
                     <td className={`${TD} whitespace-nowrap font-mono text-[12.5px] font-semibold`}>{e.nomor_registrasi}</td>
                     <td className={`${TD} whitespace-nowrap text-[12px]`}>
                       <div>{e.tgl_diajukan ? `↑ ${tanggalIndo(e.tgl_diajukan)}` : "–"}</div>
@@ -341,7 +341,7 @@ function Rekap() {
               <ul className="mt-2 divide-y divide-[#EDF0F4]">
                 {(daftar as Kartu[]).map((e) => (
                   <li key={e.id} className="py-1.5 text-[13px]">
-                    <Link href={`/sigap/pedia/kelola/${e.id}`} className="hover:text-[#1F6FD1]">
+                    <Link href={`/sigap/kelola/pedia/${e.id}`} className="hover:text-[#1F6FD1]">
                       <span className="font-mono text-[12px] text-[#7B8794]">{e.nomor_registrasi}</span> <span className="font-semibold">{e.judul}</span>
                     </Link>
                     <div className="text-[11.5px] text-[#7B8794]">{e.perlu_ditinjau ? e.alasan_tinjau : `diajukan ${tanggalIndo(e.tgl_diajukan ?? e.dibuat_at)}`}</div>

@@ -108,7 +108,7 @@ function TabPaket({ daftar, kelola, tahun, nomorBerikut, onGalat, onMuat }: { da
     setSibuk(true);
     try {
       const r = await aksiK<{ id: number }>("buat_paket", { nama: nama.trim(), tahun });
-      window.location.href = `/sigap/kontrak/${r.id}`;
+      window.location.href = `/sigap/kelola/pengadaan/${r.id}`;
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) onGalat(pesanGalat(e));
       setSibuk(false);
@@ -118,7 +118,7 @@ function TabPaket({ daftar, kelola, tahun, nomorBerikut, onGalat, onMuat }: { da
     setSibuk(true);
     try {
       const r = await aksiK<{ id: number }>("duplikat", { id, tahun });
-      window.location.href = `/sigap/kontrak/${r.id}`;
+      window.location.href = `/sigap/kelola/pengadaan/${r.id}`;
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) onGalat(pesanGalat(e));
       setSibuk(false);
@@ -201,7 +201,7 @@ function TabPaket({ daftar, kelola, tahun, nomorBerikut, onGalat, onMuat }: { da
             </thead>
             <tbody>
               {tampil.map((p) => (
-                <tr key={p.id} tabIndex={0} onClick={() => (window.location.href = `/sigap/kontrak/${p.id}`)} onKeyDown={(e) => e.key === "Enter" && (window.location.href = `/sigap/kontrak/${p.id}`)} className="cursor-pointer hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1F6FD1]">
+                <tr key={p.id} tabIndex={0} onClick={() => (window.location.href = `/sigap/kelola/pengadaan/${p.id}`)} onKeyDown={(e) => e.key === "Enter" && (window.location.href = `/sigap/kelola/pengadaan/${p.id}`)} className="cursor-pointer hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1F6FD1]">
                   <td className={`${TD} font-semibold tabular-nums`}>{p.nomor_urut ?? "–"}</td>
                   <td className={`${TD} max-w-[460px]`}>
                     <div className="truncate font-semibold text-[#14202E]" title={p.nama}>

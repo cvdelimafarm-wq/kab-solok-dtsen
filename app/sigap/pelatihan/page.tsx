@@ -284,7 +284,7 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
  */
 function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub["presensi"]>; nowMs: number; tempat: string; segarkan: () => void }) {
   const peng = pres.pengaturan;
-  const kead = keadaanHari(pres.hari, nowMs);
+  const kead = keadaanHari(pres.hari, nowMs, peng.susulan_sampai);
   const aktif = kead.aktif;
   const aktifKunci = aktif?.kunci ?? null;
   const banyak = kead.total > 1;
@@ -293,6 +293,23 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   const [membaca, setMembaca] = useState(false);
   const [kirim, setKirim] = useState(false);
   const [galatKirim, setGalatKirim] = useState<string | null>(null);
+  const [kirimSusulan, setKirimSusulan] = useState(false);
+
+  // (9 Okt 2026) presensi SUSULAN: sesi sudah ditutup tetapi panitia membuka kesempatan; bebas lokasi, tercatat TERLAMBAT
+  async function presensiTerlambat() {
+    const target = kead.susulan[0];
+    if (!target) return;
+    setKirimSusulan(true);
+    setGalatKirim(null);
+    try {
+      await fetchJson("/api/sigap/pelatihan/presensi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sesi: target.kunci, susulan: true }) });
+      segarkan();
+    } catch (e) {
+      setGalatKirim(pesanGalat(e));
+    } finally {
+      setKirimSusulan(false);
+    }
+  }
 
   const baca = useCallback(() => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
@@ -356,7 +373,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
       {kead.sesi.map((x) => {
         const gaya = x.status === "selesai" ? "bg-[#E3F6EC] text-[#13794B]" : x.status === "terbuka" ? "bg-[#E6EEFC] text-[#0F2A52]" : x.status === "terlewat" ? "bg-[#FDE8E8] text-[#B42329]" : "bg-[#EEF2F7] text-[#6B7A90]";
         const ikon = x.status === "selesai" ? "✓" : x.status === "terbuka" ? "●" : x.status === "terlewat" ? "✕" : "○";
-        const teks = x.status === "selesai" ? `${x.at ? jamWib(x.at) : "–"} WIB` : x.status === "terbuka" ? `sampai ${jamWib(x.tutup_at)}` : x.status === "terlewat" ? "terlewat" : `${jamWib(x.buka_at)}–${jamWib(x.tutup_at)}`;
+        const teks = x.status === "selesai" ? `${x.at ? jamWib(x.at) : "–"} WIB${x.terlambat ? " · TERLAMBAT" : ""}` : x.status === "terbuka" ? `sampai ${jamWib(x.tutup_at)}` : x.status === "terlewat" ? "terlewat" : `${jamWib(x.buka_at)}–${jamWib(x.tutup_at)}`;
         return (
           <span key={x.kunci} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${gaya}`}>
             {ikon} {x.nama} · {teks}
@@ -369,9 +386,15 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   // semua sesi hari ini tercatat -> tidak ada peringatan lokasi, tidak ada tombol
   if (kead.lengkap) {
     const x = kead.sesi[0];
+    const lambat = kead.sesi.filter((z) => z.terlambat);
     return (
       <>
         {ringkasSesi}
+        {lambat.length > 0 && (
+          <p className="mb-1 rounded-lg bg-[#FFF4D6] px-2.5 py-1.5 text-[13px] font-semibold text-[#8A6200]">
+            ⏰ Status presensi: TERLAMBAT. {lambat.length === 1 ? "Tercatat" : "Tercatat sebagian"} {lambat[0].at ? `${waktuWib(lambat[0].at)} WIB` : ""}, setelah sesi ditutup ({jamWib(lambat[0].tutup_at)} WIB).
+          </p>
+        )}
         <p className="text-[13px] font-semibold text-[#13794B]">
           {banyak
             ? `✓ Presensi hari ini lengkap (${kead.selesai} dari ${kead.total} sesi).`
@@ -396,6 +419,19 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
             </p>
             <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#DDE6F3] text-[#6B7A90]`}>
               Belum dibuka
+            </button>
+          </>
+        ) : kead.susulan.length > 0 ? (
+          <>
+            <p className="text-[13px] font-semibold text-[#B42329]">
+              {banyak ? `Presensi ${kead.susulan.map((x) => x.nama).join(", ")} sudah ditutup` : `Presensi sudah ditutup (pukul ${jamWib(kead.susulan[0].tutup_at)} WIB)`} dan belum tercatat untuk Anda.
+            </p>
+            <p className="mt-1 rounded-lg bg-[#FFF4D6] px-2.5 py-1.5 text-[13px] font-semibold text-[#8A6200]">
+              ⏰ Anda masih bisa presensi sekarang dari mana saja (tidak perlu di lokasi) sampai {waktuWib(peng.susulan_sampai!)} WIB. Presensi ini akan tercatat berstatus TERLAMBAT.
+            </p>
+            {galatKirim && <p className="mt-1 text-[13px] font-semibold text-[#B42329]">{galatKirim}</p>}
+            <button type="button" disabled={kirimSusulan} onClick={presensiTerlambat} className={`${TOMBOL} ${kirimSusulan ? "cursor-not-allowed bg-[#DDE6F3] text-[#6B7A90]" : "bg-[#F4B400] text-[#0F2A52] hover:bg-[#E0A400]"}`}>
+              {kirimSusulan ? "Mencatat…" : "⏰ Catat presensi terlambat sekarang"}
             </button>
           </>
         ) : (
@@ -586,10 +622,11 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
     case "hadir": {
       if (!data.presensi) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi menyusul`, teks: "Panitia belum mengatur presensi.", terima, catatan };
       // (8 Okt 2026) per sesi: pandu ke sesi yang sedang dibuka, atau tunjukkan jam sesi berikutnya
-      const kh = keadaanHari(data.presensi.hari, nowMs);
+      const kh = keadaanHari(data.presensi.hari, nowMs, data.presensi.pengaturan.susulan_sampai);
       const banyak = kh.total > 1;
       if (kh.aktif) return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: presensi ${banyak ? `${kh.aktif.nama} ` : ""}sudah dibuka`, teks: `Lakukan presensi setelah tiba di lokasi, sampai pukul ${jamWib(kh.aktif.tutup_at)} WIB. Aktifkan lokasi (GPS) di HP.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
       if (kh.berikutnya) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi ${banyak ? `${kh.berikutnya.nama} ` : ""}dibuka ${waktuWib(kh.berikutnya.buka_at)}`, teks: "Presensi dilakukan di lokasi pelatihan dengan lokasi HP aktif.", terima, catatan };
+      if (kh.susulan.length > 0) return { nada: "ingat", ikon: "⏰", judul: `Langkah ${n}: presensi terlambat masih dibuka`, teks: `Presensi sudah ditutup, tetapi Anda masih bisa presensi TERLAMBAT dari mana saja sampai ${waktuWib(data.presensi.pengaturan.susulan_sampai!)} WIB.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
       return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi sudah ditutup`, teks: "Hubungi panitia bila presensi Anda belum tercatat.", terima, catatan };
     }
     case "foto_awal":
@@ -696,7 +733,7 @@ export default function HalamanPelatihan() {
   const now = jam.sekarang();
   // (7 Okt 2026) /sigap/pelatihan = tab Langkah bagi peserta. Pengelola yang bukan peserta langsung dibawa ke Kelola Pelatihan.
   useEffect(() => {
-    if (data && !data.peserta && data.boleh_lihat_kelola) router.replace("/sigap/pelatihan/kelola");
+    if (data && !data.peserta && data.boleh_lihat_kelola) router.replace("/sigap/kelola/pelatihan");
   }, [data, router]);
   const u = data?.undangan;
   const peserta = data?.peserta ?? null;
@@ -809,7 +846,7 @@ export default function HalamanPelatihan() {
         selesai: !!data.presensi?.sudah,
         // (8 Okt 2026) per sesi: terlewat = ada sesi hari ini yang lewat tanpa tercatat & tidak ada sesi lain yang masih bisa; sekarang = ada sesi dibuka
         terlewat: !!data.presensi && !keadaanHari(data.presensi.hari, now).lengkap && !keadaanHari(data.presensi.hari, now).aktif && !keadaanHari(data.presensi.hari, now).berikutnya,
-        bisaSekarang: !!data.presensi && !!keadaanHari(data.presensi.hari, now).aktif,
+        bisaSekarang: !!data.presensi && (!!keadaanHari(data.presensi.hari, now).aktif || keadaanHari(data.presensi.hari, now, data.presensi.pengaturan.susulan_sampai).susulan.length > 0),
         badan: (
           <>
             <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam={`pelatihan ${u.pukul}`} />
@@ -921,7 +958,7 @@ export default function HalamanPelatihan() {
         <Pesan jenis="info">
           Akun Anda tidak terdaftar sebagai peserta Pelatihan PSP Pascabencana 2026, jadi langkah pelatihan, pretest, dan posttest tidak tersedia untuk Anda.{" "}
           {data.boleh_lihat_kelola && (
-            <Link href="/sigap/pelatihan/kelola" className="font-bold text-[#1F5FD1] underline">
+            <Link href="/sigap/kelola/pelatihan" className="font-bold text-[#1F5FD1] underline">
               Buka Kelola Pelatihan
             </Link>
           )}

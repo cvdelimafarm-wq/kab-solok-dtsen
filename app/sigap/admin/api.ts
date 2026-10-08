@@ -37,7 +37,7 @@ export function hapusSesi() {
 }
 
 export function keMasuk() {
-  const path = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/sigap/admin";
+  const path = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/sigap/kelola/translok";
   // (7 Okt 2026) portal satu login: masuk di halaman depan, lalu kembali ke halaman ini
   window.location.replace(`/?lanjut=${encodeURIComponent(path)}`);
 }

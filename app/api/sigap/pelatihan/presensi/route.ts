@@ -7,9 +7,11 @@
 // sesi yang sedang dibuka dan belum tercatat. Satu presensi diterima per peserta per sesi.
 // Titik lokasi: peserta diterima bila dalam radius SALAH SATU titik (Mami Hotel / Ully Hotel). Percobaan yang ditolak
 // (di luar radius / GPS lemah) tetap dicatat utk monitoring panitia.
+// (9 Okt 2026) PRESENSI SUSULAN: bila panitia membuka susulan (sigap_pelatihan_pengaturan.presensi_susulan_sampai) dan tidak ada sesi
+// yang sedang dibuka, sesi yang sudah ditutup boleh disusul dari MANA SAJA (tanpa cek radius/GPS), dicatat terlambat=true.
 
 import { NextRequest, NextResponse } from "next/server";
-import { keadaanHari, nilaiPresensi, posisiValid, susunHari } from "@/lib/sigapPresensi";
+import { jarakMeter, keadaanHari, nilaiPresensi, posisiValid, susulanTerbuka, susunHari } from "@/lib/sigapPresensi";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, muatRekamPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -31,15 +33,54 @@ export async function POST(req: NextRequest) {
     if (!peng) return galat("Presensi belum diatur panitia.", 404);
 
     const body = await req.json().catch(() => null);
-    if (!posisiValid(body)) return galat("Lokasi tidak terbaca. Aktifkan lokasi (GPS) lalu coba lagi.", 400, { kode: "lokasi" });
-    const pos = { lat: body.lat, lng: body.lng, akurasi: body.akurasi };
-
     const sekarang = new Date();
     const rekam = await muatRekamPresensi(db, kegiatanId, akun.id);
     const hari = susunHari(peng.jadwal, rekam, sekarang.getTime());
-    const kead = keadaanHari(hari, sekarang.getTime());
+    const kead = keadaanHari(hari, sekarang.getTime(), peng.susulan_sampai);
     // sesi tujuan: yang diminta klien (harus sesi hari ini), selain itu sesi yang sedang dibuka / berikutnya / yang terakhir
-    const diminta = typeof (body as Record<string, unknown>).sesi === "string" ? kead.sesi.find((s) => s.kunci === (body as Record<string, unknown>).sesi) : undefined;
+    const diminta = typeof (body as Record<string, unknown> | null)?.sesi === "string" ? kead.sesi.find((s) => s.kunci === (body as Record<string, unknown>).sesi) : undefined;
+
+    // semua sesi sudah tercatat -> kembalikan yang sudah ada (tanpa meminta lokasi)
+    if (kead.lengkap) {
+      const x = kead.sesi.find((z) => z.at) ?? kead.sesi[0];
+      return NextResponse.json({ ok: true, sudah: true, at: x.at, jarak_m: x.jarak_m, terlambat: !!x.terlambat });
+    }
+
+    // ---- presensi susulan (terlambat, bebas lokasi) ----
+    if (!kead.aktif && susulanTerbuka(peng.susulan_sampai, sekarang.getTime())) {
+      const target = (diminta && diminta.status === "terlewat" ? diminta : null) ?? kead.susulan[0] ?? null;
+      if (diminta?.at) return NextResponse.json({ ok: true, sudah: true, at: diminta.at, jarak_m: diminta.jarak_m, terlambat: !!diminta.terlambat });
+      if (target) {
+        const pos = posisiValid(body) ? { lat: body.lat, lng: body.lng, akurasi: body.akurasi } : null;
+        const dekatM = pos && peng.titik.length ? Math.min(...peng.titik.map((t) => jarakMeter(pos.lat, pos.lng, t.lat, t.lng))) : null;
+        const baris = {
+          kegiatan_id: kegiatanId,
+          akun_id: akun.id,
+          penugasan_id: peserta.penugasan_id,
+          tanggal: target.tanggal,
+          sesi_no: target.no,
+          at: sekarang.toISOString(),
+          lat: pos?.lat ?? null,
+          lng: pos?.lng ?? null,
+          akurasi_m: pos?.akurasi ?? null,
+          jarak_m: dekatM != null && Number.isFinite(dekatM) ? Math.round(dekatM * 10) / 10 : null,
+          titik_nama: null,
+          diterima: true,
+          terlambat: true,
+          alasan: "Presensi susulan (terlambat), tanpa cek lokasi",
+        };
+        const { error } = await db.from("sigap_pelatihan_presensi").insert(baris);
+        if (error) {
+          const ulang = (await muatRekamPresensi(db, kegiatanId, akun.id)).find((r) => r.tanggal === target.tanggal && r.sesi_no === target.no);
+          if (ulang) return NextResponse.json({ ok: true, sudah: true, at: ulang.at, jarak_m: ulang.jarak_m, terlambat: !!ulang.terlambat });
+          return galat(error.message, 500);
+        }
+        return NextResponse.json({ ok: true, sudah: false, at: baris.at, jarak_m: baris.jarak_m, terlambat: true, sesi: target.nama, batas: target.tutup_at });
+      }
+    }
+
+    if (!posisiValid(body)) return galat("Lokasi tidak terbaca. Aktifkan lokasi (GPS) lalu coba lagi.", 400, { kode: "lokasi" });
+    const pos = { lat: body.lat, lng: body.lng, akurasi: body.akurasi };
     const sesi = diminta ?? kead.aktif ?? kead.berikutnya ?? kead.sesi.find((s) => s.status === "terlewat") ?? kead.sesi[kead.sesi.length - 1];
     if (!sesi) return galat("Presensi belum diatur panitia.", 404);
     if (sesi.at) return NextResponse.json({ ok: true, sudah: true, at: sesi.at, jarak_m: sesi.jarak_m });

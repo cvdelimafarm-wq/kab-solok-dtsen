@@ -208,14 +208,14 @@ export default function Shell({
   const pindahMenu = useCallback(
     (k: KodeTabAdmin) => {
       if (onMenu) onMenu(k);
-      else window.location.href = `/sigap/admin?tab=${k}`;
+      else window.location.href = `/sigap/kelola/translok?tab=${k}`;
     },
     [onMenu]
   );
   const pilihKegiatan = useCallback(
     (id: number) => {
       if (onPilihKegiatan) onPilihKegiatan(id);
-      else window.location.href = `/sigap/admin?kegiatan=${id}`;
+      else window.location.href = `/sigap/kelola/translok?kegiatan=${id}`;
     },
     [onPilihKegiatan]
   );
@@ -225,25 +225,30 @@ export default function Shell({
   const bolehKontrak = !!ringkas.izin["kontrak.kelola"];
   const bolehPediaKelola = ringkas.izin["pedia.kelola"]?.level === "kelola";
   const bolehPelatihanKelola = !!ringkas.izin["pelatihan.kelola"]; // (7 Okt 2026) Kelola Pelatihan
+  // (9 Okt 2026) /sigap/kelola/<modul> -- permintaan user: Delego & Kelola Aplikasi ikut di sidebar pengelolaan
+  const bolehDelego = !!ringkas.izin["delego.admin"];
+  const bolehAplikasi = ringkas.izin["portal.kelola"]?.level === "kelola" || ringkas.izin["translok.kegiatan"]?.level === "kelola";
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
   const itemPalet = useMemo<ItemPalet[]>(() => {
     const out: ItemPalet[] = [{ id: "m-beranda", grup: "Menu", label: "Beranda", ket: "ringkasan & perlu tindakan", jalankan: () => pindahMenu("beranda") }];
     for (const m of subAdmin) out.push({ id: `m-${m.kode}`, grup: "Menu", label: `Admin transport › ${m.label}`, jalankan: () => pindahMenu(m.kode) });
-    if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kontrak") });
+    if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kelola/pengadaan") });
     out.push({ id: "m-pedia", grup: "Menu", label: "SIGAP PEDIA", ket: "ensiklopedia konsultasi", jalankan: () => (window.location.href = "/sigap/pedia") });
-    if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/pedia/kelola") });
+    if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/kelola/pedia") });
     if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
-    if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/pelatihan/kelola") });
-    if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
+    if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/kelola/pelatihan") });
+    if (bolehAplikasi) out.push({ id: "m-aplikasi", grup: "Menu", label: "Kelola aplikasi, admin & periode", jalankan: () => (window.location.href = "/sigap/kelola/aplikasi") });
+    if (bolehDelego) out.push({ id: "m-delego", grup: "Menu", label: "Delego", ket: "aplikasi delegasi kerja", jalankan: () => (window.location.href = "/sigap/kelola/delego") });
+    if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/kelola/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
     out.push({ id: "m-portal", grup: "Menu", label: "Beranda SIGAP", jalankan: () => (window.location.href = "/") });
     out.push(...aksiPalet);
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehDelego, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -280,24 +285,24 @@ export default function Shell({
             <ItemNav mini={mini} ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
           )}
           {(tokenPetugas || bolehPelatihanKelola) && <ItemNav mini={mini} ikon="buku" label="Pelatihan" href="/sigap/pelatihan" aktif={aktif === "pelatihan"} title="Langkah pelatihan: pretest, presensi, posttest" />}
-          {bolehPelatihanKelola && <ItemNav mini={mini} ikon="grafik" label="Kelola pelatihan" href="/sigap/pelatihan/kelola" aktif={aktif === "pelatihan_kelola"} title="Soal, jadwal & monitoring tes" />}
+          {bolehPelatihanKelola && <ItemNav mini={mini} ikon="grafik" label="Kelola pelatihan" href="/sigap/kelola/pelatihan" aktif={aktif === "pelatihan_kelola"} title="Soal, jadwal & monitoring tes" />}
           <ItemNav mini={mini} ikon="pesawat" label="Perjalanan dinas" segera />
           <ItemNav mini={mini} ikon="uang" label="Honor" segera />
           {bolehKontrak ? (
-            <ItemNav mini={mini} ikon="paket" label="Pengadaan" href="/sigap/kontrak" aktif={aktif === "kontrak"} title="Pengadaan & kontrak" />
+            <ItemNav mini={mini} ikon="paket" label="Pengadaan" href="/sigap/kelola/pengadaan" aktif={aktif === "kontrak"} title="Pengadaan & kontrak" />
           ) : (
             <ItemNav mini={mini} ikon="paket" label="Pengadaan" nonaktif ket="—" title="Akun Anda belum diberi akses Pengadaan & Kontrak" />
           )}
 
           <LabelGrup mini={mini}>Referensi</LabelGrup>
           <ItemNav mini={mini} ikon="pedia" label="SIGAP PEDIA" href="/sigap/pedia" aktif={aktif === "pedia"} title="Ensiklopedia konsultasi resmi" />
-          {bolehPediaKelola && <ItemNav mini={mini} ikon="arsip" label="Register & arsip bukti" href="/sigap/pedia/kelola" aktif={aktif === "pedia_kelola"} />}
+          {bolehPediaKelola && <ItemNav mini={mini} ikon="arsip" label="Register & arsip bukti" href="/sigap/kelola/pedia" aktif={aktif === "pedia_kelola"} />}
 
           <LabelGrup mini={mini}>Monitoring</LabelGrup>
           <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
           <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
 
-          {(subAdmin.length > 0 || bolehAkses) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
+          {(subAdmin.length > 0 || bolehAkses || bolehAplikasi || bolehDelego) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
           {subAdmin.length > 0 && (
             <>
               <ItemNav
@@ -327,7 +332,9 @@ export default function Shell({
               )}
             </>
           )}
-          {bolehAkses && <ItemNav mini={mini} ikon="gembok" label="Peran dan akses" href="/sigap/akses" aktif={aktif === "akses"} />}
+          {bolehAkses && <ItemNav mini={mini} ikon="gembok" label="Peran dan akses" href="/sigap/kelola/akses" aktif={aktif === "akses"} />}
+          {bolehAplikasi && <ItemNav mini={mini} ikon="panel" label="Aplikasi & periode" href="/sigap/kelola/aplikasi" title="Kelola aplikasi, admin & periode kegiatan" />}
+          {bolehDelego && <ItemNav mini={mini} ikon="tautan" label="Delego" href="/sigap/kelola/delego" title="Buka Delego" />}
         </nav>
         <div className="flex-1" />
         <div className="pt-3">

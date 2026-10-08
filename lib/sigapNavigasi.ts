@@ -22,6 +22,10 @@ export function indukDari(path: string): string | null {
   if (p === "/sigap") return "/";
   if (p === "/sigap/pelatihan") return "/";
   if (p.startsWith("/sigap/pelatihan/kelola")) return "/";
+  // (9 Okt 2026) halaman pengelolaan /sigap/kelola/<modul> -- permintaan user. Detail (mis. /sigap/kelola/pedia/12) naik ke daftar modulnya.
+  const kelola = /^\/sigap\/kelola\/([^/]+)\/.+/.exec(p);
+  if (kelola) return `/sigap/kelola/${kelola[1]}`;
+  if (p === "/sigap/kelola" || p.startsWith("/sigap/kelola/")) return "/";
   if (/^\/sigap\/pelatihan\/(undangan|instrumen|kuis)$/.test(p) || /^\/sigap\/pelatihan\/tes(\/|$)/.test(p)) return "/sigap/pelatihan";
   if (p.startsWith("/sigap/pelatihan/")) return "/sigap/pelatihan";
   if (p.startsWith("/sigap/pedia/") && p !== "/sigap/pedia") return "/sigap/pedia";

@@ -135,9 +135,9 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
 
   // 4. Pengelolaan (dari izin peran).
   const adaTranslok = Object.keys(izin).some((k) => k.startsWith("translok."));
-  if (adaTranslok) kartu.push({ kode: "admin-translok", grup: "kelola", judul: "Admin Transport Lokal", uraian: "Monitoring, penugasan, verifikasi & kunci SPJ, periode kegiatan.", href: "/sigap/admin" });
-  if (boleh(izin, "kontrak.kelola", "lihat")) kartu.push({ kode: "kontrak", grup: "kelola", judul: "Pengadaan & Kontrak", uraian: "Paket pengadaan, master & penyedia, dokumen kontrak.", href: "/sigap/kontrak" });
-  if (boleh(izin, "pedia.kelola", "lihat")) kartu.push({ kode: "pedia-kelola", grup: "kelola", judul: "SIGAP PEDIA — Penatausahaan", uraian: "Register, rekap & arsip bukti.", href: "/sigap/pedia/kelola" });
+  if (adaTranslok) kartu.push({ kode: "admin-translok", grup: "kelola", judul: "Admin Transport Lokal", uraian: "Monitoring, penugasan, verifikasi & kunci SPJ, periode kegiatan.", href: "/sigap/kelola/translok" });
+  if (boleh(izin, "kontrak.kelola", "lihat")) kartu.push({ kode: "kontrak", grup: "kelola", judul: "Pengadaan & Kontrak", uraian: "Paket pengadaan, master & penyedia, dokumen kontrak.", href: "/sigap/kelola/pengadaan" });
+  if (boleh(izin, "pedia.kelola", "lihat")) kartu.push({ kode: "pedia-kelola", grup: "kelola", judul: "SIGAP PEDIA — Penatausahaan", uraian: "Register, rekap & arsip bukti.", href: "/sigap/kelola/pedia" });
   const aplAdmin: [string, string][] = [
     ["dtsen.admin", "dtsen"],
     ["bencana.admin", "bencana"],
@@ -158,7 +158,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
       status: a.href ? undefined : { label: "Tautan belum diatur", nada: "info" },
     });
   }
-  if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/akses" });
+  if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");
   if (adminAplikasi || boleh(izin, "translok.kegiatan", "kelola")) {
     kartu.push({
@@ -166,7 +166,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
       grup: "kelola",
       judul: adminAplikasi ? "Kelola Aplikasi, Admin & Periode" : "Periode Kegiatan",
       uraian: adminAplikasi ? "Admin Aplikasi: tunjuk admin per aplikasi, atur masa tenggang & buka ulang." : "Atur masa tenggang & buka ulang kegiatan.",
-      href: "/portal/admin",
+      href: "/sigap/kelola/aplikasi",
       gelap: true,
     });
   }

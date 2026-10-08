@@ -72,7 +72,7 @@ export function PanelRujukan({ jenis, refId, kelola = false }: { jenis: "kegiata
         <span className="text-[12px] text-[#7B8794]">{entri.length} entri</span>
         <div className="flex-1" />
         {kelola && entri.length > 0 && (
-          <a href={`/sigap/pedia/kelola?tautan_jenis=${jenis}&tautan_ref=${refId}`} className="text-[12px] font-semibold text-[#1F6FD1] hover:underline">
+          <a href={`/sigap/kelola/pedia?tautan_jenis=${jenis}&tautan_ref=${refId}`} className="text-[12px] font-semibold text-[#1F6FD1] hover:underline">
             Register & Paket Bukti →
           </a>
         )}

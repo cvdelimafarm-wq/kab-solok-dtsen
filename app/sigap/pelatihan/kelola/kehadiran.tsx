@@ -249,12 +249,13 @@ type PresensiPes = {
   kelas: number | null;
   /** hadir = semua sesi hari ini tercatat; sebagian = sebagian sesi; ditolak = hanya percobaan ditolak; belum */
   status: "hadir" | "sebagian" | "ditolak" | "belum";
-  sesi: { no: number; nama: string; buka_at: string; tutup_at: string; hadir: boolean; at: string | null; jarak_m: number | null; titik_nama: string | null; manual: boolean; alasan: string | null; dicatat_oleh: string | null }[];
+  sesi: { no: number; nama: string; buka_at: string; tutup_at: string; hadir: boolean; at: string | null; jarak_m: number | null; titik_nama: string | null; manual: boolean; terlambat?: boolean; alasan: string | null; dicatat_oleh: string | null }[];
   hadir_n: number;
   at: string | null;
   jarak_m: number | null;
   titik_nama: string | null;
   manual: boolean;
+  terlambat?: boolean;
   alasan: string | null;
   dicatat_oleh: string | null;
   percobaan: number;
@@ -397,7 +398,7 @@ export function MonitoringPresensi() {
                         {p.sesi.map((x) => (
                           <Chip key={x.no} w={x.hadir ? "ok" : "wait"}>
                             {x.nama} {x.hadir && x.at ? jamWib(x.at) : "–"}
-                            {x.hadir && x.manual ? " (manual)" : ""}
+                            {x.hadir && x.manual ? " (manual)" : ""}{x.hadir && x.terlambat ? " (terlambat)" : ""}
                           </Chip>
                         ))}
                       </span>
@@ -405,6 +406,7 @@ export function MonitoringPresensi() {
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Chip w="ok">{p.at ? jamWib(p.at) : "–"} WIB</Chip>
                         {p.manual && <Chip w="wait">manual</Chip>}
+                        {p.terlambat && <Chip w="wait">terlambat</Chip>}
                       </span>
                     ) : p.status === "ditolak" ? (
                       <span className="flex flex-wrap items-center gap-1.5">

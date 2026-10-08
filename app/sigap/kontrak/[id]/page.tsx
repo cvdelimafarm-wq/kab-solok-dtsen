@@ -145,7 +145,7 @@ export default function HalamanPaket({ params }: { params: Promise<{ id: string 
         </>
       }
       kanan={(gelap) => (
-        <Link href="/sigap/kontrak" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN_O}>
+        <Link href="/sigap/kelola/pengadaan" className={gelap ? "rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20" : BTN_O}>
           ← Daftar paket
         </Link>
       )}
@@ -217,7 +217,7 @@ export default function HalamanPaket({ params }: { params: Promise<{ id: string 
                 {penyedia && (!penyedia.npwp || !penyedia.nama_pimpinan || !penyedia.nomor_rekening) && (
                   <span className="text-[11.5px] text-amber-700">
                     Data penyedia belum lengkap (NPWP/pimpinan/rekening). Lengkapi di{" "}
-                    <Link href="/sigap/kontrak" className="underline">
+                    <Link href="/sigap/kelola/pengadaan" className="underline">
                       tab Penyedia
                     </Link>
                     .

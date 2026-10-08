@@ -184,7 +184,7 @@ export default function Beranda({
                 {kPen && <BarisCepat ikon="＋" label="Tambah penugasan" ket={kPen.nama} onClick={() => onBuka(kPen.id, "penugasan")} />}
                 {kPen && <BarisCepat ikon="⬆" label="Unggah PDF Surat Tugas" ket={kPen.nama} onClick={() => onBuka(kPen.id, "penugasan")} />}
                 {kTarif && <BarisCepat ikon="⚙" label="Atur tarif" ket={kTarif.nama} onClick={() => onBuka(kTarif.id, "kegiatan")} />}
-                {bolehAkses && <BarisCepat ikon="🔐" label="Kelola peran & akses" href="/sigap/akses" />}
+                {bolehAkses && <BarisCepat ikon="🔐" label="Kelola peran & akses" href="/sigap/kelola/akses" />}
                 {bolehBuatKegiatan && <BarisCepat ikon="✚" label="Kegiatan baru" onClick={onKegiatanBaru} />}
                 {!kPen && !kTarif && !bolehAkses && !bolehBuatKegiatan && <li className="py-4 text-[12px] text-[#7B8794]">Belum ada aksi yang tersedia untuk peran Anda.</li>}
               </ul>
