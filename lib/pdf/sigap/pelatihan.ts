@@ -386,6 +386,20 @@ export type RingkasTes = {
   terendah: number | null;
 };
 
+/** (8 Okt 2026) Halaman nilai akhir peserta (skema Pretest + Posttest + Kuis Adu Sigap). */
+export type NilaiLaporan = {
+  /** teks skema, mis. "Pretest 20% + Posttest 50% + Kuis (Adu Sigap) 30%" */
+  skema: string;
+  /** dasar nilai kuis (null bila kuis tidak dihitung) */
+  dasarKuis: string | null;
+  /** false = skema bawaan aplikasi (belum disimpan pengelola) */
+  tersimpan: boolean;
+  baris: { nama: string; peran: string; pretest: number | null; posttest: number | null; kuis: number | null; akhir: number | null; lengkap: boolean }[];
+  rataRata: { pretest: number | null; posttest: number | null; kuis: number | null; akhir: number | null };
+  /** ringkasan Adu Sigap (null = belum ada peserta yang ikut) */
+  kuis: { ikut: number; juara: { nama: string; poin: number; benar: number; total: number }[] } | null;
+};
+
 export type FotoLampiran = { bytes: Uint8Array; contentType: string; keterangan: string | null };
 
 export type DataLaporan = {
@@ -394,6 +408,8 @@ export type DataLaporan = {
   foto?: FotoLampiran[];
   jumlahPeserta: number;
   hadir: number;
+  /** Nilai akhir per peserta (opsional; tanpa data = bagian tidak dicetak). */
+  nilai?: NilaiLaporan;
   tes: RingkasTes[];
   /** Selisih rata-rata posttest - pretest (peserta yang selesai keduanya) bila tersedia. */
   kenaikanRata: number | null;
@@ -405,9 +421,36 @@ export type DataLaporan = {
 
 const fmt = (n: number | null | undefined) => (n == null ? "-" : String(Math.round(n * 100) / 100).replace(".", ","));
 
+function bagianNilai(k: Kanvas, d: DataLaporan) {
+  const n = d.nilai;
+  if (!n || n.baris.length === 0) return;
+  k.seksi("NILAI AKHIR PESERTA");
+  k.paragraf(`Nilai akhir = ${n.skema}.${n.dasarKuis ? ` Nilai kuis dari ${n.dasarKuis}.` : ""}${n.tersimpan ? "" : " (Skema bawaan aplikasi; belum ditetapkan pengelola.)"}`, 9.5, 13);
+  const sel = (x: number | null) => (x == null ? "-" : fmt(x));
+  k.tabel(
+    ["NO", "NAMA", "PERAN", "PRETEST", "POSTTEST", "KUIS", "NILAI AKHIR"],
+    [5, 33, 9, 11, 11, 11, 13],
+    [
+      ...n.baris.map((b, i) => [String(i + 1), b.nama, b.peran, sel(b.pretest), sel(b.posttest), sel(b.kuis), b.akhir == null ? "-" : `${fmt(b.akhir)}${b.lengkap ? "" : " *"}`]),
+      ["", "RATA-RATA KELAS", "", sel(n.rataRata.pretest), sel(n.rataRata.posttest), sel(n.rataRata.kuis), sel(n.rataRata.akhir)],
+    ],
+    { rataTengah: [0, 2, 3, 4, 5, 6], ukuran: 8.5, tinggiMin: 18 }
+  );
+  if (n.baris.some((b) => b.akhir != null && !b.lengkap)) k.paragraf("* Belum lengkap: ada komponen nilai yang belum diikuti peserta dan dihitung 0 pada nilai akhir.", 8.5, 12);
+  if (n.kuis) {
+    const j = n.kuis.juara.map((x, i) => `${i + 1}. ${x.nama} (${String(x.poin).replace(/\B(?=(\d{3})+(?!\d))/g, ".")} poin; ${x.benar}/${x.total} benar)`).join("; ");
+    k.paragraf(`Kuis Adu Sigap diikuti ${n.kuis.ikut} peserta. Peringkat teratas: ${j}.`, 9.5, 13);
+  } else if (n.dasarKuis) {
+    k.paragraf("Kuis Adu Sigap: belum ada peserta kelas ini yang mengikuti kuis yang sudah selesai.", 9.5, 13);
+  }
+}
+
 function bagianHasil(k: Kanvas, d: DataLaporan) {
   k.seksi("HASIL PRETEST & POSTTEST");
-  if (d.tes.length === 0) return k.paragraf("(Belum ada data tes.)");
+  if (d.tes.length === 0) {
+    k.paragraf("(Belum ada data tes.)");
+    return bagianNilai(k, d);
+  }
   k.tabel(
     ["TES", "DIBUKA", "DITUTUP", "SELESAI", "RATA-RATA", "TERTINGGI", "TERENDAH"],
     [14, 21, 21, 11, 11, 11, 11],
@@ -415,6 +458,7 @@ function bagianHasil(k: Kanvas, d: DataLaporan) {
     { rataTengah: [3, 4, 5, 6], ukuran: 8.5 }
   );
   if (d.kenaikanRata != null) k.paragraf(`Kenaikan rata-rata nilai (posttest dikurangi pretest) pada peserta yang menyelesaikan kedua tes: ${d.kenaikanRata > 0 ? "+" : ""}${fmt(d.kenaikanRata)}.`);
+  bagianNilai(k, d);
 }
 
 export async function buatPdfLaporanPelatihan(d: DataLaporan): Promise<Uint8Array> {

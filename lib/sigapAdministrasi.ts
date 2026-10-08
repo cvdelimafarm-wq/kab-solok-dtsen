@@ -25,11 +25,14 @@ import {
   type DataLaporan,
   type FotoLampiran,
   type InfoKelas,
+  type NilaiLaporan,
   type PesertaHadir,
   type RingkasTes,
 } from "@/lib/pdf/sigap/pelatihan";
 import { formatTanggalIndo } from "@/lib/pdf/sigap/format";
 import { boleh, izinAkun, type PeranAkun } from "@/lib/sigapAkses";
+import { muatNilaiAkhir } from "@/lib/sigapNilai";
+import { LABEL_DASAR_KUIS, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, type SesiBaris } from "@/lib/sigapTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
@@ -114,9 +117,17 @@ export type BarisPeserta = {
   /** (8 Okt 2026) nomor HP untuk pulsa yang sudah dikonfirmasi peserta (08xx), null bila belum */
   pulsa: string | null;
   pulsa_diubah: boolean;
+  /** (8 Okt 2026) nilai (0-100); hanya terisi bila muatPeserta dipanggil dengan { nilai: true } */
+  pretest: number | null;
+  posttest: number | null;
+  kuis: number | null;
+  /** hasil kuis mentah, mis. "6/8" (benar/jumlah soal) */
+  kuis_ket: string | null;
+  akhir: number | null;
+  nilai_lengkap: boolean;
 };
 
-export async function muatPeserta(db: Db, kegiatanId: number, kelas: number): Promise<BarisPeserta[]> {
+export async function muatPeserta(db: Db, kegiatanId: number, kelas: number, opsi: { nilai?: boolean } = {}): Promise<BarisPeserta[]> {
   const { data: pen } = await db
     .from("sigap_penugasan")
     .select("id, akun_id, peran, kelas, sumber, dikunci_at")
@@ -179,8 +190,28 @@ export async function muatPeserta(db: Db, kegiatanId: number, kelas: number): Pr
       nominal: dibayarN * (tarifPeran.get(String(p.peran)) ?? 0),
       pulsa: pulsa.get(p.akun_id as number)?.pulsa ?? null,
       pulsa_diubah: pulsa.get(p.akun_id as number)?.diubah ?? false,
+      pretest: null,
+      posttest: null,
+      kuis: null,
+      kuis_ket: null,
+      akhir: null,
+      nilai_lengkap: false,
     };
   });
+  if (opsi.nilai) {
+    // (8 Okt 2026) nilai akhir menurut skema tersimpan (Soal & Jadwal / Monitoring); peserta manual tidak ikut tes -> kosong
+    const { per } = await muatNilaiAkhir(db, kegiatanId, hasil.filter((h) => !h.manual).map((h) => h.akun_id));
+    for (const h of hasil) {
+      const n = per.get(h.akun_id);
+      if (!n) continue;
+      h.pretest = n.pretest;
+      h.posttest = n.posttest;
+      h.kuis = n.komponen.kuis;
+      h.kuis_ket = n.kuis ? `${n.kuis.benar}/${n.kuis.total_soal}` : null;
+      h.akhir = n.akhir;
+      h.nilai_lengkap = n.lengkap;
+    }
+  }
   return hasil.sort((a, b) => a.nama.localeCompare(b.nama));
 }
 
@@ -270,6 +301,29 @@ export async function muatNarasi(db: Db, kegiatanId: number, kelas: number): Pro
 }
 
 /** Angka laporan satu kelas: dihitung dari peserta kelas (tanpa peserta manual). */
+/** Nilai per peserta + ringkasan kuis untuk halaman "Nilai Akhir Peserta" pada laporan. */
+async function nilaiLaporan(db: Db, kegiatanId: number, inti: BarisPeserta[]): Promise<NilaiLaporan> {
+  const { skema, tersimpan, per } = await muatNilaiAkhir(db, kegiatanId, inti.map((p) => p.akun_id));
+  const baris = inti.map((p) => {
+    const n = per.get(p.akun_id);
+    return { nama: p.nama, peran: p.peran.toUpperCase(), pretest: n?.pretest ?? null, posttest: n?.posttest ?? null, kuis: n?.komponen.kuis ?? null, akhir: n?.akhir ?? null, lengkap: n?.lengkap ?? false };
+  });
+  const rata = (xs: (number | null)[]) => {
+    const v = xs.filter((x): x is number => x != null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const ikut = inti.map((p) => ({ p, k: per.get(p.akun_id)?.kuis ?? null })).filter((x): x is { p: BarisPeserta; k: NonNullable<typeof x.k> } => x.k != null && x.k.menjawab > 0);
+  const juara = [...ikut].sort((a, b) => b.k.poin - a.k.poin).slice(0, 3).map((x) => ({ nama: x.p.nama, poin: x.k.poin, benar: x.k.benar, total: x.k.total_soal }));
+  return {
+    skema: ringkasSkema(skema),
+    dasarKuis: skema.pakai.kuis ? LABEL_DASAR_KUIS[skema.dasar_kuis] : null,
+    tersimpan,
+    baris,
+    rataRata: { pretest: rata(baris.map((b) => b.pretest)), posttest: rata(baris.map((b) => b.posttest)), kuis: rata(baris.map((b) => b.kuis)), akhir: rata(baris.map((b) => b.akhir)) },
+    kuis: ikut.length ? { ikut: ikut.length, juara } : null,
+  };
+}
+
 export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jenis: "pelatihan" | "instruktur"): Promise<DataLaporan> {
   const semua = await muatPeserta(db, kegiatanId, kelas);
   const inti = semua.filter((p) => !p.manual);
@@ -312,9 +366,11 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
   }
   const n = narasi[jenis];
   const foto = await unduhFotoLaporan(db, kegiatanId, kelas);
+  const nilai = await nilaiLaporan(db, kegiatanId, inti);
   return {
     info,
     foto,
+    nilai,
     jumlahPeserta: inti.length,
     hadir: inti.filter((p) => pres.has(p.akun_id)).length,
     tes,

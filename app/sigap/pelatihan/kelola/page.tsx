@@ -16,6 +16,8 @@ import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
+import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
+import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, ringkasSkema, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
@@ -86,6 +88,9 @@ export default function KelolaPelatihan() {
             const t = ringkas.tes.find((x) => x.jenis === j);
             return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
           })}
+          <div className="lg:col-span-2">
+            <SkemaNilaiMandiri asal="soal" />
+          </div>
           <div className="lg:col-span-2">
             <PengaturanPresensiKartu />
           </div>
@@ -396,6 +401,14 @@ const opsiStatusTes = (j: JenisTes): Opsi[] => Object.entries(STATUS_FILTER).map
 const OPSI_STATUS_TES: Opsi[] = DAFTAR_JENIS_TES.flatMap((j) => Object.entries(STATUS_FILTER).map(([k, v]) => ({ nilai: `${j}:${k}`, label: `${LABEL_JENIS_TES[j]}: ${v}`, grup: LABEL_JENIS_TES[j] })));
 const normStatusTes = (s0: string | undefined) => (!s0 || s0 === "belum_buka" || s0 === "buka" || s0 === "soal_belum_ada" ? "belum_mulai" : s0);
 
+type PesertaMon = Monitor["peserta"][number];
+/** Nilai akhir satu peserta dari skema + hasil kuis (API nilai) + skor tes (data monitoring). */
+function nilaiPeserta(p: PesertaMon, d: ReturnType<typeof useSkemaNilai>["data"]): HasilAkhir {
+  const skor = (j: JenisTes) => (p.tes[j]?.status === "selesai" ? (p.tes[j]?.skor ?? null) : null);
+  const kuis = d?.kuis[String(p.akun_id)] ?? null;
+  return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis });
+}
+
 function Monitoring() {
   const [data, setData] = useState<Monitor | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
@@ -403,6 +416,7 @@ function Monitoring() {
   const [jenisAnalisis, setJenisAnalisis] = useState<JenisTes>("pretest");
   const jam = useJamServer();
   const { setujukan, sekarang } = jam;
+  const nilai = useSkemaNilai(30_000); // (8 Okt 2026) skema nilai akhir + hasil kuis
 
   const muat = useCallback(async () => {
     try {
@@ -433,9 +447,10 @@ function Monitoring() {
       for (const [j, sts] of perTes) if (!sts.has(normStatusTes(p.tes[j as JenisTes]?.status))) return false;
       return true;
     });
+    const akhirDari = (p: Monitor["peserta"][number]) => nilaiPeserta(p, nilai.data);
     const naik = (p: Monitor["peserta"][number]) => (p.tes.pretest?.skor != null && p.tes.posttest?.skor != null ? p.tes.posttest.skor - p.tes.pretest.skor : null);
-    return urutkan(lolos, f.urut, { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, pretest: (p) => p.tes.pretest?.skor, posttest: (p) => p.tes.posttest?.skor, naik });
-  }, [data, f.jenis, f.kelas, f.peran, f.status, f.cari, f.urut]); // eslint-disable-line react-hooks/exhaustive-deps
+    return urutkan(lolos, f.urut, { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, pretest: (p) => p.tes.pretest?.skor, posttest: (p) => p.tes.posttest?.skor, naik, kuis: (p) => akhirDari(p).komponen.kuis, akhir: (p) => akhirDari(p).akhir });
+  }, [data, nilai.data, f.jenis, f.kelas, f.peran, f.status, f.cari, f.urut]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Analisis per soal: kerangka soal dari server, angkanya dihitung ulang dari jawaban peserta yang lolos filter. */
   function analisisUntuk(j: JenisTes): Analisis[] {
@@ -461,7 +476,7 @@ function Monitoring() {
     if (!data) return;
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    const aoa: (string | number)[][] = [["No", "Nama", "Jenis", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)"]];
+    const aoa: (string | number)[][] = [["No", "Nama", "Jenis", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)", "Kuis nilai", "Kuis benar", "Kuis poin", "Nilai akhir", "Nilai akhir lengkap?"]];
     baris.forEach((p, i) => {
       const a = p.tes.pretest;
       const b = p.tes.posttest;
@@ -482,11 +497,26 @@ function Monitoring() {
         b?.mulai_at ? waktuWib(b.mulai_at) : "",
         b?.selesai_at ? waktuWib(b.selesai_at) : "",
         a?.skor != null && b?.skor != null ? Math.round((b.skor - a.skor) * 100) / 100 : "",
+        ...(() => {
+          const nl = nilaiPeserta(p, nilai.data);
+          const kz = nilai.data?.kuis[String(p.akun_id)] ?? null;
+          return [nl.komponen.kuis ?? "", kz ? `${kz.benar}/${kz.total_soal}` : "", kz ? kz.poin : "", nl.akhir ?? "", nl.akhir == null ? "" : nl.lengkap ? "ya" : "belum"];
+        })(),
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 12 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, "Peserta");
+    {
+      const sk = nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN;
+      const wsk = XLSX.utils.aoa_to_sheet([
+        ["Skema nilai akhir", ringkasSkema(sk)],
+        ["Nilai kuis dari", LABEL_DASAR_KUIS[sk.dasar_kuis]],
+        ["Komponen kosong", "dihitung 0 (kolom 'Nilai akhir lengkap?' = belum)"],
+      ]);
+      wsk["!cols"] = [{ wch: 20 }, { wch: 70 }];
+      XLSX.utils.book_append_sheet(wb, wsk, "Skema Nilai");
+    }
     for (const j of DAFTAR_JENIS_TES) {
       const an = analisisUntuk(j);
       const wa = XLSX.utils.aoa_to_sheet([["Soal", "Teks", "Kunci", "Menjawab", "Benar", "% benar"], ...an.map((a) => [a.nomor, a.teks, a.kunci, a.menjawab, a.benar, a.persen_benar ?? ""])]);
@@ -523,20 +553,31 @@ function Monitoring() {
   const terendah = urut[0];
   const tertinggi = urut[urut.length - 1];
   const fmt = (n: number | null | undefined) => (n == null ? "—" : String(n).replace(".", ","));
+  const hasilNilai = baris.map((p) => nilaiPeserta(p, nilai.data));
+  const rata2 = (xs: (number | null)[]) => {
+    const v = xs.filter((x): x is number => x != null);
+    return { n: v.length, rata: v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null };
+  };
+  const rataKuis = rata2(hasilNilai.map((h) => h.komponen.kuis));
+  const rataAkhir = { ...rata2(hasilNilai.map((h) => h.akhir)), lengkap: hasilNilai.filter((h) => h.akhir != null && h.lengkap).length };
 
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
 
+      <PanelSkemaNilai nilai={nilai} asal="monitoring" />
+
       <BarFilterMonitoring f={f} total={total} semua={semua} statusOpsi={OPSI_STATUS_TES} catatan="Kartu & tabel di bawah hanya menghitung peserta ini." />
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KartuAngka label="Peserta" nilai={total} ket={adaFilter ? `dari ${semua}` : undefined} />
         <KartuAngka label="Pretest selesai" nilai={pre.selesai} ket={`${persen(pre.selesai)}%`} warna="#1E7A4C" />
         <KartuAngka label="Sedang mengerjakan" nilai={pre.mengerjakan + post.mengerjakan} ket={`pre ${pre.mengerjakan} · post ${post.mengerjakan}`} warna="#1F6FD1" />
         <KartuAngka label="Pretest belum mulai" nilai={pre.belum} ket={pre.terlewat > 0 ? `${pre.terlewat} terlewat` : undefined} warna="#9A6200" />
         <KartuAngka label="Rata-rata pretest" nilai={fmt(pre.rata)} ket={`${pre.selesai} peserta`} />
         <KartuAngka label="Rata-rata posttest" nilai={fmt(post.rata)} ket={`selesai ${persen(post.selesai)}% (${post.selesai})`} />
+        <KartuAngka label="Rata-rata kuis" nilai={fmt(rataKuis.rata)} ket={`${rataKuis.n} peserta ikut`} warna="#C2570C" />
+        <KartuAngka label="Rata-rata nilai akhir" nilai={fmt(rataAkhir.rata)} ket={`${rataAkhir.n} peserta · ${rataAkhir.lengkap} lengkap`} warna="#0F3D7A" />
       </div>
 
       <Kartu
@@ -558,6 +599,8 @@ function Monitoring() {
               <ThKontrol label="Pretest" filter={{ options: opsiStatusTes("pretest"), selected: new Set([...f.status].filter((v) => v.startsWith("pretest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("pretest:")), ...v])) }} sort={sortKolom(f, "pretest")} />
               <ThKontrol label="Posttest" filter={{ options: opsiStatusTes("posttest"), selected: new Set([...f.status].filter((v) => v.startsWith("posttest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("posttest:")), ...v])) }} sort={sortKolom(f, "posttest")} />
               <ThKontrol label="Naik" sort={sortKolom(f, "naik")} />
+              <ThKontrol label="Kuis" sort={sortKolom(f, "kuis")} />
+              <ThKontrol label="Nilai akhir" sort={sortKolom(f, "akhir")} />
             </tr>
           </thead>
           <tbody>
@@ -565,6 +608,8 @@ function Monitoring() {
               const a = p.tes.pretest?.skor;
               const b = p.tes.posttest?.skor;
               const naik = a != null && b != null ? Math.round((b - a) * 100) / 100 : null;
+              const nl = nilaiPeserta(p, nilai.data);
+              const kz = nilai.data?.kuis[String(p.akun_id)] ?? null;
               return (
                 <tr key={p.akun_id}>
                   <td className={`${TD} font-semibold`}>{p.nama}</td>
@@ -574,12 +619,32 @@ function Monitoring() {
                   <td className={TD}><ChipStatus c={p.tes.pretest} jam={sekarang} /></td>
                   <td className={TD}><ChipStatus c={p.tes.posttest} jam={sekarang} /></td>
                   <td className={`${TD} tabular-nums ${naik != null ? (naik >= 0 ? "text-[#1E7A4C]" : "text-[#C0392B]") : "text-[#7B8794]"}`}>{naik != null ? `${naik > 0 ? "+" : ""}${fmt(naik)}` : "—"}</td>
+                  <td className={TD}>
+                    {kz ? (
+                      <span title={`${kz.benar}/${kz.total_soal} benar · ${kz.poin.toLocaleString("id-ID")} poin`}>
+                        <b className="tabular-nums">{fmt(nl.komponen.kuis)}</b>
+                        <span className="ml-1 text-[11px] text-[#7B8794]">{kz.benar}/{kz.total_soal}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[#7B8794]">—</span>
+                    )}
+                  </td>
+                  <td className={TD}>
+                    {nl.akhir != null ? (
+                      <span className="flex items-center gap-1.5">
+                        <b className="tabular-nums text-[#0F3D7A]">{fmt(nl.akhir)}</b>
+                        {!nl.lengkap && <Chip w="wait" title="Ada komponen terpilih yang belum punya nilai (dihitung 0)">belum lengkap</Chip>}
+                      </span>
+                    ) : (
+                      <span className="text-[#7B8794]">—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={7}>Tidak ada peserta yang cocok dengan filter.</td>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={9}>Tidak ada peserta yang cocok dengan filter.</td>
               </tr>
             )}
           </tbody>

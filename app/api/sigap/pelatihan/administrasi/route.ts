@@ -19,6 +19,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { catatAudit } from "@/lib/sigapAkses";
 import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
 import { UNDANGAN } from "@/lib/sigapTes";
+import { muatSkema } from "@/lib/sigapNilai";
+import { ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi } from "@/lib/sigapAdministrasi";
 
 export const runtime = "nodejs";
@@ -42,11 +44,12 @@ export async function GET(req: NextRequest) {
     if (kelas instanceof NextResponse) return kelas;
 
     if (bagian === "peserta") {
-      const peserta = await muatPeserta(k.db, k.kegiatanId, kelas);
+      const [peserta, { skema, tersimpan }] = await Promise.all([muatPeserta(k.db, k.kegiatanId, kelas, { nilai: true }), muatSkema(k.db, k.kegiatanId)]);
       const hitung = (s: string) => peserta.filter((p) => p.status === s).length;
       return NextResponse.json({
         kelas,
         stat: { peserta: peserta.length, belum: hitung("belum"), draft: hitung("draft"), sudah: hitung("sudah"), terverifikasi: hitung("terverifikasi"), pulsa: peserta.filter((p) => p.pulsa).length },
+        skema: { ...skema, ringkas: ringkasSkema(skema), tersimpan },
         peserta,
       });
     }

@@ -32,9 +32,15 @@ type Peserta = {
   nominal: number;
   pulsa: string | null;
   pulsa_diubah: boolean;
+  pretest: number | null;
+  posttest: number | null;
+  kuis: number | null;
+  kuis_ket: string | null;
+  akhir: number | null;
+  nilai_lengkap: boolean;
 };
 type Ringkas = { nama: string; boleh_kelola: boolean; kelas: number[]; semua_kelas: boolean; kelas_bawaan: number | null; tanggal: string };
-type DataPeserta = { kelas: number; stat: { peserta: number; belum: number; draft: number; sudah: number; terverifikasi: number; pulsa: number }; peserta: Peserta[] };
+type DataPeserta = { kelas: number; stat: { peserta: number; belum: number; draft: number; sudah: number; terverifikasi: number; pulsa: number }; skema?: { ringkas: string; tersimpan: boolean; dasar_kuis: string }; peserta: Peserta[] };
 type Kandidat = { akun_id: number; nama: string; jenis: string; kecamatan: string | null };
 type Narasi = { ringkasan: string | null; kendala: string | null; catatan: string | null };
 
@@ -60,6 +66,7 @@ const DOK_PEL: { k: string; label: string; ket: string }[] = [
   { k: "laporan_instruktur", label: "Laporan Pelatihan Instruktur", ket: "angka otomatis + catatan instruktur" },
 ];
 const SPJ_KODE = new Set(DOK_SPJ.map((d) => d.k));
+const angka = (n: number | null | undefined) => (n == null ? "—" : String(Math.round(n * 100) / 100).replace(".", ","));
 
 function CentangDok({ d, on, ubah }: { d: { k: string; label: string; ket: string }; on: boolean; ubah: () => void }) {
   return (
@@ -296,6 +303,12 @@ export default function Administrasi() {
           <button type="button" className={BTN_O} onClick={() => setSel(new Set([...sel, ...tampil.map((p) => p.penugasan_id)]))}>Pilih semua (yang tampil)</button>
           <button type="button" className={BTN_O} onClick={() => setSel(new Set())}>Kosongkan</button>
         </div>
+        {data?.skema && (
+          <p className="mb-2 rounded-lg bg-[#F1F6FD] px-3 py-1.5 text-[12px] text-[#0F3D7A]">
+            🎯 Nilai akhir = <b>{data.skema.ringkas}</b>
+            {data.skema.tersimpan ? "" : " (skema bawaan — belum disimpan)"}. Diatur di Kelola Pelatihan › Soal & Jadwal / Monitoring.
+          </p>
+        )}
         {!data ? (
           <Memuat />
         ) : (
@@ -313,6 +326,10 @@ export default function Administrasi() {
                 <th className={TH}>Foto</th>
                 <th className={TH}>Nominal</th>
                 <th className={TH}>No. Pulsa</th>
+                <th className={TH}>Pretest</th>
+                <th className={TH}>Posttest</th>
+                <th className={TH}>Kuis</th>
+                <th className={TH}>Nilai akhir</th>
                 <th className={TH}></th>
               </tr>
             </thead>
@@ -338,6 +355,22 @@ export default function Administrasi() {
                       <Chip w="bad">belum</Chip>
                     )}
                   </td>
+                  <td className={`${TD} tabular-nums`}>{angka(p.pretest)}</td>
+                  <td className={`${TD} tabular-nums`}>{angka(p.posttest)}</td>
+                  <td className={`${TD} tabular-nums`}>
+                    {angka(p.kuis)}
+                    {p.kuis_ket && <span className="ml-1 text-[11px] text-[#7B8794]">{p.kuis_ket}</span>}
+                  </td>
+                  <td className={TD}>
+                    {p.akhir != null ? (
+                      <span className="flex items-center gap-1.5">
+                        <b className="tabular-nums text-[#0F3D7A]">{angka(p.akhir)}</b>
+                        {!p.nilai_lengkap && <Chip w="wait" title="Ada komponen terpilih yang belum punya nilai (dihitung 0)">belum lengkap</Chip>}
+                      </span>
+                    ) : (
+                      <span className="text-[#7B8794]">—</span>
+                    )}
+                  </td>
                   <td className={TD}>
                     <div className="flex gap-1.5">
                       <button type="button" className={BTN_O} onClick={() => lihatSatu(p)}>Lihat SPJ</button>
@@ -350,7 +383,7 @@ export default function Administrasi() {
               ))}
               {tampil.length === 0 && (
                 <tr>
-                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={10}>Tidak ada peserta yang cocok.</td>
+                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={14}>Tidak ada peserta yang cocok.</td>
                 </tr>
               )}
             </tbody>
