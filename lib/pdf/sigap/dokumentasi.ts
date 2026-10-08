@@ -10,6 +10,7 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
 import sharp from "sharp";
 import { formatTanggalIndoDenganHari, teksAman } from "./format";
+import { LABEL_FOTO_PENDATAAN, labelFoto } from "@/lib/sigapLabelFoto";
 
 // pdf-lib mengabaikan tag EXIF "Orientation" -- sharp().rotate() memutar piksel sungguhan, lalu
 // resize maks 1280 px supaya memori tetap kecil (pola sama dgn lib/pdf/dokumentasi.ts, 27 Sep 2026).
@@ -30,7 +31,8 @@ async function perbaikiOrientasiFoto(bytes: Uint8Array, contentType: string): Pr
 }
 
 /** (6 Okt 2026) Jenis foto per slot -- harus sama dgn SARAN_FOTO di app/sigap/translok/[token]/page.tsx. */
-export const LABEL_FOTO_SIGAP = ["Saat akan berangkat", "Tiba di lokasi sampel pertama", "Saat mendata", "Saat mau pulang", "Tiba di rumah"];
+/** Keterangan bawaan (pendataan); keterangan per jenis kegiatan: labelFoto() di lib/sigapLabelFoto.ts. */
+export const LABEL_FOTO_SIGAP = LABEL_FOTO_PENDATAAN;
 
 export interface SigapFotoInput {
   slot: number;
@@ -43,6 +45,8 @@ export interface SigapDokumentasiData {
   kegiatanNama: string;
   /** Teks kiri footer, mis. kode kegiatan. */
   kegiatanKode: string;
+  /** (8 Okt 2026) jenis kegiatan (sigap_kegiatan.jenis) -- menentukan keterangan foto; kosong = pendataan. */
+  kegiatanJenis?: string | null;
   nomorSt: string;
   namaPetugas: string;
   peranLabel: string;
@@ -311,7 +315,7 @@ export async function buatPdfDokumentasiSigap(data: SigapDokumentasiData): Promi
       const nomorTampil = dariIdx + idx + 1;
       // (6 Okt 2026) Slot kini = jenis foto yg DITANDAI petugas (Petugas di lokasi, Kegiatan di lapangan, ...)
       // -- permintaan user; label sama dgn halaman petugas.
-      const labelTxt = LABEL_FOTO_SIGAP[k.item.slot - 1] ?? "Dokumentasi";
+      const labelTxt = labelFoto(data.kegiatanJenis)[k.item.slot - 1] ?? "Dokumentasi";
 
       // Outline kartu penuh + header berlatar lembut.
       kotak(x, cardTop, cardW, rowH, { border: LINE, borderWidth: 0.6 });

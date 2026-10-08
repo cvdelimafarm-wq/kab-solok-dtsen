@@ -3,6 +3,7 @@
 import { use as usePromise, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BrandBps from "@/app/components/BrandBps";
 import { useDetak } from "../../useDetak";
+import { labelFoto } from "@/lib/sigapLabelFoto";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -66,8 +67,7 @@ const JUMLAH_FOTO = 5;
 /** (7 Okt 2026) jumlah foto & wajib laporan mengikuti pengaturan kegiatan. */
 const nFoto = (pen: Pen) => pen.kegiatan.jumlah_foto ?? JUMLAH_FOTO;
 const wajibLaporan = (pen: Pen) => pen.kegiatan.wajib_laporan !== false;
-// (6 Okt 2026) Jenis foto baku urut perjalanan -- permintaan user (sama dgn lib/pdf/sigap/dokumentasi.ts).
-const SARAN_FOTO = ["Saat akan berangkat", "Tiba di lokasi sampel pertama", "Saat mendata", "Saat mau pulang", "Tiba di rumah"];
+// (6 Okt 2026) Jenis foto baku urut perjalanan -- permintaan user. (8 Okt 2026) Keterangan mengikuti jenis kegiatan (pelatihan beda): lib/sigapLabelFoto.ts.
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const BULAN_PANJANG = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -1452,6 +1452,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
   const [massal, setMassal] = useState(false);
   const jml = hari.foto.length;
   const MAKS = nFoto(pen); // (7 Okt 2026) jumlah foto per kegiatan
+  const SARAN_FOTO = labelFoto(pen.kegiatan.jenis);
   const persen = Math.round((jml / MAKS) * 100);
 
   async function unggah(slot: number, file: File, tanpaMuat = false): Promise<boolean> {

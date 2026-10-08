@@ -379,6 +379,7 @@ export async function rakitUnit(
           const bytes = await buatPdfDokumentasiSigap({
             kegiatanNama: data.kegiatan.nama,
             kegiatanKode: data.kegiatan.kode,
+            kegiatanJenis: data.kegiatan.jenis,
             nomorSt,
             namaPetugas: data.akun.nama,
             peranLabel: data.label_jabatan,
