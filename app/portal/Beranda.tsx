@@ -8,6 +8,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
+import PengaturanAwal from "./PengaturanAwal";
 import GantiPinCepat from "./GantiPinCepat";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
@@ -130,6 +131,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
 
       <div className="relative z-10 mx-auto -mt-10 max-w-5xl space-y-6 px-4">
         {data && <AktifkanNotifikasi />}
+        {data && <PengaturanAwal />}
         {data?.pin_bawaan && (
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F0D9A0] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4A00]" role="alert">
             <span aria-hidden className="text-[20px]">⚠️</span>

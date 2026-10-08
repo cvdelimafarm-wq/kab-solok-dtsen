@@ -5,14 +5,13 @@
 // (8 Okt 2026) Gerbang "wajib lewat aplikasi" -- permintaan user: semua yang membuka di HP harus lewat aplikasi terpasang, berlaku
 // langsung setelah deploy. Di HP yang membuka lewat tab browser, isi halaman TIDAK ditampilkan; yang tampil modal penuh layar tanpa
 // tombol tutup berisi tombol "Pasang aplikasi sekarang" (Android/Chrome: satu ketukan membuka dialog Instal bawaan; iPhone: langkah
-// Bagikan > Tambahkan ke Layar Utama). Logika murni di lib/sigapGerbangApp.ts. Pintu darurat: kode dari panitia (SIGAP_KODE_BROWSER).
+// Bagikan > Tambahkan ke Layar Utama). Logika murni di lib/sigapGerbangApp.ts. Pintu darurat (kode panitia) disembunyikan atas permintaan user; route-nya tidak dipakai.
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { EVENT_SIAP_PASANG } from "./DaftarSW";
 import {
   KUNCI_IZIN_BROWSER,
-  LAMA_IZIN_BROWSER_MS,
   browserTertanam,
   izinBrowserBerlaku,
   jalurWajibApp,
@@ -63,10 +62,6 @@ function ModalPasang() {
   const [siap, setSiap] = useState(false); // dialog pasang bawaan tersedia
   const [proses, setProses] = useState<"diam" | "memasang" | "terpasang" | "batal">("diam");
   const [salin, setSalin] = useState(false);
-  const [bukaDarurat, setBukaDarurat] = useState(false);
-  const [kode, setKode] = useState("");
-  const [galat, setGalat] = useState<string | null>(null);
-  const [kirim, setKirim] = useState(false);
 
   useEffect(() => {
     const perbarui = () => setSiap(!!window.__sigapPasang);
@@ -105,27 +100,6 @@ function ModalPasang() {
     }
   }
 
-  async function masukDarurat(e: React.FormEvent) {
-    e.preventDefault();
-    setKirim(true);
-    setGalat(null);
-    try {
-      const r = await fetch("/api/sigap/browser-darurat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kode }) });
-      const d = (await r.json().catch(() => ({}))) as { error?: string };
-      if (!r.ok) throw new Error(d.error ?? "Kode tidak diterima.");
-      try {
-        localStorage.setItem(KUNCI_IZIN_BROWSER, JSON.stringify({ sampai: Date.now() + LAMA_IZIN_BROWSER_MS }));
-      } catch {
-        /* abaikan */
-      }
-      window.location.reload();
-    } catch (er) {
-      setGalat(er instanceof Error ? er.message : "Kode tidak diterima.");
-    } finally {
-      setKirim(false);
-    }
-  }
-
   const chrome = typeof window === "undefined" ? null : tautanBukaChrome(window.location.href);
   const tombolUtama = "mt-4 inline-flex min-h-[48px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[15px] font-extrabold text-white transition hover:bg-[#1A4FB8] disabled:cursor-not-allowed disabled:opacity-60";
   const tombolKedua = "mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[13px] border border-[#CBD6E6] bg-white px-4 text-[14px] font-bold text-[#1B2B4B] transition hover:bg-[#F5F8FE]";
@@ -141,12 +115,13 @@ function ModalPasang() {
           </div>
         </div>
 
-        <h2 id="judul-pasang" className="mt-4 text-[19px] font-extrabold leading-tight text-[#0F2A52]">
-          Buka SIGAP lewat aplikasi
+        <h2 id="judul-pasang" className="mt-4 text-[20px] font-extrabold leading-tight text-[#0F2A52]">
+          SIGAP kini hadir sebagai aplikasi
         </h2>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#5B6B84]">
-          Di HP, SIGAP hanya bisa dipakai dari aplikasi yang terpasang di layar utama. Pasang sekali saja, gratis, tidak perlu Play Store.
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#5B6B84]">
+          SIGAP sudah bertransformasi menjadi aplikasi <b className="text-[#0F2A52]">Android dan iPhone</b>. Mulai sekarang, Anda mengakses SIGAP langsung dari ikon di layar utama HP: lebih cepat, tampil layar penuh, dan siap mengingatkan kegiatan pelatihan Anda, bahkan saat aplikasi sedang ditutup.
         </p>
+        <p className="mt-2 text-[13.5px] font-semibold leading-relaxed text-[#0F2A52]">Nikmati layanan SIGAP yang lebih tangguh.</p>
 
         {proses === "terpasang" ? (
           <div className="mt-4 rounded-[14px] bg-[#E3F6EC] p-3.5 text-[13.5px] leading-relaxed text-[#13794B]" role="status">
@@ -225,37 +200,6 @@ function ModalPasang() {
           <b className="text-[#0F2A52]">Sudah pernah memasang?</b> Jangan buka dari browser. Ketuk ikon <b>SIGAP</b> di layar utama atau daftar aplikasi HP.
         </p>
 
-        <div className="mt-3 border-t border-[#DDE6F3] pt-3">
-          {!bukaDarurat ? (
-            <button type="button" onClick={() => setBukaDarurat(true)} className="text-[12.5px] font-semibold text-[#1F5FD1] underline">
-              Tidak bisa memasang?
-            </button>
-          ) : (
-            <form onSubmit={masukDarurat}>
-              <label htmlFor="kode-darurat" className="block text-[12.5px] font-semibold text-[#1B2B4B]">
-                Kode dari panitia
-              </label>
-              <p className="text-[12px] text-[#6B7A90]">Hubungi panitia bila HP Anda tidak bisa memasang aplikasi; Anda akan diberi kode sementara.</p>
-              <div className="mt-2 flex gap-2">
-                <input
-                  id="kode-darurat"
-                  value={kode}
-                  onChange={(e) => setKode(e.target.value)}
-                  autoComplete="off"
-                  className="min-w-0 flex-1 rounded-lg border border-[#DDE6F3] px-3 py-2 text-[14px] outline-none focus:border-[#1F5FD1] focus:ring-2 focus:ring-[#1F5FD1]/15"
-                />
-                <button type="submit" disabled={kirim || !kode.trim()} className="rounded-lg bg-[#0F2A52] px-4 text-[13.5px] font-bold text-white disabled:opacity-50">
-                  {kirim ? "…" : "Pakai"}
-                </button>
-              </div>
-              {galat && (
-                <p role="alert" className="mt-1.5 text-[12.5px] font-semibold text-[#B42329]">
-                  {galat}
-                </p>
-              )}
-            </form>
-          )}
-        </div>
       </div>
     </Layar>
   );
