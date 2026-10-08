@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
 import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import { useDetak } from "../useDetak";
+import { PulsaPeserta } from "./pulsa";
 import type { PengaturanPresensi } from "@/lib/sigapPresensi";
 import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
 
@@ -182,7 +183,10 @@ export function Kerangka({
           else router.push(k === "undangan" ? "/sigap/pelatihan/undangan" : k === "instrumen" ? "/sigap/pelatihan/instrumen" : "/sigap/pelatihan");
         }}
       />
-      <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">{children}</main>
+      <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
+        <PulsaPeserta />
+        {children}
+      </main>
     </div>
   );
 }

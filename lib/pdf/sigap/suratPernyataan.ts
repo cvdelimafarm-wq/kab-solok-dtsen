@@ -3,6 +3,7 @@
 // (5 Okt 2026) Surat Pernyataan Tidak Menggunakan Kendaraan Dinas -- SPJ SIGAP Transport Lokal,
 // permintaan user. SALINAN tata letak lib/pdf/suratKeterangan.ts (modul penyisiran: Helvetica 10pt,
 // paragraf justified) yg diparameterkan utk SIGAP; file penyisiran TIDAK diubah.
+// (8 Okt 2026) Font disamakan dgn Kwitansi SIGAP (Times Roman, isi 12pt) -- permintaan user.
 // Perbedaan dgn versi penyisiran:
 //  - Baris "Jabatan" = sigap_kegiatan_tarif.label_jabatan (bukan label PPL/PML Penyisiran SE2026).
 //  - Identitas: "NIK" utk mitra, "NIP" utk organik (bukan "Sobat ID").
@@ -27,6 +28,7 @@ export interface SigapSuratPernyataanData {
 const HITAM = rgb(0, 0, 0);
 const A4: [number, number] = [595.28, 841.89];
 const MARGIN_X = 55;
+const UKURAN = 12; // sama dgn isi Kwitansi
 
 function bungkusTeks(f: PDFFont, txt: string, size: number, maxWidth: number): string[][] {
   const baris: string[][] = [];
@@ -45,21 +47,21 @@ function bungkusTeks(f: PDFFont, txt: string, size: number, maxWidth: number): s
 export async function buatPdfSuratPernyataanSigap(data: SigapSuratPernyataanData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page: PDFPage = doc.addPage(A4);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const font = await doc.embedFont(StandardFonts.TimesRoman);
+  const fontBold = await doc.embedFont(StandardFonts.TimesRomanBold);
   const { width, height } = page.getSize();
   const usableWidth = width - MARGIN_X * 2;
   let y = height - 70;
 
   function teks(txt: string, x: number, opts: { size?: number; bold?: boolean; align?: "center"; maxWidth?: number } = {}) {
-    const size = opts.size ?? 10;
+    const size = opts.size ?? UKURAN;
     const f = opts.bold ? fontBold : font;
     const t = teksAman(txt);
     let xPos = x;
     if (opts.maxWidth && opts.align === "center") xPos = x + (opts.maxWidth - f.widthOfTextAtSize(t, size)) / 2;
     page.drawText(t, { x: xPos, y, size, font: f, color: HITAM });
   }
-  function paragraf(txt: string, size = 10, lineHeight = 15) {
+  function paragraf(txt: string, size = UKURAN, lineHeight = 17) {
     const baris = bungkusTeks(font, teksAman(txt), size, usableWidth);
     baris.forEach((kataArr, idx) => {
       if (idx === baris.length - 1 || kataArr.length === 1) {
@@ -77,7 +79,7 @@ export async function buatPdfSuratPernyataanSigap(data: SigapSuratPernyataanData
     });
   }
 
-  teks("SURAT PERNYATAAN", MARGIN_X, { bold: true, size: 14, align: "center", maxWidth: usableWidth });
+  teks("SURAT PERNYATAAN", MARGIN_X, { bold: true, size: 16, align: "center", maxWidth: usableWidth });
   y -= 30;
   paragraf("Yang bertanda tangan dibawah ini:");
   y -= 6;
@@ -88,12 +90,12 @@ export async function buatPdfSuratPernyataanSigap(data: SigapSuratPernyataanData
     teks(label, MARGIN_X + 20);
     teks(":", MARGIN_X + 20 + labelWidth);
     // Nilai panjang (mis. label jabatan) dibungkus di kolom nilai.
-    const baris = bungkusTeks(font, teksAman(value), 10, MARGIN_X + usableWidth - nilaiX);
+    const baris = bungkusTeks(font, teksAman(value), UKURAN, MARGIN_X + usableWidth - nilaiX);
     baris.forEach((b, i) => {
       teks(b.join(" "), nilaiX);
-      if (i < baris.length - 1) y -= 13;
+      if (i < baris.length - 1) y -= 15;
     });
-    y -= 18;
+    y -= 20;
   };
   barisIdentitas("Nama", data.namaPetugas || "-");
   barisIdentitas(data.labelId, data.idPetugas || "-");
@@ -119,11 +121,11 @@ export async function buatPdfSuratPernyataanSigap(data: SigapSuratPernyataanData
   const kananWidth = usableWidth * 0.45;
   const tempat = (data.tempatKedudukan || "").trim() || TEMPAT_KEDUDUKAN_DEFAULT;
   teks(`${tempat}, ${formatTanggalIndo(data.tanggalSelesai)}`, kananX, { align: "center", maxWidth: kananWidth });
-  y -= 15;
+  y -= 17;
   teks("Pelaksana Perjalanan Dinas Dalam Kota,", kananX, { align: "center", maxWidth: kananWidth });
   y -= 55;
   teks(data.namaPetugas || "-", kananX, { bold: true, align: "center", maxWidth: kananWidth });
-  y -= 13;
+  y -= 15;
   const labelTtd = data.labelId === "NIP" ? "Nip." : "NIK.";
   teks(data.idPetugas ? `${labelTtd} ${data.idPetugas}` : "-", kananX, { align: "center", maxWidth: kananWidth });
 

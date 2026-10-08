@@ -257,6 +257,45 @@ class Kanvas {
     this.y += tinggi;
   }
 
+  /**
+   * Lampiran foto kegiatan: halaman baru, grid 2 kolom x 3 baris per halaman (foto "muat di kotak", tidak dipotong),
+   * tiap foto diberi nomor + keterangan. Foto yang tidak bisa dibaca dilewati.
+   */
+  async lampiranFoto(foto: FotoLampiran[]) {
+    if (foto.length === 0) return;
+    this.baru();
+    this.seksi("LAMPIRAN FOTO KEGIATAN");
+    const gap = 12;
+    const w = (CONTENT_W - gap) / 2;
+    const hFoto = 170;
+    const hBaris = hFoto + 34;
+    let i = 0;
+    for (const f of foto) {
+      let img;
+      try {
+        img = (f.contentType === "image/png") ? await this.doc.embedPng(f.bytes) : await this.doc.embedJpg(f.bytes);
+      } catch {
+        continue;
+      }
+      const kol = i % 2;
+      if (kol === 0 && this.y + hBaris > BUDGET_BOTTOM) {
+        this.baru();
+        this.y = BUDGET_TOP;
+      }
+      const x = CONTENT_L + kol * (w + gap);
+      this.kotak(x, this.y, w, hFoto, { fill: SOFT_BG, border: LINE, borderWidth: 0.6 });
+      const s = Math.min((w - 8) / img.width, (hFoto - 8) / img.height);
+      const iw = img.width * s;
+      const ih = img.height * s;
+      this.page.drawImage(img, { x: x + (w - iw) / 2, y: PAGE_H - this.y - hFoto + (hFoto - ih) / 2, width: iw, height: ih });
+      const cap = bungkus(this.font, `${i + 1}. ${f.keterangan?.trim() || "Dokumentasi kegiatan"}`, 8.5, w).slice(0, 2);
+      cap.forEach((c, k) => this.teks(c, x, this.y + hFoto + 5 + k * 11, 8.5, { color: TEXT_SEC }));
+      if (kol === 1) this.y += hBaris;
+      i++;
+    }
+    if (i % 2 === 1) this.y += hBaris;
+  }
+
   async simpan(): Promise<Uint8Array> {
     return this.doc.save();
   }
@@ -347,8 +386,12 @@ export type RingkasTes = {
   terendah: number | null;
 };
 
+export type FotoLampiran = { bytes: Uint8Array; contentType: string; keterangan: string | null };
+
 export type DataLaporan = {
   info: InfoKelas;
+  /** Lampiran foto kegiatan (opsional; tanpa foto = tidak ada halaman lampiran). */
+  foto?: FotoLampiran[];
   jumlahPeserta: number;
   hadir: number;
   tes: RingkasTes[];
@@ -394,6 +437,7 @@ export async function buatPdfLaporanPelatihan(d: DataLaporan): Promise<Uint8Arra
   k.seksi("KENDALA DAN TINDAK LANJUT");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Panitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
+  await k.lampiranFoto(d.foto ?? []);
   return k.simpan();
 }
 
@@ -414,5 +458,6 @@ export async function buatPdfLaporanInstruktur(d: DataLaporan): Promise<Uint8Arr
   k.seksi("KENDALA DAN SARAN");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Mengetahui,\nPanitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
+  await k.lampiranFoto(d.foto ?? []);
   return k.simpan();
 }

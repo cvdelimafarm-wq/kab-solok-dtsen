@@ -30,9 +30,11 @@ type Peserta = {
   foto: number;
   foto_total: number;
   nominal: number;
+  pulsa: string | null;
+  pulsa_diubah: boolean;
 };
 type Ringkas = { nama: string; boleh_kelola: boolean; kelas: number[]; semua_kelas: boolean; kelas_bawaan: number | null; tanggal: string };
-type DataPeserta = { kelas: number; stat: { peserta: number; belum: number; draft: number; sudah: number; terverifikasi: number }; peserta: Peserta[] };
+type DataPeserta = { kelas: number; stat: { peserta: number; belum: number; draft: number; sudah: number; terverifikasi: number; pulsa: number }; peserta: Peserta[] };
 type Kandidat = { akun_id: number; nama: string; jenis: string; kecamatan: string | null };
 type Narasi = { ringkasan: string | null; kendala: string | null; catatan: string | null };
 
@@ -186,6 +188,32 @@ export default function Administrasi() {
     }
   }
 
+  async function unduhPulsa() {
+    setPesan(null);
+    setSibuk("pulsa");
+    try {
+      const s = bacaSesi();
+      if (!s) throw new Error("Sesi berakhir. Silakan masuk kembali.");
+      const res = await fetch(`${URL_ADM}?bagian=pulsa_csv&kelas=${kelas}`, { headers: { Authorization: `Bearer ${s}` }, cache: "no-store" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error((j as { error?: string })?.error ?? `Gagal menyiapkan CSV (${res.status}).`);
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `Nomor_Pulsa_Pelatihan_Kelas${kelas}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    } catch (e) {
+      setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    } finally {
+      setSibuk(null);
+    }
+  }
+
   async function keluarkan(p: Peserta) {
     if (!window.confirm(`Keluarkan ${p.nama} dari daftar administrasi kelas ini? (Data tidak dihapus; bisa ditambahkan lagi.)`)) return;
     try {
@@ -231,12 +259,13 @@ export default function Administrasi() {
       </Kartu>
 
       {/* 1. Monitoring */}
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-6">
         <KartuAngka label="Peserta kelas ini" nilai={st?.peserta ?? "…"} />
         <KartuAngka label="Belum diisi" nilai={st?.belum ?? "…"} warna="#B5352D" />
         <KartuAngka label="Draft (sebagian)" nilai={st?.draft ?? "…"} warna="#9A6200" />
         <KartuAngka label="Sudah diisi" nilai={st?.sudah ?? "…"} warna="#12816A" />
         <KartuAngka label="Terverifikasi" nilai={st?.terverifikasi ?? "…"} warna="#1F6FD1" />
+        <KartuAngka label="Nomor pulsa terkonfirmasi" nilai={st ? `${st.pulsa}/${st.peserta}` : "…"} warna="#C2570C" />
       </div>
 
       {/* 2. Pilih petugas */}
@@ -244,11 +273,16 @@ export default function Administrasi() {
         judul="① Pilih petugas"
         ket={`${dipilih.length} dipilih · segar otomatis tiap 15 detik`}
         kanan={
-          info.boleh_kelola ? (
-            <button type="button" className={BTN} onClick={() => setTambah(true)}>
-              + Tambah peserta manual
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" className={BTN_O} disabled={sibuk === "pulsa"} onClick={unduhPulsa}>
+              {sibuk === "pulsa" ? "Menyiapkan…" : "⬇ CSV nomor pulsa"}
             </button>
-          ) : undefined
+            {info.boleh_kelola && (
+              <button type="button" className={BTN} onClick={() => setTambah(true)}>
+                + Tambah peserta manual
+              </button>
+            )}
+          </div>
         }
       >
         <div className="mb-2 flex flex-wrap gap-2">
@@ -278,6 +312,7 @@ export default function Administrasi() {
                 <th className={TH}>Hari</th>
                 <th className={TH}>Foto</th>
                 <th className={TH}>Nominal</th>
+                <th className={TH}>No. Pulsa</th>
                 <th className={TH}></th>
               </tr>
             </thead>
@@ -294,6 +329,15 @@ export default function Administrasi() {
                   <td className={`${TD} tabular-nums`}>{p.hari_lengkap}/{p.hari}</td>
                   <td className={`${TD} tabular-nums`}>{p.foto}/{p.foto_total}</td>
                   <td className={`${TD} tabular-nums`}>{rupiah(p.nominal)}</td>
+                  <td className={`${TD} whitespace-nowrap font-mono text-[12px]`}>
+                    {p.pulsa ? (
+                      <>
+                        {p.pulsa} {p.pulsa_diubah && <Chip w="wait" title="Nomor lain, khusus pulsa">lain</Chip>}
+                      </>
+                    ) : (
+                      <Chip w="bad">belum</Chip>
+                    )}
+                  </td>
                   <td className={TD}>
                     <div className="flex gap-1.5">
                       <button type="button" className={BTN_O} onClick={() => lihatSatu(p)}>Lihat SPJ</button>
@@ -306,7 +350,7 @@ export default function Administrasi() {
               ))}
               {tampil.length === 0 && (
                 <tr>
-                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={9}>Tidak ada peserta yang cocok.</td>
+                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={10}>Tidak ada peserta yang cocok.</td>
                 </tr>
               )}
             </tbody>
@@ -446,6 +490,141 @@ function PanelNarasi({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean
       {pesan && (
         <div className="mt-2">
           <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>
+        </div>
+      )}
+      <PanelFoto kelas={kelas} bisaKelola={bisaKelola} />
+    </div>
+  );
+}
+
+// ======================================================================
+// Lampiran foto kegiatan (dipakai Laporan Pelatihan & Laporan Instruktur kelas ini)
+// ======================================================================
+type FotoLap = { id: number; urut: number; keterangan: string | null; url: string | null };
+const MAKS_FOTO = 8;
+
+function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }) {
+  const [foto, setFoto] = useState<FotoLap[] | null>(null);
+  const [ket, setKet] = useState("");
+  const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
+  const [progres, setProgres] = useState<string | null>(null);
+
+  const muat = useCallback(async () => {
+    try {
+      const d = await fetchJson<{ foto: FotoLap[] }>(`${URL_ADM}?bagian=foto&kelas=${kelas}`);
+      setFoto(d.foto);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    }
+  }, [kelas]);
+  useEffect(() => {
+    setFoto(null);
+    muat();
+  }, [muat]);
+
+  async function unggah(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const s = bacaSesi();
+    if (!s) return;
+    setPesan(null);
+    const sisa = MAKS_FOTO - (foto?.length ?? 0);
+    const daftar = Array.from(files).slice(0, Math.max(0, sisa));
+    let sukses = 0;
+    for (let i = 0; i < daftar.length; i++) {
+      setProgres(`Mengunggah ${i + 1} dari ${daftar.length}…`);
+      const fd = new FormData();
+      fd.append("kelas", String(kelas));
+      fd.append("keterangan", ket);
+      fd.append("file", daftar[i]);
+      try {
+        const res = await fetch(`${URL_ADM}/foto`, { method: "POST", headers: { Authorization: `Bearer ${s}` }, body: fd });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((j as { error?: string })?.error ?? `Gagal mengunggah (${res.status}).`);
+        sukses++;
+      } catch (e) {
+        setPesan({ jenis: "galat", teks: `${daftar[i].name}: ${pesanGalat(e)}` });
+        break;
+      }
+    }
+    setProgres(null);
+    if (sukses > 0) {
+      setKet("");
+      if (files.length > daftar.length) setPesan({ jenis: "galat", teks: `Maksimal ${MAKS_FOTO} foto per kelas; ${files.length - daftar.length} foto tidak diunggah.` });
+      else setPesan({ jenis: "ok", teks: `${sukses} foto ditambahkan.` });
+    }
+    muat();
+  }
+
+  async function hapus(f: FotoLap) {
+    if (!window.confirm("Hapus foto ini dari lampiran laporan?")) return;
+    try {
+      await fetchJson(`${URL_ADM}/foto?id=${f.id}`, { method: "DELETE" });
+      muat();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    }
+  }
+
+  async function simpanKet(f: FotoLap, baru: string) {
+    if ((f.keterangan ?? "") === baru.trim()) return;
+    try {
+      await fetchJson(`${URL_ADM}/foto`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: f.id, keterangan: baru }) });
+      setFoto((l) => (l ?? []).map((x) => (x.id === f.id ? { ...x, keterangan: baru.trim() || null } : x)));
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    }
+  }
+
+  const penuh = (foto?.length ?? 0) >= MAKS_FOTO;
+  return (
+    <div className="mt-4 border-t border-[#EDF0F4] pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <b className="text-[13px]">Lampiran foto kegiatan Kelas {kelas}</b>
+        <span className="text-[12px] text-[#7B8794]">{foto ? `${foto.length}/${MAKS_FOTO} foto` : "memuat…"} · tercetak di halaman lampiran kedua laporan</span>
+      </div>
+      {bisaKelola && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input className={`${INPUT} min-w-[200px] flex-1`} placeholder="Keterangan foto (opsional, berlaku untuk foto yang diunggah sekarang)" value={ket} maxLength={160} onChange={(e) => setKet(e.target.value)} />
+          <label className={`${BTN} ${penuh || progres ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>
+            ⬆ Pilih foto…
+            <input type="file" accept="image/*" multiple className="hidden" disabled={penuh || !!progres} onChange={(e) => { unggah(e.target.files); e.target.value = ""; }} />
+          </label>
+        </div>
+      )}
+      {progres && <p className="mt-1.5 text-[12.5px] text-[#1F6FD1]">{progres}</p>}
+      {pesan && (
+        <div className="mt-2">
+          <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>
+        </div>
+      )}
+      {foto && foto.length === 0 && <p className="mt-2 text-[12.5px] text-[#7B8794]">Belum ada foto. Tanpa foto, laporan dicetak tanpa halaman lampiran.</p>}
+      {foto && foto.length > 0 && (
+        <div className="mt-2 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+          {foto.map((f, i) => (
+            <div key={f.id} className="overflow-hidden rounded-xl border border-[#E3E8EE] bg-white">
+              {f.url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={f.url} alt={`Foto ${i + 1}`} className="h-28 w-full bg-[#F8FAFC] object-contain" />
+              ) : (
+                <div className="grid h-28 place-items-center bg-[#F8FAFC] text-[12px] text-[#7B8794]">tidak tampil</div>
+              )}
+              <div className="space-y-1 p-2">
+                <input
+                  className={`${INPUT} w-full !py-1 !text-[12px]`}
+                  defaultValue={f.keterangan ?? ""}
+                  placeholder={`Foto ${i + 1}: keterangan`}
+                  maxLength={160}
+                  disabled={!bisaKelola}
+                  onBlur={(e) => simpanKet(f, e.target.value)}
+                />
+                {bisaKelola && (
+                  <button type="button" className={`${BTN_R} w-full !py-1`} onClick={() => hapus(f)}>
+                    Hapus
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

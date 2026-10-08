@@ -8,53 +8,28 @@
 // GET ?bagian=peserta&kelas=N                  -> peserta kelas + status pengisian Transport Lokal + statistik
 // GET ?bagian=kandidat&kelas=N&q=teks          -> pencarian Mitra+organik (belum jadi peserta) utk ditambahkan manual
 // GET ?bagian=narasi&kelas=N                   -> narasi Laporan Pelatihan & Laporan Instruktur tersimpan
+// GET ?bagian=pulsa_csv&kelas=N                  -> CSV nomor HP pengisian pulsa peserta kelas (diisi peserta lewat pop-up)
+// GET ?bagian=foto&kelas=N                     -> foto lampiran laporan (tautan sementara); unggah/hapus: ./foto/route.ts
 // GET ?bagian=cetak&kelas=N&penugasan=1,2&jenis=kwitansi,visum,daftar_hadir&format=gabungan|zip[&unduh=1]
 // POST {aksi:"tambah_peserta", kelas, akun_id, peran?}   -> peserta manual (hanya administrasi)
 // POST {aksi:"keluarkan_peserta", penugasan_id}          -> nonaktifkan peserta manual (tidak menghapus data)
 // POST {aksi:"simpan_narasi", kelas, jenis:"pelatihan"|"instruktur", ringkasan, kendala, catatan}
 
 import { NextRequest, NextResponse } from "next/server";
-import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { catatAudit } from "@/lib/sigapAkses";
 import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
 import { UNDANGAN } from "@/lib/sigapTes";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
-import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, cakupanKelas, muatNarasi, muatPeserta, parseJenisCetak } from "@/lib/sigapAdministrasi";
-import type { Db } from "@/lib/sigap";
+import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi } from "@/lib/sigapAdministrasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
-const MENU = "pelatihan.administrasi";
-
-type Konteks = { db: Db; akun: { id: number; nama: string; jenis: string }; kegiatanId: number; bisaKelola: boolean; cakupan: Awaited<ReturnType<typeof cakupanKelas>> };
-
-async function siapkan(req: NextRequest, tulis: boolean): Promise<Konteks | NextResponse> {
-  const db = dbAdmin();
-  if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
-  const akun = await akunDariRequest(req, db);
-  if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-  const kegiatanId = await idKegiatanPelatihan(db);
-  if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
-  const { izin, peran } = await izinAkun(db, akun.id);
-  if (!boleh(izin, MENU, "lihat", kegiatanId)) return galat("Tidak punya izin membuka menu Administrasi pelatihan.", 403);
-  const bisaKelola = boleh(izin, MENU, "kelola", kegiatanId);
-  if (tulis && !bisaKelola) return galat("Hanya pengelola yang boleh mengubah data administrasi pelatihan.", 403);
-  const cakupan = await cakupanKelas(db, akun.id, peran, kegiatanId);
-  return { db, akun, kegiatanId, bisaKelola, cakupan };
-}
-
-function kelasBoleh(k: Konteks, raw: unknown): number | NextResponse {
-  const kelas = Number(raw);
-  if (!Number.isInteger(kelas) || kelas < 1 || kelas > 4) return galat("Kelas tidak valid.");
-  if (!k.cakupan.kelas.includes(kelas)) return galat(k.cakupan.kelas.length === 0 ? "Anda belum ditetapkan pada kelas mana pun. Hubungi admin." : `Anda hanya boleh mengakses Kelas ${k.cakupan.kelas.join(", ")}.`, 403);
-  return kelas;
-}
+const galat = galatJson;
 
 export async function GET(req: NextRequest) {
   try {
-    const k = await siapkan(req, false);
+    const k = await siapkanAdministrasi(req, false);
     if (k instanceof NextResponse) return k;
     const sp = req.nextUrl.searchParams;
     const bagian = sp.get("bagian") ?? "ringkas";
@@ -71,7 +46,7 @@ export async function GET(req: NextRequest) {
       const hitung = (s: string) => peserta.filter((p) => p.status === s).length;
       return NextResponse.json({
         kelas,
-        stat: { peserta: peserta.length, belum: hitung("belum"), draft: hitung("draft"), sudah: hitung("sudah"), terverifikasi: hitung("terverifikasi") },
+        stat: { peserta: peserta.length, belum: hitung("belum"), draft: hitung("draft"), sudah: hitung("sudah"), terverifikasi: hitung("terverifikasi"), pulsa: peserta.filter((p) => p.pulsa).length },
         peserta,
       });
     }
@@ -91,6 +66,17 @@ export async function GET(req: NextRequest) {
         sudah_peserta: (ak ?? []).filter((a) => sudah.has(a.id as number)).map((a) => ({ akun_id: a.id as number, nama: String(a.nama ?? ""), kelas: sudah.get(a.id as number) ?? null })),
       });
     }
+
+    if (bagian === "pulsa_csv") {
+      const isi = await csvPulsaKelas(k.db, k.kegiatanId, kelas);
+      await catatAudit(k.db, k.akun.id, "pelatihan_administrasi_unduh_pulsa", { kelas });
+      return new NextResponse(isi, {
+        status: 200,
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`Nomor_Pulsa_Pelatihan_Kelas${kelas}.csv`)}`, "Cache-Control": "no-store" },
+      });
+    }
+
+    if (bagian === "foto") return NextResponse.json({ kelas, foto: await muatFotoLaporan(k.db, k.kegiatanId, kelas) });
 
     if (bagian === "narasi") return NextResponse.json({ kelas, ...(await muatNarasi(k.db, k.kegiatanId, kelas)) });
 
@@ -120,7 +106,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   try {
-    const k = await siapkan(req, true);
+    const k = await siapkanAdministrasi(req, true);
     if (k instanceof NextResponse) return k;
     const aksi = String(body?.aksi ?? "");
 

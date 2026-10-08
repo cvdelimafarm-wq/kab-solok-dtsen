@@ -12,8 +12,9 @@
 //    peran lain yang punya izin menu (Admin Anggaran, PJ Kegiatan, Admin Aplikasi, Bendahara, Panitia Pelatihan) = semua kelas.
 //  - Peserta manual = sigap_penugasan.sumber = 'administrasi' (tidak ikut tes/kuis/presensi; lihat SUMBER_ADMINISTRASI).
 
+import { NextResponse, type NextRequest } from "next/server";
 import type { Db } from "@/lib/sigap";
-import { HK_AKTIF, aturanDari, hariIniWib, hariLengkap } from "@/lib/sigap";
+import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariIniWib, hariLengkap } from "@/lib/sigap";
 import { GalatSpj, URUTAN_JENIS, buatSpjPdf, gabungkanUnit, type JenisDok } from "@/lib/sigapDokumen";
 import { buatZip } from "@/lib/pdf/sigap/zip";
 import {
@@ -22,14 +23,16 @@ import {
   buatPdfLaporanInstruktur,
   buatPdfLaporanPelatihan,
   type DataLaporan,
+  type FotoLampiran,
   type InfoKelas,
   type PesertaHadir,
   type RingkasTes,
 } from "@/lib/pdf/sigap/pelatihan";
 import { formatTanggalIndo } from "@/lib/pdf/sigap/format";
-import type { PeranAkun } from "@/lib/sigapAkses";
+import { boleh, izinAkun, type PeranAkun } from "@/lib/sigapAkses";
+import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, type SesiBaris } from "@/lib/sigapTes";
-import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, finalisasiBilaKedaluwarsa, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 
 // Penanda peserta tambahan manual (SUMBER_ADMINISTRASI) & filternya didefinisikan di lib/sigapTesDb.ts
 // (dipakai semua query peserta tes/presensi/monitoring); diekspor ulang di sini untuk kemudahan.
@@ -60,6 +63,38 @@ export async function cakupanKelas(db: Db, akunId: number, peran: PeranAkun[], k
 }
 
 // ----------------------------------------------------------------------------------------------
+// Konteks permintaan (dipakai route administrasi & route foto)
+// ----------------------------------------------------------------------------------------------
+export const MENU_ADMINISTRASI = "pelatihan.administrasi";
+export const galatJson = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
+
+export type KonteksAdm = { db: Db; akun: { id: number; nama: string; jenis: string }; kegiatanId: number; bisaKelola: boolean; cakupan: Cakupan };
+
+/** Autentikasi + izin menu + cakupan kelas. `tulis` = butuh level kelola. */
+export async function siapkanAdministrasi(req: NextRequest, tulis: boolean): Promise<KonteksAdm | NextResponse> {
+  const db = dbAdmin();
+  if (!db) return galatJson("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
+  const akun = await akunDariRequest(req, db);
+  if (!akun) return galatJson("Sesi berakhir. Silakan masuk kembali.", 401);
+  const kegiatanId = await idKegiatanPelatihan(db);
+  if (!kegiatanId) return galatJson("Kegiatan pelatihan belum dibuat.", 404);
+  const { izin, peran } = await izinAkun(db, akun.id);
+  if (!boleh(izin, MENU_ADMINISTRASI, "lihat", kegiatanId)) return galatJson("Tidak punya izin membuka menu Administrasi pelatihan.", 403);
+  const bisaKelola = boleh(izin, MENU_ADMINISTRASI, "kelola", kegiatanId);
+  if (tulis && !bisaKelola) return galatJson("Hanya pengelola yang boleh mengubah data administrasi pelatihan.", 403);
+  const cakupan = await cakupanKelas(db, akun.id, peran, kegiatanId);
+  return { db, akun, kegiatanId, bisaKelola, cakupan };
+}
+
+/** Kelas valid & boleh diakses akun ini, atau respons galat. */
+export function kelasBoleh(k: KonteksAdm, raw: unknown): number | NextResponse {
+  const kelas = Number(raw);
+  if (!Number.isInteger(kelas) || kelas < 1 || kelas > 4) return galatJson("Kelas tidak valid.");
+  if (!k.cakupan.kelas.includes(kelas)) return galatJson(k.cakupan.kelas.length === 0 ? "Anda belum ditetapkan pada kelas mana pun. Hubungi admin." : `Anda hanya boleh mengakses Kelas ${k.cakupan.kelas.join(", ")}.`, 403);
+  return kelas;
+}
+
+// ----------------------------------------------------------------------------------------------
 // Peserta + status pengisian Transport Lokal
 // ----------------------------------------------------------------------------------------------
 export type BarisPeserta = {
@@ -76,6 +111,9 @@ export type BarisPeserta = {
   foto: number;
   foto_total: number;
   nominal: number;
+  /** (8 Okt 2026) nomor HP untuk pulsa yang sudah dikonfirmasi peserta (08xx), null bila belum */
+  pulsa: string | null;
+  pulsa_diubah: boolean;
 };
 
 export async function muatPeserta(db: Db, kegiatanId: number, kelas: number): Promise<BarisPeserta[]> {
@@ -98,6 +136,7 @@ export async function muatPeserta(db: Db, kegiatanId: number, kelas: number): Pr
     db.from("sigap_dokumentasi").select("penugasan_id, tanggal, slot").in("penugasan_id", ids).limit(20000),
     db.from("sigap_izin_susulan").select("penugasan_id, tanggal, berlaku_sampai").in("penugasan_id", ids).limit(5000),
   ]);
+  const pulsa = await pulsaBanyak(db, kegiatanId, akunIds);
   const aturan = aturanDari(keg);
   const hariIni = hariIniWib();
   const sekarang = Date.now();
@@ -138,9 +177,32 @@ export async function muatPeserta(db: Db, kegiatanId: number, kelas: number): Pr
       foto: fotoMaks,
       foto_total: aturan.jumlah_foto,
       nominal: dibayarN * (tarifPeran.get(String(p.peran)) ?? 0),
+      pulsa: pulsa.get(p.akun_id as number)?.pulsa ?? null,
+      pulsa_diubah: pulsa.get(p.akun_id as number)?.diubah ?? false,
     };
   });
   return hasil.sort((a, b) => a.nama.localeCompare(b.nama));
+}
+
+// ----------------------------------------------------------------------------------------------
+// (8 Okt 2026) Daftar nomor HP pengisian pulsa (CSV) per kelas
+// ----------------------------------------------------------------------------------------------
+/** CSV (UTF-8 + BOM) nomor pulsa peserta kelas. Nomor ditulis ="08xx" agar Excel tidak membuang angka 0 di depan. */
+export async function csvPulsaKelas(db: Db, kegiatanId: number, kelas: number): Promise<string> {
+  const peserta = await muatPeserta(db, kegiatanId, kelas);
+  const rinci = await pulsaBanyak(db, kegiatanId, peserta.map((p) => p.akun_id));
+  const q = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const nomor = (v: string | null) => (v ? `="${v}"` : "");
+  const baris = [["No", "Nama", "Peran", "Jenis", "Kelas", "No HP Pulsa", "No HP Tercatat", "Status", "Dikonfirmasi (WIB)"].map(q).join(",")];
+  let i = 0;
+  for (const p of peserta) {
+    const r = rinci.get(p.akun_id);
+    const asli = r ? r.asli : await nomorAsli(db, p.akun_id);
+    const status = !r ? "Belum dikonfirmasi" : r.diubah ? "Nomor lain (khusus pulsa)" : "Sesuai nomor tercatat";
+    i++;
+    baris.push([String(i), q(p.nama), q(p.peran.toUpperCase()), q(p.jenis_akun === "organik" ? "Organik" : "Mitra"), String(kelas), nomor(r?.pulsa ?? null), nomor(asli), q(status), q(r ? wibTeks(r.dikonfirmasi_at ?? "") : "")].join(","));
+  }
+  return "\uFEFF" + baris.join("\r\n") + "\r\n";
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -249,8 +311,10 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
     if (selisih.length) kenaikan = selisih.reduce((x, y) => x + y, 0) / selisih.length;
   }
   const n = narasi[jenis];
+  const foto = await unduhFotoLaporan(db, kegiatanId, kelas);
   return {
     info,
+    foto,
     jumlahPeserta: inti.length,
     hadir: inti.filter((p) => pres.has(p.akun_id)).length,
     tes,
@@ -260,6 +324,37 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
     catatan: n.catatan,
     tanggalCetak: `Solok, ${formatTanggalIndo(hariIniWib())}`,
   };
+}
+
+// ----------------------------------------------------------------------------------------------
+// Lampiran foto kegiatan (Laporan Pelatihan & Laporan Instruktur)
+// ----------------------------------------------------------------------------------------------
+export const MAKS_FOTO_LAPORAN = 8;
+export type BarisFoto = { id: number; urut: number; keterangan: string | null; url: string | null };
+
+/** Daftar foto lampiran satu kelas + tautan sementara (1 jam) untuk pratinjau. */
+export async function muatFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<BarisFoto[]> {
+  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("id, urut, file_path, keterangan").eq("kegiatan_id", kegiatanId).eq("kelas", kelas).order("urut").order("id");
+  const baris = data ?? [];
+  const paths = baris.map((b) => String(b.file_path));
+  const url = new Map<string, string>();
+  if (paths.length) {
+    const { data: s } = await db.storage.from(BUCKET_SIGAP).createSignedUrls(paths, 3600);
+    for (const x of s ?? []) if (x.path && x.signedUrl) url.set(x.path, x.signedUrl);
+  }
+  return baris.map((b) => ({ id: b.id as number, urut: b.urut as number, keterangan: (b.keterangan as string | null) ?? null, url: url.get(String(b.file_path)) ?? null }));
+}
+
+/** Foto lampiran siap sisip PDF (berkas diunduh dari storage; yang gagal dilewati). */
+async function unduhFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<FotoLampiran[]> {
+  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("file_path, keterangan").eq("kegiatan_id", kegiatanId).eq("kelas", kelas).order("urut").order("id");
+  const hasil: FotoLampiran[] = [];
+  for (const b of data ?? []) {
+    const { data: blob } = await db.storage.from(BUCKET_SIGAP).download(String(b.file_path));
+    if (!blob) continue;
+    hasil.push({ bytes: new Uint8Array(await blob.arrayBuffer()), contentType: /\.png$/i.test(String(b.file_path)) ? "image/png" : "image/jpeg", keterangan: (b.keterangan as string | null) ?? null });
+  }
+  return hasil;
 }
 
 // ----------------------------------------------------------------------------------------------
