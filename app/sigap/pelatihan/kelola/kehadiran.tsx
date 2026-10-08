@@ -6,18 +6,19 @@
 // Mockup disetujui user (presensi radius 300 m dari Mami Hotel; jam 06.00-18.00; sekali saja; presensi manual panitia).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LABEL_SLOT_FOTO, bagiFoto, teksJarak, type PengaturanPresensi } from "@/lib/sigapPresensi";
+import { LABEL_SLOT_FOTO, MAKS_SESI, bagiFoto, sesiBawaan, teksJarak, type AturanSesi, type PengaturanPresensi } from "@/lib/sigapPresensi";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import ResetPin from "../../admin/ResetPin";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon } from "./monitorKit";
 
 const URL_KEHADIRAN = "/api/sigap/pelatihan/admin/kehadiran";
+const BLN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const waktuHari = (tgl: string) => `${Number(tgl.slice(8, 10))} ${BLN[Number(tgl.slice(5, 7)) - 1]} ${tgl.slice(0, 4)}`;
 const jamWib = (iso: string) => {
   const d = new Date(new Date(iso).getTime() + 7 * 3_600_000);
   return `${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`;
 };
-const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 16);
 
 /** Polling data admin tiap `ms` (segar otomatis). */
 function usePolling<T>(url: string, ms = 10_000) {
@@ -42,7 +43,7 @@ function usePolling<T>(url: string, ms = 10_000) {
 // ======================================================================
 // Pengaturan presensi (tab Soal & Jadwal)
 // ======================================================================
-type RespPengaturan = { sekarang: string; boleh_kelola: boolean; pengaturan: PengaturanPresensi | null };
+type RespPengaturan = { sekarang: string; boleh_kelola: boolean; pengaturan: PengaturanPresensi | null; bawaan?: boolean };
 
 type TitikForm = { nama: string; lat: string; lng: string; radius: string };
 const TITIK_KOSONG: TitikForm = { nama: "", lat: "", lng: "", radius: "300" };
@@ -54,26 +55,32 @@ export function PengaturanPresensiKartu() {
   // (7 Okt 2026) daftar titik presensi (1-5): diterima bila dalam radius SALAH SATU titik
   const [titik, setTitik] = useState<TitikForm[]>([{ ...TITIK_KOSONG }]);
   const [akurasi, setAkurasi] = useState("100");
-  const [buka, setBuka] = useState("");
-  const [tutup, setTutup] = useState("");
+  // (8 Okt 2026) jumlah presensi per hari (1-3 sesi) + jam tiap sesi; berlaku di setiap hari kegiatan
+  const [sesi, setSesi] = useState<AturanSesi[]>(sesiBawaan(1));
+  const [hari, setHari] = useState<string[]>([]);
+  const [bawaan, setBawaan] = useState(false);
   const [sibuk, setSibuk] = useState(false);
 
   const isi = (p: PengaturanPresensi) => {
     setTitik(p.titik.length ? p.titik.map((t) => ({ nama: t.nama, lat: String(t.lat), lng: String(t.lng), radius: String(t.radius_m) })) : [{ ...TITIK_KOSONG }]);
     setAkurasi(String(p.akurasi_maks_m));
-    setBuka(keInputWib(p.buka_at));
-    setTutup(keInputWib(p.tutup_at));
+    setSesi(p.sesi?.length ? p.sesi.map((x) => ({ ...x })) : sesiBawaan(1));
+    setHari(p.hari ?? []);
   };
   useEffect(() => {
     fetchJson<RespPengaturan>(`${URL_KEHADIRAN}?bagian=pengaturan`)
       .then((r) => {
         setD(r);
+        setBawaan(!!r.bawaan);
         if (r.pengaturan) isi(r.pengaturan);
       })
       .catch((e) => !(e instanceof SesiBerakhir) && setGalat(pesanGalat(e)));
   }, []);
 
   const ubah = (i: number, k: keyof TitikForm, v: string) => setTitik((a) => a.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
+  const ubahSesi = (i: number, k: keyof AturanSesi, v: string) => setSesi((a) => a.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  // ganti jumlah sesi: isian awal menyesuaikan (Pagi/Sore, dst.); jam masih bisa diubah
+  const aturJumlahSesi = (n: number) => setSesi((a) => (a.length === n ? a : sesiBawaan(n)));
 
   function pakaiLokasiSaya(i: number) {
     setPesan(null);
@@ -99,10 +106,10 @@ export function PengaturanPresensiKartu() {
           aksi: "atur_presensi",
           titik: titik.map((t) => ({ nama: t.nama, lat: t.lat.trim() === "" ? null : Number(t.lat.replace(",", ".")), lng: t.lng.trim() === "" ? null : Number(t.lng.replace(",", ".")), radius_m: Number(t.radius) })),
           akurasi_maks_m: Number(akurasi),
-          buka_at: buka,
-          tutup_at: tutup,
+          sesi,
         }),
       });
+      setBawaan(false);
       setPesan({ jenis: "ok", teks: "Pengaturan presensi tersimpan." });
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
@@ -168,23 +175,57 @@ export function PengaturanPresensiKartu() {
           </button>
         )}
       </div>
+      <div className="mt-3 rounded-xl border border-[#E3E8EE] bg-[#F9FAFC] p-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[12.5px] font-extrabold text-[#0F3D7A]">Presensi per hari</span>
+          <label className="flex items-center gap-1.5 text-[12px] font-bold text-[#55657D]">
+            Jumlah presensi per hari
+            <select className={INPUT} value={sesi.length} disabled={!bisa} onChange={(e) => aturJumlahSesi(Number(e.target.value))} aria-label="Jumlah presensi per hari">
+              {Array.from({ length: MAKS_SESI }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>{n}× per hari</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="mt-2 space-y-2">
+          {sesi.map((x, i) => (
+            <div key={i} className="grid gap-2 sm:grid-cols-6">
+              {sesi.length > 1 ? (
+                <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-2">
+                  Nama sesi {i + 1}
+                  <input className={`${INPUT} mt-0.5 w-full`} value={x.nama} onChange={(e) => ubahSesi(i, "nama", e.target.value)} disabled={!bisa} placeholder="mis. Pagi" maxLength={30} />
+                </label>
+              ) : (
+                <div className="text-[11.5px] font-bold text-[#55657D] sm:col-span-2">
+                  Sesi
+                  <p className="mt-0.5 py-1.5 text-[13px] font-semibold text-[#14202E]">Presensi (sekali per hari)</p>
+                </div>
+              )}
+              <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-2">
+                Dibuka (WIB)
+                <input type="time" className={`${INPUT} mt-0.5 w-full`} value={x.buka} onChange={(e) => ubahSesi(i, "buka", e.target.value)} disabled={!bisa} />
+              </label>
+              <label className="text-[11.5px] font-bold text-[#55657D] sm:col-span-2">
+                Ditutup (WIB)
+                <input type="time" className={`${INPUT} mt-0.5 w-full`} value={x.tutup} onChange={(e) => ubahSesi(i, "tutup", e.target.value)} disabled={!bisa} />
+              </label>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[12px] text-[#7B8794]">
+          Berlaku di setiap hari kegiatan{hari.length ? ` (${hari.length === 1 ? waktuHari(hari[0]) : `${waktuHari(hari[0])} s.d. ${waktuHari(hari[hari.length - 1])}, ${hari.length} hari`})` : ""}. Peringatan lokasi di HP peserta hanya muncul untuk sesi yang sedang dibuka, dan hilang setelah semua sesi hari itu tercatat.
+        </p>
+      </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <label className="text-[11.5px] font-bold text-[#55657D]">
-          Presensi dibuka (WIB)
-          <input type="datetime-local" className={`${INPUT} mt-0.5 w-full`} value={buka} onChange={(e) => setBuka(e.target.value)} disabled={!bisa} />
-        </label>
-        <label className="text-[11.5px] font-bold text-[#55657D]">
-          Presensi ditutup (WIB)
-          <input type="datetime-local" className={`${INPUT} mt-0.5 w-full`} value={tutup} onChange={(e) => setTutup(e.target.value)} disabled={!bisa} />
-        </label>
         <label className="text-[11.5px] font-bold text-[#55657D]">
           Akurasi GPS maks. (meter)
           <input className={`${INPUT} mt-0.5 w-full`} value={akurasi} onChange={(e) => setAkurasi(e.target.value)} disabled={!bisa} inputMode="numeric" />
         </label>
       </div>
       <p className="mt-2 text-[12px] text-[#7B8794]">
-        Peserta bisa presensi bila berada dalam radius salah satu titik di atas dan sinyal GPS-nya cukup akurat. Presensi sekali saja per peserta.
+        Peserta bisa presensi bila berada dalam radius salah satu titik di atas dan sinyal GPS-nya cukup akurat. Satu presensi per peserta per sesi. Bila jumlah atau jam sesi diubah setelah ada peserta presensi, presensi yang sudah tercatat tetap menjadi sesi 1.
       </p>
+      {bawaan && <div className="mt-2"><Pesan jenis="ok">Pengaturan ini masih isian bawaan (1× per hari, 06.00–18.00 WIB{titik.some((t) => t.nama) ? ", lokasi disalin dari pelatihan sebelumnya" : ""}). Periksa lalu tekan Simpan agar dipakai peserta.</Pesan></div>}
       {pesan && <div className="mt-2"><Pesan jenis={pesan.jenis}>{pesan.teks}</Pesan></div>}
       {bisa && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -206,7 +247,10 @@ type PresensiPes = {
   jenis_akun: string;
   peran: string;
   kelas: number | null;
-  status: "hadir" | "ditolak" | "belum";
+  /** hadir = semua sesi hari ini tercatat; sebagian = sebagian sesi; ditolak = hanya percobaan ditolak; belum */
+  status: "hadir" | "sebagian" | "ditolak" | "belum";
+  sesi: { no: number; nama: string; buka_at: string; tutup_at: string; hadir: boolean; at: string | null; jarak_m: number | null; titik_nama: string | null; manual: boolean; alasan: string | null; dicatat_oleh: string | null }[];
+  hadir_n: number;
   at: string | null;
   jarak_m: number | null;
   titik_nama: string | null;
@@ -218,13 +262,14 @@ type PresensiPes = {
   percobaan_jarak_m: number | null;
   percobaan_alasan: string | null;
 };
-type RespPresensi = { sekarang: string; boleh_kelola: boolean; pengaturan: PengaturanPresensi | null; stat: { peserta: number; hadir: number; ditolak: number; belum: number }; peserta: PresensiPes[] };
+type RespPresensi = { sekarang: string; boleh_kelola: boolean; pengaturan: PengaturanPresensi | null; tanggal: string | null; sesi_hari: { no: number; nama: string; buka_at: string; tutup_at: string }[]; stat: { peserta: number; hadir: number; sebagian: number; ditolak: number; belum: number }; peserta: PresensiPes[] };
 
 export function MonitoringPresensi() {
   const { data, galat, muat } = usePolling<RespPresensi>(`${URL_KEHADIRAN}?bagian=presensi`);
   const f = useFilterMon();
   const [buka, setBuka] = useState<number | null>(null);
   const [alasan, setAlasan] = useState("");
+  const [sesiManual, setSesiManual] = useState<number | null>(null); // (8 Okt 2026) sesi yang dicatat manual (null = sesi pertama yang belum tercatat)
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -235,7 +280,7 @@ export function MonitoringPresensi() {
       urutkan(
         dasar.filter((p) => !f.status.size || f.status.has(p.status)),
         f.urut,
-        { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, presensi: (p) => (p.status === "hadir" ? 0 : p.status === "ditolak" ? 1 : 2), jarak: (p) => (p.status === "hadir" ? p.jarak_m : p.percobaan_jarak_m) }
+        { nama: (p) => p.nama, kelas: (p) => p.kelas, peran: (p) => p.peran, jenis: (p) => p.jenis_akun, presensi: (p) => (p.status === "hadir" ? 0 : p.status === "sebagian" ? 1 : p.status === "ditolak" ? 2 : 3), jarak: (p) => (p.status === "hadir" ? p.jarak_m : p.percobaan_jarak_m) }
       ),
     [dasar, f.status, f.urut]
   );
@@ -244,7 +289,7 @@ export function MonitoringPresensi() {
     setSibuk(true);
     setPesan(null);
     try {
-      await fetchJson(URL_KEHADIRAN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "presensi_manual", akun_id: akunId, alasan }) });
+      await fetchJson(URL_KEHADIRAN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "presensi_manual", akun_id: akunId, alasan, sesi: sesiManual != null && data?.tanggal ? `${data.tanggal}#${sesiManual}` : undefined }) });
       setBuka(null);
       setAlasan("");
       await muat();
@@ -258,12 +303,29 @@ export function MonitoringPresensi() {
   async function ekspor() {
     if (!data) return;
     const XLSX = await import("xlsx");
-    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Status", "Waktu presensi (WIB)", "Lokasi", "Jarak (m)", "Cara", "Alasan/keterangan", "Percobaan ditolak"]];
+    // (8 Okt 2026) satu kolom waktu per sesi presensi hari ini
+    const namaSesi = data.sesi_hari.map((x) => (data.sesi_hari.length > 1 ? x.nama : "Waktu presensi"));
+    const aoa: (string | number)[][] = [["No", "Nama", "Kelas", "Peran", "Status", ...namaSesi.map((n) => `${n} (WIB)`), "Lokasi", "Jarak (m)", "Cara", "Alasan/keterangan", "Percobaan ditolak"]];
     baris.forEach((p, i) =>
-      aoa.push([i + 1, p.nama, p.kelas ?? "", p.peran.toUpperCase(), p.status === "hadir" ? "Hadir" : p.status === "ditolak" ? "Ditolak (belum hadir)" : "Belum", p.at ? waktuWib(p.at) : "", p.titik_nama ?? "", p.jarak_m != null ? Math.round(p.jarak_m) : "", p.status === "hadir" ? (p.manual ? `Manual (${p.dicatat_oleh ?? ""})` : "Aplikasi") : "", p.alasan ?? "", p.percobaan])
+      aoa.push([
+        i + 1,
+        p.nama,
+        p.kelas ?? "",
+        p.peran.toUpperCase(),
+        p.status === "hadir" ? "Hadir" : p.status === "sebagian" ? `Sebagian (${p.hadir_n} dari ${data.sesi_hari.length})` : p.status === "ditolak" ? "Ditolak (belum hadir)" : "Belum",
+        ...data.sesi_hari.map((x) => {
+          const t = p.sesi.find((y) => y.no === x.no);
+          return t?.at ? waktuWib(t.at) : "";
+        }),
+        p.titik_nama ?? "",
+        p.jarak_m != null ? Math.round(p.jarak_m) : "",
+        p.hadir_n > 0 ? (p.manual ? `Manual (${p.dicatat_oleh ?? ""})` : "Aplikasi") : "",
+        p.alasan ?? "",
+        p.percobaan,
+      ])
     );
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 12 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 7 }, { wch: 7 }, { wch: 22 }, ...data.sesi_hari.map(() => ({ wch: 20 })), { wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Presensi");
     XLSX.writeFile(wb, `Presensi_Pelatihan_PSP_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -272,7 +334,8 @@ export function MonitoringPresensi() {
   if (galat && !data) return <Pesan jenis="galat">{galat}</Pesan>;
   if (!data) return <Memuat />;
   // kartu mengikuti filter Jenis/Kelas/Peran/Nama (tanpa status, karena kartu memerinci status)
-  const st = { peserta: dasar.length, hadir: dasar.filter((p) => p.status === "hadir").length, ditolak: dasar.filter((p) => p.status === "ditolak").length, belum: dasar.filter((p) => p.status === "belum").length };
+  const st = { peserta: dasar.length, hadir: dasar.filter((p) => p.status === "hadir").length, sebagian: dasar.filter((p) => p.status === "sebagian").length, ditolak: dasar.filter((p) => p.status === "ditolak").length, belum: dasar.filter((p) => p.status === "belum").length };
+  const banyakSesi = data.sesi_hari.length > 1;
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
@@ -281,7 +344,8 @@ export function MonitoringPresensi() {
         total={baris.length}
         semua={data.peserta.length}
         statusOpsi={[
-          { nilai: "hadir", label: "Sudah presensi" },
+          { nilai: "hadir", label: banyakSesi ? "Lengkap" : "Sudah presensi" },
+          ...(banyakSesi ? [{ nilai: "sebagian", label: "Sebagian" }] : []),
           { nilai: "ditolak", label: "Ditolak" },
           { nilai: "belum", label: "Belum mencoba" },
         ]}
@@ -289,8 +353,8 @@ export function MonitoringPresensi() {
       />
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KartuAngka label="Peserta" nilai={st.peserta} ket={f.adaFilter ? `dari ${data.peserta.length}` : undefined} />
-        <KartuAngka label="Sudah presensi" nilai={st.hadir} ket={`${st.peserta ? Math.round((st.hadir / st.peserta) * 100) : 0}%`} warna="#1E7A4C" />
-        <KartuAngka label="Belum presensi" nilai={st.belum + st.ditolak} warna="#9A6200" />
+        <KartuAngka label={banyakSesi ? "Presensi lengkap" : "Sudah presensi"} nilai={st.hadir} ket={`${st.peserta ? Math.round((st.hadir / st.peserta) * 100) : 0}%`} warna="#1E7A4C" />
+        <KartuAngka label={banyakSesi ? "Belum lengkap" : "Belum presensi"} nilai={st.belum + st.ditolak + st.sebagian} ket={banyakSesi && st.sebagian ? `${st.sebagian} sebagian` : undefined} warna="#9A6200" />
         <KartuAngka label="Ditolak (di luar radius/GPS)" nilai={st.ditolak} warna="#C0392B" />
       </div>
       <Kartu
@@ -312,7 +376,7 @@ export function MonitoringPresensi() {
               <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
               <ThKontrol
                 label="Presensi"
-                filter={{ options: [{ nilai: "hadir", label: "Sudah presensi" }, { nilai: "ditolak", label: "Ditolak" }, { nilai: "belum", label: "Belum mencoba" }], selected: f.status, onApply: f.setStatus }}
+                filter={{ options: [{ nilai: "hadir", label: banyakSesi ? "Lengkap" : "Sudah presensi" }, ...(banyakSesi ? [{ nilai: "sebagian", label: "Sebagian" }] : []), { nilai: "ditolak", label: "Ditolak" }, { nilai: "belum", label: "Belum mencoba" }], selected: f.status, onApply: f.setStatus }}
                 sort={sortKolom(f, "presensi")}
               />
               <ThKontrol label="Jarak" sort={sortKolom(f, "jarak")} />
@@ -328,7 +392,16 @@ export function MonitoringPresensi() {
                   <td className={TD}>{p.peran.toUpperCase()}</td>
                   <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
                   <td className={TD}>
-                    {p.status === "hadir" ? (
+                    {banyakSesi && p.hadir_n > 0 ? (
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {p.sesi.map((x) => (
+                          <Chip key={x.no} w={x.hadir ? "ok" : "wait"}>
+                            {x.nama} {x.hadir && x.at ? jamWib(x.at) : "–"}
+                            {x.hadir && x.manual ? " (manual)" : ""}
+                          </Chip>
+                        ))}
+                      </span>
+                    ) : p.status === "hadir" ? (
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Chip w="ok">{p.at ? jamWib(p.at) : "–"} WIB</Chip>
                         {p.manual && <Chip w="wait">manual</Chip>}
@@ -342,11 +415,11 @@ export function MonitoringPresensi() {
                       <Chip w="wait">belum presensi</Chip>
                     )}
                   </td>
-                  <td className={`${TD} tabular-nums`}>{p.status === "hadir" ? (p.jarak_m != null ? `${teksJarak(p.jarak_m)}${p.titik_nama ? ` · ${p.titik_nama}` : ""}` : "–") : p.percobaan_jarak_m != null ? teksJarak(p.percobaan_jarak_m) : "–"}</td>
+                  <td className={`${TD} tabular-nums`}>{p.hadir_n > 0 ? (p.jarak_m != null ? `${teksJarak(p.jarak_m)}${p.titik_nama ? ` · ${p.titik_nama}` : ""}` : "–") : p.percobaan_jarak_m != null ? teksJarak(p.percobaan_jarak_m) : "–"}</td>
                   {data.boleh_kelola && (
                     <td className={TD}>
                       {p.status !== "hadir" && (
-                        <button type="button" className={BTN_G} onClick={() => { setBuka(buka === p.akun_id ? null : p.akun_id); setAlasan(""); setPesan(null); }}>
+                        <button type="button" className={BTN_G} onClick={() => { setBuka(buka === p.akun_id ? null : p.akun_id); setAlasan(""); setPesan(null); setSesiManual(null); }}>
                           Catat manual
                         </button>
                       )}
@@ -357,6 +430,14 @@ export function MonitoringPresensi() {
                   <tr>
                     <td className={TD} colSpan={7}>
                       <div className="flex flex-wrap items-center gap-2">
+                        {p.sesi.filter((x) => !x.hadir).length > 1 && (
+                          <select className={INPUT} value={sesiManual ?? ""} onChange={(e) => setSesiManual(e.target.value === "" ? null : Number(e.target.value))} aria-label="Sesi presensi yang dicatat">
+                            <option value="">Sesi yang sedang dibuka / berikutnya</option>
+                            {p.sesi.filter((x) => !x.hadir).map((x) => (
+                              <option key={x.no} value={x.no}>{x.nama} ({jamWib(x.buka_at)}–{jamWib(x.tutup_at)})</option>
+                            ))}
+                          </select>
+                        )}
                         <input className={`${INPUT} min-w-[220px] flex-1`} placeholder="Alasan wajib (mis. GPS tidak terbaca)" value={alasan} onChange={(e) => setAlasan(e.target.value)} />
                         <button type="button" className={BTN} disabled={sibuk || alasan.trim().length < 5} onClick={() => catatManual(p.akun_id)}>
                           {sibuk ? "Menyimpan…" : "Catat hadir"}

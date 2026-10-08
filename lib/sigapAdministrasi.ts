@@ -268,12 +268,12 @@ async function infoKelas(db: Db, kegiatanId: number, kelas: number): Promise<Inf
   };
 }
 
-/** Presensi diterima per akun -> jam WIB. */
+/** Presensi diterima per akun -> jam WIB. (8 Okt 2026) Bila ada beberapa sesi presensi: hadir bila minimal satu sesi tercatat; jam = presensi pertama. */
 async function presensiPer(db: Db, kegiatanId: number, akunIds: number[]): Promise<Map<number, { jam: string; manual: boolean }>> {
   const peta = new Map<number, { jam: string; manual: boolean }>();
   if (akunIds.length === 0) return peta;
-  const { data } = await db.from("sigap_pelatihan_presensi").select("akun_id, at, manual").eq("kegiatan_id", kegiatanId).eq("diterima", true).in("akun_id", akunIds).limit(5000);
-  for (const r of data ?? []) peta.set(r.akun_id as number, { jam: jamWib(String(r.at)), manual: !!r.manual });
+  const { data } = await db.from("sigap_pelatihan_presensi").select("akun_id, at, manual").eq("kegiatan_id", kegiatanId).eq("diterima", true).in("akun_id", akunIds).order("at", { ascending: true }).limit(5000);
+  for (const r of data ?? []) if (!peta.has(r.akun_id as number)) peta.set(r.akun_id as number, { jam: jamWib(String(r.at)), manual: !!r.manual });
   return peta;
 }
 

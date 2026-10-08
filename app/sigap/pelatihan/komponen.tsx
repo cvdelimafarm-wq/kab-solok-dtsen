@@ -11,7 +11,7 @@ import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "
 import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
-import type { PengaturanPresensi } from "@/lib/sigapPresensi";
+import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
 
 export type TesHub = {
@@ -38,7 +38,8 @@ export type Hub = {
   /** (7 Okt 2026) Langkah Pelatihan: null bila akun bukan peserta. */
   langkah: { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] } | null;
   /** (7 Okt 2026) Presensi di lokasi pelatihan: null bila akun bukan peserta / belum diatur. */
-  presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null; pengaturan: PengaturanPresensi } | null;
+  /** (8 Okt 2026) `sudah` = semua sesi presensi hari ini tercatat; `hari` = sesi hari ini + catatan peserta. */
+  presensi: { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null; hari: RingkasHari; pengaturan: PengaturanPresensi } | null;
   /** (7 Okt 2026) Kuis Live: null bila akun bukan peserta / belum ada kuis (langkah disembunyikan). */
   kuis: { ada_ruang_aktif: boolean; status: string | null; kelas: number | null; judul: string | null; sudah_gabung: boolean; pernah_ikut: boolean; ada_ruang_selesai: boolean; jadwal_at: string | null } | null;
   token_translok: string | null;

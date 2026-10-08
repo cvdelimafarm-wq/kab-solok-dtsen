@@ -2,15 +2,17 @@
 //
 // (7 Okt 2026) SIGAP > Pelatihan -- beranda peserta: data undangan pribadi + status pretest/posttest.
 // GET (Authorization: Bearer <sesi>) ->
-//   { nama, peserta: {peran, kelas} | null, undangan, tes: [{jenis, judul, buka_at, tutup_at, durasi_menit,
+//   { nama, peserta: {peran, kelas} | null, undangan, presensi: {sudah, ..., hari: {tanggal, sesi_hari[]}, pengaturan} | null,
+//     tes: [{jenis, judul, buka_at, tutup_at, durasi_menit,
 //     status, jumlah_soal, sesi?, hasil_tertunda, skor?}], langkah: {undangan_dibuka, instrumen_diunduh, foto, foto_total}|null,
 //   token_translok|null, sekarang, boleh_lihat_kelola, boleh_kelola }
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { keadaanHari, susunHari } from "@/lib/sigapPresensi";
 import { UNDANGAN, statusTes } from "@/lib/sigapTes";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
-import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatPresensiAkun, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
+import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,8 +74,14 @@ export async function GET(req: NextRequest) {
     if (peserta) {
       // (7 Okt 2026) Kuis Live: ringkasan utk langkah "Kuis Live" (null = belum ada kuis -> langkah disembunyikan). Gagal -> null.
       kuis = await ringkasanKuisHub(db, kegiatanId, akun.id, peserta.kelas ?? null).catch(() => null);
-      const [peng, pres] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatPresensiAkun(db, kegiatanId, akun.id)]);
-      presensi = peng ? { ...pres, pengaturan: peng } : null;
+      const [peng, rekam] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatRekamPresensi(db, kegiatanId, akun.id)]);
+      if (peng) {
+        // (8 Okt 2026) presensi per sesi: `hari` = sesi hari ini + catatan peserta; `sudah` = semua sesi hari ini tercatat (peringatan lokasi padam)
+        const hari = susunHari(peng.jadwal, rekam, sekarang.getTime());
+        const kead = keadaanHari(hari, sekarang.getTime());
+        const pertama = hari.sesi_hari.find((x) => x.at) ?? null;
+        presensi = { sudah: kead.lengkap, at: pertama?.at ?? null, jarak_m: pertama?.jarak_m ?? null, manual: !!pertama?.manual, titik_nama: pertama?.titik_nama ?? null, hari, pengaturan: peng };
+      }
       langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);
       // (7 Okt 2026) akses pertama ke halaman Pelatihan dicatat utk monitoring "belum akses"
       if (!langkah.sudah_akses) await catatLangkah(db, akun.id, kegiatanId, "akses").catch(() => {});

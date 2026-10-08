@@ -3,21 +3,23 @@
 // (7 Okt 2026) SIGAP > Kelola Pelatihan > Monitoring presensi & Transport Lokal + pengaturan titik presensi.
 // Izin menu `pelatihan.kelola`: lihat = monitoring; kelola = pengaturan & presensi manual. Aksi tulis dicatat di sigap_audit.
 //
-// GET ?bagian=pengaturan              -> pengaturan presensi (titik, radius, jam, akurasi)
-// GET ?bagian=presensi                -> peserta x status presensi (hadir / ditolak / belum) + statistik
+// GET ?bagian=pengaturan              -> pengaturan presensi (titik, radius, sesi per hari, akurasi); belum disimpan -> isian bawaan (bawaan:true)
+// GET ?bagian=presensi                -> peserta x status presensi hari ini (hadir lengkap / sebagian / ditolak / belum) per sesi + statistik
 // GET ?bagian=translok                -> peserta x foto Transport Lokal pada hari pelatihan
 // GET ?bagian=akses                  -> peserta x akses ke halaman Pelatihan (pertama kali), login terakhir, kontak (pengelola)
 // GET ?bagian=foto&penugasan_id=N     -> foto (tautan sementara 1 jam) seorang peserta
 // POST {aksi:"reset_pin", akun_id}  -> PIN sementara utk peserta (tampil sekali)
-// POST {aksi:"atur_presensi", titik:[{nama,lat,lng,radius_m}] (1-5 titik), buka_at, tutup_at, akurasi_maks_m, tempat?}
-// POST {aksi:"presensi_manual", akun_id, alasan}   -> panitia mencatat hadir (mis. GPS gagal)
+// POST {aksi:"atur_presensi", titik:[{nama,lat,lng,radius_m}] (1-5 titik), sesi:[{nama,buka:"HH:MM",tutup:"HH:MM"}] (1-3 sesi per hari, WIB;
+//        berlaku di setiap hari kegiatan), akurasi_maks_m, tempat?}   (bentuk lama: buka_at, tutup_at = 1 sesi)
+// POST {aksi:"presensi_manual", akun_id, alasan, sesi?}   -> panitia mencatat hadir (mis. GPS gagal); sesi = kunci "YYYY-MM-DD#no", bawaan sesi yang belum tercatat
 
 import { NextRequest, NextResponse } from "next/server";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN } from "@/lib/sigapTes";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
-import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
+import { jadwalSesi, keadaanHari, susunHari, validasiSesi, type AturanSesi } from "@/lib/sigapPresensi";
+import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, bawaanPengaturanPresensi, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, muatRekamPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +46,12 @@ export async function GET(req: NextRequest) {
     const bagian = req.nextUrl.searchParams.get("bagian") ?? "";
     const sekarang = new Date();
 
-    if (bagian === "pengaturan") return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId), pengaturan: await muatPengaturanPresensi(db, kegiatanId) });
+    if (bagian === "pengaturan") {
+      // (8 Okt 2026) belum pernah disimpan -> isian bawaan (1 sesi 06.00-18.00, titik dari pelatihan sebelumnya) agar tidak mengisi dari nol
+      const tersimpan = await muatPengaturanPresensi(db, kegiatanId);
+      const pengaturan = tersimpan ?? (await bawaanPengaturanPresensi(db, kegiatanId));
+      return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId), pengaturan, bawaan: !tersimpan });
+    }
 
     // daftar peserta (penugasan aktif) + nama
     const { data: pen } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(2000);
@@ -55,33 +62,50 @@ export async function GET(req: NextRequest) {
     const urut = <T extends { kelas: number | null; nama: string }>(a: T[]) => a.sort((x, y) => (x.kelas ?? 9) - (y.kelas ?? 9) || x.nama.localeCompare(y.nama));
 
     if (bagian === "presensi") {
-      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh, titik_nama").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
-      const diterima = new Map<number, Record<string, unknown>>();
+      const peng = await muatPengaturanPresensi(db, kegiatanId);
+      // (8 Okt 2026) presensi per sesi pada hari fokus (hari ini bila hari kegiatan): lengkap = semua sesi tercatat, sebagian = sebagian
+      const { data: rows } = await db.from("sigap_pelatihan_presensi").select("akun_id, tanggal, sesi_no, at, diterima, jarak_m, akurasi_m, manual, alasan, dicatat_oleh, titik_nama").eq("kegiatan_id", kegiatanId).order("at", { ascending: true }).limit(20000);
+      const hariFokusStr = peng ? susunHari(peng.jadwal, [], sekarang.getTime()).tanggal : null;
+      const sesiHari = peng && hariFokusStr ? peng.jadwal.filter((x) => x.tanggal === hariFokusStr) : [];
+      const diterima = new Map<number, Map<number, Record<string, unknown>>>(); // akun -> sesi_no -> baris
       const percobaan = new Map<number, Record<string, unknown>[]>();
       for (const r of rows ?? []) {
         const id = r.akun_id as number;
-        if (r.diterima) diterima.set(id, r);
-        else percobaan.set(id, [...(percobaan.get(id) ?? []), r]);
+        const tgl = String(r.tanggal ?? "").slice(0, 10);
+        if (hariFokusStr && tgl !== hariFokusStr) continue;
+        if (r.diterima) {
+          const m = diterima.get(id) ?? new Map<number, Record<string, unknown>>();
+          m.set(Number(r.sesi_no ?? 1), r);
+          diterima.set(id, m);
+        } else percobaan.set(id, [...(percobaan.get(id) ?? []), r]);
       }
       const peserta = urut(
         (pen ?? []).map((p) => {
           const id = p.akun_id as number;
-          const d = diterima.get(id);
+          const m = diterima.get(id);
           const c = percobaan.get(id) ?? [];
           const terakhir = c[c.length - 1];
+          const sesi = sesiHari.map((x) => {
+            const r = m?.get(x.no);
+            return { no: x.no, nama: x.nama, buka_at: x.buka_at, tutup_at: x.tutup_at, hadir: !!r, at: (r?.at as string | undefined) ?? null, jarak_m: r?.jarak_m != null ? Number(r.jarak_m) : null, titik_nama: (r?.titik_nama as string | null | undefined) ?? null, manual: !!r?.manual, alasan: (r?.alasan as string | undefined) ?? null, dicatat_oleh: (r?.dicatat_oleh as string | undefined) ?? null };
+          });
+          const jumlahHadir = sesi.filter((x) => x.hadir).length;
+          const d = sesi.find((x) => x.hadir) ?? null;
           return {
             akun_id: id,
             nama: nama.get(id) ?? "?",
             jenis_akun: jenisAkun.get(id) ?? "mitra",
             peran: p.peran as string,
             kelas: (p.kelas as number | null) ?? null,
-            status: d ? "hadir" : c.length ? "ditolak" : "belum",
-            at: (d?.at as string | undefined) ?? null,
-            jarak_m: d?.jarak_m != null ? Number(d.jarak_m) : null,
-            titik_nama: (d?.titik_nama as string | null | undefined) ?? null,
+            status: sesi.length && jumlahHadir === sesi.length ? "hadir" : jumlahHadir > 0 ? "sebagian" : c.length ? "ditolak" : "belum",
+            sesi,
+            hadir_n: jumlahHadir,
+            at: d?.at ?? null,
+            jarak_m: d?.jarak_m ?? null,
+            titik_nama: d?.titik_nama ?? null,
             manual: !!d?.manual,
-            alasan: (d?.alasan as string | undefined) ?? null,
-            dicatat_oleh: (d?.dicatat_oleh as string | undefined) ?? null,
+            alasan: d?.alasan ?? null,
+            dicatat_oleh: d?.dicatat_oleh ?? null,
             percobaan: c.length,
             percobaan_terakhir_at: (terakhir?.at as string | undefined) ?? null,
             percobaan_jarak_m: terakhir?.jarak_m != null ? Number(terakhir.jarak_m) : null,
@@ -89,8 +113,8 @@ export async function GET(req: NextRequest) {
           };
         })
       );
-      const stat = { peserta: peserta.length, hadir: peserta.filter((p) => p.status === "hadir").length, ditolak: peserta.filter((p) => p.status === "ditolak").length, belum: peserta.filter((p) => p.status === "belum").length };
-      return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId), pengaturan: await muatPengaturanPresensi(db, kegiatanId), stat, peserta });
+      const stat = { peserta: peserta.length, hadir: peserta.filter((p) => p.status === "hadir").length, sebagian: peserta.filter((p) => p.status === "sebagian").length, ditolak: peserta.filter((p) => p.status === "ditolak").length, belum: peserta.filter((p) => p.status === "belum").length };
+      return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId), pengaturan: peng, tanggal: hariFokusStr, sesi_hari: sesiHari.map((x) => ({ no: x.no, nama: x.nama, buka_at: x.buka_at, tutup_at: x.tutup_at })), stat, peserta });
     }
 
     if (bagian === "translok") {
@@ -224,28 +248,45 @@ export async function POST(req: NextRequest) {
         titik.push({ nama, lat, lng, radius_m: radius });
       }
       const akurasi = Number(body?.akurasi_maks_m);
-      const buka = bacaWaktu(body?.buka_at);
-      const tutup = bacaWaktu(body?.tutup_at);
       if (!Number.isInteger(akurasi) || akurasi < 10 || akurasi > 1000) return galat("Akurasi GPS maksimal harus 10–1000 meter.");
-      if (!buka || !tutup) return galat("Jam buka/tutup presensi tidak valid.");
-      if (tutup.getTime() <= buka.getTime()) return galat("Jam tutup harus setelah jam buka.");
+      // (8 Okt 2026) aturan sesi per hari (bentuk baru) -- bentuk lama buka_at/tutup_at (datetime) dianggap 1 sesi
+      let aturan: AturanSesi[];
+      if (body?.sesi !== undefined) {
+        const v = validasiSesi(body.sesi);
+        if (!v.ok) return galat(v.error);
+        aturan = v.sesi;
+      } else {
+        const buka = bacaWaktu(body?.buka_at);
+        const tutup = bacaWaktu(body?.tutup_at);
+        if (!buka || !tutup) return galat("Jam buka/tutup presensi tidak valid.");
+        if (tutup.getTime() <= buka.getTime()) return galat("Jam tutup harus setelah jam buka.");
+        const jam = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(11, 16);
+        const v = validasiSesi([{ nama: "Presensi", buka: jam(buka), tutup: jam(tutup) }]);
+        if (!v.ok) return galat(v.error);
+        aturan = v.sesi;
+      }
       const sebelum = await muatPengaturanPresensi(db, kegiatanId);
+      const dasar = sebelum ?? (await bawaanPengaturanPresensi(db, kegiatanId));
+      const jadwal = jadwalSesi(aturan, dasar.hari);
       const baris = {
         kegiatan_id: kegiatanId,
-        presensi_buka_at: buka.toISOString(),
-        presensi_tutup_at: tutup.toISOString(),
+        presensi_sesi: aturan,
+        // kolom lama (kompatibilitas) = sesi pertama hari pertama
+        presensi_buka_at: jadwal[0].buka_at,
+        presensi_tutup_at: jadwal[0].tutup_at,
         akurasi_maks_m: akurasi,
         tempat: typeof body?.tempat === "string" && body.tempat.trim() ? body.tempat.trim().slice(0, 120) : sebelum?.tempat ?? null,
         diubah_at: new Date().toISOString(),
       };
-      const { error } = await db.from("sigap_pelatihan_pengaturan").upsert(baris, { onConflict: "kegiatan_id" });
+      // kolom lama presensi_lat/lng/radius_m wajib terisi saat baris pertama dibuat -> isi dari titik pertama (titik sebenarnya ada di sigap_pelatihan_titik)
+      const { error } = await db.from("sigap_pelatihan_pengaturan").upsert({ ...(sebelum ? {} : { presensi_lat: titik[0].lat, presensi_lng: titik[0].lng, presensi_radius_m: titik[0].radius_m }), ...baris }, { onConflict: "kegiatan_id" });
       if (error) return galat(error.message, 500);
       // ganti seluruh daftar titik (hapus lama -> isi baru); riwayat presensi menyimpan titik_nama sendiri
       const { error: eHapus } = await db.from("sigap_pelatihan_titik").delete().eq("kegiatan_id", kegiatanId);
       if (eHapus) return galat(eHapus.message, 500);
       const { error: eIsi } = await db.from("sigap_pelatihan_titik").insert(titik.map((t, i) => ({ kegiatan_id: kegiatanId, urut: i + 1, ...t, aktif: true })));
       if (eIsi) return galat(eIsi.message, 500);
-      await catatAudit(db, akun.id, "pelatihan_atur_presensi", { sebelum, sesudah: { ...baris, titik } });
+      await catatAudit(db, akun.id, "pelatihan_atur_presensi", { sebelum: sebelum ? { sesi: sebelum.sesi, titik: sebelum.titik, akurasi_maks_m: sebelum.akurasi_maks_m } : null, sesudah: { sesi: aturan, titik, akurasi_maks_m: akurasi } });
       return NextResponse.json({ ok: true });
     }
 
@@ -265,18 +306,29 @@ export async function POST(req: NextRequest) {
       if (alasan.length < 5) return galat("Alasan wajib diisi (minimal 5 huruf).");
       const peserta = await pesertaPelatihan(db, akunId, kegiatanId);
       if (!peserta) return galat("Peserta tidak ditemukan.", 404);
+      // (8 Okt 2026) sesi: yang dipilih panitia, atau sesi hari ini yang sedang dibuka / belum tercatat pertama
+      const peng = await muatPengaturanPresensi(db, kegiatanId);
+      if (!peng) return galat("Presensi belum diatur. Simpan pengaturan presensi lebih dulu.", 409);
+      const sekarang = new Date();
+      const kead = keadaanHari(susunHari(peng.jadwal, await muatRekamPresensi(db, kegiatanId, akunId), sekarang.getTime()), sekarang.getTime());
+      const diminta = typeof body?.sesi === "string" ? kead.sesi.find((x) => x.kunci === body.sesi) : undefined;
+      const sesi = diminta ?? kead.aktif ?? kead.sesi.find((x) => !x.at);
+      if (!sesi) return galat("Semua sesi presensi hari ini sudah tercatat untuk peserta ini.", 409);
+      if (sesi.at) return galat("Peserta ini sudah tercatat hadir pada sesi tersebut.", 409);
       const { error } = await db.from("sigap_pelatihan_presensi").insert({
         kegiatan_id: kegiatanId,
         akun_id: akunId,
         penugasan_id: peserta.penugasan_id,
-        at: new Date().toISOString(),
+        tanggal: sesi.tanggal,
+        sesi_no: sesi.no,
+        at: sekarang.toISOString(),
         diterima: true,
         manual: true,
         alasan: alasan.slice(0, 300),
         dicatat_oleh: `${akun.nama} (#${akun.id})`,
       });
       if (error) return galat(error.code === "23505" ? "Peserta ini sudah tercatat hadir." : error.message, error.code === "23505" ? 409 : 500);
-      await catatAudit(db, akun.id, "pelatihan_presensi_manual", { akun_id: akunId, alasan });
+      await catatAudit(db, akun.id, "pelatihan_presensi_manual", { akun_id: akunId, alasan, sesi: sesi.kunci });
       return NextResponse.json({ ok: true });
     }
 

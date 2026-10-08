@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LABEL_SLOT_FOTO, bagiFoto, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
+import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
 import { LABEL_JENIS_TES, PEMUKAAN } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
@@ -214,12 +214,17 @@ function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () =>
   return <p className={ket}>Kuis dibuka oleh pemandu saat sesi pelatihan. Tombol Gabung muncul otomatis di sini.</p>;
 }
 
-/** Isi langkah Presensi: baca lokasi HP, tampilkan jarak ke lokasi pelatihan, tombol aktif bila dalam radius & jam presensi. */
+/**
+ * Isi langkah Presensi: baca lokasi HP, tampilkan jarak ke lokasi pelatihan, tombol aktif bila dalam radius & jam sesi.
+ * (8 Okt 2026) Presensi per sesi (1-3 sesi per hari, diatur panitia). Peringatan lokasi hanya untuk sesi yang SEDANG DIBUKA dan
+ * belum tercatat; begitu semua sesi hari ini tercatat, peringatan/tombol/pembacaan GPS padam dan diganti ringkasan hijau.
+ */
 function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub["presensi"]>; nowMs: number; tempat: string; segarkan: () => void }) {
   const peng = pres.pengaturan;
-  const buka = new Date(peng.buka_at).getTime();
-  const tutup = new Date(peng.tutup_at).getTime();
-  const dalamJam = nowMs >= buka && nowMs < tutup;
+  const kead = keadaanHari(pres.hari, nowMs);
+  const aktif = kead.aktif;
+  const aktifKunci = aktif?.kunci ?? null;
+  const banyak = kead.total > 1;
   const [pos, setPos] = useState<{ lat: number; lng: number; akurasi: number } | null>(null);
   const [gpsGalat, setGpsGalat] = useState<string | null>(null);
   const [membaca, setMembaca] = useState(false);
@@ -253,20 +258,22 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
     );
   }, []);
 
-  // baca lokasi otomatis sekali saat presensi sedang dibuka & belum presensi
-  const sudahBaca = useRef(false);
+  // baca lokasi otomatis sekali tiap sesi yang sedang dibuka & belum tercatat (sesi lengkap -> tidak membaca lokasi sama sekali)
+  const sudahBaca = useRef<string | null>(null);
   useEffect(() => {
-    if (pres.sudah || !dalamJam || sudahBaca.current) return;
-    sudahBaca.current = true;
+    if (!aktifKunci || sudahBaca.current === aktifKunci) return;
+    sudahBaca.current = aktifKunci;
+    setPos(null);
+    setGalatKirim(null);
     baca();
-  }, [pres.sudah, dalamJam, baca]);
+  }, [aktifKunci, baca]);
 
   async function presensi() {
-    if (!pos) return;
+    if (!pos || !aktifKunci) return;
     setKirim(true);
     setGalatKirim(null);
     try {
-      await fetchJson("/api/sigap/pelatihan/presensi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pos) });
+      await fetchJson("/api/sigap/pelatihan/presensi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...pos, sesi: aktifKunci }) });
       segarkan();
     } catch (e) {
       setGalatKirim(pesanGalat(e));
@@ -279,26 +286,63 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   // (7 Okt 2026) bisa lebih dari satu titik (Mami Hotel / Ully Hotel Solok): peserta cukup berada di salah satunya
   const lokasiTeks = peng.titik.length ? namaTitik(peng.titik) : tempat;
   const radiusTeks = [...new Set(peng.titik.map((t) => t.radius_m))].map((r) => `${r} m`).join(" / ") || "—";
-  if (pres.sudah)
+
+  // ringkasan sesi (hanya bila > 1 sesi per hari): ✓ Pagi 07.12 · ● Sore (dibuka) · ○ Malam 15.00
+  const ringkasSesi = banyak && (
+    <p className="mb-1.5 flex flex-wrap gap-1">
+      {kead.sesi.map((x) => {
+        const gaya = x.status === "selesai" ? "bg-[#DDF3E6] text-[#17623C]" : x.status === "terbuka" ? "bg-[#E3EEFB] text-[#0F3D7A]" : x.status === "terlewat" ? "bg-[#FBE4E1] text-[#B5352D]" : "bg-[#EEF1F5] text-[#7B8794]";
+        const ikon = x.status === "selesai" ? "✓" : x.status === "terbuka" ? "●" : x.status === "terlewat" ? "✕" : "○";
+        const teks = x.status === "selesai" ? `${x.at ? jamWib(x.at) : "–"} WIB` : x.status === "terbuka" ? `sampai ${jamWib(x.tutup_at)}` : x.status === "terlewat" ? "terlewat" : `${jamWib(x.buka_at)}–${jamWib(x.tutup_at)}`;
+        return (
+          <span key={x.kunci} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${gaya}`}>
+            {ikon} {x.nama} · {teks}
+          </span>
+        );
+      })}
+    </p>
+  );
+
+  // semua sesi hari ini tercatat -> tidak ada peringatan lokasi, tidak ada tombol
+  if (kead.lengkap) {
+    const x = kead.sesi[0];
     return (
       <>
+        {ringkasSesi}
         <p className="text-[13px] font-semibold text-[#17623C]">
-          ✓ Presensi tercatat pukul {pres.at ? jamWib(pres.at) : "–"} WIB{pres.manual ? " (dicatat panitia)" : pres.jarak_m != null ? ` · ${teksJarak(pres.jarak_m)} dari ${pres.titik_nama ?? tempat}` : ""}.
+          {banyak
+            ? `✓ Presensi hari ini lengkap (${kead.selesai} dari ${kead.total} sesi).`
+            : `✓ Presensi tercatat pukul ${x.at ? jamWib(x.at) : "–"} WIB${x.manual ? " (dicatat panitia)" : x.jarak_m != null ? ` · ${teksJarak(x.jarak_m)} dari ${x.titik_nama ?? tempat}` : ""}.`}
         </p>
-        <p className={ket}>Presensi hanya sekali. Bila ada kendala, hubungi panitia.</p>
+        <p className={ket}>{banyak ? "Terima kasih. Bila ada kendala, hubungi panitia." : "Presensi hanya sekali. Bila ada kendala, hubungi panitia."}</p>
       </>
     );
-  if (nowMs < buka)
+  }
+
+  // tidak ada sesi yang sedang dibuka
+  if (!aktif) {
+    const b = kead.berikutnya;
     return (
       <>
-        <p className={ket}>Presensi dibuka pukul {jamWib(peng.buka_at)} WIB. Tombol aktif otomatis saat jam dibuka; Anda harus berada dalam radius {radiusTeks} dari {lokasiTeks}.</p>
-        <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]`}>
-          Belum dibuka
-        </button>
+        {ringkasSesi}
+        {b ? (
+          <>
+            {kead.selesai > 0 && <p className="mb-1 text-[13px] font-semibold text-[#17623C]">✓ {kead.selesai} dari {kead.total} presensi hari ini sudah tercatat.</p>}
+            <p className={ket}>
+              {banyak ? `Presensi ${b.nama} dibuka` : "Presensi dibuka"} pukul {jamWib(b.buka_at)} WIB. Tombol aktif otomatis saat jam dibuka; Anda harus berada dalam radius {radiusTeks} dari {lokasiTeks}.
+            </p>
+            <button type="button" disabled className={`${TOMBOL} cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]`}>
+              Belum dibuka
+            </button>
+          </>
+        ) : (
+          <p className="text-[13px] font-semibold text-[#C0392B]">
+            {banyak ? `Presensi ${kead.sesi.filter((x) => x.status === "terlewat").map((x) => x.nama).join(", ")} sudah ditutup dan belum tercatat untuk Anda.` : `Presensi sudah ditutup (pukul ${jamWib(kead.sesi[0].tutup_at)} WIB) dan belum tercatat untuk Anda.`} Hubungi panitia.
+          </p>
+        )}
       </>
     );
-  if (nowMs >= tutup)
-    return <p className="text-[13px] font-semibold text-[#C0392B]">Presensi sudah ditutup (pukul {jamWib(peng.tutup_at)} WIB) dan belum tercatat untuk Anda. Hubungi panitia.</p>;
+  }
 
   const dekat = pos ? titikTerdekat(pos, peng.titik) : null;
   const jarak = dekat?.jarak_m ?? null;
@@ -306,8 +350,9 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
   const dalam = !!dekat && dekat.dalam && !akurasiBuruk;
   return (
     <>
+      {ringkasSesi}
       <p className={ket}>
-        Harus berada dalam radius {radiusTeks} dari {lokasiTeks}. Presensi dibuka sampai pukul {jamWib(peng.tutup_at)} WIB.
+        Harus berada dalam radius {radiusTeks} dari {lokasiTeks}. {banyak ? `Presensi ${aktif.nama} dibuka` : "Presensi dibuka"} sampai pukul {jamWib(aktif.tutup_at)} WIB.
       </p>
       {membaca && <p className="mt-1 text-[13px] font-semibold text-[#55657D]">Membaca lokasi Anda…</p>}
       {gpsGalat && <p className="mt-1 text-[13px] font-semibold text-[#9A6200]">{gpsGalat}</p>}
@@ -327,7 +372,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
         onClick={presensi}
         className={`${TOMBOL} w-full ${dalam && !kirim && !membaca ? "bg-[#1E7A4C] text-white hover:bg-[#17623C]" : "cursor-not-allowed bg-[#E3E8EE] text-[#7B8794]"}`}
       >
-        {kirim ? "Mencatat…" : dalam ? "✓ Presensi sekarang" : "Presensi (belum di dalam radius)"}
+        {kirim ? "Mencatat…" : dalam ? (banyak ? `✓ Presensi ${aktif.nama} sekarang` : "✓ Presensi sekarang") : "Presensi (belum di dalam radius)"}
       </button>
       <button type="button" onClick={baca} disabled={membaca} className="mt-1.5 text-[12.5px] font-semibold text-[#1F6FD1] underline disabled:opacity-50">
         ↻ Segarkan lokasi
@@ -512,9 +557,12 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
     }
     case "hadir": {
       if (!data.presensi) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi menyusul`, teks: "Panitia belum mengatur presensi.", terima, catatan };
-      const buka = new Date(data.presensi.pengaturan.buka_at).getTime();
-      if (nowMs < buka) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi dibuka ${waktuWib(data.presensi.pengaturan.buka_at)}`, teks: "Presensi dilakukan di lokasi pelatihan dengan lokasi HP aktif.", terima, catatan };
-      return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: presensi sudah dibuka`, teks: `Lakukan presensi setelah tiba di lokasi, sampai pukul ${jamWib(data.presensi.pengaturan.tutup_at)} WIB. Aktifkan lokasi (GPS) di HP.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
+      // (8 Okt 2026) per sesi: pandu ke sesi yang sedang dibuka, atau tunjukkan jam sesi berikutnya
+      const kh = keadaanHari(data.presensi.hari, nowMs);
+      const banyak = kh.total > 1;
+      if (kh.aktif) return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: presensi ${banyak ? `${kh.aktif.nama} ` : ""}sudah dibuka`, teks: `Lakukan presensi setelah tiba di lokasi, sampai pukul ${jamWib(kh.aktif.tutup_at)} WIB. Aktifkan lokasi (GPS) di HP.`, aksi: { label: "Ke langkah presensi ↓", kode: "hadir" }, terima, catatan };
+      if (kh.berikutnya) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi ${banyak ? `${kh.berikutnya.nama} ` : ""}dibuka ${waktuWib(kh.berikutnya.buka_at)}`, teks: "Presensi dilakukan di lokasi pelatihan dengan lokasi HP aktif.", terima, catatan };
+      return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi sudah ditutup`, teks: "Hubungi panitia bila presensi Anda belum tercatat.", terima, catatan };
     }
     case "foto_awal":
     case "foto_akhir": {
@@ -696,8 +744,9 @@ export default function HalamanPelatihan() {
         kode: "hadir",
         judul: "Presensi di lokasi pelatihan",
         selesai: !!data.presensi?.sudah,
-        terlewat: !data.presensi?.sudah && !!data.presensi && now >= new Date(data.presensi.pengaturan.tutup_at).getTime(),
-        bisaSekarang: !!data.presensi && !data.presensi.sudah && now >= new Date(data.presensi.pengaturan.buka_at).getTime() && now < new Date(data.presensi.pengaturan.tutup_at).getTime(),
+        // (8 Okt 2026) per sesi: terlewat = ada sesi hari ini yang lewat tanpa tercatat & tidak ada sesi lain yang masih bisa; sekarang = ada sesi dibuka
+        terlewat: !!data.presensi && !keadaanHari(data.presensi.hari, now).lengkap && !keadaanHari(data.presensi.hari, now).aktif && !keadaanHari(data.presensi.hari, now).berikutnya,
+        bisaSekarang: !!data.presensi && !!keadaanHari(data.presensi.hari, now).aktif,
         badan: (
           <>
             <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam={`pelatihan ${u.pukul}`} />

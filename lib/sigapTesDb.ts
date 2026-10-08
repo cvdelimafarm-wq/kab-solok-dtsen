@@ -8,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { sesiDariHeader } from "@/lib/sigapAkses";
-import type { PengaturanPresensi } from "@/lib/sigapPresensi";
+import { SESI_BAWAAN, aturanDariJamLama, hariKegiatan, jadwalSesi, tanggalWib, validasiSesi, type AturanSesi, type PengaturanPresensi, type RekamPresensi } from "@/lib/sigapPresensi";
 import {
   KODE_KEGIATAN_PELATIHAN,
   bersihkanJawaban,
@@ -209,23 +209,68 @@ export async function muatLangkah(db: Db, akunId: number, kegiatanId: number, pe
 // (7 Okt 2026) Presensi di lokasi pelatihan.
 // ---------------------------------------------------------------------------------------------
 export async function muatPengaturanPresensi(db: Db, kegiatanId: number): Promise<PengaturanPresensi | null> {
-  const [{ data }, { data: titik }] = await Promise.all([
+  const [{ data }, { data: titik }, { data: keg }] = await Promise.all([
     db.from("sigap_pelatihan_pengaturan").select("*").eq("kegiatan_id", kegiatanId).maybeSingle(),
     db.from("sigap_pelatihan_titik").select("nama, lat, lng, radius_m").eq("kegiatan_id", kegiatanId).eq("aktif", true).order("urut").order("id"),
+    db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle(),
   ]);
   if (!data) return null;
+  const buka = data.presensi_buka_at as string;
+  const tutup = data.presensi_tutup_at as string;
+  // (8 Okt 2026) aturan sesi: bila belum pernah disimpan dalam bentuk sesi, turunkan dari jam buka/tutup lama (1 sesi)
+  const cek = validasiSesi(data.presensi_sesi);
+  const sesi: AturanSesi[] = cek.ok ? cek.sesi : aturanDariJamLama(buka, tutup);
+  const hari = hariKegiatan((keg?.tanggal_mulai as string | null) ?? null, (keg?.tanggal_selesai as string | null) ?? null, tanggalWib(new Date(buka).getTime()));
+  const jadwal = jadwalSesi(sesi, hari);
   return {
     titik: (titik ?? []).map((t) => ({ nama: t.nama as string, lat: Number(t.lat), lng: Number(t.lng), radius_m: Number(t.radius_m) })),
-    buka_at: data.presensi_buka_at as string,
-    tutup_at: data.presensi_tutup_at as string,
+    buka_at: jadwal[0]?.buka_at ?? buka,
+    tutup_at: jadwal[0]?.tutup_at ?? tutup,
     akurasi_maks_m: Number(data.akurasi_maks_m),
     tempat: (data.tempat as string | null) ?? null,
+    sesi,
+    hari,
+    jadwal,
+  };
+}
+
+/**
+ * (8 Okt 2026) Isian awal pengaturan presensi untuk kegiatan yang belum pernah disimpan: 1 sesi 06.00-18.00 di hari kegiatan,
+ * akurasi 100 m, titik lokasi disalin dari pengaturan kegiatan pelatihan lain terakhir (bila ada). Tidak menyimpan apa pun.
+ */
+export async function bawaanPengaturanPresensi(db: Db, kegiatanId: number): Promise<PengaturanPresensi> {
+  const [{ data: keg }, { data: lain }] = await Promise.all([
+    db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai, nama").eq("id", kegiatanId).maybeSingle(),
+    db.from("sigap_pelatihan_titik").select("kegiatan_id, nama, lat, lng, radius_m").neq("kegiatan_id", kegiatanId).eq("aktif", true).order("kegiatan_id", { ascending: false }).order("urut").limit(10),
+  ]);
+  const hariIni = tanggalWib(Date.now());
+  const hari = hariKegiatan((keg?.tanggal_mulai as string | null) ?? null, (keg?.tanggal_selesai as string | null) ?? null, hariIni);
+  const sesi = SESI_BAWAAN.map((x) => ({ ...x }));
+  const jadwal = jadwalSesi(sesi, hari);
+  const idLain = (lain ?? [])[0]?.kegiatan_id;
+  return {
+    titik: (lain ?? []).filter((t) => t.kegiatan_id === idLain).map((t) => ({ nama: t.nama as string, lat: Number(t.lat), lng: Number(t.lng), radius_m: Number(t.radius_m) })),
+    buka_at: jadwal[0].buka_at,
+    tutup_at: jadwal[0].tutup_at,
+    akurasi_maks_m: 100,
+    tempat: null,
+    sesi,
+    hari,
+    jadwal,
   };
 }
 
 export type PresensiPeserta = { sudah: boolean; at: string | null; jarak_m: number | null; manual: boolean; titik_nama: string | null };
 
-export async function muatPresensiAkun(db: Db, kegiatanId: number, akunId: number): Promise<PresensiPeserta> {
-  const { data } = await db.from("sigap_pelatihan_presensi").select("at, jarak_m, manual, titik_nama").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).maybeSingle();
-  return { sudah: !!data, at: (data?.at as string | undefined) ?? null, jarak_m: data?.jarak_m != null ? Number(data.jarak_m) : null, manual: !!data?.manual, titik_nama: (data?.titik_nama as string | null | undefined) ?? null };
+/** (8 Okt 2026) Semua presensi DITERIMA seorang peserta (satu per sesi per hari), urut waktu. */
+export async function muatRekamPresensi(db: Db, kegiatanId: number, akunId: number): Promise<RekamPresensi[]> {
+  const { data } = await db.from("sigap_pelatihan_presensi").select("tanggal, sesi_no, at, jarak_m, manual, titik_nama").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("diterima", true).order("at", { ascending: true }).limit(200);
+  return (data ?? []).map((r) => ({
+    tanggal: String(r.tanggal ?? "").slice(0, 10),
+    sesi_no: Number(r.sesi_no ?? 1),
+    at: r.at as string,
+    jarak_m: r.jarak_m != null ? Number(r.jarak_m) : null,
+    manual: !!r.manual,
+    titik_nama: (r.titik_nama as string | null | undefined) ?? null,
+  }));
 }
