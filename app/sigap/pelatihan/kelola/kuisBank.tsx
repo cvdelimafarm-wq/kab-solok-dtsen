@@ -6,7 +6,7 @@
 // lihat, salin, hapus. Ruang dibuka per kelas dari tab "Pengaturan Kelas" (bukan dari sini).
 
 import { useRef, useState } from "react";
-import { DETIK_MAX, DETIK_MIN, HEADER_TEMPLATE_KUIS, PETUNJUK_TEMPLATE_KUIS, WARNA_OPSI, bacaBarisKuis, barisTemplateKuis, type SoalKuis } from "@/lib/sigapKuis";
+import {labelKelas, DETIK_MAX, DETIK_MIN, HEADER_TEMPLATE_KUIS, PETUNJUK_TEMPLATE_KUIS, WARNA_OPSI, bacaBarisKuis, barisTemplateKuis, type SoalKuis } from "@/lib/sigapKuis";
 import { MAKS_SOAL } from "@/lib/sigapTes";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, Kartu, Pesan } from "../../admin/ui";
@@ -131,7 +131,7 @@ export function KartuKuis({ kuis, bisaKelola, sudahDimainkan, dipakaiKelas, sibu
         )}
         {kuis.jumlah_soal > 0 ? <Chip w="ok">{kuis.jumlah_soal} soal · {menit(kuis.total_detik)}</Chip> : <Chip w="bad">Belum ada soal</Chip>}
         {sudahDimainkan && <Chip w="navy">pernah dimainkan</Chip>}
-        {dipakaiKelas.length > 0 && <Chip w="ok">dipakai Kelas {dipakaiKelas.join(", ")}</Chip>}
+        {dipakaiKelas.length > 0 && <Chip w="ok">dipakai {dipakaiKelas.map((k) => labelKelas(k)).join(", ")}</Chip>}
       </div>
 
       {Object.keys(kuis.topik).length > 0 && (

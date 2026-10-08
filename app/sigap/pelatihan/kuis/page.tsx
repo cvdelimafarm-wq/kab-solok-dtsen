@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { warnaPosisi } from "@/lib/sigapKuis";
+import {KELAS_PILIHAN, labelKelas, warnaPosisi } from "@/lib/sigapKuis";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { efek, setSuaraAktif } from "../kuisSuara";
 
@@ -23,6 +23,7 @@ type Saya = { gabung: boolean; jawaban?: { pilihan: string; benar: boolean; poin
 type Keadaan = {
   ada: boolean;
   kelas?: number;
+  pindah_kelas?: number | null; // (8 Okt 2026) server: ruang "Semua Kelas" sedang aktif -> pindah ke kelas 0
   sekarang: string;
   ruang: { id: number; kelas: number; judul: string; status: Status; soal_ke: number; total: number; versi: number; mulai_at: string | null; batas_at: string | null; dijeda: boolean; sisa_ms: number | null; lanjut_at: string | null; jadwal_at: string | null };
   pengaturan: { papan_live_hp: boolean; bonus_kecepatan: boolean; lanjut_otomatis: boolean; gabung_terlambat: boolean };
@@ -106,8 +107,9 @@ export default function KuisPeserta() {
     try {
       const q = new URLSearchParams(window.location.search);
       otoGabung.current = q.get("gabung") === "1";
-      const k = Number(q.get("kelas") ?? sessionStorage.getItem("sigap_kuis_kelas"));
-      if (Number.isInteger(k) && k >= 1 && k <= 4) {
+      const mentah = q.get("kelas") ?? sessionStorage.getItem("sigap_kuis_kelas");
+      const k = mentah === null || mentah === "" ? NaN : Number(mentah);
+      if (Number.isInteger(k) && k >= 0 && k <= 4) {
         urlKelas = k;
         setKelas(k); // tampil cepat; peserta berkelas tetap dikoreksi server di bawah
       }
@@ -115,11 +117,11 @@ export default function KuisPeserta() {
       /* abaikan */
     }
     let batal = false;
-    fetchJson<Keadaan>(`${URL_KUIS}?detail=1${urlKelas ? `&kelas=${urlKelas}` : ""}`)
+    fetchJson<Keadaan>(`${URL_KUIS}?detail=1${urlKelas !== null ? `&kelas=${urlKelas}` : ""}`)
       .then((d) => {
         if (batal) return;
         const k = d.kelas ?? d.ruang?.kelas;
-        if (k) setKelas(k);
+        if (k !== undefined && k !== null) setKelas(k);
       })
       .catch((e) => {
         if (batal || e instanceof SesiBerakhir) return;
@@ -163,6 +165,12 @@ export default function KuisPeserta() {
           const d = await fetchJson<Keadaan>(`${URL_KUIS}?kelas=${kelas}`);
           if (batal) return;
           offset.current = new Date(d.sekarang).getTime() - Date.now();
+          // (8 Okt 2026) ruang "Semua Kelas" dibuka -> semua peserta otomatis pindah ke ruang gabungan
+          if (d.pindah_kelas === 0 && kelas !== 0) {
+            versiDetail.current = "";
+            setKelas(0);
+            return;
+          }
           setRingan(d);
           setGalat(null);
           const v = d.ada ? `${d.ruang.id}:${d.ruang.versi}` : "";
@@ -330,11 +338,11 @@ export default function KuisPeserta() {
         <p className="mt-1 text-[18px] font-extrabold">Pilih kelas yang ingin Anda ikuti</p>
         <p className="mt-1 text-[13px] text-[#55657D]">Akun Anda tidak terdaftar di satu kelas (inda/instruktur), jadi pilih ruang yang sedang dibuka.</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          {[1, 2, 3, 4].map((k) => {
+          {KELAS_PILIHAN.map((k) => {
             const x = daftarKelas?.find((d) => d.kelas === k);
             return (
               <button key={k} type="button" onClick={() => pilihKelas(k)} className={`rounded-xl border px-3 py-3 text-[15px] font-extrabold ${x?.ada ? "border-[#46178F] bg-[#F1EAFB] text-[#46178F]" : "border-[#CDD5DE] bg-white text-[#7B8794]"}`}>
-                Kelas {k}
+                {labelKelas(k)}
                 <span className="block text-[11.5px] font-semibold">{x?.ada ? `● ${x.status === "lobi" ? "lobi terbuka" : "sedang berjalan"}` : "belum dibuka"}</span>
               </button>
             );
@@ -350,7 +358,7 @@ export default function KuisPeserta() {
     isi = (
       <div className={`${kartu} m-auto`}>
         <p className="text-[40px]" aria-hidden>🎮</p>
-        <p className="mt-1 text-[17px] font-extrabold">Belum ada kuis yang dibuka untuk Kelas {kelas}</p>
+        <p className="mt-1 text-[17px] font-extrabold">Belum ada kuis yang dibuka untuk {labelKelas(kelas)}</p>
         <p className="mt-1 text-[13.5px] text-[#55657D]">Tunggu pemandu membuka kuis. Halaman ini akan berubah otomatis.</p>
       </div>
     );
@@ -395,7 +403,7 @@ export default function KuisPeserta() {
     isi = (
       <div className={`${kartu} m-auto`}>
         <p className="text-[40px]" aria-hidden>🎮</p>
-        <p className="mt-1 inline-block rounded-full bg-[#FFD02B] px-3 py-0.5 text-[12px] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP · KELAS {r.kelas}</p>
+        <p className="mt-1 inline-block rounded-full bg-[#FFD02B] px-3 py-0.5 text-[12px] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP · {labelKelas(r.kelas).toUpperCase()}</p>
         <p className="mt-1 text-[19px] font-extrabold">{r.judul}</p>
         <p className="mt-1 text-[13.5px] text-[#55657D]">{r.status === "lobi" ? `${r.total} soal · pastikan HP siap, lalu tekan Gabung.` : ringan?.pengaturan?.gabung_terlambat === false ? "Kuis sudah berjalan dan tidak menerima peserta baru." : "Kuis sudah berjalan. Gabung sekarang, Anda ikut mulai soal berikutnya."}</p>
         <button type="button" disabled={kirim || (r.status !== "lobi" && ringan?.pengaturan?.gabung_terlambat === false)} onClick={gabung} className="mt-4 w-full rounded-xl bg-[#1E7A4C] px-4 py-3.5 text-[17px] font-extrabold text-white shadow hover:bg-[#17623C] disabled:opacity-60">
@@ -410,7 +418,7 @@ export default function KuisPeserta() {
       <div className={`${kartu} m-auto`}>
         <p className="text-[40px]" aria-hidden>🏁</p>
         <p className="mt-1 text-[17px] font-extrabold">Kuis sudah selesai</p>
-        <p className="mt-1 text-[13.5px] text-[#55657D]">Anda tidak ikut pada kuis “{r.judul}” (Kelas {r.kelas}).</p>
+        <p className="mt-1 text-[13.5px] text-[#55657D]">Anda tidak ikut pada kuis “{r.judul}” ({labelKelas(r.kelas)}).</p>
       </div>
     );
   } else if (r && saya && r.status === "lobi") {
@@ -418,7 +426,7 @@ export default function KuisPeserta() {
       <div className={`${kartu} m-auto`}>
         <p className="text-[40px]" aria-hidden>✅</p>
         <p className="mt-1 text-[19px] font-extrabold">Anda sudah bergabung</p>
-        <p className="mt-1 text-[14px] text-[#55657D]">{r.judul} · Kelas {r.kelas} · {r.total} soal</p>
+        <p className="mt-1 text-[14px] text-[#55657D]">{r.judul} · {labelKelas(r.kelas)} · {r.total} soal</p>
         {sisaJadwal !== null && sisaJadwal > 0 && <p className="mt-2 text-[15px] font-extrabold tabular-nums text-[#46178F]">Jadwal mulai dalam {mmss(sisaJadwal)}</p>}
         <p className="mt-3 text-[13.5px] font-semibold text-[#9A6200]">Menunggu pemandu memulai kuis… jangan tutup halaman ini.</p>
       </div>
@@ -516,7 +524,7 @@ export default function KuisPeserta() {
         <div className={kartu}>
           <p className="text-[44px]" aria-hidden>{saya.peringkat != null && saya.peringkat <= 3 ? ["🥇", "🥈", "🥉"][saya.peringkat - 1] : "🏁"}</p>
           <p className="mt-1 text-[20px] font-extrabold">Kuis selesai!</p>
-          <p className="text-[14px] text-[#55657D]">{r.judul} · Kelas {r.kelas}</p>
+          <p className="text-[14px] text-[#55657D]">{r.judul} · {labelKelas(r.kelas)}</p>
           <p className="mt-3 text-[34px] font-extrabold tabular-nums text-[#46178F]">{saya.total_poin ?? 0}<span className="ml-1 text-[14px] font-bold text-[#55657D]">poin</span></p>
           <p className="text-[14px] font-bold">Peringkat {saya.peringkat ?? "–"} dari {saya.jumlah_peserta ?? "–"}</p>
           <p className="mt-0.5 text-[13px] text-[#55657D]">Benar {saya.benar ?? 0} dari {r.total} soal</p>
@@ -545,7 +553,7 @@ export default function KuisPeserta() {
     <div className="flex min-h-screen flex-col bg-[#46178F] px-3 pb-6 pt-3 text-white" style={{ minHeight: "100dvh" }}>
       <div className="mx-auto mb-3 flex w-full max-w-3xl items-center gap-2">
         <Link href="/sigap/pelatihan" className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold hover:bg-white/25">← Langkah</Link>
-        {kelas !== null && <span className="shrink-0 rounded-full bg-[#FFD02B] px-2.5 py-1 text-[12px] font-extrabold text-[#2B0F55]">Kelas {kelas}</span>}
+        {kelas !== null && <span className="shrink-0 rounded-full bg-[#FFD02B] px-2.5 py-1 text-[12px] font-extrabold text-[#2B0F55]">{labelKelas(kelas)}</span>}
         {r && <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/90">{r.judul}</span>}
         {r && r.status !== "lobi" && r.soal_ke > 0 && <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold tabular-nums">{r.soal_ke}/{r.total}</span>}
         {bisaPenuh && (

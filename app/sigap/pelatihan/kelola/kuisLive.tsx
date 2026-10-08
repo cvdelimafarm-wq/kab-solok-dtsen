@@ -10,6 +10,7 @@ import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { URL_KUIS_ADMIN } from "./kuisHost";
 import { LABEL_STATUS, kirim, type StatusR } from "./kuisBersama";
+import { labelKelas } from "@/lib/sigapKuis";
 
 type RuangLive = {
   id: number;
@@ -90,7 +91,7 @@ export function PantauLive({ bisaKelola, aktif, bukaHost, keTab }: { bisaKelola:
           const berjalan = !!r && r.status !== "selesai";
           const pct = r && r.total ? Math.round(((r.status === "jawaban" || r.status === "selesai" ? r.soal_ke : Math.max(0, r.soal_ke - 1)) / r.total) * 100) : 0;
           return (
-            <Kartu key={k.kelas} judul={`Kelas ${k.kelas}`} ket={k.kuis_judul ?? "belum memilih kuis"} kanan={r ? <Chip w={berjalan ? (r.dijeda ? "wait" : "ok") : "mut"}>{r.dijeda ? "⏸ Dijeda" : LABEL_STATUS[r.status].split(" · ")[0]}</Chip> : <Chip>tidak ada ruang</Chip>}>
+            <Kartu key={k.kelas} judul={`${labelKelas(k.kelas)}`} ket={k.kuis_judul ?? "belum memilih kuis"} kanan={r ? <Chip w={berjalan ? (r.dijeda ? "wait" : "ok") : "mut"}>{r.dijeda ? "⏸ Dijeda" : LABEL_STATUS[r.status].split(" · ")[0]}</Chip> : <Chip>tidak ada ruang</Chip>}>
               {!r ? (
                 <p className="text-[13px] text-[#7B8794]">
                   {k.kuis_id === null ? "Kelas ini belum diatur." : `${k.jumlah_soal} soal terpilih · ${k.anggota} peserta.`}
@@ -119,7 +120,7 @@ export function PantauLive({ bisaKelola, aktif, bukaHost, keTab }: { bisaKelola:
                     </div>
                   )}
                   {r.papan.length > 0 && (
-                    <ol className="space-y-1" aria-label={`Papan skor live Kelas ${k.kelas}`}>
+                    <ol className="space-y-1" aria-label={`Papan skor live ${labelKelas(k.kelas)}`}>
                       {r.papan.slice(0, 5).map((p) => (
                         <li key={`${p.peringkat}-${p.nama}`} className="flex items-center gap-2 rounded-lg bg-[#F8FAFC] px-2.5 py-1 text-[12.5px]">
                           <b className="w-5 text-[#6B2FC0]">{p.peringkat}</b>

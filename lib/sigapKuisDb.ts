@@ -10,6 +10,9 @@
 import type { Db } from "@/lib/sigap";
 import type { Opsi } from "@/lib/sigapTes";
 import {
+  KELAS_GABUNGAN,
+  KELAS_PILIHAN,
+  labelKelas,
   PENGATURAN_DEFAULT,
   TOLERANSI_JAWAB_MS,
   bangunSoalMain,
@@ -251,7 +254,7 @@ function olahKonfig(kegiatanId: number, kelas: number, x: Record<string, unknown
 export async function konfigKelasSemua(db: Db, kegiatanId: number): Promise<KelasKonfig[]> {
   const { data } = await db.from("sigap_kuis_kelas").select("kelas, kuis_id, pengaturan, soal_pilihan, diubah_at").eq("kegiatan_id", kegiatanId).limit(20);
   const peta = new Map(((data ?? []) as Record<string, unknown>[]).map((x) => [Number(x.kelas), x]));
-  return [1, 2, 3, 4].map((k) => olahKonfig(kegiatanId, k, peta.get(k) ?? null));
+  return KELAS_PILIHAN.map((k) => olahKonfig(kegiatanId, k, peta.get(k) ?? null)); // (8 Okt 2026) + kelas 0 = Semua Kelas
 }
 
 /** Nomor soal (pada kuis `kuisId`) yang sudah dipilih kelas LAIN. */
@@ -307,11 +310,11 @@ export type HasilBuka = { ok: true; ruang: RuangBaris } | { ok: false; error: st
 export async function bukaRuang(db: Db, kegiatanId: number, kelas: number, akunId: number, now: Date): Promise<HasilBuka> {
   const semua = await konfigKelasSemua(db, kegiatanId);
   const k = semua.find((x) => x.kelas === kelas)!;
-  if (k.kuis_id === null) return { ok: false, error: `Kelas ${kelas} belum memilih kuis. Atur dulu di Pengaturan Kelas.`, status: 409 };
+  if (k.kuis_id === null) return { ok: false, error: `${labelKelas(kelas)} belum memilih kuis. Atur dulu di Pengaturan Kelas.`, status: 409 };
   const bank = await soalKuis(db, k.kuis_id);
   if (!bank.length) return { ok: false, error: "Kuis belum punya soal.", status: 409 };
   let pilihan = k.soal_pilihan.filter((n) => bank.some((s) => s.nomor === n));
-  if (k.pengaturan.mode === "manual" && !pilihan.length) return { ok: false, error: `Kelas ${kelas}: belum ada soal yang dicentang (mode Manual).`, status: 409 };
+  if (k.pengaturan.mode === "manual" && !pilihan.length) return { ok: false, error: `${labelKelas(kelas)}: belum ada soal yang dicentang (mode Manual).`, status: 409 };
   if (!pilihan.length || (k.pengaturan.mode === "acak" && pilihan.length !== Math.min(k.pengaturan.jumlah, bank.length))) pilihan = await acakSoalKelas(db, semua, kelas, k.kuis_id, k.pengaturan);
   if (!pilihan.length) return { ok: false, error: "Tidak ada soal yang terpilih.", status: 409 };
   const main = bangunSoalMain(bank, pilihan, k.pengaturan, rngBenih(Date.now() ^ (kelas * 7919)));
@@ -321,7 +324,7 @@ export async function bukaRuang(db: Db, kegiatanId: number, kelas: number, akunI
     .select(KOLOM_RUANG)
     .maybeSingle();
   if (error) {
-    if (error.code === "23505") return { ok: false, error: `Kelas ${kelas} masih punya ruang yang aktif. Stop dulu ruang tersebut.`, status: 409 };
+    if (error.code === "23505") return { ok: false, error: `${labelKelas(kelas)} masih punya ruang yang aktif. Stop dulu ruang tersebut.`, status: 409 };
     return { ok: false, error: error.message, status: 500 };
   }
   bersihkanCache("ruang:");
@@ -446,7 +449,7 @@ export async function restartRuang(db: Db, ruangId: number): Promise<HasilLanjut
   bersihkanCache(`papanlive:${r.id}`);
   bersihkanCache(`sebaran:${r.id}`);
   if (error) {
-    if (error.code === "23505") return { ok: false, error: `Kelas ${r.kelas} sudah punya ruang aktif lain; Stop ruang itu dulu.`, status: 409 };
+    if (error.code === "23505") return { ok: false, error: `${labelKelas(r.kelas)} sudah punya ruang aktif lain; Stop ruang itu dulu.`, status: 409 };
     return { ok: false, error: error.message, status: 500 };
   }
   return { ok: true, ruang: olahRuang(data as Record<string, unknown>), berubah: true };
@@ -650,6 +653,7 @@ export async function ringkasanLive(db: Db, kegiatanId: number, now: Date) {
   ]);
   const anggota = new Map<number, number>();
   for (const p of pen ?? []) if (p.kelas != null) anggota.set(Number(p.kelas), (anggota.get(Number(p.kelas)) ?? 0) + 1);
+  anggota.set(KELAS_GABUNGAN, (pen ?? []).length); // Semua Kelas = seluruh peserta
   const kuisIds = Array.from(new Set(semua.map((k) => k.kuis_id).filter((x): x is number => x !== null)));
   const judul = new Map<number, string>();
   for (const id of kuisIds) judul.set(id, (await infoKuis(db, id)).judul);
@@ -690,7 +694,10 @@ export async function ringkasanLive(db: Db, kegiatanId: number, now: Date) {
 export async function ringkasanKuisHub(db: Db, kegiatanId: number, akunId: number, kelas: number | null) {
   const semuaRuang = await ruangSemuaKelas(db, kegiatanId);
   let ruang: RuangBaris | null = null;
-  if (kelas !== null) ruang = semuaRuang.get(kelas) ?? null;
+  // (8 Okt 2026) ruang "Semua Kelas" yg aktif didahulukan untuk semua peserta
+  const gab = semuaRuang.get(KELAS_GABUNGAN);
+  if (gab && gab.status !== "selesai") ruang = gab;
+  else if (kelas !== null) ruang = semuaRuang.get(kelas) ?? null;
   else ruang = [...semuaRuang.values()].find((r) => r.status !== "selesai") ?? null;
   let adaKonfig = false;
   if (!ruang && kelas !== null) {

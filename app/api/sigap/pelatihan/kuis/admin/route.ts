@@ -18,7 +18,8 @@ import type { Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { MAKS_SOAL } from "@/lib/sigapTes";
-import { TOPIK_UMUM, validasiKuisJson } from "@/lib/sigapKuis";
+import {
+  kelasSah, KELAS_GABUNGAN, TOPIK_UMUM, validasiKuisJson } from "@/lib/sigapKuis";
 import {
   akhiriRuang,
   bersihkanCache,
@@ -47,8 +48,9 @@ export const dynamic = "force-dynamic";
 
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
 const kelasValid = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
-  return Number.isInteger(n) && n >= 1 && n <= 4 ? n : null;
+  return kelasSah(n) ? n : null; // (8 Okt 2026) 0 = Semua Kelas (ruang gabungan)
 };
 
 type KuisBaris = { id: number; kegiatan_id: number; judul: string; aktif: boolean; dibuat_at: string; diubah_at: string };
@@ -102,6 +104,7 @@ export async function GET(req: NextRequest) {
       const { data: pen } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(3000);
       const anggota: Record<number, number> = {};
       for (const p of pen ?? []) if (p.kelas != null) anggota[Number(p.kelas)] = (anggota[Number(p.kelas)] ?? 0) + 1;
+      anggota[KELAS_GABUNGAN] = (pen ?? []).length; // (8 Okt 2026) Semua Kelas = seluruh peserta
       return NextResponse.json({
         sekarang: now.toISOString(),
         boleh_kelola: bisaKelola,
@@ -123,8 +126,8 @@ export async function GET(req: NextRequest) {
 
     if (bagian === "ruang") {
       const rid = req.nextUrl.searchParams.get("ruang_id");
-      const kelas = Number(req.nextUrl.searchParams.get("kelas"));
-      const ruang = rid ? await ruangMilik(db, rid, kegiatanId) : Number.isInteger(kelas) && kelas >= 1 && kelas <= 4 ? await ruangKelas(db, kegiatanId, kelas) : null;
+      const kelas = kelasValid(req.nextUrl.searchParams.get("kelas"));
+      const ruang = rid ? await ruangMilik(db, rid, kegiatanId) : kelas !== null ? await ruangKelas(db, kegiatanId, kelas) : null;
       if (!ruang) return NextResponse.json({ ada: false, sekarang: now.toISOString(), boleh_kelola: bisaKelola });
       return NextResponse.json({ ada: true, boleh_kelola: bisaKelola, ...(await keadaanHost(db, ruang, now)) });
     }
@@ -140,7 +143,10 @@ export async function GET(req: NextRequest) {
       bersihkanCache(`sebaran:${ruang.id}:`);
       bersihkanCache(`peserta:${ruang.id}`);
       const [soal, papan, sebaran, ikut, kuis] = await Promise.all([soalMainRuang(db, ruang), papanRuang(db, ruang.id, ruang.versi), sebaranRuang(db, ruang.id, ruang.versi), daftarPeserta(db, ruang.id), db.from("sigap_kuis").select("judul").eq("id", ruang.kuis_id).maybeSingle()]);
-      const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).eq("kelas", ruang.kelas).limit(2000);
+      // (8 Okt 2026) ruang Semua Kelas (kelas 0): daftar seluruh peserta pelatihan, tidak difilter kelas
+      let qPen = db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true);
+      if (ruang.kelas !== KELAS_GABUNGAN) qPen = qPen.eq("kelas", ruang.kelas);
+      const { data: pen } = await qPen.limit(2000);
       const ids = Array.from(new Set((pen ?? []).map((p) => Number(p.akun_id)).concat(ikut.map((p) => p.akun_id))));
       const { data: ak } = ids.length ? await db.from("sigap_akun").select("id, nama, jenis").in("id", ids).limit(2000) : { data: [] as Record<string, unknown>[] };
       const infoAkun = new Map((ak ?? []).map((a) => [Number(a.id), { nama: String(a.nama), jenis: String(a.jenis) }]));

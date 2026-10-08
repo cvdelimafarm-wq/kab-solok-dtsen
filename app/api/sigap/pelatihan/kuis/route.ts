@@ -15,15 +15,31 @@ import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { catatJawaban, dariCache, gabungRuang, keadaanPeserta, reviewPeserta, ruangKelas, ruangSemuaKelas } from "@/lib/sigapKuisDb";
 import { infoKuis, kelasInstruktur } from "@/lib/sigapKuisDb";
+import { KELAS_GABUNGAN, KELAS_PILIHAN, kelasSah, labelKelas } from "@/lib/sigapKuis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
 const kelasValid = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
-  return Number.isInteger(n) && n >= 1 && n <= 4 ? n : null;
+  return kelasSah(n) ? n : null; // (8 Okt 2026) 0 = Semua Kelas
 };
+/** (8 Okt 2026) Ruang "Semua Kelas" sedang aktif? Peserta berkelas boleh/diarahkan masuk ke sana. */
+async function gabunganAktif(db: NonNullable<ReturnType<typeof dbAdmin>>, kegiatanId: number): Promise<boolean> {
+  const g = await ruangKelas(db, kegiatanId, KELAS_GABUNGAN);
+  return !!g && g.status !== "selesai";
+}
+/** Kelas yang dipakai peserta berkelas: kelasnya sendiri, atau 0 bila diminta / ruang kelasnya tidak aktif tetapi ruang gabungan aktif. */
+async function kelasPeserta(db: NonNullable<ReturnType<typeof dbAdmin>>, kegiatanId: number, milik: number, diminta: number | null): Promise<number> {
+  const gab = await gabunganAktif(db, kegiatanId);
+  const sendiri = await ruangKelas(db, kegiatanId, milik);
+  const sendiriAktif = !!sendiri && sendiri.status !== "selesai";
+  if (diminta === KELAS_GABUNGAN) return gab || !sendiriAktif ? KELAS_GABUNGAN : milik; // minta 0 tapi gabungan sudah selesai & kelasnya aktif -> kelasnya
+  if (!gab) return milik;
+  return sendiriAktif ? milik : KELAS_GABUNGAN;
+}
 
 type Akses = { kelas: number | null; instruktur: boolean; kelas_saya?: number | null };
 /** Siapa boleh bermain: peserta pelatihan (kelasnya dipaksa) atau akun berizin pengelola (bebas pilih kelas). */
@@ -51,7 +67,7 @@ export async function GET(req: NextRequest) {
     if (q.get("daftar") === "1") {
       const peta = await ruangSemuaKelas(db, kegiatanId);
       const baris = [];
-      for (const k of [1, 2, 3, 4]) {
+      for (const k of KELAS_PILIHAN) {
         const r = peta.get(k);
         baris.push({ kelas: k, ada: !!r && r.status !== "selesai", status: r ? r.status : null, judul: r ? (await infoKuis(db, r.kuis_id)).judul : null });
       }
@@ -66,16 +82,18 @@ export async function GET(req: NextRequest) {
       if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
       const ak = await aksesMain(db, kegiatanId, akun.id);
       if (!ak) return galat("Akun ini bukan peserta pelatihan.", 403);
-      if (ak.kelas !== null) kelas = ak.kelas;
+      if (ak.kelas !== null) kelas = await kelasPeserta(db, kegiatanId, ak.kelas, kelas);
       else if (kelas === null && ak.kelas_saya) kelas = ak.kelas_saya; // inda/instruktur: langsung ke kelasnya
       pribadi = akun.id;
     }
     if (kelas === null) return galat("Kelas belum dipilih.", 400);
     const ruang = await ruangKelas(db, kegiatanId, kelas);
-    if (!ruang) return NextResponse.json({ ada: false, kelas, sekarang: now.toISOString() });
+    // (8 Okt 2026) ruang kelas ini tidak aktif tetapi "Semua Kelas" aktif -> beri tahu klien utk pindah
+    const pindah = kelas !== KELAS_GABUNGAN && (!ruang || ruang.status === "selesai") && (await gabunganAktif(db, kegiatanId)) ? KELAS_GABUNGAN : null;
+    if (!ruang) return NextResponse.json({ ada: false, kelas, pindah_kelas: pindah, sekarang: now.toISOString() });
 
     if (q.get("review") === "1" && pribadi !== null) return NextResponse.json({ sekarang: now.toISOString(), ...(await reviewPeserta(db, ruang, pribadi)) });
-    return NextResponse.json({ ada: true, ...(await keadaanPeserta(db, ruang, now, pribadi)) });
+    return NextResponse.json({ ada: true, pindah_kelas: pindah, ...(await keadaanPeserta(db, ruang, now, pribadi)) });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }
@@ -92,14 +110,14 @@ export async function POST(req: NextRequest) {
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const ak = await aksesMain(db, kegiatanId, akun.id);
     if (!ak) return galat("Akun ini bukan peserta pelatihan.", 403);
-    const kelas = ak.kelas ?? kelasValid(body?.kelas);
+    const kelas = ak.kelas !== null ? await kelasPeserta(db, kegiatanId, ak.kelas, kelasValid(body?.kelas)) : kelasValid(body?.kelas);
     if (kelas === null) return galat("Pilih kelas dulu.", 400);
     const aksi = String(body?.aksi ?? "");
     const now = new Date();
 
     if (aksi === "gabung") {
       const ruang = await ruangKelas(db, kegiatanId, kelas);
-      if (!ruang || ruang.status === "selesai") return galat(`Belum ada kuis yang dibuka untuk Kelas ${kelas}.`, 409);
+      if (!ruang || ruang.status === "selesai") return galat(`Belum ada kuis yang dibuka untuk ${labelKelas(kelas)}.`, 409);
       const h = await gabungRuang(db, akun.id, ruang);
       if (!h.ok) return galat(h.error, h.status);
       return NextResponse.json({ ok: true, ruang_id: ruang.id, kelas });

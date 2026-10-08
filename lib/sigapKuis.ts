@@ -27,6 +27,12 @@ export type SoalKuisPeserta = { nomor: number; teks: string; opsi: Opsi[]; detik
 
 export const MAKS_KELAS = 4;
 export const KELAS_SEMUA = [1, 2, 3, 4];
+// (8 Okt 2026) Mode "Semua Kelas" -- permintaan user: satu ruang gabungan utk seluruh peserta (kelas 0).
+// Ruang kelas 0 menerima peserta dari kelas mana pun; satu layar host, satu papan skor & podium.
+export const KELAS_GABUNGAN = 0;
+export const KELAS_PILIHAN = [KELAS_GABUNGAN, 1, 2, 3, 4];
+export const kelasSah = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= MAKS_KELAS;
+export const labelKelas = (k: number | null | undefined) => (k === KELAS_GABUNGAN ? "Semua Kelas" : k == null ? "?" : `Kelas ${k}`);
 export const TOPIK_UMUM = "Umum";
 
 // ======================================================================

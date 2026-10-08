@@ -10,6 +10,7 @@ import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import { URL_KUIS_ADMIN } from "./kuisHost";
 import { kirim, type AksiFn, type Daftar } from "./kuisBersama";
+import { labelKelas } from "@/lib/sigapKuis";
 
 export function Riwayat({ data, bisaKelola, sibuk, aksi, bukaHost, bukaRekap, rekapAktif, tutupRekap }: { data: Daftar; bisaKelola: boolean; sibuk: boolean; aksi: AksiFn; bukaHost: (ruangId: number) => void; bukaRekap: (ruangId: number) => void; rekapAktif: number | null; tutupRekap: () => void }) {
   const [hapusRuang, setHapusRuang] = useState<number | null>(null);
@@ -34,7 +35,7 @@ export function Riwayat({ data, bisaKelola, sibuk, aksi, bukaHost, bukaRekap, re
             <tbody>
               {riwayat.map((r) => (
                 <tr key={r.id}>
-                  <td className={`${TD} font-bold`}>Kelas {r.kelas}</td>
+                  <td className={`${TD} font-bold`}>{labelKelas(r.kelas)}</td>
                   <td className={`${TD} font-semibold`}>{judulKuis(r.kuis_id)}</td>
                   <td className={TD}>{waktuWib(r.dibuka_at)}</td>
                   <td className={`${TD} tabular-nums`}>{r.jumlah_peserta}</td>
@@ -128,7 +129,7 @@ export function Rekap({ ruangId, onTutup }: { ruangId: number; onTutup: () => vo
 
   return (
     <Kartu
-      judul={`Rekap: ${d?.ruang.judul ?? "…"}${d ? ` · Kelas ${d.ruang.kelas}` : ""}`}
+      judul={`Rekap: ${d?.ruang.judul ?? "…"}${d ? ` · ${labelKelas(d.ruang.kelas)}` : ""}`}
       ket={d ? `${nIkut} peserta ikut · rata-rata poin ${fmt(rata)} · ${d.jumlah_soal} soal` : undefined}
       kanan={
         <span className="flex gap-1.5">
@@ -156,7 +157,7 @@ export function Rekap({ ruangId, onTutup }: { ruangId: number; onTutup: () => vo
             <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
               <option value="">Semua kelas</option>
               {[1, 2, 3, 4].map((k) => (
-                <option key={k} value={k}>Kelas {k}</option>
+                <option key={k} value={k}>{labelKelas(k)}</option>
               ))}
             </select>
             <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari nama" />

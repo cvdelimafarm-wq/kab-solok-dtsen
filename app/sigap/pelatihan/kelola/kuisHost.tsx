@@ -9,7 +9,7 @@
 // Tema ungu-emas; warna tombol jawaban menurut POSISI (tetap seragam walau urutan opsi diacak).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { warnaPosisi } from "@/lib/sigapKuis";
+import {labelKelas, warnaPosisi } from "@/lib/sigapKuis";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { efek, hentikanMusik, putarMusik, setSuaraAktif } from "../kuisSuara";
 
@@ -237,7 +237,7 @@ export function LayarHost({ ruangId, bisaKelola, onTutup }: { ruangId: number; b
     <div ref={akar} className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-[#46178F] text-white" role="dialog" aria-label="Layar host Adu Sigap">
       {/* bilah atas */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3">
-        <span className="rounded-full bg-[#FFD02B] px-3 py-1 text-[13px] font-extrabold text-[#2B0F55]">⚡ ADU SIGAP · Kelas {r?.kelas ?? "?"}</span>
+        <span className="rounded-full bg-[#FFD02B] px-3 py-1 text-[13px] font-extrabold text-[#2B0F55]">⚡ ADU SIGAP · {labelKelas(r?.kelas)}</span>
         <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold">{r?.judul ?? "Adu Sigap"}</span>
         {r && r.status !== "lobi" && r.soal_ke > 0 && <span className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold">Soal {r.soal_ke} / {r.total}</span>}
         <span className="ml-auto flex flex-wrap items-center gap-2">
@@ -323,7 +323,7 @@ function Lobi({ d, sisaJadwal }: { d: KeadaanHost; sisaJadwal: number | null }) 
     <div className="m-auto w-full text-center">
       <p className="text-[clamp(1rem,2vw,1.4rem)] font-semibold text-white/80">Buka SIGAP di HP → Pelatihan → Langkah → Adu Sigap → Gabung</p>
       <p className="mt-1 text-[clamp(1rem,2.2vw,1.6rem)] font-bold text-[#FFD02B]">{alamat.replace(/^https?:\/\//, "")}</p>
-      <p className="mt-5 inline-block rounded-full bg-[#FFD02B] px-4 py-1 text-[clamp(0.9rem,1.8vw,1.3rem)] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP · KELAS {d.ruang.kelas}</p>
+      <p className="mt-5 inline-block rounded-full bg-[#FFD02B] px-4 py-1 text-[clamp(0.9rem,1.8vw,1.3rem)] font-extrabold tracking-widest text-[#2B0F55]">⚡ ADU SIGAP · {labelKelas(d.ruang.kelas).toUpperCase()}</p>
       <h1 className="mt-3 text-[clamp(2rem,6vw,4.5rem)] font-extrabold leading-tight">{d.ruang.judul}</h1>
       <p className="mt-2 text-[clamp(1rem,2vw,1.4rem)] text-white/80">{d.ruang.total} soal · menunggu peserta bergabung</p>
       {sisaJadwal !== null && (
