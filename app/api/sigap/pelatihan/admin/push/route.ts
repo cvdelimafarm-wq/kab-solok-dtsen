@@ -42,13 +42,16 @@ export async function GET(req: NextRequest) {
     const akunIds = [...new Set((pen ?? []).map((x) => x.akun_id as number))];
     const tesDaftar = await muatTesDaftar(db, kegiatanId);
     const idTes = new Map(tesDaftar.map((t) => [t.jenis as string, t.id as number]));
-    const [{ data: ak }, { data: sesi }, { data: pres }, { data: sub }, { data: log }] = await Promise.all([
+    const [{ data: ak }, { data: sesi }, { data: pres }, { data: sub }, { data: log }, { data: apl }] = await Promise.all([
       akunIds.length ? db.from("sigap_akun").select("id, nama").in("id", akunIds).limit(2000) : Promise.resolve({ data: [] as { id: number; nama: string }[] }),
       akunIds.length ? db.from("sigap_tes_sesi").select("tes_id, akun_id, selesai_at, batas_at, percobaan, skor_terbaik").in("akun_id", akunIds).limit(5000) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       akunIds.length ? db.from("sigap_pelatihan_presensi").select("akun_id").eq("kegiatan_id", kegiatanId).eq("tanggal", hari).in("akun_id", akunIds).limit(5000) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       akunIds.length ? db.from("sigap_push_langganan").select("akun_id").eq("aktif", true).in("akun_id", akunIds).limit(5000) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       db.from("sigap_push_log").select("id, judul, isi, url, jumlah_akun, jumlah_perangkat, terkirim, gagal, dibuat_at, oleh_akun_id").eq("kegiatan_id", kegiatanId).order("dibuat_at", { ascending: false }).limit(20),
+      // (8 Okt 2026) pemantauan pemasangan aplikasi; tabel belum ada (migrasi belum dijalankan) -> data null, semua dianggap belum
+      akunIds.length ? db.from("sigap_aplikasi_pakai").select("akun_id, terpasang, terakhir_aplikasi_at, terakhir_browser_at, platform").in("akun_id", akunIds).limit(5000) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     ]);
+    const petaApl = new Map((apl ?? []).map((a) => [a.akun_id as number, a]));
     const nama = new Map((ak ?? []).map((a) => [a.id as number, String(a.nama ?? "")]));
     const jumlahNotif = new Map<number, number>();
     for (const s of sub ?? []) jumlahNotif.set(s.akun_id as number, (jumlahNotif.get(s.akun_id as number) ?? 0) + 1);
@@ -70,6 +73,12 @@ export async function GET(req: NextRequest) {
         pretest: statusTes(x.akun_id as number, "pretest"),
         posttest: statusTes(x.akun_id as number, "posttest"),
         presensi_hari_ini: adaPresensi.has(x.akun_id as number),
+        aplikasi: {
+          terpasang: !!petaApl.get(x.akun_id as number)?.terpasang,
+          terakhir_aplikasi_at: (petaApl.get(x.akun_id as number)?.terakhir_aplikasi_at as string | null | undefined) ?? null,
+          terakhir_browser_at: (petaApl.get(x.akun_id as number)?.terakhir_browser_at as string | null | undefined) ?? null,
+          platform: (petaApl.get(x.akun_id as number)?.platform as string | null | undefined) ?? null,
+        },
       }))
       .sort((a, b) => a.nama.localeCompare(b.nama));
     const olehIds = [...new Set((log ?? []).map((l) => l.oleh_akun_id as number | null).filter((x): x is number => !!x))];

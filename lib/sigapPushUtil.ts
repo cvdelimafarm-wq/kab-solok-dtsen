@@ -76,5 +76,7 @@ export type PesertaPush = {
   posttest: StatusTesPush;
   /** minimal satu presensi tercatat hari ini (WIB) */
   presensi_hari_ini: boolean;
+  /** (8 Okt 2026) pemasangan aplikasi: pernah membuka SIGAP dari ikon layar utama? (sigap_aplikasi_pakai) */
+  aplikasi: { terpasang: boolean; terakhir_aplikasi_at: string | null; terakhir_browser_at: string | null; platform: string | null };
 };
 export type RiwayatPush = { id: number; judul: string; isi: string; url: string | null; jumlah_akun: number; jumlah_perangkat: number; terkirim: number; gagal: number; dibuat_at: string; oleh: string | null };

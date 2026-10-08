@@ -5,6 +5,7 @@ import { ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 import DaftarSW from "@/app/components/DaftarSW";
 import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
+import PingAplikasi from "@/app/components/PingAplikasi";
 
 // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
 // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
@@ -56,6 +57,8 @@ export default function RootLayout({
         <DaftarSW />
         {/* (8 Okt 2026) tombol Back bertingkat & Back dua kali untuk keluar di Beranda (aplikasi terpasang) */}
         <PenjagaKembali />
+        {/* (8 Okt 2026) pemantauan pemasangan aplikasi: lapor mode "aplikasi"/"browser" saat dibuka */}
+        <PingAplikasi />
       </body>
     </html>
   );

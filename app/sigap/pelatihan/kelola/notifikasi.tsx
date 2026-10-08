@@ -14,12 +14,14 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 const URL_API = "/api/sigap/pelatihan/admin/push";
 
 type Data = { boleh_kelola: boolean; server_siap: boolean; hari: string; sekarang: string; peserta: PesertaPush[]; riwayat: RiwayatPush[] };
-type Sasaran = "belum_posttest" | "belum_pretest" | "belum_presensi" | "semua" | "kelas_1" | "kelas_2" | "kelas_3" | "kelas_4" | "kosong";
+type Sasaran = "belum_posttest" | "belum_pretest" | "belum_presensi" | "belum_pasang" | "belum_notif" | "semua" | "kelas_1" | "kelas_2" | "kelas_3" | "kelas_4" | "kosong";
 
 const OPSI_SASARAN: { k: Sasaran; label: string }[] = [
   { k: "belum_posttest", label: "Belum mengerjakan Posttest" },
   { k: "belum_pretest", label: "Belum mengerjakan Pretest" },
   { k: "belum_presensi", label: "Belum presensi hari ini" },
+  { k: "belum_pasang", label: "Belum memasang aplikasi (tindak lanjut lewat WhatsApp)" },
+  { k: "belum_notif", label: "Belum mengaktifkan notifikasi" },
   { k: "kelas_1", label: "Semua peserta Kelas 1" },
   { k: "kelas_2", label: "Semua peserta Kelas 2" },
   { k: "kelas_3", label: "Semua peserta Kelas 3" },
@@ -32,6 +34,8 @@ const cocokSasaran = (s: Sasaran, p: PesertaPush): boolean => {
   if (s === "belum_posttest") return p.posttest === "belum";
   if (s === "belum_pretest") return p.pretest === "belum";
   if (s === "belum_presensi") return !p.presensi_hari_ini;
+  if (s === "belum_pasang") return !p.aplikasi.terpasang;
+  if (s === "belum_notif") return p.notif === 0;
   if (s === "semua") return true;
   if (s === "kosong") return false;
   return p.kelas === Number(s.slice(6));
@@ -90,6 +94,7 @@ export default function NotifikasiKelola() {
   const adaNotif = terpilih.filter((p) => p.notif > 0);
   const tanpaNotif = terpilih.length - adaNotif.length;
   const totalNotif = (d?.peserta ?? []).filter((p) => p.notif > 0).length;
+  const totalPasang = (d?.peserta ?? []).filter((p) => p.aplikasi.terpasang).length;
   const bisaKirim = !!d?.boleh_kelola && d.server_siap && adaNotif.length > 0 && judul.trim() !== "" && isi.trim() !== "";
 
   async function kirim() {
@@ -120,8 +125,9 @@ export default function NotifikasiKelola() {
           Pengiriman belum aktif: kunci VAPID belum dipasang di server (Railway: VAPID_PUBLIC_KEY dan VAPID_PRIVATE_KEY). Daftar di bawah tetap bisa dilihat.
         </Pesan>
       )}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
         <KartuAngka label="Peserta" nilai={d.peserta.length} />
+        <KartuAngka label="Aplikasi terpasang" nilai={totalPasang} ket={`${d.peserta.length - totalPasang} belum`} warna="#1E7A4C" />
         <KartuAngka label="Notifikasi aktif" nilai={totalNotif} ket={`${d.peserta.length - totalNotif} belum`} warna="#1E7A4C" />
         <KartuAngka label="Penerima terpilih" nilai={terpilih.length} ket={`${adaNotif.length} akan menerima`} warna="#1F5FD1" />
         <KartuAngka label="Tanpa notifikasi" nilai={tanpaNotif} ket="tidak akan menerima" warna={tanpaNotif ? "#B5352D" : undefined} />
@@ -218,6 +224,8 @@ export default function NotifikasiKelola() {
             </th>
             <th className={TH}>Nama</th>
             <th className={TH}>Kelas</th>
+            <th className={TH}>Aplikasi</th>
+            <th className={TH}>Terakhir dibuka</th>
             <th className={TH}>Notifikasi</th>
             <th className={TH}>Pretest</th>
             <th className={TH}>Posttest</th>
@@ -245,6 +253,10 @@ export default function NotifikasiKelola() {
               </td>
               <td className={`${TD} font-semibold`}>{p.nama}<span className="ml-1.5 text-[11px] font-normal uppercase text-[#7B8794]">{p.peran}</span></td>
               <td className={TD}>{p.kelas ?? "–"}</td>
+              <td className={TD}>
+                {p.aplikasi.terpasang ? <Chip w="ok">Terpasang{p.aplikasi.platform && p.aplikasi.platform !== "lain" ? ` · ${p.aplikasi.platform === "ios" ? "iPhone" : "Android"}` : ""}</Chip> : p.aplikasi.terakhir_browser_at ? <Chip w="wait">Baru lewat browser</Chip> : <Chip w="mut">Belum</Chip>}
+              </td>
+              <td className={`${TD} whitespace-nowrap text-[12px] text-[#4D5B6B]`}>{p.aplikasi.terakhir_aplikasi_at ? waktuWib(p.aplikasi.terakhir_aplikasi_at) : "–"}</td>
               <td className={TD}>{p.notif > 0 ? <Chip w="ok">Aktif{p.notif > 1 ? ` (${p.notif} HP)` : ""}</Chip> : <Chip w="mut">Belum</Chip>}</td>
               <td className={TD}><Chip w={warnaTes[p.pretest]}>{labelTes[p.pretest]}</Chip></td>
               <td className={TD}><Chip w={warnaTes[p.posttest]}>{labelTes[p.posttest]}</Chip></td>
