@@ -11,6 +11,7 @@ import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "
 import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
+import PengaturanAwal from "@/app/portal/PengaturanAwal";
 import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
@@ -194,6 +195,8 @@ export function Kerangka({
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         <PulsaPeserta />
         {children}
+        {/* (8 Okt 2026) notifikasi wajib di aplikasi terpasang (permintaan user) */}
+        <PengaturanAwal />
       </main>
     </div>
   );
