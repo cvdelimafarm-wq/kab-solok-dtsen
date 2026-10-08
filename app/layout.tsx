@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 import DaftarSW from "@/app/components/DaftarSW";
+import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 
 // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
 // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
@@ -49,7 +50,8 @@ export default function RootLayout({
   return (
     <html lang="id" className={jakarta.variable}>
       <body className="font-sans antialiased">
-        {children}
+        {/* (8 Okt 2026) di HP, beranda portal & /sigap/* wajib dibuka lewat aplikasi terpasang (permintaan user) */}
+        <GerbangAplikasi>{children}</GerbangAplikasi>
         <DaftarSW />
       </body>
     </html>
