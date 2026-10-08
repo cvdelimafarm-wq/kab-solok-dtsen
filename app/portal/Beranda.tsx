@@ -1,47 +1,55 @@
 "use client";
 
 // (7 Okt 2026) Portal satu login -- beranda: kartu sesuai peran & periode (dihitung server, /api/portal/beranda).
-// Kelompok: Tugas aktif, Pengelolaan, Referensi, Riwayat (arsip baca-saja) -- sesuai mockup yg disetujui user.
+// (8 Okt 2026) Beranda HP mengikuti mockup identitas SIGAP, variasi 3 "Tugas utama + ikon cepat" (permintaan user): saat pertama masuk,
+// kartu atas menampilkan SATU tugas paling mendesak (pelatihan: kuis live / tes / presensi / foto / langkah berikutnya; kegiatan lain dari kartu),
+// lalu menu sebagai ikon cepat 4 kolom (titik emas = ada tugas aktif). Pemilihan tugas: lib/sigapTugasUtama.ts.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
+import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
 import GantiPinCepat from "./GantiPinCepat";
+import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 
 type Data = { nama: string; jenis: string; peran: string[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
+type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
 export type InfoDtsen = { nama: string; role: string | null } | null;
 
-const GRUP: { kode: Kartu["grup"]; judul: string }[] = [
-  { kode: "tugas", judul: "Tugas aktif" },
-  { kode: "kelola", judul: "Pengelolaan" },
-  { kode: "referensi", judul: "Referensi" },
-  { kode: "riwayat", judul: "Riwayat (baca-saja)" },
-];
-
-const NADA: Record<string, string> = {
-  aktif: "bg-[#E3F4EE] text-[#1E7A5E]",
-  tenggang: "bg-[#FDF1DC] text-[#8A5A0B]",
-  arsip: "bg-[#EDF1F5] text-[#4D5B6B]",
-  info: "bg-[#E8F1FC] text-[#1A50B5]",
-  peringatan: "bg-[#FDECEA] text-[#8A2B1D]",
+const NAMA_HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const tanggalIndo = (ms: number) => {
+  const d = new Date(ms + 7 * 3_600_000);
+  return `${NAMA_HARI[d.getUTCDay()]}, ${d.getUTCDate()} ${NAMA_BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
-const GARIS: Record<Kartu["grup"], string> = {
-  tugas: "border-l-[#1F5FD1]",
-  kelola: "border-l-[#F4B400]",
-  referensi: "border-l-[#3DBB98]",
-  riwayat: "border-l-[#B8C2CE]",
+const LENCANA: Record<NadaLencana, string> = {
+  merah: "bg-[#FDE8E8] text-[#B42329]",
+  emas: "bg-[#FFF4D6] text-[#8A6200]",
+  biru: "bg-[#E6EEFC] text-[#1F5FD1]",
+  hijau: "bg-[#E3F6EC] text-[#13794B]",
+  abu: "bg-[#EEF2F7] text-[#5B6B84]",
+};
+
+/** "M. Iqbal Hadi, SST." -> "M. Iqbal Hadi"; inisial "MH". */
+const namaSapaan = (n: string) => n.split(",")[0].trim();
+const inisial = (n: string) => {
+  const k = namaSapaan(n).split(/\s+/).filter((x) => x && !/\.$/.test(x));
+  return ((k[0]?.[0] ?? "") + (k.length > 1 ? k[k.length - 1][0] : "")).toUpperCase() || "S";
 };
 
 export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKeluar: () => void }) {
   const adaSesi = typeof window !== "undefined" && !!bacaSesi();
   const [data, setData] = useState<Data | null>(null);
+  const [hub, setHub] = useState<HubBeranda | null>(null);
+  const [offset, setOffset] = useState(0); // selisih jam server - jam HP
+  const [tik, setTik] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<string | null>(null);
   // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
@@ -57,9 +65,35 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     }
   }, [onKeluar]);
 
+  // Data pelatihan (untuk menentukan tugas paling mendesak). Gagal -> beranda tetap jalan tanpa bagian pelatihan.
+  const muatHub = useCallback(async () => {
+    if (!bacaSesi()) return;
+    try {
+      const h = await apiPortal<HubBeranda>("/api/sigap/pelatihan");
+      setOffset(Date.parse(h.sekarang) - Date.now());
+      setHub(h);
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+
   useEffect(() => {
     muat();
-  }, [muat]);
+    muatHub();
+  }, [muat, muatHub]);
+
+  // jam berjalan (sisa waktu) tiap 30 dtk; data pelatihan disegarkan tiap menit saat layar terlihat
+  useEffect(() => {
+    const a = setInterval(() => setTik((x) => x + 1), 30_000);
+    const b = setInterval(() => document.visibilityState === "visible" && muatHub(), 60_000);
+    const c = () => document.visibilityState === "visible" && muatHub();
+    document.addEventListener("visibilitychange", c);
+    return () => {
+      clearInterval(a);
+      clearInterval(b);
+      document.removeEventListener("visibilitychange", c);
+    };
+  }, [muatHub]);
 
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
@@ -83,88 +117,120 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     }
   }
 
-  const kartu: Kartu[] = [...(data?.kartu ?? [])];
-  if (dtsen) {
-    kartu.unshift({
-      kode: "dtsen-operator",
-      grup: "tugas",
-      judul: "Usulan Update Data DTSEN",
-      uraian: "Terbitkan surat keterangan & pantau status usulan.",
-      status: { label: "Aktif", nada: "aktif" },
-      href: "/dashboard",
-      label_aksi: "Buka dashboard",
-    });
-  }
+  const nowMs = Date.now() + offset;
+  const { kartu, utama } = useMemo(() => {
+    const k: Kartu[] = [...(data?.kartu ?? [])];
+    if (dtsen) {
+      k.unshift({
+        kode: "dtsen-operator",
+        grup: "tugas",
+        judul: "Usulan Update Data DTSEN",
+        uraian: "Terbitkan surat keterangan & pantau status usulan.",
+        status: { label: "Aktif", nada: "aktif" },
+        href: "/dashboard",
+        label_aksi: "Buka dashboard",
+      });
+    }
+    const tp = hub ? tugasUtamaPelatihan(hub, Date.now() + offset) : null;
+    // menu pelatihan (peserta: langkah, undangan, instrumen; pengelola: Kelola Pelatihan)
+    if (hub?.peserta) {
+      k.push(
+        { kode: "pelatihan", grup: "tugas", judul: "Langkah pelatihan", uraian: "PSP Pascabencana", status: tp?.progres ? { label: `${tp.progres.selesai} dari ${tp.progres.total}`, nada: "aktif" } : undefined, href: "/sigap/pelatihan" },
+        { kode: "pelatihan-undangan", grup: "referensi", judul: "Undangan", uraian: "Kelas, jam, pakaian", href: "/sigap/pelatihan/undangan" },
+        { kode: "pelatihan-instrumen", grup: "referensi", judul: "Instrumen", uraian: "Kuesioner & pedoman", href: "/sigap/pelatihan/instrumen" }
+      );
+    }
+    if (hub?.boleh_lihat_kelola) k.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/pelatihan/kelola" });
+    return { kartu: k, utama: pilihTugasUtama(tp, tugasDariKartu(k)) };
+    // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, dtsen, hub, offset, tik]);
+
   const nama = data?.nama ?? dtsen?.nama ?? "";
+  const menu = kartu.filter((k) => k.grup !== "kelola");
+  const kelola = kartu.filter((k) => k.grup === "kelola");
+  const menuUrut = [...menu].sort((a, b) => {
+    const rank = (k: Kartu) => (k.href && utama && k.href === utama.href ? 0 : k.grup === "tugas" ? 1 : k.grup === "referensi" ? 2 : 3);
+    return rank(a) - rank(b);
+  });
+  const memuatAwal = adaSesi && !data && !error;
 
   return (
-    <main className="min-h-screen bg-[#F3F5F8] pb-12 text-[#14202E]">
-      <header className="bg-gradient-to-b from-[#1A4590] to-[#0F2A52] px-4 pb-16 pt-5 text-white sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <span className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white p-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/sigap-logo.png" alt="Logo SIGAP" width={32} height={31} className="h-full w-full object-contain" />
-            </span>
-            <span className="leading-tight">
-              <span className="block text-[15px] font-extrabold tracking-wide">SIGAP</span>
-              <span className="block text-[11px] text-[#C9D6E6]">BPS Kabupaten Solok</span>
-            </span>
+    <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
+      <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[84px] pt-6 text-white">
+        <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
+        <div className="relative mx-auto flex max-w-xl items-center gap-2.5">
+          <span className="grid h-[38px] w-[38px] flex-none place-items-center rounded-[11px] bg-white shadow-[0_4px_12px_rgba(4,16,40,.3)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/sigap-logo.png" alt="Logo SIGAP" width={29} height={29} className="h-[29px] w-[29px] object-contain" />
           </span>
-          <button type="button" onClick={keluar} className="rounded-md border border-[#3A5675] px-3 py-1.5 text-[12.5px] text-[#C9D6E6] hover:bg-[#1C3D61]">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[18px] font-extrabold leading-none">SIGAP</span>
+            <span className="mt-[3px] block truncate text-[8px] font-semibold uppercase tracking-[0.14em] text-[#A9BCD8]">Sistem Integrasi Kegiatan BPS</span>
+          </span>
+          {nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>}
+          <button type="button" onClick={keluar} className="flex-none rounded-lg border border-white/25 px-3 py-1.5 text-[12.5px] font-semibold text-[#D3E0F5] hover:bg-white/10">
             Keluar
           </button>
         </div>
-        <div className="mx-auto mt-6 max-w-5xl">
-          <p className="text-[13px] text-[#C9D6E6]">Selamat datang,</p>
-          <h1 className="text-[22px] font-bold sm:text-[26px]">{nama || "…"}</h1>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <div className="relative mx-auto mt-5 max-w-xl">
+          <p className="text-[13px] text-[#A9BCD8]">{tanggalIndo(nowMs)}</p>
+          <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.3px]">Halo, {nama ? namaSapaan(nama) : "…"}</h1>
+          <div className="-mx-5 mt-2.5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(data?.peran ?? []).map((p) => (
-              <span key={p} className="rounded-full bg-[#1C3D61] px-2.5 py-0.5 text-[11.5px] text-[#C9D6E6]">{p}</span>
+              <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>
             ))}
-            {data?.jenis === "organik" && <span className="rounded-full bg-[#1C3D61] px-2.5 py-0.5 text-[11.5px] text-[#C9D6E6]">Pegawai organik</span>}
-            {data?.jenis === "mitra" && <span className="rounded-full bg-[#1C3D61] px-2.5 py-0.5 text-[11.5px] text-[#C9D6E6]">Mitra statistik</span>}
-            {dtsen && <span className="rounded-full bg-[#1C3D61] px-2.5 py-0.5 text-[11.5px] text-[#C9D6E6]">Operator Wali Nagari</span>}
+            {data?.jenis === "organik" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Pegawai organik</span>}
+            {data?.jenis === "mitra" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Mitra statistik</span>}
+            {dtsen && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Operator Wali Nagari</span>}
           </div>
         </div>
       </header>
 
-      <div className="relative z-10 mx-auto -mt-10 max-w-5xl space-y-6 px-4">
-        {data && <AktifkanNotifikasi />}
+      <div className="relative z-10 mx-auto -mt-[62px] max-w-xl space-y-5 px-3.5">
         {data && <PengaturanAwal />}
+
+        {/* Tugas utama */}
+        {memuatAwal ? (
+          <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-busy="true">
+            <div className="h-3 w-28 animate-pulse rounded bg-[#E6EDF8]" />
+            <div className="mt-4 flex items-center gap-3">
+              <span className="h-[50px] w-[50px] animate-pulse rounded-[15px] bg-[#E6EDF8]" />
+              <span className="flex-1 space-y-2">
+                <span className="block h-4 w-3/4 animate-pulse rounded bg-[#E6EDF8]" />
+                <span className="block h-3 w-1/2 animate-pulse rounded bg-[#EEF2F7]" />
+              </span>
+            </div>
+            <div className="mt-4 h-[46px] animate-pulse rounded-[13px] bg-[#E6EDF8]" />
+          </section>
+        ) : (
+          <KartuUtama u={utama} />
+        )}
+
         {data?.pin_bawaan && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F0D9A0] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4A00]" role="alert">
-            <span aria-hidden className="text-[20px]">⚠️</span>
+          <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#F3DFA5] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4C00]" role="alert">
+            <IkonMenu n="awas" className="h-5 w-5 text-[#8A6200]" />
             <p className="min-w-[200px] flex-1 leading-snug">
               <b>Anda masih memakai PIN awal {PIN_AWAL}</b> yang sama dengan pegawai lain. Ganti dengan PIN sendiri agar akun Anda aman.
             </p>
-            <button type="button" onClick={() => setGantiPin(true)} className="rounded-lg bg-[#1E7A4C] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[#17623C]">
+            <button type="button" onClick={() => setGantiPin(true)} className="min-h-[40px] rounded-[12px] bg-[#1F5FD1] px-4 text-[13.5px] font-extrabold text-white hover:bg-[#1A4FB8]">
               Ganti PIN sekarang
             </button>
           </div>
         )}
-        {error && <p className="rounded-lg border-l-4 border-[#C2412D] bg-[#FDECEA] px-3 py-2 text-[13px] text-[#8A2B1D]">{error}</p>}
-        {adaSesi && !data && !error && <p className="rounded-xl border border-[#E3E8EE] bg-white px-4 py-6 text-center text-[13.5px] text-[#7B8794]">Memuat menu…</p>}
+        {error && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{error}</p>}
         {(data || dtsen) && kartu.length === 0 && (
-          <p className="rounded-xl border border-[#E3E8EE] bg-white px-4 py-6 text-center text-[13.5px] text-[#4D5B6B]">
+          <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
             Belum ada tugas atau menu aktif untuk akun Anda. Hubungi admin anggaran atau PJ kegiatan.
           </p>
         )}
-        {GRUP.map((g) => {
-          const isi = kartu.filter((k) => k.grup === g.kode);
-          if (isi.length === 0) return null;
-          return (
-            <section key={g.kode}>
-              <h2 className="mb-2 px-1 text-[12px] font-bold uppercase tracking-[0.1em] text-[#7B8794]">{g.judul}</h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {isi.map((k) => (
-                  <KartuItem key={k.kode} k={k} sibuk={sibuk === k.kode} onSso={() => bukaSso(k)} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+
+        {menuUrut.length > 0 && <GrupIkon judul="Menu" isi={menuUrut} sibuk={sibuk} onSso={bukaSso} />}
+        {kelola.length > 0 && <GrupIkon judul="Pengelolaan" isi={kelola} sibuk={sibuk} onSso={bukaSso} />}
+
+        {data && <AktifkanNotifikasi />}
       </div>
+
       {gantiPin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setGantiPin(false)}>
           <div className="max-h-full w-full max-w-[400px] overflow-auto" onClick={(e) => e.stopPropagation()}>
@@ -182,37 +248,104 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   );
 }
 
-function KartuItem({ k, sibuk, onSso }: { k: Kartu; sibuk: boolean; onSso: () => void }) {
-  const gelap = !!k.gelap;
-  const isi = (
-    <div
-      className={`flex h-full flex-col gap-2 rounded-xl border border-l-4 p-4 transition ${
-        gelap ? "border-[#0F2A52] border-l-[#F4B400] bg-[#0F2A52] text-white" : `border-[#E3E8EE] bg-white ${GARIS[k.grup]}`
-      } ${k.href || k.sso ? "hover:-translate-y-0.5 hover:shadow-md" : "opacity-80"}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <strong className="text-[15px] leading-snug">{k.judul}</strong>
-        {k.status && <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${NADA[k.status.nada] ?? NADA.info}`}>{k.status.label}</span>}
+function KartuUtama({ u }: { u: TugasUtama | null }) {
+  if (!u) {
+    return (
+      <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
+        <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">HARI INI</span>
+        <div className="mt-3 flex items-center gap-3">
+          <span className="grid h-[50px] w-[50px] flex-none place-items-center rounded-[15px] bg-[#E3F6EC] text-[#13794B]">
+            <IkonMenu n="centang" className="h-[26px] w-[26px]" />
+          </span>
+          <div>
+            <p className="text-[16px] font-extrabold text-[#0F2A52]">Tidak ada tugas mendesak</p>
+            <p className="text-[12.5px] text-[#5B6B84]">Pilih menu di bawah untuk melanjutkan.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+  const p = u.progres;
+  return (
+    <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-label="Tugas utama">
+      <div className="flex items-center gap-2">
+        <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">{u.label}</span>
+        {u.lencana && <span className={`ml-auto rounded-[9px] px-2 py-[3px] text-[11px] font-bold ${LENCANA[u.lencana.nada]}`}>{u.lencana.teks}</span>}
       </div>
-      <p className={`text-[13px] leading-relaxed ${gelap ? "text-[#C9D6E6]" : "text-[#4D5B6B]"}`}>{k.uraian}</p>
-      {(k.href || k.sso) && (
-        <span className={`mt-auto text-[13px] font-semibold ${gelap ? "text-[#F2C46D]" : "text-[#1F5FD1]"}`}>{sibuk ? "Membuka…" : `${k.label_aksi ?? "Buka"} →`}</span>
+      <div className="mt-3 flex items-center gap-3">
+        <span className="grid h-[50px] w-[50px] flex-none place-items-center rounded-[15px] bg-gradient-to-br from-[#3B78E0] to-[#1A4590] text-white">
+          <IkonMenu n={u.ikon} className="h-[26px] w-[26px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-extrabold leading-snug text-[#0F2A52]">{u.judul}</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#5B6B84]">{u.uraian}</p>
+        </div>
+      </div>
+      {p && p.total > 0 && (
+        <div className="mt-3.5" role="img" aria-label={`${p.selesai} dari ${p.total} langkah selesai`}>
+          <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${p.total}, minmax(0, 1fr))` }}>
+            {Array.from({ length: p.total }, (_, i) => (
+              <span key={i} className={`h-1.5 rounded-[3px] ${i < p.selesai ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} />
+            ))}
+          </div>
+          <p className="mt-1 text-[11.5px] text-[#6B7A90]">{p.selesai} dari {p.total} selesai</p>
+        </div>
       )}
-    </div>
+      <Link href={u.href} className="mt-3.5 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]">
+        {u.aksi}
+      </Link>
+    </section>
   );
+}
+
+function GrupIkon({ judul, isi, sibuk, onSso }: { judul: string; isi: Kartu[]; sibuk: string | null; onSso: (k: Kartu) => void }) {
+  return (
+    <section aria-label={judul}>
+      <h2 className="mb-2.5 px-1 text-[15px] font-extrabold text-[#0F2A52]">{judul}</h2>
+      <ul className="grid grid-cols-4 gap-x-1.5 gap-y-4 sm:grid-cols-5">
+        {isi.map((k) => (
+          <li key={k.kode}>
+            <TileMenu k={k} sibuk={sibuk === k.kode} onSso={() => onSso(k)} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Kartu "ada tugas" = grup tugas yang aktif / masa tenggang (titik emas di pojok ikon). */
+const adaTugas = (k: Kartu) => k.grup === "tugas" && k.status?.nada !== "arsip" && k.status?.nada !== "info";
+
+function TileMenu({ k, sibuk, onSso }: { k: Kartu; sibuk: boolean; onSso: () => void }) {
+  const arsip = k.grup === "riwayat" || k.status?.nada === "arsip";
+  const isi = (
+    <span className={`flex flex-col items-center gap-1.5 ${arsip ? "opacity-70" : ""}`}>
+      <span className={`relative grid h-14 w-14 place-items-center rounded-[17px] border border-[#DDE6F3] bg-white text-[#0F2A52] shadow-[0_2px_6px_rgba(15,42,82,.05)] ${sibuk ? "animate-pulse" : ""}`}>
+        <IkonMenu n={ikonKartu(k.kode)} className="h-[25px] w-[25px]" />
+        {adaTugas(k) && <span aria-hidden className="absolute -right-[3px] -top-[3px] h-2.5 w-2.5 rounded-full border-2 border-white bg-[#F4B400]" />}
+      </span>
+      <span className="line-clamp-2 min-h-[2.4em] text-center text-[11.5px] font-semibold leading-[1.2] text-[#1B2B4B]">{sibuk ? "Membuka…" : k.judul.replace(/^Transport Lokal — /, "Translok ").replace(/^Admin /, "Admin ")}</span>
+      {adaTugas(k) && <span className="sr-only">ada tugas aktif</span>}
+    </span>
+  );
+  const kelas = "block rounded-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[#1F5FD1]/50 active:scale-[0.97] transition";
   if (k.sso) {
     return (
-      <button type="button" onClick={onSso} disabled={sibuk} className="text-left">
+      <button type="button" onClick={onSso} disabled={sibuk} className={`${kelas} w-full`}>
         {isi}
       </button>
     );
   }
   if (k.href) {
     return k.href.startsWith("http") ? (
-      <a href={k.href} target="_blank" rel="noopener noreferrer">{isi}</a>
+      <a href={k.href} target="_blank" rel="noopener noreferrer" className={kelas}>
+        {isi}
+      </a>
     ) : (
-      <Link href={k.href}>{isi}</Link>
+      <Link href={k.href} className={kelas}>
+        {isi}
+      </Link>
     );
   }
-  return isi;
+  return <span className="block cursor-default">{isi}</span>;
 }
