@@ -292,8 +292,8 @@ export default function AdminTransportLokal() {
       ) : !adaAksesAdmin ? (
         <Pesan jenis="info">
           Akun Anda belum punya izin menu Admin Transport Lokal. Minta admin anggaran memberi peran lewat Kelola Peran &amp; Akses.{" "}
-          <Link href="/sigap" className="font-bold underline">
-            Kembali ke portal
+          <Link href="/" className="font-bold underline">
+            Kembali ke Beranda
           </Link>
         </Pesan>
       ) : !kegId ? (

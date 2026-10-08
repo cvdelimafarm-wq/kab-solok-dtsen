@@ -238,7 +238,7 @@ export default function Shell({
     if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/pelatihan/kelola") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/akses") });
     if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
-    out.push({ id: "m-portal", grup: "Menu", label: "Portal SIGAP", jalankan: () => (window.location.href = "/sigap") });
+    out.push({ id: "m-portal", grup: "Menu", label: "Beranda SIGAP", jalankan: () => (window.location.href = "/") });
     out.push(...aksiPalet);
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
@@ -254,10 +254,10 @@ export default function Shell({
       <aside
         className={`sticky top-0 hidden h-screen shrink-0 flex-col self-start overflow-y-auto bg-[#0E2A47] px-2.5 py-3.5 text-[#C9D6E6] transition-[width] lg:flex ${mini ? "w-[68px]" : "w-[232px]"}`}
       >
-        <Link href="/sigap" className={`mb-3 flex items-center gap-2.5 rounded-lg px-2 pb-2 pt-1 ${mini ? "justify-center" : ""}`} title="Portal SIGAP">
+        <Link href="/" className={`mb-3 flex items-center gap-2.5 rounded-lg px-2 pb-2 pt-1 ${mini ? "justify-center" : ""}`} title="Beranda SIGAP">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-bps.svg" alt="" className="h-full w-full object-contain" />
+            <img src="/sigap-logo.png" alt="Logo SIGAP" className="h-full w-full object-contain" />
           </span>
           {!mini && (
             <span className="leading-tight">
@@ -423,8 +423,8 @@ export default function Shell({
                   ))}
                 </div>
                 <div className="mt-3 border-t border-[#EDF0F4] pt-2">
-                  <Link href="/sigap" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#14202E] hover:bg-[#F8FAFC]">
-                    Portal SIGAP
+                  <Link href="/" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#14202E] hover:bg-[#F8FAFC]">
+                    Beranda SIGAP
                   </Link>
                   <button type="button" role="menuitem" onClick={keluar} className="block w-full rounded-md px-2 py-1.5 text-left text-[12.5px] font-bold text-red-700 hover:bg-red-50">
                     Keluar

@@ -46,7 +46,7 @@ export default function PasangAplikasi() {
   return (
     <div className="mt-5 flex max-w-xl items-center gap-3 rounded-2xl bg-white/10 p-3 ring-1 ring-white/20">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/ikon/ikon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
+      <img src="/icons/icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
       {mode === "tombol" ? (
         <>
           <p className="flex-1 text-[13px] leading-snug text-blue-50">Pasang SIGAP di HP: ikon di layar utama, buka layar penuh.</p>

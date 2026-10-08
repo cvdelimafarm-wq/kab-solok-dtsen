@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import BrandBps from "@/app/components/BrandBps";
+import LogoSigap from "@/app/components/LogoSigap";
 
 // (5 Okt 2026) Masuk petugas SIGAP Transport Lokal: nama + PIN akun undangan.
 // Belum punya PIN -> verifikasi nama + NIK + email + tanggal lahir, lalu buat PIN di sini.
@@ -157,7 +157,7 @@ export default function SigapMasuk() {
         <div aria-hidden className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/5" />
         <div aria-hidden className="absolute -bottom-24 right-10 h-48 w-48 rounded-full bg-[#F5B841]/10" />
         <div className="relative mx-auto max-w-md">
-          <BrandBps className="text-blue-100" teksClassName="text-[11.5px] font-bold uppercase leading-tight tracking-wider" ukuran={28} kotakPutih />
+          <LogoSigap />
           <p className="mt-6 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">SIGAP · Masuk</p>
           <h1 className="mt-1 text-[26px] font-extrabold leading-tight">Masuk ke SIGAP</h1>
           <p className="mt-1.5 text-[14px] text-blue-100">Petugas, admin anggaran, PJ kegiatan &amp; bendahara — satu pintu, menu sesuai peran</p>

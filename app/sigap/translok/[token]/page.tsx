@@ -2,7 +2,7 @@
 
 import { use as usePromise, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import BrandBps from "@/app/components/BrandBps";
+import LogoSigap from "@/app/components/LogoSigap";
 import { keAtas } from "@/app/portal/navigasi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
@@ -381,7 +381,7 @@ function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string;
       <div aria-hidden className="absolute -bottom-24 right-10 h-48 w-48 rounded-full bg-[#F5B841]/10" />
       <div className="relative mx-auto max-w-lg">
         <div className="flex items-center justify-between gap-2">
-          <BrandBps className="min-w-0 text-blue-100" teksClassName="text-[11px] font-bold uppercase leading-tight tracking-wider" ukuran={26} kotakPutih />
+          <LogoSigap ukuran={34} />
           <button type="button" onClick={onKeluar} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
             Keluar
           </button>

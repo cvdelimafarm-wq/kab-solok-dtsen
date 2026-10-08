@@ -209,14 +209,25 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[84px] pt-6 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2.5">
-          <span className="grid h-[38px] w-[38px] flex-none place-items-center rounded-[11px] bg-white shadow-[0_4px_12px_rgba(4,16,40,.3)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/sigap-logo.png" alt="Logo SIGAP" width={29} height={29} className="h-[29px] w-[29px] object-contain" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[18px] font-extrabold leading-none">SIGAP</span>
-            <span className="mt-[3px] block truncate text-[8px] font-semibold uppercase tracking-[0.14em] text-[#A9BCD8]">Sistem Integrasi Kegiatan BPS</span>
-          </span>
+          {/* (9 Okt 2026) logo = tombol ke Beranda (di sini: kembali ke puncak halaman) */}
+          <a
+            href="/"
+            aria-label="SIGAP, ke Beranda"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="flex min-w-0 flex-1 items-center gap-2.5"
+          >
+            <span className="grid h-[38px] w-[38px] flex-none place-items-center rounded-[11px] bg-white shadow-[0_4px_12px_rgba(4,16,40,.3)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/sigap-logo.png" alt="" width={29} height={29} className="h-[29px] w-[29px] object-contain" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[18px] font-extrabold leading-none">SIGAP</span>
+              <span className="mt-[3px] block truncate text-[8px] font-semibold uppercase tracking-[0.14em] text-[#A9BCD8]">Sistem Integrasi Kegiatan BPS</span>
+            </span>
+          </a>
           {nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>}
           <button type="button" onClick={keluar} className="flex-none rounded-lg border border-white/25 px-3 py-1.5 text-[12.5px] font-semibold text-[#D3E0F5] hover:bg-white/10">
             Keluar

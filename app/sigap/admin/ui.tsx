@@ -131,7 +131,7 @@ export function HeaderAdmin({
       <div className="relative mx-auto max-w-7xl">
         <div className="flex items-center justify-between gap-2">
           {/* (8 Okt 2026) Identitas SIGAP: petak putih berisi lambang S biru-emas + nama + kepanjangan (mockup identitas visual) */}
-          <a href="/sigap" className="flex min-w-0 items-center gap-2.5" aria-label="SIGAP, Sistem Integrasi Kegiatan BPS">
+          <a href="/" className="flex min-w-0 items-center gap-2.5" aria-label="SIGAP, ke Beranda">
             <span className="grid h-[38px] w-[38px] flex-none place-items-center rounded-[11px] bg-white shadow-[0_4px_12px_rgba(4,16,40,.3)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/sigap-logo.png" alt="" width={29} height={29} className="h-[29px] w-[29px] object-contain" />
