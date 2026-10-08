@@ -25,7 +25,7 @@ import {
   type StatusTes,
   type TesBaris,
 } from "@/lib/sigapTes";
-import { KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 }
 
 async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekarang: Date) {
-  const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(2000);
+  const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(2000);
   const akunIds = (pen ?? []).map((p) => p.akun_id as number);
   const { data: akun } = akunIds.length ? await db.from("sigap_akun").select("id, nama, jenis").in("id", akunIds).limit(2000) : { data: [] as Record<string, unknown>[] };
   const namaAkun = new Map((akun ?? []).map((a) => [a.id as number, { nama: a.nama as string, jenis: a.jenis as string }]));

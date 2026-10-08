@@ -17,7 +17,7 @@ import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { UNDANGAN } from "@/lib/sigapTes";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     if (bagian === "pengaturan") return NextResponse.json({ sekarang: sekarang.toISOString(), boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId), pengaturan: await muatPengaturanPresensi(db, kegiatanId) });
 
     // daftar peserta (penugasan aktif) + nama
-    const { data: pen } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(2000);
+    const { data: pen } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(2000);
     const akunIds = (pen ?? []).map((p) => p.akun_id as number);
     const { data: ak } = akunIds.length ? await db.from("sigap_akun").select("id, nama, jenis").in("id", akunIds).limit(2000) : { data: [] as Record<string, unknown>[] };
     const nama = new Map((ak ?? []).map((a) => [a.id as number, a.nama as string]));

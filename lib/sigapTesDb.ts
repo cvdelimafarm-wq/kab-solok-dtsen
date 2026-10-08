@@ -166,9 +166,17 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
   return k;
 }
 
-/** Peserta pelatihan = akun dengan penugasan aktif pada kegiatan pelatihan. */
+/**
+ * (8 Okt 2026) Peserta tambahan manual dari tab Administrasi (sigap_penugasan.sumber = 'administrasi') HANYA untuk
+ * administrasi (SPJ translok, daftar hadir, laporan): tidak ikut tes, kuis, presensi, maupun monitoring peserta.
+ * Semua query "peserta pelatihan" memakai FILTER_BUKAN_ADMINISTRASI (sumber boleh null).
+ */
+export const SUMBER_ADMINISTRASI = "administrasi";
+export const FILTER_BUKAN_ADMINISTRASI = `sumber.is.null,sumber.neq.${SUMBER_ADMINISTRASI}`;
+
+/** Peserta pelatihan = akun dengan penugasan aktif pada kegiatan pelatihan (kecuali peserta tambahan manual administrasi). */
 export async function pesertaPelatihan(db: Db, akunId: number, kegiatanId: number): Promise<{ penugasan_id: number; peran: string; kelas: number | null } | null> {
-  const { data } = await db.from("sigap_penugasan").select("id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("aktif", true).maybeSingle();
+  const { data } = await db.from("sigap_penugasan").select("id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).maybeSingle();
   if (!data) return null;
   return { penugasan_id: data.id as number, peran: data.peran as string, kelas: (data.kelas as number | null) ?? null };
 }
