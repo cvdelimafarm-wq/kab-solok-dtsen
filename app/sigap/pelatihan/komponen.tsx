@@ -24,6 +24,10 @@ export type TesHub = {
   jumlah_soal: number;
   sesi: { mulai_at: string; batas_at: string; selesai_at: string | null; terjawab: number } | null;
   hasil_tertunda: boolean;
+  /** (8 Okt 2026) Mengulang (posttest): percobaan ke-n, kuota maksimal, tombol "Ulangi" boleh tampil. */
+  percobaan: number;
+  ulang_maks: number;
+  bisa_ulang: boolean;
   skor: number | null;
   benar: number | null;
   total: number | null;

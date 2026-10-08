@@ -35,6 +35,8 @@ export type TesBaris = {
   durasi_menit: number;
   tutup_at: string;
   aktif: boolean;
+  /** (8 Okt 2026) Jumlah percobaan maksimal per peserta; 1 = tidak boleh mengulang. Hanya berlaku utk posttest. */
+  ulang_maks: number;
 };
 
 export type SesiBaris = {
@@ -49,6 +51,10 @@ export type SesiBaris = {
   benar: number | null;
   total: number | null;
   diubah_at: string;
+  /** (8 Okt 2026) Percobaan ke-berapa yang sedang/terakhir dikerjakan (mulai 1). */
+  percobaan: number;
+  /** Skor tertinggi dari percobaan SEBELUMNYA (yang sudah diarsipkan); null bila belum pernah mengulang. */
+  skor_terbaik: number | null;
 };
 
 /** Status tes bagi seorang peserta. */
@@ -95,6 +101,34 @@ export function statusTes(
   if (t < new Date(tes.buka_at).getTime()) return "belum_buka";
   if (t < new Date(tes.tutup_at).getTime()) return "buka";
   return "terlewat";
+}
+
+export const ULANG_MAKS_TERTINGGI = 5;
+/** Sisa waktu minimal (detik) sebelum tutup_at agar mengulang masih ditawarkan. */
+export const SISA_ULANG_MIN_DETIK = 60;
+
+/** Nilai resmi seorang peserta = skor tertinggi dari semua percobaan (yang berjalan dihitung bila sudah selesai). */
+export function skorResmi(s: Pick<SesiBaris, "selesai_at" | "skor" | "skor_terbaik"> | null | undefined): number | null {
+  if (!s) return null;
+  const a = s.selesai_at && s.skor != null ? Number(s.skor) : null;
+  const b = s.skor_terbaik != null ? Number(s.skor_terbaik) : null;
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.max(a, b);
+}
+
+/** Tawarkan "Ulangi"? Posttest saja, percobaan sebelumnya sudah selesai, kuota belum habis, dan jadwal tes masih terbuka. */
+export function bisaUlang(
+  tes: Pick<TesBaris, "jenis" | "aktif" | "buka_at" | "tutup_at" | "ulang_maks">,
+  sesi: Pick<SesiBaris, "selesai_at" | "percobaan"> | null,
+  jumlahSoal: number,
+  sekarang: Date
+): boolean {
+  if (!sesi || !sesi.selesai_at) return false;
+  if (tes.jenis !== "posttest" || !tes.aktif || jumlahSoal <= 0) return false;
+  if (!(tes.ulang_maks > 1) || sesi.percobaan >= tes.ulang_maks) return false;
+  const t = sekarang.getTime();
+  return t >= new Date(tes.buka_at).getTime() && new Date(tes.tutup_at).getTime() - t >= SISA_ULANG_MIN_DETIK * 1000;
 }
 
 /** Hasil (skor & pembahasan) boleh ditampilkan setelah tes ditutup utk semua peserta. */

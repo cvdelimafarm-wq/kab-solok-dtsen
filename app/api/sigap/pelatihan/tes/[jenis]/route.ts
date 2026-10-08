@@ -7,17 +7,21 @@
 // POST {aksi:"mulai"}         -> buka sesi (atau lanjutkan bila sudah ada)
 // POST {aksi:"simpan", jawaban:{"1":"B"}} -> simpan jawaban sementara (autosave)
 // POST {aksi:"kirim", jawaban?}           -> kirim & nilai
+// POST {aksi:"ulang"}                      -> (posttest, bila panitia membuka kesempatan mengulang) arsipkan percobaan lama & mulai percobaan baru;
+//                                             nilai resmi = skor tertinggi dari semua percobaan
 
 import { NextRequest, NextResponse } from "next/server";
 import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
 import {
   akunDariRequest,
   dbAdmin,
+  finalisasiBilaKedaluwarsa,
   finalisasiSesi,
   idKegiatanPelatihan,
   muatSesi,
   muatSoal,
   muatTes,
+  mulaiUlang,
   pesertaPelatihan,
   susunKeadaan,
   KOLOM_SESI_PUBLIK,
@@ -79,6 +83,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         .insert({ tes_id: tes.id, akun_id: akun.id, mulai_at: sekarang.toISOString(), batas_at: batas.toISOString(), jawaban: {} });
       // 23505 = sudah ada (klik ganda / dua perangkat): lanjutkan saja
       if (error && error.code !== "23505") return galat(error.message, 500);
+      return NextResponse.json(await susunKeadaan(db, tes, akun.id, sekarang));
+    }
+
+    if (aksi === "ulang") {
+      if (!sesi) return galat("Anda belum memulai tes ini.", 409);
+      sesi = await finalisasiBilaKedaluwarsa(db, sesi, soal, sekarang); // percobaan yang waktunya habis dinilai dulu
+      const r = await mulaiUlang(db, tes, sesi, soal, sekarang);
+      if (!r.ok) return galat(r.pesan, r.status);
       return NextResponse.json(await susunKeadaan(db, tes, akun.id, sekarang));
     }
 

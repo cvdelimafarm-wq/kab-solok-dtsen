@@ -20,13 +20,13 @@ import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai"
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, ringkasSkema, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 
-type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; jumlah_soal: number; jumlah_sesi: number };
+type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
 
 type StatusPes = "belum_mulai" | "mengerjakan" | "selesai" | "terlewat" | "soal_belum_ada" | "nonaktif" | "belum_buka" | "buka";
-type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; benar: number | null; total: number | null; jawab?: Record<string, string> | null };
+type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; skor_terakhir?: number | null; percobaan?: number; benar: number | null; total: number | null; jawab?: Record<string, string> | null };
 type Peserta = { akun_id: number; nama: string; jenis_akun: string; peran: string; kelas: number | null; tes: Partial<Record<JenisTes, CelTes>> };
-type Stat = { peserta: number; sudah_mulai: number; mengerjakan: number; selesai: number; belum_mulai: number; rata_skor: number | null; tertinggi: number | null; terendah: number | null };
+type Stat = { peserta: number; sudah_mulai: number; mengerjakan: number; selesai: number; belum_mulai: number; rata_skor: number | null; tertinggi: number | null; terendah: number | null; mengulang?: number };
 type Analisis = { nomor: number; teks: string; kunci: string; bobot: number; menjawab: number; benar: number; persen_benar: number | null; sebaran: Record<string, number> };
 type Monitor = { sekarang: string; tes: TesRingkas[]; peserta: Peserta[]; statistik: Partial<Record<JenisTes, Stat>>; analisis: Partial<Record<JenisTes, Analisis[]>> };
 
@@ -112,6 +112,10 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const [durasi, setDurasi] = useState(String(tes.durasi_menit));
   const [tutup, setTutup] = useState(keInputWib(tes.tutup_at));
   const [aktif, setAktif] = useState(tes.aktif);
+  // (8 Okt 2026) kesempatan mengulang (Posttest saja): ulangMaks = jumlah percobaan maksimal per peserta (1 = tidak boleh mengulang)
+  const bisaUlang = tes.jenis === "posttest";
+  const [ulang, setUlang] = useState((tes.ulang_maks ?? 1) > 1);
+  const [ulangMaks, setUlangMaks] = useState(String(Math.max(2, tes.ulang_maks ?? 2)));
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [pratinjau, setPratinjau] = useState<{ soal: SoalLengkap[]; galat: string[]; nama: string } | null>(null);
@@ -119,12 +123,14 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const [lihat, setLihat] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
 
-  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}`;
+  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}|${tes.ulang_maks ?? 1}`;
   useEffect(() => {
     setBuka(keInputWib(tes.buka_at));
     setTutup(keInputWib(tes.tutup_at));
     setDurasi(String(tes.durasi_menit));
     setAktif(tes.aktif);
+    setUlang((tes.ulang_maks ?? 1) > 1);
+    setUlangMaks(String(Math.max(2, tes.ulang_maks ?? 2)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kunciJadwal]);
 
@@ -146,7 +152,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
       await fetchJson(URL_ADMIN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aksi: "atur_jadwal", jenis: tes.jenis, buka_at: buka, tutup_at: tutup, durasi_menit: Number(durasi), aktif }),
+        body: JSON.stringify({ aksi: "atur_jadwal", jenis: tes.jenis, buka_at: buka, tutup_at: tutup, durasi_menit: Number(durasi), aktif, ...(bisaUlang ? { ulang_maks: ulang ? Number(ulangMaks) : 1 } : {}) }),
       });
       setPesan({ jenis: "ok", teks: "Jadwal tersimpan." });
       setelahSimpan();
@@ -230,6 +236,30 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
         <label className="col-span-2 flex items-center gap-2 pt-4 text-[12.5px] sm:col-span-1">
           <input type="checkbox" checked={aktif} disabled={!bisaKelola} onChange={(e) => setAktif(e.target.checked)} /> Tes aktif (tampil bagi peserta)
         </label>
+        {bisaUlang && (
+          <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
+            <label className="flex items-center gap-2 text-[12.5px]">
+              <input type="checkbox" checked={ulang} disabled={!bisaKelola} onChange={(e) => setUlang(e.target.checked)} /> Peserta boleh mengulang {label} (mengulang sendiri)
+            </label>
+            {ulang && (
+              <label className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-[#7B8794]">
+                Jumlah percobaan maksimal per peserta
+                <select className={`${INPUT} w-auto`} value={ulangMaks} disabled={!bisaKelola} onChange={(e) => setUlangMaks(e.target.value)}>
+                  {[2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}× (mengulang {n - 1}×)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <p className="mt-1 text-[11.5px] text-[#7B8794]">
+              {ulang
+                ? `Setelah selesai, peserta melihat tombol "Ulangi ${label}" selama jadwal masih terbuka (sampai jam tutup di atas). Jawaban percobaan lama diarsipkan, tidak dihapus; nilai yang dipakai (nilai akhir, laporan, monitoring) = skor tertinggi dari semua percobaan. Skor & pembahasan tetap disembunyikan sampai jam tutup, jadi mengulang dilakukan tanpa melihat hasil.`
+                : "Nonaktif: setiap peserta hanya punya satu kali percobaan. Untuk memberi kesempatan ulang hari ini, centang lalu perpanjang jam tutup bila perlu, kemudian Simpan jadwal."}
+            </p>
+          </div>
+        )}
       </div>
       <p className="mt-1.5 text-[11.5px] text-[#7B8794]">
         Peserta bisa mulai antara jam buka dan jam tutup; waktunya {durasi || "…"} menit per orang tetapi tidak melewati jam tutup. Saat ini tersimpan: {waktuWib(tes.buka_at)} – {waktuWib(tes.tutup_at)}.
@@ -345,6 +375,7 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
       <span className="flex items-center gap-1.5">
         <b className="tabular-nums">{c.skor ?? "–"}</b>
         <Chip w="ok">selesai</Chip>
+        {(c.percobaan ?? 0) > 1 && <span className="text-[11px] text-[#7B8794]">tertinggi dari {c.percobaan}×</span>}
       </span>
     );
   if (c.status === "mengerjakan") {
@@ -354,6 +385,7 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
         <Chip w="navy">mengerjakan</Chip>
         <span className="text-[11.5px] tabular-nums text-[#55657D]">
           {c.terjawab} jwb · {formatSisa(sisa)}
+          {(c.percobaan ?? 0) > 1 && ` · ulang ke-${c.percobaan}${c.skor != null ? ` (skor tercatat ${c.skor})` : ""}`}
         </span>
       </span>
     );
@@ -404,7 +436,7 @@ const normStatusTes = (s0: string | undefined) => (!s0 || s0 === "belum_buka" ||
 type PesertaMon = Monitor["peserta"][number];
 /** Nilai akhir satu peserta dari skema + hasil kuis (API nilai) + skor tes (data monitoring). */
 function nilaiPeserta(p: PesertaMon, d: ReturnType<typeof useSkemaNilai>["data"]): HasilAkhir {
-  const skor = (j: JenisTes) => (p.tes[j]?.status === "selesai" ? (p.tes[j]?.skor ?? null) : null);
+  const skor = (j: JenisTes) => p.tes[j]?.skor ?? null; // server: nilai resmi = skor tertinggi dari semua percobaan (null bila belum ada yang selesai)
   const kuis = d?.kuis[String(p.akun_id)] ?? null;
   return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis });
 }

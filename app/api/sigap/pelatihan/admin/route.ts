@@ -15,8 +15,10 @@ import type { Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import {
   DAFTAR_JENIS_TES,
+  ULANG_MAKS_TERTINGGI,
   bersihkanJawaban,
   jenisTesValid,
+  skorResmi,
   statusTes,
   validasiSoalJson,
   type JenisTes,
@@ -119,7 +121,10 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
           selesai_at: sesi?.selesai_at ?? null,
           batas_at: sesi?.batas_at ?? null,
           terjawab: sesi ? Object.keys(bersihkanJawaban(sesi.jawaban, soal)).length : 0,
-          skor: sesi?.skor !== null && sesi?.skor !== undefined ? Number(sesi.skor) : null,
+          // (8 Okt 2026) skor = nilai resmi (tertinggi dari semua percobaan); skor_terakhir = percobaan berjalan/terakhir
+          skor: skorResmi(sesi),
+          skor_terakhir: sesi?.selesai_at && sesi.skor != null ? Number(sesi.skor) : null,
+          percobaan: sesi?.percobaan ?? 0,
           benar: sesi?.benar ?? null,
           total: sesi?.total ?? null,
           // jawaban per nomor (hanya utk sesi selesai) -> dipakai monitoring utk menghitung ulang "Analisis per soal" sesuai filter
@@ -136,7 +141,8 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
     const soal = soalPer.get(t.id) ?? [];
     const sesi = sesiPer.get(t.id) ?? [];
     const selesai = sesi.filter((s) => s.selesai_at);
-    const skor = selesai.map((s) => Number(s.skor ?? 0));
+    const skor = sesi.map((s) => skorResmi(s)).filter((x): x is number => x !== null); // nilai resmi = skor tertinggi dari semua percobaan
+    const mengulang = sesi.filter((s) => (s.percobaan ?? 1) > 1).length;
     const rata = skor.length ? Math.round((skor.reduce((a, b) => a + b, 0) / skor.length) * 100) / 100 : null;
     const mengerjakan = sesi.length - selesai.length;
     statistik[t.jenis] = {
@@ -148,6 +154,7 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
       rata_skor: rata,
       tertinggi: skor.length ? Math.max(...skor) : null,
       terendah: skor.length ? Math.min(...skor) : null,
+      mengulang,
     };
     analisis[t.jenis] = soal.map((s) => {
       const sebaran: Record<string, number> = {};
@@ -211,9 +218,16 @@ export async function POST(req: NextRequest) {
       const upd: Record<string, unknown> = { buka_at: buka.toISOString(), tutup_at: tutup.toISOString(), durasi_menit: durasi, diubah_at: new Date().toISOString() };
       if (typeof body?.judul === "string" && body.judul.trim()) upd.judul = body.judul.trim().slice(0, 200);
       if (typeof body?.aktif === "boolean") upd.aktif = body.aktif;
+      // (8 Okt 2026) kesempatan mengulang: hanya Posttest; 1 = tidak boleh mengulang, 2–5 = jumlah percobaan maksimal per peserta
+      if (body?.ulang_maks !== undefined) {
+        const um = Number(body.ulang_maks);
+        if (!Number.isInteger(um) || um < 1 || um > ULANG_MAKS_TERTINGGI) return galat(`Jumlah percobaan harus 1–${ULANG_MAKS_TERTINGGI}.`);
+        if (jenis !== "posttest" && um > 1) return galat("Kesempatan mengulang hanya tersedia untuk Posttest.");
+        upd.ulang_maks = um;
+      }
       const { error } = await db.from("sigap_tes").update(upd).eq("id", tes.id);
       if (error) return galat(error.message, 500);
-      await catatAudit(db, akun.id, "pelatihan_atur_jadwal", { tes_id: tes.id, jenis, sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif }, sesudah: upd });
+      await catatAudit(db, akun.id, "pelatihan_atur_jadwal", { tes_id: tes.id, jenis, sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif, ulang_maks: tes.ulang_maks }, sesudah: upd });
       return NextResponse.json({ ok: true });
     }
 

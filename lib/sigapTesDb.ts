@@ -12,8 +12,11 @@ import { SESI_BAWAAN, aturanDariJamLama, hariKegiatan, jadwalSesi, tanggalWib, v
 import {
   KODE_KEGIATAN_PELATIHAN,
   bersihkanJawaban,
+  bisaUlang,
   hasilBolehTampil,
+  hitungBatas,
   hitungSkor,
+  skorResmi,
   statusTes,
   type JenisTes,
   type SesiBaris,
@@ -43,7 +46,7 @@ export async function idKegiatanPelatihan(db: Db): Promise<number | null> {
   return (data?.id as number | undefined) ?? null;
 }
 
-const KOLOM_TES = "id, kegiatan_id, jenis, judul, buka_at, durasi_menit, tutup_at, aktif";
+const KOLOM_TES = "id, kegiatan_id, jenis, judul, buka_at, durasi_menit, tutup_at, aktif, ulang_maks";
 
 export async function muatTesDaftar(db: Db, kegiatanId: number): Promise<TesBaris[]> {
   const { data } = await db.from("sigap_tes").select(KOLOM_TES).eq("kegiatan_id", kegiatanId).order("jenis", { ascending: false }); // pretest dulu
@@ -74,7 +77,7 @@ export async function jumlahSoal(db: Db, tesIds: number[]): Promise<Map<number, 
   return peta;
 }
 
-const KOLOM_SESI = "id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at";
+const KOLOM_SESI = "id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at, percobaan, skor_terbaik";
 
 export async function muatSesi(db: Db, tesId: number, akunId: number): Promise<SesiBaris | null> {
   const { data } = await db.from("sigap_tes_sesi").select(KOLOM_SESI).eq("tes_id", tesId).eq("akun_id", akunId).maybeSingle();
@@ -118,6 +121,10 @@ export type KeadaanTes = {
   status: StatusTes;
   jumlah_soal: number;
   sesi: { mulai_at: string; batas_at: string; selesai_at: string | null; terjawab: number } | null;
+  /** (8 Okt 2026) Percobaan yang sedang/terakhir dikerjakan, kuota maksimal, dan apakah tombol "Ulangi" boleh ditampilkan. */
+  percobaan: number;
+  ulang_maks: number;
+  bisa_ulang: boolean;
   /** Hanya saat status "mengerjakan". */
   soal?: SoalPeserta[];
   jawaban?: Record<string, string>;
@@ -125,9 +132,11 @@ export type KeadaanTes = {
   hasil_tertunda: boolean;
   /** Hanya setelah tutup_at & peserta punya sesi. */
   hasil?: {
+    /** Nilai resmi = skor tertinggi dari semua percobaan; butir = pembahasan percobaan terbaik itu. */
     skor: number;
     benar: number;
     total: number;
+    dari_percobaan: number;
     butir: { nomor: number; teks: string; opsi: SoalLengkap["opsi"]; jawab: string | null; kunci: string; benar: boolean }[];
   };
 };
@@ -144,6 +153,9 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
     status,
     jumlah_soal: soal.length,
     sesi: sesi ? { mulai_at: sesi.mulai_at, batas_at: sesi.batas_at, selesai_at: sesi.selesai_at, terjawab: Object.keys(bersihkanJawaban(sesi.jawaban, soal)).length } : null,
+    percobaan: sesi?.percobaan ?? 1,
+    ulang_maks: tes.jenis === "posttest" ? Math.max(1, tes.ulang_maks ?? 1) : 1,
+    bisa_ulang: bisaUlang(tes, sesi, soal.length, sekarang),
     hasil_tertunda: false,
   };
   if (status === "mengerjakan" && sesi) {
@@ -152,11 +164,31 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
   }
   if (status === "selesai" && sesi) {
     if (hasilBolehTampil(tes, sekarang)) {
-      const h = hitungSkor(soal, bersihkanJawaban(sesi.jawaban, soal));
+      // percobaan terbaik: yang berjalan, atau (bila skor percobaan sebelumnya lebih tinggi) baris arsip dengan skor tertinggi
+      let jawabanTerbaik = bersihkanJawaban(sesi.jawaban, soal);
+      let darinya = sesi.percobaan ?? 1;
+      let skorTerbaik = sesi.skor !== null ? Number(sesi.skor) : null;
+      if (sesi.skor_terbaik != null && (skorTerbaik === null || Number(sesi.skor_terbaik) > skorTerbaik)) {
+        const { data: arsip } = await db
+          .from("sigap_tes_sesi_arsip")
+          .select("percobaan, jawaban, skor")
+          .eq("sesi_id", sesi.id)
+          .order("skor", { ascending: false, nullsFirst: false })
+          .order("percobaan", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (arsip && arsip.skor != null && (skorTerbaik === null || Number(arsip.skor) > skorTerbaik)) {
+          jawabanTerbaik = bersihkanJawaban(arsip.jawaban, soal);
+          darinya = Number(arsip.percobaan);
+          skorTerbaik = Number(arsip.skor);
+        }
+      }
+      const h = hitungSkor(soal, jawabanTerbaik);
       k.hasil = {
-        skor: sesi.skor !== null ? Number(sesi.skor) : h.skor,
-        benar: sesi.benar ?? h.benar,
+        skor: skorTerbaik ?? h.skor,
+        benar: h.benar,
         total: sesi.total ?? h.total,
+        dari_percobaan: darinya,
         butir: soal.map((s, i) => ({ nomor: s.nomor, teks: s.teks, opsi: s.opsi, jawab: h.rincian[i].jawab, kunci: s.kunci, benar: h.rincian[i].benar })),
       };
     } else {
@@ -164,6 +196,69 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
     }
   }
   return k;
+}
+
+export type HasilUlang = { ok: true } | { ok: false; pesan: string; status: number };
+
+/**
+ * (8 Okt 2026) Peserta mengulang tes (posttest): baris sesi percobaan sebelumnya DIARSIPKAN (tidak dihapus) ke
+ * sigap_tes_sesi_arsip, lalu baris sesi di-reset utk percobaan berikutnya. skor_terbaik menyimpan skor tertinggi dari
+ * percobaan-percobaan yang sudah lewat, sehingga nilai resmi = max(skor_terbaik, skor percobaan berjalan yang selesai).
+ * Aman dari klik ganda/dua perangkat: reset hanya berhasil bila percobaan & status selesai masih seperti yang dibaca.
+ */
+export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: SoalLengkap[], sekarang: Date): Promise<HasilUlang> {
+  if (!bisaUlang(tes, sesi, soal.length, sekarang)) {
+    if (tes.jenis !== "posttest" || !(tes.ulang_maks > 1)) return { ok: false, pesan: "Tes ini tidak membuka kesempatan mengulang.", status: 409 };
+    if (!sesi.selesai_at) return { ok: false, pesan: "Selesaikan percobaan yang sedang berjalan terlebih dahulu.", status: 409 };
+    if (sesi.percobaan >= tes.ulang_maks) return { ok: false, pesan: `Kesempatan mengulang sudah habis (maksimal ${tes.ulang_maks} percobaan).`, status: 409 };
+    return { ok: false, pesan: "Waktu tes sudah hampir/ sudah ditutup, tidak bisa mengulang lagi.", status: 409 };
+  }
+  // 1) arsipkan percobaan yang baru selesai (unik per sesi+percobaan: klik ganda tidak menggandakan)
+  const { error: eArsip } = await db.from("sigap_tes_sesi_arsip").upsert(
+    {
+      sesi_id: sesi.id,
+      tes_id: sesi.tes_id,
+      akun_id: sesi.akun_id,
+      percobaan: sesi.percobaan,
+      mulai_at: sesi.mulai_at,
+      batas_at: sesi.batas_at,
+      selesai_at: sesi.selesai_at,
+      jawaban: sesi.jawaban ?? {},
+      skor: sesi.skor,
+      benar: sesi.benar,
+      total: sesi.total,
+    },
+    { onConflict: "sesi_id,percobaan", ignoreDuplicates: true }
+  );
+  if (eArsip) return { ok: false, pesan: eArsip.message, status: 500 };
+  // 2) reset baris sesi utk percobaan baru
+  const lama = sesi.skor_terbaik != null ? Number(sesi.skor_terbaik) : null;
+  const baru = sesi.skor != null ? Number(sesi.skor) : null;
+  const terbaik = lama === null ? baru : baru === null ? lama : Math.max(lama, baru);
+  const batas = hitungBatas(sekarang, tes.durasi_menit, tes.tutup_at);
+  const { data, error } = await db
+    .from("sigap_tes_sesi")
+    .update({
+      percobaan: sesi.percobaan + 1,
+      skor_terbaik: terbaik,
+      mulai_at: sekarang.toISOString(),
+      batas_at: batas.toISOString(),
+      selesai_at: null,
+      jawaban: {},
+      skor: null,
+      benar: null,
+      total: null,
+      diubah_at: sekarang.toISOString(),
+    })
+    .eq("id", sesi.id)
+    .eq("percobaan", sesi.percobaan)
+    .not("selesai_at", "is", null)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, pesan: error.message, status: 500 };
+  // data null = permintaan lain sudah mereset lebih dulu (klik ganda) -> anggap berhasil, klien akan memuat keadaan terbaru
+  void data;
+  return { ok: true };
 }
 
 /**

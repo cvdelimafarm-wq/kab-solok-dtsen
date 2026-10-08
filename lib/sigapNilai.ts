@@ -4,7 +4,7 @@
 // Rumus murni ada di lib/sigapNilaiHitung.ts (dipakai juga di browser).
 
 import type { Db } from "@/lib/sigap";
-import type { SesiBaris } from "@/lib/sigapTes";
+import { skorResmi, type SesiBaris } from "@/lib/sigapTes";
 import { finalisasiBilaKedaluwarsa, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 import { SKEMA_BAWAAN, bulat2, hitungAkhir, type HasilAkhir, type KuisNilai, type NilaiPeserta, type SkemaNilai } from "@/lib/sigapNilaiHitung";
 
@@ -95,7 +95,7 @@ export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[]
   const daftar = await muatTesDaftar(db, kegiatanId);
   for (const t of daftar) {
     if (t.jenis !== "pretest" && t.jenis !== "posttest") continue;
-    const { data } = await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000);
+    const { data } = await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at, percobaan, skor_terbaik").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000);
     let soal: Awaited<ReturnType<typeof muatSoal>> | null = null;
     for (const s0 of (data ?? []) as SesiBaris[]) {
       let s = s0;
@@ -103,9 +103,11 @@ export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[]
         soal = soal ?? (await muatSoal(db, t.id));
         s = await finalisasiBilaKedaluwarsa(db, s, soal, sekarang);
       }
-      if (s.selesai_at && s.skor !== null && s.skor !== undefined) {
+      // (8 Okt 2026) nilai resmi = skor tertinggi dari semua percobaan (percobaan ulang yang belum selesai memakai skor_terbaik sebelumnya)
+      const resmi = skorResmi(s);
+      if (resmi !== null) {
         const baris = hasil.get(s.akun_id);
-        if (baris) baris[t.jenis] = Number(s.skor);
+        if (baris) baris[t.jenis] = resmi;
       }
     }
   }

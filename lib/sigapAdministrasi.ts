@@ -34,7 +34,7 @@ import { boleh, izinAkun, type PeranAkun } from "@/lib/sigapAkses";
 import { muatNilaiAkhir } from "@/lib/sigapNilai";
 import { LABEL_DASAR_KUIS, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
-import { LABEL_JENIS_TES, UNDANGAN, type SesiBaris } from "@/lib/sigapTes";
+import { LABEL_JENIS_TES, UNDANGAN, skorResmi, type SesiBaris } from "@/lib/sigapTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 
 // Penanda peserta tambahan manual (SUMBER_ADMINISTRASI) & filternya didefinisikan di lib/sigapTesDb.ts
@@ -335,12 +335,13 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
   for (const t of daftarTes) {
     const soal = await muatSoal(db, t.id);
     const { data } = akunIds.length
-      ? await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000)
+      ? await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at, percobaan, skor_terbaik").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000)
       : { data: [] as SesiBaris[] };
     const skor = new Map<number, number>();
     for (const s0 of (data ?? []) as SesiBaris[]) {
       const s = await finalisasiBilaKedaluwarsa(db, s0, soal, sekarang);
-      if (s.selesai_at && s.skor !== null && s.skor !== undefined) skor.set(s.akun_id, Number(s.skor));
+      const resmi = skorResmi(s); // (8 Okt 2026) skor tertinggi dari semua percobaan
+      if (resmi !== null) skor.set(s.akun_id, resmi);
     }
     skorPer.set(t.id, skor);
     const nilai = [...skor.values()];

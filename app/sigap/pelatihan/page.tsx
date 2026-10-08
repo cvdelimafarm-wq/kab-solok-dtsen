@@ -123,17 +123,33 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
       return t.hasil_tertunda ? (
         <>
           <p className={ket}>
-            Jawaban tersimpan ({t.sesi?.terjawab ?? 0} dari {t.jumlah_soal} soal terjawab).
+            Jawaban tersimpan ({t.sesi?.terjawab ?? 0} dari {t.jumlah_soal} soal terjawab){(t.percobaan ?? 1) > 1 ? ` · percobaan ke-${t.percobaan}` : ""}.
           </p>
           <p className="mt-1 text-[12.5px] font-semibold text-[#9A6200]">
             Skor &amp; pembahasan tampil setelah sesi ditutup pukul {jamWib(t.tutup_at)} WIB ({formatSisa(sisaTutup)} lagi).
           </p>
+          {t.bisa_ulang && (
+            <>
+              <p className="mt-1.5 text-[12.5px] text-[#55657D]">
+                Boleh mengulang (percobaan ke-{t.percobaan} dari {t.ulang_maks}); nilai yang dipakai = skor tertinggi.
+              </p>
+              <Link href={href} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+                Ulangi {judul} →
+              </Link>
+            </>
+          )}
         </>
       ) : (
         <>
           <p className={ket}>
             Skor <b className="text-[17px] text-[#0F3D7A]">{t.skor ?? "–"}</b> · benar {t.benar ?? 0} dari {t.total ?? t.jumlah_soal} soal.
+            {(t.percobaan ?? 1) > 1 && <span className="text-[12px] text-[#7B8794]"> (tertinggi dari {t.percobaan} percobaan)</span>}
           </p>
+          {t.bisa_ulang && (
+            <Link href={href} className={`${TOMBOL} bg-[#1F6FD1] text-white hover:bg-[#1A5DB0]`}>
+              Ulangi {judul} →
+            </Link>
+          )}
           <Link href={href} className={TOMBOL_O}>
             Lihat pembahasan
           </Link>

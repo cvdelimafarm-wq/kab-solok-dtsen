@@ -41,6 +41,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const [idx, setIdx] = useState(0);
   const [simpan, setSimpan] = useState<"tersimpan" | "menyimpan" | "gagal">("tersimpan");
   const [konfirmasi, setKonfirmasi] = useState(false);
+  const [konfirmasiUlang, setKonfirmasiUlang] = useState(false);
 
   // ------------------------------------------------ muat keadaan
   const terapkan = useCallback(
@@ -134,6 +135,32 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
     }
   }
 
+  // (8 Okt 2026) Mengulang (posttest, bila panitia membuka kesempatan): percobaan lama diarsipkan di server, jawaban lokal dikosongkan.
+  async function ulangi() {
+    setSibuk(true);
+    setGalat(null);
+    setKonfirmasiUlang(false);
+    try {
+      const d = await fetchJson<Keadaan>(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "ulang" }) });
+      // kosongkan semua sisa keadaan percobaan sebelumnya SEBELUM menerapkan keadaan baru
+      jawabRef.current = {};
+      setJawaban({});
+      kotor.current = false;
+      habis.current = false;
+      otomatisKirim.current = false;
+      setSimpan("tersimpan");
+      setIdx(0);
+      terapkan(d);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) {
+        setGalat(pesanGalat(e));
+        muat();
+      }
+    } finally {
+      setSibuk(false);
+    }
+  }
+
   const kirim = useCallback(
     async (otomatis = false) => {
       setSibuk(true);
@@ -200,6 +227,16 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
 
   const sisaBuka = (new Date(k.tes.buka_at).getTime() - sekarang()) / 1000;
   const sisaTutup = (new Date(k.tes.tutup_at).getTime() - sekarang()) / 1000;
+  const kartuUlang = k.bisa_ulang ? (
+    <Kartu judul={`Kesempatan mengulang ${label}`}>
+      <p className="text-[13px] leading-relaxed text-[#55657D]">
+        Percobaan ke-{k.percobaan} dari maksimal {k.ulang_maks}. Anda boleh mengulang selama sesi masih terbuka (sampai pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>, {formatSisa(sisaTutup)} lagi). Nilai yang dipakai adalah <b>skor tertinggi</b> dari semua percobaan, jadi mengulang tidak menurunkan nilai Anda.
+      </p>
+      <button type="button" className="mt-3 w-full rounded-xl bg-[#1F6FD1] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#1A5DB0] disabled:opacity-60" disabled={sibuk} onClick={() => setKonfirmasiUlang(true)}>
+        Ulangi {label} →
+      </button>
+    </Kartu>
+  ) : null;
 
   return (
     <Kerangka aktif="pelatihan" judul={k.tes.judul} sub={`${tglPanjang(new Date(new Date(k.tes.buka_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10))} · dibuka ${jamWib(k.tes.buka_at)} · ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
@@ -349,9 +386,11 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
             {k.sesi?.terjawab ?? 0} dari {k.jumlah_soal} soal terjawab. Skor dan pembahasan benar/salah tampil setelah sesi ditutup pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>.
           </p>
           <p className="mt-2 text-[22px] font-extrabold tabular-nums text-[#0F3D7A]">{formatSisa(sisaTutup)}</p>
+          {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#55657D]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
           <Link href="/sigap/pelatihan" className={`${BTN_O} mt-3`}>← Kembali ke Pelatihan</Link>
         </Kartu>
       )}
+      {status === "selesai" && kartuUlang}
       {status === "selesai" && k.hasil && (
         <>
           <Kartu judul={`Hasil ${label}`} ket={`Sesi ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
@@ -371,7 +410,13 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
                 </div>
               )}
             </div>
+            {k.percobaan > 1 && (
+              <p className="mt-2 text-[12.5px] text-[#55657D]">
+                Skor tertinggi dari {k.percobaan} percobaan (pembahasan di bawah dari percobaan ke-{k.hasil.dari_percobaan}).
+              </p>
+            )}
           </Kartu>
+          {kartuUlang}
           <Kartu judul="Pembahasan">
             <ol className="space-y-2.5">
               {k.hasil.butir.map((b) => {
@@ -399,6 +444,26 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
           </Kartu>
           <Link href="/sigap/pelatihan" className={BTN_O}>← Kembali ke Pelatihan</Link>
         </>
+      )}
+      {konfirmasiUlang && (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+            <p className="text-[16px] font-extrabold">Ulangi {label} sekarang?</p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[12.5px] leading-relaxed text-[#55657D]">
+              <li>Waktu dan jawaban dimulai dari awal (percobaan ke-{k.percobaan + 1} dari {k.ulang_maks}).</li>
+              <li>Jawaban percobaan sebelumnya tetap tersimpan; nilai yang dipakai = skor tertinggi dari semua percobaan.</li>
+              <li>Waktu mengerjakan paling lama {k.tes.durasi_menit} menit dan tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB.</li>
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <button type="button" className={`${BTN_O} flex-1 !py-2.5`} onClick={() => setKonfirmasiUlang(false)}>
+                Batal
+              </button>
+              <button type="button" className="flex-1 rounded-lg bg-[#1F6FD1] px-3 py-2.5 text-[12.5px] font-bold text-white hover:bg-[#1A5DB0] disabled:opacity-60" disabled={sibuk} onClick={ulangi}>
+                {sibuk ? "Memulai…" : "Ya, ulangi"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Kerangka>
   );
