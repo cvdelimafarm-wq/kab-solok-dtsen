@@ -4,7 +4,7 @@
 
 import type { IkonKode } from "@/lib/sigapTugasUtama";
 
-const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah", React.ReactNode> = {
+const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda", React.ReactNode> = {
   motor: (
     <>
       <circle cx="6" cy="17" r="3" />
@@ -130,9 +130,23 @@ const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah", React.
     </>
   ),
   panah: <path d="m9 6 6 6-6 6" />,
+  kembali: <path d="m15 6-6 6 6 6" />,
+  kunci: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  kamera: (
+    <>
+      <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+      <circle cx="12" cy="13.5" r="3.5" />
+    </>
+  ),
+  tanda: <path d="m5 12 5 5 9-10" />,
 };
 
-export type NamaIkon = IkonKode | "lonceng" | "centang" | "awas" | "panah";
+export type NamaIkon = IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda";
 
 export default function IkonMenu({ n, className = "h-[22px] w-[22px]" }: { n: NamaIkon; className?: string }) {
   return (

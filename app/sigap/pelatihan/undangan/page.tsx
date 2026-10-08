@@ -89,7 +89,7 @@ export default function HalamanUndangan() {
             </ol>
             <p className="mt-2 text-[13px]">Seluruh foto diunggah lewat SIGAP, menu Transport Lokal.</p>
             {data.peserta && (
-              <Link href="/sigap" className="mt-2 inline-block text-[13px] font-bold text-[#1F5FD1] underline">
+              <Link href="/" className="mt-2 inline-block text-[13px] font-bold text-[#1F5FD1] underline">
                 Buka menu Transport Lokal di portal
               </Link>
             )}

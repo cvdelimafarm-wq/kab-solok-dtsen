@@ -4,12 +4,17 @@
 // (8 Okt 2026) Beranda HP mengikuti mockup identitas SIGAP, variasi 3 "Tugas utama + ikon cepat" (permintaan user): saat pertama masuk,
 // kartu atas menampilkan SATU tugas paling mendesak (pelatihan: kuis live / tes / presensi / foto / langkah berikutnya; kegiatan lain dari kartu),
 // lalu menu sebagai ikon cepat 4 kolom (titik emas = ada tugas aktif). Pemilihan tugas: lib/sigapTugasUtama.ts.
+// (8 Okt 2026) Struktur 3 layer (permintaan user, mockup disetujui): halaman lama "Menu Anda" (/sigap) dihapus; Beranda ini = Layer 1 "Kegiatan saya":
+// ikon bulat per kegiatan dengan cincin progres + tanda seru bila mendesak, mendesak di depan (lib/sigapKegiatan.ts). Mengetuk ikon membuka
+// Layer 2 (tahapan bernomor) atau langsung halaman kerja bila kegiatan belum punya tahapan terukur.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
+import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
+import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
 import GantiPinCepat from "./GantiPinCepat";
@@ -48,6 +53,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const adaSesi = typeof window !== "undefined" && !!bacaSesi();
   const [data, setData] = useState<Data | null>(null);
   const [hub, setHub] = useState<HubBeranda | null>(null);
+  const [keg, setKeg] = useState<RingkasKegiatan[] | null>(null); // kegiatan bertahapan (Transport Lokal), /api/portal/kegiatan
   const [offset, setOffset] = useState(0); // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -77,23 +83,42 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     }
   }, []);
 
+  const muatKeg = useCallback(async () => {
+    if (!bacaSesi()) return;
+    try {
+      const d = await apiPortal<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan");
+      setKeg(d.kegiatan);
+    } catch {
+      /* gagal: Transport Lokal tampil dari kartu biasa (tanpa cincin progres) */
+    }
+  }, []);
+
   useEffect(() => {
     muat();
     muatHub();
-  }, [muat, muatHub]);
+    muatKeg();
+  }, [muat, muatHub, muatKeg]);
 
   // jam berjalan (sisa waktu) tiap 30 dtk; data pelatihan disegarkan tiap menit saat layar terlihat
   useEffect(() => {
     const a = setInterval(() => setTik((x) => x + 1), 30_000);
-    const b = setInterval(() => document.visibilityState === "visible" && muatHub(), 60_000);
-    const c = () => document.visibilityState === "visible" && muatHub();
+    const b = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      muatHub();
+      muatKeg();
+    }, 60_000);
+    const c = () => {
+      if (document.visibilityState !== "visible") return;
+      muatHub();
+      muatKeg();
+    };
     document.addEventListener("visibilitychange", c);
     return () => {
       clearInterval(a);
       clearInterval(b);
       document.removeEventListener("visibilitychange", c);
     };
-  }, [muatHub]);
+  }, [muatHub, muatKeg]);
 
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
@@ -118,7 +143,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   }
 
   const nowMs = Date.now() + offset;
-  const { kartu, utama } = useMemo(() => {
+  const { kartu, utama, kegiatan } = useMemo(() => {
     const k: Kartu[] = [...(data?.kartu ?? [])];
     if (dtsen) {
       k.unshift({
@@ -131,28 +156,52 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         label_aksi: "Buka dashboard",
       });
     }
-    const tp = hub ? tugasUtamaPelatihan(hub, Date.now() + offset) : null;
-    // menu pelatihan (peserta: langkah, undangan, instrumen; pengelola: Kelola Pelatihan)
-    if (hub?.peserta) {
-      k.push(
-        { kode: "pelatihan", grup: "tugas", judul: "Langkah pelatihan", uraian: "PSP Pascabencana", status: tp?.progres ? { label: `${tp.progres.selesai} dari ${tp.progres.total}`, nada: "aktif" } : undefined, href: "/sigap/pelatihan" },
-        { kode: "pelatihan-undangan", grup: "referensi", judul: "Undangan", uraian: "Kelas, jam, pakaian", href: "/sigap/pelatihan/undangan" },
-        { kode: "pelatihan-instrumen", grup: "referensi", judul: "Instrumen", uraian: "Kuesioner & pedoman", href: "/sigap/pelatihan/instrumen" }
-      );
-    }
-    if (hub?.boleh_lihat_kelola) k.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/pelatihan/kelola" });
-    return { kartu: k, utama: pilihTugasUtama(tp, tugasDariKartu(k)) };
+    const sekarang = Date.now() + offset;
+    const tp = hub ? tugasUtamaPelatihan(hub, sekarang) : null;
+    const pel = hub ? ringkasPelatihan(hub, sekarang) : null;
+
+    // Layer 1: semua kegiatan berlangsung. Transport Lokal: bertahapan dari server; sebelum/kalau gagal dimuat, dari kartu (tanpa cincin terukur).
+    const translokKartu = k.filter((x) => x.kode.startsWith("translok-") && x.grup === "tugas");
+    const translok: RingkasKegiatan[] =
+      keg ??
+      translokKartu.map((x) => ({
+        id: x.kode,
+        judul: x.judul,
+        pendek: x.judul.replace(/^Transport Lokal — /, "Translok "),
+        ikon: "motor" as const,
+        nada: (x.status?.nada === "tenggang" ? "emas" : x.status?.nada === "info" ? "abu" : "biru") as NadaKegiatan,
+        pecahan: null,
+        selesai: null,
+        total: null,
+        sub: x.status?.label ?? "Buka",
+        peringatan: x.status?.nada === "tenggang",
+        href: x.href ?? null,
+      }));
+    const lain = k.map(ringkasDariKartu).filter((x): x is RingkasKegiatan => !!x);
+    const semua = urutKegiatan([...(pel ? [pel] : []), ...translok, ...lain]);
+
+    // menu: sisa kartu (referensi, riwayat, pengelolaan) yang bukan kegiatan di Layer 1
+    const jadiKegiatan = (x: Kartu) => (x.grup === "tugas" && (x.kode.startsWith("translok-") || ringkasDariKartu(x) !== null)) || x.kode === "pelatihan" || x.kode === "pelatihan-undangan" || x.kode === "pelatihan-instrumen";
+    const sisa = k.filter((x) => !jadiKegiatan(x));
+    if (hub?.boleh_lihat_kelola) sisa.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/pelatihan/kelola" });
+    const untukTugas = keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k;
+    return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(keg ?? [], sekarang), tugasDariKartu(untukTugas)) };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, dtsen, hub, offset, tik]);
+  }, [data, dtsen, hub, keg, offset, tik]);
 
   const nama = data?.nama ?? dtsen?.nama ?? "";
   const menu = kartu.filter((k) => k.grup !== "kelola");
   const kelola = kartu.filter((k) => k.grup === "kelola");
   const menuUrut = [...menu].sort((a, b) => {
-    const rank = (k: Kartu) => (k.href && utama && k.href === utama.href ? 0 : k.grup === "tugas" ? 1 : k.grup === "referensi" ? 2 : 3);
+    const rank = (k: Kartu) => (k.grup === "tugas" ? 1 : k.grup === "referensi" ? 2 : 3);
     return rank(a) - rank(b);
   });
+  // tombol "Kegiatan saya": kartu SSO (penyisiran) butuh aksi khusus -> cari kartunya
+  const bukaSsoKegiatan = (idKeg: string) => {
+    const kt = (data?.kartu ?? []).find((x) => x.kode === idKeg);
+    if (kt) bukaSso(kt);
+  };
   const memuatAwal = adaSesi && !data && !error;
 
   return (
@@ -219,13 +268,29 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           </div>
         )}
         {error && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{error}</p>}
-        {(data || dtsen) && kartu.length === 0 && (
+        {(data || dtsen) && kartu.length === 0 && kegiatan.length === 0 && (
           <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
             Belum ada tugas atau menu aktif untuk akun Anda. Hubungi admin anggaran atau PJ kegiatan.
           </p>
         )}
 
-        {menuUrut.length > 0 && <GrupIkon judul="Menu" isi={menuUrut} sibuk={sibuk} onSso={bukaSso} />}
+        {kegiatan.length > 0 && (
+          <section aria-label="Kegiatan saya">
+            <div className="mb-2.5 flex items-baseline gap-2 px-1">
+              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kegiatan saya</h2>
+              <span className="text-[11.5px] text-[#6B7A90]">{kegiatan.length} kegiatan</span>
+              {kegiatan.length > 1 && <span className="ml-auto text-[11.5px] text-[#6B7A90]">mendesak di depan</span>}
+            </div>
+            <ul className="grid grid-cols-3 gap-x-1.5 gap-y-4">
+              {kegiatan.map((k) => (
+                <li key={k.id}>
+                  <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {menuUrut.length > 0 && <GrupIkon judul="Menu umum" isi={menuUrut} sibuk={sibuk} onSso={bukaSso} />}
         {kelola.length > 0 && <GrupIkon judul="Pengelolaan" isi={kelola} sibuk={sibuk} onSso={bukaSso} />}
 
         {data && <AktifkanNotifikasi />}

@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
-import { BarisTab, HeaderAdmin, Memuat, Pesan } from "../admin/ui";
+import { HeaderAdmin, Memuat, Pesan } from "../admin/ui";
+import { keAtas } from "@/app/portal/navigasi";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
 import PengaturanAwal from "@/app/portal/PengaturanAwal";
@@ -149,49 +150,29 @@ export function Kerangka({
   const router = useRouter();
   const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
   useDetak({ sesi: sesiDetak }, "pelatihan");
-  // (7 Okt 2026) Tab "Transport Lokal" langsung menuju halaman transport lokal biasa milik peserta (bukan duplikasi):
-  // tokennya dari /api/sigap/saya; tab hanya muncul bila akun punya penugasan.
-  const [tokenTranslok, setTokenTranslok] = useState<string | null>(null);
-  useEffect(() => {
-    let batal = false;
-    fetchJson<{ token_petugas: string | null }>("/api/sigap/saya")
-      .then((d) => !batal && setTokenTranslok(d.token_petugas ?? null))
-      .catch(() => {});
-    return () => {
-      batal = true;
-    };
-  }, []);
-  const tab: { kode: "undangan" | "pelatihan" | "instrumen" | "translok"; label: string }[] = [
-    { kode: "undangan", label: "✉️ Undangan" },
-    { kode: "pelatihan", label: "🧭 Langkah" },
-    { kode: "instrumen", label: "📚 Instrumen" },
-    ...(tokenTranslok ? [{ kode: "translok" as const, label: "🛵 Transport Lokal" }] : []),
-  ];
+  // (8 Okt 2026) Struktur 3 layer: tab Undangan | Langkah | Instrumen | Transport Lokal dihapus (membingungkan & menumpuk riwayat Back).
+  // Undangan & instrumen kini langkah bernomor di halaman Langkah (Layer 2); tombol panah di header naik satu layer.
+  const induk = aktif === "pelatihan" ? "/" : "/sigap/pelatihan";
   return (
-    <div className="min-h-screen bg-[#F5F8FE] text-[#1B2B4B]">
+    <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
-        kecil="Pelatihan PSP Pascabencana 2026"
+        kecil="SIGAP · Pelatihan PSP Pascabencana 2026"
         judul={judul}
         onKeluar={keluar}
         kanan={
           <>
-            <a href="/sigap" className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
-              ← Portal
-            </a>
-            {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-[#A9BCD8] sm:inline">{nama}</span>}
+            <button type="button" onClick={() => keAtas(router, induk)} className="inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-full bg-white/10 pl-2 pr-3 text-[12px] font-semibold hover:bg-white/20 active:bg-white/25">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]" aria-hidden>
+                <path d="m15 6-6 6 6 6" />
+              </svg>
+              {aktif === "pelatihan" ? "Beranda" : "Langkah"}
+            </button>
+            {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-blue-100 sm:inline">{nama}</span>}
           </>
         }
       >
-        {sub && <p className="mt-1 text-[12.5px] text-[#A9BCD8]">{sub}</p>}
+        {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
       </HeaderAdmin>
-      <BarisTab
-        tab={tab}
-        aktif={aktif}
-        onPilih={(k) => {
-          if (k === "translok") window.location.href = `/sigap/translok/${tokenTranslok}`;
-          else router.push(k === "undangan" ? "/sigap/pelatihan/undangan" : k === "instrumen" ? "/sigap/pelatihan/instrumen" : "/sigap/pelatihan");
-        }}
-      />
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         <PulsaPeserta />
         {children}

@@ -943,7 +943,13 @@ export default function HalamanPelatihan() {
                 Langkah Anda
               </span>
             }
-            kanan={<Chip w={nSelesai === wajib.length ? "ok" : "wait"}>{nSelesai} dari {wajib.length} selesai</Chip>}
+            kanan={
+              <span className="flex flex-wrap items-center gap-1.5">
+                {/* (8 Okt 2026) nomor tahapan: "Langkah x dari n" (permintaan user, struktur 3 layer) */}
+                {nSelesai < wajib.length && <Chip w="navy">Langkah {pertama >= 0 ? pertama + 1 : langkah.length} dari {langkah.length}</Chip>}
+                <Chip w={nSelesai === wajib.length ? "ok" : "wait"}>{nSelesai} dari {wajib.length} selesai</Chip>
+              </span>
+            }
           >
             <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${Math.max(1, wajib.length)}, minmax(0, 1fr))` }} role="img" aria-label={`${nSelesai} dari ${wajib.length} langkah selesai`}>
               {wajib.map((l) => (
@@ -958,7 +964,7 @@ export default function HalamanPelatihan() {
                   <li key={l.kode} id={`langkah-${l.kode}`} className="relative flex gap-3 pb-4 last:pb-0">
                     {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} aria-hidden />}
                     <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
-                      {g === "done" ? "✓" : g === "miss" ? "!" : i + 1}
+                      {i + 1}
                     </span>
                     <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-[14px] border border-[#D6E4FA] bg-[#F5F8FE] p-3" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
                       <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-extrabold text-[#0F2A52]">
