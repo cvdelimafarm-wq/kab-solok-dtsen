@@ -10,7 +10,8 @@
 //     Akun admin (Admin Aplikasi / Admin Anggaran) hanya boleh direset Admin Aplikasi (cegah naik hak akses).
 
 import crypto from "crypto";
-import { hashPin, normNama } from "@/lib/undangan";
+import { cekPin, hashPin, normNama } from "@/lib/undangan";
+import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { catatAudit } from "@/lib/sigapAkses";
 import type { Db } from "@/lib/sigap";
 
@@ -61,9 +62,21 @@ export async function simpanPinBaru(db: Db, akunId: number, pin: string): Promis
   const { hash, salt } = hashPin(pin);
   const { error } = await db
     .from("sigap_akun")
-    .update({ pin_hash: hash, pin_salt: salt, pin_diubah_at: new Date().toISOString(), pin_sementara_sampai: null, akun_dibuat_at: new Date().toISOString() })
+    .update({ pin_hash: hash, pin_salt: salt, pin_diubah_at: new Date().toISOString(), pin_sementara_sampai: null, pin_bawaan: false, akun_dibuat_at: new Date().toISOString() })
     .eq("id", akunId);
   return error ? error.message : null;
+}
+
+/**
+ * (8 Okt 2026) Akun ini MASIH memakai PIN awal bersama (1303)? Penanda sigap_akun.pin_bawaan dicek ulang terhadap hash
+ * sebenarnya, jadi penanda yang basi (PIN sudah diganti lewat jalur lain) dibersihkan sendiri.
+ */
+export async function masihPinAwal(db: Db, akunId: number): Promise<boolean> {
+  const { data } = await db.from("sigap_akun").select("pin_hash, pin_salt, pin_bawaan, pin_sementara_sampai").eq("id", akunId).maybeSingle();
+  if (!data || !data.pin_bawaan) return false;
+  const cocok = !!data.pin_hash && !!data.pin_salt && !data.pin_sementara_sampai && cekPin(PIN_AWAL, data.pin_hash as string, data.pin_salt as string);
+  if (!cocok) await db.from("sigap_akun").update({ pin_bawaan: false }).eq("id", akunId);
+  return cocok;
 }
 
 const PERAN_ADMIN = ["admin_aplikasi", "admin_anggaran"];
@@ -91,7 +104,7 @@ export async function resetPinOlehAdmin(
   const pin = buatPinSementara();
   const { hash, salt } = hashPin(pin);
   const sampai = new Date(Date.now() + PIN_SEMENTARA_JAM * 3_600_000).toISOString();
-  const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, pin_diubah_at: new Date().toISOString(), pin_sementara_sampai: sampai }).eq("id", akunId);
+  const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, pin_diubah_at: new Date().toISOString(), pin_sementara_sampai: sampai, pin_bawaan: false }).eq("id", akunId);
   if (error) return { ok: false, error: error.message, status: 500 };
   // buka kunci percobaan salah (jika sedang terkunci) supaya PIN sementara langsung bisa dipakai
   await db.from("bencana_undangan_percobaan").delete().eq("kunci", `sigap_pin:${normNama(String(a.nama ?? ""))}`);

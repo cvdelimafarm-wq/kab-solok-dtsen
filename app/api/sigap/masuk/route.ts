@@ -13,6 +13,11 @@
 // POST { aksi:"lupa_verifikasi", nama, nik, email, tanggal_lahir } -> { ok, tiket, nama } | { ok:false, kolom }   (reset mandiri, min. 2 data cocok)
 // POST { aksi:"reset_pin", tiket, pin }                            -> { ok, token, sesi }                       (tiket sekali pakai, 10 menit)
 // POST { aksi:"ganti_pin", pin_lama, pin }  + Authorization: Bearer <sesi> -> { ok }                            (wajib sesudah masuk dgn PIN sementara)
+// (8 Okt 2026) Login lebih jelas:
+// POST { aksi:"cari_nama", q }                                -> { ok, saran:[{id,nama,ket}] }   (saran nama, min 3 huruf, maks 8, dibatasi per IP)
+// POST { aksi:"masuk", nama?, akun_id?, pin }                 -> { ok, ..., saran_ganti_pin } | { ok:false, kode, error, saran? }
+//      kode: nama_tidak_ditemukan | nama_ambigu | pin_belum_dibuat | pin_salah | terkunci | sementara_kedaluwarsa | belum_ditugaskan
+// POST { aksi:"ganti_pin_awal", pin } + Authorization: Bearer <sesi> -> { ok }   (ganti PIN awal bersama 1303 dgn PIN sendiri, tanpa PIN lama)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -32,9 +37,10 @@ import {
   tanggalValid,
 } from "@/lib/undangan";
 import { buatSesi, catatAudit, sesiDariHeader } from "@/lib/sigapAkses";
-import { bacaTiketReset, buatTiketReset, simpanPinBaru } from "@/lib/sigapPin";
+import { bacaTiketReset, buatTiketReset, masihPinAwal, simpanPinBaru } from "@/lib/sigapPin";
 import { bolehMasukPortal } from "@/lib/portal/server";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
+import { PIN_AWAL, alasanPinDitolak, cariNama, cocokkanNama, ketAkun, pesanGalatMasuk, type AkunNama, type Saran } from "@/lib/sigapMasukNama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,8 +53,8 @@ function supabaseAdmin() {
 }
 type Db = NonNullable<ReturnType<typeof supabaseAdmin>>;
 
-type AkunRow = { id: number; nama: string; jenis: string | null; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null; pin_sementara_sampai?: string | null; pin_diubah_at?: string | null };
-const KOLOM_AKUN = "id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id, pin_sementara_sampai, pin_diubah_at";
+type AkunRow = { id: number; nama: string; jenis: string | null; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null; pin_sementara_sampai?: string | null; pin_diubah_at?: string | null; pin_bawaan?: boolean | null };
+const KOLOM_AKUN = "id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id, pin_sementara_sampai, pin_diubah_at, pin_bawaan";
 
 /** Akun aktif dgn nama ternormalisasi sama persis (diambil per halaman, >1000 baris aman). */
 async function cariAkun(db: Db, nama: string): Promise<AkunRow[]> {
@@ -83,6 +89,42 @@ async function pinAkun(db: Db, a: AkunRow): Promise<{ hash: string; salt: string
   return null;
 }
 
+
+// ---------------------------------------------------------------- (8 Okt 2026) daftar nama untuk saran & pencocokan
+// Hanya id + nama + jenis (BUKAN PIN/token), disimpan di memori server ±60 detik. Data kredensial selalu dibaca segar.
+let cacheDaftar: { at: number; daftar: AkunNama[] } | null = null;
+async function daftarNama(db: Db, umurMaksMs = 60_000): Promise<AkunNama[]> {
+  if (cacheDaftar && Date.now() - cacheDaftar.at < umurMaksMs) return cacheDaftar.daftar;
+  const semua: AkunNama[] = [];
+  for (let i = 0; i < 10000; i += 1000) {
+    const { data } = await db.from("sigap_akun").select("id, nama, jenis").eq("aktif", true).order("id").range(i, i + 999);
+    semua.push(...((data ?? []) as AkunNama[]));
+    if (!data || data.length < 1000) break;
+  }
+  cacheDaftar = { at: Date.now(), daftar: semua };
+  return semua;
+}
+
+// Pembatas permintaan saran per alamat IP (agar daftar nama tidak bisa disalin massal): 40 permintaan / menit.
+const batasCari = new Map<string, { n: number; reset: number }>();
+function terlaluSeringCari(ip: string): boolean {
+  const now = Date.now();
+  if (batasCari.size > 2000) for (const [k, v] of batasCari) if (v.reset < now) batasCari.delete(k);
+  const b = batasCari.get(ip);
+  if (!b || b.reset < now) {
+    batasCari.set(ip, { n: 1, reset: now + 60_000 });
+    return false;
+  }
+  b.n += 1;
+  return b.n > 40;
+}
+function ipPeminta(req: NextRequest): string {
+  return (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip") || "tak-dikenal";
+}
+
+const BATAS_SARAN_GALAT = 8;
+const sebagaiSaran = (l: AkunNama[]): Saran[] => l.slice(0, BATAS_SARAN_GALAT).map((a) => ({ id: a.id, nama: a.nama, ket: ketAkun(a) }));
+
 const PESAN_BELUM_DITUGASKAN = "Akun Anda belum punya tugas atau peran aktif di aplikasi mana pun. Hubungi admin anggaran / PJ kegiatan.";
 
 /** (5 Okt 2026) Boleh masuk bila punya penugasan aktif ATAU peran SIGAP (admin/PJ/bendahara/dll).
@@ -98,43 +140,71 @@ export async function POST(req: NextRequest) {
   const aksi = body?.aksi;
 
   try {
+    // ---------------- (8 Okt 2026) Saran nama saat mengetik ----------------
+    if (aksi === "cari_nama") {
+      if (terlaluSeringCari(ipPeminta(req))) return NextResponse.json({ ok: false, error: "Terlalu sering mencari. Tunggu sebentar lalu coba lagi." }, { status: 429 });
+      const q = typeof body?.q === "string" ? body.q.slice(0, 80) : "";
+      return NextResponse.json({ ok: true, saran: cariNama(await daftarNama(db), q) });
+    }
+
     // ---------------- Masuk dgn PIN ----------------
     if (aksi === "masuk") {
       const nama = typeof body?.nama === "string" ? body.nama.trim() : "";
+      const akunIdPilihan = Number.isInteger(body?.akun_id) && body.akun_id > 0 ? (body.akun_id as number) : null;
       const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
-      if (!nama) return NextResponse.json({ error: "Nama wajib diisi." }, { status: 400 });
-      if (!pinValid(pin)) return NextResponse.json({ error: "PIN harus 4 digit angka." }, { status: 400 });
-      const kunci = `sigap_pin:${normNama(nama)}`;
-      const kondisi = await cekKunci(db, kunci);
-      if (kondisi.terkunci) return NextResponse.json({ error: "Terlalu banyak percobaan salah. Coba lagi nanti atau hubungi admin.", terkunci_sampai: kondisi.sampai }, { status: 429 });
-      const cocok = await cariAkun(db, nama);
-      let berhasil = false;
-      let sementaraKedaluwarsa = false;
-      if (cocok.length === 1) {
-        const p = await pinAkun(db, cocok[0]);
-        berhasil = !!p && cekPin(pin, p.hash, p.salt);
-        // (7 Okt 2026) PIN sementara hasil reset admin hanya berlaku 24 jam
-        if (berhasil && cocok[0].pin_sementara_sampai && new Date(cocok[0].pin_sementara_sampai).getTime() < Date.now()) {
-          berhasil = false;
-          sementaraKedaluwarsa = true;
+      const galat = (kode: Parameters<typeof pesanGalatMasuk>[0], o: Parameters<typeof pesanGalatMasuk>[1] = {}, extra: Record<string, unknown> = {}, status = 200) =>
+        NextResponse.json({ ok: false, kode, error: pesanGalatMasuk(kode, o), ...extra }, { status });
+      if (!nama && !akunIdPilihan) return galat("nama_kosong", {}, {}, 400);
+      if (!pinValid(pin)) return galat("pin_format", {}, {}, 400);
+
+      // 1. Tentukan akun: pilihan dari saran (akun_id) ATAU cocokkan teks nama secara longgar.
+      let daftar = await daftarNama(db);
+      let dipilih: AkunNama | null = null;
+      if (akunIdPilihan) {
+        dipilih = daftar.find((a) => a.id === akunIdPilihan) ?? null;
+        if (!dipilih) dipilih = (await daftarNama(db, 10_000)).find((a) => a.id === akunIdPilihan) ?? null; // akun baru? muat ulang (maks tiap 10 dtk)
+        if (!dipilih) return galat("nama_tidak_ditemukan");
+      } else {
+        let hasil = cocokkanNama(daftar, nama);
+        if (hasil.jenis === "kosong") {
+          daftar = await daftarNama(db, 10_000); // mungkin akun baru ditambahkan: muat ulang sekali (maks tiap 10 dtk)
+          hasil = cocokkanNama(daftar, nama);
         }
+        if (hasil.jenis === "kosong") return galat("nama_tidak_ditemukan"); // tidak dihitung sebagai PIN salah
+        if (hasil.jenis === "ambigu") return galat("nama_ambigu", { jumlah: hasil.kandidat.length }, { saran: sebagaiSaran(hasil.kandidat) });
+        dipilih = hasil.akun;
       }
-      if (sementaraKedaluwarsa) return NextResponse.json({ ok: false, error: "PIN sementara sudah kedaluwarsa. Pakai \"Lupa PIN?\" untuk membuat PIN baru, atau minta admin mereset ulang." });
-      if (!berhasil) {
+      const { data: akunRow } = await db.from("sigap_akun").select(KOLOM_AKUN).eq("id", dipilih.id).eq("aktif", true).maybeSingle();
+      if (!akunRow) return galat("nama_tidak_ditemukan");
+      const akun = akunRow as AkunRow;
+
+      // 2. Kunci percobaan salah per akun (kunci = nama akun sebenarnya, sama dgn yang dibuka admin saat Reset PIN).
+      const kunci = `sigap_pin:${normNama(akun.nama)}`;
+      const kondisi = await cekKunci(db, kunci);
+      if (kondisi.terkunci) return galat("terkunci", { nama: akun.nama, sampai: kondisi.sampai }, { terkunci_sampai: kondisi.sampai }, 429);
+
+      // 3. PIN
+      const p = await pinAkun(db, akun);
+      if (!p) return galat("pin_belum_dibuat", { nama: akun.nama }); // tidak dihitung sebagai PIN salah
+      const pinBenar = cekPin(pin, p.hash, p.salt);
+      // PIN sementara hasil reset admin hanya berlaku 24 jam
+      if (pinBenar && akun.pin_sementara_sampai && new Date(akun.pin_sementara_sampai).getTime() < Date.now()) return galat("sementara_kedaluwarsa", { nama: akun.nama });
+      if (!pinBenar) {
         const g = await catatGagal(db, kunci);
-        return NextResponse.json(
-          { ok: false, error: "Nama atau PIN salah, atau PIN belum dibuat (pilih tab \"Belum punya PIN\").", sisa_percobaan: g.sisa, maks_percobaan: MAKS_GAGAL },
-          { status: g.terkunci ? 429 : 200 }
-        );
+        if (g.terkunci) return galat("terkunci", { nama: akun.nama, sampai: g.sampai }, { terkunci_sampai: g.sampai }, 429);
+        return galat("pin_salah", { nama: akun.nama, sisa: g.sisa, maks: MAKS_GAGAL }, { sisa_percobaan: g.sisa, maks_percobaan: MAKS_GAGAL });
       }
       await resetGagal(db, kunci);
-      if (!(await bolehMasuk(db, cocok[0]))) return NextResponse.json({ error: PESAN_BELUM_DITUGASKAN }, { status: 403 });
-      await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", cocok[0].id);
+      if (!(await bolehMasuk(db, akun))) return galat("belum_ditugaskan", { nama: akun.nama }, { error_asli: PESAN_BELUM_DITUGASKAN }, 403);
+      await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", akun.id);
       // (7 Okt 2026) masuk dgn PIN sementara: klien wajib meminta PIN baru (aksi ganti_pin) sebelum menyimpan sesi
-      const sementara = !!cocok[0].pin_sementara_sampai;
+      const sementara = !!akun.pin_sementara_sampai;
+      // (8 Okt 2026) masih PIN awal bersama (1303) -> sarankan ganti sekarang; penanda disamakan dengan kenyataan
+      const masihAwal = !sementara && pin === PIN_AWAL;
+      if (masihAwal && !akun.pin_bawaan) await db.from("sigap_akun").update({ pin_bawaan: true }).eq("id", akun.id);
       // (6 Okt 2026) log login: masuk = sesi baru
-      if (!sementara) await catatAktivitas(db, cocok[0].id, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
-      return NextResponse.json({ ok: true, token: cocok[0].token, nama: cocok[0].nama, ganti_pin: sementara, ...buatSesi(cocok[0].id) });
+      if (!sementara) await catatAktivitas(db, akun.id, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
+      return NextResponse.json({ ok: true, token: akun.token, nama: akun.nama, ganti_pin: sementara, saran_ganti_pin: masihAwal, ...buatSesi(akun.id) });
     }
 
     // ---------------- Verifikasi identitas (belum punya PIN) ----------------
@@ -199,7 +269,7 @@ export async function POST(req: NextRequest) {
       if (!a) return NextResponse.json({ error: "Sesi tidak valid. Ulangi verifikasi." }, { status: 404 });
       if (await pinAkun(db, a as AkunRow)) return NextResponse.json({ error: "PIN sudah pernah dibuat. Masuk dengan PIN Anda, atau hubungi admin bila lupa." }, { status: 409 });
       const { hash, salt } = hashPin(pin);
-      const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, akun_dibuat_at: new Date().toISOString() }).eq("id", a.id);
+      const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, pin_bawaan: false, akun_dibuat_at: new Date().toISOString() }).eq("id", a.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", a.id);
       await catatAktivitas(db, a.id as number, { sesiBaru: true, cara: "buat_pin", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
@@ -276,6 +346,7 @@ export async function POST(req: NextRequest) {
       if (a.pin_diubah_at && new Date(a.pin_diubah_at as string).getTime() >= t.terbit) return NextResponse.json({ error: "Tautan reset ini sudah dipakai. Ulangi verifikasi data bila perlu." }, { status: 410 });
       const err = await simpanPinBaru(db, a.id as number, pin);
       if (err) return NextResponse.json({ error: err }, { status: 500 });
+      await resetGagal(db, `sigap_pin:${normNama(String(a.nama ?? ""))}`); // PIN baru -> kunci percobaan salah dibuka
       await catatAudit(db, a.id as number, "reset_pin_mandiri", { nama: a.nama });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", a.id);
       await catatAktivitas(db, a.id as number, { sesiBaru: true, cara: "reset_pin", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
@@ -291,6 +362,8 @@ export async function POST(req: NextRequest) {
       const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
       if (!pinValid(pinLama) || !pinValid(pin)) return NextResponse.json({ error: "PIN harus 4 digit angka." }, { status: 400 });
       if (pin === pinLama) return NextResponse.json({ error: "PIN baru harus berbeda dari PIN sementara." }, { status: 400 });
+      const tolak = alasanPinDitolak(pin);
+      if (tolak) return NextResponse.json({ error: tolak }, { status: 400 });
       const { data: a } = await db.from("sigap_akun").select(KOLOM_AKUN).eq("id", akunId).maybeSingle();
       if (!a) return NextResponse.json({ error: "Akun tidak ditemukan." }, { status: 404 });
       const p = await pinAkun(db, a as AkunRow);
@@ -299,6 +372,23 @@ export async function POST(req: NextRequest) {
       if (err) return NextResponse.json({ error: err }, { status: 500 });
       await catatAudit(db, akunId, "ganti_pin", { nama: a.nama });
       await catatAktivitas(db, akunId, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
+      return NextResponse.json({ ok: true });
+    }
+
+    // ---------------- (8 Okt 2026) Ganti PIN awal bersama (1303) dgn PIN sendiri: cepat, tanpa PIN lama ----------------
+    if (aksi === "ganti_pin_awal") {
+      const akunId = sesiDariHeader(req.headers);
+      if (!akunId) return NextResponse.json({ error: "Sesi berakhir. Masuk ulang lalu coba lagi." }, { status: 401 });
+      const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+      const tolak = alasanPinDitolak(pin);
+      if (tolak) return NextResponse.json({ error: tolak }, { status: 400 });
+      // Hanya untuk akun yang BENAR-BENAR masih memakai PIN awal (dicek terhadap hash, bukan hanya penanda).
+      if (!(await masihPinAwal(db, akunId))) return NextResponse.json({ error: "PIN Anda sudah bukan PIN awal. Tidak perlu diganti lagi." }, { status: 409 });
+      const { data: a } = await db.from("sigap_akun").select("id, nama").eq("id", akunId).maybeSingle();
+      if (!a) return NextResponse.json({ error: "Akun tidak ditemukan." }, { status: 404 });
+      const err = await simpanPinBaru(db, akunId, pin);
+      if (err) return NextResponse.json({ error: err }, { status: 500 });
+      await catatAudit(db, akunId, "ganti_pin_awal", { nama: a.nama }); // PIN tidak ikut dicatat
       return NextResponse.json({ ok: true });
     }
 

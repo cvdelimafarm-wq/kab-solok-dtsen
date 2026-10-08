@@ -4,16 +4,32 @@
 //  - Nama lengkap + PIN 4 digit  -> akun SIGAP (pegawai, mitra, petugas bencana/penyisiran).
 //  - Nomor HP + PIN 6 digit      -> operator Wali Nagari (Usulan DTSEN, akun Supabase lama) di form yg sama.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { emailFromPhone, normalizePhone } from "@/lib/phone";
+import { MIN_HURUF_CARI, pesanGalatMasuk, type Saran } from "@/lib/sigapMasukNama";
+import GantiPinCepat from "./GantiPinCepat";
 import { simpanSesi, tujuanLanjut } from "./sesi";
 
 const INPUT = "h-12 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-[15px] text-[#14202E] outline-none transition focus:border-[#1F6FD1] focus:ring-4 focus:ring-[#1F6FD1]/10";
 
 function tampakNomorHp(s: string): boolean {
   return /^[0-9+\-\s]{9,}$/.test(s.trim());
+}
+
+/** Tebalkan bagian nama yang cocok dengan teks yang diketik. */
+function Sorot({ nama, q }: { nama: string; q: string }) {
+  const k = q.trim().toLowerCase();
+  const i = k ? nama.toLowerCase().indexOf(k) : -1;
+  if (i < 0) return <>{nama}</>;
+  return (
+    <>
+      {nama.slice(0, i)}
+      <mark className="rounded-sm bg-[#FFE680] px-0.5 text-inherit">{nama.slice(i, i + k.length)}</mark>
+      {nama.slice(i + k.length)}
+    </>
+  );
 }
 
 export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
@@ -26,6 +42,65 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
   const [ganti, setGanti] = useState<{ sesi: string; sampai: string; token: string } | null>(null);
   const [pinBaru, setPinBaru] = useState("");
   const [pinBaru2, setPinBaru2] = useState("");
+  // (8 Okt 2026) Saran nama saat mengetik (typeahead): memilih saran = masuk ke akun itu (akun_id), bukan mencocokkan teks.
+  const [pilih, setPilih] = useState<{ id: number; nama: string } | null>(null);
+  const [saran, setSaran] = useState<Saran[]>([]);
+  const [bukaSaran, setBukaSaran] = useState(false);
+  const [aktifIdx, setAktifIdx] = useState(-1);
+  const [mencari, setMencari] = useState(false);
+  const [selesaiCari, setSelesaiCari] = useState<string | null>(null); // teks yang hasilnya sudah tampil
+  // (8 Okt 2026) Masuk dengan PIN awal 1303: tawarkan ganti PIN cepat sebelum masuk ke beranda.
+  const [awal, setAwal] = useState<{ sesi: string; sampai: string; token: string } | null>(null);
+  const refPin = useRef<HTMLInputElement>(null);
+  const refNama = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const q = id.trim();
+    if (pilih || modeHp || q.replace(/[^A-Za-z0-9]/g, "").length < MIN_HURUF_CARI) {
+      setSaran([]);
+      setBukaSaran(false);
+      setMencari(false);
+      setSelesaiCari(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setMencari(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/sigap/masuk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "cari_nama", q }), signal: ctrl.signal });
+        const j = await res.json().catch(() => ({}));
+        if (ctrl.signal.aborted) return;
+        setSaran(res.ok && Array.isArray(j.saran) ? j.saran : []);
+        setSelesaiCari(res.ok ? q : null);
+        setAktifIdx(-1);
+        setBukaSaran(res.ok);
+      } catch {
+        /* dibatalkan / offline: abaikan, galat tampil saat menekan Masuk */
+      } finally {
+        if (!ctrl.signal.aborted) setMencari(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [id, pilih, modeHp]);
+
+  function ambil(s: Saran) {
+    setPilih({ id: s.id, nama: s.nama });
+    setId(s.nama);
+    setBukaSaran(false);
+    setSaran([]);
+    setError(null);
+    setTimeout(() => refPin.current?.focus(), 0);
+  }
+
+  function gantiNama() {
+    setPilih(null);
+    setId("");
+    setError(null);
+    setTimeout(() => refNama.current?.focus(), 0);
+  }
 
   function selesai(x: { sesi: string; sampai: string; token: string }) {
     simpanSesi(x);
@@ -58,7 +133,7 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
   async function kirim(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!id.trim()) return setError("Isi nama lengkap atau nomor HP.");
+    if (!id.trim()) return setError(pesanGalatMasuk("nama_kosong"));
     setBusy(true);
     try {
       if (modeHp) {
@@ -71,15 +146,29 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
         window.location.replace(tujuanLanjut() ?? (profil?.role === "operator_nagari" ? "/dashboard" : "/"));
         return;
       }
-      if (!/^\d{4}$/.test(pin)) return setError("PIN harus 4 digit angka.");
-      const res = await fetch("/api/sigap/masuk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "masuk", nama: id.trim(), pin }) });
+      if (!/^\d{4}$/.test(pin)) return setError(pin.length === 0 ? "PIN belum diisi. Ketik 4 digit PIN Anda." : `PIN harus 4 digit angka (baru ${pin.length} digit).`);
+      const res = await fetch("/api/sigap/masuk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aksi: "masuk", nama: pilih ? pilih.nama : id.trim(), akun_id: pilih?.id, pin }),
+      });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok || !j.sesi) {
-        const sisa = typeof j.sisa_percobaan === "number" ? ` Sisa percobaan: ${j.sisa_percobaan}.` : "";
-        return setError((j.error ?? "Gagal masuk.") + sisa);
+        if (j.kode === "nama_ambigu" && Array.isArray(j.saran)) {
+          setSaran(j.saran);
+          setSelesaiCari(id.trim());
+          setAktifIdx(-1);
+          setBukaSaran(true);
+          refNama.current?.focus();
+        }
+        return setError(j.error ?? `Gagal masuk (kode ${res.status}). Server sedang bermasalah, coba lagi sebentar lagi.`);
       }
       if (j.ganti_pin) {
         setGanti({ sesi: j.sesi, sampai: j.sampai, token: j.token });
+        return;
+      }
+      if (j.saran_ganti_pin) {
+        setAwal({ sesi: j.sesi, sampai: j.sampai, token: j.token });
         return;
       }
       selesai({ sesi: j.sesi, sampai: j.sampai, token: j.token });
@@ -121,7 +210,9 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
       </section>
 
       <section className="flex flex-[1_1_420px] items-center justify-center px-4 py-12">
-        {ganti ? (
+        {awal ? (
+          <GantiPinCepat sesi={awal.sesi} onSelesai={() => selesai(awal)} onNanti={() => selesai(awal)} />
+        ) : ganti ? (
           <form onSubmit={simpanPinBaru} className="flex w-full max-w-[400px] flex-col gap-[18px] rounded-[14px] border border-[#E3E8EE] bg-white p-8">
             <div>
               <h2 className="text-[22px] font-bold">Buat PIN baru</h2>
@@ -144,18 +235,87 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
         <form onSubmit={kirim} className="flex w-full max-w-[400px] flex-col gap-[18px] rounded-[14px] border border-[#E3E8EE] bg-white p-8">
           <div>
             <h2 className="text-[22px] font-bold">Masuk</h2>
-            <p className="mt-1 text-[13.5px] text-[#4D5B6B]">Gunakan nama lengkap dan PIN 4 digit Anda.</p>
+            <p className="mt-1 text-[13.5px] text-[#4D5B6B]">Ketik nama Anda, pilih dari saran, lalu isi PIN 4 digit.</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="id-masuk" className="text-[13px] font-semibold text-[#4D5B6B]">Nama lengkap</label>
-            <input id="id-masuk" className={INPUT} value={id} onChange={(e) => setId(e.target.value)} autoComplete="username" placeholder="Nama sesuai daftar petugas/pegawai" />
+            {pilih ? (
+              <div className="flex h-12 items-center gap-2 rounded-lg border border-[#BFE3D0] bg-[#E6F4EC] px-3.5 text-[15px] font-semibold text-[#17623C]">
+                <span aria-hidden>✓</span>
+                <span className="min-w-0 flex-1 truncate">{pilih.nama}</span>
+                <button type="button" onClick={gantiNama} className="text-[13px] font-bold underline underline-offset-2">Ganti</button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  ref={refNama}
+                  id="id-masuk"
+                  className={INPUT}
+                  value={id}
+                  onChange={(e) => {
+                    setId(e.target.value);
+                    setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!bukaSaran || saran.length === 0) return;
+                    if (e.key === "ArrowDown") {
+                      setAktifIdx((i) => (i + 1) % saran.length);
+                      e.preventDefault();
+                    } else if (e.key === "ArrowUp") {
+                      setAktifIdx((i) => (i - 1 + saran.length) % saran.length);
+                      e.preventDefault();
+                    } else if (e.key === "Enter" && aktifIdx >= 0) {
+                      ambil(saran[aktifIdx]);
+                      e.preventDefault();
+                    } else if (e.key === "Escape") {
+                      setBukaSaran(false);
+                    }
+                  }}
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={bukaSaran}
+                  aria-controls="daftar-saran-nama"
+                  aria-autocomplete="list"
+                  placeholder="Ketik 3 huruf nama Anda, lalu pilih"
+                />
+                {bukaSaran && !modeHp && (
+                  <div id="daftar-saran-nama" role="listbox" className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-[#CDD5DE] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+                    {saran.length === 0 ? (
+                      <p className="px-3.5 py-3 text-[13px] text-[#7B8794]">Tidak ada nama yang cocok. Periksa ejaan, atau coba ketik bagian lain dari nama Anda.</p>
+                    ) : (
+                      saran.map((x, i) => (
+                        <button
+                          key={x.id}
+                          type="button"
+                          role="option"
+                          aria-selected={i === aktifIdx}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => ambil(x)}
+                          className={`block w-full border-b border-[#F0F3F7] px-3.5 py-2.5 text-left text-[14.5px] last:border-b-0 hover:bg-[#F3F8FF] ${i === aktifIdx ? "bg-[#F3F8FF]" : "bg-white"}`}
+                        >
+                          <Sorot nama={x.nama} q={selesaiCari ?? id} />
+                          <small className="block text-[11.5px] text-[#7B8794]">{x.ket}</small>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <span className="text-xs text-[#7B8794]">
-              {modeHp ? "Terbaca sebagai nomor HP — masuk sebagai operator Wali Nagari (PIN 6 digit)." : "Operator Wali Nagari: ketik nomor HP di kolom ini."}
+              {modeHp
+                ? "Terbaca sebagai nomor HP — masuk sebagai operator Wali Nagari (PIN 6 digit)."
+                : pilih
+                  ? "Nama dipilih dari daftar. Ketuk \"Ganti\" bila bukan Anda."
+                  : mencari
+                    ? "Mencari nama…"
+                    : "Operator Wali Nagari: ketik nomor HP di kolom ini."}
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="pin-masuk" className="text-[13px] font-semibold text-[#4D5B6B]">PIN</label>
             <input
+              ref={refPin}
               id="pin-masuk"
               type="password"
               inputMode="numeric"

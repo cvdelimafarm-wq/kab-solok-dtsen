@@ -7,9 +7,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
+import GantiPinCepat from "./GantiPinCepat";
+import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 
-type Data = { nama: string; jenis: string; peran: string[]; admin_aplikasi: boolean; kartu: Kartu[] };
+type Data = { nama: string; jenis: string; peran: string[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
 export type InfoDtsen = { nama: string; role: string | null } | null;
 
 const GRUP: { kode: Kartu["grup"]; judul: string }[] = [
@@ -39,6 +41,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<string | null>(null);
+  // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
+  const [gantiPin, setGantiPin] = useState(false);
 
   const muat = useCallback(async () => {
     if (!bacaSesi()) return;
@@ -112,6 +116,17 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       </header>
 
       <div className="relative z-10 mx-auto -mt-10 max-w-5xl space-y-6 px-4">
+        {data?.pin_bawaan && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#F0D9A0] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4A00]" role="alert">
+            <span aria-hidden className="text-[20px]">⚠️</span>
+            <p className="min-w-[200px] flex-1 leading-snug">
+              <b>Anda masih memakai PIN awal {PIN_AWAL}</b> yang sama dengan pegawai lain. Ganti dengan PIN sendiri agar akun Anda aman.
+            </p>
+            <button type="button" onClick={() => setGantiPin(true)} className="rounded-lg bg-[#1E7A4C] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[#17623C]">
+              Ganti PIN sekarang
+            </button>
+          </div>
+        )}
         {error && <p className="rounded-lg border-l-4 border-[#C2412D] bg-[#FDECEA] px-3 py-2 text-[13px] text-[#8A2B1D]">{error}</p>}
         {adaSesi && !data && !error && <p className="rounded-xl border border-[#E3E8EE] bg-white px-4 py-6 text-center text-[13.5px] text-[#7B8794]">Memuat menu…</p>}
         {(data || dtsen) && kartu.length === 0 && (
@@ -134,6 +149,19 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           );
         })}
       </div>
+      {gantiPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={() => setGantiPin(false)}>
+          <div className="max-h-full w-full max-w-[400px] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <GantiPinCepat
+              onSelesai={() => {
+                setGantiPin(false);
+                setData((d) => (d ? { ...d, pin_bawaan: false } : d));
+              }}
+              onNanti={() => setGantiPin(false)}
+            />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
