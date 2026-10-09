@@ -15,7 +15,6 @@
 // DIBULATKAN 4 desimal (~11 m) supaya tidak persis di titik rumah. Pakai OSRM_URL sendiri bila ingin nol kebocoran.
 
 import { readFileSync, existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 
 const DESIMAL = 4;
 const MAKS_KOORDINAT_PER_PERMINTAAN = 90; // batas server demo OSRM ~100 koordinat
@@ -27,11 +26,17 @@ const SATU = (args.find((a) => a.startsWith("--petugas=")) ?? "").split("=")[1];
 const OSRM = (process.env.OSRM_URL || "https://router.project-osrm.org").replace(/\/+$/, "");
 
 function muatEnv() {
-  for (const f of [".env.local", ".env"]) {
+  // (9 Okt 2026) nilai di .env.local MENGGANTI variabel lama di sesi PowerShell (kunci usang di sesi memicu 401),
+  // dan nilai dirapikan: spasi/kutip/komentar di ujung dibuang.
+  for (const f of [".env", ".env.local"]) {
     if (!existsSync(f)) continue;
     for (const baris of readFileSync(f, "utf8").split(/\r?\n/)) {
-      const m = baris.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      const m = baris.match(/^\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=\s*(.*)$/);
+      if (!m || baris.trim().startsWith("#")) continue;
+      let v = m[2].trim();
+      const kutip = v.match(/^(["'])(.*?)\1/);
+      v = kutip ? kutip[2] : v.replace(/\s+#.*$/, "").trim();
+      process.env[m[1]] = v;
     }
   }
 }
@@ -74,7 +79,11 @@ async function main() {
   muatEnv();
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const kunci = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!base || !kunci) { console.error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY tidak ditemukan di .env.local"); process.exit(1); }
+  if (!base || !kunci) { console.error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY tidak ditemukan di .env.local"); process.exitCode = 1; return; }
+  // Diagnosa aman (kunci TIDAK dicetak): bantu cari penyebab 401.
+  const ref = (() => { try { return new URL(base).hostname.split(".")[0]; } catch { return "URL tidak valid"; } })();
+  console.log(`Supabase proyek: ${ref} | panjang kunci: ${kunci.length} | awalan: ${kunci.slice(0, 6)}...`);
+  if (ref !== "nlwkpakyfprugqwklxiu") console.warn("PERINGATAN: proyek bukan dtsen-usulan-solok (nlwkpakyfprugqwklxiu).");
   const H = { apikey: kunci, Authorization: `Bearer ${kunci}`, "Content-Type": "application/json" };
 
   async function ambil(path) {
@@ -120,7 +129,7 @@ async function main() {
       hasil = await rutePerRumah({ lat: p.lat, lon: p.lng }, tujuan);
     } catch (e) {
       console.error(`Petugas ${p.id} (${p.nama}): ${e.message}`);
-      if (/403|407/.test(e.message)) { console.error("Diblokir proxy/kebijakan jaringan -- berhenti."); process.exit(2); }
+      if (/403|407/.test(e.message)) { console.error("Diblokir proxy/kebijakan jaringan -- berhenti."); process.exitCode = 2; return; }
       gagal += tujuan.length;
       continue;
     }
@@ -160,6 +169,6 @@ async function main() {
   console.log(`Tersimpan: ${upserts.length} baris ke bencana_jarak_rute.`);
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  main().catch((e) => { console.error(e.message); process.exit(1); });
+if (/hitung-jarak-rute\.mjs$/i.test(process.argv[1] || "")) {
+  main().catch((e) => { console.error(e.message); process.exitCode = 1; });
 }
