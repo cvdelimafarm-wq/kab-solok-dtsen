@@ -19,6 +19,7 @@ import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
 import ModalFotoPanitia from "@/app/sigap/pelatihan/ModalFotoPanitia"; // (9 Okt 2026) pengingat foto pelatihan untuk panitia
+import ModalRapat from "./ModalRapat"; // (9 Okt 2026) presensi rapat Zoom (modal + token)
 import GantiPinCepat from "./GantiPinCepat";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
@@ -338,6 +339,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
 
         {data && <AktifkanNotifikasi />}
         {data && <ModalFotoPanitia />}
+        {data && <ModalRapat />}
       </div>
 
       {gantiPin && (

@@ -27,6 +27,11 @@ import BrandBps from "@/app/components/BrandBps";
 // jawaban) TETAP sama.
 // ------------------------------------------------------------------------
 
+// (9 Okt 2026) Data "wilayah sampel" (seluruh Sub SLS sampel milik tim) DIMATIKAN di halaman undangan karena membingungkan petugas
+// -- permintaan user. Wilayah tugas riil (hasil plotting) ada di tab Alokasi Petugas, halaman PML, dan tabel bencana_alokasi_subsls.
+// Ubah ke true untuk menampilkannya lagi.
+const TAMPILKAN_WILAYAH_UNDANGAN = false;
+
 type WilayahKerjaRow = {
   idsubsls: string;
   kecamatan: string;
@@ -446,7 +451,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
         </header>
 
         {/* ===== STRIP RINGKASAN ===== */}
-        <div className="-mt-[26px] mx-4 grid grid-cols-3 rounded-[14px] bg-white px-1.5 py-3.5 shadow-md">
+        <div className={`-mt-[26px] mx-4 grid ${TAMPILKAN_WILAYAH_UNDANGAN ? "grid-cols-3" : "grid-cols-2"} rounded-[14px] bg-white px-1.5 py-3.5 shadow-md`}>
           <div className="flex flex-col items-center gap-0.5 border-r border-[#E4E9F0]">
             <span className="text-[11px] font-semibold text-[#55657D]">Pelatihan</span>
             <span className="text-sm font-extrabold">{ringkasPelatihan}</span>
@@ -455,10 +460,12 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
             <span className="text-[11px] font-semibold text-[#55657D]">Pendataan</span>
             <span className="text-sm font-extrabold">10–31 Okt</span>
           </div>
-          <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[11px] font-semibold text-[#55657D]">Wilayah</span>
-            <span className="text-sm font-extrabold">{info.wilayah_kerja.length} Sub SLS</span>
-          </div>
+          {TAMPILKAN_WILAYAH_UNDANGAN && (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[11px] font-semibold text-[#55657D]">Wilayah</span>
+              <span className="text-sm font-extrabold">{info.wilayah_kerja.length} Sub SLS</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 p-4">
@@ -674,6 +681,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
           </section>
 
           {/* ===== PERKIRAAN WILAYAH KERJA ===== */}
+          {TAMPILKAN_WILAYAH_UNDANGAN && (
           <section className={`${KARTU} flex flex-col gap-3`}>
             <div className="flex items-baseline justify-between">
               <h2 className={JUDUL_KARTU}>Wilayah kerja tim</h2>
@@ -786,6 +794,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
               </>
             )}
           </section>
+          )}
 
           {/* ===== TUGAS ANDA ===== */}
           <section className={`${KARTU} flex flex-col gap-3.5`}>
