@@ -11,6 +11,12 @@ const PETA_KELOLA = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // (10 Okt 2026) Metadata WAJIB di <head> untuk semua browser -- perbaikan tombol "Instal SIGAP" yang mendadak tidak memunculkan dialog
+  // di beberapa HP sekaligus. Penyebab (terbukti lewat uji Chrome): sejak Next.js 15.2+ metadata (title, <link rel="manifest">, ikon) dikirim
+  // belakangan (streaming) dan jatuh di <body> untuk browser biasa; Chrome tidak menemukan manifest di sana ("no-manifest" -> tidak dianggap
+  // aplikasi yang bisa dipasang -> beforeinstallprompt tidak pernah datang). htmlLimitedBots bawaan hanya mencakup mesin pencari; regex ini
+  // menyuruh Next menunggu metadata dan menaruhnya di <head> untuk semua pengguna. Harga: awal pengiriman halaman menunggu metadata (milidetik).
+  htmlLimitedBots: /.*/,
   // (7 Okt 2026) SIGAP PEDIA: pustaka email/DKIM dijalankan apa adanya dari node_modules (tidak di-bundle
   // webpack) supaya require dinamis & modul Node bawaan (dns, crypto) aman.
   serverExternalPackages: ["mailauth", "mailparser"],

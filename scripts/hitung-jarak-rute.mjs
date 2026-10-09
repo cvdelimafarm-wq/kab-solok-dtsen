@@ -36,6 +36,7 @@ function muatEnv() {
       let v = m[2].trim();
       const kutip = v.match(/^(["'])(.*?)\1/);
       v = kutip ? kutip[2] : v.replace(/\s+#.*$/, "").trim();
+      v = v.replace(/^<+/, "").replace(/>+$/, "").trim(); // tanda < > sisa dari contoh/placeholder ikut tersalin
       process.env[m[1]] = v;
     }
   }
