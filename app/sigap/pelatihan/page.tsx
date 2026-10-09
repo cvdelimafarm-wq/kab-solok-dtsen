@@ -23,6 +23,7 @@ import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
 import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
 import { ModalPengumuman } from "./pengumumanUi";
+import KartuTranslokPelatihan from "./translok";
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -1014,6 +1015,8 @@ export default function HalamanPelatihan() {
               })}
             </ol>
           </Kartu>
+          {/* (9 Okt 2026) Transport Lokal pelatihan ada di dalam tahap Pelatihan */}
+          <KartuTranslokPelatihan />
           <div className="rounded-[14px] border border-[#DDE6F3] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5B6B84]">
             Waktu mengikuti jam server. Skor &amp; pembahasan tampil setelah sesi tes ditutup; sebelum itu hanya tampil &ldquo;jawaban tersimpan&rdquo;.
           </div>

@@ -20,7 +20,12 @@ export function indukDari(path: string): string | null {
   if (p === "/") return null;
   if (p === "/sigap/masuk" || p.startsWith("/sigap/masuk/")) return null;
   if (p === "/sigap") return "/";
-  if (p === "/sigap/pelatihan") return "/";
+  // (9 Okt 2026) Kegiatan induk: Layer 2 /sigap/kegiatan/<kode> -> Beranda; Layer 3 /sigap/kegiatan/<kode>/<tahap> -> Layer 2.
+  // Pelatihan adalah halaman kerja tahap "Pelatihan" milik Pendataan Pascabencana -> naik ke garis waktu kegiatan itu.
+  // (Transport Lokal "translok-<id>" tetap satu layer di bawah Beranda.)
+  const tahap = /^\/sigap\/kegiatan\/([^/]+)\/[^/]+$/.exec(p);
+  if (tahap) return `/sigap/kegiatan/${tahap[1]}`;
+  if (p === "/sigap/pelatihan") return "/sigap/kegiatan/pascabencana";
   if (p.startsWith("/sigap/pelatihan/kelola")) return "/";
   // (9 Okt 2026) halaman pengelolaan /sigap/kelola/<modul> -- permintaan user. Detail (mis. /sigap/kelola/pedia/12) naik ke daftar modulnya.
   const kelola = /^\/sigap\/kelola\/([^/]+)\/.+/.exec(p);

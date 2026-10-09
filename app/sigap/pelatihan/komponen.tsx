@@ -152,7 +152,8 @@ export function Kerangka({
   useDetak({ sesi: sesiDetak }, "pelatihan");
   // (8 Okt 2026) Struktur 3 layer: tab Undangan | Langkah | Instrumen | Transport Lokal dihapus (membingungkan & menumpuk riwayat Back).
   // Undangan & instrumen kini langkah bernomor di halaman Langkah (Layer 2); tombol panah di header naik satu layer.
-  const induk = aktif === "pelatihan" ? "/" : "/sigap/pelatihan";
+  // (9 Okt 2026) Pelatihan kini tahap dalam garis waktu Pendataan Pascabencana -> panah kembali naik ke sana.
+  const induk = aktif === "pelatihan" ? "/sigap/kegiatan/pascabencana" : "/sigap/pelatihan";
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
@@ -165,7 +166,7 @@ export function Kerangka({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]" aria-hidden>
                 <path d="m15 6-6 6 6 6" />
               </svg>
-              {aktif === "pelatihan" ? "Beranda" : "Langkah"}
+              {aktif === "pelatihan" ? "Tahapan" : "Langkah"}
             </button>
             {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-blue-100 sm:inline">{nama}</span>}
           </>

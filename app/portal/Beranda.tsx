@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
+import { ringkasInduk, type Induk } from "@/lib/sigapTahap";
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
@@ -55,6 +56,9 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const [data, setData] = useState<Data | null>(null);
   const [hub, setHub] = useState<HubBeranda | null>(null);
   const [keg, setKeg] = useState<RingkasKegiatan[] | null>(null); // kegiatan bertahapan (Transport Lokal), /api/portal/kegiatan
+  // (9 Okt 2026) kegiatan INDUK + tahap proses bisnis (mis. Pendataan Pascabencana: Perencanaan, Pelatihan, Pendataan, Evaluasi), /api/portal/induk
+  const [induk, setInduk] = useState<Induk[] | null>(null);
+  const [hubMuat, setHubMuat] = useState<"memuat" | "siap" | "gagal">("memuat");
   const [offset, setOffset] = useState(0); // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +83,9 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       const h = await apiPortal<HubBeranda>("/api/sigap/pelatihan");
       setOffset(Date.parse(h.sekarang) - Date.now());
       setHub(h);
+      setHubMuat("siap");
     } catch {
-      /* abaikan */
+      setHubMuat((m) => (m === "siap" ? m : "gagal"));
     }
   }, []);
 
@@ -94,11 +99,22 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     }
   }, []);
 
+  const muatInduk = useCallback(async () => {
+    if (!bacaSesi()) return;
+    try {
+      const d = await apiPortal<{ induk: Induk[] }>("/api/portal/induk");
+      setInduk(d.induk);
+    } catch {
+      /* gagal: Beranda memakai ikon lama (pelatihan, Transport Lokal, bencana terpisah) */
+    }
+  }, []);
+
   useEffect(() => {
     muat();
     muatHub();
     muatKeg();
-  }, [muat, muatHub, muatKeg]);
+    muatInduk();
+  }, [muat, muatHub, muatKeg, muatInduk]);
 
   // jam berjalan (sisa waktu) tiap 30 dtk; data pelatihan disegarkan tiap menit saat layar terlihat
   useEffect(() => {
@@ -107,11 +123,13 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       if (document.visibilityState !== "visible") return;
       muatHub();
       muatKeg();
+      muatInduk();
     }, 60_000);
     const c = () => {
       if (document.visibilityState !== "visible") return;
       muatHub();
       muatKeg();
+      muatInduk();
     };
     document.addEventListener("visibilitychange", c);
     return () => {
@@ -119,7 +137,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       clearInterval(b);
       document.removeEventListener("visibilitychange", c);
     };
-  }, [muatHub, muatKeg]);
+  }, [muatHub, muatKeg, muatInduk]);
 
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
@@ -179,7 +197,20 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         href: x.href ?? null,
       }));
     const lain = k.map(ringkasDariKartu).filter((x): x is RingkasKegiatan => !!x);
-    const semua = urutKegiatan([...(pel ? [pel] : []), ...translok, ...lain]);
+
+    // (9 Okt 2026) Kegiatan INDUK: pelatihan, Transport Lokal, dan pendataan bencana yang tergabung dalam satu kegiatan diringkas menjadi SATU ikon
+    // (Layer 1); tahapnya tampil di Layer 2. Menunggu data pelatihan & Transport Lokal siap dulu supaya ikon tidak berganti-ganti.
+    const indukRingkas: RingkasKegiatan[] = [];
+    const serap = new Set<string>();
+    if (induk && keg && hubMuat !== "memuat") {
+      for (const i of induk) {
+        const r = ringkasInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
+        if (!r) continue;
+        indukRingkas.push(r);
+        i.menyerap.forEach((x) => serap.add(x));
+      }
+    }
+    const semua = urutKegiatan([...indukRingkas, ...(pel && !serap.has("pelatihan") ? [pel] : []), ...translok.filter((x) => !serap.has(x.id)), ...lain.filter((x) => !serap.has(x.id))]);
 
     // menu: sisa kartu (referensi, riwayat, pengelolaan) yang bukan kegiatan di Layer 1
     const jadiKegiatan = (x: Kartu) => (x.grup === "tugas" && (x.kode.startsWith("translok-") || ringkasDariKartu(x) !== null)) || x.kode === "pelatihan" || x.kode === "pelatihan-undangan" || x.kode === "pelatihan-instrumen";
@@ -189,7 +220,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(keg ?? [], sekarang), tugasDariKartu(untukTugas)) };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, dtsen, hub, keg, offset, tik]);
+  }, [data, dtsen, hub, hubMuat, keg, induk, offset, tik]);
 
   const nama = data?.nama ?? dtsen?.nama ?? "";
   const menu = kartu.filter((k) => k.grup !== "kelola");

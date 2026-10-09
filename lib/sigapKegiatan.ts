@@ -44,6 +44,8 @@ export type RingkasKegiatan = {
   href: string | null;
   sso?: "penyisiran";
   langkah?: LangkahKegiatan[];
+  /** (9 Okt 2026) sigap_kegiatan.id untuk Transport Lokal, dipakai tahap kegiatan induk (lib/sigapTahap.ts) */
+  kegiatan_id?: number;
 };
 
 export const URUT_NADA: Record<NadaKegiatan, number> = { merah: 0, emas: 1, biru: 2, abu: 3, hijau: 4 };

@@ -123,6 +123,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     peringatan: nada === "merah" || nada === "emas",
     href: `/sigap/kegiatan/translok-${p.id}`,
     langkah,
+    kegiatan_id: k.id,
   };
 }
 

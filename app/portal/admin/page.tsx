@@ -51,14 +51,14 @@ export default function AdminAplikasiPage() {
 
   const muat = useCallback(async () => {
     if (!bacaSesi()) {
-      window.location.replace(`/?lanjut=${encodeURIComponent("/sigap/kelola/aplikasi")}`);
+      window.location.replace(`/?lanjut=${encodeURIComponent("/portal/admin")}`);
       return;
     }
     try {
       setData(await apiPortal<Data>("/api/portal/admin"));
       setError(null);
     } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return window.location.replace(`/?lanjut=${encodeURIComponent("/sigap/kelola/aplikasi")}`);
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return window.location.replace(`/?lanjut=${encodeURIComponent("/portal/admin")}`);
       setError(e instanceof Error ? e.message : "Gagal memuat.");
     }
   }, []);
@@ -86,7 +86,10 @@ export default function AdminAplikasiPage() {
       <header className="bg-[#0E2A47] px-4 py-5 text-white sm:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <Link href="/" className="text-[13px] text-[#C9D6E6] hover:text-white">← Beranda portal</Link>
-          <span className="text-[12.5px] font-bold italic tracking-wide">BPS KABUPATEN SOLOK</span>
+          <span className="flex items-center gap-4">
+            {data?.boleh_admin && <Link href="/portal/admin/tahap" className="text-[13px] font-semibold text-[#F4B400] hover:underline">Atur tahap kegiatan →</Link>}
+            <span className="text-[12.5px] font-bold italic tracking-wide">BPS KABUPATEN SOLOK</span>
+          </span>
         </div>
         <div className="mx-auto mt-4 max-w-6xl">
           <p className="text-[12.5px] text-[#C9D6E6]">{data?.boleh_admin ? "Admin Aplikasi" : "Admin Anggaran"}</p>

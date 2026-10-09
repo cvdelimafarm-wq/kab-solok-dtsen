@@ -4,7 +4,9 @@
 //
 // (8 Okt 2026) Layer 2 struktur 3 layer (mockup disetujui user): tahapan bernomor satu kegiatan. Kartu "Kerjakan sekarang" ditempel di atas,
 // langkah dikelompokkan Persiapan / Pelaksanaan / Penyelesaian dengan keterangan "Langkah x dari n"; kelompok yang sudah selesai diringkas.
-// Saat ini untuk Transport Lokal (adapter lib/portal/kegiatan.ts). Pelatihan memakai halaman /sigap/pelatihan yang sudah bertahap.
+// Untuk Transport Lokal (adapter lib/portal/kegiatan.ts; id "translok-<penugasan>").
+// (9 Okt 2026) Id lain = kegiatan INDUK (mis. "pascabencana") -> garis waktu tahap (./Induk.tsx). Transport Lokal yang dibuka dari sebuah tahap
+// membawa ?dari=<halaman tahap> supaya tombol kembali pulang ke tahap itu, bukan ke Beranda.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -15,6 +17,7 @@ import { keAtas } from "@/app/portal/navigasi";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { KELOMPOK_URUT, langkahKe, type KelompokLangkah, type LangkahKegiatan, type RingkasKegiatan, type StatusLangkah } from "@/lib/sigapKegiatan";
 import { sisaTeks } from "@/lib/sigapTugasUtama";
+import HalamanInduk from "./Induk";
 
 const BULAT: Record<StatusLangkah, string> = {
   selesai: "bg-[#E3F6EC] text-[#13794B] border-[1.5px] border-[#BFE6D0]",
@@ -65,9 +68,25 @@ function BarisLangkah({ l }: { l: LangkahKegiatan }) {
   );
 }
 
+/** Tujuan "kembali" dari ?dari= -- hanya jalur internal /sigap/ (cegah pengalihan ke luar). */
+function tujuanDari(x: string | null): string | null {
+  if (!x || x.length > 100 || !x.startsWith("/sigap/") || x.includes("//") || x.includes("..") || x.includes("\\")) return null;
+  return x;
+}
+
 export default function HalamanKegiatan() {
   const { id } = useParams<{ id: string }>();
+  if (!id.startsWith("translok-")) return <HalamanInduk kode={id} />;
+  return <HalamanTranslok id={id} />;
+}
+
+function HalamanTranslok({ id }: { id: string }) {
   const router = useRouter();
+  // dibaca dari alamat setelah tampil (tanpa useSearchParams -> tak perlu batas Suspense)
+  const [dari, setDari] = useState<string | null>(null);
+  useEffect(() => {
+    setDari(tujuanDari(new URLSearchParams(window.location.search).get("dari")));
+  }, []);
   const [k, setK] = useState<RingkasKegiatan | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
@@ -124,10 +143,10 @@ export default function HalamanKegiatan() {
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[62px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <button type="button" onClick={() => keAtas(router, "/")} aria-label="Kembali ke Beranda" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
+          <button type="button" onClick={() => keAtas(router, dari ?? "/")} aria-label={dari ? "Kembali ke tahap" : "Kembali ke Beranda"} className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
             <IkonMenu n="kembali" className="h-5 w-5 text-white" />
           </button>
-          <span className="text-[12.5px] font-bold text-[#D3E0F5]">Beranda · Kegiatan saya</span>
+          <span className="text-[12.5px] font-bold text-[#D3E0F5]">{dari ? "Tahap kegiatan" : "Beranda · Kegiatan saya"}</span>
         </div>
         <div className="relative mx-auto mt-3 flex max-w-xl items-center gap-3.5">
           <div className="min-w-0 flex-1">
