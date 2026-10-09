@@ -50,7 +50,7 @@ type WilayahKerjaRow = {
   // (5 Okt 2026) "private" = dikerjakan 1 PPL, "keroyok" = seluruh PPL tim.
   mode_kerja?: string;
   jarak_rumah_km?: number | null;
-  jarak_sumber?: "garis_lurus" | "alokasi" | null;
+  jarak_sumber?: "rute_jalan" | "perkiraan_jalan" | "garis_lurus" | "alokasi" | null;
 };
 
 type KonfirmasiInfo = {
@@ -747,7 +747,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                       </span>
                       <span className="text-[11px] font-semibold text-[#0F3D7A]">
                         {typeof r.jarak_rumah_km === "number"
-                          ? `📍 ± ${r.jarak_rumah_km.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km dari rumah Anda${r.jarak_sumber === "garis_lurus" ? " (garis lurus)" : ""}`
+                          ? `📍 ± ${r.jarak_rumah_km.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km dari rumah Anda${r.jarak_sumber === "rute_jalan" ? " (rute jalan)" : r.jarak_sumber === "garis_lurus" ? " (garis lurus)" : " (perkiraan jalan)"}`
                           : "📍 Jarak dari rumah belum tersedia"}
                       </span>
                       {r.pemegang && r.pemegang.length > 0 && (

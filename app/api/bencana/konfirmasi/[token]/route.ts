@@ -200,7 +200,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     pemegang?: string[];
     mode_kerja?: string;
     jarak_rumah_km?: number | null;
-    jarak_sumber?: "garis_lurus" | "alokasi" | null;
+    jarak_sumber?: "rute_jalan" | "perkiraan_jalan" | "garis_lurus" | "alokasi" | null;
   }[] = [];
 
   if (idsubslsList.length > 0) {
@@ -291,6 +291,13 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         }
       }
     }
+    // (9 Okt 2026) Jarak RUTE JALAN nyata (OSRM; tabel bencana_jarak_rute, diisi scripts/hitung-jarak-rute.mjs) -- permintaan user:
+    // "harusnya pakai jarak rute jalan". Dipakai lebih dulu; bila belum ada, garis lurus x 1,35 diberi label "perkiraan jalan".
+    const ruteJalan = new Map<string, number>();
+    for (let i = 0; i < idsubslsList.length; i += 200) {
+      const { data: rj } = await supabase.from("bencana_jarak_rute").select("idsubsls, jarak_km").eq("petugas_id", petugas.id).in("idsubsls", idsubslsList.slice(i, i + 200));
+      for (const r of (rj ?? []) as { idsubsls: string; jarak_km: number | string }[]) ruteJalan.set(r.idsubsls, Number(r.jarak_km));
+    }
     const rad = (d: number) => (d * Math.PI) / 180;
     const haversineKm = (la1: number, lo1: number, la2: number, lo2: number) => {
       const a = Math.sin(rad(la2 - la1) / 2) ** 2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2;
@@ -302,9 +309,13 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       w.mode_kerja = modeKerja.get(w.idsubsls) ?? "keroyok";
       w.pemegang = Array.from(new Set(ids.map((id) => namaPpl.get(id) ?? `#${id}`)));
       const k = koord.get(w.idsubsls);
-      if (rumahRiil && k && homeLat != null && homeLng != null) {
-        w.jarak_rumah_km = Math.round(haversineKm(homeLat, homeLng, k.lat, k.lon) * 10) / 10;
-        w.jarak_sumber = "garis_lurus";
+      if (ruteJalan.has(w.idsubsls)) {
+        w.jarak_rumah_km = Math.round((ruteJalan.get(w.idsubsls) as number) * 10) / 10;
+        w.jarak_sumber = "rute_jalan";
+      } else if (rumahRiil && k && homeLat != null && homeLng != null) {
+        // belum ada rute jalan: perkiraan jalan = garis lurus x 1,35 (faktor yang sama dengan hitungan plotting)
+        w.jarak_rumah_km = Math.round(haversineKm(homeLat, homeLng, k.lat, k.lon) * 1.35 * 10) / 10;
+        w.jarak_sumber = "perkiraan_jalan";
       } else if (jarakAlokasiSaya.has(w.idsubsls)) {
         w.jarak_rumah_km = Math.round((jarakAlokasiSaya.get(w.idsubsls) as number) * 10) / 10;
         w.jarak_sumber = "alokasi";
