@@ -22,31 +22,56 @@ function tanda(isi: string): string {
   return crypto.createHmac("sha256", kunciRahasia()).update(isi).digest("base64url");
 }
 
-/** Buat sesi bertanda tangan utk akun (berlaku 12 jam). */
-export function buatSesi(akunId: number): { sesi: string; sampai: string } {
+/** Buat sesi bertanda tangan utk akun (berlaku 12 jam).
+ *  (10 Okt 2026) aktorId = akun SUPER yang "masuk sebagai" akun ini (uji tampilan PPL/PML). Sesi biasa tetap `akunId.exp.tanda`;
+ *  sesi "masuk sebagai" `akunId.exp.aktorId.tanda` (aktor ikut ditandatangani, tidak bisa dipalsukan/dihapus). */
+export function buatSesi(akunId: number, aktorId?: number | null): { sesi: string; sampai: string } {
   const exp = Date.now() + SESI_JAM * 3_600_000;
-  const isi = `${akunId}.${exp}`;
+  const isi = aktorId ? `${akunId}.${exp}.${aktorId}` : `${akunId}.${exp}`;
   return { sesi: `${isi}.${tanda(isi)}`, sampai: new Date(exp).toISOString() };
+}
+
+/** Isi sesi yg sah & belum kedaluwarsa: akun yang dipakai + (bila "masuk sebagai") akun super yang menjadi aktor. */
+export function bacaSesiLengkap(sesi: string | null | undefined): { akunId: number; aktorId: number | null } | null {
+  if (!sesi) return null;
+  const p = sesi.split(".");
+  if (p.length !== 3 && p.length !== 4) return null;
+  const sig = p[p.length - 1];
+  const isi = p.slice(0, -1).join(".");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(tanda(isi));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (Number(p[1]) < Date.now()) return null;
+  const n = Number(p[0]);
+  const aktor = p.length === 4 ? Number(p[2]) : null;
+  if (!Number.isInteger(n) || n <= 0) return null;
+  if (aktor !== null && (!Number.isInteger(aktor) || aktor <= 0)) return null;
+  return { akunId: n, aktorId: aktor };
 }
 
 /** Akun id dari sesi yg sah & belum kedaluwarsa, atau null. */
 export function bacaSesi(sesi: string | null | undefined): number | null {
-  if (!sesi) return null;
-  const [id, exp, sig] = sesi.split(".");
-  if (!id || !exp || !sig) return null;
-  const harus = tanda(`${id}.${exp}`);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(harus);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  if (Number(exp) < Date.now()) return null;
-  const n = Number(id);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return bacaSesiLengkap(sesi)?.akunId ?? null;
+}
+
+function bearer(h: Headers): string | null {
+  const v = h.get("authorization") ?? "";
+  return v.startsWith("Bearer ") ? v.slice(7).trim() : null;
 }
 
 /** Sesi dari header Authorization: Bearer <sesi>. */
 export function sesiDariHeader(h: Headers): number | null {
-  const v = h.get("authorization") ?? "";
-  return bacaSesi(v.startsWith("Bearer ") ? v.slice(7).trim() : null);
+  return bacaSesi(bearer(h));
+}
+
+/** (10 Okt 2026) Sesi lengkap dari header (akun + aktor "masuk sebagai"). */
+export function sesiLengkapDariHeader(h: Headers): { akunId: number; aktorId: number | null } | null {
+  return bacaSesiLengkap(bearer(h));
+}
+
+/** (10 Okt 2026) Akun super yang sedang "masuk sebagai" akun lain (null = sesi biasa). */
+export function aktorDariHeader(h: Headers): number | null {
+  return sesiLengkapDariHeader(h)?.aktorId ?? null;
 }
 
 export type Level = "lihat" | "kelola";

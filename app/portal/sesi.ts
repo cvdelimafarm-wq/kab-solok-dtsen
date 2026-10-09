@@ -22,6 +22,16 @@ const PENYISIRAN = {
   jorongNama: "identifikasi-jorong-login-nama",
 } as const;
 
+// (10 Okt 2026) Akun super "masuk sebagai" akun lain: sesi akun super disimpan di sini selama mode ini, supaya bisa kembali / ganti akun.
+export const KUNCI_ASLI = {
+  sesi: "sigap_sesi_asli",
+  sampai: "sigap_sesi_asli_sampai",
+  tokenPetugas: "sigap_token_asli",
+  sebagai: "sigap_lihat_sebagai",
+} as const;
+
+export type LihatSebagai = { id: number; nama: string; aktor: string };
+
 function aman<T>(f: () => T, cadangan: T): T {
   try {
     return f();
@@ -70,8 +80,73 @@ export function simpanPenyisiran(d: SsoPenyisiran) {
 /** Keluar dari portal: hapus sesi portal/SIGAP & token penyisiran turunan (perangkat bisa dipakai bergantian). */
 export function hapusSemuaSesi() {
   aman(() => {
-    for (const k of [...Object.values(KUNCI), ...Object.values(PENYISIRAN)]) localStorage.removeItem(k);
+    for (const k of [...Object.values(KUNCI), ...Object.values(PENYISIRAN), ...Object.values(KUNCI_ASLI)]) localStorage.removeItem(k);
   }, undefined);
+}
+
+function hapusPenyisiran() {
+  aman(() => {
+    for (const k of Object.values(PENYISIRAN)) localStorage.removeItem(k);
+  }, undefined);
+}
+
+/** Sedang "masuk sebagai" akun lain? (null = akun sendiri) */
+export function bacaLihatSebagai(): LihatSebagai | null {
+  return aman(() => {
+    const raw = localStorage.getItem(KUNCI_ASLI.sebagai);
+    if (!raw || !localStorage.getItem(KUNCI_ASLI.sesi)) return null;
+    const v = JSON.parse(raw) as Partial<LihatSebagai>;
+    return typeof v.id === "number" && typeof v.nama === "string" ? { id: v.id, nama: v.nama, aktor: typeof v.aktor === "string" ? v.aktor : "" } : null;
+  }, null);
+}
+
+/** Sesi asli (akun super) yang disimpan selama mode "masuk sebagai". */
+export function bacaSesiAsli(): string | null {
+  return aman(() => {
+    const s = localStorage.getItem(KUNCI_ASLI.sesi);
+    const sampai = localStorage.getItem(KUNCI_ASLI.sampai);
+    if (!s) return null;
+    if (sampai && Date.parse(sampai) < Date.now()) return null;
+    return s;
+  }, null);
+}
+
+/** Simpan sesi akun super (asli) lalu pakai sesi akun target. Token penyisiran lama dibuang (milik akun sebelumnya). */
+export function mulaiLihatSebagai(asli: { sesi: string; sampai: string; token?: string | null }, target: { sesi: string; sampai: string; token?: string | null; id: number; nama: string; aktor: string }) {
+  aman(() => {
+    if (!localStorage.getItem(KUNCI_ASLI.sesi)) {
+      localStorage.setItem(KUNCI_ASLI.sesi, asli.sesi);
+      localStorage.setItem(KUNCI_ASLI.sampai, asli.sampai);
+      if (asli.token) localStorage.setItem(KUNCI_ASLI.tokenPetugas, asli.token);
+    }
+    localStorage.setItem(KUNCI_ASLI.sebagai, JSON.stringify({ id: target.id, nama: target.nama, aktor: target.aktor }));
+    hapusPenyisiran();
+    localStorage.setItem(KUNCI.sesi, target.sesi);
+    localStorage.setItem(KUNCI.sampai, target.sampai);
+    if (target.token) localStorage.setItem(KUNCI.tokenPetugas, target.token);
+    else localStorage.removeItem(KUNCI.tokenPetugas);
+  }, undefined);
+}
+
+/** Kembali ke akun super (sesi asli dipulihkan). false bila sesi asli sudah tidak ada/kedaluwarsa. */
+export function kembaliKeAkunSaya(): boolean {
+  return aman(() => {
+    const asli = bacaSesiAsli();
+    const sampai = localStorage.getItem(KUNCI_ASLI.sampai);
+    const token = localStorage.getItem(KUNCI_ASLI.tokenPetugas);
+    hapusPenyisiran();
+    localStorage.removeItem(KUNCI_ASLI.sebagai);
+    for (const k of [KUNCI_ASLI.sesi, KUNCI_ASLI.sampai, KUNCI_ASLI.tokenPetugas]) localStorage.removeItem(k);
+    if (!asli || !sampai) {
+      for (const k of Object.values(KUNCI)) localStorage.removeItem(k);
+      return false;
+    }
+    localStorage.setItem(KUNCI.sesi, asli);
+    localStorage.setItem(KUNCI.sampai, sampai);
+    if (token) localStorage.setItem(KUNCI.tokenPetugas, token);
+    else localStorage.removeItem(KUNCI.tokenPetugas);
+    return true;
+  }, false);
 }
 
 /** ?lanjut= yg aman (path internal saja). */

@@ -18,6 +18,9 @@
 // POST { aksi:"masuk", nama?, akun_id?, pin }                 -> { ok, ..., saran_ganti_pin } | { ok:false, kode, error, saran? }
 //      kode: nama_tidak_ditemukan | nama_ambigu | pin_belum_dibuat | pin_salah | terkunci | sementara_kedaluwarsa | belum_ditugaskan
 // POST { aksi:"ganti_pin_awal", pin } + Authorization: Bearer <sesi> -> { ok }   (ganti PIN awal bersama 1303 dgn PIN sendiri, tanpa PIN lama)
+// (10 Okt 2026) Akun SUPER (sigap_akun.super) boleh "masuk sebagai" akun mana pun untuk menguji tampilan PPL/PML:
+// POST { aksi:"daftar_sebagai" } + Bearer <sesi super>                 -> { ok, akun:[{id,nama,jenis,peran,peserta}] }
+// POST { aksi:"masuk_sebagai", akun_id } + Bearer <sesi super>         -> { ok, sesi, sampai, token, nama, aktor }  (sesi memuat aktor; dicatat di sigap_audit)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -36,7 +39,7 @@ import {
   resetGagal,
   tanggalValid,
 } from "@/lib/undangan";
-import { buatSesi, catatAudit, sesiDariHeader } from "@/lib/sigapAkses";
+import { aktorDariHeader, buatSesi, catatAudit, sesiDariHeader, sesiLengkapDariHeader } from "@/lib/sigapAkses";
 import { bacaTiketReset, buatTiketReset, masihPinAwal, simpanPinBaru } from "@/lib/sigapPin";
 import { bolehMasukPortal } from "@/lib/portal/server";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
@@ -53,8 +56,8 @@ function supabaseAdmin() {
 }
 type Db = NonNullable<ReturnType<typeof supabaseAdmin>>;
 
-type AkunRow = { id: number; nama: string; jenis: string | null; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null; pin_sementara_sampai?: string | null; pin_diubah_at?: string | null; pin_bawaan?: boolean | null };
-const KOLOM_AKUN = "id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id, pin_sementara_sampai, pin_diubah_at, pin_bawaan";
+type AkunRow = { id: number; nama: string; jenis: string | null; token: string; pin_hash: string | null; pin_salt: string | null; petugas_bencana_id: number | null; mitra_id: number | null; pin_sementara_sampai?: string | null; pin_diubah_at?: string | null; pin_bawaan?: boolean | null; super?: boolean | null };
+const KOLOM_AKUN = "id, nama, jenis, token, pin_hash, pin_salt, petugas_bencana_id, mitra_id, pin_sementara_sampai, pin_diubah_at, pin_bawaan, super";
 
 /** Akun aktif dgn nama ternormalisasi sama persis (diambil per halaman, >1000 baris aman). */
 async function cariAkun(db: Db, nama: string): Promise<AkunRow[]> {
@@ -133,6 +136,18 @@ async function bolehMasuk(db: Db, a: AkunRow): Promise<boolean> {
   return bolehMasukPortal(db, a);
 }
 
+/** (10 Okt 2026) Pemanggil (dari sesi; bila sesi "masuk sebagai", aktornya) harus akun SUPER yang aktif. */
+async function pemanggilSuper(db: Db, req: NextRequest): Promise<{ id: number; nama: string } | null> {
+  const s = sesiLengkapDariHeader(req.headers);
+  if (!s) return null;
+  const id = s.aktorId ?? s.akunId;
+  const { data } = await db.from("sigap_akun").select("id, nama, aktif, super").eq("id", id).maybeSingle();
+  if (!data || !data.aktif || data.super !== true) return null;
+  return { id: data.id as number, nama: data.nama as string };
+}
+
+const PESAN_MODE_SEBAGAI = "Sedang dalam mode \"masuk sebagai\": ganti PIN dinonaktifkan supaya PIN petugas tidak berubah.";
+
 export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -204,7 +219,7 @@ export async function POST(req: NextRequest) {
       if (masihAwal && !akun.pin_bawaan) await db.from("sigap_akun").update({ pin_bawaan: true }).eq("id", akun.id);
       // (6 Okt 2026) log login: masuk = sesi baru
       if (!sementara) await catatAktivitas(db, akun.id, { sesiBaru: true, cara: "masuk", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});
-      return NextResponse.json({ ok: true, token: akun.token, nama: akun.nama, ganti_pin: sementara, saran_ganti_pin: masihAwal, ...buatSesi(akun.id) });
+      return NextResponse.json({ ok: true, token: akun.token, nama: akun.nama, ganti_pin: sementara, saran_ganti_pin: masihAwal, super: akun.super === true && !sementara, ...buatSesi(akun.id) });
     }
 
     // ---------------- Verifikasi identitas (belum punya PIN) ----------------
@@ -356,6 +371,7 @@ export async function POST(req: NextRequest) {
 
     // ---------------- (7 Okt 2026) Ganti PIN (wajib sesudah PIN sementara) ----------------
     if (aksi === "ganti_pin") {
+      if (aktorDariHeader(req.headers)) return NextResponse.json({ error: PESAN_MODE_SEBAGAI }, { status: 403 });
       const akunId = sesiDariHeader(req.headers);
       if (!akunId) return NextResponse.json({ error: "Sesi berakhir. Masuk ulang dengan PIN sementara." }, { status: 401 });
       const pinLama = typeof body?.pin_lama === "string" ? body.pin_lama.trim() : "";
@@ -377,6 +393,7 @@ export async function POST(req: NextRequest) {
 
     // ---------------- (8 Okt 2026) Ganti PIN awal bersama (1303) dgn PIN sendiri: cepat, tanpa PIN lama ----------------
     if (aksi === "ganti_pin_awal") {
+      if (aktorDariHeader(req.headers)) return NextResponse.json({ error: PESAN_MODE_SEBAGAI }, { status: 403 });
       const akunId = sesiDariHeader(req.headers);
       if (!akunId) return NextResponse.json({ error: "Sesi berakhir. Masuk ulang lalu coba lagi." }, { status: 401 });
       const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
@@ -390,6 +407,45 @@ export async function POST(req: NextRequest) {
       if (err) return NextResponse.json({ error: err }, { status: 500 });
       await catatAudit(db, akunId, "ganti_pin_awal", { nama: a.nama }); // PIN tidak ikut dicatat
       return NextResponse.json({ ok: true });
+    }
+
+    // ---------------- (10 Okt 2026) Akun SUPER: daftar akun & "masuk sebagai" ----------------
+    // Permintaan user: "akun M. Iqbal Hadi adalah akun super, ketika masuk menggunakan akun ini ada dropdown tampilkan sebagai siapa
+    // (seluruh akun yang ada di sistem)" dan boleh melakukan aksi apa saja seperti petugas itu. Pengaman: hanya sigap_akun.super=true,
+    // aktor ikut tertanda tangan di sesi, setiap "masuk sebagai" dicatat di sigap_audit, ganti PIN dinonaktifkan selama mode ini.
+    if (aksi === "daftar_sebagai") {
+      const pemanggil = await pemanggilSuper(db, req);
+      if (!pemanggil) return NextResponse.json({ error: "Hanya akun super yang boleh memakai fitur ini." }, { status: 403 });
+      const akun: { id: number; nama: string; jenis: string | null; petugas_bencana_id: number | null }[] = [];
+      for (let i = 0; i < 10000; i += 1000) {
+        const { data } = await db.from("sigap_akun").select("id, nama, jenis, petugas_bencana_id").eq("aktif", true).order("id").range(i, i + 999);
+        akun.push(...((data ?? []) as typeof akun));
+        if (!data || data.length < 1000) break;
+      }
+      const peranBencana = new Map<number, string>();
+      for (let i = 0; i < 5000; i += 1000) {
+        const { data } = await db.from("bencana_petugas").select("id, peran").order("id").range(i, i + 999);
+        for (const r of (data ?? []) as { id: number; peran: string | null }[]) if (r.peran) peranBencana.set(r.id, r.peran);
+        if (!data || data.length < 1000) break;
+      }
+      const { data: pel } = await db.from("sigap_penugasan").select("akun_id").eq("kegiatan_id", 3).eq("aktif", true);
+      const peserta = new Set(((pel ?? []) as { akun_id: number }[]).map((r) => r.akun_id));
+      const daftar = akun
+        .map((a) => ({ id: a.id, nama: a.nama, jenis: a.jenis, peran: a.petugas_bencana_id ? (peranBencana.get(a.petugas_bencana_id) ?? null) : null, peserta: peserta.has(a.id) }))
+        .sort((x, y) => x.nama.localeCompare(y.nama, "id"));
+      return NextResponse.json({ ok: true, akun: daftar });
+    }
+
+    if (aksi === "masuk_sebagai") {
+      const pemanggil = await pemanggilSuper(db, req);
+      if (!pemanggil) return NextResponse.json({ error: "Hanya akun super yang boleh memakai fitur ini." }, { status: 403 });
+      const akunId = Number.isInteger(body?.akun_id) && body.akun_id > 0 ? (body.akun_id as number) : null;
+      if (!akunId) return NextResponse.json({ error: "Pilih akun yang ingin dilihat." }, { status: 400 });
+      const { data: t } = await db.from("sigap_akun").select("id, nama, token, aktif").eq("id", akunId).maybeSingle();
+      if (!t || !t.aktif) return NextResponse.json({ error: "Akun tidak ditemukan atau tidak aktif." }, { status: 404 });
+      const sendiri = t.id === pemanggil.id;
+      await catatAudit(db, pemanggil.id, "masuk_sebagai", { target_id: t.id, target_nama: t.nama, sendiri }).catch(() => {});
+      return NextResponse.json({ ok: true, nama: t.nama, token: t.token as string, aktor: pemanggil.nama, sendiri, ...buatSesi(t.id as number, sendiri ? null : pemanggil.id) });
     }
 
     return NextResponse.json({ error: "Aksi tidak dikenal." }, { status: 400 });

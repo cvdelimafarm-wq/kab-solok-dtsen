@@ -10,7 +10,8 @@ import { createClient } from "@/lib/supabase/client";
 import { emailFromPhone, normalizePhone } from "@/lib/phone";
 import { MIN_HURUF_CARI, pesanGalatMasuk, type Saran } from "@/lib/sigapMasukNama";
 import GantiPinCepat from "./GantiPinCepat";
-import { simpanSesi, tujuanLanjut } from "./sesi";
+import PilihSebagai, { type HasilSebagai } from "./PilihSebagai";
+import { mulaiLihatSebagai, simpanSesi, tujuanLanjut } from "./sesi";
 
 const INPUT = "h-12 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-[15px] text-[#14202E] outline-none transition focus:border-[#1F5FD1] focus:ring-4 focus:ring-[#1F5FD1]/10";
 
@@ -51,6 +52,8 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
   const [selesaiCari, setSelesaiCari] = useState<string | null>(null); // teks yang hasilnya sudah tampil
   // (8 Okt 2026) Masuk dengan PIN awal 1303: tawarkan ganti PIN cepat sebelum masuk ke beranda.
   const [awal, setAwal] = useState<{ sesi: string; sampai: string; token: string } | null>(null);
+  // (10 Okt 2026) Akun super (M. Iqbal Hadi): sesudah PIN benar, tanya "masuk sebagai siapa" (uji tampilan PPL/PML).
+  const [sebagai, setSebagai] = useState<{ sesi: string; sampai: string; token: string; nama: string } | null>(null);
   const refPin = useRef<HTMLInputElement>(null);
   const refNama = useRef<HTMLInputElement>(null);
 
@@ -110,6 +113,12 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
     else onMasuk();
   }
 
+  function pilihSebagai(asli: { sesi: string; sampai: string; token: string }, h: HasilSebagai) {
+    if (h.sendiri) return selesai(asli); // akun sendiri: alur masuk biasa
+    mulaiLihatSebagai(asli, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
+    window.location.replace("/"); // muat ulang penuh supaya semua tampilan memakai akun yang dipilih
+  }
+
   async function simpanPinBaru(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -167,6 +176,10 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
         setGanti({ sesi: j.sesi, sampai: j.sampai, token: j.token });
         return;
       }
+      if (j.super) {
+        setSebagai({ sesi: j.sesi, sampai: j.sampai, token: j.token, nama: typeof j.nama === "string" ? j.nama : "Akun saya" });
+        return;
+      }
       if (j.saran_ganti_pin) {
         setAwal({ sesi: j.sesi, sampai: j.sampai, token: j.token });
         return;
@@ -209,7 +222,9 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
       </section>
 
       <section className="flex flex-[1_1_420px] items-center justify-center px-4 py-12">
-        {awal ? (
+        {sebagai ? (
+          <PilihSebagai sesi={sebagai.sesi} namaSaya={sebagai.nama} onPilih={(h) => pilihSebagai({ sesi: sebagai.sesi, sampai: sebagai.sampai, token: sebagai.token }, h)} />
+        ) : awal ? (
           <GantiPinCepat sesi={awal.sesi} onSelesai={() => selesai(awal)} onNanti={() => selesai(awal)} />
         ) : ganti ? (
           <form onSubmit={simpanPinBaru} className="flex w-full max-w-[400px] flex-col gap-[18px] rounded-[14px] border border-[#E3E8EE] bg-white p-8">

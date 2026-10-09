@@ -6,6 +6,7 @@ import DaftarSW from "@/app/components/DaftarSW";
 import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
 import PingAplikasi from "@/app/components/PingAplikasi";
+import BannerLihatSebagai from "@/app/components/BannerLihatSebagai";
 
 // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
 // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
@@ -67,6 +68,8 @@ export default function RootLayout({
         <PenjagaKembali />
         {/* (8 Okt 2026) pemantauan pemasangan aplikasi: lapor mode "aplikasi"/"browser" saat dibuka */}
         <PingAplikasi />
+        {/* (10 Okt 2026) spanduk mode "masuk sebagai" untuk akun super (uji tampilan PPL/PML) */}
+        <BannerLihatSebagai />
       </body>
     </html>
   );
