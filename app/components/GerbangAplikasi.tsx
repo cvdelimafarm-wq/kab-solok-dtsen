@@ -234,7 +234,7 @@ function ModalPasang() {
                     Ketuk <b>⋮</b> di pojok kanan atas.
                   </Langkah>
                   <Langkah no={2}>
-                    Pilih <b>Instal aplikasi</b>, lalu ketuk <b>Instal</b>.
+                    Pilih <b>Instal aplikasi</b> (atau <b>Tambahkan ke layar utama</b>), lalu ketuk <b>Instal</b>.
                   </Langkah>
                 </ol>
                 {chrome && (
