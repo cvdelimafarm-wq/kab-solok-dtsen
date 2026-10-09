@@ -34,7 +34,29 @@ export function perangkatIos(ua: string, maxTouchPoints = 0): boolean {
 
 /** Browser tertanam (WhatsApp/Facebook/Instagram/Line/WebView) yang tidak bisa memasang aplikasi. */
 export function browserTertanam(ua: string): boolean {
-  return /FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|TikTok|Snapchat|Twitter|; wv\)|WebView/i.test(ua);
+  return /FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|TikTok|Snapchat|Twitter|WhatsApp|; wv\)|WebView/i.test(ua);
+}
+
+/**
+ * (9 Okt 2026) Jalur pemasangan menurut HP + browser -- permintaan user: "perbaiki agar semua masalah teratasi" dan
+ * "utamakan tombol pintas seperti install". Menentukan tombol utama di halaman pasang:
+ * - "android"          : Chrome/Samsung Internet/Edge/Opera Android -> tombol "Instal SIGAP" (dialog bawaan; cadangan: menu ⋮)
+ * - "tertanam-android" : browser di dalam WhatsApp/FB/IG di Android -> tombol "Buka di Chrome"
+ * - "ios-safari"       : iPhone Safari -> Bagikan › Tambahkan ke Layar Utama
+ * - "ios-chrome"       : iPhone Chrome (iOS 16.4+ bisa) -> Bagikan di kolom alamat › Tambahkan ke Layar Utama
+ * - "ios-lain"         : browser iPhone lain atau browser tertanam di iPhone -> salin tautan, buka di Safari
+ */
+export type JalurPasang = "android" | "tertanam-android" | "ios-safari" | "ios-chrome" | "ios-lain";
+
+export function jalurPasang(ua: string, maxTouchPoints = 0): JalurPasang {
+  const tertanam = browserTertanam(ua);
+  if (perangkatIos(ua, maxTouchPoints)) {
+    if (tertanam) return "ios-lain";
+    if (/crios/i.test(ua)) return "ios-chrome";
+    if (safariIos(ua)) return "ios-safari";
+    return "ios-lain";
+  }
+  return tertanam ? "tertanam-android" : "android";
 }
 
 /** iPhone: hanya Safari yang bisa "Tambahkan ke Layar Utama" (Chrome/Firefox iOS tidak lagi tersedia untuk ini di sebagian versi; arahkan ke Safari). */

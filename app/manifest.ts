@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { ALAMAT_DASAR } from "@/lib/halaman";
 
 // (8 Okt 2026) PWA SIGAP -- identitas visual baru (keputusan user): "SIGAP - Sistem Integrasi Kegiatan BPS", tema navy #0F2A52,
 // latar putih, ikon logo S biru-emas (paket sigap-pwa-ikon: public/icons/*). Web bisa dipasang di HP sebagai aplikasi
@@ -19,6 +20,10 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     background_color: "#FFFFFF",
     theme_color: "#0F2A52",
+    // (9 Okt 2026) agar halaman pasang tahu SIGAP sudah terpasang di HP ini (navigator.getInstalledRelatedApps, Chrome Android),
+    // sehingga pengguna diarahkan membuka ikon, bukan diminta memasang ulang. prefer_related_applications=false: tetap PWA ini.
+    related_applications: [{ platform: "webapp", url: `${ALAMAT_DASAR.replace(/\/+$/, "")}/manifest.webmanifest` }],
+    prefer_related_applications: false,
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

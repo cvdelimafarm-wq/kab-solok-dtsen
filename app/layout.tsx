@@ -44,6 +44,11 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: NAMA_PORTAL, description: DESKRIPSI_PORTAL },
 };
 
+// (9 Okt 2026) Tangkap "beforeinstallprompt" SEBELUM React siap -- perbaikan: Chrome bisa mengirim event ini sangat awal, sebelum
+// DaftarSW (useEffect) terpasang; bila terlewat, tombol "Instal SIGAP" tidak pernah mendapat dialog bawaan. Skrip kecil di <head> ini
+// menyimpannya di window.__sigapPasang (sama dengan DaftarSW) lalu memberi kabar lewat event "sigap-siap-pasang".
+const TANGKAP_PASANG = `(function(){try{var k='sigap-siap-pasang';window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__sigapPasang=e;window.dispatchEvent(new Event(k));});window.addEventListener('appinstalled',function(){window.__sigapPasang=null;window.dispatchEvent(new Event(k));});}catch(_){}})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -51,6 +56,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className={jakarta.variable}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TANGKAP_PASANG }} />
+      </head>
       <body className="font-sans antialiased">
         {/* (8 Okt 2026) di HP, beranda portal & /sigap/* wajib dibuka lewat aplikasi terpasang (permintaan user) */}
         <GerbangAplikasi>{children}</GerbangAplikasi>
