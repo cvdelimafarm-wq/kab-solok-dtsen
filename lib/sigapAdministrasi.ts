@@ -386,8 +386,18 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
 // ----------------------------------------------------------------------------------------------
 // Lampiran foto kegiatan (Laporan Pelatihan & Laporan Instruktur)
 // ----------------------------------------------------------------------------------------------
-export const MAKS_FOTO_LAPORAN = 8;
+// (9 Okt 2026) maks. 4 foto terbaik per kelas (4 kelas x 4) -- permintaan user (sebelumnya 8)
+export const MAKS_FOTO_LAPORAN = 4;
 export type BarisFoto = { id: number; urut: number; keterangan: string | null; url: string | null };
+
+/** (9 Okt 2026) Jumlah foto lampiran per kelas (untuk pengingat panitia "unggah 4 foto terbaik per kelas"). */
+export async function hitungFotoLaporan(db: Db, kegiatanId: number, kelas: number[]): Promise<{ kelas: number; jumlah: number }[]> {
+  if (kelas.length === 0) return [];
+  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("kelas").eq("kegiatan_id", kegiatanId).in("kelas", kelas);
+  const n = new Map<number, number>();
+  for (const r of data ?? []) n.set(Number(r.kelas), (n.get(Number(r.kelas)) ?? 0) + 1);
+  return kelas.map((k) => ({ kelas: k, jumlah: n.get(k) ?? 0 }));
+}
 
 /** Daftar foto lampiran satu kelas + tautan sementara (1 jam) untuk pratinjau. */
 export async function muatFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<BarisFoto[]> {

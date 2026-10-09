@@ -9,6 +9,7 @@
 // GET ?bagian=kandidat&kelas=N&q=teks          -> pencarian Mitra+organik (belum jadi peserta) utk ditambahkan manual
 // GET ?bagian=narasi&kelas=N                   -> narasi Laporan Pelatihan & Laporan Instruktur tersimpan
 // GET ?bagian=pulsa_csv&kelas=N                  -> CSV nomor HP pengisian pulsa peserta kelas (diisi peserta lewat pop-up)
+// GET ?bagian=foto_ringkas                    -> (9 Okt 2026) jumlah foto lampiran per kelas cakupan + batas
 // GET ?bagian=foto&kelas=N                     -> foto lampiran laporan (tautan sementara); unggah/hapus: ./foto/route.ts
 // GET ?bagian=cetak&kelas=N&penugasan=1,2&jenis=kwitansi,visum,daftar_hadir&format=gabungan|zip[&unduh=1]
 // POST {aksi:"tambah_peserta", kelas, akun_id, peran?}   -> peserta manual (hanya administrasi)
@@ -21,7 +22,7 @@ import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
 import { UNDANGAN } from "@/lib/sigapTes";
 import { muatSkema } from "@/lib/sigapNilai";
 import { ringkasSkema } from "@/lib/sigapNilaiHitung";
-import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi } from "@/lib/sigapAdministrasi";
+import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan } from "@/lib/sigapAdministrasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
 
     if (bagian === "ringkas") {
       return NextResponse.json({ nama: k.akun.nama, boleh_kelola: k.bisaKelola, kelas: k.cakupan.kelas, semua_kelas: k.cakupan.semua, kelas_bawaan: k.cakupan.bawaan, tanggal: UNDANGAN.tanggal_iso });
+    }
+    // (9 Okt 2026) pengingat panitia: jumlah foto lampiran per kelas yang boleh diakses akun
+    if (bagian === "foto_ringkas") {
+      return NextResponse.json({ boleh_kelola: k.bisaKelola, maks: MAKS_FOTO_LAPORAN, kelas: await hitungFotoLaporan(k.db, k.kegiatanId, k.cakupan.kelas) });
     }
 
     const kelas = kelasBoleh(k, sp.get("kelas"));

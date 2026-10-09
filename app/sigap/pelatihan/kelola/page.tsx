@@ -22,6 +22,7 @@ import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPres
 import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, ringkasSkema, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
+import ModalFotoPanitia from "../ModalFotoPanitia";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -106,6 +107,8 @@ export default function KelolaPelatihan() {
       {ringkas && tab === "kuis" && <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian />}
       {ringkas && tab === "administrasi" && <Administrasi />}
+      {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
+      <ModalFotoPanitia sembunyi={tab === "administrasi"} />
     </Bingkai>
   );
 }

@@ -1,7 +1,7 @@
 // app/api/sigap/pelatihan/administrasi/foto/route.ts
 //
 // (8 Okt 2026) Lampiran foto kegiatan untuk Laporan Pelatihan & Laporan Pelatihan Instruktur (tab Administrasi).
-// Izin: pelatihan.administrasi level kelola, hanya untuk kelas yang boleh diakses akun. Maks. 8 foto per kelas.
+// Izin: pelatihan.administrasi level kelola, hanya untuk kelas yang boleh diakses akun. Maks. 4 foto per kelas (9 Okt 2026, sebelumnya 8).
 // Foto dirapikan di server (sharp: rotasi EXIF, maks 1600 px, JPEG q80) lalu disimpan di bucket privat sigap-files:
 // pelatihan-laporan/<kegiatan>/<kelas>/<berkas>.jpg ; satu set foto dipakai kedua laporan kelas itu.
 //

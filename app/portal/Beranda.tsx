@@ -17,6 +17,7 @@ import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, ty
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
+import ModalFotoPanitia from "@/app/sigap/pelatihan/ModalFotoPanitia"; // (9 Okt 2026) pengingat foto pelatihan untuk panitia
 import GantiPinCepat from "./GantiPinCepat";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
@@ -305,6 +306,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         {kelola.length > 0 && <GrupIkon judul="Pengelolaan" isi={kelola} sibuk={sibuk} onSso={bukaSso} />}
 
         {data && <AktifkanNotifikasi />}
+        {data && <ModalFotoPanitia />}
       </div>
 
       {gantiPin && (

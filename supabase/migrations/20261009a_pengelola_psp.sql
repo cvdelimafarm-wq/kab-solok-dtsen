@@ -26,14 +26,14 @@ where p.kode = 'pengelola_psp'
   and not exists (select 1 from sigap_peran_izin x where x.peran_id = p.id and x.menu_kode = m.menu);
 
 -- Alex Kandria 23, Wisnu 710, Oryza 478, Yudi Firdian 745, instruktur: Faisal 200, Nurafiza 464, Anggun 49
--- (M. Iqbal Hadi 354 sudah Admin Anggaran/Aplikasi, tidak perlu).
+-- + M. Iqbal Hadi 354 (juga instruktur, ditambahkan atas permintaan user).
 insert into sigap_akun_peran (akun_id, peran_id, kegiatan_id, diberi_oleh)
 select a.akun_id, p.id, k.kegiatan_id, 'claude (permintaan M. Iqbal Hadi, 9 Okt 2026)'
 from sigap_peran p
-cross join (values (23), (710), (478), (745), (200), (464), (49)) as a(akun_id)
+cross join (values (23), (710), (478), (745), (200), (464), (49), (354)) as a(akun_id)
 cross join (values (1), (3)) as k(kegiatan_id)
 where p.kode = 'pengelola_psp'
   and not exists (select 1 from sigap_akun_peran x where x.akun_id = a.akun_id and x.peran_id = p.id and x.kegiatan_id = k.kegiatan_id);
 
 insert into sigap_audit (akun_id, aksi, detail)
-values (354, 'peran.beri', jsonb_build_object('peran', 'pengelola_psp', 'akun', array[23,710,478,745,200,464,49], 'kegiatan', array[1,3], 'oleh', 'claude'));
+values (354, 'peran.beri', jsonb_build_object('peran', 'pengelola_psp', 'akun', array[23,710,478,745,200,464,49,354], 'kegiatan', array[1,3], 'oleh', 'claude'));

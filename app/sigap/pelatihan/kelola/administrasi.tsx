@@ -9,7 +9,7 @@
 //  4) mencetak: PDF gabungan atau ZIP per petugas.
 // API: /api/sigap/pelatihan/administrasi (lihat app/api/sigap/pelatihan/administrasi/route.ts).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, bukaBlob, fetchJson, pesanGalat, SesiBerakhir, rupiah } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 
@@ -99,7 +99,15 @@ export default function Administrasi() {
     fetchJson<Ringkas>(`${URL_ADM}?bagian=ringkas`)
       .then((r) => {
         setInfo(r);
-        setKelas(r.kelas_bawaan ?? r.kelas[0] ?? null);
+        // (9 Okt 2026) tautan dari pengingat foto: ?kelas=N memilih kelas itu (bila boleh diakses)
+        let dariUrl: number | null = null;
+        try {
+          const q = Number(new URLSearchParams(window.location.search).get("kelas"));
+          if (r.kelas.includes(q)) dariUrl = q;
+        } catch {
+          /* abaikan */
+        }
+        setKelas(dariUrl ?? r.kelas_bawaan ?? r.kelas[0] ?? null);
       })
       .catch((e) => {
         if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
@@ -534,7 +542,7 @@ function PanelNarasi({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean
 // Lampiran foto kegiatan (dipakai Laporan Pelatihan & Laporan Instruktur kelas ini)
 // ======================================================================
 type FotoLap = { id: number; urut: number; keterangan: string | null; url: string | null };
-const MAKS_FOTO = 8;
+const MAKS_FOTO = 4; // (9 Okt 2026) 4 foto terbaik per kelas -- permintaan user (sebelumnya 8)
 
 function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }) {
   const [foto, setFoto] = useState<FotoLap[] | null>(null);
@@ -609,11 +617,25 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
   }
 
   const penuh = (foto?.length ?? 0) >= MAKS_FOTO;
+
+  // (9 Okt 2026) dibuka dari pengingat (?fokus=foto) -> gulir ke panel foto
+  const sudahGulir = useRef(false);
+  useEffect(() => {
+    if (sudahGulir.current || !foto) return;
+    try {
+      if (new URLSearchParams(window.location.search).get("fokus") !== "foto") return;
+    } catch {
+      return;
+    }
+    sudahGulir.current = true;
+    document.getElementById("panel-foto-pelatihan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [foto]);
+
   return (
-    <div className="mt-4 border-t border-[#EDF0F4] pt-3">
+    <div id="panel-foto-pelatihan" className="mt-4 scroll-mt-20 border-t border-[#EDF0F4] pt-3">
       <div className="flex flex-wrap items-center gap-2">
         <b className="text-[13px]">Lampiran foto kegiatan Kelas {kelas}</b>
-        <span className="text-[12px] text-[#7B8794]">{foto ? `${foto.length}/${MAKS_FOTO} foto` : "memuat…"} · tercetak di halaman lampiran kedua laporan</span>
+        <span className="text-[12px] text-[#7B8794]">{foto ? `${foto.length}/${MAKS_FOTO} foto` : "memuat…"} · pilih {MAKS_FOTO} foto terbaik · tercetak di halaman lampiran kedua laporan</span>
       </div>
       {bisaKelola && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
