@@ -9,6 +9,7 @@
 
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
+import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
 import { KUNCI_RINCIAN, idSubSlsSah, ringkasIdentifikasi, type Isian, type RingkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
 
 const angka = (x: unknown): number => {
@@ -76,8 +77,9 @@ export async function daftarIdentifikasi(db: Db, pmlId: number): Promise<{ sub: 
   const alok = (al ?? []) as Alok[];
   if (alok.length === 0) return { sub: [], ringkas: ringkasIdentifikasi([]) };
   const sls = new Set(alok.map((a) => a.idsls));
-  const { data: skor } = await db.rpc("bencana_skor_beban_subsls");
-  const dasar = ((skor ?? []) as Skor[]).filter((s) => sls.has(s.idsubsls.slice(0, 14)));
+  // (10 Okt 2026) Ambil seluruh 1084 Sub SLS (rpc polos terpotong 1000 baris) -- lihat skorSubsls.ts.
+  const skor = await ambilSkorSubsls(db);
+  const dasar = skor.filter((s) => sls.has(s.idsubsls.slice(0, 14)));
   const [{ data: hs }, kontak] = await Promise.all([
     db.from("bencana_identifikasi_subsls").select("*").in("idsubsls", dasar.map((s) => s.idsubsls)),
     kontakPml(db, alok.flatMap((a) => (a.pml_pendamping_id == null ? [a.pml_pelaksana_id] : [a.pml_pelaksana_id, a.pml_pendamping_id]))),
@@ -134,15 +136,15 @@ export type Monitoring = {
 };
 
 export async function monitoringIdentifikasi(db: Db): Promise<Monitoring> {
-  const [{ data: pt }, { data: al }, { data: skor }, { data: hs }] = await Promise.all([
+  const [{ data: pt }, { data: al }, skor, { data: hs }] = await Promise.all([
     db.from("bencana_petugas").select("id, nama, no_hp, aktif").eq("peran", "pml"),
     db.from("bencana_identifikasi_alokasi").select("idsls, pml_pelaksana_id, pml_pendamping_id"),
-    db.rpc("bencana_skor_beban_subsls"),
+    ambilSkorSubsls(db),
     db.from("bencana_identifikasi_subsls").select("*"),
   ]);
   const alok = (al ?? []) as Alok[];
   const sls = new Set(alok.map((a) => a.idsls));
-  const dasar = ((skor ?? []) as Skor[]).filter((s) => sls.has(s.idsubsls.slice(0, 14)));
+  const dasar = skor.filter((s) => sls.has(s.idsubsls.slice(0, 14)));
   const hasil = (hs ?? []) as BarisHasil[];
   const pmls = (pt ?? []).filter((p) => p.aktif !== false);
   const nama = new Map<number, string>(pmls.map((p) => [p.id as number, p.nama as string]));

@@ -10,6 +10,7 @@ import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
 import type { BukaMode, InfoIdentifikasi, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
+import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
 import type { IkonKode } from "@/lib/sigapTugasUtama";
 
 export type AnggotaTim = { id: number; nama: string; peran: string | null; anda: boolean };
@@ -90,9 +91,10 @@ export async function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim 
     return { pml: pml ? { id: pml.id as number, nama: pml.nama as string } : null, anggota: ringkasAnggota(anggota, petugasId), sub_sls: [], total_kk: 0, total_terdampak: 0, ada_laporan: 0 };
   }
 
-  const { data: skor } = await db.rpc("bencana_skor_beban_subsls");
-  type Skor = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string; kk_total: number; kk_terdampak_estimasi: number };
-  const peta = new Map<string, Skor>(((skor ?? []) as Skor[]).map((r) => [r.idsubsls, r]));
+  // (10 Okt 2026) Ambil seluruh 1084 Sub SLS (rpc polos terpotong 1000 baris) -- lihat skorSubsls.ts.
+  const skor = await ambilSkorSubsls(db);
+  type Skor = (typeof skor)[number];
+  const peta = new Map<string, Skor>(skor.map((r) => [r.idsubsls, r]));
 
   // Sub SLS yang sudah muncul di laporan harian anggota tim
   const adaLaporan = await subSlsBerlaporan(db, [pmlId, ...idAnggota]);

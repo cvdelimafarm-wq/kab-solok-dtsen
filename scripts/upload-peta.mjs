@@ -10,6 +10,8 @@
 //   node scripts/upload-peta.mjs "D:\peta"          -> unggah semua berkas di folder itu (termasuk subfolder)
 //   node scripts/upload-peta.mjs "D:\peta" --dry    -> hanya tampilkan rencana, tidak mengunggah
 //   node scripts/upload-peta.mjs "D:\peta" --batas=3 -> uji coba: unggah hanya 3 berkas pertama
+//   node scripts/upload-peta.mjs "D:\peta" --desa-dari=scripts/desa-terdampak.txt -> hanya berkas yang 10 digit pertamanya (kode nagari) ada di daftar itu
+//   Berkas yang petanya SUDAH ada di Storage otomatis dilewati (hemat waktu); tambahkan --timpa untuk tetap mengunggah ulang semuanya.
 // Butuh NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (dibaca dari lingkungan atau .env.local). Kunci tidak ditampilkan.
 
 import fs from "node:fs";
@@ -65,6 +67,67 @@ for (const p of kumpulkan(folder)) {
   rencana.push({ p, jenis, kunci: `${jenis}/${aman}`, tipe: TIPE[m[4].toLowerCase()], kode: m[1] });
 }
 
+// (10 Okt 2026) --desa-dari=<berkas>: hanya nagari terdampak (kode desa 10 digit di berkas daftar) -- permintaan user: jangan unggah semua Sub SLS.
+const desaDari = (args.find((a) => a.startsWith("--desa-dari=")) ?? "").slice(12);
+if (desaDari) {
+  if (!fs.existsSync(desaDari)) {
+    console.error(`Berkas daftar nagari tidak ditemukan: ${desaDari}`);
+    process.exit(1);
+  }
+  const boleh = new Set(
+    fs
+      .readFileSync(desaDari, "utf8")
+      .split(/\r?\n/)
+      .filter((b) => !b.trim().startsWith("#"))
+      .map((b) => /^\s*(\d{10})/.exec(b)?.[1])
+      .filter(Boolean),
+  );
+  const sebelum = rencana.length;
+  for (let i = rencana.length - 1; i >= 0; i--) if (!boleh.has(rencana[i].kode.slice(0, 10))) rencana.splice(i, 1);
+  const ada = new Set(rencana.map((r) => r.kode.slice(0, 10)));
+  console.log(`Filter nagari terdampak (${boleh.size} nagari di daftar): ${rencana.length} dari ${sebelum} berkas dipakai; ${ada.size} nagari punya berkas.`);
+  const kosong = [...boleh].filter((k) => !ada.has(k));
+  if (kosong.length) console.log(`Nagari di daftar yang tidak ada berkasnya: ${kosong.join(", ")}`);
+}
+
+bacaEnvLokal();
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const kunci = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").replace(/^["'<\s]+|["'>\s]+$/g, "");
+const kunciUtuh = !!kunci && kunci.split(".").length === 3;
+const db = url && kunciUtuh ? createClient(url, kunci, { auth: { persistSession: false } }) : null;
+
+// (10 Okt 2026) Lewati berkas yang petanya sudah ada di Storage -- permintaan user (hemat/cepat). Aturan "sudah ada" sama dengan aplikasi
+// (petaTersedia): kode 16 digit dianggap ada bila Storage punya kode itu, kode SLS-nya (14 digit), atau kode14+"00".
+const timpa = args.includes("--timpa");
+if (!timpa) {
+  if (!db) {
+    console.log("Peringatan: kunci/URL belum terbaca, jadi tidak bisa memeriksa peta yang sudah ada -- semua berkas diproses.");
+  } else {
+    const ada = new Set();
+    for (const awalan of ["sls", "wa"]) {
+      for (let dari = 0; ; dari += 1000) {
+        const { data, error } = await db.storage.from(BUCKET).list(awalan, { limit: 1000, offset: dari });
+        if (error) {
+          console.error(`Gagal membaca daftar Storage (${awalan}/): ${error.message}`);
+          process.exit(1);
+        }
+        for (const f of data ?? []) {
+          const k = /^(\d{10,16})/.exec(f.name)?.[1];
+          if (k) ada.add(`${awalan}:${k}`);
+        }
+        if ((data ?? []).length < 1000) break;
+      }
+    }
+    const sudah = (r) => {
+      const k = r.kode;
+      return ada.has(`${r.jenis}:${k}`) || (r.jenis === "sls" && k.length === 16 && (ada.has(`sls:${k.slice(0, 14)}`) || ada.has(`sls:${k.slice(0, 14)}00`)));
+    };
+    const sebelum = rencana.length;
+    for (let i = rencana.length - 1; i >= 0; i--) if (sudah(rencana[i])) rencana.splice(i, 1);
+    console.log(`Peta yang sudah ada di Storage dilewati: ${sebelum - rencana.length} berkas; sisa ${rencana.length} berkas baru. (--timpa untuk mengunggah ulang semuanya)`);
+  }
+}
+
 // (10 Okt 2026) --batas=N: unggah hanya N berkas pertama (uji coba kecil dulu) -- permintaan user.
 const batas = Number((args.find((a) => a.startsWith("--batas=")) ?? "").slice(8));
 if (batas > 0 && rencana.length > batas) {
@@ -82,18 +145,14 @@ if (dry) {
   process.exit(0);
 }
 
-bacaEnvLokal();
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const kunci = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").replace(/^["'<\s]+|["'>\s]+$/g, "");
-if (kunci && kunci.split(".").length !== 3) {
+if (kunci && !kunciUtuh) {
   console.error("SUPABASE_SERVICE_ROLE_KEY bukan kunci JWT yang utuh (harus 3 bagian dipisah titik, diawali eyJ). Periksa .env.local; kunci tidak ditampilkan.");
   process.exit(1);
 }
-if (!url || !kunci) {
+if (!db) {
   console.error("NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum ada (lingkungan atau .env.local).");
   process.exit(1);
 }
-const db = createClient(url, kunci, { auth: { persistSession: false } });
 
 let ok = 0;
 const gagal = [];
