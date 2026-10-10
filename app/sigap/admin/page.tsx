@@ -27,6 +27,7 @@ import TabMonitoring from "./TabMonitoring";
 import TabPenugasan from "./TabPenugasan";
 import TabKegiatan from "./TabKegiatan";
 import TabVerifikasi from "./TabVerifikasi";
+import DaftarKegiatan from "../kelola/DaftarKegiatan"; // (10 Okt 2026) halaman awal = daftar kegiatan per kegiatan induk
 
 type Tab = KodeTabAdmin;
 const IKON_TAB: Record<Exclude<Tab, "beranda">, string> = { monitoring: "📈", penugasan: "👥", kegiatan: "⚙️", verifikasi: "✅" };
@@ -46,6 +47,9 @@ export default function AdminTransportLokal() {
   // (6 Okt 2026) data Beranda (juga utk badge "perlu tindakan")
   const [beranda, setBeranda] = useState<DataBeranda | null>(null);
   const [galatBeranda, setGalatBeranda] = useState<unknown>(null);
+  // (10 Okt 2026) halaman awal = daftar kegiatan per kegiatan induk -- permintaan user ("demikian juga translok").
+  // Tanpa ?kegiatan / ?tab di URL -> daftar; memilih kegiatan -> tab Monitoring kegiatan itu.
+  const [daftar, setDaftar] = useState(false);
 
   const muat = useCallback(async (pilih?: number) => {
     try {
@@ -91,6 +95,7 @@ export default function AdminTransportLokal() {
     try {
       const q = new URLSearchParams(window.location.search);
       const t = q.get("tab") as Tab | null;
+      if (!t && !q.get("kegiatan")) setDaftar(true);
       if (t && SEMUA_TAB.includes(t)) setTab(t);
       else if (q.get("kegiatan")) setTab("monitoring");
       pilih = Number(q.get("kegiatan")) || undefined;
@@ -100,6 +105,16 @@ export default function AdminTransportLokal() {
     muat(pilih);
     muatBeranda();
   }, [muat, muatBeranda]);
+
+  // (10 Okt 2026) tombol Back browser: kembali ke daftar bila URL tanpa ?kegiatan/?tab
+  useEffect(() => {
+    const sinkron = () => {
+      const q = new URLSearchParams(window.location.search);
+      setDaftar(!q.get("tab") && !q.get("kegiatan"));
+    };
+    window.addEventListener("popstate", sinkron);
+    return () => window.removeEventListener("popstate", sinkron);
+  }, []);
 
   useEffect(() => {
     try {
@@ -118,6 +133,7 @@ export default function AdminTransportLokal() {
 
   const pindahTab = useCallback(
     (k: Tab) => {
+      setDaftar(false);
       setKegBaru(false);
       setTab(k);
       if (k === "beranda") muatBeranda();
@@ -126,6 +142,7 @@ export default function AdminTransportLokal() {
     [muatBeranda]
   );
   const mulaiKegiatanBaru = useCallback(() => {
+    setDaftar(false);
     setKegBaru(true);
     setTab("kegiatan");
   }, []);
@@ -133,6 +150,21 @@ export default function AdminTransportLokal() {
     () => (bolehBuatKegiatan ? [{ id: "a-kegbaru", grup: "Aksi", label: "＋ Kegiatan baru", jalankan: mulaiKegiatanBaru }] : []),
     [bolehBuatKegiatan, mulaiKegiatanBaru]
   );
+
+  function bukaKegiatan(id: number) {
+    window.history.pushState(null, "", `${window.location.pathname}?kegiatan=${id}`);
+    setDaftar(false);
+    setKegBaru(false);
+    setKegId(id);
+    setTab("monitoring");
+    window.scrollTo({ top: 0 });
+  }
+  function keDaftar() {
+    window.history.pushState(null, "", window.location.pathname);
+    setKegBaru(false);
+    setDaftar(true);
+    window.scrollTo({ top: 0 });
+  }
 
   if (galat && !r)
     return (
@@ -164,7 +196,7 @@ export default function AdminTransportLokal() {
     <>
       <HeaderAdmin
         kecil="Admin Transport Lokal"
-        judul={kegBaru ? "Kegiatan baru" : tabAktif === "beranda" ? "Beranda" : keg?.nama ?? "Belum ada kegiatan"}
+        judul={daftar ? "Pilih kegiatan" : kegBaru ? "Kegiatan baru" : tabAktif === "beranda" ? "Beranda" : keg?.nama ?? "Belum ada kegiatan"}
         onKeluar={keluar}
         kanan={
           <>
@@ -180,7 +212,12 @@ export default function AdminTransportLokal() {
         }
       >
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {r.kegiatan.length > 0 && (
+          {!daftar && (
+            <button type="button" onClick={keDaftar} className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
+              ← Daftar kegiatan
+            </button>
+          )}
+          {!daftar && r.kegiatan.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="sr-only">Pilih kegiatan</span>
               <select
@@ -214,7 +251,7 @@ export default function AdminTransportLokal() {
           )}
         </div>
       </HeaderAdmin>
-      {!kegBaru && tabAktif && <BarisTab tab={tabMobile} aktif={tabAktif} onPilih={pindahTab} />}
+      {!daftar && !kegBaru && tabAktif && <BarisTab tab={tabMobile} aktif={tabAktif} onPilih={pindahTab} />}
     </>
   );
 
@@ -225,6 +262,7 @@ export default function AdminTransportLokal() {
       ringkas={r}
       kegId={kegId}
       onPilihKegiatan={(id) => {
+        setDaftar(false);
         setKegBaru(false);
         setKegId(id);
         if (tab === "beranda") setTab(tabTampil[0]?.kode ?? "monitoring");
@@ -237,8 +275,27 @@ export default function AdminTransportLokal() {
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
 
       {/* (6 Okt 2026) Judul halaman versi layar lebar (header navy disembunyikan di lg). */}
-      {tabAktif !== "beranda" && (
+      {!daftar && !kegBaru && tabAktif === "beranda" && (
+        <div className="hidden pb-1 lg:flex">
+          <button type="button" onClick={keDaftar} className="rounded-lg border border-[#D5DCE7] bg-white px-2.5 py-1 text-[12px] font-bold text-[#4D5B6B] hover:border-[#1F6FD1] hover:text-[#1F6FD1]">
+            ← Daftar kegiatan
+          </button>
+        </div>
+      )}
+      {daftar && (
         <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 pb-1 lg:flex">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">Admin transport lokal</p>
+            <h1 className="truncate text-[17px] font-extrabold leading-tight">Pilih kegiatan</h1>
+          </div>
+          <span className="pb-0.5 text-[12px] text-[#7B8794]">dikelompokkan per kegiatan induk · {tglPanjang(r.hari_ini)}</span>
+        </div>
+      )}
+      {!daftar && tabAktif !== "beranda" && (
+        <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 pb-1 lg:flex">
+          <button type="button" onClick={keDaftar} className="mb-0.5 rounded-lg border border-[#D5DCE7] bg-white px-2.5 py-1 text-[12px] font-bold text-[#4D5B6B] hover:border-[#1F6FD1] hover:text-[#1F6FD1]">
+            ← Daftar kegiatan
+          </button>
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">{kegBaru ? "Admin transport" : labelTab ?? "Admin transport"}</p>
             <h1 className="truncate text-[17px] font-extrabold leading-tight">{kegBaru ? "Kegiatan baru" : keg?.nama ?? "Belum ada kegiatan"}</h1>
@@ -258,7 +315,25 @@ export default function AdminTransportLokal() {
         </div>
       )}
 
-      {kegBaru ? (
+      {daftar ? (
+        <DaftarKegiatan
+          modul="translok"
+          onPilih={(k) => bukaKegiatan(k.id)}
+          kosong={bolehBuatKegiatan ? "Belum ada kegiatan. Tekan “＋ Kegiatan baru” untuk membuat kegiatan pertama." : "Belum ada kegiatan yang bisa Anda lihat. Minta admin anggaran menambahkan Anda sebagai PJ kegiatan."}
+          aksiKanan={
+            <>
+              <button type="button" onClick={() => { window.history.pushState(null, "", `${window.location.pathname}?tab=beranda`); pindahTab("beranda"); }} className="rounded-lg border border-[#D5DCE7] bg-white px-3 py-1.5 text-[12px] font-bold text-[#4D5B6B] hover:border-[#1F6FD1] hover:text-[#1F6FD1]">
+                Ringkasan &amp; perlu tindakan{nTindakan ? ` (${nTindakan})` : ""}
+              </button>
+              {bolehBuatKegiatan && (
+                <button type="button" onClick={mulaiKegiatanBaru} className="rounded-lg border border-[#D5DCE7] bg-white px-3 py-1.5 text-[12px] font-bold text-[#1F6FD1] hover:border-[#1F6FD1]">
+                  ＋ Kegiatan baru
+                </button>
+              )}
+            </>
+          }
+        />
+      ) : kegBaru ? (
         <TabKegiatan
           kegiatanId={null}
           bolehBuat={bolehBuatKegiatan}

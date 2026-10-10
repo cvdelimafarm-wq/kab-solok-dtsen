@@ -3,7 +3,7 @@
 // (8 Okt 2026) Notifikasi push SIGAP -- sisi browser: cek dukungan, minta izin, daftarkan perangkat ke server, uji, matikan.
 // Server: /api/sigap/push. Service worker: /sw.js (event push & notificationclick).
 
-import { apiPortal } from "./sesi";
+import { apiPortal, bacaLihatSebagai } from "./sesi";
 
 export type StatusPush = "memuat" | "tidak_didukung" | "perlu_pasang_ios" | "belum_siap_server" | "diblokir" | "belum_aktif" | "aktif";
 
@@ -35,6 +35,10 @@ async function kirimLangganan(sub: PushSubscription) {
  * (mengaitkan perangkat ke akun yang sedang masuk, dan memperbarui langganan yang kedaluwarsa).
  */
 export async function bacaStatusPush(): Promise<{ status: StatusPush; perangkat: number }> {
+  // (10 Okt 2026) Mode "masuk sebagai" (akun super melihat tampilan petugas): JANGAN sinkronkan langganan -- kirimLangganan()
+  // akan mengaitkan HP admin ke akun petugas yang sedang dilihat sehingga pengingat petugas itu mampir ke HP admin.
+  // Kartu disembunyikan selama mode ini.
+  if (bacaLihatSebagai()) return { status: "tidak_didukung", perangkat: 0 };
   if (!adaDukungan()) return { status: iPhoneIPad() && !sudahTerpasang() ? "perlu_pasang_ios" : "tidak_didukung", perangkat: 0 };
   if (iPhoneIPad() && !sudahTerpasang()) return { status: "perlu_pasang_ios", perangkat: 0 };
   let info: InfoServer;

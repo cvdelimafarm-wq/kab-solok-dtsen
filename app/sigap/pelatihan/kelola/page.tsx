@@ -24,6 +24,7 @@ import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai"
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, ringkasSkema, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 import ModalFotoPanitia from "../ModalFotoPanitia";
+import DaftarPelatihan, { type PelatihanDaftar } from "./daftar"; // (10 Okt 2026) halaman awal = daftar pelatihan per kegiatan
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -49,6 +50,31 @@ export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
+  // (10 Okt 2026) "daftar" = daftar pelatihan per kegiatan (halaman awal); "kelola" = tab-tab pelatihan terpilih.
+  // Tautan bertab (?tab=...) atau ?kegiatan=ID langsung membuka mode kelola.
+  const [mode, setMode] = useState<"memuat" | "daftar" | "kelola">("memuat");
+  const [namaPelatihan, setNamaPelatihan] = useState<string | null>(null);
+  useEffect(() => {
+    const sinkron = () => {
+      const q = new URLSearchParams(window.location.search);
+      setMode(q.get("kegiatan") || q.get("tab") ? "kelola" : "daftar");
+    };
+    sinkron();
+    window.addEventListener("popstate", sinkron);
+    return () => window.removeEventListener("popstate", sinkron);
+  }, []);
+  function pilihPelatihan(p: PelatihanDaftar) {
+    setNamaPelatihan(p.nama);
+    window.history.pushState(null, "", `${window.location.pathname}?kegiatan=${p.id}`);
+    setTab("soal");
+    setMode("kelola");
+    window.scrollTo(0, 0);
+  }
+  function keDaftar() {
+    window.history.pushState(null, "", window.location.pathname);
+    setMode("daftar");
+    window.scrollTo(0, 0);
+  }
 
   const muat = useCallback(async () => {
     try {
@@ -69,13 +95,30 @@ export default function KelolaPelatihan() {
     }
   }, [muat]);
 
+  if (mode !== "kelola")
+    return (
+      <Bingkai<TabK> aktif="pelatihan_kelola" kecil="SIGAP · Kelola Pelatihan" jejak={["Pelatihan", "Kelola"]} judul="Kelola Pelatihan" sub="Pilih pelatihan yang ingin dikelola, dikelompokkan per kegiatan">
+        {mode === "daftar" ? <DaftarPelatihan onPilih={pilihPelatihan} /> : <Memuat />}
+        <ModalFotoPanitia />
+      </Bingkai>
+    );
+
   return (
     <Bingkai<TabK>
       aktif="pelatihan_kelola"
       kecil="SIGAP · Kelola Pelatihan"
-      jejak={["Pelatihan", "Kelola"]}
+      jejak={["Pelatihan", "Kelola", namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"]}
       judul="Kelola Pelatihan"
-      sub="Soal, jadwal, pengumuman, kuis live & monitoring · Pelatihan PSP Pascabencana 2026"
+      sub={`Soal, jadwal, pengumuman, kuis live & monitoring · ${namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"}`}
+      kanan={(gelap) => (
+        <button
+          type="button"
+          onClick={keDaftar}
+          className={gelap ? "rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-white/20" : "rounded-lg border border-[#E3E8EE] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#14202E] hover:bg-[#F8FAFC]"}
+        >
+          ← Daftar pelatihan
+        </button>
+      )}
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Adu Sigap" },

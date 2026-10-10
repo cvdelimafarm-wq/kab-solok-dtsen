@@ -160,12 +160,26 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     return () => clearInterval(t);
   }, [muat]);
 
-  // Kegiatan aktif: pilihan petugas; default = kegiatan yg hari ini adalah hari kerjanya.
+  // (10 Okt 2026) Tautan dari kartu/tombol membawa ?p=<penugasan_id> supaya halaman langsung membuka KEGIATAN YANG DIMAKSUD
+  // -- permintaan user: "saat pilih hari kerja (Translok Pendataan), kenapa malah masuk ke transportasi pelatihan? padahal pelatihan sudah selesai".
+  // Sebelumnya tautan hanya berisi token sehingga halaman memilih sendiri (penugasan pertama) -> sering jatuh ke Pelatihan yang sudah lewat.
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get("p");
+      if (p && /^\d+$/.test(p)) setPenId(Number(p));
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+
+  // Kegiatan aktif: pilihan petugas (?p= atau tab); lalu kegiatan yg hari ini adalah hari kerjanya;
+  // lalu kegiatan yang periodenya masih AKTIF (bukan masa tenggang/arsip); terakhir penugasan pertama.
   const pen = useMemo(() => {
     if (!data) return null;
     return (
       data.penugasan.find((p) => p.id === penId) ??
       data.penugasan.find((p) => p.hari_kerja.includes(data.hari_ini)) ??
+      data.penugasan.find((p) => p.status_periode === "aktif") ??
       data.penugasan[0] ??
       null
     );

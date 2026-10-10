@@ -9,23 +9,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { aktifkanPush, bacaStatusPush, matikanPush, ujiPush, type StatusPush } from "./pushKlien";
 
-const KUNCI_NANTI = "sigap_push_nanti";
-const NANTI_MS = 24 * 3_600_000;
-
-const nantiAktif = (): boolean => {
-  try {
-    const t = Number(localStorage.getItem(KUNCI_NANTI) ?? 0);
-    return t > 0 && Date.now() - t < NANTI_MS;
-  } catch {
-    return false;
-  }
-};
-
 export default function AktifkanNotifikasi() {
   const [status, setStatus] = useState<StatusPush>("memuat");
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<{ ok: boolean; teks: string } | null>(null);
-  const [sembunyi, setSembunyi] = useState(false);
 
   const muat = useCallback(async () => {
     const r = await bacaStatusPush();
@@ -33,7 +20,6 @@ export default function AktifkanNotifikasi() {
   }, []);
 
   useEffect(() => {
-    setSembunyi(nantiAktif());
     muat();
   }, [muat]);
 
@@ -68,6 +54,11 @@ export default function AktifkanNotifikasi() {
 
   if (status === "memuat" || status === "tidak_didukung" || status === "belum_siap_server") return null;
 
+  // (10 Okt 2026) Sudah aktif -> kartu HILANG (permintaan user: "jika sudah dinyalakan kartu ini hilang, jika belum tetap ada").
+  // Pengecualian: sesaat setelah tombol Aktifkan ditekan di sesi halaman ini, konfirmasi + "Kirim uji"/"Matikan" tetap tampil
+  // sampai halaman dimuat ulang. Perangkat yang sudah aktif sejak awal tidak menampilkan apa pun.
+  if (status === "aktif" && !pesan) return null;
+
   if (status === "aktif") {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#BFE5CD] bg-[#F1FAF4] px-3.5 py-2.5 text-[13px] text-[#17623C]">
@@ -82,8 +73,6 @@ export default function AktifkanNotifikasi() {
       </div>
     );
   }
-
-  if (status === "belum_aktif" && sembunyi) return null;
 
   const teks =
     status === "perlu_pasang_ios"
@@ -105,20 +94,7 @@ export default function AktifkanNotifikasi() {
           <button type="button" onClick={aktifkan} disabled={sibuk} className="rounded-lg bg-[#1F5FD1] px-4 py-2 text-[13.5px] font-extrabold text-white hover:bg-[#1A50B5] disabled:opacity-60">
             {sibuk ? "Memproses…" : "Aktifkan notifikasi"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              try {
-                localStorage.setItem(KUNCI_NANTI, String(Date.now()));
-              } catch {
-                /* abaikan */
-              }
-              setSembunyi(true);
-            }}
-            className="text-[12.5px] text-[#55657D] underline underline-offset-2"
-          >
-            Nanti saja
-          </button>
+          {/* (10 Okt 2026) Tombol "Nanti saja" dihapus -- permintaan user: "tawari terus sampai dia aktifkan notifikasi". */}
         </div>
       )}
     </div>

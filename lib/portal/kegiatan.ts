@@ -147,6 +147,6 @@ export async function kegiatanTranslok(db: Db, akunId: number, token: string, pe
         foto: (dok ?? []).filter((f) => f.penugasan_id === p.id && f.tanggal === t).length,
       };
     }
-    return susunTranslok({ p, hariKerja, isian, hariIni, hrefKerja: `/sigap/translok/${token}`, nowMs });
+    return susunTranslok({ p, hariKerja, isian, hariIni, hrefKerja: `/sigap/translok/${token}?p=${p.id}`, nowMs }); // (10 Okt 2026) ?p= -> halaman langsung membuka kegiatan ini, bukan penugasan pertama
   });
 }
