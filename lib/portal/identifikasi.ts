@@ -19,7 +19,8 @@ const angka = (x: unknown): number => {
 type BarisHasil = Record<string, unknown> & { pml_id: number; idsubsls: string };
 type Hasil = NonNullable<SubIdentifikasi["hasil"]>;
 type Skor = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string; kk_total: number; kk_terdampak_estimasi: number };
-type Alok = { idsls: string; pml_pelaksana_id: number; pml_pendamping_id: number };
+// (10 Okt 2026) pml_pendamping_id boleh kosong: wilayah yang hanya punya tim PML pelaksana (mis. Danau Kembar/Lembah Gumanti/Pantai Cermin) tanpa pendamping -- permintaan user.
+type Alok = { idsls: string; pml_pelaksana_id: number; pml_pendamping_id: number | null };
 
 function jadiHasil(b: BarisHasil, nama: Map<number, string>): Hasil {
   const h = { kk_terdampak: angka(b.kk_terdampak), tidak_terdampak: b.tidak_terdampak === true, lainnya_ket: (b.lainnya_ket as string | null) ?? "", catatan: (b.catatan as string | null) ?? "", diperbarui_at: String(b.diperbarui_at ?? ""), oleh: nama.get(Number(b.pml_id)) ?? null } as Hasil;
@@ -47,7 +48,7 @@ export async function ambilPml(db: Db, petugasId: number | null): Promise<{ id: 
 
 /** Susun daftar Sub SLS dari SLS yang dialokasikan + hasil bersama. `pmlId` = sudut pandang (peran & rekan); null = tanpa peran (dipakai monitoring). */
 function susunSub(alok: Alok[], skor: Skor[], hasil: BarisHasil[], nama: Map<number, string>, pmlId: number): SubIdentifikasi[] {
-  const peranSls = new Map<string, { peran: "pelaksana" | "pendamping"; rekan: number }>();
+  const peranSls = new Map<string, { peran: "pelaksana" | "pendamping"; rekan: number | null }>();
   for (const a of alok) {
     if (a.pml_pelaksana_id === pmlId) peranSls.set(a.idsls, { peran: "pelaksana", rekan: a.pml_pendamping_id });
     else if (a.pml_pendamping_id === pmlId) peranSls.set(a.idsls, { peran: "pendamping", rekan: a.pml_pelaksana_id });
@@ -58,7 +59,7 @@ function susunSub(alok: Alok[], skor: Skor[], hasil: BarisHasil[], nama: Map<num
     const p = peranSls.get(s.idsubsls.slice(0, 14));
     if (!p) continue;
     const r = petaHasil.get(s.idsubsls);
-    sub.push({ idsubsls: s.idsubsls, kecamatan: s.kecamatan, nagari: s.nagari, sls: s.sls, sub_sls: s.sub_sls, kk: angka(s.kk_total), kk_awal: angka(s.kk_terdampak_estimasi), peran: p.peran, rekan: nama.get(p.rekan) ?? null, hasil: r ? jadiHasil(r, nama) : null });
+    sub.push({ idsubsls: s.idsubsls, kecamatan: s.kecamatan, nagari: s.nagari, sls: s.sls, sub_sls: s.sub_sls, kk: angka(s.kk_total), kk_awal: angka(s.kk_terdampak_estimasi), peran: p.peran, rekan: p.rekan == null ? null : (nama.get(p.rekan) ?? null), hasil: r ? jadiHasil(r, nama) : null });
   }
   return sub.sort(urut);
 }
@@ -73,7 +74,7 @@ export async function daftarIdentifikasi(db: Db, pmlId: number): Promise<{ sub: 
   const dasar = ((skor ?? []) as Skor[]).filter((s) => sls.has(s.idsubsls.slice(0, 14)));
   const [{ data: hs }, nama] = await Promise.all([
     db.from("bencana_identifikasi_subsls").select("*").in("idsubsls", dasar.map((s) => s.idsubsls)),
-    namaPml(db, alok.flatMap((a) => [a.pml_pelaksana_id, a.pml_pendamping_id])),
+    namaPml(db, alok.flatMap((a) => (a.pml_pendamping_id == null ? [a.pml_pelaksana_id] : [a.pml_pelaksana_id, a.pml_pendamping_id]))),
   ]);
   const sub = susunSub(alok, dasar, (hs ?? []) as BarisHasil[], nama, pmlId);
   return { sub, ringkas: ringkasIdentifikasi(sub) };
@@ -221,7 +222,7 @@ async function tandatangani(db: Db, folder: "wa" | "sls", terpilih: Map<string, 
 
 /**
  * Peta yang tersedia. `desa` = kode desa 10 digit; `sub` = idsubsls 16 digit.
- * Peta Sub SLS dicari dengan kode 16 digit; bila tidak ada, dengan kode SLS 14 digit. Yang belum diunggah tidak muncul di hasil.
+ * Peta Sub SLS dicari dengan kode 16 digit; bila tidak ada, dengan kode SLS 14 digit, lalu kode SLS + "00". Yang belum diunggah tidak muncul di hasil.
  */
 export async function petaTersedia(db: Db, desa: string[], sub: string[]): Promise<{ wa: Record<string, BerkasPeta[]>; sls: Record<string, BerkasPeta[]> }> {
   const [bWa, bSls] = await Promise.all([desa.length ? daftarBerkas(db, "wa") : Promise.resolve(new Map()), sub.length ? daftarBerkas(db, "sls") : Promise.resolve(new Map())]);
@@ -229,7 +230,9 @@ export async function petaTersedia(db: Db, desa: string[], sub: string[]): Promi
   for (const k of desa) if (bWa.has(k)) pilihWa.set(k, bWa.get(k)!);
   const pilihSls = new Map<string, { nama: string; halaman: number; dari: number }[]>();
   for (const k of sub) {
-    const arr = bSls.get(k) ?? bSls.get(k.slice(0, 14));
+    // (10 Okt 2026) Urutan: peta Sub SLS (16 digit) -> peta SLS 14 digit -> peta SLS berakhiran "00" (16 digit, mis. 1303040002000900)
+    // -- sesuai penamaan berkas peta SLS yang diunduh dari Drive (kode SLS + "00" = satu peta untuk seluruh SLS).
+    const arr = bSls.get(k) ?? bSls.get(k.slice(0, 14)) ?? bSls.get(`${k.slice(0, 14)}00`);
     if (arr) pilihSls.set(k, arr);
   }
   const [wa, sls] = await Promise.all([tandatangani(db, "wa", pilihWa), tandatangani(db, "sls", pilihSls)]);
