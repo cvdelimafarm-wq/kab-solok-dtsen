@@ -337,7 +337,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         )}
         {tab === "hari_ini" && (
           <>
-            <Ringkasan pen={pen} hariIni={data.hari_ini} />
+            <Ringkasan pen={pen} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
@@ -642,12 +642,11 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
 }
 
 // ---------------- Ringkasan ----------------
-function Ringkasan({ pen, hariIni }: { pen: Pen; hariIni: string }) {
+// (10 Okt 2026) Kolom "Estimasi diterima" (nominal & "N hari sudah pasti") DIHAPUS dari ringkasan -- permintaan user. Ringkasan kini 2 kolom: Hari kerja & Hari lengkap.
+function Ringkasan({ pen }: { pen: Pen }) {
   const lengkap = pen.hari.filter((h) => h.lengkap).length;
-  const dibayar = pen.kelompok.reduce((s, k) => s + k.jumlah_hari, 0);
-  const sudahPasti = pen.hari.filter((h) => h.lengkap && h.tanggal < hariIni).length;
   return (
-    <div className="grid grid-cols-3 rounded-2xl bg-white px-1 py-3.5 shadow-md">
+    <div className="grid grid-cols-2 rounded-2xl bg-white px-1 py-3.5 shadow-md">
       <div className="flex flex-col items-center border-r border-[#E4E9F0]">
         <span className="text-[10.5px] font-semibold text-[#55657D]">Hari kerja</span>
         <span className="text-[17px] font-extrabold">
@@ -655,14 +654,9 @@ function Ringkasan({ pen, hariIni }: { pen: Pen; hariIni: string }) {
           {pen.maks_hari ? <span className="text-[12px] font-bold text-[#8592A8]">/{pen.maks_hari}</span> : null}
         </span>
       </div>
-      <div className="flex flex-col items-center border-r border-[#E4E9F0]">
+      <div className="flex flex-col items-center">
         <span className="text-[10.5px] font-semibold text-[#55657D]">Hari lengkap</span>
         <span className="text-[17px] font-extrabold">{lengkap}</span>
-      </div>
-      <div className="flex flex-col items-center">
-        <span className="text-[10.5px] font-semibold text-[#55657D]">Estimasi diterima</span>
-        <span className="text-[15px] font-extrabold text-[#1E7A4C]">{rupiah(dibayar * pen.tarif)}</span>
-        <span className="text-[9.5px] text-[#8592A8]">{sudahPasti} hari sudah pasti</span>
       </div>
     </div>
   );

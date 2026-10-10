@@ -40,9 +40,11 @@ const CHIP: Record<StatusLangkah, { teks: string; kelas: string }> = {
 };
 
 function BarisLangkah({ l }: { l: LangkahKegiatan }) {
-  const c = CHIP[l.status];
-  const bisa = !!l.href && l.status !== "terkunci";
-  const redup = l.status === "terkunci" || l.status === "menunggu";
+  const [pesan, setPesan] = useState(false);
+  const kunciHari = !!l.pesanKunci; // (10 Okt 2026) terkunci di luar hari kerja: tampil terkunci, ketukan memunculkan pesan
+  const c = kunciHari ? CHIP.terkunci : CHIP[l.status];
+  const bisa = !kunciHari && !!l.href && l.status !== "terkunci";
+  const redup = l.status === "terkunci" || l.status === "menunggu" || kunciHari;
   const isi = (
     <>
       <span className={`grid h-[30px] w-[30px] flex-none place-items-center rounded-full text-[13px] font-extrabold ${BULAT[l.status]}`}>{l.no}</span>
@@ -52,13 +54,26 @@ function BarisLangkah({ l }: { l: LangkahKegiatan }) {
       </span>
       <span className={`flex flex-none items-center gap-1 rounded-[9px] text-[11px] font-bold ${l.status === "selesai" || l.status === "menunggu" || l.status === "terkunci" ? "" : "px-2 py-[3px]"} ${c.kelas}`}>
         {l.status === "selesai" && <IkonMenu n="tanda" className="h-3 w-3" />}
-        {l.status === "terkunci" && <IkonMenu n="kunci" className="h-3 w-3" />}
+        {(l.status === "terkunci" || kunciHari) && <IkonMenu n="kunci" className="h-3 w-3" />}
         {c.teks}
       </span>
       {bisa && <IkonMenu n="panah" className="h-4 w-4 text-[#A5B3C7]" />}
     </>
   );
   const kelas = `flex min-h-[52px] items-center gap-[11px] border-b border-[#EEF2F7] px-3.5 py-2.5 last:border-b-0 ${LATAR[l.status] ?? ""}`;
+  if (kunciHari)
+    return (
+      <div className="border-b border-[#EEF2F7] last:border-b-0">
+        <button type="button" onClick={() => setPesan((v) => !v)} aria-expanded={pesan} className={`${kelas} w-full border-b-0 text-left transition active:bg-[#EAF1FC]`}>
+          {isi}
+        </button>
+        {pesan && (
+          <p role="alert" className="mx-3.5 mb-2.5 rounded-[12px] border-l-4 border-[#F4B400] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold leading-snug text-[#6B4A00]">
+            {l.pesanKunci}
+          </p>
+        )}
+      </div>
+    );
   return bisa ? (
     <Link href={l.href!} className={`${kelas} transition active:bg-[#EAF1FC]`}>
       {isi}

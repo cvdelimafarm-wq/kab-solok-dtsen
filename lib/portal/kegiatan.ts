@@ -65,6 +65,17 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     ket3 = `${lengkapN} dari ${hariKerja.length} hari kerja lengkap`;
   }
 
+  // (10 Okt 2026) Langkah "Laporan & foto harian" terkunci di luar hari kerja -- permintaan user: PPL yang menekannya melihat pesan
+  // "Anda berada di luar hari kerja". Tetap terbuka bila ada yang perlu dilengkapi (hari terlewat / izin susulan), sudah selesai, atau hari ini hari kerja.
+  let pesanKunci3: string | null = null;
+  if (!adaHariIni && (s3 === "menunggu" || s3 === "berjalan")) {
+    const berikut = hariKerja.find((t) => t > hariIni);
+    pesanKunci3 =
+      hariKerja.length === 0
+        ? "Anda berada di luar hari kerja: belum ada hari kerja yang dipilih. Pilih hari kerja dulu di langkah 2."
+        : `Anda berada di luar hari kerja. Laporan & foto harian hanya bisa diisi pada hari kerja${berikut ? ` (berikutnya ${tglPendek(berikut)})` : ""}.`;
+  }
+
   const s2: StatusLangkah = hariKerja.length > 0 ? "selesai" : aktif ? "perlu" : "menunggu";
   const langkah: LangkahKegiatan[] = [
     { no: 1, kode: "penugasan", kelompok: "Persiapan", judul: "Terima penugasan", ket: p.label_jabatan, status: "selesai" },
@@ -78,7 +89,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
       href: hrefKerja,
       aksi: "Pilih hari kerja",
     },
-    { no: 3, kode: "harian", kelompok: "Pelaksanaan", judul: k.wajib_laporan ? "Laporan & foto harian" : "Foto harian", ket: ket3, status: s3, href: hrefKerja, aksi: s3 === "mendesak" || s3 === "perlu" ? "Lanjutkan isi hari ini" : "Buka isian", batas: batas3 },
+    { no: 3, kode: "harian", kelompok: "Pelaksanaan", judul: k.wajib_laporan ? "Laporan & foto harian" : "Foto harian", ket: ket3, status: s3, href: pesanKunci3 ? null : hrefKerja, aksi: s3 === "mendesak" || s3 === "perlu" ? "Lanjutkan isi hari ini" : "Buka isian", batas: batas3, pesanKunci: pesanKunci3 },
     { no: 4, kode: "verifikasi", kelompok: "Penyelesaian", judul: "Rekap & verifikasi admin", ket: dikunci ? "SPJ sudah dikunci admin" : "Setelah semua hari kerja terisi", status: dikunci ? "selesai" : "menunggu" },
     { no: 5, kode: "spj", kelompok: "Penyelesaian", judul: "Unduh SPJ", ket: dikunci ? "SPJ siap diunduh" : "Setelah SPJ dikunci admin", status: dikunci ? "sekarang" : "terkunci", href: dikunci ? hrefKerja : null, aksi: "Unduh SPJ" },
   ];

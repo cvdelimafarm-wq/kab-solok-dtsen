@@ -23,6 +23,8 @@ export type LangkahKegiatan = {
   aksi?: string;
   /** batas waktu (ISO) untuk hitung mundur di kartu "Kerjakan sekarang" */
   batas?: string | null;
+  /** (10 Okt 2026) Bila terisi, langkah ini TERKUNCI sementara (mis. di luar hari kerja): ketukan menampilkan pesan ini, tidak membuka halaman kerja. */
+  pesanKunci?: string | null;
 };
 
 export type RingkasKegiatan = {
