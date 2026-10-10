@@ -31,57 +31,66 @@ export async function GET(req: NextRequest) {
     const sekarang = new Date();
     const [peserta, daftar, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), muatTesDaftar(db, kegiatanId), izinAkun(db, akun.id)]);
     const nSoal = await jumlahSoal(db, daftar.map((t) => t.id));
-    const tes = [];
-    for (const t of daftar) {
-      if (!t.aktif) continue;
-      if (peserta) {
-        const k = await susunKeadaan(db, t, akun.id, sekarang);
-        tes.push({
-          jenis: t.jenis,
-          judul: t.judul,
-          buka_at: t.buka_at,
-          tutup_at: t.tutup_at,
-          durasi_menit: t.durasi_menit,
-          status: k.status,
-          jumlah_soal: k.jumlah_soal,
-          sesi: k.sesi,
-          hasil_tertunda: k.hasil_tertunda,
-          percobaan: k.percobaan,
-          ulang_maks: k.ulang_maks,
-          bisa_ulang: k.bisa_ulang,
-          skor: k.hasil?.skor ?? null,
-          benar: k.hasil?.benar ?? null,
-          total: k.hasil?.total ?? null,
-        });
-      } else {
-        tes.push({
-          jenis: t.jenis,
-          judul: t.judul,
-          buka_at: t.buka_at,
-          tutup_at: t.tutup_at,
-          durasi_menit: t.durasi_menit,
-          status: statusTes(t, nSoal.get(t.id) ?? 0, null, sekarang),
-          jumlah_soal: nSoal.get(t.id) ?? 0,
-          sesi: null,
-          hasil_tertunda: false,
-          percobaan: 1,
-          ulang_maks: t.jenis === "posttest" ? Math.max(1, t.ulang_maks ?? 1) : 1,
-          bisa_ulang: false,
-          skor: null,
-          benar: null,
-          total: null,
-        });
-      }
-    }
+    // (10 Okt 2026) Keadaan tiap tes dihitung BERSAMAAN (tadinya satu per satu, tiap tes beberapa query) -- permintaan user: pindah layer terlalu lama.
+    const tes = await Promise.all(
+      daftar
+        .filter((t) => t.aktif)
+        .map(async (t) => {
+          if (peserta) {
+            const k = await susunKeadaan(db, t, akun.id, sekarang);
+            return {
+              jenis: t.jenis,
+              judul: t.judul,
+              buka_at: t.buka_at,
+              tutup_at: t.tutup_at,
+              durasi_menit: t.durasi_menit,
+              status: k.status,
+              jumlah_soal: k.jumlah_soal,
+              sesi: k.sesi,
+              hasil_tertunda: k.hasil_tertunda,
+              percobaan: k.percobaan,
+              ulang_maks: k.ulang_maks,
+              bisa_ulang: k.bisa_ulang,
+              skor: k.hasil?.skor ?? null,
+              benar: k.hasil?.benar ?? null,
+              total: k.hasil?.total ?? null,
+            };
+          }
+          return {
+            jenis: t.jenis,
+            judul: t.judul,
+            buka_at: t.buka_at,
+            tutup_at: t.tutup_at,
+            durasi_menit: t.durasi_menit,
+            status: statusTes(t, nSoal.get(t.id) ?? 0, null, sekarang),
+            jumlah_soal: nSoal.get(t.id) ?? 0,
+            sesi: null,
+            hasil_tertunda: false,
+            percobaan: 1,
+            ulang_maks: t.jenis === "posttest" ? Math.max(1, t.ulang_maks ?? 1) : 1,
+            bisa_ulang: false,
+            skor: null,
+            benar: null,
+            total: null,
+          };
+        })
+    );
     // (7 Okt 2026) Langkah Pelatihan: status undangan/instrumen/foto + token halaman Transport Lokal peserta.
     let langkah = null;
     let tokenTranslok: string | null = null;
     let presensi = null;
     let kuis = null;
     if (peserta) {
+      // (10 Okt 2026) Lima pembacaan di bawah tidak saling bergantung -> BERSAMAAN (tadinya berurutan).
       // (7 Okt 2026) Kuis Live: ringkasan utk langkah "Kuis Live" (null = belum ada kuis -> langkah disembunyikan). Gagal -> null.
-      kuis = await ringkasanKuisHub(db, kegiatanId, akun.id, peserta.kelas ?? null).catch(() => null);
-      const [peng, rekam] = await Promise.all([muatPengaturanPresensi(db, kegiatanId), muatRekamPresensi(db, kegiatanId, akun.id)]);
+      const [kuisHasil, peng, rekam, langkahHasil, akunToken] = await Promise.all([
+        ringkasanKuisHub(db, kegiatanId, akun.id, peserta.kelas ?? null).catch(() => null),
+        muatPengaturanPresensi(db, kegiatanId),
+        muatRekamPresensi(db, kegiatanId, akun.id),
+        muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso),
+        db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle(),
+      ]);
+      kuis = kuisHasil;
       if (peng) {
         // (8 Okt 2026) presensi per sesi: `hari` = sesi hari ini + catatan peserta; `sudah` = semua sesi hari ini tercatat (peringatan lokasi padam)
         const hari = susunHari(peng.jadwal, rekam, sekarang.getTime());
@@ -89,11 +98,10 @@ export async function GET(req: NextRequest) {
         const pertama = hari.sesi_hari.find((x) => x.at) ?? null;
         presensi = { sudah: kead.lengkap, at: pertama?.at ?? null, jarak_m: pertama?.jarak_m ?? null, manual: !!pertama?.manual, titik_nama: pertama?.titik_nama ?? null, hari, pengaturan: peng };
       }
-      langkah = await muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso);
-      // (7 Okt 2026) akses pertama ke halaman Pelatihan dicatat utk monitoring "belum akses"
-      if (!langkah.sudah_akses) await catatLangkah(db, akun.id, kegiatanId, "akses").catch(() => {});
-      const { data: a } = await db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle();
-      tokenTranslok = (a?.token as string | undefined) ?? null;
+      langkah = langkahHasil;
+      // (7 Okt 2026) akses pertama ke halaman Pelatihan dicatat utk monitoring "belum akses" (tidak ditunggu: tidak menghambat jawaban)
+      if (!langkah.sudah_akses) void catatLangkah(db, akun.id, kegiatanId, "akses").catch(() => {});
+      tokenTranslok = (akunToken.data?.token as string | undefined) ?? null;
     }
     // (8 Okt 2026) Modal pengumuman yang diatur panitia (Kelola Pelatihan > Pengumuman): hanya yang aktif, dalam jadwal, dan sesuai kelas/peran peserta.
     // Gagal baca (mis. tabel belum ada) -> tanpa modal; tidak boleh menghalangi halaman Langkah.

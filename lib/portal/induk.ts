@@ -11,6 +11,7 @@ import { tentukanTujuan } from "@/lib/undangan";
 import type { BukaMode, InfoIdentifikasi, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
+import { memoWaktu } from "@/lib/portal/memoSingkat";
 import type { IkonKode } from "@/lib/sigapTugasUtama";
 
 export type AnggotaTim = { id: number; nama: string; peran: string | null; anda: boolean };
@@ -76,7 +77,13 @@ async function perencanaanAkun(db: Db, akun: AkunPortal): Promise<InfoPerencanaa
 }
 
 /** Tim (PML + semua anggotanya) dan Sub SLS yang didata bersama, dengan perkiraan KK & KK terdampak. */
-export async function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim | null> {
+export function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim | null> {
+  // (10 Okt 2026) Disimpan 60 detik per petugas: induk, wilayah-tim dan halaman-halaman tahap memanggilnya berulang dalam hitungan detik
+  // -- permintaan user (pindah layer terlalu lama). Status identifikasi/laporan boleh tertunda sampai semenit (jawaban user: menit tidak masalah).
+  return memoWaktu(`tim:${petugasId}`, 60_000, () => hitungWilayahTim(db, petugasId));
+}
+
+async function hitungWilayahTim(db: Db, petugasId: number): Promise<WilayahTim | null> {
   const { data: p } = await db.from("bencana_petugas").select("id, nama, peran, atasan_id").eq("id", petugasId).maybeSingle();
   if (!p) return null;
   const pmlId = (p.peran === "pml" ? p.id : p.atasan_id) as number | null;
@@ -95,19 +102,20 @@ export async function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim 
   }
 
   // (10 Okt 2026) Ambil seluruh 1084 Sub SLS (rpc polos terpotong 1000 baris) -- lihat skorSubsls.ts.
-  const skor = await ambilSkorSubsls(db);
+  // Tiga pembacaan di bawah tidak saling bergantung -> dijalankan BERSAMAAN (tadinya berurutan).
+  const idsSls = Array.from(new Set(ids.map((x) => x.slice(0, 14))));
+  const [skor, adaLaporan, [{ data: hsl }, { data: alIdf }]] = await Promise.all([
+    ambilSkorSubsls(db),
+    // Sub SLS yang sudah muncul di laporan harian anggota tim
+    subSlsBerlaporan(db, [pmlId, ...idAnggota]),
+    // (10 Okt 2026) Status identifikasi per Sub SLS: ada baris hasil -> selesai; SLS-nya ada di pembagian identifikasi tetapi belum ada hasil -> proses.
+    Promise.all([
+      db.from("bencana_identifikasi_subsls").select("idsubsls").in("idsubsls", ids),
+      db.from("bencana_identifikasi_alokasi").select("idsls").in("idsls", idsSls),
+    ]),
+  ]);
   type Skor = (typeof skor)[number];
   const peta = new Map<string, Skor>(skor.map((r) => [r.idsubsls, r]));
-
-  // Sub SLS yang sudah muncul di laporan harian anggota tim
-  const adaLaporan = await subSlsBerlaporan(db, [pmlId, ...idAnggota]);
-
-  // (10 Okt 2026) Status identifikasi per Sub SLS: ada baris hasil -> selesai; SLS-nya ada di pembagian identifikasi tetapi belum ada hasil -> proses.
-  const idsSls = Array.from(new Set(ids.map((x) => x.slice(0, 14))));
-  const [{ data: hsl }, { data: alIdf }] = await Promise.all([
-    db.from("bencana_identifikasi_subsls").select("idsubsls").in("idsubsls", ids),
-    db.from("bencana_identifikasi_alokasi").select("idsls").in("idsls", idsSls),
-  ]);
   const sudahIdf = new Set((hsl ?? []).map((x) => x.idsubsls as string));
   const slsIdf = new Set((alIdf ?? []).map((x) => x.idsls as string));
 
@@ -167,19 +175,13 @@ async function subSlsBerlaporan(db: Db, petugasIds: number[]): Promise<Set<strin
 
 /** Induk yang relevan bagi akun, lengkap dengan tahap & data pendukung. */
 export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | null): Promise<Induk[]> {
-  const { induk, tahap } = await bacaDefinisi(db);
+  // (10 Okt 2026) Dipercepat -- permintaan user (pindah layer terlalu lama): definisi induk & penugasan dibaca BERSAMAAN, lalu perencanaan,
+  // wilayah tim dan lembar identifikasi (yang dibutuhkan saja) juga BERSAMAAN. Tadinya semuanya berurutan, satu bolak-balik jaringan per query.
+  const [{ induk, tahap }, pen] = await Promise.all([bacaDefinisi(db), penugasanAkun(db, akun.id)]);
   if (induk.length === 0) return [];
-  const pen = await penugasanAkun(db, akun.id);
-  const hasil: Induk[] = [];
-  let perencanaan: InfoPerencanaan | null | undefined;
-  let wilayah: InfoWilayah | null | undefined;
-  let identifikasi: InfoIdentifikasi | null | undefined;
-  // (10 Okt 2026) tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
-  let timMemo: WilayahTim | null | undefined;
-  const timAkun = async () => {
-    if (timMemo === undefined) timMemo = akun.petugas_bencana_id ? await wilayahTim(db, akun.petugas_bencana_id) : null;
-    return timMemo;
-  };
+
+  type Terpilih = { i: BarisInduk; t: TahapDef[]; isi: Set<string>; penInduk: typeof pen };
+  const terpilih: Terpilih[] = [];
   for (const i of induk) {
     if (kode && i.kode !== kode) continue;
     const kegIds = (i.kegiatan_ids ?? []).map(Number);
@@ -188,22 +190,32 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     if (!relevan) continue;
     const t = tahap.filter((x) => x.induk_kode === i.kode).map(jadiTahap).sort((a, b) => a.urutan - b.urutan);
     if (t.length === 0) continue;
-    const isi = new Set(t.flatMap((x) => x.isi));
+    terpilih.push({ i, t, isi: new Set(t.flatMap((x) => x.isi)), penInduk });
+  }
+  const perlu = (k: string) => terpilih.some((x) => x.isi.has(k));
 
-    if (isi.has("konfirmasi") && perencanaan === undefined) perencanaan = await perencanaanAkun(db, akun);
-    if (isi.has("wilayah_tim") && wilayah === undefined) {
-      const w = await timAkun();
-      wilayah = w ? { total: w.sub_sls.length, ada_laporan: w.ada_laporan, kk: w.total_kk, kk_terdampak: w.total_terdampak } : null;
-    }
+  // Tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
+  const [perencanaan, wilayah, identifikasi] = await Promise.all([
+    perlu("konfirmasi") ? perencanaanAkun(db, akun) : Promise.resolve<InfoPerencanaan | null>(null),
+    perlu("wilayah_tim")
+      ? (async (): Promise<InfoWilayah | null> => {
+          const w = akun.petugas_bencana_id ? await wilayahTim(db, akun.petugas_bencana_id) : null;
+          return w ? { total: w.sub_sls.length, ada_laporan: w.ada_laporan, kk: w.total_kk, kk_terdampak: w.total_terdampak } : null;
+        })()
+      : Promise.resolve<InfoWilayah | null>(null),
     // Lembar Identifikasi SLS: hanya PML (ambilPml null = bukan PML -> modul tidak tampil)
-    if (isi.has("identifikasi") && identifikasi === undefined) {
-      const pml = await ambilPml(db, akun.petugas_bencana_id);
-      if (pml) {
-        const { ringkas } = await daftarIdentifikasi(db, pml.id);
-        identifikasi = { total: ringkas.total, terisi: ringkas.terisi, tidak_terdampak: ringkas.tidak_terdampak, hasil: ringkas.hasil };
-      } else identifikasi = null;
-    }
+    perlu("identifikasi")
+      ? (async (): Promise<InfoIdentifikasi | null> => {
+          const pml = await ambilPml(db, akun.petugas_bencana_id);
+          if (!pml) return null;
+          const { ringkas } = await daftarIdentifikasi(db, pml.id);
+          return { total: ringkas.total, terisi: ringkas.terisi, tidak_terdampak: ringkas.tidak_terdampak, hasil: ringkas.hasil };
+        })()
+      : Promise.resolve<InfoIdentifikasi | null>(null),
+  ]);
 
+  const hasil: Induk[] = [];
+  for (const { i, t, isi, penInduk } of terpilih) {
     const menyerap: string[] = [];
     if (isi.has("pelatihan")) menyerap.push("pelatihan");
     if (isi.has("konfirmasi") || isi.has("wilayah_tim")) menyerap.push("bencana");
@@ -216,9 +228,9 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       ikon: jadiIkon(i.ikon),
       menyerap,
       tahap: t,
-      perencanaan: isi.has("konfirmasi") ? (perencanaan ?? null) : null,
-      wilayah: isi.has("wilayah_tim") ? (wilayah ?? null) : null,
-      identifikasi: isi.has("identifikasi") ? (identifikasi ?? null) : null,
+      perencanaan: isi.has("konfirmasi") ? perencanaan : null,
+      wilayah: isi.has("wilayah_tim") ? wilayah : null,
+      identifikasi: isi.has("identifikasi") ? identifikasi : null,
     });
   }
   return hasil;

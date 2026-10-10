@@ -30,6 +30,14 @@ export const KUNCI_ASLI = {
   sebagai: "sigap_lihat_sebagai",
 } as const;
 
+// (10 Okt 2026) Simpanan data bersama antar-layer (app/portal/dataBersama.ts) disimpan di sessionStorage dengan kunci ini; dibuang saat keluar.
+export const KUNCI_SIMPAN_DATA = "sigap_cache_v1";
+
+/** Waktu (ms) penulisan terakhir lewat apiPortal di tab ini; data simpanan yang diambil sebelum itu dianggap kedaluwarsa. */
+export function waktuTulisTerakhir(): number {
+  return (globalThis as { __sigapTulis?: number }).__sigapTulis ?? 0;
+}
+
 export type LihatSebagai = { id: number; nama: string; aktor: string };
 
 function aman<T>(f: () => T, cadangan: T): T {
@@ -82,6 +90,8 @@ export function hapusSemuaSesi() {
   aman(() => {
     for (const k of [...Object.values(KUNCI), ...Object.values(PENYISIRAN), ...Object.values(KUNCI_ASLI)]) localStorage.removeItem(k);
   }, undefined);
+  // (10 Okt 2026) data simpanan antar-layer milik akun ini ikut dibuang (HP bisa dipakai bergantian)
+  aman(() => sessionStorage.removeItem(KUNCI_SIMPAN_DATA), undefined);
 }
 
 function hapusPenyisiran() {
@@ -169,5 +179,7 @@ export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T>
     throw new Error("SESI_BERAKHIR");
   }
   if (!res.ok) throw new Error((json as { error?: string }).error ?? `Gagal (${res.status})`);
+  // (10 Okt 2026) setelah menulis (POST/PUT/PATCH/DELETE), data simpanan antar-layer ditandai kedaluwarsa -> dimuat ulang di belakang saat halaman dibuka
+  if (init?.method && init.method.toUpperCase() !== "GET") (globalThis as { __sigapTulis?: number }).__sigapTulis = Date.now();
   return json as T;
 }

@@ -5,9 +5,9 @@
 // (10 Okt 2026) Pengambil data Lembar Identifikasi SLS (PML) bersama halaman daftar & halaman isian: /api/portal/identifikasi.
 // `dariAman` = alamat induk dari ?dari= (hanya path internal), dipakai tombol kembali.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { apiPortal, bacaSesi } from "@/app/portal/sesi";
+import { useData } from "@/app/portal/dataBersama";
 import type { RingkasIdentifikasi, SubIdentifikasi } from "@/lib/identifikasi";
 
 export type DataIdentifikasi = { sekarang: string; pml: { id: number; nama: string }; sub: SubIdentifikasi[]; ringkas: RingkasIdentifikasi };
@@ -23,28 +23,14 @@ export function dariAman(): string | null {
 
 export function useIdentifikasi() {
   const router = useRouter();
-  const [data, setData] = useState<DataIdentifikasi | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
-
-  const muat = useCallback(async () => {
-    if (!bacaSesi()) return router.replace("/");
-    try {
-      setData(await apiPortal<DataIdentifikasi>("/api/portal/identifikasi"));
-      setGalat(null);
-    } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
-      setGalat(e instanceof Error ? e.message : "Gagal memuat.");
-    }
-  }, [router]);
-
+  // (10 Okt 2026) Lewat simpanan bersama (app/portal/dataBersama.ts): daftar sudah diambil lebih dulu dari halaman tahap, jadi langsung tampil;
+  // setelah menyimpan hasil (apiPortal POST) simpanan ditandai kedaluwarsa dan dimuat ulang di belakang.
+  const d = useData<DataIdentifikasi>("/api/portal/identifikasi", { segarMs: 5_000, interval: 180_000 });
   useEffect(() => {
-    muat();
-    const c = () => document.visibilityState === "visible" && muat();
-    document.addEventListener("visibilitychange", c);
-    return () => document.removeEventListener("visibilitychange", c);
-  }, [muat]);
-
-  return { data, galat, muat };
+    if (d.galat === "SESI_BERAKHIR") router.replace("/");
+  }, [d.galat, router]);
+  const galat = d.galat && d.galat !== "SESI_BERAKHIR" ? d.galat : null;
+  return { data: d.data, galat, muat: d.muat };
 }
 
 /** "<1" untuk perkiraan di bawah satu KK, selain itu dibulatkan. */

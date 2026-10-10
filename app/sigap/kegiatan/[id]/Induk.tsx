@@ -7,10 +7,12 @@
 // Mengetuk tahap membuka halaman tahapnya (Layer 3): Pelatihan -> /sigap/pelatihan, lainnya -> /sigap/kegiatan/<kegiatan>/<tahap>.
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
 import { keAtas } from "@/app/portal/navigasi";
+import { buatRencana, useSiapkan } from "@/app/portal/siapkan";
 import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
 import type { StatusLangkah } from "@/lib/sigapKegiatan";
 import { useInduk } from "../useInduk";
@@ -98,6 +100,10 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
 export default function HalamanInduk({ kode }: { kode: string }) {
   const router = useRouter();
   const { induk, tahap, siap, galat } = useInduk(kode);
+  // (10 Okt 2026) Selagi petugas membaca tahapan, data & kode halaman TUJUAN (semua tahap yang sudah terbuka; tahap prioritas lebih dulu) diambil di belakang
+  // supaya saat tahap ditekan langsung tampil -- permintaan user (lihat app/portal/siapkan.ts)
+  const rencana = useMemo(() => buatRencana(tahap, !!induk?.identifikasi), [tahap, induk]);
+  useSiapkan(rencana, siap);
   const selesai = tahap.filter((t) => t.status === "selesai").length;
   const sekarang = tahapSekarang(tahap);
   const idxAktif = sekarang ? tahap.findIndex((t) => t.kode === sekarang.tahap.kode) : -1;

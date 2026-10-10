@@ -8,13 +8,14 @@
 // ikon bulat per kegiatan dengan cincin progres + tanda seru bila mendesak, mendesak di depan (lib/sigapKegiatan.ts). Mengetuk ikon membuka
 // Layer 2 (tahapan bernomor) atau langsung halaman kerja bila kegiatan belum punya tahapan terukur.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { ringkasInduk, susunTahap, tahapSekarang, type Induk } from "@/lib/sigapTahap";
+import { ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
+import { tugasDariInduk } from "@/lib/sigapPrioritas";
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
@@ -25,6 +26,8 @@ import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
+import { useData } from "./dataBersama";
+import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
 type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
 type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
@@ -54,91 +57,40 @@ const inisial = (n: string) => {
 
 export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKeluar: () => void }) {
   const adaSesi = typeof window !== "undefined" && !!bacaSesi();
-  const [data, setData] = useState<Data | null>(null);
-  const [hub, setHub] = useState<HubBeranda | null>(null);
-  const [keg, setKeg] = useState<RingkasKegiatan[] | null>(null); // kegiatan bertahapan (Transport Lokal), /api/portal/kegiatan
+  // (10 Okt 2026) Data lewat simpanan bersama (dataBersama.ts) -- permintaan user: pindah layer terlalu lama. Keempat API diambil BERSAMAAN;
+  // data terakhir langsung tampil lalu diperbarui di belakang, dan dipakai ulang oleh Layer 2/3 (tanpa kerangka abu-abu).
+  const dBeranda = useData<Data>("/api/portal/beranda", { interval: 180_000 });
+  // Data pelatihan (untuk menentukan tugas paling mendesak). Gagal -> beranda tetap jalan tanpa bagian pelatihan.
+  const dHub = useData<HubBeranda>("/api/sigap/pelatihan", { interval: 60_000 });
+  // kegiatan bertahapan (Transport Lokal), /api/portal/kegiatan. Gagal: Transport Lokal tampil dari kartu biasa (tanpa cincin progres)
+  const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan", { interval: 120_000 });
   // (9 Okt 2026) kegiatan INDUK + tahap proses bisnis (mis. Pendataan Pascabencana: Perencanaan, Pelatihan, Pendataan, Evaluasi), /api/portal/induk
-  const [induk, setInduk] = useState<Induk[] | null>(null);
-  const [hubMuat, setHubMuat] = useState<"memuat" | "siap" | "gagal">("memuat");
-  const [offset, setOffset] = useState(0); // selisih jam server - jam HP
+  // Gagal: Beranda memakai ikon lama (pelatihan, Transport Lokal, bencana terpisah)
+  const dInduk = useData<{ induk: Induk[] }>("/api/portal/induk", { interval: 120_000 });
+  const [pinSelesai, setPinSelesai] = useState(false);
+  const data: Data | null = useMemo(() => (dBeranda.data && pinSelesai ? { ...dBeranda.data, pin_bawaan: false } : dBeranda.data), [dBeranda.data, pinSelesai]);
+  const hub = dHub.data;
+  const keg = dKeg.data?.kegiatan ?? null;
+  const induk = dInduk.data?.induk ?? null;
+  const hubMuat: "memuat" | "siap" | "gagal" = hub ? "siap" : dHub.galat ? "gagal" : "memuat";
+  const offset = hub ? Date.parse(hub.sekarang) - dHub.tiba : 0; // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [errorAksi, setError] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<string | null>(null);
   // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
   const [gantiPin, setGantiPin] = useState(false);
-
-  const muat = useCallback(async () => {
-    if (!bacaSesi()) return;
-    try {
-      setData(await apiPortal<Data>("/api/portal/beranda"));
-    } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return onKeluar();
-      setError(e instanceof Error ? e.message : "Gagal memuat.");
-    }
-  }, [onKeluar]);
-
-  // Data pelatihan (untuk menentukan tugas paling mendesak). Gagal -> beranda tetap jalan tanpa bagian pelatihan.
-  const muatHub = useCallback(async () => {
-    if (!bacaSesi()) return;
-    try {
-      const h = await apiPortal<HubBeranda>("/api/sigap/pelatihan");
-      setOffset(Date.parse(h.sekarang) - Date.now());
-      setHub(h);
-      setHubMuat("siap");
-    } catch {
-      setHubMuat((m) => (m === "siap" ? m : "gagal"));
-    }
-  }, []);
-
-  const muatKeg = useCallback(async () => {
-    if (!bacaSesi()) return;
-    try {
-      const d = await apiPortal<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan");
-      setKeg(d.kegiatan);
-    } catch {
-      /* gagal: Transport Lokal tampil dari kartu biasa (tanpa cincin progres) */
-    }
-  }, []);
-
-  const muatInduk = useCallback(async () => {
-    if (!bacaSesi()) return;
-    try {
-      const d = await apiPortal<{ induk: Induk[] }>("/api/portal/induk");
-      setInduk(d.induk);
-    } catch {
-      /* gagal: Beranda memakai ikon lama (pelatihan, Transport Lokal, bencana terpisah) */
-    }
-  }, []);
-
+  const sesiHabis = [dBeranda.galat, dHub.galat, dKeg.galat, dInduk.galat].includes("SESI_BERAKHIR");
   useEffect(() => {
-    muat();
-    muatHub();
-    muatKeg();
-    muatInduk();
-  }, [muat, muatHub, muatKeg, muatInduk]);
+    if (sesiHabis) onKeluar();
+  }, [sesiHabis, onKeluar]);
+  // galat memuat beranda (selain sesi habis) hanya ditampilkan bila belum ada data sama sekali
+  const error = errorAksi ?? (!dBeranda.data && dBeranda.galat && dBeranda.galat !== "SESI_BERAKHIR" ? dBeranda.galat : null);
 
-  // jam berjalan (sisa waktu) tiap 30 dtk; data pelatihan disegarkan tiap menit saat layar terlihat
+  // jam berjalan (sisa waktu) tiap 30 dtk
   useEffect(() => {
     const a = setInterval(() => setTik((x) => x + 1), 30_000);
-    const b = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      muatHub();
-      muatKeg();
-      muatInduk();
-    }, 60_000);
-    const c = () => {
-      if (document.visibilityState !== "visible") return;
-      muatHub();
-      muatKeg();
-      muatInduk();
-    };
-    document.addEventListener("visibilitychange", c);
-    return () => {
-      clearInterval(a);
-      clearInterval(b);
-      document.removeEventListener("visibilitychange", c);
-    };
-  }, [muatHub, muatKeg, muatInduk]);
+    return () => clearInterval(a);
+  }, []);
 
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
@@ -203,25 +155,17 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     // (Layer 1); tahapnya tampil di Layer 2. Menunggu data pelatihan & Transport Lokal siap dulu supaya ikon tidak berganti-ganti.
     const indukRingkas: RingkasKegiatan[] = [];
     const serap = new Set<string>();
-    let tujuanBencana: { href: string; judul: string; uraian: string } | null = null;
+    const tugasInduk: TugasUtama[] = [];
     if (induk && keg && hubMuat !== "memuat") {
       for (const i of induk) {
         const r = ringkasInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
         if (!r) continue;
         indukRingkas.push(r);
         i.menyerap.forEach((x) => serap.add(x));
-        // (10 Okt 2026) Tombol "Tugas aktif" pendataan bencana harus ke TAHAP yang sedang dikerjakan (mis. Pendataan), bukan ke halaman konfirmasi
-        // undangan lama -- permintaan user (tangkapan layar akun Valina). Tahap sekarang = yang mendesak/perlu; bila tak ada, tahap yang berjalan; bila tak ada, garis waktu kegiatan.
-        if (i.menyerap.includes("bencana")) {
-          const ts = susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
-          const kini = tahapSekarang(ts);
-          const tujuan = kini?.tahap ?? ts.find((x) => !x.terkunci && x.status === "berjalan") ?? null;
-          tujuanBencana = {
-            href: tujuan?.rute ?? `/sigap/kegiatan/${i.kode}`,
-            judul: i.nama,
-            uraian: tujuan ? `Tahap ${tujuan.no} · ${tujuan.nama}${kini ? `: ${kini.modul.ket}` : ""}` : "Lihat tahapan dan tugas Anda.",
-          };
-        }
+        // (10 Okt 2026) Kartu "Tugas aktif" kegiatan induk memakai aturan prioritas umum (lib/sigapPrioritas.ts): mendesak > perlu > berikutnya;
+        // tombol langsung ke langkah yang diprioritaskan -- permintaan user (tangkapan layar akun Valina: tombol salah ke halaman undangan).
+        const tI = tugasDariInduk(i, susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang }), keg, sekarang);
+        if (tI) tugasInduk.push(tI);
       }
     }
     const semua = urutKegiatan([...indukRingkas, ...(pel && !serap.has("pelatihan") ? [pel] : []), ...translok.filter((x) => !serap.has(x.id)), ...lain.filter((x) => !serap.has(x.id))]);
@@ -230,12 +174,29 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const jadiKegiatan = (x: Kartu) => (x.grup === "tugas" && (x.kode.startsWith("translok-") || ringkasDariKartu(x) !== null)) || x.kode === "pelatihan" || x.kode === "pelatihan-undangan" || x.kode === "pelatihan-instrumen";
     const sisa = k.filter((x) => !jadiKegiatan(x));
     if (hub?.boleh_lihat_kelola) sisa.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/kelola/pelatihan" });
-    const tanpaTranslok = keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k;
-    const untukTugas = tujuanBencana ? tanpaTranslok.map((x) => (x.kode === "bencana" && x.grup === "tugas" ? { ...x, ...tujuanBencana } : x)) : tanpaTranslok;
-    return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(keg ?? [], sekarang), tugasDariKartu(untukTugas)) };
+    // Kartu & kegiatan yang sudah diserap kegiatan induk tidak lagi jadi kandidat tugas sendiri (supaya tidak dobel / tujuan lama)
+    const untukTugas = (keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k).filter((x) => !(x.kode === "bencana" && serap.has("bencana")));
+    const kegTugas = (keg ?? []).filter((x) => !serap.has(x.id));
+    return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(kegTugas, sekarang), tugasDariKartu(untukTugas), ...tugasInduk) };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, dtsen, hub, hubMuat, keg, induk, offset, tik]);
+
+  // (10 Okt 2026) Prefetch: selagi petugas membaca Beranda, siapkan data tujuan layer berikutnya (tahapan, dan halaman kerja yang jadi tujuan
+  // tombol biru: wilayah tim / lembar identifikasi) agar saat ditekan sudah ada -- permintaan user. Lihat siapkan.ts.
+  const rencana: Rencana = useMemo(() => {
+    const r: Rencana = { rute: [], data: [] };
+    if (!induk || !keg || hubMuat === "memuat") return r;
+    for (const i of induk) {
+      r.rute.push(`/sigap/kegiatan/${i.kode}`);
+      const p = buatRencana(susunTahap({ induk: i, hub, hubMuat, keg, nowMs: Date.now() + offset }), !!i.identifikasi);
+      r.rute.push(...p.rute);
+      r.data.push(...p.data);
+    }
+    return { rute: Array.from(new Set(r.rute)), data: Array.from(new Set(r.data)) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [induk, hub, hubMuat, keg, offset, tik]);
+  useSiapkan(rencana);
 
   const nama = data?.nama ?? dtsen?.nama ?? "";
   const menu = kartu.filter((k) => k.grup !== "kelola");
@@ -370,7 +331,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
             <GantiPinCepat
               onSelesai={() => {
                 setGantiPin(false);
-                setData((d) => (d ? { ...d, pin_bawaan: false } : d));
+                setPinSelesai(true);
               }}
               onNanti={() => setGantiPin(false)}
             />

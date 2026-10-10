@@ -5,12 +5,14 @@
 // (9 Okt 2026) Layer 3 generik: halaman kerja satu tahap kegiatan induk (mockup disetujui user). Isinya mengikuti modul yang diatur admin
 // (urut seperti di pengaturan): Wilayah tugas per tim, Transport Lokal, Konfirmasi. Tahap Pelatihan memakai halaman /sigap/pelatihan.
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
+import { buatRencana, useSiapkan } from "@/app/portal/siapkan";
 import type { ModulTahap } from "@/lib/sigapTahap";
+import { adalahTugas } from "@/lib/sigapPrioritas";
 import { useInduk } from "../../useInduk";
 import WilayahTim from "./WilayahTim";
 
@@ -30,7 +32,8 @@ const CHIP: Record<ModulTahap["status"], { teks: string; kelas: string }> = {
 const SEMBUNYIKAN_WILAYAH_TIM_PML = true;
 
 // (10 Okt 2026) Modul yang berupa TUGAS (harus dikerjakan) diberi nomor langkah agar PML jelas urutannya -- permintaan user.
-const adalahTugas = (kode: string) => kode === "identifikasi" || kode.startsWith("translok:");
+// adalahTugas dipakai bersama kartu Tugas aktif di Beranda (lib/sigapPrioritas.ts) supaya nomor "Langkah i dari n" di kartu & halaman ini sama.
+// Perbaikan: kode modul Transport Lokal bentuknya "translok-<id>" (bukan "translok:<id>"), sehingga sebelumnya tidak ikut dinomori.
 
 function BarisModul({ m, no }: { m: ModulTahap; no?: number }) {
   const c = CHIP[m.status];
@@ -72,6 +75,10 @@ export default function HalamanTahap() {
   const tugas = t && !t.terkunci ? t.modul.filter((m) => adalahTugas(m.kode)) : [];
   const adalahPml = !!induk?.identifikasi || !!t?.modul.some((m) => m.kode === "identifikasi");
   const sembunyikanWilayah = SEMBUNYIKAN_WILAYAH_TIM_PML && adalahPml;
+  // (10 Okt 2026) Selagi petugas membaca halaman ini, data & kode halaman kerja tujuannya (Transport Lokal, Lembar Identifikasi, wilayah tim)
+  // diambil di belakang supaya saat baris ditekan langsung tampil -- permintaan user (lihat app/portal/siapkan.ts)
+  const rencana = useMemo(() => buatRencana(t && !t.terkunci ? [t] : [], sembunyikanWilayah), [t, sembunyikanWilayah]);
+  useSiapkan(rencana, siap);
   const tugasSelesai = tugas.filter((m) => m.status === "selesai").length;
 
   // Tahap Pelatihan punya halamannya sendiri; tahap yang tak berlaku bagi akun ini -> kembali ke garis waktu

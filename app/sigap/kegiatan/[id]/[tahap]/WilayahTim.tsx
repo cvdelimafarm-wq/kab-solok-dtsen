@@ -6,9 +6,9 @@
 // tim (PML + semua PPL) dan Sub SLS yang didata bersama -- bukan "siapa mendata Sub SLS apa". Tiap Sub SLS satu baris padat dengan
 // perkiraan KK dan perkiraan KK terdampak. Status per Sub SLS hanya "sudah ada laporan" (satu-satunya data yang benar-benar ada di SIGAP).
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import IkonMenu from "@/app/portal/IkonMenu";
-import { apiPortal } from "@/app/portal/sesi";
+import { useData } from "@/app/portal/dataBersama";
 import type { WilayahTim as Tim } from "@/lib/portal/induk";
 import { angkaId, judulKata, namaSingkat } from "../../format";
 
@@ -16,18 +16,11 @@ import { angkaId, judulKata, namaSingkat } from "../../format";
 const GRID = "grid grid-cols-[minmax(0,1fr)_48px_72px] gap-x-2";
 
 export default function WilayahTim() {
-  const [tim, setTim] = useState<Tim | null | undefined>(undefined);
-  const [galat, setGalat] = useState<string | null>(null);
-
-  useEffect(() => {
-    let batal = false;
-    apiPortal<{ tim: Tim | null }>("/api/portal/wilayah-tim")
-      .then((d) => !batal && setTim(d.tim))
-      .catch((e) => !batal && setGalat(e instanceof Error ? e.message : "Gagal memuat wilayah tugas."));
-    return () => {
-      batal = true;
-    };
-  }, []);
+  // (10 Okt 2026) Data dari simpanan bersama (sudah diambil lebih dulu selagi petugas di halaman sebelumnya), diperbarui di belakang.
+  // Data dasar (Sub SLS, KK) hampir tetap; status identifikasi/laporan boleh tertunda beberapa menit.
+  const d = useData<{ tim: Tim | null }>("/api/portal/wilayah-tim", { segarMs: 60_000, interval: 180_000 });
+  const tim: Tim | null | undefined = d.data ? d.data.tim : undefined;
+  const galat = d.galat && d.galat !== "SESI_BERAKHIR" && !d.data ? d.galat : null;
 
   // Kelompok per kecamatan · nagari (sudah terurut dari server)
   const kelompok = useMemo(() => {
