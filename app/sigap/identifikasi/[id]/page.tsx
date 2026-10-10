@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { apiPortal, bacaLihatSebagai } from "@/app/portal/sesi";
+import { kirimAtauAntre } from "@/app/portal/antreanKirim";
 import { BATAS_CATATAN, BATAS_KET, JENIS_DAMPAK, JENIS_LAMA, kodeDesa, periksaIsian, peringatanIsian, type KunciAngka } from "@/lib/identifikasi";
 import KontakRekan from "../KontakRekan";
 import PetaSheet, { IkonPeta } from "../PetaSheet";
@@ -95,12 +96,22 @@ export default function IsianIdentifikasi() {
     if (!s || !cek.ok || menyimpan) return;
     setMenyimpan(true);
     setPesan(null);
+    const nol = Object.fromEntries(Object.keys(KOSONG).map((k) => [k, 0]));
+    const body = tidak ? { ...nol, idsubsls, tidak_terdampak: true, catatan } : { ...nilai, idsubsls, tidak_terdampak: false, lainnya_ket: ket, catatan };
+    // (10 Okt 2026) Mode "masuk sebagai" hanya melihat: ditolak server, jadi dikirim langsung agar pesannya tampil. Selain itu hasil langsung tampil tersimpan
+    // dan dikirim di belakang layar (antreanKirim.ts) -- petugas tidak menunggu server & aman bila sinyal lemah (permintaan user).
+    if (!sebagai) {
+      const r = kirimAtauAntre("/api/portal/identifikasi", body, idsubsls);
+      if (!r.ok) {
+        setPesan(r.pesan);
+        setMenyimpan(false);
+        return;
+      }
+      router.replace(daftar);
+      return;
+    }
     try {
-      const nol = Object.fromEntries(Object.keys(KOSONG).map((k) => [k, 0]));
-      await apiPortal("/api/portal/identifikasi", {
-        method: "POST",
-        body: JSON.stringify(tidak ? { ...nol, idsubsls, tidak_terdampak: true, catatan } : { ...nilai, idsubsls, tidak_terdampak: false, lainnya_ket: ket, catatan }),
-      });
+      await apiPortal("/api/portal/identifikasi", { method: "POST", body: JSON.stringify(body) });
       router.replace(daftar);
     } catch (e) {
       if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");

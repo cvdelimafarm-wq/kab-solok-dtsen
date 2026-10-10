@@ -3,10 +3,13 @@
 // terlihat oleh petugas dan data tidak basi. Yang disimpan hanya halaman "Tidak ada sinyal" (offline.html)
 // beserta ikon, untuk ditampilkan saat HP benar-benar tidak terhubung internet.
 // Bila nanti perlu mode offline penuh (isi tanpa sinyal), dikembangkan di berkas ini.
+// (10 Okt 2026) Pengecualian: peta wilayah kerja yang diunduh ke HP (cache "sigap-peta-v1", diisi app/portal/petaOffline.ts) dilayani dari sini
+// lewat alamat tetap /peta-cache/<wa|sls>/<nama berkas> supaya terbuka seketika dan tanpa sinyal. Halaman & data aplikasi tetap TIDAK di-cache di sini.
 // (8 Okt 2026) Notifikasi push: event "push" menampilkan notifikasi (juga saat aplikasi ditutup), "notificationclick" membuka
 // halaman tujuan. Isi push dikirim server (lib/sigapPush.ts) sebagai JSON { judul, isi, url, tag }.
 
-const VERSI = "sigap-v2";
+const VERSI = "sigap-v3";
+const CACHE_PETA = "sigap-peta-v1";
 const BERKAS_OFFLINE = ["/offline.html", "/ikon/ikon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -18,13 +21,26 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((kunci) => Promise.all(kunci.filter((k) => k !== VERSI).map((k) => caches.delete(k))))
+      .then((kunci) => Promise.all(kunci.filter((k) => k !== VERSI && k !== CACHE_PETA).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
+  // (10 Okt 2026) peta yang tersimpan di HP
+  if (req.method === "GET") {
+    const u = new URL(req.url);
+    if (u.origin === self.location.origin && u.pathname.startsWith("/peta-cache/")) {
+      e.respondWith(
+        caches
+          .open(CACHE_PETA)
+          .then((c) => c.match(u.origin + u.pathname))
+          .then((r) => r || new Response("Peta ini belum tersimpan di HP.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } })),
+      );
+      return;
+    }
+  }
   // Hanya navigasi halaman (buka/pindah halaman) yang ditangani; API, gambar, unggah foto dll dibiarkan
   // langsung ke jaringan seperti web biasa.
   if (req.method !== "GET" || req.mode !== "navigate") return;

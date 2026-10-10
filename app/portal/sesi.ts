@@ -30,13 +30,35 @@ export const KUNCI_ASLI = {
   sebagai: "sigap_lihat_sebagai",
 } as const;
 
-// (10 Okt 2026) Simpanan data bersama antar-layer (app/portal/dataBersama.ts) disimpan di sessionStorage dengan kunci ini; dibuang saat keluar.
-export const KUNCI_SIMPAN_DATA = "sigap_cache_v1";
+// (10 Okt 2026) Simpanan data bersama antar-layer (app/portal/dataBersama.ts) disimpan di localStorage (bertahan walau aplikasi ditutup);
+// dibuang saat KELUAR. Saat sesi hanya kedaluwarsa (12 jam) data akun yang sama dipertahankan supaya tampilan pertama setelah masuk lagi tetap instan.
+export const KUNCI_SIMPAN_DATA = "sigap_cache_v2";
+/** Peta wilayah kerja yang diunduh ke HP (Cache Storage) + daftar berkasnya (app/portal/petaOffline.ts). Tidak dibuang saat keluar (bukan data pribadi). */
+export const NAMA_CACHE_PETA = "sigap-peta-v1";
+export const KUNCI_MANIFEST_PETA = "sigap_peta_manifest_v1";
+/** Antrean hasil yang menunggu dikirim ke server (app/portal/antreanKirim.ts). Dimiliki satu akun; tidak dibuang saat keluar agar tidak hilang. */
+export const KUNCI_ANTREAN = "sigap_antrean_v1";
 
-/** Waktu (ms) penulisan terakhir lewat apiPortal di tab ini; data simpanan yang diambil sebelum itu dianggap kedaluwarsa. */
-export function waktuTulisTerakhir(): number {
-  return (globalThis as { __sigapTulis?: number }).__sigapTulis ?? 0;
+/** Id akun pemilik sesi aktif (bagian pertama token sesi), atau null. */
+export function pemilikSesi(): number | null {
+  const s = bacaSesi();
+  if (!s) return null;
+  const n = Number(s.split(".")[0]);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+/** Pendengar penulisan (POST/PUT/PATCH/DELETE lewat apiPortal yang berhasil): dipakai simpanan data untuk menandai data terkait kedaluwarsa. */
+export const pendengarTulis = new Set<(path: string) => void>();
+
+/** Galat dari apiPortal membawa kode status HTTP (undefined = gagal sambung / tak ada jawaban). */
+export type GalatApi = Error & { status?: number };
+
+/** (10 Okt 2026) Id build aplikasi yang sedang berjalan di HP (diisi saat build, next.config.js) dan yang terakhir dilaporkan server lewat header X-Build-Id.
+ *  Beda = ada deploy baru; kode di HP ini masih versi lama (lihat PembaruanTersedia.tsx). Data simpanan TIDAK dibuang karena deploy:
+ *  tiap jenis data punya nomor skema sendiri (dataBersama.ts) -- permintaan user: perbarui hanya area yang berkaitan. */
+export const BUILD_ID_KLIEN = process.env.NEXT_PUBLIC_BUILD_ID ?? "dev";
+export const infoBuild: { server: string | null } = { server: null };
+export const pendengarBuild = new Set<() => void>();
 
 export type LihatSebagai = { id: number; nama: string; aktor: string };
 
@@ -85,13 +107,17 @@ export function simpanPenyisiran(d: SsoPenyisiran) {
   }, undefined);
 }
 
-/** Keluar dari portal: hapus sesi portal/SIGAP & token penyisiran turunan (perangkat bisa dipakai bergantian). */
-export function hapusSemuaSesi() {
+/** Keluar dari portal: hapus sesi portal/SIGAP & token penyisiran turunan (perangkat bisa dipakai bergantian).
+ *  `simpanData` = hanya sesi habis (bukan keluar disengaja): data simpanan akun yang sama dipertahankan. */
+export function hapusSemuaSesi(opsi?: { simpanData?: boolean }) {
   aman(() => {
     for (const k of [...Object.values(KUNCI), ...Object.values(PENYISIRAN), ...Object.values(KUNCI_ASLI)]) localStorage.removeItem(k);
   }, undefined);
-  // (10 Okt 2026) data simpanan antar-layer milik akun ini ikut dibuang (HP bisa dipakai bergantian)
-  aman(() => sessionStorage.removeItem(KUNCI_SIMPAN_DATA), undefined);
+  if (!opsi?.simpanData) {
+    // (10 Okt 2026) data simpanan antar-layer milik akun ini ikut dibuang (HP bisa dipakai bergantian)
+    aman(() => localStorage.removeItem(KUNCI_SIMPAN_DATA), undefined);
+    aman(() => sessionStorage.removeItem("sigap_cache_v1"), undefined);
+  }
 }
 
 function hapusPenyisiran() {
@@ -169,17 +195,35 @@ export function tujuanLanjut(): string | null {
 
 export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T> {
   const s = bacaSesi();
-  const res = await fetch(path, {
-    ...init,
-    headers: { ...(init?.headers ?? {}), "Content-Type": "application/json", ...(s ? { Authorization: `Bearer ${s}` } : {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), "Content-Type": "application/json", ...(s ? { Authorization: `Bearer ${s}` } : {}) },
+    });
+  } catch (e) {
+    const g: GalatApi = new Error(e instanceof Error ? e.message : "Tidak ada sambungan.");
+    throw g;
+  }
+  const buildServer = res.headers.get("x-build-id");
+  if (buildServer && buildServer !== infoBuild.server) {
+    infoBuild.server = buildServer;
+    pendengarBuild.forEach((f) => f());
+  }
   const json = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    hapusSemuaSesi();
+    hapusSemuaSesi({ simpanData: true });
     throw new Error("SESI_BERAKHIR");
   }
-  if (!res.ok) throw new Error((json as { error?: string }).error ?? `Gagal (${res.status})`);
-  // (10 Okt 2026) setelah menulis (POST/PUT/PATCH/DELETE), data simpanan antar-layer ditandai kedaluwarsa -> dimuat ulang di belakang saat halaman dibuka
-  if (init?.method && init.method.toUpperCase() !== "GET") (globalThis as { __sigapTulis?: number }).__sigapTulis = Date.now();
+  if (!res.ok) {
+    const g: GalatApi = new Error((json as { error?: string }).error ?? `Gagal (${res.status})`);
+    g.status = res.status;
+    throw g;
+  }
+  // (10 Okt 2026) setelah menulis (POST/PUT/PATCH/DELETE) data simpanan terkait ditandai kedaluwarsa -> dimuat ulang di belakang saat halaman dibuka
+  if (init?.method && init.method.toUpperCase() !== "GET") {
+    const jalur = path.split("?")[0];
+    pendengarTulis.forEach((f) => f(jalur));
+  }
   return json as T;
 }

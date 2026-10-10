@@ -4,9 +4,12 @@
 //
 // (10 Okt 2026) Lembar bawah "Peta" -- permintaan user: ikon peta di sebelah nama nagari untuk melihat peta WA (desa) dan peta SLS.
 // Berkas diunggah belakangan ke bucket Storage "peta-wilayah"; yang belum ada tampil "Belum diunggah". Tautan dari /api/portal/peta (berlaku 1 jam).
+// (10 Okt 2026) Peta yang sudah diunduh ke HP (app/portal/petaOffline.ts) dibuka dari alamat tetap /peta-cache/... -- seketika & tanpa sinyal, dan bila SEMUA
+// peta yang diperlukan sudah tersimpan, lembar ini tidak memanggil server sama sekali. Yang belum tersimpan tetap memakai tautan bertanda tangan seperti semula.
 
 import { useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import { berkasDiperlukan, daftarPetaDari, jalurPeta, manifestLengkap, petaTersimpan, swAktif, bacaManifest } from "@/app/portal/petaOffline";
 
 type Berkas = { nama: string; url: string; tipe: "pdf" | "gambar"; halaman: number; dari: number };
 type Hasil = { wa: Record<string, Berkas[]>; sls: Record<string, Berkas[]> };
@@ -21,22 +24,30 @@ export function IkonPeta({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function Lembar({ berkas }: { berkas: Berkas[] | undefined }) {
+function Lembar({ berkas, folder, lokal }: { berkas: Berkas[] | undefined; folder: "wa" | "sls"; lokal: Set<string> }) {
   if (!berkas || berkas.length === 0) return <span className="rounded-full bg-[#EEF2F7] px-3 py-1.5 text-[12px] font-bold text-[#8A97AB]">Belum diunggah</span>;
   return (
     <span className="flex flex-wrap gap-1.5">
-      {berkas.map((b) => (
-        <a key={b.nama} href={b.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#E6EEFC] px-3 text-[12.5px] font-extrabold text-[#1F5FD1] active:bg-[#D3E0F5]">
-          <IkonPeta className="h-3.5 w-3.5" />
-          {b.dari > 1 ? `Lembar ${b.halaman} dari ${b.dari}` : "Buka peta"}
-        </a>
-      ))}
+      {berkas.map((b) => {
+        const jalur = jalurPeta(folder, b.nama);
+        const diHp = lokal.has(jalur);
+        const href = diHp ? jalur : b.url;
+        if (!href) return null;
+        return (
+          <a key={b.nama} href={href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#E6EEFC] px-3 text-[12.5px] font-extrabold text-[#1F5FD1] active:bg-[#D3E0F5]">
+            <IkonPeta className="h-3.5 w-3.5" />
+            {b.dari > 1 ? `Lembar ${b.halaman} dari ${b.dari}` : "Buka peta"}
+            {diHp && <span className="ml-0.5 rounded-full bg-[#E3F6EC] px-1.5 py-[1px] text-[10px] font-extrabold text-[#13794B]">di HP</span>}
+          </a>
+        );
+      })}
     </span>
   );
 }
 
 export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: boolean; onTutup: () => void; judul: string; desa: string | null; subs: SubPeta[] }) {
   const [hasil, setHasil] = useState<Hasil | null>(null);
+  const [lokal, setLokal] = useState<Set<string>>(new Set());
   const [galat, setGalat] = useState<string | null>(null);
   const kunci = `${desa ?? ""}|${subs.map((s) => s.idsubsls).join(",")}`;
 
@@ -45,12 +56,42 @@ export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: 
     let batal = false;
     setHasil(null);
     setGalat(null);
-    const q = new URLSearchParams();
-    if (desa) q.set("desa", desa);
-    if (subs.length) q.set("sub", subs.map((s) => s.idsubsls).join(","));
-    apiPortal<Hasil>(`/api/portal/peta?${q.toString()}`)
-      .then((h) => !batal && setHasil(h))
-      .catch((e) => !batal && setGalat(e instanceof Error ? e.message : "Gagal memuat peta."));
+    const daftar = daftarPetaDari(subs.map((s) => s.idsubsls));
+    if (desa) daftar.desa = Array.from(new Set([desa, ...daftar.desa]));
+    (async () => {
+      // 1) semua peta sudah ada di HP & daftarnya masih baru -> tanpa jaringan
+      const m = bacaManifest();
+      if (m && manifestLengkap(daftar, m) && swAktif()) {
+        const perlu = berkasDiperlukan(daftar, m);
+        const ada = new Set<string>();
+        for (const x of perlu) if (await petaTersimpan(x.folder, x.berkas.nama)) ada.add(jalurPeta(x.folder, x.berkas.nama));
+        if (batal) return;
+        if (perlu.every((x) => ada.has(jalurPeta(x.folder, x.berkas.nama)))) {
+          const lokalDari = (folder: "wa" | "sls", kode: string) => (m[folder][kode] ?? []).map((b) => ({ ...b, url: "" }));
+          setLokal(ada);
+          setHasil({ wa: desa ? { [desa]: lokalDari("wa", desa) } : {}, sls: Object.fromEntries(subs.map((s) => [s.idsubsls, lokalDari("sls", s.idsubsls)])) });
+          return;
+        }
+      }
+      // 2) selain itu tanya server, lalu tandai yang sudah tersimpan di HP
+      const q = new URLSearchParams();
+      if (desa) q.set("desa", desa);
+      if (subs.length) q.set("sub", subs.map((s) => s.idsubsls).join(","));
+      try {
+        const h = await apiPortal<Hasil>(`/api/portal/peta?${q.toString()}`);
+        if (batal) return;
+        const ada = new Set<string>();
+        if (swAktif()) {
+          for (const [folder, peta] of [["wa", h.wa], ["sls", h.sls]] as const)
+            for (const arr of Object.values(peta)) for (const b of arr) if (await petaTersimpan(folder, b.nama)) ada.add(jalurPeta(folder, b.nama));
+        }
+        if (batal) return;
+        setLokal(ada);
+        setHasil(h);
+      } catch (e) {
+        if (!batal) setGalat(e instanceof Error ? e.message : "Gagal memuat peta.");
+      }
+    })();
     return () => {
       batal = true;
     };
@@ -82,7 +123,7 @@ export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: 
                 <b className="block text-[13.5px] text-[#0F2A52]">Peta WA (wilayah administrasi desa)</b>
                 <small className="block text-[11.5px] text-[#55657D]">Batas nagari/desa</small>
                 <div className="mt-2">
-                  <Lembar berkas={hasil.wa[desa]} />
+                  <Lembar berkas={hasil.wa[desa]} folder="wa" lokal={lokal} />
                 </div>
               </div>
             )}
@@ -97,7 +138,7 @@ export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: 
                         <span className="break-words">{s.nama}</span>
                         <span className="block text-[11px] font-semibold text-[#6B7A90]">Sub {s.sub}</span>
                       </span>
-                      <Lembar berkas={hasil.sls[s.idsubsls]} />
+                      <Lembar berkas={hasil.sls[s.idsubsls]} folder="sls" lokal={lokal} />
                     </li>
                   ))}
                 </ul>

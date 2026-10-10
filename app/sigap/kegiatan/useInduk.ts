@@ -4,7 +4,7 @@
 //
 // (9 Okt 2026) Pengambil data bersama halaman tahapan (Layer 2) dan halaman tahap (Layer 3) sebuah kegiatan induk:
 // definisi induk + tahap (/api/portal/induk), data pelatihan (/api/sigap/pelatihan) dan ringkasan Transport Lokal (/api/portal/kegiatan).
-// Jam server dipakai untuk hitung mundur.
+// Jam server dipakai untuk hitung mundur. Umur "segar" tiap jenis data diatur di PROFIL (app/portal/dataBersama.ts).
 // (10 Okt 2026) Dipercepat -- permintaan user (pindah layer terlalu lama): ketiga API kini diambil BERSAMAAN lewat simpanan bersama
 // (app/portal/dataBersama.ts), jadi pindah Beranda -> Layer 2 -> Layer 3 langsung tampil dari data yang sudah ada lalu diperbarui di belakang.
 // Daftar induk diambil UTUH (tanpa ?kode=) supaya satu salinan dipakai Beranda dan semua layer.
@@ -20,9 +20,9 @@ type HubBeranda = HubTugas & { sekarang: string };
 
 export function useInduk(kode: string) {
   const router = useRouter();
-  const dInduk = useData<{ sekarang: string; induk: Induk[] }>("/api/portal/induk", { interval: 120_000 });
-  const dHub = useData<HubBeranda>("/api/sigap/pelatihan", { interval: 60_000 });
-  const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan", { interval: 120_000 });
+  const dInduk = useData<{ sekarang: string; induk: Induk[] }>("/api/portal/induk");
+  const dHub = useData<HubBeranda>("/api/sigap/pelatihan");
+  const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan");
   const [, setTik] = useState(0);
 
   const induk = dInduk.data?.induk.find((x) => x.kode === kode) ?? null;
@@ -52,7 +52,7 @@ export function useInduk(kode: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [induk, hub, hubMuat, keg, siap, Math.floor(nowMs / 30_000)]
   );
-  const galat = dInduk.galat && dInduk.galat !== "SESI_BERAKHIR" ? dInduk.galat : null;
+  const galat = !dInduk.data && dInduk.galat && dInduk.galat !== "SESI_BERAKHIR" ? dInduk.galat : null;
   const muat = async () => {
     await Promise.all([dInduk.muat(), dHub.muat(), dKeg.muat()]);
   };

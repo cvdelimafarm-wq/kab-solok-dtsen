@@ -15,6 +15,8 @@ import { keAtas } from "@/app/portal/navigasi";
 import { keadaanSub, kodeDesa, type SubIdentifikasi } from "@/lib/identifikasi";
 import KontakRekan from "./KontakRekan";
 import PetaSheet, { IkonPeta } from "./PetaSheet";
+import BannerAntrean from "@/app/portal/BannerAntrean";
+import KartuPetaOffline from "@/app/portal/KartuPetaOffline";
 import { dariAman, tampilAwal, useIdentifikasi } from "./useIdentifikasi";
 
 type Saring = "semua" | "belum" | "terdampak" | "tidak";
@@ -103,6 +105,9 @@ export default function DaftarIdentifikasi() {
             <div className="mt-4 h-16 animate-pulse rounded bg-[#EEF2F7]" />
           </div>
         )}
+
+        <BannerAntrean satuan="hasil identifikasi" />
+        {data && <KartuPetaOffline idsubsls={data.sub.map((s) => s.idsubsls)} />}
 
         {data && ringkas && (
           <>

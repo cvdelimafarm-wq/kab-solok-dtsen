@@ -3,60 +3,138 @@
 // app/portal/dataBersama.ts
 //
 // (10 Okt 2026) Simpanan data bersama di HP untuk semua layer (Beranda -> tahapan -> tahap -> halaman kerja) -- permintaan user:
-// "proses loading dari satu layer ke layer berikut sangat lama". Sebelumnya tiap halaman memuat ulang semua API dari nol dan menampilkan
-// kerangka abu-abu sampai selesai. Sekarang:
-//  - data terakhir langsung tampil (stale-while-revalidate), lalu diperbarui diam-diam di belakang bila sudah lebih tua dari `segarMs`;
-//  - permintaan yang sama yang sedang berjalan dibagi (tidak ganda), semua API di satu halaman dipanggil BERSAMAAN;
-//  - disimpan juga di sessionStorage (bertahan saat muat ulang tab) dan terikat pada sesi: ganti akun / "masuk sebagai" otomatis tak memakai data lama;
-//  - penulisan lewat apiPortal (POST/PUT/DELETE) menandai semua simpanan kedaluwarsa, jadi halaman yang dibuka setelah menyimpan memuat ulang di belakang.
-// Hanya data baca-saja milik akun yang sedang masuk; dihapus saat keluar (sesi.ts: hapusSemuaSesi).
+// "proses loading dari satu layer ke layer berikut sangat lama". Prinsip (aplikasi ini lebih banyak MENGIRIM daripada menerima, isinya jarang berubah):
+//  - data terakhir SELALU langsung tampil (stale-while-revalidate), lalu diperbarui diam-diam di belakang bila sudah lebih tua dari `segarMs`;
+//  - data disimpan di localStorage, jadi bertahan saat aplikasi ditutup / HP dimatikan: buka aplikasi = langsung tampil, bahkan tanpa sinyal;
+//  - tiap jenis data punya umur "segar" sendiri (PROFIL di bawah). Data tampil tetap instan berapa pun umurnya; `segarMs` hanya mengatur
+//    seberapa sering diminta ulang ke server. Info yang perlu cepat (tugas terlewat dll) boleh tertunda ±10 menit -- jawaban user;
+//  - permintaan yang sama yang sedang berjalan dibagi (tidak ganda); semua API satu halaman dipanggil BERSAMAAN;
+//  - penulisan lewat apiPortal menandai kedaluwarsa HANYA data yang berkaitan (ATURAN_TULIS), bukan semuanya; hasil yang baru disimpan bisa
+//    langsung ditulis ke simpanan (ubahCache) tanpa menunggu server;
+//  - deploy TIDAK membuang simpanan. Tiap jenis data punya nomor `skema`: naikkan HANYA bila bentuk/arti jawaban API-nya berubah, maka hanya
+//    jenis itu yang diambil ulang -- permintaan user (banyak deploy kecil: perbarui area yang berkaitan saja);
+//  - milik satu akun: ganti akun -> simpanan akun lain tidak dipakai; keluar -> dibuang (sesi.ts).
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { apiPortal, bacaSesi, KUNCI_SIMPAN_DATA, waktuTulisTerakhir } from "./sesi";
+import { apiPortal, bacaSesi, KUNCI_SIMPAN_DATA, pemilikSesi, pendengarTulis } from "./sesi";
 
-type Entri = { sesi: string; data: unknown; at: number; tiba: number };
+const MENIT = 60_000;
+const HARI = 24 * 60 * MENIT;
+
+export type Profil = {
+  /** data lebih muda dari ini tidak diminta ulang saat halaman dibuka */
+  segarMs: number;
+  /** muat ulang berkala saat layar terlihat (0 = mati) */
+  interval: number;
+  /** data lebih tua dari ini dibuang (tidak ditampilkan lagi) */
+  umurMaksMs: number;
+  /** dianggap basi bila tanggal (WIB) sudah berganti sejak diambil -- untuk data yang bergantung pada "hari ini" */
+  hariBaru: boolean;
+  /** NAIKKAN bila bentuk/arti jawaban API ini berubah di sebuah deploy; simpanan lama jenis ini otomatis diabaikan */
+  skema: number;
+};
+
+const dasar = { umurMaksMs: 14 * HARI, hariBaru: false, skema: 1 };
+/** Cocok awalan terpanjang. Tanpa kecocokan -> bawaan. */
+const PROFIL: [string, Profil][] = [
+  // berubah menit ke menit (presensi, jendela tes, kuis live) -> sering diminta ulang; tampil tetap instan
+  ["/api/sigap/pelatihan", { ...dasar, segarMs: 1 * MENIT, interval: 1 * MENIT }],
+  // tugas/tahapan terlewat boleh tertunda ±10 menit; status "mendesak" bergantung hari -> ikut basi saat ganti hari
+  ["/api/portal/induk", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
+  ["/api/portal/kegiatan", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
+  // kartu menurut peran & periode: jarang berubah
+  ["/api/portal/beranda", { ...dasar, segarMs: 30 * MENIT, interval: 30 * MENIT }],
+  // daftar Sub SLS/KK praktis tetap; status identifikasi & laporan boleh tertunda ±10 menit
+  ["/api/portal/wilayah-tim", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
+  ["/api/portal/identifikasi", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
+];
+const PROFIL_BAWAAN: Profil = { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT };
+
+export function profilDari(path: string): Profil {
+  const jalur = path.split("?")[0];
+  let terbaik: [string, Profil] | null = null;
+  for (const p of PROFIL) if (jalur.startsWith(p[0]) && (!terbaik || p[0].length > terbaik[0].length)) terbaik = p;
+  return terbaik ? terbaik[1] : PROFIL_BAWAAN;
+}
+
+/** Penulisan ke path (kiri) membuat data di daftar (kanan) ditandai kedaluwarsa. Path tak dikenal -> semua data bergantung-aksi (lihat tandaBasi). */
+const ATURAN_TULIS: [string, string[]][] = [
+  ["/api/portal/identifikasi", ["/api/portal/identifikasi", "/api/portal/induk", "/api/portal/wilayah-tim"]],
+  ["/api/sigap/pelatihan", ["/api/sigap/pelatihan"]],
+  ["/api/portal/sso", []],
+];
+
+type Entri = { data: unknown; at: number; tiba: number; sk: number; basi?: boolean };
+type Simpanan = { f: 1; pemilik: number; e: Record<string, Entri> };
 
 const memori = new Map<string, Entri>();
 const terbang = new Map<string, Promise<unknown>>();
 const pendengar = new Map<string, Set<() => void>>();
-let sudahMuatSimpan = false;
+const tumpukan = new Map<string, (data: unknown) => unknown>();
+let pemilikMemori: number | null | undefined;
 let jadwalSimpan: ReturnType<typeof setTimeout> | null = null;
-
-const MAKS_SIMPAN_KARAKTER = 600_000;
-/** Data lebih muda dari ini dianggap segar: tidak diminta ulang saat pindah halaman. */
-export const SEGAR_MS = 10_000;
+const MAKS_SIMPAN_KARAKTER = 2_500_000;
 
 const useTataLetak = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-function muatSimpan() {
-  if (sudahMuatSimpan || typeof window === "undefined") return;
-  sudahMuatSimpan = true;
+const hariWib = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Pastikan isi memori milik akun yang sedang masuk; muat dari localStorage bila baru. */
+function pastikanPemilik() {
+  if (typeof window === "undefined") return;
+  const p = pemilikSesi();
+  if (p === pemilikMemori) return;
+  pemilikMemori = p;
+  memori.clear();
+  if (!p) return;
   try {
-    const raw = sessionStorage.getItem(KUNCI_SIMPAN_DATA);
+    const raw = localStorage.getItem(KUNCI_SIMPAN_DATA);
     if (!raw) return;
-    const obj = JSON.parse(raw) as Record<string, Entri>;
-    for (const [k, v] of Object.entries(obj)) {
-      if (v && typeof v.sesi === "string" && typeof v.at === "number" && typeof v.tiba === "number" && !memori.has(k)) memori.set(k, v);
+    const obj = JSON.parse(raw) as Simpanan;
+    if (obj.f !== 1 || obj.pemilik !== p) return; // milik akun lain / format lain -> abaikan
+    const kini = Date.now();
+    for (const [k, v] of Object.entries(obj.e)) {
+      const pr = profilDari(k);
+      if (v && typeof v.at === "number" && typeof v.tiba === "number" && v.sk === pr.skema && kini - v.tiba <= pr.umurMaksMs) memori.set(k, v);
     }
   } catch {
     /* abaikan: tanpa simpanan tetap jalan */
   }
 }
 
+function tulisSekarang() {
+  jadwalSimpan = null;
+  try {
+    const p = pemilikSesi();
+    if (!p) return;
+    const urut = Array.from(memori.entries()).sort((a, b) => b[1].tiba - a[1].tiba);
+    const obj: Simpanan = { f: 1, pemilik: p, e: {} };
+    let teks = "";
+    // muat sebanyak mungkin dari yang terbaru; bila terlalu besar, yang paling lama dilepas
+    while (urut.length) {
+      obj.e = Object.fromEntries(urut);
+      teks = JSON.stringify(obj);
+      if (teks.length <= MAKS_SIMPAN_KARAKTER) break;
+      urut.pop();
+    }
+    localStorage.setItem(KUNCI_SIMPAN_DATA, teks || JSON.stringify({ f: 1, pemilik: p, e: {} }));
+  } catch {
+    /* penyimpanan penuh / diblokir: abaikan */
+  }
+}
+
 function jadwalkanSimpan() {
   if (typeof window === "undefined" || jadwalSimpan) return;
-  jadwalSimpan = setTimeout(() => {
-    jadwalSimpan = null;
-    try {
-      const sesi = bacaSesi();
-      const obj: Record<string, Entri> = {};
-      for (const [k, v] of memori) if (v.sesi === sesi) obj[k] = v;
-      const teks = JSON.stringify(obj);
-      if (teks.length <= MAKS_SIMPAN_KARAKTER) sessionStorage.setItem(KUNCI_SIMPAN_DATA, teks);
-    } catch {
-      /* penyimpanan penuh / diblokir: abaikan */
+  jadwalSimpan = setTimeout(tulisSekarang, 800);
+}
+if (typeof window !== "undefined") {
+  // jangan hilang bila aplikasi ditutup tiba-tiba
+  window.addEventListener("pagehide", () => {
+    if (jadwalSimpan) {
+      clearTimeout(jadwalSimpan);
+      tulisSekarang();
     }
-  }, 600);
+  });
 }
 
 function beritahu(path: string) {
@@ -67,33 +145,41 @@ export type IsiCache<T> = { data: T; at: number; tiba: number };
 
 /** Data tersimpan untuk akun yang sedang masuk (null bila tidak ada). */
 export function bacaCache<T>(path: string): IsiCache<T> | null {
-  muatSimpan();
+  pastikanPemilik();
   const e = memori.get(path);
-  if (!e || e.sesi !== bacaSesi()) return null;
+  if (!e) return null;
   return { data: e.data as T, at: e.at, tiba: e.tiba };
 }
 
-/** Basi = lebih tua dari `segarMs`, atau sudah ada penulisan (simpan/ubah) sesudah data ini diambil. */
-export function basi(path: string, segarMs = SEGAR_MS): boolean {
-  const e = bacaCache(path);
+/** Basi = lebih tua dari `segarMs`, ditandai kedaluwarsa oleh penulisan terkait, atau (untuk data bergantung-hari) tanggal sudah berganti. */
+export function basi(path: string, segarMs?: number): boolean {
+  pastikanPemilik();
+  const e = memori.get(path);
   if (!e) return true;
-  return Date.now() - e.tiba > segarMs || waktuTulisTerakhir() > e.at;
+  const pr = profilDari(path);
+  if (e.basi) return true;
+  if (Date.now() - e.tiba > (segarMs ?? pr.segarMs)) return true;
+  if (pr.hariBaru && hariWib(e.tiba) !== hariWib(Date.now())) return true;
+  return false;
 }
 
 /** Ambil dari server (berbagi permintaan yang sedang berjalan). Selalu memperbarui simpanan. */
 export function muatData<T>(path: string): Promise<T> {
   const sesi = bacaSesi();
   if (!sesi) return Promise.reject(new Error("SESI_BERAKHIR"));
+  pastikanPemilik();
   const kunci = `${sesi}|${path}`;
   const ada = terbang.get(kunci);
   if (ada) return ada as Promise<T>;
   const mulai = Date.now();
   const janji = apiPortal<T>(path)
     .then((data) => {
-      memori.set(path, { sesi, data, at: mulai, tiba: Date.now() });
+      // tumpuk perubahan lokal yang belum terkirim (antreanKirim.ts) supaya tidak "mundur" ke data server yang lama
+      const jadi = (tumpukan.get(path.split("?")[0])?.(data) ?? data) as T;
+      memori.set(path, { data: jadi, at: mulai, tiba: Date.now(), sk: profilDari(path).skema });
       jadwalkanSimpan();
       beritahu(path);
-      return data;
+      return jadi;
     })
     .finally(() => {
       terbang.delete(kunci);
@@ -103,11 +189,49 @@ export function muatData<T>(path: string): Promise<T> {
 }
 
 /** Ambil bila belum ada / sudah basi; selain itu pakai simpanan. Dipakai prefetch. */
-export async function siapkanData<T>(path: string, segarMs = 30_000): Promise<T> {
+export async function siapkanData<T>(path: string, segarMs?: number): Promise<T> {
   const c = bacaCache<T>(path);
   if (c && !basi(path, segarMs)) return c.data;
   return muatData<T>(path);
 }
+
+/** Ubah data tersimpan di tempat (mis. hasil yang baru disimpan) tanpa menunggu server; tanda "segar" tidak berubah. */
+export function ubahCache<T>(path: string, f: (data: T) => T): boolean {
+  pastikanPemilik();
+  const e = memori.get(path);
+  if (!e) return false;
+  try {
+    memori.set(path, { ...e, data: f(e.data as T) });
+  } catch {
+    return false;
+  }
+  jadwalkanSimpan();
+  beritahu(path);
+  return true;
+}
+
+/** Tandai kedaluwarsa semua simpanan berawalan `awalan` (dimuat ulang di belakang saat dibuka; tampilannya tetap ada). */
+export function tandaBasi(awalan: string) {
+  pastikanPemilik();
+  for (const [k, v] of memori) if (k.startsWith(awalan)) memori.set(k, { ...v, basi: true });
+  jadwalkanSimpan();
+}
+
+/** Daftarkan penumpuk perubahan lokal untuk satu path (dipakai antreanKirim.ts). */
+export function daftarkanTumpuk(path: string, f: (data: unknown) => unknown) {
+  tumpukan.set(path, f);
+}
+
+// penulisan berhasil -> hanya data yang berkaitan ditandai kedaluwarsa
+pendengarTulis.add((jalur) => {
+  const aturan = ATURAN_TULIS.find(([w]) => jalur.startsWith(w));
+  if (aturan) {
+    for (const t of aturan[1]) tandaBasi(t);
+    return;
+  }
+  // tak dikenal: tandai semua kecuali yang tidak bergantung aksi (hanya kedaluwarsa; tampilan tidak berubah)
+  tandaBasi("/api/");
+});
 
 function langganan(path: string, f: () => void): () => void {
   let s = pendengar.get(path);
@@ -119,11 +243,11 @@ function langganan(path: string, f: () => void): () => void {
 }
 
 export type OpsiData = {
-  /** data lebih muda dari ini tidak diminta ulang saat halaman dibuka (default 10 detik) */
+  /** menimpa profil: data lebih muda dari ini tidak diminta ulang saat halaman dibuka */
   segarMs?: number;
-  /** muat ulang berkala saat layar terlihat (default 2 menit; 0 = mati) */
+  /** menimpa profil: muat ulang berkala saat layar terlihat (0 = mati) */
   interval?: number;
-  /** false = jangan memuat (mis. menunggu syarat lain) */
+  /** false = jangan memuat dari server (simpanan tetap dibaca) */
   aktif?: boolean;
 };
 
@@ -141,14 +265,17 @@ export type HasilData<T> = {
 
 /** Hook: tampilkan data tersimpan seketika, perbarui di belakang. */
 export function useData<T>(path: string, opsi: OpsiData = {}): HasilData<T> {
-  const { segarMs = SEGAR_MS, interval = 120_000, aktif = true } = opsi;
+  const pr = profilDari(path);
+  const segarMs = opsi.segarMs ?? pr.segarMs;
+  const interval = opsi.interval ?? pr.interval;
+  const aktif = opsi.aktif ?? true;
   const [isi, setIsi] = useState<IsiCache<T> | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const hidup = useRef(true);
 
   const salin = useCallback(() => {
     const c = bacaCache<T>(path);
-    if (c) setIsi((lama) => (lama && lama.tiba === c.tiba ? lama : c));
+    if (c) setIsi((lama) => (lama && lama.tiba === c.tiba && lama.data === c.data ? lama : c));
   }, [path]);
 
   const muat = useCallback(async () => {
@@ -174,17 +301,19 @@ export function useData<T>(path: string, opsi: OpsiData = {}): HasilData<T> {
     if (basi(path, segarMs)) void muat();
     const kali = interval
       ? setInterval(() => {
-          if (document.visibilityState === "visible" && basi(path, interval / 2)) void muat();
-        }, interval)
+          if (document.visibilityState === "visible" && basi(path, segarMs)) void muat();
+        }, Math.max(interval, 30_000))
       : null;
     const c = () => {
-      if (document.visibilityState === "visible" && basi(path, 30_000)) void muat();
+      if (document.visibilityState === "visible" && basi(path, segarMs)) void muat();
     };
     document.addEventListener("visibilitychange", c);
+    window.addEventListener("online", c);
     return () => {
       hidup.current = false;
       if (kali) clearInterval(kali);
       document.removeEventListener("visibilitychange", c);
+      window.removeEventListener("online", c);
     };
   }, [path, aktif, segarMs, interval, muat]);
 

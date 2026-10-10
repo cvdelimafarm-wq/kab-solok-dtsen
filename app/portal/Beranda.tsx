@@ -27,6 +27,10 @@ import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 import { useData } from "./dataBersama";
+import PetaOtomatis from "./PetaOtomatis";
+import PembaruanTersedia from "./PembaruanTersedia";
+import BannerAntrean from "./BannerAntrean";
+import { kirimAntrean } from "./antreanKirim";
 import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
 type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
@@ -59,14 +63,14 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const adaSesi = typeof window !== "undefined" && !!bacaSesi();
   // (10 Okt 2026) Data lewat simpanan bersama (dataBersama.ts) -- permintaan user: pindah layer terlalu lama. Keempat API diambil BERSAMAAN;
   // data terakhir langsung tampil lalu diperbarui di belakang, dan dipakai ulang oleh Layer 2/3 (tanpa kerangka abu-abu).
-  const dBeranda = useData<Data>("/api/portal/beranda", { interval: 180_000 });
+  const dBeranda = useData<Data>("/api/portal/beranda");
   // Data pelatihan (untuk menentukan tugas paling mendesak). Gagal -> beranda tetap jalan tanpa bagian pelatihan.
-  const dHub = useData<HubBeranda>("/api/sigap/pelatihan", { interval: 60_000 });
+  const dHub = useData<HubBeranda>("/api/sigap/pelatihan");
   // kegiatan bertahapan (Transport Lokal), /api/portal/kegiatan. Gagal: Transport Lokal tampil dari kartu biasa (tanpa cincin progres)
-  const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan", { interval: 120_000 });
+  const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan");
   // (9 Okt 2026) kegiatan INDUK + tahap proses bisnis (mis. Pendataan Pascabencana: Perencanaan, Pelatihan, Pendataan, Evaluasi), /api/portal/induk
   // Gagal: Beranda memakai ikon lama (pelatihan, Transport Lokal, bencana terpisah)
-  const dInduk = useData<{ induk: Induk[] }>("/api/portal/induk", { interval: 120_000 });
+  const dInduk = useData<{ induk: Induk[] }>("/api/portal/induk");
   const [pinSelesai, setPinSelesai] = useState(false);
   const data: Data | null = useMemo(() => (dBeranda.data && pinSelesai ? { ...dBeranda.data, pin_bawaan: false } : dBeranda.data), [dBeranda.data, pinSelesai]);
   const hub = dHub.data;
@@ -95,6 +99,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
     await Promise.race([matikanPush(), new Promise((r) => setTimeout(r, 2500))]);
+    // (10 Okt 2026) hasil yang masih menunggu dikirim (antreanKirim.ts) dicoba terkirim dulu sebelum sesi dihapus
+    await Promise.race([kirimAntrean().catch(() => {}), new Promise((r) => setTimeout(r, 3500))]);
     hapusSemuaSesi();
     if (dtsen) await createClient().auth.signOut().catch(() => {});
     onKeluar();
@@ -295,6 +301,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           </div>
         )}
         {error && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{error}</p>}
+        <PembaruanTersedia bolehOtomatis />
+        <BannerAntrean />
         {(data || dtsen) && kartu.length === 0 && kegiatan.length === 0 && (
           <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
             Belum ada tugas atau menu aktif untuk akun Anda. Hubungi admin anggaran atau PJ kegiatan.
@@ -320,6 +328,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         {menuUrut.length > 0 && <GrupIkon judul="Menu umum" isi={menuUrut} sibuk={sibuk} onSso={bukaSso} />}
         {kelola.length > 0 && <GrupIkon judul="Pengelolaan" isi={kelola} sibuk={sibuk} onSso={bukaSso} />}
 
+        {data && <PetaOtomatis induk={induk} />}
         {data && <AktifkanNotifikasi />}
         {data && <ModalFotoPanitia />}
         {data && <ModalRapat />}

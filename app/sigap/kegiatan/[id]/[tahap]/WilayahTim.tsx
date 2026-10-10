@@ -9,6 +9,7 @@
 import { useMemo } from "react";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { useData } from "@/app/portal/dataBersama";
+import KartuPetaOffline from "@/app/portal/KartuPetaOffline";
 import type { WilayahTim as Tim } from "@/lib/portal/induk";
 import { angkaId, judulKata, namaSingkat } from "../../format";
 
@@ -18,7 +19,7 @@ const GRID = "grid grid-cols-[minmax(0,1fr)_48px_72px] gap-x-2";
 export default function WilayahTim() {
   // (10 Okt 2026) Data dari simpanan bersama (sudah diambil lebih dulu selagi petugas di halaman sebelumnya), diperbarui di belakang.
   // Data dasar (Sub SLS, KK) hampir tetap; status identifikasi/laporan boleh tertunda beberapa menit.
-  const d = useData<{ tim: Tim | null }>("/api/portal/wilayah-tim", { segarMs: 60_000, interval: 180_000 });
+  const d = useData<{ tim: Tim | null }>("/api/portal/wilayah-tim");
   const tim: Tim | null | undefined = d.data ? d.data.tim : undefined;
   const galat = d.galat && d.galat !== "SESI_BERAKHIR" && !d.data ? d.galat : null;
 
@@ -47,6 +48,7 @@ export default function WilayahTim() {
   const persen = Math.round((tim.ada_laporan / tim.sub_sls.length) * 100);
 
   return (
+    <div className="space-y-3">
     <section aria-label="Wilayah tugas tim" className="overflow-hidden rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]">
       <div className="border-b border-[#EEF2F7] p-3.5">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Tim Anda</p>
@@ -147,5 +149,7 @@ export default function WilayahTim() {
 
       <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu. Tag identifikasi: “Sedang diidentifikasi PML” = PML belum menyimpan hasilnya; “Selesai identifikasi” = hasil sudah disimpan.</p>
     </section>
+    <KartuPetaOffline idsubsls={tim.sub_sls.map((x) => x.idsubsls)} />
+    </div>
   );
 }

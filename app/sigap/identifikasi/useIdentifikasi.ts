@@ -24,12 +24,13 @@ export function dariAman(): string | null {
 export function useIdentifikasi() {
   const router = useRouter();
   // (10 Okt 2026) Lewat simpanan bersama (app/portal/dataBersama.ts): daftar sudah diambil lebih dulu dari halaman tahap, jadi langsung tampil;
-  // setelah menyimpan hasil (apiPortal POST) simpanan ditandai kedaluwarsa dan dimuat ulang di belakang.
-  const d = useData<DataIdentifikasi>("/api/portal/identifikasi", { segarMs: 5_000, interval: 180_000 });
+  // hasil yang baru disimpan langsung tampil (antreanKirim.ts) dan data terkait ditandai kedaluwarsa agar dimuat ulang di belakang.
+  const d = useData<DataIdentifikasi>("/api/portal/identifikasi");
   useEffect(() => {
     if (d.galat === "SESI_BERAKHIR") router.replace("/");
   }, [d.galat, router]);
-  const galat = d.galat && d.galat !== "SESI_BERAKHIR" ? d.galat : null;
+  // galat hanya bila belum ada data sama sekali (gagal muat ulang di belakang, mis. tanpa sinyal, tidak mengganggu tampilan tersimpan)
+  const galat = !d.data && d.galat && d.galat !== "SESI_BERAKHIR" ? d.galat : null;
   return { data: d.data, galat, muat: d.muat };
 }
 
