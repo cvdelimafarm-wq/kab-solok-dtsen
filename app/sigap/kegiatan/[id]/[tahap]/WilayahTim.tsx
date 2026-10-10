@@ -12,6 +12,9 @@ import { apiPortal } from "@/app/portal/sesi";
 import type { WilayahTim as Tim } from "@/lib/portal/induk";
 import { angkaId, judulKata, namaSingkat } from "../../format";
 
+/** Grid tunggal untuk judul kolom & baris Sub SLS: nama (lebar sisa) | KK | KK terdampak. */
+const GRID = "grid grid-cols-[minmax(0,1fr)_48px_72px] gap-x-2";
+
 export default function WilayahTim() {
   const [tim, setTim] = useState<Tim | null | undefined>(undefined);
   const [galat, setGalat] = useState<string | null>(null);
@@ -102,36 +105,42 @@ export default function WilayahTim() {
         </div>
       </div>
 
-      <div className="flex items-center border-b border-[#EEF2F7] bg-[#F7FAFE] px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
-        <span className="flex-1">Sub SLS</span>
-        <span className="w-[62px] text-right">Perkiraan KK</span>
-        <span className="w-[74px] text-right">KK terdampak</span>
+      {/* (10 Okt 2026) Judul kolom & baris memakai SATU grid yang sama (lebar kolom angka identik) supaya judul tepat di atas angkanya,
+          dan judul dipendekkan (tidak lagi terlipat 2 baris & meluber) -- permintaan user: "judul kolom agak ketengah". */}
+      <div className={`${GRID} items-end border-b border-[#EEF2F7] bg-[#F7FAFE] px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]`}>
+        <span>Sub SLS</span>
+        <span className="text-right">KK</span>
+        <span className="text-right">Terdampak</span>
       </div>
 
       {kelompok.map(([nama, isi]) => (
         <div key={nama}>
           <div className="border-b border-[#EEF2F7] bg-[#F1F6FE] px-3.5 py-1 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-[#0F3D7A]">{judulKata(nama.split(" · ")[0])} · {judulKata(nama.split(" · ")[1] ?? "")}</div>
           {isi.map((s) => (
-            <div key={s.idsubsls} className="flex min-h-[38px] items-center gap-2 border-b border-[#EEF2F7] px-3.5 py-1.5 last:border-b-0">
-              <span
-                className={`grid h-[18px] w-[18px] flex-none place-items-center rounded-full ${s.ada_laporan ? "bg-[#19A463] text-white" : "border-[1.5px] border-[#C5D0E2] bg-white"}`}
-                role="img"
-                aria-label={s.ada_laporan ? "Sudah ada laporan" : "Belum ada laporan"}
-              >
-                {s.ada_laporan && <IkonMenu n="tanda" className="h-2.5 w-2.5" />}
+            <div key={s.idsubsls} className={`${GRID} min-h-[44px] items-center border-b border-[#EEF2F7] px-3.5 py-1.5 last:border-b-0`}>
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`grid h-[18px] w-[18px] flex-none place-items-center rounded-full ${s.ada_laporan ? "bg-[#19A463] text-white" : "border-[1.5px] border-[#C5D0E2] bg-white"}`}
+                  role="img"
+                  aria-label={s.ada_laporan ? "Sudah ada laporan" : "Belum ada laporan"}
+                >
+                  {s.ada_laporan && <IkonMenu n="tanda" className="h-2.5 w-2.5" />}
+                </span>
+                {/* (10 Okt 2026) Nama jorong TIDAK lagi dipotong "…": boleh turun ke baris berikutnya, nomor Sub SLS di baris sendiri
+                    -- permintaan user: "list jorong banyak yang terputus, apa solusinya?" */}
+                <span className="min-w-0 flex-1 text-[12.5px] leading-tight text-[#0F2A52]">
+                  <b className="block break-words">{judulKata(s.sls)}</b>
+                  <span className="text-[11px] text-[#6B7A90]">Sub {s.sub_sls}</span>
+                </span>
               </span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] text-[#0F2A52]">
-                <b>{judulKata(s.sls)}</b>
-                <span className="text-[#6B7A90]"> · Sub {s.sub_sls}</span>
-              </span>
-              <span className="w-[62px] text-right text-[12.5px] font-bold tabular-nums text-[#0F2A52]">{angkaId(s.kk)}</span>
-              <span className="w-[74px] text-right text-[12.5px] font-bold tabular-nums text-[#8A6200]">{angkaId(s.kk_terdampak)}</span>
+              <span className="text-right text-[12.5px] font-bold tabular-nums text-[#0F2A52]">{angkaId(s.kk)}</span>
+              <span className="text-right text-[12.5px] font-bold tabular-nums text-[#8A6200]">{angkaId(s.kk_terdampak)}</span>
             </div>
           ))}
         </div>
       ))}
 
-      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">Angka KK dan KK terdampak adalah perkiraan dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu.</p>
+      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu.</p>
     </section>
   );
 }
