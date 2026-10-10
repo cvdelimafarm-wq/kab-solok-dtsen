@@ -16,6 +16,7 @@ import { apiPortal, KUNCI_ANTREAN, pemilikSesi, type GalatApi } from "./sesi";
 import { daftarkanTumpuk, tandaBasi, ubahCache } from "./dataBersama";
 import { EVENT_SIMULASI, modeSimulasi } from "./simulasi";
 import { periksaIsian, ringkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
+import { API_PENDATAAN, pathKkSub, periksaCatat, type DataKkSub, type IsiCatat } from "@/lib/pendataan";
 
 export type ItemAntre = {
   id: string;
@@ -32,6 +33,7 @@ export type ItemAntre = {
 };
 
 const PATH_IDENTIFIKASI = "/api/portal/identifikasi";
+const PATH_PENDATAAN = API_PENDATAAN;
 const pemantau = new Set<() => void>();
 let sedangKirim: Promise<void> | null = null;
 
@@ -74,6 +76,34 @@ function terapkanIdentifikasi(d: DataIdf, items: ItemAntre[]): DataIdf {
 
 daftarkanTumpuk(PATH_IDENTIFIKASI, (data) => terapkanIdentifikasi(data as DataIdf, milikku(baca())));
 
+// (11 Okt 2026) Lembar Pendataan: penandaan KK yang belum terkirim langsung tampil di daftar/peta/kartu HP ini. Bila server sudah punya catatan yang
+// LEBIH BARU (status_at lebih besar dari waktu kejadian item ini -- mis. rekan menandai belakangan), tampilan server yang dipakai. Hasil terakhir menurut waktu kejadian.
+function terapkanPendataan(d: unknown, items: ItemAntre[], pemilik: number): unknown {
+  const data = d as Partial<DataKkSub>;
+  if (!Array.isArray(data.kk)) return d; // daftar tim/ringkasan tidak ditumpuk: diperbarui dari server setelah terkirim
+  const per = new Map<number, IsiCatat>();
+  for (const x of items) {
+    if (x.path !== PATH_PENDATAAN || x.status !== "menunggu") continue;
+    const c = periksaCatat(x.body);
+    if (c.ok) per.set(c.isi.kk_id, c.isi);
+  }
+  if (per.size === 0) return d;
+  const kk = data.kk.map((k) => {
+    const it = per.get(k.id);
+    if (!it) return k;
+    if (k.status_at && Date.parse(k.status_at) > Date.parse(it.waktu)) return k;
+    return it.hasil === "belum"
+      ? { ...k, hasil: null, alasan: null, ppl_akun_id: null, status_at: it.waktu }
+      : { ...k, hasil: it.hasil, alasan: it.alasan, ppl_akun_id: pemilik, status_at: it.waktu };
+  });
+  return { ...data, kk };
+}
+
+daftarkanTumpuk(PATH_PENDATAAN, (data) => {
+  const p = pemilikSesi();
+  return p ? terapkanPendataan(data, baca().filter((x) => x.pemilik === p), p) : data;
+});
+
 // ---------------------------------------------------------------- antre & kirim
 /**
  * Simpan hasil: tampil seketika di layar & simpanan lokal, lalu dikirim di belakang. Mengembalikan segera (tidak menunggu server).
@@ -86,10 +116,15 @@ export function kirimAtauAntre(path: string, body: Record<string, unknown>, kunc
     const cek = periksaIsian(body);
     if (!cek.ok) return { ok: false, pesan: cek.pesan };
   }
+  if (path === PATH_PENDATAAN) {
+    const cek = periksaCatat(body);
+    if (!cek.ok) return { ok: false, pesan: cek.pesan };
+  }
   // (11 Okt 2026) mode simulasi ("masuk sebagai"): hanya tampil di layar ini (simpanan lokal), tidak masuk antrean & tidak dikirim
   if (modeSimulasi()) {
     const tiruan: ItemAntre = { id: "simulasi", pemilik, path, body, kunci, at: Date.now(), coba: 0, status: "menunggu" };
     if (path === PATH_IDENTIFIKASI) ubahCache<DataIdf>(PATH_IDENTIFIKASI, (d) => terapkanIdentifikasi(d, [tiruan]));
+    if (path === PATH_PENDATAAN && typeof body.idsubsls === "string") ubahCache<unknown>(pathKkSub(body.idsubsls), (d) => terapkanPendataan(d, [tiruan], pemilik));
     try {
       window.dispatchEvent(new CustomEvent(EVENT_SIMULASI, { detail: { metode: "POST", jalur: path } }));
     } catch {
@@ -104,6 +139,9 @@ export function kirimAtauAntre(path: string, body: Record<string, unknown>, kunc
   if (path === PATH_IDENTIFIKASI) {
     ubahCache<DataIdf>(PATH_IDENTIFIKASI, (d) => terapkanIdentifikasi(d, [item]));
     tandaBasi("/api/portal/induk"); // ringkasan di Beranda/tahap dihitung ulang di belakang
+  }
+  if (path === PATH_PENDATAAN && typeof body.idsubsls === "string") {
+    ubahCache<unknown>(pathKkSub(body.idsubsls), (d) => terapkanPendataan(d, [item], pemilik));
   }
   pasangPemicu(); // kirim ulang otomatis (online lagi / aplikasi dibuka lagi / tiap menit) walau petugas tidak lewat Beranda
   void kirimAntrean();
@@ -130,7 +168,7 @@ export function kirimAntrean(): Promise<void> {
         const tolak = status !== undefined && status >= 400 && status < 500;
         tulis(baca().map((x) => (x.id === item.id ? { ...x, coba: x.coba + 1, ...(tolak ? { status: "ditolak" as const, galat: g.message } : {}) } : x)));
         if (!tolak) return; // sinyal / server sibuk: berhenti, coba lagi nanti
-        tandaBasi(PATH_IDENTIFIKASI); // ditolak: ambil data server agar tampilan kembali benar
+        tandaBasi(item.path); // ditolak: ambil data server agar tampilan kembali benar
       }
     }
   })().finally(() => {
@@ -142,6 +180,7 @@ export function kirimAntrean(): Promise<void> {
 export function buangDitolak(id?: string) {
   tulis(baca().filter((x) => !(x.status === "ditolak" && (!id || x.id === id))));
   tandaBasi(PATH_IDENTIFIKASI);
+  tandaBasi(PATH_PENDATAAN);
 }
 
 let terpasang = false;

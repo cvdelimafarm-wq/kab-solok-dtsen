@@ -13,6 +13,7 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin } from "@/lib/sigapAkses";
 import { tentukanTujuan } from "@/lib/undangan";
+import { adaDaftarKkTim } from "@/lib/portal/pendataan";
 
 export function dbPortal(): Db | null {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -127,6 +128,11 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
     }
   }
 
+  // (11 Okt 2026) Lembar Pendataan keroyokan: kartu muncul bila tim petugas ini sudah punya daftar KK yang diunggah admin (tidak tampil sebelum ada daftar).
+  if (akun.petugas_bencana_id && (await adaDaftarKkTim(db, akun.id))) {
+    kartu.push({ kode: "pendataan", grup: "tugas", judul: "Lembar Pendataan", uraian: "Daftar KK sasaran tim: tandai hasil pendataan, lihat sebaran di peta, dan pantau progres PPL.", status: { label: "Aktif", nada: "aktif" }, href: "/sigap/pendataan", label_aksi: "Buka" });
+  }
+
   // 3. Penyisiran SE2026 (nama cocok di daftar petugas penyisiran).
   const ps = await cocokPenyisiran(db, akun.nama);
   if (ps) {
@@ -160,6 +166,8 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
   }
   // (10 Okt 2026) Monitoring Lembar Identifikasi SLS: admin bencana (izin bencana.admin)
   if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi SLS", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
+  // (11 Okt 2026) Unggah daftar KK sasaran Pendataan keroyokan: admin bencana (izin bencana.admin level kelola)
+  if (boleh(izin, "bencana.admin", "kelola")) kartu.push({ kode: "admin-pendataan", grup: "kelola", judul: "Unggah Daftar KK Pendataan", uraian: "Unggah daftar KK sasaran per Sub SLS (Excel/CSV), lihat riwayat unggahan dan jumlah yang sudah didata.", href: "/sigap/kelola/pendataan" });
   if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");
   if (adminAplikasi || boleh(izin, "translok.kegiatan", "kelola")) {

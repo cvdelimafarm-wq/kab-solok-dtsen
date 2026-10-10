@@ -48,6 +48,8 @@ const PROFIL: [string, Profil][] = [
   // daftar Sub SLS/KK praktis tetap; status identifikasi & laporan boleh tertunda ±10 menit
   ["/api/portal/wilayah-tim", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
   ["/api/portal/identifikasi", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
+  // (11 Okt 2026) Lembar Pendataan keroyokan: rekan satu tim menandai KK di lapangan, jadi lebih sering disegarkan daripada identifikasi -- permintaan user.
+  ["/api/portal/pendataan", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000 }],
 ];
 const PROFIL_BAWAAN: Profil = { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT };
 
@@ -61,6 +63,7 @@ export function profilDari(path: string): Profil {
 /** Penulisan ke path (kiri) membuat data di daftar (kanan) ditandai kedaluwarsa. Path tak dikenal -> semua data bergantung-aksi (lihat tandaBasi). */
 const ATURAN_TULIS: [string, string[]][] = [
   ["/api/portal/identifikasi", ["/api/portal/identifikasi", "/api/portal/induk", "/api/portal/wilayah-tim"]],
+  ["/api/portal/pendataan", ["/api/portal/pendataan", "/api/portal/induk"]],
   ["/api/sigap/pelatihan", ["/api/sigap/pelatihan"]],
   ["/api/portal/sso", []],
 ];

@@ -181,7 +181,7 @@ const SKOR_KARTU: [RegExp, number, IkonKode][] = [
 /** Ikon untuk kartu beranda mana pun. */
 export function ikonKartu(kode: string): IkonKode {
   if (kode.startsWith("translok-") || kode === "admin-translok") return "motor";
-  if (kode === "bencana" || kode === "admin-bencana") return "bencana";
+  if (kode === "bencana" || kode === "admin-bencana" || kode === "pendataan") return "bencana"; // (11 Okt 2026) kartu Lembar Pendataan
   if (kode === "penyisiran" || kode === "admin-penyisiran") return "peta";
   if (kode === "pedia" || kode === "pedia-kelola") return "pedia";
   if (kode === "seruti" || kode === "admin-seruti") return "grafik";
