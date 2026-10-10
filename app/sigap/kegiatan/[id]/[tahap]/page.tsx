@@ -24,9 +24,10 @@ const CHIP: Record<ModulTahap["status"], { teks: string; kelas: string }> = {
   terkunci: { teks: "Belum dibuka", kelas: "bg-[#E3E8F0] text-[#55657D]" },
 };
 
-// (10 Okt 2026) Daftar wilayah tugas tim disembunyikan sementara -- permintaan user (kartu PML terlalu panjang; fokus ke 2 tugas utama).
-// Komponen WilayahTim & modulnya tetap ada; ubah ke false untuk menampilkannya lagi.
-const SEMBUNYIKAN_WILAYAH_TIM = true;
+// (10 Okt 2026) Daftar wilayah tugas tim disembunyikan sementara KHUSUS PML -- permintaan user (kartu PML terlalu panjang; fokus ke 2 tugas utama).
+// PPL tetap melihatnya. PML dikenali dari modul "identifikasi" (hanya muncul bagi PML) atau ringkasan identifikasi pada kegiatan induk.
+// Komponen WilayahTim & modulnya tetap ada; ubah ke false untuk menampilkannya lagi bagi PML.
+const SEMBUNYIKAN_WILAYAH_TIM_PML = true;
 
 // (10 Okt 2026) Modul yang berupa TUGAS (harus dikerjakan) diberi nomor langkah agar PML jelas urutannya -- permintaan user.
 const adalahTugas = (kode: string) => kode === "identifikasi" || kode.startsWith("translok:");
@@ -69,6 +70,8 @@ export default function HalamanTahap() {
   const t = tahap.find((x) => x.kode === kodeTahap) ?? null;
   const induk_ = `/sigap/kegiatan/${id}`;
   const tugas = t && !t.terkunci ? t.modul.filter((m) => adalahTugas(m.kode)) : [];
+  const adalahPml = !!induk?.identifikasi || !!t?.modul.some((m) => m.kode === "identifikasi");
+  const sembunyikanWilayah = SEMBUNYIKAN_WILAYAH_TIM_PML && adalahPml;
   const tugasSelesai = tugas.filter((m) => m.status === "selesai").length;
 
   // Tahap Pelatihan punya halamannya sendiri; tahap yang tak berlaku bagi akun ini -> kembali ke garis waktu
@@ -108,7 +111,7 @@ export default function HalamanTahap() {
             {t.alasanKunci ?? "Tahap ini belum dibuka"}
           </p>
         )}
-        {t && !t.terkunci && t.modul.filter((m) => !(SEMBUNYIKAN_WILAYAH_TIM && m.kode === "wilayah_tim")).length === 0 && (
+        {t && !t.terkunci && t.modul.filter((m) => !(sembunyikanWilayah && m.kode === "wilayah_tim")).length === 0 && (
           <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">Belum ada isi untuk tahap ini.</p>
         )}
         {tugas.length >= 2 && (
@@ -122,7 +125,7 @@ export default function HalamanTahap() {
         {t &&
           !t.terkunci &&
           t.modul.map((m) => {
-            if (m.kode === "wilayah_tim") return SEMBUNYIKAN_WILAYAH_TIM ? null : <WilayahTim key={m.kode} />;
+            if (m.kode === "wilayah_tim") return sembunyikanWilayah ? null : <WilayahTim key={m.kode} />;
             const i = tugas.indexOf(m);
             return <BarisModul key={m.kode} m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
           })}

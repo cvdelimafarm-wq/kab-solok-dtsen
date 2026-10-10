@@ -26,6 +26,9 @@ export type SubSlsTim = {
   kk_terdampak: number;
   /** sudah ada laporan harian yang memuat Sub SLS ini (sigap_realisasi.lokasi) */
   ada_laporan: boolean;
+  /** (10 Okt 2026) Status Lembar Identifikasi SLS: "selesai" = PML sudah menyimpan hasil Sub SLS ini; "proses" = SLS-nya sedang diidentifikasi PML;
+   *  null = SLS ini tidak termasuk pembagian identifikasi. -- permintaan user (PPL melihat status identifikasi di wilayah tugas). */
+  identifikasi: "selesai" | "proses" | null;
 };
 export type WilayahTim = {
   pml: { id: number; nama: string } | null;
@@ -99,6 +102,15 @@ export async function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim 
   // Sub SLS yang sudah muncul di laporan harian anggota tim
   const adaLaporan = await subSlsBerlaporan(db, [pmlId, ...idAnggota]);
 
+  // (10 Okt 2026) Status identifikasi per Sub SLS: ada baris hasil -> selesai; SLS-nya ada di pembagian identifikasi tetapi belum ada hasil -> proses.
+  const idsSls = Array.from(new Set(ids.map((x) => x.slice(0, 14))));
+  const [{ data: hsl }, { data: alIdf }] = await Promise.all([
+    db.from("bencana_identifikasi_subsls").select("idsubsls").in("idsubsls", ids),
+    db.from("bencana_identifikasi_alokasi").select("idsls").in("idsls", idsSls),
+  ]);
+  const sudahIdf = new Set((hsl ?? []).map((x) => x.idsubsls as string));
+  const slsIdf = new Set((alIdf ?? []).map((x) => x.idsls as string));
+
   const sub: SubSlsTim[] = ids
     .map((id) => {
       const r = peta.get(id);
@@ -111,6 +123,7 @@ export async function wilayahTim(db: Db, petugasId: number): Promise<WilayahTim 
         kk: angka(r?.kk_total),
         kk_terdampak: angka(r?.kk_terdampak_estimasi),
         ada_laporan: adaLaporan.has(id),
+        identifikasi: sudahIdf.has(id) ? ("selesai" as const) : slsIdf.has(id.slice(0, 14)) ? ("proses" as const) : null,
       };
     })
     .sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls) || a.sub_sls.localeCompare(b.sub_sls));

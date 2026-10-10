@@ -92,6 +92,12 @@ export default function WilayahTim() {
           Seluruh anggota tim mendata bersama (keroyokan). Sub SLS di bawah adalah wilayah tim, bukan pembagian per orang.
         </p>
 
+        {tim.sub_sls.some((x) => x.identifikasi) && (
+          <p className="mt-3 rounded-[12px] bg-[#F1F6FE] px-3 py-2 text-[12px] leading-snug text-[#0F3D7A]">
+            Identifikasi SLS oleh PML: <b>{tim.sub_sls.filter((x) => x.identifikasi === "selesai").length}</b> dari {tim.sub_sls.filter((x) => x.identifikasi).length} Sub SLS selesai.
+          </p>
+        )}
+
         <div className="mt-3">
           <div className="flex items-center justify-between text-[11.5px] font-bold text-[#55657D]">
             <span>Sudah ada laporan</span>
@@ -131,6 +137,12 @@ export default function WilayahTim() {
                 <span className="min-w-0 flex-1 text-[12.5px] leading-tight text-[#0F2A52]">
                   <b className="block break-words">{judulKata(s.sls)}</b>
                   <span className="text-[11px] text-[#6B7A90]">Sub {s.sub_sls}</span>
+                  {/* (10 Okt 2026) Status Lembar Identifikasi SLS oleh PML -- permintaan user */}
+                  {s.identifikasi && (
+                    <span className={`ml-1.5 inline-block rounded-full px-1.5 py-[1px] align-middle text-[9.5px] font-extrabold ${s.identifikasi === "selesai" ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>
+                      {s.identifikasi === "selesai" ? "Selesai identifikasi" : "Sedang diidentifikasi PML"}
+                    </span>
+                  )}
                 </span>
               </span>
               <span className="text-right text-[12.5px] font-bold tabular-nums text-[#0F2A52]">{angkaId(s.kk)}</span>
@@ -140,7 +152,7 @@ export default function WilayahTim() {
         </div>
       ))}
 
-      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu.</p>
+      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu. Tag identifikasi: “Sedang diidentifikasi PML” = PML belum menyimpan hasilnya; “Selesai identifikasi” = hasil sudah disimpan.</p>
     </section>
   );
 }

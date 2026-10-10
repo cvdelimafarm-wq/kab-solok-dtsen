@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { ringkasInduk, type Induk } from "@/lib/sigapTahap";
+import { ringkasInduk, susunTahap, tahapSekarang, type Induk } from "@/lib/sigapTahap";
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
@@ -203,12 +203,25 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     // (Layer 1); tahapnya tampil di Layer 2. Menunggu data pelatihan & Transport Lokal siap dulu supaya ikon tidak berganti-ganti.
     const indukRingkas: RingkasKegiatan[] = [];
     const serap = new Set<string>();
+    let tujuanBencana: { href: string; judul: string; uraian: string } | null = null;
     if (induk && keg && hubMuat !== "memuat") {
       for (const i of induk) {
         const r = ringkasInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
         if (!r) continue;
         indukRingkas.push(r);
         i.menyerap.forEach((x) => serap.add(x));
+        // (10 Okt 2026) Tombol "Tugas aktif" pendataan bencana harus ke TAHAP yang sedang dikerjakan (mis. Pendataan), bukan ke halaman konfirmasi
+        // undangan lama -- permintaan user (tangkapan layar akun Valina). Tahap sekarang = yang mendesak/perlu; bila tak ada, tahap yang berjalan; bila tak ada, garis waktu kegiatan.
+        if (i.menyerap.includes("bencana")) {
+          const ts = susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
+          const kini = tahapSekarang(ts);
+          const tujuan = kini?.tahap ?? ts.find((x) => !x.terkunci && x.status === "berjalan") ?? null;
+          tujuanBencana = {
+            href: tujuan?.rute ?? `/sigap/kegiatan/${i.kode}`,
+            judul: i.nama,
+            uraian: tujuan ? `Tahap ${tujuan.no} · ${tujuan.nama}${kini ? `: ${kini.modul.ket}` : ""}` : "Lihat tahapan dan tugas Anda.",
+          };
+        }
       }
     }
     const semua = urutKegiatan([...indukRingkas, ...(pel && !serap.has("pelatihan") ? [pel] : []), ...translok.filter((x) => !serap.has(x.id)), ...lain.filter((x) => !serap.has(x.id))]);
@@ -217,7 +230,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const jadiKegiatan = (x: Kartu) => (x.grup === "tugas" && (x.kode.startsWith("translok-") || ringkasDariKartu(x) !== null)) || x.kode === "pelatihan" || x.kode === "pelatihan-undangan" || x.kode === "pelatihan-instrumen";
     const sisa = k.filter((x) => !jadiKegiatan(x));
     if (hub?.boleh_lihat_kelola) sisa.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/kelola/pelatihan" });
-    const untukTugas = keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k;
+    const tanpaTranslok = keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k;
+    const untukTugas = tujuanBencana ? tanpaTranslok.map((x) => (x.kode === "bencana" && x.grup === "tugas" ? { ...x, ...tujuanBencana } : x)) : tanpaTranslok;
     return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(keg ?? [], sekarang), tugasDariKartu(untukTugas)) };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
