@@ -8,6 +8,8 @@
 // (10 Okt 2026) Saat akun super "masuk sebagai" PPL/PML, modal TETAP tampil -- permintaan user: "saat mencoba login sebagai Ayu
 // Sepriani maka tampil persis seperti Ayu Sepriani saat ini". Spanduk "Melihat sebagai" (z-index lebih tinggi) tetap di atas modal,
 // jadi tombol "Kembali ke akun saya" masih bisa ditekan.
+// (10 Okt 2026) PENGECUALIAN khusus -- permintaan user: bila akun super "masuk sebagai" Irawita (akun 302), modal TIDAK tampil
+// supaya bisa diakses. Irawita yang login sendiri, dan "masuk sebagai" akun lain, tetap diblokir.
 // Waktu memakai jam server. Setelah TUTUP_SAMPAI lewat, semua akun otomatis terbuka lagi tanpa deploy ulang.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +20,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TUTUP_SAMPAI = "2026-10-10T13:00:00+07:00";
+/** Akun yang TIDAK diblokir hanya saat dibuka akun super lewat "masuk sebagai" (302 = Irawita). */
+const AKUN_BEBAS_SAAT_SEBAGAI = [302];
 const JUDUL = "Sedang menyiapkan lembar kerja identifikasi SLS";
 const PESAN = "Halaman SIGAP ditutup sementara sampai pukul 13.00 WIB. Silakan buka kembali setelah itu.";
 
@@ -33,9 +37,12 @@ export async function GET(req: NextRequest) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (key) {
       const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
-      const ids = [sesi.akunId]; // hanya akun yang sedang dipakai, bukan aktor "masuk sebagai"
+      const ids = [sesi.akunId, sesi.aktorId].filter((x): x is number => typeof x === "number");
       const { data } = await db.from("sigap_akun").select("id").in("id", ids).eq("super", true);
-      kecuali = (data ?? []).length > 0;
+      const superIds = new Set((data ?? []).map((x) => Number(x.id)));
+      const akunSuper = superIds.has(sesi.akunId); // akun super masuk dengan akunnya sendiri
+      const superSebagaiBebas = sesi.aktorId != null && superIds.has(sesi.aktorId) && AKUN_BEBAS_SAAT_SEBAGAI.includes(sesi.akunId);
+      kecuali = akunSuper || superSebagaiBebas;
     }
   }
   return NextResponse.json({ ...dasar, tutup: !kecuali, masuk: !!sesi }, { headers: { "Cache-Control": "no-store" } });
