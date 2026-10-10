@@ -158,6 +158,8 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
       status: a.href ? undefined : { label: "Tautan belum diatur", nada: "info" },
     });
   }
+  // (10 Okt 2026) Monitoring Lembar Identifikasi SLS: admin bencana (izin bencana.admin)
+  if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi SLS", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
   if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");
   if (adminAplikasi || boleh(izin, "translok.kegiatan", "kelola")) {

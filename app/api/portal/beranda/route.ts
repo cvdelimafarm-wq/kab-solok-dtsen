@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal, susunBeranda } from "@/lib/portal/server";
 import { masihPinAwal } from "@/lib/sigapPin";
+import { tautanPeran } from "@/lib/portal/peranTautan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +19,12 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const [b, pinBawaan] = await Promise.all([susunBeranda(db, akun), masihPinAwal(db, akun.id).catch(() => false)]);
-    const peran = Array.from(new Map(b.peran.map((p) => [p.kode, p.nama])).values());
-    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan });
+    const peranMap = new Map(b.peran.map((p) => [p.kode, p.nama]));
+    const peran = Array.from(peranMap.values());
+    // (10 Okt 2026) tujuan ketuk label peran di kepala Beranda: nama peran -> alamat halaman (null = tidak bisa ditekan)
+    const peran_tautan: Record<string, string | null> = {};
+    for (const [kode, nama] of peranMap) peran_tautan[nama] = tautanPeran(kode, b.kartu);
+    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, peran_tautan, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat beranda." }, { status: 500 });
   }

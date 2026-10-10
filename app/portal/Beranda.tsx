@@ -26,7 +26,7 @@ import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 
-type Data = { nama: string; jenis: string; peran: string[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
+type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
 type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
 export type InfoDtsen = { nama: string; role: string | null } | null;
 
@@ -270,9 +270,17 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           <p className="text-[13px] text-[#A9BCD8]">{tanggalIndo(nowMs)}</p>
           <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.3px]">Halo, {nama ? namaSapaan(nama) : "…"}</h1>
           <div className="-mx-5 mt-2.5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {(data?.peran ?? []).map((p) => (
-              <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>
-            ))}
+            {/* (10 Okt 2026) label peran bisa ditekan -> membuka lembar pengelolaannya (tujuan dihitung server: peran_tautan) */}
+            {(data?.peran ?? []).map((p) => {
+              const tujuan = data?.peran_tautan?.[p] ?? null;
+              if (!tujuan) return <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>;
+              const kelasTekan = "flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5] ring-1 ring-white/25 transition hover:bg-white/20 active:bg-white/25";
+              return tujuan.startsWith("http") ? (
+                <a key={p} href={tujuan} target="_blank" rel="noopener noreferrer" className={kelasTekan} title={`Buka ${p}`}>{p} ›</a>
+              ) : (
+                <Link key={p} href={tujuan} className={kelasTekan} title={`Buka ${p}`}>{p} ›</Link>
+              );
+            })}
             {data?.jenis === "organik" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Pegawai organik</span>}
             {data?.jenis === "mitra" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Mitra statistik</span>}
             {dtsen && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Operator Wali Nagari</span>}

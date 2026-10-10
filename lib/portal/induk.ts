@@ -8,7 +8,8 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
-import type { BukaMode, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import type { BukaMode, InfoIdentifikasi, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import type { IkonKode } from "@/lib/sigapTugasUtama";
 
 export type AnggotaTim = { id: number; nama: string; peran: string | null; anda: boolean };
@@ -157,6 +158,13 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
   const hasil: Induk[] = [];
   let perencanaan: InfoPerencanaan | null | undefined;
   let wilayah: InfoWilayah | null | undefined;
+  let identifikasi: InfoIdentifikasi | null | undefined;
+  // (10 Okt 2026) tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
+  let timMemo: WilayahTim | null | undefined;
+  const timAkun = async () => {
+    if (timMemo === undefined) timMemo = akun.petugas_bencana_id ? await wilayahTim(db, akun.petugas_bencana_id) : null;
+    return timMemo;
+  };
   for (const i of induk) {
     if (kode && i.kode !== kode) continue;
     const kegIds = (i.kegiatan_ids ?? []).map(Number);
@@ -169,8 +177,16 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
 
     if (isi.has("konfirmasi") && perencanaan === undefined) perencanaan = await perencanaanAkun(db, akun);
     if (isi.has("wilayah_tim") && wilayah === undefined) {
-      const w = akun.petugas_bencana_id ? await wilayahTim(db, akun.petugas_bencana_id) : null;
+      const w = await timAkun();
       wilayah = w ? { total: w.sub_sls.length, ada_laporan: w.ada_laporan, kk: w.total_kk, kk_terdampak: w.total_terdampak } : null;
+    }
+    // Lembar Identifikasi SLS: hanya PML (ambilPml null = bukan PML -> modul tidak tampil)
+    if (isi.has("identifikasi") && identifikasi === undefined) {
+      const pml = await ambilPml(db, akun.petugas_bencana_id);
+      if (pml) {
+        const { ringkas } = await daftarIdentifikasi(db, pml.id);
+        identifikasi = { total: ringkas.total, terisi: ringkas.terisi, tidak_terdampak: ringkas.tidak_terdampak, hasil: ringkas.hasil };
+      } else identifikasi = null;
     }
 
     const menyerap: string[] = [];
@@ -187,6 +203,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       tahap: t,
       perencanaan: isi.has("konfirmasi") ? (perencanaan ?? null) : null,
       wilayah: isi.has("wilayah_tim") ? (wilayah ?? null) : null,
+      identifikasi: isi.has("identifikasi") ? (identifikasi ?? null) : null,
     });
   }
   return hasil;

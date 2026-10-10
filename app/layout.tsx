@@ -7,6 +7,7 @@ import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
 import PingAplikasi from "@/app/components/PingAplikasi";
 import BannerLihatSebagai from "@/app/components/BannerLihatSebagai";
+import TutupSementara from "@/app/components/TutupSementara";
 
 // Eksplisit (bukan cuma andalkan default Next.js) supaya semua halaman
 // SELALU otomatis menyesuaikan lebar layar HP (width=device-width) --
@@ -70,6 +71,8 @@ export default function RootLayout({
         <PingAplikasi />
         {/* (10 Okt 2026) spanduk mode "masuk sebagai" untuk akun super (uji tampilan PPL/PML) */}
         <BannerLihatSebagai />
+        {/* (10 Okt 2026) SIGAP ditutup sementara s.d. 13.00 WIB untuk semua selain akun super ("menyiapkan lembar kerja identifikasi SLS") */}
+        <TutupSementara />
       </body>
     </html>
   );

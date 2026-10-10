@@ -17,7 +17,7 @@ export type TahapDef = {
   urutan: number;
   nama: string;
   uraian: string | null;
-  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | translok:<kegiatan_id> */
+  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | translok:<kegiatan_id> */
   isi: string[];
   buka_mode: BukaMode;
   buka_tanggal: string | null;
@@ -27,6 +27,8 @@ export type TahapDef = {
 export type InfoPerencanaan = { konfirmasi: boolean | null; href: string | null; pesan?: string | null };
 /** Ringkasan wilayah tugas tim (detail lengkap di /api/portal/wilayah-tim). */
 export type InfoWilayah = { total: number; ada_laporan: number; kk: number; kk_terdampak: number };
+/** (10 Okt 2026) Ringkasan Lembar Identifikasi SLS milik PML (detail di /api/portal/identifikasi). */
+export type InfoIdentifikasi = { total: number; terisi: number; tidak_terdampak: number; hasil: number };
 
 export type Induk = {
   kode: string;
@@ -38,6 +40,8 @@ export type Induk = {
   tahap: TahapDef[];
   perencanaan: InfoPerencanaan | null;
   wilayah: InfoWilayah | null;
+  /** hanya untuk PML; opsional agar data lama/uji tetap sah */
+  identifikasi?: InfoIdentifikasi | null;
 };
 
 export type ModulTahap = {
@@ -80,6 +84,7 @@ export const KATALOG_MODUL: { kode: string; label: string; ket: string }[] = [
   { kode: "konfirmasi", label: "Konfirmasi kesediaan & wilayah", ket: "Halaman konfirmasi petugas/PML (undangan bencana)." },
   { kode: "pelatihan", label: "Langkah pelatihan", ket: "Undangan, instrumen, tes, presensi, foto." },
   { kode: "wilayah_tim", label: "Wilayah tugas per tim", ket: "Tim (PML + semua PPL) dan Sub SLS yang didata bersama, lengkap dengan perkiraan KK." },
+  { kode: "identifikasi", label: "Lembar Identifikasi SLS (PML)", ket: "PML mengisi hasil identifikasi tiap Sub SLS wilayah tim: KK terdampak & rincian dampak. Hanya tampil bagi PML." },
   { kode: "translok:", label: "Transport Lokal", ket: "Hari kerja, laporan & foto harian, SPJ untuk satu kegiatan anggaran." },
 ];
 
@@ -87,13 +92,14 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
   if (kode === "konfirmasi") return "Konfirmasi kesediaan & wilayah";
   if (kode === "pelatihan") return "Langkah pelatihan";
   if (kode === "wilayah_tim") return "Wilayah tugas per tim";
+  if (kode === "identifikasi") return "Lembar Identifikasi SLS";
   if (kode.startsWith("translok:")) return `Transport Lokal${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(9)})`}`;
   return kode;
 };
 
 /** Modul sah: salah satu dari katalog. */
 export function modulSah(kode: string): boolean {
-  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || /^translok:\d+$/.test(kode);
+  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || /^translok:\d+$/.test(kode);
 }
 
 const NADA_KE_STATUS: Record<NadaKegiatan, StatusLangkah> = { merah: "mendesak", emas: "perlu", biru: "berjalan", abu: "menunggu", hijau: "selesai" };
@@ -150,6 +156,29 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         status,
         href: null,
         pecahan: w.total ? Math.min(1, w.ada_laporan / w.total) : 0,
+      },
+    ];
+  }
+  if (kode === "identifikasi") {
+    // (10 Okt 2026) khusus PML yang punya Sub SLS; bagi akun lain modul ini tidak berlaku (tidak tampil)
+    const f = induk.identifikasi;
+    if (!f || f.total <= 0) return [];
+    const status: StatusLangkah = f.terisi >= f.total ? "selesai" : f.terisi > 0 ? "berjalan" : "perlu";
+    const ket =
+      f.terisi >= f.total
+        ? `Semua ${f.total} Sub SLS sudah terisi · ${f.hasil} KK terdampak`
+        : f.terisi > 0
+          ? `${f.terisi} dari ${f.total} Sub SLS terisi`
+          : `Belum ada yang terisi · ${f.total} Sub SLS menunggu hasil identifikasi`;
+    return [
+      {
+        kode,
+        judul: "Lembar Identifikasi SLS",
+        ket,
+        status,
+        href: `/sigap/identifikasi?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        aksi: f.terisi >= f.total ? "Lihat" : "Isi sekarang",
+        pecahan: Math.min(1, f.terisi / f.total),
       },
     ];
   }
