@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 
 // Nama portal & alamat dasar. Alamat dasar dipakai Next.js untuk membuat URL
 // absolut gambar pratinjau link (WhatsApp, Telegram, dll).
-export const NAMA_PORTAL = "Portal Layanan BPS Kabupaten Solok";
+// (11 Okt 2026) Nama diseragamkan "SIGAP · Sistem Integrasi Kegiatan BPS" -- keputusan user (temuan audit: header, judul tab Beranda, dan judul
+// halaman dalam memakai tiga nama berbeda, "BPS Kabupaten Solok" juga tertulis dobel di judul tab).
+export const NAMA_PORTAL = "SIGAP · Sistem Integrasi Kegiatan BPS";
+/** Akhiran judul tab tiap halaman: "<judul> · SIGAP" */
+export const AKHIRAN_JUDUL = "SIGAP";
 export const DESKRIPSI_PORTAL =
-  "Satu pintu aplikasi pendataan dan pemantauan BPS Kabupaten Solok: usulan data DTSEN, pendataan bencana, Seruti, penyisiran usaha, dan SIGAP (anggaran & SPJ).";
+  "SIGAP BPS Kabupaten Solok: satu pintu kegiatan pendataan, pelatihan, transport lokal & SPJ, usulan DTSEN, penyisiran usaha, dan Seruti.";
 export const ALAMAT_DASAR =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://bps-solokkab.up.railway.app";
 
@@ -14,7 +18,7 @@ export const ALAMAT_DASAR =
  * file opengraph-image.tsx di folder halaman yang bersangkutan.
  */
 export function metaHalaman(judul: string, deskripsi: string): Metadata {
-  const judulLengkap = `${judul} · BPS Kabupaten Solok`;
+  const judulLengkap = `${judul} · ${AKHIRAN_JUDUL}`;
   return {
     title: judul,
     description: deskripsi,

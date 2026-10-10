@@ -43,7 +43,8 @@ const PROFIL: [string, Profil][] = [
   ["/api/portal/induk", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
   ["/api/portal/kegiatan", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
   // kartu menurut peran & periode: jarang berubah
-  ["/api/portal/beranda", { ...dasar, segarMs: 30 * MENIT, interval: 30 * MENIT }],
+  // (11 Okt 2026) skema 2: jawaban menambah peran_chip (chip peran = nama ubin tujuan) -> simpanan lama diambil ulang
+  ["/api/portal/beranda", { ...dasar, segarMs: 30 * MENIT, interval: 30 * MENIT, skema: 2 }],
   // daftar Sub SLS/KK praktis tetap; status identifikasi & laporan boleh tertunda ±10 menit
   ["/api/portal/wilayah-tim", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
   ["/api/portal/identifikasi", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
@@ -105,8 +106,10 @@ function pastikanPemilik() {
 function tulisSekarang() {
   jadwalSimpan = null;
   try {
-    const p = pemilikSesi();
-    if (!p) return;
+    // (11 Okt 2026) Perbaikan audit: label pemilik = pemilik isi memori, BUKAN sesi saat menulis. Bila sesi sudah berganti (ganti akun lalu halaman
+    // ditutup/pagehide), isi memori milik akun lama tidak boleh ditulis atas nama akun baru.
+    const p = pemilikMemori;
+    if (!p || p !== pemilikSesi()) return;
     const urut = Array.from(memori.entries()).sort((a, b) => b[1].tiba - a[1].tiba);
     const obj: Simpanan = { f: 1, pemilik: p, e: {} };
     let teks = "";
@@ -172,8 +175,11 @@ export function muatData<T>(path: string): Promise<T> {
   const ada = terbang.get(kunci);
   if (ada) return ada as Promise<T>;
   const mulai = Date.now();
+  const pemilikAwal = pemilikMemori;
   const janji = apiPortal<T>(path)
     .then((data) => {
+      // (11 Okt 2026) jawaban tiba setelah akun berganti -> jangan masuk simpanan akun yang baru
+      if (pemilikAwal !== pemilikSesi()) return data;
       // tumpuk perubahan lokal yang belum terkirim (antreanKirim.ts) supaya tidak "mundur" ke data server yang lama
       const jadi = (tumpukan.get(path.split("?")[0])?.(data) ?? data) as T;
       memori.set(path, { data: jadi, at: mulai, tiba: Date.now(), sk: profilDari(path).skema });

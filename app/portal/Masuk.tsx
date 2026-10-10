@@ -11,7 +11,7 @@ import { emailFromPhone, normalizePhone } from "@/lib/phone";
 import { MIN_HURUF_CARI, pesanGalatMasuk, type Saran } from "@/lib/sigapMasukNama";
 import GantiPinCepat from "./GantiPinCepat";
 import PilihSebagai, { type HasilSebagai } from "./PilihSebagai";
-import { mulaiLihatSebagai, simpanSesi, tujuanLanjut } from "./sesi";
+import { hapusLihatSebagai, mulaiLihatSebagai, simpanSesi, tujuanLanjut } from "./sesi";
 
 const INPUT = "h-12 w-full rounded-lg border border-[#CDD5DE] bg-white px-3.5 text-[15px] text-[#14202E] outline-none transition focus:border-[#1F5FD1] focus:ring-4 focus:ring-[#1F5FD1]/10";
 
@@ -106,6 +106,7 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
   }
 
   function selesai(x: { sesi: string; sampai: string; token: string }) {
+    hapusLihatSebagai(); // (11 Okt 2026) login biasa: buang sisa mode "masuk sebagai" (sesi asli lama, spanduk)
     simpanSesi(x);
     const lanjut = tujuanLanjut();
     // /dashboard (DTSEN) butuh login nomor HP -> jangan diteruskan dari sesi nama + PIN.
@@ -115,6 +116,7 @@ export default function Masuk({ onMasuk }: { onMasuk: () => void }) {
 
   function pilihSebagai(asli: { sesi: string; sampai: string; token: string }, h: HasilSebagai) {
     if (h.sendiri) return selesai(asli); // akun sendiri: alur masuk biasa
+    hapusLihatSebagai(); // (11 Okt 2026) login baru akun super: sesi asli yang tersimpan diganti dengan sesi yang baru ini
     mulaiLihatSebagai(asli, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
     window.location.replace("/"); // muat ulang penuh supaya semua tampilan memakai akun yang dipilih
   }

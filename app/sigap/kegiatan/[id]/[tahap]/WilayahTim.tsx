@@ -6,10 +6,11 @@
 // tim (PML + semua PPL) dan Sub SLS yang didata bersama -- bukan "siapa mendata Sub SLS apa". Tiap Sub SLS satu baris padat dengan
 // perkiraan KK dan perkiraan KK terdampak. Status per Sub SLS hanya "sudah ada laporan" (satu-satunya data yang benar-benar ada di SIGAP).
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { useData } from "@/app/portal/dataBersama";
 import KartuPetaOffline from "@/app/portal/KartuPetaOffline";
+import PetaSheet, { IkonPeta } from "@/app/sigap/identifikasi/PetaSheet";
 import type { WilayahTim as Tim } from "@/lib/portal/induk";
 import { angkaId, judulKata, namaSingkat } from "../../format";
 
@@ -22,6 +23,9 @@ export default function WilayahTim() {
   const d = useData<{ tim: Tim | null }>("/api/portal/wilayah-tim");
   const tim: Tim | null | undefined = d.data ? d.data.tim : undefined;
   const galat = d.galat && d.galat !== "SESI_BERAKHIR" && !d.data ? d.galat : null;
+  // (11 Okt 2026) Lembar Peta per nagari untuk PPL -- temuan audit: peta wilayah tim sudah diunduh ke HP PPL (±26 MB) tetapi tidak ada
+  // tombol untuk membukanya (hanya ada di Lembar Identifikasi PML). Memakai PetaSheet yang sama dengan halaman identifikasi.
+  const [petaBuka, setPetaBuka] = useState<string | null>(null);
 
   // Kelompok per kecamatan · nagari (sudah terurut dari server)
   const kelompok = useMemo(() => {
@@ -116,7 +120,18 @@ export default function WilayahTim() {
 
       {kelompok.map(([nama, isi]) => (
         <div key={nama}>
-          <div className="border-b border-[#EEF2F7] bg-[#F1F6FE] px-3.5 py-1 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-[#0F3D7A]">{judulKata(nama.split(" · ")[0])} · {judulKata(nama.split(" · ")[1] ?? "")}</div>
+          <div className="flex items-center justify-between gap-2 border-b border-[#EEF2F7] bg-[#F1F6FE] py-1 pl-3.5 pr-2 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-[#0F3D7A]">
+            <span className="min-w-0">{judulKata(nama.split(" · ")[0])} · {judulKata(nama.split(" · ")[1] ?? "")}</span>
+            <button
+              type="button"
+              onClick={() => setPetaBuka(nama)}
+              aria-label={`Lihat peta ${nama.split(" · ")[1] ?? nama}`}
+              className="inline-flex min-h-[32px] flex-none items-center gap-1 rounded-full bg-white px-2.5 text-[11px] font-extrabold normal-case tracking-normal text-[#1F5FD1] shadow-[0_1px_3px_rgba(15,42,82,.12)] active:bg-[#E6EEFC]"
+            >
+              <IkonPeta className="h-3.5 w-3.5" />
+              Peta
+            </button>
+          </div>
           {isi.map((s) => (
             <div key={s.idsubsls} className={`${GRID} min-h-[44px] items-center border-b border-[#EEF2F7] px-3.5 py-1.5 last:border-b-0`}>
               <span className="flex min-w-0 items-center gap-2">
@@ -135,7 +150,7 @@ export default function WilayahTim() {
                   {/* (10 Okt 2026) Status Lembar Identifikasi SLS oleh PML -- permintaan user */}
                   {s.identifikasi && (
                     <span className={`ml-1.5 inline-block rounded-full px-1.5 py-[1px] align-middle text-[9.5px] font-extrabold ${s.identifikasi === "selesai" ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>
-                      {s.identifikasi === "selesai" ? "Selesai identifikasi" : "Sedang diidentifikasi PML"}
+                      {s.identifikasi === "selesai" ? "Selesai identifikasi" : "Menunggu identifikasi PML"}
                     </span>
                   )}
                 </span>
@@ -147,9 +162,21 @@ export default function WilayahTim() {
         </div>
       ))}
 
-      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu. Tag identifikasi: “Sedang diidentifikasi PML” = PML belum menyimpan hasilnya; “Selesai identifikasi” = hasil sudah disimpan.</p>
+      <p className="px-3.5 py-2.5 text-[11px] leading-snug text-[#6B7A90]">KK = perkiraan jumlah keluarga; Terdampak = perkiraan KK terdampak bencana. Keduanya dari data awal, bukan hasil pencacahan. Lingkaran hijau = sudah ada laporan harian yang memuat Sub SLS itu. Tombol Peta = peta WA nagari & peta tiap Sub SLS (terbuka tanpa sinyal bila sudah tersimpan di HP). Tag identifikasi: “Menunggu identifikasi PML” = PML belum menyimpan hasilnya; “Selesai identifikasi” = hasil sudah disimpan.</p>
     </section>
     <KartuPetaOffline idsubsls={tim.sub_sls.map((x) => x.idsubsls)} />
+    {(() => {
+      const isi = kelompok.find(([n]) => n === petaBuka)?.[1] ?? [];
+      return (
+        <PetaSheet
+          buka={!!petaBuka && isi.length > 0}
+          onTutup={() => setPetaBuka(null)}
+          judul={judulKata(petaBuka?.split(" · ")[1] ?? "")}
+          desa={isi[0]?.idsubsls.slice(0, 10) ?? null}
+          subs={isi.map((x) => ({ idsubsls: x.idsubsls, nama: judulKata(x.sls), sub: x.sub_sls }))}
+        />
+      );
+    })()}
     </div>
   );
 }

@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal, susunBeranda } from "@/lib/portal/server";
 import { masihPinAwal } from "@/lib/sigapPin";
-import { tautanPeran } from "@/lib/portal/peranTautan";
+import { chipPeran, tautanPeran } from "@/lib/portal/peranTautan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
     // (10 Okt 2026) tujuan ketuk label peran di kepala Beranda: nama peran -> alamat halaman (null = tidak bisa ditekan)
     const peran_tautan: Record<string, string | null> = {};
     for (const [kode, nama] of peranMap) peran_tautan[nama] = tautanPeran(kode, b.kartu);
-    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, peran_tautan, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan });
+    // (11 Okt 2026) chip = nama ubin tujuan, tujuan sama digabung (lib/portal/peranTautan.ts chipPeran)
+    const peran_chip = chipPeran(Array.from(peranMap, ([kode, nama]) => ({ kode, nama })), b.kartu);
+    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, peran_tautan, peran_chip, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat beranda." }, { status: 500 });
   }

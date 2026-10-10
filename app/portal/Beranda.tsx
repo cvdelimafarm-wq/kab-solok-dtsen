@@ -33,7 +33,7 @@ import BannerAntrean from "./BannerAntrean";
 import { kirimAntrean } from "./antreanKirim";
 import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
-type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
+type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; peran_chip?: { label: string; href: string | null }[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
 type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
 export type InfoDtsen = { nama: string; role: string | null } | null;
 
@@ -95,6 +95,18 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const a = setInterval(() => setTik((x) => x + 1), 30_000);
     return () => clearInterval(a);
   }, []);
+
+  // (11 Okt 2026) "Keluar" perlu ketuk dua kali (dalam 4 detik) -- temuan audit: satu ketuk tak sengaja langsung menghapus sesi & simpanan data.
+  const [yakinKeluar, setYakinKeluar] = useState(false);
+  useEffect(() => {
+    if (!yakinKeluar) return;
+    const t = setTimeout(() => setYakinKeluar(false), 4000);
+    return () => clearTimeout(t);
+  }, [yakinKeluar]);
+  function tekanKeluar() {
+    if (!yakinKeluar) return setYakinKeluar(true);
+    void keluar();
+  }
 
   async function keluar() {
     // (8 Okt 2026) lepas notifikasi push perangkat ini dari akun sebelum sesi dihapus (HP bisa dipakai bergantian)
@@ -243,8 +255,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
             </span>
           </a>
           {nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>}
-          <button type="button" onClick={keluar} className="flex-none rounded-lg border border-white/25 px-3 py-1.5 text-[12.5px] font-semibold text-[#D3E0F5] hover:bg-white/10">
-            Keluar
+          <button type="button" onClick={tekanKeluar} className={`flex-none rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold hover:bg-white/10 ${yakinKeluar ? "border-[#F4B400] bg-[#F4B400] text-[#0F2A52]" : "border-white/25 text-[#D3E0F5]"}`}>
+            {yakinKeluar ? "Ketuk lagi untuk keluar" : "Keluar"}
           </button>
         </div>
         <div className="relative mx-auto mt-5 max-w-xl">
@@ -252,8 +264,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.3px]">Halo, {nama ? namaSapaan(nama) : "…"}</h1>
           <div className="-mx-5 mt-2.5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* (10 Okt 2026) label peran bisa ditekan -> membuka lembar pengelolaannya (tujuan dihitung server: peran_tautan) */}
-            {(data?.peran ?? []).map((p) => {
-              const tujuan = data?.peran_tautan?.[p] ?? null;
+            {/* (11 Okt 2026) chip = nama ubin tujuan; tujuan sama digabung (peran_chip dari server; cadangan: data lama di HP) */}
+            {(data?.peran_chip ?? (data?.peran ?? []).map((p) => ({ label: p, href: data?.peran_tautan?.[p] ?? null }))).map(({ label: p, href: tujuan }) => {
               if (!tujuan) return <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>;
               const kelasTekan = "flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5] ring-1 ring-white/25 transition hover:bg-white/20 active:bg-white/25";
               return tujuan.startsWith("http") ? (

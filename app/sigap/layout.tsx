@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 
-// (5 Okt 2026) SIGAP -- Sistem Informasi Gerak Anggaran & Pertanggungjawaban.
+// (5 Okt 2026) SIGAP -- awalnya "Gerak Anggaran & Pertanggungjawaban".
+// (11 Okt 2026) Judul diseragamkan "SIGAP · Sistem Integrasi Kegiatan BPS" (sama dengan header Beranda) -- keputusan user.
 // Catatan: helper metaHalaman()/opengraph-image (lib/halaman.ts, lib/ogImage.tsx) akan
 // disambungkan menyusul (berkas helper belum terbaca saat modul ini dibuat).
 export const metadata: Metadata = {
-  title: "SIGAP — Gerak Anggaran & Pertanggungjawaban · BPS Kabupaten Solok",
-  description: "Portal anggaran BPS Kabupaten Solok: RAB, revisi, pelaksanaan (transport lokal, perjalanan dinas, honor, pengadaan) dan SPJ.",
+  title: { absolute: NAMA_PORTAL },
+  description: DESKRIPSI_PORTAL,
 };
 
 export default function SigapLayout({ children }: { children: React.ReactNode }) {

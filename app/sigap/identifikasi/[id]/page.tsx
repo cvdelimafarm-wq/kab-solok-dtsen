@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
-import { apiPortal, bacaLihatSebagai } from "@/app/portal/sesi";
+import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { kirimAtauAntre } from "@/app/portal/antreanKirim";
 import { BATAS_CATATAN, BATAS_KET, JENIS_DAMPAK, JENIS_LAMA, kodeDesa, periksaIsian, peringatanIsian, type KunciAngka } from "@/lib/identifikasi";
 import KontakRekan from "../KontakRekan";
@@ -98,26 +98,16 @@ export default function IsianIdentifikasi() {
     setPesan(null);
     const nol = Object.fromEntries(Object.keys(KOSONG).map((k) => [k, 0]));
     const body = tidak ? { ...nol, idsubsls, tidak_terdampak: true, catatan } : { ...nilai, idsubsls, tidak_terdampak: false, lainnya_ket: ket, catatan };
-    // (10 Okt 2026) Mode "masuk sebagai" hanya melihat: ditolak server, jadi dikirim langsung agar pesannya tampil. Selain itu hasil langsung tampil tersimpan
-    // dan dikirim di belakang layar (antreanKirim.ts) -- petugas tidak menunggu server & aman bila sinyal lemah (permintaan user).
-    if (!sebagai) {
-      const r = kirimAtauAntre("/api/portal/identifikasi", body, idsubsls);
-      if (!r.ok) {
-        setPesan(r.pesan);
-        setMenyimpan(false);
-        return;
-      }
-      router.replace(daftar);
+    // (10 Okt 2026) Hasil langsung tampil tersimpan dan dikirim di belakang layar (antreanKirim.ts) -- petugas tidak menunggu server & aman bila
+    // sinyal lemah (permintaan user). (11 Okt 2026) Mode "masuk sebagai" = simulasi: kirimAtauAntre hanya menerapkan hasil di layar ini,
+    // tidak masuk antrean dan tidak dikirim (keputusan user: "bisa simulasi pengisian ... tapi datanya tidak dikirim").
+    const r = kirimAtauAntre("/api/portal/identifikasi", body, idsubsls);
+    if (!r.ok) {
+      setPesan(r.pesan);
+      setMenyimpan(false);
       return;
     }
-    try {
-      await apiPortal("/api/portal/identifikasi", { method: "POST", body: JSON.stringify(body) });
-      router.replace(daftar);
-    } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
-      setPesan(e instanceof Error ? e.message : "Gagal menyimpan.");
-      setMenyimpan(false);
-    }
+    router.replace(daftar);
   }
 
   const kartu = "rounded-[20px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]";
@@ -154,7 +144,7 @@ export default function IsianIdentifikasi() {
 
         {s && (
           <>
-            {sebagai && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">Mode "masuk sebagai": hanya untuk melihat tampilan, tombol Simpan dimatikan.</p>}
+            {sebagai && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">Mode simulasi ("masuk sebagai"): Anda boleh mengisi dan menekan Simpan; hasilnya hanya tampil di layar ini dan tidak dikirim ke server.</p>}
 
             <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
               <p className="mb-3 rounded-[12px] bg-[#F1F6FE] px-3 py-2 text-[12px] leading-snug text-[#0F2A52]">
@@ -249,7 +239,7 @@ export default function IsianIdentifikasi() {
 
             <div className="space-y-2 pb-4">
               {pesan && <p className="rounded-[12px] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{pesan}</p>}
-              <button type="button" onClick={simpan} disabled={!cek.ok || menyimpan || sebagai} className="flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-[#1F5FD1] text-[16px] font-extrabold text-white disabled:bg-[#A9BCD8]">
+              <button type="button" onClick={simpan} disabled={!cek.ok || menyimpan} className="flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-[#1F5FD1] text-[16px] font-extrabold text-white disabled:bg-[#A9BCD8]">
                 {menyimpan ? "Menyimpan…" : "Simpan"}
               </button>
               <p className="text-center text-[11.5px] text-[#6B7A90]">Bisa diubah lagi kapan saja. Terakhir disimpan: {s.hasil ? `${tglJam(s.hasil.diperbarui_at)}${s.hasil.oleh ? ` oleh ${s.hasil.oleh}` : ""}` : "belum pernah"}.</p>

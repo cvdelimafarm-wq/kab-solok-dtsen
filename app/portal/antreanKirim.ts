@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiPortal, KUNCI_ANTREAN, pemilikSesi, type GalatApi } from "./sesi";
 import { daftarkanTumpuk, tandaBasi, ubahCache } from "./dataBersama";
+import { EVENT_SIMULASI, modeSimulasi } from "./simulasi";
 import { periksaIsian, ringkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
 
 export type ItemAntre = {
@@ -85,6 +86,17 @@ export function kirimAtauAntre(path: string, body: Record<string, unknown>, kunc
     const cek = periksaIsian(body);
     if (!cek.ok) return { ok: false, pesan: cek.pesan };
   }
+  // (11 Okt 2026) mode simulasi ("masuk sebagai"): hanya tampil di layar ini (simpanan lokal), tidak masuk antrean & tidak dikirim
+  if (modeSimulasi()) {
+    const tiruan: ItemAntre = { id: "simulasi", pemilik, path, body, kunci, at: Date.now(), coba: 0, status: "menunggu" };
+    if (path === PATH_IDENTIFIKASI) ubahCache<DataIdf>(PATH_IDENTIFIKASI, (d) => terapkanIdentifikasi(d, [tiruan]));
+    try {
+      window.dispatchEvent(new CustomEvent(EVENT_SIMULASI, { detail: { metode: "POST", jalur: path } }));
+    } catch {
+      /* abaikan */
+    }
+    return { ok: true };
+  }
   const semua = baca().filter((x) => !(x.pemilik === pemilik && x.kunci === kunci && x.path === path && x.status === "menunggu"));
   const item: ItemAntre = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, pemilik, path, body, kunci, at: Date.now(), coba: 0, status: "menunggu" };
   tulis([...semua, item]);
@@ -101,6 +113,7 @@ export function kirimAtauAntre(path: string, body: Record<string, unknown>, kunc
 /** Kirim semua yang menunggu (milik akun yang sedang masuk). Aman dipanggil berulang; satu proses sekaligus. */
 export function kirimAntrean(): Promise<void> {
   if (sedangKirim) return sedangKirim;
+  if (modeSimulasi()) return Promise.resolve(); // (11 Okt 2026) simulasi: antrean tidak dikirim (dan tidak dianggap terkirim)
   sedangKirim = (async () => {
     for (;;) {
       const pemilik = pemilikSesi();

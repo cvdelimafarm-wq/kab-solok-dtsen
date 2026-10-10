@@ -18,7 +18,7 @@ export default function KartuPetaOffline({ idsubsls }: { idsubsls: string[] }) {
   const teks = !status
     ? "Memeriksa…"
     : lengkap
-      ? `Semua peta wilayah Anda (${status.tersimpan} berkas) tersimpan di HP. Bisa dibuka tanpa sinyal.`
+      ? `Semua peta wilayah Anda (${status.tersimpan} berkas) tersimpan di HP. Bisa dibuka tanpa sinyal selama aplikasi terbuka.`
       : belumDicek && status.total === 0
         ? "Peta wilayah Anda belum diunduh ke HP."
         : `${status.tersimpan} dari ${status.total} berkas peta tersimpan di HP.${status.berhenti === "sinyal" ? " Berhenti karena sinyal lemah; dilanjutkan otomatis nanti." : ""}`;

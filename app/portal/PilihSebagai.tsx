@@ -94,7 +94,7 @@ export default function PilihSebagai({
       <div>
         <h2 id="judul-sebagai" className="text-[20px] font-bold">Masuk sebagai siapa?</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-[#4D5B6B]">
-          Akun super: tampilan dan aksi mengikuti akun yang dipilih (persis seperti petugas itu). Aksi tersimpan atas nama akun tersebut.
+          Akun super: tampilan persis seperti akun yang dipilih. Mode simulasi: Anda boleh mengisi, mengunggah, dan menyimpan, tetapi tidak ada data yang dikirim ke server.
         </p>
       </div>
 

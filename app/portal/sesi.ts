@@ -126,11 +126,17 @@ function hapusPenyisiran() {
   }, undefined);
 }
 
+/** Penanda mode tanpa memeriksa sesi (dipakai apiPortal saat 401). */
+function bacaLihatSebagaiMentah(): boolean {
+  return aman(() => !!localStorage.getItem(KUNCI_ASLI.sebagai), false);
+}
+
 /** Sedang "masuk sebagai" akun lain? (null = akun sendiri) */
 export function bacaLihatSebagai(): LihatSebagai | null {
   return aman(() => {
     const raw = localStorage.getItem(KUNCI_ASLI.sebagai);
-    if (!raw || !localStorage.getItem(KUNCI_ASLI.sesi)) return null;
+    // (11 Okt 2026) spanduk hanya bila sesi akun yang dilihat masih sah (dulu tetap tampil di halaman Masuk setelah sesi habis)
+    if (!raw || !localStorage.getItem(KUNCI_ASLI.sesi) || !bacaSesi()) return null;
     const v = JSON.parse(raw) as Partial<LihatSebagai>;
     return typeof v.id === "number" && typeof v.nama === "string" ? { id: v.id, nama: v.nama, aktor: typeof v.aktor === "string" ? v.aktor : "" } : null;
   }, null);
@@ -150,7 +156,9 @@ export function bacaSesiAsli(): string | null {
 /** Simpan sesi akun super (asli) lalu pakai sesi akun target. Token penyisiran lama dibuang (milik akun sebelumnya). */
 export function mulaiLihatSebagai(asli: { sesi: string; sampai: string; token?: string | null }, target: { sesi: string; sampai: string; token?: string | null; id: number; nama: string; aktor: string }) {
   aman(() => {
-    if (!localStorage.getItem(KUNCI_ASLI.sesi)) {
+    // (11 Okt 2026) Perbaikan audit: sesi asli yang SUDAH KEDALUWARSA juga ditimpa. Dulu hanya disimpan bila belum ada, sehingga sesi asli kemarin
+    // tertinggal -> tombol "Ganti" diam dan "Kembali ke akun saya" mengeluarkan akun. Saat "Ganti" (asli.sampai kosong) sesi asli yang masih sah dipertahankan.
+    if (!bacaSesiAsli() && asli.sampai) {
       localStorage.setItem(KUNCI_ASLI.sesi, asli.sesi);
       localStorage.setItem(KUNCI_ASLI.sampai, asli.sampai);
       if (asli.token) localStorage.setItem(KUNCI_ASLI.tokenPetugas, asli.token);
@@ -161,6 +169,15 @@ export function mulaiLihatSebagai(asli: { sesi: string; sampai: string; token?: 
     localStorage.setItem(KUNCI.sampai, target.sampai);
     if (target.token) localStorage.setItem(KUNCI.tokenPetugas, target.token);
     else localStorage.removeItem(KUNCI.tokenPetugas);
+    // (11 Okt 2026) simpanan data akun sebelumnya dibuang saat berganti akun (tidak tertinggal di perangkat; lihat juga dataBersama.ts)
+    localStorage.removeItem(KUNCI_SIMPAN_DATA);
+  }, undefined);
+}
+
+/** (11 Okt 2026) Hapus semua jejak mode "masuk sebagai" (dipanggil saat login biasa, supaya sesi asli lama & spanduk tidak tertinggal). */
+export function hapusLihatSebagai() {
+  aman(() => {
+    for (const k of Object.values(KUNCI_ASLI)) localStorage.removeItem(k);
   }, undefined);
 }
 
@@ -173,6 +190,8 @@ export function kembaliKeAkunSaya(): boolean {
     hapusPenyisiran();
     localStorage.removeItem(KUNCI_ASLI.sebagai);
     for (const k of [KUNCI_ASLI.sesi, KUNCI_ASLI.sampai, KUNCI_ASLI.tokenPetugas]) localStorage.removeItem(k);
+    // (11 Okt 2026) simpanan data milik akun yang dilihat dibuang (dulu tertinggal di perangkat, terutama bila sesi asli sudah habis)
+    localStorage.removeItem(KUNCI_SIMPAN_DATA);
     if (!asli || !sampai) {
       for (const k of Object.values(KUNCI)) localStorage.removeItem(k);
       return false;
@@ -212,6 +231,12 @@ export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T>
   }
   const json = await res.json().catch(() => ({}));
   if (res.status === 401) {
+    // (11 Okt 2026) mode "masuk sebagai": sesi akun yang dilihat habis -> kembali ke akun super (sesi asli tidak ikut dihapus)
+    if (bacaLihatSebagaiMentah()) {
+      kembaliKeAkunSaya();
+      if (typeof window !== "undefined") window.location.replace("/");
+      throw new Error("SESI_BERAKHIR");
+    }
     hapusSemuaSesi({ simpanData: true });
     throw new Error("SESI_BERAKHIR");
   }

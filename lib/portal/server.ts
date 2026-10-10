@@ -175,7 +175,8 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
 
   // 5. Referensi.
   if (akun.jenis === "organik" || boleh(izin, "pedia.baca", "lihat")) kartu.push({ kode: "pedia", grup: "referensi", judul: "SIGAP PEDIA", uraian: "Ensiklopedia aturan & arsip bukti.", href: "/sigap/pedia" });
-  if (akun.jenis === "organik") kartu.push({ kode: "seruti", grup: "referensi", judul: "Seruti", uraian: "Progres lapangan & kualitas data.", href: "/seruti" });
+  // (11 Okt 2026) tidak dobel dengan ubin "Admin Seruti" (tujuan sama /seruti) -- temuan audit menu membingungkan
+  if (akun.jenis === "organik" && !kartu.some((k) => k.kode === "admin-seruti")) kartu.push({ kode: "seruti", grup: "referensi", judul: "Seruti", uraian: "Progres lapangan & kualitas data.", href: "/seruti" });
 
   return { peran, izin, kartu, admin_aplikasi: adminAplikasi };
 }

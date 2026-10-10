@@ -83,7 +83,8 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
         ) : bisa ? (
           <Link href={t.rute} className="block rounded-[12px] py-0.5 transition active:bg-[#EAF1FC]">
             {judul}
-            <p className="mt-0.5 text-[12.5px] leading-snug text-[#55657D]">{t.ringkas}</p>
+            {/* (11 Okt 2026) "Selesai" tidak diulang di bawah lencana "Selesai" (dulu terbaca "Selesai Selesai") */}
+            {!(t.status === "selesai" && t.ringkas === "Selesai") && <p className="mt-0.5 text-[12.5px] leading-snug text-[#55657D]">{t.ringkas}</p>}
             {t.uraian && t.status !== "selesai" && <p className="mt-0.5 text-[11.5px] leading-snug text-[#6B7A90]">{t.uraian}</p>}
           </Link>
         ) : (

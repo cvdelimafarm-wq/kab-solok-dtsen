@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import { ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
+import { AKHIRAN_JUDUL, ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 import DaftarSW from "@/app/components/DaftarSW";
 import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
@@ -30,7 +30,7 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL(ALAMAT_DASAR),
-  title: { default: NAMA_PORTAL, template: "%s · BPS Kabupaten Solok" },
+  title: { default: NAMA_PORTAL, template: `%s · ${AKHIRAN_JUDUL}` }, // (11 Okt 2026) nama seragam (lib/halaman.ts)
   description: DESKRIPSI_PORTAL,
   applicationName: "SIGAP",
   openGraph: {
