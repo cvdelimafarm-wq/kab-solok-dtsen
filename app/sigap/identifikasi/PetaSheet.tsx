@@ -7,12 +7,15 @@
 // (10 Okt 2026) Peta yang sudah diunduh ke HP (app/portal/petaOffline.ts) dibuka dari alamat tetap /peta-cache/... -- seketika & tanpa sinyal, dan bila SEMUA
 // peta yang diperlukan sudah tersimpan, lembar ini tidak memanggil server sama sekali. Yang belum tersimpan tetap memakai tautan bertanda tangan seperti semula.
 
-import { useEffect, useState } from "react";
+// (10 Okt 2026) Lembar langsung tampil dari daftar di HP (manifest) tanpa menunggu server -- permintaan user: "klik icon peta dan menunggu modal terbuka penuh masih lambat".
+// Server dipanggil di belakang hanya bila ada yang belum lengkap; tanda "di HP" ikut diperbarui saat unduhan latar berjalan; unduhan latar ditahan selama lembar terbuka.
+
+import { useEffect, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
-import { berkasDiperlukan, daftarPetaDari, jalurPeta, manifestLengkap, petaTersimpan, swAktif, bacaManifest } from "@/app/portal/petaOffline";
+import { bacaManifest, berkasDiperlukan, daftarPetaDari, jalurPeta, manifestLengkap, pantauPeta, petaTersimpanBanyak, swAktif, tahanUnduh } from "@/app/portal/petaOffline";
 
 type Berkas = { nama: string; url: string; tipe: "pdf" | "gambar"; halaman: number; dari: number };
-type Hasil = { wa: Record<string, Berkas[]>; sls: Record<string, Berkas[]> };
+type Hasil = { wa: Record<string, Berkas[] | undefined>; sls: Record<string, Berkas[] | undefined> };
 export type SubPeta = { idsubsls: string; nama: string; sub: string };
 
 export function IkonPeta({ className = "h-5 w-5" }: { className?: string }) {
@@ -24,7 +27,8 @@ export function IkonPeta({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function Lembar({ berkas, folder, lokal }: { berkas: Berkas[] | undefined; folder: "wa" | "sls"; lokal: Set<string> }) {
+function Lembar({ berkas, folder, lokal, memuat }: { berkas: Berkas[] | undefined; folder: "wa" | "sls"; lokal: Set<string>; memuat: boolean }) {
+  if (berkas === undefined && memuat) return <span className="inline-block h-9 w-28 animate-pulse rounded-full bg-[#E3EAF5]" aria-busy="true" />;
   if (!berkas || berkas.length === 0) return <span className="rounded-full bg-[#EEF2F7] px-3 py-1.5 text-[12px] font-bold text-[#8A97AB]">Belum diunggah</span>;
   return (
     <span className="flex flex-wrap gap-1.5">
@@ -32,11 +36,20 @@ function Lembar({ berkas, folder, lokal }: { berkas: Berkas[] | undefined; folde
         const jalur = jalurPeta(folder, b.nama);
         const diHp = lokal.has(jalur);
         const href = diHp ? jalur : b.url;
-        if (!href) return null;
+        const teks = b.dari > 1 ? `Lembar ${b.halaman} dari ${b.dari}` : "Buka peta";
+        // belum di HP & tautan belum datang: tampil sebentar sebagai "menyiapkan" (tautan datang dari server beberapa saat kemudian)
+        if (!href)
+          return (
+            <span key={b.nama} className={`inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#EEF2F7] px-3 text-[12.5px] font-extrabold text-[#8A97AB] ${memuat ? "animate-pulse" : ""}`}>
+              <IkonPeta className="h-3.5 w-3.5" />
+              {teks}
+              <span className="ml-0.5 text-[10px] font-bold">{memuat ? "menyiapkan…" : "perlu sinyal"}</span>
+            </span>
+          );
         return (
           <a key={b.nama} href={href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#E6EEFC] px-3 text-[12.5px] font-extrabold text-[#1F5FD1] active:bg-[#D3E0F5]">
             <IkonPeta className="h-3.5 w-3.5" />
-            {b.dari > 1 ? `Lembar ${b.halaman} dari ${b.dari}` : "Buka peta"}
+            {teks}
             {diHp && <span className="ml-0.5 rounded-full bg-[#E3F6EC] px-1.5 py-[1px] text-[10px] font-extrabold text-[#13794B]">di HP</span>}
           </a>
         );
@@ -48,48 +61,84 @@ function Lembar({ berkas, folder, lokal }: { berkas: Berkas[] | undefined; folde
 export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: boolean; onTutup: () => void; judul: string; desa: string | null; subs: SubPeta[] }) {
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const [lokal, setLokal] = useState<Set<string>>(new Set());
+  const [memuat, setMemuat] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
+  const hasilRef = useRef<Hasil | null>(null);
+  hasilRef.current = hasil;
   const kunci = `${desa ?? ""}|${subs.map((s) => s.idsubsls).join(",")}`;
+
+  const jalurDari = (h: Hasil) => {
+    const j: string[] = [];
+    for (const arr of Object.values(h.wa)) for (const b of arr ?? []) j.push(jalurPeta("wa", b.nama));
+    for (const arr of Object.values(h.sls)) for (const b of arr ?? []) j.push(jalurPeta("sls", b.nama));
+    return j;
+  };
+
+  // unduhan latar berhenti mengambil berkas baru selama lembar terbuka (sinyal dipakai lembar ini dulu)
+  useEffect(() => {
+    if (!buka) return;
+    return tahanUnduh();
+  }, [buka]);
+
+  // tanda "di HP" ikut berubah saat unduhan latar menyimpan berkas baru
+  useEffect(() => {
+    if (!buka) return;
+    let pewaktu: ReturnType<typeof setTimeout> | null = null;
+    const henti = pantauPeta(() => {
+      if (pewaktu) clearTimeout(pewaktu);
+      pewaktu = setTimeout(() => {
+        const h = hasilRef.current;
+        if (!h || !swAktif()) return;
+        void petaTersimpanBanyak(jalurDari(h)).then((ada) => setLokal((lama) => (lama.size === ada.size ? lama : ada)));
+      }, 400);
+    });
+    return () => {
+      henti();
+      if (pewaktu) clearTimeout(pewaktu);
+    };
+  }, [buka]);
 
   useEffect(() => {
     if (!buka) return;
     let batal = false;
     setHasil(null);
     setGalat(null);
+    setMemuat(false);
     const daftar = daftarPetaDari(subs.map((s) => s.idsubsls));
     if (desa) daftar.desa = Array.from(new Set([desa, ...daftar.desa]));
     (async () => {
-      // 1) semua peta sudah ada di HP & daftarnya masih baru -> tanpa jaringan
+      // 1) tampil SEKETIKA dari daftar di HP (manifest), tanpa menunggu server
       const m = bacaManifest();
-      if (m && manifestLengkap(daftar, m) && swAktif()) {
-        const perlu = berkasDiperlukan(daftar, m);
-        const ada = new Set<string>();
-        for (const x of perlu) if (await petaTersimpan(x.folder, x.berkas.nama)) ada.add(jalurPeta(x.folder, x.berkas.nama));
+      let adaManifest = false;
+      let lengkap = false;
+      if (m) {
+        const lokalDari = (folder: "wa" | "sls", kode: string): Berkas[] | undefined => (kode in m[folder] ? m[folder][kode].map((b) => ({ ...b, url: "" })) : undefined);
+        const dariManifest: Hasil = { wa: desa ? { [desa]: lokalDari("wa", desa) } : {}, sls: Object.fromEntries(subs.map((s) => [s.idsubsls, lokalDari("sls", s.idsubsls)])) };
+        const ada = swAktif() ? await petaTersimpanBanyak(jalurDari(dariManifest)) : new Set<string>();
         if (batal) return;
-        if (perlu.every((x) => ada.has(jalurPeta(x.folder, x.berkas.nama)))) {
-          const lokalDari = (folder: "wa" | "sls", kode: string) => (m[folder][kode] ?? []).map((b) => ({ ...b, url: "" }));
-          setLokal(ada);
-          setHasil({ wa: desa ? { [desa]: lokalDari("wa", desa) } : {}, sls: Object.fromEntries(subs.map((s) => [s.idsubsls, lokalDari("sls", s.idsubsls)])) });
-          return;
-        }
+        adaManifest = true;
+        const perlu = berkasDiperlukan(daftar, m);
+        lengkap = manifestLengkap(daftar, m) && swAktif() && perlu.every((x) => ada.has(jalurPeta(x.folder, x.berkas.nama)));
+        setLokal(ada);
+        setHasil(dariManifest);
+        if (lengkap) return; // semua sudah di HP & daftarnya masih baru -> tanpa jaringan sama sekali
       }
-      // 2) selain itu tanya server, lalu tandai yang sudah tersimpan di HP
+      // 2) selebihnya tanya server di belakang (tautan untuk yang belum di HP), lalu tandai yang sudah tersimpan
+      setMemuat(true);
       const q = new URLSearchParams();
       if (desa) q.set("desa", desa);
       if (subs.length) q.set("sub", subs.map((s) => s.idsubsls).join(","));
       try {
         const h = await apiPortal<Hasil>(`/api/portal/peta?${q.toString()}`);
         if (batal) return;
-        const ada = new Set<string>();
-        if (swAktif()) {
-          for (const [folder, peta] of [["wa", h.wa], ["sls", h.sls]] as const)
-            for (const arr of Object.values(peta)) for (const b of arr) if (await petaTersimpan(folder, b.nama)) ada.add(jalurPeta(folder, b.nama));
-        }
+        const ada = swAktif() ? await petaTersimpanBanyak(jalurDari(h)) : new Set<string>();
         if (batal) return;
         setLokal(ada);
         setHasil(h);
       } catch (e) {
-        if (!batal) setGalat(e instanceof Error ? e.message : "Gagal memuat peta.");
+        if (!batal && !adaManifest) setGalat(e instanceof Error ? e.message : "Gagal memuat peta.");
+      } finally {
+        if (!batal) setMemuat(false);
       }
     })();
     return () => {
@@ -123,7 +172,7 @@ export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: 
                 <b className="block text-[13.5px] text-[#0F2A52]">Peta WA (wilayah administrasi desa)</b>
                 <small className="block text-[11.5px] text-[#55657D]">Batas nagari/desa</small>
                 <div className="mt-2">
-                  <Lembar berkas={hasil.wa[desa]} folder="wa" lokal={lokal} />
+                  <Lembar berkas={hasil.wa[desa]} folder="wa" lokal={lokal} memuat={memuat} />
                 </div>
               </div>
             )}
@@ -138,7 +187,7 @@ export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: 
                         <span className="break-words">{s.nama}</span>
                         <span className="block text-[11px] font-semibold text-[#6B7A90]">Sub {s.sub}</span>
                       </span>
-                      <Lembar berkas={hasil.sls[s.idsubsls]} folder="sls" lokal={lokal} />
+                      <Lembar berkas={hasil.sls[s.idsubsls]} folder="sls" lokal={lokal} memuat={memuat} />
                     </li>
                   ))}
                 </ul>

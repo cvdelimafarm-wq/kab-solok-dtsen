@@ -10,6 +10,7 @@
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
+import { buangMemo, memoWaktu } from "@/lib/portal/memoSingkat";
 import { KUNCI_RINCIAN, idSubSlsSah, ringkasIdentifikasi, type Isian, type RingkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
 
 const angka = (x: unknown): number => {
@@ -195,11 +196,28 @@ export type BerkasPeta = { nama: string; url: string; tipe: "pdf" | "gambar"; ha
 const POLA_BERKAS = /^(\d{16}|\d{14}|\d{10})(?:[\s_-]+(\d+)[\s_-]+dari[\s_-]+(\d+))?\.(jpe?g|png|pdf|webp)$/i;
 
 /** Daftar berkas satu folder bucket: kode -> berkas (urut lembar). */
-async function daftarBerkas(db: Db, folder: "wa" | "sls"): Promise<Map<string, { nama: string; halaman: number; dari: number }[]>> {
+// (10 Okt 2026) Daftar isi bucket peta (>1000 berkas = beberapa panggilan Storage berurutan) dulu dibaca ULANG pada setiap permintaan /api/portal/peta,
+// sehingga lembar Peta lambat terbuka. Kini disimpan 5 menit di memori server (berkas yang baru diunggah admin muncul paling lambat 5 menit kemudian);
+// hasil yang gagal dibaca tidak disimpan. -- permintaan user: "klik ikon peta ... menunggu modal terbuka penuh masih lambat".
+const TTL_DAFTAR_PETA_MS = 5 * 60_000;
+function daftarBerkas(db: Db, folder: "wa" | "sls"): Promise<Map<string, { nama: string; halaman: number; dari: number }[]>> {
+  const kunci = `peta:daftar:${folder}`;
+  return memoWaktu(kunci, TTL_DAFTAR_PETA_MS, async () => {
+    const { hasil, utuh } = await bacaDaftarBerkas(db, folder);
+    if (!utuh) buangMemo(kunci);
+    return hasil;
+  });
+}
+
+async function bacaDaftarBerkas(db: Db, folder: "wa" | "sls"): Promise<{ hasil: Map<string, { nama: string; halaman: number; dari: number }[]>; utuh: boolean }> {
   const hasil = new Map<string, { nama: string; halaman: number; dari: number }[]>();
+  let utuh = true;
   for (let off = 0; off < 20000; off += 1000) {
     const { data, error } = await db.storage.from(BUCKET_PETA).list(folder, { limit: 1000, offset: off, sortBy: { column: "name", order: "asc" } });
-    if (error || !data) break;
+    if (error || !data) {
+      utuh = false;
+      break;
+    }
     for (const f of data) {
       const m = POLA_BERKAS.exec(f.name);
       if (!m) continue;
@@ -210,7 +228,7 @@ async function daftarBerkas(db: Db, folder: "wa" | "sls"): Promise<Map<string, {
     if (data.length < 1000) break;
   }
   for (const arr of hasil.values()) arr.sort((a, b) => a.halaman - b.halaman);
-  return hasil;
+  return { hasil, utuh };
 }
 
 async function tandatangani(db: Db, folder: "wa" | "sls", terpilih: Map<string, { nama: string; halaman: number; dari: number }[]>): Promise<Record<string, BerkasPeta[]>> {

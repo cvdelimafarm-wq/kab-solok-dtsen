@@ -63,6 +63,21 @@ export async function petaTersimpan(folder: "wa" | "sls", nama: string): Promise
   }
 }
 
+// (10 Okt 2026) Cek banyak berkas sekaligus: Cache Storage dibuka SEKALI dan semua pencocokan jalan paralel (dulu satu per satu -- lembar Peta terasa lambat
+// terutama saat unduhan masih berjalan). -- permintaan user: "klik icon peta dan menunggu modal terbuka penuh masih lambat".
+export async function petaTersimpanBanyak(jalur: string[]): Promise<Set<string>> {
+  const ada = new Set<string>();
+  if (!cacheDidukung() || jalur.length === 0) return ada;
+  try {
+    const c = await caches.open(NAMA_CACHE_PETA);
+    const cek = await Promise.all(jalur.map((j) => c.match(j).then((r) => !!r, () => false)));
+    jalur.forEach((j, i) => cek[i] && ada.add(j));
+  } catch {
+    /* abaikan */
+  }
+  return ada;
+}
+
 /** Daftar kode peta dari idsubsls wilayah kerja: kode desa (peta WA) + idsubsls (peta SLS). */
 export function daftarPetaDari(idsubsls: string[]): DaftarPeta {
   const subs = Array.from(new Set(idsubsls.filter((x) => /^\d{16}$/.test(x))));
@@ -112,6 +127,27 @@ const pemantau = new Set<() => void>();
 let jalan: Promise<HasilUnduh> | null = null;
 let berhentiTerakhir: HasilUnduh["berhenti"] = null;
 const beritahu = () => pemantau.forEach((f) => f());
+/** Berlangganan perubahan unduhan (berkas baru tersimpan / mulai / selesai). Mengembalikan fungsi berhenti. */
+export function pantauPeta(f: () => void): () => void {
+  pemantau.add(f);
+  return () => {
+    pemantau.delete(f);
+  };
+}
+
+// (10 Okt 2026) Saat petugas membuka lembar Peta, unduhan latar belakang berhenti MENGAMBIL berkas baru (yang sedang berjalan diselesaikan) supaya sinyal
+// dipakai lembar itu dulu; dilanjutkan otomatis saat lembar ditutup. -- permintaan user (lembar lambat terbuka karena berebut sinyal dengan unduhan).
+let tahanan = 0;
+export function tahanUnduh(): () => void {
+  tahanan++;
+  let lepas = false;
+  return () => {
+    if (lepas) return;
+    lepas = true;
+    tahanan = Math.max(0, tahanan - 1);
+  };
+}
+const tunggu = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function bolehUnduhOtomatis(): "ya" | "luring" | "hemat" | "tersembunyi" {
   if (typeof navigator === "undefined" || typeof document === "undefined") return "tersembunyi";
@@ -155,8 +191,9 @@ export function unduhPeta(d: DaftarPeta, opsi: { manual?: boolean } = {}): Promi
       for (const t of semua) unik.set(jalurPeta(t.folder, t.b.nama), t);
       hasil.total = unik.size;
       const perlu: Tugas[] = [];
+      const sudahAda = await petaTersimpanBanyak(Array.from(unik.keys()));
       for (const [j, t] of unik) {
-        if (await cache.match(j)) hasil.sudah++;
+        if (sudahAda.has(j)) hasil.sudah++;
         else perlu.push(t);
       }
       beritahu();
@@ -166,6 +203,9 @@ export function unduhPeta(d: DaftarPeta, opsi: { manual?: boolean } = {}): Promi
       let waktuMulai = Date.now();
       const kerjakan = async () => {
         for (;;) {
+          if (berhenti) return;
+          // ditahan lembar Peta yang sedang terbuka (paling lama 2 menit supaya tidak menggantung selamanya)
+          for (let i = 0; tahanan > 0 && i < 480 && !berhenti; i++) await tunggu(250);
           if (berhenti) return;
           const t = perlu.shift();
           if (!t) return;
@@ -224,15 +264,7 @@ export function unduhPeta(d: DaftarPeta, opsi: { manual?: boolean } = {}): Promi
 export async function hitungStatus(d: DaftarPeta): Promise<StatusPeta> {
   const perlu = new Map<string, { folder: "wa" | "sls"; berkas: BerkasM }>();
   for (const x of berkasDiperlukan(d)) perlu.set(jalurPeta(x.folder, x.berkas.nama), x);
-  let tersimpan = 0;
-  if (cacheDidukung()) {
-    try {
-      const c = await caches.open(NAMA_CACHE_PETA);
-      for (const j of perlu.keys()) if (await c.match(j)) tersimpan++;
-    } catch {
-      /* abaikan */
-    }
-  }
+  const tersimpan = (await petaTersimpanBanyak(Array.from(perlu.keys()))).size;
   return { total: perlu.size, tersimpan, jalan: !!jalan, berhenti: berhentiTerakhir };
 }
 
