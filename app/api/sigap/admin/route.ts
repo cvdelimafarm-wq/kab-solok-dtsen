@@ -327,6 +327,8 @@ export async function GET(req: NextRequest) {
           nominal: dibayar.length * b.tarif,
           dokumen: { surat_tugas: !!b.st?.ada_file, kwitansi: kelompok.length > 0, visum: kelompok.length > 0, laporan: nLap > 0, dokumentasi: nDok > 0, surat_pernyataan: kelompok.length > 0 },
           belum_selesai: hk.some((t) => t >= hariIni),
+          // (10 Okt 2026) semua hari kerja lengkap (laporan bila wajib + foto sesuai aturan kegiatan) -- dipakai "Kunci semua yang lengkap"
+          semua_lengkap: hk.length > 0 && hk.every((t) => statusHari(realSet.has(`${b.id}|${t}`), st.foto.get(`${b.id}|${t}`) ?? 0, t, hariIni, aturan) === "lengkap"),
           dikunci_at: b.dikunci_at,
           dikunci_oleh: b.dikunci_oleh,
         };

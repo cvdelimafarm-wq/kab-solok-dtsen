@@ -4,7 +4,10 @@
 // layarnya diblok dengan modal yang tidak dapat ditutup: 'Sedang menyiapkan lembar kerja identifikasi SLS', halaman SIGAP ditutup
 // sampai pukul 13.00".
 // GET (Authorization: Bearer <sesi> opsional) -> { tutup, sampai, judul, pesan, sekarang }
-// Dikecualikan: akun super (sigap_akun.super = M. Iqbal Hadi), termasuk saat akun super "masuk sebagai" PPL/PML (aktor = akun super).
+// Dikecualikan: akun super (sigap_akun.super = M. Iqbal Hadi) saat masuk dengan akunnya sendiri.
+// (10 Okt 2026) Saat akun super "masuk sebagai" PPL/PML, modal TETAP tampil -- permintaan user: "saat mencoba login sebagai Ayu
+// Sepriani maka tampil persis seperti Ayu Sepriani saat ini". Spanduk "Melihat sebagai" (z-index lebih tinggi) tetap di atas modal,
+// jadi tombol "Kembali ke akun saya" masih bisa ditekan.
 // Waktu memakai jam server. Setelah TUTUP_SAMPAI lewat, semua akun otomatis terbuka lagi tanpa deploy ulang.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -30,7 +33,7 @@ export async function GET(req: NextRequest) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (key) {
       const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
-      const ids = [sesi.akunId, sesi.aktorId].filter((x): x is number => typeof x === "number");
+      const ids = [sesi.akunId]; // hanya akun yang sedang dipakai, bukan aktor "masuk sebagai"
       const { data } = await db.from("sigap_akun").select("id").in("id", ids).eq("super", true);
       kecuali = (data ?? []).length > 0;
     }

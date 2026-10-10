@@ -23,6 +23,8 @@ type Row = {
   nominal: number;
   dokumen: Dok;
   belum_selesai: boolean;
+  /** (10 Okt 2026) semua hari kerja lengkap menurut aturan kegiatan */
+  semua_lengkap?: boolean;
   dikunci_at: string | null;
   dikunci_oleh: string | null;
 };
@@ -37,6 +39,9 @@ const NAMA_DOK: [keyof Dok, string][] = [
   ["surat_pernyataan", "S. Pernyataan"],
 ];
 const jmlDok = (d: Dok) => NAMA_DOK.filter(([k]) => d[k]).length;
+/** (10 Okt 2026) siap dikunci: belum dikunci, hari kerja selesai, ada hari dibayar, dan 6/6 dokumen ATAU semua hari kerja lengkap
+ *  (kegiatan tanpa laporan harian, mis. pelatihan, tidak pernah punya chip Laporan). */
+const siapKunci = (r: Row) => !r.dikunci_at && !r.belum_selesai && r.hari_dibayar > 0 && (jmlDok(r.dokumen) === 6 || !!r.semua_lengkap);
 
 export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
   const [data, setData] = useState<Data | null>(null);
@@ -47,6 +52,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
   const [busy, setBusy] = useState<number | null>(null);
   const [bukaId, setBukaId] = useState<number | null>(null);
   const [alasan, setAlasan] = useState("");
+  const [massal, setMassal] = useState<{ selesai: number; total: number; gagal: string[] } | null>(null);
 
   const muat = useCallback(async () => {
     try {
@@ -65,7 +71,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
     return (data?.rows ?? []).filter((r) => {
       if (q && !r.nama.toLowerCase().includes(q)) return false;
       if (fStatus === "dikunci") return !!r.dikunci_at;
-      if (fStatus === "siap") return !r.dikunci_at && !r.belum_selesai && jmlDok(r.dokumen) === 6;
+      if (fStatus === "siap") return siapKunci(r);
       if (fStatus === "belum") return !r.dikunci_at;
       return true;
     });
@@ -105,6 +111,36 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
     }
   }
 
+  // (10 Okt 2026) "Kunci semua yang lengkap" -- permintaan user: kunci SPJ seluruh petugas yang sudah lengkap.
+  // Satu per satu lewat aksi "kunci" yang sama (PDF dibekukan per petugas), dengan progres; gagal dicatat, tidak menghentikan yang lain.
+  async function kunciMassal() {
+    const daftar = (data?.rows ?? []).filter(siapKunci);
+    if (daftar.length === 0) return;
+    const total = daftar.reduce((a, r) => a + r.nominal, 0);
+    if (!window.confirm(`Verifikasi & kunci SPJ ${daftar.length} petugas yang sudah lengkap?\nTotal ${rupiah(total)}.\n\nPDF Kwitansi/Visum/Surat Pernyataan dibekukan dan petugas tidak bisa mengubah data. Proses berjalan satu per satu, jangan tutup halaman ini.`)) return;
+    setGalat(null);
+    setOk(null);
+    const gagal: string[] = [];
+    setMassal({ selesai: 0, total: daftar.length, gagal });
+    for (let i = 0; i < daftar.length; i++) {
+      const r = daftar[i];
+      setBusy(r.penugasan_id);
+      try {
+        const res = await aksi<{ ok: boolean; beku: unknown }>("kunci", { penugasan_id: r.penugasan_id });
+        if (res.beku && typeof res.beku === "object" && "error" in (res.beku as Record<string, unknown>)) gagal.push(`${r.nama} (dikunci, PDF belum dibekukan)`);
+      } catch (e) {
+        if (e instanceof SesiBerakhir) return;
+        gagal.push(`${r.nama}: ${pesanGalat(e)}`);
+      }
+      setMassal({ selesai: i + 1, total: daftar.length, gagal: [...gagal] });
+    }
+    setBusy(null);
+    setOk(`${daftar.length - gagal.filter((g) => !g.includes("(dikunci")).length} dari ${daftar.length} SPJ dikunci.`);
+    if (gagal.length) setGalat(`Perlu dicek: ${gagal.join("; ")}`);
+    setMassal(null);
+    await muat();
+  }
+
   async function bukaKunci(r: Row) {
     if (alasan.trim().length < 5) return setGalat("Alasan membuka kunci wajib diisi (minimal 5 karakter).");
     setBusy(r.penugasan_id);
@@ -126,7 +162,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
   if (!data) return <Memuat />;
   const total = data.rows.reduce((a, r) => a + r.nominal, 0);
   const nKunci = data.rows.filter((r) => r.dikunci_at).length;
-  const nSiap = data.rows.filter((r) => !r.dikunci_at && !r.belum_selesai && jmlDok(r.dokumen) === 6).length;
+  const nSiap = data.rows.filter(siapKunci).length;
   const nBerjalan = data.rows.filter((r) => !r.dikunci_at && r.belum_selesai).length;
 
   return (
@@ -136,6 +172,16 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
         <Pesan jenis="ok" onTutup={() => setOk(null)}>
           {ok}
         </Pesan>
+      )}
+      {data.boleh_kelola && (nSiap > 0 || massal) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#C9E7D6] bg-[#F1FAF5] px-3 py-2.5">
+          <span className="flex-1 text-[13px] text-[#0F6340]">
+            {massal ? `Mengunci ${massal.selesai}/${massal.total}…` : `${nSiap} petugas sudah lengkap & siap dikunci.`}
+          </span>
+          <button type="button" className={BTN_G} onClick={kunciMassal} disabled={!!massal || busy !== null}>
+            {massal ? "Sedang mengunci…" : `🔒 Kunci semua yang lengkap (${nSiap})`}
+          </button>
+        </div>
       )}
       {!data.boleh_kelola && <Pesan jenis="info">Mode lihat saja — Anda bisa melihat &amp; mempratinjau SPJ, tetapi tidak bisa mengunci.</Pesan>}
 
@@ -217,7 +263,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
                       </span>
                     ) : r.belum_selesai ? (
                       <Chip w="wait">masih berjalan</Chip>
-                    ) : n === 6 ? (
+                    ) : siapKunci(r) ? (
                       <Chip w="ok">siap dikunci</Chip>
                     ) : (
                       <Chip w="bad">belum lengkap</Chip>
