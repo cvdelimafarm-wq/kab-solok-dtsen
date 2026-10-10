@@ -111,6 +111,8 @@ export type SubIdentifikasi = {
   peran: "pelaksana" | "pendamping";
   /** nama PML satunya (pendamping bagi pelaksana, pelaksana bagi pendamping) */
   rekan: string | null;
+  /** nomor HP PML rekan (apa adanya dari data petugas) supaya bisa dihubungi -- permintaan user 10 Okt 2026 */
+  rekan_hp: string | null;
   /** hasil dipakai BERSAMA pelaksana & pendamping; `oleh` = PML yang terakhir menyimpan */
   hasil: (Isian & { diperbarui_at: string; oleh: string | null }) | null;
 };
@@ -145,3 +147,19 @@ export function kodeSls(idsubsls: string): string {
   return idsubsls.slice(0, 14);
 }
 export const idSubSlsSah = (id: string): boolean => /^\d{16}$/.test(id);
+
+/** Nomor HP -> hanya angka (untuk tautan tel:); null bila tidak masuk akal (kurang dari 8 digit). */
+export function hpTel(hp: string | null | undefined): string | null {
+  const d = String(hp ?? "").replace(/[^\d]/g, "");
+  return d.length >= 8 && d.length <= 15 ? d : null;
+}
+
+/** Nomor HP -> format internasional tanpa plus untuk tautan WhatsApp (0812... -> 62812...); null bila tidak sah. */
+export function hpWa(hp: string | null | undefined): string | null {
+  const d = hpTel(hp);
+  if (!d) return null;
+  if (d.startsWith("62")) return d;
+  if (d.startsWith("0")) return `62${d.slice(1)}`;
+  if (d.startsWith("8")) return `62${d}`;
+  return d;
+}

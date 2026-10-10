@@ -11,6 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { apiPortal, bacaLihatSebagai } from "@/app/portal/sesi";
 import { BATAS_CATATAN, BATAS_KET, JENIS_DAMPAK, JENIS_LAMA, kodeDesa, periksaIsian, peringatanIsian, type KunciAngka } from "@/lib/identifikasi";
+import KontakRekan from "../KontakRekan";
 import PetaSheet, { IkonPeta } from "../PetaSheet";
 import { dariAman, tampilAwal, tglJam, useIdentifikasi } from "../useIdentifikasi";
 
@@ -148,6 +149,11 @@ export default function IsianIdentifikasi() {
               <p className="mb-3 rounded-[12px] bg-[#F1F6FE] px-3 py-2 text-[12px] leading-snug text-[#0F2A52]">
                 Anda <b>PML {s.peran}</b> untuk SLS ini{s.rekan ? <>; {s.peran === "pelaksana" ? "pendamping" : "pelaksana"}: <b>{s.rekan}</b></> : ""}. Hasil dipakai bersama, jadi siapa pun dari kalian berdua bisa mengisi atau memperbaikinya.
               </p>
+              {s.rekan && (
+                <div className="mb-3">
+                  <KontakRekan s={s} />
+                </div>
+              )}
               <p className={judulKecil}>Data awal dari sistem</p>
               <div className="mt-2.5 grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-[12px] bg-[#F1F6FE] px-1 py-2.5">

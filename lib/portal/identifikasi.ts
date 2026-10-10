@@ -30,12 +30,18 @@ function jadiHasil(b: BarisHasil, nama: Map<number, string>): Hasil {
 
 const urut = (a: SubIdentifikasi, b: SubIdentifikasi) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls) || a.sub_sls.localeCompare(b.sub_sls);
 
-async function namaPml(db: Db, ids: number[]): Promise<Map<number, string>> {
-  const peta = new Map<number, string>();
-  if (ids.length === 0) return peta;
-  const { data } = await db.from("bencana_petugas").select("id, nama").in("id", Array.from(new Set(ids)));
-  for (const r of data ?? []) peta.set(r.id as number, r.nama as string);
-  return peta;
+type Kontak = { nama: Map<number, string>; hp: Map<number, string> };
+
+// (10 Okt 2026) Nama + nomor HP PML (rekan satu SLS perlu bisa saling menghubungi) -- permintaan user.
+async function kontakPml(db: Db, ids: number[]): Promise<Kontak> {
+  const k: Kontak = { nama: new Map(), hp: new Map() };
+  if (ids.length === 0) return k;
+  const { data } = await db.from("bencana_petugas").select("id, nama, no_hp").in("id", Array.from(new Set(ids)));
+  for (const r of data ?? []) {
+    k.nama.set(r.id as number, r.nama as string);
+    if (r.no_hp) k.hp.set(r.id as number, String(r.no_hp));
+  }
+  return k;
 }
 
 /** Petugas ini PML aktif? */
@@ -47,7 +53,7 @@ export async function ambilPml(db: Db, petugasId: number | null): Promise<{ id: 
 }
 
 /** Susun daftar Sub SLS dari SLS yang dialokasikan + hasil bersama. `pmlId` = sudut pandang (peran & rekan); null = tanpa peran (dipakai monitoring). */
-function susunSub(alok: Alok[], skor: Skor[], hasil: BarisHasil[], nama: Map<number, string>, pmlId: number): SubIdentifikasi[] {
+function susunSub(alok: Alok[], skor: Skor[], hasil: BarisHasil[], nama: Map<number, string>, hp: Map<number, string>, pmlId: number): SubIdentifikasi[] {
   const peranSls = new Map<string, { peran: "pelaksana" | "pendamping"; rekan: number | null }>();
   for (const a of alok) {
     if (a.pml_pelaksana_id === pmlId) peranSls.set(a.idsls, { peran: "pelaksana", rekan: a.pml_pendamping_id });
@@ -59,7 +65,7 @@ function susunSub(alok: Alok[], skor: Skor[], hasil: BarisHasil[], nama: Map<num
     const p = peranSls.get(s.idsubsls.slice(0, 14));
     if (!p) continue;
     const r = petaHasil.get(s.idsubsls);
-    sub.push({ idsubsls: s.idsubsls, kecamatan: s.kecamatan, nagari: s.nagari, sls: s.sls, sub_sls: s.sub_sls, kk: angka(s.kk_total), kk_awal: angka(s.kk_terdampak_estimasi), peran: p.peran, rekan: p.rekan == null ? null : (nama.get(p.rekan) ?? null), hasil: r ? jadiHasil(r, nama) : null });
+    sub.push({ idsubsls: s.idsubsls, kecamatan: s.kecamatan, nagari: s.nagari, sls: s.sls, sub_sls: s.sub_sls, kk: angka(s.kk_total), kk_awal: angka(s.kk_terdampak_estimasi), peran: p.peran, rekan: p.rekan == null ? null : (nama.get(p.rekan) ?? null), rekan_hp: p.rekan == null ? null : (hp.get(p.rekan) ?? null), hasil: r ? jadiHasil(r, nama) : null });
   }
   return sub.sort(urut);
 }
@@ -72,11 +78,11 @@ export async function daftarIdentifikasi(db: Db, pmlId: number): Promise<{ sub: 
   const sls = new Set(alok.map((a) => a.idsls));
   const { data: skor } = await db.rpc("bencana_skor_beban_subsls");
   const dasar = ((skor ?? []) as Skor[]).filter((s) => sls.has(s.idsubsls.slice(0, 14)));
-  const [{ data: hs }, nama] = await Promise.all([
+  const [{ data: hs }, kontak] = await Promise.all([
     db.from("bencana_identifikasi_subsls").select("*").in("idsubsls", dasar.map((s) => s.idsubsls)),
-    namaPml(db, alok.flatMap((a) => (a.pml_pendamping_id == null ? [a.pml_pelaksana_id] : [a.pml_pelaksana_id, a.pml_pendamping_id]))),
+    kontakPml(db, alok.flatMap((a) => (a.pml_pendamping_id == null ? [a.pml_pelaksana_id] : [a.pml_pelaksana_id, a.pml_pendamping_id]))),
   ]);
-  const sub = susunSub(alok, dasar, (hs ?? []) as BarisHasil[], nama, pmlId);
+  const sub = susunSub(alok, dasar, (hs ?? []) as BarisHasil[], kontak.nama, kontak.hp, pmlId);
   return { sub, ringkas: ringkasIdentifikasi(sub) };
 }
 
@@ -101,8 +107,8 @@ export async function simpanIdentifikasi(db: Db, pmlId: number, akunId: number, 
   const { data, error } = await db.from("bencana_identifikasi_subsls").upsert(baris, { onConflict: "idsubsls" }).select("*").maybeSingle();
   if (error) return { ok: false, pesan: `Gagal menyimpan: ${error.message}` };
   await catatAudit(db, akunId, "identifikasi_simpan", { pml_id: pmlId, idsubsls, kk_terdampak: isi.kk_terdampak, tidak_terdampak: isi.tidak_terdampak });
-  const nama = await namaPml(db, [pmlId]);
-  return { ok: true, hasil: jadiHasil((data ?? baris) as BarisHasil, nama) };
+  const kontak = await kontakPml(db, [pmlId]);
+  return { ok: true, hasil: jadiHasil((data ?? baris) as BarisHasil, kontak.nama) };
 }
 
 // ---------------------------------------------------------------- monitoring admin
@@ -129,7 +135,7 @@ export type Monitoring = {
 
 export async function monitoringIdentifikasi(db: Db): Promise<Monitoring> {
   const [{ data: pt }, { data: al }, { data: skor }, { data: hs }] = await Promise.all([
-    db.from("bencana_petugas").select("id, nama, aktif").eq("peran", "pml"),
+    db.from("bencana_petugas").select("id, nama, no_hp, aktif").eq("peran", "pml"),
     db.from("bencana_identifikasi_alokasi").select("idsls, pml_pelaksana_id, pml_pendamping_id"),
     db.rpc("bencana_skor_beban_subsls"),
     db.from("bencana_identifikasi_subsls").select("*"),
@@ -140,10 +146,11 @@ export async function monitoringIdentifikasi(db: Db): Promise<Monitoring> {
   const hasil = (hs ?? []) as BarisHasil[];
   const pmls = (pt ?? []).filter((p) => p.aktif !== false);
   const nama = new Map<number, string>(pmls.map((p) => [p.id as number, p.nama as string]));
+  const hp = new Map<number, string>(pmls.filter((p) => p.no_hp).map((p) => [p.id as number, String(p.no_hp)]));
 
   const baris: BarisMonitoring[] = pmls.map((p) => {
     const id = p.id as number;
-    const sub = susunSub(alok, dasar, hasil, nama, id);
+    const sub = susunSub(alok, dasar, hasil, nama, hp, id);
     const pelaksana = sub.filter((s) => s.peran === "pelaksana");
     const pend = sub.filter((s) => s.peran === "pendamping");
     const terakhir = sub.reduce<string | null>((m, s) => (s.hasil && (!m || s.hasil.diperbarui_at > m) ? s.hasil.diperbarui_at : m), null);

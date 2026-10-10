@@ -72,6 +72,7 @@ export default function MonitoringIdentifikasi() {
             PML: b.nama,
             Peran: s.peran === "pelaksana" ? "Pelaksana" : "Pendamping",
             "PML rekan": s.rekan ?? "",
+            "HP rekan": s.rekan_hp ?? "",
             Kecamatan: s.kecamatan,
             Nagari: s.nagari,
             SLS: s.sls,

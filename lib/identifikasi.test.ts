@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keadaanSub, kodeDesa, kodeSls, periksaIsian, peringatanIsian, ringkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
+import { hpTel, hpWa, keadaanSub, kodeDesa, kodeSls, periksaIsian, peringatanIsian, ringkasIdentifikasi, type SubIdentifikasi } from "@/lib/identifikasi";
 
 // (10 Okt 2026) Uji aturan Lembar Identifikasi SLS: total diisi sendiri (bukan jumlah kolom), jenis <= total, tidak terdampak = nol semua.
 describe("periksaIsian", () => {
@@ -45,5 +45,21 @@ describe("ringkasan & kode peta", () => {
   it("kode desa 10 digit dan kode SLS 14 digit", () => {
     expect(kodeDesa("1303040002000900")).toBe("1303040002");
     expect(kodeSls("1303040002000900")).toBe("13030400020009");
+  });
+});
+
+describe("nomor HP rekan", () => {
+  it("hpTel hanya menyisakan angka dan menolak yang tidak masuk akal", () => {
+    expect(hpTel("0812-3456 7890")).toBe("081234567890");
+    expect(hpTel("+62 812 3456 7890")).toBe("6281234567890");
+    expect(hpTel("123")).toBeNull();
+    expect(hpTel(null)).toBeNull();
+    expect(hpTel("")).toBeNull();
+  });
+  it("hpWa memakai kode negara 62", () => {
+    expect(hpWa("081234567890")).toBe("6281234567890");
+    expect(hpWa("+6281234567890")).toBe("6281234567890");
+    expect(hpWa("81234567890")).toBe("6281234567890");
+    expect(hpWa("abc")).toBeNull();
   });
 });

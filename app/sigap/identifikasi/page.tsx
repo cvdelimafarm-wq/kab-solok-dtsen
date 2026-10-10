@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
 import { keadaanSub, kodeDesa, type SubIdentifikasi } from "@/lib/identifikasi";
+import KontakRekan from "./KontakRekan";
 import PetaSheet, { IkonPeta } from "./PetaSheet";
 import { dariAman, tampilAwal, useIdentifikasi } from "./useIdentifikasi";
 
@@ -161,11 +162,14 @@ export default function DaftarIdentifikasi() {
                           <IkonPeta />
                         </button>
                       </div>
-                      {g.baris.map((s) => {
+                      {g.baris.map((s, i) => {
                         const k = keadaanSub(s);
+                        // kartu kontak rekan muncul sekali per SLS (di atas Sub SLS pertama yang tampil), bukan di tiap Sub SLS
+                        const awalSls = i === 0 || g.baris[i - 1].idsubsls.slice(0, 14) !== s.idsubsls.slice(0, 14);
                         return (
-                          <Link
-                            key={s.idsubsls}
+                          <div key={s.idsubsls}>
+                            {awalSls && s.rekan && <KontakRekan s={s} kompak />}
+                            <Link
                             href={`/sigap/identifikasi/${encodeURIComponent(s.idsubsls)}${sufiks}`}
                             className={`grid min-h-[50px] grid-cols-[minmax(0,1fr)_44px_52px_60px] items-center gap-x-1.5 border-b border-[#EEF2F7] px-3.5 py-1.5 active:bg-[#EAF1FC] ${k === "tidak_terdampak" ? "bg-[#EAF5FD]" : ""}`}
                           >
@@ -185,7 +189,8 @@ export default function DaftarIdentifikasi() {
                             <span className={`text-right text-[12.5px] font-extrabold ${k === "belum" ? "text-[#A5B3C7]" : k === "tidak_terdampak" ? "text-[#12618F]" : "text-[#13794B]"}`}>
                               {k === "belum" ? "–" : k === "tidak_terdampak" ? "Aman" : s.hasil?.kk_terdampak}
                             </span>
-                          </Link>
+                            </Link>
+                          </div>
                         );
                       })}
                     </div>
