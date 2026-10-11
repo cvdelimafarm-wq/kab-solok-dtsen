@@ -7,7 +7,8 @@ import { LABEL_STATUS_REKAP, bagiKolom, rapikanNama, susunBarisGambar, type Bari
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const PAD = 28;
-const LEBAR_KOLOM = 380;
+const LEBAR_KOLOM_SATU = 680; // satu kolom (nagari): cukup lebar untuk ringkasan di kepala dan kaki
+const LEBAR_KOLOM_BANYAK = 420;
 const JARAK_KOLOM = 20;
 const TINGGI_BARIS = 34;
 const BARIS_PER_KOLOM = 28;
@@ -24,6 +25,7 @@ const WARNA = {
   bagian: "#EAF1FC",
   terdampak: { latar: "#E3F6EC", teks: "#13794B" },
   tidak: { latar: "#E3F0FA", teks: "#12618F" },
+  belum: { latar: "#ECEFF4", teks: "#55657D" },
 };
 
 function potong(ctx: CanvasRenderingContext2D, teks: string, lebar: number): string {
@@ -54,8 +56,9 @@ export function susunKolomGambar(k: KelompokRekap, tingkat: TingkatRekap): Baris
 export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, tanggalTeks: string): Promise<Blob> {
   const kolom = susunKolomGambar(k, tingkat);
   const nKolom = Math.max(1, kolom.length);
+  const LEBAR_KOLOM = nKolom === 1 ? LEBAR_KOLOM_SATU : LEBAR_KOLOM_BANYAK;
   const maksBaris = Math.max(1, ...kolom.map((c) => c.length));
-  const lebar = Math.max(PAD * 2 + 460, PAD * 2 + nKolom * LEBAR_KOLOM + (nKolom - 1) * JARAK_KOLOM);
+  const lebar = Math.max(PAD * 2 + LEBAR_KOLOM_SATU, PAD * 2 + nKolom * LEBAR_KOLOM + (nKolom - 1) * JARAK_KOLOM);
   const tinggi = TINGGI_KEPALA + maksBaris * TINGGI_BARIS + TINGGI_KAKI + 8;
   const skala = Math.min(2, BATAS_PIKSEL / Math.max(lebar, tinggi));
 
@@ -80,7 +83,7 @@ export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, t
   ctx.fillText(potong(ctx, judul, lebar - PAD * 2), PAD, PAD + 42);
   ctx.fillStyle = WARNA.ink;
   ctx.font = `600 14px ${FONT}`;
-  const sub = [tingkat === "nagari" && k.induk ? `Kec. ${rapikanNama(k.induk)}` : `${k.nagari} nagari`, `${k.baris.length} Sub SLS`, `${k.terdampak} terdampak`, `${k.tidak} tidak terdampak`].join("  ·  ");
+  const sub = [tingkat === "nagari" && k.induk ? `Kec. ${rapikanNama(k.induk)}` : `${k.nagari} nagari`, `${k.baris.length} Sub SLS`, `${k.terdampak} terdampak`, `${k.tidak} tidak terdampak`, `${k.belum} belum`].join("  ·  ");
   ctx.fillText(potong(ctx, sub, lebar - PAD * 2), PAD, PAD + 68);
   ctx.strokeStyle = WARNA.garis;
   ctx.lineWidth = 1.5;
@@ -100,10 +103,10 @@ export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, t
         ctx.fill();
         ctx.fillStyle = WARNA.navy;
         ctx.font = `800 13px ${FONT}`;
-        ctx.fillText(potong(ctx, b.teks, LEBAR_KOLOM - 150), x + 10, y + TINGGI_BARIS / 2 + 4.5);
+        ctx.fillText(potong(ctx, b.teks, LEBAR_KOLOM - 230), x + 10, y + TINGGI_BARIS / 2 + 4.5);
         ctx.fillStyle = WARNA.muted;
         ctx.font = `600 11.5px ${FONT}`;
-        const ringkas = `${b.terdampak} terdampak · ${b.tidak} tidak`;
+        const ringkas = `${b.terdampak} terdampak · ${b.tidak} tidak · ${b.belum} belum`;
         ctx.textAlign = "right";
         ctx.fillText(ringkas, x + LEBAR_KOLOM - 10, y + TINGGI_BARIS / 2 + 4);
         ctx.textAlign = "left";
@@ -117,7 +120,7 @@ export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, t
       ctx.lineTo(x + LEBAR_KOLOM, y + TINGGI_BARIS - 0.5);
       ctx.stroke();
 
-      const warna = b.status === "tidak_terdampak" ? WARNA.tidak : WARNA.terdampak;
+      const warna = b.status === "tidak_terdampak" ? WARNA.tidak : b.status === "belum" ? WARNA.belum : WARNA.terdampak;
       const label = LABEL_STATUS_REKAP[b.status];
       ctx.font = `800 11.5px ${FONT}`;
       const lebarChip = ctx.measureText(label).width + 20;
@@ -136,7 +139,7 @@ export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, t
   // kaki
   ctx.fillStyle = WARNA.muted;
   ctx.font = `600 11.5px ${FONT}`;
-  ctx.fillText(`Per ${tanggalTeks} · hanya Sub SLS yang sudah diidentifikasi · SIGAP BPS Kabupaten Solok`, PAD, tinggi - 14);
+  ctx.fillText(`Per ${tanggalTeks} · SIGAP BPS Kabupaten Solok`, PAD, tinggi - 14);
 
   return await new Promise<Blob>((ok, gagal) => canvas.toBlob((b) => (b ? ok(b) : gagal(new Error("Gagal membuat gambar."))), "image/png"));
 }

@@ -3,8 +3,8 @@
 // app/sigap/kegiatan/[id]/[tahap]/RekapIdentifikasi.tsx
 //
 // (11 Okt 2026) Tombol melayang di pojok kanan bawah tahap Pendataan (terlihat PML dan PPL): rekap seluruh hasil identifikasi, ekspor Excel,
-// dan salin gambar per nagari atau per kecamatan -- permintaan user. Yang tampil HANYA Sub SLS dan statusnya (terdampak / tidak terdampak).
-// Sub SLS yang belum diidentifikasi tidak ikut. Data diambil saat lembar dibuka (selalu terbaru).
+// dan salin gambar per nagari atau per kecamatan -- permintaan user. Yang tampil HANYA Sub SLS dan statusnya (terdampak / tidak terdampak / belum diidentifikasi).
+// Sub SLS yang belum diidentifikasi ikut tampil (abu-abu) -- permintaan user; cakupannya SLS yang sudah dialokasikan ke PML. Data diambil saat lembar dibuka (selalu terbaru).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
@@ -180,7 +180,7 @@ export default function RekapIdentifikasi() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-[17px] font-extrabold text-[#0F2A52]">Rekap hasil identifikasi</h2>
                 <p className="mt-0.5 text-[12px] leading-snug text-[#55657D]">
-                  {data ? `${ringkas.total} Sub SLS · ${ringkas.terdampak} terdampak · ${ringkas.tidak} tidak terdampak · ${ringkas.nagari} nagari` : "Memuat…"}
+                  {data ? `${ringkas.total} Sub SLS · ${ringkas.terdampak} terdampak · ${ringkas.tidak} tidak terdampak · ${ringkas.belum} belum · ${ringkas.nagari} nagari` : "Memuat…"}
                 </p>
               </div>
               <button ref={tombolTutup} type="button" onClick={() => setBuka(false)} aria-label="Tutup" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white text-[#0F2A52] shadow-[0_2px_8px_rgba(15,42,82,.12)]">
@@ -201,7 +201,7 @@ export default function RekapIdentifikasi() {
               )}
               {memuat && !data && <div className="h-40 animate-pulse rounded-[18px] bg-white" aria-busy="true" />}
 
-              {data && baris.length === 0 && !galat && <p className="rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] text-[#5B6B84]">Belum ada hasil identifikasi yang tersimpan.</p>}
+              {data && baris.length === 0 && !galat && <p className="rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] text-[#5B6B84]">Belum ada Sub SLS yang dialokasikan untuk diidentifikasi.</p>}
 
               {data && baris.length > 0 && (
                 <>
@@ -226,7 +226,7 @@ export default function RekapIdentifikasi() {
                       <div className="border-b border-[#EEF2F7] px-4 py-3">
                         <b className="block text-[15px] text-[#0F2A52]">{tingkat === "nagari" ? `Nagari ${rapikanNama(terpilih.judul)}` : `Kecamatan ${rapikanNama(terpilih.judul)}`}</b>
                         <small className="text-[12px] text-[#55657D]">
-                          {terpilih.baris.length} Sub SLS · {terpilih.terdampak} terdampak · {terpilih.tidak} tidak terdampak
+                          {terpilih.baris.length} Sub SLS · {terpilih.terdampak} terdampak · {terpilih.tidak} tidak terdampak · {terpilih.belum} belum
                         </small>
                       </div>
                       <ul className="max-h-[38vh] overflow-y-auto">
@@ -235,13 +235,13 @@ export default function RekapIdentifikasi() {
                             <li key={`b${i}`} className="flex items-center justify-between bg-[#EAF1FC] px-4 py-1.5 text-[12px] font-extrabold text-[#0F2A52]">
                               <span>{b.teks}</span>
                               <span className="font-semibold text-[#6B7A90]">
-                                {b.terdampak} terdampak · {b.tidak} tidak
+                                {b.terdampak} terdampak · {b.tidak} tidak · {b.belum} belum
                               </span>
                             </li>
                           ) : (
                             <li key={`i${i}`} className="flex min-h-[40px] items-center justify-between gap-3 border-t border-[#EEF2F7] px-4 py-1.5 text-[13.5px]">
                               <span className="min-w-0 truncate font-semibold text-[#1B2B4B]">{b.teks}</span>
-                              <span className={`flex-none rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold ${b.status === "tidak_terdampak" ? "bg-[#E3F0FA] text-[#12618F]" : "bg-[#E3F6EC] text-[#13794B]"}`}>{LABEL_STATUS_REKAP[b.status]}</span>
+                              <span className={`flex-none rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold ${b.status === "tidak_terdampak" ? "bg-[#E3F0FA] text-[#12618F]" : b.status === "belum" ? "bg-[#ECEFF4] text-[#55657D]" : "bg-[#E3F6EC] text-[#13794B]"}`}>{LABEL_STATUS_REKAP[b.status]}</span>
                             </li>
                           )
                         )}
@@ -260,7 +260,7 @@ export default function RekapIdentifikasi() {
                   <p aria-live="polite" className="mt-2 min-h-[18px] text-[12.5px] font-semibold text-[#13794B]">
                     {pesan}
                   </p>
-                  <p className="text-[11.5px] leading-snug text-[#6B7A90]">Gambar hanya memuat nagari/kecamatan yang dipilih. Excel memuat seluruh Sub SLS yang sudah diidentifikasi. Sub SLS yang belum diidentifikasi tidak ikut.</p>
+                  <p className="text-[11.5px] leading-snug text-[#6B7A90]">Gambar hanya memuat nagari/kecamatan yang dipilih. Excel memuat seluruh Sub SLS pada SLS yang sudah dialokasikan, termasuk yang belum diidentifikasi.</p>
                 </>
               )}
             </div>

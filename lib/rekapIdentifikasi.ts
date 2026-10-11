@@ -1,13 +1,13 @@
 // lib/rekapIdentifikasi.ts
 //
 // (11 Okt 2026) Rekap hasil identifikasi untuk semua PML/PPL (tombol di tahap Pendataan) -- permintaan user.
-// Hanya wilayah + status (terdampak / tidak terdampak); tidak ada angka KK atau rincian dampak. Murni (tanpa React/DB) supaya mudah diuji.
+// Hanya wilayah + status (terdampak / tidak terdampak / belum diidentifikasi); tidak ada angka KK atau rincian dampak. Murni (tanpa React/DB) supaya mudah diuji.
 
-export type StatusRekap = "terdampak" | "tidak_terdampak";
+export type StatusRekap = "terdampak" | "tidak_terdampak" | "belum";
 export type BarisRekap = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string; status: StatusRekap };
 export type TingkatRekap = "nagari" | "kecamatan";
 
-export const LABEL_STATUS_REKAP: Record<StatusRekap, string> = { terdampak: "Terdampak", tidak_terdampak: "Tidak terdampak" };
+export const LABEL_STATUS_REKAP: Record<StatusRekap, string> = { terdampak: "Terdampak", tidak_terdampak: "Tidak terdampak", belum: "Belum diidentifikasi" };
 
 export type KelompokRekap = {
   kunci: string;
@@ -16,6 +16,7 @@ export type KelompokRekap = {
   baris: BarisRekap[];
   terdampak: number;
   tidak: number;
+  belum: number;
   nagari: number; // jumlah nagari di kelompok
 };
 
@@ -32,7 +33,7 @@ const koleksi = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
 export const urutBaris = (a: BarisRekap, b: BarisRekap): number =>
   koleksi.compare(a.kecamatan, b.kecamatan) || koleksi.compare(a.nagari, b.nagari) || koleksi.compare(a.sls, b.sls) || koleksi.compare(a.sub_sls, b.sub_sls) || a.idsubsls.localeCompare(b.idsubsls);
 
-/** Rapikan respons API: buang baris tak sah, status apa adanya (selain "tidak_terdampak" dianggap terdampak). */
+/** Rapikan respons API: buang baris tak sah. Status "tidak_terdampak" / "belum" apa adanya; selain itu dianggap terdampak. */
 export function periksaBarisRekap(x: unknown): BarisRekap[] {
   if (!Array.isArray(x)) return [];
   const out: BarisRekap[] = [];
@@ -46,7 +47,7 @@ export function periksaBarisRekap(x: unknown): BarisRekap[] {
       nagari: String(o.nagari ?? ""),
       sls: String(o.sls ?? ""),
       sub_sls: String(o.sub_sls ?? ""),
-      status: o.status === "tidak_terdampak" ? "tidak_terdampak" : "terdampak",
+      status: o.status === "tidak_terdampak" ? "tidak_terdampak" : o.status === "belum" ? "belum" : "terdampak",
     });
   }
   return out.sort(urutBaris);
@@ -59,12 +60,13 @@ export function kelompokkan(baris: BarisRekap[], tingkat: TingkatRekap): Kelompo
     const kunci = tingkat === "nagari" ? `${b.kecamatan}|${b.nagari}` : b.kecamatan;
     let k = peta.get(kunci);
     if (!k) {
-      k = { kunci, judul: tingkat === "nagari" ? b.nagari : b.kecamatan, induk: tingkat === "nagari" ? b.kecamatan : null, baris: [], terdampak: 0, tidak: 0, nagari: 0 };
+      k = { kunci, judul: tingkat === "nagari" ? b.nagari : b.kecamatan, induk: tingkat === "nagari" ? b.kecamatan : null, baris: [], terdampak: 0, tidak: 0, belum: 0, nagari: 0 };
       peta.set(kunci, k);
       nagariPer.set(kunci, new Set());
     }
     k.baris.push(b);
     if (b.status === "tidak_terdampak") k.tidak += 1;
+    else if (b.status === "belum") k.belum += 1;
     else k.terdampak += 1;
     nagariPer.get(kunci)!.add(b.nagari);
   }
@@ -72,21 +74,23 @@ export function kelompokkan(baris: BarisRekap[], tingkat: TingkatRekap): Kelompo
   return [...peta.values()];
 }
 
-export type RingkasRekap = { total: number; terdampak: number; tidak: number; nagari: number; kecamatan: number };
+export type RingkasRekap = { total: number; terdampak: number; tidak: number; belum: number; nagari: number; kecamatan: number };
 export function ringkasRekap(baris: BarisRekap[]): RingkasRekap {
   const nag = new Set<string>();
   const kec = new Set<string>();
   let tidak = 0;
+  let belum = 0;
   for (const b of baris) {
     nag.add(`${b.kecamatan}|${b.nagari}`);
     kec.add(b.kecamatan);
     if (b.status === "tidak_terdampak") tidak += 1;
+    else if (b.status === "belum") belum += 1;
   }
-  return { total: baris.length, terdampak: baris.length - tidak, tidak, nagari: nag.size, kecamatan: kec.size };
+  return { total: baris.length, terdampak: baris.length - tidak - belum, tidak, belum, nagari: nag.size, kecamatan: kec.size };
 }
 
 /** Baris tampilan gambar: judul bagian (nagari, untuk tingkat kecamatan) atau isi (satu Sub SLS). */
-export type BarisGambar = { jenis: "bagian"; teks: string; terdampak: number; tidak: number } | { jenis: "isi"; teks: string; status: StatusRekap };
+export type BarisGambar = { jenis: "bagian"; teks: string; terdampak: number; tidak: number; belum: number } | { jenis: "isi"; teks: string; status: StatusRekap };
 
 export function susunBarisGambar(k: KelompokRekap, tingkat: TingkatRekap): BarisGambar[] {
   const out: BarisGambar[] = [];
@@ -96,7 +100,8 @@ export function susunBarisGambar(k: KelompokRekap, tingkat: TingkatRekap): Baris
       nagariSaatIni = b.nagari;
       const per = k.baris.filter((x) => x.nagari === b.nagari);
       const tidak = per.filter((x) => x.status === "tidak_terdampak").length;
-      out.push({ jenis: "bagian", teks: `Nagari ${rapikanNama(b.nagari)}`, terdampak: per.length - tidak, tidak });
+      const belum = per.filter((x) => x.status === "belum").length;
+      out.push({ jenis: "bagian", teks: `Nagari ${rapikanNama(b.nagari)}`, terdampak: per.length - tidak - belum, tidak, belum });
     }
     out.push({ jenis: "isi", teks: `${rapikanNama(b.sls)} · ${b.sub_sls}`, status: b.status });
   }
@@ -136,7 +141,7 @@ export function namaBerkasRekap(k: KelompokRekap, tingkat: TingkatRekap, tanggal
   return `rekap-identifikasi-${tingkat}-${slug(k.judul)}-${tanggal}`;
 }
 
-/** Baris Excel: hanya wilayah + status. */
+/** Baris Excel: hanya wilayah + status (termasuk yang belum diidentifikasi). */
 export function barisExcel(baris: BarisRekap[]): Record<string, string>[] {
   return [...baris].sort(urutBaris).map((b) => ({
     Kecamatan: rapikanNama(b.kecamatan),
@@ -152,8 +157,9 @@ export function barisExcelPerNagari(baris: BarisRekap[]): Record<string, string 
   return kelompokkan(baris, "nagari").map((k) => ({
     Kecamatan: rapikanNama(k.induk ?? ""),
     Nagari: rapikanNama(k.judul),
-    "Sub SLS teridentifikasi": k.baris.length,
+    "Total Sub SLS": k.baris.length,
     Terdampak: k.terdampak,
     "Tidak terdampak": k.tidak,
+    "Belum diidentifikasi": k.belum,
   }));
 }

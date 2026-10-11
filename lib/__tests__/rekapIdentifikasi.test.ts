@@ -9,6 +9,7 @@ const DATA: BarisRekap[] = [
   r("1303080001000901", "GUNUNG TALANG", "CUPAK", "JORONG TANGAH PADANG", "01"),
   r("1303070002000101", "GUNUNG TALANG", "AIE DINGIN", "JORONG A", "01"),
   r("1303050001000101", "LEMBAH GUMANTI", "ALAHAN PANJANG", "JORONG B", "01", "tidak_terdampak"),
+  r("1303050001000102", "LEMBAH GUMANTI", "ALAHAN PANJANG", "JORONG B", "02", "belum"),
 ];
 
 describe("rapikanNama", () => {
@@ -26,6 +27,7 @@ describe("periksaBarisRekap", () => {
   });
   it("status tak dikenal dianggap terdampak; bukan larik -> kosong", () => {
     expect(periksaBarisRekap([{ idsubsls: "1303080001000802", status: "aneh" }])[0].status).toBe("terdampak");
+    expect(periksaBarisRekap([{ idsubsls: "1303080001000802", status: "belum" }])[0].status).toBe("belum");
     expect(periksaBarisRekap("x")).toEqual([]);
   });
 });
@@ -38,6 +40,7 @@ describe("kelompokkan & ringkasRekap", () => {
     expect(cupak.baris).toHaveLength(3);
     expect(cupak.terdampak).toBe(2);
     expect(cupak.tidak).toBe(1);
+    expect(cupak.belum).toBe(0);
     expect(cupak.induk).toBe("GUNUNG TALANG");
     expect(cupak.baris.map((b) => b.sub_sls)).toEqual(["01", "02", "01"]);
   });
@@ -49,8 +52,13 @@ describe("kelompokkan & ringkasRekap", () => {
     expect(gt.induk).toBeNull();
   });
   it("ringkasan total", () => {
-    expect(ringkasRekap(DATA)).toEqual({ total: 5, terdampak: 3, tidak: 2, nagari: 3, kecamatan: 2 });
-    expect(ringkasRekap([])).toEqual({ total: 0, terdampak: 0, tidak: 0, nagari: 0, kecamatan: 0 });
+    expect(ringkasRekap(DATA)).toEqual({ total: 6, terdampak: 3, tidak: 2, belum: 1, nagari: 3, kecamatan: 2 });
+    expect(ringkasRekap([])).toEqual({ total: 0, terdampak: 0, tidak: 0, belum: 0, nagari: 0, kecamatan: 0 });
+  });
+  it("kelompok memisahkan belum diidentifikasi", () => {
+    const ap = kelompokkan(DATA, "nagari").find((k) => k.judul === "ALAHAN PANJANG")!;
+    expect(ap.baris).toHaveLength(2);
+    expect([ap.terdampak, ap.tidak, ap.belum]).toEqual([0, 1, 1]);
   });
 });
 
@@ -69,13 +77,14 @@ describe("susunBarisGambar & bagiKolom", () => {
     expect(bagian.map((x) => (x.jenis === "bagian" ? x.teks : ""))).toContain("Nagari Cupak");
     const cupak = bagian.find((x) => x.jenis === "bagian" && x.teks === "Nagari Cupak");
     expect(cupak && cupak.jenis === "bagian" && cupak.tidak).toBe(1);
+    expect(cupak && cupak.jenis === "bagian" && cupak.belum).toBe(0);
   });
   it("bagiKolom: batas baris dan judul tidak yatim", () => {
     const baris = [
-      { jenis: "bagian", teks: "A", terdampak: 0, tidak: 0 },
+      { jenis: "bagian", teks: "A", terdampak: 0, tidak: 0, belum: 0 },
       { jenis: "isi", teks: "1", status: "terdampak" },
       { jenis: "isi", teks: "2", status: "terdampak" },
-      { jenis: "bagian", teks: "B", terdampak: 0, tidak: 0 },
+      { jenis: "bagian", teks: "B", terdampak: 0, tidak: 0, belum: 0 },
       { jenis: "isi", teks: "3", status: "terdampak" },
     ] as Parameters<typeof bagiKolom>[0];
     const k = bagiKolom(baris, 4);
@@ -98,9 +107,11 @@ describe("nama berkas & Excel", () => {
   it("Excel hanya memuat wilayah + status", () => {
     const b = barisExcel(DATA);
     expect(Object.keys(b[0])).toEqual(["Kecamatan", "Nagari", "SLS", "Sub SLS", "ID Sub SLS", "Status"]);
-    expect(b).toHaveLength(5);
+    expect(b).toHaveLength(6);
     expect(b.some((x) => x.Status === "Tidak terdampak")).toBe(true);
+    expect(b.filter((x) => x.Status === "Belum diidentifikasi")).toHaveLength(1);
     const p = barisExcelPerNagari(DATA);
-    expect(p.reduce((a, x) => a + Number(x["Sub SLS teridentifikasi"]), 0)).toBe(5);
+    expect(p.reduce((a, x) => a + Number(x["Total Sub SLS"]), 0)).toBe(6);
+    expect(p.reduce((a, x) => a + Number(x["Belum diidentifikasi"]), 0)).toBe(1);
   });
 });
