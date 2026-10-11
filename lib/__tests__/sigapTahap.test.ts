@@ -185,3 +185,30 @@ describe("periksaTahapAdmin", () => {
     expect(periksaTahapAdmin({ ...sah, buka_mode: "acak" }, [1, 3])).toMatch(/tidak dikenal/);
   });
 });
+
+// (11 Okt 2026) Modul "pendataan" (Lembar Pendataan KK) di tahap Pendataan -- permintaan user: gabung ke kegiatan Pendataan Pascabencana.
+describe("modul pendataan", () => {
+  const induk = (p: Induk["pendataan"]) => INDUK([T("pendataan", 1, ["pendataan"])], { pendataan: p });
+
+  it("tidak tampil bila tim belum punya daftar KK (tahap berisi modul itu ikut disembunyikan)", () => {
+    expect(susunTahap(K(induk(null)))).toEqual([]);
+    expect(susunTahap(K(induk({ total: 0, didata: 0, terdampak: 0 })))).toEqual([]);
+    expect(susunTahap(K(INDUK([T("pendataan", 1, ["pendataan"])])))).toEqual([]); // data lama tanpa field pendataan
+  });
+
+  it("status: belum ada yang didata = perlu; sebagian = berjalan; semua = selesai", () => {
+    const m = (p: NonNullable<Induk["pendataan"]>) => susunTahap(K(induk(p)))[0].modul[0];
+    expect(m({ total: 40, didata: 0, terdampak: 0 })).toMatchObject({ kode: "pendataan", status: "perlu", aksi: "Buka lembar" });
+    expect(m({ total: 40, didata: 12, terdampak: 5 })).toMatchObject({ status: "berjalan", ket: "12 dari 40 KK tim sudah didata" });
+    expect(m({ total: 40, didata: 40, terdampak: 22 })).toMatchObject({ status: "selesai", aksi: "Lihat", pecahan: 1 });
+  });
+
+  it("tautan memuat ?dari= ke halaman tahap supaya Back pulang ke tahap Pendataan", () => {
+    const h = susunModulHref(induk({ total: 10, didata: 1, terdampak: 0 }));
+    expect(h).toBe("/sigap/pendataan?dari=" + encodeURIComponent("/sigap/kegiatan/pascabencana/pendataan"));
+  });
+});
+
+function susunModulHref(i: Induk): string | null {
+  return susunTahap(K(i))[0].modul[0].href;
+}

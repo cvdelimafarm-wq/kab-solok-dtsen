@@ -17,7 +17,7 @@ export type TahapDef = {
   urutan: number;
   nama: string;
   uraian: string | null;
-  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | translok:<kegiatan_id> */
+  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | pendataan | translok:<kegiatan_id> */
   isi: string[];
   buka_mode: BukaMode;
   buka_tanggal: string | null;
@@ -29,6 +29,9 @@ export type InfoPerencanaan = { konfirmasi: boolean | null; href: string | null;
 export type InfoWilayah = { total: number; ada_laporan: number; kk: number; kk_terdampak: number };
 /** (10 Okt 2026) Ringkasan Lembar Identifikasi SLS milik PML (detail di /api/portal/identifikasi). */
 export type InfoIdentifikasi = { total: number; terisi: number; tidak_terdampak: number; hasil: number };
+
+/** (11 Okt 2026) Ringkasan Lembar Pendataan KK milik tim petugas (detail di /api/portal/pendataan). total = KK aktif di Sub SLS tim; didata = yang sudah punya hasil. -- permintaan user: gabung ke tahap Pendataan */
+export type InfoPendataan = { total: number; didata: number; terdampak: number };
 
 export type Induk = {
   kode: string;
@@ -42,6 +45,8 @@ export type Induk = {
   wilayah: InfoWilayah | null;
   /** hanya untuk PML; opsional agar data lama/uji tetap sah */
   identifikasi?: InfoIdentifikasi | null;
+  /** PML & PPL yang timnya sudah punya daftar KK; opsional agar data lama/uji tetap sah */
+  pendataan?: InfoPendataan | null;
 };
 
 export type ModulTahap = {
@@ -85,6 +90,7 @@ export const KATALOG_MODUL: { kode: string; label: string; ket: string }[] = [
   { kode: "pelatihan", label: "Langkah pelatihan", ket: "Undangan, instrumen, tes, presensi, foto." },
   { kode: "wilayah_tim", label: "Wilayah tugas per tim", ket: "Tim (PML + semua PPL) dan Sub SLS yang didata bersama, lengkap dengan perkiraan KK." },
   { kode: "identifikasi", label: "Lembar Identifikasi SLS (PML)", ket: "PML mengisi hasil identifikasi tiap Sub SLS wilayah tim: KK terdampak & rincian dampak. Hanya tampil bagi PML." },
+  { kode: "pendataan", label: "Lembar Pendataan KK (PML & PPL)", ket: "Daftar KK sasaran tim: tandai hasil (terdampak / tidak terdampak / tidak ditemukan), peta sebaran, pantau progres. Tampil bila tim sudah punya daftar KK." },
   { kode: "translok:", label: "Transport Lokal", ket: "Hari kerja, laporan & foto harian, SPJ untuk satu kegiatan anggaran." },
 ];
 
@@ -93,13 +99,14 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
   if (kode === "pelatihan") return "Langkah pelatihan";
   if (kode === "wilayah_tim") return "Wilayah tugas per tim";
   if (kode === "identifikasi") return "Lembar Identifikasi SLS";
+  if (kode === "pendataan") return "Lembar Pendataan KK";
   if (kode.startsWith("translok:")) return `Transport Lokal${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(9)})`}`;
   return kode;
 };
 
 /** Modul sah: salah satu dari katalog. */
 export function modulSah(kode: string): boolean {
-  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || /^translok:\d+$/.test(kode);
+  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || kode === "pendataan" || /^translok:\d+$/.test(kode);
 }
 
 const NADA_KE_STATUS: Record<NadaKegiatan, StatusLangkah> = { merah: "mendesak", emas: "perlu", biru: "berjalan", abu: "menunggu", hijau: "selesai" };
@@ -179,6 +186,29 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         href: `/sigap/identifikasi?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
         aksi: f.terisi >= f.total ? "Lihat" : "Isi sekarang",
         pecahan: Math.min(1, f.terisi / f.total),
+      },
+    ];
+  }
+  if (kode === "pendataan") {
+    // (11 Okt 2026) bagi PML & PPL yang timnya sudah punya daftar KK; selain itu modul tidak berlaku (tidak tampil)
+    const f = induk.pendataan;
+    if (!f || f.total <= 0) return [];
+    const status: StatusLangkah = f.didata >= f.total ? "selesai" : f.didata > 0 ? "berjalan" : "perlu";
+    const ket =
+      f.didata >= f.total
+        ? `Semua ${f.total} KK sudah didata · ${f.terdampak} terdampak`
+        : f.didata > 0
+          ? `${f.didata} dari ${f.total} KK tim sudah didata`
+          : `Belum ada yang didata · ${f.total} KK tim menunggu`;
+    return [
+      {
+        kode,
+        judul: "Lembar Pendataan KK",
+        ket,
+        status,
+        href: `/sigap/pendataan?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        aksi: f.didata >= f.total ? "Lihat" : "Buka lembar",
+        pecahan: Math.min(1, f.didata / f.total),
       },
     ];
   }

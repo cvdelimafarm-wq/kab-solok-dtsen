@@ -13,7 +13,6 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin } from "@/lib/sigapAkses";
 import { tentukanTujuan } from "@/lib/undangan";
-import { adaDaftarKkTim } from "@/lib/portal/pendataan";
 
 export function dbPortal(): Db | null {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -128,10 +127,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
     }
   }
 
-  // (11 Okt 2026) Lembar Pendataan keroyokan: kartu muncul bila tim petugas ini sudah punya daftar KK yang diunggah admin (tidak tampil sebelum ada daftar).
-  if (akun.petugas_bencana_id && (await adaDaftarKkTim(db, akun.id))) {
-    kartu.push({ kode: "pendataan", grup: "tugas", judul: "Lembar Pendataan", uraian: "Daftar KK sasaran tim: tandai hasil pendataan, lihat sebaran di peta, dan pantau progres PPL.", status: { label: "Aktif", nada: "aktif" }, href: "/sigap/pendataan", label_aksi: "Buka" });
-  }
+  // (11 Okt 2026) Lembar Pendataan KK tidak lagi kartu lepas: kini modul "pendataan" di tahap Pendataan kegiatan Pendataan Pascabencana (lib/sigapTahap.ts) -- permintaan user.
 
   // 3. Penyisiran SE2026 (nama cocok di daftar petugas penyisiran).
   const ps = await cocokPenyisiran(db, akun.nama);

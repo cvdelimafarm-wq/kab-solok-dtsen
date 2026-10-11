@@ -8,8 +8,9 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
-import type { BukaMode, InfoIdentifikasi, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import type { BukaMode, InfoIdentifikasi, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
+import { ringkasModulPendataan } from "@/lib/portal/pendataan";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
 import { memoWaktu } from "@/lib/portal/memoSingkat";
 import type { IkonKode } from "@/lib/sigapTugasUtama";
@@ -195,7 +196,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
   const perlu = (k: string) => terpilih.some((x) => x.isi.has(k));
 
   // Tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
-  const [perencanaan, wilayah, identifikasi] = await Promise.all([
+  const [perencanaan, wilayah, identifikasi, pendataan] = await Promise.all([
     perlu("konfirmasi") ? perencanaanAkun(db, akun) : Promise.resolve<InfoPerencanaan | null>(null),
     perlu("wilayah_tim")
       ? (async (): Promise<InfoWilayah | null> => {
@@ -212,6 +213,8 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
           return { total: ringkas.total, terisi: ringkas.terisi, tidak_terdampak: ringkas.tidak_terdampak, hasil: ringkas.hasil };
         })()
       : Promise.resolve<InfoIdentifikasi | null>(null),
+    // (11 Okt 2026) Lembar Pendataan KK: PML & PPL yang timnya sudah punya daftar KK (null = modul tidak tampil)
+    perlu("pendataan") && akun.petugas_bencana_id ? ringkasModulPendataan(db, akun.petugas_bencana_id) : Promise.resolve<InfoPendataan | null>(null),
   ]);
 
   const hasil: Induk[] = [];
@@ -219,6 +222,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     const menyerap: string[] = [];
     if (isi.has("pelatihan")) menyerap.push("pelatihan");
     if (isi.has("konfirmasi") || isi.has("wilayah_tim")) menyerap.push("bencana");
+    if (isi.has("pendataan")) menyerap.push("pendataan"); // (11 Okt 2026) kartu lepas "Lembar Pendataan" diganti modul di tahap Pendataan
     for (const p of penInduk) if (isi.has(`translok:${p.kegiatan.id}`)) menyerap.push(`translok-${p.id}`);
 
     hasil.push({
@@ -231,6 +235,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       perencanaan: isi.has("konfirmasi") ? perencanaan : null,
       wilayah: isi.has("wilayah_tim") ? wilayah : null,
       identifikasi: isi.has("identifikasi") ? identifikasi : null,
+      pendataan: isi.has("pendataan") ? pendataan : null,
     });
   }
   return hasil;

@@ -103,6 +103,30 @@ export async function catatHasil(db: Db, akunId: number, c: IsiCatat): Promise<{
   return { ok: true, terkini: r.status === "tercatat" ? r.terkini === true : false, duplikat: r.status === "duplikat" };
 }
 
+/**
+ * (11 Okt 2026) Ringkasan untuk modul "Lembar Pendataan KK" di tahap Pendataan: jumlah KK aktif tim, yang sudah didata, dan yang terdampak.
+ * Tim = PML + PPL di bawahnya (pml = diri sendiri bila PML, atasan bila PPL). null = bukan PML/PPL, atau tim belum punya daftar KK (modul tidak tampil).
+ * Gagal = null supaya Layer 2 tidak ikut rusak.
+ */
+export async function ringkasModulPendataan(db: Db, petugasId: number): Promise<{ total: number; didata: number; terdampak: number } | null> {
+  try {
+    const { data: p } = await db.from("bencana_petugas").select("id, peran, atasan_id, aktif").eq("id", petugasId).maybeSingle();
+    if (!p || p.aktif === false || (p.peran !== "pml" && p.peran !== "ppl")) return null;
+    const pmlId = (p.peran === "pml" ? p.id : p.atasan_id) as number | null;
+    if (!pmlId) return null;
+    const baris = await ringkasTim(db, pmlId);
+    let total = 0, didata = 0, terdampak = 0;
+    for (const b of baris) {
+      total += b.jumlah;
+      if (b.hasil !== null) didata += b.jumlah;
+      if (b.hasil === "terdampak") terdampak += b.jumlah;
+    }
+    return total > 0 ? { total, didata, terdampak } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Tim akun ini sudah punya daftar KK (diunggah admin)? Dipakai Beranda untuk menampilkan kartu Lembar Pendataan. Gagal = anggap belum ada (kartu tidak tampil). */
 export async function adaDaftarKkTim(db: Db, akunId: number): Promise<boolean> {
   try {

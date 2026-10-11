@@ -22,7 +22,7 @@ export const SKOR_PERLU = 72;
 export const SKOR_BERIKUTNYA = 30;
 
 /** Modul yang berupa TUGAS bernomor (dikerjakan PML/PPL): Lembar Identifikasi & Transport Lokal (kode "translok-<id>" atau "translok:<id>"). */
-export const adalahTugas = (kode: string): boolean => kode === "identifikasi" || kode.startsWith("translok");
+export const adalahTugas = (kode: string): boolean => kode === "identifikasi" || kode === "pendataan" || kode.startsWith("translok");
 
 /** Modul yang tidak ikut dihitung sebagai tugas aktif di sini. */
 const DILEWATI = new Set(["pelatihan", "wilayah_tim"]);
@@ -60,7 +60,7 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
         if (l) calon.push({ tier: l.status === "mendesak" ? 1 : 2, tahap: t, indeks, modul: m, langkah: l, batas: l.batas ? Date.parse(l.batas) : Infinity });
         return;
       }
-      const perluSekarang = m.status === "mendesak" || m.status === "perlu" || ((m.kode === "identifikasi" || m.kode === "konfirmasi") && (m.status === "berjalan" || m.status === "sekarang"));
+      const perluSekarang = m.status === "mendesak" || m.status === "perlu" || ((m.kode === "identifikasi" || m.kode === "pendataan" || m.kode === "konfirmasi") && (m.status === "berjalan" || m.status === "sekarang"));
       if (perluSekarang && m.href) calon.push({ tier: m.status === "mendesak" ? 1 : 2, tahap: t, indeks, modul: m, langkah: null, batas: m.batas ? Date.parse(m.batas) : Infinity });
     });
   }

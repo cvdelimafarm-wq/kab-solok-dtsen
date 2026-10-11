@@ -227,6 +227,8 @@ export default function Shell({
   const bolehPelatihanKelola = !!ringkas.izin["pelatihan.kelola"]; // (7 Okt 2026) Kelola Pelatihan
   // (9 Okt 2026) /sigap/kelola/<modul> -- permintaan user: Delego & Kelola Aplikasi ikut di sidebar pengelolaan
   const bolehDelego = !!ringkas.izin["delego.admin"];
+  // (11 Okt 2026) Pendataan keroyokan PPL/PML -- permintaan user (lembar petugas lewat tahap Pendataan di Beranda; sidebar desktop hanya memuat menu admin unggah, karena unggah CSV dari laptop)
+  const bolehPendataanKelola = ringkas.izin["bencana.admin"]?.level === "kelola";
   const bolehAplikasi = ringkas.izin["portal.kelola"]?.level === "kelola" || ringkas.izin["translok.kegiatan"]?.level === "kelola";
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
@@ -239,6 +241,7 @@ export default function Shell({
     if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/kelola/pedia") });
     if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
     if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/kelola/pelatihan") });
+    if (bolehPendataanKelola) out.push({ id: "m-pendataan-unggah", grup: "Menu", label: "Pendataan › Unggah daftar KK (CSV FASIH)", jalankan: () => (window.location.href = "/sigap/kelola/pendataan") });
     if (bolehAplikasi) out.push({ id: "m-aplikasi", grup: "Menu", label: "Kelola aplikasi, admin & periode", jalankan: () => (window.location.href = "/sigap/kelola/aplikasi") });
     if (bolehDelego) out.push({ id: "m-delego", grup: "Menu", label: "Delego", ket: "aplikasi delegasi kerja", jalankan: () => (window.location.href = "/sigap/kelola/delego") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/kelola/akses") });
@@ -248,7 +251,7 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehDelego, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehDelego, bolehPendataanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -302,7 +305,7 @@ export default function Shell({
           <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
           <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
 
-          {(subAdmin.length > 0 || bolehAkses || bolehAplikasi || bolehDelego) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
+          {(subAdmin.length > 0 || bolehAkses || bolehAplikasi || bolehDelego || bolehPendataanKelola) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
           {subAdmin.length > 0 && (
             <>
               <ItemNav
@@ -335,6 +338,7 @@ export default function Shell({
           {bolehAkses && <ItemNav mini={mini} ikon="gembok" label="Peran dan akses" href="/sigap/kelola/akses" aktif={aktif === "akses"} />}
           {bolehAplikasi && <ItemNav mini={mini} ikon="panel" label="Aplikasi & periode" href="/sigap/kelola/aplikasi" title="Kelola aplikasi, admin & periode kegiatan" />}
           {bolehDelego && <ItemNav mini={mini} ikon="tautan" label="Delego" href="/sigap/kelola/delego" title="Buka Delego" />}
+          {bolehPendataanKelola && <ItemNav mini={mini} ikon="arsip" label="Unggah daftar KK" href="/sigap/kelola/pendataan" title="Unggah CSV ekspor FASIH-SM untuk Pendataan keroyokan" />}
         </nav>
         <div className="flex-1" />
         <div className="pt-3">
