@@ -3,7 +3,7 @@
 // (11 Okt 2026) Menggambar rekap identifikasi satu nagari/kecamatan menjadi gambar PNG (canvas, tanpa pustaka) untuk disalin/dibagikan -- permintaan user.
 // Isi hanya Sub SLS + status. Banyak baris dibagi ke beberapa kolom supaya gambar tidak terlalu tinggi untuk dibagikan lewat WhatsApp.
 
-import { LABEL_STATUS_REKAP, bagiKolom, rapikanNama, susunBarisGambar, type BarisGambar, type KelompokRekap, type TingkatRekap } from "@/lib/rekapIdentifikasi";
+import { LABEL_STATUS_REKAP, bagiKolom, persenRealisasi, rapikanNama, ringkasPml, susunBarisGambar, urutkanPml, type BarisGambar, type BarisPml, type KelompokRekap, type TingkatRekap, type UrutPml } from "@/lib/rekapIdentifikasi";
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const PAD = 28;
@@ -141,5 +141,108 @@ export async function buatGambarRekap(k: KelompokRekap, tingkat: TingkatRekap, t
   ctx.font = `600 11.5px ${FONT}`;
   ctx.fillText(`Per ${tanggalTeks} · SIGAP BPS Kabupaten Solok`, PAD, tinggi - 14);
 
+  return await new Promise<Blob>((ok, gagal) => canvas.toBlob((b) => (b ? ok(b) : gagal(new Error("Gagal membuat gambar."))), "image/png"));
+}
+
+/** (11 Okt 2026) Gambar tabel target & realisasi identifikasi per PML (untuk dibagikan ke grup). */
+export async function buatGambarPml(baris: BarisPml[], urut: UrutPml, tanggalTeks: string): Promise<Blob> {
+  const data = urutkanPml(baris.filter((b) => b.target > 0 || b.target_pendamping > 0), urut);
+  const r = ringkasPml(baris);
+  const LEBAR = 760;
+  const TB = 40; // tinggi baris
+  const KEPALA = 150;
+  const tinggi = KEPALA + 30 + Math.max(1, data.length) * TB + TINGGI_KAKI + 8;
+  const skala = Math.min(2, BATAS_PIKSEL / Math.max(LEBAR, tinggi));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(LEBAR * skala);
+  canvas.height = Math.round(tinggi * skala);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Peramban tidak mendukung pembuatan gambar.");
+  ctx.scale(skala, skala);
+  ctx.fillStyle = WARNA.latar;
+  ctx.fillRect(0, 0, LEBAR, tinggi);
+  ctx.textBaseline = "alphabetic";
+
+  ctx.fillStyle = WARNA.muted;
+  ctx.font = `700 12px ${FONT}`;
+  ctx.fillText("MONITORING IDENTIFIKASI · PENDATAAN PASCABENCANA", PAD, PAD + 8);
+  ctx.fillStyle = WARNA.navy;
+  ctx.font = `800 26px ${FONT}`;
+  ctx.fillText("Target & realisasi per PML", PAD, PAD + 42);
+  ctx.fillStyle = WARNA.ink;
+  ctx.font = `600 14px ${FONT}`;
+  ctx.fillText(`${r.realisasi} dari ${r.target} Sub SLS sudah diidentifikasi (${r.persen}%)  ·  ${r.belum} belum  ·  ${r.selesai} dari ${r.pml} PML selesai`, PAD, PAD + 68);
+  // batang total
+  const xBar = PAD;
+  const wBar = LEBAR - PAD * 2;
+  ctx.fillStyle = WARNA.garis;
+  bulat(ctx, xBar, PAD + 82, wBar, 12, 6);
+  ctx.fill();
+  if (r.target > 0 && r.realisasi > 0) {
+    ctx.fillStyle = "#1F5FD1";
+    bulat(ctx, xBar, PAD + 82, Math.max(12, (wBar * r.realisasi) / r.target), 12, 6);
+    ctx.fill();
+  }
+
+  // kepala kolom
+  const yH = KEPALA + 14;
+  const X_NAMA = PAD;
+  const X_BAR = PAD + 210;
+  const W_BAR = 190;
+  const X_REAL = X_BAR + W_BAR + 78; // rata kanan
+  const X_PERSEN = X_REAL + 58; // rata kanan
+  const X_PEND = LEBAR - PAD; // rata kanan
+  ctx.fillStyle = WARNA.muted;
+  ctx.font = `800 11px ${FONT}`;
+  ctx.fillText("PML", X_NAMA, yH);
+  ctx.fillText("PROGRES", X_BAR, yH);
+  ctx.textAlign = "right";
+  ctx.fillText("REALISASI/TARGET", X_REAL + 10, yH);
+  ctx.fillText("%", X_PERSEN + 8, yH);
+  ctx.fillText("SBG PENDAMPING", X_PEND, yH);
+  ctx.textAlign = "left";
+  ctx.strokeStyle = WARNA.garis;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(PAD, yH + 8);
+  ctx.lineTo(LEBAR - PAD, yH + 8);
+  ctx.stroke();
+
+  data.forEach((b, i) => {
+    const y = yH + 10 + i * TB;
+    const p = persenRealisasi(b.realisasi, b.target);
+    ctx.fillStyle = WARNA.ink;
+    ctx.font = `700 14px ${FONT}`;
+    ctx.fillText(potong(ctx, rapikanNama(b.nama), 195), X_NAMA, y + TB / 2 + 5);
+    ctx.fillStyle = WARNA.garis;
+    bulat(ctx, X_BAR, y + TB / 2 - 5, W_BAR, 10, 5);
+    ctx.fill();
+    if (b.target > 0 && b.realisasi > 0) {
+      ctx.fillStyle = p >= 100 ? WARNA.terdampak.teks : "#1F5FD1";
+      bulat(ctx, X_BAR, y + TB / 2 - 5, Math.max(10, (W_BAR * b.realisasi) / b.target), 10, 5);
+      ctx.fill();
+    }
+    ctx.textAlign = "right";
+    ctx.fillStyle = WARNA.ink;
+    ctx.font = `700 13.5px ${FONT}`;
+    ctx.fillText(b.target > 0 ? `${b.realisasi}/${b.target}` : "–", X_REAL + 10, y + TB / 2 + 5);
+    ctx.fillStyle = p >= 100 ? WARNA.terdampak.teks : b.realisasi === 0 && b.target > 0 ? "#B42329" : WARNA.navy;
+    ctx.font = `800 13.5px ${FONT}`;
+    ctx.fillText(b.target > 0 ? `${p}%` : "–", X_PERSEN + 8, y + TB / 2 + 5);
+    ctx.fillStyle = WARNA.muted;
+    ctx.font = `600 12.5px ${FONT}`;
+    ctx.fillText(b.target_pendamping > 0 ? `${b.realisasi_pendamping}/${b.target_pendamping}` : "–", X_PEND, y + TB / 2 + 5);
+    ctx.textAlign = "left";
+    ctx.strokeStyle = WARNA.garis;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD, y + TB - 0.5);
+    ctx.lineTo(LEBAR - PAD, y + TB - 0.5);
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = WARNA.muted;
+  ctx.font = `600 11.5px ${FONT}`;
+  ctx.fillText(`Per ${tanggalTeks} · target = Sub SLS sebagai pelaksana · SIGAP BPS Kabupaten Solok`, PAD, tinggi - 14);
   return await new Promise<Blob>((ok, gagal) => canvas.toBlob((b) => (b ? ok(b) : gagal(new Error("Gagal membuat gambar."))), "image/png"));
 }

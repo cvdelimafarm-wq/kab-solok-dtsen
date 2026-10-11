@@ -163,3 +163,89 @@ export function barisExcelPerNagari(baris: BarisRekap[]): Record<string, string 
     "Belum diidentifikasi": k.belum,
   }));
 }
+
+// ----------------------------------------------------------------------------------------------
+// (11 Okt 2026) Target dan realisasi identifikasi per PML -- permintaan user ("monitoring target realisasi").
+// Target = Sub SLS pada SLS yang dialokasikan ke PML itu sebagai PELAKSANA (tiap SLS punya satu pelaksana, jadi jumlahnya tidak ganda);
+// realisasi = dari target itu, yang sudah diidentifikasi. Peran pendamping dihitung terpisah (target & realisasi pendamping) agar tidak dobel.
+
+export type BarisPml = {
+  id: number;
+  nama: string;
+  target: number;
+  realisasi: number;
+  terdampak: number;
+  tidak: number;
+  target_pendamping: number;
+  realisasi_pendamping: number;
+};
+
+/** Persen dibulatkan ke bawah supaya 99,6% tidak tampil "100%" sebelum benar-benar selesai. */
+export const persenRealisasi = (realisasi: number, target: number): number => (target > 0 ? Math.min(100, Math.floor((realisasi / target) * 100)) : 0);
+
+/** Gabungkan baris API (satu baris per PML per peran) menjadi satu baris per PML. */
+export function periksaBarisPml(x: unknown): BarisPml[] {
+  if (!Array.isArray(x)) return [];
+  const peta = new Map<number, BarisPml>();
+  for (const r of x) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const id = Number(o.pml_id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const target = Math.max(0, Math.trunc(Number(o.target) || 0));
+    const realisasi = Math.min(target, Math.max(0, Math.trunc(Number(o.realisasi) || 0)));
+    const b = peta.get(id) ?? { id, nama: String(o.nama ?? ""), target: 0, realisasi: 0, terdampak: 0, tidak: 0, target_pendamping: 0, realisasi_pendamping: 0 };
+    if (o.peran === "pendamping") {
+      b.target_pendamping += target;
+      b.realisasi_pendamping += realisasi;
+    } else {
+      b.target += target;
+      b.realisasi += realisasi;
+      b.terdampak += Math.max(0, Math.trunc(Number(o.terdampak) || 0));
+      b.tidak += Math.max(0, Math.trunc(Number(o.tidak_terdampak) || 0));
+    }
+    peta.set(id, b);
+  }
+  return [...peta.values()].sort((a, b) => koleksi.compare(a.nama, b.nama));
+}
+
+export type UrutPml = "nama" | "terendah";
+/** "terendah" = persen realisasi terkecil dulu (yang perlu dikejar), seri menurut sisa terbanyak lalu nama. */
+export function urutkanPml(baris: BarisPml[], urut: UrutPml): BarisPml[] {
+  const salin = [...baris];
+  if (urut === "nama") return salin.sort((a, b) => koleksi.compare(a.nama, b.nama));
+  return salin.sort((a, b) => {
+    const pa = a.target > 0 ? a.realisasi / a.target : 2; // PML tanpa target di akhir
+    const pb = b.target > 0 ? b.realisasi / b.target : 2;
+    return pa - pb || b.target - b.realisasi - (a.target - a.realisasi) || koleksi.compare(a.nama, b.nama);
+  });
+}
+
+export type RingkasPml = { pml: number; target: number; realisasi: number; belum: number; persen: number; selesai: number };
+export function ringkasPml(baris: BarisPml[]): RingkasPml {
+  let target = 0;
+  let realisasi = 0;
+  let selesai = 0;
+  let pml = 0;
+  for (const b of baris) {
+    if (b.target > 0) pml += 1;
+    target += b.target;
+    realisasi += b.realisasi;
+    if (b.target > 0 && b.realisasi >= b.target) selesai += 1;
+  }
+  return { pml, target, realisasi, belum: target - realisasi, persen: persenRealisasi(realisasi, target), selesai };
+}
+
+export function barisExcelPml(baris: BarisPml[]): Record<string, string | number>[] {
+  return urutkanPml(baris, "nama").map((b) => ({
+    PML: rapikanNama(b.nama),
+    "Target Sub SLS (pelaksana)": b.target,
+    "Realisasi (sudah diidentifikasi)": b.realisasi,
+    Belum: b.target - b.realisasi,
+    "Persen realisasi": persenRealisasi(b.realisasi, b.target),
+    Terdampak: b.terdampak,
+    "Tidak terdampak": b.tidak,
+    "Target sebagai pendamping": b.target_pendamping,
+    "Realisasi sebagai pendamping": b.realisasi_pendamping,
+  }));
+}

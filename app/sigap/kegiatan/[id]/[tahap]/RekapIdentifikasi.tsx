@@ -4,6 +4,7 @@
 //
 // (11 Okt 2026) Tombol melayang di pojok kanan bawah tahap Pendataan (terlihat PML dan PPL): rekap seluruh hasil identifikasi, ekspor Excel,
 // dan salin gambar per nagari atau per kecamatan -- permintaan user. Yang tampil HANYA Sub SLS dan statusnya (terdampak / tidak terdampak / belum diidentifikasi).
+// Tampilan "Per PML" = monitoring target dan realisasi identifikasi tiap PML (permintaan user, 11 Okt 2026).
 // Sub SLS yang belum diidentifikasi ikut tampil (abu-abu) -- permintaan user; cakupannya SLS yang sudah dialokasikan ke PML. Data diambil saat lembar dibuka (selalu terbaru).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,18 +13,26 @@ import {
   LABEL_STATUS_REKAP,
   barisExcel,
   barisExcelPerNagari,
+  barisExcelPml,
   kelompokkan,
   namaBerkasRekap,
+  periksaBarisPml,
   periksaBarisRekap,
+  persenRealisasi,
   rapikanNama,
+  ringkasPml,
   ringkasRekap,
   susunBarisGambar,
+  urutkanPml,
+  type BarisPml,
   type BarisRekap,
   type TingkatRekap,
+  type UrutPml,
 } from "@/lib/rekapIdentifikasi";
-import { buatGambarRekap } from "./gambarRekap";
+import { buatGambarPml, buatGambarRekap } from "./gambarRekap";
 
-type Data = { sekarang: string; baris: BarisRekap[] };
+type Data = { sekarang: string; baris: BarisRekap[]; pml: BarisPml[] };
+type Mode = TingkatRekap | "pml";
 
 const tglTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 const tglKode = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
@@ -33,7 +42,9 @@ export default function RekapIdentifikasi() {
   const [data, setData] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
-  const [tingkat, setTingkat] = useState<TingkatRekap>("nagari");
+  const [mode, setMode] = useState<Mode>("nagari");
+  const [urutPml, setUrutPml] = useState<UrutPml>("terendah");
+  const tingkat: TingkatRekap = mode === "pml" ? "nagari" : mode;
   const [kunci, setKunci] = useState<string>("");
   const [pesan, setPesan] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<"gambar" | "excel" | null>(null);
@@ -43,8 +54,8 @@ export default function RekapIdentifikasi() {
     if (!bacaSesi()) return;
     setMemuat(true);
     try {
-      const d = await apiPortal<{ sekarang: string; baris: unknown }>("/api/portal/identifikasi/rekap");
-      setData({ sekarang: d.sekarang, baris: periksaBarisRekap(d.baris) });
+      const d = await apiPortal<{ sekarang: string; baris: unknown; pml?: unknown }>("/api/portal/identifikasi/rekap");
+      setData({ sekarang: d.sekarang, baris: periksaBarisRekap(d.baris), pml: periksaBarisPml(d.pml) });
       setGalat(null);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat rekap. Periksa sambungan lalu coba lagi.");
@@ -75,17 +86,21 @@ export default function RekapIdentifikasi() {
   }, [buka]);
 
   const baris = data?.baris ?? [];
+  const pml = data?.pml ?? [];
+  const pmlUrut = useMemo(() => urutkanPml(pml.filter((b) => b.target > 0 || b.target_pendamping > 0), urutPml), [pml, urutPml]);
+  const ringPml = useMemo(() => ringkasPml(pml), [pml]);
   const ringkas = useMemo(() => ringkasRekap(baris), [baris]);
   const kelompok = useMemo(() => kelompokkan(baris, tingkat), [baris, tingkat]);
   const terpilih = kelompok.find((k) => k.kunci === kunci) ?? kelompok[0] ?? null;
   const tampilan = useMemo(() => (terpilih ? susunBarisGambar(terpilih, tingkat) : []), [terpilih, tingkat]);
 
   async function salinGambar() {
-    if (!terpilih || !data || sibuk) return;
+    if (!data || sibuk) return;
+    if (mode === "pml" ? pmlUrut.length === 0 : !terpilih) return;
     setSibuk("gambar");
     setPesan(null);
-    const nama = `${namaBerkasRekap(terpilih, tingkat, tglKode(data.sekarang))}.png`;
-    const pembuat = buatGambarRekap(terpilih, tingkat, tglTeks(data.sekarang));
+    const nama = mode === "pml" || !terpilih ? `target-realisasi-identifikasi-per-pml-${tglKode(data.sekarang)}.png` : `${namaBerkasRekap(terpilih, tingkat, tglKode(data.sekarang))}.png`;
+    const pembuat = mode === "pml" || !terpilih ? buatGambarPml(pml, urutPml, tglTeks(data.sekarang)) : buatGambarRekap(terpilih, tingkat, tglTeks(data.sekarang));
     try {
       // Promise diberikan langsung ke ClipboardItem supaya tetap dalam satu ketukan (dibutuhkan Safari)
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
@@ -133,6 +148,7 @@ export default function RekapIdentifikasi() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(barisExcel(baris)), "Rekap Sub SLS");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(barisExcelPerNagari(baris)), "Per Nagari");
+      if (pml.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(barisExcelPml(pml)), "Target-Realisasi PML");
       XLSX.writeFile(wb, `rekap-identifikasi-${tglKode(data.sekarang)}.xlsx`);
       setPesan("Excel diunduh.");
     } catch (e) {
@@ -142,16 +158,17 @@ export default function RekapIdentifikasi() {
     }
   }
 
-  const segmen = (k: TingkatRekap, teks: string) => (
+  const segmen = (k: Mode, teks: string) => (
     <button
       key={k}
       type="button"
       onClick={() => {
-        setTingkat(k);
+        setMode(k);
         setKunci("");
+        setPesan(null);
       }}
-      aria-pressed={tingkat === k}
-      className={`min-h-[44px] flex-1 rounded-full text-[13px] font-extrabold ${tingkat === k ? "bg-[#0F2A52] text-white" : "text-[#55657D]"}`}
+      aria-pressed={mode === k}
+      className={`min-h-[44px] flex-1 rounded-full text-[13px] font-extrabold ${mode === k ? "bg-[#0F2A52] text-white" : "text-[#55657D]"}`}
     >
       {teks}
     </button>
@@ -208,8 +225,62 @@ export default function RekapIdentifikasi() {
                   <div className="flex gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(15,42,82,.08)]" role="group" aria-label="Tingkat rekap">
                     {segmen("nagari", "Per nagari")}
                     {segmen("kecamatan", "Per kecamatan")}
+                    {segmen("pml", "Per PML")}
                   </div>
 
+                  {mode === "pml" && (
+                    <div className="mt-3">
+                      <div className="rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <b className="text-[15px] text-[#0F2A52]">Target &amp; realisasi identifikasi</b>
+                          <span className="text-[20px] font-extrabold text-[#1F5FD1]">{ringPml.persen}%</span>
+                        </div>
+                        <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#E6ECF5]" role="progressbar" aria-valuenow={ringPml.persen} aria-valuemin={0} aria-valuemax={100} aria-label="Realisasi identifikasi seluruh PML">
+                          <div className="h-full rounded-full bg-[#1F5FD1]" style={{ width: `${ringPml.persen}%` }} />
+                        </div>
+                        <p className="mt-2 text-[12.5px] leading-snug text-[#55657D]">
+                          {ringPml.realisasi} dari {ringPml.target} Sub SLS sudah diidentifikasi · {ringPml.belum} belum · {ringPml.selesai} dari {ringPml.pml} PML selesai
+                        </p>
+                      </div>
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">Urutkan</span>
+                        <div className="flex gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(15,42,82,.08)]" role="group" aria-label="Urutan PML">
+                          {(["terendah", "nama"] as UrutPml[]).map((u) => (
+                            <button key={u} type="button" aria-pressed={urutPml === u} onClick={() => setUrutPml(u)} className={`min-h-[36px] rounded-full px-3.5 text-[12.5px] font-extrabold ${urutPml === u ? "bg-[#0F2A52] text-white" : "text-[#55657D]"}`}>
+                              {u === "terendah" ? "Terendah dulu" : "Nama"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <ul className="mt-2.5 overflow-hidden rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]">
+                        {pmlUrut.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-[#5B6B84]">Data target per PML belum tersedia.</li>}
+                        {pmlUrut.map((b) => {
+                          const p = persenRealisasi(b.realisasi, b.target);
+                          return (
+                            <li key={b.id} className="border-t border-[#EEF2F7] px-4 py-2.5 first:border-t-0">
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="min-w-0 truncate text-[14px] font-bold text-[#1B2B4B]">{rapikanNama(b.nama)}</span>
+                                <span className={`flex-none text-[13.5px] font-extrabold ${p >= 100 ? "text-[#13794B]" : b.target > 0 && b.realisasi === 0 ? "text-[#B42329]" : "text-[#0F2A52]"}`}>
+                                  {b.target > 0 ? `${b.realisasi}/${b.target} · ${p}%` : "–"}
+                                </span>
+                              </div>
+                              {b.target > 0 && (
+                                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#E6ECF5]">
+                                  <div className={`h-full rounded-full ${p >= 100 ? "bg-[#13794B]" : "bg-[#1F5FD1]"}`} style={{ width: `${p}%` }} />
+                                </div>
+                              )}
+                              <p className="mt-1 text-[11.5px] text-[#6B7A90]">
+                                {b.target > 0 ? `${b.terdampak} terdampak · ${b.tidak} tidak terdampak · ${b.target - b.realisasi} belum` : "Tidak menjadi pelaksana"}
+                                {b.target_pendamping > 0 && ` · pendamping ${b.realisasi_pendamping}/${b.target_pendamping}`}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+
+                  {mode !== "pml" && (
                   <label className="mt-3 block text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                     {tingkat === "nagari" ? "Pilih nagari" : "Pilih kecamatan"}
                     <select value={terpilih?.kunci ?? ""} onChange={(e) => setKunci(e.target.value)} className="mt-1 min-h-[46px] w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 text-[14px] font-bold text-[#0F2A52]">
@@ -220,8 +291,9 @@ export default function RekapIdentifikasi() {
                       ))}
                     </select>
                   </label>
+                  )}
 
-                  {terpilih && (
+                  {mode !== "pml" && terpilih && (
                     <div className="mt-3 overflow-hidden rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]">
                       <div className="border-b border-[#EEF2F7] px-4 py-3">
                         <b className="block text-[15px] text-[#0F2A52]">{tingkat === "nagari" ? `Nagari ${rapikanNama(terpilih.judul)}` : `Kecamatan ${rapikanNama(terpilih.judul)}`}</b>
@@ -250,7 +322,7 @@ export default function RekapIdentifikasi() {
                   )}
 
                   <div className="mt-3 grid grid-cols-2 gap-2.5">
-                    <button type="button" onClick={salinGambar} disabled={!terpilih || sibuk !== null} className="min-h-[50px] rounded-[14px] bg-[#1F5FD1] px-3 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
+                    <button type="button" onClick={salinGambar} disabled={(mode === "pml" ? pmlUrut.length === 0 : !terpilih) || sibuk !== null} className="min-h-[50px] rounded-[14px] bg-[#1F5FD1] px-3 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
                       {sibuk === "gambar" ? "Membuat gambar…" : "Salin gambar"}
                     </button>
                     <button type="button" onClick={unduhExcel} disabled={sibuk !== null} className="min-h-[50px] rounded-[14px] bg-[#0F2A52] px-3 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
@@ -260,7 +332,7 @@ export default function RekapIdentifikasi() {
                   <p aria-live="polite" className="mt-2 min-h-[18px] text-[12.5px] font-semibold text-[#13794B]">
                     {pesan}
                   </p>
-                  <p className="text-[11.5px] leading-snug text-[#6B7A90]">Gambar hanya memuat nagari/kecamatan yang dipilih. Excel memuat seluruh Sub SLS pada SLS yang sudah dialokasikan, termasuk yang belum diidentifikasi.</p>
+                  <p className="text-[11.5px] leading-snug text-[#6B7A90]">{mode === "pml" ? "Target = Sub SLS pada SLS yang dialokasikan ke PML sebagai pelaksana; realisasi = yang sudah diidentifikasi. Pendamping dihitung terpisah agar tidak ganda. " : "Gambar hanya memuat nagari/kecamatan yang dipilih. "}Excel memuat seluruh Sub SLS pada SLS yang sudah dialokasikan, termasuk yang belum diidentifikasi.</p>
                 </>
               )}
             </div>

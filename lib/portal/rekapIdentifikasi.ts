@@ -5,7 +5,7 @@
 
 import type { Db } from "@/lib/sigap";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
-import { periksaBarisRekap, type BarisRekap } from "@/lib/rekapIdentifikasi";
+import { periksaBarisPml, periksaBarisRekap, type BarisPml, type BarisRekap } from "@/lib/rekapIdentifikasi";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
 
@@ -23,4 +23,14 @@ export async function rekapIdentifikasi(db: Db): Promise<BarisRekap[]> {
   const { data, error } = await db.rpc("bencana_rekap_identifikasi_v2");
   if (error) throw new Error(`Gagal memuat rekap identifikasi: ${error.message}`);
   return periksaBarisRekap(((data ?? []) as Record<string, unknown>[]).map((r) => ({ ...r, status: r.sudah !== true ? "belum" : r.tidak_terdampak === true ? "tidak_terdampak" : "terdampak" })));
+}
+
+/** (11 Okt 2026) Target & realisasi identifikasi per PML. Kegagalan di sini tidak boleh menggagalkan rekap utama: dikembalikan kosong. */
+export async function rekapPml(db: Db): Promise<BarisPml[]> {
+  const { data, error } = await db.rpc("bencana_rekap_pml");
+  if (error) {
+    console.error("[rekapPml]", error.message);
+    return [];
+  }
+  return periksaBarisPml(data);
 }

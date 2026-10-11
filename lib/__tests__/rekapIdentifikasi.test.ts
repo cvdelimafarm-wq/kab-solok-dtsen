@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bagiKolom, barisExcel, barisExcelPerNagari, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
+import { bagiKolom, barisExcel, barisExcelPerNagari, barisExcelPml, periksaBarisPml, persenRealisasi, ringkasPml, urutkanPml, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
 
 // (11 Okt 2026) Uji rekap hasil identifikasi (hanya Sub SLS + status).
 const r = (idsubsls: string, kecamatan: string, nagari: string, sls: string, sub_sls: string, status: BarisRekap["status"] = "terdampak"): BarisRekap => ({ idsubsls, kecamatan, nagari, sls, sub_sls, status });
@@ -113,5 +113,47 @@ describe("nama berkas & Excel", () => {
     const p = barisExcelPerNagari(DATA);
     expect(p.reduce((a, x) => a + Number(x["Total Sub SLS"]), 0)).toBe(6);
     expect(p.reduce((a, x) => a + Number(x["Belum diidentifikasi"]), 0)).toBe(1);
+  });
+});
+
+describe("target & realisasi per PML", () => {
+  const api = [
+    { pml_id: 2, nama: "BUDI", peran: "pelaksana", target: 10, realisasi: 4, terdampak: 3, tidak_terdampak: 1 },
+    { pml_id: 1, nama: "ANI", peran: "pelaksana", target: 8, realisasi: 8, terdampak: 5, tidak_terdampak: 3 },
+    { pml_id: 1, nama: "ANI", peran: "pendamping", target: 6, realisasi: 2, terdampak: 2, tidak_terdampak: 0 },
+    { pml_id: 3, nama: "CICI", peran: "pendamping", target: 5, realisasi: 5, terdampak: 5, tidak_terdampak: 0 },
+    { pml_id: 0, nama: "TAK SAH", peran: "pelaksana", target: 3, realisasi: 1 },
+    null,
+  ];
+  it("menggabungkan peran, membuang baris tak sah, urut nama", () => {
+    const b = periksaBarisPml(api);
+    expect(b.map((x) => x.nama)).toEqual(["ANI", "BUDI", "CICI"]);
+    const ani = b[0];
+    expect([ani.target, ani.realisasi, ani.terdampak, ani.tidak]).toEqual([8, 8, 5, 3]);
+    expect([ani.target_pendamping, ani.realisasi_pendamping]).toEqual([6, 2]);
+    expect(b[2].target).toBe(0); // CICI hanya pendamping
+    expect(periksaBarisPml("x")).toEqual([]);
+  });
+  it("realisasi tidak melebihi target", () => {
+    expect(periksaBarisPml([{ pml_id: 1, nama: "A", peran: "pelaksana", target: 3, realisasi: 9 }])[0].realisasi).toBe(3);
+  });
+  it("persen dibulatkan ke bawah", () => {
+    expect(persenRealisasi(0, 0)).toBe(0);
+    expect(persenRealisasi(4, 10)).toBe(40);
+    expect(persenRealisasi(249, 250)).toBe(99);
+    expect(persenRealisasi(5, 5)).toBe(100);
+  });
+  it("urut terendah dulu, tanpa target di akhir", () => {
+    const b = periksaBarisPml(api);
+    expect(urutkanPml(b, "terendah").map((x) => x.nama)).toEqual(["BUDI", "ANI", "CICI"]);
+    expect(b.map((x) => x.nama)).toEqual(["ANI", "BUDI", "CICI"]); // tidak mengubah asal
+  });
+  it("ringkasan memakai target pelaksana saja (tidak ganda)", () => {
+    expect(ringkasPml(periksaBarisPml(api))).toEqual({ pml: 2, target: 18, realisasi: 12, belum: 6, persen: 66, selesai: 1 });
+  });
+  it("Excel per PML", () => {
+    const x = barisExcelPml(periksaBarisPml(api));
+    expect(Object.keys(x[0])).toEqual(["PML", "Target Sub SLS (pelaksana)", "Realisasi (sudah diidentifikasi)", "Belum", "Persen realisasi", "Terdampak", "Tidak terdampak", "Target sebagai pendamping", "Realisasi sebagai pendamping"]);
+    expect(x[1]).toMatchObject({ PML: "Budi", Belum: 6, "Persen realisasi": 40 });
   });
 });
