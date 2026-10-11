@@ -4,6 +4,8 @@
 // Token = sigap_akun.token (didapat setelah masuk nama + PIN di /sigap/masuk).
 //
 // GET  -> { akun, hari_ini, penugasan:[{..., hari_kerja[], hari[], kelompok[], tanggal_kegiatan_lain[]}], lokasi_opsi, kecamatan_opsi }
+//      (11 Okt 2026) tiap hari memuat `otomatis` = saran isian Laporan realisasi dari identifikasi (PML) / pendataan (PPL, korwil); penugasan memuat
+//      `satuan_laporan` dan `sumber_otomatis` (lib/realisasiOtomatis.ts)
 // POST { aksi:"profil", alamat_kecamatan?, selesai_onboarding? }
 // POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap)
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
@@ -25,6 +27,8 @@ import {
   rentangTanggal,
   tanggalValid,
 } from "@/lib/sigap";
+import { ambilRealisasiOtomatis } from "@/lib/portal/realisasiOtomatis";
+import { satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +120,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       }
     }
 
+    // (11 Okt 2026) Saran isian Laporan realisasi dari hasil identifikasi (PML) / pendataan (PPL, korwil) -- hanya Pendataan Pascabencana.
+    const penugasanOto = await Promise.all(
+      hasil.map(async (p) => {
+        const satuan = satuanLaporan(p.kegiatan.kode, p.peran, p.kegiatan.satuan_realisasi);
+        const oto = await ambilRealisasiOtomatis(db, akun.id, p.peran, p.kegiatan.kode, satuan, p.hari.map((h) => h.tanggal), wil);
+        return { ...p, satuan_laporan: satuan, sumber_otomatis: sumberUntukPeran(p.kegiatan.kode, p.peran), hari: p.hari.map((h) => ({ ...h, otomatis: oto.get(h.tanggal) ?? null })) };
+      })
+    );
+
     return NextResponse.json({
       akun: {
         nama: akun.nama,
@@ -128,7 +141,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         verifikasi: akun.verif_at ? { at: akun.verif_at, jarak_m: akun.verif_jarak_m, alasan: akun.verif_alasan } : null,
       },
       hari_ini: hariIni,
-      penugasan: hasil,
+      penugasan: penugasanOto,
       lokasi_opsi: { wilayah_tim: subTim, master: Array.from(master.values()) },
       kecamatan_opsi: Array.from(new Set(wil.map((w) => w.kecamatan))).sort(),
     });

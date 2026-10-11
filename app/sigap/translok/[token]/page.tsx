@@ -6,6 +6,7 @@ import LogoSigap from "@/app/components/LogoSigap";
 import { keAtas } from "@/app/portal/navigasi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
+import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -24,6 +25,8 @@ type Hari = {
   tanggal: string;
   realisasi: { lokasi: Lokasi[]; jumlah_realisasi: number; kendala: string | null; diperbarui_at: string } | null;
   foto: Foto[];
+  // (11 Okt 2026) saran isian laporan dari identifikasi (PML) / pendataan (PPL, korwil)
+  otomatis?: RealisasiOtomatis | null;
   kunci: "hari_ini" | "izin" | "terlewat" | "akan_datang";
   lengkap: boolean;
   izin_sampai: string | null;
@@ -34,6 +37,9 @@ type Pen = {
   // (7 Okt 2026) jenis kegiatan & aturan isian (pelatihan: tanpa laporan)
   kegiatan: { id: number; kode: string; nama: string; kode_anggaran: string | null; satuan_realisasi: string; jenis?: string; wajib_laporan?: boolean; jumlah_foto?: number };
   peran: string;
+  // (11 Okt 2026) satuan angka laporan menurut peran (PML Pascabencana = Sub SLS) dan sumber isian otomatis
+  satuan_laporan?: string;
+  sumber_otomatis?: SumberOtomatis | null;
   label_jabatan: string;
   tarif: number;
   maks_hari: number | null;
@@ -258,7 +264,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
                   <InfoLangkah
                     ikon="📝"
                     judul="Laporan diisi setiap hari kerja"
-                    isi={`Pada setiap hari kerja, isi lokasi, jumlah ${pen.kegiatan.satuan_realisasi} dan kendala. Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
+                    isi={`Pada setiap hari kerja, periksa lokasi, jumlah ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} dan kendala${pen.sumber_otomatis ? ` (lokasi dan jumlah terisi otomatis dari ${LABEL_SUMBER[pen.sumber_otomatis]} Anda, boleh diubah)` : ""}, lalu tekan Simpan laporan. Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
                   />
                   <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} hanya="laporan" />
                 </>
@@ -926,7 +932,7 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
                   <span className="block text-[17px] font-extrabold leading-tight">{d.getUTCDate()}</span>
                 </span>
                 <span className="flex-1 text-[12.5px] text-[#55657D]">
-                  {h.realisasi ? `${h.realisasi.jumlah_realisasi} ${pen.kegiatan.satuan_realisasi} · ${h.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ")}` : BULAN_PANJANG[d.getUTCMonth()]}
+                  {h.realisasi ? `${h.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${h.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ")}` : h.otomatis && wajibLaporan(pen) ? `${h.otomatis.jumlah} ${h.otomatis.satuan} dari ${LABEL_SUMBER[h.otomatis.sumber]} · belum disimpan` : BULAN_PANJANG[d.getUTCMonth()]}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${status.c}`}>{status.t}</span>
               </button>
@@ -1301,8 +1307,13 @@ function FormRealisasi({
   opsi: Data["lokasi_opsi"];
   onTersimpan: () => Promise<void>;
 }) {
-  const [lokasi, setLokasi] = useState<Lokasi[]>(hari.realisasi?.lokasi ?? []);
-  const [jumlah, setJumlah] = useState<string>(hari.realisasi ? String(hari.realisasi.jumlah_realisasi) : "");
+  // (11 Okt 2026) Belum ada laporan tersimpan -> terisi otomatis dari identifikasi (PML) / pendataan (PPL, korwil); petugas memeriksa lalu menyimpan.
+  const oto = hari.otomatis ?? null;
+  const sumber = pen.sumber_otomatis ?? null;
+  const sat = pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi;
+  const awalOto = !hari.realisasi && boleh ? oto : null;
+  const [lokasi, setLokasi] = useState<Lokasi[]>(hari.realisasi?.lokasi ?? awalOto?.lokasi ?? []);
+  const [jumlah, setJumlah] = useState<string>(hari.realisasi ? String(hari.realisasi.jumlah_realisasi) : awalOto ? String(awalOto.jumlah) : "");
   const [kendala, setKendala] = useState(hari.realisasi?.kendala ?? "");
   const [busy, setBusy] = useState(false);
   const [pesan, setPesan] = useState<{ teks: string; ok: boolean } | null>(null);
@@ -1341,6 +1352,15 @@ function FormRealisasi({
 
   const SELECT = "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-[14px] outline-none focus:border-[#0F3D7A] disabled:bg-slate-50";
   const tersimpan = !!hari.realisasi;
+  const banding = oto ? bandingkanOtomatis({ lokasi, jumlah: jumlah === "" ? null : Number(jumlah) }, oto) : null;
+  const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi" : "Lembar Pendataan";
+  function pakaiOtomatis() {
+    if (!oto) return;
+    setLokasi(oto.lokasi.map((l) => ({ ...l })));
+    setJumlah(String(oto.jumlah));
+    setPesan(null);
+  }
+  const TAG = <span className="ml-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-800">otomatis</span>;
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm">
@@ -1351,8 +1371,34 @@ function FormRealisasi({
         </span>
       </div>
 
+      {/* (11 Okt 2026) Keterangan isian otomatis dari identifikasi / pendataan */}
+      {sumber && !oto && (
+        <p className="mt-2.5 rounded-xl bg-slate-50 px-3 py-2 text-[12.5px] leading-snug text-slate-600">
+          Belum ada hasil di {namaLembar} atas nama Anda pada tanggal ini, jadi isian belum terisi otomatis. Isi manual, atau lengkapi hasilnya lalu muat ulang halaman ini.
+        </p>
+      )}
+      {sumber && oto && banding && (
+        <div className={`mt-2.5 rounded-xl px-3 py-2 text-[12.5px] leading-snug ${banding.semuaSama ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-900"}`}>
+          {banding.semuaSama ? (
+            <p>
+              <b>{tersimpan ? "✓ Sesuai" : "Terisi otomatis dari"} {LABEL_SUMBER[oto.sumber]}:</b> {oto.jumlah} {sat} di {oto.lokasi.length} jorong.{!tersimpan && " Periksa lalu tekan Simpan laporan."}
+            </p>
+          ) : (
+            <p>
+              <b>Isian berbeda dari {LABEL_SUMBER[oto.sumber]}</b> ({oto.jumlah} {sat} di {oto.lokasi.length} jorong).
+              {boleh && (
+                <button type="button" onClick={pakaiOtomatis} className="ml-1.5 font-extrabold underline">
+                  Pakai data otomatis
+                </button>
+              )}
+            </p>
+          )}
+          {oto.lokasi_terpotong > 0 && <p className="mt-1">Catatan: {oto.lokasi_terpotong} jorong lain tidak muat (maksimal 10 lokasi per laporan); tambahkan di Kendala bila perlu.</p>}
+        </div>
+      )}
+
       {/* Lokasi */}
-      <p className="mb-1.5 mt-3 text-[13px] font-bold text-slate-700">Lokasi</p>
+      <p className="mb-1.5 mt-3 text-[13px] font-bold text-slate-700">Lokasi{banding?.lokasiSama && TAG}</p>
       {lokasi.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {lokasi.map((l, i) => (
@@ -1416,7 +1462,10 @@ function FormRealisasi({
       )}
 
       {/* Jumlah */}
-      <p className="mb-1.5 mt-4 text-[13px] font-bold text-slate-700">Jumlah {pen.kegiatan.satuan_realisasi} {pen.peran === "pml" ? "diperiksa" : "didata"}</p>
+      <p className="mb-1.5 mt-4 text-[13px] font-bold text-slate-700">
+        Jumlah {sat} {sumber === "identifikasi" ? "diidentifikasi" : pen.peran === "pml" ? "diperiksa" : "didata"}
+        {banding?.jumlahSama && TAG}
+      </p>
       <div className="flex items-center gap-2">
         <button type="button" disabled={!boleh} onClick={() => setJumlah((v) => String(Math.max(0, (Number(v) || 0) - 1)))} className="h-12 w-12 shrink-0 rounded-xl border border-slate-300 text-[20px] font-bold disabled:opacity-40">−</button>
         <input
