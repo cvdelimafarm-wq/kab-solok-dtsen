@@ -255,10 +255,7 @@ export const FORM_TAHAP: Partial<Record<KodeTahap, FormTahap>> = {
       },
       { kode: "honor_instruktur", label: "Honor instruktur (Inda)", jenis: "yatidak" },
       { kode: "narasumber", label: "Narasumber eksternal", jenis: "yatidak" },
-      { kode: "jml_ppl", label: "Jumlah PPL", pendek: "PPL", grup: "Jumlah petugas", jenis: "angka", satuan: "orang" },
-      { kode: "jml_pml", label: "Jumlah PML", pendek: "PML", grup: "Jumlah petugas", jenis: "angka", satuan: "orang" },
-      { kode: "jml_instruktur", label: "Jumlah instruktur", jenis: "angka", satuan: "orang" },
-      { kode: "jml_kelas", label: "Jumlah kelas", jenis: "angka", satuan: "kelas" },
+      // (11 Okt 2026, 17.28) Jumlah kelas/petugas/instruktur tidak ditanyakan lagi: dihitung dari "Susunan kelas & panitia" (lihat SusunanPelatihan).
       { kode: "jml_hari", label: "Lama pelatihan", jenis: "angka", satuan: "hari" },
       { kode: "jml_jp", label: "Jam pelajaran", jenis: "angka", satuan: "JP", opsional: true },
     ],
@@ -332,6 +329,91 @@ export const FORM_TAHAP: Partial<Record<KodeTahap, FormTahap>> = {
     modul: [{ nama: "Rapat evaluasi", jika: [YA("rapat")] }, { nama: "Umpan balik petugas", jika: [YA("umpan_balik")] }, { nama: "Penilaian mitra", jika: [YA("nilai_mitra")] }, { nama: "Rencana perbaikan" }],
   },
 };
+
+// ---------------------------------------------------------------- pelatihan: susunan kelas & panitia
+// (11 Okt 2026, 17.28) Permintaan user: "di pelatihan ada pilihan identifikasi kelas, petugas + jabatannya + panitia + instruktur".
+// Disimpan di jawaban tahap pelatihan pada kunci `susunan` (di luar pertanyaan form). Nama instruktur/panitia boleh menyusul
+// (saat perencanaan sering belum ditetapkan); jumlah petugas per jabatan per kelas wajib.
+
+export const JABATAN_BAWAAN = ["PPL", "PML"];
+export type KelasPelatihan = { id: string; nama: string; instruktur: string; peserta: Record<string, number | null> };
+export type TugasPanitia = "ketua" | "sekretaris" | "anggota";
+export const TUGAS_PANITIA: { nilai: TugasPanitia; label: string }[] = [
+  { nilai: "ketua", label: "Ketua" },
+  { nilai: "sekretaris", label: "Sekretaris" },
+  { nilai: "anggota", label: "Anggota" },
+];
+export type PanitiaPelatihan = { id: string; nama: string; tugas: TugasPanitia };
+export type SusunanPelatihan = {
+  /** Jabatan petugas peserta (bawaan PPL, PML; boleh ditambah mis. Koseka, Operator). */
+  jabatan: string[];
+  kelas: KelasPelatihan[];
+  panitia: PanitiaPelatihan[];
+  /** Panitia diberi honor lewat SK (paket 521213-A); null = belum dijawab (hanya ditanya bila ada panitia). */
+  honorPanitia: boolean | null;
+};
+
+export function susunanKosong(): SusunanPelatihan {
+  return { jabatan: [...JABATAN_BAWAAN], kelas: [], panitia: [], honorPanitia: null };
+}
+
+export function kelasBaru(id: string, no: number, jabatan: string[]): KelasPelatihan {
+  return { id, nama: `Kelas ${no}`, instruktur: "", peserta: Object.fromEntries(jabatan.map((j) => [j, null])) };
+}
+
+export function bacaSusunan(x: unknown): SusunanPelatihan {
+  const o = x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {};
+  const jabatan = Array.isArray(o.jabatan) ? (o.jabatan as unknown[]).filter((j): j is string => typeof j === "string" && j.trim() !== "") : [];
+  const kelas = Array.isArray(o.kelas)
+    ? (o.kelas as KelasPelatihan[])
+        .filter((k) => k && typeof k.id === "string")
+        .map((k) => ({ id: k.id, nama: String(k.nama ?? ""), instruktur: String(k.instruktur ?? ""), peserta: k.peserta && typeof k.peserta === "object" ? { ...k.peserta } : {} }))
+    : [];
+  const panitia = Array.isArray(o.panitia)
+    ? (o.panitia as PanitiaPelatihan[]).filter((p) => p && typeof p.id === "string").map((p) => ({ id: p.id, nama: String(p.nama ?? ""), tugas: TUGAS_PANITIA.some((t) => t.nilai === p.tugas) ? p.tugas : "anggota" }))
+    : [];
+  return { jabatan: jabatan.length ? jabatan : [...JABATAN_BAWAAN], kelas, panitia, honorPanitia: typeof o.honorPanitia === "boolean" ? o.honorPanitia : null };
+}
+
+export type RingkasSusunan = { kelas: number; perJabatan: Record<string, number>; peserta: number; instruktur: number; instrukturBelum: number; panitia: number };
+
+export function ringkasSusunan(s: SusunanPelatihan): RingkasSusunan {
+  const perJabatan: Record<string, number> = {};
+  for (const j of s.jabatan) perJabatan[j] = s.kelas.reduce((n, k) => n + (k.peserta[j] ?? 0), 0);
+  const nama = new Set(s.kelas.map((k) => k.instruktur.trim().toLowerCase()).filter(Boolean));
+  return {
+    kelas: s.kelas.length,
+    perJabatan,
+    peserta: Object.values(perJabatan).reduce((a, b) => a + b, 0),
+    instruktur: nama.size,
+    instrukturBelum: s.kelas.filter((k) => !k.instruktur.trim()).length,
+    panitia: s.panitia.length,
+  };
+}
+
+/** Isian susunan yang belum lengkap (nama instruktur/panitia boleh menyusul). */
+export function periksaSusunan(s: SusunanPelatihan): string[] {
+  const out: string[] = [];
+  if (s.kelas.length === 0) out.push("Susunan kelas: tambahkan minimal satu kelas.");
+  s.kelas.forEach((k, i) => {
+    const nama = k.nama.trim() || `Kelas ${i + 1}`;
+    if (!k.nama.trim()) out.push(`Kelas ${i + 1}: nama kelas belum diisi.`);
+    const kosong = s.jabatan.filter((j) => k.peserta[j] === null || k.peserta[j] === undefined);
+    if (kosong.length) out.push(`${nama}: jumlah ${kosong.join(", ")} belum diisi (isi 0 bila tidak ada).`);
+    else if (s.jabatan.every((j) => !k.peserta[j])) out.push(`${nama}: belum ada petugas.`);
+  });
+  s.panitia.forEach((p, i) => {
+    if (!p.nama.trim()) out.push(`Panitia ${i + 1}: nama belum diisi (hapus baris bila belum ditentukan).`);
+  });
+  if (s.panitia.length > 0 && s.honorPanitia === null) out.push("Panitia: honor (SK) belum dijawab.");
+  return out;
+}
+
+export function paketSusunan(s: SusunanPelatihan, sumber = "Pelatihan petugas"): PaketTurunan[] {
+  const out: PaketTurunan[] = [];
+  if (s.panitia.length > 0 && s.honorPanitia) tambahPaket(out, "521213-A", "Honor panitia pelatihan (SK)", sumber);
+  return out;
+}
 
 // ---------------------------------------------------------------- pendataan: sub-kegiatan x peran
 
@@ -446,7 +528,10 @@ export function paketTahap(kode: KodeTahap, jawaban: Record<string, unknown> | n
   if (!jawaban) return [];
   if (kode === "pendataan") return paketPendataan(bacaJawabanPendataan(jawaban));
   const f = FORM_TAHAP[kode];
-  return f ? paketDariForm(f, jawaban as Jawaban) : [];
+  if (!f) return [];
+  const out = paketDariForm(f, jawaban as Jawaban);
+  if (kode === "pelatihan" && jawaban.susunan) for (const p of paketSusunan(bacaSusunan(jawaban.susunan))) tambahPaket(out, p.kode, p.ket, p.sumber);
+  return out;
 }
 
 /** Gabungan paket semua tahap yang dipakai & sudah diidentifikasi (satu baris per paket, keterangan & sumber digabung), urut kode. */

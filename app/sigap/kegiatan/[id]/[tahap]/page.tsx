@@ -15,6 +15,7 @@ import type { ModulTahap } from "@/lib/sigapTahap";
 import { adalahTugas } from "@/lib/sigapPrioritas";
 import { useInduk } from "../../useInduk";
 import WilayahTim from "./WilayahTim";
+import RekapIdentifikasi from "./RekapIdentifikasi";
 
 const CHIP: Record<ModulTahap["status"], { teks: string; kelas: string }> = {
   selesai: { teks: "Selesai", kelas: "bg-[#E3F6EC] text-[#13794B]" },
@@ -89,7 +90,7 @@ export default function HalamanTahap() {
   }, [siap, t, id, induk_, router]);
 
   return (
-    <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
+    <main className="min-h-screen bg-[#F5F8FE] pb-24 text-[#1B2B4B]">
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[52px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
@@ -137,6 +138,8 @@ export default function HalamanTahap() {
             return <BarisModul key={m.kode} m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
           })}
       </div>
+      {/* (11 Okt 2026) Tombol rekap hasil identifikasi (PPL & PML) di tahap yang memuat Lembar Identifikasi / Pendataan -- permintaan user */}
+      {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <RekapIdentifikasi />}
     </main>
   );
 }

@@ -65,7 +65,6 @@ import {
   cekPaketKePok,
   jawabanEfektif,
   modulDariForm,
-  paketDariForm,
   paketKegiatan,
   paketPendataan,
   paketTahap,
@@ -74,6 +73,13 @@ import {
   pertanyaanTampil,
   pilihanTampil,
   sisipkanSub,
+  bacaSusunan,
+  kelasBaru,
+  periksaSusunan,
+  ringkasSusunan,
+  TUGAS_PANITIA,
+  type SusunanPelatihan,
+  type TugasPanitia,
   subKegiatanBaru,
   type CekPok,
   type FormTahap,
@@ -763,6 +769,7 @@ function jawabanAwal(kode: KodeTahap, j: Record<string, unknown> | null): Record
   if (kode === "pendataan") return bacaJawabanPendataan(j) as unknown as Record<string, unknown>;
   const out: Jawaban = {};
   for (const [k, v] of Object.entries(j ?? {})) if (v === null || ["string", "number", "boolean"].includes(typeof v)) out[k] = v as Nilai;
+  if (kode === "pelatihan") return { ...out, susunan: bacaSusunan(j?.susunan) };
   return out;
 }
 
@@ -806,11 +813,13 @@ function DetailTahap({
   };
 
   const jp = kode === "pendataan" ? bacaJawabanPendataan(draf) : null;
+  const susunan = kode === "pelatihan" ? bacaSusunan(draf.susunan) : null;
   const efektif = form ? jawabanEfektif(form, draf as Jawaban) : null;
-  const kurang: string[] = jp ? periksaPendataan(jp) : form ? belumDijawab(form, draf as Jawaban).map((p) => p.label) : [];
-  const paket = jp ? paketPendataan(jp) : form ? paketDariForm(form, draf as Jawaban) : [];
+  const kurang: string[] = jp ? periksaPendataan(jp) : form ? [...belumDijawab(form, draf as Jawaban).map((p) => p.label), ...(susunan ? periksaSusunan(susunan) : [])] : [];
+  const paket = jp ? paketPendataan(jp) : form ? paketTahap(kode, draf) : [];
   const modul = form ? modulDariForm(form, draf as Jawaban) : ["Penugasan & wilayah tugas petugas", "Monitoring progres lapangan", "Pemeriksaan dokumen"];
-  const normal = (x: Record<string, unknown>): unknown => (kode === "pendataan" ? bacaJawabanPendataan(x) : form ? jawabanEfektif(form, x as Jawaban) : x);
+  const normal = (x: Record<string, unknown>): unknown =>
+    kode === "pendataan" ? bacaJawabanPendataan(x) : form ? [jawabanEfektif(form, x as Jawaban), kode === "pelatihan" ? bacaSusunan(x.susunan) : null] : x;
   const adaDraf = JSON.stringify(normal(draf)) !== JSON.stringify(normal(tersimpan));
 
   // Cek ke POK: akun yang sudah dialokasikan ke kegiatan ini vs akun yang ada di POK RO.
@@ -830,9 +839,9 @@ function DetailTahap({
       setInfo(null);
       return;
     }
-    const j = jp ? (JSON.parse(JSON.stringify(jp)) as Record<string, unknown>) : { ...efektif };
+    const j = jp ? (JSON.parse(JSON.stringify(jp)) as Record<string, unknown>) : susunan ? { ...efektif, susunan: JSON.parse(JSON.stringify(susunan)) } : { ...efektif };
     tulis(j);
-    setDraf(jp ? j : (efektif as Record<string, unknown>));
+    setDraf(jp || susunan ? j : (efektif as Record<string, unknown>));
     setCoba(false);
     setTunda(null);
     setInfo(`Identifikasi ${t.nama.toLowerCase()} tersimpan. ${paket.length} paket administrasi.`);
@@ -880,7 +889,10 @@ function DetailTahap({
           {jp ? (
             <FormPendataan nilai={jp} ubah={(j) => ubahDraf(j as unknown as Record<string, unknown>)} tandai={coba} />
           ) : form ? (
-            <FormIdentifikasi form={form} nilai={draf as Jawaban} ubah={(j) => ubahDraf(j)} tandai={coba} />
+            <>
+              <FormIdentifikasi form={form} nilai={draf as Jawaban} ubah={(j) => ubahDraf(j)} tandai={coba} />
+              {susunan && <FormSusunan nilai={susunan} ubah={(x) => ubahDraf({ ...draf, susunan: x })} tandai={coba} />}
+            </>
           ) : (
             <Kartu judul="Belum ada form">
               <ul className="grid gap-1.5 text-[13px] text-[#14202E] sm:grid-cols-2">
@@ -1152,6 +1164,189 @@ function FormIdentifikasi({ form, nilai, ubah, tandai }: { form: FormTahap; nila
             </Baris>
           );
         })}
+      </div>
+    </Kartu>
+  );
+}
+
+// ---------------------------------------------------------------- Pelatihan: susunan kelas & panitia
+// (11 Okt 2026, 17.28) Permintaan user: identifikasi kelas, petugas + jabatannya, panitia, instruktur.
+function FormSusunan({ nilai, ubah, tandai }: { nilai: SusunanPelatihan; ubah: (s: SusunanPelatihan) => void; tandai: boolean }) {
+  const [jabBaru, setJabBaru] = useState("");
+  const r = ringkasSusunan(nilai);
+  const gantiKelas = (id: string, k: Partial<SusunanPelatihan["kelas"][number]>) => ubah({ ...nilai, kelas: nilai.kelas.map((x) => (x.id === id ? { ...x, ...k } : x)) });
+  const tambahJabatan = () => {
+    const j = jabBaru.trim();
+    if (!j || nilai.jabatan.some((x) => x.toLowerCase() === j.toLowerCase())) return setJabBaru("");
+    ubah({ ...nilai, jabatan: [...nilai.jabatan, j], kelas: nilai.kelas.map((k) => ({ ...k, peserta: { ...k.peserta, [j]: null } })) });
+    setJabBaru("");
+  };
+  const hapusJabatan = (j: string) =>
+    ubah({
+      ...nilai,
+      jabatan: nilai.jabatan.filter((x) => x !== j),
+      kelas: nilai.kelas.map((k) => {
+        const p = { ...k.peserta };
+        delete p[j];
+        return { ...k, peserta: p };
+      }),
+    });
+  const ringkas = [
+    `${r.kelas} kelas`,
+    ...nilai.jabatan.map((j) => `${j} ${r.perJabatan[j] ?? 0}`),
+    `${r.instruktur} instruktur${r.instrukturBelum ? ` (${r.instrukturBelum} kelas belum ditentukan)` : ""}`,
+    `${r.panitia} panitia`,
+  ].join(" · ");
+
+  return (
+    <Kartu judul="Susunan kelas & panitia" ket={ringkas}>
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="mb-1.5 text-[13px] font-semibold text-[#14202E]">Jabatan petugas peserta</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {nilai.jabatan.map((j) => (
+              <span key={j} className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-[#D5DEEA] bg-white pl-2.5 pr-1 text-[12.5px] font-semibold text-[#33445C]">
+                {j}
+                {nilai.jabatan.length > 1 && (
+                  <button type="button" aria-label={`Hapus jabatan ${j}`} className="flex h-6 w-6 items-center justify-center rounded text-[#9AA7B6] hover:bg-[#FDE8E8] hover:text-[#B42329]" onClick={() => hapusJabatan(j)}>
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            <input
+              className={`${INPUT} w-36`}
+              aria-label="Jabatan baru"
+              placeholder="mis. Koseka"
+              value={jabBaru}
+              onChange={(e) => setJabBaru(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  tambahJabatan();
+                }
+              }}
+            />
+            <button type="button" className={BTN_O} onClick={tambahJabatan} disabled={!jabBaru.trim()}>
+              + Jabatan
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-[13px] font-semibold text-[#14202E]">Kelas, instruktur & jumlah petugas</p>
+          {nilai.kelas.length === 0 ? (
+            <p className={`text-[13px] ${tandai ? "text-[#B42329]" : "text-[#6B7A90]"}`}>Belum ada kelas.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-[12.5px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Kelas</th>
+                    <th className={TH}>Instruktur</th>
+                    {nilai.jabatan.map((j) => (
+                      <th key={j} className={`${TH} text-right`}>
+                        {j}
+                      </th>
+                    ))}
+                    <th className={TH} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {nilai.kelas.map((k, i) => (
+                    <tr key={k.id}>
+                      <td className={TD}>
+                        <input className={`${INPUT} w-28 ${tandai && !k.nama.trim() ? "border-[#E07070]" : ""}`} aria-label={`Nama kelas ${i + 1}`} value={k.nama} onChange={(e) => gantiKelas(k.id, { nama: e.target.value })} />
+                      </td>
+                      <td className={TD}>
+                        <input className={`${INPUT} w-full min-w-[150px]`} aria-label={`Instruktur kelas ${i + 1}`} placeholder="boleh menyusul" value={k.instruktur} onChange={(e) => gantiKelas(k.id, { instruktur: e.target.value })} />
+                      </td>
+                      {nilai.jabatan.map((j) => (
+                        <td key={j} className={`${TD} text-right`}>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            aria-label={`Jumlah ${j} kelas ${i + 1}`}
+                            className={`${INPUT} w-20 text-right ${tandai && (k.peserta[j] === null || k.peserta[j] === undefined) ? "border-[#E07070]" : ""}`}
+                            value={k.peserta[j] ?? ""}
+                            onChange={(e) => gantiKelas(k.id, { peserta: { ...k.peserta, [j]: e.target.value === "" ? null : Math.max(0, Math.floor(Number(e.target.value))) } })}
+                          />
+                        </td>
+                      ))}
+                      <td className={`${TD} text-right`}>
+                        <button type="button" className="text-[12px] font-semibold text-[#B42329] underline" onClick={() => ubah({ ...nilai, kelas: nilai.kelas.filter((x) => x.id !== k.id) })}>
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td className={`${TD} font-bold`} colSpan={2}>
+                      Jumlah petugas
+                    </td>
+                    {nilai.jabatan.map((j) => (
+                      <td key={j} className={`${TD} text-right font-bold`}>
+                        {r.perJabatan[j] ?? 0}
+                      </td>
+                    ))}
+                    <td className={`${TD} text-right font-bold`}>{r.peserta}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          <button type="button" className={`${BTN_O} mt-2`} onClick={() => ubah({ ...nilai, kelas: [...nilai.kelas, kelasBaru(idAcak("kls"), nilai.kelas.length + 1, nilai.jabatan)] })}>
+            + Tambah kelas
+          </button>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-[13px] font-semibold text-[#14202E]">Panitia</p>
+          {nilai.panitia.length === 0 && <p className="text-[13px] text-[#6B7A90]">Belum ada panitia. Kosongkan bila pelatihan tanpa panitia.</p>}
+          <div className="flex flex-col gap-2">
+            {nilai.panitia.map((p, i) => (
+              <div key={p.id} className="flex flex-wrap items-center gap-2">
+                <input
+                  className={`${INPUT} min-w-[180px] flex-1 ${tandai && !p.nama.trim() ? "border-[#E07070]" : ""}`}
+                  aria-label={`Nama panitia ${i + 1}`}
+                  placeholder="Nama panitia"
+                  value={p.nama}
+                  onChange={(e) => ubah({ ...nilai, panitia: nilai.panitia.map((x) => (x.id === p.id ? { ...x, nama: e.target.value } : x)) })}
+                />
+                <select
+                  className={`${INPUT} w-36`}
+                  aria-label={`Tugas panitia ${i + 1}`}
+                  value={p.tugas}
+                  onChange={(e) => ubah({ ...nilai, panitia: nilai.panitia.map((x) => (x.id === p.id ? { ...x, tugas: e.target.value as TugasPanitia } : x)) })}
+                >
+                  {TUGAS_PANITIA.map((t) => (
+                    <option key={t.nilai} value={t.nilai}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="text-[12px] font-semibold text-[#B42329] underline" onClick={() => ubah({ ...nilai, panitia: nilai.panitia.filter((x) => x.id !== p.id) })}>
+                  Hapus
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`${BTN_O} mt-2`}
+            onClick={() => ubah({ ...nilai, panitia: [...nilai.panitia, { id: idAcak("pan"), nama: "", tugas: nilai.panitia.length === 0 ? "ketua" : "anggota" }] })}
+          >
+            + Tambah panitia
+          </button>
+          {nilai.panitia.length > 0 && (
+            <div className="mt-3">
+              <Baris label="Panitia diberi honor (SK)?" bantuan="Ya = paket honor tim pelaksana 521213-A.">
+                <Segmen label="Honor panitia" nilai={nilai.honorPanitia} pilihan={YT} ubah={(v) => ubah({ ...nilai, honorPanitia: v })} salah={tandai && nilai.honorPanitia === null} />
+              </Baris>
+            </div>
+          )}
+        </div>
       </div>
     </Kartu>
   );

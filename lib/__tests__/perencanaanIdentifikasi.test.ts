@@ -15,6 +15,11 @@ import {
   pertanyaanTampil,
   pilihanTampil,
   sisipkanSub,
+  susunanKosong,
+  kelasBaru,
+  periksaSusunan,
+  ringkasSusunan,
+  bacaSusunan,
   subKegiatanBaru,
   type Jawaban,
 } from "../perencanaanIdentifikasi";
@@ -59,7 +64,7 @@ test("daring: lokasi/tempat/konsumsi disembunyikan dan jawaban lamanya dibuang",
   expect(ef.lokasi).toBeUndefined();
   expect(ef.tempat).toBeUndefined();
   expect(ef.konsumsi).toBeUndefined();
-  expect(pertanyaanTampil(P, { jenis: "daring" }).map((x) => x.p.kode)).toEqual(["jenis", "peserta", "pulsa", "honor_instruktur", "narasumber", "jml_ppl", "jml_pml", "jml_instruktur", "jml_kelas", "jml_hari", "jml_jp"]);
+  expect(pertanyaanTampil(P, { jenis: "daring" }).map((x) => x.p.kode)).toEqual(["jenis", "peserta", "pulsa", "honor_instruktur", "narasumber", "jml_hari", "jml_jp"]);
 });
 
 test("paket pelatihan sesuai lokasi/tempat/peserta", () => {
@@ -90,8 +95,29 @@ test("pulsa daring: pilihan mengikuti peserta; organik saja otomatis tidak", () 
   expect(kode({ jenis: "daring", peserta: "keduanya", pulsa: "tidak" })).toEqual([]);
 });
 
+test("susunan kelas & panitia: ringkasan, pemeriksaan, paket honor panitia", () => {
+  const s = susunanKosong();
+  expect(periksaSusunan(s)).toEqual(["Susunan kelas: tambahkan minimal satu kelas."]);
+  s.jabatan.push("Koseka");
+  s.kelas = [kelasBaru("k1", 1, s.jabatan), kelasBaru("k2", 2, s.jabatan)];
+  expect(periksaSusunan(s)[0]).toBe("Kelas 1: jumlah PPL, PML, Koseka belum diisi (isi 0 bila tidak ada).");
+  s.kelas[0].peserta = { PPL: 20, PML: 5, Koseka: 0 };
+  s.kelas[0].instruktur = "Nurafiza";
+  s.kelas[1].peserta = { PPL: 22, PML: 5, Koseka: 1 };
+  expect(periksaSusunan(s)).toEqual([]);
+  expect(ringkasSusunan(s)).toEqual({ kelas: 2, perJabatan: { PPL: 42, PML: 10, Koseka: 1 }, peserta: 53, instruktur: 1, instrukturBelum: 1, panitia: 0 });
+  s.panitia = [{ id: "p1", nama: "Oryza", tugas: "ketua" }];
+  expect(periksaSusunan(s)).toEqual(["Panitia: honor (SK) belum dijawab."]);
+  s.honorPanitia = true;
+  const j = { jenis: "luring", peserta: "mitra", lokasi: "dalam", tempat: "kantor", susunan: s } as unknown as Record<string, unknown>;
+  expect(paketTahap("pelatihan", j).map((x) => x.kode)).toContain("521213-A");
+  // dibaca ulang dari JSON tetap sama; data rusak -> kosong dengan jabatan bawaan
+  expect(bacaSusunan(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  expect(bacaSusunan("x")).toEqual(susunanKosong());
+});
+
 test("belumDijawab: otomatis & angka opsional tidak diminta", () => {
-  const j: Jawaban = { jenis: "luring", peserta: "mitra", lokasi: "luar", paket_meeting: "fullboard", bahan: true, honor_instruktur: true, narasumber: false, jml_ppl: 30, jml_pml: 10, jml_instruktur: 2, jml_kelas: 2, jml_hari: 3 };
+  const j: Jawaban = { jenis: "luring", peserta: "mitra", lokasi: "luar", paket_meeting: "fullboard", bahan: true, honor_instruktur: true, narasumber: false, jml_hari: 3 };
   expect(belumDijawab(P, j)).toEqual([]);
   expect(belumDijawab(P, { ...j, jml_hari: null }).map((p) => p.kode)).toEqual(["jml_hari"]);
   expect(belumDijawab(P, {}).map((p) => p.kode)[0]).toBe("jenis");
