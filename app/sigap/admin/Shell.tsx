@@ -14,8 +14,9 @@ import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola">;
+// (11 Okt 2026) + "perencanaan" (uji coba Perencanaan kegiatan: RO -> kegiatan utama -> tahap GSBPM; /sigap/kelola/perencanaan)
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
@@ -230,6 +231,8 @@ export default function Shell({
   // (11 Okt 2026) Pendataan keroyokan PPL/PML -- permintaan user (lembar petugas lewat tahap Pendataan di Beranda; sidebar desktop hanya memuat menu admin unggah, karena unggah CSV dari laptop)
   const bolehPendataanKelola = ringkas.izin["bencana.admin"]?.level === "kelola";
   const bolehAplikasi = ringkas.izin["portal.kelola"]?.level === "kelola" || ringkas.izin["translok.kegiatan"]?.level === "kelola";
+  // (11 Okt 2026) Uji coba Perencanaan kegiatan (GSBPM per RO) -- hanya Admin Aplikasi, keputusan user
+  const bolehPerencanaan = ringkas.izin["portal.kelola"]?.level === "kelola";
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
@@ -242,6 +245,7 @@ export default function Shell({
     if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
     if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/kelola/pelatihan") });
     if (bolehPendataanKelola) out.push({ id: "m-pendataan-unggah", grup: "Menu", label: "Pendataan › Unggah daftar KK (CSV FASIH)", jalankan: () => (window.location.href = "/sigap/kelola/pendataan") });
+    if (bolehPerencanaan) out.push({ id: "m-perencanaan", grup: "Menu", label: "Perencanaan kegiatan (uji coba)", ket: "RO → kegiatan utama → tahap GSBPM", jalankan: () => (window.location.href = "/sigap/kelola/perencanaan") });
     if (bolehAplikasi) out.push({ id: "m-aplikasi", grup: "Menu", label: "Kelola aplikasi, admin & periode", jalankan: () => (window.location.href = "/sigap/kelola/aplikasi") });
     if (bolehDelego) out.push({ id: "m-delego", grup: "Menu", label: "Delego", ket: "aplikasi delegasi kerja", jalankan: () => (window.location.href = "/sigap/kelola/delego") });
     if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/kelola/akses") });
@@ -251,7 +255,7 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehDelego, bolehPendataanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehPerencanaan, bolehDelego, bolehPendataanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -278,6 +282,7 @@ export default function Shell({
           <ItemNav mini={mini} ikon="beranda" label="Beranda" aktif={aktif === "beranda"} onClick={() => pindahMenu("beranda")} />
 
           <LabelGrup mini={mini}>Perencanaan</LabelGrup>
+          {bolehPerencanaan && <ItemNav mini={mini} ikon="panel" label="Perencanaan kegiatan" href="/sigap/kelola/perencanaan" aktif={aktif === "perencanaan"} title="Uji coba: RO anggaran → kegiatan utama → tahap GSBPM" />}
           <ItemNav mini={mini} ikon="buku" label="RAB / POK" segera />
           <ItemNav mini={mini} ikon="revisi" label="Revisi anggaran" segera />
 
