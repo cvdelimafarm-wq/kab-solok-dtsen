@@ -106,9 +106,11 @@ export function definisiTahap(kode: string): DefinisiTahap | null {
 
 export type IsianTahap = {
   dipakai: boolean;
-  /** Jawaban identifikasi (form menyusul); null = belum diidentifikasi. */
+  /** Jawaban identifikasi (lib/perencanaanIdentifikasi.ts); null = belum diidentifikasi. */
   jawaban: Record<string, unknown> | null;
   diubah: string | null;
+  /** (11 Okt 2026) Nama pengisi terakhir identifikasi (admin/pengelola kegiatan/ketua tim). */
+  oleh?: string | null;
 };
 
 export type Ro = {

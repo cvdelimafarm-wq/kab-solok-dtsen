@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adaAktivitas, agregatAkhir, alasanAnomali, daftarTim, geserTanggal, jumlahAgregat, jumlahBerhasil, periksaRentang, ringkas, SARINGAN_AWAL, saring, statusLapangan, statusTranslok, urutkan, type BarisLapangan } from "@/lib/lapangan";
+import { adaAktivitas, agregatAkhir, kkDihitung, alasanAnomali, daftarTim, geserTanggal, jumlahAgregat, jumlahBerhasil, periksaRentang, ringkas, SARINGAN_AWAL, saring, statusLapangan, statusTranslok, urutkan, type BarisLapangan } from "@/lib/lapangan";
 import { ATURAN_BAWAAN } from "@/lib/sigap";
 
 // (11 Okt 2026) Uji aturan Monitoring Lapangan: jumlah berhasil, status lapangan/translok, saringan, ringkasan.
@@ -29,9 +29,16 @@ describe("statusLapangan", () => {
     expect(statusLapangan(x)).toBe("belum");
     expect(adaAktivitas(x)).toBe(true);
   });
-  it("PML yang ikut mendata KK tercatat pendataan; identifikasi didahulukan", () => {
-    expect(statusLapangan(b({ peran: "pml", kk_berhasil: 5 }))).toBe("pendataan");
+  it("KK yang ditandai PML tidak dihitung; ukuran PML hanya Sub SLS", () => {
+    expect(statusLapangan(b({ peran: "pml", kk_berhasil: 5 }))).toBe("belum");
     expect(statusLapangan(b({ peran: "pml", kk_berhasil: 5, sub_idf: 2 }))).toBe("identifikasi");
+    expect(kkDihitung(b({ peran: "pml", kk_berhasil: 5 }))).toBe(0);
+    expect(kkDihitung(b({ peran: "ppl", kk_berhasil: 5 }))).toBe(5);
+  });
+  it("PML yang hanya menandai KK tetap dianggap beraktivitas (bukan anomali palsu)", () => {
+    const x = b({ peran: "pml", kk_berhasil: 2, hari_kerja: true, ada_laporan: true, jumlah_foto: 5 });
+    expect(adaAktivitas(x)).toBe(true);
+    expect(statusTranslok(x, A)).toBe("lengkap");
   });
   it("PPL tidak punya identifikasi", () => {
     expect(statusLapangan(b({ sub_idf: 4 }))).toBe("belum");
@@ -74,6 +81,25 @@ describe("statusTranslok", () => {
   });
 });
 
+describe("korwil", () => {
+  const k = (o: Partial<BarisLapangan> = {}) => b({ peran: "korwil", pml_id: null, pml_nama: null, ...o });
+  it("hari kerja tanpa hasil bukan anomali bagi korwil", () => {
+    expect(statusTranslok(k({ hari_kerja: true }), A)).toBe("sebagian");
+    expect(statusTranslok(k({ hari_kerja: true, ada_laporan: true, jumlah_foto: 5 }), A)).toBe("lengkap");
+  });
+  it("korwil tanpa klaim, dan dokumen tanpa hari kerja tetap anomali", () => {
+    expect(statusTranslok(k(), A)).toBe("tidak_ada");
+    expect(statusTranslok(k({ ada_laporan: true }), A)).toBe("anomali");
+  });
+  it("saringan peran korwil dan label satuan KK", () => {
+    const d = [k({ akun_id: 50 }), b({ akun_id: 1 }), b({ akun_id: 10, peran: "pml" })];
+    expect(saring(d, { ...SARINGAN_AWAL, peran: "korwil" }, A)).toHaveLength(1);
+    expect(jumlahBerhasil(k({ kk_berhasil: 3 }))).toBe(3);
+    expect(jumlahAgregat(k({ agg_kk: 8 }))).toBe(8);
+    expect(statusLapangan(k({ kk_berhasil: 2 }))).toBe("pendataan");
+  });
+});
+
 describe("saring, urutkan, ringkas", () => {
   const data = [
     b({ akun_id: 1, nama: "Rina Amelia", tanggal: "2026-10-10", kk_berhasil: 5, hari_kerja: true, ada_laporan: true, jumlah_foto: 5 }),
@@ -111,6 +137,7 @@ describe("saring, urutkan, ringkas", () => {
     expect(r.orang_berhasil).toBe(3);
     expect(r.sub_idf).toBe(3);
     expect(r.kk_berhasil).toBe(7);
+    expect(r.kk_oleh_pml).toBe(0);
     expect(r.belum_ada_hasil).toBe(1);
     expect(r.translok.lengkap).toBe(1);
     expect(r.translok.anomali).toBe(2); // Budi & Ilham: ada hasil tanpa hari kerja

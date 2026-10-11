@@ -13,6 +13,7 @@ import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import type { AturanIsian } from "@/lib/sigap";
 import {
   LABEL_LAPANGAN,
+  LABEL_PERAN,
   LABEL_STATUS_LAPANGAN,
   LABEL_STATUS_TRANSLOK,
   SARINGAN_AWAL,
@@ -22,6 +23,7 @@ import {
   geserTanggal,
   jumlahAgregat,
   jumlahBerhasil,
+  kkDihitung,
   ringkas,
   saring,
   statusLapangan,
@@ -121,12 +123,13 @@ export default function MonitoringLapangan() {
       const baris = tertata.map((b) => ({
         Tanggal: b.tanggal,
         Nama: b.nama,
-        Peran: b.peran.toUpperCase(),
+        Peran: LABEL_PERAN[b.peran],
         "Tim (PML)": b.pml_nama ?? "",
         "Status lapangan": LABEL_STATUS_LAPANGAN[statusLapangan(b)],
         "Sub SLS diidentifikasi": b.peran === "pml" ? b.sub_idf : "",
-        "KK berhasil (terdampak + tidak terdampak)": b.kk_berhasil,
-        "KK tidak ditemukan": b.kk_tdk_ditemukan,
+        "KK berhasil (terdampak + tidak terdampak)": b.peran === "pml" ? "" : b.kk_berhasil,
+        "KK tidak ditemukan": b.peran === "pml" ? "" : b.kk_tdk_ditemukan,
+        "KK ditandai PML (tidak dihitung)": b.peran === "pml" ? b.kk_berhasil : "",
         "Agregat s.d. tanggal ini": jumlahAgregat(b),
         "Satuan agregat": LABEL_LAPANGAN[b.peran].satuan,
         "Hari kerja": b.hari_kerja ? "Ya" : "Tidak",
@@ -149,7 +152,7 @@ export default function MonitoringLapangan() {
     </button>
   );
   const kartu = "rounded-[16px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]";
-  const kolom = "grid grid-cols-[84px_minmax(150px,1.3fr)_52px_minmax(110px,1fr)_130px_84px_84px_96px_64px_64px_56px_104px] items-center gap-x-3";
+  const kolom = "grid grid-cols-[84px_minmax(150px,1.3fr)_64px_minmax(110px,1fr)_130px_84px_84px_96px_64px_64px_56px_104px] items-center gap-x-3";
   const th = "text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]";
 
   return (
@@ -182,6 +185,7 @@ export default function MonitoringLapangan() {
                     <option value="semua">Semua</option>
                     <option value="pml">PML</option>
                     <option value="ppl">PPL</option>
+                    <option value="korwil">Korwil</option>
                   </select>
                 </label>
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
@@ -258,6 +262,7 @@ export default function MonitoringLapangan() {
                 <small className="mt-1 block text-[11.5px] text-[#6B7A90]">
                   agregat PPL s.d. akhir rentang: {fmt(agr.kk)}
                   {ringk.kk_tdk_ditemukan > 0 && ` · ${fmt(ringk.kk_tdk_ditemukan)} tidak ditemukan`}
+                  {ringk.kk_oleh_pml > 0 && ` · ${fmt(ringk.kk_oleh_pml)} KK ditandai PML (tidak dihitung)`}
                 </small>
               </div>
               <div className={ringk.translok.anomali > 0 ? "rounded-[16px] bg-[#FDE8E8] p-4" : kartu}>
@@ -293,13 +298,13 @@ export default function MonitoringLapangan() {
                     <div key={`${b.akun_id}-${b.tanggal}`} className={`${kolom} min-h-[44px] border-b border-[#EEF2F7] px-5 py-1.5 text-[13px]`}>
                       <span className="text-[#55657D]">{tgl(b.tanggal)}</span>
                       <span className="truncate font-bold text-[#0F2A52]" title={b.nama}>{b.nama}</span>
-                      <span className="text-[11.5px] font-extrabold text-[#55657D]">{b.peran.toUpperCase()}</span>
+                      <span className="text-[11.5px] font-extrabold text-[#55657D]">{LABEL_PERAN[b.peran]}</span>
                       <span className="truncate text-[#55657D]" title={b.pml_nama ?? ""}>{b.pml_nama ?? "–"}</span>
                       <span className={`text-[12.5px] font-bold ${sl === "belum" ? "text-[#8A97AB]" : sl === "identifikasi" ? "text-[#12618F]" : "text-[#13794B]"}`}>{LABEL_STATUS_LAPANGAN[sl]}</span>
                       <span className="text-right font-extrabold text-[#0F2A52]">{b.peran === "pml" ? (b.sub_idf || "–") : "–"}</span>
-                      <span className="text-right font-extrabold text-[#0F2A52]">
-                        {b.kk_berhasil || "–"}
-                        {b.kk_tdk_ditemukan > 0 && <small className="block text-[10.5px] font-semibold text-[#8A97AB]">+{b.kk_tdk_ditemukan} tdk ditemukan</small>}
+                      <span className="text-right font-extrabold text-[#0F2A52]" title={b.peran === "pml" && b.kk_berhasil > 0 ? `PML menandai ${b.kk_berhasil} KK di Lembar Pendataan (tidak dihitung di sini)` : undefined}>
+                        {kkDihitung(b) || "–"}
+                        {b.peran !== "pml" && b.kk_tdk_ditemukan > 0 && <small className="block text-[10.5px] font-semibold text-[#8A97AB]">+{b.kk_tdk_ditemukan} tdk ditemukan</small>}
                       </span>
                       <span className="text-right text-[#55657D]" title={`Kumulatif ${LABEL_LAPANGAN[b.peran].satuan} sampai ${b.tanggal}`}>
                         {fmt(jumlahAgregat(b))} <small className="text-[10.5px] text-[#8A97AB]">{LABEL_LAPANGAN[b.peran].satuan}</small>
@@ -329,7 +334,7 @@ export default function MonitoringLapangan() {
             </div>
 
             <div className="mt-4 rounded-[16px] bg-white p-4 text-[12.5px] leading-snug text-[#55657D] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
-              <b className="text-[#0F2A52]">Cara membaca.</b> <b>Sub SLS diidentifikasi</b> (PML): Sub SLS yang hasilnya diisi PML pada tanggal itu. <b>KK berhasil</b> (PPL; PML yang ikut mendata juga tercatat): KK dengan hasil terdampak atau tidak terdampak pada tanggal itu; &quot;tidak ditemukan&quot; tidak dihitung. <b>Agregat</b>: jumlah kumulatif orang itu dari awal sampai tanggal baris, tidak terpengaruh saringan tanggal. <b>Translok</b> ({data.kegiatan?.nama ?? "kegiatan Pendataan"}): hari kerja dipilih, laporan harian{aturan.wajib_laporan ? "" : " (tidak wajib)"}, dan {aturan.jumlah_foto} foto. <b>Lengkap</b> = hari kerja + hasil + laporan + foto sesuai aturan; <b>Sebagian</b> = hari kerja dan hasil ada tetapi laporan/foto belum lengkap; <b>Anomali</b> = ada hasil, laporan, atau foto tanpa hari kerja, atau hari kerja tanpa hasil lapangan (hari berjalan bisa tampil anomali sementara hasil belum masuk); <b>Tidak ada klaim</b> = tidak ada hari kerja dan tidak ada hasil. Penandaan di HP yang belum terkirim belum masuk hitungan. Hanya jumlah yang ditampilkan; nama KK tidak muncul di halaman ini.
+              <b className="text-[#0F2A52]">Cara membaca.</b> <b>Sub SLS diidentifikasi</b> (PML): Sub SLS yang hasilnya diisi PML pada tanggal itu. <b>KK berhasil</b> (PPL dan korwil; penandaan KK oleh PML tidak dihitung): KK dengan hasil terdampak atau tidak terdampak pada tanggal itu; &quot;tidak ditemukan&quot; tidak dihitung. <b>Agregat</b>: jumlah kumulatif orang itu dari awal sampai tanggal baris, tidak terpengaruh saringan tanggal. <b>Translok</b> ({data.kegiatan?.nama ?? "kegiatan Pendataan"}): hari kerja dipilih, laporan harian{aturan.wajib_laporan ? "" : " (tidak wajib)"}, dan {aturan.jumlah_foto} foto. <b>Lengkap</b> = hari kerja + hasil + laporan + foto sesuai aturan; <b>Sebagian</b> = hari kerja dan hasil ada tetapi laporan/foto belum lengkap; <b>Anomali</b> = ada hasil, laporan, atau foto tanpa hari kerja, atau hari kerja tanpa hasil lapangan (hari berjalan bisa tampil anomali sementara hasil belum masuk); <b>Tidak ada klaim</b> = tidak ada hari kerja dan tidak ada hasil. Penandaan di HP yang belum terkirim belum masuk hitungan. <b>Korwil</b> = pegawai organik (selain PML organik) yang mengoordinasi wilayah; hari kerja tanpa hasil lapangan tidak dianggap anomali bagi korwil. Hanya jumlah yang ditampilkan; nama KK tidak muncul di halaman ini.
             </div>
           </>
         )}

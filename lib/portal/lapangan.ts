@@ -23,7 +23,7 @@ export async function monitoringLapangan(db: Db, dari: string | null, sampai: st
   const baris: BarisLapangan[] = ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     akun_id: n(r.akun_id),
     nama: String(r.nama ?? ""),
-    peran: r.peran === "pml" ? "pml" : "ppl",
+    peran: r.peran === "pml" ? "pml" : r.peran === "korwil" ? "korwil" : "ppl",
     pml_id: r.pml_id == null ? null : n(r.pml_id),
     pml_nama: r.pml_nama == null ? null : String(r.pml_nama),
     tanggal: String(r.tanggal ?? "").slice(0, 10),

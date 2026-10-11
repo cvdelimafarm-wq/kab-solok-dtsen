@@ -9,7 +9,7 @@
 
 import { hariLengkap, type AturanIsian } from "@/lib/sigap";
 
-export type PeranLapangan = "pml" | "ppl";
+export type PeranLapangan = "pml" | "ppl" | "korwil"; // korwil = pegawai organik (bukan PML/PPL) yang bertindak sebagai koordinator wilayah
 
 /** Satu baris hasil fungsi database (orang × tanggal). */
 export type BarisLapangan = {
@@ -35,7 +35,9 @@ export type StatusTranslok = "lengkap" | "sebagian" | "anomali" | "tidak_ada";
 export const LABEL_LAPANGAN: Record<PeranLapangan, { hasil: string; satuan: string }> = {
   pml: { hasil: "Identifikasi", satuan: "Sub SLS" },
   ppl: { hasil: "Pendataan", satuan: "KK" },
+  korwil: { hasil: "Pendataan", satuan: "KK" },
 };
+export const LABEL_PERAN: Record<PeranLapangan, string> = { pml: "PML", ppl: "PPL", korwil: "Korwil" };
 export const LABEL_STATUS_TRANSLOK: Record<StatusTranslok, string> = {
   lengkap: "Lengkap",
   sebagian: "Sebagian",
@@ -54,9 +56,17 @@ export function jumlahAgregat(b: Pick<BarisLapangan, "peran" | "agg_sub" | "agg_
 
 export const LABEL_STATUS_LAPANGAN: Record<StatusLapangan, string> = { identifikasi: "Ada identifikasi", pendataan: "Ada pendataan", belum: "Belum ada hasil" };
 
-/** PML dengan Sub SLS diidentifikasi = identifikasi; siapa pun (PPL, atau PML yang ikut mendata) dengan KK berhasil = pendataan. */
+/**
+ * KK berhasil yang DIHITUNG: PML tidak (ukuran PML hanya Sub SLS diidentifikasi -- keputusan user 11 Okt 2026).
+ * Penandaan KK oleh PML di Lembar Pendataan tetap tersimpan, hanya tidak masuk angka Monitoring Lapangan.
+ */
+export function kkDihitung(b: Pick<BarisLapangan, "peran" | "kk_berhasil">): number {
+  return b.peran === "pml" ? 0 : b.kk_berhasil;
+}
+
+/** PML = identifikasi bila ada Sub SLS diidentifikasi; PPL/korwil = pendataan bila ada KK berhasil. */
 export function statusLapangan(b: BarisLapangan): StatusLapangan {
-  if (b.peran === "pml" && b.sub_idf > 0) return "identifikasi";
+  if (b.peran === "pml") return b.sub_idf > 0 ? "identifikasi" : "belum";
   return b.kk_berhasil > 0 ? "pendataan" : "belum";
 }
 
@@ -68,12 +78,17 @@ export function adaAktivitas(b: BarisLapangan): boolean {
 /**
  * Status translok satu baris (mengikuti mockup yang dilihat user):
  *  - tidak_ada : tanpa hari kerja, tanpa laporan/foto, tanpa hasil lapangan.
- *  - anomali   : ada hasil lapangan/laporan/foto tanpa hari kerja dipilih, ATAU hari kerja dipilih tetapi tidak ada hasil lapangan sama sekali.
+ *  - anomali   : ada hasil lapangan/laporan/foto tanpa hari kerja dipilih, ATAU hari kerja dipilih tetapi tidak ada hasil lapangan sama sekali (korwil dikecualikan: hari kerja tanpa hasil tetap wajar).
  *  - sebagian  : hari kerja dipilih, ada hasil, tetapi laporan/foto belum memenuhi aturan kegiatan.
  *  - lengkap   : hari kerja dipilih, ada hasil, laporan + foto memenuhi aturan kegiatan.
  */
 export function statusTranslok(b: BarisLapangan, aturan: AturanIsian): StatusTranslok {
   const aktif = adaAktivitas(b);
+  // Korwil mengoordinasi/mengawasi: hasil lapangan tidak diwajibkan, jadi hari kerja tanpa hasil bukan anomali
+  if (b.peran === "korwil") {
+    if (!b.hari_kerja) return aktif || b.ada_laporan || b.jumlah_foto > 0 ? "anomali" : "tidak_ada";
+    return hariLengkap(b.ada_laporan, b.jumlah_foto, aturan) ? "lengkap" : "sebagian";
+  }
   if (!b.hari_kerja) return aktif || b.ada_laporan || b.jumlah_foto > 0 ? "anomali" : "tidak_ada";
   if (!aktif) return "anomali";
   return hariLengkap(b.ada_laporan, b.jumlah_foto, aturan) ? "lengkap" : "sebagian";
@@ -132,21 +147,23 @@ export type RingkasLapangan = {
   orang: number;
   orang_berhasil: number; // orang yang punya hasil minimal sekali pada baris tersaring
   sub_idf: number; // jumlah Sub SLS diidentifikasi (PML)
-  kk_berhasil: number; // jumlah KK terdampak + tidak terdampak (PPL)
+  kk_berhasil: number; // jumlah KK terdampak + tidak terdampak (PPL dan korwil; penandaan oleh PML tidak dihitung)
+  kk_oleh_pml: number; // KK berhasil yang ditandai PML (tidak dihitung, sekadar info)
   kk_tdk_ditemukan: number;
   translok: Record<StatusTranslok, number>;
   belum_ada_hasil: number; // baris tanpa hasil
 };
 
 export function ringkas(baris: BarisLapangan[], aturan: AturanIsian): RingkasLapangan {
-  const r: RingkasLapangan = { baris: baris.length, orang: 0, orang_berhasil: 0, sub_idf: 0, kk_berhasil: 0, kk_tdk_ditemukan: 0, translok: { lengkap: 0, sebagian: 0, anomali: 0, tidak_ada: 0 }, belum_ada_hasil: 0 };
+  const r: RingkasLapangan = { baris: baris.length, orang: 0, orang_berhasil: 0, sub_idf: 0, kk_berhasil: 0, kk_oleh_pml: 0, kk_tdk_ditemukan: 0, translok: { lengkap: 0, sebagian: 0, anomali: 0, tidak_ada: 0 }, belum_ada_hasil: 0 };
   const orang = new Set<number>();
   const berhasil = new Set<number>();
   for (const b of baris) {
     orang.add(b.akun_id);
     r.sub_idf += b.sub_idf;
-    r.kk_berhasil += b.kk_berhasil;
-    r.kk_tdk_ditemukan += b.kk_tdk_ditemukan;
+    r.kk_berhasil += kkDihitung(b);
+    if (b.peran === "pml") r.kk_oleh_pml += b.kk_berhasil;
+    if (b.peran !== "pml") r.kk_tdk_ditemukan += b.kk_tdk_ditemukan;
     r.translok[statusTranslok(b, aturan)] += 1;
     if (statusLapangan(b) !== "belum") berhasil.add(b.akun_id);
     else r.belum_ada_hasil += 1;

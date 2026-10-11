@@ -7,6 +7,8 @@
 // Keputusan user 11 Okt: halaman uji coba di web (bukan mockup), hanya Admin Aplikasi (izin portal.kelola), data disimpan di
 // browser dulu (localStorage, kunci sigap_uji_perencanaan_v1) sampai aturan disetujui -- tidak ada tabel/migrasi, modul lain tidak disentuh.
 // Posisi hierarki ada di alamat (?ro=&keg=&tahap=) supaya tombol Back naik satu tingkat.
+// (11 Okt 2026, langkah 3) Halaman tahap = form identifikasi yang bisa diisi & disimpan (pengelola kegiatan/ketua tim; uji coba: Admin Aplikasi),
+// paket administrasi per mata anggaran diturunkan langsung dari jawaban dan dicek ke baris POK. Logika: lib/perencanaanIdentifikasi.ts.
 // Logika murni & uji: lib/perencanaanGsbpm.ts, lib/__tests__/perencanaanGsbpm.test.ts. Rancangan: claude/rancangan-identifikasi-gsbpm-ro.md.
 // (11 Okt 2026, lanjutan) Tingkat RO punya 3 bagian (?bagian=): Kegiatan | Baris POK | Rencana realisasi -- permintaan user: daftar diambil dari POK
 // (tempel dari Excel) supaya tidak ada yang terlewat; setiap baris ditautkan ke kegiatan (boleh >1 kegiatan, dengan alokasi), baris tanpa tautan
@@ -55,6 +57,31 @@ import {
   type HasilTempel,
   type StatusDetail,
 } from "@/lib/perencanaanPok";
+import {
+  FORM_TAHAP,
+  PERAN_PENDATAAN,
+  bacaJawabanPendataan,
+  belumDijawab,
+  cekPaketKePok,
+  jawabanEfektif,
+  modulDariForm,
+  paketDariForm,
+  paketKegiatan,
+  paketPendataan,
+  paketTahap,
+  periksaPendataan,
+  peranKosong,
+  pertanyaanTampil,
+  subKegiatanBaru,
+  type CekPok,
+  type FormTahap,
+  type IsianPeran,
+  type Jawaban,
+  type JawabanPendataan,
+  type KodePeran,
+  type Nilai,
+  type SubKegiatan,
+} from "@/lib/perencanaanIdentifikasi";
 
 type Bagian = "kegiatan" | "pok" | "rencana";
 const BAGIAN: { kode: Bagian; label: string }[] = [
@@ -100,12 +127,16 @@ export default function PerencanaanKegiatan() {
   const [galat, setGalat] = useState<string | null>(null);
   const [data, setData] = useState<DataUji | null>(null);
   const [pos, setPos] = useState<Posisi>({ ro: null, keg: null, tahap: null });
+  const [pengisi, setPengisi] = useState<string | null>(null);
 
   // Gerbang: hanya Admin Aplikasi (portal.kelola level kelola).
   useEffect(() => {
     if (!bacaSesi()) return keMasuk();
-    fetchJson<{ izin?: Record<string, { level: "lihat" | "kelola" }> }>("/api/sigap/saya")
-      .then((s) => setIzin(s.izin?.["portal.kelola"]?.level === "kelola" ? "boleh" : "tidak"))
+    fetchJson<{ nama?: string; izin?: Record<string, { level: "lihat" | "kelola" }> }>("/api/sigap/saya")
+      .then((s) => {
+        setPengisi(s.nama ?? null);
+        setIzin(s.izin?.["portal.kelola"]?.level === "kelola" ? "boleh" : "tidak");
+      })
       .catch((e) => {
         if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
       });
@@ -170,8 +201,7 @@ export default function PerencanaanKegiatan() {
     isi = (
       <>
         <Pesan jenis="peringatan">
-          <span className="font-bold">Uji coba.</span> Data di halaman ini hanya tersimpan di browser ini (belum ke database) dan tidak terlihat petugas. Form identifikasi per tahap
-          menyusul.{" "}
+          <span className="font-bold">Uji coba.</span> Data di halaman ini hanya tersimpan di browser ini (belum ke database) dan tidak terlihat petugas.{" "}
           <button type="button" onClick={kembalikanContoh} className="font-bold underline">
             Kembalikan contoh awal
           </button>
@@ -191,7 +221,7 @@ export default function PerencanaanKegiatan() {
         ) : !tahap ? (
           <DetailKegiatan data={data} ro={ro} keg={keg} simpan={simpan} pergi={pergi} />
         ) : (
-          <DetailTahap ro={ro} keg={keg} kode={tahap.kode} pergi={pergi} />
+          <DetailTahap key={`${keg.id}-${tahap.kode}`} data={data} ro={ro} keg={keg} kode={tahap.kode} pengisi={pengisi} simpan={simpan} pergi={pergi} />
         )}
       </>
     );
@@ -531,6 +561,10 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
   const ganti = (k: KegiatanUtama) => simpan({ ...data, kegiatan: data.kegiatan.map((x) => (x.id === k.id ? k : x)) });
   const per = rentang(keg.mulai, keg.selesai);
   const ang = anggaranKegiatan(keg.id, data.pok.filter((d) => d.roId === ro.id), data.alokasi);
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
+  const akunRo = new Set(pokRo.map((d) => d.akun));
+  const akunKeg = new Set(ang.baris.map((b) => b.detail.akun));
+  const paket = paketKegiatan(keg.tahap);
 
   return (
     <>
@@ -642,6 +676,7 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
                     <span className="rounded-md bg-[#EEF3FA] px-1.5 py-0.5 text-[11.5px] font-semibold text-[#33445C]">GSBPM {t.gsbpm}</span>
                     {t.wajib ? <Chip w="navy">Wajib</Chip> : t.kapan ? <span className="text-[11.5px] text-[#6B7A90]">{t.kapan}</span> : null}
                     <span className="flex-1" />
+                    {s === "sudah" && <span className="text-[11.5px] font-semibold text-[#4D5B6B]">{paketTahap(t.kode, isian.jawaban).length} paket</span>}
                     {s === "sudah" ? <Chip w="ok">Sudah diidentifikasi</Chip> : s === "belum" ? <Chip w="wait">Belum diidentifikasi</Chip> : <Chip w="mut">Tidak dipakai</Chip>}
                   </div>
                   <p className="text-[12.5px] text-[#4D5B6B]">{t.uraian}</p>
@@ -653,7 +688,7 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
                       onClick={() => pergi({ ro: ro.id, keg: keg.id, tahap: t.kode })}
                       title={s === "tidak_dipakai" ? "Nyalakan tahap ini dulu" : undefined}
                     >
-                      Buka tahap →
+                      {s === "sudah" ? "Lihat / ubah identifikasi →" : "Isi identifikasi →"}
                     </button>
                     {!t.wajib && (
                       <label className="flex min-h-[32px] cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-[#33445C]">
@@ -668,55 +703,602 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
           })}
         </ol>
       </Kartu>
+
+      <Kartu judul="Paket administrasi kegiatan" ket="Gabungan hasil identifikasi semua tahap yang dipakai, dicek ke baris POK RO">
+        {paket.length === 0 ? (
+          <p className="text-[13px] text-[#6B7A90]">Belum ada. Isi identifikasi tahap di atas; paket per mata anggaran akan terkumpul di sini.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
+              <thead>
+                <tr>
+                  <th className={TH}>Paket</th>
+                  <th className={TH}>Untuk</th>
+                  <th className={TH}>Tahap</th>
+                  <th className={TH}>Cek POK</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paket.map((p) => {
+                  const c = pokRo.length ? LABEL_CEK[cekPaketKePok(p.akun, akunKeg, akunRo)] : null;
+                  return (
+                    <tr key={p.kode}>
+                      <td className={TD}>
+                        <span className="font-mono text-[11.5px] font-bold text-[#6E4F0E]">{p.kode}</span>
+                        <span className="block font-semibold text-[#14202E]">{p.nama}</span>
+                        <span className="block text-[11px] text-[#6B7A90]">
+                          {p.dokumen} dokumen · {p.alur}
+                        </span>
+                      </td>
+                      <td className={TD}>{p.ket}</td>
+                      <td className={TD}>{p.sumber}</td>
+                      <td className={TD}>{c ? <Chip w={c.w}>{c.label}</Chip> : <Chip w="mut">POK RO belum dimuat</Chip>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Kartu>
     </>
   );
 }
 
-// ---------------------------------------------------------------- Tingkat 4: satu tahap (form identifikasi menyusul)
-function DetailTahap({ ro, keg, kode, pergi }: { ro: Ro; keg: KegiatanUtama; kode: KodeTahap; pergi: (p: Posisi) => void }) {
+// ---------------------------------------------------------------- Tingkat 4: satu tahap -- form identifikasi
+// (11 Okt 2026) Diisi admin/pengelola kegiatan/ketua tim (uji coba: Admin Aplikasi). Jawaban -> paket administrasi per mata anggaran
+// (lib/perencanaanIdentifikasi.ts). Yang disimpan hanya jawaban efektif (pertanyaan tersembunyi dibuang, nilai otomatis diisi).
+
+const LABEL_CEK: Record<CekPok, { label: string; w: "ok" | "wait" | "bad" }> = {
+  teralokasi: { label: "Ada di anggaran kegiatan", w: "ok" },
+  ada_di_ro: { label: "Ada di POK RO, belum dialokasikan", w: "wait" },
+  tidak_ada: { label: "Akun tidak ada di POK RO", w: "bad" },
+};
+
+function jawabanAwal(kode: KodeTahap, j: Record<string, unknown> | null): Record<string, unknown> {
+  if (kode === "pendataan") return bacaJawabanPendataan(j) as unknown as Record<string, unknown>;
+  const out: Jawaban = {};
+  for (const [k, v] of Object.entries(j ?? {})) if (v === null || ["string", "number", "boolean"].includes(typeof v)) out[k] = v as Nilai;
+  return out;
+}
+
+function waktuSimpan(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : `${tglSedang(iso.slice(0, 10))} ${d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function DetailTahap({
+  data,
+  ro,
+  keg,
+  kode,
+  pengisi,
+  simpan,
+  pergi,
+}: {
+  data: DataUji;
+  ro: Ro;
+  keg: KegiatanUtama;
+  kode: KodeTahap;
+  pengisi: string | null;
+  simpan: (d: DataUji) => void;
+  pergi: (p: Posisi) => void;
+}) {
   const t = definisiTahap(kode)!;
+  const isian = keg.tahap[kode];
+  const form = kode === "pendataan" ? null : FORM_TAHAP[kode] ?? null;
+  const tersimpan = useMemo(() => jawabanAwal(kode, isian.jawaban), [kode, isian.jawaban]);
+  const [draf, setDraf] = useState<Record<string, unknown>>(tersimpan);
+  const [coba, setCoba] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [kosongkan, setKosongkan] = useState(false);
+  const [tunda, setTunda] = useState<Posisi | null>(null);
+
+  const ubahDraf = (d: Record<string, unknown>) => {
+    setDraf(d);
+    setInfo(null);
+    setTunda(null);
+  };
+
+  const jp = kode === "pendataan" ? bacaJawabanPendataan(draf) : null;
+  const efektif = form ? jawabanEfektif(form, draf as Jawaban) : null;
+  const kurang: string[] = jp ? periksaPendataan(jp) : form ? belumDijawab(form, draf as Jawaban).map((p) => p.label) : [];
+  const paket = jp ? paketPendataan(jp) : form ? paketDariForm(form, draf as Jawaban) : [];
+  const modul = form ? modulDariForm(form, draf as Jawaban) : ["Penugasan & wilayah tugas petugas", "Monitoring progres lapangan", "Pemeriksaan dokumen"];
+  const normal = (x: Record<string, unknown>): unknown => (kode === "pendataan" ? bacaJawabanPendataan(x) : form ? jawabanEfektif(form, x as Jawaban) : x);
+  const adaDraf = JSON.stringify(normal(draf)) !== JSON.stringify(normal(tersimpan));
+
+  // Cek ke POK: akun yang sudah dialokasikan ke kegiatan ini vs akun yang ada di POK RO.
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
+  const akunRo = new Set(pokRo.map((d) => d.akun));
+  const idRo = new Set(pokRo.map((d) => d.id));
+  const akunKeg = new Set(data.alokasi.filter((a) => a.kegiatanId === keg.id && idRo.has(a.detailId)).map((a) => pokRo.find((d) => d.id === a.detailId)?.akun ?? ""));
+
+  const tulis = (jawaban: Record<string, unknown> | null) => {
+    const baru: KegiatanUtama = { ...keg, tahap: { ...keg.tahap, [kode]: { ...isian, jawaban, diubah: sekarang(), oleh: pengisi } } };
+    simpan({ ...data, kegiatan: data.kegiatan.map((x) => (x.id === keg.id ? baru : x)) });
+  };
+
+  const simpanIdentifikasi = () => {
+    setCoba(true);
+    if (kurang.length) {
+      setInfo(null);
+      return;
+    }
+    const j = jp ? (JSON.parse(JSON.stringify(jp)) as Record<string, unknown>) : { ...efektif };
+    tulis(j);
+    setDraf(jp ? j : (efektif as Record<string, unknown>));
+    setCoba(false);
+    setTunda(null);
+    setInfo(`Identifikasi ${t.nama.toLowerCase()} tersimpan. ${paket.length} paket administrasi.`);
+  };
+
   const dipakai = TAHAP_GSBPM.filter((x) => keg.tahap[x.kode]?.dipakai);
   const idx = dipakai.findIndex((x) => x.kode === kode);
   const seb = idx > 0 ? dipakai[idx - 1] : null;
   const ber = idx >= 0 && idx < dipakai.length - 1 ? dipakai[idx + 1] : null;
+  const pindah = (p: Posisi) => {
+    if (adaDraf && !tunda) return setTunda(p);
+    pergi(p);
+  };
 
   return (
     <>
-      {!keg.tahap[kode]?.dipakai && <Pesan jenis="info">Tahap ini sedang tidak dipakai untuk kegiatan ini. Nyalakan dari halaman kegiatan.</Pesan>}
-      <Kartu judul="Identifikasi tahap" ket={`GSBPM ${t.gsbpm}`}>
-        <p className="text-[13.5px] text-[#4D5B6B]">{t.uraian}</p>
-        <div className="mt-3 rounded-xl border border-dashed border-[#CBD6E6] bg-[#FAFBFD] p-3.5">
-          <p className="text-[12.5px] font-bold text-[#33445C]">Form identifikasi dibuat pada langkah berikut. Yang akan ditanyakan:</p>
-          <ul className="mt-2 grid gap-1.5 text-[13px] text-[#14202E] sm:grid-cols-2">
-            {t.identifikasi.map((x) => (
-              <li key={x} className="flex gap-2">
-                <span aria-hidden className="text-[#9AA7B6]">•</span>
-                {x}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-[12.5px] text-[#6B7A90]">Dari jawaban ini akan diturunkan modul kerja dan paket administrasi per mata anggaran untuk tahap {t.nama.toLowerCase()}.</p>
-        </div>
+      {!isian.dipakai && <Pesan jenis="info">Tahap ini sedang tidak dipakai untuk kegiatan ini. Nyalakan dari halaman kegiatan.</Pesan>}
+
+      <Kartu
+        judul="Identifikasi tahap"
+        ket={`GSBPM ${t.gsbpm}`}
+        kanan={statusTahap(isian) === "sudah" ? <Chip w="ok">Sudah diidentifikasi</Chip> : <Chip w="wait">Belum diidentifikasi</Chip>}
+      >
+        <p className="text-[13.5px] text-[#4D5B6B]">{form?.pengantar ?? t.uraian}</p>
+        <p className="mt-2 text-[12.5px] text-[#6B7A90]">
+          Diisi oleh pengelola kegiatan / ketua tim. Pada uji coba ini baru Admin Aplikasi yang bisa mengisi.
+          {isian.jawaban !== null && isian.diubah && (
+            <>
+              {" "}
+              Terakhir disimpan <span className="font-semibold text-[#33445C]">{waktuSimpan(isian.diubah)}</span>
+              {isian.oleh ? (
+                <>
+                  {" "}
+                  oleh <span className="font-semibold text-[#33445C]">{isian.oleh}</span>
+                </>
+              ) : null}
+              .
+            </>
+          )}
+        </p>
       </Kartu>
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {jp ? (
+            <FormPendataan nilai={jp} ubah={(j) => ubahDraf(j as unknown as Record<string, unknown>)} tandai={coba} />
+          ) : form ? (
+            <FormIdentifikasi form={form} nilai={draf as Jawaban} ubah={(j) => ubahDraf(j)} tandai={coba} />
+          ) : (
+            <Kartu judul="Belum ada form">
+              <ul className="grid gap-1.5 text-[13px] text-[#14202E] sm:grid-cols-2">
+                {t.identifikasi.map((x) => (
+                  <li key={x}>• {x}</li>
+                ))}
+              </ul>
+            </Kartu>
+          )}
+
+          {coba && kurang.length > 0 && (
+            <Pesan jenis="galat">
+              <span className="font-bold">Belum bisa disimpan, {kurang.length} isian belum lengkap:</span>
+              <ul className="mt-1 list-disc pl-5">
+                {kurang.slice(0, 8).map((k) => (
+                  <li key={k}>{k}</li>
+                ))}
+                {kurang.length > 8 && <li>dan {kurang.length - 8} lainnya</li>}
+              </ul>
+            </Pesan>
+          )}
+          {info && (
+            <Pesan jenis="ok" onTutup={() => setInfo(null)}>
+              {info}
+            </Pesan>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={BTN} onClick={simpanIdentifikasi} disabled={!isian.dipakai}>
+              Simpan identifikasi
+            </button>
+            {adaDraf && (
+              <>
+                <Chip w="wait">Ada perubahan belum disimpan</Chip>
+                <button
+                  type="button"
+                  className={BTN_O}
+                  onClick={() => {
+                    ubahDraf(tersimpan);
+                    setCoba(false);
+                  }}
+                >
+                  Batalkan perubahan
+                </button>
+              </>
+            )}
+            <span className="flex-1" />
+            {isian.jawaban !== null &&
+              (kosongkan ? (
+                <span className="flex items-center gap-2 text-[12.5px] text-[#B42329]">
+                  Hapus semua jawaban tahap ini?
+                  <button
+                    type="button"
+                    className={BTN_R}
+                    onClick={() => {
+                      tulis(null);
+                      setDraf(jawabanAwal(kode, null));
+                      setKosongkan(false);
+                      setCoba(false);
+                      setInfo("Identifikasi tahap dikosongkan.");
+                    }}
+                  >
+                    Ya, kosongkan
+                  </button>
+                  <button type="button" className={BTN_O} onClick={() => setKosongkan(false)}>
+                    Batal
+                  </button>
+                </span>
+              ) : (
+                <button type="button" className="text-[12.5px] font-semibold text-[#B42329] underline" onClick={() => setKosongkan(true)}>
+                  Kosongkan identifikasi
+                </button>
+              ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 lg:sticky lg:top-4">
+          <Kartu judul="Paket administrasi" ket={`${paket.length} mata anggaran dari jawaban${adaDraf ? " (belum disimpan)" : ""}`}>
+            {paket.length === 0 ? (
+              <p className="text-[13px] text-[#6B7A90]">Belum ada. Paket muncul di sini sambil Anda menjawab.</p>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {paket.map((p) => {
+                  const c = pokRo.length ? LABEL_CEK[cekPaketKePok(p.akun, akunKeg, akunRo)] : null;
+                  return (
+                    <li key={p.kode} className="rounded-xl border border-[#E3E8EE] p-3">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="font-mono text-[12px] font-bold text-[#6E4F0E]">{p.kode}</span>
+                        <span className="text-[13px] font-bold text-[#14202E]">{p.nama}</span>
+                      </div>
+                      <p className="mt-1 text-[12px] text-[#4D5B6B]">{p.ket}</p>
+                      <p className="mt-1 text-[11.5px] text-[#6B7A90]">
+                        {p.dokumen} dokumen · {p.alur}
+                      </p>
+                      <div className="mt-1.5">{c ? <Chip w={c.w}>{c.label}</Chip> : <Chip w="mut">POK RO belum dimuat</Chip>}</div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Kartu>
+          <Kartu judul="Modul kerja" ket="Yang disiapkan untuk tahap ini">
+            <ul className="flex flex-col gap-1.5 text-[13px] text-[#14202E]">
+              {modul.map((m) => (
+                <li key={m} className="flex gap-2">
+                  <span aria-hidden className="text-[#13794B]">✓</span>
+                  {m}
+                </li>
+              ))}
+            </ul>
+          </Kartu>
+        </div>
+      </div>
+
+      {tunda && (
+        <Pesan jenis="peringatan" onTutup={() => setTunda(null)}>
+          Ada perubahan yang belum disimpan.{" "}
+          <button type="button" className="font-bold underline" onClick={() => pergi(tunda)}>
+            Pindah tanpa menyimpan
+          </button>
+        </Pesan>
+      )}
       <div className="flex flex-wrap justify-between gap-2">
         {seb ? (
-          <button type="button" className={BTN_O} onClick={() => pergi({ ro: ro.id, keg: keg.id, tahap: seb.kode })}>
+          <button type="button" className={BTN_O} onClick={() => pindah({ ro: ro.id, keg: keg.id, tahap: seb.kode })}>
             ← {seb.no}. {seb.nama}
           </button>
         ) : (
           <span />
         )}
-        <button type="button" className={BTN_O} onClick={() => pergi({ ro: ro.id, keg: keg.id, tahap: null })}>
+        <button type="button" className={BTN_O} onClick={() => pindah({ ro: ro.id, keg: keg.id, tahap: null })}>
           Semua tahap
         </button>
         {ber ? (
-          <button type="button" className={BTN_O} onClick={() => pergi({ ro: ro.id, keg: keg.id, tahap: ber.kode })}>
+          <button type="button" className={BTN_O} onClick={() => pindah({ ro: ro.id, keg: keg.id, tahap: ber.kode })}>
             {ber.no}. {ber.nama} →
           </button>
         ) : (
           <span />
         )}
       </div>
+    </>
+  );
+}
+
+// Tombol pilihan (satu dari beberapa). Ukuran sentuh minimal 40px.
+function Segmen<T extends string | boolean>({
+  label,
+  nilai,
+  pilihan,
+  ubah,
+  kunci,
+  salah,
+}: {
+  label: string;
+  nilai: T | null | undefined;
+  pilihan: { nilai: T; label: string }[];
+  ubah: (v: T) => void;
+  kunci?: boolean;
+  salah?: boolean;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className={`flex flex-wrap gap-1.5 ${salah ? "rounded-xl ring-2 ring-[#F4B4B4] ring-offset-2" : ""}`}>
+      {pilihan.map((p) => {
+        const aktif = nilai === p.nilai;
+        return (
+          <button
+            key={String(p.nilai)}
+            type="button"
+            role="radio"
+            aria-checked={aktif}
+            disabled={kunci && !aktif}
+            onClick={() => !kunci && ubah(p.nilai)}
+            className={`min-h-[40px] rounded-lg border px-3.5 text-[13px] font-semibold transition ${
+              aktif ? "border-[#1F5FD1] bg-[#E3EEFB] text-[#1F5FD1]" : "border-[#D5DEEA] bg-white text-[#33445C] hover:bg-[#F8FAFC]"
+            } ${kunci ? "cursor-default" : ""} disabled:opacity-40`}
+          >
+            {p.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const YT: { nilai: boolean; label: string }[] = [
+  { nilai: true, label: "Ya" },
+  { nilai: false, label: "Tidak" },
+];
+
+function Baris({ label, bantuan, otomatis, children }: { label: string; bantuan?: string; otomatis?: string | null; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-[#EEF2F7] py-3 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
+      <div className="sm:w-[42%] sm:shrink-0 sm:pt-2">
+        <p className="text-[13.5px] font-semibold text-[#14202E]">{label}</p>
+        {bantuan && <p className="text-[12px] text-[#6B7A90]">{bantuan}</p>}
+      </div>
+      <div className="min-w-0 flex-1">
+        {children}
+        {otomatis && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-[#6B7A90]">
+            <Chip w="navy">Otomatis</Chip>
+            {otomatis}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FormIdentifikasi({ form, nilai, ubah, tandai }: { form: FormTahap; nilai: Jawaban; ubah: (j: Jawaban) => void; tandai: boolean }) {
+  const tampil = pertanyaanTampil(form, nilai);
+  const kosong = new Set(tandai ? belumDijawab(form, nilai).map((p) => p.kode) : []);
+  const set = (k: string, v: Nilai) => ubah({ ...nilai, [k]: v });
+  return (
+    <Kartu judul={`Form identifikasi · ${form.judul}`} ket={`${tampil.length} pertanyaan sesuai jawaban`}>
+      <div className="flex flex-col">
+        {tampil.map(({ p, otomatis }) => {
+          const v = otomatis ? otomatis.nilai : nilai[p.kode];
+          const salah = kosong.has(p.kode);
+          return (
+            <Baris key={p.kode} label={p.label} bantuan={p.bantuan} otomatis={otomatis?.alasan}>
+              {p.jenis === "pilih" && <Segmen label={p.label} nilai={typeof v === "string" ? v : null} pilihan={p.pilihan ?? []} ubah={(x) => set(p.kode, x)} kunci={!!otomatis} salah={salah} />}
+              {p.jenis === "yatidak" && <Segmen label={p.label} nilai={typeof v === "boolean" ? v : null} pilihan={YT} ubah={(x) => set(p.kode, x)} kunci={!!otomatis} salah={salah} />}
+              {p.jenis === "angka" && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    aria-label={p.label}
+                    className={`${INPUT} w-32 ${salah ? "border-[#E07070]" : ""}`}
+                    value={typeof v === "number" ? v : ""}
+                    onChange={(e) => set(p.kode, e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+                  />
+                  {p.satuan && <span className="text-[13px] text-[#4D5B6B]">{p.satuan}</span>}
+                  {p.opsional && <span className="text-[12px] text-[#9AA7B6]">boleh kosong</span>}
+                </div>
+              )}
+            </Baris>
+          );
+        })}
+      </div>
+    </Kartu>
+  );
+}
+
+// ---------------------------------------------------------------- Pendataan: sub-kegiatan x peran
+const PRESET_SUB = ["Listing / updating", "Pencacahan sampel"];
+
+function FormPendataan({ nilai, ubah, tandai }: { nilai: JawabanPendataan; ubah: (j: JawabanPendataan) => void; tandai: boolean }) {
+  const [hapus, setHapus] = useState<string | null>(null);
+  const gantiSub = (s: SubKegiatan) => ubah({ sub: nilai.sub.map((x) => (x.id === s.id ? s : x)) });
+  const gantiPeran = (s: SubKegiatan, k: KodePeran, r: Partial<IsianPeran>) => gantiSub({ ...s, peran: { ...s.peran, [k]: { ...(s.peran[k] ?? peranKosong(false)), ...r } } });
+  const tambah = (nama: string) => {
+    const s = subKegiatanBaru(idAcak("sub"), nama);
+    if (/listing|updating/i.test(nama)) s.jenis = "listing";
+    if (/pencacahan/i.test(nama)) s.jenis = "pencacahan";
+    ubah({ sub: [...nilai.sub, s] });
+  };
+  const ada = new Set(nilai.sub.map((s) => s.nama.trim().toLowerCase()));
+
+  return (
+    <>
+      <Kartu judul="Sub-kegiatan pendataan" ket="Satu baris per jenis pekerjaan lapangan; tiap sub-kegiatan punya peran pencacah, pengawas, pengolah">
+        <div className="flex flex-wrap gap-2">
+          {PRESET_SUB.filter((n) => !ada.has(n.toLowerCase())).map((n) => (
+            <button key={n} type="button" className={BTN_O} onClick={() => tambah(n)}>
+              + {n}
+            </button>
+          ))}
+          <button type="button" className={BTN_O} onClick={() => tambah("")}>
+            + Sub-kegiatan lain
+          </button>
+        </div>
+        {nilai.sub.length === 0 && <p className="mt-3 text-[13px] text-[#6B7A90]">Belum ada sub-kegiatan. Contoh Susenas: Listing / updating dan Pencacahan sampel.</p>}
+      </Kartu>
+
+      {nilai.sub.map((s, i) => (
+        <Kartu
+          key={s.id}
+          judul={s.nama.trim() || `Sub-kegiatan ${i + 1}`}
+          kanan={
+            hapus === s.id ? (
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={BTN_R}
+                  onClick={() => {
+                    ubah({ sub: nilai.sub.filter((x) => x.id !== s.id) });
+                    setHapus(null);
+                  }}
+                >
+                  Ya, hapus
+                </button>
+                <button type="button" className={BTN_O} onClick={() => setHapus(null)}>
+                  Batal
+                </button>
+              </span>
+            ) : (
+              <button type="button" className="text-[12.5px] font-semibold text-[#B42329] underline" onClick={() => setHapus(s.id)}>
+                Hapus
+              </button>
+            )
+          }
+        >
+          <Baris label="Nama sub-kegiatan">
+            <input className={`${INPUT} w-full ${tandai && !s.nama.trim() ? "border-[#E07070]" : ""}`} value={s.nama} onChange={(e) => gantiSub({ ...s, nama: e.target.value })} placeholder="mis. Pencacahan sampel" />
+          </Baris>
+          <Baris label="Jenis">
+            <Segmen
+              label="Jenis"
+              nilai={s.jenis}
+              pilihan={[
+                { nilai: "listing", label: "Listing / updating" },
+                { nilai: "pencacahan", label: "Pencacahan sampel" },
+              ]}
+              ubah={(v) => gantiSub({ ...s, jenis: v as SubKegiatan["jenis"] })}
+              salah={tandai && !s.jenis}
+            />
+          </Baris>
+          <Baris label="Mode pengumpulan" bantuan="PAPI menambah paket penggandaan dokumen.">
+            <Segmen
+              label="Mode"
+              nilai={s.mode}
+              pilihan={[
+                { nilai: "capi", label: "CAPI" },
+                { nilai: "papi", label: "PAPI" },
+              ]}
+              ubah={(v) => gantiSub({ ...s, mode: v as SubKegiatan["mode"] })}
+              salah={tandai && !s.mode}
+            />
+          </Baris>
+          <Baris label="Honor aparat / penunjuk jalan?">
+            <Segmen label="Penunjuk jalan" nilai={s.penunjukJalan} pilihan={YT} ubah={(v) => gantiSub({ ...s, penunjukJalan: v })} salah={tandai && s.penunjukJalan === null} />
+          </Baris>
+
+          <div className="mt-3 grid gap-3 xl:grid-cols-3">
+            {PERAN_PENDATAAN.map((p) => {
+              const r = s.peran[p.kode] ?? peranKosong(false);
+              const merah = (x: boolean) => tandai && r.dipakai && x;
+              return (
+                <div key={p.kode} className={`rounded-xl border p-3 ${r.dipakai ? "border-[#CFE0F7] bg-[#F7FAFE]" : "border-dashed border-[#CBD6E6] bg-[#FAFBFD]"}`}>
+                  <label className="flex min-h-[32px] cursor-pointer items-center gap-2 text-[13.5px] font-bold text-[#14202E]">
+                    <input type="checkbox" className="h-4 w-4" checked={r.dipakai} onChange={(e) => gantiPeran(s, p.kode, { dipakai: e.target.checked })} />
+                    {p.label}
+                  </label>
+                  {r.dipakai && (
+                    <div className="mt-2 flex flex-col gap-2.5 text-[12.5px]">
+                      <div>
+                        <p className="mb-1 font-semibold text-[#33445C]">Status</p>
+                        <Segmen
+                          label={`Status ${p.label}`}
+                          nilai={r.status}
+                          pilihan={[
+                            { nilai: "mitra", label: "Mitra" },
+                            { nilai: "organik", label: "Organik" },
+                            { nilai: "keduanya", label: "Keduanya" },
+                          ]}
+                          ubah={(v) => gantiPeran(s, p.kode, { status: v as IsianPeran["status"] })}
+                          salah={merah(!r.status)}
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-1 font-semibold text-[#33445C]">Honor</p>
+                        <Segmen label={`Honor ${p.label}`} nilai={r.honor} pilihan={YT} ubah={(v) => gantiPeran(s, p.kode, { honor: v })} salah={merah(r.honor === null)} />
+                      </div>
+                      {r.honor && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            className={`${INPUT} w-28 ${merah(!r.satuan.trim()) ? "border-[#E07070]" : ""}`}
+                            aria-label={`Satuan honor ${p.label}`}
+                            placeholder="Satuan (Ruta, BS, Dok)"
+                            value={r.satuan}
+                            onChange={(e) => gantiPeran(s, p.kode, { satuan: e.target.value })}
+                          />
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            className={`${INPUT} w-24`}
+                            aria-label={`Target ${p.label}`}
+                            placeholder="Target"
+                            value={r.target ?? ""}
+                            onChange={(e) => gantiPeran(s, p.kode, { target: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) })}
+                          />
+                        </div>
+                      )}
+                      {p.kode !== "pengolah" && (
+                        <div>
+                          <p className="mb-1 font-semibold text-[#33445C]">Transport</p>
+                          <Segmen
+                            label={`Transport ${p.label}`}
+                            nilai={r.translok}
+                            pilihan={[
+                              { nilai: "tidak", label: "Tidak ada" },
+                              { nilai: "kurang8", label: "Translok < 8 jam" },
+                              { nilai: "lebih8", label: "> 8 jam" },
+                            ]}
+                            ubah={(v) => gantiPeran(s, p.kode, { translok: v as IsianPeran["translok"] })}
+                            salah={merah(!r.translok)}
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <p className="mb-1 font-semibold text-[#33445C]">Pulsa</p>
+                        <Segmen label={`Pulsa ${p.label}`} nilai={r.pulsa} pilihan={YT} ubah={(v) => gantiPeran(s, p.kode, { pulsa: v })} salah={merah(r.pulsa === null)} />
+                      </div>
+                      {p.kode === "pengawas" && (
+                        <div>
+                          <p className="mb-1 font-semibold text-[#33445C]">Supervisi luar kota (perjadin)</p>
+                          <Segmen label="Supervisi" nilai={r.supervisi} pilihan={YT} ubah={(v) => gantiPeran(s, p.kode, { supervisi: v })} salah={merah(r.supervisi === null)} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Kartu>
+      ))}
     </>
   );
 }
