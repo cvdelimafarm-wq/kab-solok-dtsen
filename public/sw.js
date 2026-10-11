@@ -8,9 +8,11 @@
 // (8 Okt 2026) Notifikasi push: event "push" menampilkan notifikasi (juga saat aplikasi ditutup), "notificationclick" membuka
 // halaman tujuan. Isi push dikirim server (lib/sigapPush.ts) sebagai JSON { judul, isi, url, tag }.
 
-const VERSI = "sigap-v3";
+// (11 Okt 2026) v4: offline.html baru (membedakan "tidak ada sinyal" dari "server tidak terjangkau", daftar peta tersimpan) & ikon yang benar
+// (offline.html memakai /icons/icon-192.png; dulu yang disimpan /ikon/ikon-192.png sehingga ikon hilang saat luring).
+const VERSI = "sigap-v4";
 const CACHE_PETA = "sigap-peta-v1";
-const BERKAS_OFFLINE = ["/offline.html", "/ikon/ikon-192.png"];
+const BERKAS_OFFLINE = ["/offline.html", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSI).then((c) => c.addAll(BERKAS_OFFLINE)));
@@ -44,7 +46,14 @@ self.addEventListener("fetch", (e) => {
   // Hanya navigasi halaman (buka/pindah halaman) yang ditangani; API, gambar, unggah foto dll dibiarkan
   // langsung ke jaringan seperti web biasa.
   if (req.method !== "GET" || req.mode !== "navigate") return;
-  e.respondWith(fetch(req).catch(() => caches.match("/offline.html")));
+  // (11 Okt 2026) Temuan audit: satu kegagalan sesaat (server restart saat deploy, koneksi putus di tengah) langsung menampilkan
+  // "Tidak ada sinyal" walau internet ada. Kini dicoba ULANG sekali setelah 1,5 dtk; baru bila tetap gagal tampil offline.html
+  // (yang membedakan sendiri "tidak ada sinyal" dan "server tidak terjangkau").
+  e.respondWith(
+    fetch(req)
+      .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => fetch(req)))
+      .catch(() => caches.match("/offline.html")),
+  );
 });
 
 // ---------------------------------------------------------------- notifikasi push

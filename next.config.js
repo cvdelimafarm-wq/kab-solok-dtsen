@@ -39,6 +39,13 @@ const nextConfig = {
   async headers() {
     return [
       { source: "/api/:path*", headers: [{ key: "X-Build-Id", value: BUILD_ID }] },
+      // (11 Okt 2026) Aset statis /public dulu dikirim max-age=0 -> diunduh ulang tiap navigasi (ikon 22 KB) / muat ulang (logo 106 KB) -- temuan audit.
+      // Disimpan 7 hari di HP (+ boleh dipakai sambil diperbarui 1 hari). Bila gambar diganti dengan isi berbeda, beri NAMA BERKAS BARU.
+      ...["/icons/:path*", "/ikon/:path*", "/sigap-logo.png", "/logo-bps.png", "/logo-bps-hd.png", "/logo-bps.svg"].map((source) => ({
+        source,
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
+      })),
+      { source: "/manifest.webmanifest", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=86400" }] },
       {
         source: "/sw.js",
         headers: [

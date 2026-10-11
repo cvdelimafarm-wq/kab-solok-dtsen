@@ -65,7 +65,7 @@ export async function daftarKk(db: Db, idsubsls: string): Promise<KkLembar[]> {
   for (let dari = 0; ; dari += 1000) {
     const { data, error } = await db
       .from("bencana_pendataan_kk")
-      .select("id, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at")
+      .select("id, no_urut, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at")
       .eq("idsubsls", idsubsls)
       .eq("aktif", true)
       .order("nama_kk", { ascending: true })
@@ -145,29 +145,80 @@ export async function batchAktif(db: Db, batchId: number): Promise<{ id: number;
   return (data as { id: number; kegiatan_id: number; dibatalkan_at: string | null } | null) ?? null;
 }
 
-/** Terima sekelompok baris (maks MAKS_BARIS_UNGGAH). Baris bermasalah dilaporkan, yang lain tetap masuk. `no` = nomor baris di Excel. */
-export async function terimaBaris(db: Db, kegiatanId: number, batchId: number, baris: { no: number; data: Record<string, unknown> }[]): Promise<{ diterima: number; ditolak: TolakBaris[] }> {
+/** Sub SLS sampel = daftar awal di master wilayah (keputusan user 11 Okt 2026: 636 Sub SLS). */
+export async function daftarSampel(db: Db): Promise<string[]> {
+  const out: string[] = [];
+  for (let dari = 0; ; dari += 1000) {
+    const { data, error } = await db.from("bencana_wilayah").select("idsubsls").eq("daftar_awal", true).order("idsubsls").range(dari, dari + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data ?? []).map((r) => r.idsubsls as string));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+type Ada = { id: number; idsubsls: string; sumber_id: string; nama_kk: string; anggota_lain: string | null; patokan: string | null; lat: number | null; lng: number | null; no_urut: number | null; keberadaan_awal: number | null };
+
+/**
+ * Terima sekelompok baris (maks MAKS_BARIS_UNGGAH). Baris bermasalah dilaporkan, yang lain tetap masuk. `no` = nomor baris di berkas.
+ * - Hanya Sub SLS sampel (daftar awal) yang diterima.
+ * - Baris ber-`sumber_id` (ekspor FASIH-SM): unggah ulang MEMPERBARUI KK yang sama (nama, anggota, alamat, koordinat) tanpa menyentuh hasil pendataan;
+ *   bila Sub SLS-nya berbeda dari yang sudah tersimpan, ditolak (batalkan unggahan lama dulu).
+ * - Baris tanpa `sumber_id` (templat Excel): baris identik yang sudah ada dilewati.
+ */
+export async function terimaBaris(
+  db: Db,
+  kegiatanId: number,
+  batchId: number,
+  baris: { no: number; data: Record<string, unknown> }[]
+): Promise<{ diterima: number; diperbarui: number; sama: number; ditolak: TolakBaris[] }> {
   if (baris.length > MAKS_BARIS_UNGGAH) throw new Error(`Maksimal ${MAKS_BARIS_UNGGAH} baris per kiriman.`);
   const ditolak: TolakBaris[] = [];
   const sah: { no: number; b: BarisKk }[] = [];
+  const dilihat = new Set<string>();
   for (const x of baris) {
     const r = periksaBarisKk(x.data);
-    if (r.ok) sah.push({ no: x.no, b: r.baris });
-    else ditolak.push({ no: x.no, pesan: r.pesan });
+    if (!r.ok) {
+      ditolak.push({ no: x.no, pesan: r.pesan });
+      continue;
+    }
+    if (r.baris.sumber_id) {
+      if (dilihat.has(r.baris.sumber_id)) {
+        ditolak.push({ no: x.no, pesan: "ID penugasan kembar di berkas ini." });
+        continue;
+      }
+      dilihat.add(r.baris.sumber_id);
+    }
+    sah.push({ no: x.no, b: r.baris });
   }
-  if (sah.length === 0) return { diterima: 0, ditolak };
+  if (sah.length === 0) return { diterima: 0, diperbarui: 0, sama: 0, ditolak };
 
-  // kode Sub SLS harus ada di master wilayah
+  // kode Sub SLS harus ada di master wilayah DAN termasuk sampel (daftar awal)
   const kode = Array.from(new Set(sah.map((x) => x.b.idsubsls)));
-  const dikenal = new Set<string>();
+  const status = new Map<string, boolean>();
   for (let i = 0; i < kode.length; i += 200) {
-    const { data } = await db.from("bencana_wilayah").select("idsubsls").in("idsubsls", kode.slice(i, i + 200));
-    for (const r of data ?? []) dikenal.add(r.idsubsls as string);
+    const { data } = await db.from("bencana_wilayah").select("idsubsls, daftar_awal").in("idsubsls", kode.slice(i, i + 200));
+    for (const r of data ?? []) status.set(r.idsubsls as string, r.daftar_awal === true);
   }
 
-  // cegah ganda: baris identik yang sudah ada (berkas yang sama diunggah dua kali) dan yang kembar dalam kiriman ini
-  const ada = new Set<string>();
-  for (const sub of kode.filter((k) => dikenal.has(k))) {
+  // KK ber-sumber_id yang sudah ada (aktif) pada kegiatan ini
+  const sumberIds = sah.map((x) => x.b.sumber_id).filter((x): x is string => !!x);
+  const adaSumber = new Map<string, Ada>();
+  for (let i = 0; i < sumberIds.length; i += 200) {
+    const { data, error } = await db
+      .from("bencana_pendataan_kk")
+      .select("id, idsubsls, sumber_id, nama_kk, anggota_lain, patokan, lat, lng, no_urut, keberadaan_awal")
+      .eq("kegiatan_id", kegiatanId)
+      .eq("aktif", true)
+      .in("sumber_id", sumberIds.slice(i, i + 200));
+    if (error) throw new Error(error.message);
+    for (const r of (data ?? []) as Ada[]) adaSumber.set(r.sumber_id, r);
+  }
+
+  // cegah ganda untuk baris tanpa sumber_id (templat): baris identik yang sudah ada
+  const adaKunci = new Set<string>();
+  const subTanpaSumber = Array.from(new Set(sah.filter((x) => !x.b.sumber_id && status.get(x.b.idsubsls)).map((x) => x.b.idsubsls)));
+  for (const sub of subTanpaSumber) {
     for (let dari = 0; ; dari += 1000) {
       const { data } = await db
         .from("bencana_pendataan_kk")
@@ -175,43 +226,86 @@ export async function terimaBaris(db: Db, kegiatanId: number, batchId: number, b
         .eq("kegiatan_id", kegiatanId)
         .eq("idsubsls", sub)
         .eq("aktif", true)
+        .is("sumber_id", null)
         .range(dari, dari + 999);
-      for (const r of data ?? []) ada.add(kunciBaris(r as BarisKk));
+      for (const r of data ?? []) adaKunci.add(kunciBaris(r as BarisKk));
       if (!data || data.length < 1000) break;
     }
   }
 
   const masuk: Record<string, unknown>[] = [];
+  const ubah: { id: number; isi: Record<string, unknown> }[] = [];
+  let sama = 0;
   for (const x of sah) {
-    if (!dikenal.has(x.b.idsubsls)) {
+    const sampel = status.get(x.b.idsubsls);
+    if (sampel === undefined) {
       ditolak.push({ no: x.no, pesan: "Kode Sub SLS tidak ada di master wilayah." });
       continue;
     }
-    const k = kunciBaris(x.b);
-    if (ada.has(k)) {
-      ditolak.push({ no: x.no, pesan: "Sudah ada (nama, anggota, dan koordinat sama persis di Sub SLS itu)." });
+    if (!sampel) {
+      ditolak.push({ no: x.no, pesan: "Bukan Sub SLS sampel (tidak masuk daftar awal)." });
       continue;
     }
-    ada.add(k);
-    masuk.push({ kegiatan_id: kegiatanId, batch_id: batchId, ...x.b });
+    const lama = x.b.sumber_id ? adaSumber.get(x.b.sumber_id) : undefined;
+    if (lama) {
+      if (lama.idsubsls !== x.b.idsubsls) {
+        ditolak.push({ no: x.no, pesan: "ID penugasan sudah tersimpan di Sub SLS lain. Batalkan unggahan lama dulu bila datanya memang pindah." });
+        continue;
+      }
+      const baru = { nama_kk: x.b.nama_kk, anggota_lain: x.b.anggota_lain, patokan: x.b.patokan, lat: x.b.lat, lng: x.b.lng, no_urut: x.b.no_urut ?? null, keberadaan_awal: x.b.keberadaan_awal ?? null };
+      const beda = (Object.keys(baru) as (keyof typeof baru)[]).some((k) => (lama[k] ?? null) !== (baru[k] ?? null));
+      if (beda) ubah.push({ id: lama.id, isi: baru });
+      else sama++;
+      continue;
+    }
+    if (!x.b.sumber_id) {
+      const k = kunciBaris(x.b);
+      if (adaKunci.has(k)) {
+        ditolak.push({ no: x.no, pesan: "Sudah ada (nama, anggota, dan koordinat sama persis di Sub SLS itu)." });
+        continue;
+      }
+      adaKunci.add(k);
+    }
+    masuk.push({
+      kegiatan_id: kegiatanId,
+      batch_id: batchId,
+      idsubsls: x.b.idsubsls,
+      nama_kk: x.b.nama_kk,
+      anggota_lain: x.b.anggota_lain,
+      patokan: x.b.patokan,
+      lat: x.b.lat,
+      lng: x.b.lng,
+      sumber_id: x.b.sumber_id ?? null,
+      no_urut: x.b.no_urut ?? null,
+      keberadaan_awal: x.b.keberadaan_awal ?? null,
+    });
   }
   for (let i = 0; i < masuk.length; i += 250) {
     const { error } = await db.from("bencana_pendataan_kk").insert(masuk.slice(i, i + 250));
     if (error) throw new Error(error.message);
   }
+  // pembaruan: tidak menyentuh hasil / ppl_akun_id / status_at
+  for (let i = 0; i < ubah.length; i += 10) {
+    await Promise.all(
+      ubah.slice(i, i + 10).map(async (u) => {
+        const { error } = await db.from("bencana_pendataan_kk").update(u.isi).eq("id", u.id);
+        if (error) throw new Error(error.message);
+      })
+    );
+  }
   ditolak.sort((a, b) => a.no - b.no);
-  return { diterima: masuk.length, ditolak };
+  return { diterima: masuk.length, diperbarui: ubah.length, sama, ditolak };
 }
 
 /** Tutup unggahan: jumlah diterima dihitung dari isi database; daftar penolakan (maks 200) disimpan di ringkasan. */
-export async function selesaiUnggah(db: Db, akunId: number, batchId: number, ditolak: TolakBaris[]): Promise<{ diterima: number; ditolak: number }> {
+export async function selesaiUnggah(db: Db, akunId: number, batchId: number, ditolak: TolakBaris[], catatan: Record<string, number> = {}): Promise<{ diterima: number; ditolak: number }> {
   const { count } = await db.from("bencana_pendataan_kk").select("id", { count: "exact", head: true }).eq("batch_id", batchId).eq("aktif", true);
   const diterima = count ?? 0;
   await db
     .from("bencana_pendataan_batch")
-    .update({ jumlah_diterima: diterima, jumlah_ditolak: ditolak.length, ringkasan: { ditolak: ditolak.slice(0, 200), terpotong: ditolak.length > 200 } })
+    .update({ jumlah_diterima: diterima, jumlah_ditolak: ditolak.length, ringkasan: { ditolak: ditolak.slice(0, 200), terpotong: ditolak.length > 200, catatan } })
     .eq("id", batchId);
-  await catatAudit(db, akunId, "pendataan.unggah", { batch_id: batchId, diterima, ditolak: ditolak.length });
+  await catatAudit(db, akunId, "pendataan.unggah", { batch_id: batchId, diterima, ditolak: ditolak.length, ...catatan });
   return { diterima, ditolak: ditolak.length };
 }
 

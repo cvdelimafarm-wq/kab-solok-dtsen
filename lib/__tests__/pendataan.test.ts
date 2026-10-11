@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bacaKodeSub, buatProyeksi, jarakMeter, kunciBaris, periksaBarisKk, periksaCatat, petakanBarisExcel, ringkasPerPpl, ringkasPerSub, type BarisRingkas } from "@/lib/pendataan";
+import { adalahFasih, bacaCsvFasih, bacaGeotag, bacaKodeSub, buatProyeksi, jarakMeter, kodeKeberadaan, kunciBaris, parseCsv, periksaBarisKk, periksaCatat, petakanBarisExcel, petakanBarisFasih, ringkasPerPpl, ringkasPerSub, type BarisRingkas } from "@/lib/pendataan";
 
 // (11 Okt 2026) Uji aturan Pendataan keroyokan: penandaan hasil, validasi baris unggahan, proyeksi peta, ringkasan monitoring.
 const KUNCI = "3f2b8c1e-5a4d-4c7e-9b1a-2d6e8f0a1b3c";
@@ -139,5 +139,102 @@ describe("ringkasan monitoring", () => {
     expect(p[1].per_sub.B.total.tidak_terdampak).toBe(3);
     expect(p[2].total.tidak_ditemukan).toBe(1);
     expect(Object.keys(p)).toEqual(["1", "2"]);
+  });
+});
+
+// ---------------------------------------------------------------- ekspor FASIH-SM
+// Contoh buatan (bukan data asli) yang meniru keanehan berkas ekspor: baris yang memuat tanda kutip dibungkus satu kali lagi, kode diawali apostrof,
+// catatan bisa berisi koma dan baris baru, dan status keberadaan memakai awalan angka.
+const HEADER = "NO,IDSUBSLS,ASSIGNMENT_ID,STATUS_ASSIGNMENT,Kode_Identitas,Jenis_Prelist,Nama_Keluarga_FasihSM,Nama_Kepala_Keluarga,Keberadaan_Keluarga,Alamat_Domisili,Nomor_KK,NIK_Kepala_Keluarga,Tanggal_Lahir_Kepala_keluarga,Status_Perkawinan,Geotag,Jumlah_Anggota_Keluarga_dalam_KK,Jumlah_Anggota_Keluarga_yg_Menetap,Total_Pendapatan_Keluarga_Sebulan,Total_Pengeluaran_Keluarga_Sebulan,Status_Kepemilikan_Rumah,Luas_Lantai_Tempat_Tinggal,Lantai,Dinding,Atap,catatan";
+const BARIS_BUNGKUS = `"100001,'1303040001000100,aaaa-1,APPROVED BY Pengawas,1303040001000100 - DTSEN - 15,Prelist (Keluarga),BUDI TEST / SITI TEST,BUDI TEST,1. Ditemukan,JORONG UJI,'1111111111111111,'2222222222222222,7/06/1975,Kawin/nikah,""'-1.3011193,100.9893264"",5.0,3.0,2500000.0,2467857.14,Milik sendiri,108.0,2. Keramik,Tembok,3. Seng,""Catatan uji, memuat koma"""`;
+const BARIS_POLOS = "100002,'1303040001000100,aaaa-2,APPROVED BY Pengawas,1303040001000100 - DTSEN - 45,Prelist (Keluarga),ANI TEST / ANU TEST,ANI TEST,0. Tidak Ditemukan (STOP),,'1111111111111112,'2222222222222223,,,,,,,,,,,,,";
+const BERKAS = [HEADER, BARIS_BUNGKUS, BARIS_POLOS].join("\r\n") + "\r\n";
+
+describe("bacaCsvFasih", () => {
+  it("membuka baris yang dibungkus tanda kutip sehingga semua baris punya 25 kolom", () => {
+    const { judul, baris } = bacaCsvFasih(BERKAS);
+    expect(judul.length).toBe(25);
+    expect(baris.length).toBe(2);
+    expect(baris[0].Nama_Kepala_Keluarga).toBe("BUDI TEST");
+    expect(baris[0].Geotag).toBe("'-1.3011193,100.9893264");
+    expect(baris[0].catatan).toBe("Catatan uji, memuat koma");
+    expect(adalahFasih(judul)).toBe(true);
+  });
+  it("CSV baku biasa tetap terbaca", () => {
+    const r = parseCsv('a,b\n"x, y",2\n');
+    expect(r).toEqual([["a", "b"], ["x, y", "2"]]);
+  });
+  it("catatan bertanda kutip yang berisi baris baru tidak memecah rekaman", () => {
+    const bungkus = BARIS_BUNGKUS.replace("Catatan uji, memuat koma", "baris satu\nbaris dua");
+    const { baris } = bacaCsvFasih([HEADER, bungkus, BARIS_POLOS].join("\n"));
+    expect(baris.length).toBe(2);
+    expect(baris[0].catatan).toBe("baris satu\nbaris dua");
+  });
+});
+
+describe("kodeKeberadaan", () => {
+  it("awalan angka didahulukan: 'Tidak Ditemukan' bukan 'Ditemukan'", () => {
+    expect(kodeKeberadaan("1. Ditemukan")).toBe(1);
+    expect(kodeKeberadaan("0. Tidak Ditemukan (STOP)")).toBe(0);
+    expect(kodeKeberadaan("2. Baru")).toBe(2);
+    expect(kodeKeberadaan("5. Tidak dapat ditemui sampai akhir pendataan")).toBe(5);
+    expect(kodeKeberadaan("6. Keluarga Khusus")).toBe(6);
+  });
+  it("tanpa angka: teks persis; 'Tidak Ditemukan' tetap 0", () => {
+    expect(kodeKeberadaan("Ditemukan")).toBe(1);
+    expect(kodeKeberadaan("Tidak Ditemukan")).toBe(0);
+    expect(kodeKeberadaan("")).toBe(null);
+  });
+});
+
+describe("bacaGeotag", () => {
+  it("membuang apostrof dan tanda kutip", () => {
+    expect(bacaGeotag("'-1.3011193,100.9893264")).toEqual({ lat: -1.3011193, lng: 100.9893264 });
+    expect(bacaGeotag("")).toBe(null);
+    expect(bacaGeotag("abc")).toBe("salah");
+  });
+});
+
+describe("petakanBarisFasih", () => {
+  const { baris } = bacaCsvFasih(BERKAS);
+  it("menerima Ditemukan, memetakan nama, nomor urut, koordinat, dan kunci penugasan", () => {
+    const h = petakanBarisFasih(baris[0]);
+    expect(h.jenis).toBe("terima");
+    if (h.jenis !== "terima") return;
+    const c = periksaBarisKk(h.mentah);
+    expect(c.ok).toBe(true);
+    if (!c.ok) return;
+    expect(c.baris).toMatchObject({ idsubsls: "1303040001000100", nama_kk: "BUDI TEST", anggota_lain: "SITI TEST", patokan: "JORONG UJI", sumber_id: "aaaa-1", no_urut: 15, keberadaan_awal: 1 });
+    expect(c.baris.lat).toBeCloseTo(-1.3011193);
+  });
+  it("tidak membawa NIK, Nomor KK, tanggal lahir, atau pendapatan", () => {
+    const h = petakanBarisFasih(baris[0]);
+    if (h.jenis !== "terima") throw new Error("harus diterima");
+    const json = JSON.stringify(h);
+    for (const rahasia of ["2222222222222222", "1111111111111111", "7/06/1975", "2500000"]) expect(json).not.toContain(rahasia);
+  });
+  it("melewati status 0 (STOP) tanpa menghitungnya sebagai salah", () => {
+    expect(petakanBarisFasih(baris[1])).toEqual({ jenis: "lewati", keberadaan: 0 });
+  });
+  it("menerima status 2, 5, 6 dan melewati 3, 4", () => {
+    const dasar = { ...baris[0] };
+    for (const [teksStatus, jenis] of [["2. Baru", "terima"], ["5. Tidak dapat ditemui sampai akhir pendataan", "terima"], ["6. Keluarga Khusus", "terima"], ["3. Pindah", "lewati"], ["4. Meninggal", "lewati"]] as const) {
+      expect(petakanBarisFasih({ ...dasar, Keberadaan_Keluarga: teksStatus }).jenis).toBe(jenis);
+    }
+  });
+  it("koordinat di luar Kab. Solok tidak menggugurkan KK, hanya menjadi peringatan", () => {
+    const h = petakanBarisFasih({ ...baris[0], Geotag: "'-6.2,106.8" });
+    expect(h.jenis).toBe("terima");
+    if (h.jenis === "terima") {
+      expect(h.peringatan).toMatch(/luar/);
+      const c = periksaBarisKk(h.mentah);
+      expect(c.ok && c.baris.lat).toBe(null);
+    }
+  });
+  it("tanpa ASSIGNMENT_ID dianggap salah", () => {
+    expect(petakanBarisFasih({ ...baris[0], ASSIGNMENT_ID: "" }).jenis).toBe("salah");
+  });
+  it("bacaKodeSub menerima apostrof di depan", () => {
+    expect(bacaKodeSub("'1303040001000100")).toBe("1303040001000100");
   });
 });

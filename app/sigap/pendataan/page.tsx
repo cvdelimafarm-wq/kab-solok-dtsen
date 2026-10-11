@@ -356,7 +356,7 @@ export default function LembarPendataan() {
                           <IkonHasil hasil={k.hasil} warna={k.hasil ? warnaPelaku(a) : WARNA_BELUM} />
                           <span className="min-w-0 flex-1">
                             <b className="block truncate text-[14px] text-[#0F2A52]">{k.nama_kk}</b>
-                            <small className="block truncate text-[12px] text-[#6B7A90]">{[k.anggota_lain, k.patokan, jarak].filter(Boolean).join(" · ") || "-"}</small>
+                            <small className="block truncate text-[12px] text-[#6B7A90]">{[k.no_urut ? `No. ${k.no_urut}` : null, k.anggota_lain, k.patokan, jarak].filter(Boolean).join(" · ") || "-"}</small>
                           </span>
                           <span className="flex-none text-right text-[11.5px] font-bold text-[#52627A]">
                             {k.hasil ? LABEL_PENDEK[k.hasil] : "Belum"}
@@ -506,7 +506,7 @@ export default function LembarPendataan() {
           <h3 className="pr-10 text-[17px] font-extrabold text-[#0F2A52]">{terpilih.nama_kk}</h3>
           {terpilih.anggota_lain && <p className="mt-0.5 text-[12.5px] text-[#52627A]">Anggota: {terpilih.anggota_lain}</p>}
           <p className="mt-0.5 text-[12.5px] text-[#6B7A90]">
-            {[terpilih.patokan, subAktif ? namaSub(subAktif) : null, saya && terpilih.lat !== null && terpilih.lng !== null ? `${fmtJarak(jarakMeter(saya, { lat: terpilih.lat, lng: terpilih.lng }))} dari Anda` : null].filter(Boolean).join(" · ")}
+            {[terpilih.no_urut ? `No. ${terpilih.no_urut}` : null, terpilih.patokan, subAktif ? namaSub(subAktif) : null, saya && terpilih.lat !== null && terpilih.lng !== null ? `${fmtJarak(jarakMeter(saya, { lat: terpilih.lat, lng: terpilih.lng }))} dari Anda` : null].filter(Boolean).join(" · ")}
           </p>
 
           {terpilih.hasil && terpilih.ppl_akun_id !== sayaAkun && (

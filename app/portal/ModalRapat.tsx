@@ -64,18 +64,21 @@ export default function ModalRapat() {
     }
   }, []);
 
+  // (11 Okt 2026) Cek ulang tiap 20 dtk HANYA bila ada rapat aktif/terjadwal; tanpa rapat cukup tiap 2 menit (+ saat aplikasi dibuka lagi)
+  // -- temuan audit: /api/sigap/rapat dipanggil tiap 20 dtk di Beranda semua petugas walau tidak ada rapat.
+  const adaRapat = !!r;
   useEffect(() => {
     muat();
     const t = setInterval(() => {
       if (document.visibilityState === "visible") muat();
-    }, 20_000);
+    }, adaRapat ? 20_000 : 120_000);
     const v = () => document.visibilityState === "visible" && muat();
     document.addEventListener("visibilitychange", v);
     return () => {
       clearInterval(t);
       document.removeEventListener("visibilitychange", v);
     };
-  }, [muat]);
+  }, [muat, adaRapat]);
 
   // status berubah -> buka kembali modal yang ditutup untuk status sebelumnya
   useEffect(() => {

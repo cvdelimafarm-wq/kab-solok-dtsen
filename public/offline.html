@@ -1,26 +1,111 @@
 <!doctype html>
 <!-- (8 Okt 2026) Halaman saat HP tidak ada sinyal -- PWA SIGAP, permintaan user -->
+<!-- (11 Okt 2026) Temuan audit: (1) dulu selalu "Tidak ada sinyal" walau internet ada (server sedang restart/deploy) -> kini dibedakan memakai
+     navigator.onLine dan dicoba ulang otomatis; (2) peta wilayah yang sudah tersimpan di HP bisa dibuka dari sini walau aplikasi gagal dibuka
+     tanpa sinyal (nama Sub SLS diambil dari simpanan data terakhir di HP, sigap_cache_v2). Disajikan service worker (public/sw.js, cache sigap-v4). -->
 <html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0F3D7A">
+<meta name="theme-color" content="#0F2A52">
 <title>Tidak ada sinyal · SIGAP</title>
 <style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#EEF2F8;color:#13213A;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px;box-sizing:border-box}
-  .kartu{max-width:360px;background:#fff;border-radius:18px;padding:28px 24px;text-align:center;box-shadow:0 6px 20px rgba(15,61,122,.12)}
-  img{width:72px;height:72px}
-  h1{font-size:20px;margin:14px 0 6px}
-  p{font-size:14px;line-height:1.55;color:#55657D;margin:0 0 18px}
-  button{border:0;border-radius:12px;background:#0F3D7A;color:#fff;font-weight:800;font-size:15px;padding:12px 22px}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#EEF2F8;color:#13213A;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px;box-sizing:border-box}
+  .kartu{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:24px 20px;text-align:center;box-shadow:0 6px 20px rgba(15,61,122,.12);box-sizing:border-box}
+  img{width:64px;height:64px}
+  h1{font-size:19px;margin:12px 0 6px}
+  p{font-size:14px;line-height:1.55;color:#55657D;margin:0 0 16px}
+  button{border:0;border-radius:12px;background:#1F5FD1;color:#fff;font-weight:800;font-size:15px;padding:12px 22px;min-height:46px}
+  small{display:block;margin-top:10px;font-size:12px;color:#8A97AB}
+  .peta{text-align:left}
+  .peta h2{font-size:15px;margin:0 0 4px}
+  .peta p{font-size:12.5px;margin:0 0 10px}
+  .grup{margin-top:10px}
+  .grup b{display:block;font-size:12px;color:#0F3D7A;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  .grup a{display:inline-flex;align-items:center;min-height:36px;margin:0 6px 6px 0;padding:0 12px;border-radius:999px;background:#E6EEFC;color:#1F5FD1;font-weight:800;font-size:12.5px;text-decoration:none}
 </style>
 </head>
 <body>
   <div class="kartu">
     <img src="/icons/icon-192.png" alt="">
-    <h1>Tidak ada sinyal</h1>
-    <p>SIGAP butuh internet. Periksa data seluler/Wi-Fi Anda, lalu coba lagi.</p>
+    <h1 id="judul">Tidak ada sinyal</h1>
+    <p id="pesan">SIGAP butuh internet. Periksa data seluler/Wi-Fi Anda, lalu coba lagi.</p>
     <button type="button" onclick="location.reload()">Coba lagi</button>
+    <small id="otomatis"></small>
   </div>
+  <div class="kartu peta" id="peta" hidden>
+    <h2>Peta tersimpan di HP</h2>
+    <p>Bisa dibuka tanpa sinyal.</p>
+    <div id="daftar"></div>
+  </div>
+<script>
+(function () {
+  var judul = document.getElementById("judul"), pesan = document.getElementById("pesan"), oto = document.getElementById("otomatis");
+  function atur() {
+    if (navigator.onLine) {
+      judul.textContent = "Server SIGAP belum terjangkau";
+      pesan.textContent = "Internet HP Anda tersambung, tetapi server SIGAP sedang tidak menjawab (mungkin sedang diperbarui). Biasanya pulih dalam 1–2 menit.";
+      oto.textContent = "Mencoba lagi otomatis…";
+    } else {
+      judul.textContent = "Tidak ada sinyal";
+      pesan.textContent = "SIGAP butuh internet. Periksa data seluler/Wi-Fi Anda, lalu coba lagi.";
+      oto.textContent = "Halaman dimuat ulang otomatis begitu sinyal kembali.";
+    }
+  }
+  atur();
+  window.addEventListener("online", function () { location.reload(); });
+  window.addEventListener("offline", atur);
+  setInterval(function () { if (navigator.onLine) location.reload(); }, 15000);
+
+  // daftar peta tersimpan
+  try {
+    var m = JSON.parse(localStorage.getItem("sigap_peta_manifest_v1") || "null");
+    if (!m || !m.wa || !m.sls) return;
+    var nama = {}, desa = {};
+    try {
+      var c = JSON.parse(localStorage.getItem("sigap_cache_v2") || "null");
+      var e = (c && c.e) || {};
+      var tim = e["/api/portal/wilayah-tim"] && e["/api/portal/wilayah-tim"].data && e["/api/portal/wilayah-tim"].data.tim;
+      var idf = e["/api/portal/identifikasi"] && e["/api/portal/identifikasi"].data;
+      var subs = [].concat((tim && tim.sub_sls) || [], (idf && idf.sub) || []);
+      subs.forEach(function (s) {
+        if (!s || !s.idsubsls) return;
+        nama[s.idsubsls] = (s.sls || s.idsubsls) + (s.sub_sls ? " · Sub " + s.sub_sls : "");
+        if (s.nagari) desa[s.idsubsls.slice(0, 10)] = s.nagari;
+      });
+    } catch (_) {}
+    var jalur = function (f, n) { return "/peta-cache/" + f + "/" + encodeURIComponent(n); };
+    var esc = function (t) { return String(t).replace(/[&<>"']/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); };
+    if (!("caches" in window)) return;
+    caches.open("sigap-peta-v1").then(function (cc) { return cc.keys(); }).then(function (ks) {
+    var ada = {};
+    ks.forEach(function (r) { ada[new URL(r.url).pathname] = true; });
+    var html = "";
+    Object.keys(m.wa).forEach(function (k) {
+      var b = m.wa[k] || [];
+      if (!b.length) return;
+      b = b.filter(function (x) { return ada[jalur("wa", x.nama)]; });
+      if (!b.length) return;
+      html += '<div class="grup"><b>Peta WA ' + esc(desa[k] || k) + "</b>" + b.map(function (x) {
+        return '<a href="' + jalur("wa", x.nama) + '">' + (x.dari > 1 ? "Lembar " + x.halaman + "/" + x.dari : "Buka peta") + "</a>";
+      }).join("") + "</div>";
+    });
+    Object.keys(m.sls).forEach(function (k) {
+      var b = m.sls[k] || [];
+      if (!b.length) return;
+      b = b.filter(function (x) { return ada[jalur("sls", x.nama)]; });
+      if (!b.length) return;
+      html += '<div class="grup"><b>' + esc(nama[k] || k) + "</b>" + b.map(function (x) {
+        return '<a href="' + jalur("sls", x.nama) + '">' + (x.dari > 1 ? "Lembar " + x.halaman + "/" + x.dari : "Buka peta") + "</a>";
+      }).join("") + "</div>";
+    });
+    if (html) {
+      document.getElementById("daftar").innerHTML = html;
+      document.getElementById("peta").hidden = false;
+    }
+    }).catch(function () {});
+  } catch (_) {}
+})();
+</script>
 </body>
 </html>

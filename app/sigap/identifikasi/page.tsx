@@ -176,6 +176,9 @@ export default function DaftarIdentifikasi() {
                             {awalSls && s.rekan && <KontakRekan s={s} kompak />}
                             <Link
                             href={`/sigap/identifikasi/${encodeURIComponent(s.idsubsls)}${sufiks}`}
+                            // (11 Okt 2026) prefetch PENUH (kode + data halaman) untuk baris yang terlihat -- audit: daftar -> detail dulu ±960 ms
+                            // karena kode halaman detail baru diunduh saat diketuk; kini terbuka seketika
+                            prefetch={true}
                             className={`grid min-h-[50px] grid-cols-[minmax(0,1fr)_44px_52px_60px] items-center gap-x-1.5 border-b border-[#EEF2F7] px-3.5 py-1.5 active:bg-[#EAF1FC] ${k === "tidak_terdampak" ? "bg-[#EAF5FD]" : ""}`}
                           >
                             <span className="flex min-w-0 items-center gap-2">

@@ -36,7 +36,9 @@ export function buatRencana(tahap: TahapHasil[], pml: boolean): Rencana {
       if (m.kode === "wilayah_tim" && pml) continue; // (10 Okt 2026) wilayah tugas tim disembunyikan untuk PML
       const api = DATA_MODUL[m.kode];
       if (api) data.add(api);
-      if (internal(m.href)) rute.add(m.href.split("?")[0]);
+      // (11 Okt 2026) URL LENGKAP termasuk ?dari=... -- temuan audit: prefetch dulu membuang query, padahal Next menyimpan hasil per URL lengkap,
+      // sehingga tombol "Isi sekarang" (/sigap/identifikasi?dari=...) tetap menunggu server (±400 ms).
+      if (internal(m.href)) rute.add(m.href);
     }
   }
   return { rute: Array.from(rute), data: Array.from(data) };
@@ -74,6 +76,7 @@ export function useSiapkan(rencana: Rencana, aktif = true) {
         } catch {
           /* abaikan */
         }
+        await tunda(120); // (11 Okt 2026) satu per satu, tidak sekaligus (audit: 9-14 rute diambil bersamaan)
       }
     })();
     return () => {

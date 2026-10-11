@@ -60,11 +60,21 @@ export default function TutupSementara() {
     }
   }, []);
 
+  // (11 Okt 2026) Temuan audit: /api/sigap/tutup dulu dipanggil di SETIAP perpindahan halaman (efek bergantung pada pathname) + tiap menit.
+  // Kini: sekali saat masuk wilayah SIGAP, lalu tiap 1 menit HANYA selama penutupan aktif (supaya terbuka sendiri tepat waktu),
+  // selain itu tiap 5 menit dan saat aplikasi dibuka lagi; tetap segera bila sesi berubah (baru masuk / keluar).
+  const aktif = halamanSigap(pathname);
+  const sedangTutup = !!st?.tutup;
   useEffect(() => {
-    if (!halamanSigap(pathname)) return;
+    if (!aktif) return;
     periksa();
-    // cek ulang tiap menit (buka sendiri setelah 13.00) & segera saat sesi berubah (baru masuk / keluar)
-    const lambat = setInterval(periksa, 60_000);
+    const v = () => document.visibilityState === "visible" && periksa();
+    document.addEventListener("visibilitychange", v);
+    return () => document.removeEventListener("visibilitychange", v);
+  }, [aktif, periksa]);
+  useEffect(() => {
+    if (!aktif) return;
+    const lambat = setInterval(() => document.visibilityState === "visible" && periksa(), sedangTutup ? 60_000 : 300_000);
     const cepat = setInterval(() => {
       setTik((t) => t + 1);
       if (bacaSesi() !== sesiTerakhir.current) periksa();
@@ -73,7 +83,7 @@ export default function TutupSementara() {
       clearInterval(lambat);
       clearInterval(cepat);
     };
-  }, [pathname, periksa]);
+  }, [aktif, sedangTutup, periksa]);
 
   // halaman Masuk (Beranda tanpa sesi) & /sigap/masuk tetap bisa dipakai
   const halamanMasuk = pathname === "/sigap/masuk" || (pathname === "/" && !adaSesi);
