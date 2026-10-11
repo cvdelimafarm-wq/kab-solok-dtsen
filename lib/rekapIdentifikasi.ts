@@ -249,3 +249,32 @@ export function barisExcelPml(baris: BarisPml[]): Record<string, string | number
     "Realisasi sebagai pendamping": b.realisasi_pendamping,
   }));
 }
+
+/**
+ * Validasi baris PML yang SUDAH digabung server (respons API: satu baris per PML). Dipakai di klien --
+ * periksaBarisPml hanya untuk baris mentah database (pml_id + peran), jadi tidak boleh dipakai ulang di sini.
+ */
+export function periksaBarisPmlJadi(x: unknown): BarisPml[] {
+  if (!Array.isArray(x)) return [];
+  const angka = (v: unknown) => Math.max(0, Math.trunc(Number(v) || 0));
+  const out: BarisPml[] = [];
+  for (const r of x) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const id = Number(o.id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const target = angka(o.target);
+    const targetPend = angka(o.target_pendamping);
+    out.push({
+      id,
+      nama: String(o.nama ?? ""),
+      target,
+      realisasi: Math.min(target, angka(o.realisasi)),
+      terdampak: angka(o.terdampak),
+      tidak: angka(o.tidak),
+      target_pendamping: targetPend,
+      realisasi_pendamping: Math.min(targetPend, angka(o.realisasi_pendamping)),
+    });
+  }
+  return out.sort((a, b) => koleksi.compare(a.nama, b.nama));
+}

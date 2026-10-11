@@ -16,7 +16,7 @@ import {
   barisExcelPml,
   kelompokkan,
   namaBerkasRekap,
-  periksaBarisPml,
+  periksaBarisPmlJadi,
   periksaBarisRekap,
   persenRealisasi,
   rapikanNama,
@@ -55,7 +55,7 @@ export default function RekapIdentifikasi() {
     setMemuat(true);
     try {
       const d = await apiPortal<{ sekarang: string; baris: unknown; pml?: unknown }>("/api/portal/identifikasi/rekap");
-      setData({ sekarang: d.sekarang, baris: periksaBarisRekap(d.baris), pml: periksaBarisPml(d.pml) });
+      setData({ sekarang: d.sekarang, baris: periksaBarisRekap(d.baris), pml: periksaBarisPmlJadi(d.pml) });
       setGalat(null);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat rekap. Periksa sambungan lalu coba lagi.");

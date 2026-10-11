@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bagiKolom, barisExcel, barisExcelPerNagari, barisExcelPml, periksaBarisPml, persenRealisasi, ringkasPml, urutkanPml, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
+import { bagiKolom, barisExcel, barisExcelPerNagari, barisExcelPml, periksaBarisPml, periksaBarisPmlJadi, persenRealisasi, ringkasPml, urutkanPml, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
 
 // (11 Okt 2026) Uji rekap hasil identifikasi (hanya Sub SLS + status).
 const r = (idsubsls: string, kecamatan: string, nagari: string, sls: string, sub_sls: string, status: BarisRekap["status"] = "terdampak"): BarisRekap => ({ idsubsls, kecamatan, nagari, sls, sub_sls, status });
@@ -155,5 +155,24 @@ describe("target & realisasi per PML", () => {
     const x = barisExcelPml(periksaBarisPml(api));
     expect(Object.keys(x[0])).toEqual(["PML", "Target Sub SLS (pelaksana)", "Realisasi (sudah diidentifikasi)", "Belum", "Persen realisasi", "Terdampak", "Tidak terdampak", "Target sebagai pendamping", "Realisasi sebagai pendamping"]);
     expect(x[1]).toMatchObject({ PML: "Budi", Belum: 6, "Persen realisasi": 40 });
+  });
+});
+
+describe("respons API per PML (sudah digabung server)", () => {
+  it("lolos dua kali jalan: baris mentah -> digabung server -> divalidasi klien", () => {
+    const mentah = [
+      { pml_id: 1, nama: "ANI", peran: "pelaksana", target: 8, realisasi: 8, terdampak: 5, tidak_terdampak: 3 },
+      { pml_id: 1, nama: "ANI", peran: "pendamping", target: 6, realisasi: 2, terdampak: 2, tidak_terdampak: 0 },
+    ];
+    const diServer = periksaBarisPml(mentah);
+    const diKlien = periksaBarisPmlJadi(JSON.parse(JSON.stringify(diServer)));
+    expect(diKlien).toEqual(diServer);
+    expect(diKlien).toHaveLength(1); // regresi: dulu klien memakai periksaBarisPml lagi sehingga semua baris terbuang
+  });
+  it("membuang baris tak sah dan membatasi realisasi", () => {
+    const x = periksaBarisPmlJadi([{ id: 0, nama: "x" }, null, { id: 2, nama: "B", target: 3, realisasi: 9, terdampak: 1, tidak: 1, target_pendamping: 2, realisasi_pendamping: 5 }]);
+    expect(x).toHaveLength(1);
+    expect([x[0].realisasi, x[0].realisasi_pendamping]).toEqual([3, 2]);
+    expect(periksaBarisPmlJadi(undefined)).toEqual([]);
   });
 });
