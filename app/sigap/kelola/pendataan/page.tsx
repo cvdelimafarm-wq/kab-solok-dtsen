@@ -222,6 +222,9 @@ export default function UnggahPendataan() {
           Daftar KK sasaran per Sub SLS. Setelah diunggah, seluruh anggota tim (PML dan semua PPL) di Sub SLS itu melihat daftarnya di Lembar Pendataan. Berkas yang diterima: <b>ekspor FASIH-SM &quot;1303 - Pendataan&quot;</b> (CSV/Excel; disaring otomatis ke Sub SLS sampel dan status keberadaan 1, 2, 5, 6; NIK, Nomor KK, dan pendapatan tidak ikut dikirim) atau templat Excel/CSV (kode Sub SLS teks 16 digit, koordinat desimal).
         </p>
 
+        {/* (11 Okt 2026) Unggah CSV memang dirancang dari laptop -- permintaan user; di layar kecil hanya diingatkan */}
+        <p className="mt-3 rounded-[14px] border-l-4 border-[#B7791F] bg-[#FFF6E0] px-3 py-2 text-[12.5px] text-[#6B4A0E] lg:hidden">Unggah daftar KK sebaiknya dari laptop (berkas CSV ekspor FASIH-SM ada di laptop dan ukurannya besar).</p>
+
         {galat && <p className="mt-4 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
         {data && (

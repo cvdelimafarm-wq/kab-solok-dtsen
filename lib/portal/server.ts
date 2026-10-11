@@ -166,8 +166,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
   }
   // (10 Okt 2026) Monitoring Lembar Identifikasi SLS: admin bencana (izin bencana.admin)
   if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi SLS", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
-  // (11 Okt 2026) Unggah daftar KK sasaran Pendataan keroyokan: admin bencana (izin bencana.admin level kelola)
-  if (boleh(izin, "bencana.admin", "kelola")) kartu.push({ kode: "admin-pendataan", grup: "kelola", judul: "Unggah Daftar KK Pendataan", uraian: "Unggah daftar KK sasaran per Sub SLS (Excel/CSV), lihat riwayat unggahan dan jumlah yang sudah didata.", href: "/sigap/kelola/pendataan" });
+  // (11 Okt 2026) Unggah daftar KK sasaran TIDAK dibuat kartu di Beranda HP: unggah CSV dilakukan dari laptop lewat menu sidebar desktop (Shell.tsx) -- permintaan user.
   if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");
   if (adminAplikasi || boleh(izin, "translok.kegiatan", "kelola")) {
