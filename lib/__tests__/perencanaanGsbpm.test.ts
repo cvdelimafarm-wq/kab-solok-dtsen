@@ -95,3 +95,25 @@ test("bacaData: rusak -> contoh; tahap hilang dilengkapi; kegiatan tanpa RO dibu
   expect(d.kegiatan[0].tahap.evaluasi.dipakai).toBe(true);
   expect(d.kegiatan[0].tahap.pelatihan.dipakai).toBe(true);
 });
+
+test("bacaData: baris POK & alokasi yang yatim dibuang, rencana dirapikan", () => {
+  const raw = JSON.stringify({
+    versi: 1,
+    ro: [{ id: "r1", kode: "2906.BMA.006", nama: "X", program: "", tahun: 2026 }],
+    kegiatan: [{ id: "k1", roId: "r1", nama: "A", subKomponen: [], tahap: {} }],
+    pok: [
+      { id: "p1", roId: "r1", komponen: "052", subKomponen: "A", akun: "524113", uraian: "Translok", volume: 10, satuan: "O-K", harga: 170000, jumlah: 1700000 },
+      { id: "p2", roId: "hilang", komponen: "052", subKomponen: "A", akun: "524113", uraian: "X", volume: null, satuan: "", harga: null, jumlah: 1 },
+    ],
+    alokasi: [
+      { id: "a1", detailId: "p1", kegiatanId: "k1", volume: 10, nilai: 1700000, rencana: [{ bulan: "2026-03", nilai: 1700000 }, { rusak: true }] },
+      { id: "a2", detailId: "p2", kegiatanId: "k1", volume: null, nilai: 1, rencana: [] },
+      { id: "a3", detailId: "p1", kegiatanId: "k-hilang", volume: null, nilai: 1, rencana: [] },
+    ],
+  });
+  const d = bacaData(raw);
+  expect(d.pok.map((p) => p.id)).toEqual(["p1"]);
+  expect(d.alokasi.map((a) => a.id)).toEqual(["a1"]);
+  expect(d.alokasi[0].rencana).toEqual([{ bulan: "2026-03", nilai: 1700000 }]);
+  expect(dataContoh().pok).toEqual([]);
+});

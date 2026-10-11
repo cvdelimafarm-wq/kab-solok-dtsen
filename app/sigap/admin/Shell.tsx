@@ -230,6 +230,8 @@ export default function Shell({
   const bolehDelego = !!ringkas.izin["delego.admin"];
   // (11 Okt 2026) Pendataan keroyokan PPL/PML -- permintaan user (lembar petugas lewat tahap Pendataan di Beranda; sidebar desktop hanya memuat menu admin unggah, karena unggah CSV dari laptop)
   const bolehPendataanKelola = ringkas.izin["bencana.admin"]?.level === "kelola";
+  // (11 Okt 2026) Monitoring Lapangan (translok + identifikasi/pendataan per petugas per tanggal) -- permintaan user; cukup izin bencana.admin level lihat
+  const bolehLapangan = !!ringkas.izin["bencana.admin"];
   const bolehAplikasi = ringkas.izin["portal.kelola"]?.level === "kelola" || ringkas.izin["translok.kegiatan"]?.level === "kelola";
   // (11 Okt 2026) Uji coba Perencanaan kegiatan (GSBPM per RO) -- hanya Admin Aplikasi, keputusan user
   const bolehPerencanaan = ringkas.izin["portal.kelola"]?.level === "kelola";
@@ -244,6 +246,7 @@ export default function Shell({
     if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/kelola/pedia") });
     if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
     if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/kelola/pelatihan") });
+    if (bolehLapangan) out.push({ id: "m-lapangan", grup: "Menu", label: "Monitoring › Lapangan (translok, identifikasi, pendataan)", jalankan: () => (window.location.href = "/sigap/kelola/lapangan") });
     if (bolehPendataanKelola) out.push({ id: "m-pendataan-unggah", grup: "Menu", label: "Pendataan › Unggah daftar KK (CSV FASIH)", jalankan: () => (window.location.href = "/sigap/kelola/pendataan") });
     if (bolehPerencanaan) out.push({ id: "m-perencanaan", grup: "Menu", label: "Perencanaan kegiatan (uji coba)", ket: "RO → kegiatan utama → tahap GSBPM", jalankan: () => (window.location.href = "/sigap/kelola/perencanaan") });
     if (bolehAplikasi) out.push({ id: "m-aplikasi", grup: "Menu", label: "Kelola aplikasi, admin & periode", jalankan: () => (window.location.href = "/sigap/kelola/aplikasi") });
@@ -255,7 +258,7 @@ export default function Shell({
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehPerencanaan, bolehDelego, bolehPendataanKelola, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehPerencanaan, bolehDelego, bolehPendataanKelola, bolehLapangan, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -309,6 +312,7 @@ export default function Shell({
           <LabelGrup mini={mini}>Monitoring</LabelGrup>
           <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
           <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
+          {bolehLapangan && <ItemNav mini={mini} ikon="grafik" label="Monitoring lapangan" href="/sigap/kelola/lapangan" title="Translok + hasil identifikasi/pendataan per petugas per tanggal" />}
 
           {(subAdmin.length > 0 || bolehAkses || bolehAplikasi || bolehDelego || bolehPendataanKelola) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
           {subAdmin.length > 0 && (

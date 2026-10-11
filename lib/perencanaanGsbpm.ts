@@ -9,6 +9,8 @@
 // (localStorage), belum ke database, supaya aturan bisa dicoba dan diubah tanpa migrasi. Logika murni (tanpa DOM/DB)
 // agar mudah diuji (lib/__tests__/perencanaanGsbpm.test.ts).
 
+import type { Alokasi, DetailPok } from "./perencanaanPok";
+
 export type KodeTahap = "perencanaan" | "pelatihan" | "pendataan" | "pengolahan" | "analisis" | "evaluasi";
 
 export type DefinisiTahap = {
@@ -125,7 +127,8 @@ export type KegiatanUtama = {
   nama: string;
   mulai: string | null;
   selesai: string | null;
-  /** Tautan anggaran tingkat Sub Komponen / detail POK, mis. "052.A" (keputusan 11 Okt: tautan di Sub Komponen). */
+  /** Tautan anggaran tingkat Sub Komponen, mis. "052.A" (11 Okt, versi awal). Sejak tautan diambil dari baris POK (DataUji.alokasi),
+   *  isian manual ini tidak ditampilkan lagi di form; tetap dibaca agar data lama tidak rusak. */
   subKomponen: string[];
   tahap: Record<KodeTahap, IsianTahap>;
   /** Kegiatan asal bila hasil duplikat. */
@@ -133,7 +136,8 @@ export type KegiatanUtama = {
   dibuat: string;
 };
 
-export type DataUji = { versi: 1; ro: Ro[]; kegiatan: KegiatanUtama[] };
+/** (11 Okt 2026) + pok (baris detail POK per RO) & alokasi (baris POK x kegiatan + rencana bayar). Lihat lib/perencanaanPok.ts. */
+export type DataUji = { versi: 1; ro: Ro[]; kegiatan: KegiatanUtama[]; pok: DetailPok[]; alokasi: Alokasi[] };
 
 export const KUNCI_SIMPAN = "sigap_uji_perencanaan_v1";
 
@@ -262,6 +266,8 @@ export function dataContoh(sekarang = "2026-10-11T00:00:00.000Z"): DataUji {
     versi: 1,
     ro: [ro],
     kegiatan: nama.map((n, i) => buatKegiatan({ roId: ro.id, nama: n }, `keg-contoh-${i + 1}`, sekarang)),
+    pok: [],
+    alokasi: [],
   };
 }
 
@@ -286,7 +292,25 @@ export function bacaData(raw: string | null): DataUji {
         for (const t of TAHAP_GSBPM) if (t.wajib) awal[t.kode].dipakai = true;
         return { ...k, subKomponen: Array.isArray(k.subKomponen) ? k.subKomponen.filter((s) => typeof s === "string") : [], tahap: awal };
       });
-    return { versi: 1, ro: ro.map((r) => ({ ...r, program: typeof r.program === "string" ? r.program : "", tahun: typeof r.tahun === "number" ? r.tahun : 2026 })), kegiatan };
+    const angka = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+    const pok = (Array.isArray(d.pok) ? (d.pok as unknown[]) : []).filter(
+      (p): p is DetailPok => apakahObjek(p) && typeof p.id === "string" && typeof p.roId === "string" && idRo.has(p.roId as string) && typeof p.akun === "string" && typeof p.uraian === "string" && angka(p.jumlah)
+    );
+    const idPok = new Set(pok.map((p) => p.id));
+    const idKeg = new Set(kegiatan.map((k) => k.id));
+    const alokasi = (Array.isArray(d.alokasi) ? (d.alokasi as unknown[]) : [])
+      .filter(
+        (a): a is Alokasi =>
+          apakahObjek(a) && typeof a.id === "string" && idPok.has(a.detailId as string) && idKeg.has(a.kegiatanId as string) && angka(a.nilai)
+      )
+      .map((a) => ({ ...a, rencana: Array.isArray(a.rencana) ? a.rencana.filter((r) => apakahObjek(r) && typeof r.bulan === "string" && angka(r.nilai)) : [] }));
+    return {
+      versi: 1,
+      ro: ro.map((r) => ({ ...r, program: typeof r.program === "string" ? r.program : "", tahun: typeof r.tahun === "number" ? r.tahun : 2026 })),
+      kegiatan,
+      pok,
+      alokasi,
+    };
   } catch {
     return dataContoh();
   }

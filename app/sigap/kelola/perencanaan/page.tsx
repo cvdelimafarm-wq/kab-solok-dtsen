@@ -8,12 +8,15 @@
 // browser dulu (localStorage, kunci sigap_uji_perencanaan_v1) sampai aturan disetujui -- tidak ada tabel/migrasi, modul lain tidak disentuh.
 // Posisi hierarki ada di alamat (?ro=&keg=&tahap=) supaya tombol Back naik satu tingkat.
 // Logika murni & uji: lib/perencanaanGsbpm.ts, lib/__tests__/perencanaanGsbpm.test.ts. Rancangan: claude/rancangan-identifikasi-gsbpm-ro.md.
+// (11 Okt 2026, lanjutan) Tingkat RO punya 3 bagian (?bagian=): Kegiatan | Baris POK | Rencana realisasi -- permintaan user: daftar diambil dari POK
+// (tempel dari Excel) supaya tidak ada yang terlewat; setiap baris ditautkan ke kegiatan (boleh >1 kegiatan, dengan alokasi), baris tanpa tautan
+// ditandai "belum dipetakan"; RAB kegiatan = akumulasi alokasi; tiap alokasi punya rencana bayar per bulan. Logika: lib/perencanaanPok.ts.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Bingkai from "../../kontrak/Bingkai";
-import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
-import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
+import { bacaSesi, fetchJson, keMasuk, pesanGalat, rupiah, SesiBerakhir, tglSedang } from "../../admin/api";
+import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH } from "../../admin/ui";
 import {
   KUNCI_SIMPAN,
   TAHAP_GSBPM,
@@ -35,14 +38,43 @@ import {
   type KodeTahap,
   type Ro,
 } from "@/lib/perencanaanGsbpm";
+import {
+  BULAN_PENDEK,
+  KOLOM_TEMPEL,
+  anggaranKegiatan,
+  bacaTempelanPok,
+  gabungMuatan,
+  matriksRencana,
+  nilaiAlokasi,
+  parseAngka,
+  periksaAlokasiDetail,
+  ringkasDetail,
+  ringkasRo,
+  type Alokasi,
+  type DetailPok,
+  type HasilTempel,
+  type StatusDetail,
+} from "@/lib/perencanaanPok";
 
-type Posisi = { ro: string | null; keg: string | null; tahap: KodeTahap | null };
+type Bagian = "kegiatan" | "pok" | "rencana";
+const BAGIAN: { kode: Bagian; label: string }[] = [
+  { kode: "kegiatan", label: "Kegiatan" },
+  { kode: "pok", label: "Baris POK" },
+  { kode: "rencana", label: "Rencana realisasi" },
+];
+type Posisi = { ro: string | null; keg: string | null; tahap: KodeTahap | null; bagian?: Bagian };
 
 function posisiDariAlamat(): Posisi {
   if (typeof window === "undefined") return { ro: null, keg: null, tahap: null };
   const q = new URLSearchParams(window.location.search);
   const t = q.get("tahap");
-  return { ro: q.get("ro"), keg: q.get("keg"), tahap: t && definisiTahap(t) ? (t as KodeTahap) : null };
+  const b = q.get("bagian");
+  return {
+    ro: q.get("ro"),
+    keg: q.get("keg"),
+    tahap: t && definisiTahap(t) ? (t as KodeTahap) : null,
+    bagian: b === "pok" || b === "rencana" ? b : undefined,
+  };
 }
 
 function alamat(p: Posisi): string {
@@ -50,6 +82,7 @@ function alamat(p: Posisi): string {
   if (p.ro) q.set("ro", p.ro);
   if (p.keg) q.set("keg", p.keg);
   if (p.tahap) q.set("tahap", p.tahap);
+  if (p.ro && !p.keg && p.bagian && p.bagian !== "kegiatan") q.set("bagian", p.bagian);
   const s = q.toString();
   return `/sigap/kelola/perencanaan${s ? `?${s}` : ""}`;
 }
@@ -114,7 +147,7 @@ export default function PerencanaanKegiatan() {
 
   const jejak = ["Perencanaan kegiatan", ...(ro ? [ro.kode] : []), ...(keg ? [keg.nama] : []), ...(tahap ? [tahap.nama] : [])];
   const judul = tahap ? tahap.nama : keg ? keg.nama : ro ? `RO ${ro.kode}` : "Perencanaan kegiatan";
-  const sub = tahap ? `Tahap ${tahap.no} · GSBPM ${tahap.gsbpm} · ${keg?.nama}` : keg ? `RO ${ro?.kode} · ${ro?.nama}` : ro ? ro.nama : "RO anggaran → kegiatan utama → tahap GSBPM";
+  const sub = tahap ? `Tahap ${tahap.no} · GSBPM ${tahap.gsbpm} · ${keg?.nama}` : keg ? `RO ${ro?.kode} · ${ro?.nama}` : ro ? ro.nama : "RO anggaran → kegiatan → tahap GSBPM";
 
   const kembalikanContoh = () => {
     simpan(dataContoh(sekarang()));
@@ -154,7 +187,7 @@ export default function PerencanaanKegiatan() {
         {!ro ? (
           <DaftarRo data={data} simpan={simpan} pergi={pergi} />
         ) : !keg ? (
-          <DaftarKegiatan data={data} ro={ro} simpan={simpan} pergi={pergi} />
+          <TingkatRo data={data} ro={ro} bagian={pos.bagian ?? "kegiatan"} simpan={simpan} pergi={pergi} />
         ) : !tahap ? (
           <DetailKegiatan data={data} ro={ro} keg={keg} simpan={simpan} pergi={pergi} />
         ) : (
@@ -174,7 +207,7 @@ export default function PerencanaanKegiatan() {
 function JejakHierarki({ ro, keg, tahap, pergi }: { ro: Ro | null; keg: KegiatanUtama | null; tahap: string | null; pergi: (p: Posisi) => void }) {
   const item: { label: string; ke: Posisi | null; tingkat: string }[] = [{ label: "Semua RO", ke: { ro: null, keg: null, tahap: null }, tingkat: "Anggaran" }];
   if (ro) item.push({ label: ro.kode, ke: { ro: ro.id, keg: null, tahap: null }, tingkat: "RO" });
-  if (ro && keg) item.push({ label: keg.nama, ke: { ro: ro.id, keg: keg.id, tahap: null }, tingkat: "Kegiatan utama" });
+  if (ro && keg) item.push({ label: keg.nama, ke: { ro: ro.id, keg: keg.id, tahap: null }, tingkat: "Kegiatan" });
   if (tahap) item.push({ label: tahap, ke: null, tingkat: "Tahap GSBPM" });
   return (
     <nav aria-label="Hierarki perencanaan" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[#E3E8EE] bg-white px-3 py-2 text-[12.5px]">
@@ -249,11 +282,12 @@ function DaftarRo({ data, simpan, pergi }: { data: DataUji; simpan: (d: DataUji)
           {salah && <p className="text-[12.5px] font-semibold text-[#B42329] sm:col-span-4">{salah}</p>}
         </div>
       )}
-      {data.ro.length === 0 && <p className="text-[13.5px] text-[#6B7A90]">Belum ada RO. Tambahkan RO dari POK, lalu kegiatan utama yang memakainya.</p>}
+      {data.ro.length === 0 && <p className="text-[13.5px] text-[#6B7A90]">Belum ada RO. Tambahkan RO dari POK, lalu kegiatan yang memakainya.</p>}
       <ul className="grid gap-2.5 md:grid-cols-2">
         {data.ro.map((r) => {
           const keg = data.kegiatan.filter((k) => k.roId === r.id);
-          const bertaut = keg.filter((k) => k.subKomponen.length > 0).length;
+          const pokRo = data.pok.filter((d) => d.roId === r.id);
+          const rr = ringkasRo(pokRo, data.alokasi);
           return (
             <li key={r.id} className="flex flex-col gap-2 rounded-xl border border-[#DDE6F3] p-3.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -262,13 +296,17 @@ function DaftarRo({ data, simpan, pergi }: { data: DataUji; simpan: (d: DataUji)
               </div>
               <p className="text-[14px] font-bold leading-snug text-[#14202E]">{r.nama}</p>
               <p className="text-[12.5px] text-[#4D5B6B]">
-                {keg.length} kegiatan utama · {bertaut} bertaut anggaran
+                {keg.length} kegiatan ·{" "}
+                {pokRo.length === 0 ? "baris POK belum dimuat" : `${pokRo.length} baris POK · pagu ${rupiah(rr.pagu)}`}
               </p>
+              {pokRo.length > 0 && (rr.belumBaris > 0 || rr.sebagianBaris > 0) && (
+                <p className="text-[12.5px] font-semibold text-[#8A6200]">Belum dipetakan: {rupiah(rr.belumNilai)} ({rr.belumBaris + rr.sebagianBaris} baris)</p>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" className={BTN} onClick={() => pergi({ ro: r.id, keg: null, tahap: null })}>
                   Buka RO →
                 </button>
-                {keg.length === 0 &&
+                {keg.length === 0 && pokRo.length === 0 &&
                   (hapus === r.id ? (
                     <>
                       <button type="button" className={BTN_R} onClick={() => simpan({ ...data, ro: data.ro.filter((x) => x.id !== r.id) })}>
@@ -312,7 +350,8 @@ function FormKegiatan({
   const [nama, setNama] = useState(awal.nama);
   const [mulai, setMulai] = useState(awal.mulai ?? "");
   const [selesai, setSelesai] = useState(awal.selesai ?? "");
-  const [sub, setSub] = useState(awal.subKomponen.join(", "));
+  // (11 Okt 2026) tautan anggaran kini lewat tab Baris POK; isian Sub Komponen lama dipertahankan apa adanya
+  const sub = awal.subKomponen.join(", ");
   const [roId, setRoId] = useState(awal.roId);
   const [salah, setSalah] = useState<string | null>(null);
 
@@ -327,7 +366,7 @@ function FormKegiatan({
     <div className="grid gap-2 rounded-xl border border-[#DDE6F3] bg-[#F8FAFE] p-3">
       {catatan && <p className="text-[12.5px] text-[#4D5B6B]">{catatan}</p>}
       <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
-        Nama kegiatan utama
+        Nama kegiatan
         <input className={INPUT} value={nama} onChange={(e) => setNama(e.target.value)} placeholder="mis. Susenas Maret terintegrasi Seruti Triwulan I 2026" />
       </label>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -352,10 +391,6 @@ function FormKegiatan({
           </label>
         )}
       </div>
-      <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
-        Tautan Sub Komponen / detail POK (pisahkan dengan koma)
-        <input className={INPUT} value={sub} onChange={(e) => setSub(e.target.value)} placeholder="mis. 052.A, 052.B" />
-      </label>
       {salah && <p className="text-[12.5px] font-semibold text-[#B42329]">{salah}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={BTN} onClick={kirim}>
@@ -371,6 +406,7 @@ function FormKegiatan({
 
 // ---------------------------------------------------------------- Tingkat 2: kegiatan utama dalam satu RO
 function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; simpan: (d: DataUji) => void; pergi: (p: Posisi) => void }) {
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
   const [tambah, setTambah] = useState(false);
   const [duplikat, setDuplikat] = useState<string | null>(null);
   const [hapus, setHapus] = useState<string | null>(null);
@@ -379,7 +415,7 @@ function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; si
 
   return (
     <Kartu
-      judul="Kegiatan utama"
+      judul="Kegiatan"
       ket={`${daftar.length} kegiatan memakai RO ini`}
       kanan={
         <button type="button" className={BTN} onClick={() => setTambah((v) => !v)} aria-expanded={tambah}>
@@ -401,7 +437,7 @@ function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; si
           />
         </div>
       )}
-      {daftar.length === 0 && <p className="text-[13.5px] text-[#6B7A90]">Belum ada kegiatan utama untuk RO ini.</p>}
+      {daftar.length === 0 && <p className="text-[13.5px] text-[#6B7A90]">Belum ada kegiatan untuk RO ini.</p>}
       <ul className="flex flex-col gap-2.5">
         {daftar.map((k) => {
           const r = ringkasKegiatan(k);
@@ -418,7 +454,16 @@ function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; si
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {r.tautanAnggaran ? k.subKomponen.map((s) => <Chip key={s} w="navy">{s}</Chip>) : <Chip w="wait">Tautan anggaran belum diisi</Chip>}
+                  {(() => {
+                    const ang = anggaranKegiatan(k.id, pokRo, data.alokasi);
+                    return ang.baris.length ? (
+                      <Chip w="navy" title={`${ang.baris.length} baris POK; terjadwal ${rupiah(ang.terjadwal)}`}>
+                        {rupiah(ang.total)} · {ang.baris.length} baris POK
+                      </Chip>
+                    ) : (
+                      <Chip w="wait">Belum tertaut ke baris POK</Chip>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5" aria-label="Tahap GSBPM">
@@ -444,7 +489,7 @@ function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; si
                 </button>
                 {hapus === k.id ? (
                   <>
-                    <button type="button" className={BTN_R} onClick={() => simpan({ ...data, kegiatan: data.kegiatan.filter((x) => x.id !== k.id) })}>
+                    <button type="button" className={BTN_R} onClick={() => simpan({ ...data, kegiatan: data.kegiatan.filter((x) => x.id !== k.id), alokasi: data.alokasi.filter((x) => x.kegiatanId !== k.id) })}>
                       Ya, hapus dari uji coba
                     </button>
                     <button type="button" className={BTN_O} onClick={() => setHapus(null)}>
@@ -462,7 +507,7 @@ function DaftarKegiatan({ data, ro, simpan, pergi }: { data: DataUji; ro: Ro; si
                   awal={{ nama: `${k.nama} (salinan)`, mulai: null, selesai: null, subKomponen: [], roId: ro.id }}
                   roPilihan={data.ro}
                   labelSimpan="Buat duplikat"
-                  catatan="Tahap yang dipakai dan jawaban identifikasi ikut tersalin. Ganti nama, periode, dan tautan anggaran."
+                  catatan="Tahap yang dipakai dan jawaban identifikasi ikut tersalin. Tautan ke baris POK tidak ikut: atur di tab Baris POK."
                   onBatal={() => setDuplikat(null)}
                   onSimpan={(v) => {
                     const baru = duplikatKegiatan(k, v, idAcak("keg"), sekarang());
@@ -485,6 +530,7 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
   const [ubah, setUbah] = useState(false);
   const ganti = (k: KegiatanUtama) => simpan({ ...data, kegiatan: data.kegiatan.map((x) => (x.id === k.id ? k : x)) });
   const per = rentang(keg.mulai, keg.selesai);
+  const ang = anggaranKegiatan(keg.id, data.pok.filter((d) => d.roId === ro.id), data.alokasi);
 
   return (
     <>
@@ -519,10 +565,56 @@ function DetailKegiatan({ data, ro, keg, simpan, pergi }: { data: DataUji; ro: R
               <dd className="font-semibold text-[#14202E]">{per ?? "Belum diisi"}</dd>
             </div>
             <div>
-              <dt className="text-[12px] text-[#6B7A90]">Tautan Sub Komponen / detail POK</dt>
-              <dd className="flex flex-wrap gap-1.5 pt-0.5">{keg.subKomponen.length ? keg.subKomponen.map((s) => <Chip key={s} w="navy">{s}</Chip>) : <Chip w="wait">Belum diisi</Chip>}</dd>
+              <dt className="text-[12px] text-[#6B7A90]">Anggaran (dari baris POK)</dt>
+              <dd className="font-semibold text-[#14202E]">{ang.baris.length ? `${rupiah(ang.total)} · terjadwal ${rupiah(ang.terjadwal)}` : "Belum tertaut"}</dd>
             </div>
           </dl>
+        )}
+      </Kartu>
+
+      <Kartu
+        judul="Anggaran kegiatan"
+        ket="Akumulasi alokasi dari baris POK"
+        kanan={
+          <button type="button" className={BTN_O} onClick={() => pergi({ ro: ro.id, keg: null, tahap: null, bagian: "pok" })}>
+            Atur di Baris POK
+          </button>
+        }
+      >
+        {ang.baris.length === 0 ? (
+          <p className="text-[13px] text-[#6B7A90]">Belum ada baris POK yang ditautkan ke kegiatan ini.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
+              <thead>
+                <tr>
+                  <th className={TH}>Komponen</th>
+                  <th className={TH}>Akun · uraian</th>
+                  <th className={`${TH} text-right`}>Alokasi</th>
+                  <th className={TH}>Rencana bayar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ang.baris.map(({ alokasi: a, detail: d }) => (
+                  <tr key={a.id}>
+                    <td className={TD}>{[d.komponen, d.subKomponen].filter(Boolean).join(".")}</td>
+                    <td className={TD}>
+                      <span className="font-mono text-[11.5px] text-[#6E4F0E]">{d.akun}</span> {d.uraian}
+                    </td>
+                    <td className={`${TD} text-right font-semibold`}>
+                      {rupiah(a.nilai)}
+                      {a.volume !== null && d.satuan ? <span className="block text-[11px] font-normal text-[#6B7A90]">{`${a.volume} ${d.satuan}`}</span> : null}
+                    </td>
+                    <td className={TD}>
+                      <div className="flex flex-wrap gap-1">
+                        {a.rencana.length === 0 ? <Chip w="wait">Belum dijadwalkan</Chip> : a.rencana.map((r, i) => <Chip key={i} w="mut">{`${BULAN_PENDEK[Number(r.bulan.slice(5, 7)) - 1]} ${rupiah(r.nilai)}`}</Chip>)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Kartu>
 
@@ -626,5 +718,499 @@ function DetailTahap({ ro, keg, kode, pergi }: { ro: Ro; keg: KegiatanUtama; kod
         )}
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------- Tingkat RO: 3 bagian
+function TingkatRo({ data, ro, bagian, simpan, pergi }: { data: DataUji; ro: Ro; bagian: Bagian; simpan: (d: DataUji) => void; pergi: (p: Posisi) => void }) {
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
+  const rr = ringkasRo(pokRo, data.alokasi);
+  return (
+    <>
+      <div role="tablist" aria-label="Bagian RO" className="flex flex-wrap gap-1 rounded-xl border border-[#E3E8EE] bg-white p-1">
+        {BAGIAN.map((b) => (
+          <button
+            key={b.kode}
+            type="button"
+            role="tab"
+            aria-selected={bagian === b.kode}
+            onClick={() => pergi({ ro: ro.id, keg: null, tahap: null, bagian: b.kode })}
+            className={`flex min-h-[40px] items-center gap-1.5 rounded-lg px-3.5 text-[13px] ${bagian === b.kode ? "bg-[#E3EEFB] font-bold text-[#1F5FD1]" : "text-[#4D5B6B] hover:bg-[#F8FAFC]"}`}
+          >
+            {b.label}
+            {b.kode === "pok" && pokRo.length > 0 && rr.belumBaris + rr.sebagianBaris > 0 && (
+              <span className="rounded-full bg-[#FFF4D6] px-1.5 text-[11px] font-bold text-[#8A6200]" title="Baris belum/sebagian dipetakan">
+                {rr.belumBaris + rr.sebagianBaris}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {bagian === "kegiatan" && <DaftarKegiatan data={data} ro={ro} simpan={simpan} pergi={pergi} />}
+      {bagian === "pok" && <PanelPok data={data} ro={ro} simpan={simpan} />}
+      {bagian === "rencana" && <PanelRencana data={data} ro={ro} pergi={pergi} />}
+    </>
+  );
+}
+
+const STATUS_DETAIL: Record<StatusDetail, { label: string; w: "ok" | "wait" | "bad" | "navy" }> = {
+  belum: { label: "Belum dipetakan", w: "bad" },
+  sebagian: { label: "Sebagian", w: "wait" },
+  penuh: { label: "Terpetakan", w: "ok" },
+  lebih: { label: "Melebihi pagu", w: "bad" },
+};
+
+// ---------------------------------------------------------------- Baris POK: muat dari Excel + pemetaan
+function PanelPok({ data, ro, simpan }: { data: DataUji; ro: Ro; simpan: (d: DataUji) => void }) {
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
+  const kegRo = data.kegiatan.filter((k) => k.roId === ro.id);
+  const rr = ringkasRo(pokRo, data.alokasi);
+  const [muatBuka, setMuatBuka] = useState(pokRo.length === 0);
+  const [teks, setTeks] = useState("");
+  const [pratinjau, setPratinjau] = useState<HasilTempel | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [saring, setSaring] = useState<"semua" | StatusDetail>("semua");
+  const [atur, setAtur] = useState<string | null>(null);
+  const [hapus, setHapus] = useState<string | null>(null);
+
+  const simpanMuatan = () => {
+    if (!pratinjau || pratinjau.baris.length === 0) return;
+    const g = gabungMuatan(data.pok, ro.id, pratinjau.baris, () => idAcak("pok"));
+    simpan({ ...data, pok: g.detail });
+    setInfo(
+      `${g.ditambah} baris ditambah, ${g.diperbarui} diperbarui${g.tidakAdaDiMuatan ? `, ${g.tidakAdaDiMuatan} baris lama tidak ada di tempelan (tetap disimpan)` : ""}.`
+    );
+    setTeks("");
+    setPratinjau(null);
+    setMuatBuka(false);
+  };
+
+  const tampil = pokRo
+    .map((d) => ({ d, r: ringkasDetail(d, data.alokasi) }))
+    .filter((x) => saring === "semua" || x.r.status === saring)
+    .sort((a, b) => `${a.d.komponen}.${a.d.subKomponen}.${a.d.akun}`.localeCompare(`${b.d.komponen}.${b.d.subKomponen}.${b.d.akun}`));
+  const grup: { kunci: string; isi: typeof tampil }[] = [];
+  for (const x of tampil) {
+    const k = [x.d.komponen, x.d.subKomponen].filter(Boolean).join(".") || "Tanpa komponen";
+    const g = grup.find((y) => y.kunci === k);
+    if (g) g.isi.push(x);
+    else grup.push({ kunci: k, isi: [x] });
+  }
+  const namaKeg = (id: string) => data.kegiatan.find((k) => k.id === id)?.nama ?? "?";
+
+  return (
+    <>
+      {pokRo.length > 0 && (
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          <KartuAngka label="Pagu baris POK dimuat" nilai={rupiah(rr.pagu)} ket={`${pokRo.length} baris`} />
+          <KartuAngka label="Teralokasi ke kegiatan" nilai={rupiah(rr.teralokasi)} warna="#13794B" />
+          <KartuAngka label="Belum dipetakan" nilai={rupiah(rr.belumNilai)} ket={`${rr.belumBaris} baris kosong · ${rr.sebagianBaris} sebagian`} warna={rr.belumNilai > 0 ? "#8A6200" : undefined} />
+          <KartuAngka label="Melebihi pagu" nilai={rr.lebihBaris} ket="baris" warna={rr.lebihBaris > 0 ? "#B42329" : undefined} />
+        </div>
+      )}
+      {info && (
+        <Pesan jenis="ok" onTutup={() => setInfo(null)}>
+          {info}
+        </Pesan>
+      )}
+      <Kartu
+        judul="Muat baris POK"
+        ket="Tempel dari Excel RKKS/POK untuk RO ini"
+        kanan={
+          <button type="button" className={BTN_O} onClick={() => setMuatBuka((v) => !v)} aria-expanded={muatBuka}>
+            {muatBuka ? "Tutup" : pokRo.length ? "Muat ulang / tambah" : "Buka"}
+          </button>
+        }
+      >
+        {muatBuka && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[12.5px] text-[#4D5B6B]">
+              Salin baris detail di Excel (tanpa baris judul pun boleh) dengan urutan kolom: <span className="font-semibold">{KOLOM_TEMPEL.join(" | ")}</span>. Jumlah boleh
+              kosong bila volume dan harga satuan terisi. Memuat ulang tidak menghapus baris lama dan tidak menghilangkan pemetaan baris yang sama.
+            </p>
+            <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
+              Tempelan
+              <textarea
+                className={`${INPUT} min-h-[140px] font-mono text-[12px]`}
+                value={teks}
+                onChange={(e) => {
+                  setTeks(e.target.value);
+                  setPratinjau(null);
+                }}
+                placeholder={"052\tA\t524113\tTransport lokal pencacah Susenas Maret\t120\tO-K\t170.000\t20.400.000"}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={BTN_O} disabled={!teks.trim()} onClick={() => setPratinjau(bacaTempelanPok(teks))}>
+                Baca tempelan
+              </button>
+              {pratinjau && pratinjau.baris.length > 0 && (
+                <button type="button" className={BTN} onClick={simpanMuatan}>
+                  Simpan {pratinjau.baris.length} baris ke RO {ro.kode}
+                </button>
+              )}
+            </div>
+            {pratinjau && (
+              <div className="rounded-xl border border-[#DDE6F3] bg-[#F8FAFE] p-3 text-[12.5px]">
+                <p className="font-semibold text-[#14202E]">
+                  Terbaca {pratinjau.baris.length} baris · pagu {rupiah(pratinjau.baris.reduce((s, b) => s + b.jumlah, 0))}
+                  {pratinjau.galat.length ? ` · ${pratinjau.galat.length} baris ditolak` : ""}
+                </p>
+                {pratinjau.galat.length > 0 && (
+                  <ul className="mt-1.5 list-disc pl-5 text-[#B42329]">
+                    {pratinjau.galat.slice(0, 15).map((g) => (
+                      <li key={g.baris}>
+                        Baris {g.baris}: {g.pesan}
+                      </li>
+                    ))}
+                    {pratinjau.galat.length > 15 && <li>… dan {pratinjau.galat.length - 15} lainnya</li>}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Kartu>
+
+      {pokRo.length > 0 && (
+        <Kartu
+          judul="Pemetaan baris POK ke kegiatan"
+          ket="Satu baris boleh dibagi ke beberapa kegiatan"
+          kanan={
+            <label className="flex items-center gap-2 text-[12.5px] text-[#4D5B6B]">
+              Tampilkan
+              <select className={INPUT} value={saring} onChange={(e) => setSaring(e.target.value as typeof saring)}>
+                <option value="semua">Semua baris</option>
+                <option value="belum">Belum dipetakan</option>
+                <option value="sebagian">Sebagian</option>
+                <option value="penuh">Terpetakan</option>
+                <option value="lebih">Melebihi pagu</option>
+              </select>
+            </label>
+          }
+        >
+          {kegRo.length === 0 && <Pesan jenis="info">Tambahkan kegiatan di tab Kegiatan dulu, lalu petakan baris POK ke kegiatan.</Pesan>}
+          {grup.length === 0 && <p className="text-[13px] text-[#6B7A90]">Tidak ada baris dengan status ini.</p>}
+          <div className="flex flex-col gap-3">
+            {grup.map((g) => (
+              <section key={g.kunci} className="overflow-hidden rounded-xl border border-[#DDE6F3]">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-[#F5F8FE] px-3.5 py-2 text-[12.5px]">
+                  <span className="font-bold text-[#14202E]">Komponen {g.kunci}</span>
+                  <span className="text-[#4D5B6B]">{rupiah(g.isi.reduce((s, x) => s + x.d.jumlah, 0))}</span>
+                </div>
+                <ul>
+                  {g.isi.map(({ d, r }) => {
+                    const st = STATUS_DETAIL[r.status];
+                    const alk = data.alokasi.filter((a) => a.detailId === d.id);
+                    return (
+                      <li key={d.id} className="border-t border-[#EEF2F7] px-3.5 py-2.5">
+                        <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
+                          <div className="min-w-[220px] flex-[3]">
+                            <p className="text-[13px] text-[#14202E]">
+                              <span className="font-mono text-[12px] font-bold text-[#6E4F0E]">{d.akun}</span> {d.uraian}
+                            </p>
+                            <p className="text-[11.5px] text-[#6B7A90]">
+                              {d.volume !== null ? `${d.volume} ${d.satuan}` : "—"}
+                              {d.harga !== null ? ` × ${rupiah(d.harga)}` : ""}
+                            </p>
+                          </div>
+                          <div className="min-w-[120px] flex-1 text-right text-[13px]">
+                            <p className="font-bold text-[#14202E]">{rupiah(d.jumlah)}</p>
+                            {r.status !== "belum" && <p className="text-[11.5px] text-[#6B7A90]">teralokasi {rupiah(r.teralokasi)}</p>}
+                          </div>
+                          <div className="flex min-w-[220px] flex-[2] flex-wrap items-center gap-1.5">
+                            <Chip w={st.w}>{st.label}</Chip>
+                            {alk.map((a) => (
+                              <Chip key={a.id} w="navy" title={rupiah(a.nilai)}>
+                                {namaKeg(a.kegiatanId)}
+                              </Chip>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button type="button" className={atur === d.id ? BTN_O : BTN} disabled={kegRo.length === 0} onClick={() => setAtur(atur === d.id ? null : d.id)} aria-expanded={atur === d.id}>
+                              {atur === d.id ? "Tutup" : "Petakan"}
+                            </button>
+                            {alk.length === 0 &&
+                              (hapus === d.id ? (
+                                <>
+                                  <button type="button" className={BTN_R} onClick={() => simpan({ ...data, pok: data.pok.filter((x) => x.id !== d.id) })}>
+                                    Ya, hapus
+                                  </button>
+                                  <button type="button" className={BTN_O} onClick={() => setHapus(null)}>
+                                    Batal
+                                  </button>
+                                </>
+                              ) : (
+                                <button type="button" className={BTN_O} onClick={() => setHapus(d.id)} title="Hapus baris dari uji coba">
+                                  Hapus
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                        {atur === d.id && (
+                          <EditorAlokasi
+                            d={d}
+                            awal={alk}
+                            kegiatan={kegRo}
+                            tahun={ro.tahun}
+                            onBatal={() => setAtur(null)}
+                            onSimpan={(baru) => {
+                              simpan({ ...data, alokasi: [...data.alokasi.filter((a) => a.detailId !== d.id), ...baru] });
+                              setAtur(null);
+                            }}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </Kartu>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Editor alokasi satu baris POK (banyak kegiatan + rencana bayar)
+type DrafAlokasi = { id: string; kegiatanId: string; volume: string; nilai: string; rencana: { bulan: string; nilai: string }[] };
+
+function EditorAlokasi({
+  d,
+  awal,
+  kegiatan,
+  tahun,
+  onSimpan,
+  onBatal,
+}: {
+  d: DetailPok;
+  awal: Alokasi[];
+  kegiatan: KegiatanUtama[];
+  tahun: number;
+  onSimpan: (a: Alokasi[]) => void;
+  onBatal: () => void;
+}) {
+  const pakaiVolume = d.harga !== null;
+  const [draf, setDraf] = useState<DrafAlokasi[]>(() =>
+    awal.length
+      ? awal.map((a) => ({
+          id: a.id,
+          kegiatanId: a.kegiatanId,
+          volume: a.volume !== null ? String(a.volume) : "",
+          nilai: String(a.nilai),
+          rencana: a.rencana.map((r) => ({ bulan: r.bulan, nilai: String(r.nilai) })),
+        }))
+      : [{ id: idAcak("alk"), kegiatanId: kegiatan.length === 1 ? kegiatan[0].id : "", volume: d.volume !== null ? String(d.volume) : "", nilai: String(d.jumlah), rencana: [] }]
+  );
+  const [salah, setSalah] = useState<string | null>(null);
+
+  const jadi = (x: DrafAlokasi): Alokasi => ({
+    id: x.id,
+    detailId: d.id,
+    kegiatanId: x.kegiatanId,
+    volume: pakaiVolume ? parseAngka(x.volume) : null,
+    nilai: nilaiAlokasi(d, pakaiVolume ? parseAngka(x.volume) : null, parseAngka(x.nilai)),
+    rencana: x.rencana.map((r) => ({ bulan: r.bulan, nilai: parseAngka(r.nilai) ?? 0 })),
+  });
+  const hasil = draf.map(jadi);
+  const total = hasil.reduce((s, a) => s + a.nilai, 0);
+  const ubah = (i: number, v: Partial<DrafAlokasi>) => setDraf((x) => x.map((y, j) => (j === i ? { ...y, ...v } : y)));
+
+  const tambah = () => {
+    const sisa = d.jumlah - total;
+    setDraf((x) => [
+      ...x,
+      {
+        id: idAcak("alk"),
+        kegiatanId: "",
+        volume: pakaiVolume && sisa > 0 ? String(Math.floor((sisa / (d.harga as number)) * 1000) / 1000) : "",
+        nilai: sisa > 0 ? String(Math.round(sisa)) : "",
+        rencana: [],
+      },
+    ]);
+  };
+
+  const kirim = () => {
+    const err = periksaAlokasiDetail(d, hasil, tahun);
+    if (err) return setSalah(err);
+    onSimpan(hasil);
+  };
+
+  return (
+    <div className="mt-2.5 flex flex-col gap-2.5 rounded-xl border border-[#CBD6E6] bg-[#F8FAFE] p-3">
+      <p className="text-[12.5px] text-[#4D5B6B]">
+        Pagu baris {rupiah(d.jumlah)} · dialokasikan {rupiah(total)} · sisa <span className={d.jumlah - total < 0 ? "font-bold text-[#B42329]" : "font-bold"}>{rupiah(d.jumlah - total)}</span>
+        {pakaiVolume ? ` · harga satuan ${rupiah(d.harga as number)} per ${d.satuan || "satuan"}` : ""}
+      </p>
+      {draf.map((x, i) => {
+        const a = hasil[i];
+        const terencana = a.rencana.reduce((s, r) => s + r.nilai, 0);
+        return (
+          <div key={x.id} className="flex flex-col gap-2 rounded-lg border border-[#DDE6F3] bg-white p-2.5">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
+              <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
+                Kegiatan
+                <select className={INPUT} value={x.kegiatanId} onChange={(e) => ubah(i, { kegiatanId: e.target.value })}>
+                  <option value="">Pilih kegiatan…</option>
+                  {kegiatan.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.nama}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {pakaiVolume ? (
+                <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
+                  Volume ({d.satuan || "satuan"}) → {rupiah(a.nilai)}
+                  <input className={INPUT} inputMode="decimal" value={x.volume} onChange={(e) => ubah(i, { volume: e.target.value })} />
+                </label>
+              ) : (
+                <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
+                  Nilai (Rp)
+                  <input className={INPUT} inputMode="numeric" value={x.nilai} onChange={(e) => ubah(i, { nilai: e.target.value })} />
+                </label>
+              )}
+              <button type="button" className={BTN_R} onClick={() => setDraf((y) => y.filter((_, j) => j !== i))}>
+                Hapus
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[12px] font-semibold text-[#4D5B6B]">
+                Rencana bayar · terjadwal {rupiah(terencana)}
+                {a.nilai - terencana > 0.5 ? ` · belum dijadwalkan ${rupiah(a.nilai - terencana)}` : ""}
+              </p>
+              {x.rencana.map((r, ri) => (
+                <div key={ri} className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="month"
+                    className={INPUT}
+                    aria-label="Bulan bayar"
+                    min={`${tahun}-01`}
+                    max={`${tahun}-12`}
+                    value={r.bulan}
+                    onChange={(e) => ubah(i, { rencana: x.rencana.map((y, j) => (j === ri ? { ...y, bulan: e.target.value } : y)) })}
+                  />
+                  <input
+                    className={`${INPUT} w-[150px]`}
+                    inputMode="numeric"
+                    aria-label="Nilai bayar (Rp)"
+                    value={r.nilai}
+                    onChange={(e) => ubah(i, { rencana: x.rencana.map((y, j) => (j === ri ? { ...y, nilai: e.target.value } : y)) })}
+                  />
+                  <button type="button" className={BTN_O} onClick={() => ubah(i, { rencana: x.rencana.filter((_, j) => j !== ri) })}>
+                    Hapus
+                  </button>
+                </div>
+              ))}
+              <div>
+                <button
+                  type="button"
+                  className={BTN_O}
+                  onClick={() => {
+                    const sisa = a.nilai - terencana;
+                    ubah(i, { rencana: [...x.rencana, { bulan: "", nilai: sisa > 0 ? String(Math.round(sisa)) : "" }] });
+                  }}
+                >
+                  ＋ Rencana bayar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {salah && <p className="text-[12.5px] font-semibold text-[#B42329]">{salah}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BTN_O} onClick={tambah}>
+          ＋ Kegiatan lain
+        </button>
+        <span className="flex-1" />
+        <button type="button" className={BTN_O} onClick={onBatal}>
+          Batal
+        </button>
+        <button type="button" className={BTN} onClick={kirim}>
+          Simpan pemetaan
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Rencana realisasi: kegiatan x bulan
+const ringkasRp = (n: number) => (n === 0 ? "–" : n >= 1_000_000 ? `${(n / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt` : rupiah(n));
+
+function PanelRencana({ data, ro, pergi }: { data: DataUji; ro: Ro; pergi: (p: Posisi) => void }) {
+  const pokRo = data.pok.filter((d) => d.roId === ro.id);
+  const m = matriksRencana(pokRo, data.alokasi, data.kegiatan.filter((k) => k.roId === ro.id), ro.tahun);
+  if (pokRo.length === 0)
+    return (
+      <Kartu judul="Rencana realisasi">
+        <p className="text-[13px] text-[#6B7A90]">Muat baris POK dan petakan ke kegiatan dulu. Rencana realisasi disusun dari rencana bayar setiap alokasi.</p>
+        <button type="button" className={`${BTN} mt-3`} onClick={() => pergi({ ro: ro.id, keg: null, tahap: null, bagian: "pok" })}>
+          Ke Baris POK
+        </button>
+      </Kartu>
+    );
+  const terjadwal = m.baris.reduce((s, b) => s + b.terjadwal, 0);
+  return (
+    <Kartu judul="Rencana realisasi" ket={`TA ${ro.tahun} · terjadwal ${rupiah(terjadwal)} dari ${rupiah(m.total)}`}>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1100px] border-collapse text-[12px]">
+          <thead>
+            <tr>
+              <th className={TH}>Kegiatan</th>
+              {BULAN_PENDEK.map((b) => (
+                <th key={b} className={`${TH} text-right`}>
+                  {b}
+                </th>
+              ))}
+              <th className={`${TH} text-right`}>Alokasi</th>
+              <th className={`${TH} text-right`}>Belum dijadwalkan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {m.baris.map((b) => (
+              <tr key={b.kunci} className={b.kunci === "__belum" ? "bg-[#FFF8E6]" : undefined}>
+                <td className={`${TD} max-w-[260px]`}>
+                  {b.kunci === "__belum" ? (
+                    <span className="font-semibold text-[#8A6200]">{b.label}</span>
+                  ) : (
+                    <button type="button" className="text-left font-semibold text-[#1F5FD1] hover:underline" onClick={() => pergi({ ro: ro.id, keg: b.kunci, tahap: null })}>
+                      {b.label}
+                    </button>
+                  )}
+                </td>
+                {b.perBulan.map((n, i) => (
+                  <td key={i} className={`${TD} text-right tabular-nums`} title={n ? rupiah(n) : undefined}>
+                    {ringkasRp(n)}
+                  </td>
+                ))}
+                <td className={`${TD} text-right font-semibold tabular-nums`} title={rupiah(b.nilai)}>
+                  {ringkasRp(b.nilai)}
+                </td>
+                <td className={`${TD} text-right tabular-nums ${b.belumDijadwalkan > 0.5 ? "font-semibold text-[#8A6200]" : ""}`} title={rupiah(b.belumDijadwalkan)}>
+                  {ringkasRp(Math.max(0, b.belumDijadwalkan))}
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td className={`${TD} font-bold`}>Total RO</td>
+              {m.totalBulan.map((n, i) => (
+                <td key={i} className={`${TD} text-right font-bold tabular-nums`} title={n ? rupiah(n) : undefined}>
+                  {ringkasRp(n)}
+                </td>
+              ))}
+              <td className={`${TD} text-right font-bold tabular-nums`} title={rupiah(m.total)}>
+                {ringkasRp(m.total)}
+              </td>
+              <td className={`${TD} text-right font-bold tabular-nums`} title={rupiah(m.total - terjadwal)}>
+                {ringkasRp(Math.max(0, m.total - terjadwal))}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[12px] text-[#6B7A90]">Angka dalam juta rupiah (arahkan kursor untuk nilai lengkap). Rencana bayar diatur per alokasi di tab Baris POK.</p>
+    </Kartu>
   );
 }
