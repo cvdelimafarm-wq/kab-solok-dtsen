@@ -48,7 +48,8 @@ export type Jawaban = Record<string, Nilai>;
 export type Syarat = { k: string; di?: string[]; ya?: boolean };
 export type Kondisi = Syarat[];
 
-export type Pilihan = { nilai: string; label: string };
+/** `jika`: pilihan hanya ditawarkan bila kondisi terpenuhi (mis. pulsa "untuk organik dan mitra" hanya bila pesertanya keduanya). */
+export type Pilihan = { nilai: string; label: string; jika?: Kondisi };
 export type Pertanyaan = {
   kode: string;
   label: string;
@@ -62,6 +63,10 @@ export type Pertanyaan = {
   otomatis?: { jika: Kondisi; nilai: Nilai; alasan: string }[];
   /** Angka boleh kosong. */
   opsional?: boolean;
+  /** Pertanyaan angka berurutan dengan grup sama ditampilkan dalam satu baris (mis. "Jumlah petugas": PPL, PML). */
+  grup?: string;
+  /** Label singkat di dalam grup (mis. "PPL"). */
+  pendek?: string;
 };
 
 export type Aturan = {
@@ -96,9 +101,19 @@ export function jawabanEfektif(form: FormTahap, mentah: Jawaban): Jawaban {
     if (!cocok(p.tampil, out)) continue;
     const oto = p.otomatis?.find((o) => cocok(o.jika, out));
     if (oto) out[p.kode] = oto.nilai;
-    else if (mentah[p.kode] !== undefined) out[p.kode] = mentah[p.kode];
+    else if (mentah[p.kode] !== undefined) {
+      const v = mentah[p.kode];
+      // Pilihan yang tidak (lagi) ditawarkan dianggap belum dijawab.
+      if (p.jenis === "pilih" && v !== null && !pilihanTampil(p, out).some((x) => x.nilai === v)) continue;
+      out[p.kode] = v;
+    }
   }
   return out;
+}
+
+/** Pilihan yang ditawarkan untuk jawaban di atasnya. */
+export function pilihanTampil(p: Pertanyaan, j: Jawaban): Pilihan[] {
+  return (p.pilihan ?? []).filter((x) => cocok(x.jika, j));
 }
 
 /** Pertanyaan yang tampil (beserta status otomatis) untuk jawaban saat ini. */
@@ -226,10 +241,23 @@ export const FORM_TAHAP: Partial<Record<KodeTahap, FormTahap>> = {
         ],
       },
       { kode: "bahan", label: "Bahan, ATK & perlengkapan pelatihan", jenis: "yatidak", tampil: [YATIDAK_PELATIHAN_LURING] },
-      { kode: "pulsa", label: "Pulsa untuk peserta daring", jenis: "yatidak", tampil: [DI("jenis", "daring", "hybrid")] },
+      {
+        kode: "pulsa",
+        label: "Pulsa untuk peserta daring",
+        jenis: "pilih",
+        tampil: [DI("jenis", "daring", "hybrid")],
+        pilihan: [
+          { nilai: "mitra", label: "Ya, untuk mitra", jika: [DI("peserta", "mitra", "keduanya")] },
+          { nilai: "keduanya", label: "Ya, untuk organik dan mitra", jika: [DI("peserta", "keduanya")] },
+          { nilai: "tidak", label: "Tidak" },
+        ],
+        otomatis: [{ jika: [DI("peserta", "organik")], nilai: "tidak", alasan: "Peserta organik saja: tidak ada pulsa." }],
+      },
       { kode: "honor_instruktur", label: "Honor instruktur (Inda)", jenis: "yatidak" },
       { kode: "narasumber", label: "Narasumber eksternal", jenis: "yatidak" },
-      { kode: "jml_peserta", label: "Jumlah peserta", jenis: "angka", satuan: "orang" },
+      { kode: "jml_ppl", label: "Jumlah PPL", pendek: "PPL", grup: "Jumlah petugas", jenis: "angka", satuan: "orang" },
+      { kode: "jml_pml", label: "Jumlah PML", pendek: "PML", grup: "Jumlah petugas", jenis: "angka", satuan: "orang" },
+      { kode: "jml_instruktur", label: "Jumlah instruktur", jenis: "angka", satuan: "orang" },
       { kode: "jml_kelas", label: "Jumlah kelas", jenis: "angka", satuan: "kelas" },
       { kode: "jml_hari", label: "Lama pelatihan", jenis: "angka", satuan: "hari" },
       { kode: "jml_jp", label: "Jam pelajaran", jenis: "angka", satuan: "JP", opsional: true },
@@ -242,7 +270,8 @@ export const FORM_TAHAP: Partial<Record<KodeTahap, FormTahap>> = {
       { paket: "524119-B", jika: [YATIDAK_PELATIHAN_LURING, DI("lokasi", "luar")], ket: "Kontrak hotel paket meeting luar kota" },
       { paket: "524119-A", jika: [YATIDAK_PELATIHAN_LURING, DI("lokasi", "luar")], ket: "Perjadin peserta luar kota (uang harian & transport at cost)" },
       { paket: "521211-B", jika: [YATIDAK_PELATIHAN_LURING, YA("bahan")], ket: "Bahan, ATK & perlengkapan pelatihan" },
-      { paket: "521211-D", jika: [DI("jenis", "daring", "hybrid"), YA("pulsa")], ket: "Pulsa peserta daring" },
+      { paket: "521211-D", jika: [DI("jenis", "daring", "hybrid"), DI("pulsa", "mitra")], ket: "Pulsa peserta daring (mitra)" },
+      { paket: "521211-D", jika: [DI("jenis", "daring", "hybrid"), DI("pulsa", "keduanya")], ket: "Pulsa peserta daring (organik dan mitra)" },
       { paket: "521213-C", jika: [YA("honor_instruktur")], ket: "Honor instruktur" },
       { paket: "522151", jika: [YA("narasumber")], ket: "Honor narasumber eksternal" },
     ],
@@ -255,23 +284,6 @@ export const FORM_TAHAP: Partial<Record<KodeTahap, FormTahap>> = {
       { nama: "Laporan instruktur & laporan pelatihan" },
       { nama: "Nilai akhir peserta" },
     ],
-  },
-
-  pengolahan: {
-    judul: "Pengolahan",
-    pengantar: "Pemeriksaan, validasi, edit, dan entri data di satker.",
-    pertanyaan: [
-      { kode: "status", label: "Pengolah", jenis: "pilih", pilihan: [{ nilai: "mitra", label: "Mitra" }, { nilai: "organik", label: "Organik" }, { nilai: "keduanya", label: "Organik dan mitra" }] },
-      { kode: "honor", label: "Pengolah diberi honor?", jenis: "yatidak" },
-      { kode: "pulsa", label: "Pulsa pengolah?", jenis: "yatidak" },
-      { kode: "target", label: "Target dokumen", jenis: "angka", satuan: "dokumen", opsional: true },
-    ],
-    aturan: [
-      { paket: "521213-D", jika: [YA("honor"), DI("status", "mitra", "keduanya")], ket: "Honor pengolah mitra" },
-      { paket: "521213-P", jika: [YA("honor"), DI("status", "organik", "keduanya")], ket: "Honor pengolah PNS BPS" },
-      { paket: "521211-D", jika: [YA("pulsa")], ket: "Pulsa pengolah" },
-    ],
-    modul: [{ nama: "Monitoring pemeriksaan & validasi" }],
   },
 
   analisis: {
@@ -334,6 +346,8 @@ export type IsianPeran = {
   dipakai: boolean;
   status: "mitra" | "organik" | "keduanya" | null;
   honor: boolean | null;
+  /** Bila status "keduanya" dan ada honor: honor hanya untuk mitra, atau untuk organik dan mitra. */
+  honorUntuk?: "mitra" | "keduanya" | null;
   satuan: string;
   target: number | null;
   translok: "tidak" | "kurang8" | "lebih8" | null;
@@ -341,10 +355,14 @@ export type IsianPeran = {
   supervisi: boolean | null;
 };
 
+export type JenisSub = "listing" | "pencacahan" | "lainnya";
+export const URUT_JENIS: Record<JenisSub, number> = { listing: 0, pencacahan: 1, lainnya: 2 };
+
 export type SubKegiatan = {
   id: string;
   nama: string;
-  jenis: "listing" | "pencacahan" | null;
+  /** Ditentukan dari tombol tambah (bukan ditanyakan): listing/updating dan pencacahan sampel adalah sub-kegiatan terpisah & berurutan. */
+  jenis: JenisSub | null;
   mode: "capi" | "papi" | null;
   penunjukJalan: boolean | null;
   peran: Record<KodePeran, IsianPeran>;
@@ -353,17 +371,24 @@ export type SubKegiatan = {
 export type JawabanPendataan = { sub: SubKegiatan[] };
 
 export function peranKosong(dipakai: boolean): IsianPeran {
-  return { dipakai, status: null, honor: null, satuan: "", target: null, translok: null, pulsa: null, supervisi: null };
+  return { dipakai, status: null, honor: null, honorUntuk: null, satuan: "", target: null, translok: null, pulsa: null, supervisi: null };
 }
 
-export function subKegiatanBaru(id: string, nama = ""): SubKegiatan {
-  return { id, nama, jenis: null, mode: null, penunjukJalan: null, peran: { pencacah: peranKosong(true), pengawas: peranKosong(true), pengolah: peranKosong(false) } };
+export function subKegiatanBaru(id: string, nama = "", jenis: JenisSub | null = null): SubKegiatan {
+  return { id, nama, jenis, mode: null, penunjukJalan: null, peran: { pencacah: peranKosong(true), pengawas: peranKosong(true), pengolah: peranKosong(false) } };
 }
 
 export function bacaJawabanPendataan(x: unknown): JawabanPendataan {
   const o = x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {};
   const sub = Array.isArray(o.sub) ? (o.sub as SubKegiatan[]).filter((s) => s && typeof s.id === "string" && s.peran) : [];
   return { sub };
+}
+
+/** Tambah sub-kegiatan dengan urutan tahapan lapangan: listing/updating -> pencacahan sampel -> lainnya. */
+export function sisipkanSub(daftar: SubKegiatan[], baru: SubKegiatan): SubKegiatan[] {
+  const u = URUT_JENIS[baru.jenis ?? "lainnya"];
+  const i = daftar.findIndex((s) => URUT_JENIS[s.jenis ?? "lainnya"] > u);
+  return i < 0 ? [...daftar, baru] : [...daftar.slice(0, i), baru, ...daftar.slice(i)];
 }
 
 /** Isian yang belum lengkap, sebagai pesan singkat. */
@@ -373,7 +398,6 @@ export function periksaPendataan(j: JawabanPendataan): string[] {
   j.sub.forEach((s, i) => {
     const nama = s.nama.trim() || `Sub-kegiatan ${i + 1}`;
     if (!s.nama.trim()) out.push(`${nama}: nama belum diisi.`);
-    if (!s.jenis) out.push(`${nama}: jenis belum dipilih.`);
     if (!s.mode) out.push(`${nama}: mode CAPI/PAPI belum dipilih.`);
     if (s.penunjukJalan === null) out.push(`${nama}: honor penunjuk jalan/aparat belum dijawab.`);
     const dipakai = PERAN_PENDATAAN.filter((p) => s.peran[p.kode]?.dipakai);
@@ -383,6 +407,7 @@ export function periksaPendataan(j: JawabanPendataan): string[] {
       const kurang: string[] = [];
       if (!r.status) kurang.push("status");
       if (r.honor === null) kurang.push("honor");
+      if (r.status === "keduanya" && r.honor && !r.honorUntuk) kurang.push("honor untuk siapa");
       if (r.honor && !r.satuan.trim()) kurang.push("satuan honor");
       if (p.kode !== "pengolah" && !r.translok) kurang.push("transport");
       if (r.pulsa === null) kurang.push("pulsa");
@@ -402,7 +427,7 @@ export function paketPendataan(j: JawabanPendataan, sumber = "Pendataan"): Paket
       if (!r?.dipakai) continue;
       const lbl = p.label.split(" (")[0].toLowerCase();
       if (r.honor && (r.status === "mitra" || r.status === "keduanya")) tambahPaket(out, "521213-D", `Honor ${lbl} mitra (${nama})`, sumber);
-      if (r.honor && (r.status === "organik" || r.status === "keduanya")) tambahPaket(out, "521213-P", `Honor ${lbl} PNS (${nama})`, sumber);
+      if (r.honor && (r.status === "organik" || (r.status === "keduanya" && r.honorUntuk === "keduanya"))) tambahPaket(out, "521213-P", `Honor ${lbl} PNS (${nama})`, sumber);
       if (r.translok === "kurang8") tambahPaket(out, "524113-A", `Transport lokal ${lbl} (${nama})`, sumber);
       if (r.translok === "lebih8") tambahPaket(out, "524113-B", `Perjadin dalam kota > 8 jam ${lbl} (${nama})`, sumber);
       if (r.pulsa) tambahPaket(out, "521211-D", `Pulsa ${lbl} (${nama})`, sumber);

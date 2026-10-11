@@ -3,7 +3,7 @@
 // app/sigap/kelola/perencanaan/page.tsx
 //
 // (11 Okt 2026) Perencanaan kegiatan berbasis GSBPM per RO anggaran -- UJI COBA, permintaan user ("buatkan hierarkhynya dulu").
-// Hierarki: RO anggaran -> kegiatan utama -> 6 tahap GSBPM -> (form identifikasi tahap: langkah berikut).
+// Hierarki: RO anggaran -> kegiatan utama -> 5 tahap GSBPM (Pengolahan dilebur ke Pendataan, 11 Okt) -> form identifikasi tahap.
 // Keputusan user 11 Okt: halaman uji coba di web (bukan mockup), hanya Admin Aplikasi (izin portal.kelola), data disimpan di
 // browser dulu (localStorage, kunci sigap_uji_perencanaan_v1) sampai aturan disetujui -- tidak ada tabel/migrasi, modul lain tidak disentuh.
 // Posisi hierarki ada di alamat (?ro=&keg=&tahap=) supaya tombol Back naik satu tingkat.
@@ -72,14 +72,18 @@ import {
   periksaPendataan,
   peranKosong,
   pertanyaanTampil,
+  pilihanTampil,
+  sisipkanSub,
   subKegiatanBaru,
   type CekPok,
   type FormTahap,
   type IsianPeran,
+  type JenisSub,
   type Jawaban,
   type JawabanPendataan,
   type KodePeran,
   type Nilai,
+  type Pertanyaan,
   type SubKegiatan,
 } from "@/lib/perencanaanIdentifikasi";
 
@@ -1089,33 +1093,62 @@ function Baris({ label, bantuan, otomatis, children }: { label: string; bantuan?
 
 function FormIdentifikasi({ form, nilai, ubah, tandai }: { form: FormTahap; nilai: Jawaban; ubah: (j: Jawaban) => void; tandai: boolean }) {
   const tampil = pertanyaanTampil(form, nilai);
+  const ef = jawabanEfektif(form, nilai);
   const kosong = new Set(tandai ? belumDijawab(form, nilai).map((p) => p.kode) : []);
   const set = (k: string, v: Nilai) => ubah({ ...nilai, [k]: v });
+
+  // Pertanyaan angka bergrup (mis. Jumlah petugas: PPL, PML) digabung dalam satu baris.
+  const baris: (typeof tampil)[] = [];
+  for (const x of tampil) {
+    const akhir = baris[baris.length - 1];
+    if (x.p.grup && akhir && akhir[0].p.grup === x.p.grup) akhir.push(x);
+    else baris.push([x]);
+  }
+
+  const kotakAngka = (p: Pertanyaan, v: Nilai, pendek: boolean) => (
+    <div key={p.kode} className="flex items-center gap-2">
+      {pendek && <span className="w-10 text-[13px] font-semibold text-[#33445C]">{p.pendek ?? p.label}</span>}
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        aria-label={p.label}
+        className={`${INPUT} w-32 ${kosong.has(p.kode) ? "border-[#E07070]" : ""}`}
+        value={typeof v === "number" ? v : ""}
+        onChange={(e) => set(p.kode, e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+      />
+      {p.satuan && <span className="text-[13px] text-[#4D5B6B]">{p.satuan}</span>}
+      {p.opsional && <span className="text-[12px] text-[#9AA7B6]">boleh kosong</span>}
+    </div>
+  );
+
   return (
     <Kartu judul={`Form identifikasi · ${form.judul}`} ket={`${tampil.length} pertanyaan sesuai jawaban`}>
       <div className="flex flex-col">
-        {tampil.map(({ p, otomatis }) => {
+        {baris.map((grup) => {
+          const { p, otomatis } = grup[0];
+          if (grup.length > 1 || p.grup)
+            return (
+              <Baris key={p.kode} label={p.grup ?? p.label}>
+                <div className="flex flex-col gap-2">{grup.map((x) => kotakAngka(x.p, nilai[x.p.kode] ?? null, true))}</div>
+              </Baris>
+            );
           const v = otomatis ? otomatis.nilai : nilai[p.kode];
           const salah = kosong.has(p.kode);
           return (
             <Baris key={p.kode} label={p.label} bantuan={p.bantuan} otomatis={otomatis?.alasan}>
-              {p.jenis === "pilih" && <Segmen label={p.label} nilai={typeof v === "string" ? v : null} pilihan={p.pilihan ?? []} ubah={(x) => set(p.kode, x)} kunci={!!otomatis} salah={salah} />}
-              {p.jenis === "yatidak" && <Segmen label={p.label} nilai={typeof v === "boolean" ? v : null} pilihan={YT} ubah={(x) => set(p.kode, x)} kunci={!!otomatis} salah={salah} />}
-              {p.jenis === "angka" && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    aria-label={p.label}
-                    className={`${INPUT} w-32 ${salah ? "border-[#E07070]" : ""}`}
-                    value={typeof v === "number" ? v : ""}
-                    onChange={(e) => set(p.kode, e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
-                  />
-                  {p.satuan && <span className="text-[13px] text-[#4D5B6B]">{p.satuan}</span>}
-                  {p.opsional && <span className="text-[12px] text-[#9AA7B6]">boleh kosong</span>}
-                </div>
+              {p.jenis === "pilih" && (
+                <Segmen
+                  label={p.label}
+                  nilai={typeof v === "string" ? v : null}
+                  pilihan={otomatis ? p.pilihan ?? [] : pilihanTampil(p, ef)}
+                  ubah={(x) => set(p.kode, x)}
+                  kunci={!!otomatis}
+                  salah={salah}
+                />
               )}
+              {p.jenis === "yatidak" && <Segmen label={p.label} nilai={typeof v === "boolean" ? v : null} pilihan={YT} ubah={(x) => set(p.kode, x)} kunci={!!otomatis} salah={salah} />}
+              {p.jenis === "angka" && kotakAngka(p, v ?? null, false)}
             </Baris>
           );
         })}
@@ -1125,30 +1158,28 @@ function FormIdentifikasi({ form, nilai, ubah, tandai }: { form: FormTahap; nila
 }
 
 // ---------------------------------------------------------------- Pendataan: sub-kegiatan x peran
-const PRESET_SUB = ["Listing / updating", "Pencacahan sampel"];
+const PRESET_SUB: { nama: string; jenis: JenisSub }[] = [
+  { nama: "Listing / updating", jenis: "listing" },
+  { nama: "Pencacahan sampel", jenis: "pencacahan" },
+];
 
 function FormPendataan({ nilai, ubah, tandai }: { nilai: JawabanPendataan; ubah: (j: JawabanPendataan) => void; tandai: boolean }) {
   const [hapus, setHapus] = useState<string | null>(null);
   const gantiSub = (s: SubKegiatan) => ubah({ sub: nilai.sub.map((x) => (x.id === s.id ? s : x)) });
   const gantiPeran = (s: SubKegiatan, k: KodePeran, r: Partial<IsianPeran>) => gantiSub({ ...s, peran: { ...s.peran, [k]: { ...(s.peran[k] ?? peranKosong(false)), ...r } } });
-  const tambah = (nama: string) => {
-    const s = subKegiatanBaru(idAcak("sub"), nama);
-    if (/listing|updating/i.test(nama)) s.jenis = "listing";
-    if (/pencacahan/i.test(nama)) s.jenis = "pencacahan";
-    ubah({ sub: [...nilai.sub, s] });
-  };
-  const ada = new Set(nilai.sub.map((s) => s.nama.trim().toLowerCase()));
+  const tambah = (nama: string, jenis: JenisSub) => ubah({ sub: sisipkanSub(nilai.sub, subKegiatanBaru(idAcak("sub"), nama, jenis)) });
+  const adaJenis = new Set(nilai.sub.map((s) => s.jenis));
 
   return (
     <>
       <Kartu judul="Sub-kegiatan pendataan" ket="Satu baris per jenis pekerjaan lapangan; tiap sub-kegiatan punya peran pencacah, pengawas, pengolah">
         <div className="flex flex-wrap gap-2">
-          {PRESET_SUB.filter((n) => !ada.has(n.toLowerCase())).map((n) => (
-            <button key={n} type="button" className={BTN_O} onClick={() => tambah(n)}>
-              + {n}
+          {PRESET_SUB.filter((x) => !adaJenis.has(x.jenis)).map((x) => (
+            <button key={x.jenis} type="button" className={BTN_O} onClick={() => tambah(x.nama, x.jenis)}>
+              + {x.nama}
             </button>
           ))}
-          <button type="button" className={BTN_O} onClick={() => tambah("")}>
+          <button type="button" className={BTN_O} onClick={() => tambah("", "lainnya")}>
             + Sub-kegiatan lain
           </button>
         </div>
@@ -1159,6 +1190,7 @@ function FormPendataan({ nilai, ubah, tandai }: { nilai: JawabanPendataan; ubah:
         <Kartu
           key={s.id}
           judul={s.nama.trim() || `Sub-kegiatan ${i + 1}`}
+          ket={s.jenis === "listing" ? "Tahap lapangan 1 · sebelum pencacahan sampel" : s.jenis === "pencacahan" ? "Tahap lapangan 2 · sesudah listing / updating" : "Sub-kegiatan lain"}
           kanan={
             hapus === s.id ? (
               <span className="flex items-center gap-2">
@@ -1184,19 +1216,7 @@ function FormPendataan({ nilai, ubah, tandai }: { nilai: JawabanPendataan; ubah:
           }
         >
           <Baris label="Nama sub-kegiatan">
-            <input className={`${INPUT} w-full ${tandai && !s.nama.trim() ? "border-[#E07070]" : ""}`} value={s.nama} onChange={(e) => gantiSub({ ...s, nama: e.target.value })} placeholder="mis. Pencacahan sampel" />
-          </Baris>
-          <Baris label="Jenis">
-            <Segmen
-              label="Jenis"
-              nilai={s.jenis}
-              pilihan={[
-                { nilai: "listing", label: "Listing / updating" },
-                { nilai: "pencacahan", label: "Pencacahan sampel" },
-              ]}
-              ubah={(v) => gantiSub({ ...s, jenis: v as SubKegiatan["jenis"] })}
-              salah={tandai && !s.jenis}
-            />
+            <input className={`${INPUT} w-full ${tandai && !s.nama.trim() ? "border-[#E07070]" : ""}`} value={s.nama} onChange={(e) => gantiSub({ ...s, nama: e.target.value })} placeholder="mis. Pemeriksaan lapangan" />
           </Baris>
           <Baris label="Mode pengumpulan" bantuan="PAPI menambah paket penggandaan dokumen.">
             <Segmen
@@ -1242,7 +1262,21 @@ function FormPendataan({ nilai, ubah, tandai }: { nilai: JawabanPendataan; ubah:
                       </div>
                       <div>
                         <p className="mb-1 font-semibold text-[#33445C]">Honor</p>
-                        <Segmen label={`Honor ${p.label}`} nilai={r.honor} pilihan={YT} ubah={(v) => gantiPeran(s, p.kode, { honor: v })} salah={merah(r.honor === null)} />
+                        {r.status === "keduanya" ? (
+                          <Segmen
+                            label={`Honor ${p.label}`}
+                            nilai={r.honor === false ? "tidak" : r.honor ? r.honorUntuk ?? null : null}
+                            pilihan={[
+                              { nilai: "mitra", label: "Ya, hanya mitra" },
+                              { nilai: "keduanya", label: "Ya, organik dan mitra" },
+                              { nilai: "tidak", label: "Tidak" },
+                            ]}
+                            ubah={(v) => gantiPeran(s, p.kode, v === "tidak" ? { honor: false, honorUntuk: null } : { honor: true, honorUntuk: v as "mitra" | "keduanya" })}
+                            salah={merah(r.honor === null || (r.honor === true && !r.honorUntuk))}
+                          />
+                        ) : (
+                          <Segmen label={`Honor ${p.label}`} nilai={r.honor} pilihan={YT} ubah={(v) => gantiPeran(s, p.kode, { honor: v, honorUntuk: null })} salah={merah(r.honor === null)} />
+                        )}
                       </div>
                       {r.honor && (
                         <div className="flex flex-wrap items-center gap-2">

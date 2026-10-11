@@ -17,12 +17,13 @@ import {
 
 const T = "2026-10-11T07:00:00.000Z";
 
-test("6 tahap urut, perencanaan & evaluasi wajib, pengolahan tidak dipakai bawaan", () => {
-  expect(TAHAP_GSBPM.map((t) => t.kode)).toEqual(["perencanaan", "pelatihan", "pendataan", "pengolahan", "analisis", "evaluasi"]);
+test("5 tahap urut (pengolahan dilebur ke pendataan), perencanaan & evaluasi wajib", () => {
+  expect(TAHAP_GSBPM.map((t) => t.kode)).toEqual(["perencanaan", "pelatihan", "pendataan", "analisis", "evaluasi"]);
+  expect(TAHAP_GSBPM.map((t) => t.no)).toEqual([1, 2, 3, 4, 5]);
+  expect(TAHAP_GSBPM.find((t) => t.kode === "pendataan")?.gsbpm).toContain("5.3");
   expect(TAHAP_GSBPM.filter((t) => t.wajib).map((t) => t.kode)).toEqual(["perencanaan", "evaluasi"]);
   const k = buatKegiatan({ roId: "r", nama: "  Susenas  " }, "k1", T);
   expect(k.nama).toBe("Susenas");
-  expect(k.tahap.pengolahan.dipakai).toBe(false);
   expect(ringkasKegiatan(k)).toEqual({ dipakai: 5, teridentifikasi: 0, tautanAnggaran: false });
 });
 
@@ -58,25 +59,27 @@ test("periode kegiatan diperiksa", () => {
 test("tahap wajib tidak bisa dimatikan; opsional bisa", () => {
   const k = buatKegiatan({ roId: "r", nama: "A" }, "k1", T);
   expect(aturTahapDipakai(k, "perencanaan", false, T).tahap.perencanaan.dipakai).toBe(true);
-  const k2 = aturTahapDipakai(k, "pengolahan", true, T);
-  expect(k2.tahap.pengolahan.dipakai).toBe(true);
-  expect(statusTahap(k2.tahap.pengolahan)).toBe("belum");
+  const k1 = aturTahapDipakai(k, "analisis", false, T);
+  expect(k1.tahap.analisis.dipakai).toBe(false);
+  const k2 = aturTahapDipakai(k1, "analisis", true, T);
+  expect(k2.tahap.analisis.dipakai).toBe(true);
+  expect(statusTahap(k2.tahap.analisis)).toBe("belum");
   expect(statusTahap(aturTahapDipakai(k, "pelatihan", false, T).tahap.pelatihan)).toBe("tidak_dipakai");
 });
 
 test("duplikat menyalin tahap & jawaban (salinan dalam), mengganti nama/periode/sub komponen", () => {
   const asal = buatKegiatan({ roId: "r", nama: "Susenas Maret", subKomponen: ["052.A"] }, "k1", T);
   asal.tahap.pelatihan = { dipakai: true, jawaban: { jenis: "luring", rinci: { lokasi: "dalam" } }, diubah: T };
-  asal.tahap.pengolahan.dipakai = true;
+  asal.tahap.analisis.dipakai = false;
   const salin = duplikatKegiatan(asal, { nama: "Susenas September", mulai: "2026-09-01", selesai: "2026-09-30", subKomponen: ["052.B"] }, "k2", "2026-10-12T00:00:00.000Z");
   expect(salin.id).toBe("k2");
   expect(salin.asalId).toBe("k1");
   expect(salin.subKomponen).toEqual(["052.B"]);
-  expect(salin.tahap.pengolahan.dipakai).toBe(true);
+  expect(salin.tahap.analisis.dipakai).toBe(false);
   expect(salin.tahap.pelatihan.jawaban).toEqual({ jenis: "luring", rinci: { lokasi: "dalam" } });
   (salin.tahap.pelatihan.jawaban as { rinci: { lokasi: string } }).rinci.lokasi = "luar";
   expect((asal.tahap.pelatihan.jawaban as { rinci: { lokasi: string } }).rinci.lokasi).toBe("dalam");
-  expect(ringkasKegiatan(salin)).toEqual({ dipakai: 6, teridentifikasi: 1, tautanAnggaran: true });
+  expect(ringkasKegiatan(salin)).toEqual({ dipakai: 4, teridentifikasi: 1, tautanAnggaran: true });
 });
 
 test("bacaData: rusak -> contoh; tahap hilang dilengkapi; kegiatan tanpa RO dibuang; wajib dipaksa dipakai", () => {
@@ -86,7 +89,7 @@ test("bacaData: rusak -> contoh; tahap hilang dilengkapi; kegiatan tanpa RO dibu
     versi: 1,
     ro: [{ id: "r1", kode: "2906.BMA.006", nama: "X", program: "054.01.GG", tahun: 2026 }],
     kegiatan: [
-      { id: "a", roId: "r1", nama: "A", subKomponen: ["052.A"], tahap: { evaluasi: { dipakai: false, jawaban: null, diubah: null } } },
+      { id: "a", roId: "r1", nama: "A", subKomponen: ["052.A"], tahap: { evaluasi: { dipakai: false, jawaban: null, diubah: null }, pengolahan: { dipakai: true, jawaban: { honor: true }, diubah: null } } },
       { id: "b", roId: "hilang", nama: "B", subKomponen: [], tahap: {} },
     ],
   });
@@ -94,6 +97,7 @@ test("bacaData: rusak -> contoh; tahap hilang dilengkapi; kegiatan tanpa RO dibu
   expect(d.kegiatan.map((k) => k.id)).toEqual(["a"]);
   expect(d.kegiatan[0].tahap.evaluasi.dipakai).toBe(true);
   expect(d.kegiatan[0].tahap.pelatihan.dipakai).toBe(true);
+  expect(Object.keys(d.kegiatan[0].tahap)).not.toContain("pengolahan"); // tahap lama yang dihapus diabaikan
 });
 
 test("bacaData: baris POK & alokasi yang yatim dibuang, rencana dirapikan", () => {

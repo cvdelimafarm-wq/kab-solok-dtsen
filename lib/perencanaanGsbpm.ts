@@ -11,7 +11,7 @@
 
 import type { Alokasi, DetailPok } from "./perencanaanPok";
 
-export type KodeTahap = "perencanaan" | "pelatihan" | "pendataan" | "pengolahan" | "analisis" | "evaluasi";
+export type KodeTahap = "perencanaan" | "pelatihan" | "pendataan" | "analisis" | "evaluasi";
 
 export type DefinisiTahap = {
   kode: KodeTahap;
@@ -31,6 +31,8 @@ export type DefinisiTahap = {
 };
 
 // (11 Okt 2026) 6 tahap disetujui user (menggantikan 5 tahap desain 10 Okt; "Penyelesaian" dilebur ke status paket).
+// (11 Okt 2026, sore) Tahap "Pengolahan" dihapus atas permintaan user: pengolahan sudah terintegrasi dengan pendataan
+// (peran pengolah di setiap sub-kegiatan pendataan). Data lama ber-kunci "pengolahan" diabaikan saat dibaca. Jadi 5 tahap.
 export const TAHAP_GSBPM: DefinisiTahap[] = [
   {
     kode: "perencanaan",
@@ -57,27 +59,16 @@ export const TAHAP_GSBPM: DefinisiTahap[] = [
     kode: "pendataan",
     no: 3,
     nama: "Pendataan",
-    gsbpm: "4.1 · 4.3 · 4.4",
-    uraian: "Updating/listing, pencacahan sampel, pengawasan, dan finalisasi pengumpulan.",
+    gsbpm: "4.1 · 4.3 · 4.4 · 5.3 · 5.4",
+    uraian: "Updating/listing, pencacahan sampel, pengawasan, pemeriksaan & pengolahan dokumen (peran pengolah), dan finalisasi pengumpulan.",
     wajib: false,
     bawaan: true,
     kapan: "Wajib untuk survei/sensus",
     identifikasi: ["Sub-kegiatan: updating/listing, pencacahan (per survei bila terintegrasi)", "Per peran (pencacah, pengawas, pengolah): status, honor & target", "Transport lokal (< 8 / > 8 jam), pulsa, perjadin supervisi", "Honor camat/kades/penunjuk jalan", "Mode CAPI / PAPI"],
   },
   {
-    kode: "pengolahan",
-    no: 4,
-    nama: "Pengolahan",
-    gsbpm: "5.3 · 5.4",
-    uraian: "Pemeriksaan, validasi, edit, dan entri data (bila bukan CAPI).",
-    wajib: false,
-    bawaan: false,
-    kapan: "Bila ada pengolahan di satker (mis. PAPI)",
-    identifikasi: ["Peran pengolah & honor", "Target dokumen", "Pulsa"],
-  },
-  {
     kode: "analisis",
-    no: 5,
+    no: 4,
     nama: "Analisis & diseminasi",
     gsbpm: "6 · 7",
     uraian: "Konsultasi & validasi angka, penyusunan publikasi/laporan, rilis, layanan data.",
@@ -88,7 +79,7 @@ export const TAHAP_GSBPM: DefinisiTahap[] = [
   },
   {
     kode: "evaluasi",
-    no: 6,
+    no: 5,
     nama: "Evaluasi",
     gsbpm: "8",
     uraian: "Rapat evaluasi, umpan balik petugas, penilaian mitra, rencana perbaikan.",

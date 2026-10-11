@@ -13,6 +13,8 @@ import {
   paketTahap,
   periksaPendataan,
   pertanyaanTampil,
+  pilihanTampil,
+  sisipkanSub,
   subKegiatanBaru,
   type Jawaban,
 } from "../perencanaanIdentifikasi";
@@ -53,11 +55,11 @@ test("dalam kota di kantor: konsumsi otomatis ya, paket meeting tidak ditanyakan
 });
 
 test("daring: lokasi/tempat/konsumsi disembunyikan dan jawaban lamanya dibuang", () => {
-  const ef = jawabanEfektif(P, { jenis: "daring", lokasi: "dalam", tempat: "hotel", konsumsi: true, pulsa: true });
+  const ef = jawabanEfektif(P, { jenis: "daring", lokasi: "dalam", tempat: "hotel", konsumsi: true, pulsa: "mitra" });
   expect(ef.lokasi).toBeUndefined();
   expect(ef.tempat).toBeUndefined();
   expect(ef.konsumsi).toBeUndefined();
-  expect(pertanyaanTampil(P, { jenis: "daring" }).map((x) => x.p.kode)).toEqual(["jenis", "peserta", "pulsa", "honor_instruktur", "narasumber", "jml_peserta", "jml_kelas", "jml_hari", "jml_jp"]);
+  expect(pertanyaanTampil(P, { jenis: "daring" }).map((x) => x.p.kode)).toEqual(["jenis", "peserta", "pulsa", "honor_instruktur", "narasumber", "jml_ppl", "jml_pml", "jml_instruktur", "jml_kelas", "jml_hari", "jml_jp"]);
 });
 
 test("paket pelatihan sesuai lokasi/tempat/peserta", () => {
@@ -71,14 +73,25 @@ test("paket pelatihan sesuai lokasi/tempat/peserta", () => {
   // luar kota
   expect(kode({ ...dasar, jenis: "luring", peserta: "keduanya", lokasi: "luar" })).toEqual(["524119-A", "524119-B"]);
   // daring + pulsa + instruktur + narasumber
-  expect(kode({ jenis: "daring", peserta: "mitra", pulsa: true, honor_instruktur: true, narasumber: true })).toEqual(["521211-D", "521213-C", "522151"]);
+  expect(kode({ jenis: "daring", peserta: "mitra", pulsa: "mitra", honor_instruktur: true, narasumber: true })).toEqual(["521211-D", "521213-C", "522151"]);
   // modul
   expect(modulDariForm(P, { jenis: "daring" })).toContain("Rapat Zoom");
   expect(modulDariForm(P, { jenis: "daring" })).not.toContain("Presensi bertitik lokasi");
 });
 
+test("pulsa daring: pilihan mengikuti peserta; organik saja otomatis tidak", () => {
+  const pul = (peserta: string) => pilihanTampil(P.pertanyaan.find((p) => p.kode === "pulsa")!, { jenis: "daring", peserta }).map((x) => x.label);
+  expect(pul("mitra")).toEqual(["Ya, untuk mitra", "Tidak"]);
+  expect(pul("keduanya")).toEqual(["Ya, untuk mitra", "Ya, untuk organik dan mitra", "Tidak"]);
+  expect(jawabanEfektif(P, { jenis: "daring", peserta: "organik", pulsa: "mitra" }).pulsa).toBe("tidak");
+  // ganti peserta keduanya -> mitra: pilihan "keduanya" gugur, harus dijawab ulang
+  expect(jawabanEfektif(P, { jenis: "daring", peserta: "mitra", pulsa: "keduanya" }).pulsa).toBeUndefined();
+  expect(paketDariForm(P, { jenis: "hybrid", peserta: "keduanya", pulsa: "keduanya" }).find((x) => x.kode === "521211-D")?.ket).toBe("Pulsa peserta daring (organik dan mitra)");
+  expect(kode({ jenis: "daring", peserta: "keduanya", pulsa: "tidak" })).toEqual([]);
+});
+
 test("belumDijawab: otomatis & angka opsional tidak diminta", () => {
-  const j: Jawaban = { jenis: "luring", peserta: "mitra", lokasi: "luar", paket_meeting: "fullboard", bahan: true, honor_instruktur: true, narasumber: false, jml_peserta: 40, jml_kelas: 2, jml_hari: 3 };
+  const j: Jawaban = { jenis: "luring", peserta: "mitra", lokasi: "luar", paket_meeting: "fullboard", bahan: true, honor_instruktur: true, narasumber: false, jml_ppl: 30, jml_pml: 10, jml_instruktur: 2, jml_kelas: 2, jml_hari: 3 };
   expect(belumDijawab(P, j)).toEqual([]);
   expect(belumDijawab(P, { ...j, jml_hari: null }).map((p) => p.kode)).toEqual(["jml_hari"]);
   expect(belumDijawab(P, {}).map((p) => p.kode)[0]).toBe("jenis");
@@ -90,7 +103,7 @@ test("pendataan: sub-kegiatan x peran menurunkan paket", () => {
   s.mode = "capi";
   s.penunjukJalan = false;
   s.peran.pencacah = { dipakai: true, status: "mitra", honor: true, satuan: "Ruta", target: 160, translok: "kurang8", pulsa: true, supervisi: null };
-  s.peran.pengawas = { dipakai: true, status: "keduanya", honor: true, satuan: "Ruta", target: 160, translok: "lebih8", pulsa: false, supervisi: true };
+  s.peran.pengawas = { dipakai: true, status: "keduanya", honor: true, satuan: "Ruta", target: 160, translok: "lebih8", pulsa: false, supervisi: true, honorUntuk: "keduanya" };
   const j = { sub: [s] };
   expect(periksaPendataan(j)).toEqual([]);
   const k = paketPendataan(j).map((x) => x.kode).sort();
@@ -98,6 +111,27 @@ test("pendataan: sub-kegiatan x peran menurunkan paket", () => {
   // honor mitra pencacah & pengawas digabung dalam satu paket
   expect(paketPendataan(j).find((x) => x.kode === "521213-D")?.ket).toMatch(/pencacah.*;.*pengawas/);
   expect(paketTahap("pendataan", j).length).toBe(6);
+});
+
+test("pendataan: status keduanya -> honor hanya mitra atau organik & mitra", () => {
+  const s = subKegiatanBaru("s1", "Listing / updating", "listing");
+  s.mode = "capi";
+  s.penunjukJalan = false;
+  s.peran.pengawas.dipakai = false;
+  s.peran.pencacah = { dipakai: true, status: "keduanya", honor: true, honorUntuk: null, satuan: "BS", target: null, translok: "tidak", pulsa: false, supervisi: null };
+  expect(periksaPendataan({ sub: [s] })).toEqual(["Listing / updating · Pencacah (PPL): honor untuk siapa belum diisi."]);
+  s.peran.pencacah.honorUntuk = "mitra";
+  expect(paketPendataan({ sub: [s] }).map((x) => x.kode)).toEqual(["521213-D"]);
+  s.peran.pencacah.honorUntuk = "keduanya";
+  expect(paketPendataan({ sub: [s] }).map((x) => x.kode)).toEqual(["521213-D", "521213-P"]);
+});
+
+test("pendataan: urutan listing -> pencacahan -> lainnya", () => {
+  let d = sisipkanSub([], subKegiatanBaru("a", "Lainnya", "lainnya"));
+  d = sisipkanSub(d, subKegiatanBaru("b", "Pencacahan sampel", "pencacahan"));
+  d = sisipkanSub(d, subKegiatanBaru("c", "Listing / updating", "listing"));
+  expect(d.map((s) => s.id)).toEqual(["c", "b", "a"]);
+  expect(periksaPendataan({ sub: [subKegiatanBaru("x", "X")] }).some((m) => m.includes("jenis"))).toBe(false);
 });
 
 test("pendataan: isian kurang dilaporkan per sub-kegiatan & peran", () => {
@@ -119,7 +153,7 @@ test("paketKegiatan: gabungan tahap dipakai saja, urut kode, sumber digabung", (
   const k = buatKegiatan({ roId: "r", nama: "Susenas" }, "k1", "2026-10-11T00:00:00.000Z");
   k.tahap.pelatihan.jawaban = { jenis: "luring", peserta: "mitra", lokasi: "dalam", tempat: "kantor", bahan: false, honor_instruktur: false, narasumber: false };
   k.tahap.evaluasi.jawaban = { rapat: true, rapat_tempat: "kantor" };
-  k.tahap.pengolahan.jawaban = { status: "mitra", honor: true, pulsa: false }; // tidak dipakai bawaan
+  k.tahap.analisis = { dipakai: false, jawaban: { konsultasi_prov: true }, diubah: null }; // tahap dimatikan -> tidak dihitung
   const p = paketKegiatan(k.tahap);
   expect(p.map((x) => x.kode)).toEqual(["521211-A", "524113-A"]);
   expect(p[0].sumber).toBe("Pelatihan petugas, Evaluasi");
