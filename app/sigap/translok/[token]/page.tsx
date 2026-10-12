@@ -27,6 +27,8 @@ type Hari = {
   foto: Foto[];
   // (11 Okt 2026) saran isian laporan dari identifikasi (PML) / pendataan (PPL, korwil)
   otomatis?: RealisasiOtomatis | null;
+  // (12 Okt 2026) hari lampau tanpa laporan manual tetapi ada hasil identifikasi/pendataan: laporan dianggap sudah selesai
+  laporan_dianggap?: boolean;
   kunci: "hari_ini" | "izin" | "terlewat" | "akan_datang";
   lengkap: boolean;
   izin_sampai: string | null;
@@ -264,7 +266,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
                   <InfoLangkah
                     ikon="📝"
                     judul="Laporan diisi setiap hari kerja"
-                    isi={`Pada setiap hari kerja, periksa lokasi, jumlah ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} dan kendala${pen.sumber_otomatis ? ` (lokasi dan jumlah terisi otomatis dari ${LABEL_SUMBER[pen.sumber_otomatis]} Anda, boleh diubah)` : ""}, lalu tekan Simpan laporan. Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
+                    isi={`Pada setiap hari kerja, periksa lokasi, jumlah ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} dan kendala${pen.sumber_otomatis ? ` (lokasi dan jumlah terisi otomatis dari ${LABEL_SUMBER[pen.sumber_otomatis]} Anda, boleh diubah)` : ""}, lalu tekan Konfirmasi & simpan laporan (isian otomatis baru berlaku setelah Anda konfirmasi). Laporan PDF dibuat otomatis dari isian ini. Batas pengisian 23:59 WIB di hari yang sama.`}
                   />
                   <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} hanya="laporan" />
                 </>
@@ -901,6 +903,14 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
           <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, hubungi admin anggaran untuk izin susulan.</p>
         </div>
       )}
+      {hanya !== "foto" && wajibLaporan(pen) && hari.laporan_dianggap && hari.otomatis && (
+        <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+          <p className="text-[14px] font-extrabold">✓ Laporan dianggap sudah selesai</p>
+          <p className="mt-0.5 text-[12.5px]">
+            Anda tidak mengisi laporan manual, tetapi ada {hari.otomatis.jumlah} {hari.otomatis.satuan} dari {LABEL_SUMBER[hari.otomatis.sumber]} Anda pada tanggal ini di {hari.otomatis.lokasi.length} jorong, sehingga laporan dihitung sudah dibuat. Tinggal pastikan dokumentasi foto lengkap.
+          </p>
+        </div>
+      )}
       {hanya !== "foto" && wajibLaporan(pen) && <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />}
       {hanya !== "laporan" && <PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />}
     </>
@@ -922,7 +932,7 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
             ? { t: "Terlewat", c: "bg-red-50 text-red-800" }
             : h.kunci === "akan_datang"
             ? { t: "Rencana", c: "bg-slate-100 text-slate-600" }
-            : { t: `${wajibLaporan(pen) ? `${h.realisasi ? "Laporan ✓" : "Laporan –"} · ` : ""}${h.foto.length}/${nFoto(pen)} foto`, c: "bg-amber-50 text-amber-800" };
+            : { t: `${wajibLaporan(pen) ? `${h.realisasi || h.laporan_dianggap ? "Laporan ✓" : "Laporan –"} · ` : ""}${h.foto.length}/${nFoto(pen)} foto`, c: "bg-amber-50 text-amber-800" };
           const d = tglObj(h.tanggal);
           return (
             <div key={h.tanggal}>
@@ -932,7 +942,7 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
                   <span className="block text-[17px] font-extrabold leading-tight">{d.getUTCDate()}</span>
                 </span>
                 <span className="flex-1 text-[12.5px] text-[#55657D]">
-                  {h.realisasi ? `${h.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${h.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ")}` : h.otomatis && wajibLaporan(pen) ? `${h.otomatis.jumlah} ${h.otomatis.satuan} dari ${LABEL_SUMBER[h.otomatis.sumber]} · belum disimpan` : BULAN_PANJANG[d.getUTCMonth()]}
+                  {h.realisasi ? `${h.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${h.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ")}` : h.otomatis && wajibLaporan(pen) ? `${h.otomatis.jumlah} ${h.otomatis.satuan} dari ${LABEL_SUMBER[h.otomatis.sumber]} · ${h.laporan_dianggap ? "laporan dianggap selesai" : "belum disimpan"}` : BULAN_PANJANG[d.getUTCMonth()]}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${status.c}`}>{status.t}</span>
               </button>
@@ -1381,7 +1391,7 @@ function FormRealisasi({
         <div className={`mt-2.5 rounded-xl px-3 py-2 text-[12.5px] leading-snug ${banding.semuaSama ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-900"}`}>
           {banding.semuaSama ? (
             <p>
-              <b>{tersimpan ? "✓ Sesuai" : "Terisi otomatis dari"} {LABEL_SUMBER[oto.sumber]}:</b> {oto.jumlah} {sat} di {oto.lokasi.length} jorong.{!tersimpan && " Periksa lalu tekan Simpan laporan."}
+              <b>{tersimpan ? "✓ Sesuai" : "Terisi otomatis dari"} {LABEL_SUMBER[oto.sumber]}:</b> {oto.jumlah} {sat} di {oto.lokasi.length} jorong.{!tersimpan && " Periksa; bila sudah benar tekan Konfirmasi & simpan laporan, bila perlu ubah dulu lokasi atau jumlahnya."}
             </p>
           ) : (
             <p>
@@ -1500,7 +1510,7 @@ function FormRealisasi({
           onClick={simpan}
           className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50"
         >
-          {busy ? "Menyimpan…" : tersimpan ? "Perbarui laporan" : "Simpan laporan"}
+          {busy ? "Menyimpan…" : tersimpan ? "Perbarui laporan" : banding?.semuaSama ? "Konfirmasi & simpan laporan" : banding ? "Simpan laporan (isian diubah)" : "Simpan laporan"}
         </button>
       )}
     </section>

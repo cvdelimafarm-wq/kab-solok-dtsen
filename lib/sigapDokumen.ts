@@ -24,6 +24,8 @@
 // penyisiran lib/pdf/*.ts TIDAK diubah).
 
 import { PDFDocument } from "pdf-lib";
+import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
+import { catatanDianggap, laporanDianggap } from "@/lib/realisasiOtomatis";
 import { BUCKET_SIGAP, aturanDari, hariLengkap, hariIniWib, kelompokTanggal, type AturanIsian, type Db, HK_AKTIF } from "@/lib/sigap";
 import { buatPdfKwitansiSigap } from "@/lib/pdf/sigap/kwitansi";
 import { buatPdfVisumSigap } from "@/lib/pdf/sigap/visum";
@@ -78,6 +80,8 @@ export type HariSpj = {
   izinAktif: boolean;
   lengkap: boolean;
   dibayar: boolean;
+  /** (12 Okt 2026) laporan tidak diisi manual tetapi dianggap selesai dari data identifikasi/pendataan (realisasi berisi data otomatis) */
+  laporanDianggap?: boolean;
 };
 
 export type KelompokSpj = { mulai: string; selesai: string; jumlah_hari: number; tanggal: string[]; nominal: number };
@@ -132,6 +136,11 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
   const tarifNum = Number(tarif?.tarif ?? 0);
   const aturan = aturanDari(keg); // (7 Okt 2026) wajib laporan & jumlah foto per kegiatan
   const tanggalKerja = Array.from(new Set((hk ?? []).map((h) => String(h.tanggal).slice(0, 10)))).sort();
+  // (12 Okt 2026) hari lampau tanpa laporan manual tetapi ada hasil identifikasi/pendataan -> laporan dianggap selesai (isi diambil dari data itu)
+  const satuanLap = satuanLaporan(String(keg.kode ?? ""), String(pen.peran), String(keg.satuan_realisasi ?? "") || "ruta");
+  const otoPeta = aturan.wajib_laporan && tanggalKerja.length > 0
+    ? await ambilRealisasiOtomatis(db, pen.akun_id as number, String(pen.peran), String(keg.kode ?? ""), satuanLap, tanggalKerja, await ambilWilayahRingkas(db))
+    : new Map<string, import("@/lib/realisasiOtomatis").RealisasiOtomatis>();
   const hari: HariSpj[] = tanggalKerja.map((t) => {
     const r = (real ?? []).find((x) => String(x.tanggal).slice(0, 10) === t);
     const f = (foto ?? [])
@@ -139,15 +148,19 @@ export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
       .map((x) => ({ slot: Number(x.slot), file_path: String(x.file_path) }))
       .sort((a, b) => a.slot - b.slot);
     const izinAktif = (izin ?? []).some((x) => String(x.tanggal).slice(0, 10) === t && new Date(String(x.berlaku_sampai)).getTime() > acuanWaktu.getTime());
+    const oto = otoPeta.get(t) ?? null;
+    const dianggap = laporanDianggap(t, acuan.hariIni, !!r, oto);
     const realisasi = r
       ? {
           lokasi: (Array.isArray(r.lokasi) ? (r.lokasi as LokasiRealisasi[]) : []).filter((l) => l && typeof l === "object"),
           jumlah_realisasi: Number(r.jumlah_realisasi ?? 0),
           kendala: (r.kendala as string | null) ?? null,
         }
+      : dianggap && oto
+      ? { lokasi: oto.lokasi.map((l) => ({ ...l })) as LokasiRealisasi[], jumlah_realisasi: oto.jumlah, kendala: catatanDianggap(oto.sumber) }
       : null;
     const lengkap = hariLengkap(!!realisasi, new Set(f.map((x) => x.slot)).size, aturan);
-    return { tanggal: t, realisasi, foto: f, izinAktif, lengkap, dibayar: t >= acuan.hariIni || lengkap || izinAktif };
+    return { tanggal: t, realisasi, foto: f, izinAktif, lengkap, dibayar: t >= acuan.hariIni || lengkap || izinAktif, ...(dianggap ? { laporanDianggap: true } : {}) };
   });
   const kelompok = kelompokTanggal(hari.filter((h) => h.dibayar).map((h) => h.tanggal)).map((k) => ({ ...k, nominal: k.jumlah_hari * tarifNum }));
 

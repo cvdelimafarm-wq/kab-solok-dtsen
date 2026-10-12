@@ -3,7 +3,7 @@
 // (11 Okt 2026) Monitoring Lapangan (admin) -- permintaan user. Hanya-baca: memanggil fungsi database bencana_monitoring_lapangan
 // (orang × tanggal, tanggal menurut WIB) dan aturan isian kegiatan Pendataan untuk menilai status translok.
 
-import { aturanDari, type AturanIsian, type Db } from "@/lib/sigap";
+import { aturanDari, hariIniWib, type AturanIsian, type Db } from "@/lib/sigap";
 import { KEGIATAN_PENDATAAN_ID } from "@/lib/pendataan";
 import type { BarisLapangan } from "@/lib/lapangan";
 
@@ -20,7 +20,8 @@ export async function monitoringLapangan(db: Db, dari: string | null, sampai: st
     db.from("sigap_kegiatan").select("id, nama, jenis, wajib_laporan, jumlah_foto").eq("id", KEGIATAN_PENDATAAN_ID).maybeSingle(),
   ]);
   if (error) throw new Error(`Gagal memuat monitoring lapangan: ${error.message}`);
-  const baris: BarisLapangan[] = ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+  const hariIni = hariIniWib();
+  const dasar: BarisLapangan[] = ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     akun_id: n(r.akun_id),
     nama: String(r.nama ?? ""),
     peran: r.peran === "pml" ? "pml" : r.peran === "korwil" ? "korwil" : "ppl",
@@ -36,5 +37,10 @@ export async function monitoringLapangan(db: Db, dari: string | null, sampai: st
     ada_laporan: r.ada_laporan === true,
     jumlah_foto: n(r.jumlah_foto),
   }));
+  const baris: BarisLapangan[] = dasar.map((b) => {
+    // (12 Okt 2026) hari lampau tanpa laporan manual tetapi ada hasil (PML: Sub SLS diidentifikasi; PPL/korwil: KK berhasil) = laporan dianggap selesai
+    const adaHasil = b.peran === "pml" ? b.sub_idf > 0 : b.kk_berhasil > 0;
+    return !b.ada_laporan && b.tanggal < hariIni && adaHasil ? { ...b, ada_laporan: true, laporan_dianggap: true } : b;
+  });
   return { baris, aturan: aturanDari(keg), kegiatan: keg ? { id: n(keg.id), nama: String(keg.nama ?? "") } : null };
 }

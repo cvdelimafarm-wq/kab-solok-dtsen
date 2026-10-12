@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAKS_LOKASI, bandingkanOtomatis, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
+import { MAKS_LOKASI, bandingkanOtomatis, laporanDianggap, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
 
 // (11 Okt 2026) Uji isian otomatis Laporan realisasi PML (identifikasi) dan PPL (pendataan).
 const W: WilayahRingkas[] = [
@@ -74,5 +74,23 @@ describe("bandingkanOtomatis", () => {
     expect(bandingkanOtomatis({ lokasi, jumlah: 3 }, oto)).toEqual({ lokasiSama: true, jumlahSama: false, semuaSama: false });
     expect(bandingkanOtomatis({ lokasi: lokasi.slice(0, 1), jumlah: 2 }, oto)).toEqual({ lokasiSama: false, jumlahSama: true, semuaSama: false });
     expect(bandingkanOtomatis({ lokasi, jumlah: null }, oto).jumlahSama).toBe(false);
+  });
+});
+
+describe("laporanDianggap (12 Okt 2026)", () => {
+  const oto = { jumlah: 4 };
+  it("hari lampau, tanpa laporan manual, ada hasil -> dianggap", () => {
+    expect(laporanDianggap("2026-10-10", "2026-10-12", false, oto)).toBe(true);
+  });
+  it("hari ini dan hari mendatang tidak dianggap", () => {
+    expect(laporanDianggap("2026-10-12", "2026-10-12", false, oto)).toBe(false);
+    expect(laporanDianggap("2026-10-13", "2026-10-12", false, oto)).toBe(false);
+  });
+  it("sudah ada laporan manual -> bukan 'dianggap'", () => {
+    expect(laporanDianggap("2026-10-10", "2026-10-12", true, oto)).toBe(false);
+  });
+  it("tanpa hasil lapangan -> tidak dianggap", () => {
+    expect(laporanDianggap("2026-10-10", "2026-10-12", false, null)).toBe(false);
+    expect(laporanDianggap("2026-10-10", "2026-10-12", false, { jumlah: 0 })).toBe(false);
   });
 });

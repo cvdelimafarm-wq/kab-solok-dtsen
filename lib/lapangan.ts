@@ -26,6 +26,8 @@ export type BarisLapangan = {
   agg_kk: number;
   hari_kerja: boolean;
   ada_laporan: boolean;
+  /** (12 Okt 2026) laporan tidak diisi manual, dianggap selesai dari hasil identifikasi/pendataan (hari lampau) */
+  laporan_dianggap?: boolean;
   jumlah_foto: number;
 };
 

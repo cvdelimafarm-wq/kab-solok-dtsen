@@ -27,8 +27,8 @@ import {
   rentangTanggal,
   tanggalValid,
 } from "@/lib/sigap";
-import { ambilRealisasiOtomatis } from "@/lib/portal/realisasiOtomatis";
-import { satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
+import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
+import { laporanDianggap, satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,9 +75,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       for (const s of signed ?? []) if (s.path && s.signedUrl) urlMap.set(s.path, s.signedUrl);
     }
 
-    const hasil = penugasan.map((p) => {
+    // Opsi lokasi: master wilayah kabupaten (kec > nagari > jorong), diambil per halaman (>1000 baris).
+    const wil = await ambilWilayahRingkas(db);
+
+    // (12 Okt 2026) Hari lampau tanpa laporan manual tetapi ada hasil identifikasi/pendataan = laporan dianggap selesai (lihat laporanDianggap).
+    const hasil = await Promise.all(penugasan.map(async (p) => {
       const hariKerja = (hk ?? []).filter((h) => h.penugasan_id === p.id).map((h) => h.tanggal as string).sort();
       const lain = (hk ?? []).filter((h) => h.penugasan_id !== p.id).map((h) => h.tanggal as string);
+      const satuan = satuanLaporan(p.kegiatan.kode, p.peran, p.kegiatan.satuan_realisasi);
+      const oto = await ambilRealisasiOtomatis(db, akun.id, p.peran, p.kegiatan.kode, satuan, hariKerja, wil);
       const hari = hariKerja.map((t) => {
         const r = (realisasi ?? []).find((x) => x.penugasan_id === p.id && x.tanggal === t) ?? null;
         const f = (foto ?? [])
@@ -86,22 +92,17 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
           .sort((a, b) => a.slot - b.slot);
         const iz = (izin ?? []).find((x) => x.penugasan_id === p.id && x.tanggal === t);
         const kunci = t === hariIni ? "hari_ini" : iz ? "izin" : t > hariIni ? "akan_datang" : "terlewat";
-        const lengkap = hariLengkap(!!r, f.length, p.kegiatan); // (7 Okt 2026) aturan isian per kegiatan
-        return { tanggal: t, realisasi: r, foto: f, kunci, lengkap, izin_sampai: (iz?.berlaku_sampai as string | undefined) ?? null };
+        const otoHari = oto.get(t) ?? null;
+        const dianggap = p.kegiatan.wajib_laporan && laporanDianggap(t, hariIni, !!r, otoHari);
+        const lengkap = hariLengkap(!!r || dianggap, f.length, p.kegiatan); // (7 Okt 2026) aturan isian per kegiatan
+        return { tanggal: t, realisasi: r, foto: f, kunci, lengkap, laporan_dianggap: dianggap, otomatis: otoHari, izin_sampai: (iz?.berlaku_sampai as string | undefined) ?? null };
       });
       // Hari dibayar: hari kerja yg belum lewat (masih bisa dilengkapi) + hari lampau yg lengkap / sedang izin susulan.
       const dibayar = hari.filter((h) => h.tanggal >= hariIni || h.lengkap || h.kunci === "izin").map((h) => h.tanggal);
       const kelompok = kelompokTanggal(dibayar).map((k) => ({ ...k, nominal: k.jumlah_hari * p.tarif }));
-      return { ...p, hari_kerja: hariKerja, hari, kelompok, tanggal_kegiatan_lain: lain };
-    });
+      return { ...p, satuan_laporan: satuan, sumber_otomatis: sumberUntukPeran(p.kegiatan.kode, p.peran), hari_kerja: hariKerja, hari, kelompok, tanggal_kegiatan_lain: lain };
+    }));
 
-    // Opsi lokasi: master wilayah kabupaten (kec > nagari > jorong), diambil per halaman (>1000 baris).
-    const wil: { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string }[] = [];
-    for (let i = 0; i < 5000; i += 1000) {
-      const { data: hal } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").order("idsubsls").range(i, i + 999);
-      wil.push(...((hal ?? []) as typeof wil));
-      if (!hal || hal.length < 1000) break;
-    }
     wil.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls));
     const master = new Map<string, { kecamatan: string; nagari: string; jorong: string }>();
     for (const w of wil) {
@@ -120,15 +121,6 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       }
     }
 
-    // (11 Okt 2026) Saran isian Laporan realisasi dari hasil identifikasi (PML) / pendataan (PPL, korwil) -- hanya Pendataan Pascabencana.
-    const penugasanOto = await Promise.all(
-      hasil.map(async (p) => {
-        const satuan = satuanLaporan(p.kegiatan.kode, p.peran, p.kegiatan.satuan_realisasi);
-        const oto = await ambilRealisasiOtomatis(db, akun.id, p.peran, p.kegiatan.kode, satuan, p.hari.map((h) => h.tanggal), wil);
-        return { ...p, satuan_laporan: satuan, sumber_otomatis: sumberUntukPeran(p.kegiatan.kode, p.peran), hari: p.hari.map((h) => ({ ...h, otomatis: oto.get(h.tanggal) ?? null })) };
-      })
-    );
-
     return NextResponse.json({
       akun: {
         nama: akun.nama,
@@ -141,7 +133,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         verifikasi: akun.verif_at ? { at: akun.verif_at, jarak_m: akun.verif_jarak_m, alasan: akun.verif_alasan } : null,
       },
       hari_ini: hariIni,
-      penugasan: penugasanOto,
+      penugasan: hasil,
       lokasi_opsi: { wilayah_tim: subTim, master: Array.from(master.values()) },
       kecamatan_opsi: Array.from(new Set(wil.map((w) => w.kecamatan))).sort(),
     });

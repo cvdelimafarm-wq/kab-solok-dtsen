@@ -32,3 +32,14 @@ export async function ambilRealisasiOtomatis(
   }
   return susunRealisasiOtomatis(baris, wilayah, satuan);
 }
+
+/** Master wilayah ringkas (kode Sub SLS -> kecamatan/nagari/SLS), dibaca per halaman 1000 baris. */
+export async function ambilWilayahRingkas(db: Db): Promise<(WilayahRingkas & { sub_sls: string })[]> {
+  const wil: (WilayahRingkas & { sub_sls: string })[] = [];
+  for (let i = 0; i < 5000; i += 1000) {
+    const { data: hal } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").order("idsubsls").range(i, i + 999);
+    wil.push(...((hal ?? []) as typeof wil));
+    if (!hal || hal.length < 1000) break;
+  }
+  return wil;
+}

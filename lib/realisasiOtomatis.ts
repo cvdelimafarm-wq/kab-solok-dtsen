@@ -81,3 +81,17 @@ export function bandingkanOtomatis(isian: { lokasi: { kecamatan: string; nagari:
   const jumlahSama = isian.jumlah === oto.jumlah;
   return { lokasiSama, jumlahSama, semuaSama: lokasiSama && jumlahSama };
 }
+
+/**
+ * (12 Okt 2026, permintaan user) Hari LAMPAU (sebelum hari ini WIB) yang petugasnya tidak membuat laporan manual tetapi sudah
+ * mengerjakan identifikasi (PML) / pendataan (PPL, korwil) DIANGGAP sudah menyelesaikan laporan. Dokumentasi foto tetap mengikuti aturan kegiatan.
+ * Hari ini & hari mendatang tidak dianggap: petugas masih bisa mengonfirmasi/mengubah isiannya.
+ */
+export function laporanDianggap(tanggal: string, hariIni: string, adaLaporanManual: boolean, oto: { jumlah: number } | null | undefined): boolean {
+  return !adaLaporanManual && tanggal < hariIni && !!oto && oto.jumlah > 0;
+}
+
+/** Catatan pada laporan yang dianggap otomatis (tampil di PDF Laporan sebagai Kendala). */
+export function catatanDianggap(sumber: SumberOtomatis): string {
+  return `Laporan dibuat otomatis dari ${LABEL_SUMBER[sumber]} (petugas tidak mengisi laporan manual).`;
+}
