@@ -228,6 +228,21 @@ export async function selesaikanPermintaan(db: Db, akun: { id: number }, ids: nu
   return { selesai: baris.length, dikirim };
 }
 
+/** Admin menarik kembali tanda "sudah keluar di FASIH" (salah klik): status kembali "menunggu", tanpa notifikasi. Kuota PML tidak berubah. */
+export async function tarikPermintaan(db: Db, akun: { id: number }, ids: number[]): Promise<{ ditarik: number } | Galat> {
+  const { data, error } = await db
+    .from("bencana_pendataan_permintaan")
+    .update({ status: "menunggu", selesai_oleh: null, selesai_at: null })
+    .in("id", ids)
+    .eq("status", "sudah_keluar")
+    .select("id");
+  if (error) return { galat: "Gagal menarik kembali. Coba lagi.", status: 500 };
+  const baris = (data ?? []) as { id: number }[];
+  if (!baris.length) return { galat: "Tidak ada permintaan berstatus sudah keluar yang cocok (mungkin sudah ditarik).", status: 409 };
+  await catatAudit(db, akun.id, "pendataan_minta_tarik", { permintaan: baris.map((b) => b.id) }).catch(() => undefined);
+  return { ditarik: baris.length };
+}
+
 /** Admin mengisi email FASIH pengawas (PML) / pencacah (PPL) dari satu permintaan -> disimpan di bencana_petugas.email_fasih (berlaku untuk semua permintaan petugas itu). */
 export async function simpanEmailFasih(db: Db, akun: { id: number }, permintaanId: number, sebagai: PeranEmail, emailMentah: unknown): Promise<{ ok: true; email: string } | Galat> {
   const email = periksaEmail(emailMentah);

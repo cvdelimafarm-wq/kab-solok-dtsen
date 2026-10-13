@@ -7,12 +7,13 @@
 //  POST { aksi:"batalkan", id }                              PML tim: hanya yang masih menunggu
 //  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
+//  POST { aksi:"tarik", ids:[...] }                          admin level kelola: tarik kembali "sudah keluar" -> "menunggu" (salah klik; tanpa notifikasi)
 // Sesi "masuk sebagai" hanya boleh MELIHAT: semua POST ditolak.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
-import { batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, selesaikanPermintaan, simpanEmailFasih } from "@/lib/portal/permintaanDaftar";
+import { batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan } from "@/lib/portal/permintaanDaftar";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { MAKS_SUB_PER_HARI, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -77,6 +78,15 @@ export async function POST(req: NextRequest) {
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await selesaikanPermintaan(db, { id: akun.id }, ids);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "tarik") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menarik tanda sudah keluar.", 403);
+      const ids = periksaIds(b.ids);
+      if (!ids) return galat("Pilih minimal satu permintaan.");
+      const h = await tarikPermintaan(db, { id: akun.id }, ids);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }

@@ -22,7 +22,8 @@ export default function PermintaanDaftar() {
   const [saring, setSaring] = useState<Saring>("menunggu");
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [yakin, setYakin] = useState(false);
-  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | null>(null);
+  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | null>(null);
+  const [yakinTarik, setYakinTarik] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
   const [surel, setSurel] = useState<Record<string, string>>({});
   const [simpanSurel, setSimpanSurel] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export default function PermintaanDaftar() {
   const tampil = saring === "menunggu" ? menunggu : keluar;
   const dipilih = useMemo(() => semua.filter((p) => pilih.has(p.id)), [semua, pilih]);
   const dipilihMenunggu = dipilih.filter((p) => p.status === "menunggu");
+  const dipilihKeluar = dipilih.filter((p) => p.status === "sudah_keluar");
   const tanpaSurel = dipilih.filter(tanpaEmail).length;
   const boleh = !!data?.boleh_kelola;
 
@@ -120,8 +122,26 @@ export default function PermintaanDaftar() {
     }
   }
 
+  async function tarik() {
+    if (dipilihKeluar.length === 0 || sibuk) return;
+    setSibuk("tarik");
+    setPesan(null);
+    try {
+      const h = await apiPortal<{ ditarik: number }>(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "tarik", ids: dipilihKeluar.map((p) => p.id) }) });
+      setPesan(`${h.ditarik} permintaan dikembalikan ke Menunggu admin. Tidak ada notifikasi yang dikirim.`);
+      setPilih(new Set());
+      setYakinTarik(false);
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menarik kembali. Coba lagi.");
+      setYakinTarik(false);
+    } finally {
+      setSibuk(null);
+    }
+  }
+
   const tombolSaring = (k: Saring, teks: string, n: number) => (
-    <button key={k} type="button" aria-pressed={saring === k} onClick={() => { setSaring(k); setYakin(false); }} className={`min-h-[40px] flex-1 rounded-full px-3 text-[12.5px] font-extrabold ${saring === k ? "bg-[#0F2A52] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
+    <button key={k} type="button" aria-pressed={saring === k} onClick={() => { setSaring(k); setYakin(false); setYakinTarik(false); }} className={`min-h-[40px] flex-1 rounded-full px-3 text-[12.5px] font-extrabold ${saring === k ? "bg-[#0F2A52] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
       {teks} <b>{n}</b>
     </button>
   );
@@ -230,6 +250,28 @@ export default function PermintaanDaftar() {
               )
             ) : (
               <p className="text-[12.5px] text-[#6B7A90]">Akun ini hanya boleh melihat dan mengekspor; menandai butuh izin kelola pendataan.</p>
+            ))}
+          {dipilihKeluar.length > 0 &&
+            (boleh ? (
+              !yakinTarik ? (
+                <button type="button" disabled={sibuk !== null} onClick={() => setYakinTarik(true)} className="min-h-[50px] w-full rounded-[14px] border-2 border-[#B42329] bg-white px-4 text-[14px] font-extrabold text-[#B42329] disabled:opacity-50">
+                  Tarik kembali ke Menunggu ({dipilihKeluar.length})…
+                </button>
+              ) : (
+                <div className="rounded-[14px] border border-[#F2B8BA] bg-[#FDE8E8] p-3">
+                  <p className="text-[13px] font-bold text-[#7A1D22]">Kembalikan {dipilihKeluar.length} Sub SLS ke Menunggu admin? Untuk salah klik. Tidak ada notifikasi ke PML/PPL, dan penugasan di FASIH tidak ikut berubah (batalkan sendiri di FASIH bila perlu).</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setYakinTarik(false)} className="min-h-[46px] rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#0F2A52] shadow-sm">
+                      Batal
+                    </button>
+                    <button type="button" disabled={sibuk !== null} onClick={() => void tarik()} className="min-h-[46px] rounded-[12px] bg-[#B42329] text-[13.5px] font-extrabold text-white disabled:opacity-50">
+                      {sibuk === "tarik" ? "Menarik…" : "Ya, tarik kembali"}
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              <p className="text-[12.5px] text-[#6B7A90]">Menarik kembali butuh izin kelola pendataan.</p>
             ))}
         </div>
       )}
