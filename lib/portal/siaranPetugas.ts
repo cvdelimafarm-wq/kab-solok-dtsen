@@ -114,7 +114,7 @@ export async function siarkan(db: Db, akun: { id: number }, s: Siaran): Promise<
     const { data: mx } = await db.from("sigap_pengumuman").select("urut").eq("kegiatan_id", kegiatanId).order("urut", { ascending: false }).limit(1).maybeSingle();
     const { data: ins, error } = await db
       .from("sigap_pengumuman")
-      .insert({ kegiatan_id: kegiatanId, urut: ((mx?.urut as number | undefined) ?? 0) + 1, judul: s.modal.judul, jenis: s.modal.jenis, isi: s.modal.isi, frekuensi: "sekali", aktif: true, akhir_at: akhirModalSiaran(new Date()) })
+      .insert({ kegiatan_id: kegiatanId, urut: ((mx?.urut as number | undefined) ?? 0) + 1, judul: s.modal.judul, jenis: s.modal.jenis, isi: s.modal.isi, tombol_label: s.modal.tombol?.label ?? null, tombol_url: s.modal.tombol?.url ?? null, frekuensi: "sekali", aktif: true, akhir_at: akhirModalSiaran(new Date()) })
       .select("id")
       .single();
     if (error || !ins) return { galat: "Modal gagal dibuat. Coba lagi.", status: 500 };

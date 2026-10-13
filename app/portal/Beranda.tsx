@@ -21,6 +21,7 @@ import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
 import ModalFotoPanitia from "@/app/sigap/pelatihan/ModalFotoPanitia"; // (9 Okt 2026) pengingat foto pelatihan untuk panitia
 import ModalRapat from "./ModalRapat"; // (9 Okt 2026) presensi rapat Zoom (modal + token)
+import PengumumanPetugas from "@/app/sigap/kegiatan/[id]/[tahap]/PengumumanPetugas"; // (13 Okt 2026) siaran admin untuk petugas pendataan (sekali konfirmasi)
 import GantiPinCepat from "./GantiPinCepat";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
@@ -344,6 +345,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         {data && <AktifkanNotifikasi />}
         {data && <ModalFotoPanitia />}
         {data && <ModalRapat />}
+        {data && <PengumumanPetugas />}
       </div>
 
       {gantiPin && (

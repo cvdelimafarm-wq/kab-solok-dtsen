@@ -12,7 +12,7 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
-import { MAKS_SUB_PER_HARI, tanggalWib, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
+import { MAKS_SUB_PER_HARI, periksaEmail, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
@@ -62,15 +62,27 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
   if (!baris.length) return [];
   const [wil, { data: pml }, { data: ppl }, akunPml] = await Promise.all([
     petaWilayah(db, baris.map((b) => b.idsubsls)),
-    db.from("bencana_petugas").select("id, nama").in("id", [...new Set(baris.map((b) => b.pml_id))]),
-    db.from("sigap_akun").select("id, nama").in("id", [...new Set(baris.map((b) => b.ppl_akun_id))]),
+    db.from("bencana_petugas").select("id, nama, email_fasih").in("id", [...new Set(baris.map((b) => b.pml_id))]),
+    db.from("sigap_akun").select("id, nama, petugas_bencana_id").in("id", [...new Set(baris.map((b) => b.ppl_akun_id))]),
     denganEmail ? akunPerPetugas(db, baris.map((b) => b.pml_id)) : Promise.resolve(new Map<number, number>()),
   ]);
   const namaPml = new Map((pml ?? []).map((p) => [p.id as number, String(p.nama ?? "")]));
   const namaPpl = new Map((ppl ?? []).map((p) => [p.id as number, String(p.nama ?? "")]));
   const email = denganEmail ? await emailPerAkun(db, [...baris.map((b) => b.ppl_akun_id), ...akunPml.values()]) : new Map<number, string>();
+  // email FASIH yang diisi admin (bencana_petugas.email_fasih) DIUTAMAKAN di atas email data mitra
+  const emailFasihPetugas = new Map<number, string>();
+  if (denganEmail) {
+    for (const p of pml ?? []) if (p.email_fasih) emailFasihPetugas.set(p.id as number, String(p.email_fasih));
+    const pplPetugas = [...new Set((ppl ?? []).map((a) => a.petugas_bencana_id as number | null).filter((x): x is number => typeof x === "number"))];
+    if (pplPetugas.length) {
+      const { data: ep } = await db.from("bencana_petugas").select("id, email_fasih").in("id", pplPetugas);
+      for (const p of ep ?? []) if (p.email_fasih) emailFasihPetugas.set(p.id as number, String(p.email_fasih));
+    }
+  }
+  const petugasPpl = new Map((ppl ?? []).map((a) => [a.id as number, a.petugas_bencana_id as number | null]));
   return baris.map((b) => {
     const w = wil.get(b.idsubsls);
+    const pplPet = petugasPpl.get(b.ppl_akun_id);
     return {
       id: b.id,
       idsubsls: b.idsubsls,
@@ -86,8 +98,8 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
       status: (b.status === "sudah_keluar" ? "sudah_keluar" : "menunggu") as StatusMinta,
       diminta_at: b.diminta_at,
       selesai_at: b.selesai_at,
-      email_pengawas: denganEmail ? email.get(akunPml.get(b.pml_id) ?? -1) ?? "" : "",
-      email_pencacah: denganEmail ? email.get(b.ppl_akun_id) ?? "" : "",
+      email_pengawas: denganEmail ? emailFasihPetugas.get(b.pml_id) ?? email.get(akunPml.get(b.pml_id) ?? -1) ?? "" : "",
+      email_pencacah: denganEmail ? (pplPet != null ? emailFasihPetugas.get(pplPet) : undefined) ?? email.get(b.ppl_akun_id) ?? "" : "",
     };
   });
 }
@@ -210,4 +222,22 @@ export async function selesaikanPermintaan(db: Db, akun: { id: number }, ids: nu
     console.error("[selesai push]", e instanceof Error ? e.message : e);
   }
   return { selesai: baris.length, dikirim };
+}
+
+/** Admin mengisi email FASIH pengawas (PML) / pencacah (PPL) dari satu permintaan -> disimpan di bencana_petugas.email_fasih (berlaku untuk semua permintaan petugas itu). */
+export async function simpanEmailFasih(db: Db, akun: { id: number }, permintaanId: number, sebagai: PeranEmail, emailMentah: unknown): Promise<{ ok: true; email: string } | Galat> {
+  const email = periksaEmail(emailMentah);
+  if (!email) return { galat: "Format email tidak sah.", status: 422 };
+  const { data: p } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, ppl_akun_id").eq("id", permintaanId).maybeSingle();
+  if (!p) return { galat: "Permintaan tidak ditemukan.", status: 404 };
+  let petugasId: number | null = p.pml_id as number;
+  if (sebagai === "pencacah") {
+    const { data: a } = await db.from("sigap_akun").select("petugas_bencana_id").eq("id", p.ppl_akun_id as number).maybeSingle();
+    petugasId = (a?.petugas_bencana_id as number | null | undefined) ?? null;
+  }
+  if (!petugasId) return { galat: "Akun PPL ini belum terhubung ke data petugas, jadi emailnya belum bisa disimpan.", status: 409 };
+  const { error } = await db.from("bencana_petugas").update({ email_fasih: email }).eq("id", petugasId);
+  if (error) return { galat: "Email gagal disimpan. Coba lagi.", status: 500 };
+  await catatAudit(db, akun.id, "pendataan_email_fasih", { petugas_id: petugasId, sebagai, permintaan: permintaanId }).catch(() => undefined);
+  return { ok: true, email };
 }

@@ -5,13 +5,14 @@
 //  GET ?admin=1       -> { sekarang, boleh_kelola, permintaan[] (+email) }       admin bencana.admin (lihat); boleh_kelola = level kelola
 //  POST { aksi:"buat", pilihan:[{idsubsls,ppl_akun_id}] }   PML tim: maks. 2 Sub SLS per hari; admin diberi push
 //  POST { aksi:"batalkan", id }                              PML tim: hanya yang masih menunggu
+//  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
 // Sesi "masuk sebagai" hanya boleh MELIHAT: semua POST ditolak.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
-import { batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, selesaikanPermintaan } from "@/lib/portal/permintaanDaftar";
+import { batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, selesaikanPermintaan, simpanEmailFasih } from "@/lib/portal/permintaanDaftar";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { MAKS_SUB_PER_HARI, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -78,6 +79,15 @@ export async function POST(req: NextRequest) {
       const h = await selesaikanPermintaan(db, { id: akun.id }, ids);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "email") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengisi email petugas.", 403);
+      const id = Number(b.id);
+      if (!Number.isInteger(id) || id <= 0 || (b.sebagai !== "pengawas" && b.sebagai !== "pencacah")) return galat("Permintaan tidak sah.");
+      const h = await simpanEmailFasih(db, { id: akun.id }, id, b.sebagai, b.email);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, email: h.email });
     }
     return galat("Aksi tidak dikenal.");
   } catch (e) {

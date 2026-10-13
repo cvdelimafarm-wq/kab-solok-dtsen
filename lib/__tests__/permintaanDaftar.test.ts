@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, type Permintaan } from "@/lib/permintaanDaftar";
+import { JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, type Permintaan } from "@/lib/permintaanDaftar";
 
 const P = (o: Partial<Permintaan>): Permintaan => ({ id: 1, idsubsls: "1303071002000101", kecamatan: "", nagari: "", sls: "", sub_sls: "", pml_id: 1, pml_nama: "", ppl_akun_id: 1, ppl_nama: "", tanggal: "2026-10-13", status: "menunggu", diminta_at: "2026-10-13T01:00:00Z", selesai_at: null, ...o });
 
@@ -73,5 +73,16 @@ describe("templat FASIH (Pengawas-Pencacah)", () => {
     expect(tanpaEmail({ email_pengawas: "a@b", email_pencacah: "" })).toBe(true);
     expect(tanpaEmail({ email_pengawas: "a@b", email_pencacah: "c@d" })).toBe(false);
     expect(namaBerkasTemplat("2026-10-13")).toBe("Pengawas-Pencacah-20261013.xlsx");
+  });
+});
+
+describe("periksaEmail", () => {
+  it("merapikan dan memvalidasi", () => {
+    expect(periksaEmail("  RiniNofsiska4@Gmail.com ")).toBe("rininofsiska4@gmail.com");
+    expect(periksaEmail("tanpa-at.com")).toBeNull();
+    expect(periksaEmail("a b@c.com")).toBeNull();
+    expect(periksaEmail("a@b")).toBeNull();
+    expect(periksaEmail(123)).toBeNull();
+    expect(periksaEmail("x".repeat(120) + "@b.co")).toBeNull();
   });
 });

@@ -120,3 +120,13 @@ export function barisTemplatFasih(p: Pick<PermintaanAdmin, "idsubsls" | "email_p
 export const tanpaEmail = (p: Pick<PermintaanAdmin, "email_pengawas" | "email_pencacah">): boolean => !p.email_pengawas.trim() || !p.email_pencacah.trim();
 
 export const namaBerkasTemplat = (tanggal: string): string => `Pengawas-Pencacah-${tanggal.replaceAll("-", "")}.xlsx`;
+
+// ---------------------------------------------------------------- email akun FASIH (diisi admin bila data mitra belum punya)
+const POLA_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+/** Email dirapikan (huruf kecil, tanpa spasi pinggir). null = tidak sah. */
+export function periksaEmail(x: unknown): string | null {
+  if (typeof x !== "string") return null;
+  const e = x.trim().toLowerCase();
+  return e.length <= 120 && POLA_EMAIL.test(e) ? e : null;
+}
+export type PeranEmail = "pengawas" | "pencacah";

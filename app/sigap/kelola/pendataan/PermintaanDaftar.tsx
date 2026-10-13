@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
-import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PermintaanAdmin } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
 type Saring = "menunggu" | "sudah_keluar";
 
@@ -23,6 +23,8 @@ export default function PermintaanDaftar() {
   const [yakin, setYakin] = useState(false);
   const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
+  const [surel, setSurel] = useState<Record<string, string>>({});
+  const [simpanSurel, setSimpanSurel] = useState<string | null>(null);
 
   const muat = useCallback(async () => {
     setSibuk("muat");
@@ -78,6 +80,24 @@ export default function PermintaanDaftar() {
       setPesan(e instanceof Error ? e.message : "Gagal membuat Excel.");
     } finally {
       setSibuk(null);
+    }
+  }
+
+  async function simpanEmail(p: PermintaanAdmin, sebagai: PeranEmail) {
+    const kunci = `${p.id}:${sebagai}`;
+    const nilai = periksaEmail(surel[kunci]);
+    if (!nilai) return setGalat("Format email tidak sah.");
+    setSimpanSurel(kunci);
+    setGalat(null);
+    try {
+      await apiPortal(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "email", id: p.id, sebagai, email: nilai }) });
+      setSurel((s) => ({ ...s, [kunci]: "" }));
+      setPesan(`Email ${sebagai === "pengawas" ? "PML" : "PPL"} tersimpan: ${nilai}`);
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menyimpan email. Coba lagi.");
+    } finally {
+      setSimpanSurel(null);
     }
   }
 
@@ -144,9 +164,30 @@ export default function PermintaanDaftar() {
                       Diminta {waktuRingkas(p.diminta_at)}
                       {p.selesai_at ? ` · keluar ${waktuRingkas(p.selesai_at)}` : ""}
                     </small>
-                    {tanpaEmail(p) && <small className="mt-0.5 block text-[11.5px] font-bold text-[#B42329]">Email {!p.email_pengawas.trim() ? "PML" : ""}{!p.email_pengawas.trim() && !p.email_pencacah.trim() ? " dan " : ""}{!p.email_pencacah.trim() ? "PPL" : ""} belum ada di data mitra</small>}
                   </span>
                 </label>
+                {tanpaEmail(p) && (
+                  <div className="space-y-1.5 px-3 pb-3 pl-[52px]">
+                    {([["pengawas", "PML", p.email_pengawas], ["pencacah", "PPL", p.email_pencacah]] as [PeranEmail, string, string][])
+                      .filter(([, , v]) => !v.trim())
+                      .map(([sebagai, label]) => {
+                        const kunci = `${p.id}:${sebagai}`;
+                        return (
+                          <div key={sebagai}>
+                            <small className="block text-[11.5px] font-bold text-[#B42329]">Email {label} belum ada. {boleh ? "Isi di sini:" : "Minta admin pengelola mengisinya."}</small>
+                            {boleh && (
+                              <div className="mt-1 flex gap-2">
+                                <input type="email" inputMode="email" autoComplete="off" value={surel[kunci] ?? ""} onChange={(e) => setSurel((s) => ({ ...s, [kunci]: e.target.value }))} placeholder={`email akun FASIH ${label}`} className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9E3F2] bg-white px-3 text-[13px]" />
+                                <button type="button" disabled={simpanSurel !== null || !periksaEmail(surel[kunci])} onClick={() => void simpanEmail(p, sebagai)} className="min-h-[40px] flex-none rounded-[10px] bg-[#1F5FD1] px-3 text-[12.5px] font-extrabold text-white disabled:bg-[#A9BCD8]">
+                                  {simpanSurel === kunci ? "Menyimpan…" : "Simpan"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

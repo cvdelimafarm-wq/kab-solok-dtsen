@@ -6,6 +6,8 @@
 // Isi dirender sebagai elemen React dari hasil pengurai (tanpa HTML mentah), jadi aman dari kode berbahaya.
 
 import { Fragment, useEffect, useRef } from "react";
+import Link from "next/link";
+import { urlInternalSigap } from "@/lib/siaranPetugas";
 import { IKON_PENGUMUMAN, JUDUL_BAWAAN_PENGUMUMAN, uraiIsi, urlAman, type JenisPengumuman, type Sebaris } from "@/lib/sigapPengumuman";
 
 const GAYA: Record<JenisPengumuman, { ikon: string; judul: string }> = {
@@ -94,7 +96,20 @@ export function ModalPengumuman({ d, posisi, jumlah, lanjut, sebagaiPratinjau = 
         </div>
       )}
       <div className="mt-3 flex flex-col gap-2">
-        {d.tombol_label && d.tombol_url && urlAman(d.tombol_url) && (
+        {/* (13 Okt 2026) tombol ke halaman SIGAP: pindah di tab yang sama sekaligus menutup (mengonfirmasi) modal */}
+        {d.tombol_label && d.tombol_url && urlInternalSigap(d.tombol_url) && (
+          <Link
+            href={d.tombol_url}
+            onClick={(e) => {
+              if (sebagaiPratinjau) e.preventDefault();
+              else lanjut();
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1F5FD1] px-4 py-3 text-center text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8]"
+          >
+            {d.tombol_label}
+          </Link>
+        )}
+        {d.tombol_label && d.tombol_url && !urlInternalSigap(d.tombol_url) && urlAman(d.tombol_url) && (
           <a href={d.tombol_url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1F5FD1] px-4 py-3 text-center text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8]">
             {d.tombol_label}
           </a>

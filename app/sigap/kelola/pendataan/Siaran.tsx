@@ -18,9 +18,11 @@ type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkir
 
 const AWAL = {
   judul: "Data keluarga sudah tersedia",
-  isi: "Data keluarga sudah tersedia. PML silakan pilih 2 Sub SLS untuk didata hari ini, nanti kami assign ke FASIH. Upayakan pendataan awal ini dengan keroyokan: daftar keluarga akan di-assign ke salah satu akun PPL.",
+  isi: "Data keluarga sudah tersedia. PML silakan pilih maksimal 2 Sub SLS untuk didata hari ini, nanti kami assign ke FASIH. Upayakan keroyokan: daftar keluarga akan di-assign ke salah satu akun PPL.",
   mJudul: "DATA KELUARGA SUDAH TERSEDIA",
-  mIsi: "**Data keluarga sudah tersedia.**\n\n- PML silakan pilih **2 Sub SLS** untuk didata hari ini, nanti kami assign ke FASIH (pilih lewat kartu \"Plotting tim hari ini\" di Lembar Pendataan)\n- PPL bisa melihat pilihan dan statusnya di kartu yang sama\n- ==Upayakan pendataan awal ini dengan keroyokan==\n- ==Daftar keluarga akan di-assign ke salah satu akun PPL==",
+  mIsi: "**Data keluarga sudah tersedia.**\n\n- PML silakan pilih ==maksimal 2 Sub SLS== untuk didata hari ini, nanti kami assign ke FASIH\n- Pilih lewat kartu \"Plotting tim hari ini\" di Lembar Pendataan (tombol di bawah)\n- PPL bisa melihat pilihan dan statusnya di kartu yang sama\n- ==Upayakan pendataan awal ini dengan keroyokan==\n- ==Daftar keluarga akan di-assign ke salah satu akun PPL==",
+  tLabel: "Buka Lembar Pendataan",
+  tUrl: "/sigap/pendataan",
 };
 
 const waktuTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(".", ":") + " WIB";
@@ -34,7 +36,11 @@ export default function Siaran() {
   const [isi, setIsi] = useState(AWAL.isi);
   const [mJudul, setMJudul] = useState(AWAL.mJudul);
   const [mIsi, setMIsi] = useState(AWAL.mIsi);
+  const [tLabel, setTLabel] = useState(AWAL.tLabel);
+  const [tUrl, setTUrl] = useState(AWAL.tUrl);
   const [jenis, setJenis] = useState<JenisPengumuman>("info");
+  const [uji, setUji] = useState(false);
+  const [hasilUji, setHasilUji] = useState<string | null>(null);
   const [yakin, setYakin] = useState(false);
   const [kirim, setKirim] = useState(false);
   const [hasil, setHasil] = useState<Hasil | null>(null);
@@ -59,7 +65,7 @@ export default function Siaran() {
     try {
       const h = await apiPortal<Hasil & { ok: boolean }>("/api/portal/siaran-petugas", {
         method: "POST",
-        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: "/sigap/pendataan", modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis } }),
+        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: "/sigap/pendataan", modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
       });
       setHasil(h);
       setYakin(false);
@@ -69,6 +75,25 @@ export default function Siaran() {
       setYakin(false);
     } finally {
       setKirim(false);
+    }
+  }
+
+  async function ujiPush() {
+    if (uji) return;
+    setUji(true);
+    setHasilUji(null);
+    setGalat(null);
+    try {
+      const h = await apiPortal<{ perangkat: number; terkirim: number; gagal: number }>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "uji", judul, isi, url: "/sigap/pendataan" }) });
+      setHasilUji(
+        h.perangkat === 0
+          ? "Tidak ada perangkat yang mengaktifkan notifikasi di akun Anda. Buka Beranda di HP Anda, ketuk \"Aktifkan notifikasi\", lalu coba lagi."
+          : `Terkirim ke ${h.terkirim} dari ${h.perangkat} perangkat akun Anda${h.gagal ? ` (${h.gagal} gagal)` : ""}. Cek HP Anda.`
+      );
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal mengirim uji. Periksa sambungan lalu coba lagi.");
+    } finally {
+      setUji(false);
     }
   }
 
@@ -129,10 +154,30 @@ export default function Siaran() {
             Isi modal (**tebal**, ==sorot==, baris &quot;- &quot; = daftar)
             <textarea value={mIsi} maxLength={2000} rows={6} onChange={(e) => setMIsi(e.target.value)} className={kolom} />
           </label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="block text-[12px] font-bold text-[#55657D]">
+              Label tombol (kosongkan = tanpa tombol)
+              <input value={tLabel} maxLength={60} onChange={(e) => setTLabel(e.target.value)} className={kolom} />
+            </label>
+            <label className="block text-[12px] font-bold text-[#55657D]">
+              Tujuan (/sigap/… atau https://)
+              <input value={tUrl} maxLength={200} onChange={(e) => setTUrl(e.target.value)} className={kolom} />
+            </label>
+          </div>
           <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">Pratinjau</p>
           <div className="mt-1">
-            <ModalPengumuman d={{ jenis, judul: mJudul, isi: mIsi, tombol_label: null, tombol_url: null }} posisi={1} jumlah={1} lanjut={() => undefined} sebagaiPratinjau />
+            <ModalPengumuman d={{ jenis, judul: mJudul, isi: mIsi, tombol_label: tLabel.trim() || null, tombol_url: tUrl.trim() || null }} posisi={1} jumlah={1} lanjut={() => undefined} sebagaiPratinjau />
           </div>
+        </div>
+      )}
+
+      {boleh && push && (
+        <div className="mt-4 rounded-[14px] bg-[#F5F8FE] p-3">
+          <button type="button" disabled={uji || !judul.trim() || !isi.trim()} onClick={() => void ujiPush()} className="min-h-[46px] w-full rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#1F5FD1] shadow-sm disabled:opacity-50">
+            {uji ? "Mengirim uji…" : "Uji: kirim notifikasi ke akun saya saja"}
+          </button>
+          <p className="mt-1.5 text-[11.5px] leading-snug text-[#55657D]">Hanya ke perangkat akun Anda sendiri, tidak ke petugas. Saat &quot;masuk sebagai&quot; petugas, notifikasi asli tetap masuk ke HP petugas itu, bukan ke akun Anda. Modal tidak bisa diuji terpisah: modal tampil di Beranda semua petugas begitu siaran dikirim.</p>
+          {hasilUji && <p role="status" className="mt-2 rounded-[10px] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#0F2A52]">{hasilUji}</p>}
         </div>
       )}
 

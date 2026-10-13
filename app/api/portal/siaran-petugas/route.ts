@@ -12,6 +12,8 @@ import { aksesRekap } from "@/lib/portal/rekapIdentifikasi";
 import { catatBaca, modalUntukAkun, ringkasSiaran, siarkan } from "@/lib/portal/siaranPetugas";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { validasiSiaran } from "@/lib/siaranPetugas";
+import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
+import { urlInternalAman, validasiPesanPush } from "@/lib/sigapPushUtil";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +51,19 @@ export async function POST(req: NextRequest) {
       if (!Number.isInteger(id) || id <= 0 || typeof body.versi !== "string") return galat("Permintaan tidak sah.");
       if (!aktorDariHeader(req.headers)) await catatBaca(db, akun.id, id, body.versi);
       return NextResponse.json({ ok: true });
+    }
+    if (body?.aksi === "uji") {
+      // uji notifikasi: HANYA ke perangkat akun pengirim sendiri (bukan ke petugas); tidak dicatat sebagai siaran
+      if (aktorDariHeader(req.headers)) return galat('Uji notifikasi tidak dapat dikirim saat mode "masuk sebagai": notifikasi akan masuk ke HP petugas itu. Kembali ke akun Anda dulu.', 403);
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengirim uji notifikasi pendataan.", 403);
+      if (!pushSiap()) return galat("Pengiriman notifikasi belum aktif: kunci VAPID belum dipasang di server.", 503);
+      const url = urlInternalAman(body.url);
+      if (url === null) return galat("Tautan tujuan notifikasi tidak sah.", 422);
+      const v = validasiPesanPush({ judul: body.judul, isi: body.isi, url });
+      if (!v.ok) return galat(v.pesan, 422);
+      const h = await kirimKeAkun(db, [akun.id], { ...v.nilai, judul: `[UJI] ${v.nilai.judul}`.slice(0, 80), tag: "uji-siaran-pendataan" });
+      return NextResponse.json({ ok: true, perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal });
     }
     if (body?.aksi === "siarkan") {
       if (aktorDariHeader(req.headers)) return galat("Siaran tidak dapat dikirim saat mode \"masuk sebagai\".", 403);
