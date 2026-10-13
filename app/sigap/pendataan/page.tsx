@@ -14,6 +14,7 @@ import { keAtas } from "@/app/portal/navigasi";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import { dariAman } from "../identifikasi/useIdentifikasi";
+import PlottingTim from "./PlottingTim";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, waktuRingkas } from "./usePendataan";
 import {
@@ -243,6 +244,9 @@ export default function LembarPendataan() {
         <BannerAntrean satuan="penandaan" />
 
         {data && data.sub.length === 0 && <p className="rounded-[16px] bg-white p-4 text-[13px] text-[#55657D] shadow-[0_8px_22px_rgba(15,42,82,.08)]">Tim Anda belum mendapat pembagian Sub SLS.</p>}
+
+        {/* (13 Okt 2026) Kartu plotting tim tampil PERTAMA: PML memilih maks. 2 Sub SLS + PPL lalu Kirim; PPL hanya melihat -- permintaan user */}
+        {data && data.sub.length > 0 && <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} />}
 
         {data && subId && (
           <>

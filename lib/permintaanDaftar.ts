@@ -1,0 +1,122 @@
+// lib/permintaanDaftar.ts
+//
+// (13 Okt 2026) Kartu plotting tim di Lembar Pendataan -- permintaan user: PML memilih maksimal 2 Sub SLS untuk didata hari ini, memilih PPL untuk tiap
+// Sub SLS, lalu menekan Kirim untuk meminta daftar KK "keluar" di FASIH. Admin meng-assign di FASIH lalu menandai "Sudah keluar". PPL hanya melihat.
+// Fungsi MURNI (tanpa DB/React): tipe, batas harian, validasi isian, dan baris templat upload FASIH (Pengawas-Pencacah).
+
+export const MAKS_SUB_PER_HARI = 2;
+export const API_PERMINTAAN = "/api/portal/pendataan/permintaan";
+
+export type StatusMinta = "menunggu" | "sudah_keluar";
+export const LABEL_STATUS_MINTA: Record<StatusMinta, string> = { menunggu: "Menunggu admin", sudah_keluar: "Sudah keluar di FASIH" };
+
+export type Permintaan = {
+  id: number;
+  idsubsls: string;
+  kecamatan: string;
+  nagari: string;
+  sls: string;
+  sub_sls: string;
+  pml_id: number;
+  pml_nama: string;
+  ppl_akun_id: number;
+  ppl_nama: string;
+  tanggal: string; // yyyy-mm-dd (WIB)
+  status: StatusMinta;
+  diminta_at: string;
+  selesai_at: string | null;
+};
+
+/** Tambahan khusus admin: email untuk templat FASIH (dari data mitra). Kosong = belum ada. */
+export type PermintaanAdmin = Permintaan & { email_pengawas: string; email_pencacah: string };
+
+export type DataPermintaanTim = {
+  sekarang: string;
+  tanggal: string;
+  maks: number;
+  /** hanya PML tim (bukan sesi "masuk sebagai") yang boleh mengirim */
+  bisa_kirim: boolean;
+  permintaan: Permintaan[];
+};
+export type DataPermintaanAdmin = { sekarang: string; boleh_kelola: boolean; permintaan: PermintaanAdmin[] };
+
+/** Tanggal WIB (yyyy-mm-dd) dari waktu apa pun. Dasar hitung "hari ini". */
+export const tanggalWib = (t: Date | number | string): string => new Date(new Date(t).getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Berapa Sub SLS yang masih boleh diminta PML pada `tanggal` (permintaan yang masih berlaku dihitung, yang dibatalkan tidak). */
+export function sisaKuota(permintaan: Pick<Permintaan, "tanggal">[], tanggal: string, maks = MAKS_SUB_PER_HARI): number {
+  return Math.max(0, maks - permintaan.filter((p) => p.tanggal === tanggal).length);
+}
+
+export type Pilihan = { idsubsls: string; ppl_akun_id: number };
+
+export function periksaPilihan(x: unknown, maks = MAKS_SUB_PER_HARI): { ok: true; pilihan: Pilihan[] } | { ok: false; pesan: string } {
+  if (!Array.isArray(x) || x.length === 0) return { ok: false, pesan: "Pilih minimal satu Sub SLS." };
+  if (x.length > maks) return { ok: false, pesan: `Maksimal ${maks} Sub SLS untuk didata hari ini.` };
+  const out: Pilihan[] = [];
+  const sudah = new Set<string>();
+  for (const r of x) {
+    const o = (r ?? {}) as Record<string, unknown>;
+    if (typeof o.idsubsls !== "string" || !/^\d{16}$/.test(o.idsubsls)) return { ok: false, pesan: "Kode Sub SLS tidak sah." };
+    const ppl = Number(o.ppl_akun_id);
+    if (!Number.isInteger(ppl) || ppl <= 0) return { ok: false, pesan: "Pilih PPL untuk setiap Sub SLS." };
+    if (sudah.has(o.idsubsls)) return { ok: false, pesan: "Sub SLS yang sama dipilih dua kali." };
+    sudah.add(o.idsubsls);
+    out.push({ idsubsls: o.idsubsls, ppl_akun_id: ppl });
+  }
+  return { ok: true, pilihan: out };
+}
+
+export function periksaIds(x: unknown, maks = 200): number[] | null {
+  if (!Array.isArray(x) || x.length === 0 || x.length > maks) return null;
+  const ids = x.map(Number);
+  if (ids.some((n) => !Number.isInteger(n) || n <= 0)) return null;
+  return [...new Set(ids)];
+}
+
+const koleksi = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
+/** Menunggu dulu (paling lama di atas), lalu yang sudah keluar (terbaru di atas). */
+export function urutPermintaan<T extends Permintaan>(a: T[]): T[] {
+  return [...a].sort((p, q) => {
+    if (p.status !== q.status) return p.status === "menunggu" ? -1 : 1;
+    const t = p.status === "menunggu" ? p.diminta_at.localeCompare(q.diminta_at) : (q.selesai_at ?? "").localeCompare(p.selesai_at ?? "");
+    return t || koleksi.compare(p.idsubsls, q.idsubsls);
+  });
+}
+
+// ---------------------------------------------------------------- templat upload FASIH (format "Pengawas-Pencacah", sheet "Sheet0")
+export const JUDUL_TEMPLAT_FASIH = ["PROVINSI", "KABUPATEN/KOTA", "KECAMATAN", "DESA/KELURAHAN", "SLS/SUBSLS", "Email Pengawas", "Email Pencacah"] as const;
+export type BarisTemplatFasih = Record<(typeof JUDUL_TEMPLAT_FASIH)[number], string>;
+
+/** idsubsls 16 digit = provinsi(2) kabupaten(2) kecamatan(3) desa(3) SLS(4) subSLS(2). Kolom SLS/SUBSLS di FASIH = 6 digit terakhir. */
+export function pecahKodeSubsls(idsubsls: string): { prov: string; kab: string; kec: string; desa: string; slsSub: string } | null {
+  if (!/^\d{16}$/.test(idsubsls)) return null;
+  return { prov: idsubsls.slice(0, 2), kab: idsubsls.slice(2, 4), kec: idsubsls.slice(4, 7), desa: idsubsls.slice(7, 10), slsSub: idsubsls.slice(10, 16) };
+}
+
+const emailBersih = (s: string) => s.trim().toLowerCase();
+
+/** Baris templat dari permintaan. Semua nilai TEKS (kode berawalan nol harus tetap). Baris dengan kode tak sah dilewati. */
+export function barisTemplatFasih(p: Pick<PermintaanAdmin, "idsubsls" | "email_pengawas" | "email_pencacah">[]): BarisTemplatFasih[] {
+  const out: BarisTemplatFasih[] = [];
+  for (const r of p) {
+    const k = pecahKodeSubsls(r.idsubsls);
+    if (!k) continue;
+    out.push({
+      PROVINSI: k.prov,
+      "KABUPATEN/KOTA": k.kab,
+      KECAMATAN: k.kec,
+      "DESA/KELURAHAN": k.desa,
+      "SLS/SUBSLS": k.slsSub,
+      "Email Pengawas": emailBersih(r.email_pengawas),
+      "Email Pencacah": emailBersih(r.email_pencacah),
+    });
+  }
+  // urut stabil menurut kode wilayah lalu pencacah
+  return out.sort((a, b) => koleksi.compare(`${a.KECAMATAN}${a["DESA/KELURAHAN"]}${a["SLS/SUBSLS"]}`, `${b.KECAMATAN}${b["DESA/KELURAHAN"]}${b["SLS/SUBSLS"]}`));
+}
+
+/** Permintaan yang belum bisa diekspor utuh: email pengawas/pencacah belum ada. */
+export const tanpaEmail = (p: Pick<PermintaanAdmin, "email_pengawas" | "email_pencacah">): boolean => !p.email_pengawas.trim() || !p.email_pencacah.trim();
+
+export const namaBerkasTemplat = (tanggal: string): string => `Pengawas-Pencacah-${tanggal.replaceAll("-", "")}.xlsx`;

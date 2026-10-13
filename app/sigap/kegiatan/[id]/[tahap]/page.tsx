@@ -16,6 +16,7 @@ import { adalahTugas } from "@/lib/sigapPrioritas";
 import { useInduk } from "../../useInduk";
 import WilayahTim from "./WilayahTim";
 import RekapIdentifikasi from "./RekapIdentifikasi";
+import PengumumanPetugas from "./PengumumanPetugas";
 
 const CHIP: Record<ModulTahap["status"], { teks: string; kelas: string }> = {
   selesai: { teks: "Selesai", kelas: "bg-[#E3F6EC] text-[#13794B]" },
@@ -140,6 +141,8 @@ export default function HalamanTahap() {
       </div>
       {/* (11 Okt 2026) Tombol rekap hasil identifikasi (PPL & PML) di tahap yang memuat Lembar Identifikasi / Pendataan -- permintaan user */}
       {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <RekapIdentifikasi />}
+      {/* (13 Okt 2026) Modal siaran admin untuk petugas (cukup sekali konfirmasi) -- permintaan user */}
+      {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <PengumumanPetugas />}
     </main>
   );
 }
