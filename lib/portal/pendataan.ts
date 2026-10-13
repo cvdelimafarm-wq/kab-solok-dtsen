@@ -169,23 +169,33 @@ export async function batchAktif(db: Db, batchId: number): Promise<{ id: number;
   return (data as { id: number; kegiatan_id: number; dibatalkan_at: string | null } | null) ?? null;
 }
 
-/** Sub SLS sampel = daftar awal di master wilayah (keputusan user 11 Okt 2026: 636 Sub SLS). */
+/**
+ * Sub SLS sampel = daftar awal di master wilayah (keputusan user 11 Okt 2026: 636 Sub SLS)
+ * DITAMBAH Sub SLS yang sudah diplot ke tim (bencana_alokasi_subsls.pml_id terisi). (13 Okt 2026) Tim sudah ditugaskan di Sub SLS di luar daftar awal
+ * (mis. Kacang Tembok/Biteh, Gantuang Ciri, Koto Gaek Guguk = 23 Sub SLS); tanpa tambahan ini daftar KK-nya tersaring dan tim melihat daftar kosong.
+ */
 export async function daftarSampel(db: Db): Promise<string[]> {
-  const out: string[] = [];
+  const himpun = new Set<string>();
   for (let dari = 0; ; dari += 1000) {
     const { data, error } = await db.from("bencana_wilayah").select("idsubsls").eq("daftar_awal", true).order("idsubsls").range(dari, dari + 999);
     if (error) throw new Error(error.message);
-    out.push(...(data ?? []).map((r) => r.idsubsls as string));
+    for (const r of data ?? []) himpun.add(r.idsubsls as string);
     if (!data || data.length < 1000) break;
   }
-  return out;
+  for (let dari = 0; ; dari += 1000) {
+    const { data, error } = await db.from("bencana_alokasi_subsls").select("idsubsls").not("pml_id", "is", null).order("idsubsls").range(dari, dari + 999);
+    if (error) throw new Error(error.message);
+    for (const r of data ?? []) himpun.add(r.idsubsls as string);
+    if (!data || data.length < 1000) break;
+  }
+  return Array.from(himpun).sort();
 }
 
 type Ada = { id: number; idsubsls: string; sumber_id: string; nama_kk: string; anggota_lain: string | null; patokan: string | null; lat: number | null; lng: number | null; no_urut: number | null; keberadaan_awal: number | null };
 
 /**
  * Terima sekelompok baris (maks MAKS_BARIS_UNGGAH). Baris bermasalah dilaporkan, yang lain tetap masuk. `no` = nomor baris di berkas.
- * - Hanya Sub SLS sampel (daftar awal) yang diterima.
+ * - Hanya Sub SLS sampel (daftar awal atau sudah diplot ke tim) yang diterima.
  * - Baris ber-`sumber_id` (ekspor FASIH-SM): unggah ulang MEMPERBARUI KK yang sama (nama, anggota, alamat, koordinat) tanpa menyentuh hasil pendataan;
  *   bila Sub SLS-nya berbeda dari yang sudah tersimpan, ditolak (batalkan unggahan lama dulu).
  * - Baris tanpa `sumber_id` (templat Excel): baris identik yang sudah ada dilewati.
@@ -217,13 +227,20 @@ export async function terimaBaris(
   }
   if (sah.length === 0) return { diterima: 0, diperbarui: 0, sama: 0, ditolak };
 
-  // kode Sub SLS harus ada di master wilayah DAN termasuk sampel (daftar awal)
+  // kode Sub SLS harus ada di master wilayah DAN termasuk sampel (daftar awal atau sudah diplot ke tim)
   const kode = Array.from(new Set(sah.map((x) => x.b.idsubsls)));
   const status = new Map<string, boolean>();
   for (let i = 0; i < kode.length; i += 200) {
     const { data } = await db.from("bencana_wilayah").select("idsubsls, daftar_awal").in("idsubsls", kode.slice(i, i + 200));
     for (const r of data ?? []) status.set(r.idsubsls as string, r.daftar_awal === true);
   }
+  // Sub SLS yang sudah diplot ke tim juga sampel, walau bukan daftar awal (lihat daftarSampel)
+  const bertim = new Set<string>();
+  for (let i = 0; i < kode.length; i += 200) {
+    const { data } = await db.from("bencana_alokasi_subsls").select("idsubsls").not("pml_id", "is", null).in("idsubsls", kode.slice(i, i + 200));
+    for (const r of data ?? []) bertim.add(r.idsubsls as string);
+  }
+  for (const k of bertim) if (status.has(k)) status.set(k, true);
 
   // KK ber-sumber_id yang sudah ada (aktif) pada kegiatan ini
   const sumberIds = sah.map((x) => x.b.sumber_id).filter((x): x is string => !!x);
@@ -267,7 +284,7 @@ export async function terimaBaris(
       continue;
     }
     if (!sampel) {
-      ditolak.push({ no: x.no, pesan: "Bukan Sub SLS sampel (tidak masuk daftar awal)." });
+      ditolak.push({ no: x.no, pesan: "Bukan Sub SLS sampel (tidak masuk daftar awal dan belum diplot ke tim)." });
       continue;
     }
     const lama = x.b.sumber_id ? adaSumber.get(x.b.sumber_id) : undefined;

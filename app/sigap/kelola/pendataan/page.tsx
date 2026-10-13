@@ -279,7 +279,7 @@ export default function UnggahPendataan() {
                         {fmt(n)} baris berstatus keberadaan {k === "-1" ? "lain" : `${k} (${LABEL_KEBERADAAN[Number(k)] ?? "lain"})`}
                       </li>
                     ))}
-                    {periksa.bukanSampel > 0 && <li>{fmt(periksa.bukanSampel)} baris di Sub SLS yang bukan sampel (di luar daftar awal)</li>}
+                    {periksa.bukanSampel > 0 && <li>{fmt(periksa.bukanSampel)} baris di Sub SLS yang bukan sampel (di luar daftar awal dan belum diplot ke tim)</li>}
                   </ul>
                 </div>
               )}
