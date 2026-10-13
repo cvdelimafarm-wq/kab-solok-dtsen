@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { useData } from "@/app/portal/dataBersama";
 import { apiPortal } from "@/app/portal/sesi";
 import { namaDepan, waktuRingkas } from "./usePendataan";
-import { API_PERMINTAAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, labelJorong, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
 import type { Anggota, SubTim } from "@/lib/pendataan";
 
 const namaSub = (s: Pick<SubTim, "nagari" | "sls" | "sub_sls">) => `${s.nagari} · ${s.sls}${s.sub_sls ? ` / ${s.sub_sls}` : ""}`;
@@ -134,8 +134,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
                   {p && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-9 text-[12px] text-[#52627A]">
                       <span>
-                        Untuk <b className="text-[#0F2A52]">{namaDepan(p.ppl_nama || "PPL")}</b>
-                        {p.ppl_nama && p.ppl_nama.trim().split(/\s+/).length > 1 ? ` (${p.ppl_nama})` : ""} · diminta {waktuRingkas(p.diminta_at)}
+                        {p.status === "sudah_keluar" ? "PPL penerima assignment" : "PPL tujuan"}: <b className="text-[#0F2A52]">{p.ppl_nama || "PPL"}</b> · diminta {waktuRingkas(p.diminta_at)}
                         {p.status === "sudah_keluar" && p.selesai_at ? ` · keluar ${waktuRingkas(p.selesai_at)}` : ""}
                       </span>
                       {bisaKirim && p.status === "menunggu" && (
@@ -170,6 +169,23 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
               );
             })}
           </ul>
+
+          {(data?.permintaan ?? []).some((p) => p.status === "sudah_keluar") && (
+            <div className="mt-3 rounded-[14px] border border-[#CFE0F8] bg-[#F1F6FE] p-3 text-[12.5px] leading-snug text-[#0F2A52]" aria-label="Rincian assignment di FASIH">
+              <p className="font-extrabold">Sudah di-assign ke FASIH</p>
+              <ul className="mt-1.5 space-y-1">
+                {urutPermintaan((data?.permintaan ?? []).filter((p) => p.status === "sudah_keluar")).map((p) => (
+                  <li key={p.id}>
+                    <b>{labelJorong(p.sls, p.sub_sls)}</b> <span className="text-[#52627A]">(Nagari {p.nagari.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())})</span> → PPL penerima: <b>{p.ppl_nama || "PPL"}</b>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2">{CATATAN_CEK_SUBMIT}</p>
+              <p className="mt-2 rounded-[8px] px-2 py-1.5 font-extrabold" style={{ background: "#FFE680", color: "#4A3500" }}>
+                Catatan: {CATATAN_KEROYOKAN}
+              </p>
+            </div>
+          )}
 
           {sisa === 0 && bisaKirim && <p className="mt-2 text-[12px] font-bold text-[#8A6200]">Batas {maks} Sub SLS untuk hari ini sudah terpakai. Batalkan permintaan yang masih menunggu bila ingin mengganti.</p>}
 

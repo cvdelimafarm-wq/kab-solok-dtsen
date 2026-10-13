@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
-import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
 type Saring = "menunggu" | "sudah_keluar";
 
@@ -143,6 +143,13 @@ export default function PermintaanDaftar() {
         {tombolSaring("sudah_keluar", "Sudah keluar", keluar.length)}
       </div>
 
+      <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
+        <p>{CATATAN_CEK_SUBMIT}</p>
+        <p className="mt-1.5 rounded-[8px] px-2 py-1 font-extrabold" style={{ background: "#FFE680", color: "#4A3500" }}>
+          Catatan: {CATATAN_KEROYOKAN}
+        </p>
+      </div>
+
       {data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : "Belum ada permintaan yang ditandai sudah keluar."}</p>}
 
       {tampil.length > 0 && (
@@ -209,7 +216,7 @@ export default function PermintaanDaftar() {
                 </button>
               ) : (
                 <div className="rounded-[14px] border border-[#F2D58A] bg-[#FFF6E0] p-3">
-                  <p className="text-[13px] font-bold text-[#6B4A0E]">Tandai {dipilihMenunggu.length} Sub SLS sudah keluar di FASIH? PML dan PPL-nya langsung dikabari lewat notifikasi.</p>
+                  <p className="text-[13px] font-bold text-[#6B4A0E]">Tandai {dipilihMenunggu.length} Sub SLS sudah keluar di FASIH? PML dan PPL-nya langsung dikabari lewat notifikasi berisi rincian jorong dan nama PPL penerima, pengingat memeriksa submit identifikasi, dan catatan keroyokan.</p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => setYakin(false)} className="min-h-[46px] rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#0F2A52] shadow-sm">
                       Batal

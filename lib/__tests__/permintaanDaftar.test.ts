@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, type Permintaan } from "@/lib/permintaanDaftar";
+import { JUDUL_TEMPLAT_FASIH, labelJorong, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, type Permintaan } from "@/lib/permintaanDaftar";
 
 const P = (o: Partial<Permintaan>): Permintaan => ({ id: 1, idsubsls: "1303071002000101", kecamatan: "", nagari: "", sls: "", sub_sls: "", pml_id: 1, pml_nama: "", ppl_akun_id: 1, ppl_nama: "", tanggal: "2026-10-13", status: "menunggu", diminta_at: "2026-10-13T01:00:00Z", selesai_at: null, ...o });
 
@@ -84,5 +84,35 @@ describe("periksaEmail", () => {
     expect(periksaEmail("a@b")).toBeNull();
     expect(periksaEmail(123)).toBeNull();
     expect(periksaEmail("x".repeat(120) + "@b.co")).toBeNull();
+  });
+});
+
+describe("notifikasi sudah di-assign ke FASIH", () => {
+  it("labelJorong: sub 00 tidak ditampilkan", () => {
+    expect(labelJorong("JORONG TANJUNG", "00")).toBe("Jorong Tanjung");
+    expect(labelJorong("JORONG GANDO", "04")).toBe("Jorong Gando 04");
+  });
+  it("PML: rincian jorong + nama PPL, pengingat cek submit, catatan keroyokan", () => {
+    const p = susunPushKeluar("pml", [{ jorong: "Jorong Tanjung", ppl: "Yovinda Oktasia Rahmi" }, { jorong: "Jorong Gando 04", ppl: "Rini Nofsiska Sari" }]);
+    expect(p.judul).toBe("Daftar KK sudah di-assign ke FASIH");
+    expect(p.isi).toContain("Jorong Tanjung → Yovinda; Jorong Gando 04 → Rini");
+    expect(p.isi).toContain("tersubmit di FASIH");
+    expect(p.isi).toContain("Keroyokan: semua petugas login pakai akun PPL di atas");
+    expect(p.isi.length).toBeLessThanOrEqual(240);
+  });
+  it("PPL: hanya jorong miliknya + login pakai akun Anda", () => {
+    const p = susunPushKeluar("ppl", [{ jorong: "Jorong Tanjung", ppl: "Yovinda" }]);
+    expect(p.isi.startsWith("Untuk Anda: Jorong Tanjung.")).toBe(true);
+    expect(p.isi).toContain("login pakai akun Anda");
+  });
+  it("daftar panjang: daftar dipotong (+N lagi), catatan di belakang tetap utuh dan <= 240", () => {
+    const banyak = Array.from({ length: 12 }, (_, i) => ({ jorong: `Jorong Panjang Sekali Nomor ${i + 1}`, ppl: `Petugas Nomor ${i + 1}` }));
+    for (const untuk of ["pml", "ppl"] as const) {
+      const p = susunPushKeluar(untuk, banyak);
+      expect(p.isi.length).toBeLessThanOrEqual(240);
+      expect(p.isi).toMatch(/\(\+\d+ lagi\)/);
+      expect(p.isi).toContain("Keroyokan:");
+      expect(p.isi).toContain("tersubmit di FASIH");
+    }
   });
 });

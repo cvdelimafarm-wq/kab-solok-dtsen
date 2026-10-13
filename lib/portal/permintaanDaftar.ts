@@ -12,7 +12,7 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
-import { MAKS_SUB_PER_HARI, periksaEmail, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
+import { MAKS_SUB_PER_HARI, labelJorong, periksaEmail, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
@@ -206,16 +206,20 @@ export async function selesaikanPermintaan(db: Db, akun: { id: number }, ids: nu
       perPml.set(b.pml_id, [...(perPml.get(b.pml_id) ?? []), b]);
       perPpl.set(b.ppl_akun_id, [...(perPpl.get(b.ppl_akun_id) ?? []), b]);
     }
+    const jorong = (idsubsls: string) => {
+      const w = wil.get(idsubsls);
+      return w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : idsubsls;
+    };
     for (const [pmlId, rows] of perPml) {
       const a = akunPml.get(pmlId);
       if (!a) continue;
-      const daftar = rows.map((b) => `${labelWilayah(wil.get(b.idsubsls), b.idsubsls)} → ${rapikanNama(namaPpl.get(b.ppl_akun_id) ?? "PPL")}`).join("; ");
-      const h = await kirimKeAkun(db, [a], { judul: "Daftar KK sudah keluar di FASIH", isi: ringkas(`Sudah di-assign: ${daftar}. Silakan mulai mendata.`, 240), url: "/sigap/pendataan", tag: `keluar-pml-${pmlId}` });
+      const { judul, isi } = susunPushKeluar("pml", rows.map((b) => ({ jorong: jorong(b.idsubsls), ppl: namaPpl.get(b.ppl_akun_id) ?? "PPL" })));
+      const h = await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `keluar-pml-${pmlId}` });
       dikirim += h.terkirim;
     }
     for (const [pplId, rows] of perPpl) {
-      const daftar = rows.map((b) => labelWilayah(wil.get(b.idsubsls), b.idsubsls)).join("; ");
-      const h = await kirimKeAkun(db, [pplId], { judul: "Daftar KK sudah ada di FASIH Anda", isi: ringkas(`Daftar keluarga ${daftar} sudah di-assign ke akun FASIH Anda. Silakan mulai mendata bersama tim.`, 240), url: "/sigap/pendataan", tag: `keluar-ppl-${pplId}` });
+      const { judul, isi } = susunPushKeluar("ppl", rows.map((b) => ({ jorong: jorong(b.idsubsls), ppl: namaPpl.get(pplId) ?? "PPL" })));
+      const h = await kirimKeAkun(db, [pplId], { judul, isi, url: "/sigap/pendataan", tag: `keluar-ppl-${pplId}` });
       dikirim += h.terkirim;
     }
   } catch (e) {

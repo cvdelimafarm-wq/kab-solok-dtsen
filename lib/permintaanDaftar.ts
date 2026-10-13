@@ -4,6 +4,9 @@
 // Sub SLS, lalu menekan Kirim untuk meminta daftar KK "keluar" di FASIH. Admin meng-assign di FASIH lalu menandai "Sudah keluar". PPL hanya melihat.
 // Fungsi MURNI (tanpa DB/React): tipe, batas harian, validasi isian, dan baris templat upload FASIH (Pengawas-Pencacah).
 
+import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
+import { rapikanNama } from "@/lib/rekapIdentifikasi";
+
 export const MAKS_SUB_PER_HARI = 2;
 export const API_PERMINTAAN = "/api/portal/pendataan/permintaan";
 
@@ -130,3 +133,45 @@ export function periksaEmail(x: unknown): string | null {
   return e.length <= 120 && POLA_EMAIL.test(e) ? e : null;
 }
 export type PeranEmail = "pengawas" | "pencacah";
+
+// ---------------------------------------------------------------- notifikasi & catatan "sudah di-assign ke FASIH"
+/** Dipakai di kartu plotting (PML/PPL) dan layar admin. */
+export const CATATAN_CEK_SUBMIT = "Belum muncul di akun PPL? Periksa dulu apakah proses identifikasi jorong ini sudah tersubmit di FASIH.";
+export const CATATAN_KEROYOKAN = "Jika keroyokan, seluruh petugas login memakai akun PPL penerima di atas.";
+
+/** "JORONG TANJUNG" + "00" -> "Jorong Tanjung"; sub selain 00 ikut: "Jorong Gando 04". */
+export const labelJorong = (sls: string, sub: string): string => `${rapikanNama(sls || "")}${sub && sub !== "00" ? ` ${sub}` : ""}`.trim();
+
+const namaPertama = (n: string): string => rapikanNama(n || "").split(" ")[0] || "PPL";
+
+export type ItemKeluar = { jorong: string; ppl: string };
+
+/**
+ * Isi notifikasi saat permintaan ditandai sudah keluar di FASIH. Selalu memuat: rincian jorong (+ nama PPL penerima untuk PML), pengingat memeriksa
+ * submit identifikasi, dan catatan keroyokan. Bila daftar terlalu panjang, yang dipotong DAFTARNYA ("+N lagi"), bukan catatan di belakangnya.
+ */
+export function susunPushKeluar(untuk: "pml" | "ppl", items: ItemKeluar[]): { judul: string; isi: string } {
+  const judul = untuk === "pml" ? "Daftar KK sudah di-assign ke FASIH" : "Daftar KK sudah ada di FASIH Anda";
+  const ekor =
+    untuk === "pml"
+      ? " Belum ada di akun PPL? Cek apakah identifikasi jorong sudah tersubmit di FASIH. Keroyokan: semua petugas login pakai akun PPL di atas."
+      : " Belum muncul? Cek apakah identifikasi jorong sudah tersubmit di FASIH. Keroyokan: semua petugas login pakai akun Anda.";
+  const awal = untuk === "pml" ? "Di-assign: " : "Untuk Anda: ";
+  const potong = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+  const bentuk = (i: ItemKeluar) => (untuk === "pml" ? `${i.jorong} → ${namaPertama(i.ppl)}` : i.jorong);
+  const ruang = MAKS_ISI_PUSH - ekor.length - awal.length - 1; // 1 = titik penutup daftar
+  const pilih: string[] = [];
+  let pakai = 0;
+  for (let k = 0; k < items.length; k++) {
+    const t = bentuk(items[k]);
+    const sisa = items.length - k - 1;
+    const tambah = (pilih.length ? 2 : 0) + t.length;
+    const cadangan = sisa > 0 ? ` (+${sisa} lagi)`.length : 0;
+    if (pakai + tambah + cadangan > ruang && pilih.length > 0) break;
+    pilih.push(pilih.length === 0 ? potong(t, Math.max(10, ruang - cadangan)) : t);
+    pakai += tambah;
+  }
+  const lagi = items.length - pilih.length;
+  const isi = `${awal}${pilih.join("; ")}${lagi > 0 ? ` (+${lagi} lagi)` : ""}.${ekor}`;
+  return { judul: judul.slice(0, MAKS_JUDUL_PUSH), isi: potong(isi, MAKS_ISI_PUSH) };
+}
