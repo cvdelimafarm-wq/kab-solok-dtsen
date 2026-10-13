@@ -4,7 +4,27 @@
 // Hanya wilayah + status (terdampak / tidak terdampak / belum diidentifikasi); tidak ada angka KK atau rincian dampak. Murni (tanpa React/DB) supaya mudah diuji.
 
 export type StatusRekap = "terdampak" | "tidak_terdampak" | "belum";
-export type BarisRekap = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string; status: StatusRekap };
+/** (13 Okt 2026) Petugas yang pernah menyimpan identifikasi suatu Sub SLS (n = berapa kali simpan; terakhir = penyimpan terakhir / yang hasilnya berlaku). */
+export type PetugasRekap = { akun_id: number; nama: string; n: number; waktu: string | null; terakhir: boolean };
+export type StatusSanggah = "terbuka" | "dikoreksi" | "tetap";
+/** Sanggahan: "tidak terdampak" padahal nyatanya terdampak. dikoreksi = hasil sudah diisi ulang jadi terdampak; tetap = PML/admin menyatakan hasil tetap. */
+export type SanggahRekap = { id: number; akun_id: number; nama: string; alasan: string; waktu: string; status: StatusSanggah; tanggapan: string | null; oleh: string | null; waktu_tanggapan: string | null };
+export type BarisRekap = {
+  idsubsls: string;
+  kecamatan: string;
+  nagari: string;
+  sls: string;
+  sub_sls: string;
+  status: StatusRekap;
+  /** siapa yang mengidentifikasi (terbaru dulu); kosong bila belum / tak tercatat */
+  petugas?: PetugasRekap[];
+  /** rincian sanggahan YANG BOLEH dilihat pemanggil (admin, PML bersangkutan, petugas pengidentifikasi, penyanggah sendiri); lainnya hanya angka */
+  sanggah?: SanggahRekap[];
+  sanggah_total?: number;
+  sanggah_terbuka?: number;
+  /** pemanggil boleh menanggapi sanggahan Sub SLS ini (admin / PML bersangkutan) */
+  dapat_tanggapi?: boolean;
+};
 export type TingkatRekap = "nagari" | "kecamatan";
 
 export const LABEL_STATUS_REKAP: Record<StatusRekap, string> = { terdampak: "Terdampak", tidak_terdampak: "Tidak terdampak", belum: "Belum diidentifikasi" };
@@ -33,6 +53,78 @@ const koleksi = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
 export const urutBaris = (a: BarisRekap, b: BarisRekap): number =>
   koleksi.compare(a.kecamatan, b.kecamatan) || koleksi.compare(a.nagari, b.nagari) || koleksi.compare(a.sls, b.sls) || koleksi.compare(a.sub_sls, b.sub_sls) || a.idsubsls.localeCompare(b.idsubsls);
 
+const teksAtauNull = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+
+export function periksaPetugas(x: unknown): PetugasRekap[] {
+  if (!Array.isArray(x)) return [];
+  const out: PetugasRekap[] = [];
+  for (const r of x) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const akun = Number(o.akun_id);
+    if (!Number.isInteger(akun) || akun <= 0) continue;
+    out.push({ akun_id: akun, nama: String(o.nama ?? "").trim() || "(tanpa nama)", n: Math.max(1, Math.trunc(Number(o.n) || 1)), waktu: teksAtauNull(o.waktu), terakhir: o.terakhir === true });
+  }
+  return out;
+}
+
+export function periksaSanggah(x: unknown): SanggahRekap[] {
+  if (!Array.isArray(x)) return [];
+  const out: SanggahRekap[] = [];
+  for (const r of x) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const id = Number(o.id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    out.push({
+      id,
+      akun_id: Math.max(0, Math.trunc(Number(o.akun_id) || 0)),
+      nama: String(o.nama ?? "").trim() || "(tanpa nama)",
+      alasan: String(o.alasan ?? ""),
+      waktu: String(o.waktu ?? ""),
+      status: o.status === "dikoreksi" ? "dikoreksi" : o.status === "tetap" ? "tetap" : "terbuka",
+      tanggapan: teksAtauNull(o.tanggapan),
+      oleh: teksAtauNull(o.oleh),
+      waktu_tanggapan: teksAtauNull(o.waktu_tanggapan),
+    });
+  }
+  return out;
+}
+
+export const MIN_ALASAN_SANGGAH = 10;
+export const MAKS_TEKS_SANGGAH = 500;
+export const MIN_TANGGAPAN_SANGGAH = 5;
+
+/** Rapikan teks isian sanggahan/tanggapan: spasi ganda dibuang, panjang diperiksa. */
+export function bersihkanTeksSanggah(x: unknown, min: number, nama: string): { ok: true; teks: string } | { ok: false; pesan: string } {
+  const t = typeof x === "string" ? x.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim() : "";
+  if (t.length < min) return { ok: false, pesan: `${nama} minimal ${min} karakter.` };
+  if (t.length > MAKS_TEKS_SANGGAH) return { ok: false, pesan: `${nama} maksimal ${MAKS_TEKS_SANGGAH} karakter.` };
+  return { ok: true, teks: t };
+}
+
+/** Gabungkan daftar id akun penerima: buang duplikat, nilai tak sah, dan akun yang dikecualikan (pelaku sendiri). */
+export function gabungPenerima(daftar: Array<Array<number | null | undefined>>, kecuali: number | null): number[] {
+  const s = new Set<number>();
+  for (const d of daftar) for (const v of d) if (typeof v === "number" && Number.isInteger(v) && v > 0 && v !== kecuali) s.add(v);
+  return [...s].sort((a, b) => a - b);
+}
+
+/** Petugas yang hasilnya berlaku (penyimpan terakhir), lalu urutan waktu terbaru. */
+export function urutPetugas(p: PetugasRekap[]): PetugasRekap[] {
+  return [...p].sort((a, b) => Number(b.terakhir) - Number(a.terakhir) || String(b.waktu ?? "").localeCompare(String(a.waktu ?? "")));
+}
+
+/** "Budi" / "Budi +1 lainnya" / "" (belum ada). */
+export function teksPetugas(p: PetugasRekap[] | undefined): string {
+  if (!p || p.length === 0) return "";
+  const u = urutPetugas(p);
+  return u.length === 1 ? u[0].nama : `${u[0].nama} +${u.length - 1} lainnya`;
+}
+
+/** Jumlah sanggahan yang masih terbuka (belum dikoreksi / ditanggapi). */
+export const sanggahTerbuka = (b: BarisRekap): number => b.sanggah_terbuka ?? (b.sanggah ?? []).filter((s) => s.status === "terbuka").length;
+
 /** Rapikan respons API: buang baris tak sah. Status "tidak_terdampak" / "belum" apa adanya; selain itu dianggap terdampak. */
 export function periksaBarisRekap(x: unknown): BarisRekap[] {
   if (!Array.isArray(x)) return [];
@@ -48,6 +140,11 @@ export function periksaBarisRekap(x: unknown): BarisRekap[] {
       sls: String(o.sls ?? ""),
       sub_sls: String(o.sub_sls ?? ""),
       status: o.status === "tidak_terdampak" ? "tidak_terdampak" : o.status === "belum" ? "belum" : "terdampak",
+      petugas: periksaPetugas(o.petugas),
+      sanggah: periksaSanggah(o.sanggah),
+      sanggah_total: Math.max(0, Math.trunc(Number(o.sanggah_total) || 0)),
+      sanggah_terbuka: Math.max(0, Math.trunc(Number(o.sanggah_terbuka) || 0)),
+      dapat_tanggapi: o.dapat_tanggapi === true,
     });
   }
   return out.sort(urutBaris);
@@ -108,6 +205,13 @@ export function susunBarisGambar(k: KelompokRekap, tingkat: TingkatRekap): Baris
   return out;
 }
 
+/** Baris tampilan layar: seperti BarisGambar tetapi baris "isi" membawa data Sub SLS-nya (untuk diketuk: petugas, sanggah). */
+export type BarisTampilan = Extract<BarisGambar, { jenis: "bagian" }> | { jenis: "isi"; teks: string; baris: BarisRekap };
+export function susunBarisTampilan(k: KelompokRekap, tingkat: TingkatRekap): BarisTampilan[] {
+  let i = 0;
+  return susunBarisGambar(k, tingkat).map((g) => (g.jenis === "bagian" ? g : { jenis: "isi" as const, teks: g.teks, baris: k.baris[i++] }));
+}
+
 /**
  * Bagi baris ke kolom (aliran ke bawah lalu ke kanan) dengan paling banyak `maks` baris per kolom.
  * Judul bagian tidak boleh jadi baris terakhir kolom (dipindah bersama isi pertamanya).
@@ -142,7 +246,7 @@ export function namaBerkasRekap(k: KelompokRekap, tingkat: TingkatRekap, tanggal
 }
 
 /** Baris Excel: hanya wilayah + status (termasuk yang belum diidentifikasi). */
-export function barisExcel(baris: BarisRekap[]): Record<string, string>[] {
+export function barisExcel(baris: BarisRekap[]): Record<string, string | number>[] {
   return [...baris].sort(urutBaris).map((b) => ({
     Kecamatan: rapikanNama(b.kecamatan),
     Nagari: rapikanNama(b.nagari),
@@ -150,6 +254,9 @@ export function barisExcel(baris: BarisRekap[]): Record<string, string>[] {
     "Sub SLS": b.sub_sls,
     "ID Sub SLS": b.idsubsls,
     Status: LABEL_STATUS_REKAP[b.status],
+    "Diidentifikasi oleh": urutPetugas(b.petugas ?? []).map((p) => p.nama).join("; "),
+    "Jumlah petugas": (b.petugas ?? []).length,
+    "Sanggahan terbuka": sanggahTerbuka(b),
   }));
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bagiKolom, barisExcel, barisExcelPerNagari, barisExcelPml, periksaBarisPml, periksaBarisPmlJadi, persenRealisasi, ringkasPml, urutkanPml, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
+import { bersihkanTeksSanggah, gabungPenerima, periksaPetugas, periksaSanggah, sanggahTerbuka, susunBarisTampilan, teksPetugas, urutPetugas, bagiKolom, barisExcel, barisExcelPerNagari, barisExcelPml, periksaBarisPml, persenRealisasi, ringkasPml, urutkanPml, kelompokkan, namaBerkasRekap, periksaBarisRekap, rapikanNama, ringkasRekap, susunBarisGambar, type BarisRekap } from "@/lib/rekapIdentifikasi";
 
 // (11 Okt 2026) Uji rekap hasil identifikasi (hanya Sub SLS + status).
 const r = (idsubsls: string, kecamatan: string, nagari: string, sls: string, sub_sls: string, status: BarisRekap["status"] = "terdampak"): BarisRekap => ({ idsubsls, kecamatan, nagari, sls, sub_sls, status });
@@ -106,7 +106,7 @@ describe("nama berkas & Excel", () => {
   });
   it("Excel hanya memuat wilayah + status", () => {
     const b = barisExcel(DATA);
-    expect(Object.keys(b[0])).toEqual(["Kecamatan", "Nagari", "SLS", "Sub SLS", "ID Sub SLS", "Status"]);
+    expect(Object.keys(b[0])).toEqual(["Kecamatan", "Nagari", "SLS", "Sub SLS", "ID Sub SLS", "Status", "Diidentifikasi oleh", "Jumlah petugas", "Sanggahan terbuka"]);
     expect(b).toHaveLength(6);
     expect(b.some((x) => x.Status === "Tidak terdampak")).toBe(true);
     expect(b.filter((x) => x.Status === "Belum diidentifikasi")).toHaveLength(1);
@@ -158,21 +158,63 @@ describe("target & realisasi per PML", () => {
   });
 });
 
-describe("respons API per PML (sudah digabung server)", () => {
-  it("lolos dua kali jalan: baris mentah -> digabung server -> divalidasi klien", () => {
-    const mentah = [
-      { pml_id: 1, nama: "ANI", peran: "pelaksana", target: 8, realisasi: 8, terdampak: 5, tidak_terdampak: 3 },
-      { pml_id: 1, nama: "ANI", peran: "pendamping", target: 6, realisasi: 2, terdampak: 2, tidak_terdampak: 0 },
-    ];
-    const diServer = periksaBarisPml(mentah);
-    const diKlien = periksaBarisPmlJadi(JSON.parse(JSON.stringify(diServer)));
-    expect(diKlien).toEqual(diServer);
-    expect(diKlien).toHaveLength(1); // regresi: dulu klien memakai periksaBarisPml lagi sehingga semua baris terbuang
+describe("petugas pengidentifikasi & sanggahan (13 Okt 2026)", () => {
+  const pet = [
+    { akun_id: 370, nama: "Megawati", n: 4, waktu: "2026-10-10T10:43:35Z", terakhir: false },
+    { akun_id: 108, nama: "Budi Pernandes", n: 3, waktu: "2026-10-11T01:46:06Z", terakhir: true },
+  ];
+  it("periksaPetugas membuang yang tak sah & menetapkan bawaan", () => {
+    const x = periksaPetugas([...pet, { akun_id: 0, nama: "x" }, null, { akun_id: 5, nama: "  ", n: 0 }]);
+    expect(x).toHaveLength(3);
+    expect(x[2]).toMatchObject({ akun_id: 5, nama: "(tanpa nama)", n: 1, terakhir: false });
+    expect(periksaPetugas("x")).toEqual([]);
   });
-  it("membuang baris tak sah dan membatasi realisasi", () => {
-    const x = periksaBarisPmlJadi([{ id: 0, nama: "x" }, null, { id: 2, nama: "B", target: 3, realisasi: 9, terdampak: 1, tidak: 1, target_pendamping: 2, realisasi_pendamping: 5 }]);
-    expect(x).toHaveLength(1);
-    expect([x[0].realisasi, x[0].realisasi_pendamping]).toEqual([3, 2]);
-    expect(periksaBarisPmlJadi(undefined)).toEqual([]);
+  it("urutPetugas: hasil berlaku dulu; teksPetugas ringkas", () => {
+    expect(urutPetugas(pet).map((p) => p.nama)).toEqual(["Budi Pernandes", "Megawati"]);
+    expect(teksPetugas(pet)).toBe("Budi Pernandes +1 lainnya");
+    expect(teksPetugas([pet[1]])).toBe("Budi Pernandes");
+    expect(teksPetugas([])).toBe("");
+    expect(teksPetugas(undefined)).toBe("");
+  });
+  it("periksaSanggah: status tak dikenal -> terbuka; id tak sah dibuang", () => {
+    const x = periksaSanggah([{ id: 1, akun_id: 9, nama: "A", alasan: "rumah terendam", waktu: "2026-10-12T00:00:00Z", status: "dikoreksi" }, { id: 2, status: "aneh" }, { id: 0 }, 7]);
+    expect(x.map((g) => [g.id, g.status])).toEqual([[1, "dikoreksi"], [2, "terbuka"]]);
+    expect(x[1].tanggapan).toBeNull();
+  });
+  it("periksaBarisRekap membawa petugas/sanggah; baris lama tanpa field tetap sah", () => {
+    const x = periksaBarisRekap([
+      { idsubsls: "1303140002000101", status: "tidak_terdampak", petugas: pet, sanggah: [{ id: 3, akun_id: 1, nama: "B", alasan: "x", waktu: "w", status: "terbuka" }], sanggah_total: 2, sanggah_terbuka: 1, dapat_tanggapi: true },
+      { idsubsls: "1303140002000102", status: "terdampak" },
+    ]);
+    expect(x[0].petugas).toHaveLength(2);
+    expect(x[0].dapat_tanggapi).toBe(true);
+    expect(x[1].petugas).toEqual([]);
+    expect(x[1].dapat_tanggapi).toBe(false);
+    expect(sanggahTerbuka(x[0])).toBe(1);
+    expect(sanggahTerbuka(x[1])).toBe(0);
+  });
+  it("susunBarisTampilan: baris isi membawa Sub SLS-nya, urutan sama dengan gambar", () => {
+    const k = kelompokkan(DATA, "kecamatan").find((z) => z.judul === "GUNUNG TALANG")!;
+    const t = susunBarisTampilan(k, "kecamatan");
+    const g = susunBarisGambar(k, "kecamatan");
+    expect(t.map((z) => z.jenis)).toEqual(g.map((z) => z.jenis));
+    const isi = t.filter((z) => z.jenis === "isi");
+    expect(isi.map((z) => (z.jenis === "isi" ? z.baris.idsubsls : ""))).toEqual(k.baris.map((b) => b.idsubsls));
+  });
+  it("Excel memuat nama petugas, jumlah, dan sanggahan terbuka", () => {
+    const b = barisExcel([{ ...r("1303140002000101", "K", "N", "S", "01", "tidak_terdampak"), petugas: pet, sanggah_terbuka: 2 }]);
+    expect(b[0]["Diidentifikasi oleh"]).toBe("Budi Pernandes; Megawati");
+    expect(b[0]["Jumlah petugas"]).toBe(2);
+    expect(b[0]["Sanggahan terbuka"]).toBe(2);
+    expect(barisExcel(DATA)[0]["Diidentifikasi oleh"]).toBe("");
+  });
+  it("bersihkanTeksSanggah: rapikan spasi, batas panjang", () => {
+    expect(bersihkanTeksSanggah("  rumah   terendam \n\n\n\n parah ", 10, "Alasan")).toEqual({ ok: true, teks: "rumah terendam \n\n parah" });
+    expect(bersihkanTeksSanggah("pendek", 10, "Alasan")).toEqual({ ok: false, pesan: "Alasan minimal 10 karakter." });
+    expect(bersihkanTeksSanggah("x".repeat(501), 10, "Alasan").ok).toBe(false);
+    expect(bersihkanTeksSanggah(null, 5, "Tanggapan").ok).toBe(false);
+  });
+  it("gabungPenerima: tanpa duplikat, tanpa pelaku, tanpa nilai tak sah", () => {
+    expect(gabungPenerima([[3, 1, null], [1, 2, 0, -4], [undefined, 9]], 2)).toEqual([1, 3, 9]);
   });
 });
