@@ -11,10 +11,11 @@ import { useMemo, useState } from "react";
 import { useData } from "@/app/portal/dataBersama";
 import { apiPortal } from "@/app/portal/sesi";
 import { namaDepan, waktuRingkas } from "./usePendataan";
-import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, labelJorong, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
+import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import type { Anggota, SubTim } from "@/lib/pendataan";
 
-const namaSub = (s: Pick<SubTim, "nagari" | "sls" | "sub_sls">) => `${s.nagari} · ${s.sls}${s.sub_sls ? ` / ${s.sub_sls}` : ""}`;
+const namaSub = (s: Pick<SubTim, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(s.sls)}${s.sub_sls ? ` Sub ${s.sub_sls}` : ""} (Nagari ${rapikanNama(s.nagari)})`;
 
 export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggota: Anggota[]; sub: SubTim[]; totalKk: (idsubsls: string) => number; sayaAkun: number }) {
   const d = useData<DataPermintaanTim>(API_PERMINTAAN);
@@ -123,9 +124,12 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
                       <input type="checkbox" checked={dipilih} disabled={nonaktif && !dipilih} onChange={(e) => ganti(s.idsubsls, e.target.checked)} className="h-6 w-6 flex-none accent-[#1F5FD1] disabled:opacity-40" aria-label={`Pilih ${namaSub(s)}`} />
                     )}
                     <span className="min-w-0 flex-1">
-                      <b className="block truncate text-[13.5px] text-[#0F2A52]">{namaSub(s)}</b>
-                      <small className="block truncate text-[11.5px] text-[#6B7A90]">
-                        Kec. {s.kecamatan} · {n > 0 ? `${n} KK` : "daftar KK belum diunggah"}
+                      <b className="block break-words text-[14px] leading-snug text-[#0F2A52]">
+                        {rapikanNama(s.sls)}
+                        {s.sub_sls && <span className="ml-1.5 inline-block whitespace-nowrap rounded-full bg-[#E6EEFC] px-2 py-[1px] align-[1px] text-[11.5px] font-extrabold text-[#1F5FD1]">Sub {s.sub_sls}</span>}
+                      </b>
+                      <small className="mt-0.5 block break-words text-[12px] leading-snug text-[#6B7A90]">
+                        Nagari {rapikanNama(s.nagari)} · Kec. {rapikanNama(s.kecamatan)} · {n > 0 ? <b className="text-[#0F2A52]">{n} KK</b> : "daftar KK belum diunggah"}
                       </small>
                     </span>
                     {p && chip(p)}
@@ -176,7 +180,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
               <ul className="mt-1.5 space-y-1">
                 {urutPermintaan((data?.permintaan ?? []).filter((p) => p.status === "sudah_keluar")).map((p) => (
                   <li key={p.id}>
-                    <b>{labelJorong(p.sls, p.sub_sls)}</b> <span className="text-[#52627A]">(Nagari {p.nagari.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())})</span> → PPL penerima: <b>{p.ppl_nama || "PPL"}</b>
+                    <b>{rapikanNama(p.sls)}{p.sub_sls ? ` Sub ${p.sub_sls}` : ""}</b> <span className="text-[#52627A]">(Nagari {p.nagari.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())})</span> → PPL penerima: <b>{p.ppl_nama || "PPL"}</b>
                   </li>
                 ))}
               </ul>

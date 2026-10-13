@@ -9,11 +9,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
+import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
 type Saring = "menunggu" | "sudah_keluar";
 
-const namaSub = (p: Pick<PermintaanAdmin, "nagari" | "sls" | "sub_sls">) => `${p.nagari} · ${p.sls}${p.sub_sls ? ` / ${p.sub_sls}` : ""}`;
+const namaSub = (p: Pick<PermintaanAdmin, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} · Nagari ${rapikanNama(p.nagari)}`;
 
 export default function PermintaanDaftar() {
   const [data, setData] = useState<DataPermintaanAdmin | null>(null);
