@@ -3,13 +3,14 @@
 // (11 Okt 2026) Lembar Pendataan keroyokan PPL/PML -- permintaan user.
 //  GET                  -> { sekarang, saya, pml, anggota[{akun_id,nama,peran,indeks}], sub[], ringkas[] }   (anggota tim: PML + semua PPL-nya)
 //  GET ?sub=<idsubsls>  -> { idsubsls, kk[] }                                                              (hanya Sub SLS milik tim)
+//  POST { aksi:"tambah", idsubsls, nama, patokan?, lat?, lng?, hasil, waktu, kunci, paksa? }  (14 Okt 2026) tambah keluarga baru
 //  POST { kk_id, hasil, alasan?, waktu, kunci, pos? }  catat hasil satu KK. Idempoten lewat `kunci` (uuid dari HP); `waktu` = waktu kejadian di HP.
 // "Masuk sebagai" (akun super) hanya boleh MELIHAT: mencatat ditolak supaya data lapangan tidak terisi tanpa sengaja.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
-import { ambilTim, catatHasil, daftarKk, ringkasTim } from "@/lib/portal/pendataan";
+import { ambilTim, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
 import { periksaCatat } from "@/lib/pendataan";
 
 export const runtime = "nodejs";
@@ -50,6 +51,13 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json().catch(() => null);
+    if (body && body.aksi === "tambah") {
+      const t = periksaTambahKk(body);
+      if (!t.ok) return NextResponse.json({ error: t.pesan }, { status: 400 });
+      const r = await tambahKk(db, akun.id, t.isi);
+      if (!r.ok) return NextResponse.json({ error: r.pesan, nama_ada: r.nama_ada ?? false }, { status: r.nama_ada ? 409 : 400 });
+      return NextResponse.json({ ok: true, kk_id: r.kk_id, duplikat: r.duplikat });
+    }
     const cek = periksaCatat(body);
     if (!cek.ok) return NextResponse.json({ error: cek.pesan }, { status: 400 });
     // keanggotaan tim diperiksa di fungsi database (bukan_wilayah_tim) -- satu panggilan saja, ringan untuk sinyal lemah

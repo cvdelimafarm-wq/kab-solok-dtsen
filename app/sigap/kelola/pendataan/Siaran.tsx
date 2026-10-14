@@ -17,10 +17,10 @@ type Ringkas = { push_siap: boolean; penerima: number; berlangganan: number; riw
 type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkirim: number; gagal: number; modal: boolean; push: boolean };
 
 const AWAL = {
-  judul: "Data keluarga sudah tersedia",
-  isi: "Data keluarga sudah tersedia. PML silakan pilih maksimal 2 Sub SLS untuk didata hari ini, nanti kami assign ke FASIH. Upayakan keroyokan: daftar keluarga akan di-assign ke salah satu akun PPL.",
-  mJudul: "DATA KELUARGA SUDAH TERSEDIA",
-  mIsi: "**Data keluarga sudah tersedia.**\n\n- PML silakan pilih ==maksimal 2 Sub SLS== untuk didata hari ini, nanti kami assign ke FASIH\n- Pilih lewat kartu \"Plotting tim hari ini\" di Lembar Pendataan (tombol di bawah)\n- PPL bisa melihat pilihan dan statusnya di kartu yang sama\n- ==Upayakan pendataan awal ini dengan keroyokan==\n- ==Daftar keluarga akan di-assign ke salah satu akun PPL==",
+  judul: "Kuota pengajuan Sub SLS ditambah jadi 5",
+  isi: "Kabar baik untuk PML: total pengajuan Sub SLS kini maksimal 5 per PML (sebelumnya 2). Buka Lembar Pendataan > Plotting tim, pilih Sub SLS + PPL-nya, lalu Kirim. Salah PPL? Ajukan pembatalan, langsung berlaku.",
+  mJudul: "KUOTA PENGAJUAN DITAMBAH",
+  mIsi: "**Kuota pengajuan Sub SLS ditambah.**\n\n- Total pengajuan per PML kini ==maksimal 5 Sub SLS== (sebelumnya 2)\n- Berlaku sebagai total, bukan per hari; yang dibatalkan tidak dihitung\n- Pilih lewat kartu \"Plotting tim\" di Lembar Pendataan (tombol di bawah)\n- Salah memilih PPL? Tekan **Ajukan pembatalan** pada Sub SLS yang sudah keluar di FASIH; langsung berlaku tanpa persetujuan, lalu isi ulang PPL-nya\n- ==Upayakan keroyokan: daftar keluarga di-assign ke salah satu akun PPL==",
   tLabel: "Buka Lembar Pendataan",
   tUrl: "/sigap/pendataan",
 };

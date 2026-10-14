@@ -103,6 +103,67 @@ export async function catatHasil(db: Db, akunId: number, c: IsiCatat): Promise<{
   return { ok: true, terkini: r.status === "tercatat" ? r.terkini === true : false, duplikat: r.status === "duplikat" };
 }
 
+// ----------------------------------------------------------------------------------------------
+// (14 Okt 2026) Tambah keluarga baru (assignment baru) dari lapangan -- permintaan user: tombol "tambah assignment/keluarga baru"
+// di pojok kanan bawah Lembar Pendataan. Ditulis lewat fungsi DB bencana_pendataan_tambah (idempoten lewat `kunci`, wilayah tim
+// diperiksa di DB, nama kembar di Sub SLS yang sama ditolak kecuali `paksa`). KK baru langsung berhasil didata (terdampak / tidak
+// terdampak), keberadaan_awal = 2 (Baru), dan tercatat di log atas nama penambah.
+// ----------------------------------------------------------------------------------------------
+export const KEGIATAN_PENDATAAN_BAWAAN = 1;
+export type IsiTambahKk = { idsubsls: string; nama: string; patokan: string | null; lat: number | null; lng: number | null; hasil: "terdampak" | "tidak_terdampak"; waktu: string; kunci: string; paksa: boolean };
+const PESAN_TOLAK_TAMBAH: Record<string, string> = {
+  hasil_tidak_dikenal: "Pilih hasil: terdampak atau tidak terdampak.",
+  nama_tidak_sah: "Nama kepala keluarga wajib diisi (maks. 150 huruf).",
+  patokan_tidak_sah: "Patokan/alamat terlalu panjang (maks. 150 huruf).",
+  koordinat_tidak_sah: "Lokasi di luar wilayah Kabupaten Solok. Ambil ulang lokasi atau kosongkan.",
+  kegiatan_tidak_ada: "Kegiatan pendataan tidak ditemukan.",
+  bukan_wilayah_tim: "Sub SLS ini bukan wilayah tim Anda.",
+};
+
+export function periksaTambahKk(b: unknown): { ok: true; isi: IsiTambahKk } | { ok: false; pesan: string } {
+  const x = (b ?? {}) as Record<string, unknown>;
+  const idsubsls = typeof x.idsubsls === "string" && /^\d{16}$/.test(x.idsubsls) ? x.idsubsls : null;
+  if (!idsubsls) return { ok: false, pesan: "Sub SLS tidak valid." };
+  const nama = typeof x.nama === "string" ? x.nama.trim() : "";
+  if (!nama) return { ok: false, pesan: "Nama kepala keluarga wajib diisi." };
+  const hasil = x.hasil === "terdampak" || x.hasil === "tidak_terdampak" ? x.hasil : null;
+  if (!hasil) return { ok: false, pesan: "Pilih hasil: terdampak atau tidak terdampak." };
+  const kunci = typeof x.kunci === "string" && /^[0-9a-f-]{36}$/i.test(x.kunci) ? x.kunci : null;
+  if (!kunci) return { ok: false, pesan: "Kunci permintaan tidak valid." };
+  const angka = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const lat = angka(x.lat);
+  const lng = angka(x.lng);
+  const waktu = typeof x.waktu === "string" && !Number.isNaN(Date.parse(x.waktu)) ? x.waktu : new Date().toISOString();
+  const patokan = typeof x.patokan === "string" && x.patokan.trim() ? x.patokan.trim() : null;
+  return { ok: true, isi: { idsubsls, nama, patokan, lat: lat !== null && lng !== null ? lat : null, lng: lat !== null && lng !== null ? lng : null, hasil, waktu, kunci, paksa: x.paksa === true } };
+}
+
+export async function tambahKk(db: Db, akunId: number, t: IsiTambahKk): Promise<{ ok: true; kk_id: number; duplikat: boolean } | { ok: false; pesan: string; nama_ada?: boolean }> {
+  // kegiatan mengikuti KK lain di Sub SLS yang sama (semua daftar KK saat ini = kegiatan 1)
+  const { data: contoh } = await db.from("bencana_pendataan_kk").select("kegiatan_id").eq("idsubsls", t.idsubsls).limit(1).maybeSingle();
+  const kegiatan = Number(contoh?.kegiatan_id ?? KEGIATAN_PENDATAAN_BAWAAN);
+  const { data, error } = await db.rpc("bencana_pendataan_tambah", {
+    p_akun: akunId,
+    p_kegiatan: kegiatan,
+    p_idsubsls: t.idsubsls,
+    p_nama: t.nama,
+    p_patokan: t.patokan,
+    p_lat: t.lat,
+    p_lng: t.lng,
+    p_hasil: t.hasil,
+    p_waktu: t.waktu,
+    p_kunci: t.kunci,
+    p_paksa: t.paksa,
+  });
+  if (error) throw new Error(error.message);
+  const r = data as { status: "tercatat" | "duplikat" | "ditolak"; kk_id?: number; alasan?: string };
+  if (r.status === "ditolak") {
+    if (r.alasan === "nama_sudah_ada") return { ok: false, pesan: "Nama ini sudah ada di daftar Sub SLS ini.", nama_ada: true };
+    return { ok: false, pesan: PESAN_TOLAK_TAMBAH[r.alasan ?? ""] ?? "Ditolak." };
+  }
+  return { ok: true, kk_id: Number(r.kk_id), duplikat: r.status === "duplikat" };
+}
+
 /**
  * (11 Okt 2026) Ringkasan untuk modul "Lembar Pendataan KK" di tahap Pendataan: jumlah KK aktif tim, yang sudah didata, dan yang terdampak.
  * Tim = PML + PPL di bawahnya (pml = diri sendiri bila PML, atasan bila PPL). null = bukan PML/PPL, atau tim belum punya daftar KK (modul tidak tampil).

@@ -6,8 +6,10 @@
 // Seluruh anggota tim (PML + semua PPL-nya) melihat SEMUA KK di Sub SLS timnya dan menandai hasil: didata-terdampak, didata-tidak terdampak, tidak ditemukan.
 // Hasil terakhir yang berlaku (menurut waktu kejadian di HP); pelaku tercatat di log. Tab: Peta | Daftar KK | Monitoring (bersama PPL dan PML).
 // Tahap 1: titik KK di kanvas tanpa peta dasar; peta jalan offline (tahap 2), flag "segera didata" oleh PML (tahap 3), draf translok (tahap 4).
+// (14 Okt 2026) Alur baru -- permintaan user: halaman dibuka dengan kartu "Plotting tim hari ini"; tab Peta | Daftar KK | Monitoring baru
+// tampil setelah kartu Sub SLS diklik (alamat ?sub=<idsubsls>, tombol Kembali HP kembali ke kartu). Tombol "+ Keluarga baru" di kanan bawah.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
@@ -15,6 +17,7 @@ import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
+import TambahKk from "./TambahKk";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, waktuRingkas } from "./usePendataan";
 import {
@@ -67,14 +70,23 @@ export default function LembarPendataan() {
   const [saya, setSaya] = useState<{ lat: number; lng: number } | null>(null);
   const [monPpl, setMonPpl] = useState<number | null>(null);
   const [toast, setToast] = useState<{ pesan: string; urungkan?: () => void } | null>(null);
+  const dariKartu = useRef(false); // true bila Sub SLS dibuka dari kartu (ada entri riwayat yang bisa di-"back")
 
   useEffect(() => {
     setDari(dariAman());
     try {
-      setSubPilih(new URLSearchParams(window.location.search).get("sub") ?? localStorage.getItem(KUNCI_SUB));
+      // (14 Okt 2026) hanya ?sub di alamat yang langsung membuka Sub SLS; tanpa itu tampil kartu plotting dulu
+      setSubPilih(new URLSearchParams(window.location.search).get("sub"));
     } catch {
       /* abaikan */
     }
+    const kembali = () => {
+      dariKartu.current = false;
+      setSubPilih(new URLSearchParams(window.location.search).get("sub"));
+      setTerpilihId(null);
+    };
+    window.addEventListener("popstate", kembali);
+    return () => window.removeEventListener("popstate", kembali);
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -85,7 +97,7 @@ export default function LembarPendataan() {
   const data = tim.data;
   const subId = useMemo(() => {
     if (!data || data.sub.length === 0) return null;
-    return data.sub.some((s) => s.idsubsls === subPilih) ? subPilih : data.sub[0].idsubsls;
+    return data.sub.some((s) => s.idsubsls === subPilih) ? subPilih : null;
   }, [data, subPilih]);
   const kkQ = useKkSub(subId);
   useUnduhKkLatar(useMemo(() => (data ? data.sub.map((s) => s.idsubsls) : []), [data]), subId);
@@ -133,6 +145,46 @@ export default function LembarPendataan() {
     setSaya(null);
     try {
       localStorage.setItem(KUNCI_SUB, id);
+    } catch {
+      /* abaikan */
+    }
+  }
+
+  function alamatSub(id: string | null): string {
+    const u = new URL(window.location.href);
+    if (id) u.searchParams.set("sub", id);
+    else u.searchParams.delete("sub");
+    return `${u.pathname}${u.search}${u.hash}`;
+  }
+  function bukaSub(id: string) {
+    pilihSub(id);
+    setTab("peta");
+    try {
+      window.history.pushState(window.history.state, "", alamatSub(id));
+      dariKartu.current = true;
+    } catch {
+      /* abaikan */
+    }
+    window.scrollTo({ top: 0 });
+  }
+  function gantiSub(id: string) {
+    pilihSub(id);
+    try {
+      window.history.replaceState(window.history.state, "", alamatSub(id));
+    } catch {
+      /* abaikan */
+    }
+  }
+  function keKartu() {
+    setTerpilihId(null);
+    if (dariKartu.current) {
+      dariKartu.current = false;
+      window.history.back(); // popstate menutup Sub SLS
+      return;
+    }
+    setSubPilih(null);
+    try {
+      window.history.replaceState(window.history.state, "", alamatSub(null));
     } catch {
       /* abaikan */
     }
@@ -199,7 +251,7 @@ export default function LembarPendataan() {
       <header className="bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-4 pb-4 pt-4 text-white">
         <div className="mx-auto max-w-xl">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => keAtas(router, dari ?? "/")} aria-label="Kembali" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
+            <button type="button" onClick={() => (subId ? keKartu() : keAtas(router, dari ?? "/"))} aria-label="Kembali" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
               <IkonMenu n="kembali" className="h-5 w-5 text-white" />
             </button>
             <div className="min-w-0">
@@ -207,7 +259,7 @@ export default function LembarPendataan() {
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Tim ${namaDepan(data.pml.nama)} · ${data.saya.peran === "pml" ? "PML" : "PPL"}` : "Pendataan Pascabencana"}</p>
             </div>
           </div>
-          {data && data.sub.length > 0 && (
+          {data && subId && (
             <div className="mt-3">
               <label htmlFor="sub-pendataan" className="sr-only">
                 Sub SLS
@@ -215,7 +267,7 @@ export default function LembarPendataan() {
               <select
                 id="sub-pendataan"
                 value={subId ?? ""}
-                onChange={(e) => pilihSub(e.target.value)}
+                onChange={(e) => gantiSub(e.target.value)}
                 className="h-11 w-full rounded-[12px] border border-white/25 bg-white/12 px-3 text-[13.5px] font-bold text-white [&>option]:text-[#0F2A52]"
               >
                 {data.sub.map((s) => {
@@ -246,10 +298,14 @@ export default function LembarPendataan() {
         {data && data.sub.length === 0 && <p className="rounded-[16px] bg-white p-4 text-[13px] text-[#55657D] shadow-[0_8px_22px_rgba(15,42,82,.08)]">Tim Anda belum mendapat pembagian Sub SLS.</p>}
 
         {/* (13 Okt 2026) Kartu plotting tim tampil PERTAMA: PML memilih maks. 2 Sub SLS + PPL lalu Kirim; PPL hanya melihat -- permintaan user */}
-        {data && data.sub.length > 0 && <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} />}
+        {/* (14 Okt 2026) kartu Sub SLS diklik -> buka Peta | Daftar KK | Monitoring Sub SLS itu */}
+        {data && data.sub.length > 0 && !subId && <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} onBuka={bukaSub} />}
 
         {data && subId && (
           <>
+            <button type="button" onClick={keKartu} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-white px-3.5 text-[12.5px] font-extrabold text-[#1F5FD1] shadow-[0_2px_6px_rgba(15,42,82,.1)]">
+              ← Plotting tim (semua Sub SLS)
+            </button>
             <nav role="tablist" aria-label="Tampilan" className="flex overflow-hidden rounded-[14px] bg-white shadow-[0_2px_10px_rgba(15,42,82,.08)]">
               {([
                 ["peta", "Peta"],
@@ -479,7 +535,7 @@ export default function LembarPendataan() {
                           const hari = monPpl !== null ? p?.hari_ini : t?.hari_ini;
                           const jml = monPpl !== null ? p?.didata ?? 0 : t?.didata ?? 0;
                           return (
-                            <tr key={s.idsubsls} onClick={() => { pilihSub(s.idsubsls); setTab("peta"); }} className="cursor-pointer border-t border-[#EEF2F7]">
+                            <tr key={s.idsubsls} onClick={() => { gantiSub(s.idsubsls); setTab("peta"); }} className="cursor-pointer border-t border-[#EEF2F7]">
                               <td className="py-2 pr-2">{namaSub(s)}</td>
                               <td className="px-1 text-right">{t?.total ?? 0}</td>
                               <td className="px-1 text-right font-extrabold">{jml}</td>
@@ -568,8 +624,11 @@ export default function LembarPendataan() {
         </div>
       )}
 
+      {/* (14 Okt 2026) tombol tambah keluarga baru -- hanya saat Sub SLS dibuka, tab Peta / Daftar KK */}
+      {subAktif && tab !== "mon" && !terpilih && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
+
       {toast && (
-        <div role="status" className="fixed inset-x-3 bottom-4 z-40 mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]">
+        <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-40 mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
           <span className="min-w-0 flex-1">{toast.pesan}</span>
           {toast.urungkan && (
             <button
