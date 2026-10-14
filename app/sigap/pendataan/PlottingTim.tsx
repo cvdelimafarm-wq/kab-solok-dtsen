@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { useData } from "@/app/portal/dataBersama";
 import { apiPortal } from "@/app/portal/sesi";
 import { namaDepan, waktuRingkas } from "./usePendataan";
-import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_BATAL, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_PER_HARI, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import type { Anggota, SubTim } from "@/lib/pendataan";
 
@@ -23,6 +23,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
   const [buka, setBuka] = useState(true);
   const [pilih, setPilih] = useState<Record<string, number>>({}); // idsubsls -> akun PPL (0 = belum dipilih)
   const [sibuk, setSibuk] = useState(false);
+  const [konfirmasiBatal, setKonfirmasiBatal] = useState<number | null>(null); // id permintaan sudah keluar yang sedang dikonfirmasi pembatalannya
   const [pesan, setPesan] = useState<{ nada: "ok" | "salah"; teks: string } | null>(null);
 
   const ppls = useMemo(() => anggota.filter((a) => a.peran === "ppl"), [anggota]);
@@ -78,6 +79,23 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
       await d.muat();
     } catch (e) {
       setPesan({ nada: "salah", teks: e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal membatalkan. Coba lagi." });
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  async function ajukanBatal(p: Permintaan) {
+    if (sibuk) return;
+    setSibuk(true);
+    setPesan(null);
+    try {
+      await apiPortal(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "ajukan_batal", id: p.id }) });
+      setKonfirmasiBatal(null);
+      setPesan({ nada: "ok", teks: `Pembatalan berlaku. ${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} dan kuota Anda sudah bebas; tandai lagi di daftar lalu pilih PPL penggantinya. Admin dikabari untuk menghapus assignment lama di FASIH.` });
+      await d.muat();
+    } catch (e) {
+      setKonfirmasiBatal(null);
+      setPesan({ nada: "salah", teks: e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal mengajukan pembatalan. Coba lagi." });
     } finally {
       setSibuk(false);
     }
@@ -146,6 +164,26 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
                           Batalkan
                         </button>
                       )}
+                      {bisaKirim && p.status === "sudah_keluar" && konfirmasiBatal !== p.id && (
+                        <button type="button" disabled={sibuk} onClick={() => { setPesan(null); setKonfirmasiBatal(p.id); }} className="min-h-[36px] rounded-full bg-white px-3 text-[12px] font-extrabold text-[#B42329] shadow-[0_2px_6px_rgba(15,42,82,.1)] disabled:opacity-50">
+                          Ajukan pembatalan
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {p && bisaKirim && p.status === "sudah_keluar" && konfirmasiBatal === p.id && (
+                    <div className="mt-2 rounded-[12px] border border-[#F2B8BA] bg-[#FDE8E8] p-3 text-[12.5px] leading-snug text-[#7A1D22]">
+                      <p className="font-extrabold">Batalkan assignment {rapikanNama(s.sls)}{s.sub_sls ? ` Sub ${s.sub_sls}` : ""} untuk {p.ppl_nama || "PPL"}?</p>
+                      <p className="mt-1">{CATATAN_BATAL}</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setKonfirmasiBatal(null)} className="min-h-[44px] rounded-[12px] bg-white text-[13px] font-extrabold text-[#0F2A52] shadow-sm">
+                          Tidak jadi
+                        </button>
+                        <button type="button" disabled={sibuk} onClick={() => void ajukanBatal(p)} className="min-h-[44px] rounded-[12px] bg-[#B42329] text-[13px] font-extrabold text-white disabled:opacity-50">
+                          {sibuk ? "Membatalkan…" : "Ya, batalkan"}
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -191,7 +229,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
             </div>
           )}
 
-          {sisa === 0 && bisaKirim && <p className="mt-2 text-[12px] font-bold text-[#8A6200]">Batas {maks} Sub SLS untuk hari ini sudah terpakai. Batalkan permintaan yang masih menunggu bila ingin mengganti.</p>}
+          {sisa === 0 && bisaKirim && <p className="mt-2 text-[12px] font-bold text-[#8A6200]">Batas {maks} Sub SLS untuk hari ini sudah terpakai. Batalkan permintaan yang masih menunggu, atau ajukan pembatalan untuk yang sudah keluar, bila ingin mengganti.</p>}
 
           <button type="button" disabled={!bolehKirim} onClick={() => void kirim()} className="mt-3 min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
             {sibuk ? "Mengirim…" : terpilih.length > 0 ? `Kirim permintaan (${terpilih.length} Sub SLS)` : "Kirim permintaan"}
@@ -207,6 +245,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun }: { anggo
           <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
             <p className="font-extrabold text-[#0F2A52]">Hanya PML yang dapat mengisi pilihan dan menekan Kirim.</p>
             <p className="mt-1">PPL hanya melihat pilihan dan statusnya di kartu ini; tombol tidak aktif bagi PPL.</p>
+            <p className="mt-1">Salah memilih PPL? PML dapat menekan <b>Ajukan pembatalan</b> pada Sub SLS yang sudah keluar di FASIH. Pembatalan langsung berlaku tanpa persetujuan, lalu PML bisa mengisi ulang PPL-nya.</p>
             <p className="mt-1">Setelah Kirim, permintaan masuk ke admin. Admin meng-assign daftar KK ke akun FASIH PPL yang dipilih, lalu status berubah dari &quot;Menunggu admin&quot; menjadi &quot;Sudah keluar di FASIH&quot; dan PML serta PPL dikabari lewat notifikasi. Batas <mark className="rounded px-0.5 font-bold" style={{ background: "#FFE680" }}>maksimal {maks} Sub SLS</mark> per PML per hari (menurut tanggal WIB).</p>
           </div>
         </div>

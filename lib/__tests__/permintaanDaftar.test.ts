@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JUDUL_TEMPLAT_FASIH, labelJorong, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, type Permintaan } from "@/lib/permintaanDaftar";
+import { JUDUL_TEMPLAT_FASIH, labelJorong, susunPushBatal, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, CATATAN_BATAL, LABEL_STATUS_MINTA, type Permintaan } from "@/lib/permintaanDaftar";
 
 const P = (o: Partial<Permintaan>): Permintaan => ({ id: 1, idsubsls: "1303071002000101", kecamatan: "", nagari: "", sls: "", sub_sls: "", pml_id: 1, pml_nama: "", ppl_akun_id: 1, ppl_nama: "", tanggal: "2026-10-13", status: "menunggu", diminta_at: "2026-10-13T01:00:00Z", selesai_at: null, ...o });
 
@@ -114,5 +114,35 @@ describe("notifikasi sudah di-assign ke FASIH", () => {
       expect(p.isi).toContain("Keroyokan:");
       expect(p.isi).toContain("tersubmit di FASIH");
     }
+  });
+});
+
+describe("pembatalan assignment oleh PML", () => {
+  it("urutan: menunggu, sudah keluar, lalu dibatalkan", () => {
+    const a = urutPermintaan([P({ id: 3, status: "dibatalkan", selesai_at: "2026-10-13T03:00:00Z" }), P({ id: 2, status: "sudah_keluar", selesai_at: "2026-10-13T02:00:00Z" }), P({ id: 1 })]);
+    expect(a.map((x) => x.id)).toEqual([1, 2, 3]);
+  });
+  it("label status dan catatan menyebut tanpa persetujuan", () => {
+    expect(LABEL_STATUS_MINTA.dibatalkan).toBe("Dibatalkan PML");
+    expect(CATATAN_BATAL).toMatch(/tanpa persetujuan/i);
+  });
+  it("push admin: siapa membatalkan, jorong + PPL, perintah hapus di FASIH", () => {
+    const { judul, isi } = susunPushBatal("admin", "Lia Anggraini", [{ jorong: "Jorong Tembok 01", ppl: "Novi Endria Jhoni" }]);
+    expect(judul).toBe("Pembatalan assignment FASIH");
+    expect(isi).toContain("PML Lia membatalkan: Jorong Tembok 01 (Novi)");
+    expect(isi).toContain("Hapus assignment lama di FASIH");
+  });
+  it("push PPL: assignment dibatalkan, abaikan daftar", () => {
+    const { judul, isi } = susunPushBatal("ppl", "Lia Anggraini", [{ jorong: "Jorong Tembok 01", ppl: "Novi" }]);
+    expect(judul).toBe("Assignment dibatalkan PML");
+    expect(isi).toContain("Dibatalkan PML: Jorong Tembok 01");
+    expect(isi).toContain("Abaikan daftar ini");
+  });
+  it("daftar panjang tetap <= 240 dan ekor utuh", () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({ jorong: `Jorong Panjang Sekali ${i}`, ppl: "Nama Panjang" }));
+    const { isi } = susunPushBatal("admin", "Lia Anggraini", items);
+    expect(isi.length).toBeLessThanOrEqual(240);
+    expect(isi).toMatch(/lagi\)/);
+    expect(isi.endsWith("PPL-nya.")).toBe(true);
   });
 });

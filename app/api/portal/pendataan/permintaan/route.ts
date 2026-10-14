@@ -5,6 +5,8 @@
 //  GET ?admin=1       -> { sekarang, boleh_kelola, permintaan[] (+email) }       admin bencana.admin (lihat); boleh_kelola = level kelola
 //  POST { aksi:"buat", pilihan:[{idsubsls,ppl_akun_id}] }   PML tim: maks. 2 Sub SLS per hari; admin diberi push
 //  POST { aksi:"batalkan", id }                              PML tim: hanya yang masih menunggu
+//  POST { aksi:"ajukan_batal", id }                          PML tim: batalkan assignment yang SUDAH keluar di FASIH; langsung berlaku (tanpa persetujuan), admin & PPL dikabari
+//  POST { aksi:"batal_diproses", ids:[...] }                 admin level kelola: tandai pembatalan sudah dihapus di FASIH
 //  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
 //  POST { aksi:"tarik", ids:[...] }                          admin level kelola: tarik kembali "sudah keluar" -> "menunggu" (salah klik; tanpa notifikasi)
@@ -13,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
-import { batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan } from "@/lib/portal/permintaanDaftar";
+import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan } from "@/lib/portal/permintaanDaftar";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { MAKS_SUB_PER_HARI, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!b) return galat("Permintaan tidak sah.");
   try {
-    if (b.aksi === "buat" || b.aksi === "batalkan") {
+    if (b.aksi === "buat" || b.aksi === "batalkan" || b.aksi === "ajukan_batal") {
       const tim = await ambilTim(db, akun);
       if (!tim) return galat("Kartu plotting khusus anggota tim PML dan PPL.", 403);
       if (b.aksi === "buat") {
@@ -68,6 +70,11 @@ export async function POST(req: NextRequest) {
       }
       const id = Number(b.id);
       if (!Number.isInteger(id) || id <= 0) return galat("Permintaan tidak sah.");
+      if (b.aksi === "ajukan_batal") {
+        const hb = await ajukanPembatalan(db, { id: akun.id }, tim, id);
+        if ("galat" in hb) return galat(hb.galat, hb.status);
+        return NextResponse.json({ ok: true, dikirim: hb.dikirim });
+      }
       const h = await batalkanPermintaan(db, { id: akun.id }, tim, id);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true });
@@ -78,6 +85,15 @@ export async function POST(req: NextRequest) {
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await selesaikanPermintaan(db, { id: akun.id }, ids);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "batal_diproses") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menandai pembatalan.", 403);
+      const ids = periksaIds(b.ids);
+      if (!ids) return galat("Pilih minimal satu pembatalan.");
+      const h = await prosesPembatalan(db, { id: akun.id }, ids);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }

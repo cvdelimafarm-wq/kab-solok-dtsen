@@ -10,8 +10,9 @@ import { rapikanNama } from "@/lib/rekapIdentifikasi";
 export const MAKS_SUB_PER_HARI = 2;
 export const API_PERMINTAAN = "/api/portal/pendataan/permintaan";
 
-export type StatusMinta = "menunggu" | "sudah_keluar";
-export const LABEL_STATUS_MINTA: Record<StatusMinta, string> = { menunggu: "Menunggu admin", sudah_keluar: "Sudah keluar di FASIH" };
+/** "dibatalkan" hanya muncul di layar admin: pembatalan PML atas assignment yang sudah keluar dan belum dihapus di FASIH. */
+export type StatusMinta = "menunggu" | "sudah_keluar" | "dibatalkan";
+export const LABEL_STATUS_MINTA: Record<StatusMinta, string> = { menunggu: "Menunggu admin", sudah_keluar: "Sudah keluar di FASIH", dibatalkan: "Dibatalkan PML" };
 
 export type Permintaan = {
   id: number;
@@ -31,7 +32,7 @@ export type Permintaan = {
 };
 
 /** Tambahan khusus admin: email untuk templat FASIH (dari data mitra). Kosong = belum ada. */
-export type PermintaanAdmin = Permintaan & { email_pengawas: string; email_pencacah: string };
+export type PermintaanAdmin = Permintaan & { email_pengawas: string; email_pencacah: string; dibatalkan_at: string | null };
 
 export type DataPermintaanTim = {
   sekarang: string;
@@ -78,10 +79,11 @@ export function periksaIds(x: unknown, maks = 200): number[] | null {
 }
 
 const koleksi = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
-/** Menunggu dulu (paling lama di atas), lalu yang sudah keluar (terbaru di atas). */
+const URUTAN: Record<StatusMinta, number> = { menunggu: 0, sudah_keluar: 1, dibatalkan: 2 };
+/** Menunggu dulu (paling lama di atas), lalu yang sudah keluar (terbaru di atas), terakhir yang dibatalkan. */
 export function urutPermintaan<T extends Permintaan>(a: T[]): T[] {
   return [...a].sort((p, q) => {
-    if (p.status !== q.status) return p.status === "menunggu" ? -1 : 1;
+    if (p.status !== q.status) return URUTAN[p.status] - URUTAN[q.status];
     const t = p.status === "menunggu" ? p.diminta_at.localeCompare(q.diminta_at) : (q.selesai_at ?? "").localeCompare(p.selesai_at ?? "");
     return t || koleksi.compare(p.idsubsls, q.idsubsls);
   });
@@ -160,6 +162,38 @@ export function susunPushKeluar(untuk: "pml" | "ppl", items: ItemKeluar[]): { ju
   const potong = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
   const bentuk = (i: ItemKeluar) => (untuk === "pml" ? `${i.jorong} → ${namaPertama(i.ppl)}` : i.jorong);
   const ruang = MAKS_ISI_PUSH - ekor.length - awal.length - 1; // 1 = titik penutup daftar
+  const pilih: string[] = [];
+  let pakai = 0;
+  for (let k = 0; k < items.length; k++) {
+    const t = bentuk(items[k]);
+    const sisa = items.length - k - 1;
+    const tambah = (pilih.length ? 2 : 0) + t.length;
+    const cadangan = sisa > 0 ? ` (+${sisa} lagi)`.length : 0;
+    if (pakai + tambah + cadangan > ruang && pilih.length > 0) break;
+    pilih.push(pilih.length === 0 ? potong(t, Math.max(10, ruang - cadangan)) : t);
+    pakai += tambah;
+  }
+  const lagi = items.length - pilih.length;
+  const isi = `${awal}${pilih.join("; ")}${lagi > 0 ? ` (+${lagi} lagi)` : ""}.${ekor}`;
+  return { judul: judul.slice(0, MAKS_JUDUL_PUSH), isi: potong(isi, MAKS_ISI_PUSH) };
+}
+
+// ---------------------------------------------------------------- pembatalan assignment oleh PML (14 Okt 2026)
+export const CATATAN_BATAL = "Pembatalan langsung berlaku tanpa persetujuan: Sub SLS ini dan kuota harian Anda bebas lagi, jadi Anda bisa memilih ulang PPL-nya. Admin diberi tahu untuk menghapus assignment lama di FASIH.";
+
+export type ItemBatal = { jorong: string; ppl: string };
+
+/**
+ * Notifikasi pembatalan assignment. Admin: siapa yang membatalkan + apa yang harus dihapus di FASIH. PPL: assignment-nya dibatalkan, abaikan.
+ * Daftar yang panjang dipotong "(+N lagi)"; pesan akhir tetap utuh dan <= MAKS_ISI_PUSH.
+ */
+export function susunPushBatal(untuk: "admin" | "ppl", pml: string, items: ItemBatal[]): { judul: string; isi: string } {
+  const potong = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+  const judul = untuk === "admin" ? "Pembatalan assignment FASIH" : "Assignment dibatalkan PML";
+  const awal = untuk === "admin" ? `PML ${namaPertama(pml)} membatalkan: ` : "Dibatalkan PML: ";
+  const ekor = untuk === "admin" ? " Hapus assignment lama di FASIH; PML mengisi ulang PPL-nya." : " Abaikan daftar ini; jika ada penggantinya Anda dikabari.";
+  const bentuk = (i: ItemBatal) => (untuk === "admin" ? `${i.jorong} (${namaPertama(i.ppl)})` : i.jorong);
+  const ruang = MAKS_ISI_PUSH - ekor.length - awal.length - 1;
   const pilih: string[] = [];
   let pakai = 0;
   for (let k = 0; k < items.length; k++) {

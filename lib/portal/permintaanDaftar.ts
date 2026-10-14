@@ -12,12 +12,12 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
-import { MAKS_SUB_PER_HARI, labelJorong, periksaEmail, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
+import { MAKS_SUB_PER_HARI, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
 
-type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null };
+type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null; dibatalkan_at: string | null };
 type Wilayah = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string };
 
 const labelWilayah = (w: Wilayah | undefined, id: string) => (w ? `${rapikanNama(String(w.sls ?? ""))} · ${w.sub_sls} (Nagari ${rapikanNama(String(w.nagari ?? ""))})` : id);
@@ -95,27 +95,36 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
       ppl_akun_id: b.ppl_akun_id,
       ppl_nama: namaPpl.get(b.ppl_akun_id) ?? "",
       tanggal: b.tanggal,
-      status: (b.status === "sudah_keluar" ? "sudah_keluar" : "menunggu") as StatusMinta,
+      status: (b.status === "sudah_keluar" ? "sudah_keluar" : b.status === "dibatalkan" ? "dibatalkan" : "menunggu") as StatusMinta,
       diminta_at: b.diminta_at,
       selesai_at: b.selesai_at,
+      dibatalkan_at: b.dibatalkan_at,
       email_pengawas: denganEmail ? emailFasihPetugas.get(b.pml_id) ?? email.get(akunPml.get(b.pml_id) ?? -1) ?? "" : "",
       email_pencacah: denganEmail ? (pplPet != null ? emailFasihPetugas.get(pplPet) : undefined) ?? email.get(b.ppl_akun_id) ?? "" : "",
     };
   });
 }
 
-const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at";
+const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at, dibatalkan_at";
 
 /** Permintaan yang masih berlaku untuk satu tim (dilihat PML dan PPL-nya). */
 export async function permintaanTim(db: Db, pmlId: number): Promise<Permintaan[]> {
   const { data, error } = await db.from("bencana_pendataan_permintaan").select(KOLOM).eq("pml_id", pmlId).in("status", ["menunggu", "sudah_keluar"]).order("id", { ascending: false }).limit(300);
   if (error) throw new Error(error.message);
-  return (await lengkapi(db, (data ?? []) as BarisDb[], false)).map(({ email_pengawas: _a, email_pencacah: _b, ...p }) => p);
+  return (await lengkapi(db, (data ?? []) as BarisDb[], false)).map(({ email_pengawas: _a, email_pencacah: _b, dibatalkan_at: _c, ...p }) => p);
 }
 
-/** Semua permintaan yang masih berlaku (admin), lengkap dengan email untuk templat FASIH. */
+/**
+ * Semua permintaan yang masih berlaku (admin), lengkap dengan email untuk templat FASIH, ditambah pembatalan PML atas assignment yang sudah keluar
+ * dan belum ditandai dihapus di FASIH (status "dibatalkan").
+ */
 export async function permintaanSemua(db: Db): Promise<PermintaanAdmin[]> {
-  const { data, error } = await db.from("bencana_pendataan_permintaan").select(KOLOM).in("status", ["menunggu", "sudah_keluar"]).order("id", { ascending: false }).limit(500);
+  const { data, error } = await db
+    .from("bencana_pendataan_permintaan")
+    .select(KOLOM)
+    .or("status.in.(menunggu,sudah_keluar),and(status.eq.dibatalkan,selesai_at.not.is.null,batal_diproses_at.is.null)")
+    .order("id", { ascending: false })
+    .limit(500);
   if (error) throw new Error(error.message);
   return lengkapi(db, (data ?? []) as BarisDb[], true);
 }
@@ -176,6 +185,60 @@ export async function batalkanPermintaan(db: Db, akun: { id: number }, tim: Tim,
   if (!upd || upd.length === 0) return { galat: "Permintaan ini sudah berubah status.", status: 409 };
   await catatAudit(db, akun.id, "pendataan_minta_batal", { permintaan: id, idsubsls: s.idsubsls }).catch(() => undefined);
   return { ok: true };
+}
+
+/**
+ * PML mengajukan pembatalan assignment yang SUDAH keluar di FASIH. Langsung berlaku tanpa persetujuan (permintaan user 14 Okt 2026): status jadi
+ * "dibatalkan" sehingga kuota harian PML dan Sub SLS-nya bebas, PML bisa memilih ulang PPL. Admin dan PPL penerima dikabari; admin menghapus
+ * assignment lama di FASIH lalu menandainya (prosesPembatalan). Kegagalan push tidak menggagalkan pembatalan.
+ */
+export async function ajukanPembatalan(db: Db, akun: { id: number }, tim: Tim, id: number): Promise<{ ok: true; dikirim: number } | Galat> {
+  if (tim.saya.peran !== "pml") return { galat: "Hanya PML yang dapat mengajukan pembatalan.", status: 403 };
+  const { data: s } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, status, idsubsls, ppl_akun_id").eq("id", id).maybeSingle();
+  if (!s || s.pml_id !== tim.pml.id) return { galat: "Permintaan tidak ditemukan.", status: 404 };
+  if (s.status !== "sudah_keluar") return { galat: "Pembatalan assignment hanya untuk yang sudah keluar di FASIH. Yang masih menunggu cukup dibatalkan biasa.", status: 409 };
+  const { data: upd, error } = await db
+    .from("bencana_pendataan_permintaan")
+    .update({ status: "dibatalkan", dibatalkan_oleh: akun.id, dibatalkan_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "sudah_keluar")
+    .select("id");
+  if (error) return { galat: "Pembatalan gagal. Coba lagi.", status: 500 };
+  if (!upd || upd.length === 0) return { galat: "Permintaan ini sudah berubah status.", status: 409 };
+  await catatAudit(db, akun.id, "pendataan_minta_batal_fasih", { permintaan: id, idsubsls: s.idsubsls, ppl_akun_id: s.ppl_akun_id }).catch(() => undefined);
+
+  let dikirim = 0;
+  try {
+    const [wil, { data: ppl }, admin] = await Promise.all([petaWilayah(db, [s.idsubsls as string]), db.from("sigap_akun").select("id, nama").eq("id", s.ppl_akun_id as number).maybeSingle(), akunAdminBencana(db)]);
+    const w = wil.get(s.idsubsls as string);
+    const jorong = w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : (s.idsubsls as string);
+    const namaPpl = String(ppl?.nama ?? "PPL");
+    const a = susunPushBatal("admin", tim.pml.nama, [{ jorong, ppl: namaPpl }]);
+    const h1 = await kirimKeAkun(db, gabungPenerima([admin], akun.id), { judul: a.judul, isi: a.isi, url: "/sigap/kelola/pendataan", tag: `batal-fasih-${id}` });
+    const p = susunPushBatal("ppl", tim.pml.nama, [{ jorong, ppl: namaPpl }]);
+    const h2 = await kirimKeAkun(db, [s.ppl_akun_id as number], { judul: p.judul, isi: p.isi, url: "/sigap/pendataan", tag: `batal-ppl-${id}` });
+    dikirim = h1.terkirim + h2.terkirim;
+  } catch (e) {
+    console.error("[batal fasih push]", e instanceof Error ? e.message : e);
+  }
+  return { ok: true, dikirim };
+}
+
+/** Admin menandai pembatalan sudah dihapus di FASIH (hilang dari daftar "Perlu dihapus di FASIH"). */
+export async function prosesPembatalan(db: Db, akun: { id: number }, ids: number[]): Promise<{ diproses: number } | Galat> {
+  const { data, error } = await db
+    .from("bencana_pendataan_permintaan")
+    .update({ batal_diproses_oleh: akun.id, batal_diproses_at: new Date().toISOString() })
+    .in("id", ids)
+    .eq("status", "dibatalkan")
+    .not("selesai_at", "is", null)
+    .is("batal_diproses_at", null)
+    .select("id");
+  if (error) return { galat: "Gagal menandai. Coba lagi.", status: 500 };
+  const baris = (data ?? []) as { id: number }[];
+  if (!baris.length) return { galat: "Tidak ada pembatalan yang cocok (mungkin sudah ditandai).", status: 409 };
+  await catatAudit(db, akun.id, "pendataan_batal_fasih_diproses", { permintaan: baris.map((b) => b.id) }).catch(() => undefined);
+  return { diproses: baris.length };
 }
 
 /** Admin menandai permintaan "sudah keluar di FASIH". PML dan PPL tiap permintaan diberi tahu. */

@@ -12,7 +12,7 @@ import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
-type Saring = "menunggu" | "sudah_keluar";
+type Saring = "menunggu" | "sudah_keluar" | "dibatalkan";
 
 const namaSub = (p: Pick<PermintaanAdmin, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} · Nagari ${rapikanNama(p.nagari)}`;
 
@@ -22,7 +22,7 @@ export default function PermintaanDaftar() {
   const [saring, setSaring] = useState<Saring>("menunggu");
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [yakin, setYakin] = useState(false);
-  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | null>(null);
+  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | "hapus" | null>(null);
   const [yakinTarik, setYakinTarik] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
   const [surel, setSurel] = useState<Record<string, string>>({});
@@ -46,11 +46,15 @@ export default function PermintaanDaftar() {
   const semua = useMemo(() => urutPermintaan(data?.permintaan ?? []), [data]);
   const menunggu = useMemo(() => semua.filter((p) => p.status === "menunggu"), [semua]);
   const keluar = useMemo(() => semua.filter((p) => p.status === "sudah_keluar"), [semua]);
-  const tampil = saring === "menunggu" ? menunggu : keluar;
+  const batal = useMemo(() => semua.filter((p) => p.status === "dibatalkan"), [semua]);
+  const batalPerSub = useMemo(() => new Set(batal.map((p) => p.idsubsls)), [batal]);
+  const tampil = saring === "menunggu" ? menunggu : saring === "sudah_keluar" ? keluar : batal;
   const dipilih = useMemo(() => semua.filter((p) => pilih.has(p.id)), [semua, pilih]);
   const dipilihMenunggu = dipilih.filter((p) => p.status === "menunggu");
   const dipilihKeluar = dipilih.filter((p) => p.status === "sudah_keluar");
-  const tanpaSurel = dipilih.filter(tanpaEmail).length;
+  const dipilihAktif = dipilih.filter((p) => p.status !== "dibatalkan"); // pembatalan tidak ikut templat FASIH
+  const dipilihBatal = dipilih.filter((p) => p.status === "dibatalkan");
+  const tanpaSurel = dipilihAktif.filter(tanpaEmail).length;
   const boleh = !!data?.boleh_kelola;
 
   function centang(id: number) {
@@ -69,12 +73,12 @@ export default function PermintaanDaftar() {
   };
 
   async function ekspor() {
-    if (dipilih.length === 0 || sibuk) return;
+    if (dipilihAktif.length === 0 || sibuk) return;
     setSibuk("ekspor");
     setPesan(null);
     try {
       const XLSX = await import("xlsx");
-      const baris = barisTemplatFasih(dipilih);
+      const baris = barisTemplatFasih(dipilihAktif);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(baris, { header: [...JUDUL_TEMPLAT_FASIH] }), "Sheet0");
       XLSX.writeFile(wb, namaBerkasTemplat(tanggalWib(Date.now())));
@@ -140,6 +144,22 @@ export default function PermintaanDaftar() {
     }
   }
 
+  async function hapusSudah() {
+    if (dipilihBatal.length === 0 || sibuk) return;
+    setSibuk("hapus");
+    setPesan(null);
+    try {
+      const h = await apiPortal<{ diproses: number }>(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "batal_diproses", ids: dipilihBatal.map((p) => p.id) }) });
+      setPesan(`${h.diproses} pembatalan ditandai sudah dihapus di FASIH.`);
+      setPilih(new Set());
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menandai. Coba lagi.");
+    } finally {
+      setSibuk(null);
+    }
+  }
+
   const tombolSaring = (k: Saring, teks: string, n: number) => (
     <button key={k} type="button" aria-pressed={saring === k} onClick={() => { setSaring(k); setYakin(false); setYakinTarik(false); }} className={`min-h-[40px] flex-1 rounded-full px-3 text-[12.5px] font-extrabold ${saring === k ? "bg-[#0F2A52] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
       {teks} <b>{n}</b>
@@ -155,14 +175,21 @@ export default function PermintaanDaftar() {
         </button>
       </div>
       <p className="mt-1 text-[12.5px] leading-snug text-[#55657D]">
-        PML memilih maksimal 2 Sub SLS per hari beserta PPL-nya. Alurnya: <b>Ekspor templat FASIH</b> → unggah dan assign di FASIH → <b>Tandai sudah keluar</b>. PML dan PPL langsung dikabari lewat notifikasi dan status di kartu plotting mereka berubah.
+        PML memilih maksimal 2 Sub SLS per hari beserta PPL-nya. Alurnya: <b>Ekspor templat FASIH</b> → unggah dan assign di FASIH → <b>Tandai sudah keluar</b>. PML dan PPL langsung dikabari lewat notifikasi dan status di kartu plotting mereka berubah. PML juga dapat <b>mengajukan pembatalan</b> assignment yang sudah keluar; itu langsung berlaku tanpa persetujuan, dan tab <b>Hapus di FASIH</b> mencatat assignment lama yang perlu Anda hapus di FASIH.
       </p>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
       <div className="mt-3 flex gap-2" role="group" aria-label="Saring status">
         {tombolSaring("menunggu", LABEL_STATUS_MINTA.menunggu, menunggu.length)}
         {tombolSaring("sudah_keluar", "Sudah keluar", keluar.length)}
+        {tombolSaring("dibatalkan", "Hapus di FASIH", batal.length)}
       </div>
+      {batal.length > 0 && saring !== "dibatalkan" && (
+        <p className="mt-2 rounded-[12px] bg-[#FDE8E8] px-3 py-2 text-[12.5px] font-bold text-[#7A1D22]">
+          {batal.length} assignment dibatalkan PML dan perlu dihapus di FASIH.{" "}
+          <button type="button" onClick={() => { setSaring("dibatalkan"); setYakin(false); setYakinTarik(false); }} className="underline">Lihat daftar</button>
+        </p>
+      )}
 
       <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
         <p>{CATATAN_CEK_SUBMIT}</p>
@@ -171,7 +198,7 @@ export default function PermintaanDaftar() {
         </p>
       </div>
 
-      {data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : "Belum ada permintaan yang ditandai sudah keluar."}</p>}
+      {data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : saring === "sudah_keluar" ? "Belum ada permintaan yang ditandai sudah keluar." : "Tidak ada pembatalan yang perlu dihapus di FASIH."}</p>}
 
       {tampil.length > 0 && (
         <>
@@ -191,10 +218,13 @@ export default function PermintaanDaftar() {
                     <small className="block text-[11.5px] text-[#6B7A90]">
                       Diminta {waktuRingkas(p.diminta_at)}
                       {p.selesai_at ? ` · keluar ${waktuRingkas(p.selesai_at)}` : ""}
+                      {p.status === "dibatalkan" && p.dibatalkan_at ? ` · dibatalkan PML ${waktuRingkas(p.dibatalkan_at)}` : ""}
                     </small>
+                    {p.status === "dibatalkan" && <small className="mt-0.5 block text-[11.5px] font-bold text-[#B42329]">Hapus assignment {p.ppl_nama} untuk Sub SLS ini di FASIH. PML sudah bisa memilih PPL pengganti.</small>}
+                    {p.status === "menunggu" && batalPerSub.has(p.idsubsls) && <small className="mt-0.5 block text-[11.5px] font-bold text-[#B42329]">Sub SLS ini punya pembatalan lama yang belum dihapus di FASIH; hapus dulu sebelum meng-assign ulang.</small>}
                   </span>
                 </label>
-                {tanpaEmail(p) && (
+                {p.status !== "dibatalkan" && tanpaEmail(p) && (
                   <div className="space-y-1.5 px-3 pb-3 pl-[52px]">
                     {([["pengawas", "PML", p.email_pengawas], ["pencacah", "PPL", p.email_pencacah]] as [PeranEmail, string, string][])
                       .filter(([, , v]) => !v.trim())
@@ -224,9 +254,19 @@ export default function PermintaanDaftar() {
 
       {dipilih.length > 0 && (
         <div className="mt-3 space-y-2">
-          <button type="button" disabled={sibuk !== null} onClick={() => void ekspor()} className="min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
-            {sibuk === "ekspor" ? "Membuat Excel…" : `Ekspor templat FASIH (${dipilih.length} Sub SLS)`}
-          </button>
+          {dipilihAktif.length > 0 && (
+            <button type="button" disabled={sibuk !== null} onClick={() => void ekspor()} className="min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
+              {sibuk === "ekspor" ? "Membuat Excel…" : `Ekspor templat FASIH (${dipilihAktif.length} Sub SLS)`}
+            </button>
+          )}
+          {dipilihBatal.length > 0 &&
+            (boleh ? (
+              <button type="button" disabled={sibuk !== null} onClick={() => void hapusSudah()} className="min-h-[50px] w-full rounded-[14px] bg-[#0F2A52] px-4 text-[14px] font-extrabold text-white disabled:opacity-50">
+                {sibuk === "hapus" ? "Menandai…" : `Sudah dihapus di FASIH (${dipilihBatal.length})`}
+              </button>
+            ) : (
+              <p className="text-[12.5px] text-[#6B7A90]">Menandai pembatalan butuh izin kelola pendataan.</p>
+            ))}
           {tanpaSurel > 0 && <p className="text-[12px] font-bold text-[#B42329]">{tanpaSurel} baris terpilih email-nya kosong; kolomnya dikosongkan di Excel.</p>}
 
           {dipilihMenunggu.length > 0 &&
