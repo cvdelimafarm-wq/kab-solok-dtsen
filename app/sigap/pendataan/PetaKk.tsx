@@ -7,6 +7,7 @@
 //   titik abu kecil = belum didata. Inisial PPL muncul saat diperbesar (>= 2,2x) karena warna saja kurang aman (biru dan ungu mirip pada titik tersebar).
 // Tahap 1: kanvas titik tanpa peta dasar (nol unduhan, langsung tampil walau tanpa sinyal). Peta jalan vektor offline menyusul di tahap 2.
 // Geser 1 jari, cubit 2 jari (tombol +/- ada di halaman); ketuk titik untuk membuka kartu KK.
+// (14 Okt 2026) Desain ringkas: kanvas mengisi wadah induknya (h-full w-full; dulu rasio tetap 360:440 maks. 64vh) -- permintaan user, tampilan saja.
 
 import { useRef } from "react";
 import { WARNA_BELUM, WARNA_PML, warnaIndeks, type Anggota, type KkLembar, type Proyeksi } from "@/lib/pendataan";
@@ -98,7 +99,9 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
     const dy = baru.y - lama.y;
     if (!gerak.current.geser && Math.abs(dx) + Math.abs(dy) < 3) return;
     gerak.current.geser = true;
-    const sk = L / pandang.z / (svg.current.clientWidth || L);
+    // (14 Okt 2026) kanvas kini mengisi sisa layar (tinggi bebas): skala "meet" = sisi terpendek yang menentukan
+    const skala = Math.min((svg.current.clientWidth || L) / (L / pandang.z), (svg.current.clientHeight || T) / (T / pandang.z));
+    const sk = 1 / skala;
     setPandang((p) => klem({ ...p, cx: p.cx - dx * sk, cy: p.cy - dy * sk }));
   }
   function lepas(e: React.PointerEvent) {
@@ -127,8 +130,7 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
       viewBox={viewBox}
       role="img"
       aria-label="Sebaran titik KK pada Sub SLS"
-      className="block h-auto w-full touch-none select-none bg-[#EEF2F7]"
-      style={{ aspectRatio: `${L} / ${T}`, maxHeight: "64vh" }}
+      className="block h-full w-full touch-none select-none bg-[#EEF2F7]"
       onPointerDown={bawah}
       onPointerMove={pindah}
       onPointerUp={lepas}

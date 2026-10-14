@@ -13,7 +13,7 @@ import PilihSebagai, { type HasilSebagai } from "@/app/portal/PilihSebagai";
 import { bacaLihatSebagai, bacaSesiAsli, kembaliKeAkunSaya, mulaiLihatSebagai, type LihatSebagai } from "@/app/portal/sesi";
 import { EVENT_SIMULASI } from "@/app/portal/simulasi"; // memasang penahan penulisan sejak modul dimuat
 
-const TINGGI = 36;
+const TINGGI = 30; // (14 Okt 2026) pita tipis 30 px -- permintaan user (desain ringkas Lembar Pendataan)
 
 export default function BannerLihatSebagai() {
   const [info, setInfo] = useState<LihatSebagai | null>(null);
@@ -31,8 +31,11 @@ export default function BannerLihatSebagai() {
     if (!info) return;
     const lama = document.body.style.paddingTop;
     document.body.style.paddingTop = `${TINGGI}px`;
+    // (14 Okt 2026) halaman layar penuh (Lembar Pendataan) memakai --tinggi-banner agar tinggi minimumnya tidak melebihi layar
+    document.documentElement.style.setProperty("--tinggi-banner", `${TINGGI}px`);
     return () => {
       document.body.style.paddingTop = lama;
+      document.documentElement.style.removeProperty("--tinggi-banner");
     };
   }, [info]);
 
@@ -71,12 +74,21 @@ export default function BannerLihatSebagai() {
 
   return (
     <>
-      <div role="status" className="fixed inset-x-0 top-0 z-[10000] flex items-center justify-between gap-2 bg-[#B45309] px-3 text-[12.5px] font-semibold text-white shadow-md" style={{ height: TINGGI }}>
-        <span className="min-w-0 truncate">👁 Melihat sebagai <b>{info.nama}</b> · simulasi, tidak ada data yang dikirim</span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => setGanti(true)} className="rounded-md bg-white/15 px-2 py-1 text-[12px] font-bold hover:bg-white/25">Ganti</button>
-          <button type="button" onClick={kembali} className="rounded-md bg-white px-2 py-1 text-[12px] font-bold text-[#B45309] hover:bg-[#FFF4E5]">Kembali ke akun saya</button>
+      {/* (14 Okt 2026) satu pita tipis: ikon mata, "Melihat sebagai <nama>", Ganti, Kembali. Mode tetap simulasi (tidak ada data dikirim): lihat aria-label dan catatan di bawah. */}
+      <div role="status" aria-label={`Melihat sebagai ${info.nama}. Simulasi, tidak ada data yang dikirim.`} className="fixed inset-x-0 top-0 z-[10000] flex items-center gap-2 bg-[#B8560F] px-3 text-[12px] font-bold text-white shadow-md" style={{ height: TINGGI }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[15px] w-[15px] flex-none fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <span className="min-w-0 flex-1 truncate">
+          Melihat sebagai <b>{info.nama}</b>
         </span>
+        <button type="button" onClick={() => setGanti(true)} className="h-full flex-none px-1 text-[12px] font-bold opacity-90">
+          Ganti
+        </button>
+        <button type="button" onClick={kembali} className="h-full flex-none px-1 text-[12px] font-bold underline">
+          Kembali
+        </button>
       </div>
       {catatan && (
         <div role="status" className="fixed inset-x-0 z-[10000] mx-auto w-fit max-w-[92vw] rounded-b-[12px] bg-[#7C3A06] px-3 py-1.5 text-center text-[12px] font-semibold text-white shadow-md" style={{ top: TINGGI }}>
