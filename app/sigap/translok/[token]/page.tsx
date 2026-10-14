@@ -1,12 +1,14 @@
 "use client";
 
-import { use as usePromise, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use as usePromise, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import LogoSigap from "@/app/components/LogoSigap";
 import { keAtas } from "@/app/portal/navigasi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
+import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
+import { bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -70,10 +72,20 @@ type Data = {
   penugasan: Pen[];
   lokasi_opsi: { wilayah_tim: (Lokasi & { sub_sls: string })[]; master: Lokasi[] };
   kecamatan_opsi: string[];
+  /** (14 Okt 2026) nomor WhatsApp admin anggaran (62...) untuk tombol "Minta izin susulan"; null = tombol tidak tampil */
+  wa_admin?: string | null;
 };
 type Tab = "hari_ini" | "hari_kerja" | "arsip";
 
+// (14 Okt 2026) Tautan dalam dari pengingat/kartu Beranda: ?tab=&tgl=&fokus= membuka tab, hari, dan bagian (laporan/foto) yang kurang, lalu menyorotnya
+// sebentar. Konteks ini dibaca kartu hari (sorot, tombol WhatsApp izin susulan) dan daftar hari kerja (hari yang dibuka otomatis).
+type FokusKerja = { tgl: string | null; bagian: BagianKerja | null };
+const FokusCtx = createContext<{ fokus: FokusKerja | null; bukaTgl: string | null; waAdmin: string | null; namaPetugas: string | null }>({ fokus: null, bukaTgl: null, waAdmin: null, namaPetugas: null });
+const SOROT = "rounded-2xl ring-4 ring-[#F5B841] ring-offset-2 ring-offset-[#EEF2F8] transition";
+
 const JUMLAH_FOTO = 5;
+/** (14 Okt 2026) batas angka laporan per hari; sama dengan penolakan di server (api/sigap/translok POST realisasi). */
+const MAKS_JUMLAH = 500;
 /** (7 Okt 2026) jumlah foto & wajib laporan mengikuti pengaturan kegiatan. */
 const nFoto = (pen: Pen) => pen.kegiatan.jumlah_foto ?? JUMLAH_FOTO;
 const wajibLaporan = (pen: Pen) => pen.kegiatan.wajib_laporan !== false;
@@ -149,17 +161,29 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   const [unduhFab, setUnduhFab] = useState(false); // (6 Okt 2026) pintasan Unduh SPJ (tombol melayang)
   const [langkah, setLangkah] = useState<number | null>(null); // null = panduan tidak tampil
   const [, setDetik] = useState(0);
+  // (14 Okt 2026) true hanya bila server menjawab 404 "Sesi tidak valid" (token tidak dikenal): hanya itu yang menawarkan "Masuk kembali".
+  const [sesiTidakSah, setSesiTidakSah] = useState(false);
+  // (14 Okt 2026) tautan dalam dari pengingat/kartu Beranda (?tab=&tgl=&fokus=), diterapkan sekali setelah data siap
+  const [fokus, setFokus] = useState<FokusKerja | null>(null);
+  const [bukaTgl, setBukaTgl] = useState<string | null>(null);
+  const tautanDiterapkan = useRef(false);
 
   const muat = useCallback(async () => {
     try {
       const res = await fetch(`/api/sigap/translok/${token}`, { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? "Gagal memuat.");
+      // (14 Okt 2026) jawaban 502/HTML tidak lagi menjadi layar galat mentah: dibaca aman, lalu dibedakan menurut status
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setSesiTidakSah(res.status === 404);
+        throw new Error(json?.error ?? (res.status >= 500 ? "Server sedang sibuk. Coba lagi sebentar lagi." : "Gagal memuat."));
+      }
       setData(json as Data);
       setLoadError(null);
+      setSesiTidakSah(false);
       setLangkah((l) => (l === null && !(json as Data).akun.onboarding_selesai ? 1 : l));
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Gagal memuat.");
+      // gagal sambung (TypeError dari fetch) = jaringan, bukan sesi habis
+      setLoadError(e instanceof TypeError ? "Koneksi terputus. Periksa sinyal, lalu coba lagi." : e instanceof Error ? e.message : "Gagal memuat.");
     }
   }, [token]);
   useEffect(() => {
@@ -193,6 +217,35 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     );
   }, [data, penId]);
 
+  // (14 Okt 2026) Terapkan tautan dalam sekali, setelah data siap dan panduan login pertama tidak sedang tampil:
+  // buka tab/hari yang dituju, sorot bagian yang kurang, lalu bersihkan alamat (muat ulang halaman = tampilan biasa).
+  useEffect(() => {
+    if (!data || !pen || langkah !== null || tautanDiterapkan.current) return;
+    tautanDiterapkan.current = true;
+    try {
+      const f = bacaTautanKerja(window.location.search, pen.hari.map((h) => h.tanggal), data.hari_ini);
+      if (!f) return;
+      setTab(f.tab);
+      setBukaTgl(f.tgl);
+      if (f.tgl) setFokus({ tgl: f.tgl, bagian: f.fokus });
+      window.history.replaceState(window.history.state, "", tanpaTautanKerja(window.location.pathname, window.location.search));
+    } catch {
+      /* abaikan */
+    }
+  }, [data, pen, langkah]);
+  // gulir ke bagian yang dituju (setelah tab tampil), sorot beberapa detik
+  useEffect(() => {
+    if (!fokus?.tgl) return;
+    const id = fokus.bagian ? `bag-${fokus.bagian}-${fokus.tgl}` : `hari-${fokus.tgl}`;
+    const t1 = setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+    const t2 = setTimeout(() => setFokus(null), 6000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [fokus]);
+  const ctxFokus = useMemo(() => ({ fokus, bukaTgl, waAdmin: data?.wa_admin ?? null, namaPetugas: data?.akun.nama ?? null }), [fokus, bukaTgl, data]);
+
   function keluar() {
     try {
       localStorage.removeItem(KUNCI_SESI);
@@ -204,13 +257,26 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     window.location.replace("/"); // (7 Okt 2026) portal satu login
   }
 
-  if (loadError)
+  // (14 Okt 2026) Layar galat penuh HANYA bila belum ada data sama sekali atau sesi memang tidak sah. Galat sementara sesudah data tampil
+  // (mis. sinyal putus tepat setelah menyimpan) menjadi spanduk kecil di atas halaman -- halaman tidak lagi hilang.
+  if (loadError && (!data || sesiTidakSah))
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#EEF2F8] px-6 text-center">
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{loadError}</p>
-        <button type="button" onClick={keluar} className="text-sm font-bold text-[#0F3D7A] underline">
-          Masuk kembali
-        </button>
+        {!sesiTidakSah && (
+          <button type="button" onClick={() => { setLoadError(null); muat(); }} className="rounded-xl bg-[#0F3D7A] px-5 py-3 text-sm font-extrabold text-white">
+            Coba lagi
+          </button>
+        )}
+        {sesiTidakSah ? (
+          <button type="button" onClick={keluar} className="text-sm font-bold text-[#0F3D7A] underline">
+            Masuk kembali
+          </button>
+        ) : (
+          <button type="button" onClick={() => window.location.replace("/")} className="text-sm font-bold text-[#0F3D7A] underline">
+            Ke Beranda
+          </button>
+        )}
       </main>
     );
   if (!data || !pen)
@@ -302,6 +368,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
 
   // ---------------- BERANDA (3 TAB) ----------------
   return (
+    <FokusCtx.Provider value={ctxFokus}>
     <main className="min-h-screen bg-[#EEF2F8] pb-44 text-[#13213A]">
       <Header
         kecil={tab === "hari_ini" ? "SIGAP · Transport Lokal" : tab === "hari_kerja" ? "Hari Kerja" : "Arsip Dokumen"}
@@ -328,6 +395,14 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </Header>
 
       <div className="relative z-10 mx-auto -mt-7 max-w-lg space-y-3 px-4">
+        {loadError && (
+          <div role="alert" className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-900">
+            <span className="flex-1">{loadError} Yang tampil adalah data terakhir.</span>
+            <button type="button" onClick={() => { setLoadError(null); muat(); }} className="shrink-0 rounded-lg bg-[#0F3D7A] px-3 py-1.5 text-[12.5px] font-extrabold text-white">
+              Coba lagi
+            </button>
+          </div>
+        )}
         {pen.status_periode === "arsip" && !pen.dikunci_at && (
           <p className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[13px] font-semibold text-slate-700">
             Kegiatan ini sudah ditutup{pen.ditutup_pada ? ` sejak ${pen.ditutup_pada}` : ""} dan menjadi arsip baca-saja. Bila perlu koreksi, hubungi PJ kegiatan atau admin anggaran.
@@ -391,6 +466,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         </div>
       </nav>
     </main>
+    </FokusCtx.Provider>
   );
 }
 
@@ -884,6 +960,22 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
 
 function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto" }) {
   const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin");
+  const { fokus, waAdmin, namaPetugas } = useContext(FokusCtx);
+  const sorotLaporan = fokus?.tgl === hari.tanggal && fokus.bagian === "laporan";
+  const sorotFoto = fokus?.tgl === hari.tanggal && fokus.bagian === "foto";
+  // (14 Okt 2026) tombol WhatsApp ke admin dengan teks izin susulan terisi (hanya bila nomor admin diatur di server)
+  const linkIzin =
+    waAdmin && hari.kunci === "terlewat" && !hari.lengkap
+      ? tautanWaIzinSusulan(waAdmin, {
+          namaPetugas,
+          namaKegiatan: pen.kegiatan.nama,
+          tanggal: hari.tanggal,
+          kurang: ringkasKurang(
+            bagianKurang({ laporan: !!hari.realisasi, slot: hari.foto.map((f) => f.slot), dianggap: !!hari.laporan_dianggap }, { jenis: "pendataan", wajib_laporan: wajibLaporan(pen), jumlah_foto: nFoto(pen) }),
+            { jenis: "pendataan", wajib_laporan: wajibLaporan(pen), jumlah_foto: nFoto(pen) }
+          ),
+        })
+      : null;
   return (
     <>
       {hari.kunci !== "hari_ini" && (
@@ -901,6 +993,11 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
         <div className="rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-red-900">
           <p className="text-[14px] font-extrabold">🔒 Batas waktu tanggal ini sudah lewat</p>
           <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, hubungi admin anggaran untuk izin susulan.</p>
+          {linkIzin && (
+            <a href={linkIzin} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#1E7A4C] px-4 text-[13.5px] font-extrabold text-white">
+              Minta izin susulan ke admin (WhatsApp)
+            </a>
+          )}
         </div>
       )}
       {hanya !== "foto" && wajibLaporan(pen) && hari.laporan_dianggap && hari.otomatis && (
@@ -911,15 +1008,28 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
           </p>
         </div>
       )}
-      {hanya !== "foto" && wajibLaporan(pen) && <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />}
-      {hanya !== "laporan" && <PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />}
+      {hanya !== "foto" && wajibLaporan(pen) && (
+        <div id={`bag-laporan-${hari.tanggal}`} className={sorotLaporan ? SOROT : undefined}>
+          <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />
+        </div>
+      )}
+      {hanya !== "laporan" && (
+        <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
+          <PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />
+        </div>
+      )}
     </>
   );
 }
 
 // ---------------- Daftar hari kerja (tab Hari Kerja) ----------------
 function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void> }) {
-  const [buka, setBuka] = useState<string | null>(null);
+  // (14 Okt 2026) hari yang dituju tautan dalam (mis. dari pengingat "13 Okt belum lengkap") terbuka otomatis dan disorot
+  const { bukaTgl, fokus } = useContext(FokusCtx);
+  const [buka, setBuka] = useState<string | null>(bukaTgl);
+  useEffect(() => {
+    if (bukaTgl) setBuka(bukaTgl);
+  }, [bukaTgl]);
   if (pen.hari.length === 0) return null;
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm">
@@ -935,7 +1045,7 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
             : { t: `${wajibLaporan(pen) ? `${h.realisasi || h.laporan_dianggap ? "Laporan ✓" : "Laporan –"} · ` : ""}${h.foto.length}/${nFoto(pen)} foto`, c: "bg-amber-50 text-amber-800" };
           const d = tglObj(h.tanggal);
           return (
-            <div key={h.tanggal}>
+            <div key={h.tanggal} id={`hari-${h.tanggal}`} className={fokus?.tgl === h.tanggal && !fokus.bagian ? SOROT : undefined}>
               <button type="button" onClick={() => setBuka((b) => (b === h.tanggal ? null : h.tanggal))} className="flex w-full items-center gap-3 py-2.5 text-left">
                 <span className="w-11 shrink-0 text-center">
                   <span className="block text-[10px] font-bold text-[#8592A8]">{HARI[d.getUTCDay()]}</span>
@@ -1363,6 +1473,8 @@ function FormRealisasi({
   const SELECT = "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-[14px] outline-none focus:border-[#0F3D7A] disabled:bg-slate-50";
   const tersimpan = !!hari.realisasi;
   const banding = oto ? bandingkanOtomatis({ lokasi, jumlah: jumlah === "" ? null : Number(jumlah) }, oto) : null;
+  // (14 Okt 2026) Isian yang BERBEDA dari hasil lembar (lokasi atau jumlah) wajib disertai alasan singkat di kolom Kendala -- supaya selisih dengan data lembar tercatat.
+  const butuhAlasan = !!banding && !banding.semuaSama && kendala.trim().length < 5;
   const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi" : "Lembar Pendataan";
   function pakaiOtomatis() {
     if (!oto) return;
@@ -1482,16 +1594,21 @@ function FormRealisasi({
           inputMode="numeric"
           disabled={!boleh}
           value={jumlah}
-          onChange={(e) => setJumlah(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          onChange={(e) => {
+            // (14 Okt 2026) batas 500 sama dengan server (sebelumnya HP menerima sampai 999 lalu ditolak saat simpan)
+            const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+            setJumlah(v !== "" && Number(v) > MAKS_JUMLAH ? String(MAKS_JUMLAH) : v);
+          }}
           placeholder="0"
           className="h-12 w-full rounded-xl border border-slate-300 text-center text-[22px] font-extrabold outline-none focus:border-[#0F3D7A] disabled:bg-slate-50"
         />
-        <button type="button" disabled={!boleh} onClick={() => setJumlah((v) => String((Number(v) || 0) + 1))} className="h-12 w-12 shrink-0 rounded-xl border border-slate-300 text-[20px] font-bold disabled:opacity-40">＋</button>
+        <button type="button" disabled={!boleh} onClick={() => setJumlah((v) => String(Math.min(MAKS_JUMLAH, (Number(v) || 0) + 1)))} className="h-12 w-12 shrink-0 rounded-xl border border-slate-300 text-[20px] font-bold disabled:opacity-40">＋</button>
       </div>
 
       {/* Kendala */}
       <p className="mb-1.5 mt-4 text-[13px] font-bold text-slate-700">
-        Kendala / catatan <span className="font-normal text-slate-500">(opsional)</span>
+        Kendala / catatan{" "}
+        {banding && !banding.semuaSama ? <span className="font-bold text-amber-800">(wajib: isian berbeda dari lembar)</span> : <span className="font-normal text-slate-500">(opsional)</span>}
       </p>
       <textarea
         disabled={!boleh}
@@ -1503,10 +1620,15 @@ function FormRealisasi({
       />
 
       {pesan && <p className={`mt-2 text-[13px] font-semibold ${pesan.ok ? "text-emerald-700" : "text-red-700"}`}>{pesan.ok ? "✓ " : "⚠ "}{pesan.teks}</p>}
+      {boleh && butuhAlasan && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] font-semibold text-amber-900">
+          Isian berbeda dari {oto ? LABEL_SUMBER[oto.sumber] : "lembar"} ({oto?.jumlah} {sat}). Tuliskan alasan singkat di kolom Kendala (minimal 5 huruf), atau tekan Pakai data otomatis.
+        </p>
+      )}
       {boleh && (
         <button
           type="button"
-          disabled={busy || lokasi.length === 0 || jumlah === ""}
+          disabled={busy || lokasi.length === 0 || jumlah === "" || butuhAlasan}
           onClick={simpan}
           className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50"
         >

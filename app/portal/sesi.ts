@@ -4,6 +4,8 @@
 // sigap_token) supaya halaman SIGAP lama langsung ikut masuk. Kunci penyisiran SAMA dgn
 // app/seruti/penyisiran-usaha.tsx (TOKEN_KEY dst.) supaya /penyisiran langsung terbuka tanpa login ulang.
 
+import { alamatMasukDengan, bersihkanTujuan } from "@/lib/sigapTujuan";
+
 export const KUNCI = {
   sesi: "sigap_sesi",
   sampai: "sigap_sesi_sampai",
@@ -204,12 +206,17 @@ export function kembaliKeAkunSaya(): boolean {
   }, false);
 }
 
-/** ?lanjut= yg aman (path internal saja). */
+/** ?lanjut= yg aman (path internal saja). (14 Okt 2026) diperketat: tolak "/\host", "..", karakter kontrol -- lihat lib/sigapTujuan.ts */
 export function tujuanLanjut(): string | null {
-  return aman(() => {
-    const l = new URLSearchParams(window.location.search).get("lanjut");
-    return l && l.startsWith("/") && !l.startsWith("//") ? l : null;
-  }, null);
+  return aman(() => bersihkanTujuan(new URLSearchParams(window.location.search).get("lanjut")), null);
+}
+
+/**
+ * (14 Okt 2026) Alamat tujuan saat sesi berakhir di sebuah halaman SIGAP: "/?lanjut=<halaman ini>" supaya sesudah masuk petugas kembali ke halaman yang sama
+ * (mis. tahapan kegiatan atau tahap yang dibuka dari pengingat/tautan WhatsApp), bukan selalu ke Beranda.
+ */
+export function alamatMasukKembali(): string {
+  return aman(() => alamatMasukDengan(window.location.pathname, window.location.search), "/");
 }
 
 export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T> {

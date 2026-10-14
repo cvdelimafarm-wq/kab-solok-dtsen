@@ -8,13 +8,13 @@
 // (9 Okt 2026) Id lain = kegiatan INDUK (mis. "pascabencana") -> garis waktu tahap (./Induk.tsx). Transport Lokal yang dibuka dari sebuah tahap
 // membawa ?dari=<halaman tahap> supaya tombol kembali pulang ke tahap itu, bukan ke Beranda.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
 import { keAtas } from "@/app/portal/navigasi";
-import { apiPortal, bacaSesi } from "@/app/portal/sesi";
+import { alamatMasukKembali, apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { KELOMPOK_URUT, langkahKe, type KelompokLangkah, type LangkahKegiatan, type RingkasKegiatan, type StatusLangkah } from "@/lib/sigapKegiatan";
 import { sisaTeks } from "@/lib/sigapTugasUtama";
 import HalamanInduk from "./Induk";
@@ -107,16 +107,25 @@ function HalamanTranslok({ id }: { id: string }) {
   const [offset, setOffset] = useState(0);
   const [, setTik] = useState(0);
   const [buka, setBuka] = useState<Record<string, boolean>>({});
+  // (14 Okt 2026) kegiatan tidak ada / sudah diarsipkan (404): hentikan pemuatan berulang dan tawarkan tombol ke Beranda
+  const [tidakAda, setTidakAda] = useState(false);
+  const berhenti = useRef(false);
 
   const muat = useCallback(async () => {
-    if (!bacaSesi()) return router.replace("/");
+    if (berhenti.current) return;
+    if (!bacaSesi()) return router.replace(alamatMasukKembali());
     try {
       const d = await apiPortal<{ sekarang: string; kegiatan: RingkasKegiatan[] }>(`/api/portal/kegiatan?id=${encodeURIComponent(id)}`);
       setOffset(Date.parse(d.sekarang) - Date.now());
       setK(d.kegiatan[0] ?? null);
       setGalat(null);
     } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
+      // (14 Okt 2026) sesi habis -> masuk, lalu kembali ke halaman ini (?lanjut=)
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace(alamatMasukKembali());
+      if ((e as { status?: number }).status === 404) {
+        berhenti.current = true;
+        setTidakAda(true);
+      }
       setGalat(e instanceof Error ? e.message : "Gagal memuat.");
     }
   }, [id, router]);
@@ -151,7 +160,13 @@ function HalamanTranslok({ id }: { id: string }) {
   const adaYangBelum = langkah.some((l) => l.status !== "selesai");
   const ringkas = (g: { nama: KelompokLangkah; isi: LangkahKegiatan[] }) => !buka[g.nama] && adaYangBelum && g.isi.every((l) => l.status === "selesai");
 
-  const sisa = sekarang?.batas ? (Date.parse(sekarang.batas) - nowMs) / 1000 : null;
+  // (14 Okt 2026) "Yang belum dilengkapi": kekurangan teratas menjadi kartu utama (isi dan tombol menuju bagian yang kurang), sisanya daftar ringkas di bawahnya.
+  // Tanpa daftar (adapter lama) kartu tetap berasal dari langkah yang sedang dikerjakan.
+  const kek = useMemo(() => k?.kekurangan ?? [], [k]);
+  const utama = kek[0] ?? null;
+  const batasKartu = utama ? utama.batas : (sekarang?.batas ?? null);
+  const sisa = batasKartu ? (Date.parse(batasKartu) - nowMs) / 1000 : null;
+  const mendesakKartu = utama ? utama.nada === "merah" || (sisa != null && sisa > 0 && sisa < 7200) : sekarang?.status === "mendesak";
 
   return (
     <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
@@ -181,7 +196,16 @@ function HalamanTranslok({ id }: { id: string }) {
       </header>
 
       <div className="relative z-10 mx-auto -mt-[44px] max-w-xl space-y-4 px-3.5">
-        {galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
+        {galat && (
+          <div className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
+            <p>{galat}</p>
+            {tidakAda && (
+              <Link href="/" className="mt-2 inline-flex min-h-[40px] items-center rounded-[10px] bg-[#0F2A52] px-3.5 text-[13px] font-extrabold text-white">
+                Ke Beranda
+              </Link>
+            )}
+          </div>
+        )}
         {!k && !galat && (
           <div className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-busy="true">
             <div className="h-3 w-32 animate-pulse rounded bg-[#E6EDF8]" />
@@ -189,31 +213,65 @@ function HalamanTranslok({ id }: { id: string }) {
           </div>
         )}
 
-        {k && sekarang && (
+        {k && (utama || sekarang) && (
           <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-label="Kerjakan sekarang">
             <div className="flex items-center gap-2">
-              <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">KERJAKAN SEKARANG</span>
+              <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">{utama ? (mendesakKartu && utama.label === "TUGAS HARI INI" ? "SEGERA" : utama.label) : "KERJAKAN SEKARANG"}</span>
               {sisa != null && sisa > 0 && (
-                <span className={`ml-auto rounded-[9px] px-2 py-[3px] text-[11px] font-bold ${sekarang.status === "mendesak" ? "bg-[#FDE8E8] text-[#B42329]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>sisa {sisaTeks(sisa)}</span>
+                <span className={`ml-auto rounded-[9px] px-2 py-[3px] text-[11px] font-bold ${mendesakKartu ? "bg-[#FDE8E8] text-[#B42329]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>sisa {sisaTeks(sisa)}</span>
               )}
+              {utama?.lencana && !(sisa != null && sisa > 0) && <span className="ml-auto rounded-[9px] bg-[#FFF4D6] px-2 py-[3px] text-[11px] font-bold text-[#8A6200]">{utama.lencana.teks}</span>}
             </div>
             <div className="mt-3 flex items-center gap-3">
               <span className="grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] bg-[#F4B400] text-[#0F2A52] shadow-[0_6px_14px_rgba(244,180,0,.35)]">
-                <IkonMenu n={sekarang.kode === "harian" ? "kamera" : k.ikon} className="h-6 w-6" />
+                <IkonMenu n={utama ? (utama.jenis === "foto" || utama.jenis === "izin_susulan" ? "kamera" : k.ikon) : sekarang!.kode === "harian" ? "kamera" : k.ikon} className="h-6 w-6" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15.5px] font-extrabold leading-snug text-[#0F2A52]">{sekarang.judul}</p>
-                <p className="mt-0.5 text-[12px] leading-snug text-[#6B7A90]">Langkah {sekarang.no} · {sekarang.ket}</p>
+                <p className="text-[15.5px] font-extrabold leading-snug text-[#0F2A52]">{utama ? utama.judul : sekarang!.judul}</p>
+                <p className="mt-0.5 text-[12px] leading-snug text-[#6B7A90]">{utama ? utama.uraian : `Langkah ${sekarang!.no} · ${sekarang!.ket}`}</p>
               </div>
             </div>
-            {sekarang.href && (
-              <Link href={sekarang.href} className="mt-3 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]">
-                {sekarang.aksi ?? "Lanjutkan"}
+            {utama?.progres && utama.progres.total > 0 && utama.progres.total <= 12 && (
+              <div className="mt-3 flex gap-1" role="img" aria-label={`${utama.progres.selesai} dari ${utama.progres.total}`}>
+                {Array.from({ length: utama.progres.total }).map((_, i) => (
+                  <i key={i} className={`h-[7px] flex-1 rounded ${i < utama.progres!.selesai ? "bg-[#1F5FD1]" : "bg-[#DDE5F0]"}`} />
+                ))}
+              </div>
+            )}
+            {(utama ? utama.href : sekarang!.href) && (
+              <Link href={(utama ? utama.href : sekarang!.href)!} className="mt-3 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]">
+                {utama ? utama.aksi : (sekarang!.aksi ?? "Lanjutkan")}
               </Link>
             )}
+            {utama?.sekunder &&
+              (utama.sekunder.luar ? (
+                <a href={utama.sekunder.href} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[13px] border-2 border-[#1F5FD1] px-4 text-[14px] font-extrabold text-[#1F5FD1]">
+                  {utama.sekunder.teks}
+                </a>
+              ) : (
+                <Link href={utama.sekunder.href} className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[13px] border-2 border-[#1F5FD1] px-4 text-[14px] font-extrabold text-[#1F5FD1]">
+                  {utama.sekunder.teks}
+                </Link>
+              ))}
           </section>
         )}
-        {k && !sekarang && semuaSelesai && (
+        {k && kek.length > 1 && (
+          <section className="rounded-[18px] bg-white p-3.5 shadow-[0_8px_22px_rgba(15,42,82,.08)]" aria-label="Juga belum lengkap">
+            <h2 className="mb-1 text-[12px] font-extrabold tracking-[0.12em] text-[#6B7A90]">JUGA BELUM LENGKAP</h2>
+            <div className="divide-y divide-[#EEF2F7]">
+              {kek.slice(1, 4).map((x) => (
+                <Link key={x.kode} href={x.href} className="flex min-h-[52px] items-center gap-3 py-2 transition active:bg-[#EAF1FC]">
+                  <span className="min-w-0 flex-1">
+                    <b className="block text-[13.5px] text-[#0F2A52]">{x.judul}</b>
+                    <small className="block text-[11.5px] leading-snug text-[#6B7A90]">{x.aksi}</small>
+                  </span>
+                  <IkonMenu n="panah" className="h-4 w-4 text-[#A5B3C7]" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+        {k && !utama && !sekarang && semuaSelesai && (
           <section className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
             <span className="grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] bg-[#E3F6EC] text-[#13794B]">
               <IkonMenu n="centang" className="h-6 w-6" />

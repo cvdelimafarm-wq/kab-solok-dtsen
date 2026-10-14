@@ -2,10 +2,17 @@
 //
 // (8 Okt 2026) Adapter "tahapan" Transport Lokal untuk struktur 3 layer: dari penugasan + hari kerja + laporan + foto menjadi daftar langkah bernomor
 // (Persiapan / Pelaksanaan / Penyelesaian) dan ringkasan Layer 1 (cincin progres). Kegiatan lain belum punya tahapan terukur.
+// (14 Okt 2026) Permintaan user (fokus utama: kejelasan yang belum dilengkapi + pengingat dinamis):
+//  - Hari dinilai dengan penilai yang SAMA dengan halaman kerja (hariDinilai: laporan manual ATAU laporan dianggap dari hasil lembar).
+//  - Daftar `kekurangan` (lib/sigapKekurangan.ts): apa persisnya yang belum lengkap + tautan yang membuka bagian itu.
+//  - Langkah 2/3/5 membuka tab/hari/bagian yang tepat (?tab=&tgl=&fokus=), bukan sekadar halaman kerja.
 
 import type { Db, Penugasan } from "@/lib/sigap";
-import { HK_AKTIF, hariIniWib, hariLengkap } from "@/lib/sigap";
+import { HK_AKTIF, hariIniWib } from "@/lib/sigap";
+import { laporanDianggap, satuanLaporan, sumberUntukPeran, type SumberOtomatis } from "@/lib/realisasiOtomatis";
+import { ambilRealisasiOtomatisRingan } from "@/lib/portal/realisasiOtomatis";
 import type { LangkahKegiatan, NadaKegiatan, RingkasKegiatan, StatusLangkah } from "@/lib/sigapKegiatan";
+import { hariLengkapDinilai, hitungTerlewat, susunKekurangan, type IsianHari, type MasukanKekurangan } from "@/lib/sigapKekurangan";
 
 function tglPendek(iso: string): string {
   const b = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -13,27 +20,74 @@ function tglPendek(iso: string): string {
   return `${d} ${b[m - 1]} ${y}`;
 }
 
+/** Tambahkan parameter alamat ke tautan halaman kerja (yang sudah memuat ?p=). */
+const tambahQ = (href: string, q: string) => `${href}${href.includes("?") ? "&" : "?"}${q}`;
+
+export type IsianTranslok = {
+  laporan: boolean;
+  foto: number;
+  /** nomor slot foto yang sudah ada (bila kosong, dianggap 1..foto) */
+  slot?: number[];
+  /** hari lampau tanpa laporan manual tetapi ada hasil lembar (dihitung selesai) */
+  dianggap?: boolean;
+  hasilLembar?: number | null;
+  jorong?: string | null;
+};
+
 export type MasukanTranslok = {
   p: Pick<Penugasan, "id" | "kegiatan" | "label_jabatan" | "status_periode" | "ditutup_pada" | "dikunci_at">;
   hariKerja: string[];
-  /** tanggal -> { laporan, foto } */
-  isian: Record<string, { laporan: boolean; foto: number }>;
+  /** tanggal -> isian hari itu */
+  isian: Record<string, IsianTranslok>;
   hariIni: string;
   hrefKerja: string;
   nowMs: number;
+  /** izin susulan yang masih berlaku: tanggal -> berlaku_sampai (ISO) */
+  izin?: Record<string, string>;
+  namaPetugas?: string | null;
+  satuan?: string;
+  sumber?: SumberOtomatis | null;
+  hrefLembar?: string | null;
+  waAdmin?: string | null;
 };
 
 /** Murni (tanpa DB) supaya bisa diuji. */
 export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
   const { p, hariKerja, isian, hariIni, hrefKerja, nowMs } = m;
   const k = p.kegiatan;
-  const lengkap = (t: string) => hariLengkap(!!isian[t]?.laporan, isian[t]?.foto ?? 0, k);
+  const aktif = p.status_periode === "aktif" || p.status_periode === "tenggang";
+  const dikunci = !!p.dikunci_at;
+
+  const isianKek: Record<string, IsianHari> = {};
+  for (const [t, v] of Object.entries(isian)) {
+    isianKek[t] = { laporan: v.laporan, slot: v.slot ?? Array.from({ length: v.foto }, (_, i) => i + 1), dianggap: !!v.dianggap, hasilLembar: v.hasilLembar ?? null, jorong: v.jorong ?? null };
+  }
+  const kekMasuk: MasukanKekurangan = {
+    penugasanId: p.id,
+    namaKegiatan: k.nama,
+    namaPetugas: m.namaPetugas ?? null,
+    aturan: k,
+    satuan: m.satuan ?? k.satuan_realisasi,
+    aktif: aktif && !dikunci,
+    hariKerja,
+    isian: isianKek,
+    izin: m.izin,
+    hariIni,
+    hrefDasar: hrefKerja,
+    sumber: m.sumber ?? null,
+    hrefLembar: m.hrefLembar ?? null,
+    waAdmin: m.waAdmin ?? null,
+  };
+  const kek = susunKekurangan(kekMasuk, nowMs);
+  const ter = hitungTerlewat(kekMasuk, nowMs);
+  const tugasHariIni = kek.find((x) => x.tanggal === hariIni && (x.jenis === "foto" || x.jenis === "laporan" || x.jenis === "lembar")) ?? null;
+  const izinAktif = kek.find((x) => x.jenis === "izin_susulan") ?? null;
+
+  const lengkap = (t: string) => hariLengkapDinilai(isianKek[t], k);
   const berlaku = hariKerja.filter((t) => t <= hariIni);
   const lengkapN = berlaku.filter(lengkap).length;
   const adaHariIni = hariKerja.includes(hariIni);
   const lengkapHariIni = adaHariIni && lengkap(hariIni);
-  const aktif = p.status_periode === "aktif" || p.status_periode === "tenggang";
-  const dikunci = !!p.dikunci_at;
   const akhirHari = new Date(`${hariIni}T23:59:00+07:00`).getTime();
   const sisaDetik = (akhirHari - nowMs) / 1000;
 
@@ -41,7 +95,8 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
   let s3: StatusLangkah;
   let ket3: string;
   let batas3: string | null = null;
-  const terlewatN = berlaku.filter((t) => t < hariIni && !lengkap(t)).length;
+  let href3: string = hrefKerja;
+  let aksi3: string | undefined;
   if (hariKerja.length === 0) {
     s3 = "menunggu";
     ket3 = "Setelah hari kerja dipilih";
@@ -49,11 +104,24 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     const f = isian[hariIni]?.foto ?? 0;
     const bagian = [k.wajib_laporan ? (isian[hariIni]?.laporan ? "laporan sudah" : "laporan belum") : null, `foto ${f} dari ${k.jumlah_foto}`].filter(Boolean).join(", ");
     s3 = sisaDetik < 7200 ? "mendesak" : "perlu";
-    ket3 = `Hari ini: ${bagian}. Batas 23.59 WIB.`;
+    ket3 = tugasHariIni ? `${tugasHariIni.judul}. Batas 23.59 WIB.` : `Hari ini: ${bagian}. Batas 23.59 WIB.`;
     batas3 = new Date(akhirHari).toISOString();
-  } else if (terlewatN > 0) {
+    if (tugasHariIni) {
+      href3 = tugasHariIni.href;
+      aksi3 = tugasHariIni.aksi;
+    }
+  } else if (izinAktif || ter.baru > 0) {
+    // (14 Okt 2026) hari terlewat yang sudah diberi izin susulan tidak lagi disuruh "minta izin"; hari terlewat LAMA (lewat jendela) tidak membuat langkah merah terus-menerus
     s3 = "perlu";
-    ket3 = `${terlewatN} hari kerja belum lengkap. Minta izin susulan ke admin.`;
+    ket3 = izinAktif ? `${izinAktif.judul}. ${izinAktif.uraian}` : `${ter.baru} hari kerja belum lengkap. Minta izin susulan ke admin.`;
+    if (izinAktif) {
+      href3 = izinAktif.href;
+      aksi3 = izinAktif.aksi;
+      batas3 = izinAktif.batas;
+    } else if (ter.terbaru) {
+      href3 = tambahQ(hrefKerja, `tab=hari_kerja&tgl=${ter.terbaru}`);
+      aksi3 = "Lihat hari terlewat";
+    }
   } else if (berlaku.length > 0 && lengkapN === hariKerja.length) {
     s3 = "selesai";
     ket3 = `${hariKerja.length} hari kerja lengkap`;
@@ -62,7 +130,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     ket3 = `Hari kerja pertama ${tglPendek(hariKerja[0])}`;
   } else {
     s3 = "berjalan";
-    ket3 = `${lengkapN} dari ${hariKerja.length} hari kerja lengkap`;
+    ket3 = `${lengkapN} dari ${hariKerja.length} hari kerja lengkap${ter.semua > 0 ? `. ${ter.semua} hari terlewat (tidak masuk Kwitansi).` : ""}`;
   }
 
   // (10 Okt 2026) Langkah "Laporan & foto harian" terkunci di luar hari kerja -- permintaan user: PPL yang menekannya melihat pesan
@@ -86,12 +154,23 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
       judul: "Pilih hari kerja",
       ket: hariKerja.length ? `${hariKerja.length} hari kerja dipilih` : "Belum ada hari kerja dipilih",
       status: s2,
-      href: hrefKerja,
+      href: tambahQ(hrefKerja, "tab=hari_kerja"),
       aksi: "Pilih hari kerja",
     },
-    { no: 3, kode: "harian", kelompok: "Pelaksanaan", judul: k.wajib_laporan ? "Laporan & foto harian" : "Foto harian", ket: ket3, status: s3, href: pesanKunci3 ? null : hrefKerja, aksi: s3 === "mendesak" || s3 === "perlu" ? "Lanjutkan isi hari ini" : "Buka isian", batas: batas3, pesanKunci: pesanKunci3 },
+    {
+      no: 3,
+      kode: "harian",
+      kelompok: "Pelaksanaan",
+      judul: k.wajib_laporan ? "Laporan & foto harian" : "Foto harian",
+      ket: ket3,
+      status: s3,
+      href: pesanKunci3 ? null : href3,
+      aksi: s3 === "mendesak" || s3 === "perlu" ? (aksi3 ?? "Lanjutkan isi hari ini") : "Buka isian",
+      batas: batas3,
+      pesanKunci: pesanKunci3,
+    },
     { no: 4, kode: "verifikasi", kelompok: "Penyelesaian", judul: "Rekap & verifikasi admin", ket: dikunci ? "SPJ sudah dikunci admin" : "Setelah semua hari kerja terisi", status: dikunci ? "selesai" : "menunggu" },
-    { no: 5, kode: "spj", kelompok: "Penyelesaian", judul: "Unduh SPJ", ket: dikunci ? "SPJ siap diunduh" : "Setelah SPJ dikunci admin", status: dikunci ? "sekarang" : "terkunci", href: dikunci ? hrefKerja : null, aksi: "Unduh SPJ" },
+    { no: 5, kode: "spj", kelompok: "Penyelesaian", judul: "Unduh SPJ", ket: dikunci ? "SPJ siap diunduh" : "Setelah SPJ dikunci admin", status: dikunci ? "sekarang" : "terkunci", href: dikunci ? tambahQ(hrefKerja, "tab=arsip") : null, aksi: "Unduh SPJ" },
   ];
 
   const selesai = langkah.filter((l) => l.status === "selesai").length;
@@ -109,10 +188,10 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     pesan = "SPJ dikunci";
   } else if (s3 === "mendesak") {
     nada = "merah";
-    pesan = "Isian hari ini belum lengkap";
+    pesan = tugasHariIni?.ringkas ?? "Isian hari ini belum lengkap";
   } else if (s3 === "perlu" || s2 === "perlu") {
     nada = "emas";
-    pesan = s2 === "perlu" ? "Pilih hari kerja" : adaHariIni && !lengkapHariIni ? `Foto kurang ${Math.max(0, k.jumlah_foto - (isian[hariIni]?.foto ?? 0))}` : "Ada hari belum lengkap";
+    pesan = s2 === "perlu" ? "Pilih hari kerja" : (tugasHariIni?.ringkas ?? izinAktif?.ringkas ?? kek.find((x) => x.jenis === "hari_terlewat")?.ringkas ?? "Ada hari belum lengkap");
   } else if (p.status_periode === "tenggang") {
     nada = "emas";
     pesan = "Masa tenggang";
@@ -135,29 +214,66 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     href: `/sigap/kegiatan/translok-${p.id}`,
     langkah,
     kegiatan_id: k.id,
+    kekurangan: kek,
   };
 }
 
 /** Semua penugasan Transport Lokal non-arsip milik akun -> ringkasan + langkah. */
-export async function kegiatanTranslok(db: Db, akunId: number, token: string, pen: Penugasan[], nowMs: number): Promise<RingkasKegiatan[]> {
+export async function kegiatanTranslok(
+  db: Db,
+  akunId: number,
+  token: string,
+  pen: Penugasan[],
+  nowMs: number,
+  opsi: { namaPetugas?: string | null; waAdmin?: string | null } = {}
+): Promise<RingkasKegiatan[]> {
   const aktif = pen.filter((p) => p.status_periode !== "arsip");
   if (aktif.length === 0) return [];
   const ids = aktif.map((p) => p.id);
-  const [{ data: hk }, { data: lap }, { data: dok }] = await Promise.all([
+  const [{ data: hk }, { data: lap }, { data: dok }, { data: izin }] = await Promise.all([
     db.from("sigap_hari_kerja").select("penugasan_id, tanggal").eq("akun_id", akunId).or(HK_AKTIF()),
     db.from("sigap_realisasi").select("penugasan_id, tanggal").in("penugasan_id", ids),
-    db.from("sigap_dokumentasi").select("penugasan_id, tanggal").in("penugasan_id", ids),
+    db.from("sigap_dokumentasi").select("penugasan_id, tanggal, slot").in("penugasan_id", ids),
+    db.from("sigap_izin_susulan").select("penugasan_id, tanggal, berlaku_sampai").in("penugasan_id", ids).gt("berlaku_sampai", new Date(nowMs).toISOString()),
   ]);
   const hariIni = hariIniWib();
-  return aktif.map((p) => {
-    const hariKerja = Array.from(new Set((hk ?? []).filter((h) => h.penugasan_id === p.id).map((h) => h.tanggal as string))).sort();
-    const isian: Record<string, { laporan: boolean; foto: number }> = {};
-    for (const t of hariKerja) {
-      isian[t] = {
-        laporan: (lap ?? []).some((r) => r.penugasan_id === p.id && r.tanggal === t),
-        foto: (dok ?? []).filter((f) => f.penugasan_id === p.id && f.tanggal === t).length,
-      };
-    }
-    return susunTranslok({ p, hariKerja, isian, hariIni, hrefKerja: `/sigap/translok/${token}?p=${p.id}`, nowMs }); // (10 Okt 2026) ?p= -> halaman langsung membuka kegiatan ini, bukan penugasan pertama
-  });
+  return Promise.all(
+    aktif.map(async (p) => {
+      const hariKerja = Array.from(new Set((hk ?? []).filter((h) => h.penugasan_id === p.id).map((h) => h.tanggal as string))).sort();
+      const satuan = satuanLaporan(p.kegiatan.kode, p.peran, p.kegiatan.satuan_realisasi);
+      const sumber = sumberUntukPeran(p.kegiatan.kode, p.peran);
+      // hasil lembar (identifikasi/pendataan) per tanggal: dasar "laporan dianggap" dan saran isi laporan
+      const oto = sumber ? await ambilRealisasiOtomatisRingan(db, akunId, p.peran, p.kegiatan.kode, satuan, hariKerja.filter((t) => t <= hariIni)) : new Map();
+      const isian: Record<string, IsianTranslok> = {};
+      for (const t of hariKerja) {
+        const laporan = (lap ?? []).some((r) => r.penugasan_id === p.id && r.tanggal === t);
+        const fotoBaris = (dok ?? []).filter((f) => f.penugasan_id === p.id && f.tanggal === t);
+        const o = oto.get(t) ?? null;
+        isian[t] = {
+          laporan,
+          foto: fotoBaris.length,
+          slot: fotoBaris.map((f) => Number(f.slot)).filter((n) => Number.isInteger(n) && n > 0),
+          dianggap: !!p.kegiatan.wajib_laporan && laporanDianggap(t, hariIni, laporan, o),
+          hasilLembar: o?.jumlah ?? null,
+          jorong: o?.lokasi[0]?.jorong ?? null,
+        };
+      }
+      const izinP: Record<string, string> = {};
+      for (const z of izin ?? []) if (z.penugasan_id === p.id) izinP[z.tanggal as string] = z.berlaku_sampai as string;
+      return susunTranslok({
+        p,
+        hariKerja,
+        isian,
+        hariIni,
+        hrefKerja: `/sigap/translok/${token}?p=${p.id}`, // (10 Okt 2026) ?p= -> halaman langsung membuka kegiatan ini, bukan penugasan pertama
+        nowMs,
+        izin: izinP,
+        namaPetugas: opsi.namaPetugas ?? null,
+        satuan,
+        sumber,
+        hrefLembar: sumber === "identifikasi" ? "/sigap/identifikasi" : sumber === "pendataan" ? "/sigap/pendataan" : null,
+        waAdmin: opsi.waAdmin ?? null,
+      });
+    })
+  );
 }

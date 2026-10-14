@@ -28,6 +28,7 @@ import {
   tanggalValid,
 } from "@/lib/sigap";
 import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
+import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
 import { laporanDianggap, satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
 
 export const runtime = "nodejs";
@@ -136,10 +137,13 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
       penugasan: hasil,
       lokasi_opsi: { wilayah_tim: subTim, master: Array.from(master.values()) },
       kecamatan_opsi: Array.from(new Set(wil.map((w) => w.kecamatan))).sort(),
+      // (14 Okt 2026) nomor WhatsApp admin anggaran untuk tombol "Minta izin susulan ke admin" (env SIGAP_WA_ADMIN); null = tombol tidak tampil
+      wa_admin: normalisasiNomorWa(process.env.SIGAP_WA_ADMIN),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // (14 Okt 2026) pesan database mentah tidak ditampilkan ke petugas (rinciannya ada di log server)
+    console.error("[api/sigap/translok GET]", err);
+    return NextResponse.json({ error: "Gagal memuat data. Coba lagi sebentar lagi." }, { status: 500 });
   }
 }
 

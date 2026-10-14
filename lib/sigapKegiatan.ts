@@ -5,6 +5,7 @@
 // Berkas ini murni (tanpa React/DB): tipe bersama server-klien, ringkasan kegiatan dari data pelatihan/kartu, pengurutan mendesak-dulu.
 
 import { bagiFoto, keadaanHari } from "@/lib/sigapPresensi";
+import { AMBANG_MENDESAK_DETIK, type Kekurangan } from "@/lib/sigapKekurangan";
 import { tugasUtamaPelatihan, type HubTugas, type IkonKode, type KartuRingkas, type TugasUtama } from "@/lib/sigapTugasUtama";
 
 export type NadaKegiatan = "merah" | "emas" | "biru" | "abu" | "hijau";
@@ -48,6 +49,11 @@ export type RingkasKegiatan = {
   langkah?: LangkahKegiatan[];
   /** (9 Okt 2026) sigap_kegiatan.id untuk Transport Lokal, dipakai tahap kegiatan induk (lib/sigapTahap.ts) */
   kegiatan_id?: number;
+  /**
+   * (14 Okt 2026) Daftar "yang belum dilengkapi" terurut (lib/sigapKekurangan.ts). Ada (mungkin kosong) = adapter sudah menghitungnya:
+   * kosong berarti tidak ada yang perlu diingatkan. Tidak ada (undefined) = adapter lama / kegiatan tanpa hitungan -> pakai langkah.
+   */
+  kekurangan?: Kekurangan[];
 };
 
 export const URUT_NADA: Record<NadaKegiatan, number> = { merah: 0, emas: 1, biru: 2, abu: 3, hijau: 4 };
@@ -153,6 +159,31 @@ export function tugasDariKegiatan(daftar: RingkasKegiatan[], nowMs: number): Tug
   let terbaik: TugasUtama | null = null;
   for (const k of daftar) {
     if (!k.langkah) continue;
+    // (14 Okt 2026) Adapter sudah menghitung daftar "yang belum dilengkapi": kartu Beranda memakai kekurangan teratas (isi dan tombol menuju
+    // bagian yang kurang). Daftar kosong = tidak ada yang perlu diingatkan (hari terlewat lama tidak lagi memerahkan Beranda terus-menerus).
+    if (k.kekurangan) {
+      const t = k.kekurangan[0];
+      if (!t) continue;
+      const sisaT = t.batas ? (Date.parse(t.batas) - nowMs) / 1000 : null;
+      const adaSisa = sisaT != null && sisaT > 0;
+      const mend = adaSisa && sisaT! < AMBANG_MENDESAK_DETIK;
+      const skorT = mend ? Math.max(t.skor, 88) : t.skor;
+      if (terbaik && terbaik.skor >= skorT) continue;
+      const padT = (n: number) => String(n).padStart(2, "0");
+      const teksT = !adaSisa ? undefined : sisaT! < 3600 ? `sisa ${padT(Math.floor(sisaT! / 60))}:${padT(Math.floor(sisaT! % 60))}` : `sisa ${Math.floor(sisaT! / 3600)} j ${padT(Math.floor((sisaT! % 3600) / 60))} mnt`;
+      terbaik = {
+        skor: skorT,
+        ikon: k.ikon,
+        label: mend && t.label === "TUGAS HARI INI" ? "SEGERA" : t.label,
+        judul: t.judul,
+        uraian: `${k.pendek}. ${t.uraian}`,
+        lencana: teksT ? { teks: teksT, nada: mend ? "merah" : "emas" } : t.lencana ? { teks: t.lencana.teks, nada: t.lencana.nada === "merah" ? "merah" : t.lencana.nada === "biru" ? "biru" : "emas" } : undefined,
+        progres: t.progres ?? (k.total ? { selesai: k.selesai ?? 0, total: k.total } : undefined),
+        href: t.href,
+        aksi: t.aksi,
+      };
+      continue;
+    }
     const l = k.langkah.find((x) => x.status === "mendesak" || x.status === "perlu");
     if (!l) continue;
     const skor = l.status === "mendesak" ? 88 : 70;

@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/app/portal/dataBersama";
+import { alamatMasukKembali } from "@/app/portal/sesi";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { susunTahap, type Induk, type TahapHasil } from "@/lib/sigapTahap";
 import type { HubTugas } from "@/lib/sigapTugasUtama";
@@ -36,7 +37,9 @@ export function useInduk(kode: string) {
   const sesiHabis = [dInduk.galat, dHub.galat, dKeg.galat].includes("SESI_BERAKHIR");
   const tidakAda = !!dInduk.data && !induk;
   useEffect(() => {
-    if (sesiHabis || tidakAda) router.replace("/");
+    // (14 Okt 2026) sesi habis: masuk lalu KEMBALI ke halaman ini (?lanjut=); kegiatan tidak ada: Beranda
+    if (sesiHabis) router.replace(alamatMasukKembali());
+    else if (tidakAda) router.replace("/");
   }, [sesiHabis, tidakAda, router]);
 
   useEffect(() => {

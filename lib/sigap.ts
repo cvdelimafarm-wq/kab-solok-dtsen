@@ -47,6 +47,16 @@ export function aturanDari(k: { jenis?: unknown; wajib_laporan?: unknown; jumlah
 export function hariLengkap(adaLaporan: boolean, jumlahFoto: number, a: AturanIsian): boolean {
   return (!a.wajib_laporan || adaLaporan) && jumlahFoto >= a.jumlah_foto;
 }
+
+/**
+ * (14 Okt 2026) Penilai hari untuk tampilan ringkasan (Beranda, tahapan kegiatan, pengingat): SAMA dengan penilai di API halaman kerja
+ * translok -- laporan manual ATAU laporan dianggap (hari lampau tanpa laporan manual tetapi ada hasil lembar), ditambah foto sesuai aturan.
+ * Sebelumnya Beranda hanya menghitung laporan manual sehingga bisa berkata "hari belum lengkap" padahal halaman kerja & Kwitansi menganggapnya lengkap.
+ * (Kwitansi/SPJ tetap memakai penilainya sendiri di lib/sigapDokumen.ts; berkas itu sengaja tidak disentuh.)
+ */
+export function hariDinilai(adaLaporan: boolean, dianggap: boolean, jumlahFoto: number, a: AturanIsian): boolean {
+  return hariLengkap(adaLaporan || dianggap, jumlahFoto, a);
+}
 export const BUCKET_SIGAP = "sigap-files";
 
 /** Tanggal hari ini menurut WIB (Asia/Jakarta), format YYYY-MM-DD. */

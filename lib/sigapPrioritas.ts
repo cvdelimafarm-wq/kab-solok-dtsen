@@ -78,18 +78,22 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
     const c = calon[0];
     const { n, no, selesai } = infoLangkah(c.tahap, c.modul);
     const kegC = c.langkah ? keg.find((x) => x.id === c.modul.kode) : undefined;
-    const ket = c.langkah ? `${kegC?.pendek ?? c.modul.judul} · ${c.langkah.ket}` : c.modul.ket;
-    const sisa = c.langkah?.batas ? (Date.parse(c.langkah.batas) - nowMs) / 1000 : null;
+    // (14 Okt 2026) Langkah "Laporan & foto harian" Transport Lokal: kartu memakai kekurangan teratas (apa persisnya yang belum lengkap + tombol langsung
+    // ke bagian itu) -- bukan judul langkah yang tetap. Langkah lain (mis. Pilih hari kerja) dan adapter lama tetap seperti semula.
+    const kek = c.langkah?.kode === "harian" ? (kegC?.kekurangan?.[0] ?? null) : null;
+    const ket = c.langkah ? `${kegC?.pendek ?? c.modul.judul} · ${kek ? kek.uraian : c.langkah.ket}` : c.modul.ket;
+    const batasSisa = kek ? kek.batas : (c.langkah?.batas ?? null);
+    const sisa = batasSisa ? (Date.parse(batasSisa) - nowMs) / 1000 : null;
     return {
       skor: c.tier === 1 ? SKOR_MENDESAK : SKOR_PERLU,
       ikon,
       label: labelTahap(c.tahap),
-      judul: c.langkah ? c.langkah.judul : c.modul.judul,
+      judul: kek ? kek.judul : c.langkah ? c.langkah.judul : c.modul.judul,
       uraian: n >= 2 && no > 0 ? `Langkah ${no} dari ${n} · ${ket}` : ket,
-      lencana: sisa != null && sisa > 0 ? { teks: teksSisa(sisa), nada: c.tier === 1 ? "merah" : "emas" } : c.tier === 1 ? { teks: "Mendesak", nada: "merah" } : undefined,
+      lencana: sisa != null && sisa > 0 ? { teks: teksSisa(sisa), nada: c.tier === 1 ? "merah" : "emas" } : c.tier === 1 ? { teks: "Mendesak", nada: "merah" } : kek?.lencana ? { teks: kek.lencana.teks, nada: "emas" } : undefined,
       progres: n >= 2 ? { selesai, total: n } : undefined,
-      href: (c.langkah ? c.langkah.href : c.modul.href) ?? c.tahap.rute,
-      aksi: (c.langkah ? c.langkah.aksi : c.modul.aksi) ?? "Buka",
+      href: (kek ? kek.href : c.langkah ? c.langkah.href : c.modul.href) ?? c.tahap.rute,
+      aksi: (kek ? kek.aksi : c.langkah ? c.langkah.aksi : c.modul.aksi) ?? "Buka",
     };
   }
 

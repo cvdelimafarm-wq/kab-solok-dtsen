@@ -57,6 +57,26 @@ describe("tugasDariInduk", () => {
     expect(tugasDariInduk(induk, [tahap(3, "Pendataan", [modul("identifikasi", "x", "selesai")])], [], NOW)).toBeNull();
     expect(tugasDariInduk(induk, [tahap(2, "Pelatihan", [modul("pelatihan", "Langkah pelatihan", "perlu")])], [], NOW)).toBeNull();
   });
+  it("langkah harian memakai kekurangan teratas: judul, uraian, tombol, dan lencana dinamis", () => {
+    const l3 = langkah(3, "harian", "Laporan & foto harian", "Hari ini: foto 0 dari 5.", "perlu", { href: "/sigap/translok/tok" });
+    const k = keg(l3);
+    k[0].kekurangan = [{
+      kode: "foto-2026-10-11", jenis: "foto", tanggal: "2026-10-11", skor: 74, nada: "emas", label: "FOTO", judul: "Foto kurang 2: nomor 4–5", ringkas: "foto kurang 2",
+      uraian: "Unggah 2 foto dokumentasi.", batas: null, lencana: { teks: "Foto 3/5", nada: "emas" }, aksi: "Unggah foto 4–5", href: "/sigap/translok/tok?tab=hari_ini&fokus=foto",
+    } as never];
+    const g = tugasDariInduk(induk, [tahap(3, "Pendataan", [modul("translok-46", "Transport Lokal", "perlu")])], k, NOW)!;
+    expect(g.judul).toBe("Foto kurang 2: nomor 4–5");
+    expect(g.aksi).toBe("Unggah foto 4–5");
+    expect(g.href).toBe("/sigap/translok/tok?tab=hari_ini&fokus=foto");
+    expect(g.uraian).toContain("Unggah 2 foto dokumentasi.");
+    expect(g.lencana?.teks).toBe("Foto 3/5");
+  });
+  it("tanpa kekurangan, langkah harian tetap memakai judul langkah semula", () => {
+    const l3 = langkah(3, "harian", "Laporan & foto harian", "Hari ini: foto 0 dari 5.", "perlu", { href: "/sigap/translok/tok" });
+    const g = tugasDariInduk(induk, [tahap(3, "Pendataan", [modul("translok-46", "Transport Lokal", "perlu")])], keg(l3), NOW)!;
+    expect(g.judul).toBe("Laporan & foto harian");
+    expect(g.href).toBe("/sigap/translok/tok");
+  });
   it("adalahTugas mengenali kode translok-<id> maupun translok:<id>", () => {
     expect(adalahTugas("translok-46")).toBe(true);
     expect(adalahTugas("translok:1")).toBe(true);
