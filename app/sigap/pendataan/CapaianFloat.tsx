@@ -132,7 +132,8 @@ function TabRealisasi({ d }: { d: Aktif }) {
   );
 }
 
-export default function CapaianFloat({ naik }: { naik: boolean }) {
+/** Tombol mengambang di kiri bawah (sebaris dengan "+ Keluarga baru" di kanan). */
+export default function CapaianFloat() {
   const { data } = useData<DataCapaian>(PATH_CAPAIAN);
   const [buka, setBuka] = useState(false);
   const [tab, setTab] = useState<"hari" | "realisasi">("hari");
@@ -159,7 +160,7 @@ export default function CapaianFloat({ naik }: { naik: boolean }) {
           setBuka(true);
         }}
         aria-label={`Capaian hari ini ${formatAngka(h.total)} dari ${formatAngka(h.target)} poin, ${teksPersen(h.total, h.target)}`}
-        className={`fixed right-4 z-20 flex h-[52px] items-center gap-2 rounded-full border-[1.5px] border-[#1F5FD1] bg-white pl-2 pr-4 text-left text-[#0F2A52] shadow-[0_8px_22px_rgba(15,42,82,.25)] active:bg-[#F2F6FD] ${naik ? "bottom-[92px]" : "bottom-6"}`}
+        className="fixed bottom-6 left-4 z-20 flex h-[52px] items-center gap-2 rounded-full border-[1.5px] border-[#1F5FD1] bg-white pl-2 pr-4 text-left text-[#0F2A52] shadow-[0_8px_22px_rgba(15,42,82,.25)] active:bg-[#F2F6FD]"
       >
         <Cincin persen={h.persen} warna={tercapai ? "#13794B" : "#B7791F"} />
         <span className="leading-tight">

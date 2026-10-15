@@ -692,8 +692,8 @@ export default function LembarPendataan() {
                 <button type="button" aria-label="Terdekat dari saya" onClick={cariPosisi} className="absolute bottom-[92px] right-2.5 grid h-[40px] w-[40px] place-items-center rounded-[12px] bg-white text-[#1F5FD1] shadow-[0_4px_12px_rgba(15,42,82,.15)] active:bg-[#F1F5FC]">
                   <Ik n="lokasi" />
                 </button>
-                {/* legenda bentuk kecil, kiri bawah */}
-                <div className="absolute bottom-[34px] left-2.5 flex max-w-[150px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
+                {/* legenda bentuk kecil, kiri bawah (di atas tombol capaian yang mengambang di kiri bawah layar) */}
+                <div className="absolute bottom-[88px] left-2.5flex max-w-[150px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
                   <span className="inline-flex items-center gap-1.5"><Penanda k="terdampak" warna="#44546F" />Terdampak</span>
                   <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_terdampak" warna="#44546F" />Tidak terdampak</span>
                   <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_ditemukan" warna="#44546F" />Tdk ditemukan</span>
@@ -1003,7 +1003,7 @@ export default function LembarPendataan() {
       {!perbaikan && subAktif && tab !== "mon" && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
 
       {/* (15 Okt 2026) tombol float capaian hari ini (PPL): bertumpuk di atas "+ Keluarga baru" bila tombol itu tampil; tidak tampil di tab Monitoring */}
-      {!perbaikan && !terpilih && !lembar && (!subAktif || tab !== "mon") && <CapaianFloat naik={!!subAktif && tab !== "mon"} />}
+      {!perbaikan && !terpilih && !lembar && (!subAktif || tab !== "mon") && <CapaianFloat />}
 
       {toast && (
         <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
