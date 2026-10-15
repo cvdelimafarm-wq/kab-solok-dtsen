@@ -1,19 +1,31 @@
 // lib/permintaanDaftar.ts
 //
-// (13 Okt 2026) Kartu plotting tim di Lembar Pendataan -- permintaan user: PML mengajukan Sub SLS (TANPA batas jumlah sejak 15 Okt 2026; semula 2 per hari, lalu total 5 per PML), memilih PPL untuk tiap
+// (13 Okt 2026) Kartu plotting tim di Lembar Pendataan -- permintaan user: PML mengajukan Sub SLS (batas TOTAL per PML naik bertahap sejak 15 Okt 2026: 7, 9, lalu 11; semula 2 per hari, lalu total 5), memilih PPL untuk tiap
 // Sub SLS, lalu menekan Kirim untuk meminta daftar KK "keluar" di FASIH. Admin meng-assign di FASIH lalu menandai "Sudah keluar". PPL hanya melihat.
-// Fungsi MURNI (tanpa DB/React): tipe, validasi isian, dan baris templat upload FASIH (Pengawas-Pencacah).
+// Fungsi MURNI (tanpa DB/React): tipe, batas pengajuan, validasi isian, dan baris templat upload FASIH (Pengawas-Pencacah).
 
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 
 /**
- * (15 Okt 2026) Pembatasan jumlah pengajuan Sub SLS oleh PML DIHAPUS (permintaan user). Dua nilai di bawah hanya pengaman teknis, bukan kuota:
- *  - MAKS_SUB_SEKALI_KIRIM: ukuran satu permintaan (cegah muatan terlalu besar); PML boleh mengirim berkali-kali.
- *  - BATAS_DB_TANPA_BATAS: nilai p_maks untuk fungsi DB bencana_pendataan_minta_total (parameter, bukan isi fungsi) agar batas di database tak pernah tercapai.
+ * (15 Okt 2026) Batas TOTAL pengajuan yang masih berlaku (menunggu + sudah keluar) per PML -- permintaan user: 7 pada 15 Okt, 9 pada 16 Okt, 11 pada 17 Okt 2026
+ * dan seterusnya (setelah 17 Okt tetap 11 sampai ada perintah baru). Yang dibatalkan tidak dihitung. Dijaga atomik di fungsi DB bencana_pendataan_minta_total (parameter p_maks).
+ * Tanggal = tanggal WIB. Untuk mengubah jadwal cukup ubah daftar ini + deploy.
  */
+export const JADWAL_BATAS_PENGAJUAN: ReadonlyArray<readonly [string, number]> = [
+  ["2026-10-15", 7],
+  ["2026-10-16", 9],
+  ["2026-10-17", 11],
+];
+export const BATAS_AWAL_PENGAJUAN = 7;
+export function batasPengajuan(tanggal: string): number {
+  let b = BATAS_AWAL_PENGAJUAN;
+  for (const [t, n] of JADWAL_BATAS_PENGAJUAN) if (tanggal >= t) b = n;
+  return b;
+}
+export const CATATAN_BATAS_PENGAJUAN = "Batas total pengajuan naik bertahap: 7 Sub SLS pada 15 Okt, 9 pada 16 Okt, dan 11 mulai 17 Okt 2026.";
+/** Pengaman ukuran satu kiriman (bukan kuota). */
 export const MAKS_SUB_SEKALI_KIRIM = 200;
-export const BATAS_DB_TANPA_BATAS = 1_000_000;
 export const API_PERMINTAAN = "/api/portal/pendataan/permintaan";
 
 /** "dibatalkan" hanya muncul di layar admin: pembatalan PML atas assignment yang sudah keluar dan belum dihapus di FASIH. */
@@ -43,6 +55,8 @@ export type PermintaanAdmin = Permintaan & { email_pengawas: string; email_penca
 export type DataPermintaanTim = {
   sekarang: string;
   tanggal: string;
+  /** batas TOTAL pengajuan yang berlaku hari ini */
+  maks: number;
   /** hanya PML tim (bukan sesi "masuk sebagai") yang boleh mengirim */
   bisa_kirim: boolean;
   permintaan: Permintaan[];
@@ -51,6 +65,11 @@ export type DataPermintaanAdmin = { sekarang: string; boleh_kelola: boolean; per
 
 /** Tanggal WIB (yyyy-mm-dd) dari waktu apa pun. Dasar hitung "hari ini". */
 export const tanggalWib = (t: Date | number | string): string => new Date(new Date(t).getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Berapa Sub SLS yang masih boleh diajukan PML: batas total dikurangi pengajuan yang masih berlaku (menunggu/sudah keluar; yang dibatalkan tidak dihitung). */
+export function sisaKuota(aktif: unknown[], maks: number): number {
+  return Math.max(0, maks - aktif.length);
+}
 
 export type Pilihan = { idsubsls: string; ppl_akun_id: number };
 
@@ -179,7 +198,7 @@ export function susunPushKeluar(untuk: "pml" | "ppl", items: ItemKeluar[]): { ju
 }
 
 // ---------------------------------------------------------------- pembatalan assignment oleh PML (14 Okt 2026)
-export const CATATAN_BATAL = "Pembatalan langsung berlaku tanpa persetujuan: Sub SLS ini bebas lagi, jadi Anda bisa memilih ulang PPL-nya. Admin diberi tahu untuk menghapus assignment lama di FASIH.";
+export const CATATAN_BATAL = "Pembatalan langsung berlaku tanpa persetujuan: Sub SLS ini dan kuota Anda bebas lagi, jadi Anda bisa memilih ulang PPL-nya. Admin diberi tahu untuk menghapus assignment lama di FASIH.";
 
 export type ItemBatal = { jorong: string; ppl: string };
 
