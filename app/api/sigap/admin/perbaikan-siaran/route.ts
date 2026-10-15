@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     async function olahAkun(id: number) {
       const info = akunInfo.get(id)!;
       const pen = await penugasanAkun(db, id);
-      const mereka = pen.filter((p) => p.kegiatan_id === kegiatanId && penIds.includes(p.id) && (p.status_periode === "aktif" || p.status_periode === "tenggang") && !p.dikunci_at);
+      const mereka = pen.filter((p) => p.kegiatan.id === kegiatanId && penIds.includes(p.id) && (p.status_periode === "aktif" || p.status_periode === "tenggang") && !p.dikunci_at);
       if (mereka.length === 0) return;
       const masukan = await muatMasukanTranslok(db, id, info.token, mereka, nowMs, { namaPetugas: info.nama });
       const barisAkun: Baris[] = [];
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
         const tanggal = tanggalSiaran({ hariKerja: m.hariKerja, isian, aturan, pernahIzin: pernahIzin.get(m.p.id) ?? new Set(), hariIni, batas });
         const sudah = (siaranAktif.get(m.p.id) ?? []).filter((t) => !tanggal.includes(t)).sort();
         if (tanggal.length === 0 && sudah.length === 0) continue;
-        barisAkun.push({ penugasan_id: m.p.id, akun_id: id, nama: info.nama, peran: m.p.peran, tanggal, sudah_diberi: sudah, perangkat: perangkat.has(id), sudah_push: sudahPush.has(id) });
+        barisAkun.push({ penugasan_id: m.p.id, akun_id: id, nama: info.nama, peran: daftar.find((d) => d.id === m.p.id)?.peran ?? "", tanggal, sudah_diberi: sudah, perangkat: perangkat.has(id), sudah_push: sudahPush.has(id) });
       }
       if (barisAkun.length === 0) return;
 
