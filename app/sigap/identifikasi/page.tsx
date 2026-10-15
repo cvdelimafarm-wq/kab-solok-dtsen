@@ -5,7 +5,7 @@
 // (10 Okt 2026) Lembar Identifikasi SLS -- daftar Sub SLS yang dibagikan ke PML sebagai pelaksana atau pendamping (pembagian terpisah dari plotting PPL;
 // satu SLS utuh dipegang 1 PML terdekat, tanggung jawab tetap berdua; hasil dipakai bersama) (mockup disetujui user). Per baris: KK tinggal, perkiraan terdampak awal,
 // hasil identifikasi. Sub SLS yang dinyatakan TIDAK TERDAMPAK diberi warna & tulisan "Aman" (permintaan user). Ikon peta di sebelah nama nagari
-// membuka peta WA (desa) & peta SLS. Mulai berlaku 10 Okt 2026 (tahap Pendataan).
+// membuka peta WA (desa) & peta SLS. Mulai berlaku 10 Okt 2026 (tahap Pendataan). (15 Okt 2026) Tombol melayang Rekap identifikasi ikut dipasang di sini.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
 import { keadaanSub, kodeDesa, type SubIdentifikasi } from "@/lib/identifikasi";
 import KontakRekan from "./KontakRekan";
+import RekapIdentifikasi from "../kegiatan/[id]/[tahap]/RekapIdentifikasi";
 import PetaSheet, { IkonPeta } from "./PetaSheet";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import KartuPetaOffline from "@/app/portal/KartuPetaOffline";
@@ -95,7 +96,7 @@ export default function DaftarIdentifikasi() {
   );
 
   return (
-    <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
+    <main className="min-h-screen bg-[#F5F8FE] pb-28 text-[#1B2B4B]">
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[74px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
@@ -235,6 +236,9 @@ export default function DaftarIdentifikasi() {
         desa={peta}
         subs={grupPeta.map((s) => ({ idsubsls: s.idsubsls, nama: s.sls, sub: s.sub_sls }))}
       />
+
+      {/* (15 Okt 2026) Tombol Rekap identifikasi juga di Lembar Identifikasi (permintaan user), selain di halaman Tahap Pendataan */}
+      <RekapIdentifikasi />
     </main>
   );
 }

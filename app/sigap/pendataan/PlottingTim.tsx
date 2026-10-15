@@ -3,7 +3,7 @@
 // app/sigap/pendataan/PlottingTim.tsx
 //
 // (13 Okt 2026) Kartu plotting tim -- tampil PERTAMA di Lembar Pendataan (permintaan user). Tampilan SAMA untuk PML dan PPL; bedanya hanya bisa mengirim atau tidak:
-// PML mengajukan Sub SLS (tanpa batas jumlah), memilih PPL untuk tiap Sub SLS (dropdown sendiri-sendiri), lalu menekan Kirim untuk meminta daftar KK
+// PML mengajukan Sub SLS (batas total per PML naik bertahap 7/9/11), memilih PPL untuk tiap Sub SLS (dropdown sendiri-sendiri), lalu menekan Kirim untuk meminta daftar KK
 // "keluar" di FASIH. Permintaan masuk ke admin; admin meng-assign di FASIH lalu menandai "Sudah keluar" -> status di kartu berubah, PML & PPL dikabari lewat notifikasi.
 // PPL melihat pilihan dan statusnya, tanpa bisa mengubah.
 
@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { useData } from "@/app/portal/dataBersama";
 import { apiPortal } from "@/app/portal/sesi";
 import { namaDepan, waktuRingkas } from "./usePendataan";
-import { API_PERMINTAAN, CATATAN_BATAL, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, MAKS_SUB_SEKALI_KIRIM, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_BATAL, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, LABEL_STATUS_MINTA, CATATAN_BATAS_PENGAJUAN, batasPengajuan, tanggalWib, urutPermintaan, type DataPermintaanTim, type Permintaan } from "@/lib/permintaanDaftar";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import type { Anggota, SubTim } from "@/lib/pendataan";
 
@@ -28,7 +28,9 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
 
   const ppls = useMemo(() => anggota.filter((a) => a.peran === "ppl"), [anggota]);
   const bisaKirim = !!data?.bisa_kirim;
-  const terpakai = (data?.permintaan ?? []).length; // hanya yang masih berlaku (menunggu/sudah keluar)
+  const maks = data?.maks ?? batasPengajuan(tanggalWib(Date.now()));
+  const terpakai = (data?.permintaan ?? []).length; // hanya yang masih berlaku (menunggu/sudah keluar); batas TOTAL per PML, bukan per hari
+  const sisa = Math.max(0, maks - terpakai);
   const terpilih = Object.keys(pilih);
   const adaPmlBelumPilihPpl = terpilih.some((k) => !pilih[k]);
   const bolehKirim = bisaKirim && !sibuk && terpilih.length > 0 && !adaPmlBelumPilihPpl;
@@ -46,7 +48,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     setPilih((p) => {
       const n = { ...p };
       if (!tandai) delete n[id];
-      else if (Object.keys(n).length < MAKS_SUB_SEKALI_KIRIM) n[id] = ppls.length === 1 ? ppls[0].akun_id : 0;
+      else if (Object.keys(n).length < sisa) n[id] = ppls.length === 1 ? ppls[0].akun_id : 0;
       return n;
     });
   }
@@ -73,7 +75,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     setPesan(null);
     try {
       await apiPortal(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "batalkan", id: p.id }) });
-      setPesan({ nada: "ok", teks: "Permintaan dibatalkan." });
+      setPesan({ nada: "ok", teks: "Permintaan dibatalkan. Kuota Anda kembali." });
       await d.muat();
     } catch (e) {
       setPesan({ nada: "salah", teks: e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal membatalkan. Coba lagi." });
@@ -89,7 +91,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     try {
       await apiPortal(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "ajukan_batal", id: p.id }) });
       setKonfirmasiBatal(null);
-      setPesan({ nada: "ok", teks: `Pembatalan berlaku. ${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} sudah bebas; tandai lagi di daftar lalu pilih PPL penggantinya. Admin dikabari untuk menghapus assignment lama di FASIH.` });
+      setPesan({ nada: "ok", teks: `Pembatalan berlaku. ${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} dan kuota Anda sudah bebas; tandai lagi di daftar lalu pilih PPL penggantinya. Admin dikabari untuk menghapus assignment lama di FASIH.` });
       await d.muat();
     } catch (e) {
       setKonfirmasiBatal(null);
@@ -109,7 +111,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
         <span className="min-w-0 flex-1">
           <b className="block text-[15px] text-[#0F2A52]">Plotting tim hari ini</b>
           <small className="block text-[12px] text-[#55657D]">
-            {data ? `${terpakai} Sub SLS sudah diajukan` : "Memuat…"}
+            {data ? `${terpakai} dari ${maks} Sub SLS sudah diajukan · sisa kuota ${sisa}` : "Memuat…"}
             {data && !bisaKirim ? " · hanya PML yang bisa mengisi" : ""}
           </small>
         </span>
@@ -119,7 +121,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
       {buka && (
         <div className="border-t border-[#E8EDF5] px-4 pb-4 pt-3">
           <p className="rounded-[12px] bg-[#EAF1FC] px-3 py-2 text-[12.5px] leading-snug text-[#0F2A52]">
-            <b>Ketuk kartu Sub SLS</b> untuk membuka Peta, Daftar KK, dan Monitoring-nya. <b>Upayakan pendataan awal ini dengan keroyokan.</b> Daftar keluarga akan di-assign ke salah satu akun PPL. Pilih Sub SLS sebanyak yang akan didata; tidak ada batas jumlah pengajuan.
+            <b>Ketuk kartu Sub SLS</b> untuk membuka Peta, Daftar KK, dan Monitoring-nya. <b>Upayakan pendataan awal ini dengan keroyokan.</b> Daftar keluarga akan di-assign ke salah satu akun PPL. Pilih <mark className="rounded px-0.5 font-extrabold" style={{ background: "#FFE680" }}>maksimal {maks} Sub SLS</mark> secara total (bukan per hari). {CATATAN_BATAS_PENGAJUAN}
           </p>
 
           {d.galat && !data && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">Status permintaan belum termuat. {d.galat === "SESI_BERAKHIR" ? "" : d.galat}</p>}
@@ -129,7 +131,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
               const p = aktifPer.get(s.idsubsls);
               const n = totalKk(s.idsubsls);
               const dipilih = s.idsubsls in pilih;
-              const penuh = !dipilih && terpilih.length >= MAKS_SUB_SEKALI_KIRIM;
+              const penuh = !dipilih && terpilih.length >= sisa;
               const nonaktif = !bisaKirim || !!p || n === 0 || penuh;
               return (
                 <li key={s.idsubsls} className={`rounded-[14px] border px-3 py-2.5 ${dipilih ? "border-[#1F5FD1] bg-[#F1F6FE]" : "border-[#E3E8F0] bg-white"}`}>
@@ -236,6 +238,8 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
             </div>
           )}
 
+          {sisa === 0 && bisaKirim && <p className="mt-2 text-[12px] font-bold text-[#8A6200]">Kuota total {maks} Sub SLS sudah terpakai. Batalkan permintaan yang masih menunggu, atau ajukan pembatalan untuk yang sudah keluar, bila ingin mengganti.</p>}
+
           <button type="button" disabled={!bolehKirim} onClick={() => void kirim()} className="mt-3 min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">
             {sibuk ? "Mengirim…" : terpilih.length > 0 ? `Kirim permintaan (${terpilih.length} Sub SLS)` : "Kirim permintaan"}
           </button>
@@ -251,7 +255,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
             <p className="font-extrabold text-[#0F2A52]">Hanya PML yang dapat mengisi pilihan dan menekan Kirim.</p>
             <p className="mt-1">PPL hanya melihat pilihan dan statusnya di kartu ini; tombol tidak aktif bagi PPL.</p>
             <p className="mt-1">Salah memilih PPL? PML dapat menekan <b>Ajukan pembatalan</b> pada Sub SLS yang sudah keluar di FASIH. Pembatalan langsung berlaku tanpa persetujuan, lalu PML bisa mengisi ulang PPL-nya.</p>
-            <p className="mt-1">Setelah Kirim, permintaan masuk ke admin. Admin meng-assign daftar KK ke akun FASIH PPL yang dipilih, lalu status berubah dari &quot;Menunggu admin&quot; menjadi &quot;Sudah keluar di FASIH&quot; dan PML serta PPL dikabari lewat notifikasi. Tidak ada batas jumlah pengajuan per PML.</p>
+            <p className="mt-1">Setelah Kirim, permintaan masuk ke admin. Admin meng-assign daftar KK ke akun FASIH PPL yang dipilih, lalu status berubah dari &quot;Menunggu admin&quot; menjadi &quot;Sudah keluar di FASIH&quot; dan PML serta PPL dikabari lewat notifikasi. Batas <mark className="rounded px-0.5 font-bold" style={{ background: "#FFE680" }}>maksimal {maks} Sub SLS</mark> per PML sebagai total pengajuan (bukan per hari); yang dibatalkan tidak dihitung. {CATATAN_BATAS_PENGAJUAN}</p>
           </div>
         </div>
       )}

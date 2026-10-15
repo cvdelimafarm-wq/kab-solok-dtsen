@@ -1,7 +1,7 @@
 // lib/portal/permintaanDaftar.ts  (hanya server)
 //
 // (13 Okt 2026) Permintaan daftar KK "keluar" di FASIH dari kartu plotting tim -- permintaan user.
-// - PML (satu-satunya yang boleh mengirim) mengajukan Sub SLS + PPL untuk tiap Sub SLS (TANPA batas jumlah sejak 15 Okt 2026; fungsi database bencana_pendataan_minta_total dipanggil dengan p_maks = BATAS_DB_TANPA_BATAS).
+// - PML (satu-satunya yang boleh mengirim) mengajukan Sub SLS + PPL untuk tiap Sub SLS (batas TOTAL per PML naik bertahap 7/9/11 menurut tanggal WIB, lib/permintaanDaftar.ts batasPengajuan; dijaga atomik di fungsi database bencana_pendataan_minta_total).
 // - Admin (bencana.admin level kelola) meng-assign di FASIH, mengekspor templat Pengawas-Pencacah, lalu menandai "sudah keluar".
 // - Push: admin dikabari saat permintaan masuk; PML dan PPL dikabari saat sudah keluar. Kegagalan push TIDAK menggagalkan aksi.
 // - Pembatalan dan penyelesaian bersifat lunak (kolom status); tidak ada yang dihapus.
@@ -12,7 +12,7 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
-import { BATAS_DB_TANPA_BATAS, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
+import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
@@ -129,7 +129,7 @@ export async function permintaanSemua(db: Db): Promise<PermintaanAdmin[]> {
   return lengkapi(db, (data ?? []) as BarisDb[], true);
 }
 
-/** PML mengirim permintaan 1..N Sub SLS + PPL-nya (tanpa batas jumlah). Tim = hasil ambilTim (akun sudah dipastikan anggota tim). */
+/** PML mengirim permintaan 1..N Sub SLS + PPL-nya (N = sisa kuota total). Tim = hasil ambilTim (akun sudah dipastikan anggota tim). */
 export async function buatPermintaan(db: Db, akun: { id: number; nama?: string | null }, tim: Tim, pilihan: Pilihan[]): Promise<{ ids: number[]; dikirim: number } | Galat> {
   if (tim.saya.peran !== "pml") return { galat: "Hanya PML yang dapat mengirim permintaan. PPL hanya melihat.", status: 403 };
   const subTim = new Set(tim.sub.map((s) => s.idsubsls));
@@ -145,11 +145,13 @@ export async function buatPermintaan(db: Db, akun: { id: number; nama?: string |
     if (!count) return { galat: `Daftar KK untuk ${labelWilayah(wil.get(p.idsubsls), p.idsubsls)} belum diunggah admin.`, status: 409 };
   }
 
-  const { data, error } = await db.rpc("bencana_pendataan_minta_total", { p_pml: tim.pml.id, p_akun: akun.id, p_tanggal: tanggalWib(Date.now()), p_pilihan: pilihan, p_maks: BATAS_DB_TANPA_BATAS });
+  const hariIni = tanggalWib(Date.now());
+  const maks = batasPengajuan(hariIni);
+  const { data, error } = await db.rpc("bencana_pendataan_minta_total", { p_pml: tim.pml.id, p_akun: akun.id, p_tanggal: hariIni, p_pilihan: pilihan, p_maks: maks });
   if (error) return { galat: "Permintaan gagal disimpan. Coba lagi.", status: 500 };
   const r = data as { status: string; ids?: number[]; alasan?: string; sisa?: number };
   if (r.status !== "ok") {
-    if (r.alasan === "melebihi_batas") return { galat: "Permintaan ditolak karena batas di server. Hubungi admin.", status: 409 };
+    if (r.alasan === "melebihi_batas") return { galat: r.sisa ? `Kuota Anda tinggal ${r.sisa} Sub SLS (total maksimal ${maks} per PML hari ini).` : `Kuota total ${maks} Sub SLS hari ini sudah terpakai. Batalkan salah satu bila ingin mengganti.`, status: 409 };
     if (r.alasan === "sudah_diminta") return { galat: "Salah satu Sub SLS sudah diminta sebelumnya dan masih berlaku.", status: 409 };
     return { galat: "Permintaan ditolak.", status: 400 };
   }
