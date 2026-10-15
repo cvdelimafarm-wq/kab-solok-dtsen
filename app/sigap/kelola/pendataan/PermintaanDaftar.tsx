@@ -175,7 +175,7 @@ export default function PermintaanDaftar() {
         </button>
       </div>
       <p className="mt-1 text-[12.5px] leading-snug text-[#55657D]">
-        PML mengajukan Sub SLS beserta PPL-nya (total maksimal 5 per PML, bukan per hari). Alurnya: <b>Ekspor templat FASIH</b> → unggah dan assign di FASIH → <b>Tandai sudah keluar</b>. PML dan PPL langsung dikabari lewat notifikasi dan status di kartu plotting mereka berubah. PML juga dapat <b>mengajukan pembatalan</b> assignment yang sudah keluar; itu langsung berlaku tanpa persetujuan, dan tab <b>Hapus di FASIH</b> mencatat assignment lama yang perlu Anda hapus di FASIH.
+        PML mengajukan Sub SLS beserta PPL-nya (tanpa batas jumlah). Alurnya: <b>Ekspor templat FASIH</b> → unggah dan assign di FASIH → <b>Tandai sudah keluar</b>. PML dan PPL langsung dikabari lewat notifikasi dan status di kartu plotting mereka berubah. PML juga dapat <b>mengajukan pembatalan</b> assignment yang sudah keluar; itu langsung berlaku tanpa persetujuan, dan tab <b>Hapus di FASIH</b> mencatat assignment lama yang perlu Anda hapus di FASIH.
       </p>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 

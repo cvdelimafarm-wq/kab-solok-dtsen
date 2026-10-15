@@ -1,9 +1,9 @@
 // app/api/portal/pendataan/permintaan/route.ts
 //
 // (13 Okt 2026) Kartu plotting tim: permintaan daftar KK "keluar" di FASIH -- permintaan user.
-//  GET                -> { sekarang, tanggal, maks, bisa_kirim, permintaan[] }   anggota tim (PML dan PPL melihat yang SAMA; hanya PML bisa_kirim)
+//  GET                -> { sekarang, tanggal, bisa_kirim, permintaan[] }   anggota tim (PML dan PPL melihat yang SAMA; hanya PML bisa_kirim)
 //  GET ?admin=1       -> { sekarang, boleh_kelola, permintaan[] (+email) }       admin bencana.admin (lihat); boleh_kelola = level kelola
-//  POST { aksi:"buat", pilihan:[{idsubsls,ppl_akun_id}] }   PML tim: total maks. 5 Sub SLS berlaku per PML (bukan per hari); admin diberi push
+//  POST { aksi:"buat", pilihan:[{idsubsls,ppl_akun_id}] }   PML tim: tanpa batas jumlah Sub SLS (dihapus 15 Okt 2026); admin diberi push
 //  POST { aksi:"batalkan", id }                              PML tim: hanya yang masih menunggu
 //  POST { aksi:"ajukan_batal", id }                          PML tim: batalkan assignment yang SUDAH keluar di FASIH; langsung berlaku (tanpa persetujuan), admin & PPL dikabari
 //  POST { aksi:"batal_diproses", ids:[...] }                 admin level kelola: tandai pembatalan sudah dihapus di FASIH
@@ -17,7 +17,7 @@ import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
 import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan } from "@/lib/portal/permintaanDaftar";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
-import { MAKS_SUB_PENGAJUAN, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
+import { periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       sekarang: new Date().toISOString(),
       tanggal: tanggalWib(Date.now()),
-      maks: MAKS_SUB_PENGAJUAN,
       bisa_kirim: tim.saya.peran === "pml" && !aktorDariHeader(req.headers),
       permintaan: await permintaanTim(db, tim.pml.id),
     });

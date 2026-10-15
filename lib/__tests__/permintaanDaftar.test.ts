@@ -1,33 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { MAKS_SUB_PENGAJUAN, JUDUL_TEMPLAT_FASIH, labelJorong, susunPushBatal, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, CATATAN_BATAL, LABEL_STATUS_MINTA, type Permintaan } from "@/lib/permintaanDaftar";
+import { BATAS_DB_TANPA_BATAS, MAKS_SUB_SEKALI_KIRIM, JUDUL_TEMPLAT_FASIH, labelJorong, susunPushBatal, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, tanggalWib, tanpaEmail, urutPermintaan, CATATAN_BATAL, LABEL_STATUS_MINTA, type Permintaan } from "@/lib/permintaanDaftar";
 
 const P = (o: Partial<Permintaan>): Permintaan => ({ id: 1, idsubsls: "1303071002000101", kecamatan: "", nagari: "", sls: "", sub_sls: "", pml_id: 1, pml_nama: "", ppl_akun_id: 1, ppl_nama: "", tanggal: "2026-10-13", status: "menunggu", diminta_at: "2026-10-13T01:00:00Z", selesai_at: null, ...o });
 
-describe("tanggalWib & kuota", () => {
+describe("tanggalWib & batas teknis", () => {
   it("memakai tanggal WIB (UTC+7)", () => {
     expect(tanggalWib("2026-10-13T16:59:00Z")).toBe("2026-10-13");
     expect(tanggalWib("2026-10-13T17:00:00Z")).toBe("2026-10-14");
   });
-  it("kuota = batas TOTAL 5 dikurangi pengajuan yang masih berlaku, tanpa memandang tanggal", () => {
-    expect(MAKS_SUB_PENGAJUAN).toBe(5);
-    expect(sisaKuota([])).toBe(5);
-    expect(sisaKuota([P({})])).toBe(4);
-    expect(sisaKuota([P({ tanggal: "2026-10-12" }), P({ id: 2, tanggal: "2026-10-13" }), P({ id: 3, tanggal: "2026-10-14" })])).toBe(2);
-    expect(sisaKuota([1, 2, 3, 4, 5])).toBe(0);
-    expect(sisaKuota([1, 2, 3, 4, 5, 6, 7])).toBe(0);
+  it("tidak ada kuota total: batas teknis sekali kirim 200 dan batas database tak tercapai (dicabut 15 Okt 2026)", () => {
+    expect(MAKS_SUB_SEKALI_KIRIM).toBe(200);
+    expect(BATAS_DB_TANPA_BATAS).toBeGreaterThan(100_000);
   });
 });
 
 describe("periksaPilihan", () => {
-  it("menerima pilihan sah (sampai batas total)", () => {
+  it("menerima pilihan sah", () => {
     const r = periksaPilihan([{ idsubsls: "1303071002000101", ppl_akun_id: 5 }, { idsubsls: "1303071002000901", ppl_akun_id: "6" }]);
     expect(r).toEqual({ ok: true, pilihan: [{ idsubsls: "1303071002000101", ppl_akun_id: 5 }, { idsubsls: "1303071002000901", ppl_akun_id: 6 }] });
   });
-  it("menolak kosong, lebih dari 5, kode salah, PPL kosong, dan ganda", () => {
+  it("menolak kosong, lebih dari batas teknis, kode salah, PPL kosong, dan ganda", () => {
     expect(periksaPilihan([]).ok).toBe(false);
     expect(periksaPilihan("x").ok).toBe(false);
     const enam = ["1303071002000101", "1303071002000901", "1303080008000401", "1303080008000402", "1303080008000403", "1303080008000404"].map((idsubsls) => ({ idsubsls, ppl_akun_id: 1 }));
-    expect(periksaPilihan(enam).ok).toBe(false);
+    expect(periksaPilihan(enam).ok).toBe(true); // tidak lagi dibatasi 5
+    expect(periksaPilihan(enam, 5).ok).toBe(false);
     expect(periksaPilihan(enam.slice(0, 5)).ok).toBe(true);
     expect(periksaPilihan([{ idsubsls: "123", ppl_akun_id: 1 }]).ok).toBe(false);
     expect(periksaPilihan([{ idsubsls: "1303071002000101", ppl_akun_id: 0 }]).ok).toBe(false);
