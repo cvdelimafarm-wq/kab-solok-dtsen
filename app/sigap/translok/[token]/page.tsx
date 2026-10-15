@@ -9,6 +9,7 @@ import { labelFoto } from "@/lib/sigapLabelFoto";
 import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
+import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -1498,6 +1499,15 @@ function FormRealisasi({
         <p className="mt-2.5 rounded-xl bg-slate-50 px-3 py-2 text-[12.5px] leading-snug text-slate-600">
           Belum ada hasil di {namaLembar} atas nama Anda pada tanggal ini, jadi isian belum terisi otomatis. Isi manual, atau lengkapi hasilnya lalu muat ulang halaman ini.
         </p>
+      )}
+      {/* (15 Okt 2026) Laporan diambil dari pendataan: bila belum ada hasil, petugas diarahkan ke Lembar Pendataan (Sub SLS prioritas) dari dalam formulir */}
+      {sumber === "pendataan" && !oto && !tersimpan && boleh && (
+        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] leading-snug text-amber-900">
+          <p>Laporan ini diambil dari hasil pendataan. Lengkapi dulu status KK di Lembar Pendataan, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
+          <a href={alamatLembarUtama("/sigap/pendataan")} className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#E0A526] px-4 text-[14px] font-extrabold text-[#1E2A47]">
+            Buka Lembar Pendataan
+          </a>
+        </div>
       )}
       {sumber && oto && banding && (
         <div className={`mt-2.5 rounded-xl px-3 py-2 text-[12.5px] leading-snug ${banding.semuaSama ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-900"}`}>

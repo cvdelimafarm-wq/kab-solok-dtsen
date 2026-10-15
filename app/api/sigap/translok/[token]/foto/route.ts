@@ -10,6 +10,7 @@
 // DELETE ?penugasan_id=&tanggal=&slot=                    -> hapus foto slot (hanya selama masih boleh)
 
 import { NextRequest, NextResponse } from "next/server";
+import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { BUCKET_SIGAP, akunDariToken, cekAksesIsian } from "@/lib/sigap";
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
     }
     const path = `translok/${penugasanId}/${akses.tanggal}/slot${slot}.jpg`;
     const { error: eUp } = await db.storage.from(BUCKET_SIGAP).upload(path, jpeg, { contentType: "image/jpeg", upsert: true });
-    if (eUp) return NextResponse.json({ error: `Gagal menyimpan foto: ${eUp.message}` }, { status: 500 });
+    if (eUp) return galatServer("[api/sigap/translok foto POST unggah]", eUp, "Gagal menyimpan foto. Coba lagi.");
     const { error } = await db.from("sigap_dokumentasi").upsert(
       {
         penugasan_id: penugasanId,
@@ -80,12 +81,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       },
       { onConflict: "penugasan_id,tanggal,slot" }
     );
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return galatServer("[api/sigap/translok foto]", error);
     const { data: signed } = await db.storage.from(BUCKET_SIGAP).createSignedUrl(path, 3600);
     return NextResponse.json({ ok: true, slot, url: signed?.signedUrl ?? null });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return galatServer("[api/sigap/translok foto]", err);
   }
 }
 
@@ -109,10 +109,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ toke
     if (!row) return NextResponse.json({ ok: true });
     await db.storage.from(BUCKET_SIGAP).remove([row.file_path as string]);
     const { error } = await db.from("sigap_dokumentasi").delete().eq("id", row.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return galatServer("[api/sigap/translok foto]", error);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return galatServer("[api/sigap/translok foto]", err);
   }
 }

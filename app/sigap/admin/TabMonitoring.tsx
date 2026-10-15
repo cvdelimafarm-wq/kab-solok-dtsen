@@ -18,6 +18,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ambil, aksi, bulanSingkat, hariSingkat, pesanGalat, SesiBerakhir, tglAngka, tglPanjang, tglPendek, waktuWib, type KegiatanRingkas } from "./api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import GrafikMonitoring from "./GrafikMonitoring";
+import PanelSiaranPerbaikan from "./PanelSiaranPerbaikan";
 
 type Status = "lengkap" | "sebagian" | "terlewat" | "rencana";
 type Row = {
@@ -595,6 +596,8 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
           </tbody>
         </TabelKartu>
       )}
+
+      {data.boleh_izin && <PanelSiaranPerbaikan kegiatanId={kegiatanId} />}
 
       {data.boleh_izin && (
         <div ref={formRef}>

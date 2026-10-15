@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
 import BannerAntrean from "@/app/portal/BannerAntrean";
@@ -22,7 +23,10 @@ import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
 import TambahKk from "./TambahKk";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
-import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, waktuRingkas } from "./usePendataan";
+import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
+import { apiPortal } from "@/app/portal/sesi";
+import { tandaBasi } from "@/app/portal/dataBersama";
+import { peringatanSekali, tglPanjangPerbaikan } from "@/lib/sigapPerbaikan";
 import {
   HASIL_KK,
   LABEL_HASIL,
@@ -44,6 +48,7 @@ type Urut = "belum" | "nama" | "dekat";
 type Lembar = null | "sub" | "ppl";
 
 const KUNCI_SUB = "sigap_pendataan_sub";
+const KUNCI_PERBAIKAN = "sigap_perbaikan_tampung_v1";
 const ALASAN_TIDAK_DITEMUKAN = ["Rumah kosong", "Pindah", "Menolak", "Alamat tidak ada"];
 const SUBTEKS: Record<HasilKk, string> = { terdampak: "Keluarga terdampak bencana", tidak_terdampak: "Keluarga tidak terdampak", tidak_ditemukan: "Rumah kosong, pindah, menolak, atau alamat tidak ada" };
 const URUT_LABEL: Record<Urut, string> = { belum: "Belum dulu", nama: "Nama", dekat: "Terdekat" };
@@ -177,12 +182,33 @@ export default function LembarPendataan() {
   const [monPpl, setMonPpl] = useState<number | null>(null);
   const [toast, setToast] = useState<{ pesan: string; urungkan?: () => void } | null>(null);
   const dariKartu = useRef(false); // true bila Sub SLS dibuka dari kartu (ada entri riwayat yang bisa di-"back")
+  // (15 Okt 2026) MODE PERBAIKAN (?perbaikan=<penugasan>&tgl=<hari kerja>): daftar KK sama persis, tetapi penandaan hanya ditampung dulu di HP ini lalu dikirim
+  // sekali lewat tombol "Kirim perbaikan laporan" (dicatat sebagai pendataan tanggal hari kerja itu). Hanya KK yang belum punya hasil yang bisa ditandai.
+  const [perbaikan, setPerbaikan] = useState<{ pen: number; tanggal: string } | null>(null);
+  const [tampung, setTampung] = useState<Record<number, { hasil: HasilKk; alasan: string | null; kunci: string }>>({});
+  const [infoPerbaikan, setInfoPerbaikan] = useState(false);
+  const [konfirmKirim, setKonfirmKirim] = useState(false);
+  const [kirimProses, setKirimProses] = useState(false);
+  const [kirimPesan, setKirimPesan] = useState<string | null>(null);
 
   useEffect(() => {
     setDari(dariAman());
     try {
       // (14 Okt 2026) hanya ?sub di alamat yang langsung membuka Sub SLS; tanpa itu tampil kartu plotting dulu
       setSubPilih(new URLSearchParams(window.location.search).get("sub"));
+      const q = new URLSearchParams(window.location.search);
+      const pen = Number(q.get("perbaikan"));
+      const tgl = q.get("tgl") ?? "";
+      if (Number.isInteger(pen) && pen > 0 && /^\d{4}-\d{2}-\d{2}$/.test(tgl)) {
+        setPerbaikan({ pen, tanggal: tgl });
+        setInfoPerbaikan(true);
+        try {
+          const simpan = JSON.parse(localStorage.getItem(`${KUNCI_PERBAIKAN}:${pen}:${tgl}`) ?? "null");
+          if (simpan && typeof simpan === "object") setTampung(simpan);
+        } catch {
+          /* abaikan */
+        }
+      }
     } catch {
       /* abaikan */
     }
@@ -217,7 +243,12 @@ export default function LembarPendataan() {
   useUnduhKkLatar(useMemo(() => (data ? data.sub.map((s) => s.idsubsls) : []), [data]), subId);
 
   const anggota = useMemo(() => new Map((data?.anggota ?? []).map((a) => [a.akun_id, a])), [data]);
-  const kk = useMemo(() => kkQ.data?.kk ?? [], [kkQ.data]);
+  const kkAsli = useMemo(() => kkQ.data?.kk ?? [], [kkQ.data]);
+  // mode perbaikan: tampilkan penandaan yang masih ditampung di atas daftar server (hanya KK yang belum punya hasil)
+  const kk = useMemo(
+    () => (perbaikan ? kkAsli.map((k) => (!k.hasil && tampung[k.id] ? { ...k, hasil: tampung[k.id].hasil, alasan: tampung[k.id].alasan, ppl_akun_id: data?.saya.akun_id ?? null } : k)) : kkAsli),
+    [kkAsli, perbaikan, tampung, data]
+  );
   const sayaAkun = data?.saya.akun_id ?? 0;
 
   const proj = useMemo(() => {
@@ -250,6 +281,36 @@ export default function LembarPendataan() {
 
   const perSub = useMemo(() => ringkasPerSub(data?.ringkas ?? []), [data]);
   const perPpl = useMemo(() => ringkasPerPpl(data?.ringkas ?? []), [data]);
+
+  // (15 Okt 2026) ?utama=1 (dari tombol pengingat "Buka Lembar Pendataan"): langsung buka Sub SLS prioritas (lanjutan terakhir, atau sisa terbanyak).
+  // Alamat dirapikan (utama dihapus, sub diisi) dengan replaceState, jadi tombol Kembali HP kembali ke halaman sebelumnya, bukan memutar ulang.
+  const utamaDipakai = useRef(false);
+  useEffect(() => {
+    if (utamaDipakai.current || !data) return;
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("utama") !== "1") return;
+      utamaDipakai.current = true;
+      u.searchParams.delete("utama");
+      if (!u.searchParams.get("sub")) {
+        let terakhir: string | null = null;
+        try {
+          terakhir = localStorage.getItem(KUNCI_SUB);
+        } catch {
+          /* abaikan */
+        }
+        const id = pilihSubPrioritas(data.sub.map((s) => s.idsubsls), perSub, terakhir);
+        if (id) {
+          pilihSub(id);
+          setTab("peta");
+          u.searchParams.set("sub", id);
+        }
+      }
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* abaikan */
+    }
+  }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pilihSub(id: string) {
     setSubPilih(id);
@@ -306,8 +367,45 @@ export default function LembarPendataan() {
     }
   }
 
+  function simpanTampung(baru: typeof tampung) {
+    setTampung(baru);
+    if (!perbaikan) return;
+    try {
+      localStorage.setItem(`${KUNCI_PERBAIKAN}:${perbaikan.pen}:${perbaikan.tanggal}`, JSON.stringify(baru));
+    } catch {
+      /* abaikan */
+    }
+  }
+  const sudahAdaHasil = (k: KkLembar) => !!kkAsli.find((x) => x.id === k.id)?.hasil;
+  async function kirimPerbaikan() {
+    if (!perbaikan) return;
+    setKirimProses(true);
+    setKirimPesan(null);
+    try {
+      const items = Object.entries(tampung).map(([id, v]) => ({ kk_id: Number(id), hasil: v.hasil, alasan: v.alasan, kunci: v.kunci }));
+      await apiPortal("/api/portal/perbaikan", { method: "POST", body: JSON.stringify({ aksi: "kirim_laporan", penugasan_id: perbaikan.pen, tanggal: perbaikan.tanggal, items }) });
+      try {
+        localStorage.removeItem(`${KUNCI_PERBAIKAN}:${perbaikan.pen}:${perbaikan.tanggal}`);
+      } catch {
+        /* abaikan */
+      }
+      tandaBasi("/api/portal/kegiatan");
+      tandaBasi("/api/portal/pendataan");
+      router.replace(`/sigap/perbaikan?p=${perbaikan.pen}`);
+    } catch (e) {
+      setKirimPesan(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal mengirim. Periksa sambungan lalu coba lagi.");
+    } finally {
+      setKirimProses(false);
+    }
+  }
+
   function tandai(k: KkLembar, hasil: HasilKk, alasan?: string) {
     if (!subId) return;
+    if (perbaikan) {
+      if (sudahAdaHasil(k)) return setToast({ pesan: "KK ini sudah punya hasil, tidak bisa diubah lewat perbaikan." });
+      simpanTampung({ ...tampung, [k.id]: { hasil, alasan: alasan ?? null, kunci: tampung[k.id]?.kunci ?? uuid() } });
+      return setToast({ pesan: `Ditandai: ${LABEL_HASIL[hasil]} (belum dikirim)` });
+    }
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
     const r = tandaiKk(subId, k, hasil, alasan);
     if (!r.ok) return setToast({ pesan: r.pesan });
@@ -320,6 +418,12 @@ export default function LembarPendataan() {
   }
   function kembalikan(k: KkLembar) {
     if (!subId) return;
+    if (perbaikan) {
+      if (sudahAdaHasil(k)) return setToast({ pesan: "KK ini sudah punya hasil, tidak bisa diubah lewat perbaikan." });
+      const { [k.id]: _buang, ...sisa } = tampung; // eslint-disable-line @typescript-eslint/no-unused-vars
+      simpanTampung(sisa);
+      return setToast({ pesan: "Dikembalikan ke belum didata" });
+    }
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
     const r = tandaiKk(subId, k, "belum");
     if (!r.ok) return setToast({ pesan: r.pesan });
@@ -448,6 +552,26 @@ export default function LembarPendataan() {
           )}
         </div>
       </header>
+
+      {/* (15 Okt 2026) MODE PERBAIKAN: strip sorot + tombol kirim di paling atas; jendela info saat dibuka */}
+      {perbaikan && (
+        <div className="mx-auto w-full max-w-xl space-y-2 px-2.5 pt-2.5">
+          <div className="rounded-[14px] border-l-4 border-[#E0A526] bg-[#FFF4D6] px-3 py-2.5 text-[12.5px] leading-snug text-[#5E4300]">
+            <b>MODE PERBAIKAN.</b> Hasil yang Anda tandai di sini direkam sebagai pendataan tanggal <b>{tglPanjangPerbaikan(perbaikan.tanggal)}</b> dan akan masuk ke laporan translok tanggal itu. Hanya KK yang belum punya hasil yang bisa ditandai.
+          </div>
+          <button
+            type="button"
+            disabled={Object.keys(tampung).length === 0}
+            onClick={() => {
+              setKirimPesan(null);
+              setKonfirmKirim(true);
+            }}
+            className="min-h-[48px] w-full rounded-xl bg-[#E0A526] px-4 text-[14.5px] font-extrabold text-[#1E2A47] shadow-sm disabled:opacity-55"
+          >
+            {`Kirim perbaikan laporan (hari kerja ${Number(perbaikan.tanggal.slice(8))}/${Number(perbaikan.tanggal.slice(5, 7))}) · ${Object.keys(tampung).length} KK`}
+          </button>
+        </div>
+      )}
 
       <div className={`mx-auto flex w-full max-w-xl flex-1 flex-col ${subId ? "" : "pb-28"}`}>
         <div className="space-y-2 px-2.5 pt-2.5 empty:hidden">
@@ -875,7 +999,7 @@ export default function LembarPendataan() {
       )}
 
       {/* (14 Okt 2026) tombol tambah keluarga baru -- hanya saat Sub SLS dibuka, tab Peta / Daftar KK */}
-      {subAktif && tab !== "mon" && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
+      {!perbaikan && subAktif && tab !== "mon" && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
 
       {toast && (
         <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
@@ -892,6 +1016,45 @@ export default function LembarPendataan() {
               Urungkan
             </button>
           )}
+        </div>
+      )}
+
+      {perbaikan && infoPerbaikan && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#0B1530]/60 p-4">
+          <div role="dialog" aria-modal="true" aria-label="Info perbaikan laporan" className="w-full max-w-sm space-y-3 rounded-2xl bg-white px-5 py-5 shadow-2xl">
+            <span className="inline-block rounded-full bg-[#FFF4D6] px-2.5 py-0.5 text-[11.5px] font-extrabold text-[#8A6200]">INFO PERBAIKAN</span>
+            <h2 className="text-[17px] font-extrabold leading-snug">Anda memperbaiki pendataan tanggal {tglPanjangPerbaikan(perbaikan.tanggal)}</h2>
+            <ul className="list-disc space-y-1.5 pl-5 text-[13.5px] leading-relaxed text-[#3A4A66]">
+              <li>
+                Hasil pendataan yang Anda tandai akan <b>direkam sebagai pendataan tanggal {tglPanjangPerbaikan(perbaikan.tanggal)}</b>, bukan hari ini.
+              </li>
+              <li>
+                Hasil itu <b>masuk ke laporan translok</b> tanggal tersebut.
+              </li>
+              <li>{peringatanSekali}</li>
+            </ul>
+            <button type="button" onClick={() => setInfoPerbaikan(false)} className="min-h-[46px] w-full rounded-xl bg-[#E0A526] px-4 text-[15px] font-extrabold text-[#1E2A47]">
+              Mengerti, lanjutkan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {perbaikan && konfirmKirim && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#0B1530]/60 p-0 sm:items-center sm:p-4" onClick={() => !kirimProses && setKonfirmKirim(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Konfirmasi kirim perbaikan" className="w-full max-w-sm space-y-3 rounded-t-2xl bg-white px-5 py-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-[17px] font-extrabold leading-snug">Kirim perbaikan laporan?</h2>
+            <p className="text-[13.5px] leading-relaxed text-[#3A4A66]">
+              {Object.keys(tampung).length} KK akan direkam sebagai pendataan tanggal <b>{tglPanjangPerbaikan(perbaikan.tanggal)}</b> dan masuk ke laporan translok. {peringatanSekali}
+            </p>
+            {kirimPesan && <p className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{kirimPesan}</p>}
+            <button type="button" disabled={kirimProses} onClick={() => void kirimPerbaikan()} className="min-h-[46px] w-full rounded-xl bg-[#E0A526] px-4 text-[15px] font-extrabold text-[#1E2A47] disabled:opacity-60">
+              {kirimProses ? "Mengirim…" : "Ya, kirim perbaikan"}
+            </button>
+            <button type="button" disabled={kirimProses} onClick={() => setKonfirmKirim(false)} className="min-h-[44px] w-full rounded-xl border border-[#CBD6E6] px-4 text-[14px] font-bold text-[#1E2A47]">
+              Periksa lagi
+            </button>
+          </div>
         </div>
       )}
     </main>

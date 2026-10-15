@@ -6,7 +6,7 @@
 //
 // Satu daftar kekurangan dihitung dari data yang sudah ada; kartu Beranda, kartu "Kerjakan sekarang" tahapan kegiatan, langkah bernomor,
 // dan (nanti) modal pengingat membaca daftar yang SAMA supaya isinya tidak saling bertentangan. Urutan = skor tertinggi dulu:
-//   izin susulan mendesak 90 > hari ini mendesak (sisa < 2 jam) 88 > izin susulan 76 > hari ini 72..75 > pilih hari kerja 65 > hari terlewat 60.
+//   perbaikan administrasi mendesak 91 > hari ini mendesak (sisa < 2 jam) 88 > perbaikan administrasi 78 (menggantikan 'izin susulan' per hari, 15 Okt) > hari ini 72..75 > pilih hari kerja 65 > hari terlewat 60.
 //   Dalam "hari ini": hasil lembar sudah ada tetapi laporan belum / lembar belum ada hasil (+3) > foto (+2) > laporan manual (+0).
 // Hari lampau yang tidak lengkap HANYA diingatkan dalam JENDELA_TERLEWAT_HARI hari (sesudahnya tidak bisa diperbaiki selain izin admin dan
 // pengingat yang tak bisa ditindaklanjuti hanya menjadi gangguan); daftar lengkapnya tetap ada di tab Hari Kerja halaman kerja.
@@ -14,7 +14,13 @@
 import { hariDinilai, type AturanIsian } from "@/lib/sigap";
 
 export type NadaKekurangan = "merah" | "emas" | "biru";
-export type JenisKekurangan = "izin_susulan" | "foto" | "laporan" | "lembar" | "hari_terlewat" | "hari_kerja";
+export type JenisKekurangan = "izin_susulan" | "perbaikan" | "foto" | "laporan" | "lembar" | "hari_terlewat" | "hari_kerja";
+
+/** (15 Okt 2026) Satu hari kerja lampau yang masih bisa diperbaiki (izin 24 jam), dipakai modal dan menu "Perbaiki administrasi". */
+export type HariPerbaikan = { tanggal: string; laporan: boolean; foto: number; fotoTotal: number; sampai: string };
+
+/** Alamat menu perbaikan administrasi (halaman tersendiri, bukan halaman kerja translok). */
+export const alamatMenuPerbaikan = (penugasanId: number): string => `/sigap/perbaikan?p=${penugasanId}`;
 
 export type Kekurangan = {
   /** unik per kekurangan + keadaan: berubah bila angkanya berubah (mis. foto 3 -> 4). Dipakai sebagai kunci modal "sekali per kekurangan". */
@@ -39,6 +45,12 @@ export type Kekurangan = {
   href: string;
   /** tombol kedua (mis. "Minta izin susulan ke admin" lewat WhatsApp, atau "Isi laporan manual"); luar = tautan keluar aplikasi */
   sekunder?: { teks: string; href: string; luar?: boolean };
+  /** jenis "perbaikan": penugasan dan daftar hari yang bisa diperbaiki (checklist di modal/menu) */
+  penugasanId?: number;
+  hari?: HariPerbaikan[];
+  /** jenis "perbaikan": alamat halaman kerja translok (foto/laporan manual) dan apakah laporan diperbaiki lewat daftar KK (kegiatan pendataan) */
+  hrefKerja?: string;
+  lewatKk?: boolean;
 };
 
 export type IsianHari = {
@@ -170,30 +182,40 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
   const lembar = m.sumber === "identifikasi" ? "Lembar Identifikasi" : "Lembar Pendataan";
   const izin = m.izin ?? {};
 
-  // --- 1. Izin susulan yang masih berlaku untuk hari lampau
+  // --- 1. Perbaikan administrasi: hari lampau yang masih punya izin susulan (jendela 24 jam) dan belum lengkap.
+  // (15 Okt 2026) Semua hari itu digabung jadi SATU kekurangan "Perbaiki administrasi" (modal + menu perbaikan), bukan satu per hari.
+  const hariPerbaikan: HariPerbaikan[] = [];
   for (const t of hariKerja) {
     const sampai = izin[t];
     if (!sampai || t >= hariIni) continue;
-    const sisaIzin = (Date.parse(sampai) - nowMs) / 1000;
-    if (!(sisaIzin > 0)) continue;
+    if (!((Date.parse(sampai) - nowMs) / 1000 > 0)) continue;
     const b = bagianKurang(m.isian[t], aturan);
     if (!b.laporan && b.fotoN === 0) continue;
-    const mend = sisaIzin < AMBANG_MENDESAK_DETIK;
-    const fokus = b.laporan ? "laporan" : "foto";
+    hariPerbaikan.push({ tanggal: t, laporan: b.laporan, foto: aturan.jumlah_foto - b.fotoN, fotoTotal: aturan.jumlah_foto, sampai: new Date(Date.parse(sampai)).toISOString() });
+  }
+  if (hariPerbaikan.length > 0) {
+    const terdekat = hariPerbaikan.reduce((a, h) => (Date.parse(h.sampai) < Date.parse(a) ? h.sampai : a), hariPerbaikan[0].sampai);
+    const mend = (Date.parse(terdekat) - nowMs) / 1000 < AMBANG_MENDESAK_DETIK;
+    const n = hariPerbaikan.length;
+    const wib = new Date(Date.parse(terdekat) + 7 * 3_600_000).toISOString().slice(0, 10);
     out.push({
-      kode: `izin_susulan:${m.penugasanId}:${t}:${b.laporan ? "L" : ""}${b.foto.join("")}`,
-      jenis: "izin_susulan",
-      tanggal: t,
-      skor: mend ? 90 : 76,
+      kode: `perbaikan:${m.penugasanId}:${hariPerbaikan.map((h) => `${h.tanggal}${h.laporan ? "L" : ""}${h.foto}`).join(",")}`,
+      jenis: "perbaikan",
+      tanggal: null,
+      skor: mend ? 91 : 78,
       nada: mend ? "merah" : "emas",
-      label: "IZIN SUSULAN",
-      judul: `Lengkapi ${tglPendekKek(t)} (izin susulan)`,
-      ringkas: `Izin susulan ${tglPendekKek(t)}`,
-      uraian: `Izin berlaku s.d. ${jamMenitWib(Date.parse(sampai))} WIB. Kurang: ${ringkasKurang(b, aturan)}.`,
-      batas: new Date(Date.parse(sampai)).toISOString(),
-      progres: aturan.jumlah_foto > 0 ? { selesai: aturan.jumlah_foto - b.fotoN, total: aturan.jumlah_foto } : undefined,
-      aksi: b.laporan ? "Isi laporan susulan" : `Unggah foto ${rentangNomor(b.foto)}`,
-      href: url(`tab=hari_kerja&tgl=${t}&fokus=${fokus}`),
+      label: "PERBAIKI ADMINISTRASI",
+      judul: `Perbaiki administrasi (${n} hari)`,
+      ringkas: `Perbaiki ${n} hari`,
+      uraian: `${hariPerbaikan.map((h) => tglPendekKek(h.tanggal)).join(", ")} belum lengkap. Kesempatan hanya sekali, berlaku sampai ${tglPendekKek(wib)} ${jamMenitWib(Date.parse(terdekat))} WIB.`,
+      batas: terdekat,
+      progres: undefined,
+      aksi: "Lengkapi administrasi",
+      href: alamatMenuPerbaikan(m.penugasanId),
+      penugasanId: m.penugasanId,
+      hari: hariPerbaikan,
+      hrefKerja: m.hrefDasar,
+      lewatKk: m.sumber === "pendataan" && !!m.hrefLembar,
     });
   }
 
@@ -207,7 +229,8 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
     const batas = new Date(akhirHari).toISOString();
     const nFoto = aturan.jumlah_foto - b.fotoN;
     const adaHasil = (isi.hasilLembar ?? 0) > 0;
-    const bisaLembar = !!m.sumber && !!m.hrefLembar;
+    // (15 Okt 2026) PML tidak lagi diarahkan ke Lembar Identifikasi: pekerjaannya beralih ke pengawasan, laporannya diisi manual (jumlah KK diawasi).
+    const bisaLembar = !!m.sumber && m.sumber !== "identifikasi" && !!m.hrefLembar;
     const ket = (s: string) => `${s}${mendesak ? " Batas 23.59 WIB; sesudahnya hari ini tidak masuk Kwitansi." : " Batas 23.59 WIB."}`;
 
     if (b.laporan) {
@@ -236,11 +259,12 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
           label,
           judul: `Belum ada hasil di ${lembar} hari ini`,
           ringkas: "Lembar belum ada hasil",
-          uraian: ket(`Hasil di ${lembar} otomatis menjadi saran isi laporan dan dihitung sebagai laporan selesai.`),
+          uraian: ket(`Laporan diambil dari hasil ${lembar}. Buka formulir laporan; bila hasilnya masih kosong, Anda diarahkan ke ${lembar} untuk melengkapinya.`),
           batas,
-          aksi: `Buka ${lembar}`,
-          href: m.hrefLembar!,
-          sekunder: { teks: "Isi laporan manual", href: url("tab=hari_ini&fokus=laporan") },
+          // (15 Okt 2026) Tombol utama = formulir laporan (sesuai judul langkah "Laporan & foto harian"); Lembar menjadi tombol kedua dan juga ditawarkan di dalam formulir.
+          aksi: "Isi laporan",
+          href: url("tab=hari_ini&fokus=laporan"),
+          sekunder: { teks: `Buka ${lembar}`, href: m.hrefLembar! },
         });
       } else {
         out.push({

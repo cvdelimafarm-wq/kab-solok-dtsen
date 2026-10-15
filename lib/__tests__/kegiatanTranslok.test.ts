@@ -71,7 +71,7 @@ describe("susunTranslok: hari terlewat", () => {
     const r = susunTranslok(masuk({ hariKerja: ["2026-10-12"], isian: { "2026-10-12": { laporan: true, foto: 4, slot: [1, 2, 3, 4] } }, izin: { "2026-10-12": sampai }, nowMs: at("10:00") }));
     expect(r.langkah![2].status).toBe("perlu");
     expect(r.langkah![2].ket).not.toContain("Minta izin susulan");
-    expect(r.langkah![2].href).toContain("tgl=2026-10-12&fokus=foto");
+    expect(r.langkah![2].href).toBe("/sigap/perbaikan?p=46");
   });
 });
 
@@ -86,11 +86,15 @@ describe("tugasDariKegiatan memakai kekurangan teratas", () => {
     expect(t.lencana?.nada).toBe("merah");
     expect(t.skor).toBeGreaterThanOrEqual(88);
   });
-  it("pagi hari kerja tanpa hasil: kartu mengarah ke Lembar Pendataan", () => {
+  it("pagi hari kerja tanpa hasil: kartu dan langkah 3 membuka formulir laporan (bukan Lembar Pendataan)", () => {
     const r = susunTranslok(masuk({ nowMs: at("07:00") }));
     const t = tugasDariKegiatan([r], at("07:00"))!;
-    expect(t.href).toBe("/sigap/pendataan");
-    expect(t.aksi).toBe("Buka Lembar Pendataan");
+    expect(t.href).toContain("fokus=laporan");
+    expect(t.href).not.toBe("/sigap/pendataan");
+    expect(t.aksi).toBe("Isi laporan");
+    const l3 = r.langkah!.find((l) => l.kode === "harian")!;
+    expect(l3.href).toContain("fokus=laporan");
+    expect(l3.ket).toContain("Belum ada hasil di Lembar Pendataan");
   });
   it("tanpa kekurangan (adapter lama) tetap memakai langkah seperti sebelumnya", () => {
     const r = susunTranslok(masuk({ isian: { [HARI_INI]: { laporan: true, foto: 2 } } }));

@@ -58,7 +58,7 @@ export function useUnduhKkLatar(idsubs: string[], dulukan: string | null) {
   }, [kunci]);
 }
 
-function uuid(): string {
+export function uuid(): string {
   const c = typeof crypto !== "undefined" ? crypto : undefined;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   const b = new Uint8Array(16);

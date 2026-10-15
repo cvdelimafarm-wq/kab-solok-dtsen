@@ -7,7 +7,7 @@
 // hasil identifikasi. Sub SLS yang dinyatakan TIDAK TERDAMPAK diberi warna & tulisan "Aman" (permintaan user). Ikon peta di sebelah nama nagari
 // membuka peta WA (desa) & peta SLS. Mulai berlaku 10 Okt 2026 (tahap Pendataan).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
@@ -41,6 +41,21 @@ export default function DaftarIdentifikasi() {
   const [saring, setSaring] = useState<Saring>("semua");
   const [peta, setPeta] = useState<string | null>(null); // kode desa yang petanya dibuka
   useEffect(() => setDari(dariAman()), []);
+  // (15 Okt 2026) ?utama=1 (dari tombol pengingat "Buka Lembar Identifikasi"): tampilkan langsung daftar Sub SLS yang BELUM diisi (bila semua sudah, tampil semua).
+  const utamaDipakai = useRef(false);
+  useEffect(() => {
+    if (utamaDipakai.current || !data) return;
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("utama") !== "1") return;
+      utamaDipakai.current = true;
+      if (data.sub.some((s) => keadaanSub(s) === "belum")) setSaring("belum");
+      u.searchParams.delete("utama");
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* abaikan */
+    }
+  }, [data]);
 
   const sufiks = dari ? `?dari=${encodeURIComponent(dari)}` : "";
   const ringkas = data?.ringkas;

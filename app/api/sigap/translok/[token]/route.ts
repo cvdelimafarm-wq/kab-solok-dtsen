@@ -11,6 +11,7 @@
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
 import { NextRequest, NextResponse } from "next/server";
+import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@supabase/supabase-js";
 import { PESAN_ARSIP } from "@/lib/portal/periode";
 import {
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       if (body?.selesai_onboarding === true) ubah.onboarding_selesai_at = new Date().toISOString();
       if (Object.keys(ubah).length === 0) return NextResponse.json({ ok: true });
       const { error } = await db.from("sigap_akun").update(ubah).eq("id", akun.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) return galatServer("[api/sigap/translok POST]", error);
       return NextResponse.json({ ok: true });
     }
 
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       ubah.verif_jarak_m = jarak;
       ubah.verif_alasan = perluAlasan ? alasan : null;
       const { error } = await db.from("sigap_akun").update(ubah).eq("id", akun.id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) return galatServer("[api/sigap/translok POST]", error);
       return NextResponse.json({ ok: true, jarak_m: jarak, perlu_alasan: perluAlasan });
     }
 
@@ -250,11 +251,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       }
       if (hapus.length) {
         const { error } = await db.from("sigap_hari_kerja").delete().eq("penugasan_id", pen.id).in("tanggal", hapus).is("uji_coba_sampai", null);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) return galatServer("[api/sigap/translok POST]", error);
       }
       if (tambah.length) {
         const { error } = await db.from("sigap_hari_kerja").insert(tambah.map((t) => ({ penugasan_id: pen.id, akun_id: akun.id, tanggal: t })));
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) return galatServer("[api/sigap/translok POST]", error);
       }
       const log = [...tambah.map((t) => ({ t, aksi: "tambah" })), ...hapus.map((t) => ({ t, aksi: "hapus" }))];
       if (log.length) await db.from("sigap_hari_kerja_riwayat").insert(log.map((x) => ({ penugasan_id: pen.id, tanggal: x.t, aksi: x.aksi, oleh: `petugas:${akun.nama}` })));
@@ -289,13 +290,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         },
         { onConflict: "penugasan_id,tanggal" }
       );
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) return galatServer("[api/sigap/translok POST]", error);
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Aksi tidak dikenal." }, { status: 400 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return galatServer("[api/sigap/translok POST]", err);
   }
 }

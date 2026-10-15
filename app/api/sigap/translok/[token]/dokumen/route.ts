@@ -8,6 +8,7 @@
 // lengkap memakai berkas beku.
 
 import { NextRequest, NextResponse } from "next/server";
+import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@supabase/supabase-js";
 import { akunDariToken, penugasanAkun, tanggalValid } from "@/lib/sigap";
 import { GalatSpj, buatSpjPdf, headerBerkas, parseJenis } from "@/lib/sigapDokumen";
@@ -44,6 +45,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ token: 
     return new NextResponse(Buffer.from(hasil.bytes), { status: 200, headers: headerBerkas(hasil, "attachment") });
   } catch (err) {
     if (err instanceof GalatSpj) return NextResponse.json({ error: err.message }, { status: err.status });
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Terjadi kesalahan tak terduga" }, { status: 500 });
+    return galatServer("[api/sigap/translok dokumen]", err);
   }
 }

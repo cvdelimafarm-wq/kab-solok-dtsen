@@ -224,7 +224,7 @@ function HalamanTranslok({ id }: { id: string }) {
             </div>
             <div className="mt-3 flex items-center gap-3">
               <span className="grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] bg-[#F4B400] text-[#0F2A52] shadow-[0_6px_14px_rgba(244,180,0,.35)]">
-                <IkonMenu n={utama ? (utama.jenis === "foto" || utama.jenis === "izin_susulan" ? "kamera" : k.ikon) : sekarang!.kode === "harian" ? "kamera" : k.ikon} className="h-6 w-6" />
+                <IkonMenu n={utama ? (utama.jenis === "foto" || utama.jenis === "izin_susulan" || utama.jenis === "perbaikan" ? "kamera" : k.ikon) : sekarang!.kode === "harian" ? "kamera" : k.ikon} className="h-6 w-6" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[15.5px] font-extrabold leading-snug text-[#0F2A52]">{utama ? utama.judul : sekarang!.judul}</p>

@@ -13,6 +13,7 @@ import { laporanDianggap, satuanLaporan, sumberUntukPeran, type SumberOtomatis }
 import { ambilRealisasiOtomatisRingan } from "@/lib/portal/realisasiOtomatis";
 import type { LangkahKegiatan, NadaKegiatan, RingkasKegiatan, StatusLangkah } from "@/lib/sigapKegiatan";
 import { hariLengkapDinilai, hitungTerlewat, susunKekurangan, type IsianHari, type MasukanKekurangan } from "@/lib/sigapKekurangan";
+import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 
 function tglPendek(iso: string): string {
   const b = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -81,7 +82,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
   const kek = susunKekurangan(kekMasuk, nowMs);
   const ter = hitungTerlewat(kekMasuk, nowMs);
   const tugasHariIni = kek.find((x) => x.tanggal === hariIni && (x.jenis === "foto" || x.jenis === "laporan" || x.jenis === "lembar")) ?? null;
-  const izinAktif = kek.find((x) => x.jenis === "izin_susulan") ?? null;
+  const izinAktif = kek.find((x) => x.jenis === "perbaikan") ?? null; // (15 Okt 2026) izin susulan per hari digabung jadi satu "Perbaiki administrasi"
 
   const lengkap = (t: string) => hariLengkapDinilai(isianKek[t], k);
   const berlaku = hariKerja.filter((t) => t <= hariIni);
@@ -227,6 +228,21 @@ export async function kegiatanTranslok(
   nowMs: number,
   opsi: { namaPetugas?: string | null; waAdmin?: string | null } = {}
 ): Promise<RingkasKegiatan[]> {
+  return (await muatMasukanTranslok(db, akunId, token, pen, nowMs, opsi)).map((m) => susunTranslok(m));
+}
+
+/**
+ * (15 Okt 2026) Bahan mentah per penugasan (hari kerja, isian per tanggal, izin susulan aktif) sebelum disusun menjadi ringkasan.
+ * Dipakai kegiatanTranslok dan siaran perbaikan admin (perlu isian per tanggal, bukan hanya kekurangan).
+ */
+export async function muatMasukanTranslok(
+  db: Db,
+  akunId: number,
+  token: string,
+  pen: Penugasan[],
+  nowMs: number,
+  opsi: { namaPetugas?: string | null; waAdmin?: string | null } = {}
+): Promise<MasukanTranslok[]> {
   const aktif = pen.filter((p) => p.status_periode !== "arsip");
   if (aktif.length === 0) return [];
   const ids = aktif.map((p) => p.id);
@@ -260,7 +276,7 @@ export async function kegiatanTranslok(
       }
       const izinP: Record<string, string> = {};
       for (const z of izin ?? []) if (z.penugasan_id === p.id) izinP[z.tanggal as string] = z.berlaku_sampai as string;
-      return susunTranslok({
+      const masukan: MasukanTranslok = {
         p,
         hariKerja,
         isian,
@@ -271,9 +287,10 @@ export async function kegiatanTranslok(
         namaPetugas: opsi.namaPetugas ?? null,
         satuan,
         sumber,
-        hrefLembar: sumber === "identifikasi" ? "/sigap/identifikasi" : sumber === "pendataan" ? "/sigap/pendataan" : null,
+        hrefLembar: sumber === "identifikasi" ? alamatLembarUtama("/sigap/identifikasi") : sumber === "pendataan" ? alamatLembarUtama("/sigap/pendataan") : null,
         waAdmin: opsi.waAdmin ?? null,
-      });
+      };
+      return masukan;
     })
   );
 }

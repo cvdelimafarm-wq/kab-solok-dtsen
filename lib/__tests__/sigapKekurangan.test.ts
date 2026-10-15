@@ -61,12 +61,13 @@ describe("pembantu", () => {
 });
 
 describe("susunKekurangan: hari ini", () => {
-  it("pagi, lembar belum ada hasil: arahkan ke lembar (bukan status tetap)", () => {
+  it("pagi, lembar belum ada hasil: tombol utama = formulir laporan, Lembar = tombol kedua", () => {
     const k = susunKekurangan(dasar(), at("07:00"));
     expect(k[0].jenis).toBe("lembar");
-    expect(k[0].href).toBe("/sigap/pendataan");
-    expect(k[0].aksi).toBe("Buka Lembar Pendataan");
-    expect(k[0].sekunder?.href).toContain("fokus=laporan");
+    expect(k[0].href).toContain("fokus=laporan");
+    expect(k[0].aksi).toBe("Isi laporan");
+    expect(k[0].sekunder?.href).toBe("/sigap/pendataan");
+    expect(k[0].sekunder?.teks).toBe("Buka Lembar Pendataan");
     expect(k.some((x) => x.jenis === "foto")).toBe(true);
   });
   it("siang, lembar sudah punya hasil tetapi laporan belum: 'Periksa & simpan laporan' ke kartu laporan", () => {
@@ -110,6 +111,15 @@ describe("susunKekurangan: hari ini", () => {
     expect(k[0].jenis).toBe("foto");
     expect(k[0].judul).toBe("Unggah 5 foto dokumentasi");
   });
+  it("PML (sumber identifikasi): tidak diarahkan ke Lembar Identifikasi, laporan manual tanpa tombol lembar", () => {
+    const k = susunKekurangan(dasar({ sumber: "identifikasi", hrefLembar: "/sigap/identifikasi" }), at("07:00"));
+    expect(k.some((x) => x.jenis === "lembar")).toBe(false);
+    const l = k.find((x) => x.jenis === "laporan")!;
+    expect(l.aksi).toBe("Isi laporan");
+    expect(l.href).toContain("fokus=laporan");
+    expect(l.sekunder).toBeUndefined();
+    expect(l.uraian).not.toContain("Lembar Identifikasi");
+  });
   it("tanpa lembar (peran tanpa sumber otomatis): laporan manual", () => {
     const k = susunKekurangan(dasar({ sumber: null, hrefLembar: null }), at("07:00"));
     expect(k.find((x) => x.jenis === "laporan")?.aksi).toBe("Isi laporan");
@@ -146,11 +156,28 @@ describe("susunKekurangan: hari lampau", () => {
   it("izin susulan aktif: diingatkan dengan batas izin, bukan 'minta izin'", () => {
     const sampai = new Date(at("20:00")).toISOString();
     const k = susunKekurangan(dasar({ hariKerja: ["2026-10-12"], isian: { "2026-10-12": { laporan: true, slot: [1, 2, 3, 4] } }, izin: { "2026-10-12": sampai } }), at("10:00"));
-    expect(k[0].jenis).toBe("izin_susulan");
-    expect(k[0].aksi).toBe("Unggah foto 5");
-    expect(k[0].href).toBe("/sigap/translok/tok?p=88&tab=hari_kerja&tgl=2026-10-12&fokus=foto");
-    expect(k.some((x) => x.jenis === "hari_terlewat")).toBe(false);
+    expect(k[0].jenis).toBe("perbaikan");
+    expect(k[0].judul).toBe("Perbaiki administrasi (1 hari)");
+    expect(k[0].aksi).toBe("Lengkapi administrasi");
+    expect(k[0].href).toBe("/sigap/perbaikan?p=88");
+    expect(k[0].penugasanId).toBe(88);
+    expect(k[0].hari).toEqual([{ tanggal: "2026-10-12", laporan: false, foto: 4, fotoTotal: 5, sampai: sampai }]);
+    expect(k.some((x) => x.jenis === "hari_terlewat" || x.jenis === "izin_susulan")).toBe(false);
     expect(hitungTerlewat(dasar({ hariKerja: ["2026-10-12"], isian: {}, izin: { "2026-10-12": sampai } }), at("10:00")).semua).toBe(0);
+  });
+  it("beberapa hari dengan izin digabung jadi satu kekurangan, memuat laporan/foto tiap hari; hari yang sudah lengkap tidak ikut", () => {
+    const sampai = new Date(at("20:00") + 86_400_000).toISOString();
+    const m = dasar({
+      hariKerja: ["2026-10-10", "2026-10-12", "2026-10-13"],
+      isian: { "2026-10-10": { laporan: true, slot: [1, 2, 3, 4, 5] }, "2026-10-12": { laporan: false, slot: [1, 2, 3] }, "2026-10-13": { laporan: false, dianggap: true, slot: [1, 2] } },
+      izin: { "2026-10-10": sampai, "2026-10-12": sampai, "2026-10-13": sampai },
+    });
+    const k = susunKekurangan(m, at("10:00")).filter((x) => x.jenis === "perbaikan");
+    expect(k).toHaveLength(1);
+    expect(k[0].hari?.map((h) => [h.tanggal, h.laporan, h.foto])).toEqual([["2026-10-12", true, 3], ["2026-10-13", false, 2]]);
+    expect(k[0].judul).toBe("Perbaiki administrasi (2 hari)");
+    expect(k[0].skor).toBe(78);
+    expect(k[0].nada).toBe("emas");
   });
   it("izin yang sudah habis dihitung terlewat biasa", () => {
     const habis = new Date(at("06:00")).toISOString();
@@ -168,7 +195,7 @@ describe("susunKekurangan: persiapan dan urutan", () => {
   it("izin mendesak mengalahkan hari ini biasa; hari ini mendesak mengalahkan izin biasa", () => {
     const izinHabisSebentar = new Date(at("12:30")).toISOString();
     const m = dasar({ hariKerja: ["2026-10-12", HARI_INI], isian: { "2026-10-12": { laporan: true, slot: [1] } }, izin: { "2026-10-12": izinHabisSebentar } });
-    expect(susunKekurangan(m, at("11:00"))[0].jenis).toBe("izin_susulan");
+    expect(susunKekurangan(m, at("11:00"))[0].jenis).toBe("perbaikan");
     const izinPanjang = new Date(at("23:00") + 86_400_000).toISOString();
     const n = dasar({ hariKerja: ["2026-10-12", HARI_INI], isian: { "2026-10-12": { laporan: true, slot: [1] } }, izin: { "2026-10-12": izinPanjang } });
     expect(susunKekurangan(n, at("22:30"))[0].jenis).toBe("foto");
