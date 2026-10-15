@@ -177,3 +177,32 @@ export const teksXY = (x: number, y: number, maksDesimal = 2): string => `${form
 
 /** Persentase bulat (boleh > 100), "84%". */
 export const teksPersen = (x: number, y: number): string => `${y > 0 ? Math.round((x / y) * 100) : 0}%`;
+
+// ---------------------------------------------------------------- bentuk jawaban API capaian (/api/portal/pendataan/capaian)
+
+/** Cara jarak hari itu dihitung: jalan (OSRM), perkiraan (garis lurus x 1,3), tanpa_rumah / tanpa_titik (jarak belum bisa dihitung), tidak_ada (belum ada KK didata). */
+export type JarakMetode = "jalan" | "perkiraan" | "tanpa_rumah" | "tanpa_titik" | "tidak_ada";
+
+export type CapaianHari = PoinHari & {
+  tanggal: string;
+  terdampak: number;
+  tidak_terdampak: number;
+  tidak_ditemukan: number;
+  km: number;
+  metode: JarakMetode;
+};
+
+export type DataCapaian =
+  | { ada: false }
+  | {
+      ada: true;
+      sekarang: string;
+      kegiatan: string;
+      hari_ini: CapaianHari;
+      realisasi: Realisasi;
+      /** Hutang poin dari hari-hari sebelum hari ini (ditutup lebih dulu oleh poin hari ini). */
+      hutang_sebelumnya: number;
+      /** Aturan bobot sudah berlaku pada hari ini? (mulai 15 Okt 2026) */
+      bobot_berlaku: boolean;
+      aturan: Pick<AturanPoin, "poinTerdampak" | "poinTidakTerdampak" | "poinPerKm" | "maksPoinJarak" | "targetHarian" | "mulaiBobot">;
+    };

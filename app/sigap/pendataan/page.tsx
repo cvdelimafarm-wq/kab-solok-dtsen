@@ -22,6 +22,7 @@ import { useAntrean } from "@/app/portal/antreanKirim";
 import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
 import TambahKk from "./TambahKk";
+import CapaianFloat from "./CapaianFloat";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
@@ -1000,6 +1001,9 @@ export default function LembarPendataan() {
 
       {/* (14 Okt 2026) tombol tambah keluarga baru -- hanya saat Sub SLS dibuka, tab Peta / Daftar KK */}
       {!perbaikan && subAktif && tab !== "mon" && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
+
+      {/* (15 Okt 2026) tombol float capaian hari ini (PPL): bertumpuk di atas "+ Keluarga baru" bila tombol itu tampil; tidak tampil di tab Monitoring */}
+      {!perbaikan && !terpilih && !lembar && (!subAktif || tab !== "mon") && <CapaianFloat naik={!!subAktif && tab !== "mon"} />}
 
       {toast && (
         <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
