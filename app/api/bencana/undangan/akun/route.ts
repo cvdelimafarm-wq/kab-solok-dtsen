@@ -67,6 +67,14 @@ export async function POST(req: NextRequest) {
       .from("bencana_undangan")
       .upsert({ petugas_id: petugasId, pin_hash: hash, pin_salt: salt, akun_dibuat_at: new Date().toISOString() }, { onConflict: "petugas_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // (16 Okt 2026) Samakan penanda di akun SIGAP: login SIGAP memakai PIN ini (lihat pinAkun di /api/sigap/masuk), tetapi `sigap_akun.akun_dibuat_at`
+    // tadinya tetap kosong sehingga laporan (mis. kehadiran pelatihan) menyebut petugas "belum membuat akun". Hash PIN TIDAK disalin. Terbaik-upaya.
+    const { error: errAkun } = await db
+      .from("sigap_akun")
+      .update({ akun_dibuat_at: new Date().toISOString() })
+      .eq("petugas_bencana_id", petugasId)
+      .is("akun_dibuat_at", null);
+    if (errAkun) console.error("[undangan/akun] penanda akun SIGAP gagal:", errAkun.message);
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";
