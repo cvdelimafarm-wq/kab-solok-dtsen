@@ -9,6 +9,8 @@ import { penugasanAkun } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
 import type { BukaMode, InfoIdentifikasi, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import type { InfoSpdt } from "@/lib/spdtNtp";
+import { adalahSupervisorSpdt, ringkasModulSpdt } from "@/lib/portal/spdt";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import { ringkasModulPendataan } from "@/lib/portal/pendataan";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
@@ -183,20 +185,25 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
 
   type Terpilih = { i: BarisInduk; t: TahapDef[]; isi: Set<string>; penInduk: typeof pen };
   const terpilih: Terpilih[] = [];
+  // (16 Okt 2026) SPDT NTP: Supervisor tidak punya penugasan, jadi dikenali dari peran (hanya diperiksa bila ada induk bermodul spdt_lembar)
+  const adaSpdt = tahap.some((x) => x.isi?.includes("spdt_lembar"));
+  const supervisorSpdt = adaSpdt ? await adalahSupervisorSpdt(db, akun.id).catch(() => false) : false;
   for (const i of induk) {
     if (kode && i.kode !== kode) continue;
     const kegIds = (i.kegiatan_ids ?? []).map(Number);
     const penInduk = pen.filter((p) => kegIds.includes(p.kegiatan.id));
-    const relevan = !!akun.petugas_bencana_id || penInduk.length > 0;
-    if (!relevan) continue;
     const t = tahap.filter((x) => x.induk_kode === i.kode).map(jadiTahap).sort((a, b) => a.urutan - b.urutan);
     if (t.length === 0) continue;
+    // induk SPDT NTP hanya untuk yang bertugas di kegiatannya (jangan ikut muncul bagi seluruh petugas bencana)
+    const indukSpdt = t.some((x) => x.isi.includes("spdt_lembar"));
+    const relevan = indukSpdt ? penInduk.length > 0 || supervisorSpdt : !!akun.petugas_bencana_id || penInduk.length > 0;
+    if (!relevan) continue;
     terpilih.push({ i, t, isi: new Set(t.flatMap((x) => x.isi)), penInduk });
   }
   const perlu = (k: string) => terpilih.some((x) => x.isi.has(k));
 
   // Tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
-  const [perencanaan, wilayah, identifikasi, pendataan] = await Promise.all([
+  const [perencanaan, wilayah, identifikasi, pendataan, spdt] = await Promise.all([
     perlu("konfirmasi") ? perencanaanAkun(db, akun) : Promise.resolve<InfoPerencanaan | null>(null),
     perlu("wilayah_tim")
       ? (async (): Promise<InfoWilayah | null> => {
@@ -215,6 +222,8 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       : Promise.resolve<InfoIdentifikasi | null>(null),
     // (11 Okt 2026) Lembar Pendataan KK: PML & PPL yang timnya sudah punya daftar KK (null = modul tidak tampil)
     perlu("pendataan") && akun.petugas_bencana_id ? ringkasModulPendataan(db, akun.petugas_bencana_id) : Promise.resolve<InfoPendataan | null>(null),
+    // (16 Okt 2026) Lembar Pendataan SPDT NTP: PPL/PML/Supervisor (null = modul tidak tampil)
+    perlu("spdt_lembar") ? ringkasModulSpdt(db, akun) : Promise.resolve<InfoSpdt | null>(null),
   ]);
 
   const hasil: Induk[] = [];
@@ -236,6 +245,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       wilayah: isi.has("wilayah_tim") ? wilayah : null,
       identifikasi: isi.has("identifikasi") ? identifikasi : null,
       pendataan: isi.has("pendataan") ? pendataan : null,
+      spdt: isi.has("spdt_lembar") ? spdt : null,
     });
   }
   return hasil;

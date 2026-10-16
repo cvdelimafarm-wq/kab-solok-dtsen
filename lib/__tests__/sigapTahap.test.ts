@@ -212,3 +212,35 @@ describe("modul pendataan", () => {
 function susunModulHref(i: Induk): string | null {
   return susunTahap(K(i))[0].modul[0].href;
 }
+
+// (16 Okt 2026) Modul "spdt_lembar" (Lembar Pendataan SPDT NTP) -- lembar bantu tanpa status pendataan.
+describe("modul spdt_lembar", () => {
+  const induk = (s: Induk["spdt"], tahap = [T("lembar_pendataan", 1, ["spdt_lembar"]), T("translok", 2, ["translok:2"])]) =>
+    INDUK(tahap, { kode: "spdt_ntp", nama: "SPDT NTP 2026", pendek: "SPDT NTP", ikon: "grafik", perencanaan: null, wilayah: null, spdt: s });
+
+  it("sah dipilih admin; tidak tampil bagi akun tanpa peran SPDT NTP (tahap ikut disembunyikan)", () => {
+    expect(periksaTahapAdmin({ kode: "lembar", nama: "Lembar", isi: ["spdt_lembar"], buka_mode: "langsung", buka_tanggal: null }, [2])).toBeNull();
+    expect(susunTahap(K(induk(null)))).toEqual([]);
+    expect(susunTahap(K(induk({ peran: "ppl", total: 0, ppl: 0, pml: 0 })))).toEqual([]); // PPL tanpa KK
+  });
+
+  it("PPL & PML: berjalan (tanpa penyelesaian), tautan ke /sigap/spdt dengan ?dari= ke tahap", () => {
+    const m = susunTahap(K(induk({ peran: "ppl", total: 25, ppl: 1, pml: 1 })))[0].modul[0];
+    expect(m).toMatchObject({ kode: "spdt_lembar", status: "berjalan", aksi: "Buka lembar", pecahan: 0 });
+    expect(m.ket).toContain("25 KK di wilayah tugas Anda");
+    expect(m.href).toBe("/sigap/spdt?dari=" + encodeURIComponent("/sigap/kegiatan/spdt_ntp/lembar_pendataan"));
+  });
+
+  it("Supervisor tanpa penugasan tetap melihat modul; tombolnya Buka monitoring", () => {
+    const h = susunTahap(K(induk({ peran: "supervisor", total: 811, ppl: 40, pml: 15 })));
+    expect(h.map((x) => x.kode)).toEqual(["lembar_pendataan"]); // translok:2 tak berlaku (tak ada penugasan)
+    expect(h[0].modul[0]).toMatchObject({ aksi: "Buka monitoring", status: "berjalan" });
+    expect(h[0].modul[0].ket).toContain("811 KK seluruh wilayah");
+  });
+
+  it("ringkasan Layer 1 berwarna biru (berjalan), bukan merah/emas", () => {
+    const r = ringkasInduk(K(induk({ peran: "pml", total: 45, ppl: 2, pml: 1 })));
+    expect(r?.nada).toBe("biru");
+    expect(r?.href).toBe("/sigap/kegiatan/spdt_ntp");
+  });
+});

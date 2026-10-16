@@ -20,6 +20,7 @@ const DATA_MODUL: Record<string, string> = {
   wilayah_tim: "/api/portal/wilayah-tim",
   identifikasi: "/api/portal/identifikasi",
   pendataan: "/api/portal/pendataan", // (11 Okt 2026) Lembar Pendataan KK
+  spdt_lembar: "/api/portal/spdt-kk", // (16 Okt 2026) Lembar Pendataan SPDT NTP
 };
 
 const internal = (x: string | null | undefined): x is string => !!x && x.startsWith("/") && !x.startsWith("//");
