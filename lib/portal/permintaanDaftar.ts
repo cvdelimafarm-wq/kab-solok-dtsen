@@ -14,7 +14,7 @@ import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
 import { adaKkBerhasil, lepasKolam } from "@/lib/portal/kolamWilayah";
 import { pesanTolak } from "@/lib/kolamWilayah";
-import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
+import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, susunPushTolak, rapikanAlasanTolak, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
@@ -300,6 +300,58 @@ export async function selesaikanPermintaan(db: Db, akun: { id: number }, ids: nu
     console.error("[selesai push]", e instanceof Error ? e.message : e);
   }
   return { selesai: baris.length, dikirim };
+}
+
+/**
+ * (16 Okt 2026) Admin MENOLAK permintaan yang masih menunggu (belum di-assign di FASIH): status jadi "dibatalkan" (lunak; kuota PML kembali, Sub SLS bebas
+ * lagi, tidak ada data dihapus). Alasan opsional dicatat di audit dan dikirim ke PML lewat push. Pilihan dari kolam dikembalikan ke kolam; bila di Sub SLS itu
+ * sudah ada KK yang didata, penolakan dilewati (alokasinya tidak boleh dilepas) dan dilaporkan.
+ */
+export async function tolakPermintaan(db: Db, akun: { id: number }, ids: number[], alasanMentah: unknown): Promise<{ ditolak: number; dilewati: number; dikirim: number } | Galat> {
+  const alasan = rapikanAlasanTolak(alasanMentah);
+  const { data: cari, error: errCari } = await db.from("bencana_pendataan_permintaan").select("id, idsubsls, pml_id, dari_kolam").in("id", ids).eq("status", "menunggu");
+  if (errCari) return { galat: "Gagal membaca permintaan. Coba lagi.", status: 500 };
+  const calon = (cari ?? []) as { id: number; idsubsls: string; pml_id: number; dari_kolam: boolean | null }[];
+  if (!calon.length) return { galat: "Tidak ada permintaan menunggu yang cocok (mungkin sudah ditandai, ditolak, atau dibatalkan PML).", status: 409 };
+  const boleh: typeof calon = [];
+  let dilewati = 0;
+  for (const c of calon) {
+    if (c.dari_kolam && (await adaKkBerhasil(db, c.idsubsls))) dilewati++;
+    else boleh.push(c);
+  }
+  if (!boleh.length) return { galat: pesanTolak("sudah_didata").isi, status: 409 };
+
+  const { data: upd, error } = await db
+    .from("bencana_pendataan_permintaan")
+    .update({ status: "dibatalkan", dibatalkan_oleh: akun.id, dibatalkan_at: new Date().toISOString() })
+    .in("id", boleh.map((b) => b.id))
+    .eq("status", "menunggu")
+    .select("id, idsubsls, pml_id, dari_kolam");
+  if (error) return { galat: "Gagal menolak. Coba lagi.", status: 500 };
+  const baris = (upd ?? []) as { id: number; idsubsls: string; pml_id: number; dari_kolam: boolean | null }[];
+  if (!baris.length) return { galat: "Permintaan ini sudah berubah status.", status: 409 };
+  await catatAudit(db, akun.id, "pendataan_minta_tolak", { permintaan: baris.map((b) => b.id), alasan: alasan || null }).catch(() => undefined);
+  for (const b of baris) if (b.dari_kolam) await lepasKolam(db, b.id);
+
+  let dikirim = 0;
+  try {
+    const [wil, akunPml] = await Promise.all([petaWilayah(db, baris.map((b) => b.idsubsls)), akunPerPetugas(db, baris.map((b) => b.pml_id))]);
+    const perPml = new Map<number, string[]>();
+    for (const b of baris) {
+      const w = wil.get(b.idsubsls);
+      perPml.set(b.pml_id, [...(perPml.get(b.pml_id) ?? []), w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : b.idsubsls]);
+    }
+    for (const [pmlId, jorong] of perPml) {
+      const a = akunPml.get(pmlId);
+      if (!a) continue;
+      const { judul, isi } = susunPushTolak(jorong, alasan);
+      const h = await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tolak-pml-${pmlId}` });
+      dikirim += h.terkirim;
+    }
+  } catch (e) {
+    console.error("[tolak push]", e instanceof Error ? e.message : e);
+  }
+  return { ditolak: baris.length, dilewati, dikirim };
 }
 
 /** Admin menarik kembali tanda "sudah keluar di FASIH" (salah klik): status kembali "menunggu", tanpa notifikasi. Kuota PML tidak berubah. */

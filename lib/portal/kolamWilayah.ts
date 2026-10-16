@@ -26,7 +26,7 @@ const ringkas = (t: string, maks: number) => (t.length > maks ? `${t.slice(0, ma
 
 function bacaProgres(x: unknown): ProgresKolam {
   const o = (x ?? {}) as Record<string, unknown>;
-  return { awal_total: n(o.awal_total), awal_didata: n(o.awal_didata), tambahan_sub: n(o.tambahan_sub), tambahan_total: n(o.tambahan_total), tambahan_didata: n(o.tambahan_didata) };
+  return { awal_total: n(o.awal_total), awal_didata: n(o.awal_didata), tambahan_sub: n(o.tambahan_sub), tambahan_total: n(o.tambahan_total), tambahan_didata: n(o.tambahan_didata), izin_wilayah: o.izin_wilayah === true };
 }
 
 /** Progres tim dan isi kolam. Gagal baca (migrasi belum dijalankan) -> error, biar terlihat. */

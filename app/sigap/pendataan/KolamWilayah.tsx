@@ -199,12 +199,13 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
             <div className="rounded-[14px] border border-[#E3D3F0] px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12.5px] font-extrabold text-[#0F2A52]">Wilayah tim Anda</span>
-                <span className={`rounded-full px-2 py-[2px] text-[11px] font-extrabold ${lolosW ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>{lolosW ? "Syarat terpenuhi" : `Syarat > ${SYARAT_WILAYAH_PERSEN}%`}</span>
+                <span className={`rounded-full px-2 py-[2px] text-[11px] font-extrabold ${lolosW ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>{progres.izin_wilayah ? "Dikecualikan" : lolosW ? "Syarat terpenuhi" : `Syarat > ${SYARAT_WILAYAH_PERSEN}%`}</span>
               </div>
               <Bar nilai={pctW} syarat={SYARAT_WILAYAH_PERSEN} lolos={lolosW} />
               <p className="mt-1.5 text-[12px] text-[#52627A]">
                 <b className="text-[#0F2A52]">{String(pctW).replace(".", ",")}%</b> · {progres.awal_didata.toLocaleString("id-ID")} dari {progres.awal_total.toLocaleString("id-ID")} KK sudah didata
               </p>
+              {progres.izin_wilayah && <p className="mt-1 text-[12px] font-bold text-[#13794B]">Tim Anda diberi izin khusus oleh admin: syarat wilayah {SYARAT_WILAYAH_PERSEN}% tidak berlaku. Syarat lain (maksimal {MAKS_PILIH_KOLAM} sekali pilih, tambahan {SYARAT_TAMBAHAN_PERSEN}%) tetap berlaku.</p>}
             </div>
             <div className="rounded-[14px] border border-[#E3D3F0] px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">

@@ -5,12 +5,13 @@
 // (13 Okt 2026) Permintaan daftar KK ke FASIH dari kartu plotting tim (PML) -- permintaan user.
 // Alur admin: lihat permintaan -> Ekspor templat FASIH (format Pengawas-Pencacah: PROVINSI, KABUPATEN/KOTA, KECAMATAN, DESA/KELURAHAN, SLS/SUBSLS, Email Pengawas, Email Pencacah)
 // -> unggah & assign di FASIH -> "Tandai sudah keluar di FASIH" (PML dan PPL dikabari lewat notifikasi, status di kartu berubah).
+// (16 Okt 2026) "Tolak permintaan": admin menolak yang masih menunggu (alasan opsional); kuota PML kembali, PML dikabari.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
-import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
+import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, MAKS_ALASAN_TOLAK, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
 type Saring = "menunggu" | "sudah_keluar" | "dibatalkan";
 
@@ -22,8 +23,10 @@ export default function PermintaanDaftar() {
   const [saring, setSaring] = useState<Saring>("menunggu");
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [yakin, setYakin] = useState(false);
-  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | "hapus" | null>(null);
+  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | "hapus" | "tolak" | null>(null);
   const [yakinTarik, setYakinTarik] = useState(false);
+  const [yakinTolak, setYakinTolak] = useState(false);
+  const [alasanTolak, setAlasanTolak] = useState("");
   const [pesan, setPesan] = useState<string | null>(null);
   const [surel, setSurel] = useState<Record<string, string>>({});
   const [simpanSurel, setSimpanSurel] = useState<string | null>(null);
@@ -59,6 +62,7 @@ export default function PermintaanDaftar() {
 
   function centang(id: number) {
     setYakin(false);
+    setYakinTolak(false);
     setPesan(null);
     setPilih((s) => {
       const n = new Set(s);
@@ -121,6 +125,25 @@ export default function PermintaanDaftar() {
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menandai. Coba lagi.");
       setYakin(false);
+    } finally {
+      setSibuk(null);
+    }
+  }
+
+  async function tolak() {
+    if (dipilihMenunggu.length === 0 || sibuk) return;
+    setSibuk("tolak");
+    setPesan(null);
+    try {
+      const h = await apiPortal<{ ditolak: number; dilewati: number; dikirim: number }>(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "tolak", ids: dipilihMenunggu.map((p) => p.id), alasan: alasanTolak }) });
+      setPesan(`${h.ditolak} permintaan ditolak; kuota PML kembali dan Sub SLS-nya bebas lagi. PML dikabari lewat notifikasi (${h.dikirim} perangkat).${h.dilewati ? ` ${h.dilewati} dilewati karena KK di dalamnya sudah ada yang didata (pilihan kolam yang sudah dikerjakan tidak bisa ditolak).` : ""}`);
+      setPilih(new Set());
+      setYakinTolak(false);
+      setAlasanTolak("");
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menolak. Coba lagi.");
+      setYakinTolak(false);
     } finally {
       setSibuk(null);
     }
@@ -293,6 +316,29 @@ export default function PermintaanDaftar() {
               )
             ) : (
               <p className="text-[12.5px] text-[#6B7A90]">Akun ini hanya boleh melihat dan mengekspor; menandai butuh izin kelola pendataan.</p>
+            ))}
+          {dipilihMenunggu.length > 0 &&
+            boleh &&
+            (!yakinTolak ? (
+              <button type="button" disabled={sibuk !== null} onClick={() => { setYakinTolak(true); setYakin(false); }} className="min-h-[50px] w-full rounded-[14px] border-2 border-[#B42329] bg-white px-4 text-[14px] font-extrabold text-[#B42329] disabled:opacity-50">
+                Tolak permintaan ({dipilihMenunggu.length})…
+              </button>
+            ) : (
+              <div className="rounded-[14px] border border-[#F2B8BA] bg-[#FDE8E8] p-3">
+                <p className="text-[13px] font-bold text-[#7A1D22]">Tolak {dipilihMenunggu.length} permintaan? Sub SLS-nya kembali bebas, kuota pengajuan PML kembali, dan PML dikabari lewat notifikasi. Tidak ada data yang dihapus. Pilihan dari kolam kembali ke kolam.</p>
+                <label className="mt-2 block text-[12px] font-bold text-[#7A1D22]">
+                  Alasan (opsional, ikut dikirim ke PML)
+                  <input type="text" value={alasanTolak} maxLength={MAKS_ALASAN_TOLAK} onChange={(e) => setAlasanTolak(e.target.value)} placeholder="mis. daftar KK belum lengkap" className="mt-1 h-11 w-full rounded-[10px] border border-[#E6B1B3] bg-white px-3 text-[13px] font-normal text-[#0F2A52]" />
+                </label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setYakinTolak(false)} className="min-h-[46px] rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#0F2A52] shadow-sm">
+                    Batal
+                  </button>
+                  <button type="button" disabled={sibuk !== null} onClick={() => void tolak()} className="min-h-[46px] rounded-[12px] bg-[#B42329] text-[13.5px] font-extrabold text-white disabled:opacity-50">
+                    {sibuk === "tolak" ? "Menolak…" : "Ya, tolak"}
+                  </button>
+                </div>
+              </div>
             ))}
           {dipilihKeluar.length > 0 &&
             (boleh ? (

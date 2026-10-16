@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { batasPengajuan, MAKS_SUB_SEKALI_KIRIM, JUDUL_TEMPLAT_FASIH, labelJorong, susunPushBatal, susunPushKeluar, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, CATATAN_BATAL, LABEL_STATUS_MINTA, type Permintaan } from "@/lib/permintaanDaftar";
+import { batasPengajuan, MAKS_SUB_SEKALI_KIRIM, JUDUL_TEMPLAT_FASIH, labelJorong, susunPushBatal, susunPushKeluar, susunPushTolak, rapikanAlasanTolak, MAKS_ALASAN_TOLAK, barisTemplatFasih, namaBerkasTemplat, pecahKodeSubsls, periksaEmail, periksaIds, periksaPilihan, sisaKuota, tanggalWib, tanpaEmail, urutPermintaan, CATATAN_BATAL, LABEL_STATUS_MINTA, type Permintaan } from "@/lib/permintaanDaftar";
 
 const P = (o: Partial<Permintaan>): Permintaan => ({ id: 1, idsubsls: "1303071002000101", kecamatan: "", nagari: "", sls: "", sub_sls: "", pml_id: 1, pml_nama: "", ppl_akun_id: 1, ppl_nama: "", tanggal: "2026-10-13", status: "menunggu", diminta_at: "2026-10-13T01:00:00Z", selesai_at: null, ...o });
 
@@ -154,5 +154,29 @@ describe("pembatalan assignment oleh PML", () => {
     expect(isi.length).toBeLessThanOrEqual(240);
     expect(isi).toMatch(/lagi\)/);
     expect(isi.endsWith("PPL-nya.")).toBe(true);
+  });
+});
+
+describe("tolak admin (16 Okt 2026)", () => {
+  it("push memuat daftar Sub SLS, alasan, dan kabar kuota kembali", () => {
+    const { judul, isi } = susunPushTolak(["Jorong Markiyo 01", "Jorong Kapalo Koto 02"], "daftar KK belum lengkap");
+    expect(judul).toBe("Permintaan daftar KK ditolak");
+    expect(isi).toContain("Ditolak admin: Jorong Markiyo 01; Jorong Kapalo Koto 02.");
+    expect(isi).toContain("Alasan: daftar KK belum lengkap.");
+    expect(isi).toContain("Kuota pengajuan Anda kembali");
+  });
+  it("tanpa alasan: tidak ada kata Alasan", () => {
+    expect(susunPushTolak(["Jorong A 01"], "   ").isi).not.toContain("Alasan");
+  });
+  it("daftar panjang dipotong (+N lagi) dan tetap muat dalam batas push", () => {
+    const banyak = Array.from({ length: 40 }, (_, i) => `Jorong Contoh Panjang Nomor ${i + 1} Sub 0${(i % 3) + 1}`);
+    const { isi } = susunPushTolak(banyak, "x".repeat(300));
+    expect(isi).toMatch(/\(\+\d+ lagi\)/);
+    expect(isi.length).toBeLessThanOrEqual(240);
+  });
+  it("alasan dirapikan: spasi, panjang, bukan teks", () => {
+    expect(rapikanAlasanTolak("  tidak   lengkap \n lagi ")).toBe("tidak lengkap lagi");
+    expect(rapikanAlasanTolak("a".repeat(500)).length).toBe(MAKS_ALASAN_TOLAK);
+    expect(rapikanAlasanTolak(123)).toBe("");
   });
 });

@@ -9,13 +9,14 @@
 //  POST { aksi:"batal_diproses", ids:[...] }                 admin level kelola: tandai pembatalan sudah dihapus di FASIH
 //  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
+//  POST { aksi:"tolak", ids:[...], alasan? }                 admin level kelola: TOLAK permintaan yang masih menunggu (lunak: jadi dibatalkan, kuota PML kembali, PML dikabari + alasan)
 //  POST { aksi:"tarik", ids:[...] }                          admin level kelola: tarik kembali "sudah keluar" -> "menunggu" (salah klik; tanpa notifikasi)
 // Sesi "masuk sebagai" hanya boleh MELIHAT: semua POST ditolak.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
-import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan } from "@/lib/portal/permintaanDaftar";
+import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan, tolakPermintaan } from "@/lib/portal/permintaanDaftar";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { batasPengajuan, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -94,6 +95,15 @@ export async function POST(req: NextRequest) {
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu pembatalan.");
       const h = await prosesPembatalan(db, { id: akun.id }, ids);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "tolak") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menolak permintaan pendataan.", 403);
+      const ids = periksaIds(b.ids);
+      if (!ids) return galat("Pilih minimal satu permintaan.");
+      const h = await tolakPermintaan(db, { id: akun.id }, ids, b.alasan);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }

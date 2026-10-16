@@ -26,6 +26,8 @@ export type ProgresKolam = {
   tambahan_sub: number;
   tambahan_total: number;
   tambahan_didata: number;
+  /** (16 Okt 2026) PML dikecualikan dari syarat wilayah > 70% (tabel bencana_kolam_izin, mis. wilayah kerja sudah habis) */
+  izin_wilayah?: boolean;
 };
 
 export type ItemKolam = {
@@ -63,8 +65,8 @@ export const perluWilayah = (total: number): number => Math.floor((total * SYARA
 /** KK ber-hasil minimal agar tambahan SEKURANGNYA 50%. */
 export const perluTambahan = (total: number): number => Math.ceil((total * SYARAT_TAMBAHAN_PERSEN) / 100);
 
-/** Wilayah awal lebih dari 70%? Tanpa daftar KK sama sekali -> belum lolos. */
-export const lolosWilayah = (p: ProgresKolam): boolean => p.awal_total > 0 && p.awal_didata * 100 > SYARAT_WILAYAH_PERSEN * p.awal_total;
+/** Wilayah awal lebih dari 70%? Tanpa daftar KK sama sekali -> belum lolos. PML dengan izin khusus (izin_wilayah) selalu lolos syarat ini. */
+export const lolosWilayah = (p: ProgresKolam): boolean => p.izin_wilayah === true || (p.awal_total > 0 && p.awal_didata * 100 > SYARAT_WILAYAH_PERSEN * p.awal_total);
 /** Belum pernah mengambil dari kolam -> lolos; kalau sudah, seluruh tambahan harus >= 50%. */
 export const lolosTambahan = (p: ProgresKolam): boolean => p.tambahan_sub === 0 || (p.tambahan_total > 0 && p.tambahan_didata * 100 >= SYARAT_TAMBAHAN_PERSEN * p.tambahan_total);
 

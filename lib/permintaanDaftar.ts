@@ -230,3 +230,37 @@ export function susunPushBatal(untuk: "admin" | "ppl", pml: string, items: ItemB
   const isi = `${awal}${pilih.join("; ")}${lagi > 0 ? ` (+${lagi} lagi)` : ""}.${ekor}`;
   return { judul: judul.slice(0, MAKS_JUDUL_PUSH), isi: potong(isi, MAKS_ISI_PUSH) };
 }
+
+/** (16 Okt 2026) Alasan penolakan admin (opsional) ikut di notifikasi ke PML. */
+export const MAKS_ALASAN_TOLAK = 160;
+/** Bersihkan alasan dari kotak isian: rapikan spasi, potong ke MAKS_ALASAN_TOLAK. */
+export function rapikanAlasanTolak(x: unknown): string {
+  const t = typeof x === "string" ? x.replace(/\s+/g, " ").trim() : "";
+  return t.length > MAKS_ALASAN_TOLAK ? t.slice(0, MAKS_ALASAN_TOLAK).trimEnd() : t;
+}
+
+/**
+ * Push ke PML saat admin MENOLAK permintaan daftar KK yang masih menunggu: daftar Sub SLS (dipotong "(+N lagi)"), alasan bila ada, dan kabar bahwa
+ * kuota kembali sehingga PML boleh mengajukan lagi. Pesan akhir <= MAKS_ISI_PUSH.
+ */
+export function susunPushTolak(jorong: string[], alasan: string): { judul: string; isi: string } {
+  const potong = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+  const a = rapikanAlasanTolak(alasan);
+  const awal = "Ditolak admin: ";
+  const ekor = `${a ? ` Alasan: ${a}.` : ""} Kuota pengajuan Anda kembali; ajukan lagi bila perlu.`;
+  const ruang = Math.max(20, MAKS_ISI_PUSH - ekor.length - awal.length - 1);
+  const pilih: string[] = [];
+  let pakai = 0;
+  for (let k = 0; k < jorong.length; k++) {
+    const t = jorong[k];
+    const sisa = jorong.length - k - 1;
+    const tambah = (pilih.length ? 2 : 0) + t.length;
+    const cadangan = sisa > 0 ? ` (+${sisa} lagi)`.length : 0;
+    if (pakai + tambah + cadangan > ruang && pilih.length > 0) break;
+    pilih.push(pilih.length === 0 ? potong(t, Math.max(10, ruang - cadangan)) : t);
+    pakai += tambah;
+  }
+  const lagi = jorong.length - pilih.length;
+  const isi = `${awal}${pilih.join("; ")}${lagi > 0 ? ` (+${lagi} lagi)` : ""}.${ekor}`;
+  return { judul: "Permintaan daftar KK ditolak".slice(0, MAKS_JUDUL_PUSH), isi: potong(isi, MAKS_ISI_PUSH) };
+}

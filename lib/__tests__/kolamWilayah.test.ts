@@ -39,6 +39,21 @@ describe("syarat wilayah awal (lebih dari 70%)", () => {
   });
 });
 
+describe("izin khusus (dikecualikan dari syarat wilayah)", () => {
+  it("izin_wilayah selalu lolos syarat wilayah, walau 0% atau tanpa daftar KK", () => {
+    expect(lolosWilayah(P({ awal_total: 1213, awal_didata: 103, izin_wilayah: true }))).toBe(true);
+    expect(lolosWilayah(P({ awal_total: 0, awal_didata: 0, izin_wilayah: true }))).toBe(true);
+    expect(lolosWilayah(P({ awal_total: 1213, awal_didata: 103, izin_wilayah: false }))).toBe(false);
+  });
+  it("syarat lain tetap berlaku bagi yang diberi izin", () => {
+    const izin = P({ awal_total: 1213, awal_didata: 103, izin_wilayah: true });
+    expect(periksaAturanKolam({ bisaPilih: true, progres: izin, jumlahDipilih: 0 })).toBeNull();
+    expect(periksaAturanKolam({ bisaPilih: true, progres: izin, jumlahDipilih: 2 })).toBe("maks");
+    expect(periksaAturanKolam({ bisaPilih: true, progres: { ...izin, tambahan_sub: 2, tambahan_total: 228, tambahan_didata: 46 }, jumlahDipilih: 0 })).toBe("tambahan");
+    expect(periksaAturanKolam({ bisaPilih: false, progres: izin, jumlahDipilih: 0 })).toBe("ppl");
+  });
+});
+
 describe("syarat tambahan dari kolam (sekurangnya 50%)", () => {
   it("belum pernah mengambil -> lolos", () => {
     expect(lolosTambahan(P())).toBe(true);
