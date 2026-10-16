@@ -4,7 +4,7 @@
 //
 // (11 Okt 2026) Unggah daftar KK sasaran Pendataan keroyokan PPL/PML -- hanya pemegang izin bencana.admin (level kelola). Permintaan user.
 // Alur: pilih berkas -> diperiksa di peramban ini -> unggah bertahap (500 baris per kiriman; baris bermasalah dilaporkan, yang lain tetap masuk) -> riwayat.
-// Dua jenis berkas: (1) EKSPOR FASIH-SM "1303 - Pendataan" (CSV/Excel): disaring otomatis -- hanya Sub SLS sampel (daftar awal) dan Keberadaan_Keluarga
+// Dua jenis berkas: (1) EKSPOR FASIH-SM "1303 - Pendataan" (CSV/Excel): disaring otomatis -- hanya Keberadaan_Keluarga
 // 1 Ditemukan, 2 Baru, 5 Tidak dapat ditemui sampai akhir pendataan, 6 Keluarga khusus; hanya kolom yang dibutuhkan lembar yang dikirim (NIK, Nomor KK,
 // tanggal lahir, pendapatan, dan kondisi rumah dibuang di sini, tidak pernah sampai ke server); ID penugasan jadi kunci: unggah ulang MEMPERBARUI, tidak menggandakan.
 // (2) Templat Excel/CSV buatan sendiri (Kode Sub SLS, Nama KK, ...).
@@ -221,7 +221,7 @@ export default function UnggahPendataan() {
         <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Kelola · Pendataan Pascabencana</p>
         <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Unggah Daftar KK Pendataan</h1>
         <p className="mt-1.5 max-w-2xl text-[13px] leading-snug text-[#55657D]">
-          Daftar KK sasaran per Sub SLS. Setelah diunggah, seluruh anggota tim (PML dan semua PPL) di Sub SLS itu melihat daftarnya di Lembar Pendataan. Berkas yang diterima: <b>ekspor FASIH-SM &quot;1303 - Pendataan&quot;</b> (CSV/Excel; disaring otomatis ke Sub SLS sampel dan status keberadaan 1, 2, 5, 6; NIK, Nomor KK, dan pendapatan tidak ikut dikirim) atau templat Excel/CSV (kode Sub SLS teks 16 digit, koordinat desimal).
+          Daftar KK sasaran per Sub SLS. Setelah diunggah, seluruh anggota tim (PML dan semua PPL) di Sub SLS itu melihat daftarnya di Lembar Pendataan. Berkas yang diterima: <b>ekspor FASIH-SM &quot;1303 - Pendataan&quot;</b> (CSV/Excel; disaring otomatis ke status keberadaan 1, 2, 5, 6 (seluruh Sub SLS di master wilayah diterima); NIK, Nomor KK, dan pendapatan tidak ikut dikirim) atau templat Excel/CSV (kode Sub SLS teks 16 digit, koordinat desimal).
         </p>
 
         {/* (11 Okt 2026) Unggah CSV memang dirancang dari laptop -- permintaan user; di layar kecil hanya diingatkan */}
@@ -279,7 +279,6 @@ export default function UnggahPendataan() {
                         {fmt(n)} baris berstatus keberadaan {k === "-1" ? "lain" : `${k} (${LABEL_KEBERADAAN[Number(k)] ?? "lain"})`}
                       </li>
                     ))}
-                    {periksa.bukanSampel > 0 && <li>{fmt(periksa.bukanSampel)} baris di Sub SLS yang bukan sampel (di luar daftar awal dan belum diplot ke tim)</li>}
                   </ul>
                 </div>
               )}

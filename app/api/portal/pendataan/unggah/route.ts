@@ -1,7 +1,7 @@
 // app/api/portal/pendataan/unggah/route.ts
 //
 // (11 Okt 2026) Unggah daftar KK sasaran pendataan (admin, izin bencana.admin level kelola) -- permintaan user.
-//  GET                       -> { batch[], total_aktif, total_didata, sampel[] }   (sampel = kode Sub SLS daftar awal, untuk penyaringan di peramban)
+//  GET                       -> { batch[], total_aktif, total_didata, sampel[] }   (sampel = selalu kosong sejak 16 Okt 2026: tidak ada penyaringan Sub SLS di peramban)
 //  POST { aksi:"mulai", nama_berkas, kegiatan_id? }            -> { batch_id }
 //  POST { aksi:"baris", batch_id, baris:[{no,data}] }          -> { diterima, diperbarui, sama, ditolak[{no,pesan}] }   (maks 500 baris per kiriman)
 //  POST { aksi:"selesai", batch_id, ditolak:[{no,pesan}], catatan?:{nama:angka} } -> { diterima, ditolak }
@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
-import { batalkanUnggah, batchAktif, daftarSampel, daftarUnggahan, kegiatanAda, mulaiUnggah, selesaiUnggah, terimaBaris, type TolakBaris } from "@/lib/portal/pendataan";
+import { batalkanUnggah, batchAktif, daftarUnggahan, kegiatanAda, mulaiUnggah, selesaiUnggah, terimaBaris, type TolakBaris } from "@/lib/portal/pendataan";
 import { KEGIATAN_PENDATAAN_ID, MAKS_BARIS_UNGGAH } from "@/lib/pendataan";
 
 export const runtime = "nodejs";
@@ -38,8 +38,9 @@ export async function GET(req: NextRequest) {
   if ("err" in x) return x.err;
   try {
     const kegiatan = Number(req.nextUrl.searchParams.get("kegiatan") ?? KEGIATAN_PENDATAAN_ID) || KEGIATAN_PENDATAAN_ID;
-    const [u, sampel] = await Promise.all([daftarUnggahan(x.db, kegiatan), daftarSampel(x.db)]);
-    return NextResponse.json({ sekarang: new Date().toISOString(), kegiatan_id: kegiatan, ...u, sampel });
+    const u = await daftarUnggahan(x.db, kegiatan);
+    // (16 Okt 2026) `sampel` kosong = peramban tidak menyaring per Sub SLS; semua Sub SLS di master wilayah diterima
+    return NextResponse.json({ sekarang: new Date().toISOString(), kegiatan_id: kegiatan, ...u, sampel: [] });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat daftar unggahan." }, { status: 500 });
   }
