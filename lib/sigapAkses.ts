@@ -2,7 +2,7 @@
 //
 // (5 Okt 2026) SIGAP -- sesi & hak akses (Kelola Peran & Akses), permintaan user:
 //  - Satu pintu masuk /sigap/masuk (nama + PIN). Sesudah masuk, browser memegang "sesi" bertanda tangan
-//    HMAC (akunId.kedaluwarsa.tanda) yg berlaku 12 jam -- dipakai semua endpoint admin.
+//    HMAC (akunId.kedaluwarsa.tanda) yg berlaku 30 hari -- dipakai semua endpoint admin.
 //  - Izin TIDAK di-hardcode: dibaca dari sigap_akun_peran -> sigap_peran_izin (level 'lihat' | 'kelola',
 //    'kelola' sudah termasuk 'lihat'), dgn lingkup kegiatan (null = semua kegiatan).
 //  - Menu petugas Transport Lokal tidak lewat izin: otomatis bila akun punya penugasan aktif.
@@ -10,7 +10,10 @@
 import crypto from "crypto";
 import type { Db } from "@/lib/sigap";
 
-const SESI_JAM = 12;
+// (16 Okt 2026) Sesi login petugas/admin = 30 HARI (permintaan user; sebelumnya 12 jam). Sesi "masuk sebagai" (akun super menyamar
+// sebagai akun lain untuk uji tampilan) SENGAJA tetap pendek: 12 jam.
+const SESI_JAM = 24 * 30;
+const SESI_JAM_MASUK_SEBAGAI = 12;
 
 function kunciRahasia(): string {
   const k = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -22,11 +25,11 @@ function tanda(isi: string): string {
   return crypto.createHmac("sha256", kunciRahasia()).update(isi).digest("base64url");
 }
 
-/** Buat sesi bertanda tangan utk akun (berlaku 12 jam).
+/** Buat sesi bertanda tangan utk akun (berlaku 30 hari; sesi "masuk sebagai" 12 jam).
  *  (10 Okt 2026) aktorId = akun SUPER yang "masuk sebagai" akun ini (uji tampilan PPL/PML). Sesi biasa tetap `akunId.exp.tanda`;
  *  sesi "masuk sebagai" `akunId.exp.aktorId.tanda` (aktor ikut ditandatangani, tidak bisa dipalsukan/dihapus). */
 export function buatSesi(akunId: number, aktorId?: number | null): { sesi: string; sampai: string } {
-  const exp = Date.now() + SESI_JAM * 3_600_000;
+  const exp = Date.now() + (aktorId ? SESI_JAM_MASUK_SEBAGAI : SESI_JAM) * 3_600_000;
   const isi = aktorId ? `${akunId}.${exp}.${aktorId}` : `${akunId}.${exp}`;
   return { sesi: `${isi}.${tanda(isi)}`, sampai: new Date(exp).toISOString() };
 }

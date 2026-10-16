@@ -33,7 +33,7 @@ export const KUNCI_ASLI = {
 } as const;
 
 // (10 Okt 2026) Simpanan data bersama antar-layer (app/portal/dataBersama.ts) disimpan di localStorage (bertahan walau aplikasi ditutup);
-// dibuang saat KELUAR. Saat sesi hanya kedaluwarsa (12 jam) data akun yang sama dipertahankan supaya tampilan pertama setelah masuk lagi tetap instan.
+// dibuang saat KELUAR. Saat sesi hanya kedaluwarsa (30 hari) data akun yang sama dipertahankan supaya tampilan pertama setelah masuk lagi tetap instan.
 export const KUNCI_SIMPAN_DATA = "sigap_cache_v2";
 /** Peta wilayah kerja yang diunduh ke HP (Cache Storage) + daftar berkasnya (app/portal/petaOffline.ts). Tidak dibuang saat keluar (bukan data pribadi). */
 export const NAMA_CACHE_PETA = "sigap-peta-v1";
