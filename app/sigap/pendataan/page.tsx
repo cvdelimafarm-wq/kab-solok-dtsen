@@ -21,6 +21,7 @@ import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
+import { KolamPanel, KolamTombol } from "./KolamWilayah";
 import TambahKk from "./TambahKk";
 import CapaianFloat from "./CapaianFloat";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
@@ -177,6 +178,7 @@ export default function LembarPendataan() {
   const [urut, setUrut] = useState<Urut>("belum");
   const [cari, setCari] = useState("");
   const [lembar, setLembar] = useState<Lembar>(null);
+  const [kolamBuka, setKolamBuka] = useState(false); // (16 Okt 2026) mode Kolam wilayah kerja: menggantikan kartu Plotting tim
   const [terpilihId, setTerpilihId] = useState<number | null>(null);
   const [pandang, setPandang] = useState<Pandang>(PANDANG_AWAL);
   const [saya, setSaya] = useState<{ lat: number; lng: number } | null>(null);
@@ -590,7 +592,11 @@ export default function LembarPendataan() {
         {/* (14 Okt 2026) kartu Sub SLS diklik -> buka Peta | Daftar KK | Monitoring Sub SLS itu */}
         {data && data.sub.length > 0 && !subId && (
           <div className="px-3.5 pt-3">
-            <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} onBuka={bukaSub} />
+            {kolamBuka ? (
+              <KolamPanel anggota={data.anggota} sayaAkun={sayaAkun} onTutup={() => setKolamBuka(false)} onBuka={bukaSub} />
+            ) : (
+              <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} onBuka={bukaSub} />
+            )}
           </div>
         )}
 
@@ -1004,6 +1010,9 @@ export default function LembarPendataan() {
 
       {/* (15 Okt 2026) tombol float capaian hari ini (PPL): bertumpuk di atas "+ Keluarga baru" bila tombol itu tampil; tidak tampil di tab Monitoring */}
       {!perbaikan && !terpilih && !lembar && (!subAktif || tab !== "mon") && <CapaianFloat />}
+
+      {/* (16 Okt 2026) tombol float ungu "Kolam wilayah": hanya di halaman utama (kartu plotting tim), tidak saat sebuah Sub SLS dibuka */}
+      {data && data.sub.length > 0 && !subId && !kolamBuka && !perbaikan && !terpilih && !lembar && <KolamTombol onBuka={() => setKolamBuka(true)} />}
 
       {toast && (
         <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>

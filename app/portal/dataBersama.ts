@@ -50,6 +50,8 @@ const PROFIL: [string, Profil][] = [
   ["/api/portal/identifikasi", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT }],
   // (11 Okt 2026) Lembar Pendataan keroyokan: rekan satu tim menandai KK di lapangan, jadi lebih sering disegarkan daripada identifikasi -- permintaan user.
   ["/api/portal/pendataan", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000 }],
+  // (16 Okt 2026) kolam wilayah kerja: tim lain bisa mengambil Sub SLS kapan saja, jadi cukup sering disegarkan (hanya terbaca saat tombol kolam dibuka)
+  ["/api/portal/pendataan/kolam", { ...dasar, segarMs: 30 * 1000, interval: 60 * 1000 }],
   // (16 Okt 2026) Lembar Pendataan SPDT NTP: daftar KK & koordinat praktis tetap; Monitoring berubah menit ke menit dan bergantung "hari ini"
   ["/api/portal/spdt-kk", { ...dasar, segarMs: 30 * MENIT, interval: 0 }],
   ["/api/portal/spdt-monitoring", { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT, hariBaru: true }],

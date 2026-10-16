@@ -12,12 +12,14 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
+import { adaKkBerhasil, lepasKolam } from "@/lib/portal/kolamWilayah";
+import { pesanTolak } from "@/lib/kolamWilayah";
 import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
 
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
 
-type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null; dibatalkan_at: string | null };
+type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null; dibatalkan_at: string | null; dari_kolam?: boolean | null };
 type Wilayah = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string };
 
 const labelWilayah = (w: Wilayah | undefined, id: string) => (w ? `${rapikanNama(String(w.sls ?? ""))} · ${w.sub_sls} (Nagari ${rapikanNama(String(w.nagari ?? ""))})` : id);
@@ -98,6 +100,7 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
       status: (b.status === "sudah_keluar" ? "sudah_keluar" : b.status === "dibatalkan" ? "dibatalkan" : "menunggu") as StatusMinta,
       diminta_at: b.diminta_at,
       selesai_at: b.selesai_at,
+      dari_kolam: !!b.dari_kolam,
       dibatalkan_at: b.dibatalkan_at,
       email_pengawas: denganEmail ? emailFasihPetugas.get(b.pml_id) ?? email.get(akunPml.get(b.pml_id) ?? -1) ?? "" : "",
       email_pencacah: denganEmail ? (pplPet != null ? emailFasihPetugas.get(pplPet) : undefined) ?? email.get(b.ppl_akun_id) ?? "" : "",
@@ -105,7 +108,7 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
   });
 }
 
-const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at, dibatalkan_at";
+const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at, dibatalkan_at, dari_kolam";
 
 /** Permintaan yang masih berlaku untuk satu tim (dilihat PML dan PPL-nya). */
 export async function permintaanTim(db: Db, pmlId: number): Promise<Permintaan[]> {
@@ -179,13 +182,16 @@ export async function buatPermintaan(db: Db, akun: { id: number; nama?: string |
 /** PML membatalkan permintaan yang masih menunggu (lunak: status jadi dibatalkan, kuota hari itu kembali). */
 export async function batalkanPermintaan(db: Db, akun: { id: number }, tim: Tim, id: number): Promise<{ ok: true } | Galat> {
   if (tim.saya.peran !== "pml") return { galat: "Hanya PML yang dapat membatalkan permintaan.", status: 403 };
-  const { data: s } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, status, idsubsls").eq("id", id).maybeSingle();
+  const { data: s } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, status, idsubsls, dari_kolam").eq("id", id).maybeSingle();
   if (!s || s.pml_id !== tim.pml.id) return { galat: "Permintaan tidak ditemukan.", status: 404 };
   if (s.status !== "menunggu") return { galat: "Hanya permintaan yang masih menunggu yang bisa dibatalkan.", status: 409 };
+  // (16 Okt 2026) pilihan kolam yang sudah mulai didata tidak boleh dikembalikan ke kolam
+  if (s.dari_kolam && (await adaKkBerhasil(db, s.idsubsls as string))) return { galat: pesanTolak("sudah_didata").isi, status: 409 };
   const { data: upd, error } = await db.from("bencana_pendataan_permintaan").update({ status: "dibatalkan", dibatalkan_oleh: akun.id, dibatalkan_at: new Date().toISOString() }).eq("id", id).eq("status", "menunggu").select("id");
   if (error) return { galat: "Pembatalan gagal. Coba lagi.", status: 500 };
   if (!upd || upd.length === 0) return { galat: "Permintaan ini sudah berubah status.", status: 409 };
   await catatAudit(db, akun.id, "pendataan_minta_batal", { permintaan: id, idsubsls: s.idsubsls }).catch(() => undefined);
+  if (s.dari_kolam) await lepasKolam(db, id); // kembali ke kolam: baris alokasi yang dibuat pilihan itu dilepas
   return { ok: true };
 }
 
@@ -196,9 +202,11 @@ export async function batalkanPermintaan(db: Db, akun: { id: number }, tim: Tim,
  */
 export async function ajukanPembatalan(db: Db, akun: { id: number }, tim: Tim, id: number): Promise<{ ok: true; dikirim: number } | Galat> {
   if (tim.saya.peran !== "pml") return { galat: "Hanya PML yang dapat mengajukan pembatalan.", status: 403 };
-  const { data: s } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, status, idsubsls, ppl_akun_id").eq("id", id).maybeSingle();
+  const { data: s } = await db.from("bencana_pendataan_permintaan").select("id, pml_id, status, idsubsls, ppl_akun_id, dari_kolam").eq("id", id).maybeSingle();
   if (!s || s.pml_id !== tim.pml.id) return { galat: "Permintaan tidak ditemukan.", status: 404 };
   if (s.status !== "sudah_keluar") return { galat: "Pembatalan assignment hanya untuk yang sudah keluar di FASIH. Yang masih menunggu cukup dibatalkan biasa.", status: 409 };
+  // (16 Okt 2026) pilihan kolam yang sudah mulai didata tidak boleh dikembalikan ke kolam
+  if (s.dari_kolam && (await adaKkBerhasil(db, s.idsubsls as string))) return { galat: pesanTolak("sudah_didata").isi, status: 409 };
   const { data: upd, error } = await db
     .from("bencana_pendataan_permintaan")
     .update({ status: "dibatalkan", dibatalkan_oleh: akun.id, dibatalkan_at: new Date().toISOString() })
@@ -208,6 +216,7 @@ export async function ajukanPembatalan(db: Db, akun: { id: number }, tim: Tim, i
   if (error) return { galat: "Pembatalan gagal. Coba lagi.", status: 500 };
   if (!upd || upd.length === 0) return { galat: "Permintaan ini sudah berubah status.", status: 409 };
   await catatAudit(db, akun.id, "pendataan_minta_batal_fasih", { permintaan: id, idsubsls: s.idsubsls, ppl_akun_id: s.ppl_akun_id }).catch(() => undefined);
+  if (s.dari_kolam) await lepasKolam(db, id); // kembali ke kolam: baris alokasi yang dibuat pilihan itu dilepas
 
   let dikirim = 0;
   try {

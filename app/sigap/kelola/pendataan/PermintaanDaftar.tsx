@@ -211,7 +211,10 @@ export default function PermintaanDaftar() {
                 <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
                   <input type="checkbox" checked={pilih.has(p.id)} onChange={() => centang(p.id)} className="mt-0.5 h-6 w-6 flex-none accent-[#1F5FD1]" aria-label={`Pilih ${namaSub(p)}`} />
                   <span className="min-w-0 flex-1">
-                    <b className="block text-[13.5px] text-[#0F2A52]">{namaSub(p)}</b>
+                    <b className="block text-[13.5px] text-[#0F2A52]">
+                      {namaSub(p)}
+                      {p.dari_kolam && <span className="ml-1.5 inline-block rounded-full bg-[#F1E4FA] px-2 py-[1px] align-[1px] text-[11px] font-extrabold text-[#6B1F96]">Dari kolam</span>}
+                    </b>
                     <small className="block text-[12px] text-[#6B7A90]">
                       Kec. {p.kecamatan} · PML {p.pml_nama} → PPL {p.ppl_nama}
                     </small>
