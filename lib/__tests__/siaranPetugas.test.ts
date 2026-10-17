@@ -64,3 +64,25 @@ describe("tombol navigasi modal (13 Okt 2026)", () => {
     expect(urlInternalSigap(null)).toBe(false);
   });
 });
+
+import { validasiKirimSatu } from "@/lib/siaranPetugas";
+
+describe("validasiKirimSatu (17 Okt 2026)", () => {
+  const dasar1 = { akun_id: 266, judul: "Coba menu Kolam wilayah", isi: "Silakan dicoba ya.", url: "/sigap/pendataan" };
+  it("sah", () => {
+    const v = validasiKirimSatu(dasar1);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.nilai).toEqual({ akun: 266, pesan: { judul: "Coba menu Kolam wilayah", isi: "Silakan dicoba ya.", url: "/sigap/pendataan" } });
+  });
+  it("tolak penerima kosong/tidak sah", () => {
+    expect(validasiKirimSatu({ ...dasar1, akun_id: undefined }).ok).toBe(false);
+    expect(validasiKirimSatu({ ...dasar1, akun_id: 0 }).ok).toBe(false);
+    expect(validasiKirimSatu({ ...dasar1, akun_id: "abc" }).ok).toBe(false);
+    expect(validasiKirimSatu({ ...dasar1, akun_id: 1.5 }).ok).toBe(false);
+  });
+  it("tolak judul/isi kosong, terlalu panjang, dan tautan luar", () => {
+    expect(validasiKirimSatu({ ...dasar1, judul: "  " }).ok).toBe(false);
+    expect(validasiKirimSatu({ ...dasar1, isi: "x".repeat(241) }).ok).toBe(false);
+    expect(validasiKirimSatu({ ...dasar1, url: "//evil.com" }).ok).toBe(false);
+  });
+});

@@ -8,6 +8,7 @@ import type { Db } from "@/lib/sigap";
 import { KOLOM_PENGUMUMAN, keBentukPeserta, type Pengumuman, type PengumumanPeserta } from "@/lib/sigapPengumuman";
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { catatAudit } from "@/lib/sigapAkses";
+import type { PesanPush } from "@/lib/sigapPushUtil";
 import { HARI_MODAL_SIARAN, KODE_KEGIATAN_SIARAN, PERAN_PENERIMA_SIARAN, akhirModalSiaran, kunciBacaSiaran, type Siaran } from "@/lib/siaranPetugas";
 
 export type Galat = { galat: string; status: number };
@@ -140,4 +141,51 @@ export async function siarkan(db: Db, akun: { id: number }, s: Siaran): Promise<
   }
   await catatAudit(db, akun.id, "siaran_pendataan", { judul: judulCek, pengumuman_id: pengumumanId, akun: penerima.length, perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal, hari_modal: s.modal ? HARI_MODAL_SIARAN : 0 });
   return { akun: penerima.length, tanpa_notifikasi: s.push ? penerima.length - h.akun_berlangganan.length : 0, perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal, modal: !!s.modal, push: !!s.push };
+}
+
+// ---------------------------------------------------------------- (17 Okt 2026) notifikasi ke SATU petugas
+export type PenerimaSatu = { akun_id: number; nama: string; peran: string; perangkat: number };
+
+/** Daftar petugas yang bisa dipilih (penerima siaran) beserta jumlah perangkat yang sudah mengaktifkan notifikasi. */
+export async function daftarPenerimaSatu(db: Db): Promise<PenerimaSatu[]> {
+  const ids = await akunPenerimaSiaran(db);
+  if (!ids.length) return [];
+  const kegiatanId = await idKegiatanSiaran(db);
+  const [{ data: ak }, { data: pen }, { data: lg }] = await Promise.all([
+    db.from("sigap_akun").select("id, nama").in("id", ids).limit(5000),
+    db.from("sigap_penugasan").select("akun_id, peran").eq("kegiatan_id", kegiatanId as number).eq("aktif", true).in("akun_id", ids).limit(5000),
+    db.from("sigap_push_langganan").select("akun_id").eq("aktif", true).in("akun_id", ids).limit(5000),
+  ]);
+  const peran = new Map<number, string>();
+  for (const p of pen ?? []) {
+    const a = p.akun_id as number;
+    const r = String(p.peran ?? "");
+    if (!peran.has(a) || r === "korwil" || (r === "pml" && peran.get(a) === "ppl")) peran.set(a, r);
+  }
+  const perangkat = new Map<number, number>();
+  for (const l of lg ?? []) perangkat.set(l.akun_id as number, (perangkat.get(l.akun_id as number) ?? 0) + 1);
+  return (ak ?? [])
+    .map((a) => ({ akun_id: a.id as number, nama: String(a.nama ?? ""), peran: peran.get(a.id as number) ?? "", perangkat: perangkat.get(a.id as number) ?? 0 }))
+    .sort((x, y) => x.nama.localeCompare(y.nama, "id"));
+}
+
+/**
+ * Kirim notifikasi ke satu petugas. Penerima WAJIB ada di daftar penerima siaran (petugas bertugas). Judul yang sama ke petugas yang sama
+ * dalam 10 menit ditolak (cegah klik ganda). Dicatat di sigap_push_log (jenis siaran_pendataan_satu) dan sigap_audit.
+ */
+export async function kirimKeSatu(db: Db, admin: { id: number }, akunId: number, pesan: PesanPush): Promise<{ nama: string; perangkat: number; terkirim: number; gagal: number } | Galat> {
+  if (!pushSiap()) return { galat: "Pengiriman notifikasi belum aktif: kunci VAPID belum dipasang di server.", status: 503 };
+  const kegiatanId = await idKegiatanSiaran(db);
+  if (!kegiatanId) return { galat: "Kegiatan Pendataan Pascabencana belum ada.", status: 404 };
+  const daftar = await akunPenerimaSiaran(db);
+  if (!daftar.includes(akunId)) return { galat: "Petugas ini tidak termasuk petugas pendataan yang bertugas.", status: 422 };
+  const { data: baru } = await db.from("sigap_audit").select("detail").eq("aksi", "siaran_pendataan_satu").gte("waktu", new Date(Date.now() - 10 * 60_000).toISOString()).limit(50);
+  if ((baru ?? []).some((b) => Number((b.detail as Record<string, unknown>)?.akun) === akunId && String((b.detail as Record<string, unknown>)?.judul ?? "") === pesan.judul)) {
+    return { galat: "Notifikasi berjudul sama baru saja dikirim ke petugas ini (kurang dari 10 menit lalu).", status: 409 };
+  }
+  const { data: ak } = await db.from("sigap_akun").select("nama").eq("id", akunId).maybeSingle();
+  const h = await kirimKeAkun(db, [akunId], { ...pesan, tag: "siaran-pendataan-satu" });
+  await db.from("sigap_push_log").insert({ kegiatan_id: kegiatanId, oleh_akun_id: admin.id, jenis: "siaran_pendataan_satu", judul: pesan.judul, isi: pesan.isi, url: pesan.url, jumlah_akun: 1, jumlah_perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal });
+  await catatAudit(db, admin.id, "siaran_pendataan_satu", { akun: akunId, judul: pesan.judul, perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal });
+  return { nama: String(ak?.nama ?? ""), perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal };
 }

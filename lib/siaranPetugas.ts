@@ -68,3 +68,16 @@ export const akhirModalSiaran = (dari: Date): string => new Date(dari.getTime() 
 
 /** Kunci penanda "sudah dikonfirmasi" = id modal + versi (diubah_at); berubahnya versi memunculkan modal lagi. */
 export const kunciBacaSiaran = (id: number, versi: string): string => `${id}_${versi}`;
+
+/**
+ * (17 Okt 2026) Notifikasi ke SATU petugas pendataan (mis. mengajak mencoba menu baru): validasi isian. Penerima dipilih admin dari daftar petugas
+ * yang ditugaskan; server menolak akun di luar daftar itu. Tanpa modal, tidak masuk riwayat siaran massal.
+ */
+export function validasiKirimSatu(x: unknown): { ok: true; nilai: { akun: number; pesan: PesanPush } } | { ok: false; pesan: string } {
+  const o = (x ?? {}) as Record<string, unknown>;
+  const akun = Number(o.akun_id);
+  if (!Number.isInteger(akun) || akun <= 0) return { ok: false, pesan: "Pilih petugas penerima." };
+  const v = validasiPesanPush({ judul: o.judul, isi: o.isi, url: o.url });
+  if (!v.ok) return v;
+  return { ok: true, nilai: { akun, pesan: v.nilai } };
+}

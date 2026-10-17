@@ -17,6 +17,7 @@ import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { LABEL_KEBERADAAN, MAKS_BARIS_UNGGAH, adalahFasih, bacaCsvFasih, periksaBarisKk, petakanBarisExcel, petakanBarisFasih, type BarisKk } from "@/lib/pendataan";
 import { tglJam } from "../../identifikasi/useIdentifikasi";
 import Siaran from "./Siaran";
+import KirimSatu from "./KirimSatu";
 import PermintaanDaftar from "./PermintaanDaftar";
 
 type Batch = { id: number; nama_berkas: string | null; diunggah_at: string; oleh: string | null; diterima: number; ditolak: number; aktif: number; sudah_didata: number; dibatalkan_at: string | null };
@@ -249,6 +250,8 @@ export default function UnggahPendataan() {
 
         {/* (13 Okt 2026) Siaran ke petugas: notifikasi + modal sekali konfirmasi */}
         <Siaran />
+        {/* (17 Okt 2026) notifikasi ke satu petugas (mis. mengajak mencoba menu baru) */}
+        <KirimSatu />
 
         <section className="mt-5 rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
           <h2 className="text-[15px] font-extrabold text-[#0F2A52]">1. Pilih berkas</h2>

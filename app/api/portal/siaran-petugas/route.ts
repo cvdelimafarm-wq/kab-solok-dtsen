@@ -5,13 +5,15 @@
 // GET  ?ringkas=1                 -> { push_siap, penerima, berlangganan, riwayat[] }  (admin bencana.admin)
 // POST { aksi:"baca", id, versi } -> catat konfirmasi (diabaikan pada sesi "masuk sebagai")
 // POST { aksi:"siarkan", kirim_push, judul, isi, url?, modal:{aktif,judul,isi,jenis} }  -> admin bencana.admin level kelola
+// GET  ?petugas=1                 -> { petugas: [{akun_id,nama,peran,perangkat}] }  (admin bencana.admin) daftar penerima untuk "kirim ke satu petugas"
+// POST { aksi:"kirim_satu", akun_id, judul, isi, url? }  -> notifikasi ke SATU petugas bertugas (admin bencana.admin level kelola; (17 Okt 2026))
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aksesRekap } from "@/lib/portal/rekapIdentifikasi";
-import { catatBaca, modalUntukAkun, ringkasSiaran, siarkan } from "@/lib/portal/siaranPetugas";
+import { catatBaca, daftarPenerimaSatu, kirimKeSatu, modalUntukAkun, ringkasSiaran, siarkan } from "@/lib/portal/siaranPetugas";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
-import { validasiSiaran } from "@/lib/siaranPetugas";
+import { validasiKirimSatu, validasiSiaran } from "@/lib/siaranPetugas";
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { urlInternalAman, validasiPesanPush } from "@/lib/sigapPushUtil";
 
@@ -30,6 +32,11 @@ export async function GET(req: NextRequest) {
       const { izin } = await izinAkun(db, akun.id);
       if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
       return NextResponse.json({ ...(await ringkasSiaran(db)), boleh_kirim: boleh(izin, "bencana.admin", "kelola") });
+    }
+    if (new URL(req.url).searchParams.get("petugas") === "1") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
+      return NextResponse.json({ petugas: await daftarPenerimaSatu(db) });
     }
     const akses = await aksesRekap(db, akun);
     if (!akses.boleh) return NextResponse.json({ pengumuman: [] });
@@ -64,6 +71,16 @@ export async function POST(req: NextRequest) {
       if (!v.ok) return galat(v.pesan, 422);
       const h = await kirimKeAkun(db, [akun.id], { ...v.nilai, judul: `[UJI] ${v.nilai.judul}`.slice(0, 80), tag: "uji-siaran-pendataan" });
       return NextResponse.json({ ok: true, perangkat: h.perangkat, terkirim: h.terkirim, gagal: h.gagal });
+    }
+    if (body?.aksi === "kirim_satu") {
+      if (aktorDariHeader(req.headers)) return galat('Notifikasi tidak dapat dikirim saat mode "masuk sebagai".', 403);
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengirim notifikasi pendataan.", 403);
+      const v = validasiKirimSatu(body);
+      if (!v.ok) return galat(v.pesan, 422);
+      const h = await kirimKeSatu(db, { id: akun.id }, v.nilai.akun, v.nilai.pesan);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, ...h });
     }
     if (body?.aksi === "siarkan") {
       if (aktorDariHeader(req.headers)) return galat("Siaran tidak dapat dikirim saat mode \"masuk sebagai\".", 403);
