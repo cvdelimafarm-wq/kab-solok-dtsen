@@ -27,7 +27,8 @@ import CapaianFloat from "./CapaianFloat";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
-import { tandaBasi } from "@/app/portal/dataBersama";
+import { tandaBasi, useData } from "@/app/portal/dataBersama";
+import { API_PERMINTAAN, type DataPermintaanTim } from "@/lib/permintaanDaftar";
 import { peringatanSekali, tglPanjangPerbaikan } from "@/lib/sigapPerbaikan";
 import {
   HASIL_KK,
@@ -169,6 +170,8 @@ function LembarBawah({ judulLembar, kanan, onTutup, children }: { judulLembar: s
 export default function LembarPendataan() {
   const router = useRouter();
   const tim = useTimPendataan();
+  // (17 Okt 2026) Sumber data yang SAMA dengan kartu plotting (kunci cache sama, jadi tidak mengunduh dua kali): dipakai untuk tahu Sub SLS mana yang sudah diajukan.
+  const minta = useData<DataPermintaanTim>(API_PERMINTAAN);
   const { menunggu } = useAntrean();
   const [dari, setDari] = useState<string | null>(null);
   const [subPilih, setSubPilih] = useState<string | null>(null);
@@ -466,9 +469,14 @@ export default function LembarPendataan() {
   const ppls = (data?.anggota ?? []).filter((a) => a.peran === "ppl");
   const bukanTim = tim.galat && /khusus anggota tim/i.test(tim.galat);
 
-  const total = Object.values(perSub).reduce((n, s) => n + s.total, 0);
-  const didata = Object.values(perSub).reduce((n, s) => n + s.didata, 0);
-  const timHasil = Object.values(perSub).reduce(
+  // (17 Okt 2026) Angka tim (Progres tim, header Monitoring, baris "Semua Sub SLS tim") = HANYA Sub SLS yang sudah DIAJUKAN (permintaan menunggu atau sudah keluar; yang dibatalkan
+  // tidak dihitung) -- permintaan user, bukan total plotting awal seluruh wilayah. Selama daftar permintaan belum termuat, dipakai semua Sub SLS supaya angka tidak kosong.
+  const idDiajukan = useMemo(() => (minta.data ? new Set(minta.data.permintaan.filter((p) => p.status !== "dibatalkan").map((p) => p.idsubsls)) : null), [minta.data]);
+  const perSubTim = Object.entries(perSub).filter(([id]) => !idDiajukan || idDiajukan.has(id)).map(([, s]) => s);
+  const jumlahDiajukan = idDiajukan ? (data?.sub ?? []).filter((s) => idDiajukan.has(s.idsubsls)).length : (data?.sub.length ?? 0);
+  const total = perSubTim.reduce((n, s) => n + s.total, 0);
+  const didata = perSubTim.reduce((n, s) => n + s.didata, 0);
+  const timHasil = perSubTim.reduce(
     (h, s) => ({ terdampak: h.terdampak + s.total_hasil.terdampak, tidak_terdampak: h.tidak_terdampak + s.total_hasil.tidak_terdampak, tidak_ditemukan: h.tidak_ditemukan + s.total_hasil.tidak_ditemukan }),
     { terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 0 }
   );
@@ -762,6 +770,10 @@ export default function LembarPendataan() {
                   / {total} KK · {persen(didata, total)}%
                 </span>
               </div>
+              <p className="-mt-1 text-[11.5px] text-[#6B7A90]">
+                Target = {jumlahDiajukan} dari {data.sub.length} Sub SLS yang sudah diajukan
+                {jumlahDiajukan === 0 ? ". Belum ada Sub SLS yang diajukan." : "."}
+              </p>
               <BilahTumpuk
                 total={total}
                 label={`${didata} dari ${total} KK didata`}
