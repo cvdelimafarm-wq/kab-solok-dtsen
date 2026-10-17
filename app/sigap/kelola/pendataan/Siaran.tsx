@@ -18,10 +18,10 @@ type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkir
 
 const AWAL = {
   judul: "Peta batas wilayah kini ada di Lembar Pendataan",
-  isi: "Tab baru \"Wilayah\" di Lembar Pendataan: lihat peta batas Sub SLS dan peta desa/nagari tempat Anda bertugas. Bisa dizoom, dan setelah dibuka sekali tersimpan di HP sehingga tetap bisa dilihat tanpa sinyal. Ketuk untuk membuka.",
+  isi: "Tab baru \"Batas\" di Lembar Pendataan: lihat peta batas Sub SLS dan peta desa/nagari tempat Anda bertugas. Bisa dizoom, dan setelah dibuka sekali tersimpan di HP sehingga tetap bisa dilihat tanpa sinyal. Ketuk untuk membuka.",
   mJudul: "PETA BATAS WILAYAH TERSEDIA",
-  mIsi: "**Tab baru \"Wilayah\" di Lembar Pendataan.**\n\n- Menampilkan ==peta batas Sub SLS== dan ==peta desa/nagari== untuk Sub SLS yang sedang dibuka\n- Bisa diperbesar (cubit atau ketuk dua kali) untuk melihat batas dan landmark\n- Peta yang sudah dibuka ==tersimpan di HP selama 20 hari==, jadi tetap bisa dilihat di lokasi yang sinyalnya lemah\n- Hanya peta yang Anda buka yang diunduh, jadi tidak boros kuota\n- Tab ini bisa dilihat oleh PML dan PPL tim yang bersangkutan",
-  tLabel: "Buka Peta Wilayah",
+  mIsi: "**Tab baru \"Batas\" di Lembar Pendataan.**\n\n- Menampilkan ==peta batas Sub SLS== dan ==peta desa/nagari== untuk Sub SLS yang sedang dibuka\n- Bisa diperbesar (cubit atau ketuk dua kali) untuk melihat batas dan landmark\n- Peta yang sudah dibuka ==tersimpan di HP selama 20 hari==, jadi tetap bisa dilihat di lokasi yang sinyalnya lemah\n- Hanya peta yang Anda buka yang diunduh, jadi tidak boros kuota\n- Tab ini bisa dilihat oleh PML dan PPL tim yang bersangkutan",
+  tLabel: "Buka Tab Batas",
   tUrl: "/sigap/pendataan?tab=wilayah",
 };
 const URL_PUSH = "/sigap/pendataan?tab=wilayah";

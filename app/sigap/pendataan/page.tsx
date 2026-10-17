@@ -46,7 +46,7 @@ import {
   type SubTim,
 } from "@/lib/pendataan";
 
-type Tab = "peta" | "daftar" | "mon" | "wilayah"; // (17 Okt 2026) "wilayah" = peta Sub SLS & peta nagari (berkas peta jadi BPS)
+type Tab = "peta" | "daftar" | "mon" | "wilayah"; // tab "wilayah" tampil sebagai "Batas" (diganti 17 Okt) -- (17 Okt 2026) "wilayah" = peta Sub SLS & peta nagari (berkas peta jadi BPS)
 type FStatus = "semua" | "belum" | HasilKk;
 type Urut = "belum" | "nama" | "dekat";
 type Lembar = null | "sub" | "ppl";
@@ -79,8 +79,11 @@ const judul = (s: string) =>
 const namaPendek = (s: SubTim) => `${judul(s.sls)}${s.sub_sls ? ` / ${s.sub_sls}` : ""}`;
 const persen = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
+/** (17 Okt 2026) Penanda "BARU" di tab Batas: tampil sampai akhir Okt 2026 (31 Okt, WIB), sesudah itu hilang sendiri. */
+const TAB_BATAS_BARU = Date.now() < Date.parse("2026-10-31T16:59:59Z");
+
 /** Ikon garis inline (24x24, tebal 2) -- tanpa emoji. */
-function Ik({ n, className = "h-[18px] w-[18px]" }: { n: "mata" | "pin" | "turun" | "kanan" | "tambah" | "kurang" | "semua" | "lokasi" | "cari" | "urut" | "lapis"; className?: string }) {
+function Ik({ n, className = "h-[18px] w-[18px]" }: { n: "mata" | "pin" | "turun" | "kanan" | "tambah" | "kurang" | "semua" | "lokasi" | "cari" | "urut" | "lapis" | "batas"; className?: string }) {
   const p = {
     mata: (
       <>
@@ -112,6 +115,13 @@ function Ik({ n, className = "h-[18px] w-[18px]" }: { n: "mata" | "pin" | "turun
       </>
     ),
     urut: <path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4" />,
+    // (17 Okt 2026) tab "Batas": garis batas wilayah (poligon putus-putus) dengan satu titik patokan di dalamnya
+    batas: (
+      <>
+        <path d="M4 9.5 8.5 4l7 1.5L20 10l-1.5 7.5L11 20l-6.5-4z" strokeDasharray="3 2.6" />
+        <circle cx="12" cy="12" r="1.6" />
+      </>
+    ),
     lapis: (
       <>
         <path d="M3 7l9-4 9 4-9 4z" />
@@ -319,7 +329,7 @@ export default function LembarPendataan() {
     }
   }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // (17 Okt 2026) ?tab=wilayah (dari tombol modal/notifikasi "Buka Peta Wilayah"): langsung buka tab Wilayah pada Sub SLS prioritas
+  // (17 Okt 2026) ?tab=wilayah (dari tombol modal/notifikasi "Buka Peta Batas"): langsung buka tab Batas pada Sub SLS prioritas
   // (atau Sub SLS di ?sub=, bila ada). Alamat dirapikan dengan replaceState agar tombol Kembali tidak memutar ulang.
   const wilayahDipakai = useRef(false);
   useEffect(() => {
@@ -587,10 +597,16 @@ export default function LembarPendataan() {
                   ["peta", "Peta"],
                   ["daftar", "Daftar KK"],
                   ["mon", "Monitoring"],
-                  ["wilayah", "Wilayah"],
+                  ["wilayah", "Batas"],
                 ] as [Tab, string][]).map(([k, t]) => (
-                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`grid h-[34px] min-w-0 flex-1 place-items-center whitespace-nowrap rounded-[9px] px-0.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`relative flex h-[34px] min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[9px] px-0.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                    {k === "wilayah" && <Ik n="batas" className="h-[15px] w-[15px]" />}
                     {t}
+                    {k === "wilayah" && TAB_BATAS_BARU && (
+                      <span aria-label="Baru" className="pointer-events-none absolute -right-0.5 -top-[9px] rounded-[6px] bg-[#E0752B] px-1 py-[1px] text-[8.5px] font-extrabold leading-tight tracking-[0.04em] text-white shadow-sm">
+                        BARU
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
