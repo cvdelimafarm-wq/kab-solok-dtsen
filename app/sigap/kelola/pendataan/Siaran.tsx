@@ -17,13 +17,14 @@ type Ringkas = { push_siap: boolean; penerima: number; berlangganan: number; riw
 type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkirim: number; gagal: number; modal: boolean; push: boolean };
 
 const AWAL = {
-  judul: "Kuota pengajuan Sub SLS ditambah jadi 5",
-  isi: "Kabar baik untuk PML: total pengajuan Sub SLS kini maksimal 5 per PML (sebelumnya 2). Buka Lembar Pendataan > Plotting tim, pilih Sub SLS + PPL-nya, lalu Kirim. Salah PPL? Ajukan pembatalan, langsung berlaku.",
-  mJudul: "KUOTA PENGAJUAN DITAMBAH",
-  mIsi: "**Kuota pengajuan Sub SLS ditambah.**\n\n- Total pengajuan per PML kini ==maksimal 5 Sub SLS== (sebelumnya 2)\n- Berlaku sebagai total, bukan per hari; yang dibatalkan tidak dihitung\n- Pilih lewat kartu \"Plotting tim\" di Lembar Pendataan (tombol di bawah)\n- Salah memilih PPL? Tekan **Ajukan pembatalan** pada Sub SLS yang sudah keluar di FASIH; langsung berlaku tanpa persetujuan, lalu isi ulang PPL-nya\n- ==Upayakan keroyokan: daftar keluarga di-assign ke salah satu akun PPL==",
-  tLabel: "Buka Lembar Pendataan",
-  tUrl: "/sigap/pendataan",
+  judul: "Peta batas wilayah kini ada di Lembar Pendataan",
+  isi: "Tab baru \"Wilayah\" di Lembar Pendataan: lihat peta batas Sub SLS dan peta desa/nagari tempat Anda bertugas. Bisa dizoom, dan setelah dibuka sekali tersimpan di HP sehingga tetap bisa dilihat tanpa sinyal. Ketuk untuk membuka.",
+  mJudul: "PETA BATAS WILAYAH TERSEDIA",
+  mIsi: "**Tab baru \"Wilayah\" di Lembar Pendataan.**\n\n- Menampilkan ==peta batas Sub SLS== dan ==peta desa/nagari== untuk Sub SLS yang sedang dibuka\n- Bisa diperbesar (cubit atau ketuk dua kali) untuk melihat batas dan landmark\n- Peta yang sudah dibuka ==tersimpan di HP selama 20 hari==, jadi tetap bisa dilihat di lokasi yang sinyalnya lemah\n- Hanya peta yang Anda buka yang diunduh, jadi tidak boros kuota\n- Tab ini bisa dilihat oleh PML dan PPL tim yang bersangkutan",
+  tLabel: "Buka Peta Wilayah",
+  tUrl: "/sigap/pendataan?tab=wilayah",
 };
+const URL_PUSH = "/sigap/pendataan?tab=wilayah";
 
 const waktuTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(".", ":") + " WIB";
 
@@ -65,7 +66,7 @@ export default function Siaran() {
     try {
       const h = await apiPortal<Hasil & { ok: boolean }>("/api/portal/siaran-petugas", {
         method: "POST",
-        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: "/sigap/pendataan", modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
+        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: URL_PUSH, modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
       });
       setHasil(h);
       setYakin(false);
@@ -84,7 +85,7 @@ export default function Siaran() {
     setHasilUji(null);
     setGalat(null);
     try {
-      const h = await apiPortal<{ perangkat: number; terkirim: number; gagal: number }>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "uji", judul, isi, url: "/sigap/pendataan" }) });
+      const h = await apiPortal<{ perangkat: number; terkirim: number; gagal: number }>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "uji", judul, isi, url: URL_PUSH }) });
       setHasilUji(
         h.perangkat === 0
           ? "Tidak ada perangkat yang mengaktifkan notifikasi di akun Anda. Buka Beranda di HP Anda, ketuk \"Aktifkan notifikasi\", lalu coba lagi."

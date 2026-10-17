@@ -121,6 +121,75 @@ async function ambilDaftar(d: DaftarPeta): Promise<HasilApi> {
   return hasil;
 }
 
+// ---------------------------------------------------------------- (17 Okt 2026) satu peta sesuai kebutuhan (tab "Wilayah" di Lembar Pendataan)
+// Hemat Log Ingestion & kuota: HANYA peta yang sedang dibuka yang ditanyakan ke server dan diunduh -- sekali per HP, lalu disimpan di Cache Storage
+// (kunci tetap, sama dengan unduhan lengkap di atas). Pembukaan berikutnya tanpa permintaan jaringan apa pun. Manifest hanya DITAMBAH (kode lain tidak disentuh).
+
+/** Daftar berkas satu kode menurut manifest di HP. null = belum pernah dicek, atau hasil "belum diunggah" yang sudah lewat 6 jam (dicek ulang). */
+export function berkasDariManifest(folder: "wa" | "sls", kode: string): BerkasM[] | null {
+  const m = bacaManifest();
+  const arr = m?.[folder][kode];
+  if (!m || !arr) return null;
+  if (arr.length === 0 && Date.now() - m.at > UMUR_MANIFEST_MS) return null;
+  return arr;
+}
+
+/** Catat hasil cek satu kode ke manifest tanpa menghapus kode lain. */
+export function catatManifestKode(folder: "wa" | "sls", kode: string, berkas: BerkasM[]) {
+  const m: Manifest = bacaManifest() ?? { at: Date.now(), wa: {}, sls: {} };
+  m[folder][kode] = berkas.map(({ nama, halaman, dari, tipe }) => ({ nama, halaman, dari, tipe }));
+  simpanManifest(m);
+}
+
+/** (17 Okt 2026) Umur simpan peta di HP untuk tab Wilayah: 20 hari (permintaan user), sesudah itu diunduh ulang. Peta hasil unduhan lengkap lama (tanpa cap waktu) dianggap masih berlaku. */
+export const UMUR_PETA_MS = 20 * 24 * 3_600_000;
+
+/** Isi berkas peta dari Cache Storage (null bila belum tersimpan atau sudah lewat 20 hari). */
+export async function bacaPetaTersimpan(folder: "wa" | "sls", nama: string): Promise<Blob | null> {
+  if (!cacheDidukung()) return null;
+  try {
+    const c = await caches.open(NAMA_CACHE_PETA);
+    const r = await c.match(jalurPeta(folder, nama));
+    if (!r) return null;
+    const cap = Number(r.headers.get("X-Disimpan"));
+    if (cap > 0 && Date.now() - cap > UMUR_PETA_MS) return null;
+    return await r.blob();
+  } catch {
+    return null;
+  }
+}
+
+/** Satu permintaan ke server untuk SATU kode: daftar berkas + tautan bertanda tangan (1 jam). */
+export async function tanyaPetaSatu(folder: "wa" | "sls", kode: string): Promise<BerkasApi[]> {
+  const h = await apiPortal<HasilApi>(`/api/portal/peta?${folder === "wa" ? "desa" : "sub"}=${encodeURIComponent(kode)}`);
+  return (folder === "wa" ? h.wa[kode] : h.sls[kode]) ?? [];
+}
+
+/** Unduh satu berkas lalu simpan di Cache Storage (kunci tetap). Mengembalikan isinya; null bila gagal. */
+export async function unduhSimpanPeta(folder: "wa" | "sls", b: { nama: string; url: string }): Promise<Blob | null> {
+  const ac = new AbortController();
+  const batas = setTimeout(() => ac.abort(), 60_000);
+  try {
+    const res = await fetch(b.url, { signal: ac.signal });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const tipe = res.headers.get("content-type") || "image/jpeg";
+    if (cacheDidukung()) {
+      try {
+        const c = await caches.open(NAMA_CACHE_PETA);
+        await c.put(jalurPeta(folder, b.nama), new Response(buf, { headers: { "Content-Type": tipe, "X-Disimpan": String(Date.now()) } }));
+      } catch {
+        /* penyimpanan penuh: tetap ditampilkan sekali ini */
+      }
+    }
+    return new Blob([buf], { type: tipe });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(batas);
+  }
+}
+
 // ---------------------------------------------------------------- status & pemberitahuan
 export type StatusPeta = { total: number; tersimpan: number; jalan: boolean; berhenti: HasilUnduh["berhenti"] };
 const pemantau = new Set<() => void>();

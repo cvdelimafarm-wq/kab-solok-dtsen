@@ -21,6 +21,7 @@ import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
+import PetaWilayah from "./PetaWilayah";
 import { KolamPanel, KolamTombol } from "./KolamWilayah";
 import TambahKk from "./TambahKk";
 import CapaianFloat from "./CapaianFloat";
@@ -45,7 +46,7 @@ import {
   type SubTim,
 } from "@/lib/pendataan";
 
-type Tab = "peta" | "daftar" | "mon";
+type Tab = "peta" | "daftar" | "mon" | "wilayah"; // (17 Okt 2026) "wilayah" = peta Sub SLS & peta nagari (berkas peta jadi BPS)
 type FStatus = "semua" | "belum" | HasilKk;
 type Urut = "belum" | "nama" | "dekat";
 type Lembar = null | "sub" | "ppl";
@@ -318,6 +319,37 @@ export default function LembarPendataan() {
     }
   }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // (17 Okt 2026) ?tab=wilayah (dari tombol modal/notifikasi "Buka Peta Wilayah"): langsung buka tab Wilayah pada Sub SLS prioritas
+  // (atau Sub SLS di ?sub=, bila ada). Alamat dirapikan dengan replaceState agar tombol Kembali tidak memutar ulang.
+  const wilayahDipakai = useRef(false);
+  useEffect(() => {
+    if (wilayahDipakai.current || !data) return;
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("tab") !== "wilayah") return;
+      wilayahDipakai.current = true;
+      u.searchParams.delete("tab");
+      let id = u.searchParams.get("sub");
+      if (!id || !data.sub.some((s) => s.idsubsls === id)) {
+        let terakhir: string | null = null;
+        try {
+          terakhir = localStorage.getItem(KUNCI_SUB);
+        } catch {
+          /* abaikan */
+        }
+        id = pilihSubPrioritas(data.sub.map((s) => s.idsubsls), perSub, terakhir);
+      }
+      if (id) {
+        pilihSub(id);
+        setTab("wilayah");
+        u.searchParams.set("sub", id);
+      }
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* abaikan */
+    }
+  }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function pilihSub(id: string) {
     setSubPilih(id);
     setTerpilihId(null);
@@ -507,7 +539,9 @@ export default function LembarPendataan() {
     return { n: m.length, td: m.filter((k) => k.hasil === "terdampak").length };
   };
 
-  const adaFilter = !!data && !!subId && tab !== "mon" && kk.length > 0;
+  // (17 Okt 2026) tab yang menampilkan KK sebuah Sub SLS (Peta titik, Daftar KK); Monitoring dan Wilayah tidak memakai saringan, tombol "Keluarga baru", maupun tombol capaian
+  const tabKk = tab === "peta" || tab === "daftar";
+  const adaFilter = !!data && !!subId && tabKk && kk.length > 0;
 
   return (
     <main className="flex min-h-[calc(100dvh_-_var(--tinggi-banner,0px))] flex-col bg-[#F2F6FC] text-[#1B2B4B]">
@@ -553,8 +587,9 @@ export default function LembarPendataan() {
                   ["peta", "Peta"],
                   ["daftar", "Daftar KK"],
                   ["mon", "Monitoring"],
+                  ["wilayah", "Wilayah"],
                 ] as [Tab, string][]).map(([k, t]) => (
-                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`grid h-[34px] flex-1 place-items-center rounded-[9px] text-[13px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`grid h-[34px] min-w-0 flex-1 place-items-center whitespace-nowrap rounded-[9px] px-0.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
                     {t}
                   </button>
                 ))}
@@ -608,7 +643,7 @@ export default function LembarPendataan() {
           </div>
         )}
 
-        {data && subId && tab !== "mon" && (
+        {data && subId && tabKk && (
           <>
             {kkQ.galat && !kkQ.data && <p className="mx-2.5 mt-2.5 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{kkQ.galat}</p>}
             {kkQ.memuat && <div className="mx-2.5 mt-2.5 h-24 animate-pulse rounded-[16px] bg-white" aria-busy="true" />}
@@ -680,6 +715,11 @@ export default function LembarPendataan() {
               })}
             </div>
           </section>
+        )}
+
+        {/* ---------------------------------------------------------------- Wilayah: peta Sub SLS & peta nagari (berkas peta jadi BPS), mengisi sisa layar */}
+        {data && subId && subAktif && tab === "wilayah" && (
+          <PetaWilayah sub={subAktif} judulSub={namaPendek(subAktif)} judulNagari={judul(subAktif.nagari)} onKePeta={() => setTab("peta")} onSubLain={() => setLembar("sub")} />
         )}
 
         {/* ---------------------------------------------------------------- Peta: mengisi sisa layar */}
@@ -1018,16 +1058,16 @@ export default function LembarPendataan() {
       )}
 
       {/* (14 Okt 2026) tombol tambah keluarga baru -- hanya saat Sub SLS dibuka, tab Peta / Daftar KK */}
-      {!perbaikan && subAktif && tab !== "mon" && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
+      {!perbaikan && subAktif && tabKk && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
 
       {/* (15 Okt 2026) tombol float capaian hari ini (PPL): bertumpuk di atas "+ Keluarga baru" bila tombol itu tampil; tidak tampil di tab Monitoring */}
-      {!perbaikan && !terpilih && !lembar && (!subAktif || tab !== "mon") && <CapaianFloat />}
+      {!perbaikan && !terpilih && !lembar && (!subAktif || tabKk) && <CapaianFloat />}
 
       {/* (16 Okt 2026) tombol float ungu "Kolam wilayah": hanya di halaman utama (kartu plotting tim), tidak saat sebuah Sub SLS dibuka */}
       {data && data.sub.length > 0 && !subId && !kolamBuka && !perbaikan && !terpilih && !lembar && <KolamTombol onBuka={() => setKolamBuka(true)} />}
 
       {toast && (
-        <div role="status" className={`fixed inset-x-3 ${subAktif && tab !== "mon" && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
+        <div role="status" className={`fixed inset-x-3 ${subAktif && tabKk && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
           <span className="min-w-0 flex-1">{toast.pesan}</span>
           {toast.urungkan && (
             <button
