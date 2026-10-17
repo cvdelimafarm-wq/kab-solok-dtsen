@@ -219,25 +219,91 @@ export function alamatMasukKembali(): string {
   return aman(() => alamatMasukDengan(window.location.pathname, window.location.search), "/");
 }
 
-export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T> {
-  const s = bacaSesi();
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      ...init,
-      headers: { ...(init?.headers ?? {}), "Content-Type": "application/json", ...(s ? { Authorization: `Bearer ${s}` } : {}) },
+/** (17 Okt 2026) Catatan keluar paksa: disimpan di HP saat sesi dihapus karena 401, dilaporkan ke server sesudah masuk lagi (sigap_audit "keluar_paksa").
+ *  Sengaja TIDAK ada di KUNCI: tidak ikut terhapus oleh hapusSemuaSesi. Isinya tanpa data pribadi (hanya jalur API, status, sisa masa sesi). */
+export const KUNCI_CATATAN_KELUAR = "sigap_catatan_keluar_v1";
+let sedangMelapor = false;
+
+function simpanCatatanKeluar(c: { api: string; metode: string; status: number; pesan: string | null; sisaMenit: number | null }) {
+  aman(() => {
+    localStorage.setItem(
+      KUNCI_CATATAN_KELUAR,
+      JSON.stringify({
+        waktu: new Date().toISOString(),
+        halaman: window.location.pathname.slice(0, 80),
+        api: c.api.slice(0, 80),
+        metode: c.metode,
+        status: c.status,
+        pesan: c.pesan,
+        sisa_menit: c.sisaMenit,
+        akun: pemilikSesi(),
+        sebagai: bacaLihatSebagaiMentah(),
+        online: typeof navigator !== "undefined" ? navigator.onLine : null,
+        build: BUILD_ID_KLIEN,
+      })
+    );
+  }, undefined);
+}
+
+function laporkanKeluarPaksa(sesi: string | null) {
+  if (sedangMelapor || !sesi || typeof window === "undefined") return;
+  const raw = aman(() => localStorage.getItem(KUNCI_CATATAN_KELUAR), null);
+  if (!raw) return;
+  const catatan = aman(() => JSON.parse(raw) as unknown, null);
+  if (!catatan) {
+    aman(() => localStorage.removeItem(KUNCI_CATATAN_KELUAR), undefined);
+    return;
+  }
+  sedangMelapor = true;
+  fetch("/api/sigap/aktivitas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sesi}` },
+    body: JSON.stringify({ halaman: window.location.pathname.slice(0, 80), catatan_keluar: catatan }),
+    keepalive: true,
+  })
+    .then((r) => {
+      if (r.ok) aman(() => localStorage.removeItem(KUNCI_CATATAN_KELUAR), undefined);
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      sedangMelapor = false;
     });
-  } catch (e) {
-    const g: GalatApi = new Error(e instanceof Error ? e.message : "Tidak ada sambungan.");
-    throw g;
+}
+
+export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T> {
+  let res!: Response;
+  let json: unknown = {};
+  let sesiDipakai: string | null = null;
+  // (17 Okt 2026) Satu 401 TIDAK langsung menghapus sesi: diulang sekali setelah jeda singkat (sesi baru dibaca ulang, siapa tahu tab lain
+  // sudah memperbaruinya, atau gangguan sesaat di server). Hanya bila 401 terjadi dua kali berturut-turut sesi dihapus -- dan alasannya dicatat.
+  for (let percobaan = 0; percobaan < 2; percobaan++) {
+    const s = bacaSesi();
+    sesiDipakai = s;
+    try {
+      res = await fetch(path, {
+        ...init,
+        headers: { ...(init?.headers ?? {}), "Content-Type": "application/json", ...(s ? { Authorization: `Bearer ${s}` } : {}) },
+      });
+    } catch (e) {
+      const g: GalatApi = new Error(e instanceof Error ? e.message : "Tidak ada sambungan.");
+      throw g;
+    }
+    const buildServer = res.headers.get("x-build-id");
+    if (buildServer && buildServer !== infoBuild.server) {
+      infoBuild.server = buildServer;
+      pendengarBuild.forEach((f) => f());
+    }
+    json = await res.json().catch(() => ({}));
+    if (res.status !== 401 || !s || percobaan === 1) break;
+    await new Promise((r) => setTimeout(r, 700));
   }
-  const buildServer = res.headers.get("x-build-id");
-  if (buildServer && buildServer !== infoBuild.server) {
-    infoBuild.server = buildServer;
-    pendengarBuild.forEach((f) => f());
-  }
-  const json = await res.json().catch(() => ({}));
   if (res.status === 401) {
+    if (sesiDipakai) {
+      const sampai = aman(() => localStorage.getItem(KUNCI.sampai), null);
+      const sisa = sampai && Number.isFinite(Date.parse(sampai)) ? Math.round((Date.parse(sampai) - Date.now()) / 60_000) : null;
+      const pesan = (json as { error?: unknown }).error;
+      simpanCatatanKeluar({ api: path.split("?")[0], metode: (init?.method ?? "GET").toUpperCase(), status: 401, pesan: typeof pesan === "string" ? pesan.slice(0, 120) : null, sisaMenit: sisa });
+    }
     // (11 Okt 2026) mode "masuk sebagai": sesi akun yang dilihat habis -> kembali ke akun super (sesi asli tidak ikut dihapus)
     if (bacaLihatSebagaiMentah()) {
       kembaliKeAkunSaya();
@@ -252,6 +318,8 @@ export async function apiPortal<T>(path: string, init?: RequestInit): Promise<T>
     g.status = res.status;
     throw g;
   }
+  // (17 Okt 2026) ada catatan keluar paksa dari sesi sebelumnya? laporkan sekali (di belakang layar) sesudah permintaan berhasil
+  laporkanKeluarPaksa(sesiDipakai);
   // (10 Okt 2026) setelah menulis (POST/PUT/PATCH/DELETE) data simpanan terkait ditandai kedaluwarsa -> dimuat ulang di belakang saat halaman dibuka
   if (init?.method && init.method.toUpperCase() !== "GET") {
     const jalur = path.split("?")[0];

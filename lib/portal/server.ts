@@ -25,7 +25,10 @@ export type AkunPortal = { id: number; nama: string; jenis: string; token: strin
 export async function akunDariSesi(db: Db, h: Headers): Promise<AkunPortal | null> {
   const id = sesiDariHeader(h);
   if (!id) return null;
-  const { data } = await db.from("sigap_akun").select("id, nama, jenis, token, petugas_bencana_id, aktif").eq("id", id).maybeSingle();
+  const { data, error } = await db.from("sigap_akun").select("id, nama, jenis, token, petugas_bencana_id, aktif").eq("id", id).maybeSingle();
+  // (17 Okt 2026) Galat database (waktu habis, sambungan putus) BUKAN "sesi tidak sah": dulu ikut menjadi null -> 401 -> HP menghapus sesi
+  // dan petugas terlempar ke halaman masuk. Kini dilempar sebagai galat 500 sehingga klien hanya menampilkan "gagal memuat" dan sesi tetap aman.
+  if (error) throw new Error(`Gagal memeriksa sesi (database): ${error.message}`);
   if (!data || !data.aktif) return null;
   return data as AkunPortal;
 }
