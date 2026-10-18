@@ -45,8 +45,11 @@ export async function ambilTim(db: Db, akun: AkunMin): Promise<Tim | null> {
   const ids = Array.from(new Set((alok ?? []).map((x) => x.idsubsls as string)));
   const sub: SubTim[] = [];
   for (let i = 0; i < ids.length; i += 200) {
-    const { data: w } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").in("idsubsls", ids.slice(i, i + 200));
-    for (const r of w ?? []) sub.push(r as SubTim);
+    const potong = ids.slice(i, i + 200);
+    const baru = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls, nonaktif, nonaktif_alasan").in("idsubsls", potong);
+    // (18 Okt 2026) Kolom nonaktif baru ada setelah migrasi 20261018a diterapkan; sebelum itu jatuh ke kolom lama supaya Lembar Pendataan tidak rusak.
+    const w = baru.error ? (await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").in("idsubsls", potong)).data : baru.data;
+    for (const r of w ?? []) sub.push(r as unknown as SubTim);
   }
   sub.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls) || a.sub_sls.localeCompare(b.sub_sls));
 

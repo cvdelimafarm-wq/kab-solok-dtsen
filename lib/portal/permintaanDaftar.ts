@@ -12,6 +12,7 @@ import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
+import { pilihanNonaktif } from "@/lib/pendataan";
 import { adaKkBerhasil, lepasKolam } from "@/lib/portal/kolamWilayah";
 import { pesanTolak } from "@/lib/kolamWilayah";
 import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKeluar, susunPushTolak, rapikanAlasanTolak, tanggalWib, type PeranEmail, type Permintaan, type PermintaanAdmin, type Pilihan, type StatusMinta } from "@/lib/permintaanDaftar";
@@ -142,6 +143,9 @@ export async function buatPermintaan(db: Db, akun: { id: number; nama?: string |
     if (!pplTim.has(p.ppl_akun_id)) return { galat: "PPL yang dipilih bukan anggota tim Anda.", status: 400 };
   }
   const wil = await petaWilayah(db, pilihan.map((p) => p.idsubsls));
+  // (18 Okt 2026) Sub SLS non aktif (dibekukan admin) tidak dapat diajukan. Pemeriksaan ini ramah-pengguna; penjaga sebenarnya pemicu database (SUB_NONAKTIF).
+  const beku = pilihanNonaktif(tim.sub, pilihan.map((p) => p.idsubsls));
+  if (beku.length) return { galat: `${beku.map((id) => labelWilayah(wil.get(id), id)).join(", ")} berstatus NON AKTIF dan tidak dapat diajukan untuk pendataan/FASIH.`, status: 409 };
   for (const p of pilihan) {
     const { count, error } = await db.from("bencana_pendataan_kk").select("id", { count: "exact", head: true }).eq("idsubsls", p.idsubsls).eq("aktif", true);
     if (error) return { galat: "Gagal memeriksa daftar KK. Coba lagi.", status: 500 };
@@ -151,7 +155,10 @@ export async function buatPermintaan(db: Db, akun: { id: number; nama?: string |
   const hariIni = tanggalWib(Date.now());
   const maks = batasPengajuan(hariIni);
   const { data, error } = await db.rpc("bencana_pendataan_minta_total", { p_pml: tim.pml.id, p_akun: akun.id, p_tanggal: hariIni, p_pilihan: pilihan, p_maks: maks });
-  if (error) return { galat: "Permintaan gagal disimpan. Coba lagi.", status: 500 };
+  if (error) {
+    if (/SUB_NONAKTIF/.test(error.message)) return { galat: "Ada Sub SLS yang berstatus NON AKTIF dan tidak dapat diajukan.", status: 409 };
+    return { galat: "Permintaan gagal disimpan. Coba lagi.", status: 500 };
+  }
   const r = data as { status: string; ids?: number[]; alasan?: string; sisa?: number };
   if (r.status !== "ok") {
     if (r.alasan === "melebihi_batas") return { galat: r.sisa ? `Kuota Anda tinggal ${r.sisa} Sub SLS (total maksimal ${maks} per PML hari ini).` : `Kuota total ${maks} Sub SLS hari ini sudah terpakai. Batalkan salah satu bila ingin mengganti.`, status: 409 };

@@ -40,7 +40,9 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     const diminta = urutPermintaan(data?.permintaan ?? []).map((p) => p.idsubsls);
     const sudah = new Set(diminta);
     const peta = new Map(sub.map((s) => [s.idsubsls, s]));
-    return [...diminta.map((id) => peta.get(id)).filter((s): s is SubTim => !!s), ...sub.filter((s) => !sudah.has(s.idsubsls))];
+    // (18 Okt 2026) Sub SLS non aktif (dibekukan admin) di paling bawah supaya tidak mengganggu pilihan.
+    const sisaSub = sub.filter((s) => !sudah.has(s.idsubsls));
+    return [...diminta.map((id) => peta.get(id)).filter((s): s is SubTim => !!s), ...sisaSub.filter((s) => !s.nonaktif), ...sisaSub.filter((s) => !!s.nonaktif)];
   }, [data, sub]);
 
   function ganti(id: string, tandai: boolean) {
@@ -135,14 +137,17 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
               const n = totalKk(s.idsubsls);
               const dipilih = s.idsubsls in pilih;
               const penuh = !dipilih && terpilih.length >= sisa;
-              const nonaktif = !bisaKirim || !!p || n === 0 || penuh;
+              const beku = !!s.nonaktif && !p; // non aktif: tidak dapat diajukan (kecuali yang sudah telanjur diajukan, tetap tampil statusnya)
+              const nonaktif = !bisaKirim || !!p || n === 0 || penuh || beku;
               return (
-                <li key={s.idsubsls} className={`rounded-[14px] border px-3 py-2.5 ${dipilih ? "border-[#1F5FD1] bg-[#F1F6FE]" : "border-[#E3E8F0] bg-white"}`}>
+                <li key={s.idsubsls} className={`rounded-[14px] border px-3 py-2.5 ${dipilih ? "border-[#1F5FD1] bg-[#F1F6FE]" : beku ? "border-[#D5DAE3] bg-[#F3F5F9]" : "border-[#E3E8F0] bg-white"}`}>
                   {/* (14 Okt 2026) Kartu Sub SLS dapat diklik -> membuka Peta | Daftar KK | Monitoring Sub SLS itu -- permintaan user.
                       Kotak centang PML dipisah dari area klik supaya memilih Sub SLS tidak ikut membuka halaman pendataan. */}
                   <div className="flex items-center gap-3">
                     {p ? (
                       <span aria-hidden className={`grid h-6 w-6 flex-none place-items-center rounded-full text-[13px] font-extrabold text-white ${p.status === "sudah_keluar" ? "bg-[#13794B]" : "bg-[#C98A00]"}`}>{p.status === "sudah_keluar" ? "✓" : "…"}</span>
+                    ) : beku ? (
+                      <span aria-hidden className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[#8A94A6] text-[12px] font-extrabold text-white">×</span>
                     ) : (
                       <input type="checkbox" checked={dipilih} disabled={nonaktif && !dipilih} onChange={(e) => ganti(s.idsubsls, e.target.checked)} className={`h-6 w-6 flex-none accent-[#1F5FD1] disabled:opacity-40 ${nonaktif ? "" : "cursor-pointer"}`} aria-label={`Pilih ${namaSub(s)}`} />
                     )}
@@ -157,6 +162,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                       </small>
                     </span>
                     {p && chip(p)}
+                    {beku && <span className="flex-none rounded-full bg-[#E3E7EE] px-2 py-[2px] text-[10.5px] font-extrabold text-[#4A5568]">Non aktif</span>}
                     {onBuka && (
                       <span aria-hidden className="flex-none text-[20px] font-bold leading-none text-[#1F5FD1]">
                         ›
@@ -164,6 +170,12 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                     )}
                     </button>
                   </div>
+
+                  {beku && (
+                    <p className="mt-1.5 pl-9 text-[12px] leading-snug text-[#52627A]">
+                      Non aktif{s.nonaktif_alasan ? ` — ${s.nonaktif_alasan}` : ""}. Tidak dapat diajukan untuk pendataan/FASIH; daftar KK dan petanya tetap bisa dilihat.
+                    </p>
+                  )}
 
                   {p && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-9 text-[12px] text-[#52627A]">

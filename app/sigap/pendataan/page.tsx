@@ -316,7 +316,7 @@ export default function LembarPendataan() {
         } catch {
           /* abaikan */
         }
-        const id = pilihSubPrioritas(data.sub.map((s) => s.idsubsls), perSub, terakhir);
+        const id = pilihSubPrioritas(data.sub.filter((s) => !s.nonaktif).map((s) => s.idsubsls), perSub, terakhir);
         if (id) {
           pilihSub(id);
           setTab("peta");
@@ -328,6 +328,27 @@ export default function LembarPendataan() {
       /* abaikan */
     }
   }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // (18 Okt 2026) ?kolam=1 (dari tombol modal/notifikasi "Buka Kolam Wilayah"): langsung membuka mode Kolam wilayah di halaman utama (bukan di dalam sebuah Sub SLS).
+  // Hanya dipakai bila tim punya Sub SLS (tombol/panel Kolam hanya ada saat itu). Alamat dirapikan dengan replaceState.
+  const kolamDipakai = useRef(false);
+  useEffect(() => {
+    if (kolamDipakai.current || !data) return;
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("kolam") !== "1") return;
+      kolamDipakai.current = true;
+      u.searchParams.delete("kolam");
+      u.searchParams.delete("sub");
+      if (data.sub.length > 0) {
+        setSubPilih(null);
+        setKolamBuka(true);
+      }
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* abaikan */
+    }
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // (17 Okt 2026) ?tab=wilayah (dari tombol modal/notifikasi "Buka Peta Batas"): langsung buka tab Batas pada Sub SLS prioritas
   // (atau Sub SLS di ?sub=, bila ada). Alamat dirapikan dengan replaceState agar tombol Kembali tidak memutar ulang.
@@ -347,7 +368,7 @@ export default function LembarPendataan() {
         } catch {
           /* abaikan */
         }
-        id = pilihSubPrioritas(data.sub.map((s) => s.idsubsls), perSub, terakhir);
+        id = pilihSubPrioritas(data.sub.filter((s) => !s.nonaktif).map((s) => s.idsubsls), perSub, terakhir);
       }
       if (id) {
         pilihSub(id);
@@ -513,9 +534,11 @@ export default function LembarPendataan() {
 
   // (17 Okt 2026) Angka tim (Progres tim, header Monitoring, baris "Semua Sub SLS tim") = HANYA Sub SLS yang sudah DIAJUKAN (permintaan menunggu atau sudah keluar; yang dibatalkan
   // tidak dihitung) -- permintaan user, bukan total plotting awal seluruh wilayah. Selama daftar permintaan belum termuat, dipakai semua Sub SLS supaya angka tidak kosong.
-  const idDiajukan = useMemo(() => (minta.data ? new Set(minta.data.permintaan.filter((p) => p.status !== "dibatalkan").map((p) => p.idsubsls)) : null), [minta.data]);
-  const perSubTim = Object.entries(perSub).filter(([id]) => !idDiajukan || idDiajukan.has(id)).map(([, s]) => s);
-  const jumlahDiajukan = idDiajukan ? (data?.sub ?? []).filter((s) => idDiajukan.has(s.idsubsls)).length : (data?.sub.length ?? 0);
+  // (18 Okt 2026) Sub SLS NON AKTIF (dibekukan admin, mis. Gantuang Ciri) dikeluarkan dari target tim walau sudah telanjur diajukan; server (bencana_kolam_progres) memakai aturan yang sama.
+  const idNonaktif = useMemo(() => new Set((data?.sub ?? []).filter((s) => s.nonaktif).map((s) => s.idsubsls)), [data]);
+  const idDiajukan = useMemo(() => (minta.data ? new Set(minta.data.permintaan.filter((p) => p.status !== "dibatalkan" && !idNonaktif.has(p.idsubsls)).map((p) => p.idsubsls)) : null), [minta.data, idNonaktif]);
+  const perSubTim = Object.entries(perSub).filter(([id]) => !idNonaktif.has(id) && (!idDiajukan || idDiajukan.has(id))).map(([, s]) => s);
+  const jumlahDiajukan = idDiajukan ? (data?.sub ?? []).filter((s) => idDiajukan.has(s.idsubsls)).length : (data?.sub.length ?? 0) - idNonaktif.size;
   const total = perSubTim.reduce((n, s) => n + s.total, 0);
   const didata = perSubTim.reduce((n, s) => n + s.didata, 0);
   const timHasil = perSubTim.reduce(
@@ -827,7 +850,7 @@ export default function LembarPendataan() {
                 </span>
               </div>
               <p className="-mt-1 text-[11.5px] text-[#6B7A90]">
-                Target = {jumlahDiajukan} dari {data.sub.length} Sub SLS yang sudah diajukan
+                Target = {jumlahDiajukan} dari {data.sub.length - idNonaktif.size} Sub SLS yang sudah diajukan
                 {jumlahDiajukan === 0 ? ". Belum ada Sub SLS yang diajukan." : "."}
               </p>
               <BilahTumpuk

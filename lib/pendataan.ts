@@ -412,7 +412,15 @@ export const API_PENDATAAN = "/api/portal/pendataan";
 export const pathKkSub = (idsubsls: string) => `${API_PENDATAAN}?sub=${idsubsls}`;
 
 export type Anggota = { akun_id: number; nama: string; peran: "pml" | "ppl"; indeks: number };
-export type SubTim = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string };
+// (18 Okt 2026) nonaktif = Sub SLS dibekukan admin (bencana_wilayah.nonaktif): tetap tampil dan KK-nya tetap bisa dilihat, tetapi PML tidak dapat mengajukannya
+// untuk pendataan/FASIH (kartu Plotting tim & Kolam wilayah). Kolom belum ada sebelum migrasi 20261018a diterapkan -> dianggap aktif.
+export type SubTim = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string; nonaktif?: boolean; nonaktif_alasan?: string | null };
+
+/** Dari daftar idsubsls yang dipilih, yang berstatus non aktif menurut daftar Sub SLS tim (kosong = semua boleh diajukan). */
+export function pilihanNonaktif(sub: Pick<SubTim, "idsubsls" | "nonaktif">[], ids: string[]): string[] {
+  const beku = new Set(sub.filter((s) => s.nonaktif).map((s) => s.idsubsls));
+  return ids.filter((id) => beku.has(id));
+}
 export type KkLembar = {
   id: number;
   no_urut: number | null;

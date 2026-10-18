@@ -16,15 +16,33 @@ type Riwayat = { waktu: string; judul: string; oleh: string | null; akun: number
 type Ringkas = { push_siap: boolean; penerima: number; berlangganan: number; riwayat: Riwayat[]; boleh_kirim: boolean };
 type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkirim: number; gagal: number; modal: boolean; push: boolean };
 
-const AWAL = {
-  judul: "Peta batas wilayah kini ada di Lembar Pendataan",
-  isi: "Tab baru \"Batas\" di Lembar Pendataan: lihat peta batas Sub SLS dan peta desa/nagari tempat Anda bertugas. Bisa dizoom, dan setelah dibuka sekali tersimpan di HP sehingga tetap bisa dilihat tanpa sinyal. Ketuk untuk membuka.",
-  mJudul: "PETA BATAS WILAYAH TERSEDIA",
-  mIsi: "**Tab baru \"Batas\" di Lembar Pendataan.**\n\n- Menampilkan ==peta batas Sub SLS== dan ==peta desa/nagari== untuk Sub SLS yang sedang dibuka\n- Bisa diperbesar (cubit atau ketuk dua kali) untuk melihat batas dan landmark\n- Peta yang sudah dibuka ==tersimpan di HP selama 20 hari==, jadi tetap bisa dilihat di lokasi yang sinyalnya lemah\n- Hanya peta yang Anda buka yang diunduh, jadi tidak boros kuota\n- Tab ini bisa dilihat oleh PML dan PPL tim yang bersangkutan",
-  tLabel: "Buka Tab Batas",
-  tUrl: "/sigap/pendataan?tab=wilayah",
-};
-const URL_PUSH = "/sigap/pendataan?tab=wilayah";
+// (18 Okt 2026) Templat siaran. Urutan pertama = bawaan. Tombol/push membawa petugas langsung ke tujuan (?kolam=1 membuka mode Kolam wilayah, ?tab=wilayah membuka tab Batas).
+type Templat = { nama: string; judul: string; isi: string; mJudul: string; mIsi: string; tLabel: string; tUrl: string; url: string; jenis: JenisPengumuman };
+const TEMPLAT: Templat[] = [
+  {
+    nama: "Gantuang Ciri dinonaktifkan + Kolam wilayah",
+    judul: "Sub SLS Gantuang Ciri dinonaktifkan",
+    isi: "Seluruh Sub SLS Nagari Gantuang Ciri dinonaktifkan dan tidak bisa diajukan. Pilih Sub SLS di nagari lain. Tim yang Sub SLS-nya hampir habis bisa mengajukan tambahan lewat Kolam wilayah. Ketuk untuk membuka.",
+    mJudul: "SUB SLS GANTUANG CIRI DINONAKTIFKAN",
+    mIsi: "**Pembaruan pengajuan Sub SLS.**\n\n- ==Seluruh Sub SLS di Nagari Gantuang Ciri dinonaktifkan== dan tidak dapat diajukan untuk pendataan/FASIH. Silakan memilih Sub SLS di nagari lain\n- Sub SLS Gantuang Ciri ==dikeluarkan dari target tim==, jadi tidak ikut dihitung pada syarat 70% untuk Kolam wilayah\n- Tim yang ==jumlah Sub SLS-nya mulai habis== dapat mengajukan Sub SLS tambahan lewat ==Kolam wilayah== (tombol ungu di Lembar Pendataan)\n- Pengajuan lewat Kolam wilayah dilakukan oleh PML",
+    tLabel: "Buka Kolam Wilayah",
+    tUrl: "/sigap/pendataan?kolam=1",
+    url: "/sigap/pendataan?kolam=1",
+    jenis: "perhatian",
+  },
+  {
+    nama: "Peta batas wilayah (tab Batas)",
+    judul: "Peta batas wilayah kini ada di Lembar Pendataan",
+    isi: "Tab baru \"Batas\" di Lembar Pendataan: lihat peta batas Sub SLS dan peta desa/nagari tempat Anda bertugas. Bisa dizoom, dan setelah dibuka sekali tersimpan di HP sehingga tetap bisa dilihat tanpa sinyal. Ketuk untuk membuka.",
+    mJudul: "PETA BATAS WILAYAH TERSEDIA",
+    mIsi: "**Tab baru \"Batas\" di Lembar Pendataan.**\n\n- Menampilkan ==peta batas Sub SLS== dan ==peta desa/nagari== untuk Sub SLS yang sedang dibuka\n- Bisa diperbesar (cubit atau ketuk dua kali) untuk melihat batas dan landmark\n- Peta yang sudah dibuka ==tersimpan di HP selama 20 hari==, jadi tetap bisa dilihat di lokasi yang sinyalnya lemah\n- Hanya peta yang Anda buka yang diunduh, jadi tidak boros kuota\n- Tab ini bisa dilihat oleh PML dan PPL tim yang bersangkutan",
+    tLabel: "Buka Tab Batas",
+    tUrl: "/sigap/pendataan?tab=wilayah",
+    url: "/sigap/pendataan?tab=wilayah",
+    jenis: "info",
+  },
+];
+const AWAL = TEMPLAT[0];
 
 const waktuTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(".", ":") + " WIB";
 
@@ -39,7 +57,9 @@ export default function Siaran() {
   const [mIsi, setMIsi] = useState(AWAL.mIsi);
   const [tLabel, setTLabel] = useState(AWAL.tLabel);
   const [tUrl, setTUrl] = useState(AWAL.tUrl);
-  const [jenis, setJenis] = useState<JenisPengumuman>("info");
+  const [jenis, setJenis] = useState<JenisPengumuman>(AWAL.jenis);
+  const [templat, setTemplat] = useState(0);
+  const [urlPush, setUrlPush] = useState(AWAL.url);
   const [uji, setUji] = useState(false);
   const [hasilUji, setHasilUji] = useState<string | null>(null);
   const [yakin, setYakin] = useState(false);
@@ -66,7 +86,7 @@ export default function Siaran() {
     try {
       const h = await apiPortal<Hasil & { ok: boolean }>("/api/portal/siaran-petugas", {
         method: "POST",
-        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: URL_PUSH, modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
+        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: urlPush, modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
       });
       setHasil(h);
       setYakin(false);
@@ -85,7 +105,7 @@ export default function Siaran() {
     setHasilUji(null);
     setGalat(null);
     try {
-      const h = await apiPortal<{ perangkat: number; terkirim: number; gagal: number }>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "uji", judul, isi, url: URL_PUSH }) });
+      const h = await apiPortal<{ perangkat: number; terkirim: number; gagal: number }>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "uji", judul, isi, url: urlPush }) });
       setHasilUji(
         h.perangkat === 0
           ? "Tidak ada perangkat yang mengaktifkan notifikasi di akun Anda. Buka Beranda di HP Anda, ketuk \"Aktifkan notifikasi\", lalu coba lagi."
@@ -96,6 +116,22 @@ export default function Siaran() {
     } finally {
       setUji(false);
     }
+  }
+
+  function pakaiTemplat(i: number) {
+    const t = TEMPLAT[i] ?? TEMPLAT[0];
+    setTemplat(i);
+    setJudul(t.judul);
+    setIsi(t.isi);
+    setMJudul(t.mJudul);
+    setMIsi(t.mIsi);
+    setTLabel(t.tLabel);
+    setTUrl(t.tUrl);
+    setUrlPush(t.url);
+    setJenis(t.jenis);
+    setYakin(false);
+    setHasil(null);
+    setHasilUji(null);
   }
 
   const kolom = "mt-1 w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 py-2 text-[14px] text-[#1B2B4B]";
@@ -114,6 +150,16 @@ export default function Siaran() {
           {!r.push_siap && <b className="mt-1 block text-[#B42329]">Kunci VAPID belum terpasang di server, notifikasi belum bisa dikirim.</b>}
         </p>
       )}
+      <label className="mt-3 block text-[12px] font-bold text-[#55657D]">
+        Templat siaran
+        <select value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
+          {TEMPLAT.map((t, i) => (
+            <option key={t.nama} value={i}>
+              {t.nama}
+            </option>
+          ))}
+        </select>
+      </label>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
       <label className="mt-3 flex items-center gap-2 text-[13.5px] font-bold text-[#0F2A52]">
