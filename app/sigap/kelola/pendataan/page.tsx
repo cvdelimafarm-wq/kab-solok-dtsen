@@ -19,10 +19,12 @@ import { tglJam } from "../../identifikasi/useIdentifikasi";
 import Siaran from "./Siaran";
 import KirimSatu from "./KirimSatu";
 import PermintaanDaftar from "./PermintaanDaftar";
+import Monitoring from "./Monitoring";
 
 type Batch = { id: number; nama_berkas: string | null; diunggah_at: string; oleh: string | null; diterima: number; ditolak: number; aktif: number; sudah_didata: number; dibatalkan_at: string | null };
 type Data = { sekarang: string; kegiatan_id: number; batch: Batch[]; total_aktif: number; total_didata: number; sampel: string[] };
 type Tolak = { no: number; pesan: string };
+type Tab = "unggah" | "monitoring";
 type Periksa = {
   nama: string;
   fasih: boolean;
@@ -58,6 +60,18 @@ export default function UnggahPendataan() {
   const [konfirmBatal, setKonfirmBatal] = useState<number | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
+  // (18 Okt 2026) Dua tab: "Unggah & Siaran" (isi halaman semula, tidak diubah) dan "Monitoring". Pilihan tab ikut di alamat (?tab=monitoring).
+  const [tab, setTab] = useState<Tab>("unggah");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "monitoring") setTab("monitoring");
+  }, []);
+  function pilihTab(t: Tab) {
+    setTab(t);
+    const u = new URL(window.location.href);
+    if (t === "monitoring") u.searchParams.set("tab", "monitoring");
+    else u.searchParams.delete("tab");
+    window.history.replaceState(null, "", u.toString());
+  }
 
   const muat = useCallback(async () => {
     if (!bacaSesi()) return router.replace("/");
@@ -215,12 +229,25 @@ export default function UnggahPendataan() {
 
   return (
     <main className="min-h-screen bg-[#F5F8FE] px-4 py-6 text-[#1B2B4B]">
-      <div className="mx-auto max-w-4xl">
+      <div className={`mx-auto ${tab === "monitoring" ? "max-w-6xl" : "max-w-4xl"}`}>
         <Link href="/" className="text-[12px] font-bold text-[#1F5FD1]">
           ‹ Beranda
         </Link>
         <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Kelola · Pendataan Pascabencana</p>
-        <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Unggah Daftar KK Pendataan</h1>
+        <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Kelola Pendataan</h1>
+        <div role="tablist" aria-label="Bagian Kelola Pendataan" className="mt-3 flex w-full gap-1.5 sm:w-max rounded-[16px] bg-[#E4ECFA] p-[5px]">
+          {([["unggah", "Unggah & Siaran"], ["monitoring", "Monitoring"]] as [Tab, string][]).map(([k, t]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => pilihTab(k)} className={`min-h-[44px] flex-1 rounded-[12px] px-[18px] text-[13.5px] sm:min-h-[40px] sm:flex-none font-extrabold ${tab === k ? "bg-white text-[#0F2A52] shadow-[0_2px_8px_rgba(15,42,82,.12)]" : "text-[#55657D]"}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "monitoring" && <Monitoring />}
+
+        {tab === "unggah" && (
+          <>
+        <h2 className="mt-5 text-[18px] font-extrabold text-[#0F2A52]">Unggah Daftar KK Pendataan</h2>
         <p className="mt-1.5 max-w-2xl text-[13px] leading-snug text-[#55657D]">
           Daftar KK sasaran per Sub SLS. Setelah diunggah, seluruh anggota tim (PML dan semua PPL) di Sub SLS itu melihat daftarnya di Lembar Pendataan. Berkas yang diterima: <b>ekspor FASIH-SM &quot;1303 - Pendataan&quot;</b> (CSV/Excel; disaring otomatis ke status keberadaan 1, 2, 5, 6 (seluruh Sub SLS di master wilayah diterima); NIK, Nomor KK, dan pendapatan tidak ikut dikirim) atau templat Excel/CSV (kode Sub SLS teks 16 digit, koordinat desimal).
         </p>
@@ -377,6 +404,8 @@ export default function UnggahPendataan() {
             ))}
           </ul>
         </section>
+          </>
+        )}
       </div>
     </main>
   );
