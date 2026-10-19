@@ -135,6 +135,16 @@ function tglPendek(iso: string): string {
   return `${d} ${b[m - 1]} ${y}`;
 }
 
+/**
+ * (19 Okt 2026) Keterangan baris Transport Lokal di halaman tahap: yang belum lengkap SEBENARNYA ("Foto kurang 2 · +1 lagi"), bukan label "2/5 · …" yang tak jelas
+ * (audit alur per peran). Tanpa daftar kekurangan: "3/5 · …" dibaca "Langkah 3 dari 5 · …".
+ */
+export function ketTranslok(x: Pick<RingkasKegiatan, "sub" | "kekurangan">): string {
+  const kek = x.kekurangan ?? [];
+  if (kek.length > 0) return kek.length > 1 ? `${kek[0].ringkas} · +${kek.length - 1} lagi` : kek[0].ringkas;
+  return x.sub.replace(/^(\d+)\/(\d+) · /, "Langkah $1 dari $2 · ");
+}
+
 /** Modul -> keadaan petugas ini; null = modul tidak berlaku bagi petugas (mis. bukan peserta pelatihan). */
 export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): ModulTahap[] {
   const { induk, hub, hubMuat, keg, nowMs } = k;
@@ -264,7 +274,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
       .map((x) => ({
         kode: x.id,
         judul: x.judul,
-        ket: x.sub,
+        ket: ketTranslok(x),
         status: NADA_KE_STATUS[x.nada],
         href: x.href ? `${x.href}?dari=${encodeURIComponent(ruteTahap(induk, tahap))}` : null,
         aksi: "Buka",

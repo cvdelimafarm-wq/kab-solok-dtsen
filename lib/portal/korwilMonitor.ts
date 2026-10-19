@@ -19,6 +19,7 @@ import {
   type AnggotaKorwil,
   type BarisHariKorwil,
   type DataKorwil,
+  type LapanganKorwil,
   type PilihanKelompok,
   type SubInfoKorwil,
   type SubPmlKorwil,
@@ -120,15 +121,15 @@ async function halaman<T>(ambil: (dari: number, sampai: number) => PromiseLike<{
   return out;
 }
 
-async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, "pilihan"> | null> {
-  const k = await pmlKelompok(db, kelompok);
-  if (!k) return null;
-  const namaKorwil = await namaAkun(db, k.korwilAkun);
-  const timKelompok = await bangunTim(db, k.pmlPetugas, true);
-
+/**
+ * (19 Okt 2026) Hitungan KK PROPORSIONAL untuk sekumpulan tim PML: satu-satunya sumber angka target/realisasi KK bersama Monitoring Korwil,
+ * kartu tahap & Beranda (ringkasModulPendataan) dan header Lembar Pendataan -- supaya angka di semua layar sama (keputusan user 19 Okt).
+ * Tim lain yang ikut memegang Sub SLS yang sama ikut dimuat (tampil = false) agar pembagian Sub SLS bersama benar.
+ */
+async function lapanganTim(db: Db, pmlPetugas: number[], timKelompok: TimKorwilMasuk[]): Promise<LapanganKorwil> {
   // Sub SLS tim kelompok, lalu pemegang lain Sub SLS yang sama (tim di kelompok lain) supaya pembagian proporsional benar
   const alokasi = await halaman<{ idsubsls: string; pml_id: number | null }>((a, b) =>
-    db.from("bencana_alokasi_subsls").select("idsubsls, pml_id").in("pml_id", k.pmlPetugas.length ? k.pmlPetugas : [-1]).order("idsubsls").range(a, b),
+    db.from("bencana_alokasi_subsls").select("idsubsls, pml_id").in("pml_id", pmlPetugas.length ? pmlPetugas : [-1]).order("idsubsls").range(a, b),
   );
   const subPml: SubPmlKorwil[] = alokasi.filter((x) => x.pml_id != null).map((x) => ({ idsubsls: x.idsubsls, pml_id: n(x.pml_id) }));
   const idsSub = Array.from(new Set(subPml.map((s) => s.idsubsls)));
@@ -137,7 +138,7 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
     const { data } = await db.from("bencana_alokasi_subsls").select("idsubsls, pml_id").in("idsubsls", idsSub.slice(i, i + 200)).not("pml_id", "is", null);
     lain.push(...((data ?? []) as { idsubsls: string; pml_id: number | null }[]));
   }
-  const pmlLuar = Array.from(new Set(lain.map((x) => n(x.pml_id)).filter((id) => id > 0 && !k.pmlPetugas.includes(id))));
+  const pmlLuar = Array.from(new Set(lain.map((x) => n(x.pml_id)).filter((id) => id > 0 && !pmlPetugas.includes(id))));
   const timLuar = await bangunTim(db, pmlLuar, false);
   for (const x of lain) if (pmlLuar.includes(n(x.pml_id))) subPml.push({ idsubsls: x.idsubsls, pml_id: n(x.pml_id) });
   const semuaTim = [...timKelompok, ...timLuar];
@@ -173,6 +174,17 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
     for (const h of hasil) baris.push(...h);
   }
 
+  return susunLapanganKorwil({ tim: semuaTim, sub: subPml, nonaktif, baris, info });
+}
+
+async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, "pilihan"> | null> {
+  const k = await pmlKelompok(db, kelompok);
+  if (!k) return null;
+  const namaKorwil = await namaAkun(db, k.korwilAkun);
+  const timKelompok = await bangunTim(db, k.pmlPetugas, true);
+
+  const lapangan = await lapanganTim(db, k.pmlPetugas, timKelompok);
+
   // administrasi harian (sama dengan Monitoring Lapangan); satu muatan dipakai semua kelompok
   const hariIni = hariIniWib();
   const lap = await memoWaktu("korwil:lapangan", TTL_MS, () => monitoringLapangan(db, MULAI_KORWIL, hariIni));
@@ -195,7 +207,7 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
     mulai: MULAI_KORWIL,
     kelompok,
     korwil: k.korwilAkun.map((a) => namaKorwil.get(a) ?? `Akun ${a}`),
-    lapangan: susunLapanganKorwil({ tim: semuaTim, sub: subPml, nonaktif, baris, info }),
+    lapangan,
     administrasi: susunAdministrasi({ tim: timKelompok, baris: hari, mulai: MULAI_KORWIL, hariIni }),
   };
 }
@@ -216,5 +228,22 @@ export async function ringkasModulKorwil(db: Db, akun: Pick<AkunPortal, "id">): 
     if (!k) return null;
     const { data } = k.pmlPetugas.length ? await db.from("bencana_petugas").select("id").in("atasan_id", k.pmlPetugas).eq("peran", "ppl").neq("aktif", false) : { data: [] };
     return { kelompok: kel, tim: k.pmlPetugas.length, ppl: (data ?? []).length };
+  });
+}
+
+/** Angka KK proporsional satu tim PML (target = KK tim + bagian sisa Sub SLS bersama; didata = realisasi + tidak ditemukan). null = tim tak dikenal/gagal. */
+export type KkProporsionalTim = { total: number; didata: number; realisasi: number; tidak_ditemukan: number; sub: number };
+export function kkProporsionalTim(db: Db, pmlId: number): Promise<KkProporsionalTim | null> {
+  return memoWaktu(`kk-prop:${pmlId}`, TTL_MS, async () => {
+    try {
+      const tim = await bangunTim(db, [pmlId], true);
+      if (tim.length === 0) return null;
+      const l = await lapanganTim(db, [pmlId], tim);
+      const t = l.tim.find((x) => x.pml_id === pmlId);
+      if (!t || t.target <= 0) return null;
+      return { total: t.target, didata: t.realisasi + t.tidak_ditemukan, realisasi: t.realisasi, tidak_ditemukan: t.tidak_ditemukan, sub: t.sub.length };
+    } catch {
+      return null;
+    }
   });
 }

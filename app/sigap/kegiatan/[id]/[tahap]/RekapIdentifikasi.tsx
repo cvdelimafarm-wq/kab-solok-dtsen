@@ -55,7 +55,8 @@ const CHIP_SANGGAH: Record<SanggahRekap["status"], { teks: string; kelas: string
 const tglTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 const tglKode = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 
-export default function RekapIdentifikasi() {
+/** sebaris = tombol ikut alur halaman (PPL, 19 Okt 2026: tidak lagi melayang menutupi tugas); default = melayang di kanan bawah (PML). */
+export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boolean } = {}) {
   const [buka, setBuka] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
@@ -254,8 +255,10 @@ export default function RekapIdentifikasi() {
         type="button"
         onClick={() => setBuka(true)}
         aria-haspopup="dialog"
-        className="fixed right-4 z-40 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1F5FD1] px-5 text-[14px] font-extrabold text-white shadow-[0_10px_26px_rgba(31,95,209,.45)] active:bg-[#184EAF]"
-        style={{ bottom: "max(16px, env(safe-area-inset-bottom))" }}
+        className={sebaris
+          ? "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[18px] bg-white px-5 text-[14px] font-extrabold text-[#1F5FD1] shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF1FC]"
+          : "fixed right-4 z-40 inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#1F5FD1] px-5 text-[14px] font-extrabold text-white shadow-[0_10px_26px_rgba(31,95,209,.45)] active:bg-[#184EAF]"}
+        style={sebaris ? undefined : { bottom: "max(16px, env(safe-area-inset-bottom))" }}
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <rect x="4" y="4" width="16" height="16" rx="3" />

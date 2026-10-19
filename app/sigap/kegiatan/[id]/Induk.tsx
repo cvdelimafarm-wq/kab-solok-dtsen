@@ -13,6 +13,7 @@ import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
 import { keAtas } from "@/app/portal/navigasi";
 import { buatRencana, useSiapkan } from "@/app/portal/siapkan";
+import { adalahTugas } from "@/lib/sigapPrioritas";
 import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
 import type { StatusLangkah } from "@/lib/sigapKegiatan";
 import { useInduk } from "../useInduk";
@@ -40,6 +41,9 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
   const garis = t.status === "selesai" ? "bg-[#19A463]" : "bg-[#D5DBE6]";
   const c = CHIP[t.status];
   const bisa = !t.terkunci && t.isi.length > 0;
+  // (19 Okt 2026) Kartu aktif menghitung TUGAS bernomor (sama dengan kartu "Tugas aktif" & halaman tahap), bukan semua bagian informasi (Wilayah tim dst.).
+  const tugas = t.modul.filter((m) => adalahTugas(m.kode));
+  const tampil = tugas.length > 0 ? tugas : t.modul;
   const judul = (
     <div className="flex flex-wrap items-center gap-2">
       <b className="text-[15px] font-extrabold text-[#0F2A52]">{t.nama}</b>
@@ -60,7 +64,7 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-black tracking-[0.12em] text-[#B42329]">KERJAKAN SEKARANG</span>
               <span className="text-[11px] font-bold text-[#55657D]">
-                {t.modul.filter((m) => m.status === "selesai").length} dari {t.modul.length} bagian
+                {tampil.filter((m) => m.status === "selesai").length} dari {tampil.length} {tugas.length > 0 ? "tugas" : "bagian"}
               </span>
             </div>
             <div className="mt-1.5">{judul}</div>
@@ -69,7 +73,7 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
             </div>
             <p className="mt-2 text-[12.5px] leading-snug text-[#0F2A52]">{t.ringkas}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {t.modul.map((m) => (
+              {tampil.map((m) => (
                 <span key={m.kode} className="rounded-full bg-[#E6EEFC] px-2.5 py-[3px] text-[11px] font-bold text-[#0F3D7A]">
                   {m.judul}
                 </span>
@@ -108,7 +112,10 @@ export default function HalamanInduk({ kode }: { kode: string }) {
   const selesai = tahap.filter((t) => t.status === "selesai").length;
   const sekarang = tahapSekarang(tahap);
   const idxAktif = sekarang ? tahap.findIndex((t) => t.kode === sekarang.tahap.kode) : -1;
+  // (19 Okt 2026) "Tahap x dari n" = tahap yang sedang dikerjakan (kartu "Kerjakan sekarang"), bukan sekadar tahap pertama yang belum selesai --
+  // dulu tahap Perencanaan yang tak berlaku bagi petugas lapangan membuat tulisan di kepala berbeda dengan kartu aktif.
   const ke = (() => {
+    if (idxAktif >= 0) return idxAktif + 1;
     const i = tahap.findIndex((t) => t.status !== "selesai");
     return i < 0 ? tahap.length : i + 1;
   })();

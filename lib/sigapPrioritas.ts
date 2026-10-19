@@ -11,7 +11,7 @@
 //   Pelatihan TIDAK dihitung di sini (punya aturan sendiri di sigapTugasUtama.tugasUtamaPelatihan); Wilayah tugas tim hanya informasi.
 // TOMBOL: menuju langkah yang diprioritaskan itu sendiri (bila modul punya langkah dalam, mis. Transport Lokal -> langkah "Laporan & foto harian"
 //   yang sedang terbuka); langkah yang terkunci sementara (pesanKunci) tidak pernah dijadikan tujuan. Pada tingkat BERIKUTNYA tombol "Lihat tahapan".
-// KARTU: label = tahap ("TAHAP 3 · PENDATAAN"), judul = tugasnya, uraian = "Langkah i dari n · keterangan" bila tahap punya >= 2 tugas.
+// KARTU: label = tahap ("TAHAP 3 · PENDATAAN"), judul = tugasnya, uraian = "Tugas i dari n · keterangan" bila tahap punya >= 2 tugas.
 
 import type { LangkahKegiatan, RingkasKegiatan } from "@/lib/sigapKegiatan";
 import type { ModulTahap, TahapHasil } from "@/lib/sigapTahap";
@@ -60,7 +60,7 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
         if (l) calon.push({ tier: l.status === "mendesak" ? 1 : 2, tahap: t, indeks, modul: m, langkah: l, batas: l.batas ? Date.parse(l.batas) : Infinity });
         return;
       }
-      const perluSekarang = m.status === "mendesak" || m.status === "perlu" || ((m.kode === "identifikasi" || m.kode === "pendataan" || m.kode === "konfirmasi") && (m.status === "berjalan" || m.status === "sekarang"));
+      const perluSekarang = m.status === "mendesak" || m.status === "perlu" || ((m.kode === "identifikasi" || m.kode === "pendataan" || m.kode === "konfirmasi" || m.kode === "monitoring_korwil") && (m.status === "berjalan" || m.status === "sekarang"));
       if (perluSekarang && m.href) calon.push({ tier: m.status === "mendesak" ? 1 : 2, tahap: t, indeks, modul: m, langkah: null, batas: m.batas ? Date.parse(m.batas) : Infinity });
     });
   }
@@ -89,7 +89,7 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
       ikon,
       label: labelTahap(c.tahap),
       judul: kek ? kek.judul : c.langkah ? c.langkah.judul : c.modul.judul,
-      uraian: n >= 2 && no > 0 ? `Langkah ${no} dari ${n} · ${ket}` : ket,
+      uraian: n >= 2 && no > 0 ? `Tugas ${no} dari ${n} · ${ket}` : ket,
       lencana: sisa != null && sisa > 0 ? { teks: teksSisa(sisa), nada: c.tier === 1 ? "merah" : "emas" } : c.tier === 1 ? { teks: "Mendesak", nada: "merah" } : kek?.lencana ? { teks: kek.lencana.teks, nada: "emas" } : undefined,
       progres: n >= 2 ? { selesai, total: n } : undefined,
       href: (kek ? kek.href : c.langkah ? c.langkah.href : c.modul.href) ?? c.tahap.rute,
@@ -111,7 +111,7 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
         ikon,
         label: `BERIKUTNYA · ${labelTahap(t)}`,
         judul: dalam ? dalam.judul : m.judul,
-        uraian: n >= 2 && no > 0 ? `Langkah ${no} dari ${n} · ${ket}` : ket,
+        uraian: n >= 2 && no > 0 ? `Tugas ${no} dari ${n} · ${ket}` : ket,
         lencana: { teks: "Menunggu", nada: "abu" },
         progres: n >= 2 ? { selesai, total: n } : undefined,
         href: m.href ?? t.rute,

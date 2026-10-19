@@ -434,7 +434,10 @@ export type KkLembar = {
   ppl_akun_id: number | null;
   status_at: string | null;
 };
-export type DataTimPendataan = { sekarang: string; saya: { akun_id: number; peran: "pml" | "ppl" }; pml: { id: number; nama: string }; anggota: Anggota[]; sub: SubTim[]; ringkas: BarisRingkas[] };
+export type DataTimPendataan = { sekarang: string; saya: { akun_id: number; peran: "pml" | "ppl" }; pml: { id: number; nama: string }; anggota: Anggota[]; sub: SubTim[]; ringkas: BarisRingkas[];
+  /** (19 Okt 2026) angka KK tim PROPORSIONAL (sama dengan Monitoring Korwil & Beranda); null/tak ada = pakai jumlah dari `ringkas` */
+  proporsional?: { total: number; didata: number } | null;
+};
 export type DataKkSub = { sekarang: string; idsubsls: string; kk: KkLembar[] };
 
 

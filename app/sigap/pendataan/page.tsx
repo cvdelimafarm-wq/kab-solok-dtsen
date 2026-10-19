@@ -541,8 +541,11 @@ export default function LembarPendataan() {
   const idDiajukan = useMemo(() => (minta.data ? new Set(minta.data.permintaan.filter((p) => p.status !== "dibatalkan" && !idNonaktif.has(p.idsubsls)).map((p) => p.idsubsls)) : null), [minta.data, idNonaktif]);
   const perSubTim = Object.entries(perSub).filter(([id]) => !idNonaktif.has(id) && (!idDiajukan || idDiajukan.has(id))).map(([, s]) => s);
   const jumlahDiajukan = idDiajukan ? (data?.sub ?? []).filter((s) => idDiajukan.has(s.idsubsls)).length : (data?.sub.length ?? 0) - idNonaktif.size;
-  const total = perSubTim.reduce((n, s) => n + s.total, 0);
-  const didata = perSubTim.reduce((n, s) => n + s.didata, 0);
+  // (19 Okt 2026) Angka tim "KK didata / KK tim" memakai hitungan PROPORSIONAL dari server (sama dengan Beranda & Monitoring Korwil): Sub SLS yang dipegang
+  // dua tim dibagi rata sisanya. Bila belum tersedia (data lama di simpanan HP), jatuh ke jumlah Sub SLS yang diajukan seperti sebelumnya.
+  const prop = data?.proporsional ?? null;
+  const total = prop ? prop.total : perSubTim.reduce((n, s) => n + s.total, 0);
+  const didata = prop ? prop.didata : perSubTim.reduce((n, s) => n + s.didata, 0);
   const timHasil = perSubTim.reduce(
     (h, s) => ({ terdampak: h.terdampak + s.total_hasil.terdampak, tidak_terdampak: h.tidak_terdampak + s.total_hasil.tidak_terdampak, tidak_ditemukan: h.tidak_ditemukan + s.total_hasil.tidak_ditemukan }),
     { terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 0 }
@@ -852,8 +855,9 @@ export default function LembarPendataan() {
                 </span>
               </div>
               <p className="-mt-1 text-[11.5px] text-[#6B7A90]">
-                Target = {jumlahDiajukan} dari {data.sub.length - idNonaktif.size} Sub SLS yang sudah diajukan
-                {jumlahDiajukan === 0 ? ". Belum ada Sub SLS yang diajukan." : "."}
+                {prop
+                  ? `Target = KK dari ${data.sub.length - idNonaktif.size} Sub SLS aktif tim; Sub SLS yang dipegang dua tim dibagi rata sisanya.`
+                  : `Target = ${jumlahDiajukan} dari ${data.sub.length - idNonaktif.size} Sub SLS yang sudah diajukan${jumlahDiajukan === 0 ? ". Belum ada Sub SLS yang diajukan." : "."}`}
               </p>
               <BilahTumpuk
                 total={total}

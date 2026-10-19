@@ -34,7 +34,7 @@ const CHIP: Record<ModulTahap["status"], { teks: string; kelas: string }> = {
 const SEMBUNYIKAN_WILAYAH_TIM_PML = true;
 
 // (10 Okt 2026) Modul yang berupa TUGAS (harus dikerjakan) diberi nomor langkah agar PML jelas urutannya -- permintaan user.
-// adalahTugas dipakai bersama kartu Tugas aktif di Beranda (lib/sigapPrioritas.ts) supaya nomor "Langkah i dari n" di kartu & halaman ini sama.
+// adalahTugas dipakai bersama kartu Tugas aktif di Beranda (lib/sigapPrioritas.ts) supaya nomor "Tugas i dari n" di kartu & halaman ini sama.
 // Perbaikan: kode modul Transport Lokal bentuknya "translok-<id>" (bukan "translok:<id>"), sehingga sebelumnya tidak ikut dinomori.
 
 function BarisModul({ m, no }: { m: ModulTahap; no?: number }) {
@@ -44,7 +44,7 @@ function BarisModul({ m, no }: { m: ModulTahap; no?: number }) {
     <>
       {no != null && (
         <span
-          aria-label={`Langkah ${no}${selesai ? ", selesai" : ""}`}
+          aria-label={`Tugas ${no}${selesai ? ", selesai" : ""}`}
           className={`grid h-8 w-8 flex-none place-items-center rounded-full text-[14px] font-extrabold ${selesai ? "bg-[#13794B] text-white" : "bg-[#1A4590] text-white"}`}
         >
           {selesai ? "✓" : no}
@@ -134,13 +134,32 @@ export default function HalamanTahap() {
         {t &&
           !t.terkunci &&
           t.modul.map((m) => {
-            if (m.kode === "wilayah_tim") return sembunyikanWilayah ? null : <WilayahTim key={m.kode} />;
+            // (19 Okt 2026) Wilayah tim tidak lagi menjadi kartu pertama yang menutupi tugas: ditaruh PALING BAWAH sebagai panel lipat (lihat di bawah)
+            if (m.kode === "wilayah_tim") return null;
             const i = tugas.indexOf(m);
             return <BarisModul key={m.kode} m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
           })}
+        {/* PPL: Rekap hasil identifikasi sebaris di bawah tugas (bukan tombol melayang). PML tetap tombol melayang. */}
+        {t && !t.terkunci && !adalahPml && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <div><RekapIdentifikasi sebaris /></div>}
+        {t && !t.terkunci && !sembunyikanWilayah && t.modul.some((m) => m.kode === "wilayah_tim") && (
+          <details className="group rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)] open:pb-3">
+            <summary className="flex min-h-[56px] cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 flex-1">
+                <b className="block text-[14px] text-[#0F2A52]">Wilayah tugas tim &amp; peta</b>
+                <small className="block text-[12px] leading-snug text-[#55657D]">Daftar Sub SLS tim Anda, perkiraan KK, dan peta offline. Ketuk untuk membuka.</small>
+              </span>
+              <span aria-hidden className="flex-none text-[#A5B3C7] transition group-open:rotate-90">
+                <IkonMenu n="panah" className="h-4 w-4" />
+              </span>
+            </summary>
+            <div className="px-2.5">
+              <WilayahTim />
+            </div>
+          </details>
+        )}
       </div>
       {/* (11 Okt 2026) Tombol rekap hasil identifikasi (PPL & PML) di tahap yang memuat Lembar Identifikasi / Pendataan -- permintaan user */}
-      {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <RekapIdentifikasi />}
+      {t && !t.terkunci && adalahPml && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <RekapIdentifikasi />}
       {/* (13 Okt 2026) Modal siaran admin untuk petugas (cukup sekali konfirmasi) -- permintaan user */}
       {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <PengumumanPetugas />}
     </main>

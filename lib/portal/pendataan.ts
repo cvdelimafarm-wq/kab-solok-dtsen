@@ -8,6 +8,7 @@
 
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
+import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 import { MAKS_BARIS_UNGGAH, kunciBaris, periksaBarisKk, type Anggota, type BarisKk, type BarisRingkas, type IsiCatat, type KkLembar, type SubTim } from "@/lib/pendataan";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
@@ -191,7 +192,12 @@ export async function ringkasModulPendataan(db: Db, petugasId: number): Promise<
       if (b.hasil !== null) didata += b.jumlah;
       if (b.hasil === "terdampak") terdampak += b.jumlah;
     }
-    return total > 0 ? { total, didata, terdampak } : null;
+    if (total <= 0) return null;
+    // (19 Okt 2026) Angka KK disatukan ke hitungan PROPORSIONAL (sama dengan Monitoring Korwil & header Lembar Pendataan): Sub SLS yang dipegang dua tim
+    // dibagi rata sisanya, jadi tiap tim mendapat target yang wajar (mis. Tim Budi 183 dari 461, bukan 254 dari 535). Gagal -> pakai hitungan mentah di atas.
+    const prop = await kkProporsionalTim(db, pmlId);
+    if (prop && prop.total > 0) return { total: prop.total, didata: Math.min(prop.didata, prop.total), terdampak };
+    return { total, didata, terdampak };
   } catch {
     return null;
   }

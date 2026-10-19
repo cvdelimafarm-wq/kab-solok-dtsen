@@ -12,6 +12,7 @@ import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
 import { ambilTim, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
 import { periksaCatat } from "@/lib/pendataan";
+import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,8 +35,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ sekarang: new Date().toISOString(), idsubsls, kk });
     }
 
-    const ringkas = await ringkasTim(db, tim.pml.id);
-    return NextResponse.json({ sekarang: new Date().toISOString(), saya: tim.saya, pml: tim.pml, anggota: tim.anggota, sub: tim.sub, ringkas });
+    const [ringkas, prop] = await Promise.all([ringkasTim(db, tim.pml.id), kkProporsionalTim(db, tim.pml.id)]);
+    const proporsional = prop ? { total: prop.total, didata: prop.didata } : null;
+    return NextResponse.json({ sekarang: new Date().toISOString(), saya: tim.saya, pml: tim.pml, anggota: tim.anggota, sub: tim.sub, ringkas, proporsional });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat lembar pendataan." }, { status: 500 });
   }

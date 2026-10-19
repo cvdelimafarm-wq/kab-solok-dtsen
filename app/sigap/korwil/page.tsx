@@ -52,7 +52,7 @@ export default function MonitoringKorwil() {
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Monitoring Korwil</h1>
-              <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => judulKata(x).split(" ").slice(0, 2).join(" ")).join(" & ")}` : "Pendataan Pascabencana"}</p>
+              <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => judulKata(x.split(",")[0]).split(" ").slice(0, 2).join(" ")).join(" & ")}` : "Pendataan Pascabencana"}</p>
             </div>
             {L && (
               <div className="flex-none text-right">
