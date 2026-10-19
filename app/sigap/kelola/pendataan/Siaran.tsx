@@ -20,6 +20,18 @@ type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkir
 type Templat = { nama: string; judul: string; isi: string; mJudul: string; mIsi: string; tLabel: string; tUrl: string; url: string; jenis: JenisPengumuman };
 const TEMPLAT: Templat[] = [
   {
+    // (19 Okt 2026) Briefing pendataan PSP via Zoom (Selasa 20 Okt 2026, 08.00-08.45 WIB). Tombol modal membuka Zoom; tombol "Salin tautan" muncul otomatis di bawahnya.
+    nama: "Briefing pendataan PSP via Zoom (20 Okt 2026)",
+    judul: "Briefing Pendataan PSP: Selasa 20 Okt, 08.00 WIB",
+    isi: "Bapak/Ibu petugas PSP Pascabencana 2026, besok Selasa 20 Oktober 2026 pukul 08.00–08.45 WIB ada briefing pendataan via Zoom. Mohon hadir tepat waktu. Ketuk untuk membuka tautan.",
+    mJudul: "Briefing Pendataan PSP Pascabencana 2026",
+    mIsi: "Bapak/Ibu petugas Pendataan Status Pemulihan (PSP) Pascabencana Sumatera 2026, kami mengundang untuk mengikuti **briefing pendataan** secara daring via Zoom:\n\n- **Hari/tanggal:** Selasa, 20 Oktober 2026\n- **Waktu:** ==08.00 – 08.45 WIB==\n- **Peserta:** seluruh korwil, PML, dan PPL\n- **Tautan Zoom:** [Buka tautan briefing](https://telkomsel.zoom.us/j/98559750469?pwd=maxZ1XeIlIKK6iT5aDdiuXyaOFOw6d.1) (tanpa password)\n\nMohon bergabung tepat waktu. Terima kasih.",
+    tLabel: "Buka tautan briefing",
+    tUrl: "https://telkomsel.zoom.us/j/98559750469?pwd=maxZ1XeIlIKK6iT5aDdiuXyaOFOw6d.1",
+    url: "/sigap/pendataan",
+    jenis: "perhatian",
+  },
+  {
     nama: "Gantuang Ciri dinonaktifkan + Kolam wilayah",
     judul: "Sub SLS Gantuang Ciri dinonaktifkan",
     isi: "Seluruh Sub SLS Nagari Gantuang Ciri dinonaktifkan dan tidak bisa diajukan. Pilih Sub SLS di nagari lain. Tim yang Sub SLS-nya hampir habis bisa mengajukan tambahan lewat Kolam wilayah. Ketuk untuk membuka.",
