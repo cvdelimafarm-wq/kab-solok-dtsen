@@ -10,7 +10,8 @@
 import { useState } from "react";
 import { apiPortal, type GalatApi } from "@/app/portal/sesi";
 import { muatData } from "@/app/portal/dataBersama";
-import { API_PENDATAAN, pathKkSub, type SubTim } from "@/lib/pendataan";
+import { API_PENDATAAN, dalamKotak, pathKkSub, type SubTim } from "@/lib/pendataan";
+import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
 
 type Hasil = "terdampak" | "tidak_terdampak";
 
@@ -35,6 +36,8 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
   const [cariPos, setCariPos] = useState(false);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
+  // (19 Okt 2026) Lokasi TIDAK wajib: kegagalan membaca lokasi hanya saran (kotak kuning), bukan galat yang menahan penyimpanan.
+  const [infoLokasi, setInfoLokasi] = useState<string | null>(null);
   const [kembar, setKembar] = useState(false);
   const [kunci, setKunci] = useState(uuid);
 
@@ -44,6 +47,7 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
     setHasil(null);
     setPos(null);
     setGalat(null);
+    setInfoLokasi(null);
     setKembar(false);
     setKunci(uuid());
   }
@@ -53,21 +57,24 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
     reset();
   }
 
-  function ambilLokasi() {
-    if (!navigator.geolocation) return setGalat("Perangkat ini tidak punya GPS.");
+  async function ambilLokasi() {
+    if (cariPos) return;
+    if (!navigator.geolocation) return setInfoLokasi(pesanGalatLokasi("tak_dikenal", true).replace("Lokasi belum bisa dibaca.", "Perangkat ini tidak punya GPS."));
     setCariPos(true);
-    setGalat(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setPos({ lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy });
-        setCariPos(false);
-      },
-      () => {
-        setCariPos(false);
-        setGalat("Lokasi tidak bisa dibaca. Izinkan lokasi untuk aplikasi ini, atau simpan tanpa lokasi.");
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
-    );
+    setInfoLokasi(null);
+    try {
+      const p = await bacaPosisi(navigator.geolocation);
+      if (!dalamKotak(p.lat, p.lng)) {
+        // titik di luar Kab. Solok (mis. lokasi jaringan meleset): tidak dipakai, supaya penyimpanan tidak ditolak server
+        setPos(null);
+        setInfoLokasi("Lokasi terbaca di luar wilayah Kabupaten Solok, jadi tidak dipakai. Coba ambil ulang di tempat terbuka, atau simpan tanpa lokasi.");
+      } else setPos(p);
+    } catch (e) {
+      setPos(null);
+      setInfoLokasi(pesanGalatLokasi(e instanceof GalatBacaLokasi ? e.jenis : "tak_dikenal", true));
+    } finally {
+      setCariPos(false);
+    }
   }
 
   async function simpan(paksa = false) {
@@ -148,8 +155,9 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
               <button type="button" onClick={ambilLokasi} disabled={cariPos} className="min-h-[42px] rounded-full bg-white px-3.5 text-[12.5px] font-extrabold text-[#1F5FD1] shadow-[0_2px_6px_rgba(15,42,82,.12)] disabled:opacity-60">
                 {cariPos ? "Membaca lokasi…" : pos ? "Ambil ulang lokasi" : "📍 Ambil lokasi rumah ini"}
               </button>
-              <span className="text-[12px] text-[#6B7A90]">{pos ? `Lokasi tersimpan (±${Math.round(pos.akurasi)} m)` : "Opsional, ambil saat berada di depan rumah"}</span>
+              <span className="text-[12px] text-[#6B7A90]">{pos ? `Lokasi tersimpan (±${Math.round(pos.akurasi)} m)` : "Tidak wajib. Boleh dilewati; ambil bila sedang di depan rumah."}</span>
             </div>
+            {infoLokasi && <p className="mt-2 rounded-[12px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#6B4A00]" role="status">{infoLokasi}</p>}
 
             {kembar && (
               <div className="mt-3 rounded-[12px] bg-[#FFF4D6] px-3 py-2.5 text-[12.5px] text-[#6B4A00]">
@@ -169,7 +177,7 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
             <button type="button" onClick={() => simpan(false)} disabled={sibuk || kembar} className="mt-4 min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] text-[15px] font-extrabold text-white disabled:opacity-60">
               {sibuk ? "Menyimpan…" : "Simpan keluarga baru"}
             </button>
-            <p className="mt-2 text-[11.5px] text-[#6B7A90]">Keluarga baru langsung tercatat sudah didata atas nama Anda dan terlihat oleh seluruh tim. Butuh sinyal.</p>
+            <p className="mt-2 text-[11.5px] text-[#6B7A90]">Keluarga baru langsung tercatat sudah didata atas nama Anda dan terlihat oleh seluruh tim. Butuh sinyal; lokasi boleh kosong.</p>
           </div>
         </div>
       )}

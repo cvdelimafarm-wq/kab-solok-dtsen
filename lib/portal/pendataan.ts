@@ -145,21 +145,27 @@ export async function tambahKk(db: Db, akunId: number, t: IsiTambahKk): Promise<
   // kegiatan mengikuti KK lain di Sub SLS yang sama (semua daftar KK saat ini = kegiatan 1)
   const { data: contoh } = await db.from("bencana_pendataan_kk").select("kegiatan_id").eq("idsubsls", t.idsubsls).limit(1).maybeSingle();
   const kegiatan = Number(contoh?.kegiatan_id ?? KEGIATAN_PENDATAAN_BAWAAN);
-  const { data, error } = await db.rpc("bencana_pendataan_tambah", {
-    p_akun: akunId,
-    p_kegiatan: kegiatan,
-    p_idsubsls: t.idsubsls,
-    p_nama: t.nama,
-    p_patokan: t.patokan,
-    p_lat: t.lat,
-    p_lng: t.lng,
-    p_hasil: t.hasil,
-    p_waktu: t.waktu,
-    p_kunci: t.kunci,
-    p_paksa: t.paksa,
-  });
-  if (error) throw new Error(error.message);
-  const r = data as { status: "tercatat" | "duplikat" | "ditolak"; kk_id?: number; alasan?: string };
+  type HasilRpc = { status: "tercatat" | "duplikat" | "ditolak"; kk_id?: number; alasan?: string };
+  const panggil = async (lat: number | null, lng: number | null): Promise<HasilRpc> => {
+    const { data, error } = await db.rpc("bencana_pendataan_tambah", {
+      p_akun: akunId,
+      p_kegiatan: kegiatan,
+      p_idsubsls: t.idsubsls,
+      p_nama: t.nama,
+      p_patokan: t.patokan,
+      p_lat: lat,
+      p_lng: lng,
+      p_hasil: t.hasil,
+      p_waktu: t.waktu,
+      p_kunci: t.kunci,
+      p_paksa: t.paksa,
+    });
+    if (error) throw new Error(error.message);
+    return data as HasilRpc;
+  };
+  let r = await panggil(t.lat, t.lng);
+  // (19 Okt 2026) Lokasi tidak wajib: titik di luar Kab. Solok (mis. lokasi jaringan yang meleset) tidak boleh menggagalkan penyimpanan -> ulangi tanpa koordinat.
+  if (r.status === "ditolak" && r.alasan === "koordinat_tidak_sah" && (t.lat !== null || t.lng !== null)) r = await panggil(null, null);
   if (r.status === "ditolak") {
     if (r.alasan === "nama_sudah_ada") return { ok: false, pesan: "Nama ini sudah ada di daftar Sub SLS ini.", nama_ada: true };
     return { ok: false, pesan: PESAN_TOLAK_TAMBAH[r.alasan ?? ""] ?? "Ditolak." };

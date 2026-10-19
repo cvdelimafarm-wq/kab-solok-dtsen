@@ -24,6 +24,7 @@ import PlottingTim from "./PlottingTim";
 import PetaWilayah from "./PetaWilayah";
 import { KolamPanel, KolamTombol } from "./KolamWilayah";
 import TambahKk from "./TambahKk";
+import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
 import CapaianFloat from "./CapaianFloat";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
@@ -499,16 +500,17 @@ export default function LembarPendataan() {
     setToast({ pesan: "Dikembalikan ke belum didata", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan) : undefined });
   }
 
+  // (19 Okt 2026) Pembacaan lokasi dibedakan menurut penyebab kegagalan (izin / posisi tidak tersedia / waktu habis) dan dicoba lewat lokasi jaringan
+  // bila GPS lemah (lib/lokasiGalat.ts); sebelumnya semua kegagalan menyalahkan izin.
   function cariPosisi() {
     if (!navigator.geolocation) return setToast({ pesan: "Perangkat ini tidak punya GPS." });
-    navigator.geolocation.getCurrentPosition(
+    bacaPosisi(navigator.geolocation).then(
       (p) => {
-        setSaya({ lat: p.coords.latitude, lng: p.coords.longitude });
+        setSaya({ lat: p.lat, lng: p.lng });
         setUrut("dekat");
         setTab("daftar");
       },
-      () => setToast({ pesan: "Lokasi tidak bisa dibaca. Izinkan lokasi untuk aplikasi ini lalu coba lagi." }),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+      (e) => setToast({ pesan: pesanGalatLokasi(e instanceof GalatBacaLokasi ? e.jenis : "tak_dikenal") })
     );
   }
   // (14 Okt 2026) tombol urut satu ketukan: Belum dulu -> Nama -> Terdekat (butuh lokasi; bila belum ada, minta dulu)
