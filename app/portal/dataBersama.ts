@@ -54,6 +54,8 @@ const PROFIL: [string, Profil][] = [
   ["/api/portal/pendataan/kolam", { ...dasar, segarMs: 30 * 1000, interval: 60 * 1000 }],
   // (16 Okt 2026) Lembar Pendataan SPDT NTP: daftar KK & koordinat praktis tetap; Monitoring berubah menit ke menit dan bergantung "hari ini"
   ["/api/portal/spdt-kk", { ...dasar, segarMs: 30 * MENIT, interval: 0 }],
+  // (19 Okt 2026) Monitoring Korwil: berubah setiap ada KK ditandai; cukup disegarkan tiap menit, status "hari ini" bergantung tanggal
+  ["/api/portal/korwil/monitoring", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000, hariBaru: true }],
   ["/api/portal/spdt-monitoring", { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT, hariBaru: true }],
 ];
 const PROFIL_BAWAAN: Profil = { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT };

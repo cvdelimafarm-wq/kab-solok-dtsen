@@ -26,6 +26,8 @@ export function indukDari(path: string): string | null {
   const tahap = /^\/sigap\/kegiatan\/([^/]+)\/[^/]+$/.exec(p);
   if (tahap) return `/sigap/kegiatan/${tahap[1]}`;
   if (p === "/sigap/pelatihan") return "/sigap/kegiatan/pascabencana";
+  // (19 Okt 2026) Monitoring Korwil = halaman kerja tahap Pendataan Pascabencana
+  if (p === "/sigap/korwil") return "/sigap/kegiatan/pascabencana";
   if (p.startsWith("/sigap/pelatihan/kelola")) return "/";
   // (9 Okt 2026) halaman pengelolaan /sigap/kelola/<modul> -- permintaan user. Detail (mis. /sigap/kelola/pedia/12) naik ke daftar modulnya.
   const kelola = /^\/sigap\/kelola\/([^/]+)\/.+/.exec(p);

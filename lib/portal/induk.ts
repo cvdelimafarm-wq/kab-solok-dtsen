@@ -8,11 +8,12 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
-import type { BukaMode, InfoIdentifikasi, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import type { BukaMode, InfoIdentifikasi, InfoKorwil, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
 import type { InfoSpdt } from "@/lib/spdtNtp";
 import { adalahSupervisorSpdt, ringkasModulSpdt } from "@/lib/portal/spdt";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import { ringkasModulPendataan } from "@/lib/portal/pendataan";
+import { ringkasModulKorwil } from "@/lib/portal/korwilMonitor";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
 import { memoWaktu } from "@/lib/portal/memoSingkat";
 import type { IkonKode } from "@/lib/sigapTugasUtama";
@@ -203,7 +204,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
   const perlu = (k: string) => terpilih.some((x) => x.isi.has(k));
 
   // Tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
-  const [perencanaan, wilayah, identifikasi, pendataan, spdt] = await Promise.all([
+  const [perencanaan, wilayah, identifikasi, pendataan, spdt, korwil] = await Promise.all([
     perlu("konfirmasi") ? perencanaanAkun(db, akun) : Promise.resolve<InfoPerencanaan | null>(null),
     perlu("wilayah_tim")
       ? (async (): Promise<InfoWilayah | null> => {
@@ -224,6 +225,8 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     perlu("pendataan") && akun.petugas_bencana_id ? ringkasModulPendataan(db, akun.petugas_bencana_id) : Promise.resolve<InfoPendataan | null>(null),
     // (16 Okt 2026) Lembar Pendataan SPDT NTP: PPL/PML/Supervisor (null = modul tidak tampil)
     perlu("spdt_lembar") ? ringkasModulSpdt(db, akun) : Promise.resolve<InfoSpdt | null>(null),
+    // (19 Okt 2026) Monitoring Korwil: hanya kortim kelompok pendataan (null = modul tidak tampil); gagal membaca tidak boleh merusak Beranda
+    perlu("monitoring_korwil") ? ringkasModulKorwil(db, akun).catch((): InfoKorwil | null => null) : Promise.resolve<InfoKorwil | null>(null),
   ]);
 
   const hasil: Induk[] = [];
@@ -246,6 +249,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       identifikasi: isi.has("identifikasi") ? identifikasi : null,
       pendataan: isi.has("pendataan") ? pendataan : null,
       spdt: isi.has("spdt_lembar") ? spdt : null,
+      korwil: isi.has("monitoring_korwil") ? korwil : null,
     });
   }
   return hasil;

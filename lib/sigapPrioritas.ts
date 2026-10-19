@@ -21,8 +21,8 @@ export const SKOR_MENDESAK = 89;
 export const SKOR_PERLU = 72;
 export const SKOR_BERIKUTNYA = 30;
 
-/** Modul yang berupa TUGAS bernomor (dikerjakan PML/PPL): Lembar Identifikasi & Transport Lokal (kode "translok-<id>" atau "translok:<id>"). */
-export const adalahTugas = (kode: string): boolean => kode === "identifikasi" || kode === "pendataan" || kode.startsWith("translok");
+/** Modul yang berupa TUGAS bernomor (dikerjakan PML/PPL/korwil): Lembar Identifikasi, Lembar Pendataan, Monitoring Korwil (19 Okt 2026: langkah 1 korwil, Transport Lokal langkah 2) & Transport Lokal (kode "translok-<id>" atau "translok:<id>"). */
+export const adalahTugas = (kode: string): boolean => kode === "identifikasi" || kode === "pendataan" || kode === "monitoring_korwil" || kode.startsWith("translok");
 
 /** Modul yang tidak ikut dihitung sebagai tugas aktif di sini. */
 const DILEWATI = new Set(["pelatihan", "wilayah_tim"]);

@@ -18,7 +18,7 @@ export type TahapDef = {
   urutan: number;
   nama: string;
   uraian: string | null;
-  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | pendataan | spdt_lembar | translok:<kegiatan_id> */
+  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | pendataan | monitoring_korwil | spdt_lembar | translok:<kegiatan_id> */
   isi: string[];
   buka_mode: BukaMode;
   buka_tanggal: string | null;
@@ -33,6 +33,9 @@ export type InfoIdentifikasi = { total: number; terisi: number; tidak_terdampak:
 
 /** (11 Okt 2026) Ringkasan Lembar Pendataan KK milik tim petugas (detail di /api/portal/pendataan). total = KK aktif di Sub SLS tim; didata = yang sudah punya hasil. -- permintaan user: gabung ke tahap Pendataan */
 export type InfoPendataan = { total: number; didata: number; terdampak: number };
+
+/** (19 Okt 2026) Monitoring Korwil: kelompok kortim, jumlah tim PML dan PPL-nya (detail progres di /api/portal/korwil/monitoring). */
+export type InfoKorwil = { kelompok: number; tim: number; ppl: number };
 
 export type Induk = {
   kode: string;
@@ -50,6 +53,8 @@ export type Induk = {
   pendataan?: InfoPendataan | null;
   /** (16 Okt 2026) Lembar Pendataan SPDT NTP (PPL, PML, Supervisor); null = modul tidak berlaku */
   spdt?: InfoSpdt | null;
+  /** (19 Okt 2026) kortim/korwil pada kelompok pendataan; null = modul tidak berlaku */
+  korwil?: InfoKorwil | null;
 };
 
 export type ModulTahap = {
@@ -94,6 +99,7 @@ export const KATALOG_MODUL: { kode: string; label: string; ket: string }[] = [
   { kode: "wilayah_tim", label: "Wilayah tugas per tim", ket: "Tim (PML + semua PPL) dan Sub SLS yang didata bersama, lengkap dengan perkiraan KK." },
   { kode: "identifikasi", label: "Lembar Identifikasi SLS (PML)", ket: "PML mengisi hasil identifikasi tiap Sub SLS wilayah tim: KK terdampak & rincian dampak. Hanya tampil bagi PML." },
   { kode: "pendataan", label: "Lembar Pendataan KK (PML & PPL)", ket: "Daftar KK sasaran tim: tandai hasil (terdampak / tidak terdampak / tidak ditemukan), peta sebaran, pantau progres. Tampil bila tim sudah punya daftar KK." },
+  { kode: "monitoring_korwil", label: "Monitoring Korwil (kortim)", ket: "Pantau kelompok pendataan: progres lapangan tiap tim PML (target, realisasi, wilayah) dan progres administrasi PPL/PML per hari. Hanya tampil bagi kortim (korwil) kelompok." },
   { kode: "spdt_lembar", label: "Lembar Pendataan SPDT NTP", ket: "Lembar bantu SPDT NTP: peta, daftar nama KK, dan navigasi ke koordinat (PPL: wilayahnya; PML: semua PPL-nya; Supervisor: semua + Monitoring)." },
   { kode: "translok:", label: "Transport Lokal", ket: "Hari kerja, laporan & foto harian, SPJ untuk satu kegiatan anggaran." },
 ];
@@ -104,6 +110,7 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
   if (kode === "wilayah_tim") return "Wilayah tugas per tim";
   if (kode === "identifikasi") return "Lembar Identifikasi SLS";
   if (kode === "pendataan") return "Lembar Pendataan KK";
+  if (kode === "monitoring_korwil") return "Monitoring Korwil";
   if (kode === "spdt_lembar") return "Lembar Pendataan SPDT NTP";
   if (kode.startsWith("translok:")) return `Transport Lokal${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(9)})`}`;
   return kode;
@@ -111,7 +118,7 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
 
 /** Modul sah: salah satu dari katalog. */
 export function modulSah(kode: string): boolean {
-  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || kode === "pendataan" || kode === "spdt_lembar" || /^translok:\d+$/.test(kode);
+  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || kode === "pendataan" || kode === "monitoring_korwil" || kode === "spdt_lembar" || /^translok:\d+$/.test(kode);
 }
 
 const NADA_KE_STATUS: Record<NadaKegiatan, StatusLangkah> = { merah: "mendesak", emas: "perlu", biru: "berjalan", abu: "menunggu", hijau: "selesai" };
@@ -214,6 +221,22 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         href: `/sigap/pendataan?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
         aksi: f.didata >= f.total ? "Lihat" : "Buka lembar",
         pecahan: Math.min(1, f.didata / f.total),
+      },
+    ];
+  }
+  if (kode === "monitoring_korwil") {
+    // (19 Okt 2026) khusus kortim (korwil) kelompok pendataan; bagi akun lain modul tidak berlaku (tidak tampil). Bukan tugas yang "diselesaikan": selalu berjalan.
+    const f = induk.korwil;
+    if (!f) return [];
+    return [
+      {
+        kode,
+        judul: "Monitoring Korwil",
+        ket: `Kelompok ${f.kelompok} · ${f.tim} tim PML · ${f.ppl} PPL`,
+        status: "berjalan",
+        href: `/sigap/korwil?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        aksi: "Buka monitoring",
+        pecahan: 0,
       },
     ];
   }
