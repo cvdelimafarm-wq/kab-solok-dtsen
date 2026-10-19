@@ -13,7 +13,7 @@ import PeriksaFoto from "./PeriksaFoto";
 import { ambilJson } from "./klien";
 import { bacaSesi } from "@/app/portal/sesi";
 
-type Mode = { bawaan: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; jumlah_foto: number; mode: string }[] };
+type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string }[] };
 type Tab = "kamera" | "saya" | "periksa";
 
 function Isi() {
@@ -57,7 +57,7 @@ function Isi() {
               </select>
             </label>
           )}
-          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} />}
+          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} />}
         </>
       )}
       {tab === "saya" && <FotoSaya />}

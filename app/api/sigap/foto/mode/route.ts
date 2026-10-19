@@ -22,12 +22,14 @@ export async function GET(req: NextRequest) {
     const [bawaan, mode] = await Promise.all([modeBawaan(db), modeKegiatan(db, ids)]);
     return NextResponse.json({
       bawaan,
+      nama_saya: m.akun.nama, // untuk draft cap di layar kamera (cap resmi tetap dicetak server)
       kegiatan: pen.map((p) => ({
         kegiatan_id: p.kegiatan.id,
         penugasan_id: p.id,
         nama: p.kegiatan.nama,
         peran: p.peran,
         jumlah_foto: p.kegiatan.jumlah_foto,
+        jenis: p.kegiatan.jenis, // untuk keterangan tiap nomor foto (lib/sigapLabelFoto.ts)
         mode: mode[p.kegiatan.id] ?? "unggah",
         status_periode: p.status_periode,
       })),
