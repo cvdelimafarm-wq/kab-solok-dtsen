@@ -22,6 +22,8 @@ export type TugasUtama = {
   progres?: { selesai: number; total: number };
   href: string;
   aksi: string;
+  /** (19 Okt 2026) kode modul tahap yang jadi tugas utama (kegiatan induk): kartu Beranda lain (Transport Lokal, peringatan Kesediaan) tidak mengulanginya */
+  kodeModul?: string;
 };
 
 /** Bagian Hub (halaman Pelatihan) yang dipakai; Hub asli cocok secara struktur. */

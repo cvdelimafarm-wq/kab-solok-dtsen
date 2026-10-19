@@ -12,6 +12,16 @@ export const HARI_MODAL_SIARAN = 14;
 export const KODE_KEGIATAN_SIARAN = "pascabencana_2026";
 export const PERAN_PENERIMA_SIARAN = ["ppl", "pml", "korwil"] as const;
 
+/**
+ * (19 Okt 2026) Modal siaran yang tombolnya menuju Lembar Pendataan (/sigap/pendataan...) hanya berlaku bagi PML/PPL: Lembar itu khusus anggota tim,
+ * jadi korwil (yang hanya memantau) tak perlu melihat instruksi pengajuan Sub SLS/Kolam wilayah dan tombolnya hanya berujung galat "khusus anggota tim".
+ * Modal ke tujuan lain (mis. tautan briefing) tetap untuk semua penerima.
+ */
+export function modalBerlakuUntukPeran(tombolUrl: string | null | undefined, peran: ReadonlySet<string>): boolean {
+  if (typeof tombolUrl === "string" && /^\/sigap\/pendataan(?:[/?#]|$)/.test(tombolUrl.trim())) return peran.has("pml") || peran.has("ppl");
+  return true;
+}
+
 /** Tombol navigasi di modal: label + tujuan (halaman SIGAP "/sigap/..." atau https). null = tanpa tombol. */
 export type TombolSiaran = { label: string; url: string };
 export type ModalSiaran = { judul: string; isi: string; jenis: JenisPengumuman; tombol: TombolSiaran | null };

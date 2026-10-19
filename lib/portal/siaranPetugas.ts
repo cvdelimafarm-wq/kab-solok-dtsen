@@ -9,7 +9,7 @@ import { KOLOM_PENGUMUMAN, keBentukPeserta, type Pengumuman, type PengumumanPese
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { catatAudit } from "@/lib/sigapAkses";
 import type { PesanPush } from "@/lib/sigapPushUtil";
-import { HARI_MODAL_SIARAN, KODE_KEGIATAN_SIARAN, PERAN_PENERIMA_SIARAN, akhirModalSiaran, kunciBacaSiaran, type Siaran } from "@/lib/siaranPetugas";
+import { HARI_MODAL_SIARAN, KODE_KEGIATAN_SIARAN, PERAN_PENERIMA_SIARAN, akhirModalSiaran, kunciBacaSiaran, modalBerlakuUntukPeran, type Siaran } from "@/lib/siaranPetugas";
 
 export type Galat = { galat: string; status: number };
 
@@ -48,9 +48,14 @@ export async function modalUntukAkun(db: Db, akunId: number): Promise<Pengumuman
   const sekarang = Date.now();
   const berlaku = ((data ?? []) as Pengumuman[]).filter((p) => (!p.mulai_at || sekarang >= new Date(p.mulai_at).getTime()) && (!p.akhir_at || sekarang < new Date(p.akhir_at).getTime()));
   if (!berlaku.length) return [];
+  // (19 Okt 2026) peran akun pada kegiatan ini: modal menuju Lembar Pendataan tidak ditampilkan bagi korwil (lihat modalBerlakuUntukPeran)
+  const { data: pen } = await db.from("sigap_penugasan").select("peran").eq("kegiatan_id", kegiatanId).eq("aktif", true).eq("akun_id", akunId).limit(20);
+  const peran = new Set((pen ?? []).map((p) => String(p.peran ?? "").toLowerCase()));
+  const cocok = berlaku.filter((p) => modalBerlakuUntukPeran(p.tombol_url, peran));
+  if (!cocok.length) return [];
   const { data: baca } = await db.from("sigap_audit").select("detail").eq("akun_id", akunId).eq("aksi", "siaran_pendataan_baca").limit(500);
   const sudah = new Set((baca ?? []).map((b) => kunciBacaSiaran(Number((b.detail as Record<string, unknown>)?.id), String((b.detail as Record<string, unknown>)?.versi))));
-  return berlaku.filter((p) => !sudah.has(kunciBacaSiaran(p.id, p.diubah_at))).map(keBentukPeserta);
+  return cocok.filter((p) => !sudah.has(kunciBacaSiaran(p.id, p.diubah_at))).map(keBentukPeserta);
 }
 
 /** Catat konfirmasi (hanya bila modalnya memang modal siaran). */

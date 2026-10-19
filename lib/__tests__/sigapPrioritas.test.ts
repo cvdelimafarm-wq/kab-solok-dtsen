@@ -42,3 +42,49 @@ describe("ketTranslok: keterangan baris Transport Lokal", () => {
     expect(ketTranslok({ sub: "Selesai", kekurangan: [] })).toBe("Selesai");
   });
 });
+
+import { peringatanDariInduk, translokDariInduk } from "@/lib/sigapPrioritas";
+import { modalBerlakuUntukPeran } from "@/lib/siaranPetugas";
+import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
+
+const kegTL = (o: Partial<RingkasKegiatan> = {}): RingkasKegiatan => ({ id: "translok-10", judul: "Transport Lokal — X", pendek: "TL", ikon: "motor", nada: "emas", pecahan: 0.4, selesai: 2, total: 5, sub: "3/5 · x", peringatan: false, href: "/sigap/kegiatan/translok-10", langkah: [1, 2, 3, 4, 5].map((no) => ({ no, kode: `l${no}`, kelompok: "Pelaksanaan" as const, judul: `L${no}`, ket: `ket ${no}`, status: no <= 2 ? ("selesai" as const) : ("menunggu" as const) })), ...o });
+
+describe("peringatanDariInduk: Kesediaan belum dikonfirmasi", () => {
+  it("konfirmasi belum selesai (tanpa halaman) -> peringatan menuju tahap", () => {
+    const t = [tahap(1, [mod("konfirmasi", "menunggu", { href: null })]), tahap(2, [mod("monitoring_korwil", "berjalan")])];
+    expect(peringatanDariInduk(t, "monitoring_korwil")).toMatchObject({ judul: "Kesediaan belum dikonfirmasi", uraian: "Tahap 1 Pendataan menunggu konfirmasi Anda.", href: "/sigap/kegiatan/p/t1" });
+  });
+  it("tanpa peringatan: sudah selesai, tahap terkunci, atau kartu utama = konfirmasi", () => {
+    expect(peringatanDariInduk([tahap(1, [mod("konfirmasi", "selesai")])], null)).toBeNull();
+    expect(peringatanDariInduk([{ ...tahap(1, [mod("konfirmasi", "perlu")]), terkunci: true }], null)).toBeNull();
+    expect(peringatanDariInduk([tahap(1, [mod("konfirmasi", "perlu")])], "konfirmasi")).toBeNull();
+  });
+});
+
+describe("translokDariInduk: kartu Transport Lokal di Beranda", () => {
+  const th = [tahap(2, [mod("monitoring_korwil", "berjalan"), mod("translok-10", "perlu")])];
+  it("tampil dengan langkah aktif (pertama yang belum selesai)", () => {
+    const d = translokDariInduk(th, [kegTL()], "monitoring_korwil");
+    expect(d).toMatchObject({ ke: 3, total: 5, aktif: { kode: "l3" } });
+  });
+  it("tidak tampil bila sudah jadi kartu utama, sudah selesai, tahap terkunci, atau tanpa langkah", () => {
+    expect(translokDariInduk(th, [kegTL()], "translok-10")).toBeNull();
+    expect(translokDariInduk([tahap(2, [mod("translok-10", "selesai")])], [kegTL()], null)).toBeNull();
+    expect(translokDariInduk([{ ...th[0], terkunci: true }], [kegTL()], null)).toBeNull();
+    expect(translokDariInduk(th, [kegTL({ langkah: undefined })], null)).toBeNull();
+  });
+});
+
+describe("modalBerlakuUntukPeran: siaran ke Lembar Pendataan tidak untuk korwil", () => {
+  it("tombol ke /sigap/pendataan hanya PML/PPL; tujuan lain untuk semua", () => {
+    const korwil = new Set(["korwil"]);
+    expect(modalBerlakuUntukPeran("/sigap/pendataan?kolam=1", korwil)).toBe(false);
+    expect(modalBerlakuUntukPeran("/sigap/pendataan", korwil)).toBe(false);
+    expect(modalBerlakuUntukPeran("/sigap/pendataan?kolam=1", new Set(["pml"]))).toBe(true);
+    expect(modalBerlakuUntukPeran("/sigap/pendataan?kolam=1", new Set(["ppl"]))).toBe(true);
+    expect(modalBerlakuUntukPeran("/sigap/pendataan?kolam=1", new Set(["korwil", "pml"]))).toBe(true);
+    expect(modalBerlakuUntukPeran("https://telkomsel.zoom.us/j/1", korwil)).toBe(true);
+    expect(modalBerlakuUntukPeran(null, korwil)).toBe(true);
+    expect(modalBerlakuUntukPeran("/sigap/pendataanx", korwil)).toBe(true);
+  });
+});

@@ -82,6 +82,8 @@ export default function HalamanTahap() {
   const rencana = useMemo(() => buatRencana(t && !t.terkunci ? [t] : [], sembunyikanWilayah), [t, sembunyikanWilayah]);
   useSiapkan(rencana, siap);
   const tugasSelesai = tugas.filter((m) => m.status === "selesai").length;
+  // modul tempat tautan Rekap identifikasi ditaruh: Lembar Identifikasi bila ada, kalau tidak Lembar Pendataan (tidak ada keduanya = tanpa tautan)
+  const jangkarRekap = t && !t.terkunci ? (t.modul.find((m) => m.kode === "identifikasi") ?? t.modul.find((m) => m.kode === "pendataan"))?.kode ?? null : null;
 
   // Tahap Pelatihan punya halamannya sendiri; tahap yang tak berlaku bagi akun ini -> kembali ke garis waktu
   useEffect(() => {
@@ -137,10 +139,20 @@ export default function HalamanTahap() {
             // (19 Okt 2026) Wilayah tim tidak lagi menjadi kartu pertama yang menutupi tugas: ditaruh PALING BAWAH sebagai panel lipat (lihat di bawah)
             if (m.kode === "wilayah_tim") return null;
             const i = tugas.indexOf(m);
-            return <BarisModul key={m.kode} m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
+            const baris = <BarisModul m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
+            // (19 Okt 2026) Rekap hasil identifikasi = tautan pintas tepat di bawah tugas Lembar Identifikasi (PML) -- atau Lembar Pendataan bila tahap
+            // tak memuat Identifikasi (PPL) -- bukan tombol melayang yang menutupi isi halaman.
+            return m.kode === jangkarRekap ? (
+              <div key={m.kode} className="space-y-2">
+                {baris}
+                <div>
+                  <RekapIdentifikasi sebaris />
+                </div>
+              </div>
+            ) : (
+              <div key={m.kode}>{baris}</div>
+            );
           })}
-        {/* PPL: Rekap hasil identifikasi sebaris di bawah tugas (bukan tombol melayang). PML tetap tombol melayang. */}
-        {t && !t.terkunci && !adalahPml && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <div><RekapIdentifikasi sebaris /></div>}
         {t && !t.terkunci && !sembunyikanWilayah && t.modul.some((m) => m.kode === "wilayah_tim") && (
           <details className="group rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)] open:pb-3">
             <summary className="flex min-h-[56px] cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
@@ -158,8 +170,6 @@ export default function HalamanTahap() {
           </details>
         )}
       </div>
-      {/* (11 Okt 2026) Tombol rekap hasil identifikasi (PPL & PML) di tahap yang memuat Lembar Identifikasi / Pendataan -- permintaan user */}
-      {t && !t.terkunci && adalahPml && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <RekapIdentifikasi />}
       {/* (13 Okt 2026) Modal siaran admin untuk petugas (cukup sekali konfirmasi) -- permintaan user */}
       {t && !t.terkunci && t.modul.some((m) => m.kode === "identifikasi" || m.kode === "pendataan") && <PengumumanPetugas />}
     </main>

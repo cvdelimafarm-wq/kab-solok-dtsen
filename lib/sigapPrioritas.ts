@@ -94,6 +94,7 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
       progres: n >= 2 ? { selesai, total: n } : undefined,
       href: (kek ? kek.href : c.langkah ? c.langkah.href : c.modul.href) ?? c.tahap.rute,
       aksi: (kek ? kek.aksi : c.langkah ? c.langkah.aksi : c.modul.aksi) ?? "Buka",
+      kodeModul: c.modul.kode,
     };
   }
 
@@ -116,12 +117,53 @@ export function tugasDariInduk(induk: { kode: string; nama: string; ikon: IkonKo
         progres: n >= 2 ? { selesai, total: n } : undefined,
         href: m.href ?? t.rute,
         aksi: "Lihat tahapan",
+        kodeModul: m.kode,
       };
     }
   }
   const terkunci = tahap.find((t) => t.terkunci);
   if (terkunci) {
     return { skor: SKOR_BERIKUTNYA, ikon, label: "BERIKUTNYA", judul: `Tahap ${terkunci.no} · ${terkunci.nama}`, uraian: terkunci.alasanKunci ?? "Belum dibuka", lencana: { teks: "Belum dibuka", nada: "abu" }, href: terkunci.rute, aksi: "Lihat tahapan" };
+  }
+  return null;
+}
+
+// ----------------------------------------------------------------------------------------------- kartu pendamping Beranda (19 Okt 2026)
+// Mockup alur per peran (disetujui): di bawah/di atas kartu "Tugas aktif" ada (1) peringatan Kesediaan yang belum dikonfirmasi dan (2) kartu Transport Lokal
+// sendiri (5 langkah, kekurangan, satu tombol) -- bukan lagi terselip di kartu utama. Keduanya tidak muncul bila kartu utama sudah memuat hal yang sama.
+
+export type PeringatanBeranda = { kode: string; judul: string; uraian: string; href: string };
+
+/** Konfirmasi kesediaan (tahap Perencanaan) yang belum selesai -> peringatan di atas kartu utama. Tidak ada bila kartu utama = konfirmasi itu sendiri. */
+export function peringatanDariInduk(tahap: TahapHasil[], kodeUtama: string | null | undefined): PeringatanBeranda | null {
+  if (kodeUtama === "konfirmasi") return null;
+  for (const t of tahap) {
+    if (t.terkunci) continue;
+    const m = t.modul.find((x) => x.kode === "konfirmasi");
+    if (m && m.status !== "selesai") {
+      return { kode: `konfirmasi:${t.kode}`, judul: "Kesediaan belum dikonfirmasi", uraian: `Tahap ${t.no} ${t.nama} menunggu konfirmasi Anda.`, href: m.href ?? t.rute };
+    }
+  }
+  return null;
+}
+
+export type KartuTranslokBeranda = { kegiatan: RingkasKegiatan; ke: number; total: number; aktif: LangkahKegiatan | null; rute: string };
+
+/**
+ * Transport Lokal kegiatan induk yang BELUM selesai -> kartu sendiri di Beranda. Tidak ada bila kartu utama sudah Transport Lokal itu, tahapnya masih
+ * terkunci, atau kegiatannya tak punya langkah bertahap (adapter lama).
+ */
+export function translokDariInduk(tahap: TahapHasil[], keg: RingkasKegiatan[], kodeUtama: string | null | undefined): KartuTranslokBeranda | null {
+  for (const t of tahap) {
+    if (t.terkunci) continue;
+    for (const m of t.modul) {
+      if (!m.kode.startsWith("translok") || m.status === "selesai" || m.kode === kodeUtama) continue;
+      const k = keg.find((x) => x.id === m.kode);
+      if (!k?.langkah || k.langkah.length === 0) continue;
+      const i = k.langkah.findIndex((l) => l.status !== "selesai");
+      const aktif = i >= 0 ? k.langkah[i] : null;
+      return { kegiatan: k, ke: i < 0 ? k.langkah.length : i + 1, total: k.langkah.length, aktif, rute: t.rute };
+    }
   }
   return null;
 }

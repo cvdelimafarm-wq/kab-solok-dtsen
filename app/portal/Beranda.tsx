@@ -15,7 +15,8 @@ import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
-import { tugasDariInduk } from "@/lib/sigapPrioritas";
+import { peringatanDariInduk, translokDariInduk, tugasDariInduk, type KartuTranslokBeranda, type PeringatanBeranda } from "@/lib/sigapPrioritas";
+import KartuTranslok from "./KartuTranslok"; // (19 Okt 2026) kartu Transport Lokal sendiri di bawah kartu utama
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
@@ -37,6 +38,10 @@ import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
 type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; peran_chip?: { label: string; href: string | null }[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
 type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
+// (19 Okt 2026) Modal "Unggah foto pelatihan" (pengingat panitia) DIMATIKAN -- permintaan user. Ubah ke true untuk menampilkannya lagi;
+// komponen ModalFotoPanitia dan halaman unggah fotonya tetap ada (tidak ada data yang dihapus).
+const TAMPILKAN_MODAL_FOTO_PANITIA = false;
+
 export type InfoDtsen = { nama: string; role: string | null } | null;
 
 const NAMA_HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -135,7 +140,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   }
 
   const nowMs = Date.now() + offset;
-  const { kartu, utama, kegiatan } = useMemo(() => {
+  const { kartu, utama, kegiatan, peringatan, kartuTL } = useMemo(() => {
     const k: Kartu[] = [...(data?.kartu ?? [])];
     if (dtsen) {
       k.unshift({
@@ -176,6 +181,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const indukRingkas: RingkasKegiatan[] = [];
     const serap = new Set<string>();
     const tugasInduk: TugasUtama[] = [];
+    const tahapInduk: ReturnType<typeof susunTahap>[] = [];
     if (induk && keg && hubMuat !== "memuat") {
       for (const i of induk) {
         const r = ringkasInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
@@ -184,7 +190,9 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         i.menyerap.forEach((x) => serap.add(x));
         // (10 Okt 2026) Kartu "Tugas aktif" kegiatan induk memakai aturan prioritas umum (lib/sigapPrioritas.ts): mendesak > perlu > berikutnya;
         // tombol langsung ke langkah yang diprioritaskan -- permintaan user (tangkapan layar akun Valina: tombol salah ke halaman undangan).
-        const tI = tugasDariInduk(i, susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang }), keg, sekarang);
+        const tahapI = susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
+        tahapInduk.push(tahapI);
+        const tI = tugasDariInduk(i, tahapI, keg, sekarang);
         if (tI) tugasInduk.push(tI);
       }
     }
@@ -197,7 +205,17 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     // Kartu & kegiatan yang sudah diserap kegiatan induk tidak lagi jadi kandidat tugas sendiri (supaya tidak dobel / tujuan lama)
     const untukTugas = (keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k).filter((x) => !(x.kode === "bencana" && serap.has("bencana")));
     const kegTugas = (keg ?? []).filter((x) => !serap.has(x.id));
-    return { kartu: sisa, kegiatan: semua, utama: pilihTugasUtama(tp, tugasDariKegiatan(kegTugas, sekarang), tugasDariKartu(untukTugas), ...tugasInduk) };
+    const utama = pilihTugasUtama(tp, tugasDariKegiatan(kegTugas, sekarang), tugasDariKartu(untukTugas), ...tugasInduk);
+    // (19 Okt 2026) kartu pendamping kartu utama: peringatan Kesediaan & kartu Transport Lokal (tidak mengulang bila kartu utama sudah memuatnya)
+    const peringatan: PeringatanBeranda[] = [];
+    const kartuTL: KartuTranslokBeranda[] = [];
+    for (const th of tahapInduk) {
+      const w = peringatanDariInduk(th, utama?.kodeModul);
+      if (w) peringatan.push(w);
+      const t = keg ? translokDariInduk(th, keg, utama?.kodeModul) : null;
+      if (t) kartuTL.push(t);
+    }
+    return { kartu: sisa, kegiatan: semua, utama, peringatan, kartuTL };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, dtsen, hub, hubMuat, keg, induk, offset, tik]);
@@ -286,6 +304,18 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       <div className="relative z-10 mx-auto -mt-[62px] max-w-xl space-y-5 px-3.5">
         {data && <PengaturanAwal />}
 
+        {/* (19 Okt 2026) Peringatan Kesediaan belum dikonfirmasi: di atas kartu utama, bukan terselip di tahapan (mockup alur per peran) */}
+        {peringatan.map((w) => (
+          <Link key={w.kode} href={w.href} className="flex items-center gap-3 rounded-[18px] border border-[#F3DFA5] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4C00]" role="alert">
+            <IkonMenu n="awas" className="h-5 w-5 flex-none text-[#8A6200]" />
+            <span className="min-w-0 flex-1 leading-snug">
+              <b className="block">{w.judul}</b>
+              {w.uraian}
+            </span>
+            <span aria-hidden className="flex-none text-[18px] text-[#8A6200]">›</span>
+          </Link>
+        ))}
+
         {/* Tugas utama */}
         {memuatAwal ? (
           <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-busy="true">
@@ -302,6 +332,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         ) : (
           <KartuUtama u={utama} />
         )}
+        {!memuatAwal && kartuTL.map((d) => <KartuTranslok key={d.kegiatan.id} d={d} />)}
 
         {data?.pin_bawaan && (
           <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#F3DFA5] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4C00]" role="alert">
@@ -344,7 +375,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
 
         {data && <PetaOtomatis induk={induk} />}
         {data && <AktifkanNotifikasi />}
-        {data && <ModalFotoPanitia />}
+        {data && TAMPILKAN_MODAL_FOTO_PANITIA && <ModalFotoPanitia />}
         {data && <ModalRapat />}
         {data && <ModalPengingat akunKey={data.nama} />}
         {data && <PengumumanPetugas />}
