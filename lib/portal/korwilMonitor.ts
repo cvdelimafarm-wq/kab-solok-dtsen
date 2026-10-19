@@ -147,9 +147,11 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
   const nonaktif = new Set<string>();
   for (let i = 0; i < idsSub.length; i += 200) {
     const potong = idsSub.slice(i, i + 200);
-    let { data, error } = await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls, nonaktif").in("idsubsls", potong);
-    if (error) ({ data, error } = await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls").in("idsubsls", potong));
-    for (const r of (data ?? []) as { idsubsls: string; nagari: string; sls: string; sub_sls: string; nonaktif?: boolean | null }[]) {
+    type BarisWilayah = { idsubsls: string; nagari: string; sls: string; sub_sls: string; nonaktif?: boolean | null };
+    type HasilWilayah = { data: BarisWilayah[] | null; error: unknown };
+    let res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls, nonaktif").in("idsubsls", potong)) as unknown as HasilWilayah;
+    if (res.error) res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls").in("idsubsls", potong)) as unknown as HasilWilayah;
+    for (const r of res.data ?? []) {
       info.set(r.idsubsls, { nagari: String(r.nagari ?? ""), sls: String(r.sls ?? ""), sub_sls: String(r.sub_sls ?? "") });
       if (r.nonaktif === true) nonaktif.add(r.idsubsls);
     }
