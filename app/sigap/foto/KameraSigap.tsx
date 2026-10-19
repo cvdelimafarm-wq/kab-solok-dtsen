@@ -15,6 +15,7 @@ import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntre
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, LABEL_KEPERCAYAAN, LABEL_ALASAN, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
+import { useTombolKembali } from "./useTombolKembali";
 
 type Pos = { lat: number; lng: number; akurasi: number; mono: number };
 type Hasil = { ok: true; sudah?: boolean; foto: { id: number; kode: string; kepercayaan: Kepercayaan; alasan: string[] }; penempatan: { ok?: boolean; status?: string; error?: string } | null; ditahan: boolean; jumlah_tag: number };
@@ -249,6 +250,12 @@ export default function KameraSigap({
     setHasil(null);
   }
 
+  // Back = kembali ke layar kamera (bukan keluar ke beranda) selama pratinjau/hasil foto terbuka
+  useTombolKembali(!!jepretan, () => {
+    if (mengirim) return false; // jangan batalkan pratinjau saat foto sedang dikirim
+    ulang();
+  });
+
   async function kirim() {
     if (!jepretan) return;
     const item: ItemAntrean = {
@@ -404,7 +411,7 @@ export default function KameraSigap({
             </div>
           ) : (
             <div className="flex gap-2">
-              <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Ulangi</button>
+              <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Ulangi foto</button>
               <button type="button" onClick={() => void kirim()} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
                 {mengirim ? "Mengirim…" : "Kirim"}
               </button>
