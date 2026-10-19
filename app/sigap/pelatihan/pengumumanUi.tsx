@@ -5,7 +5,7 @@
 // (8 Okt 2026) Tampilan modal pengumuman (dipakai halaman Langkah peserta DAN pratinjau di Kelola Pelatihan).
 // Isi dirender sebagai elemen React dari hasil pengurai (tanpa HTML mentah), jadi aman dari kode berbahaya.
 
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { urlInternalSigap } from "@/lib/siaranPetugas";
 import { IKON_PENGUMUMAN, JUDUL_BAWAAN_PENGUMUMAN, uraiIsi, urlAman, type JenisPengumuman, type Sebaris } from "@/lib/sigapPengumuman";
@@ -63,6 +63,56 @@ export function IsiPengumuman({ isi }: { isi: string }) {
   );
 }
 
+/**
+ * (19 Okt 2026) Tombol "Salin tautan" untuk tombol modal yang menuju tautan https (mis. Zoom briefing). Hanya menyalin ke papan klip:
+ * TIDAK menutup / mengonfirmasi modal. Bila izin papan klip ditolak (mis. WebView lama), dipakai cara cadangan lewat kotak teks tersembunyi.
+ */
+function SalinTautan({ url }: { url: string }) {
+  const [status, setStatus] = useState<"diam" | "ok" | "gagal">("diam");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  async function salin() {
+    let berhasil = false;
+    try {
+      await navigator.clipboard.writeText(url);
+      berhasil = true;
+    } catch {
+      try {
+        const t = document.createElement("textarea");
+        t.value = url;
+        t.setAttribute("readonly", "");
+        t.style.position = "fixed";
+        t.style.opacity = "0";
+        document.body.appendChild(t);
+        t.select();
+        berhasil = document.execCommand("copy");
+        document.body.removeChild(t);
+      } catch {
+        berhasil = false;
+      }
+    }
+    setStatus(berhasil ? "ok" : "gagal");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setStatus("diam"), 2500);
+  }
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void salin();
+        }}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#1F5FD1] bg-white px-4 py-2.5 text-[14px] font-bold text-[#1F5FD1] hover:bg-[#F5F8FE]"
+      >
+        {status === "ok" ? "✓ Tautan tersalin" : "Salin tautan"}
+      </button>
+      <p className="sr-only" role="status" aria-live="polite">{status === "ok" ? "Tautan tersalin" : status === "gagal" ? "Gagal menyalin tautan" : ""}</p>
+      {status === "gagal" && <p className="mt-1 text-center text-[12px] font-semibold text-[#B42329]">Gagal menyalin otomatis. Tekan lama tautan "Buka tautan briefing" lalu pilih salin tautan.</p>}
+    </div>
+  );
+}
+
 export type DataModal = { jenis: JenisPengumuman; judul: string; isi: string; tombol_label: string | null; tombol_url: string | null };
 
 /**
@@ -114,6 +164,7 @@ export function ModalPengumuman({ d, posisi, jumlah, lanjut, sebagaiPratinjau = 
             {d.tombol_label}
           </a>
         )}
+        {d.tombol_label && d.tombol_url && !urlInternalSigap(d.tombol_url) && urlAman(d.tombol_url) && <SalinTautan url={d.tombol_url} />}
         <button ref={tombol} type="button" onClick={lanjut} className="w-full rounded-xl border border-[#CBD6E6] bg-white px-4 py-2.5 text-[14px] font-bold text-[#1B2B4B] hover:bg-[#F5F8FE]">
           {terakhir ? "Saya mengerti" : "Lanjut →"}
         </button>
