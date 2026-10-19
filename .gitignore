@@ -6,3 +6,7 @@ npm-debug.log*
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+# peta dasar offline (hasil pemotongan lokal + program pmtiles)
+peta-keluar/
+pmtiles.exe

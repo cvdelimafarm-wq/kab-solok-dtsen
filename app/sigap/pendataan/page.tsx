@@ -27,6 +27,10 @@ import TambahKk from "./TambahKk";
 import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
 import CapaianFloat from "./CapaianFloat";
 import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
+import dynamic from "next/dynamic";
+import KontrolPetaDasar from "./KontrolPetaDasar";
+import { useDasarTim } from "./useDasar";
+import type { StatusDasar } from "./PetaDasar";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
 import { tandaBasi, useData } from "@/app/portal/dataBersama";
@@ -179,6 +183,9 @@ function LembarBawah({ judulLembar, kanan, onTutup, children }: { judulLembar: s
   );
 }
 
+// (20 Okt 2026) Peta jalan di bawah titik KK: pustaka peta dimuat hanya saat tab Peta memakainya.
+const PetaDasar = dynamic(() => import("./PetaDasar"), { ssr: false });
+
 export default function LembarPendataan() {
   const router = useRouter();
   const tim = useTimPendataan();
@@ -196,6 +203,7 @@ export default function LembarPendataan() {
   const [kolamBuka, setKolamBuka] = useState(false); // (16 Okt 2026) mode Kolam wilayah kerja: menggantikan kartu Plotting tim
   const [terpilihId, setTerpilihId] = useState<number | null>(null);
   const [pandang, setPandang] = useState<Pandang>(PANDANG_AWAL);
+  const [statusDasar, setStatusDasar] = useState<StatusDasar | null>(null);
   const [saya, setSaya] = useState<{ lat: number; lng: number } | null>(null);
   const [monPpl, setMonPpl] = useState<number | null>(null);
   const [toast, setToast] = useState<{ pesan: string; urungkan?: () => void } | null>(null);
@@ -274,6 +282,14 @@ export default function LembarPendataan() {
     return buatProyeksi(t, 360, 440, 28);
   }, [kk]);
   const tanpaKoordinat = useMemo(() => kk.filter((k) => k.lat === null).length, [kk]);
+  // (20 Okt 2026) peta dasar per tim PML (berkas di Storage "peta-dasar"; salinan di HP untuk tanpa sinyal). Tanpa berkas/sumber = kanvas titik seperti sebelumnya.
+  const dasar = useDasarTim(data?.pml.id ?? null, tab === "peta");
+  const pakaiDasar = !!proj && dasar.lapisan === "jalan" && !!dasar.sumber && statusDasar !== "gagal";
+  // sumber peta berganti (mis. selesai diunduh, atau sinyal kembali): coba lagi dari awal, jangan terjebak status "gagal" yang lama
+  const kunciDasar = !dasar.sumber ? "" : dasar.sumber.tipe === "blob" ? `b:${dasar.sumber.nama}:${dasar.sumber.blob.size}` : `o:${dasar.sumber.url}`;
+  useEffect(() => {
+    setStatusDasar(null);
+  }, [kunciDasar]);
 
   const hitung = useMemo(() => {
     const c = { semua: kk.length, belum: 0, terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 0 };
@@ -771,9 +787,11 @@ export default function LembarPendataan() {
           <section className="relative m-2.5 min-h-[340px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">
             {proj ? (
               <>
+                {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={setStatusDasar} />}
                 <div className="absolute inset-0">
-                  <PetaKk kk={kk} proj={proj} anggota={anggota} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} tampil={tampil} onPilih={setTerpilihId} saya={saya} />
+                  <PetaKk kk={kk} proj={proj} anggota={anggota} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} tampil={tampil} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
                 </div>
+                <KontrolPetaDasar dasar={dasar} status={statusDasar} />
                 {/* satu pil vertikal: perbesar, perkecil, tampilkan semua */}
                 <div className="absolute right-2.5 top-2.5 flex flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_4px_12px_rgba(15,42,82,.15)]">
                   <button type="button" aria-label="Perbesar" onClick={() => setPandang((p) => ({ ...p, z: Math.min(8, p.z * 1.6) }))} className="grid h-[40px] w-[40px] place-items-center border-b border-[#EEF2F7] text-[#0F2A52] active:bg-[#F1F5FC]">

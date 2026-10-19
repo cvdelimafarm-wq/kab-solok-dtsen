@@ -53,6 +53,8 @@ type Props = {
   onPilih: (id: number) => void;
   /** posisi saya (hanya setelah tombol "Terdekat dari saya" ditekan) */
   saya: { lat: number; lng: number } | null;
+  /** (20 Okt 2026) true = ada peta dasar di bawah: latar dan kisi dibuat bening supaya peta terlihat */
+  tanpaLatar?: boolean;
 };
 
 function klem(p: Pandang): Pandang {
@@ -61,7 +63,7 @@ function klem(p: Pandang): Pandang {
   return { z: p.z, cx: Math.max(hw, Math.min(L - hw, p.cx)), cy: Math.max(hh, Math.min(T - hh, p.cy)) };
 }
 
-export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya }: Props) {
+export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya, tanpaLatar = false }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const ptr = useRef(new Map<number, { x: number; y: number }>());
   const gerak = useRef({ geser: false, jarak0: 0, z0: 1 });
@@ -130,20 +132,24 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
       viewBox={viewBox}
       role="img"
       aria-label="Sebaran titik KK pada Sub SLS"
-      className="block h-full w-full touch-none select-none bg-[#EEF2F7]"
+      className={`block h-full w-full touch-none select-none ${tanpaLatar ? "bg-transparent" : "bg-[#EEF2F7]"}`}
       onPointerDown={bawah}
       onPointerMove={pindah}
       onPointerUp={lepas}
       onPointerCancel={lepas}
     >
-      <rect x={-400} y={-400} width={1200} height={1300} fill="#EEF2F7" />
-      {/* kisi tipis sebagai pegangan visual saat menggeser (peta jalan menyusul di tahap 2) */}
-      {Array.from({ length: 9 }, (_, i) => (
-        <g key={i} stroke="#DDE4EE" strokeWidth={1 / z}>
-          <line x1={i * 45} y1={-400} x2={i * 45} y2={900} />
-          <line x1={-400} y1={i * 55} x2={800} y2={i * 55} />
-        </g>
-      ))}
+      {!tanpaLatar && (
+        <>
+        <rect x={-400} y={-400} width={1200} height={1300} fill="#EEF2F7" />
+        {/* kisi tipis sebagai pegangan visual saat menggeser (peta jalan menyusul di tahap 2) */}
+        {Array.from({ length: 9 }, (_, i) => (
+          <g key={i} stroke="#DDE4EE" strokeWidth={1 / z}>
+            <line x1={i * 45} y1={-400} x2={i * 45} y2={900} />
+            <line x1={-400} y1={i * 55} x2={800} y2={i * 55} />
+          </g>
+        ))}
+        </>
+      )}
 
       {titik.map((k) => {
         const a = k.ppl_akun_id ? anggota.get(k.ppl_akun_id) : undefined;
