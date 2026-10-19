@@ -6,6 +6,7 @@ import LogoSigap from "@/app/components/LogoSigap";
 import { keAtas } from "@/app/portal/navigasi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
+import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
 import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
@@ -1016,7 +1017,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>
