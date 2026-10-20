@@ -1,9 +1,9 @@
 // lib/skorKinerja.ts  (murni: tanpa database, tanpa jaringan)
 //
 // (15 Okt 2026) Skor kinerja harian Transport Lokal PPL -- keputusan M. Iqbal Hadi (lihat Project: rancangan-skor-kinerja-harian-target-harian).
-// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per 5 km jarak (0,2 poin/km). Target minimal 60 poin/hari = 1 O-K.
-// (20 Okt 2026, keputusan user) Mulai 20 Okt 2026: target 45 -> 60 poin dan poin jarak 1/km -> 1 per 5 km. TIDAK berlaku mundur: hari sebelum 20 Okt tetap
-// memakai aturan lama (45 poin, 1 poin/km). Aturan dipilih per tanggal lewat RIWAYAT_ATURAN / aturanUntukTanggal; hutang dibawa dalam satuan O-K
+// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak. Target minimal 60 poin/hari = 1 O-K (mulai 20 Okt 2026; sebelumnya 45).
+// (20 Okt 2026, keputusan user) Mulai 20 Okt 2026: target 45 -> 60 poin (poin jarak tetap 1 per km; sempat diusulkan 1 per 5 km tetapi dibatalkan user).
+// TIDAK berlaku mundur: hari sebelum 20 Okt tetap memakai target lama (45 poin). Aturan dipilih per tanggal lewat RIWAYAT_ATURAN / aturanUntukTanggal; hutang dibawa dalam satuan O-K
 // (pecahan hari) supaya bisa dibawa melewati pergantian aturan.
 //
 // Aturan agregat (realisasi):
@@ -16,7 +16,7 @@
 //  - Pecahan O-K dibulatkan KE BAWAH. Tidak ada rupiah di sini.
 //
 // Nilai yang BELUM diputuskan user dipasang sebagai asumsi eksplisit di ATURAN_POIN (mudah diganti satu tempat):
-//  - poin KK "tidak ditemukan" = 0; - batas poin jarak = 15 poin/hari (usul; 0 = tanpa batas tidak didukung, isi angka besar; = 75 km pada 1 poin/5 km).
+//  - poin KK "tidak ditemukan" = 0; - batas poin jarak = 15 poin/hari (usul; 0 = tanpa batas tidak didukung, isi angka besar; = 15 km pada 1 poin/km).
 
 export type AturanPoin = {
   poinTerdampak: number;
@@ -42,12 +42,12 @@ export const ATURAN_POIN_V1: AturanPoin = {
   mulaiBobot: "2026-10-15",
 };
 
-/** Aturan berlaku sekarang: mulai 20 Okt 2026 (target 60 poin, 1 poin per 5 km). */
+/** Aturan berlaku sekarang: mulai 20 Okt 2026 (target 60 poin, 1 poin per km tetap). */
 export const ATURAN_POIN: AturanPoin = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
   poinTidakDitemukan: 0,
-  poinPerKm: 0.2, // 1 poin per 5 km
+  poinPerKm: 1, // tetap 1 poin per km
   maksPoinJarak: 15,
   targetHarian: 60,
   mulaiBobot: "2026-10-20",

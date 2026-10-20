@@ -20,12 +20,12 @@ type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkir
 type Templat = { nama: string; judul: string; isi: string; mJudul: string; mIsi: string; tLabel: string; tUrl: string; url: string; jenis: JenisPengumuman };
 const TEMPLAT: Templat[] = [
   {
-    // (20 Okt 2026) Perubahan target harian 45 -> 60 poin dan poin jarak 1/km -> 1 per 5 km, berlaku mulai 20 Okt 2026 (tidak berlaku mundur). Modal tombolnya ke Lembar Pendataan (PML/PPL).
-    nama: "Perubahan target harian & poin jarak (mulai 20 Okt 2026)",
+    // (20 Okt 2026) Perubahan target harian 45 -> 60 poin, berlaku mulai 20 Okt 2026 (tidak berlaku mundur; poin jarak tetap 1 per km). Modal tombolnya ke Lembar Pendataan (PML/PPL).
+    nama: "Perubahan target harian (mulai 20 Okt 2026)",
     judul: "Target harian jadi 60 poin, berlaku 20 Okt 2026",
-    isi: "Ketentuan ini mulai berlaku sejak 20 Oktober 2026: target harian naik dari 45 ke 60 poin (1 O-K) dan poin jarak jadi 1 poin per 5 km. Hari sebelumnya tidak berubah. Ketuk untuk melihat capaian Anda.",
-    mJudul: "PERUBAHAN TARGET HARIAN DAN POIN JARAK",
-    mIsi: "**Perubahan target harian dan poin jarak.**\n\n==Ketentuan ini mulai berlaku sejak 20 Oktober 2026.==\n\n- **Target harian** naik dari 45 menjadi ==60 poin== (60 poin = 1 O-K)\n- **Poin jarak** berubah dari 1 poin per km menjadi ==1 poin per 5 km== (maksimal 15 poin per hari, tidak berubah)\n- **Poin KK** tidak berubah: terdampak 5 poin, tidak terdampak 1 poin\n- ==Tidak berlaku mundur==: hari 15–19 Oktober tetap dihitung dengan angka lama (45 poin dan 1 poin per km)\n- Kekurangan (hutang) dari hari sebelumnya tetap dibawa dan ditutup lebih dulu oleh poin hari berikutnya\n\nPantau capaian Anda lewat tombol **Capaian hari ini** di Lembar Pendataan.",
+    isi: "Ketentuan ini mulai berlaku sejak 20 Oktober 2026: target harian naik dari 45 ke 60 poin (1 O-K). Poin jarak tetap 1 poin per km. Hari sebelumnya tidak berubah. Ketuk untuk melihat capaian Anda.",
+    mJudul: "PERUBAHAN TARGET HARIAN",
+    mIsi: "**Perubahan target harian.**\n\n==Ketentuan ini mulai berlaku sejak 20 Oktober 2026.==\n\n- **Target harian** naik dari 45 menjadi ==60 poin== (60 poin = 1 O-K)\n- **Poin jarak** tidak berubah: tetap 1 poin per km (maksimal 15 poin per hari)\n- **Poin KK** tidak berubah: terdampak 5 poin, tidak terdampak 1 poin\n- ==Tidak berlaku mundur==: hari 15–19 Oktober tetap dihitung dengan target lama (45 poin)\n- Kekurangan (hutang) dari hari sebelumnya tetap dibawa dan ditutup lebih dulu oleh poin hari berikutnya\n\nPantau capaian Anda lewat tombol **Capaian hari ini** di Lembar Pendataan.",
     tLabel: "Buka Lembar Pendataan",
     tUrl: "/sigap/pendataan",
     url: "/sigap/pendataan",

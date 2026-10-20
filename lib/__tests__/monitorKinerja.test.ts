@@ -59,14 +59,14 @@ describe("poinHari", () => {
   it("poin jarak dibatasi 15", () => expect(poinHari({ tanggal: V1, terdampak: 1, tidak_terdampak: 0, km: 40 }).poin_jarak).toBe(15));
   it("KK tidak ditemukan saja tetap mendapat poin jarak (sama dengan skor kinerja asli)", () => expect(poinHari({ tanggal: V1, terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 3, km: 12.345 })).toMatchObject({ poin_kk: 0, poin_jarak: 12.35, total: 12.35 }));
   it("tanpa KK didata tidak ada poin jarak", () => expect(poinHari({ tanggal: V1, terdampak: 0, tidak_terdampak: 0, km: 12 }).total).toBe(0));
-  // aturan baru (mulai 20 Okt 2026): target 60, 1 poin per 5 km
-  it("aturan baru mulai 20 Okt: 1 poin per 5 km, target 60", () => {
-    expect(poinHari({ tanggal: "2026-10-20", terdampak: 6, tidak_terdampak: 4, km: 8.5 })).toMatchObject({ poin_kk: 34, poin_jarak: 1.7, total: 35.7, persen: 60 });
+  // aturan baru (mulai 20 Okt 2026): target 60, poin jarak tetap 1 per km
+  it("aturan baru mulai 20 Okt: poin jarak tetap, target 60", () => {
+    expect(poinHari({ tanggal: "2026-10-20", terdampak: 6, tidak_terdampak: 4, km: 8.5 })).toMatchObject({ poin_kk: 34, poin_jarak: 8.5, total: 42.5, persen: 71 });
     expect(poinHari({ tanggal: "2026-10-20", terdampak: 1, tidak_terdampak: 0, km: 100 }).poin_jarak).toBe(15);
-    expect(poinHari({ tanggal: "2026-10-20", terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 3, km: 12.345 })).toMatchObject({ poin_jarak: 2.47 });
+    expect(poinHari({ tanggal: "2026-10-20", terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 3, km: 12.345 })).toMatchObject({ poin_jarak: 12.35 });
   });
   it("tanpa tanggal = aturan yang berlaku sekarang", () => {
-    expect(poinHari({ terdampak: 6, tidak_terdampak: 4, km: 8.5 }).total).toBe(35.7);
+    expect(poinHari({ terdampak: 6, tidak_terdampak: 4, km: 8.5 }).total).toBe(42.5);
   });
   it("targetTanggal menurut tanggal", () => {
     expect(targetTanggal("2026-10-19")).toBe(45);

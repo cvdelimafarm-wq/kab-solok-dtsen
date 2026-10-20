@@ -5,7 +5,7 @@
 //
 // Aturan (keputusan user 18 Okt 2026 + rancangan-skor-kinerja-harian-target-harian):
 //  - Poin harian PPL = 5 x KK terdampak + 1 x KK tidak terdampak + poin jarak (maks 15 poin jarak, hanya bila ada KK didata hari itu). Target = 1 O-K.
-//    (20 Okt 2026) Aturan MENURUT TANGGAL, tidak berlaku mundur (lib/skorKinerja.ts: RIWAYAT_ATURAN): 15-19 Okt target 45 poin & 1 poin/km; mulai 20 Okt target 60 poin & 1 poin per 5 km.
+//    (20 Okt 2026) Aturan MENURUT TANGGAL, tidak berlaku mundur (lib/skorKinerja.ts: RIWAYAT_ATURAN): 15-19 Okt target 45 poin & 1 poin/km; mulai 20 Okt target 60 poin (poin jarak tetap 1 poin/km).
 //    ATURAN di bawah = aturan yang berlaku SEKARANG (dipakai untuk perkiraan ke depan); hari yang sudah berlalu memakai aturan tanggalnya.
 //  - Realisasi O-K: hari kerja LENGKAP (laporan + foto) saja; sebelum 15 Okt tiap hari lengkap dihitung penuh (1 O-K); mulai 15 Okt sesuai poin dengan HUTANG
 //    kumulatif (poin hari berikutnya menutup hutang lebih dulu; kelebihan di atas target tidak menambah), pecahan O-K dibulatkan ke bawah.
@@ -21,7 +21,7 @@ export type MetodeJarak = "jalan" | "perkiraan" | "tanpa_rumah" | "tanpa_titik" 
 export const ATURAN = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
-  poinPerKm: ATURAN_POIN.poinPerKm, // 1 poin per 5 km mulai 20 Okt 2026
+  poinPerKm: ATURAN_POIN.poinPerKm, // tetap 1 poin per km
   maksPoinJarak: ATURAN_POIN.maksPoinJarak,
   targetHarian: ATURAN_POIN.targetHarian, // 60 poin mulai 20 Okt 2026
   mulaiBobot: "2026-10-15", // awal penilaian bobot (aturan lama 15-19 Okt)

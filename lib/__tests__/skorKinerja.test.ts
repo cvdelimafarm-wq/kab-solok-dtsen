@@ -18,13 +18,13 @@ describe("aturan menurut tanggal (tidak berlaku mundur)", () => {
     expect(ATURAN_POIN_V1.targetHarian).toBe(45);
     expect(ATURAN_POIN_V1.poinPerKm).toBe(1);
     expect(ATURAN_POIN.targetHarian).toBe(60);
-    expect(ATURAN_POIN.poinPerKm).toBe(0.2);
+    expect(ATURAN_POIN.poinPerKm).toBe(1); // poin jarak tidak berubah
   });
 });
 
-describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, 1 poin per 5 km)", () => {
-  it("contoh: 6 terdampak, 10 tidak terdampak, 10 km = 42 poin (70%)", () => {
-    const p = hitungPoinHari(kk(6, 10, 10));
+describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, poin jarak tetap 1 per km)", () => {
+  it("contoh: 6 terdampak, 10 tidak terdampak, 2 km = 42 poin (70%)", () => {
+    const p = hitungPoinHari(kk(6, 10, 2));
     expect(p.poin_terdampak).toBe(30);
     expect(p.poin_tidak_terdampak).toBe(10);
     expect(p.poin_jarak).toBe(2);
@@ -35,7 +35,7 @@ describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, 1 poin per
   });
 
   it("tepat target = 100% tanpa kekurangan", () => {
-    const p = hitungPoinHari(kk(10, 5, 25));
+    const p = hitungPoinHari(kk(10, 5, 5));
     expect(p.total).toBe(60);
     expect(p.persen).toBe(100);
     expect(p.kurang).toBe(0);
@@ -48,11 +48,11 @@ describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, 1 poin per
     expect(p.kurang).toBe(0);
   });
 
-  it("poin jarak dibatasi dan hanya bila ada KK didata", () => {
+  it("poin jarak 1 per km, dibatasi 15 dan hanya bila ada KK didata", () => {
     expect(hitungPoinHari(kk(1, 0, 100)).poin_jarak).toBe(ATURAN_POIN.maksPoinJarak);
     expect(hitungPoinHari(kk(0, 0, 25)).total).toBe(0);
     expect(hitungPoinHari(kk(0, 0, 100, 1)).poin_jarak).toBe(15);
-    expect(hitungPoinHari(kk(0, 0, 25, 1)).poin_jarak).toBe(5); // 25 km / 5 km = 5 poin
+    expect(hitungPoinHari(kk(0, 0, 12, 1)).poin_jarak).toBe(12);
   });
 
   it("KK tidak ditemukan 0 poin (asumsi) dan masukan aneh diabaikan", () => {
@@ -61,7 +61,13 @@ describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, 1 poin per
   });
 
   it("jarak pecahan dibulatkan dua desimal", () => {
-    expect(hitungPoinHari(kk(1, 0, 3.456)).poin_jarak).toBe(0.69);
+    expect(hitungPoinHari(kk(1, 0, 3.456)).poin_jarak).toBe(3.46);
+  });
+
+  it("poin KK dan jarak sama dengan aturan lama; hanya target yang berbeda", () => {
+    expect(hitungPoinHari(kk(5, 3, 10)).total).toBe(hitungPoinHari(kk(5, 3, 10), ATURAN_POIN_V1).total);
+    expect(hitungPoinHari(kk(5, 3, 10)).target).toBe(60);
+    expect(hitungPoinHari(kk(5, 3, 10), ATURAN_POIN_V1).target).toBe(45);
   });
 });
 
@@ -154,9 +160,9 @@ describe("hitungRealisasi - hari 15-19 Okt (aturan lama, angka tidak berubah)", 
   });
 });
 
-describe("hitungRealisasi - hari mulai 20 Okt (aturan baru: target 60, 1 poin per 5 km)", () => {
+describe("hitungRealisasi - hari mulai 20 Okt (aturan baru: target 60)", () => {
   it("20 Okt 42 poin = 0,7 O-K, hutang 18 poin", () => {
-    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 10))]);
+    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 2))]);
     expect(r.ok_bobot).toBe(0.7);
     expect(r.ok_terkumpul).toBe(0.7);
     expect(r.ok_dibayar).toBe(0);
@@ -165,7 +171,7 @@ describe("hitungRealisasi - hari mulai 20 Okt (aturan baru: target 60, 1 poin pe
   });
 
   it("hutang ditutup lebih dulu oleh poin hari berikutnya", () => {
-    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 10)), hari("2026-10-21", kk(14, 12, 0))]);
+    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 2)), hari("2026-10-21", kk(14, 12, 0))]);
     const h21 = r.rincian[1];
     expect(h21.untuk_hutang).toBe(18);
     expect(h21.kredit_hari).toBe(60);
@@ -176,7 +182,7 @@ describe("hitungRealisasi - hari mulai 20 Okt (aturan baru: target 60, 1 poin pe
   });
 
   it("hutang menumpuk bila terus kurang", () => {
-    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 10)), hari("2026-10-21", kk(6, 10, 10)), hari("2026-10-22", kk(6, 10, 10))]);
+    const r = hitungRealisasi([hari("2026-10-20", kk(6, 10, 2)), hari("2026-10-21", kk(6, 10, 2)), hari("2026-10-22", kk(6, 10, 2))]);
     expect(r.ok_bobot).toBe(2.1);
     expect(r.ok_dibayar).toBe(2);
     expect(r.hutang_poin).toBe(54);
@@ -184,12 +190,12 @@ describe("hitungRealisasi - hari mulai 20 Okt (aturan baru: target 60, 1 poin pe
 });
 
 describe("hitungRealisasi - pergantian aturan 19 -> 20 Okt (hari lalu tidak berubah)", () => {
-  it("19 Okt tetap dinilai dengan aturan lama walau aturan baku sekarang berbeda", () => {
+  it("19 Okt tetap dinilai dengan target lama (45) walau target baku sekarang 60", () => {
     const r = hitungRealisasi([hari("2026-10-19", kk(5, 3, 10))]);
-    expect(r.rincian[0].poin).toBe(38); // aturan baru akan memberi 25 + 3 + 2 = 30
+    expect(r.rincian[0].poin).toBe(38);
     expect(r.rincian[0].kredit_hari).toBe(38);
     expect(r.ok_bobot).toBe(0.84);
-    expect(r.hutang_poin).toBe(7);
+    expect(r.hutang_poin).toBe(7); // target lama 45; dengan target 60 hutangnya 22
   });
 
   it("hutang 19 Okt (7 poin lama = 0,1556 O-K) ditutup poin 20 Okt dengan target baru", () => {
@@ -204,7 +210,7 @@ describe("hitungRealisasi - pergantian aturan 19 -> 20 Okt (hari lalu tidak beru
   });
 
   it("kurang pada 20 Okt menambah hutang dalam O-K di atas hutang 19 Okt", () => {
-    const r = hitungRealisasi([hari("2026-10-19", kk(5, 3, 10)), hari("2026-10-20", kk(6, 10, 10))]);
+    const r = hitungRealisasi([hari("2026-10-19", kk(5, 3, 10)), hari("2026-10-20", kk(6, 10, 2))]);
     // 19 Okt: 38/45 = 0,8444 O-K; 20 Okt: 42/60 = 0,7 O-K; sisa poin 20 Okt (0,5444) untuk hari itu sendiri
     expect(r.rincian[1].hutang_sesudah_ok).toBeCloseTo(0.4556, 3);
     expect(r.ok_bobot).toBeCloseTo(1.54, 2);
@@ -213,7 +219,7 @@ describe("hitungRealisasi - pergantian aturan 19 -> 20 Okt (hari lalu tidak beru
   });
 
   it("hutang (O-K) = jumlah hari dihitung dikurangi O-K terkumpul, lintas pergantian aturan", () => {
-    const r = hitungRealisasi([hari("2026-10-19", kk(5, 3, 10)), hari("2026-10-20", kk(6, 10, 10))]);
+    const r = hitungRealisasi([hari("2026-10-19", kk(5, 3, 10)), hari("2026-10-20", kk(6, 10, 2))]);
     expect(r.hutang_ok).toBeCloseTo(r.hari_dihitung - r.ok_bobot, 2);
   });
 });

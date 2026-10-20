@@ -130,7 +130,7 @@ function TabRealisasi({ d }: { d: Aktif }) {
       </p>
       {/* (20 Okt 2026) aturan berganti per tanggal, tidak berlaku mundur */}
       <p className="mt-2 rounded-[12px] bg-[#E6EDFB] px-3 py-2 text-[12.5px] leading-snug text-[#1F4FBF]">
-        Mulai 20 Okt 2026: 60 poin = 1 O-K dan jarak 1 poin per 5 km. Hari sebelum 20 Okt tetap memakai angka lama (45 poin = 1 O-K, 1 poin per km).
+        Mulai 20 Okt 2026: target naik menjadi 60 poin = 1 O-K (poin jarak tetap 1 poin per km). Hari sebelum 20 Okt tetap memakai target lama (45 poin = 1 O-K).
       </p>
     </div>
   );
