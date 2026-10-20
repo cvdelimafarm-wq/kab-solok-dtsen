@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  jarakEfektifM,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, teksWaktuWib, urlVerifikasi, waktuResmi,
   type MasukanKepercayaan,
@@ -84,9 +85,10 @@ describe("nilaiKepercayaan", () => {
     expect(k(3 * 3600).tingkat).toBe("merah");
     expect(k(-3 * 3600).alasan).toContain("jam_hp_beda_besar");
   });
-  it("jauh dari wilayah 12 km = merah; 5 km = kuning", () => {
+  it("jauh dari wilayah 12 km = merah; 6 km = kuning; 3,3 km = hijau (batas kuning 5 km sejak 20 Okt)", () => {
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: 12_000 })).tingkat).toBe("merah");
-    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 5000 })).tingkat).toBe("kuning");
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 6000 })).tingkat).toBe("kuning");
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 3300 })).tingkat).toBe("hijau");
   });
   it("kecepatan 300 km/jam = merah", () => expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 300 })).alasan).toContain("kecepatan_tak_wajar"));
   it("koordinat identik & mirip = kuning", () => {
@@ -137,5 +139,24 @@ describe("cap & validasi", () => {
     expect(posisiMasukanValid({ lat: 0, lng: 0, akurasi: 10 })).toBe(false);
     expect(posisiMasukanValid({ lat: "a", lng: 100, akurasi: 1 })).toBe(false);
     expect(posisiMasukanValid(null)).toBe(false);
+  });
+});
+
+describe("jarakEfektifM (titik terdekat dari KK atau rumah petugas)", () => {
+  it("memakai yang terdekat dari KK dan rumah", () => {
+    expect(jarakEfektifM(3300, 500)).toBe(500);
+    expect(jarakEfektifM(800, 6400)).toBe(800);
+  });
+  it("wilayah tidak dikenal = tidak dinilai; rumah tidak diketahui = hanya KK", () => {
+    expect(jarakEfektifM(null, 100)).toBeNull();
+    expect(jarakEfektifM(3300, null)).toBe(3300);
+  });
+  it("tidak ada KK dalam 11 km (99999) tetapi di dekat rumah = wajar", () => {
+    expect(jarakEfektifM(99999, 900)).toBe(900);
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(99999, 900) })).tingkat).toBe("hijau");
+  });
+  it("jauh dari KK dan dari rumah tetap ditandai", () => {
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(7000, 8000) })).alasan).toContain("luar_wilayah_dekat");
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(12_000, 15_000) })).tingkat).toBe("merah");
   });
 });

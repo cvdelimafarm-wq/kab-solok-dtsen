@@ -23,7 +23,8 @@ export const BEDA_JAM_KUNING_DETIK = 120;
 export const BEDA_JAM_MERAH_DETIK = 3600;
 export const BEDA_MONO_WALL_KUNING_DETIK = 120;
 export const KECEPATAN_MERAH_KMJAM = 120;
-export const WILAYAH_KUNING_M = 2000;
+// (20 Okt 2026) 2 km -> 5 km: wilayah tugas luas (KK tersebar 6-8 km dari rumah); jarak diukur ke titik terdekat dari KK ATAU rumah petugas (jarakEfektifM)
+export const WILAYAH_KUNING_M = 5000;
 export const WILAYAH_MERAH_M = 10_000;
 export const AMBANG_MIRIP_BIT = 10; // jarak Hamming dHash 64-bit yang dianggap "mirip"
 export const SLOT_BERLOKASI = [2, 3, 4] as const; // nomor foto yang diwajibkan berada di wilayah tugas
@@ -110,6 +111,15 @@ export function waktuResmi(m: MasukanWaktu): HasilWaktu {
 }
 
 // ------------------------------------------------------------------ jarak & kecepatan
+/**
+ * Jarak efektif ke "wilayah" untuk penilaian: titik terdekat dari KK wilayah tugas ATAU rumah petugas (petugas umumnya tinggal di dalam/dekat wilayahnya).
+ * Wilayah tidak dikenal (jarakKkM null) = tidak dinilai (null). 99999 = tidak ada KK dalam ~11 km. Rumah tak diketahui = hanya KK.
+ */
+export function jarakEfektifM(jarakKkM: number | null, jarakRumahM: number | null): number | null {
+  if (jarakKkM === null) return null;
+  if (jarakRumahM === null || !Number.isFinite(jarakRumahM)) return jarakKkM;
+  return Math.min(jarakKkM, Math.round(jarakRumahM));
+}
 export function jarakM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -166,8 +176,8 @@ export const LABEL_ALASAN: Record<string, string> = {
   akurasi_sedang: "Akurasi GPS 30-100 m",
   akurasi_kasar: "Akurasi GPS lebih dari 100 m (dispensasi, perlu diperiksa)",
   posisi_basi: "Pembacaan GPS sudah lama sebelum potret",
-  luar_wilayah_dekat: "Titik 2-10 km dari wilayah tugas",
-  jauh_dari_wilayah: "Titik lebih dari 10 km dari wilayah tugas",
+  luar_wilayah_dekat: "Titik 5-10 km dari KK wilayah tugas dan dari rumah petugas",
+  jauh_dari_wilayah: "Titik lebih dari 10 km dari KK wilayah tugas dan dari rumah petugas",
   kecepatan_tak_wajar: "Perpindahan dari foto sebelumnya lebih cepat dari 120 km/jam",
   koordinat_identik: "Koordinat sama persis dengan foto di hari lain",
   mirip_foto_lain: "Gambar mirip foto lain yang sudah tersimpan",

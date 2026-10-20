@@ -219,6 +219,14 @@ export async function jarakKeWilayah(db: Db, akunId: number, lat: number, lng: n
   return Math.round(min);
 }
 
+/** Jarak (m) dari titik foto ke rumah (domisili) akun; null bila domisili belum diisi / tidak sah. */
+export async function jarakKeRumah(db: Db, akunId: number, lat: number, lng: number): Promise<number | null> {
+  const { data } = await db.from("sigap_akun").select("domisili_lat, domisili_lng").eq("id", akunId).maybeSingle();
+  const a = data?.domisili_lat, b = data?.domisili_lng;
+  if (typeof a !== "number" || typeof b !== "number" || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) > 90 || Math.abs(b) > 180 || (a === 0 && b === 0)) return null;
+  return Math.round(jarakM(lat, lng, a, b));
+}
+
 /** Teks lokasi ("Nagari X, Kec. Y") hanya bila ada KK pada Sub SLS alokasi dalam 1,5 km dari titik; selain itu null. */
 export async function teksLokasi(db: Db, akunId: number, lat: number, lng: number): Promise<string | null> {
   const titik = await titikKkSekitar(db, akunId, lat, lng);

@@ -12,6 +12,7 @@ import { adalahAdminFoto, bolehPeriksa } from "@/lib/sigapFotoServer";
 import { catatAudit } from "@/lib/sigapAkses";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 import type { Db } from "@/lib/sigap";
+import { jarakM } from "@/lib/sigapFoto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
   const admin = await adalahAdminFoto(db, akunId);
   let q = db
     .from("sigap_foto")
-    .select("id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, lokasi_teks, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa")
+    .select("id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa")
     .eq("status_periksa", "belum")
     .in("kepercayaan", ["kuning", "merah"])
     .order("diambil_at", { ascending: false })
@@ -47,9 +48,17 @@ export async function GET(req: NextRequest) {
   }
   const { data } = await q;
   const ids = Array.from(new Set((data ?? []).map((f) => f.akun_pengambil as number)));
-  const { data: nama } = ids.length ? await db.from("sigap_akun").select("id, nama").in("id", ids) : { data: [] as Record<string, unknown>[] };
+  const { data: nama } = ids.length ? await db.from("sigap_akun").select("id, nama, domisili_lat, domisili_lng").in("id", ids) : { data: [] as Record<string, unknown>[] };
   const peta = new Map((nama ?? []).map((a) => [a.id as number, a.nama as string]));
-  return NextResponse.json({ foto: (data ?? []).map((f) => ({ ...f, pemotret: peta.get(f.akun_pengambil as number) ?? "-" })) });
+  const rumah = new Map((nama ?? []).map((a) => [a.id as number, typeof a.domisili_lat === "number" && typeof a.domisili_lng === "number" ? { lat: a.domisili_lat, lng: a.domisili_lng } : null]));
+  // (20 Okt 2026) jarak titik foto ke rumah petugas (m), bahan pemeriksa menilai "di luar wilayah"; null bila domisili/koordinat tidak ada
+  return NextResponse.json({
+    foto: (data ?? []).map((f) => {
+      const r = rumah.get(f.akun_pengambil as number) ?? null;
+      const jarakRumah = r && typeof f.lat === "number" && typeof f.lng === "number" ? Math.round(jarakM(f.lat, f.lng, r.lat, r.lng)) : null;
+      return { ...f, pemotret: peta.get(f.akun_pengambil as number) ?? "-", jarak_rumah_m: jarakRumah };
+    }),
+  });
 }
 
 export async function POST(req: NextRequest) {

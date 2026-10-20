@@ -14,12 +14,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, penugasanAkun, BUCKET_SIGAP } from "@/lib/sigap";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
-  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
+  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
   slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
 import {
-  ambilPembanding, bacaTokenPotret, jarakKeWilayah, kodeAcak, modeKegiatan, rekanTim, sha256Hex, teksLokasi,
+  ambilPembanding, bacaTokenPotret, jarakKeRumah, jarakKeWilayah, kodeAcak, modeKegiatan, rekanTim, sha256Hex, teksLokasi,
 } from "@/lib/sigapFotoServer";
 import { angka, galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -138,8 +138,9 @@ export async function POST(req: NextRequest) {
 
   // 6) Penilaian kepercayaan
   const cekLokasi = nomor !== null && slotBerlokasi(nomor);
-  const [jarakWilayah, pembanding] = await Promise.all([
+  const [jarakWilayah, jarakRumah, pembanding] = await Promise.all([
     cekLokasi ? jarakKeWilayah(db, akunId, posisi.lat, posisi.lng) : Promise.resolve(null),
+    cekLokasi ? jarakKeRumah(db, akunId, posisi.lat, posisi.lng).catch(() => null) : Promise.resolve(null),
     ambilPembanding(db, akunId, kegiatanId, posisi.lat, posisi.lng, tanggal, cekLokasi),
   ]);
   let sidik: string | null = null;
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest) {
     akurasiM: posisi.akurasi,
     waktu: w,
     umurPosisiMs: umurPosisi !== null && umurPosisi <= 24 * 3600_000 ? umurPosisi : null,
-    jarakWilayahM: jarakWilayah,
+    jarakWilayahM: jarakEfektifM(jarakWilayah, jarakRumah), // (20 Okt 2026) titik terdekat dari KK atau rumah petugas
     kecepatanKmJam: kecepatan,
     koordinatIdentik: pembanding.koordinatIdentik,
     hammingTerdekat: hamMin,
