@@ -5,8 +5,9 @@
 // modal yang tampil (jadwal, sasaran), dan kunci "sekali per peserta".
 //
 // Isi pesan = teks biasa dengan penanda sederhana (TIDAK memakai HTML, jadi aman dari kode berbahaya):
-//   **tebal**   ==sorot==   [teks](https://tautan)   baris diawali "- " = daftar
-// Hanya tautan https:// yang diterima.
+//   **tebal**   ==sorot==   __miring__   [teks](https://tautan)
+//   baris diawali "- " = daftar berpoin, "1. " = daftar bernomor, "## " = subjudul
+// Hanya tautan https:// yang diterima. Penanda tidak bersarang (satu potongan teks hanya satu gaya).
 
 export const JENIS_PENGUMUMAN = ["info", "perhatian", "penting"] as const;
 export type JenisPengumuman = (typeof JENIS_PENGUMUMAN)[number];
@@ -81,42 +82,56 @@ export type Sebaris =
   | { t: "teks"; teks: string }
   | { t: "tebal"; teks: string }
   | { t: "sorot"; teks: string }
+  | { t: "miring"; teks: string }
   | { t: "tautan"; teks: string; url: string };
-export type BlokIsi = { tipe: "p"; baris: Sebaris[] } | { tipe: "daftar"; butir: Sebaris[][] };
+/** `daftar` berpoin (bernomor tidak diisi) atau bernomor (`bernomor: true`); `judul` = subjudul satu baris. */
+export type BlokIsi = { tipe: "p"; baris: Sebaris[] } | { tipe: "daftar"; butir: Sebaris[][]; bernomor?: true } | { tipe: "judul"; baris: Sebaris[] };
 
-/** Pecah satu baris menjadi potongan teks/tebal/sorot/tautan (tanpa bersarang). */
+/** Pecah satu baris menjadi potongan teks/tebal/sorot/miring/tautan (tanpa bersarang). */
 export function uraiSebaris(baris: string): Sebaris[] {
   const out: Sebaris[] = [];
-  const re = /\*\*(.+?)\*\*|==(.+?)==|\[([^\]]+?)\]\((\S+?)\)/g;
+  const re = /\*\*(.+?)\*\*|==(.+?)==|__(.+?)__|\[([^\]]+?)\]\((\S+?)\)/g;
   let akhir = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(baris))) {
     if (m.index > akhir) out.push({ t: "teks", teks: baris.slice(akhir, m.index) });
     if (m[1] !== undefined) out.push({ t: "tebal", teks: m[1] });
     else if (m[2] !== undefined) out.push({ t: "sorot", teks: m[2] });
-    else if (urlAman(m[4])) out.push({ t: "tautan", teks: m[3], url: m[4] });
-    else out.push({ t: "teks", teks: m[3] }); // tautan tidak aman: tampil sebagai teks biasa
+    else if (m[3] !== undefined) out.push({ t: "miring", teks: m[3] });
+    else if (urlAman(m[5])) out.push({ t: "tautan", teks: m[4], url: m[5] });
+    else out.push({ t: "teks", teks: m[4] }); // tautan tidak aman: tampil sebagai teks biasa
     akhir = m.index + m[0].length;
   }
   if (akhir < baris.length) out.push({ t: "teks", teks: baris.slice(akhir) });
   return out;
 }
 
-/** Isi pesan -> blok paragraf & daftar. Baris kosong memisahkan paragraf; baris "- " membentuk daftar. */
+const RE_POIN = /^\s*[-•]\s+/;
+const RE_NOMOR = /^\s*\d{1,3}[.)]\s+/;
+const RE_JUDUL = /^\s*##\s+/;
+
+/** Isi pesan -> blok. Baris kosong memisahkan paragraf; "- " = daftar berpoin, "1. " = daftar bernomor, "## " = subjudul. */
 export function uraiIsi(isi: string): BlokIsi[] {
   const blok: BlokIsi[] = [];
   const baris = String(isi ?? "").replace(/\r\n?/g, "\n").split("\n");
-  const st: { par: Sebaris[]; daftar: Sebaris[][] } = { par: [], daftar: [] };
+  const st: { par: Sebaris[]; daftar: Sebaris[][]; nomor: boolean } = { par: [], daftar: [], nomor: false };
   const tutup = () => {
     if (st.par.length) blok.push({ tipe: "p", baris: st.par });
-    if (st.daftar.length) blok.push({ tipe: "daftar", butir: st.daftar });
+    if (st.daftar.length) blok.push(st.nomor ? { tipe: "daftar", butir: st.daftar, bernomor: true } : { tipe: "daftar", butir: st.daftar });
     st.par = [];
     st.daftar = [];
+    st.nomor = false;
   };
   for (const b of baris) {
-    if (/^\s*[-•]\s+/.test(b)) {
-      if (st.par.length) tutup();
-      st.daftar.push(uraiSebaris(b.replace(/^\s*[-•]\s+/, "")));
+    const poin = RE_POIN.test(b);
+    const nomor = !poin && RE_NOMOR.test(b);
+    if (poin || nomor) {
+      if (st.par.length || (st.daftar.length && st.nomor !== nomor)) tutup();
+      st.nomor = nomor;
+      st.daftar.push(uraiSebaris(b.replace(nomor ? RE_NOMOR : RE_POIN, "")));
+    } else if (RE_JUDUL.test(b) && b.replace(RE_JUDUL, "").trim()) {
+      tutup();
+      blok.push({ tipe: "judul", baris: uraiSebaris(b.replace(RE_JUDUL, "").trim()) });
     } else if (b.trim() === "") {
       tutup();
     } else {

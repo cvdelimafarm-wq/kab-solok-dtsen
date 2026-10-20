@@ -22,6 +22,8 @@ function Potongan({ s }: { s: Sebaris }) {
       return <b>{s.teks}</b>;
     case "sorot":
       return <mark className="rounded px-0.5" style={{ background: "#FFE680" }}>{s.teks}</mark>;
+    case "miring":
+      return <i>{s.teks}</i>;
     case "tautan":
       return (
         <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-bold text-[#1F5FD1] underline">
@@ -33,20 +35,31 @@ function Potongan({ s }: { s: Sebaris }) {
   }
 }
 
-/** Isi pesan -> elemen (paragraf & daftar). */
+/** Isi pesan -> elemen (paragraf, subjudul, daftar berpoin & bernomor). */
 export function IsiPengumuman({ isi }: { isi: string }) {
   const blok = uraiIsi(isi);
   return (
     <div className="space-y-2 text-[14.5px] leading-relaxed text-[#1B2B4B]">
-      {blok.map((b, i) =>
-        b.tipe === "p" ? (
-          <p key={i} className="whitespace-pre-line">
-            {b.baris.map((s, j) => (
-              <Potongan key={j} s={s} />
-            ))}
-          </p>
-        ) : (
-          <ul key={i} className="list-disc space-y-0.5 pl-5">
+      {blok.map((b, i) => {
+        if (b.tipe === "p")
+          return (
+            <p key={i} className="whitespace-pre-line">
+              {b.baris.map((s, j) => (
+                <Potongan key={j} s={s} />
+              ))}
+            </p>
+          );
+        if (b.tipe === "judul")
+          return (
+            <h3 key={i} className="pt-1 text-[15.5px] font-extrabold leading-snug text-[#0F2A52]">
+              {b.baris.map((s, j) => (
+                <Potongan key={j} s={s} />
+              ))}
+            </h3>
+          );
+        const Daftar = b.bernomor ? "ol" : "ul";
+        return (
+          <Daftar key={i} className={`${b.bernomor ? "list-decimal" : "list-disc"} space-y-0.5 pl-5`}>
             {b.butir.map((butir, j) => (
               <li key={j}>
                 {butir.map((s, k) => (
@@ -56,9 +69,9 @@ export function IsiPengumuman({ isi }: { isi: string }) {
                 ))}
               </li>
             ))}
-          </ul>
-        )
-      )}
+          </Daftar>
+        );
+      })}
     </div>
   );
 }

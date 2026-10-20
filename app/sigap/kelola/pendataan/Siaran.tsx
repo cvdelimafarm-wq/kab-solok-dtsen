@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import EditorTeksKaya from "@/app/components/EditorTeksKaya";
 import { ModalPengumuman } from "@/app/sigap/pelatihan/pengumumanUi";
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
 import { HARI_MODAL_SIARAN } from "@/lib/siaranPetugas";
@@ -185,7 +186,7 @@ export default function Siaran() {
 
   const kolom = "mt-1 w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 py-2 text-[14px] text-[#1B2B4B]";
   const boleh = !!r?.boleh_kirim;
-  const sah = (push || modal) && (!push || (judul.trim() && isi.trim())) && (!modal || (mJudul.trim() && mIsi.trim()));
+  const sah = (push || modal) && (!push || (judul.trim() && isi.trim())) && (!modal || (mJudul.trim() && mIsi.trim() && mIsi.length <= 2000));
 
   return (
     <section className="mt-5 rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
@@ -246,10 +247,11 @@ export default function Siaran() {
               </select>
             </label>
           </div>
-          <label className="mt-2 block text-[12px] font-bold text-[#55657D]">
-            Isi modal (**tebal**, ==sorot==, baris &quot;- &quot; = daftar)
-            <textarea value={mIsi} maxLength={2000} rows={6} onChange={(e) => setMIsi(e.target.value)} className={kolom} />
-          </label>
+          {/* (21 Okt 2026) Editor visual bergaya Word; yang tersimpan tetap teks berpenanda yang sama (lib/teksKaya.ts) */}
+          <div className="mt-2">
+            <p className="text-[12px] font-bold text-[#55657D]">Isi modal (ketik langsung; blok teks lalu tekan tombol Tebal, Miring, Sorot, Subjudul, Poin, Nomor)</p>
+            <EditorTeksKaya nilai={mIsi} onUbah={setMIsi} maks={2000} />
+          </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <label className="block text-[12px] font-bold text-[#55657D]">
               Label tombol (kosongkan = tanpa tombol)
