@@ -77,3 +77,27 @@ export function labelUkuran(byte: number): string {
 }
 
 export type PilihanLapisan = "jalan" | "titik";
+
+// ------------------------------------------------------------------ SPDT NTP (21 Okt 2026)
+// Lembar Pendataan SPDT NTP memakai berkas yang sama (bucket, manifest, unduhan offline) dengan kunci angka SENDIRI supaya tidak bentrok dengan
+// bencana_petugas.id tim PML: PPL = 9.100.000 + akun PPL (hanya KK miliknya); PML = 9.200.000 + akun PML (KK semua PPL-nya);
+// Supervisor = 9.300.000 (seluruh wilayah). Berkas dibuat `node scripts/peta/potong-peta.mjs --spdt` (wilayah dihitung langsung dari sigap_spdt_kk).
+export const KUNCI_PETA_SPDT_PPL = 9_100_000;
+export const KUNCI_PETA_SPDT_PML = 9_200_000;
+export const KUNCI_PETA_SPDT_SEMUA = 9_300_000;
+
+type KkKunci = { ppl_akun_id: number | null; pml_akun_id: number | null };
+
+/** Kunci berkas peta jalan untuk pemanggil Lembar SPDT NTP menurut peran, atau null bila belum bisa ditentukan (belum dimuat / tanpa KK). */
+export function kunciPetaSpdt(peran: "ppl" | "pml" | "supervisor" | null | undefined, kk: readonly KkKunci[]): number | null {
+  if (peran === "supervisor") return KUNCI_PETA_SPDT_SEMUA;
+  if (peran === "ppl") {
+    const id = kk.find((k) => k.ppl_akun_id != null)?.ppl_akun_id;
+    return id != null ? KUNCI_PETA_SPDT_PPL + id : null;
+  }
+  if (peran === "pml") {
+    const id = kk.find((k) => k.pml_akun_id != null)?.pml_akun_id;
+    return id != null ? KUNCI_PETA_SPDT_PML + id : null;
+  }
+  return null;
+}

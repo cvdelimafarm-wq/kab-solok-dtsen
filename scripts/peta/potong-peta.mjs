@@ -11,6 +11,8 @@
 //   node scripts/peta/potong-peta.mjs                              -> potong semua tim
 //   node scripts/peta/potong-peta.mjs --unggah                     -> potong lalu unggah (berkas + manifest.json)
 //   node scripts/peta/potong-peta.mjs --hanya-unggah               -> unggah berkas yang sudah ada di peta-keluar/ (tanpa memotong ulang)
+//   node scripts/peta/potong-peta.mjs --spdt [--tim=9100498] ...   -> (21 Okt 2026) berkas Lembar SPDT NTP (per PPL, per PML, supervisor); wilayah dihitung dari tabel
+//                                                                     sigap_spdt_kk (butuh NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY). Tanpa --spdt = tim PML bencana seperti biasa.
 // Pilihan: --sumber=<url|berkas .pmtiles> (bawaan: build harian Protomaps terbaru)  --pad=1  --maxzoom=15  --keluar=peta-keluar  --pmtiles=pmtiles
 // Unggah butuh NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (dari lingkungan atau .env.local). Kunci tidak ditampilkan.
 
@@ -19,6 +21,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { wilayahTim, sidik } from "./wilayah.mjs";
+import { kelompokkanSpdt, ambilKkSpdt } from "./wilayah-spdt.mjs";
 
 const BUCKET = "peta-dasar";
 const BATAS_UNGGAH = 50 * 1024 * 1024; // batas bawaan Supabase paket gratis per berkas
@@ -43,8 +46,22 @@ function bacaEnvLokal() {
   }
 }
 
-function dapatkanWilayah() {
-  const mentah = JSON.parse(fs.readFileSync(path.join(FOLDER_INI, "wilayah-tim.json"), "utf8"));
+async function dapatkanWilayah() {
+  let mentah;
+  if (ada("spdt")) {
+    bacaEnvLokal();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const kunci = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !kunci) {
+      console.error("--spdt butuh NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (lingkungan atau .env.local).");
+      process.exit(1);
+    }
+    const { createClient } = await import("@supabase/supabase-js");
+    const sb = createClient(url, kunci, { auth: { persistSession: false } });
+    mentah = { tim: kelompokkanSpdt(await ambilKkSpdt(sb)) };
+  } else {
+    mentah = JSON.parse(fs.readFileSync(path.join(FOLDER_INI, "wilayah-tim.json"), "utf8"));
+  }
   const pad = Number(pilihan("pad", "1"));
   const diminta = pilihan("tim", "")
     .split(",")
@@ -55,7 +72,7 @@ function dapatkanWilayah() {
     if (diminta.length && !diminta.includes(id)) continue;
     hasil.push({ id, nama: t.nama, kk: t.kk, ...wilayahTim(t.lari, pad) });
   }
-  for (const d of diminta) if (!hasil.some((h) => h.id === d)) console.warn(`! Tim ${d} tidak ada di wilayah-tim.json, dilewati.`);
+  for (const d of diminta) if (!hasil.some((h) => h.id === d)) console.warn(`! Tim ${d} tidak ada di ${ada("spdt") ? "data SPDT" : "wilayah-tim.json"}, dilewati.`);
   return hasil;
 }
 
@@ -120,6 +137,16 @@ async function unggah(keluar, manifest, daftarBerkas) {
       delete manifest.tim[nama.replace(/^tim-|\.pmtiles$/g, "")];
     } else console.log("ok");
   }
+  // (21 Okt 2026) gabungkan dengan manifest yang SUDAH di Storage: memotong sebagian (mis. hanya --spdt) tidak boleh menghapus tim lain dari manifest
+  try {
+    const { data: lama } = await sb.storage.from(BUCKET).download("manifest.json");
+    if (lama) {
+      const j = JSON.parse(await lama.text());
+      if (j && typeof j === "object" && j.tim) for (const [k, v] of Object.entries(j.tim)) if (!(k in manifest.tim)) manifest.tim[k] = v;
+    }
+  } catch {
+    /* belum ada manifest lama */
+  }
   // manifest terakhir: aplikasi baru "melihat" versi baru setelah semua berkas naik
   const { error } = await sb.storage.from(BUCKET).upload("manifest.json", Buffer.from(JSON.stringify(manifest, null, 1)), { upsert: true, contentType: "application/json", cacheControl: "30" });
   console.log(error ? `x manifest.json GAGAL: ${error.message}` : "↑ manifest.json ok");
@@ -127,7 +154,7 @@ async function unggah(keluar, manifest, daftarBerkas) {
 }
 
 async function utama() {
-  const wilayah = dapatkanWilayah();
+  const wilayah = await dapatkanWilayah();
   if (!wilayah.length) {
     console.error("Tidak ada tim yang dipilih.");
     process.exit(1);

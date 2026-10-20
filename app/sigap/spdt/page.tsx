@@ -7,18 +7,26 @@
 // Supervisor = Monitoring (terbuka lebih dulu) | Peta | Daftar KK (seluruh wilayah). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
 import { dariAman } from "../identifikasi/useIdentifikasi";
 import { buatProyeksi, warnaIndeks } from "@/lib/pendataan";
 import { LABEL_PERAN, daftarPpl, jarakM, judulKata, saringKk, type KkSpdt } from "@/lib/spdtNtp";
+import { kunciPetaSpdt } from "@/lib/petaDasar";
+import KontrolPetaDasar from "../pendataan/KontrolPetaDasar";
+import { useDasarTim } from "../pendataan/useDasar";
+import type { StatusDasar } from "../pendataan/PetaDasar";
 import { useKkSpdt } from "./useSpdt";
 import Ik from "./Ik";
 import PetaSpdt, { PANDANG_AWAL, type Pandang } from "./PetaSpdt";
 import DaftarSpdt from "./DaftarSpdt";
 import MonitoringSpdt from "./MonitoringSpdt";
 import KartuKkSpdt from "./KartuKkSpdt";
+
+// (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
+const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
 
 type Tab = "mon" | "peta" | "daftar";
 const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", peta: "Peta", daftar: "Daftar KK" };
@@ -37,6 +45,8 @@ export default function HalamanSpdt() {
   const [infoLokasi, setInfoLokasi] = useState<string | null>(null);
   const [terpilihId, setTerpilihId] = useState<number | null>(null);
   const [pandang, setPandang] = useState<Pandang>(PANDANG_AWAL);
+  const [statusDasar, setStatusDasar] = useState<StatusDasar | null>(null);
+  const [alasanDasar, setAlasanDasar] = useState<string | null>(null);
 
   useEffect(() => setDari(dariAman()), []);
 
@@ -57,6 +67,13 @@ export default function HalamanSpdt() {
   const kkPeta = useMemo(() => saringKk(semuaKk, { ppl: pplF, jorong: jorongF, cari: "" }), [semuaKk, pplF, jorongF]);
   const kkDaftar = useMemo(() => saringKk(semuaKk, { ppl: pplF, jorong: jorongF, cari }), [semuaKk, pplF, jorongF, cari]);
   const proj = useMemo(() => buatProyeksi(kkPeta.map((k) => ({ lat: k.lat, lng: k.lng })), 360, 440), [kkPeta]);
+  // peta jalan per peran: PPL = KK miliknya, PML = KK tim, Supervisor = seluruh wilayah (berkas dibuat `potong-peta.mjs --spdt`). Tanpa berkas = kanvas titik seperti sebelumnya.
+  const dasar = useDasarTim(kunciPetaSpdt(peran, semuaKk), tabAktif === "peta");
+  const pakaiDasar = !!proj && dasar.lapisan === "jalan" && !!dasar.sumber && statusDasar !== "gagal";
+  const kunciDasar = !dasar.sumber ? "" : dasar.sumber.tipe === "blob" ? `b:${dasar.sumber.nama}:${dasar.sumber.blob.size}` : `o:${dasar.sumber.url}`;
+  useEffect(() => {
+    setStatusDasar(null);
+  }, [kunciDasar]);
   const warnaOleh = peran === "ppl" ? "jorong" : "ppl";
   const indeksWarna = (k: KkSpdt) => (warnaOleh === "jorong" ? (indeksJorong.get(`${k.nagari}|${k.jorong}`) ?? 0) : (indeksPpl.get(k.ppl_akun_id ?? -1) ?? 0));
 
@@ -182,9 +199,11 @@ export default function HalamanSpdt() {
           <section className="relative m-2.5 min-h-[360px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">
             {proj && kkPeta.length > 0 ? (
               <>
+                {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={(s, a) => { setStatusDasar(s); setAlasanDasar(a ?? null); }} />}
                 <div className="absolute inset-0">
-                  <PetaSpdt kk={kkPeta} proj={proj} warnaIndeksKk={indeksWarna} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} onPilih={setTerpilihId} saya={saya} />
+                  <PetaSpdt kk={kkPeta} proj={proj} warnaIndeksKk={indeksWarna} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
                 </div>
+                <KontrolPetaDasar dasar={dasar} status={statusDasar} alasan={alasanDasar} />
                 <div className="absolute right-2.5 top-2.5 flex flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_4px_12px_rgba(15,42,82,.15)]">
                   <button type="button" aria-label="Perbesar" onClick={() => setPandang((p) => ({ ...p, z: Math.min(12, p.z * 1.6) }))} className="grid h-11 w-11 place-items-center border-b border-[#EEF2F7] text-[#0F2A52] active:bg-[#F1F5FC]">
                     <Ik n="tambah" />

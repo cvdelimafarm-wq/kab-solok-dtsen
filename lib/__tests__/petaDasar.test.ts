@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buatProyeksi, jarakMeter } from "@/lib/pendataan";
-import { MPP_ZOOM0, bacaManifestDasar, berkasUntukTim, kameraDariPandang, labelUkuran, namaBerkasTim, salinanBerlaku, urlPublikBerkas } from "@/lib/petaDasar";
+import { KUNCI_PETA_SPDT_SEMUA, MPP_ZOOM0, bacaManifestDasar, berkasUntukTim, kameraDariPandang, kunciPetaSpdt, labelUkuran, namaBerkasTim, salinanBerlaku, urlPublikBerkas } from "@/lib/petaDasar";
 
 const titik = [
   { lat: -0.9559, lng: 100.6005 },
@@ -70,5 +70,28 @@ describe("manifest dan berkas", () => {
     expect(labelUkuran(18 * 1024 * 1024)).toBe("18 MB");
     expect(labelUkuran(2.5 * 1024 * 1024)).toBe("2,5 MB");
     expect(labelUkuran(400)).toBe("1 KB");
+  });
+});
+
+describe("kunciPetaSpdt (21 Okt 2026)", () => {
+  const kk = [
+    { ppl_akun_id: null, pml_akun_id: null },
+    { ppl_akun_id: 498, pml_akun_id: 455 },
+  ];
+  it("PPL = 9.100.000 + akun PPL; PML = 9.200.000 + akun PML; supervisor = satu berkas semua wilayah", () => {
+    expect(kunciPetaSpdt("ppl", kk)).toBe(9_100_498);
+    expect(kunciPetaSpdt("pml", kk)).toBe(9_200_455);
+    expect(kunciPetaSpdt("supervisor", [])).toBe(KUNCI_PETA_SPDT_SEMUA);
+  });
+  it("belum bisa ditentukan = null (tanpa KK, peran belum diketahui)", () => {
+    expect(kunciPetaSpdt("ppl", [])).toBeNull();
+    expect(kunciPetaSpdt("pml", [{ ppl_akun_id: 1, pml_akun_id: null }])).toBeNull();
+    expect(kunciPetaSpdt(null, kk)).toBeNull();
+  });
+  it("kunci SPDT tidak pernah bentrok dengan id tim PML bencana dan lolos aturan manifest (angka)", () => {
+    expect(9_100_000).toBeGreaterThan(1_000_000);
+    expect(namaBerkasTim(9_100_498)).toBe("tim-9100498.pmtiles");
+    const m = bacaManifestDasar({ versi: "v", tim: { "9100498": { berkas: "tim-9100498.pmtiles", ukuran: 5 } } });
+    expect(berkasUntukTim(m, 9_100_498)?.berkas).toBe("tim-9100498.pmtiles");
   });
 });

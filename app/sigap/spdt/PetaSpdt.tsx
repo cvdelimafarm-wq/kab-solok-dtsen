@@ -2,7 +2,7 @@
 
 // app/sigap/spdt/PetaSpdt.tsx
 //
-// (16 Okt 2026) Sebaran koordinat KK SPDT NTP pada kanvas titik TANPA peta dasar (nol unduhan, tetap tampil walau tanpa sinyal) -- sama dengan peta
+// (16 Okt 2026; 21 Okt 2026 + latar peta jalan opsional lewat `tanpaLatar`, lihat page.tsx) Sebaran koordinat KK SPDT NTP pada kanvas titik (nol unduhan bila tanpa peta jalan, tetap tampil walau tanpa sinyal) -- sama dengan peta
 // Lembar Pendataan bencana. WARNA = PPL (PPL sendiri: warna = Jorong). Titik ber-cincin putus-putus oranye = akurasi GPS rendah (> 50 m).
 // Geser 1 jari, cubit 2 jari (tombol +/- ada di halaman); ketuk titik untuk membuka kartu KK. Tidak ada status/hasil pendataan.
 
@@ -26,6 +26,8 @@ type Props = {
   terpilih: number | null;
   onPilih: (id: number) => void;
   saya: { lat: number; lng: number } | null;
+  /** (21 Okt 2026) true = ada peta jalan di bawah: latar dan kisi dibuat bening supaya peta terlihat (sama dengan PetaKk) */
+  tanpaLatar?: boolean;
 };
 
 function klem(p: Pandang): Pandang {
@@ -34,7 +36,7 @@ function klem(p: Pandang): Pandang {
   return { z: p.z, cx: Math.max(hw, Math.min(L - hw, p.cx)), cy: Math.max(hh, Math.min(T - hh, p.cy)) };
 }
 
-export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang, terpilih, onPilih, saya }: Props) {
+export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang, terpilih, onPilih, saya, tanpaLatar = false }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const ptr = useRef(new Map<number, { x: number; y: number }>());
   const gerak = useRef({ geser: false, jarak0: 0, z0: 1 });
@@ -101,19 +103,23 @@ export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang,
       viewBox={viewBox}
       role="img"
       aria-label="Sebaran titik koordinat KK"
-      className="block h-full w-full touch-none select-none bg-[#EEF2F7]"
+      className={`block h-full w-full touch-none select-none ${tanpaLatar ? "bg-transparent" : "bg-[#EEF2F7]"}`}
       onPointerDown={bawah}
       onPointerMove={pindah}
       onPointerUp={lepas}
       onPointerCancel={lepas}
     >
-      <rect x={-400} y={-400} width={1200} height={1300} fill="#EEF2F7" />
-      {Array.from({ length: 9 }, (_, i) => (
-        <g key={i} stroke="#DDE4EE" strokeWidth={1 / z}>
-          <line x1={i * 45} y1={-400} x2={i * 45} y2={900} />
-          <line x1={-400} y1={i * 55} x2={800} y2={i * 55} />
-        </g>
-      ))}
+      {!tanpaLatar && (
+        <>
+          <rect x={-400} y={-400} width={1200} height={1300} fill="#EEF2F7" />
+          {Array.from({ length: 9 }, (_, i) => (
+            <g key={i} stroke="#DDE4EE" strokeWidth={1 / z}>
+              <line x1={i * 45} y1={-400} x2={i * 45} y2={900} />
+              <line x1={-400} y1={i * 55} x2={800} y2={i * 55} />
+            </g>
+          ))}
+        </>
+      )}
 
       {proj &&
         urut.map((k) => {

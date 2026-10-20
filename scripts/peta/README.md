@@ -36,6 +36,16 @@ r as (select pml_id,y,min(x) x0,max(x) x1 from g group by pml_id,y,grp)
 select pml_id, json_agg(json_build_array(y,x0,x1) order by y,x0) as lari from r group by pml_id order by pml_id;
 ```
 
+## Lembar SPDT NTP (21 Okt 2026)
+Lembar Pendataan SPDT NTP memakai bucket, manifest, dan unduhan offline yang sama, dengan kunci angka sendiri: PPL = 9.100.000 + akun PPL, PML = 9.200.000 + akun PML, Supervisor = 9.300.000 (seluruh wilayah).
+Wilayahnya dihitung langsung dari tabel `sigap_spdt_kk` (tidak memakai `wilayah-tim.json`), jadi butuh `NEXT_PUBLIC_SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` (.env.local) bahkan untuk `--daftar`.
+```
+node scripts/peta/potong-peta.mjs --spdt --daftar                       # kunci, jumlah KK, kotak batas
+node scripts/peta/potong-peta.mjs --spdt --tim=9100498 --unggah         # coba satu PPL dulu (Rabiatul Fauziah)
+node scripts/peta/potong-peta.mjs --spdt --unggah                       # semua (sekitar 60 berkas)
+```
+Manifest yang diunggah digabung dengan manifest yang sudah ada di Storage, jadi 18 tim bencana tidak hilang. Bila KK SPDT bertambah/pindah, jalankan ulang untuk kunci terkait.
+
 ## Tim tanpa berkas
 Tim yang tidak ada di manifest tidak melihat kontrol peta jalan sama sekali; tab Peta tetap titik di kanvas seperti sebelumnya.
 
