@@ -16,7 +16,9 @@ export default function manifest(): MetadataRoute.Manifest {
     // scope "/" supaya tautan ke halaman portal lain tetap terbuka di dalam aplikasi
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    // (21 Okt 2026) "any": ikuti putaran layar HP. Sebelumnya "portrait" -- pada aplikasi terpasang (WebAPK) kunci ini ditanam oleh Android dan
+    // tidak bisa dibuka lewat screen.orientation.lock() dari halaman, sehingga Kamera SIGAP tidak bisa landscape. Halaman lain tetap rapi di layar sempit.
+    orientation: "any",
     background_color: "#FFFFFF",
     theme_color: "#0F2A52",
     // (9 Okt 2026, malam) `related_applications` DIHAPUS: sejak ditambahkan siang itu, di sebagian HP Chrome tidak lagi memunculkan dialog
