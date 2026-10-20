@@ -11,7 +11,11 @@ export const HARI_KEDALUWARSA_TANPA_TAG = 90;
 export const MAKS_TAG = 8;
 export const JUMLAH_NOMOR_FOTO = 5;
 
-export const MAKS_AKURASI_M = 100; // di atas ini foto ditolak
+export const MAKS_AKURASI_M = 100; // di atas ini foto TIDAK lagi hijau: diterima sebagai dispensasi berpenanda "perlu diperiksa" (kuning), lihat di bawah
+/** (21 Okt 2026) Dispensasi akurasi: 100-5000 m diterima tetapi ditandai kuning "akurasi_kasar" untuk diperiksa PML/admin; di atas 5000 m ditolak (lokasi tak bermakna). */
+export const MAKS_AKURASI_DISPENSASI_M = 5000;
+/** Petugas menunggu sekian detik (sambil mengikuti panduan) sebelum tombol potret dispensasi aktif. */
+export const TUNGGU_AKURASI_KASAR_DTK = 30;
 export const AKURASI_KUNING_M = 30;
 export const UMUR_TOKEN_MS = 30 * 60_000; // token potret berlaku 30 menit sejak diminta
 export const UMUR_POSISI_KUNING_MS = 2 * 60_000; // posisi GPS lebih tua dari ini saat potret = kuning
@@ -160,6 +164,7 @@ export const LABEL_ALASAN: Record<string, string> = {
   jam_hp_beda_kecil: "Jam HP berbeda dari jam resmi lebih dari 2 menit",
   jam_hp_beda_besar: "Jam HP berbeda dari jam resmi lebih dari 1 jam",
   akurasi_sedang: "Akurasi GPS 30-100 m",
+  akurasi_kasar: "Akurasi GPS lebih dari 100 m (dispensasi, perlu diperiksa)",
   posisi_basi: "Pembacaan GPS sudah lama sebelum potret",
   luar_wilayah_dekat: "Titik 2-10 km dari wilayah tugas",
   jauh_dari_wilayah: "Titik lebih dari 10 km dari wilayah tugas",
@@ -168,7 +173,7 @@ export const LABEL_ALASAN: Record<string, string> = {
   mirip_foto_lain: "Gambar mirip foto lain yang sudah tersimpan",
 };
 
-/** Menggabungkan semua pemeriksaan menjadi hijau/kuning/merah beserta alasannya. Penolakan keras (akurasi > 100 m, duplikat) dilakukan di luar fungsi ini. */
+/** Menggabungkan semua pemeriksaan menjadi hijau/kuning/merah beserta alasannya. Penolakan keras (akurasi > 5000 m, duplikat) dilakukan di luar fungsi ini. */
 export function nilaiKepercayaan(m: MasukanKepercayaan): HasilKepercayaan {
   const merah: string[] = [];
   const kuning: string[] = [];
@@ -178,7 +183,8 @@ export function nilaiKepercayaan(m: MasukanKepercayaan): HasilKepercayaan {
     if (Math.abs(s) > BEDA_JAM_MERAH_DETIK) merah.push("jam_hp_beda_besar");
     else if (Math.abs(s) > BEDA_JAM_KUNING_DETIK) kuning.push("jam_hp_beda_kecil");
   }
-  if (m.akurasiM > AKURASI_KUNING_M) kuning.push("akurasi_sedang");
+  if (m.akurasiM > MAKS_AKURASI_M) kuning.push("akurasi_kasar");
+  else if (m.akurasiM > AKURASI_KUNING_M) kuning.push("akurasi_sedang");
   if (m.umurPosisiMs !== null && m.umurPosisiMs > UMUR_POSISI_KUNING_MS) kuning.push("posisi_basi");
   if (m.jarakWilayahM !== null) {
     if (m.jarakWilayahM > WILAYAH_MERAH_M) merah.push("jauh_dari_wilayah");

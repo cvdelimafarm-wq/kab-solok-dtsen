@@ -71,6 +71,13 @@ describe("waktuResmi", () => {
 describe("nilaiKepercayaan", () => {
   it("semua wajar = hijau", () => expect(nilaiKepercayaan(dasar())).toEqual({ tingkat: "hijau", alasan: [] }));
   it("akurasi 50 m = kuning", () => expect(nilaiKepercayaan(dasar({ akurasiM: 50 })).tingkat).toBe("kuning"));
+  // (21 Okt 2026) dispensasi akurasi: > 100 m diterima tetapi ditandai kuning "akurasi_kasar" (diperiksa PML/admin), bukan merah/ditolak
+  it("akurasi 1745 m = kuning dengan alasan akurasi_kasar", () => {
+    const h = nilaiKepercayaan(dasar({ akurasiM: 1745 }));
+    expect(h.tingkat).toBe("kuning");
+    expect(h.alasan).toContain("akurasi_kasar");
+    expect(h.alasan).not.toContain("akurasi_sedang");
+  });
   it("jam HP beda 10 menit = kuning; beda 3 jam = merah", () => {
     const k = (detik: number) => nilaiKepercayaan(dasar({ waktu: { ...waktuBaik(), selisihHpDetik: detik } }));
     expect(k(600).tingkat).toBe("kuning");

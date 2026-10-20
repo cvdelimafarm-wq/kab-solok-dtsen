@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, penugasanAkun, BUCKET_SIGAP } from "@/lib/sigap";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
-  MAKS_AKURASI_M, MAKS_TAG, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
+  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
   slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
@@ -83,7 +83,8 @@ export async function POST(req: NextRequest) {
   const nomor = nomorMentah as 1 | 2 | 3 | 4 | 5 | null;
   const posisi = { lat: angka(form.get("lat")), lng: angka(form.get("lng")), akurasi: angka(form.get("akurasi")) };
   if (!posisiMasukanValid(posisi)) return galat("Lokasi tidak terbaca. Aktifkan lokasi lalu potret ulang.", 422, { kode: "lokasi" });
-  if (posisi.akurasi > MAKS_AKURASI_M) return galat(`Akurasi lokasi ±${Math.round(posisi.akurasi)} m terlalu kasar (maks ${MAKS_AKURASI_M} m). Pindah ke tempat terbuka lalu potret ulang.`, 422, { kode: "akurasi" });
+  // (21 Okt 2026) Akurasi 100-5000 m = dispensasi: diterima, ditandai kuning "akurasi_kasar" (lihat nilaiKepercayaan) untuk diperiksa PML/admin.
+  if (posisi.akurasi > MAKS_AKURASI_DISPENSASI_M) return galat(`Akurasi lokasi ±${Math.round(posisi.akurasi)} m terlalu kasar (maks ${MAKS_AKURASI_DISPENSASI_M} m). Aktifkan lokasi tepat dan pindah ke tempat terbuka lalu potret ulang.`, 422, { kode: "akurasi" });
   const tagMasukan = bacaTag(form.get("tag"));
   if (tagMasukan === null) return galat("Daftar tag tidak valid.");
   if (tagMasukan.some((t) => t.akun_id === akunId)) return galat("Tidak perlu menandai diri sendiri.");

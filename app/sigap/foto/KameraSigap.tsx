@@ -14,7 +14,7 @@ import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
-import { MAKS_AKURASI_M, LABEL_KEPERCAYAAN, LABEL_ALASAN, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
+import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, LABEL_KEPERCAYAAN, LABEL_ALASAN, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { useTombolKembali } from "./useTombolKembali";
 
@@ -320,12 +320,27 @@ export default function KameraSigap({
   useEffect(() => () => { if (jepretan) URL.revokeObjectURL(jepretan.url); }, [jepretan]);
 
   const akurasiOk = !!posisi && posisi.akurasi <= MAKS_AKURASI_M;
+  // (21 Okt 2026) Dispensasi akurasi: 100-5000 m boleh dipotret setelah menunggu + panduan; foto ditandai "perlu diperiksa" oleh server (kuning). Di atas 5000 m tetap tidak bisa.
+  const akurasiKasar = !!posisi && posisi.akurasi > MAKS_AKURASI_M && posisi.akurasi <= MAKS_AKURASI_DISPENSASI_M;
+  const akurasiBuruk = !!posisi && posisi.akurasi > MAKS_AKURASI_DISPENSASI_M;
+  const [detikKasar, setDetikKasar] = useState(0);
+  useEffect(() => {
+    if (!akurasiKasar) {
+      setDetikKasar(0);
+      return;
+    }
+    const mulai = Date.now();
+    const t = setInterval(() => setDetikKasar(Math.floor((Date.now() - mulai) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [akurasiKasar]);
+  const sisaTunggu = Math.max(0, TUNGGU_AKURASI_KASAR_DTK - detikKasar);
+  const siapPotret = akurasiOk || (akurasiKasar && sisaTunggu === 0);
   const etiket = labelFoto(jenis);
   const adaTujuan = nomor !== null || tag.length > 0; // tanpa tombol "Hanya untuk rekan": foto minimal punya nomor sendiri atau dibagikan ke rekan
 
   async function potret() {
     const v = videoRef.current;
-    if (!v || !posisi || !v.videoWidth) return;
+    if (!v || !posisi || !v.videoWidth || !siapPotret) return;
     const mono = performance.now();
     const wall = Date.now();
     const kanvas = document.createElement("canvas");
@@ -455,7 +470,7 @@ export default function KameraSigap({
                   style={{ width: "100dvh", height: "100vw", transformOrigin: "top left", transform: putar === 1 ? "rotate(90deg) translateY(-100%)" : "rotate(-90deg) translateX(-100%)" }}
                 >
                   <div className={`pointer-events-auto absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
-                    {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (terlalu kasar)"}` : galatGps ?? "Mencari lokasi…"}
+                    {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (kasar)"}` : galatGps ?? "Mencari lokasi…"}
                   </div>
                   {banyakKamera !== false && (
                     <button
@@ -471,7 +486,7 @@ export default function KameraSigap({
                   <button
                     type="button"
                     onClick={() => void potret()}
-                    disabled={!akurasiOk}
+                    disabled={!siapPotret}
                     aria-label="Potret"
                     className="pointer-events-auto absolute right-5 top-1/2 flex h-[72px] w-[72px] -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-white/25 disabled:opacity-40"
                   >
@@ -505,13 +520,28 @@ export default function KameraSigap({
                 </button>
               )}
               <div className={`absolute left-2 top-2 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
-                {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (terlalu kasar)"}` : galatGps ?? "Mencari lokasi…"}
+                {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (kasar)"}` : galatGps ?? "Mencari lokasi…"}
               </div>
             </div>
           )}
           {galatGps && posisi === null && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galatGps}</div>}
-          <button type="button" onClick={() => void potret()} disabled={!akurasiOk || !!galatKamera} className="min-h-[56px] rounded-2xl bg-[#0F2A52] text-base font-extrabold text-white disabled:opacity-40">
-            Potret
+          {posisi && !akurasiOk && (
+            <div role="status" className="rounded-lg bg-[#FFF4D6] px-3 py-2.5 text-xs leading-relaxed text-[#5E4300]">
+              <b>Akurasi GPS ±{Math.round(posisi.akurasi)} m{akurasiBuruk ? " — terlalu kasar" : ""}.</b> Agar lebih akurat:
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                <li>Pindah ke tempat terbuka (bukan di bawah atap atau di dalam bangunan), lalu tunggu beberapa saat.</li>
+                <li>Aktifkan <b>lokasi tepat</b>: Pengaturan → Aplikasi → SIGAP (atau Chrome) → Izin → Lokasi → Gunakan lokasi tepat.</li>
+                <li>Aktifkan <b>Akurasi Lokasi Google</b>: Pengaturan → Lokasi → Layanan lokasi.</li>
+              </ol>
+              {akurasiBuruk ? (
+                <p className="mt-1.5 font-semibold">Foto belum bisa diambil sampai akurasi lebih baik dari 5.000 m.</p>
+              ) : (
+                <p className="mt-1.5 font-semibold">Bila akurasi tetap kasar, foto tetap bisa diambil setelah {TUNGGU_AKURASI_KASAR_DTK} detik dan akan ditandai untuk diperiksa PML/admin.</p>
+              )}
+            </div>
+          )}
+          <button type="button" onClick={() => void potret()} disabled={!siapPotret || !!galatKamera} className="min-h-[56px] rounded-2xl bg-[#0F2A52] text-base font-extrabold text-white disabled:opacity-40">
+            {akurasiKasar && sisaTunggu > 0 ? `Menunggu GPS lebih akurat… ${sisaTunggu} dtk` : akurasiKasar ? "Potret (akurasi kasar, akan diperiksa)" : "Potret"}
           </button>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Waktu dan lokasi diambil otomatis dari sistem dan dicetak di foto bersama logo SIGAP, kode, dan QR. Tidak bisa diketik atau dipilih dari galeri.</p>
           {diag && <p className="px-1 text-[10px] leading-snug text-[#8592A8]">{diag}</p>}
