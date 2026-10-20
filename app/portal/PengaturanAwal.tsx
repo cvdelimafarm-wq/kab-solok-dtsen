@@ -256,6 +256,11 @@ export default function PengaturanAwal() {
             Izin yang sudah diblokir tidak bisa ditanyakan lagi oleh HP. Buka <b>Pengaturan HP → Aplikasi → SIGAP → Notifikasi</b> (dan <b>Izin → Lokasi</b>), ubah menjadi Izinkan, lalu kembali ke SIGAP. Halaman ini otomatis memeriksa ulang.
           </p>
         )}
+        {sibuk && (
+          <p role="status" className="mt-3 text-[12.5px] font-semibold text-[#1F5FD1]">
+            Menunggu jawaban HP… bila muncul pertanyaan izin, pilih <b>Izinkan</b>.
+          </p>
+        )}
         {catatan && (
           <p role="alert" className="mt-3 text-[12.5px] font-semibold text-[#B42329]">
             {catatan}

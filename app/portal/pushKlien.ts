@@ -20,14 +20,37 @@ export function kunciKeBytes(b64: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
+// (20 Okt 2026) Setiap langkah diberi batas waktu: di HP tertentu (sinyal lemah, layanan Google/penyimpan lambat) sebuah langkah bisa menggantung
+// selamanya sehingga tombol "Aktifkan" tampak tidak bekerja. Kini selalu berakhir dengan pesan yang menunjuk langkah yang macet.
+const BATAS_SERVER_MS = 15_000;
+const BATAS_IZIN_MS = 45_000;
+const BATAS_SW_MS = 12_000;
+const BATAS_LANGGANAN_MS = 20_000;
+
+export function denganBatas<T>(p: Promise<T>, ms: number, pesan: string): Promise<T> {
+  return new Promise<T>((ok, gagal) => {
+    const t = setTimeout(() => gagal(new Error(pesan)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        ok(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        gagal(e);
+      }
+    );
+  });
+}
+
 async function registrasi(): Promise<ServiceWorkerRegistration> {
   const r = (await navigator.serviceWorker.getRegistration("/")) ?? (await navigator.serviceWorker.register("/sw.js", { scope: "/" }));
-  await navigator.serviceWorker.ready;
+  await denganBatas(navigator.serviceWorker.ready, BATAS_SW_MS, "Layanan notifikasi belum siap. Tutup lalu buka ulang aplikasi SIGAP, kemudian coba lagi.");
   return r;
 }
 
 async function kirimLangganan(sub: PushSubscription) {
-  await apiPortal("/api/sigap/push", { method: "POST", body: JSON.stringify({ aksi: "daftar", langganan: sub.toJSON() }) });
+  await denganBatas(apiPortal("/api/sigap/push", { method: "POST", body: JSON.stringify({ aksi: "daftar", langganan: sub.toJSON() }) }), BATAS_SERVER_MS, "Server tidak menjawab saat mendaftarkan HP. Periksa sinyal lalu coba lagi.");
 }
 
 /**
@@ -65,12 +88,29 @@ export async function bacaStatusPush(): Promise<{ status: StatusPush; perangkat:
 export async function aktifkanPush(): Promise<{ ok: boolean; pesan?: string }> {
   try {
     if (!adaDukungan()) return { ok: false, pesan: "Browser ini belum mendukung notifikasi." };
-    const info = await apiPortal<InfoServer>("/api/sigap/push");
+    // (20 Okt 2026) Pertanyaan izin diminta PALING DULU, sinkron di dalam ketukan. Sebelumnya ada `await` ke server lebih dulu; di HP dengan sinyal
+    // lambat gerakan pengguna sudah kedaluwarsa sehingga HP tidak menampilkan pertanyaan izin dan tombol tampak "tidak bisa dipencet".
+    const janjiIzin = Notification.requestPermission();
+    const info = await denganBatas(apiPortal<InfoServer>("/api/sigap/push"), BATAS_SERVER_MS, "Server tidak menjawab. Periksa sinyal lalu coba lagi.");
     if (!info.siap || !info.publik) return { ok: false, pesan: "Notifikasi belum diaktifkan di server. Hubungi admin." };
-    const izin = await Notification.requestPermission();
-    if (izin !== "granted") return { ok: false, pesan: izin === "denied" ? "Izin notifikasi ditolak. Buka pengaturan situs di browser dan izinkan notifikasi." : "Izin notifikasi belum diberikan." };
+    const izin = await denganBatas(janjiIzin, BATAS_IZIN_MS, "HP tidak menampilkan pertanyaan izin. Buka Pengaturan HP → Aplikasi → SIGAP → Notifikasi, aktifkan, lalu kembali ke SIGAP.");
+    if (izin !== "granted") {
+      return {
+        ok: false,
+        pesan:
+          izin === "denied"
+            ? "Izin notifikasi ditolak. Buka Pengaturan HP → Aplikasi → SIGAP → Notifikasi, ubah menjadi Izinkan, lalu kembali ke SIGAP."
+            : "Pertanyaan izin tidak muncul atau ditutup. Buka Pengaturan HP → Aplikasi → SIGAP → Notifikasi, aktifkan, lalu kembali ke SIGAP.",
+      };
+    }
     const reg = await registrasi();
-    const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: kunciKeBytes(info.publik) as BufferSource }));
+    const sub =
+      (await denganBatas(reg.pushManager.getSubscription(), BATAS_LANGGANAN_MS, "Gagal membaca langganan notifikasi. Coba lagi.")) ??
+      (await denganBatas(
+        reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: kunciKeBytes(info.publik) as BufferSource }),
+        BATAS_LANGGANAN_MS,
+        "HP tidak bisa terhubung ke layanan notifikasi (Google). Pastikan internet aktif dan Layanan Google Play berfungsi, lalu coba lagi."
+      ));
     await kirimLangganan(sub);
     return { ok: true };
   } catch (e) {
