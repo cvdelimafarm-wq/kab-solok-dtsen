@@ -4,6 +4,7 @@ import { use as usePromise, createContext, useCallback, useContext, useEffect, u
 import { useRouter } from "next/navigation";
 import LogoSigap from "@/app/components/LogoSigap";
 import { keAtas } from "@/app/portal/navigasi";
+import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
@@ -162,6 +163,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   const [tab, setTab] = useState<Tab>("hari_ini");
   const [unduhFab, setUnduhFab] = useState(false); // (6 Okt 2026) pintasan Unduh SPJ (tombol melayang)
   const [langkah, setLangkah] = useState<number | null>(null); // null = panduan tidak tampil
+  // (21 Okt 2026) Verifikasi lokasi di langkah 1 baru saja berhasil (data belum dimuat ulang): membuka bar langkah di bawah panduan
+  const [verifLokal, setVerifLokal] = useState(false);
   const [, setDetik] = useState(0);
   // (14 Okt 2026) true hanya bila server menjawab 404 "Sesi tidak valid" (token tidak dikenal): hanya itu yang menawarkan "Masuk kembali".
   const [sesiTidakSah, setSesiTidakSah] = useState(false);
@@ -304,8 +307,15 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       setTab("hari_ini");
       muat();
     };
+    // (21 Okt 2026) Bar di bawah panduan: loncat ke langkah mana pun. Langkah 2-5 terbuka setelah lokasi terverifikasi; akun super yang sedang "Lihat sebagai"
+    // (mode simulasi, tidak ada yang tersimpan) boleh meloncat tanpa verifikasi.
+    const bebasLoncat = !!data.akun.verifikasi || verifLokal || bacaLihatSebagai() !== null;
+    const pilihLangkah = (n: number) => {
+      setLangkah(n);
+      window.scrollTo({ top: 0 });
+    };
     return (
-      <main className="min-h-screen bg-[#EEF2F8] pb-16 text-[#13213A]">
+      <main className="min-h-screen bg-[#EEF2F8] pb-28 text-[#13213A]">
         <Header
           kecil={`Langkah ${langkah} dari 5`}
           judulBesar={langkah === 1 ? `Selamat datang, ${namaDepan}` : JUDUL[langkah - 1]}
@@ -319,7 +329,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           </div>
         </Header>
         <div className="relative z-10 mx-auto -mt-7 max-w-lg space-y-3 px-4">
-          {langkah === 1 && <LangkahDataDiri token={token} data={data} onLanjut={async () => { await muat(); lanjut(); }} />}
+          {langkah === 1 && <LangkahDataDiri token={token} data={data} onLanjut={async () => { await muat(); lanjut(); }} onTerverifikasi={() => setVerifLokal(true)} />}
           {langkah === 2 && (
             <>
               <PilihKegiatan data={data} pen={pen} onPilih={setPenId} />
@@ -364,6 +374,18 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             </>
           )}
         </div>
+        <NavLangkah
+          langkah={langkah}
+          bebas={bebasLoncat}
+          onPilih={pilihLangkah}
+          item={[
+            { ikon: "👤", label: "Data diri" },
+            { ikon: "🗓", label: "Hari kerja" },
+            { ikon: wajibLaporan(pen) ? "📝" : "ℹ️", label: wajibLaporan(pen) ? "Laporan" : "Info" },
+            { ikon: "📷", label: "Foto" },
+            { ikon: "📁", label: "Arsip" },
+          ]}
+        />
       </main>
     );
   }
@@ -525,6 +547,34 @@ function InfoLangkah({ ikon, judul: j, isi }: { ikon: string; judul: string; isi
   );
 }
 
+// (21 Okt 2026) Bar navigasi bawah panduan: pintasan ke tiap langkah, langkah terakhir = Arsip.
+function NavLangkah({ langkah, item, bebas, onPilih }: { langkah: number; item: { ikon: string; label: string }[]; bebas: boolean; onPilih: (n: number) => void }) {
+  return (
+    <nav aria-label="Langkah panduan" className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      {!bebas && <p className="bg-amber-50 px-3 py-1 text-center text-[11px] font-semibold text-amber-900">Verifikasi lokasi di langkah 1 dulu untuk membuka langkah lainnya.</p>}
+      <div className="mx-auto flex max-w-lg">
+        {item.map((it, idx) => {
+          const n = idx + 1;
+          const kunci = n > 1 && !bebas;
+          return (
+            <button
+              key={n}
+              type="button"
+              disabled={kunci}
+              aria-current={langkah === n ? "step" : undefined}
+              onClick={() => onPilih(n)}
+              className={`flex flex-1 flex-col items-center gap-0.5 border-t-[3px] pb-2.5 pt-2 text-[11px] font-bold disabled:opacity-40 ${langkah === n ? "border-[#F5B841] text-[#0F3D7A]" : "border-transparent text-[#8592A8]"}`}
+            >
+              <span className="text-[18px] leading-none">{kunci ? "🔒" : it.ikon}</span>
+              {it.label}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 function TombolLangkah({ onKembali, onLanjut, teks, hijau }: { onKembali: () => void; onLanjut: () => void; teks: string; hijau?: boolean }) {
   return (
     <div className="flex gap-2 pt-1">
@@ -559,7 +609,7 @@ function PilihKegiatan({ data, pen, onPilih }: { data: Data; pen: Pen; onPilih: 
 }
 
 // ---------------- Langkah 1 ----------------
-function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data; onLanjut: () => Promise<void> }) {
+function LangkahDataDiri({ token, data, onLanjut, onTerverifikasi }: { token: string; data: Data; onLanjut: () => Promise<void>; onTerverifikasi?: () => void }) {
   // (6 Okt 2026) Tempat tinggal TIDAK diisi ulang -- permintaan user: kecamatan & koordinat diambil dari master,
   // ditampilkan, lalu diverifikasi dgn lokasi HP saat ini. Selisih > 5 km -> alasan wajib.
   const dom = data.akun.domisili;
@@ -572,6 +622,10 @@ function LangkahDataDiri({ token, data, onLanjut }: { token: string; data: Data;
   const [perluAlasan, setPerluAlasan] = useState(false);
   const [alasan, setAlasan] = useState(sudah?.alasan ?? "");
   const [ok, setOk] = useState(!!sudah);
+  useEffect(() => {
+    if (ok) onTerverifikasi?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ok]);
 
   async function kirim(lokasi: { lat: number; lng: number; akurasi: number } | null, teksAlasan: string) {
     setBusy(true);
@@ -794,6 +848,12 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
     return out;
   })();
 
+  // (21 Okt 2026) Rincian ringkasan: terlewat = hari dipilih yang sudah lewat dan tidak lengkap (tidak dibayar; izin susulan masih dihitung potensi);
+  // realisasi = hari dipilih yang lengkap; potensi = hari dipilih yang belum lengkap tetapi masih bisa dilengkapi (hari ini, mendatang, atau izin susulan).
+  const izinSet = new Set(pen.hari.filter((h) => h.kunci === "izin").map((h) => h.tanggal));
+  const nRealisasi = Array.from(pilih).filter((t) => lengkapSet.has(t)).length;
+  const nTerlewat = Array.from(pilih).filter((t) => !lengkapSet.has(t) && t < hariIni && !izinSet.has(t)).length;
+  const nPotensi = pilih.size - nRealisasi - nTerlewat;
   // Hari lewat yang masih dipilih tetapi kosong (tidak ada laporan/foto, tidak lengkap, tidak sedang izin susulan) boleh dilepas dalam mode edit.
   const bisaDilepasLewat = (t: string) => t < hariIni && pilih.has(t) && !terisi.has(t) && !lengkapSet.has(t) && !pen.hari.some((h) => h.tanggal === t && (h.kunci === "izin" || h.laporan_dianggap));
   const bukaEdit = !terkunci && edit;
@@ -928,13 +988,32 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
               </li>
             ))}
           </ul>
-          <div className="mt-1.5 flex justify-between border-t border-[#E3E8F0] pt-1.5 text-[13px]">
-            <span className="text-[#55657D]">
-              {pilih.size} hari × {rupiah(pen.tarif)}
-            </span>
-            <b>{rupiah(pilih.size * pen.tarif)}</b>
-          </div>
-          <p className="text-[10.5px] text-[#8592A8]">Estimasi. Hanya hari dengan {wajibLaporan(pen) ? "laporan + " : ""}{nFoto(pen)} foto lengkap yang dibayar.</p>
+          <dl className="mt-1.5 space-y-1 border-t border-[#E3E8F0] pt-1.5 text-[13px]">
+            <div className="flex justify-between">
+              <dt className="text-[#55657D]">Jumlah hari kerja</dt>
+              <dd className="font-semibold">{pilih.size} hari</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-red-700">Jumlah terlewat (tidak dibayar)</dt>
+              <dd className="font-semibold text-red-700">{nTerlewat} hari</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-[#1E7A4C]">Jumlah realisasi (lengkap)</dt>
+              <dd className="font-semibold text-[#1E7A4C]">{nRealisasi} hari · {rupiah(nRealisasi * pen.tarif)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-[#0F3D7A]">Jumlah potensi (belum lengkap)</dt>
+              <dd className="font-semibold text-[#0F3D7A]">{nPotensi} hari · {rupiah(nPotensi * pen.tarif)}</dd>
+            </div>
+            <div className="flex justify-between border-t border-[#E3E8F0] pt-1.5">
+              <dt className="font-bold text-[#13213A]">
+                Total (realisasi + potensi)
+                <span className="block text-[11px] font-normal text-[#6B7890]">{nRealisasi + nPotensi} hari × {rupiah(pen.tarif)}</span>
+              </dt>
+              <dd className="font-extrabold">{rupiah((nRealisasi + nPotensi) * pen.tarif)}</dd>
+            </div>
+          </dl>
+          <p className="mt-1.5 text-[10.5px] text-[#8592A8]">Estimasi. Hanya hari dengan {wajibLaporan(pen) ? "laporan + " : ""}{nFoto(pen)} foto lengkap yang dibayar.</p>
         </div>
       )}
 
