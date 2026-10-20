@@ -293,10 +293,13 @@ const rentangNama = (k: { mulai: string; selesai: string }) => (k.mulai === k.se
  */
 export async function rakitUnit(
   data: DataSpj,
-  opsi: { jenis: JenisDok[]; kelompokMulai?: string },
+  opsi: { jenis: JenisDok[]; kelompokMulai?: string; tanggal?: string },
   muat: PemuatBerkas
 ): Promise<{ unit: UnitSpj[]; dilewati: string[] }> {
   const pilih = new Set(opsi.jenis);
+  // (20 Okt 2026) Unduh SATU TANGGAL: hanya dokumen per hari (Laporan, Dokumentasi). Surat Tugas, Kwitansi, Visum, dan Surat Pernyataan
+  // berbasis rentang/kelompok tanggal sehingga tidak ikut. Tanggal boleh hari yang belum lengkap (yang sudah ada tetap diunduh).
+  if (opsi.tanggal) for (const j of ["surat_tugas", "kwitansi", "visum", "surat_pernyataan"] as const) pilih.delete(j);
   const unit: UnitSpj[] = [];
   const dilewati: string[] = [];
   const nomorSt = data.suratTugas?.nomor_st || "-";
@@ -304,7 +307,9 @@ export async function rakitUnit(
   const pdf = "application/pdf";
 
   let kelompok = data.kelompok;
-  if (opsi.kelompokMulai) {
+  if (opsi.tanggal) {
+    kelompok = [{ mulai: opsi.tanggal, selesai: opsi.tanggal, jumlah_hari: 1, tanggal: [opsi.tanggal], nominal: 0 }];
+  } else if (opsi.kelompokMulai) {
     kelompok = data.kelompok.filter((k) => k.mulai === opsi.kelompokMulai);
     if (kelompok.length === 0) throw new GalatSpj("Kelompok tanggal tidak ditemukan (mungkin hari dibayar sudah berubah). Muat ulang halaman.", 400);
   }
@@ -472,7 +477,7 @@ function pemuatStorage(db: Db): PemuatBerkas {
 export async function buatSpjPdf(
   db: Db,
   penugasanId: number,
-  opsi: { jenis: JenisDok[]; kelompokMulai?: string; format: "gabungan" | "zip" }
+  opsi: { jenis: JenisDok[]; kelompokMulai?: string; tanggal?: string; format: "gabungan" | "zip" }
 ): Promise<{ bytes: Uint8Array; namaFile: string; contentType: string; dilewati: string[] }> {
   const jenis = URUTAN_JENIS.filter((j) => opsi.jenis.includes(j));
   if (jenis.length === 0) throw new GalatSpj("Pilih minimal 1 jenis dokumen.", 400);
@@ -480,7 +485,7 @@ export async function buatSpjPdf(
   const muat = pemuatStorage(db);
 
   const kelTerpilih = opsi.kelompokMulai ? data.kelompok.find((k) => k.mulai === opsi.kelompokMulai) : undefined;
-  const dasarNama = `SPJ_${amanNama(data.kegiatan.kode || "SIGAP")}_${amanNama(data.akun.nama)}_${kelTerpilih ? rentangNama(kelTerpilih) : "semua"}`;
+  const dasarNama = `SPJ_${amanNama(data.kegiatan.kode || "SIGAP")}_${amanNama(data.akun.nama)}_${opsi.tanggal ? opsi.tanggal : kelTerpilih ? rentangNama(kelTerpilih) : "semua"}`;
   const keluaran = async (unit: { nama: string; bytes: Uint8Array }[], dilewati: string[]) => {
     if (unit.length === 0) {
       throw new GalatSpj(`Belum ada dokumen yang bisa dibuat. ${dilewati.slice(0, 3).join(" ")}`.trim(), 404);
@@ -490,7 +495,7 @@ export async function buatSpjPdf(
   };
 
   // ---- Sudah dikunci: pakai berkas beku bila ada ----
-  if (data.penugasan.dikunci_at && !opsi.kelompokMulai && data.final.length > 0) {
+  if (data.penugasan.dikunci_at && !opsi.kelompokMulai && !opsi.tanggal && data.final.length > 0) {
     const gab = data.final.find((f) => f.jenis === "gabungan");
     if (opsi.format === "gabungan" && jenis.length === URUTAN_JENIS.length && gab) {
       const berkas = await muat(gab.file_path);
@@ -516,7 +521,7 @@ export async function buatSpjPdf(
   }
 
   // ---- Rakit dari data ----
-  const { unit, dilewati } = await rakitUnit(data, { jenis, kelompokMulai: opsi.kelompokMulai }, muat);
+  const { unit, dilewati } = await rakitUnit(data, { jenis, kelompokMulai: opsi.kelompokMulai, tanggal: opsi.tanggal }, muat);
   return keluaran(unit, dilewati);
 }
 

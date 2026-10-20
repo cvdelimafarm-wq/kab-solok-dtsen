@@ -13,7 +13,9 @@ import { ambilJson } from "./klien";
 
 type Mode = { kegiatan: { kegiatan_id: number; mode: string }[] };
 
-export default function FotoKegiatan({ kegiatanId, fallback }: { kegiatanId: number; fallback: ReactNode }) {
+// (20 Okt 2026) `susulan` = tanggal yang sedang dibuka lewat izin susulan (hari lampau). Kamera hanya bisa memotret SEKARANG, jadi foto susulan
+// tidak mungkin lewat kamera: tampilkan unggah foto lama (berkas dari galeri), walau kegiatan bermode kamera. Foto hari ini tetap lewat kamera.
+export default function FotoKegiatan({ kegiatanId, fallback, susulan = false }: { kegiatanId: number; fallback: ReactNode; susulan?: boolean }) {
   const [mode, setMode] = useState<"kamera" | "unggah" | null>(null);
   useEffect(() => {
     let batal = false;
@@ -23,6 +25,7 @@ export default function FotoKegiatan({ kegiatanId, fallback }: { kegiatanId: num
     return () => { batal = true; };
   }, [kegiatanId]);
 
+  if (susulan) return <>{fallback}</>;
   if (mode === null) return <div className="h-24 animate-pulse rounded-2xl bg-[#EEF2F7]" aria-label="Memuat" />;
   if (mode === "unggah") return <>{fallback}</>;
   return (

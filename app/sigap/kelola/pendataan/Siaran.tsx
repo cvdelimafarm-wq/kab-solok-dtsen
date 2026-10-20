@@ -20,6 +20,31 @@ type Hasil = { akun: number; tanpa_notifikasi: number; perangkat: number; terkir
 type Templat = { nama: string; judul: string; isi: string; mJudul: string; mIsi: string; tLabel: string; tUrl: string; url: string; jenis: JenisPengumuman };
 const TEMPLAT: Templat[] = [
   {
+    // (20 Okt 2026) PENGUMUMAN malam 20 Okt: jendela susulan foto + laporan dibuka OTOMATIS Rabu 21 Okt 2026 06.00-10.00 WIB (pg_cron: sigap_buka_jendela_susulan_21okt).
+    // Tanpa tombol: jendela belum ada malam ini, jadi menu Perbaiki administrasi masih kosong.
+    nama: "Jendela susulan foto & laporan: PENGUMUMAN (21 Okt 2026, 06.00-10.00)",
+    judul: "Besok 06.00–10.00: lengkapi foto yang terlewat",
+    isi: "Rabu 21 Okt, 06.00–10.00 WIB: kesempatan sekali melengkapi foto dan laporan yang terlewat. Siapkan fotonya dari sekarang. Ketuk untuk membaca.",
+    mJudul: "LENGKAPI FOTO YANG TERLEWAT",
+    mIsi: "**Kesempatan melengkapi foto dan laporan yang terlewat.**\n\n==Dibuka besok, Rabu 21 Oktober 2026, pukul 06.00–10.00 WIB.== Setelah pukul 10.00 akses ditutup otomatis.\n\n- Berlaku untuk ==hari kerja sejak awal pendataan sampai 20 Oktober 2026== yang foto atau laporannya belum lengkap, termasuk hari ini bagi yang belum memakai Kamera SIGAP\n- ==Siapkan foto dari sekarang==: kumpulkan foto yang masih ada di galeri HP dan pastikan tanggal pengambilannya\n- Foto tanggal yang terlewat ==diunggah dari galeri== (bukan lewat kamera). Foto tanggal 21 Oktober dan seterusnya tetap lewat Kamera SIGAP\n- Laporan dilengkapi dengan menandai status KK di Lembar Pendataan (mode perbaikan), hanya untuk KK yang belum punya hasil\n- ==Kesempatan hanya sekali==. Tanggal yang masih belum lengkap setelah pukul 10.00 tidak masuk Kwitansi\n\nPukul 06.00, buka menu **Perbaiki administrasi** di aplikasi untuk memulai.",
+    tLabel: "",
+    tUrl: "",
+    url: "/",
+    jenis: "perhatian",
+  },
+  {
+    // (20 Okt 2026) PEMBUKAAN pagi 21 Okt (kirim ~06.00, boleh push saja): jendela sudah aktif; tombol ke menu Perbaiki administrasi.
+    nama: "Jendela susulan foto & laporan: SUDAH DIBUKA (kirim 06.00)",
+    judul: "Dibuka sampai 10.00 WIB: lengkapi foto yang terlewat",
+    isi: "Kesempatan sekali melengkapi foto dan laporan yang terlewat sudah dibuka sampai pukul 10.00 WIB hari ini. Ketuk untuk membuka Perbaiki administrasi.",
+    mJudul: "JENDELA SUSULAN SUDAH DIBUKA",
+    mIsi: "**Jendela melengkapi foto dan laporan sudah dibuka.**\n\n==Berlaku sampai pukul 10.00 WIB hari ini, hanya sekali.==\n\n- Foto tanggal yang terlewat diunggah dari galeri lewat menu **Perbaiki administrasi**\n- Laporan dilengkapi lewat Lembar Pendataan (mode perbaikan)\n- Setelah pukul 10.00 akses ditutup otomatis",
+    tLabel: "Perbaiki administrasi",
+    tUrl: "/sigap/perbaikan",
+    url: "/sigap/perbaikan",
+    jenis: "perhatian",
+  },
+  {
     // (20 Okt 2026) Perubahan target harian 45 -> 60 poin, berlaku mulai 20 Okt 2026 (tidak berlaku mundur; poin jarak tetap 1 per km). Modal tombolnya ke Lembar Pendataan (PML/PPL).
     nama: "Perubahan target harian (mulai 20 Okt 2026)",
     judul: "Target harian jadi 60 poin, berlaku 20 Okt 2026",

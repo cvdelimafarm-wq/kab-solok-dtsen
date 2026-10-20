@@ -1,0 +1,6 @@
+-- SUDAH DIJALANKAN di Supabase (migrasi "jendela_susulan_21okt_2026") pada 20 Okt 2026. Salinan untuk arsip repo.
+-- Jendela susulan foto + laporan Pendataan Pascabencana (kegiatan_id = 1): buka otomatis 21 Okt 2026 06.00 WIB (= 20 Okt 23.00 UTC), hangus 10.00 WIB (= 03.00 UTC).
+-- Pelaksana: pg_cron job 'jendela-susulan-21okt' -> public.sigap_buka_jendela_susulan_21okt(). Menambah baris sigap_izin_susulan; tidak menghapus data.
+-- Batalkan sebelum 06.00:  select cron.unschedule('jendela-susulan-21okt');
+-- Tutup lebih awal:        update sigap_izin_susulan set berlaku_sampai = now() where alasan = 'Jendela susulan 21 Okt 2026 06.00-10.00 WIB (permintaan admin)' and berlaku_sampai > now();
+-- Uji kering tanpa menunggu (menulis baris!): select public.sigap_buka_jendela_susulan_21okt(true);  -- hati-hati: membuka jendela segera

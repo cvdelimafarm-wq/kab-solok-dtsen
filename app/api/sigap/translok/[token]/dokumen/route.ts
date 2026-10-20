@@ -1,7 +1,8 @@
 // app/api/sigap/translok/[token]/dokumen/route.ts
 //
 // (5 Okt 2026) Unduh SPJ SIGAP Transport Lokal oleh petugas -- permintaan user.
-// GET ?penugasan_id=&jenis=kwitansi,visum,...&kelompok=<tanggal_mulai>|semua&format=gabungan|zip
+// GET ?penugasan_id=&jenis=kwitansi,visum,...&kelompok=<tanggal_mulai>|semua&tanggal=<YYYY-MM-DD>&format=gabungan|zip
+//   (20 Okt 2026) `tanggal` = unduh SATU hari: hanya Laporan & Dokumentasi hari itu (mengabaikan `kelompok`).
 //   -> file PDF gabungan / ZIP per file (Content-Disposition attachment).
 // Token = sigap_akun.token; penugasan harus milik akun tsb (penugasanAkun: aktif & kegiatan aktif).
 // Dokumen dirakit dari data saat diminta (lib/sigapDokumen.ts); bila sudah dikunci admin, unduhan
@@ -39,9 +40,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ token: 
     if (jenis.length === 0) return NextResponse.json({ error: "Pilih minimal 1 jenis dokumen." }, { status: 400 });
     const kel = sp.get("kelompok");
     if (kel && kel !== "semua" && !tanggalValid(kel)) return NextResponse.json({ error: "Kelompok tanggal tidak valid." }, { status: 400 });
+    const tgl = sp.get("tanggal");
+    if (tgl && !tanggalValid(tgl)) return NextResponse.json({ error: "Tanggal tidak valid." }, { status: 400 });
     const format = sp.get("format") === "zip" ? "zip" : "gabungan";
 
-    const hasil = await buatSpjPdf(db, penugasanId, { jenis, kelompokMulai: kel && kel !== "semua" ? kel : undefined, format });
+    const hasil = await buatSpjPdf(db, penugasanId, { jenis, kelompokMulai: kel && kel !== "semua" ? kel : undefined, tanggal: tgl || undefined, format });
     return new NextResponse(Buffer.from(hasil.bytes), { status: 200, headers: headerBerkas(hasil, "attachment") });
   } catch (err) {
     if (err instanceof GalatSpj) return NextResponse.json({ error: err.message }, { status: err.status });

@@ -10,6 +10,7 @@ import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
 import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
+import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 
@@ -1129,7 +1130,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>
@@ -1379,12 +1380,30 @@ function TombolUnduhMelayang({ onKlik }: { onKlik: () => void }) {
 }
 
 function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onTutup: () => void }) {
+  // (20 Okt 2026) permintaan user: utamakan unduh TANGGAL HARI INI / HARI LENGKAP TERAKHIR (cepat, hanya Laporan & Dokumentasi hari itu);
+  // rentang (Semua / kelompok tanggal) dipilih belakangan lewat "Pilih rentang lain".
+  const pil = pilihanTanggalUnduh(pen.hari.map((h) => ({ tanggal: h.tanggal, lengkap: h.lengkap })), hariIni);
+  const [tanggalPilih, setTanggalPilih] = useState<string | null>(pil.bawaan);
   const [rentangPilih, setRentangPilih] = useState<string>("semua");
-  const [jenis, setJenis] = useState<Set<string>>(new Set(JENIS_DOK.map((j) => j.k)));
+  const [bukaRentang, setBukaRentang] = useState<boolean>(pil.bawaan === null);
+  const perHari = tanggalPilih !== null;
+  const jenisPerHari = JENIS_PER_HARI as readonly string[];
+  const [jenis, setJenis] = useState<Set<string>>(new Set(pil.bawaan ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
   const [format, setFormat] = useState<"gabungan" | "zip">("gabungan");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);
-  void hariIni;
+  const pilihHari = (t: string) => {
+    setTanggalPilih(t);
+    setJenis((s) => {
+      const n = new Set(Array.from(s).filter((k) => jenisPerHari.includes(k)));
+      return n.size ? n : new Set(jenisPerHari);
+    });
+  };
+  const pilihRentang = (r: string) => {
+    if (tanggalPilih !== null) setJenis(new Set(JENIS_DOK.map((j) => j.k)));
+    setTanggalPilih(null);
+    setRentangPilih(r);
+  };
   // (5 Okt 2026) Unduh SPJ aktif -- permintaan user: memanggil /api/sigap/translok/<token>/dokumen,
   // hasil (PDF gabungan / ZIP) diunduh lewat object URL dgn nama file dari header Content-Disposition.
   const [proses, setProses] = useState(false);
@@ -1401,9 +1420,10 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
       const q = new URLSearchParams({
         penugasan_id: String(pen.id),
         jenis: JENIS_DOK.filter((j) => jenis.has(j.k)).map((j) => j.k).join(","),
-        kelompok: rentangPilih,
+        kelompok: perHari ? "semua" : rentangPilih,
         format,
       });
+      if (tanggalPilih) q.set("tanggal", tanggalPilih);
       const res = await fetch(`/api/sigap/translok/${encodeURIComponent(token)}/dokumen?${q.toString()}`, { cache: "no-store" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -1456,32 +1476,61 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
 
         <div className="mt-3 rounded-2xl bg-white p-3.5">
           <p className="text-[12px] font-bold text-[#6B7890]">1 · Tanggal</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <button type="button" className={CHIP(rentangPilih === "semua")} onClick={() => setRentangPilih("semua")}>
-              Semua
-            </button>
-            {pen.kelompok.map((k) => (
-              <button key={k.mulai} type="button" className={CHIP(rentangPilih === k.mulai)} onClick={() => setRentangPilih(k.mulai)}>
-                {rentangPendek(k.mulai, k.selesai)}
-              </button>
-            ))}
-          </div>
-          <p className="mt-1.5 text-[11px] text-[#8592A8]">Kelompok tanggal = dasar Kwitansi, Visum &amp; Surat Pernyataan.</p>
+          {(pil.hariIni || pil.terakhirLengkap) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {pil.hariIni && (
+                <button type="button" className={CHIP(tanggalPilih === pil.hariIni)} onClick={() => pilihHari(pil.hariIni as string)}>
+                  Hari ini · {tglPendek(pil.hariIni)}
+                  {!pil.hariIniLengkap && <span className="font-semibold opacity-80"> (belum lengkap)</span>}
+                </button>
+              )}
+              {pil.terakhirLengkap && pil.terakhirLengkap !== pil.hariIni && (
+                <button type="button" className={CHIP(tanggalPilih === pil.terakhirLengkap)} onClick={() => pilihHari(pil.terakhirLengkap as string)}>
+                  Terakhir lengkap · {tglPendek(pil.terakhirLengkap)}
+                </button>
+              )}
+            </div>
+          )}
+          {perHari && <p className="mt-1.5 text-[11px] text-[#8592A8]">Satu hari: Laporan &amp; Dokumentasi tanggal itu saja (cepat). Surat Tugas, Kwitansi, Visum &amp; Surat Pernyataan ada di rentang.</p>}
+          <button type="button" onClick={() => setBukaRentang((v) => !v)} className="mt-2 text-[12px] font-bold text-[#0F3D7A]">
+            {bukaRentang ? "Sembunyikan rentang ▴" : "Pilih rentang lain ▾"}
+          </button>
+          {bukaRentang && (
+            <>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button type="button" className={CHIP(!perHari && rentangPilih === "semua")} onClick={() => pilihRentang("semua")}>
+                  Semua
+                </button>
+                {pen.kelompok.map((k) => (
+                  <button key={k.mulai} type="button" className={CHIP(!perHari && rentangPilih === k.mulai)} onClick={() => pilihRentang(k.mulai)}>
+                    {rentangPendek(k.mulai, k.selesai)}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] text-[#8592A8]">Kelompok tanggal = dasar Kwitansi, Visum &amp; Surat Pernyataan.</p>
+            </>
+          )}
         </div>
 
         <div className="mt-2.5 rounded-2xl bg-white p-3.5">
           <div className="flex items-center justify-between">
             <p className="text-[12px] font-bold text-[#6B7890]">2 · Jenis dokumen</p>
-            <button type="button" onClick={() => setJenis(new Set(jenis.size === JENIS_DOK.length ? [] : JENIS_DOK.map((j) => j.k)))} className="text-[11.5px] font-bold text-[#0F3D7A]">
-              {jenis.size === JENIS_DOK.length ? "Kosongkan" : "Pilih semua"}
+            <button type="button" onClick={() => {
+                const semua = JENIS_DOK.map((j) => j.k as string).filter((k) => !perHari || jenisPerHari.includes(k));
+                setJenis(new Set(jenis.size === semua.length ? [] : semua));
+              }}
+              className="text-[11.5px] font-bold text-[#0F3D7A]"
+            >
+              {jenis.size === JENIS_DOK.filter((j) => !perHari || jenisPerHari.includes(j.k)).length ? "Kosongkan" : "Pilih semua"}
             </button>
           </div>
           <div className="mt-1">
             {JENIS_DOK.map((j) => (
-              <label key={j.k} className="flex items-center gap-2.5 py-1.5 text-[13.5px]">
-                <input type="checkbox" checked={jenis.has(j.k)} onChange={() => ubah(j.k)} className="h-4 w-4 accent-[#0F3D7A]" />
+              <label key={j.k} className={`flex items-center gap-2.5 py-1.5 text-[13.5px] ${perHari && !jenisPerHari.includes(j.k) ? "opacity-40" : ""}`}>
+                <input type="checkbox" checked={jenis.has(j.k)} disabled={perHari && !jenisPerHari.includes(j.k)} onChange={() => ubah(j.k)} className="h-4 w-4 accent-[#0F3D7A]" />
                 <span>
                   {j.ikon} {j.nama}
+                  {perHari && !jenisPerHari.includes(j.k) && <span className="text-[11px] font-semibold"> · per rentang</span>}
                 </span>
               </label>
             ))}
