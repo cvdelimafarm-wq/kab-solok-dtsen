@@ -180,7 +180,9 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
 
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      <div ref={wadah} className="absolute inset-0" />
+      {/* (20 Okt 2026) PERBAIKAN kanvas 0 px: maplibre-gl.css memberi kelas .maplibregl-map `position: relative` yang mengalahkan kelas Tailwind `absolute`,
+          sehingga wadah tingginya 0 dan peta tidak tampak walau semua berkas termuat. Gaya sebaris tidak bisa dikalahkan CSS pustaka. */}
+      <div ref={wadah} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
       <span className="absolute bottom-1 right-1.5 rounded bg-white/80 px-1 text-[8.5px] font-semibold text-[#3B4558]">© OpenStreetMap · Protomaps</span>
     </div>
   );
