@@ -9,6 +9,7 @@
 // Tanpa sinyal: foto disimpan di IndexedDB dan terkirim otomatis saat ada sinyal.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
@@ -92,6 +93,14 @@ export default function KameraSigap({
   const [antre, setAntre] = useState(0);
   const [hadap, setHadap] = useState<Hadap>("environment"); // kamera belakang dulu; tombol Putar kamera untuk depan
   const [banyakKamera, setBanyakKamera] = useState<boolean | null>(null); // null = belum diketahui (tombol tetap tampil)
+  // (21 Okt 2026) Landscape otomatis ala kamera cap waktu: aplikasi tetap terkunci tegak, arah HP dibaca dari sensor gerak (gravitasi).
+  // miring: 0 = HP tegak; 1 = HP diputar ke kiri (atas HP ke kiri); -1 = HP diputar ke kanan. Tidak bergantung pada putar otomatis (auto-rotate) di HP.
+  const [miring, setMiring] = useState<0 | 1 | -1>(0);
+  const [layarLebar, setLayarLebar] = useState(false); // layar sendiri sudah landscape (peramban biasa dengan putar otomatis): tidak perlu diputar manual
+  const izinGerakRef = useRef(false);
+  const gerakAdaRef = useRef(false);
+  const diagRef = useRef<{ sumber: string; n: number; x: number; y: number }>({ sumber: "-", n: 0, x: 0, y: 0 });
+  const [diag, setDiag] = useState("");
 
   const muatToken = useCallback(async () => {
     const mono = performance.now();
@@ -139,16 +148,102 @@ export default function KameraSigap({
     void hitungAntre();
   }, [hitungAntre]);
 
-  // (21 Okt 2026) Kamera boleh landscape: manifest PWA mengunci aplikasi tegak (portrait) untuk semua halaman; di halaman ini kunci dibuka (lock "any")
-  // dan dipulihkan ke tegak saat halaman ditinggalkan. Tidak semua peramban mengizinkan (harus aplikasi terpasang/layar penuh): gagal = diabaikan.
+  // Arah layar (bila layar sendiri berputar, sensor tidak dipakai)
   useEffect(() => {
-    const o = (typeof screen !== "undefined" ? screen.orientation : undefined) as unknown as { lock?: (t: string) => Promise<void> } | undefined;
-    if (!o?.lock) return;
-    o.lock("any").catch(() => undefined);
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(orientation: landscape)");
+    const baca = () => setLayarLebar(mq.matches);
+    baca();
+    mq.addEventListener?.("change", baca);
+    return () => mq.removeEventListener?.("change", baca);
+  }, []);
+
+  // Sensor arah HP: gaya berat pada sumbu x/y. Tegak: y ~ +9,8 (Android); diputar ke kiri: x ~ +9,8; ke kanan: x ~ -9,8 (iOS bertanda terbalik).
+  // Dihaluskan, dengan ambang + histeresis supaya tidak bolak-balik; HP rebah di meja mempertahankan arah terakhir.
+  // Sumber berurutan: devicemotion; bila tidak ada kabar dalam 1,5 dtk -> deviceorientation (beta/gamma) dan Accelerometer (Generic Sensor API).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    let sx = 0;
+    let sy = 0;
+    let awal = true;
+    const terapkan = (gx: number, gy: number, sumber: string) => {
+      if (awal) {
+        sx = gx;
+        sy = gy;
+        awal = false;
+      } else {
+        sx = sx * 0.8 + gx * 0.2;
+        sy = sy * 0.8 + gy * 0.2;
+      }
+      diagRef.current = { sumber, n: diagRef.current.n + 1, x: sx, y: sy };
+      const ax = Math.abs(sx);
+      const ay = Math.abs(sy);
+      if (ax > 6.5 && ax > ay + 2) setMiring(sx > 0 ? 1 : -1);
+      else if (ay > 6.5 && ay > ax + 2) setMiring(0);
+    };
+    const onGerak = (e: DeviceMotionEvent) => {
+      const g = e.accelerationIncludingGravity;
+      if (!g || typeof g.x !== "number" || typeof g.y !== "number") return;
+      gerakAdaRef.current = true;
+      terapkan(ios ? -g.x : g.x, ios ? -g.y : g.y, "devicemotion");
+    };
+    const onArah = (e: DeviceOrientationEvent) => {
+      if (gerakAdaRef.current || typeof e.beta !== "number" || typeof e.gamma !== "number") return;
+      const be = (e.beta * Math.PI) / 180;
+      const ga = (e.gamma * Math.PI) / 180;
+      terapkan(-9.8 * Math.sin(ga), 9.8 * Math.cos(ga) * Math.sin(be), "deviceorientation");
+    };
+    window.addEventListener("devicemotion", onGerak);
+    let sensorAcc: { stop?: () => void } | null = null;
+    const timer = setTimeout(() => {
+      if (gerakAdaRef.current) return;
+      window.addEventListener("deviceorientation", onArah);
+      try {
+        const Acc = (window as unknown as { Accelerometer?: new (o: { frequency: number }) => { x: number | null; y: number | null; start: () => void; stop: () => void; addEventListener: (n: string, f: () => void) => void } }).Accelerometer;
+        if (Acc) {
+          const a = new Acc({ frequency: 10 });
+          a.addEventListener("reading", () => {
+            if (gerakAdaRef.current || diagRef.current.sumber === "deviceorientation" || a.x == null || a.y == null) return;
+            terapkan(a.x, a.y, "accelerometer");
+          });
+          a.start();
+          sensorAcc = a;
+        }
+      } catch {
+        /* tidak diizinkan: abaikan */
+      }
+    }, 1500);
     return () => {
-      o.lock?.("portrait").catch(() => undefined);
+      clearTimeout(timer);
+      window.removeEventListener("devicemotion", onGerak);
+      window.removeEventListener("deviceorientation", onArah);
+      try {
+        sensorAcc?.stop?.();
+      } catch {
+        /* abaikan */
+      }
     };
   }, []);
+
+  // Baris diagnosa kecil (sementara) di bawah pratinjau: versi kode, sumber sensor, arah layar, ukuran bingkai kamera
+  useEffect(() => {
+    const t = setInterval(() => {
+      const v = videoRef.current;
+      const d = diagRef.current;
+      const tipe = typeof screen !== "undefined" ? screen.orientation?.type ?? "?" : "?";
+      setDiag(`v3 · sensor ${d.n ? `${d.sumber} (${d.n}) x=${d.x.toFixed(1)} y=${d.y.toFixed(1)}` : "tidak ada kabar"} · layar ${tipe} · bingkai ${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`);
+    }, 700);
+    return () => clearInterval(t);
+  }, []);
+
+  // iOS 13+ meminta izin sensor gerak lewat ketukan pengguna (Android tidak perlu)
+  function mintaIzinGerak() {
+    if (izinGerakRef.current) return;
+    izinGerakRef.current = true;
+    const D = (typeof DeviceMotionEvent !== "undefined" ? DeviceMotionEvent : undefined) as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    D?.requestPermission?.().catch(() => undefined);
+  }
 
   // Kamera (diulang saat depan/belakang diganti)
   useEffect(() => {
@@ -185,13 +280,16 @@ export default function KameraSigap({
   }, [hadap]);
 
   // Setelah "Ulangi"/"Foto lagi" elemen video dibuat ulang: sambungkan lagi ke aliran kamera yang masih menyala
+  // (juga saat tampilan landscape penuh layar dibuka/ditutup: elemen video berpindah tempat)
+  const putar: 0 | 1 | -1 = layarLebar ? 0 : miring;
+  const landPenuh = putar !== 0 && !galatKamera;
   useEffect(() => {
     const v = videoRef.current;
     if (!jepretan && v && aliranRef.current && v.srcObject !== aliranRef.current) {
       v.srcObject = aliranRef.current;
       void v.play().catch(() => undefined);
     }
-  }, [jepretan]);
+  }, [jepretan, landPenuh]);
 
   // GPS, token waktu, dan antrean tanpa sinyal
   useEffect(() => {
@@ -231,9 +329,23 @@ export default function KameraSigap({
     const mono = performance.now();
     const wall = Date.now();
     const kanvas = document.createElement("canvas");
-    kanvas.width = v.videoWidth;
-    kanvas.height = v.videoHeight;
-    kanvas.getContext("2d")?.drawImage(v, 0, 0);
+    const ctx = kanvas.getContext("2d");
+    // HP dipegang miring tetapi layar terkunci tegak: bingkai kamera tetap tegak, jadi diputar 90 derajat agar foto jadi landscape dan atasnya benar
+    if (putar !== 0 && v.videoHeight > v.videoWidth) {
+      kanvas.width = v.videoHeight;
+      kanvas.height = v.videoWidth;
+      if (putar === 1) {
+        ctx?.translate(kanvas.width, 0);
+        ctx?.rotate(Math.PI / 2);
+      } else {
+        ctx?.translate(0, kanvas.height);
+        ctx?.rotate(-Math.PI / 2);
+      }
+    } else {
+      kanvas.width = v.videoWidth;
+      kanvas.height = v.videoHeight;
+    }
+    ctx?.drawImage(v, 0, 0);
     const blob = await new Promise<Blob | null>((ok) => kanvas.toBlob(ok, "image/jpeg", 0.9));
     if (!blob) return setPesan({ jenis: "galat", teks: "Gagal mengambil gambar. Coba lagi." });
     const t = tokenRef.current;
@@ -318,7 +430,7 @@ export default function KameraSigap({
   if (!bacaSesi()) return <div className="p-4 text-sm">Sesi tidak ditemukan. Masuk dulu.</div>;
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-3 pb-6 landscape:max-w-xl">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 pb-6 landscape:max-w-xl" onPointerDown={mintaIzinGerak}>
       <div className="px-1">
         <div className="text-xs font-bold tracking-wide text-[#8A6200]">KAMERA SIGAP</div>
         <div className="text-base font-extrabold text-[#0F2A52]">{namaKegiatan}</div>
@@ -332,37 +444,77 @@ export default function KameraSigap({
 
       {!jepretan && (
         <>
-          <div className="relative overflow-hidden rounded-2xl bg-black">
-            {galatKamera ? (
-              <div role="alert" className="p-6 text-sm text-white">{galatKamera}</div>
-            ) : (
-              <video ref={videoRef} playsInline muted className={`aspect-[3/4] w-full object-cover landscape:aspect-video ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
-            )}
-            {banyakKamera !== false && (
-              <button
-                type="button"
-                onClick={() => setHadap((h) => (h === "environment" ? "user" : "environment"))}
-                aria-label={hadap === "environment" ? "Ganti ke kamera depan" : "Ganti ke kamera belakang"}
-                className="absolute right-2 top-2 flex min-h-[40px] items-center gap-1.5 rounded-full bg-black/55 px-3 text-xs font-bold text-white active:bg-black/75"
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
-                  <path d="M21 3v5h-5" />
-                  <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
-                  <path d="M3 21v-5h5" />
-                </svg>
-                {hadap === "environment" ? "Kamera depan" : "Kamera belakang"}
-              </button>
-            )}
-            <div className={`absolute left-2 top-2 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
-              {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (terlalu kasar)"}` : galatGps ?? "Mencari lokasi…"}
+          {landPenuh ? (
+            createPortal(
+              <div className="fixed inset-0 z-[10000] bg-black" data-kamera-landscape="1">
+                {/* Bingkai kamera apa adanya (tegak terhadap layar = benar secara fisik); bentuk 9:16 sama dengan foto yang dipotret (diputar jadi 16:9) */}
+                <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-contain ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
+                {/* Panggung kontrol diputar searah HP supaya tulisan dan tombol terbaca tegak oleh pengguna */}
+                <div
+                  className="pointer-events-none absolute left-0 top-0"
+                  style={{ width: "100dvh", height: "100vw", transformOrigin: "top left", transform: putar === 1 ? "rotate(90deg) translateY(-100%)" : "rotate(-90deg) translateX(-100%)" }}
+                >
+                  <div className={`pointer-events-auto absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
+                    {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (terlalu kasar)"}` : galatGps ?? "Mencari lokasi…"}
+                  </div>
+                  {banyakKamera !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setHadap((h) => (h === "environment" ? "user" : "environment"))}
+                      aria-label={hadap === "environment" ? "Ganti ke kamera depan" : "Ganti ke kamera belakang"}
+                      className="pointer-events-auto absolute left-3 top-14 flex min-h-[40px] items-center gap-1.5 rounded-full bg-black/55 px-3 text-xs font-bold text-white active:bg-black/75"
+                    >
+                      {hadap === "environment" ? "Kamera depan" : "Kamera belakang"}
+                    </button>
+                  )}
+                  {diag && <div className="pointer-events-none absolute bottom-2 left-3 right-24 text-[10px] leading-snug text-white/70">{diag}</div>}
+                  <button
+                    type="button"
+                    onClick={() => void potret()}
+                    disabled={!akurasiOk}
+                    aria-label="Potret"
+                    className="pointer-events-auto absolute right-5 top-1/2 flex h-[72px] w-[72px] -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-white/25 disabled:opacity-40"
+                  >
+                    <span className="h-[52px] w-[52px] rounded-full bg-white" />
+                  </button>
+                </div>
+              </div>,
+              document.body
+            )
+          ) : (
+            <div className="relative overflow-hidden rounded-2xl bg-black">
+              {galatKamera ? (
+                <div role="alert" className="p-6 text-sm text-white">{galatKamera}</div>
+              ) : (
+                <video ref={videoRef} playsInline muted className={`aspect-[3/4] w-full object-cover landscape:aspect-video ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
+              )}
+              {banyakKamera !== false && (
+                <button
+                  type="button"
+                  onClick={() => setHadap((h) => (h === "environment" ? "user" : "environment"))}
+                  aria-label={hadap === "environment" ? "Ganti ke kamera depan" : "Ganti ke kamera belakang"}
+                  className="absolute right-2 top-2 flex min-h-[40px] items-center gap-1.5 rounded-full bg-black/55 px-3 text-xs font-bold text-white active:bg-black/75"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+                    <path d="M3 21v-5h5" />
+                  </svg>
+                  {hadap === "environment" ? "Kamera depan" : "Kamera belakang"}
+                </button>
+              )}
+              <div className={`absolute left-2 top-2 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
+                {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (terlalu kasar)"}` : galatGps ?? "Mencari lokasi…"}
+              </div>
             </div>
-          </div>
+          )}
           {galatGps && posisi === null && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galatGps}</div>}
           <button type="button" onClick={() => void potret()} disabled={!akurasiOk || !!galatKamera} className="min-h-[56px] rounded-2xl bg-[#0F2A52] text-base font-extrabold text-white disabled:opacity-40">
             Potret
           </button>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Waktu dan lokasi diambil otomatis dari sistem dan dicetak di foto bersama logo SIGAP, kode, dan QR. Tidak bisa diketik atau dipilih dari galeri.</p>
+          {diag && <p className="px-1 text-[10px] leading-snug text-[#8592A8]">{diag}</p>}
         </>
       )}
 
