@@ -20,6 +20,8 @@ export type StatusDasar = "memuat" | "siap" | "gagal";
 const FONT_BIASA = "Plus Jakarta Sans Regular";
 const FONT_TEBAL = "Plus Jakarta Sans Bold";
 const BATAS_MUAT_MS = 20_000;
+/** Salinan dist/maplibre-gl-worker.mjs; nama memuat versi pustaka. Ganti keduanya bersama bila maplibre-gl dinaikkan (lib/__tests__/petaDasarWorker.test.ts menjaga ini). */
+const URL_WORKER = "/peta/maplibre-gl-worker-6.15.0.mjs";
 
 type Props = {
   proj: Proyeksi;
@@ -63,6 +65,10 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
         if (batal || !wadah.current) return;
         // pustaka CommonJS/UMD: bergantung pada pemaket, anggotanya ada di modul itu sendiri atau di .default
         const ml = ((modMl as unknown as { Map?: unknown }).Map ? modMl : (modMl as unknown as { default: typeof modMl }).default) as typeof modMl;
+        // (20 Okt 2026) PERBAIKAN peta jalan tidak muncul: maplibre-gl 6 mencari berkas worker-nya dari alamat modulnya sendiri (import.meta.url) dan hanya
+        // menerimanya bila berawalan http(s). Setelah dipaketkan Next.js alamat itu bukan http(s), worker tidak ditemukan ("Worker failed to load") dan peta
+        // tidak pernah selesai dimuat (20 dtk lalu kembali ke titik). Alamat worker diberikan eksplisit dari /public (salinan persis dist/maplibre-gl-worker.mjs).
+        ml.setWorkerUrl(URL_WORKER);
 
         const protokol = new pm.Protocol();
         ml.addProtocol("pmtiles", protokol.tile);
@@ -114,6 +120,12 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
           const pesan = String((e as unknown as { error?: { name?: string; message?: string } }).error?.message ?? "");
           const nama = String((e as unknown as { error?: { name?: string } }).error?.name ?? "");
           if (nama === "AbortError" || /abort/i.test(pesan)) return; // permintaan ubin dibatalkan karena kamera bergeser: bukan kegagalan
+          if (/worker/i.test(pesan) && !selesai && !batal) {
+            // worker tidak termuat: peta tidak akan pernah siap, jangan menunggu 20 dtk
+            selesai = true;
+            kabar.current("gagal", `worker: ${pesan}`.slice(0, 90));
+            return;
+          }
           if (!selesai && sid === "protomaps" && !batal) {
             selesai = true;
             kabar.current("gagal", `ubin: ${pesan || nama || "tak dikenal"}`.slice(0, 90));

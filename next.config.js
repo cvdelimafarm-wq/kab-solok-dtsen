@@ -45,6 +45,8 @@ const nextConfig = {
         source,
         headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
       })),
+      // (20 Okt 2026) Worker peta jalan (salinan maplibre-gl, nama memuat versi) -- tidak berubah untuk nama yang sama, simpan lama di HP (juga membantu saat luring).
+      { source: "/peta/maplibre-gl-worker-6.15.0.mjs", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       { source: "/manifest.webmanifest", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=86400" }] },
       {
         source: "/sw.js",
