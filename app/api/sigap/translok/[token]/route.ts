@@ -231,17 +231,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       const mintaSet = new Set(diminta);
       const tambah = diminta.filter((t) => !lamaSet.has(t));
       const hapus = Array.from(lamaSet).filter((t) => !mintaSet.has(t));
-      // Tanggal lewat tidak bisa DITAMBAH. (21 Okt 2026, permintaan user: tombol "Edit hari kerja") Hari lewat yang KOSONG (terlewat, tidak dibayar)
-      // boleh DILEPAS supaya kuota kembali; hari lewat yang berisi laporan/foto, dianggap lengkap (identifikasi/pendataan), atau sedang izin susulan tetap terkunci.
+      // Tanggal lewat tidak bisa DITAMBAH. (21 Okt 2026, permintaan user: tombol "Edit hari kerja") Hari lewat yang TERLEWAT (belum lengkap, tidak dibayar)
+      // boleh DILEPAS supaya kuota kembali; hari lewat yang sudah lengkap atau sedang izin susulan tetap terkunci.
       const tambahLewat = tambah.filter((t) => t < hariIni);
       if (tambahLewat.length) return NextResponse.json({ error: `Tanggal yang sudah lewat tidak bisa ditambah: ${tambahLewat.join(", ")}.` }, { status: 400 });
       const hapusLewat = hapus.filter((t) => t < hariIni);
       if (pen.maks_hari && diminta.length > pen.maks_hari) return NextResponse.json({ error: `Melebihi maksimal ${pen.maks_hari} hari untuk peran Anda.` }, { status: 400 });
-      // Hari yg sudah ada laporan/foto tidak bisa dilepas.
-      if (hapus.length) {
+      // Hari HARI INI/MENDATANG yang sudah ada laporan/foto tidak bisa dilepas. Hari LEWAT yang belum lengkap (terlewat, tidak dibayar) boleh dilepas walau isiannya
+      // baru sebagian (21 Okt 2026, permintaan user: berlaku sama untuk Pascabencana dan SPDT NTP); isian tetap tersimpan, hanya hari kerjanya yang dilepas.
+      const hapusBerjalan = hapus.filter((t) => t >= hariIni);
+      if (hapusBerjalan.length) {
         const [{ data: r }, { data: f }] = await Promise.all([
-          db.from("sigap_realisasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapus),
-          db.from("sigap_dokumentasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapus),
+          db.from("sigap_realisasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusBerjalan),
+          db.from("sigap_dokumentasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusBerjalan),
         ]);
         const terisi = Array.from(new Set([...(r ?? []), ...(f ?? [])].map((x) => x.tanggal as string)));
         if (terisi.length) return NextResponse.json({ error: `Tanggal yang sudah berisi laporan/foto tidak bisa dilepas: ${terisi.join(", ")}.` }, { status: 400 });
@@ -249,12 +251,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       if (hapusLewat.length) {
         const { data: izinAktif } = await db.from("sigap_izin_susulan").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusLewat).gt("berlaku_sampai", new Date().toISOString());
         if ((izinAktif ?? []).length) return NextResponse.json({ error: `Tanggal yang sedang diberi izin susulan tidak bisa dilepas: ${(izinAktif ?? []).map((x) => x.tanggal).join(", ")}.` }, { status: 400 });
-        if (pen.kegiatan.wajib_laporan) {
-          const satuan = satuanLaporan(pen.kegiatan.kode, pen.peran, pen.kegiatan.satuan_realisasi);
-          const oto = await ambilRealisasiOtomatis(db, akun.id, pen.peran, pen.kegiatan.kode, satuan, hapusLewat, await ambilWilayahRingkas(db));
-          const dianggap = hapusLewat.filter((t) => laporanDianggap(t, hariIni, false, oto.get(t) ?? null));
-          if (dianggap.length) return NextResponse.json({ error: `Tanggal yang sudah ada hasil identifikasi/pendataan (dianggap lengkap) tidak bisa dilepas: ${dianggap.join(", ")}.` }, { status: 400 });
-        }
+        const [{ data: rl }, { data: fl }] = await Promise.all([
+          db.from("sigap_realisasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusLewat),
+          db.from("sigap_dokumentasi").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusLewat),
+        ]);
+        const satuan = satuanLaporan(pen.kegiatan.kode, pen.peran, pen.kegiatan.satuan_realisasi);
+        const oto = pen.kegiatan.wajib_laporan ? await ambilRealisasiOtomatis(db, akun.id, pen.peran, pen.kegiatan.kode, satuan, hapusLewat, await ambilWilayahRingkas(db)) : new Map();
+        const lengkap = hapusLewat.filter((t) => {
+          const adaR = (rl ?? []).some((x) => x.tanggal === t);
+          const nFoto = (fl ?? []).filter((x) => x.tanggal === t).length;
+          const dianggap = !!pen.kegiatan.wajib_laporan && laporanDianggap(t, hariIni, adaR, oto.get(t) ?? null);
+          return hariLengkap(adaR || dianggap, nFoto, pen.kegiatan);
+        });
+        if (lengkap.length) return NextResponse.json({ error: `Tanggal yang sudah lengkap (dibayar) tidak bisa dilepas: ${lengkap.join(", ")}.` }, { status: 400 });
       }
       // 1 tanggal = 1 kegiatan.
       if (tambah.length) {

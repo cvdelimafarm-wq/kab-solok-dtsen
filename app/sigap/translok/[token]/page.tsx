@@ -854,8 +854,9 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
   const nRealisasi = Array.from(pilih).filter((t) => lengkapSet.has(t)).length;
   const nTerlewat = Array.from(pilih).filter((t) => !lengkapSet.has(t) && t < hariIni && !izinSet.has(t)).length;
   const nPotensi = pilih.size - nRealisasi - nTerlewat;
-  // Hari lewat yang masih dipilih tetapi kosong (tidak ada laporan/foto, tidak lengkap, tidak sedang izin susulan) boleh dilepas dalam mode edit.
-  const bisaDilepasLewat = (t: string) => t < hariIni && pilih.has(t) && !terisi.has(t) && !lengkapSet.has(t) && !pen.hari.some((h) => h.tanggal === t && (h.kunci === "izin" || h.laporan_dianggap));
+  // Hari lewat yang masih dipilih dan TERLEWAT (belum lengkap = tidak dibayar, tidak sedang izin susulan) boleh dilepas dalam mode edit, walau isiannya baru sebagian
+  // (21 Okt 2026, permintaan user: SPDT NTP juga). Isian sebagian tetap tersimpan; hanya hari kerjanya yang dilepas. Hari lengkap (dibayar) tetap terkunci.
+  const bisaDilepasLewat = (t: string) => t < hariIni && pilih.has(t) && !lengkapSet.has(t) && !pen.hari.some((h) => h.tanggal === t && h.kunci === "izin");
   const bukaEdit = !terkunci && edit;
 
   function batalEdit() {
@@ -871,7 +872,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
     setPilih((s) => {
       const n = new Set(s);
       if (n.has(t)) {
-        if (terisi.has(t)) {
+        if (terisi.has(t) && t >= hariIni) {
           setPesan({ teks: "Tanggal ini sudah berisi laporan/foto, tidak bisa dilepas.", ok: false });
           return s;
         }
@@ -921,7 +922,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
       )}
       {bukaEdit && pen.hari_kerja.length > 0 && (
         <p className="mt-2.5 rounded-xl bg-[#FFF6DD] px-3 py-2 text-[11.5px] leading-snug text-[#6B4A00]">
-          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang kosong (bingkai merah) boleh dilepas agar kuota kembali. Hari yang sudah berisi laporan/foto tetap terkunci.
+          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang belum lengkap (bingkai merah) boleh dilepas agar kuota kembali; isian sebagian tetap tersimpan tetapi tidak dibayar. Hari yang sudah lengkap tetap terkunci.
         </p>
       )}
 
@@ -961,7 +962,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
                     disabled={terkunci || !edit || dipakaiLain || (lewat && !lepasLewat)}
                     onClick={() => ketuk(t)}
                     className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""}`}
-                    title={dipakaiLain ? "Dipakai kegiatan lain" : lepasLewat ? "Hari terlewat kosong: ketuk untuk melepas" : undefined}
+                    title={dipakaiLain ? "Dipakai kegiatan lain" : lepasLewat ? "Hari terlewat (belum lengkap): ketuk untuk melepas" : undefined}
                   >
                     {tglObj(t).getUTCDate()}
                   </button>
@@ -974,7 +975,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
 
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#6B7890]">
         <span className="font-bold text-[#0F3D7A]">■</span> dipilih · <span className="font-bold text-[#1E7A4C]">■</span> lengkap ·{" "}
-        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain. Tanggal lewat terkunci, kecuali hari terlewat yang kosong bisa dilepas lewat Edit hari kerja.
+        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain. Tanggal lewat terkunci, kecuali hari terlewat yang belum lengkap bisa dilepas lewat Edit hari kerja.
       </p>
 
       {kelompokPilihan.length > 0 && (
