@@ -17,16 +17,29 @@ import { jarakM } from "@/lib/sigapFoto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Id akun PPL yang diawasi seorang PML (dari alokasi Sub SLS). */
+/**
+ * Id akun yang diawasi seorang PML. Harus SAMA dengan yang diizinkan `bolehPeriksa` (lib/sigapFotoServer.ts -> pmlDariAkun):
+ *  (1) PPL pada alokasi Sub SLS miliknya, dan (2) anggota kelompok-tim tempat ia berperan PML (20 Okt 2026: dulu hanya (1), sehingga foto anggota kelompok-tim tidak tampil).
+ */
 async function timDiawasi(db: Db, pmlAkunId: number): Promise<number[]> {
+  const hasil = new Set<number>();
   const { data: a } = await db.from("sigap_akun").select("petugas_bencana_id").eq("id", pmlAkunId).maybeSingle();
   const pid = a?.petugas_bencana_id as number | null | undefined;
-  if (!pid) return [];
-  const { data: al } = await db.from("bencana_alokasi_subsls").select("ppl_id").eq("pml_id", pid).not("ppl_id", "is", null);
-  const ppl = Array.from(new Set((al ?? []).map((r) => r.ppl_id as number)));
-  if (!ppl.length) return [];
-  const { data: ak } = await db.from("sigap_akun").select("id").in("petugas_bencana_id", ppl);
-  return (ak ?? []).map((r) => r.id as number);
+  if (pid) {
+    const { data: al } = await db.from("bencana_alokasi_subsls").select("ppl_id").eq("pml_id", pid).not("ppl_id", "is", null);
+    const ppl = Array.from(new Set((al ?? []).map((r) => r.ppl_id as number)));
+    if (ppl.length) {
+      const { data: ak } = await db.from("sigap_akun").select("id").in("petugas_bencana_id", ppl);
+      for (const r of ak ?? []) hasil.add(r.id as number);
+    }
+  }
+  const { data: kel } = await db.from("bencana_kelompok_tim").select("kegiatan_id, kelompok").eq("akun_id", pmlAkunId).eq("peran", "pml").eq("aktif", true);
+  for (const k of kel ?? []) {
+    const { data: anggota } = await db.from("bencana_kelompok_tim").select("akun_id").eq("kegiatan_id", k.kegiatan_id).eq("kelompok", k.kelompok).eq("aktif", true);
+    for (const r of anggota ?? []) hasil.add(r.akun_id as number);
+  }
+  hasil.delete(pmlAkunId); // tidak memeriksa foto sendiri
+  return Array.from(hasil);
 }
 
 export async function GET(req: NextRequest) {
