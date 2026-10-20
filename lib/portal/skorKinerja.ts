@@ -13,7 +13,7 @@ import type { Db } from "@/lib/sigap";
 import { hariIniWib, penugasanAkun } from "@/lib/sigap";
 import { dataSpj } from "@/lib/sigapDokumen";
 import { dalamKotak } from "@/lib/pendataan";
-import { ATURAN_POIN, hitungPoinHari, hitungRealisasi, type CapaianHari, type DataCapaian, type HariSkor, type JarakMetode } from "@/lib/skorKinerja";
+import { ATURAN_POIN, MULAI_BOBOT_AWAL, aturanUntukTanggal, hitungPoinHari, hitungRealisasi, type CapaianHari, type DataCapaian, type HariSkor, type JarakMetode } from "@/lib/skorKinerja";
 import { jarakPerkiraanKm, kunciRute, pusatTitik, ruteHari, tanggalWibDari, urutanSubPerHari, type Penandaan, type Titik } from "@/lib/skorRute";
 
 const UMUR_CACHE_MS = 30_000;
@@ -126,7 +126,7 @@ export async function ambilCapaian(db: Db, akunId: number): Promise<DataCapaian>
   }
 
   // hari yang butuh jarak: mulai aturan bobot s.d. hari ini, yang ada KK didata
-  const tanggalPerlu = [...hitung.keys()].filter((t) => t >= ATURAN_POIN.mulaiBobot && t <= hariIni).sort();
+  const tanggalPerlu = [...hitung.keys()].filter((t) => t >= MULAI_BOBOT_AWAL && t <= hariIni).sort();
   const urutan = urutanSubPerHari(penandaan.filter((p) => tanggalPerlu.includes(p.tanggal)));
   const idsSub = [...new Set([...urutan.values()].flat())];
 
@@ -175,7 +175,9 @@ export async function ambilCapaian(db: Db, akunId: number): Promise<DataCapaian>
   const realisasi = hitungRealisasi(hariSkor);
 
   const mHari = masukan(hariIni);
-  const poin = hitungPoinHari(mHari);
+  // (20 Okt 2026) aturan menurut TANGGAL: hari yang sudah berlalu tetap memakai angka lama (tidak berlaku mundur)
+  const aHari = aturanUntukTanggal(hariIni) ?? ATURAN_POIN;
+  const poin = hitungPoinHari(mHari, aHari);
   const hariIniCapaian: CapaianHari = { ...poin, tanggal: hariIni, terdampak: mHari.terdampak, tidak_terdampak: mHari.tidak_terdampak, tidak_ditemukan: mHari.tidak_ditemukan, km: mHari.km, metode: mHari.metode };
 
   const sebelum = realisasi.rincian.filter((r) => r.tanggal < hariIni);
@@ -185,15 +187,16 @@ export async function ambilCapaian(db: Db, akunId: number): Promise<DataCapaian>
     kegiatan: pen.kegiatan.nama,
     hari_ini: hariIniCapaian,
     realisasi,
-    hutang_sebelumnya: sebelum.length ? sebelum[sebelum.length - 1].hutang_sesudah : 0,
-    bobot_berlaku: hariIni >= ATURAN_POIN.mulaiBobot,
+    // hutang dibawa dalam O-K lalu dinyatakan dalam poin menurut target hari ini (target bisa berganti antarhari)
+    hutang_sebelumnya: sebelum.length ? Math.round(sebelum[sebelum.length - 1].hutang_sesudah_ok * aHari.targetHarian * 100) / 100 : 0,
+    bobot_berlaku: hariIni >= MULAI_BOBOT_AWAL,
     aturan: {
-      poinTerdampak: ATURAN_POIN.poinTerdampak,
-      poinTidakTerdampak: ATURAN_POIN.poinTidakTerdampak,
-      poinPerKm: ATURAN_POIN.poinPerKm,
-      maksPoinJarak: ATURAN_POIN.maksPoinJarak,
-      targetHarian: ATURAN_POIN.targetHarian,
-      mulaiBobot: ATURAN_POIN.mulaiBobot,
+      poinTerdampak: aHari.poinTerdampak,
+      poinTidakTerdampak: aHari.poinTidakTerdampak,
+      poinPerKm: aHari.poinPerKm,
+      maksPoinJarak: aHari.maksPoinJarak,
+      targetHarian: aHari.targetHarian,
+      mulaiBobot: aHari.mulaiBobot,
     },
   };
   if (cacheCapaian.size > 500) cacheCapaian.clear();

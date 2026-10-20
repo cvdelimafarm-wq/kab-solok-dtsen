@@ -23,7 +23,7 @@ const jam = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).t
 const LABEL_STATUS: Record<string, string> = { diajukan: "Menunggu", diterima: "Diterima", ditolak: "Ditolak", ditahan: "Ditahan (perlu diperiksa)", dilepas: "Dilepas" };
 
 function Lencana({ k }: { k: Kepercayaan }) {
-  return <span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: WARNA_KEPERCAYAAN[k] }}>{LABEL_KEPERCAYAAN[k]}</span>;
+  return <span className="inline-flex flex-none items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold leading-[1.4] text-white" style={{ background: WARNA_KEPERCAYAAN[k] }}>{LABEL_KEPERCAYAAN[k]}</span>;
 }
 
 function Gambar({ id, alt }: { id: number; alt: string }) {
@@ -134,18 +134,29 @@ export default function FotoSaya() {
         <ul className="flex flex-col gap-2">
           {data.diambil.map((f) => (
             <li key={f.id} className="rounded-xl border border-[#C9D3E6] bg-white p-3">
-              <button type="button" onClick={() => setBuka(buka === f.id ? null : f.id)} aria-expanded={buka === f.id} className="flex w-full items-center justify-between gap-2 text-left">
-                <span className="min-w-0">
+              <button type="button" onClick={() => setBuka(buka === f.id ? null : f.id)} aria-expanded={buka === f.id} className="flex w-full items-start justify-between gap-3 text-left">
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold text-[#0F2A52]">{nama(f.kegiatan_id)}</span>
-                  <span className="block text-xs text-[#3C4C68]">{tgl(f.tanggal)} · {jam(f.diambil_at)} WIB · {f.kode}</span>
+                  <span className="block text-xs text-[#3C4C68]">{tgl(f.tanggal)} · {jam(f.diambil_at)} WIB</span>
+                  <span className="block break-all text-[11px] tracking-wide text-[#6B7A90]">{f.kode}</span>
                 </span>
                 <Lencana k={f.kepercayaan} />
               </button>
+              {/* (20 Okt 2026) Alasan selalu terlihat bila foto bukan "Wajar" -- permintaan user (kenapa perlu perhatian) */}
+              {f.kepercayaan !== "hijau" && (
+                <div className={`mt-2 rounded-lg px-3 py-2 text-xs leading-snug ${f.kepercayaan === "merah" ? "bg-[#FDE8E8] text-[#7A1D22]" : "bg-[#FFF4D6] text-[#5E4300]"}`}>
+                  <b className="block">{f.kepercayaan === "merah" ? "Kenapa ditahan:" : "Kenapa perlu perhatian:"}</b>
+                  {f.alasan.length > 0 ? (
+                    <ul className="mt-0.5 list-disc pl-4">{f.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>
+                  ) : (
+                    <span>Tidak ada rincian alasan tercatat.</span>
+                  )}
+                </div>
+              )}
               {buka === f.id && (
                 <div className="mt-2 flex flex-col gap-2">
                   <Gambar id={f.id} alt={`Foto ${f.kode}`} />
                   {f.status_periksa !== "belum" && <div className="text-xs font-semibold text-[#0F2A52]">Pemeriksaan: {f.status_periksa === "diperiksa" ? "sudah diperiksa" : "dipertanyakan"}</div>}
-                  {f.alasan.length > 0 && <ul className="list-disc pl-5 text-xs text-[#3C4C68]">{f.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>}
                   <div className="text-xs text-[#3C4C68]">{f.tag.map((t) => `${t.peran_tag === "pemotret" ? "Saya" : t.nama}: ${LABEL_STATUS[t.status] ?? t.status}${t.slot ? ` (foto ${t.slot})` : ""}`).join(" · ")}</div>
                 </div>
               )}

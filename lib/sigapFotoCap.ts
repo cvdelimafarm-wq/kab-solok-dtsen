@@ -89,6 +89,9 @@ export async function bubuhiCap(mentah: Buffer, d: DataCap): Promise<{ buf: Buff
   const H = dasar.info.height;
   if (W < 200 || H < 200) throw new Error("Gambar terlalu kecil.");
 
+  // (20 Okt 2026) Foto landscape: cap berupa KARTU kecil di kiri bawah + kartu QR di kanan bawah (bukan panel selebar foto dengan celah kosong di tengah) -- permintaan user (lebih proporsional)
+  if (W >= H * 1.15) return bubuhiLandscape(dasar.data, W, H, d);
+
   const u = Math.min(W, H) / 1080; // satuan skala (sisi pendek: foto landscape tidak mendapat cap yang membesar; foto tegak tidak berubah)
   const pad = Math.round(22 * u);
   const logoUbin = Math.round(86 * u);
@@ -107,7 +110,7 @@ export async function bubuhiCap(mentah: Buffer, d: DataCap): Promise<{ buf: Buff
   const jedaBaris = Math.round(4 * u);
   const tinggiTeks = baris.reduce((a, b) => a + b.h, 0) + jedaBaris * (baris.length - 1);
 
-  const kodeTeks = await teks(d.kode, qrUbin, { tebal: true, ukuran: Math.round(14 * u), warna: "#FFFFFF", rata: "centre" });
+  const kodeTeks = await teks(d.kode, qrUbin + Math.round(40 * u), { tebal: true, ukuran: Math.round(13 * u), warna: "#FFFFFF", rata: "centre" }); // (20 Okt 2026) satu baris
   const kolomKanan = qrUbin + Math.round(6 * u) + kodeTeks.h;
   const tinggiPanel = Math.min(Math.round(H * 0.45), Math.max(tinggiTeks, kolomKanan, logoUbin) + 2 * pad);
   const atasPanel = H - tinggiPanel;
@@ -139,8 +142,71 @@ export async function bubuhiCap(mentah: Buffer, d: DataCap): Promise<{ buf: Buff
   const atasQr = atasPanel + pad;
   komposit.push({ input: await petakRounded(qrUbin, qrUbin, Math.round(10 * u), "#FFFFFF"), left: kiriQr, top: atasQr });
   komposit.push({ input: qr, left: kiriQr + Math.round(8 * u), top: atasQr + Math.round(8 * u) });
-  komposit.push({ input: kodeTeks.input, left: kiriQr, top: atasQr + qrUbin + Math.round(6 * u) });
+  komposit.push({ input: kodeTeks.input, left: Math.max(0, Math.round(kiriQr + qrUbin / 2 - kodeTeks.w / 2)), top: atasQr + qrUbin + Math.round(6 * u) });
 
   const keluar = await sharp(dasar.data).composite(komposit).jpeg({ quality: 82 }).toBuffer();
+  return { buf: keluar, lebar: W, tinggi: H };
+}
+
+/** Cap foto landscape: kartu info (logo + 5 baris) di kiri bawah dan kartu QR di kanan bawah; ukuran mengikuti TINGGI foto. */
+async function bubuhiLandscape(dasar: Buffer, W: number, H: number, d: DataCap): Promise<{ buf: Buffer; lebar: number; tinggi: number }> {
+  const u = (H / 1080) * 1.1;
+  const m = Math.round(18 * u); // jarak kartu ke tepi foto
+  const p = Math.round(14 * u); // isi kartu
+  const logoUbin = Math.round(72 * u);
+  const jarak = Math.round(14 * u);
+  const lebarMaks = Math.max(160, Math.min(Math.round(W * 0.58), Math.round(640 * u)));
+  const baris = [
+    await teks(d.waktu, lebarMaks, { tebal: true, ukuran: Math.round(26 * u), warna: "#FFFFFF" }),
+    await teks(d.koordinat, lebarMaks, { tebal: false, ukuran: Math.round(22 * u), warna: "#F2B632" }),
+    ...(d.lokasi ? [await teks(d.lokasi, lebarMaks, { tebal: false, ukuran: Math.round(21 * u), warna: "#E8EEF8" })] : []),
+    await teks(`${d.pemotret} · ${d.peran}`, lebarMaks, { tebal: true, ukuran: Math.round(21 * u), warna: "#FFFFFF" }),
+    await teks(d.kegiatan, lebarMaks, { tebal: false, ukuran: Math.round(19 * u), warna: "#C5D0E4" }),
+  ];
+  const jedaBaris = Math.round(2 * u);
+  const tinggiTeks = baris.reduce((a, b) => a + b.h, 0) + jedaBaris * (baris.length - 1);
+  const lebarTeks = Math.max(...baris.map((b) => b.w));
+  const lebarKartu = p + logoUbin + jarak + lebarTeks + p;
+  const tinggiKartu = Math.max(tinggiTeks, logoUbin) + 2 * p;
+  const kiriKartu = m;
+  const atasKartu = H - m - tinggiKartu;
+
+  const komposit: sharp.OverlayOptions[] = [{ input: await petakRounded(lebarKartu, tinggiKartu, Math.round(18 * u), "#0A1A33", 0.74), left: kiriKartu, top: atasKartu }];
+
+  const atasLogo = atasKartu + Math.round((tinggiKartu - logoUbin) / 2);
+  try {
+    const logoBuf = await fs.readFile(LOGO());
+    const dalam = logoUbin - Math.round(12 * u);
+    const logoKecil = await sharp(logoBuf).resize(dalam, dalam, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+    komposit.push({ input: await petakRounded(logoUbin, logoUbin, Math.round(14 * u), "#FFFFFF"), left: kiriKartu + p, top: atasLogo });
+    komposit.push({ input: logoKecil, left: kiriKartu + p + Math.round(6 * u), top: atasLogo + Math.round(6 * u) });
+  } catch {
+    // logo tidak ada: dilewati
+  }
+  let y = atasKartu + Math.round((tinggiKartu - tinggiTeks) / 2);
+  const kiriTeks = kiriKartu + p + logoUbin + jarak;
+  for (const b of baris) {
+    komposit.push({ input: b.input, left: kiriTeks, top: y });
+    y += b.h + jedaBaris;
+  }
+
+  // Kartu QR (kanan bawah): ubin putih + kode di bawahnya, satu baris
+  const qrUkuran = Math.round(104 * u);
+  const qrUbin = qrUkuran + Math.round(12 * u);
+  const pq = Math.round(10 * u);
+  const kodeTeks = await teks(d.kode, qrUbin + Math.round(60 * u), { tebal: true, ukuran: Math.round(12 * u), warna: "#FFFFFF", rata: "centre" });
+  const lebarKq = Math.max(qrUbin, kodeTeks.w) + 2 * pq;
+  const tinggiKq = pq + qrUbin + Math.round(5 * u) + kodeTeks.h + pq;
+  const kiriKq = W - m - lebarKq;
+  const atasKq = H - m - tinggiKq;
+  komposit.push({ input: await petakRounded(lebarKq, tinggiKq, Math.round(18 * u), "#0A1A33", 0.74), left: kiriKq, top: atasKq });
+  const kiriQr = kiriKq + Math.round((lebarKq - qrUbin) / 2);
+  const atasQr = atasKq + pq;
+  const qr = await QRCode.toBuffer(d.urlVerifikasi, { type: "png", errorCorrectionLevel: "M", margin: 0, width: qrUkuran, color: { dark: "#0A1A33", light: "#FFFFFF" } });
+  komposit.push({ input: await petakRounded(qrUbin, qrUbin, Math.round(10 * u), "#FFFFFF"), left: kiriQr, top: atasQr });
+  komposit.push({ input: qr, left: kiriQr + Math.round(6 * u), top: atasQr + Math.round(6 * u) });
+  komposit.push({ input: kodeTeks.input, left: kiriKq + Math.round((lebarKq - kodeTeks.w) / 2), top: atasQr + qrUbin + Math.round(5 * u) });
+
+  const keluar = await sharp(dasar).composite(komposit).jpeg({ quality: 82 }).toBuffer();
   return { buf: keluar, lebar: W, tinggi: H };
 }

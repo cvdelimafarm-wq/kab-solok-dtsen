@@ -75,7 +75,7 @@ function TabHariIni({ d }: { d: Aktif }) {
       <div className="mt-2">
         <Baris judul="KK terdampak" rumus={`${h.terdampak} KK × ${a.poinTerdampak} poin`} nilai={`${formatAngka(h.poin_terdampak)} poin`} />
         <Baris judul="KK tidak terdampak" rumus={`${h.tidak_terdampak} KK × ${a.poinTidakTerdampak} poin`} nilai={`${formatAngka(h.poin_tidak_terdampak)} poin`} />
-        <Baris judul="Jarak tempuh" rumus={`${formatAngka(h.km)} km × ${a.poinPerKm} poin (maks. ${a.maksPoinJarak} poin)`} nilai={`${formatAngka(h.poin_jarak)} poin`} />
+        <Baris judul="Jarak tempuh" rumus={`${formatAngka(h.km)} km ÷ ${formatAngka(1 / a.poinPerKm)} km × 1 poin (maks. ${a.maksPoinJarak} poin)`} nilai={`${formatAngka(h.poin_jarak)} poin`} />
         <Baris judul="Total hari ini" nilai={teksXY(h.total, h.target)} tebal />
       </div>
       {ket && <p className="mt-2 text-[12.5px] leading-snug text-[#5B6B84]">{ket}</p>}
@@ -127,6 +127,10 @@ function TabRealisasi({ d }: { d: Aktif }) {
       </div>
       <p className="mt-2 text-[12.5px] leading-snug text-[#5B6B84]">
         {formatAngka(a.targetHarian)} poin = 1 O-K. Capaian di atas 100% pada satu hari tidak menambah pembayaran. Hari yang belum lengkap (laporan atau foto) belum dihitung.
+      </p>
+      {/* (20 Okt 2026) aturan berganti per tanggal, tidak berlaku mundur */}
+      <p className="mt-2 rounded-[12px] bg-[#E6EDFB] px-3 py-2 text-[12.5px] leading-snug text-[#1F4FBF]">
+        Mulai 20 Okt 2026: 60 poin = 1 O-K dan jarak 1 poin per 5 km. Hari sebelum 20 Okt tetap memakai angka lama (45 poin = 1 O-K, 1 poin per km).
       </p>
     </div>
   );

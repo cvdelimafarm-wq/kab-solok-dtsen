@@ -16,6 +16,7 @@ import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type H
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
 import { peringatanDariInduk, translokDariInduk, tugasDariInduk, type KartuTranslokBeranda, type PeringatanBeranda } from "@/lib/sigapPrioritas";
+import { ketModulSpdt } from "@/lib/spdtNtp";
 import KartuTranslok from "./KartuTranslok"; // (19 Okt 2026) kartu Transport Lokal sendiri di bawah kartu utama
 import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
@@ -84,6 +85,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const hub = dHub.data;
   const keg = dKeg.data?.kegiatan ?? null;
   const induk = dInduk.data?.induk ?? null;
+  const lembarSpdt = induk?.map((i) => i.spdt).find((f) => !!f && (f.total > 0 || f.peran === "supervisor")) ?? null; // (20 Okt 2026) pintasan Lembar Pendataan SPDT NTP
   const hubMuat: "memuat" | "siap" | "gagal" = hub ? "siap" : dHub.galat ? "gagal" : "memuat";
   const offset = hub ? Date.parse(hub.sekarang) - dHub.tiba : 0; // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
@@ -372,6 +374,20 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           <KartuUtama u={utama} />
         )}
         {!memuatAwal && kartuTL.map((d) => <KartuTranslok key={d.kegiatan.id} d={d} />)}
+        {/* (20 Okt 2026) Pintasan Lembar Pendataan SPDT NTP: lembar bantu (bukan tugas bernomor) tidak pernah jadi kartu utama, jadi diberi kartu sendiri */}
+        {!memuatAwal && lembarSpdt && (
+          <Link href={`/sigap/spdt?dari=${encodeURIComponent("/")}`} className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF1FC]" aria-label="Lembar Pendataan SPDT NTP">
+            <span className="grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] bg-[#E6EEFC] text-[#1F5FD1]">
+              <IkonMenu n="peta" className="h-[24px] w-[24px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10.5px] font-extrabold tracking-[0.14em] text-[#6B7A90]">SPDT NTP 2026</span>
+              <b className="block text-[15px] leading-snug text-[#0F2A52]">Lembar Pendataan</b>
+              <small className="block text-[12px] leading-snug text-[#55657D]">{ketModulSpdt(lembarSpdt)}</small>
+            </span>
+            <span aria-hidden className="flex-none text-[20px] text-[#A5B3C7]">›</span>
+          </Link>
+        )}
 
         {data?.pin_bawaan && (
           <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#F3DFA5] bg-[#FFF8E6] px-4 py-3 text-[13.5px] text-[#6B4C00]" role="alert">

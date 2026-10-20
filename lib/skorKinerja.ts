@@ -1,7 +1,10 @@
 // lib/skorKinerja.ts  (murni: tanpa database, tanpa jaringan)
 //
 // (15 Okt 2026) Skor kinerja harian Transport Lokal PPL -- keputusan M. Iqbal Hadi (lihat Project: rancangan-skor-kinerja-harian-target-harian).
-// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 x km jarak. Target minimal 45 poin/hari = 1 O-K.
+// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per 5 km jarak (0,2 poin/km). Target minimal 60 poin/hari = 1 O-K.
+// (20 Okt 2026, keputusan user) Mulai 20 Okt 2026: target 45 -> 60 poin dan poin jarak 1/km -> 1 per 5 km. TIDAK berlaku mundur: hari sebelum 20 Okt tetap
+// memakai aturan lama (45 poin, 1 poin/km). Aturan dipilih per tanggal lewat RIWAYAT_ATURAN / aturanUntukTanggal; hutang dibawa dalam satuan O-K
+// (pecahan hari) supaya bisa dibawa melewati pergantian aturan.
 //
 // Aturan agregat (realisasi):
 //  - Tanpa toleransi. Kekurangan poin hari ini menjadi HUTANG; poin hari-hari berikutnya menutup hutang LEBIH DULU
@@ -13,7 +16,7 @@
 //  - Pecahan O-K dibulatkan KE BAWAH. Tidak ada rupiah di sini.
 //
 // Nilai yang BELUM diputuskan user dipasang sebagai asumsi eksplisit di ATURAN_POIN (mudah diganti satu tempat):
-//  - poin KK "tidak ditemukan" = 0; - batas poin jarak = 15 poin/hari (usul; 0 = tanpa batas tidak didukung, isi angka besar).
+//  - poin KK "tidak ditemukan" = 0; - batas poin jarak = 15 poin/hari (usul; 0 = tanpa batas tidak didukung, isi angka besar; = 75 km pada 1 poin/5 km).
 
 export type AturanPoin = {
   poinTerdampak: number;
@@ -28,7 +31,8 @@ export type AturanPoin = {
   mulaiBobot: string;
 };
 
-export const ATURAN_POIN: AturanPoin = {
+/** Aturan lama: berlaku 15-19 Okt 2026 (target 45 poin, 1 poin per km). Dipertahankan untuk hari-hari yang sudah berlalu. */
+export const ATURAN_POIN_V1: AturanPoin = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
   poinTidakDitemukan: 0,
@@ -37,6 +41,30 @@ export const ATURAN_POIN: AturanPoin = {
   targetHarian: 45,
   mulaiBobot: "2026-10-15",
 };
+
+/** Aturan berlaku sekarang: mulai 20 Okt 2026 (target 60 poin, 1 poin per 5 km). */
+export const ATURAN_POIN: AturanPoin = {
+  poinTerdampak: 5,
+  poinTidakTerdampak: 1,
+  poinTidakDitemukan: 0,
+  poinPerKm: 0.2, // 1 poin per 5 km
+  maksPoinJarak: 15,
+  targetHarian: 60,
+  mulaiBobot: "2026-10-20",
+};
+
+/** Daftar aturan menurut tanggal mulai (naik). Tanggal sebelum aturan pertama = aturan "lama" (hari lengkap = 1 O-K penuh). */
+export const RIWAYAT_ATURAN: AturanPoin[] = [ATURAN_POIN_V1, ATURAN_POIN];
+
+/** Tanggal pertama penilaian bobot poin (15 Okt 2026); sebelumnya hari lengkap dihitung penuh. */
+export const MULAI_BOBOT_AWAL = RIWAYAT_ATURAN[0].mulaiBobot;
+
+/** Aturan yang berlaku pada suatu tanggal (WIB, YYYY-MM-DD); null = sebelum penilaian bobot (hari lengkap = 1 O-K penuh). */
+export function aturanUntukTanggal(tanggal: string, riwayat: AturanPoin[] = RIWAYAT_ATURAN): AturanPoin | null {
+  let hasil: AturanPoin | null = null;
+  for (const a of riwayat) if (tanggal >= a.mulaiBobot) hasil = a;
+  return hasil;
+}
 
 export type MasukanHari = { terdampak: number; tidak_terdampak: number; tidak_ditemukan: number; km: number };
 
@@ -99,8 +127,10 @@ export type RincianHari = {
   kredit_hari: number;
   /** Poin yang melampaui target dan tidak disimpan. */
   hangus: number;
-  /** Hutang berjalan sesudah hari ini diproses. */
+  /** Hutang berjalan sesudah hari ini diproses, dalam poin menurut aturan hari ini. */
   hutang_sesudah: number;
+  /** Hutang berjalan sesudah hari ini diproses, dalam O-K (pecahan hari; tidak bergantung pada aturan). */
+  hutang_sesudah_ok: number;
 };
 
 export type Realisasi = {
@@ -120,49 +150,67 @@ export type Realisasi = {
   hutang_ok: number;
 };
 
-/** Realisasi agregat dari seluruh hari kerja (urutan tanggal diurutkan di sini). */
-export function hitungRealisasi(hari: HariSkor[], a: AturanPoin = ATURAN_POIN): Realisasi {
+const r6 = (x: number): number => Math.round(x * 1e6) / 1e6;
+
+/**
+ * Realisasi agregat dari seluruh hari kerja (urutan tanggal diurutkan di sini). Tiap hari memakai aturan yang berlaku pada tanggalnya
+ * (RIWAYAT_ATURAN). Hutang dihitung dalam O-K (pecahan hari) agar tetap benar saat target berganti; dengan satu aturan hasilnya sama dengan hitungan poin biasa.
+ */
+export function hitungRealisasi(hari: HariSkor[], riwayat: AturanPoin[] = RIWAYAT_ATURAN): Realisasi {
   const urut = [...hari].sort((x, y) => (x.tanggal < y.tanggal ? -1 : x.tanggal > y.tanggal ? 1 : 0));
-  let hutang = 0;
+  let hutangOk = 0;
   let okLama = 0;
-  let poinBobot = 0;
+  let okBobot = 0;
   let hariDihitung = 0;
+  let targetTerakhir = riwayat[riwayat.length - 1].targetHarian;
   const rincian: RincianHari[] = [];
 
   for (const h of urut) {
-    const bobot = h.tanggal >= a.mulaiBobot;
-    const p = hitungPoinHari(h, a).total;
+    const a = aturanUntukTanggal(h.tanggal, riwayat);
+    const bobot = a !== null;
+    const aturan = a ?? riwayat[0];
+    const target = aturan.targetHarian;
+    targetTerakhir = target;
+    const p = hitungPoinHari(h, aturan).total;
+    const dasar = { tanggal: h.tanggal, aturan: (bobot ? "bobot" : "lama") as RincianHari["aturan"], poin: p };
     if (!h.lengkap) {
-      rincian.push({ tanggal: h.tanggal, lengkap: false, aturan: bobot ? "bobot" : "lama", poin: p, untuk_hutang: 0, kredit_hari: 0, hangus: 0, hutang_sesudah: bulat2(hutang) });
+      rincian.push({ ...dasar, lengkap: false, untuk_hutang: 0, kredit_hari: 0, hangus: 0, hutang_sesudah: bulat2(hutangOk * target), hutang_sesudah_ok: r6(hutangOk) });
       continue;
     }
     hariDihitung += 1;
     if (!bobot) {
       okLama += 1;
-      rincian.push({ tanggal: h.tanggal, lengkap: true, aturan: "lama", poin: p, untuk_hutang: 0, kredit_hari: a.targetHarian, hangus: 0, hutang_sesudah: bulat2(hutang) });
+      rincian.push({ ...dasar, lengkap: true, untuk_hutang: 0, kredit_hari: target, hangus: 0, hutang_sesudah: bulat2(hutangOk * target), hutang_sesudah_ok: r6(hutangOk) });
       continue;
     }
-    const untukHutang = Math.min(hutang, p);
-    hutang = bulat2(hutang - untukHutang);
-    const sisa = bulat2(p - untukHutang);
-    const kredit = Math.min(sisa, a.targetHarian);
-    const hangus = bulat2(sisa - kredit);
-    hutang = bulat2(hutang + (a.targetHarian - kredit));
-    poinBobot = bulat2(poinBobot + untukHutang + kredit);
-    rincian.push({ tanggal: h.tanggal, lengkap: true, aturan: "bobot", poin: p, untuk_hutang: bulat2(untukHutang), kredit_hari: bulat2(kredit), hangus, hutang_sesudah: hutang });
+    const pOk = p / target;
+    const untukHutang = Math.min(hutangOk, pOk);
+    const sisa = pOk - untukHutang;
+    const kredit = Math.min(sisa, 1);
+    const hangus = sisa - kredit;
+    hutangOk = r6(hutangOk - untukHutang + (1 - kredit));
+    okBobot = r6(okBobot + untukHutang + kredit);
+    rincian.push({
+      ...dasar,
+      lengkap: true,
+      untuk_hutang: bulat2(untukHutang * target),
+      kredit_hari: bulat2(kredit * target),
+      hangus: bulat2(hangus * target),
+      hutang_sesudah: bulat2(hutangOk * target),
+      hutang_sesudah_ok: hutangOk,
+    });
   }
 
-  const okBobot = bulat2(poinBobot / a.targetHarian);
   const terkumpul = bulat2(okLama + okBobot);
   return {
     rincian,
     ok_lama: okLama,
-    ok_bobot: okBobot,
+    ok_bobot: bulat2(okBobot),
     ok_terkumpul: terkumpul,
     ok_dibayar: Math.floor(terkumpul + 1e-9),
     hari_dihitung: hariDihitung,
-    hutang_poin: hutang,
-    hutang_ok: bulat2(hutang / a.targetHarian),
+    hutang_poin: bulat2(hutangOk * targetTerakhir),
+    hutang_ok: bulat2(hutangOk),
   };
 }
 
@@ -172,7 +220,7 @@ export function formatAngka(x: number, maksDesimal = 2): string {
   return v.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: maksDesimal });
 }
 
-/** Teks nilai mutlak x / y, mis. "38 / 45". */
+/** Teks nilai mutlak x / y, mis. "42 / 60". */
 export const teksXY = (x: number, y: number, maksDesimal = 2): string => `${formatAngka(x, maksDesimal)} / ${formatAngka(y, maksDesimal)}`;
 
 /** Persentase bulat (boleh > 100), "84%". */

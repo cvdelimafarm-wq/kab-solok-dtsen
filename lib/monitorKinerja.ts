@@ -4,12 +4,16 @@
 // Fungsi MURNI (tanpa database/jaringan) supaya mudah diuji; datanya disusun oleh lib/portal/pendataanKinerja.ts (server).
 //
 // Aturan (keputusan user 18 Okt 2026 + rancangan-skor-kinerja-harian-target-harian):
-//  - Poin harian PPL = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak (maks 15 poin jarak, hanya bila ada KK didata hari itu). Target 45 poin = 1 O-K.
+//  - Poin harian PPL = 5 x KK terdampak + 1 x KK tidak terdampak + poin jarak (maks 15 poin jarak, hanya bila ada KK didata hari itu). Target = 1 O-K.
+//    (20 Okt 2026) Aturan MENURUT TANGGAL, tidak berlaku mundur (lib/skorKinerja.ts: RIWAYAT_ATURAN): 15-19 Okt target 45 poin & 1 poin/km; mulai 20 Okt target 60 poin & 1 poin per 5 km.
+//    ATURAN di bawah = aturan yang berlaku SEKARANG (dipakai untuk perkiraan ke depan); hari yang sudah berlalu memakai aturan tanggalnya.
 //  - Realisasi O-K: hari kerja LENGKAP (laporan + foto) saja; sebelum 15 Okt tiap hari lengkap dihitung penuh (1 O-K); mulai 15 Okt sesuai poin dengan HUTANG
 //    kumulatif (poin hari berikutnya menutup hutang lebih dulu; kelebihan di atas target tidak menambah), pecahan O-K dibulatkan ke bawah.
 //    Rumus per hari: kredit += min(poin, target + hutang); hutang += target - min(poin, target + hutang); O-K = lantai(kredit / target).
 //  - Jarak realisasi = jarak jalan (OSRM); perkiraan sisa = 1,3 x garis lurus.
 //  - Rangkuman ini adalah PERKIRAAN pemantauan, bukan angka pembayaran.
+
+import { ATURAN_POIN, ATURAN_POIN_V1, aturanUntukTanggal, hitungRealisasi } from "@/lib/skorKinerja";
 
 export type PeranKinerja = "ppl" | "pml" | "korwil";
 export type MetodeJarak = "jalan" | "perkiraan" | "tanpa_rumah" | "tanpa_titik" | "tidak_ada";
@@ -17,10 +21,10 @@ export type MetodeJarak = "jalan" | "perkiraan" | "tanpa_rumah" | "tanpa_titik" 
 export const ATURAN = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
-  poinPerKm: 1,
-  maksPoinJarak: 15,
-  targetHarian: 45,
-  mulaiBobot: "2026-10-15",
+  poinPerKm: ATURAN_POIN.poinPerKm, // 1 poin per 5 km mulai 20 Okt 2026
+  maksPoinJarak: ATURAN_POIN.maksPoinJarak,
+  targetHarian: ATURAN_POIN.targetHarian, // 60 poin mulai 20 Okt 2026
+  mulaiBobot: "2026-10-15", // awal penilaian bobot (aturan lama 15-19 Okt)
   faktorJalan: 1.3,
 } as const;
 
@@ -196,36 +200,32 @@ export const persenLengkap = (b: Pick<BarisTransport, "hari_kerja" | "lengkap">)
 
 // ----------------------------------------------------------------------------------------------- Fase 3: poin harian
 export type PoinHari = { poin_kk: number; poin_jarak: number; total: number; persen: number };
-export function poinHari(h: Pick<HariOrang, "terdampak" | "tidak_terdampak" | "km"> & { tidak_ditemukan?: number }): PoinHari {
+/** Aturan poin untuk suatu tanggal (sebelum 15 Okt: aturan lama, hanya untuk tampilan). */
+const aturanTanggal = (t?: string) => (t ? (aturanUntukTanggal(t) ?? ATURAN_POIN_V1) : ATURAN_POIN);
+/** Target harian (poin) pada suatu tanggal. */
+export const targetTanggal = (t?: string): number => aturanTanggal(t).targetHarian;
+export function poinHari(h: Pick<HariOrang, "terdampak" | "tidak_terdampak" | "km"> & { tidak_ditemukan?: number; tanggal?: string }): PoinHari {
   // Sama dengan hitungPoinHari() di lib/skorKinerja.ts: poin jarak berlaku bila minimal 1 KK ditandai hari itu
-  // (termasuk "tidak ditemukan", yang sendiri bernilai 0 poin); jarak dibulatkan 2 desimal, maks ATURAN.maksPoinJarak.
-  const poinKk = h.terdampak * ATURAN.poinTerdampak + h.tidak_terdampak * ATURAN.poinTidakTerdampak;
+  // (termasuk "tidak ditemukan", yang sendiri bernilai 0 poin); jarak dibulatkan 2 desimal, maks maksPoinJarak. Aturan dipilih menurut tanggal hari itu.
+  const a = aturanTanggal(h.tanggal);
+  const poinKk = h.terdampak * a.poinTerdampak + h.tidak_terdampak * a.poinTidakTerdampak;
   const adaKk = h.terdampak + h.tidak_terdampak + (h.tidak_ditemukan ?? 0) > 0;
-  const poinJarak = adaKk ? Math.min(ATURAN.maksPoinJarak, Math.round(Math.max(0, h.km) * ATURAN.poinPerKm * 100) / 100) : 0;
+  const poinJarak = adaKk ? Math.min(a.maksPoinJarak, Math.round(Math.max(0, h.km) * a.poinPerKm * 100) / 100) : 0;
   const total = Math.round((poinKk + poinJarak) * 100) / 100;
-  return { poin_kk: poinKk, poin_jarak: poinJarak, total, persen: Math.round((total / ATURAN.targetHarian) * 100) };
+  return { poin_kk: poinKk, poin_jarak: poinJarak, total, persen: Math.round((total / a.targetHarian) * 100) };
 }
 const bulat2 = (x: number) => Math.round(x * 100) / 100;
 
-export type RealisasiOk = { ok: number; kredit: number; hutang: number; hari_dihitung: number };
-/** Realisasi O-K satu PPL (lihat aturan di kepala berkas). Hanya hari kerja lengkap yang dihitung. */
+export type RealisasiOk = { ok: number; kredit: number; hutang: number; hutang_ok: number; hari_dihitung: number };
+/** Realisasi O-K satu PPL (lihat aturan di kepala berkas): memakai hitungRealisasi (aturan per tanggal, hutang dalam O-K). Hanya hari kerja lengkap yang dihitung. */
 export function realisasiPpl(hari: HariOrang[], sampai?: string): RealisasiOk {
-  const T = ATURAN.targetHarian;
-  let kredit = 0;
-  let hutang = 0;
-  let n = 0;
-  for (const h of [...hari].sort((a, b) => a.tanggal.localeCompare(b.tanggal))) {
-    if (!h.hari_kerja || !h.lengkap || (sampai && h.tanggal > sampai)) continue;
-    n++;
-    if (h.tanggal < ATURAN.mulaiBobot) {
-      kredit += T;
-      continue;
-    }
-    const bisa = Math.min(poinHari(h).total, T + hutang);
-    kredit += bisa;
-    hutang += T - bisa;
-  }
-  return { ok: Math.floor(kredit / T + 1e-9), kredit: bulat2(kredit), hutang: bulat2(Math.max(0, hutang)), hari_dihitung: n };
+  const hs = hari
+    .filter((h) => h.hari_kerja && h.lengkap && !(sampai && h.tanggal > sampai))
+    .map((h) => ({ tanggal: h.tanggal, lengkap: true, terdampak: h.terdampak, tidak_terdampak: h.tidak_terdampak, tidak_ditemukan: h.tidak_ditemukan, km: h.km }));
+  const r = hitungRealisasi(hs);
+  // kredit = poin yang terkredit (menutup hutang + untuk hari itu sendiri), masing-masing menurut aturan tanggalnya
+  const kredit = r.rincian.reduce((a, x) => a + x.untuk_hutang + x.kredit_hari, 0);
+  return { ok: r.ok_dibayar, kredit: bulat2(kredit), hutang: r.hutang_poin, hutang_ok: r.hutang_ok, hari_dihitung: r.hari_dihitung };
 }
 /** Realisasi PML / korwil: tiap hari kerja lengkap = 1 O-K (tanpa poin). */
 export function realisasiHariKerja(hari: HariOrang[]): number {
@@ -279,7 +279,7 @@ export function matriksPoin(d: DataKinerja): { baris: BarisPoin[]; ringkas: Ring
       total: bulat2(total),
       rata: ada.length ? bulat2(total / ada.length) : 0,
       hari_aktif: ada.length,
-      hari_penuh: ada.filter((s) => s.poin >= ATURAN.targetHarian).length,
+      hari_penuh: ada.filter((s) => s.poin >= targetTanggal(s.tanggal)).length,
       hutang: realisasiPpl(o.hari).hutang,
       perkiraan_jarak: ada.some((s) => s.metode === "perkiraan"),
     });
@@ -287,7 +287,7 @@ export function matriksPoin(d: DataKinerja): { baris: BarisPoin[]; ringkas: Ring
   const hariIni = baris.map((b) => b.sel[b.sel.length - 1]).filter((s) => s && s.ada);
   const ringkas: RingkasPoin = {
     petugas: baris.length,
-    penuh_hari_ini: hariIni.filter((s) => s.poin >= ATURAN.targetHarian).length,
+    penuh_hari_ini: hariIni.filter((s) => s.poin >= targetTanggal(s.tanggal)).length,
     rata_hari_ini: hariIni.length ? bulat2(hariIni.reduce((a, s) => a + s.poin, 0) / hariIni.length) : 0,
     total: bulat2(baris.reduce((a, b) => a + b.total, 0)),
     hutang: bulat2(baris.reduce((a, b) => a + b.hutang, 0)),
@@ -298,7 +298,7 @@ export function matriksPoin(d: DataKinerja): { baris: BarisPoin[]; ringkas: Ring
 
 // ----------------------------------------------------------------------------------------------- Fase 4: perkiraan anggaran
 export type DasarLaju = "periode" | "tiga_hari" | "target";
-export const LABEL_LAJU: Record<DasarLaju, string> = { periode: "Rata-rata sejak pendataan dimulai", tiga_hari: "Rata-rata 3 hari kerja terakhir", target: "Target 45 poin per hari" };
+export const LABEL_LAJU: Record<DasarLaju, string> = { periode: "Rata-rata sejak pendataan dimulai", tiga_hari: "Rata-rata 3 hari kerja terakhir", target: `Target ${ATURAN.targetHarian} poin per hari` };
 export type ParamAnggaran = { laju: DasarLaju; pola: PolaKerja; sertakanPmlKorwil: boolean };
 export const PARAM_AWAL: ParamAnggaran = { laju: "periode", pola: "sen_sab", sertakanPmlKorwil: true };
 
@@ -366,7 +366,7 @@ export function perkiraanAnggaran(d: DataKinerja, p: ParamAnggaran): RingkasAngg
   for (const o of ppl)
     for (const h of o.hari)
       if (h.terdampak + h.tidak_terdampak + h.tidak_ditemukan > 0 && h.tanggal >= ATURAN.mulaiBobot) {
-        jarakTeramati += poinHari(h).poin_jarak;
+        jarakTeramati += Math.min(ATURAN.maksPoinJarak, Math.max(0, h.km) * ATURAN.poinPerKm); // dinyatakan dengan aturan sekarang (km sama, poin per km berbeda antar-aturan)
         hariTeramati++;
       }
   const jarakRata = hariTeramati > 0 ? jarakTeramati / hariTeramati : 0;
@@ -400,7 +400,7 @@ export function perkiraanAnggaran(d: DataKinerja, p: ParamAnggaran): RingkasAngg
     const sisaHari = a.o.sisa_kk > 0 ? Math.ceil(a.sisaPoinKk / laju) : 0;
     const real = realisasiPpl(a.o.hari);
     const sisaPoin = a.sisaPoinKk + sisaHari * a.jarakPoin;
-    const sisaOk = Math.max(0, Math.min(sisaPoin / T, sisaHari + real.hutang / T));
+    const sisaOk = Math.max(0, Math.min(sisaPoin / T, sisaHari + real.hutang_ok));
     realPpl += real.ok;
     sisaOkPpl += sisaOk;
     jumlahSisaPoin += a.sisaPoinKk;
