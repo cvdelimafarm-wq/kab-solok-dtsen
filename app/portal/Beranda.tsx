@@ -28,7 +28,8 @@ import GantiPinCepat from "./GantiPinCepat";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
-import { apiPortal, bacaSesi, hapusSemuaSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
+import { apiPortal, bacaSesi, hapusLihatSebagai, hapusSemuaSesi, KUNCI, mulaiLihatSebagai, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
+import PilihSebagai, { type HasilSebagai } from "./PilihSebagai";
 import { useData } from "./dataBersama";
 import PetaOtomatis from "./PetaOtomatis";
 import PembaruanTersedia from "./PembaruanTersedia";
@@ -36,7 +37,7 @@ import BannerAntrean from "./BannerAntrean";
 import { kirimAntrean } from "./antreanKirim";
 import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
-type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; peran_chip?: { label: string; href: string | null }[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean };
+type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; peran_chip?: { label: string; href: string | null }[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean; super_akun?: boolean };
 type HubBeranda = HubTugas & { boleh_lihat_kelola: boolean; sekarang: string };
 // (19 Okt 2026) Modal "Unggah foto pelatihan" (pengingat panitia) DIMATIKAN -- permintaan user. Ubah ke true untuk menampilkannya lagi;
 // komponen ModalFotoPanitia dan halaman unggah fotonya tetap ada (tidak ada data yang dihapus).
@@ -90,6 +91,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const [sibuk, setSibuk] = useState<string | null>(null);
   // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
   const [gantiPin, setGantiPin] = useState(false);
+  // (21 Okt 2026) Akun super: ketuk bubble inisial = "Lihat sebagai" akun lain (sama dengan "Ganti" di spanduk oranye; mode tetap simulasi, tidak ada data dikirim).
+  const [lihatSebagai, setLihatSebagai] = useState(false);
   const sesiHabis = [dBeranda.galat, dHub.galat, dKeg.galat, dInduk.galat].includes("SESI_BERAKHIR");
   useEffect(() => {
     if (sesiHabis) onKeluar();
@@ -113,6 +116,24 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   function tekanKeluar() {
     if (!yakinKeluar) return setYakinKeluar(true);
     void keluar();
+  }
+
+  function pilihSebagai(h: HasilSebagai) {
+    setLihatSebagai(false);
+    if (h.sendiri) return;
+    const sesi = bacaSesi();
+    if (!sesi) return;
+    let sampai: string | null = null;
+    let token: string | null = null;
+    try {
+      sampai = localStorage.getItem(KUNCI.sampai);
+      token = localStorage.getItem(KUNCI.tokenPetugas);
+    } catch {
+      /* penyimpanan tidak tersedia */
+    }
+    hapusLihatSebagai(); // sisa mode lama (bila ada) dibuang; sesi akun super ini yang disimpan sebagai sesi asli
+    mulaiLihatSebagai({ sesi, sampai: sampai || new Date(Date.now() + 24 * 3_600_000).toISOString(), token }, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
+    window.location.replace("/"); // muat ulang penuh supaya semua tampilan memakai akun yang dipilih
   }
 
   async function keluar() {
@@ -274,7 +295,25 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
               <span className="mt-[3px] block truncate text-[8px] font-semibold uppercase tracking-[0.14em] text-[#A9BCD8]">Sistem Integrasi Kegiatan BPS</span>
             </span>
           </a>
-          {nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>}
+          {nama && data?.super_akun ? (
+            <button
+              type="button"
+              onClick={() => setLihatSebagai(true)}
+              aria-label="Lihat sebagai akun lain"
+              title="Lihat sebagai akun lain"
+              className="relative grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52] ring-2 ring-white/40 active:scale-95"
+            >
+              {inisial(nama)}
+              <span aria-hidden className="absolute -bottom-1 -right-1 grid h-[17px] w-[17px] place-items-center rounded-full bg-[#B8560F] ring-2 ring-[#1A4590]">
+                <svg viewBox="0 0 24 24" className="h-[11px] w-[11px] fill-none stroke-white stroke-[2.4] [stroke-linecap:round] [stroke-linejoin:round]">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
+            </button>
+          ) : (
+            nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>
+          )}
           <button type="button" onClick={tekanKeluar} className={`flex-none rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold hover:bg-white/10 ${yakinKeluar ? "border-[#F4B400] bg-[#F4B400] text-[#0F2A52]" : "border-white/25 text-[#D3E0F5]"}`}>
             {yakinKeluar ? "Ketuk lagi untuk keluar" : "Keluar"}
           </button>
@@ -378,6 +417,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         {data && TAMPILKAN_MODAL_FOTO_PANITIA && <ModalFotoPanitia />}
         {data && <ModalRapat />}
         {data && <ModalPengingat akunKey={data.nama} />}
+        {lihatSebagai && bacaSesi() && (
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50 p-4">
+            <PilihSebagai sesi={bacaSesi() as string} namaSaya={nama || "Akun saya"} onPilih={pilihSebagai} onBatal={() => setLihatSebagai(false)} />
+          </div>
+        )}
         {data && <PengumumanPetugas />}
       </div>
 

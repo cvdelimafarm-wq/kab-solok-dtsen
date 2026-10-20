@@ -89,7 +89,7 @@ export async function bubuhiCap(mentah: Buffer, d: DataCap): Promise<{ buf: Buff
   const H = dasar.info.height;
   if (W < 200 || H < 200) throw new Error("Gambar terlalu kecil.");
 
-  const u = W / 1080; // satuan skala
+  const u = Math.min(W, H) / 1080; // satuan skala (sisi pendek: foto landscape tidak mendapat cap yang membesar; foto tegak tidak berubah)
   const pad = Math.round(22 * u);
   const logoUbin = Math.round(86 * u);
   const qrUkuran = Math.round(150 * u);

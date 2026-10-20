@@ -1,7 +1,7 @@
 // app/api/portal/beranda/route.ts
 //
 // (7 Okt 2026) Portal satu login -- kartu beranda sesuai peran & periode (permintaan user).
-// GET (Authorization: Bearer <sesi>) -> { nama, jenis, peran[], admin_aplikasi, kartu[], pin_bawaan }
+// GET (Authorization: Bearer <sesi>) -> { nama, jenis, peran[], admin_aplikasi, kartu[], pin_bawaan, super_akun }
 // (8 Okt 2026) pin_bawaan = akun masih memakai PIN awal bersama 1303 -> beranda menampilkan ajakan ganti PIN.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -26,7 +26,9 @@ export async function GET(req: NextRequest) {
     for (const [kode, nama] of peranMap) peran_tautan[nama] = tautanPeran(kode, b.kartu);
     // (11 Okt 2026) chip = nama ubin tujuan, tujuan sama digabung (lib/portal/peranTautan.ts chipPeran)
     const peran_chip = chipPeran(Array.from(peranMap, ([kode, nama]) => ({ kode, nama })), b.kartu);
-    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, peran_tautan, peran_chip, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan });
+    // (21 Okt 2026) akun super (sigap_akun.super): Beranda menampilkan tombol "Lihat sebagai" pada bubble inisial. Gagal membaca -> false (tombol tidak tampil).
+    const { data: sup } = await db.from("sigap_akun").select("super").eq("id", akun.id).maybeSingle();
+    return NextResponse.json({ nama: akun.nama, jenis: akun.jenis, peran, peran_tautan, peran_chip, admin_aplikasi: b.admin_aplikasi, kartu: b.kartu, pin_bawaan: pinBawaan, super_akun: sup?.super === true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat beranda." }, { status: 500 });
   }

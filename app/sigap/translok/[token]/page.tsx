@@ -753,6 +753,8 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
   const [pilih, setPilih] = useState<Set<string>>(new Set(pen.hari_kerja));
   const [busy, setBusy] = useState(false);
   const [pesan, setPesan] = useState<{ teks: string; ok: boolean } | null>(null);
+  // (21 Okt 2026) Mode edit: sudah punya hari kerja -> kalender dikunci (hanya baca) sampai petugas menekan "Edit hari kerja"; belum punya -> langsung terbuka.
+  const [edit, setEdit] = useState(pen.hari_kerja.length === 0);
   useEffect(() => setPilih(new Set(pen.hari_kerja)), [pen.hari_kerja]);
 
   if (!pen.periode.mulai || !pen.periode.selesai)
@@ -792,8 +794,19 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
     return out;
   })();
 
+  // Hari lewat yang masih dipilih tetapi kosong (tidak ada laporan/foto, tidak lengkap, tidak sedang izin susulan) boleh dilepas dalam mode edit.
+  const bisaDilepasLewat = (t: string) => t < hariIni && pilih.has(t) && !terisi.has(t) && !lengkapSet.has(t) && !pen.hari.some((h) => h.tanggal === t && (h.kunci === "izin" || h.laporan_dianggap));
+  const bukaEdit = !terkunci && edit;
+
+  function batalEdit() {
+    setPilih(new Set(pen.hari_kerja));
+    setPesan(null);
+    setEdit(pen.hari_kerja.length === 0);
+  }
+
   function ketuk(t: string) {
-    if (terkunci || t < hariIni || lain.has(t)) return;
+    if (terkunci || !edit || lain.has(t)) return;
+    if (t < hariIni && !bisaDilepasLewat(t)) return;
     setPesan(null);
     setPilih((s) => {
       const n = new Set(s);
@@ -821,6 +834,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
       await kirimJson(token, { aksi: "hari_kerja", penugasan_id: pen.id, tanggal: Array.from(pilih) });
       await onTersimpan();
       setPesan({ teks: "Rencana hari kerja tersimpan. Kwitansi, Visum & Surat Pernyataan ikut diperbarui.", ok: true });
+      setEdit(false);
     } catch (e) {
       setPesan({ teks: e instanceof Error ? e.message : "Gagal menyimpan.", ok: false });
     } finally {
@@ -840,6 +854,16 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
           {pen.maks_hari ? ` / maks ${pen.maks_hari}` : ""} hari
         </span>
       </div>
+      {!terkunci && !edit && (
+        <button type="button" onClick={() => { setPesan(null); setEdit(true); }} className="mt-2.5 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#0F3D7A] bg-white text-[14px] font-extrabold text-[#0F3D7A]">
+          <span aria-hidden="true">✎</span> Edit hari kerja
+        </button>
+      )}
+      {bukaEdit && pen.hari_kerja.length > 0 && (
+        <p className="mt-2.5 rounded-xl bg-[#FFF6DD] px-3 py-2 text-[11.5px] leading-snug text-[#6B4A00]">
+          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang kosong (bingkai merah) boleh dilepas agar kuota kembali. Hari yang sudah berisi laporan/foto tetap terkunci.
+        </p>
+      )}
 
       {Array.from(perBulan.entries()).map(([bulan, tgl]) => {
         const awal = tglObj(tgl[0]);
@@ -862,6 +886,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
                 const dipilih = pilih.has(t);
                 const lewat = t < hariIni;
                 const dipakaiLain = lain.has(t);
+                const lepasLewat = bukaEdit && bisaDilepasLewat(t);
                 let cls = "bg-[#F4F6FA] text-[#13213A]";
                 if (dipakaiLain) cls = "bg-[#EEF1F5] text-[#B8C0CE] line-through";
                 else if (dipilih && lengkapSet.has(t)) cls = "bg-[#1E7A4C] text-white";
@@ -873,10 +898,10 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
                   <button
                     key={t}
                     type="button"
-                    disabled={terkunci || lewat || dipakaiLain}
+                    disabled={terkunci || !edit || dipakaiLain || (lewat && !lepasLewat)}
                     onClick={() => ketuk(t)}
-                    className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""}`}
-                    title={dipakaiLain ? "Dipakai kegiatan lain" : undefined}
+                    className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""}`}
+                    title={dipakaiLain ? "Dipakai kegiatan lain" : lepasLewat ? "Hari terlewat kosong: ketuk untuk melepas" : undefined}
                   >
                     {tglObj(t).getUTCDate()}
                   </button>
@@ -889,7 +914,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
 
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#6B7890]">
         <span className="font-bold text-[#0F3D7A]">■</span> dipilih · <span className="font-bold text-[#1E7A4C]">■</span> lengkap ·{" "}
-        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain. Tanggal lewat terkunci.
+        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain. Tanggal lewat terkunci, kecuali hari terlewat yang kosong bisa dilepas lewat Edit hari kerja.
       </p>
 
       {kelompokPilihan.length > 0 && (
@@ -914,10 +939,17 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
       )}
 
       {pesan && <p className={`mt-2 text-[12.5px] font-semibold ${pesan.ok ? "text-emerald-700" : "text-red-700"}`}>{pesan.ok ? "✓ " : "⚠ "}{pesan.teks}</p>}
-      {!terkunci && (
-        <button type="button" disabled={busy || !berubah} onClick={simpan} className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3 text-[14.5px] font-extrabold text-white shadow disabled:opacity-40">
-          {busy ? "Menyimpan…" : berubah ? "Simpan rencana hari kerja" : "Tersimpan ✓"}
-        </button>
+      {bukaEdit && (
+        <div className="mt-3 flex gap-2">
+          {pen.hari_kerja.length > 0 && (
+            <button type="button" disabled={busy} onClick={batalEdit} className="min-h-[48px] flex-1 rounded-xl border border-[#C9D6EA] bg-white text-[14px] font-extrabold text-[#55657D] disabled:opacity-40">
+              Batal
+            </button>
+          )}
+          <button type="button" disabled={busy || !berubah} onClick={simpan} className="min-h-[48px] flex-[2] rounded-xl bg-[#0F3D7A] py-3 text-[14.5px] font-extrabold text-white shadow disabled:opacity-40">
+            {busy ? "Menyimpan…" : berubah ? "Simpan rencana hari kerja" : "Tersimpan ✓"}
+          </button>
+        </div>
       )}
     </section>
   );

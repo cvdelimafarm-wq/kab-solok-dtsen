@@ -7,7 +7,7 @@
 //      (11 Okt 2026) tiap hari memuat `otomatis` = saran isian Laporan realisasi dari identifikasi (PML) / pendataan (PPL, korwil); penugasan memuat
 //      `satuan_laporan` dan `sumber_otomatis` (lib/realisasiOtomatis.ts)
 // POST { aksi:"profil", alamat_kecamatan?, selesai_onboarding? }
-// POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap)
+// POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap); hari lewat yang kosong boleh dilepas (21 Okt 2026)
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
 import { NextRequest, NextResponse } from "next/server";
@@ -231,9 +231,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       const mintaSet = new Set(diminta);
       const tambah = diminta.filter((t) => !lamaSet.has(t));
       const hapus = Array.from(lamaSet).filter((t) => !mintaSet.has(t));
-      // Tanggal lewat terkunci (tidak bisa ditambah / dilepas).
-      const lewat = [...tambah, ...hapus].filter((t) => t < hariIni);
-      if (lewat.length) return NextResponse.json({ error: `Tanggal yang sudah lewat tidak bisa diubah: ${lewat.join(", ")}.` }, { status: 400 });
+      // Tanggal lewat tidak bisa DITAMBAH. (21 Okt 2026, permintaan user: tombol "Edit hari kerja") Hari lewat yang KOSONG (terlewat, tidak dibayar)
+      // boleh DILEPAS supaya kuota kembali; hari lewat yang berisi laporan/foto, dianggap lengkap (identifikasi/pendataan), atau sedang izin susulan tetap terkunci.
+      const tambahLewat = tambah.filter((t) => t < hariIni);
+      if (tambahLewat.length) return NextResponse.json({ error: `Tanggal yang sudah lewat tidak bisa ditambah: ${tambahLewat.join(", ")}.` }, { status: 400 });
+      const hapusLewat = hapus.filter((t) => t < hariIni);
       if (pen.maks_hari && diminta.length > pen.maks_hari) return NextResponse.json({ error: `Melebihi maksimal ${pen.maks_hari} hari untuk peran Anda.` }, { status: 400 });
       // Hari yg sudah ada laporan/foto tidak bisa dilepas.
       if (hapus.length) {
@@ -243,6 +245,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         ]);
         const terisi = Array.from(new Set([...(r ?? []), ...(f ?? [])].map((x) => x.tanggal as string)));
         if (terisi.length) return NextResponse.json({ error: `Tanggal yang sudah berisi laporan/foto tidak bisa dilepas: ${terisi.join(", ")}.` }, { status: 400 });
+      }
+      if (hapusLewat.length) {
+        const { data: izinAktif } = await db.from("sigap_izin_susulan").select("tanggal").eq("penugasan_id", pen.id).in("tanggal", hapusLewat).gt("berlaku_sampai", new Date().toISOString());
+        if ((izinAktif ?? []).length) return NextResponse.json({ error: `Tanggal yang sedang diberi izin susulan tidak bisa dilepas: ${(izinAktif ?? []).map((x) => x.tanggal).join(", ")}.` }, { status: 400 });
+        if (pen.kegiatan.wajib_laporan) {
+          const satuan = satuanLaporan(pen.kegiatan.kode, pen.peran, pen.kegiatan.satuan_realisasi);
+          const oto = await ambilRealisasiOtomatis(db, akun.id, pen.peran, pen.kegiatan.kode, satuan, hapusLewat, await ambilWilayahRingkas(db));
+          const dianggap = hapusLewat.filter((t) => laporanDianggap(t, hariIni, false, oto.get(t) ?? null));
+          if (dianggap.length) return NextResponse.json({ error: `Tanggal yang sudah ada hasil identifikasi/pendataan (dianggap lengkap) tidak bisa dilepas: ${dianggap.join(", ")}.` }, { status: 400 });
+        }
       }
       // 1 tanggal = 1 kegiatan.
       if (tambah.length) {
@@ -258,7 +270,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         if (error) return galatServer("[api/sigap/translok POST]", error);
       }
       const log = [...tambah.map((t) => ({ t, aksi: "tambah" })), ...hapus.map((t) => ({ t, aksi: "hapus" }))];
-      if (log.length) await db.from("sigap_hari_kerja_riwayat").insert(log.map((x) => ({ penugasan_id: pen.id, tanggal: x.t, aksi: x.aksi, oleh: `petugas:${akun.nama}` })));
+      if (log.length) await db.from("sigap_hari_kerja_riwayat").insert(log.map((x) => ({ penugasan_id: pen.id, tanggal: x.t, aksi: x.aksi, oleh: x.t < hariIni ? `petugas:${akun.nama} (melepas hari terlewat)` : `petugas:${akun.nama}` })));
       return NextResponse.json({ ok: true, ditambah: tambah.length, dilepas: hapus.length });
     }
 

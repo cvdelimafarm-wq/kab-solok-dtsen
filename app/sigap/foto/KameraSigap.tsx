@@ -29,12 +29,14 @@ const NOMOR = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
  * tata letak meniru server (satuan server u = lebar/1080).
  */
 function PratinjauCap({ url, waktuMs, pos, nama, peran, kegiatan }: { url: string; waktuMs: number; pos: Pos; nama: string; peran: string; kegiatan: string }) {
-  const u = (px: number) => `${((px * 100) / 1080).toFixed(3)}cqw`;
+  // (21 Okt 2026) Foto landscape: satuan skala mengikuti sisi PENDEK foto (server: min(lebar, tinggi)/1080) supaya cap tidak membesar pada foto lebar.
+  const [rasio, setRasio] = useState(1);
+  const u = (px: number) => `${((px * 100 * rasio) / 1080).toFixed(3)}cqw`;
   const f = (px: number) => `max(8px, ${u(px)})`;
   return (
     <div className="relative overflow-hidden rounded-2xl bg-black" style={{ containerType: "inline-size" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt="Hasil potret dengan draft cap" className="block h-auto w-full" />
+      <img src={url} alt="Hasil potret dengan draft cap" className="block h-auto w-full" onLoad={(e) => { const g = e.currentTarget; if (g.naturalWidth > 0 && g.naturalHeight > 0) setRasio(Math.min(1, g.naturalHeight / g.naturalWidth)); }} />
       <span className="absolute left-2 top-2 rounded-full bg-[#F2B632] px-2.5 py-1 text-[10.5px] font-extrabold tracking-wide text-[#3B2A00]">DRAFT CAP</span>
       <div className="absolute inset-x-0 bottom-0 flex items-start text-left" style={{ background: "rgba(10,26,51,.74)", padding: u(22), gap: u(16) }} aria-hidden="true">
         <div className="flex shrink-0 items-center justify-center bg-white" style={{ width: u(86), height: u(86), borderRadius: u(16) }}>
@@ -136,6 +138,17 @@ export default function KameraSigap({
     }
     void hitungAntre();
   }, [hitungAntre]);
+
+  // (21 Okt 2026) Kamera boleh landscape: manifest PWA mengunci aplikasi tegak (portrait) untuk semua halaman; di halaman ini kunci dibuka (lock "any")
+  // dan dipulihkan ke tegak saat halaman ditinggalkan. Tidak semua peramban mengizinkan (harus aplikasi terpasang/layar penuh): gagal = diabaikan.
+  useEffect(() => {
+    const o = (typeof screen !== "undefined" ? screen.orientation : undefined) as unknown as { lock?: (t: string) => Promise<void> } | undefined;
+    if (!o?.lock) return;
+    o.lock("any").catch(() => undefined);
+    return () => {
+      o.lock?.("portrait").catch(() => undefined);
+    };
+  }, []);
 
   // Kamera (diulang saat depan/belakang diganti)
   useEffect(() => {
@@ -305,7 +318,7 @@ export default function KameraSigap({
   if (!bacaSesi()) return <div className="p-4 text-sm">Sesi tidak ditemukan. Masuk dulu.</div>;
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-3 pb-6">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-3 pb-6 landscape:max-w-xl">
       <div className="px-1">
         <div className="text-xs font-bold tracking-wide text-[#8A6200]">KAMERA SIGAP</div>
         <div className="text-base font-extrabold text-[#0F2A52]">{namaKegiatan}</div>
@@ -323,7 +336,7 @@ export default function KameraSigap({
             {galatKamera ? (
               <div role="alert" className="p-6 text-sm text-white">{galatKamera}</div>
             ) : (
-              <video ref={videoRef} playsInline muted className={`aspect-[3/4] w-full object-cover ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
+              <video ref={videoRef} playsInline muted className={`aspect-[3/4] w-full object-cover landscape:aspect-video ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
             )}
             {banyakKamera !== false && (
               <button
