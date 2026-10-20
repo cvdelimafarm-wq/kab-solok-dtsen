@@ -19,13 +19,14 @@ export type StatusDasar = "memuat" | "siap" | "gagal";
 
 const FONT_BIASA = "Plus Jakarta Sans Regular";
 const FONT_TEBAL = "Plus Jakarta Sans Bold";
-const BATAS_MUAT_MS = 15_000;
+const BATAS_MUAT_MS = 20_000;
 
 type Props = {
   proj: Proyeksi;
   pandang: PandangPeta;
   sumber: SumberDasar;
-  onStatus: (s: StatusDasar) => void;
+  /** alasan: keterangan singkat penyebab "gagal" (ditampilkan kecil di kartu peta supaya mudah dilacak dari tangkapan layar). */
+  onStatus: (s: StatusDasar, alasan?: string) => void;
 };
 
 export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
@@ -58,8 +59,10 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
 
     (async () => {
       try {
-        const [ml, pm, dasar] = await Promise.all([import("maplibre-gl"), import("pmtiles"), import("@protomaps/basemaps")]);
+        const [modMl, pm, dasar] = await Promise.all([import("maplibre-gl"), import("pmtiles"), import("@protomaps/basemaps")]);
         if (batal || !wadah.current) return;
+        // pustaka CommonJS/UMD: bergantung pada pemaket, anggotanya ada di modul itu sendiri atau di .default
+        const ml = ((modMl as unknown as { Map?: unknown }).Map ? modMl : (modMl as unknown as { default: typeof modMl }).default) as typeof modMl;
 
         const protokol = new pm.Protocol();
         ml.addProtocol("pmtiles", protokol.tile);
@@ -108,9 +111,12 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
         m.on("error", (e) => {
           // hanya galat sumber ubin sebelum peta siap yang dianggap gagal; huruf/ubin sesekali hilang dibiarkan
           const sid = (e as unknown as { sourceId?: string }).sourceId;
+          const pesan = String((e as unknown as { error?: { name?: string; message?: string } }).error?.message ?? "");
+          const nama = String((e as unknown as { error?: { name?: string } }).error?.name ?? "");
+          if (nama === "AbortError" || /abort/i.test(pesan)) return; // permintaan ubin dibatalkan karena kamera bergeser: bukan kegagalan
           if (!selesai && sid === "protomaps" && !batal) {
             selesai = true;
-            kabar.current("gagal");
+            kabar.current("gagal", `ubin: ${pesan || nama || "tak dikenal"}`.slice(0, 90));
           }
         });
         m.once("load", () => {
@@ -123,7 +129,7 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
         penjaga = setTimeout(() => {
           if (!selesai && !batal) {
             selesai = true;
-            kabar.current("gagal");
+            kabar.current("gagal", `waktu habis ${BATAS_MUAT_MS / 1000} dtk`);
           }
         }, BATAS_MUAT_MS);
 
@@ -132,10 +138,10 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
           sinkron();
         });
         pengamat.observe(wadah.current);
-      } catch {
+      } catch (err) {
         if (!batal && !selesai) {
           selesai = true;
-          kabar.current("gagal");
+          kabar.current("gagal", `mulai: ${err instanceof Error ? err.message : String(err)}`.slice(0, 90));
         }
       }
     })();

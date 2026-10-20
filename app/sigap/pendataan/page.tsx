@@ -204,6 +204,7 @@ export default function LembarPendataan() {
   const [terpilihId, setTerpilihId] = useState<number | null>(null);
   const [pandang, setPandang] = useState<Pandang>(PANDANG_AWAL);
   const [statusDasar, setStatusDasar] = useState<StatusDasar | null>(null);
+  const [alasanDasar, setAlasanDasar] = useState<string | null>(null);
   const [saya, setSaya] = useState<{ lat: number; lng: number } | null>(null);
   const [monPpl, setMonPpl] = useState<number | null>(null);
   const [toast, setToast] = useState<{ pesan: string; urungkan?: () => void } | null>(null);
@@ -787,11 +788,11 @@ export default function LembarPendataan() {
           <section className="relative m-2.5 min-h-[340px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">
             {proj ? (
               <>
-                {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={setStatusDasar} />}
+                {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={(s, a) => { setStatusDasar(s); setAlasanDasar(a ?? null); }} />}
                 <div className="absolute inset-0">
                   <PetaKk kk={kk} proj={proj} anggota={anggota} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} tampil={tampil} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
                 </div>
-                <KontrolPetaDasar dasar={dasar} status={statusDasar} />
+                <KontrolPetaDasar dasar={dasar} status={statusDasar} alasan={alasanDasar} />
                 {/* satu pil vertikal: perbesar, perkecil, tampilkan semua */}
                 <div className="absolute right-2.5 top-2.5 flex flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_4px_12px_rgba(15,42,82,.15)]">
                   <button type="button" aria-label="Perbesar" onClick={() => setPandang((p) => ({ ...p, z: Math.min(8, p.z * 1.6) }))} className="grid h-[40px] w-[40px] place-items-center border-b border-[#EEF2F7] text-[#0F2A52] active:bg-[#F1F5FC]">

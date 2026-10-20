@@ -10,7 +10,7 @@ import { labelUkuran } from "@/lib/petaDasar";
 import type { StatusDasar } from "./PetaDasar";
 import type { DasarTim } from "./useDasar";
 
-export default function KontrolPetaDasar({ dasar, status }: { dasar: DasarTim; status: StatusDasar | null }) {
+export default function KontrolPetaDasar({ dasar, status, alasan }: { dasar: DasarTim; status: StatusDasar | null; alasan?: string | null }) {
   const [buka, setBuka] = useState(false);
   const { berkas, lapisan, setLapisan, unduh, berlaku, adaVersiBaru, ada, online, siapCek } = dasar;
   const persen = unduh.total > 0 ? Math.min(100, Math.round((unduh.diterima / unduh.total) * 100)) : 0;
@@ -42,6 +42,7 @@ export default function KontrolPetaDasar({ dasar, status }: { dasar: DasarTim; s
       {lapisan === "jalan" && status === "gagal" && (
         <p className="rounded-[10px] bg-[#FEF3C7] px-2.5 py-1 text-[10.5px] font-bold text-[#92400E]">
           {online ? "Peta jalan tidak bisa dimuat, tampil titik saja." : "Tanpa sinyal dan peta belum diunduh, tampil titik saja."}
+          {alasan ? <span className="mt-0.5 block text-[9.5px] font-semibold opacity-80">Kode: {alasan}</span> : null}
         </p>
       )}
 
