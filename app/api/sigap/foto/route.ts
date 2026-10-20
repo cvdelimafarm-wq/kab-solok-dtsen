@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   const nomor = nomorMentah as 1 | 2 | 3 | 4 | 5 | null;
   const posisi = { lat: angka(form.get("lat")), lng: angka(form.get("lng")), akurasi: angka(form.get("akurasi")) };
   if (!posisiMasukanValid(posisi)) return galat("Lokasi tidak terbaca. Aktifkan lokasi lalu potret ulang.", 422, { kode: "lokasi" });
-  // (21 Okt 2026) Akurasi 100-5000 m = dispensasi: diterima, ditandai kuning "akurasi_kasar" (lihat nilaiKepercayaan) untuk diperiksa PML/admin.
+  // (21 Okt 2026) Akurasi 300-5000 m = dispensasi: diterima, ditandai kuning "akurasi_kasar" (lihat nilaiKepercayaan) untuk diperiksa PML/admin.
   if (posisi.akurasi > MAKS_AKURASI_DISPENSASI_M) return galat(`Akurasi lokasi ±${Math.round(posisi.akurasi)} m terlalu kasar (maks ${MAKS_AKURASI_DISPENSASI_M} m). Aktifkan lokasi tepat dan pindah ke tempat terbuka lalu potret ulang.`, 422, { kode: "akurasi" });
   const tagMasukan = bacaTag(form.get("tag"));
   if (tagMasukan === null) return galat("Daftar tag tidak valid.");

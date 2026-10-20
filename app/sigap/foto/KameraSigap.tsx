@@ -4,7 +4,7 @@
 //
 // (19 Okt 2026) Kamera SIGAP dalam aplikasi. Tidak ada kolom ketik waktu/koordinat dan tidak ada pilihan dari galeri:
 //  - waktu: token dari server saat kamera dibuka + jam monotonik HP (performance.now) sampai tombol potret ditekan;
-//  - koordinat: GPS HP (enableHighAccuracy) -- akurasi > 100 m ditolak server;
+//  - koordinat: GPS HP (enableHighAccuracy) -- akurasi > 5000 m ditolak server; 300-5000 m diterima berpenanda "perlu diperiksa";
 //  - cap (logo, waktu, koordinat, nama, kegiatan, kode, QR) dicetak SERVER ke gambar.
 // Tanpa sinyal: foto disimpan di IndexedDB dan terkirim otomatis saat ada sinyal.
 
@@ -320,7 +320,7 @@ export default function KameraSigap({
   useEffect(() => () => { if (jepretan) URL.revokeObjectURL(jepretan.url); }, [jepretan]);
 
   const akurasiOk = !!posisi && posisi.akurasi <= MAKS_AKURASI_M;
-  // (21 Okt 2026) Dispensasi akurasi: 100-5000 m boleh dipotret setelah menunggu + panduan; foto ditandai "perlu diperiksa" oleh server (kuning). Di atas 5000 m tetap tidak bisa.
+  // (21 Okt 2026) Dispensasi akurasi: 300-5000 m boleh dipotret setelah menunggu + panduan; foto ditandai "perlu diperiksa" oleh server (kuning). Di atas 5000 m tetap tidak bisa.
   const akurasiKasar = !!posisi && posisi.akurasi > MAKS_AKURASI_M && posisi.akurasi <= MAKS_AKURASI_DISPENSASI_M;
   const akurasiBuruk = !!posisi && posisi.akurasi > MAKS_AKURASI_DISPENSASI_M;
   const [detikKasar, setDetikKasar] = useState(0);
