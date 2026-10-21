@@ -12,6 +12,7 @@ import { ModalPengumuman } from "@/app/sigap/pelatihan/pengumumanUi";
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
 import { HARI_MODAL_SIARAN } from "@/lib/siaranPetugas";
 import type { JenisPengumuman } from "@/lib/sigapPengumuman";
+import { bakukanMarkup } from "@/lib/teksKaya";
 
 type Riwayat = { waktu: string; judul: string; oleh: string | null; akun: number; terkirim: number; modal: boolean; sudah_konfirmasi: number };
 type Ringkas = { push_siap: boolean; penerima: number; berlangganan: number; riwayat: Riwayat[]; boleh_kirim: boolean };
@@ -93,6 +94,9 @@ const TEMPLAT: Templat[] = [
   },
 ];
 const AWAL = TEMPLAT[0];
+// (21 Okt 2026) Siaran baru: semua isian kosong, siap diketik dari nol (tombol "Tambah siaran")
+const KOSONG: Templat = { nama: "Siaran baru (kosong)", judul: "", isi: "", mJudul: "", mIsi: "", tLabel: "", tUrl: "", url: "/sigap/pendataan", jenis: "info" };
+const SIARAN_BARU = -1; // nilai pemilih templat untuk siaran kosong
 
 const waktuTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(".", ":") + " WIB";
 
@@ -109,6 +113,7 @@ export default function Siaran() {
   const [tUrl, setTUrl] = useState(AWAL.tUrl);
   const [jenis, setJenis] = useState<JenisPengumuman>(AWAL.jenis);
   const [templat, setTemplat] = useState(0);
+  const [tanyaBaru, setTanyaBaru] = useState(false);
   const [urlPush, setUrlPush] = useState(AWAL.url);
   const [uji, setUji] = useState(false);
   const [hasilUji, setHasilUji] = useState<string | null>(null);
@@ -168,9 +173,8 @@ export default function Siaran() {
     }
   }
 
-  function pakaiTemplat(i: number) {
-    const t = TEMPLAT[i] ?? TEMPLAT[0];
-    setTemplat(i);
+  function isikan(t: Templat, nomor: number) {
+    setTemplat(nomor);
     setJudul(t.judul);
     setIsi(t.isi);
     setMJudul(t.mJudul);
@@ -182,6 +186,28 @@ export default function Siaran() {
     setYakin(false);
     setHasil(null);
     setHasilUji(null);
+    setTanyaBaru(false);
+  }
+
+  function pakaiTemplat(i: number) {
+    if (i === SIARAN_BARU) return isikan(KOSONG, SIARAN_BARU);
+    isikan(TEMPLAT[i] ?? TEMPLAT[0], i);
+  }
+
+  /** Isian sudah diubah dari templat/kosong yang sedang dipilih? (agar tombol Tambah siaran tidak menghapus ketikan tanpa bertanya) */
+  function sudahDiubah(): boolean {
+    const t = templat === SIARAN_BARU ? KOSONG : TEMPLAT[templat] ?? TEMPLAT[0];
+    return judul !== t.judul || isi !== t.isi || mJudul !== t.mJudul || mIsi !== bakukanMarkup(t.mIsi) || tLabel !== t.tLabel || tUrl !== t.tUrl || urlPush !== t.url || jenis !== t.jenis;
+  }
+
+  function tambahSiaran() {
+    if (sudahDiubah() && !tanyaBaru) {
+      setTanyaBaru(true);
+      return;
+    }
+    isikan(KOSONG, SIARAN_BARU);
+    setPush(true);
+    setModal(true);
   }
 
   const kolom = "mt-1 w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 py-2 text-[14px] text-[#1B2B4B]";
@@ -200,16 +226,35 @@ export default function Siaran() {
           {!r.push_siap && <b className="mt-1 block text-[#B42329]">Kunci VAPID belum terpasang di server, notifikasi belum bisa dikirim.</b>}
         </p>
       )}
-      <label className="mt-3 block text-[12px] font-bold text-[#55657D]">
-        Templat siaran
-        <select value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
-          {TEMPLAT.map((t, i) => (
-            <option key={t.nama} value={i}>
-              {t.nama}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="mt-3 flex items-end gap-2">
+        <label className="block min-w-0 flex-1 text-[12px] font-bold text-[#55657D]">
+          Templat siaran
+          <select value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
+            {templat === SIARAN_BARU && <option value={SIARAN_BARU}>{KOSONG.nama}</option>}
+            {TEMPLAT.map((t, i) => (
+              <option key={t.nama} value={i}>
+                {t.nama}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={tambahSiaran} disabled={templat === SIARAN_BARU && !sudahDiubah()} className="min-h-[44px] shrink-0 rounded-[12px] bg-[#1F5FD1] px-3.5 text-[13.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8] disabled:bg-[#A9BCD8]">
+          + Tambah siaran
+        </button>
+      </div>
+      {tanyaBaru && (
+        <div role="alert" className="mt-2 rounded-[12px] border border-[#F2D58A] bg-[#FFF6E0] p-3">
+          <p className="text-[13px] font-bold text-[#6B4A0E]">Isian yang sedang diketik akan dikosongkan untuk siaran baru. Lanjutkan?</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setTanyaBaru(false)} className="min-h-[42px] rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#0F2A52] shadow-sm">
+              Batal
+            </button>
+            <button type="button" onClick={tambahSiaran} className="min-h-[42px] rounded-[12px] bg-[#1F5FD1] text-[13.5px] font-extrabold text-white">
+              Ya, kosongkan
+            </button>
+          </div>
+        </div>
+      )}
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
       <label className="mt-3 flex items-center gap-2 text-[13.5px] font-bold text-[#0F2A52]">
