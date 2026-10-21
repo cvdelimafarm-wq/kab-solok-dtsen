@@ -122,6 +122,7 @@ export default function KameraSigap({
   const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
   const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
+  const [konfirmasiGanti, setKonfirmasiGanti] = useState<number | null>(null); // nomor terisi yang hendak diganti (menunggu modal "Yakin?")
   const [rapi, setRapi] = useState<{ cadangan: number; kosong: number[]; href: string } | null>(null); // foto terkirim yang belum bernomor + tautan ke kartu hari
   const drafIdRef = useRef<number | null>(null);
   const [tag, setTag] = useState<TagPilihan[]>([]);
@@ -438,6 +439,7 @@ export default function KameraSigap({
     if (jepretan) URL.revokeObjectURL(jepretan.url);
     setJepretan(null);
     setNomor(null);
+    setKonfirmasiGanti(null);
     setNomorOtomatis(false);
     setHitung(null);
     setTag([]);
@@ -728,23 +730,35 @@ export default function KameraSigap({
               {NOMOR(jumlahNomor).map((n) => {
                 const pilih = nomor === n;
                 const lokasi = (SLOT_BERLOKASI as readonly number[]).includes(n);
+                // (21 Okt 2026) Nomor yang sudah berisi foto "padam" (abu-abu + centang) supaya petugas langsung melihat mana yang masih perlu.
+                // Tetap bisa diketuk untuk MENGGANTI (foto lama jadi cadangan); ketuk lagi = batal ganti.
+                const terisi = terisiSemuaNomor.has(n);
+                const gaya = pilih
+                  ? terisi ? "border-[#B7791F] bg-[#FFF4D6]" : "border-[#0F2A52] bg-[#E8EEF8]"
+                  : terisi ? "border-[#E1E6EF] bg-[#F3F5F9]" : "border-[#C9D3E6] bg-white";
                 return (
                   <button
                     key={n}
                     type="button"
                     aria-pressed={pilih}
+                    aria-label={terisi ? `Nomor ${n} sudah terisi. ${pilih ? "Foto ini akan menggantikannya; ketuk lagi untuk membatalkan." : "Ketuk untuk mengganti."}` : undefined}
                     onClick={() => {
                       setHitung(null); // petugas mengatur sendiri: hentikan kirim otomatis
                       setNomorOtomatis(false);
+                      if (terisi && !pilih) {
+                        setKonfirmasiGanti(n); // nomor sudah berisi foto: minta konfirmasi dulu
+                        return;
+                      }
                       setNomor(pilih ? null : n);
                     }}
-                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${pilih ? "border-[#0F2A52] bg-[#E8EEF8]" : "border-[#C9D3E6] bg-white"}`}
+                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${gaya}`}
                   >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${pilih ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{n}</span>
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${pilih ? (terisi ? "bg-[#B7791F] text-white" : "bg-[#0F2A52] text-white") : terisi ? "bg-[#DDEFE5] text-[#1E8E4E]" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{terisi && !pilih ? "✓" : n}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-[#0F2A52]">{etiket[n - 1] ?? `Foto ${n}`}</span>
-                      {lokasi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
-                      {terisiSemuaNomor.has(n) && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah terisi hari ini; foto ini akan menggantikannya</span>}
+                      <span className={`block text-sm font-bold ${terisi && !pilih ? "text-[#7A879C]" : "text-[#0F2A52]"}`}>{etiket[n - 1] ?? `Foto ${n}`}</span>
+                      {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
+                      {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengganti</span>}
+                      {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto ini akan menggantikan foto lama (foto lama jadi cadangan) · ketuk lagi untuk batal</span>}
                     </span>
                   </button>
                 );
@@ -752,6 +766,30 @@ export default function KameraSigap({
             </div>
             <p className="text-xs text-[#3C4C68]">Salah nomor setelah terkirim? Buka kartu hari (atau menu perbaikan): nomor foto bisa dipindah atau ditukar di sana.</p>
           </fieldset>
+
+          {konfirmasiGanti !== null && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="presentation" onClick={() => setKonfirmasiGanti(null)}>
+              <div role="alertdialog" aria-modal="true" aria-labelledby="judul-ganti" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <h2 id="judul-ganti" className="text-base font-extrabold text-[#0F2A52]">Yakin mengganti Foto {konfirmasiGanti}?</h2>
+                <p className="mt-2 text-sm leading-relaxed text-[#3C4C68]">
+                  Nomor {konfirmasiGanti} ({etiket[konfirmasiGanti - 1] ?? `Foto ${konfirmasiGanti}`}) sudah berisi foto. Bila diganti, foto yang lama tidak dihapus: ia menjadi foto cadangan dan bisa dipasang kembali lewat kartu hari.
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <button type="button" onClick={() => setKonfirmasiGanti(null)} className="min-h-[48px] flex-1 rounded-xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52]">Batal</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNomor(konfirmasiGanti);
+                      setKonfirmasiGanti(null);
+                    }}
+                    className="min-h-[48px] flex-[1.4] rounded-xl bg-[#B7791F] text-sm font-extrabold text-white"
+                  >
+                    Ya, ganti Foto {konfirmasiGanti}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <button type="button" onClick={() => { setHitung(null); setBagikan((b) => !b); }} aria-expanded={bagikan} className="min-h-[48px] rounded-xl border-2 border-[#0F2A52] text-sm font-bold text-[#0F2A52]">
             {bagikan ? "Sembunyikan pilihan rekan" : tag.length ? `Bagikan ke rekan (${tag.length})` : "Bagikan ke rekan"}
