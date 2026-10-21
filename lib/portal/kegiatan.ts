@@ -29,6 +29,8 @@ export type IsianTranslok = {
   foto: number;
   /** nomor slot foto yang sudah ada (bila kosong, dianggap 1..foto) */
   slot?: number[];
+  /** (21 Okt 2026) foto Kamera SIGAP terkirim yang belum menempati nomor pada tanggal ini */
+  cadangan?: number;
   /** hari lampau tanpa laporan manual tetapi ada hasil lembar (dihitung selesai) */
   dianggap?: boolean;
   hasilLembar?: number | null;
@@ -61,7 +63,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
 
   const isianKek: Record<string, IsianHari> = {};
   for (const [t, v] of Object.entries(isian)) {
-    isianKek[t] = { laporan: v.laporan, slot: v.slot ?? Array.from({ length: v.foto }, (_, i) => i + 1), dianggap: !!v.dianggap, hasilLembar: v.hasilLembar ?? null, jorong: v.jorong ?? null };
+    isianKek[t] = { laporan: v.laporan, slot: v.slot ?? Array.from({ length: v.foto }, (_, i) => i + 1), cadangan: v.cadangan ?? 0, dianggap: !!v.dianggap, hasilLembar: v.hasilLembar ?? null, jorong: v.jorong ?? null };
   }
   const kekMasuk: MasukanKekurangan = {
     penugasanId: p.id,
@@ -232,6 +234,30 @@ export async function kegiatanTranslok(
 }
 
 /**
+ * (21 Okt 2026) Foto Kamera SIGAP milik akun yang sudah terkirim tetapi tidak menempati nomor mana pun (tag pemotret masih "diajukan" atau
+ * "dilepas" = tergeser foto lain). Kunci hasil: "<kegiatan_id>|<tanggal>". Syarat sama dengan panel Nomor foto (app/api/sigap/foto/susun):
+ * foto merah yang belum diperiksa dan foto "dipertanyakan" tidak dihitung. Gagal membaca = dianggap tidak ada (Beranda tidak boleh ikut rusak).
+ */
+export async function hitungCadanganFoto(db: Db, akunId: number, fotoDipakai: (number | null)[]): Promise<Map<string, number>> {
+  const hasil = new Map<string, number>();
+  try {
+    const { data: tag } = await db.from("sigap_foto_tag").select("foto_id").eq("akun_id", akunId).eq("peran_tag", "pemotret").in("status", ["diajukan", "dilepas"]).limit(500);
+    const ids = (tag ?? []).map((t) => t.foto_id as number).filter((id) => !fotoDipakai.includes(id));
+    if (!ids.length) return hasil;
+    const { data: foto } = await db.from("sigap_foto").select("id, kegiatan_id, tanggal, kepercayaan, status_periksa").in("id", ids).eq("akun_pengambil", akunId);
+    for (const f of foto ?? []) {
+      if (f.status_periksa === "dipertanyakan") continue;
+      if (f.kepercayaan === "merah" && f.status_periksa !== "diperiksa") continue;
+      const k = `${f.kegiatan_id}|${f.tanggal}`;
+      hasil.set(k, (hasil.get(k) ?? 0) + 1);
+    }
+  } catch {
+    /* abaikan */
+  }
+  return hasil;
+}
+
+/**
  * (15 Okt 2026) Bahan mentah per penugasan (hari kerja, isian per tanggal, izin susulan aktif) sebelum disusun menjadi ringkasan.
  * Dipakai kegiatanTranslok dan siaran perbaikan admin (perlu isian per tanggal, bukan hanya kekurangan).
  */
@@ -249,10 +275,11 @@ export async function muatMasukanTranslok(
   const [{ data: hk }, { data: lap }, { data: dok }, { data: izin }] = await Promise.all([
     db.from("sigap_hari_kerja").select("penugasan_id, tanggal").eq("akun_id", akunId).or(HK_AKTIF()),
     db.from("sigap_realisasi").select("penugasan_id, tanggal").in("penugasan_id", ids),
-    db.from("sigap_dokumentasi").select("penugasan_id, tanggal, slot").in("penugasan_id", ids),
+    db.from("sigap_dokumentasi").select("penugasan_id, tanggal, slot, foto_id").in("penugasan_id", ids),
     db.from("sigap_izin_susulan").select("penugasan_id, tanggal, berlaku_sampai").in("penugasan_id", ids).gt("berlaku_sampai", new Date(nowMs).toISOString()),
   ]);
   const hariIni = hariIniWib();
+  const cadangan = await hitungCadanganFoto(db, akunId, (dok ?? []).map((d) => d.foto_id as number | null));
   return Promise.all(
     aktif.map(async (p) => {
       const hariKerja = Array.from(new Set((hk ?? []).filter((h) => h.penugasan_id === p.id).map((h) => h.tanggal as string))).sort();
@@ -269,6 +296,7 @@ export async function muatMasukanTranslok(
           laporan,
           foto: fotoBaris.length,
           slot: fotoBaris.map((f) => Number(f.slot)).filter((n) => Number.isInteger(n) && n > 0),
+          cadangan: cadangan.get(`${p.kegiatan.id}|${t}`) ?? 0,
           dianggap: !!p.kegiatan.wajib_laporan && laporanDianggap(t, hariIni, laporan, o),
           hasilLembar: o?.jumlah ?? null,
           jorong: o?.lokasi[0]?.jorong ?? null,

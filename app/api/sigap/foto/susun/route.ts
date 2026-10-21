@@ -67,7 +67,7 @@ async function keadaan(db: Db, akunId: number, pen: Pen, tanggal: string) {
 export async function GET(req: NextRequest) {
   const m = await masukFoto(req);
   if (m instanceof NextResponse) return m;
-  const { db, akunId } = m;
+  const { db, akunId, akun } = m;
   const kegiatanId = Number(req.nextUrl.searchParams.get("kegiatan"));
   const tanggal = req.nextUrl.searchParams.get("tanggal") || hariIniWib();
   if (!Number.isInteger(kegiatanId) || kegiatanId <= 0) return galat("kegiatan wajib.");
@@ -97,6 +97,8 @@ export async function GET(req: NextRequest) {
     kosong: nomorKosong(k.terisi, k.jumlah),
     saran: nomorBerikutnya(k.terisi, k.jumlah),
     cadangan: k.cadangan.map((f) => ({ id: f.id, kode: f.kode, kepercayaan: f.kepercayaan, diambil_at: f.diambil_at })),
+    // (21 Okt 2026) tombol "Rapikan nomor foto" dari layar kamera: membuka kartu hari tanggal ini, bagian foto (tautan dalam halaman kerja)
+    href_kerja: `/sigap/translok/${akun.token}?p=${pen.id}&tab=${tanggal === hariIniWib() ? "hari_ini" : "hari_kerja"}&tgl=${tanggal}&fokus=foto`,
   });
 }
 

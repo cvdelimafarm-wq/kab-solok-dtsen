@@ -58,6 +58,8 @@ export type IsianHari = {
   laporan: boolean;
   /** nomor slot foto yang sudah ada */
   slot: number[];
+  /** (21 Okt 2026) jumlah foto Kamera SIGAP yang sudah terkirim pada tanggal itu tetapi belum menempati nomor mana pun (cadangan/tergeser) */
+  cadangan?: number;
   /** hari lampau tanpa laporan manual tetapi ada hasil lembar (dihitung selesai) */
   dianggap?: boolean;
   /** jumlah hasil di lembar (identifikasi/pendataan) pada tanggal itu; null = tak ada/ tak berlaku */
@@ -228,6 +230,7 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
     const nada: NadaKekurangan = mendesak ? "merah" : "emas";
     const batas = new Date(akhirHari).toISOString();
     const nFoto = aturan.jumlah_foto - b.fotoN;
+    const nCadangan = isi.cadangan ?? 0;
     const adaHasil = (isi.hasilLembar ?? 0) > 0;
     // (15 Okt 2026) PML tidak lagi diarahkan ke Lembar Identifikasi: pekerjaannya beralih ke pengawasan, laporannya diisi manual (jumlah KK diawasi).
     const bisaLembar = !!m.sumber && m.sumber !== "identifikasi" && !!m.hrefLembar;
@@ -286,19 +289,28 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
     }
     if (b.fotoN > 0) {
       const semua = b.fotoN === aturan.jumlah_foto;
+      // (21 Okt 2026) Foto Kamera SIGAP sudah terkirim tetapi tidak menempati nomor (dipilih ganda/tanpa nomor): arahkan ke panel "Nomor foto"
+      // untuk MEMASANG, bukan menyuruh memotret/mengunggah lagi.
+      const rapikan = nCadangan > 0;
       out.push({
-        kode: `foto:${m.penugasanId}:${hariIni}:${b.foto.join("")}`,
+        kode: `foto:${m.penugasanId}:${hariIni}:${b.foto.join("")}${rapikan ? `:c${nCadangan}` : ""}`,
         jenis: "foto",
         tanggal: hariIni,
         skor: dasar + 2,
         nada,
         label,
-        judul: semua ? `Unggah ${aturan.jumlah_foto} foto dokumentasi` : b.fotoN === 1 ? `Tinggal 1 foto lagi (nomor ${b.foto[0]})` : `Foto kurang ${b.fotoN}: nomor ${b.foto.join(", ")}`,
-        ringkas: `Foto kurang ${b.fotoN}`,
-        uraian: ket(`${semua ? "Belum ada foto hari ini." : `Foto baru ${nFoto} dari ${aturan.jumlah_foto}.`}${aturan.wajib_laporan && !b.laporan ? " Laporan sudah tersimpan." : ""} Boleh satu per satu.`),
+        judul: rapikan
+          ? `Nomor ${rentangNomor(b.foto)} masih kosong, ada ${nCadangan} foto belum terpakai`
+          : semua ? `Unggah ${aturan.jumlah_foto} foto dokumentasi` : b.fotoN === 1 ? `Tinggal 1 foto lagi (nomor ${b.foto[0]})` : `Foto kurang ${b.fotoN}: nomor ${b.foto.join(", ")}`,
+        ringkas: rapikan ? `${nCadangan} foto belum bernomor` : `Foto kurang ${b.fotoN}`,
+        uraian: ket(
+          rapikan
+            ? `Foto baru tercatat ${nFoto} dari ${aturan.jumlah_foto} nomor, padahal ${nCadangan} foto Kamera SIGAP sudah terkirim tetapi belum menempati nomor. Buka bagian foto, lalu pasang ke nomor yang kosong.${aturan.wajib_laporan && !b.laporan ? " Laporan sudah tersimpan." : ""}`
+            : `${semua ? "Belum ada foto hari ini." : `Foto baru ${nFoto} dari ${aturan.jumlah_foto}.`}${aturan.wajib_laporan && !b.laporan ? " Laporan sudah tersimpan." : ""} Boleh satu per satu.`
+        ),
         batas,
         progres: { selesai: nFoto, total: aturan.jumlah_foto },
-        aksi: `Unggah foto ${rentangNomor(b.foto)}`,
+        aksi: rapikan ? "Rapikan nomor foto" : `Unggah foto ${rentangNomor(b.foto)}`,
         href: url("tab=hari_ini&fokus=foto"),
       });
     }

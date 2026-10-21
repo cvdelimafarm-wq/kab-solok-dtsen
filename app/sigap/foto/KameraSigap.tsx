@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
@@ -121,6 +122,7 @@ export default function KameraSigap({
   const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
   const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
+  const [rapi, setRapi] = useState<{ cadangan: number; kosong: number[]; href: string } | null>(null); // foto terkirim yang belum bernomor + tautan ke kartu hari
   const drafIdRef = useRef<number | null>(null);
   const [tag, setTag] = useState<TagPilihan[]>([]);
   const [bagikan, setBagikan] = useState(false);
@@ -166,8 +168,9 @@ export default function KameraSigap({
 
   const muatTerisi = useCallback(async () => {
     try {
-      const d = await ambilJson<{ nomor: { slot: number; terisi: boolean }[] }>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tglWib()}`);
+      const d = await ambilJson<{ nomor: { slot: number; terisi: boolean }[]; kosong: number[]; cadangan: unknown[]; href_kerja: string }>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tglWib()}`);
       setTerisiServer(d.nomor.filter((n) => n.terisi).map((n) => n.slot));
+      setRapi({ cadangan: d.cadangan.length, kosong: d.kosong, href: d.href_kerja });
     } catch {
       /* tanpa sinyal: saran nomor memakai antrean HP saja */
     }
@@ -579,6 +582,16 @@ export default function KameraSigap({
       {antre > 0 && (
         <div role="status" className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold text-[#5E4300]">
           {antre} foto menunggu terkirim dari HP ini (terkirim sendiri saat ada sinyal). <button type="button" onClick={() => void kirimAntrean(true)} className="underline">Kirim sekarang</button>
+        </div>
+      )}
+
+      {rapi && rapi.cadangan > 0 && rapi.kosong.length > 0 && !(jepretan && !hasil) && (
+        <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#F2B632] bg-[#FFF4D6] px-3 py-2.5">
+          <div className="text-[13px] font-extrabold text-[#5E4300]">Nomor foto hari ini belum lengkap</div>
+          <p className="text-xs leading-relaxed text-[#5E4300]">
+            {rapi.cadangan} foto Anda sudah terkirim tetapi belum menempati nomor, sementara nomor {rapi.kosong.join(", ")} masih kosong. Pasang fotonya ke nomor yang sesuai.
+          </p>
+          <Link href={rapi.href} className="flex min-h-[48px] items-center justify-center rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">Rapikan nomor foto</Link>
         </div>
       )}
 

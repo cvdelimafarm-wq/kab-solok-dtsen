@@ -56,7 +56,7 @@ vi.mock("@/lib/sigapFotoServer", () => ({
   jarakKeRumah: async () => null,
 }));
 vi.mock("@/lib/sigapFotoRoute", () => ({
-  masukFoto: async () => ({ db, akunId: 266, akun: { id: 266, nama: "Hariston" } }),
+  masukFoto: async () => ({ db, akunId: 266, akun: { id: 266, nama: "Hariston", token: "tok123" } }),
   galat: (error: string, status = 400, ekstra: Record<string, unknown> = {}) => NextResponse.json({ error, ...ekstra }, { status }),
 }));
 
@@ -103,6 +103,12 @@ describe("GET /api/sigap/foto/susun", () => {
     expect(j.nomor[0].foto).toBeNull(); // unggahan manual
     expect(j.nomor[2].foto.id).toBe(311);
     expect(j.cadangan.map((c: { id: number }) => c.id)).toEqual([279, 364]); // termasuk yang tergeser (tag dilepas)
+    // tombol "Rapikan nomor foto": tautan dalam ke kartu hari tanggal itu, bagian foto
+    expect(j.href_kerja).toBe("/sigap/translok/tok123?p=49&tab=hari_kerja&tgl=2026-10-20&fokus=foto");
+  });
+  it("tanggal hari ini: tautan membuka tab hari ini", async () => {
+    const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-21"))).json();
+    expect(j.href_kerja).toBe("/sigap/translok/tok123?p=49&tab=hari_ini&tgl=2026-10-21&fokus=foto");
   });
   it("foto merah yang belum diperiksa dan foto 'dipertanyakan' tidak ikut cadangan", async () => {
     tabel.sigap_foto.push(foto(500, 5, { kepercayaan: "merah" }), foto(501, 6, { status_periksa: "dipertanyakan" }), foto(502, 7, { kepercayaan: "merah", status_periksa: "diperiksa" }));
