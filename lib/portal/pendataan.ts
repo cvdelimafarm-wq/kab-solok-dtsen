@@ -69,7 +69,7 @@ export async function daftarKk(db: Db, idsubsls: string): Promise<KkLembar[]> {
   for (let dari = 0; ; dari += 1000) {
     const { data, error } = await db
       .from("bencana_pendataan_kk")
-      .select("id, no_urut, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at")
+      .select("id, no_urut, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at, ditambah_oleh_akun")
       .eq("idsubsls", idsubsls)
       .eq("aktif", true)
       .order("nama_kk", { ascending: true })
@@ -172,6 +172,28 @@ export async function tambahKk(db: Db, akunId: number, t: IsiTambahKk): Promise<
     return { ok: false, pesan: PESAN_TOLAK_TAMBAH[r.alasan ?? ""] ?? "Ditolak." };
   }
   return { ok: true, kk_id: Number(r.kk_id), duplikat: r.status === "duplikat" };
+}
+
+// ----------------------------------------------------------------------------------------------
+// (21 Okt 2026) Batalkan keluarga baru: KK hasil tombol "+ Keluarga baru" yang ternyata dobel (mis. sudah ada di prelist) atau salah ketik.
+// Pembatalan lunak lewat fungsi DB bencana_pendataan_nonaktifkan (aktif=false; baris & log tetap). Boleh: PML tim, atau PPL penambahnya
+// selama belum ditimpa rekan. KK dari unggahan FASIH tidak bisa dibatalkan di sini.
+// ----------------------------------------------------------------------------------------------
+const PESAN_TOLAK_BATAL: Record<string, string> = {
+  kk_tidak_ada: "KK tidak ditemukan.",
+  bukan_hasil_tambah: "Hanya keluarga baru (tambahan dari lapangan) yang bisa dibatalkan. KK dari daftar awal tidak bisa.",
+  bukan_pml_tim: "KK ini bukan di wilayah tim Anda.",
+  bukan_penambah_atau_pml: "Hanya PML tim atau petugas yang menambahkan keluarga ini yang bisa membatalkannya.",
+  sudah_ditimpa_rekan: "Hasil keluarga ini sudah diubah rekan tim. Minta PML yang membatalkannya.",
+};
+
+export async function batalkanKkBaru(db: Db, akunId: number, kkId: number, alasan: string | null): Promise<{ ok: true; sudah: boolean } | { ok: false; pesan: string }> {
+  const { data, error } = await db.rpc("bencana_pendataan_nonaktifkan", { p_akun: akunId, p_kk: kkId, p_alasan: alasan });
+  if (error) throw new Error(error.message);
+  const r = data as { status: "tercatat" | "sudah" | "ditolak"; alasan?: string };
+  if (r.status === "ditolak") return { ok: false, pesan: PESAN_TOLAK_BATAL[r.alasan ?? ""] ?? "Ditolak." };
+  if (r.status === "tercatat") await catatAudit(db, akunId, "pendataan.batal_kk_baru", { kk_id: kkId, alasan }).catch(() => undefined);
+  return { ok: true, sudah: r.status === "sudah" };
 }
 
 /**

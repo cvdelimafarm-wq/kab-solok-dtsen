@@ -433,7 +433,30 @@ export type KkLembar = {
   alasan: string | null;
   ppl_akun_id: number | null;
   status_at: string | null;
+  /** (21 Okt 2026) akun yang menambahkan KK ini lewat tombol "+ Keluarga baru"; null = KK dari daftar awal (unggahan FASIH) */
+  ditambah_oleh_akun?: number | null;
 };
+
+/**
+ * (21 Okt 2026) Siapa yang boleh membatalkan KK hasil tambahan (tombol "Batalkan + keluarga baru"). Cermin aturan database
+ * (bencana_pendataan_nonaktifkan): hanya KK hasil tambah; PML tim boleh; PPL hanya KK yang ia tambahkan sendiri dan belum ditimpa hasil rekan.
+ * Server tetap yang menentukan; ini hanya untuk menampilkan atau menyembunyikan tombol.
+ */
+export function bisaBatalkanKkBaru(k: Pick<KkLembar, "ditambah_oleh_akun" | "ppl_akun_id">, sayaAkun: number | null, peran: "pml" | "ppl" | null): boolean {
+  if (!k.ditambah_oleh_akun || !sayaAkun || !peran) return false;
+  if (peran === "pml") return true;
+  return k.ditambah_oleh_akun === sayaAkun && (k.ppl_akun_id === null || k.ppl_akun_id === sayaAkun);
+}
+
+export type IsiBatalKkBaru = { kk_id: number; alasan: string | null };
+/** Validasi isi POST { aksi:"batalkan_baru", kk_id, alasan? } */
+export function periksaBatalKkBaru(b: unknown): { ok: true; isi: IsiBatalKkBaru } | { ok: false; pesan: string } {
+  const x = (b ?? {}) as Record<string, unknown>;
+  const id = typeof x.kk_id === "number" && Number.isInteger(x.kk_id) && x.kk_id > 0 ? x.kk_id : null;
+  if (!id) return { ok: false, pesan: "KK tidak valid." };
+  const alasan = typeof x.alasan === "string" && x.alasan.trim() ? x.alasan.trim().slice(0, 200) : null;
+  return { ok: true, isi: { kk_id: id, alasan } };
+}
 export type DataTimPendataan = { sekarang: string; saya: { akun_id: number; peran: "pml" | "ppl" }; pml: { id: number; nama: string }; anggota: Anggota[]; sub: SubTim[]; ringkas: BarisRingkas[];
   /** (19 Okt 2026) angka KK tim PROPORSIONAL (sama dengan Monitoring Korwil & Beranda); null/tak ada = pakai jumlah dari `ringkas` */
   proporsional?: { total: number; didata: number } | null;

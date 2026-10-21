@@ -33,16 +33,19 @@ import { useDasarTim } from "./useDasar";
 import type { StatusDasar } from "./PetaDasar";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
-import { tandaBasi, useData } from "@/app/portal/dataBersama";
+import { muatData, tandaBasi, useData } from "@/app/portal/dataBersama";
 import { API_PERMINTAAN, type DataPermintaanTim } from "@/lib/permintaanDaftar";
 import { peringatanSekali, tglPanjangPerbaikan } from "@/lib/sigapPerbaikan";
 import {
+  API_PENDATAAN,
   HASIL_KK,
   LABEL_HASIL,
   LABEL_PENDEK,
   WARNA_BELUM,
+  bisaBatalkanKkBaru,
   buatProyeksi,
   jarakMeter,
+  pathKkSub,
   ringkasPerPpl,
   ringkasPerSub,
   type Anggota,
@@ -208,6 +211,9 @@ export default function LembarPendataan() {
   const [saya, setSaya] = useState<{ lat: number; lng: number } | null>(null);
   const [monPpl, setMonPpl] = useState<number | null>(null);
   const [toast, setToast] = useState<{ pesan: string; urungkan?: () => void } | null>(null);
+  // (21 Okt 2026) Batalkan keluarga baru: id KK yang sedang menunggu konfirmasi, dan penanda sedang menyimpan
+  const [batalId, setBatalId] = useState<number | null>(null);
+  const [batalSibuk, setBatalSibuk] = useState(false);
   const dariKartu = useRef(false); // true bila Sub SLS dibuka dari kartu (ada entri riwayat yang bisa di-"back")
   // (15 Okt 2026) MODE PERBAIKAN (?perbaikan=<penugasan>&tgl=<hari kerja>): daftar KK sama persis, tetapi penandaan hanya ditampung dulu di HP ini lalu dikirim
   // sekali lewat tombol "Kirim perbaikan laporan" (dicatat sebagai pendataan tanggal hari kerja itu). Hanya KK yang belum punya hasil yang bisa ditandai.
@@ -515,6 +521,27 @@ export default function LembarPendataan() {
     const r = tandaiKk(subId, k, "belum");
     if (!r.ok) return setToast({ pesan: r.pesan });
     setToast({ pesan: "Dikembalikan ke belum didata", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan) : undefined });
+  }
+
+  /**
+   * (21 Okt 2026) Batalkan keluarga baru (tambahan lapangan) yang dobel/salah, mis. ternyata sudah ada di daftar awal. Pembatalan lunak di server
+   * (KK hilang dari daftar & hitungan, riwayat tetap). Butuh sinyal, tidak lewat antrean offline, supaya aturan hak diperiksa server.
+   */
+  async function batalkanBaru(k: KkLembar) {
+    if (!subId || batalSibuk) return;
+    setBatalSibuk(true);
+    try {
+      await apiPortal(API_PENDATAAN, { method: "POST", body: JSON.stringify({ aksi: "batalkan_baru", kk_id: k.id, alasan: "Dibatalkan petugas (dobel/salah tambah)" }) });
+      await Promise.allSettled([muatData(pathKkSub(subId)), muatData(API_PENDATAAN)]);
+      setBatalId(null);
+      setTerpilihId(null);
+      setToast({ pesan: `Keluarga baru "${k.nama_kk}" dibatalkan. Jika keluarga ini ada di daftar awal, tandai di sana.` });
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "";
+      setToast({ pesan: m === "SESI_BERAKHIR" ? "Sesi berakhir. Masuk kembali." : m === "Failed to fetch" || /sambungan/i.test(m) ? "Tidak ada sinyal. Membatalkan keluarga baru butuh sinyal; coba lagi saat sinyal ada." : m || "Gagal membatalkan. Coba lagi." });
+    } finally {
+      setBatalSibuk(false);
+    }
   }
 
   // (19 Okt 2026) Pembacaan lokasi dibedakan menurut penyebab kegagalan (izin / posisi tidak tersedia / waktu habis) dan dicoba lewat lokasi jaringan
@@ -845,8 +872,11 @@ export default function LembarPendataan() {
                 const a = k.ppl_akun_id ? anggota.get(k.ppl_akun_id) : undefined;
                 const jarak = saya && k.lat !== null && k.lng !== null ? fmtJarak(jarakMeter(saya, { lat: k.lat, lng: k.lng })) : "";
                 const p = PIL[k.hasil ?? "belum"];
+                const baru = !!k.ditambah_oleh_akun;
+                const bisaBatal = !perbaikan && bisaBatalkanKkBaru(k, sayaAkun, data?.saya.peran ?? null);
                 return (
-                  <button key={k.id} type="button" onClick={() => setTerpilihId(k.id)} className="flex w-full items-center gap-[11px] border-b border-[#EEF2F7] px-3 py-2 text-left last:border-b-0 active:bg-[#F1F6FE]">
+                  <div key={k.id} className="border-b border-[#EEF2F7] last:border-b-0">
+                  <button type="button" onClick={() => setTerpilihId(k.id)} className="flex w-full items-center gap-[11px] px-3 py-2 text-left active:bg-[#F1F6FE]">
                     <IkonHasil hasil={k.hasil} warna={k.hasil ? warnaPelaku(a) : WARNA_BELUM} ukuran={20} />
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-[14px] font-bold leading-[1.25] text-[#0F2A52]">{k.nama_kk}</b>
@@ -856,6 +886,32 @@ export default function LembarPendataan() {
                       {p[2]}
                     </span>
                   </button>
+                  {baru && (
+                    <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pl-[43px]">
+                      <span className="rounded-[9px] bg-[#FFF3D6] px-2 py-[3px] text-[11px] font-extrabold text-[#8A6200]">Keluarga baru</span>
+                      {bisaBatal && batalId !== k.id && (
+                        <button type="button" onClick={() => setBatalId(k.id)} className="min-h-[34px] rounded-full border border-[#F2C4C6] bg-white px-3 text-[11.5px] font-extrabold text-[#B42329] active:bg-[#FDECEC]">
+                          Batalkan + keluarga baru
+                        </button>
+                      )}
+                      {bisaBatal && batalId === k.id && (
+                        <div className="flex w-full flex-col gap-2 rounded-[12px] bg-[#FDECEC] px-3 py-2.5 text-[12.5px] text-[#7A1F23]">
+                          <p>
+                            Batalkan keluarga baru <b>{k.nama_kk}</b>? Ia hilang dari daftar dan hitungan. Pakai ini bila ternyata sudah ada di daftar awal atau salah tambah.
+                          </p>
+                          <div className="flex gap-2">
+                            <button type="button" disabled={batalSibuk} onClick={() => void batalkanBaru(k)} className="min-h-[40px] flex-1 rounded-full bg-[#B42329] px-3 text-[12.5px] font-extrabold text-white disabled:opacity-50">
+                              {batalSibuk ? "Membatalkan…" : "Ya, batalkan"}
+                            </button>
+                            <button type="button" disabled={batalSibuk} onClick={() => setBatalId(null)} className="min-h-[40px] flex-1 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-[#55657D] shadow-[0_2px_6px_rgba(15,42,82,.1)] disabled:opacity-50">
+                              Tidak
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  </div>
                 );
               })}
             </div>
@@ -1098,6 +1154,26 @@ export default function LembarPendataan() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {terpilih.ditambah_oleh_akun && !perbaikan && bisaBatalkanKkBaru(terpilih, sayaAkun, data?.saya.peran ?? null) && (
+            <div className="mt-3 rounded-[12px] bg-[#FFF8E6] px-3 py-2.5">
+              <p className="text-[12.5px] text-[#6B4F00]">Keluarga baru (ditambahkan dari lapangan). Salah tambah atau ternyata sudah ada di daftar awal?</p>
+              {batalId !== terpilih.id ? (
+                <button type="button" onClick={() => setBatalId(terpilih.id)} className="mt-2 min-h-[40px] rounded-full border border-[#F2C4C6] bg-white px-4 text-[12.5px] font-extrabold text-[#B42329] active:bg-[#FDECEC]">
+                  Batalkan + keluarga baru
+                </button>
+              ) : (
+                <div className="mt-2 flex gap-2">
+                  <button type="button" disabled={batalSibuk} onClick={() => void batalkanBaru(terpilih)} className="min-h-[40px] flex-1 rounded-full bg-[#B42329] px-3 text-[12.5px] font-extrabold text-white disabled:opacity-50">
+                    {batalSibuk ? "Membatalkan…" : "Ya, batalkan"}
+                  </button>
+                  <button type="button" disabled={batalSibuk} onClick={() => setBatalId(null)} className="min-h-[40px] flex-1 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-[#55657D] shadow-[0_2px_6px_rgba(15,42,82,.1)] disabled:opacity-50">
+                    Tidak
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

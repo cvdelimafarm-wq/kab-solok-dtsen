@@ -4,14 +4,15 @@
 //  GET                  -> { sekarang, saya, pml, anggota[{akun_id,nama,peran,indeks}], sub[], ringkas[] }   (anggota tim: PML + semua PPL-nya)
 //  GET ?sub=<idsubsls>  -> { idsubsls, kk[] }                                                              (hanya Sub SLS milik tim)
 //  POST { aksi:"tambah", idsubsls, nama, patokan?, lat?, lng?, hasil, waktu, kunci, paksa? }  (14 Okt 2026) tambah keluarga baru
+//  POST { aksi:"batalkan_baru", kk_id, alasan? }  (21 Okt 2026) batalkan keluarga baru yang dobel/salah (PML tim atau PPL penambah)
 //  POST { kk_id, hasil, alasan?, waktu, kunci, pos? }  catat hasil satu KK. Idempoten lewat `kunci` (uuid dari HP); `waktu` = waktu kejadian di HP.
 // "Masuk sebagai" (akun super) hanya boleh MELIHAT: mencatat ditolak supaya data lapangan tidak terisi tanpa sengaja.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
-import { ambilTim, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
-import { periksaCatat } from "@/lib/pendataan";
+import { ambilTim, batalkanKkBaru, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
+import { periksaBatalKkBaru, periksaCatat } from "@/lib/pendataan";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 
 export const runtime = "nodejs";
@@ -59,6 +60,13 @@ export async function POST(req: NextRequest) {
       const r = await tambahKk(db, akun.id, t.isi);
       if (!r.ok) return NextResponse.json({ error: r.pesan, nama_ada: r.nama_ada ?? false }, { status: r.nama_ada ? 409 : 400 });
       return NextResponse.json({ ok: true, kk_id: r.kk_id, duplikat: r.duplikat });
+    }
+    if (body && body.aksi === "batalkan_baru") {
+      const b = periksaBatalKkBaru(body);
+      if (!b.ok) return NextResponse.json({ error: b.pesan }, { status: 400 });
+      const r = await batalkanKkBaru(db, akun.id, b.isi.kk_id, b.isi.alasan);
+      if (!r.ok) return NextResponse.json({ error: r.pesan }, { status: 403 });
+      return NextResponse.json({ ok: true, kk_id: b.isi.kk_id, sudah: r.sudah });
     }
     const cek = periksaCatat(body);
     if (!cek.ok) return NextResponse.json({ error: cek.pesan }, { status: 400 });
