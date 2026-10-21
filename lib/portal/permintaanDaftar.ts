@@ -20,12 +20,12 @@ import { batasPengajuan, labelJorong, periksaEmail, susunPushBatal, susunPushKel
 export type Galat = { galat: string; status: number };
 const ringkas = (s: string, maks: number) => (s.length > maks ? `${s.slice(0, maks - 1).trimEnd()}…` : s);
 
-type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null; dibatalkan_at: string | null; dari_kolam?: boolean | null };
+type BarisDb = { id: number; idsubsls: string; pml_id: number; ppl_akun_id: number; tanggal: string; status: string; diminta_at: string; selesai_at: string | null; dibatalkan_at: string | null; dari_kolam?: boolean | null; dari_admin?: boolean | null };
 type Wilayah = { idsubsls: string; kecamatan: string; nagari: string; sls: string; sub_sls: string };
 
 const labelWilayah = (w: Wilayah | undefined, id: string) => (w ? `${rapikanNama(String(w.sls ?? ""))} · ${w.sub_sls} (Nagari ${rapikanNama(String(w.nagari ?? ""))})` : id);
 
-async function petaWilayah(db: Db, ids: string[]): Promise<Map<string, Wilayah>> {
+export async function petaWilayah(db: Db, ids: string[]): Promise<Map<string, Wilayah>> {
   const m = new Map<string, Wilayah>();
   const unik = [...new Set(ids)];
   for (let i = 0; i < unik.length; i += 200) {
@@ -52,7 +52,7 @@ async function emailPerAkun(db: Db, akunIds: number[]): Promise<Map<number, stri
 }
 
 /** Akun aktif milik petugas (PML) -> id akun pertama; dipakai mencari akun & email PML. */
-async function akunPerPetugas(db: Db, petugasIds: number[]): Promise<Map<number, number>> {
+export async function akunPerPetugas(db: Db, petugasIds: number[]): Promise<Map<number, number>> {
   const out = new Map<number, number>();
   const ids = [...new Set(petugasIds)];
   if (!ids.length) return out;
@@ -102,6 +102,7 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
       diminta_at: b.diminta_at,
       selesai_at: b.selesai_at,
       dari_kolam: !!b.dari_kolam,
+      dari_admin: !!b.dari_admin,
       dibatalkan_at: b.dibatalkan_at,
       email_pengawas: denganEmail ? emailFasihPetugas.get(b.pml_id) ?? email.get(akunPml.get(b.pml_id) ?? -1) ?? "" : "",
       email_pencacah: denganEmail ? (pplPet != null ? emailFasihPetugas.get(pplPet) : undefined) ?? email.get(b.ppl_akun_id) ?? "" : "",
@@ -109,7 +110,7 @@ async function lengkapi(db: Db, baris: BarisDb[], denganEmail: boolean): Promise
   });
 }
 
-const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at, dibatalkan_at, dari_kolam";
+const KOLOM = "id, idsubsls, pml_id, ppl_akun_id, tanggal, status, diminta_at, selesai_at, dibatalkan_at, dari_kolam, dari_admin";
 
 /** Permintaan yang masih berlaku untuk satu tim (dilihat PML dan PPL-nya). */
 export async function permintaanTim(db: Db, pmlId: number): Promise<Permintaan[]> {

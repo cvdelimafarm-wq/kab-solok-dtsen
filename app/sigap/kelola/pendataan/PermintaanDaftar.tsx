@@ -5,20 +5,24 @@
 // (13 Okt 2026) Permintaan daftar KK ke FASIH dari kartu plotting tim (PML) -- permintaan user.
 // Alur admin: lihat permintaan -> Ekspor templat FASIH (format Pengawas-Pencacah: PROVINSI, KABUPATEN/KOTA, KECAMATAN, DESA/KELURAHAN, SLS/SUBSLS, Email Pengawas, Email Pencacah)
 // -> unggah & assign di FASIH -> "Tandai sudah keluar di FASIH" (PML dan PPL dikabari lewat notifikasi, status di kartu berubah).
+// (21 Okt 2026) Tab "Belum diajukan": Sub SLS yang belum diajukan + plotting awal; admin menugaskan ke PML plotting / PML lain (BelumDiajukan.tsx).
 // (16 Okt 2026) "Tolak permintaan": admin menolak yang masih menunggu (alasan opsional); kuota PML kembali, PML dikabari.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
+import BelumDiajukan from "./BelumDiajukan";
+import type { DataBelum } from "@/lib/belumDiajukan";
 import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, MAKS_ALASAN_TOLAK, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
-type Saring = "menunggu" | "sudah_keluar" | "dibatalkan";
+type Saring = "belum" | "menunggu" | "sudah_keluar" | "dibatalkan";
 
 const namaSub = (p: Pick<PermintaanAdmin, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} · Nagari ${rapikanNama(p.nagari)}`;
 
 export default function PermintaanDaftar() {
   const [data, setData] = useState<DataPermintaanAdmin | null>(null);
+  const [belum, setBelum] = useState<DataBelum | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [saring, setSaring] = useState<Saring>("menunggu");
   const [pilih, setPilih] = useState<Set<number>>(new Set());
@@ -34,8 +38,11 @@ export default function PermintaanDaftar() {
   const muat = useCallback(async () => {
     setSibuk("muat");
     try {
-      setData(await apiPortal<DataPermintaanAdmin>(`${API_PERMINTAAN}?admin=1`));
-      setGalat(null);
+      const [utama, tambahan] = await Promise.allSettled([apiPortal<DataPermintaanAdmin>(`${API_PERMINTAAN}?admin=1`), apiPortal<DataBelum>(`${API_PERMINTAAN}?belum=1`)]);
+      if (utama.status === "rejected") throw utama.reason;
+      setData(utama.value);
+      if (tambahan.status === "fulfilled") setBelum(tambahan.value);
+      setGalat(tambahan.status === "rejected" && tambahan.reason instanceof Error && tambahan.reason.message !== "SESI_BERAKHIR" ? `Daftar "Belum diajukan" gagal dimuat: ${tambahan.reason.message}` : null);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat permintaan.");
     } finally {
@@ -51,7 +58,7 @@ export default function PermintaanDaftar() {
   const keluar = useMemo(() => semua.filter((p) => p.status === "sudah_keluar"), [semua]);
   const batal = useMemo(() => semua.filter((p) => p.status === "dibatalkan"), [semua]);
   const batalPerSub = useMemo(() => new Set(batal.map((p) => p.idsubsls)), [batal]);
-  const tampil = saring === "menunggu" ? menunggu : saring === "sudah_keluar" ? keluar : batal;
+  const tampil = saring === "menunggu" ? menunggu : saring === "sudah_keluar" ? keluar : saring === "dibatalkan" ? batal : [];
   const dipilih = useMemo(() => semua.filter((p) => pilih.has(p.id)), [semua, pilih]);
   const dipilihMenunggu = dipilih.filter((p) => p.status === "menunggu");
   const dipilihKeluar = dipilih.filter((p) => p.status === "sudah_keluar");
@@ -184,7 +191,7 @@ export default function PermintaanDaftar() {
   }
 
   const tombolSaring = (k: Saring, teks: string, n: number) => (
-    <button key={k} type="button" aria-pressed={saring === k} onClick={() => { setSaring(k); setYakin(false); setYakinTarik(false); }} className={`min-h-[40px] flex-1 rounded-full px-3 text-[12.5px] font-extrabold ${saring === k ? "bg-[#0F2A52] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
+    <button key={k} type="button" aria-pressed={saring === k} onClick={() => { setSaring(k); setYakin(false); setYakinTarik(false); }} className={`min-h-[40px] rounded-full px-3 text-[12.5px] font-extrabold ${saring === k ? "bg-[#0F2A52] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
       {teks} <b>{n}</b>
     </button>
   );
@@ -202,7 +209,8 @@ export default function PermintaanDaftar() {
       </p>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
-      <div className="mt-3 flex gap-2" role="group" aria-label="Saring status">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Saring status">
+        {tombolSaring("belum", "Belum diajukan", belum?.items.length ?? 0)}
         {tombolSaring("menunggu", LABEL_STATUS_MINTA.menunggu, menunggu.length)}
         {tombolSaring("sudah_keluar", "Sudah keluar", keluar.length)}
         {tombolSaring("dibatalkan", "Hapus di FASIH", batal.length)}
@@ -214,16 +222,18 @@ export default function PermintaanDaftar() {
         </p>
       )}
 
-      <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
+      {saring === "belum" && <BelumDiajukan data={belum} onSelesai={muat} />}
+
+      {saring !== "belum" && <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
         <p>{CATATAN_CEK_SUBMIT}</p>
         <p className="mt-1.5 rounded-[8px] px-2 py-1 font-extrabold" style={{ background: "#FFE680", color: "#4A3500" }}>
           Catatan: {CATATAN_KEROYOKAN}
         </p>
-      </div>
+      </div>}
 
-      {data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : saring === "sudah_keluar" ? "Belum ada permintaan yang ditandai sudah keluar." : "Tidak ada pembatalan yang perlu dihapus di FASIH."}</p>}
+      {saring !== "belum" && data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : saring === "sudah_keluar" ? "Belum ada permintaan yang ditandai sudah keluar." : "Tidak ada pembatalan yang perlu dihapus di FASIH."}</p>}
 
-      {tampil.length > 0 && (
+      {saring !== "belum" && tampil.length > 0 && (
         <>
           <button type="button" onClick={pilihSemuaTampil} className="mt-3 min-h-[40px] rounded-full bg-[#F5F8FE] px-3 text-[12px] font-extrabold text-[#1F5FD1]">
             {tampil.every((p) => pilih.has(p.id)) ? "Batal pilih semua" : "Pilih semua di daftar ini"}
@@ -237,12 +247,13 @@ export default function PermintaanDaftar() {
                     <b className="block text-[13.5px] text-[#0F2A52]">
                       {namaSub(p)}
                       {p.dari_kolam && <span className="ml-1.5 inline-block rounded-full bg-[#F1E4FA] px-2 py-[1px] align-[1px] text-[11px] font-extrabold text-[#6B1F96]">Dari kolam</span>}
+                      {p.dari_admin && <span className="ml-1.5 inline-block rounded-full bg-[#E1ECFB] px-2 py-[1px] align-[1px] text-[11px] font-extrabold text-[#1F4E9E]">Ditugaskan admin</span>}
                     </b>
                     <small className="block text-[12px] text-[#6B7A90]">
                       Kec. {p.kecamatan} · PML {p.pml_nama} → PPL {p.ppl_nama}
                     </small>
                     <small className="block text-[11.5px] text-[#6B7A90]">
-                      Diminta {waktuRingkas(p.diminta_at)}
+                      {p.dari_admin ? "Ditugaskan" : "Diminta"} {waktuRingkas(p.diminta_at)}
                       {p.selesai_at ? ` · keluar ${waktuRingkas(p.selesai_at)}` : ""}
                       {p.status === "dibatalkan" && p.dibatalkan_at ? ` · dibatalkan PML ${waktuRingkas(p.dibatalkan_at)}` : ""}
                     </small>
@@ -278,7 +289,7 @@ export default function PermintaanDaftar() {
         </>
       )}
 
-      {dipilih.length > 0 && (
+      {saring !== "belum" && dipilih.length > 0 && (
         <div className="mt-3 space-y-2">
           {dipilihAktif.length > 0 && (
             <button type="button" disabled={sibuk !== null} onClick={() => void ekspor()} className="min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">

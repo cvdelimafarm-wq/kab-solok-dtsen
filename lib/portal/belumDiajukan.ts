@@ -1,0 +1,93 @@
+// lib/portal/belumDiajukan.ts  (hanya server)
+//
+// (21 Okt 2026) Tab "Belum diajukan": daftar Sub SLS yang belum diajukan + plotting awalnya, dan penugasan admin ke PML plotting / PML (tim) lain.
+// Seluruh logika berat ada di fungsi database (hanya service_role): bencana_belum_diajukan, bencana_tim_untuk_tugas, bencana_admin_tugaskan.
+// Penugasan = membuat permintaan "menunggu" bertanda dari_admin (TIDAK menghabiskan kuota 7/9/11 PML). Alur selanjutnya sama: admin meng-assign di FASIH
+// lalu menandai "sudah keluar". Bila PML tujuan beda dari plotting awal, alokasi lama dipindah (barisnya disimpan di audit).
+
+import type { Db } from "@/lib/sigap";
+import { kirimKeAkun } from "@/lib/sigapPush";
+import { catatAudit } from "@/lib/sigapAkses";
+import { akunPerPetugas, petaWilayah, type Galat } from "@/lib/portal/permintaanDaftar";
+import { labelJorong, tanggalWib } from "@/lib/permintaanDaftar";
+import { pesanTugas, susunPushTugas, urutBelum, type BelumItem, type DataBelum, type TimTugas, type TugasPilihan } from "@/lib/belumDiajukan";
+
+const adalahBanyak = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
+
+export async function daftarBelumDiajukan(db: Db): Promise<Omit<DataBelum, "boleh_kelola">> {
+  const [a, b] = await Promise.all([db.rpc("bencana_belum_diajukan"), db.rpc("bencana_tim_untuk_tugas")]);
+  if (a.error) throw new Error("Gagal memuat daftar Sub SLS yang belum diajukan.");
+  if (b.error) throw new Error("Gagal memuat daftar tim.");
+  return { items: urutBelum(adalahBanyak<BelumItem>(a.data)), tim: adalahBanyak<TimTugas>(b.data) };
+}
+
+type HasilRpc =
+  | { status: "ok"; ids: number[]; diganti: { idsubsls: string; dari: { pml_id: number }[] }[] }
+  | { status: "ditolak"; alasan?: string; idsubsls?: string };
+
+export async function tugaskanSubsls(
+  db: Db,
+  akun: { id: number },
+  pilihan: TugasPilihan[],
+): Promise<{ ids: number[]; dikirim: number; dipindah: number } | Galat> {
+  const { data, error } = await db.rpc("bencana_admin_tugaskan", { p_akun: akun.id, p_tanggal: tanggalWib(Date.now()), p_pilihan: pilihan });
+  if (error) {
+    if (/SUB_NONAKTIF/.test(error.message)) return { galat: pesanTugas("nonaktif"), status: 409 };
+    if (/check_violation|bukan peserta/i.test(error.message)) return { galat: pesanTugas("bukan_peserta"), status: 409 };
+    return { galat: "Penugasan gagal disimpan. Coba lagi.", status: 500 };
+  }
+  const r = data as HasilRpc;
+  if (r.status !== "ok") {
+    let label = "";
+    if (r.idsubsls) {
+      const w = (await petaWilayah(db, [r.idsubsls])).get(r.idsubsls);
+      label = w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : r.idsubsls;
+    }
+    return { galat: pesanTugas(r.alasan, label), status: r.alasan === "sudah_diminta" || r.alasan === "sudah_didata" ? 409 : 400 };
+  }
+  const ids = r.ids ?? [];
+  const diganti = r.diganti ?? [];
+  await catatAudit(db, akun.id, "pendataan_admin_tugaskan", { permintaan: ids, pilihan, diganti }).catch(() => undefined);
+
+  let dikirim = 0;
+  try {
+    const wil = await petaWilayah(db, pilihan.map((p) => p.idsubsls));
+    const jorong = (id: string) => {
+      const w = wil.get(id);
+      return w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : id;
+    };
+    const { data: ppl } = await db.from("sigap_akun").select("id, nama").in("id", [...new Set(pilihan.map((p) => p.ppl_akun_id))]);
+    const namaPpl = new Map((ppl ?? []).map((p) => [p.id as number, String(p.nama ?? "")]));
+    const pmlLama = [...new Set(diganti.flatMap((d) => d.dari.map((x) => x.pml_id)))];
+    const akunPml = await akunPerPetugas(db, [...pilihan.map((p) => p.pml_id), ...pmlLama]);
+
+    const perPml = new Map<number, TugasPilihan[]>();
+    const perPpl = new Map<number, TugasPilihan[]>();
+    for (const p of pilihan) {
+      perPml.set(p.pml_id, [...(perPml.get(p.pml_id) ?? []), p]);
+      perPpl.set(p.ppl_akun_id, [...(perPpl.get(p.ppl_akun_id) ?? []), p]);
+    }
+    for (const [pmlId, rows] of perPml) {
+      const a = akunPml.get(pmlId);
+      if (!a) continue;
+      const { judul, isi } = susunPushTugas("pml", rows.map((p) => ({ jorong: jorong(p.idsubsls), ppl: namaPpl.get(p.ppl_akun_id) ?? "PPL" })));
+      dikirim += (await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-pml-${pmlId}` })).terkirim;
+    }
+    for (const [pplId, rows] of perPpl) {
+      const { judul, isi } = susunPushTugas("ppl", rows.map((p) => ({ jorong: jorong(p.idsubsls), ppl: namaPpl.get(pplId) ?? "PPL" })));
+      dikirim += (await kirimKeAkun(db, [pplId], { judul, isi, url: "/sigap/pendataan", tag: `tugas-ppl-${pplId}` })).terkirim;
+    }
+    // PML asal (bila Sub SLS-nya dipindah ke tim lain): satu notifikasi per PML
+    const perLama = new Map<number, string[]>();
+    for (const d of diganti) for (const x of d.dari) if (!pilihan.some((p) => p.idsubsls === d.idsubsls && p.pml_id === x.pml_id)) perLama.set(x.pml_id, [...new Set([...(perLama.get(x.pml_id) ?? []), jorong(d.idsubsls)])]);
+    for (const [pmlId, daftar] of perLama) {
+      const a = akunPml.get(pmlId);
+      if (!a) continue;
+      const { judul, isi } = susunPushTugas("lama", daftar.map((j) => ({ jorong: j, ppl: "" })));
+      dikirim += (await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-lama-${pmlId}` })).terkirim;
+    }
+  } catch (e) {
+    console.error("[tugaskan push]", e instanceof Error ? e.message : e);
+  }
+  return { ids, dikirim, dipindah: diganti.length };
+}

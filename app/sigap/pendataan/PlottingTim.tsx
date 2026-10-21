@@ -29,7 +29,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
   const ppls = useMemo(() => anggota.filter((a) => a.peran === "ppl"), [anggota]);
   const bisaKirim = !!data?.bisa_kirim;
   const maks = data?.maks ?? batasPengajuan(tanggalWib(Date.now()));
-  const terpakai = (data?.permintaan ?? []).filter((p) => !p.dari_kolam).length; // hanya yang masih berlaku (menunggu/sudah keluar); batas TOTAL per PML, bukan per hari. (16 Okt 2026) pilihan dari Kolam wilayah dihitung terpisah
+  const terpakai = (data?.permintaan ?? []).filter((p) => !p.dari_kolam && !p.dari_admin).length; // hanya yang masih berlaku (menunggu/sudah keluar); batas TOTAL per PML, bukan per hari. (16 Okt 2026) pilihan dari Kolam wilayah dihitung terpisah
   const sisa = Math.max(0, maks - terpakai);
   const terpilih = Object.keys(pilih);
   const adaPmlBelumPilihPpl = terpilih.some((k) => !pilih[k]);
@@ -107,6 +107,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     <span className="flex flex-none flex-col items-end gap-1">
       <span className={`rounded-full px-2 py-[2px] text-[10.5px] font-extrabold ${p.status === "sudah_keluar" ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>{LABEL_STATUS_MINTA[p.status]}</span>
       {p.dari_kolam && <span className="rounded-full bg-[#F1E4FA] px-2 py-[2px] text-[10.5px] font-extrabold text-[#6B1F96]">Dari kolam</span>}
+      {p.dari_admin && <span className="rounded-full bg-[#E1ECFB] px-2 py-[2px] text-[10.5px] font-extrabold text-[#1F4E9E]">Ditugaskan admin</span>}
     </span>
   );
 

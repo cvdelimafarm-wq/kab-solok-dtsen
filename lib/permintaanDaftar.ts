@@ -49,6 +49,8 @@ export type Permintaan = {
   selesai_at: string | null;
   /** (16 Okt 2026) true = diambil dari kolam wilayah kerja; TIDAK menghabiskan batas total 7/9/11 */
   dari_kolam?: boolean;
+  /** (21 Okt 2026) true = ditugaskan admin dari tab "Belum diajukan"; TIDAK menghabiskan batas total 7/9/11 PML */
+  dari_admin?: boolean;
 };
 
 /** Tambahan khusus admin: email untuk templat FASIH (dari data mitra). Kosong = belum ada. */

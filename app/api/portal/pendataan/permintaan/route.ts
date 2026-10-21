@@ -7,6 +7,8 @@
 //  POST { aksi:"batalkan", id }                              PML tim: hanya yang masih menunggu
 //  POST { aksi:"ajukan_batal", id }                          PML tim: batalkan assignment yang SUDAH keluar di FASIH; langsung berlaku (tanpa persetujuan), admin & PPL dikabari
 //  POST { aksi:"batal_diproses", ids:[...] }                 admin level kelola: tandai pembatalan sudah dihapus di FASIH
+//  GET ?belum=1      -> { boleh_kelola, items[], tim[] }                      admin bencana.admin (lihat): Sub SLS yang BELUM diajukan + plotting awal + daftar tim tujuan (21 Okt 2026)
+//  POST { aksi:"tugaskan", pilihan:[{idsubsls,pml_id,ppl_akun_id}] }  admin level kelola: tugaskan ke PML plotting / tim lain; jadi permintaan "menunggu" (dari_admin), tidak memakai kuota PML
 //  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
 //  POST { aksi:"tolak", ids:[...], alasan? }                 admin level kelola: TOLAK permintaan yang masih menunggu (lunak: jadi dibatalkan, kuota PML kembali, PML dikabari + alasan)
@@ -17,6 +19,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { ambilTim } from "@/lib/portal/pendataan";
 import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan, tolakPermintaan } from "@/lib/portal/permintaanDaftar";
+import { daftarBelumDiajukan, tugaskanSubsls } from "@/lib/portal/belumDiajukan";
+import { periksaTugas } from "@/lib/belumDiajukan";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
 import { batasPengajuan, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -35,6 +39,11 @@ export async function GET(req: NextRequest) {
       const { izin } = await izinAkun(db, akun.id);
       if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
       return NextResponse.json({ sekarang: new Date().toISOString(), boleh_kelola: boleh(izin, "bencana.admin", "kelola"), permintaan: await permintaanSemua(db) });
+    }
+    if (req.nextUrl.searchParams.get("belum") === "1") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
+      return NextResponse.json({ boleh_kelola: boleh(izin, "bencana.admin", "kelola"), ...(await daftarBelumDiajukan(db)) });
     }
     const tim = await ambilTim(db, akun);
     if (!tim) return galat("Kartu plotting khusus anggota tim PML dan PPL.", 403);
@@ -113,6 +122,15 @@ export async function POST(req: NextRequest) {
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await tarikPermintaan(db, { id: akun.id }, ids);
+      if ("galat" in h) return galat(h.galat, h.status);
+      return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "tugaskan") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menugaskan Sub SLS.", 403);
+      const cek = periksaTugas(b.pilihan);
+      if (!cek.ok) return galat(cek.pesan, 400);
+      const h = await tugaskanSubsls(db, { id: akun.id }, cek.pilihan);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }
