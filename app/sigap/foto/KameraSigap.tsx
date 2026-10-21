@@ -7,15 +7,24 @@
 //  - koordinat: GPS HP (enableHighAccuracy) -- akurasi > 5000 m ditolak server; 300-5000 m diterima berpenanda "perlu diperiksa";
 //  - cap (logo, waktu, koordinat, nama, kegiatan, kode, QR) dicetak SERVER ke gambar.
 // Tanpa sinyal: foto disimpan di IndexedDB dan terkirim otomatis saat ada sinyal.
+//
+// (21 Okt 2026) Nomor foto OTOMATIS + pengaman "lupa Kirim":
+//  - nomor yang dipilihkan = nomor kosong terkecil hari ini (foto pertama = 1 saat berangkat, kedua = 2, dst; lihat lib/sigapFotoSusun.ts); petugas
+//    cukup mengetuk nomor lain bila tidak sesuai;
+//  - begitu dipotret, foto langsung disimpan sebagai DRAF di HP (IndexedDB) dan detaknya diperbarui selama pratinjau terbuka: tombol Back, pindah
+//    aplikasi, atau aplikasi tertutup TIDAK membuang foto (menjadi antrean yang terkirim sendiri); hanya "Buang & ulangi" yang membuang;
+//  - hitung mundur 10 detik mengirim otomatis dengan nomor yang dipilihkan; mengetuk nomor/Bagikan/"Ubah dulu" menghentikannya.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
+import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, LABEL_KEPERCAYAAN, LABEL_ALASAN, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
+import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
 import { useTombolKembali } from "./useTombolKembali";
 
 type Pos = { lat: number; lng: number; akurasi: number; mono: number };
@@ -23,6 +32,29 @@ type Hasil = { ok: true; sudah?: boolean; foto: { id: number; kode: string; kepe
 type Hadap = "environment" | "user";
 
 const NOMOR = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+const DETIK_KIRIM_OTOMATIS = 10;
+const tglWib = (ms = Date.now()) => new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
+
+type Jepretan = { blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number; dibuatMs: number };
+
+function itemDari(j: Jepretan, kegiatanId: number, slot: number | null, tag: TagPilihan[]): ItemAntrean {
+  return {
+    akun_id: pemilikSesi(),
+    dibuat_ms: j.dibuatMs,
+    blob: j.blob,
+    kegiatan_id: kegiatanId,
+    token: j.token,
+    elapsed_mono_ms: j.mono,
+    elapsed_wall_ms: j.wall,
+    waktu_hp: j.waktuHp,
+    lat: j.pos.lat,
+    lng: j.pos.lng,
+    akurasi: j.pos.akurasi,
+    posisi_umur_ms: j.umurPosisi,
+    slot,
+    tag: tag.map((t) => ({ akun_id: t.akun_id, slot_usulan: t.slot_usulan })),
+  };
+}
 
 /**
  * (20 Okt 2026) DRAFT tampilan cap di layar sebelum kirim: logo, waktu, koordinat, nama, kegiatan. Hanya gambaran -- cap RESMI dicetak server
@@ -83,8 +115,13 @@ export default function KameraSigap({
   const [posisi, setPosisi] = useState<Pos | null>(null);
   const [galatKamera, setGalatKamera] = useState<string | null>(null);
   const [galatGps, setGalatGps] = useState<string | null>(null);
-  const [jepretan, setJepretan] = useState<{ blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number } | null>(null);
+  const [jepretan, setJepretan] = useState<Jepretan | null>(null);
   const [nomor, setNomor] = useState<number | null>(null);
+  const [nomorOtomatis, setNomorOtomatis] = useState(false); // nomor dipilihkan sistem (belum diubah petugas)
+  const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
+  const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
+  const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
+  const drafIdRef = useRef<number | null>(null);
   const [tag, setTag] = useState<TagPilihan[]>([]);
   const [bagikan, setBagikan] = useState(false);
   const [mengirim, setMengirim] = useState(false);
@@ -117,36 +154,33 @@ export default function KameraSigap({
     try {
       const a = await daftarAntrean();
       const saya = pemilikSesi();
-      setAntre(a.filter((x) => x.akun_id === saya).length);
+      const milik = a.filter((x) => x.akun_id === saya && !drafMasihBaru(x)); // draf yang pratinjaunya terbuka bukan "antre"
+      setAntre(milik.length);
+      const hariIni = tglWib();
+      setTerisiAntre(milik.filter((x) => x.kegiatan_id === kegiatanId && x.slot !== null && tglWib(x.dibuat_ms) === hariIni && !x.galat_terakhir).map((x) => x.slot as number));
     } catch {
       setAntre(0);
+      setTerisiAntre([]);
     }
-  }, []);
+  }, [kegiatanId]);
 
-  const kirimAntrean = useCallback(async () => {
-    const saya = pemilikSesi();
-    let a: ItemAntrean[] = [];
+  const muatTerisi = useCallback(async () => {
     try {
-      a = (await daftarAntrean()).filter((x) => x.akun_id === saya);
+      const d = await ambilJson<{ nomor: { slot: number; terisi: boolean }[] }>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tglWib()}`);
+      setTerisiServer(d.nomor.filter((n) => n.terisi).map((n) => n.slot));
     } catch {
-      return;
+      /* tanpa sinyal: saran nomor memakai antrean HP saja */
     }
-    for (const x of a) {
-      try {
-        const r = await kirimMultipart<Hasil>("/api/sigap/foto", formDariItem(x));
-        if (r.simulasi) break;
-        if (x.id !== undefined) await lepasAntrean(x.id);
-      } catch (e) {
-        const g = e as GalatFoto;
-        if (g.status === undefined) break; // masih tanpa sinyal
-        if (g.status === 409 || g.status === 403 || g.status === 422 || g.status === 400) {
-          // ditolak permanen oleh server: simpan alasan agar terlihat, jangan diulang terus
-          if (x.id !== undefined) await perbaruiAntrean({ ...x, galat_terakhir: g.message });
-        }
-      }
-    }
-    void hitungAntre();
-  }, [hitungAntre]);
+  }, [kegiatanId]);
+
+  const kirimAntrean = useCallback(
+    async (paksa = false) => {
+      await kirimSemuaAntrean({ paksa });
+      void hitungAntre();
+      void muatTerisi();
+    },
+    [hitungAntre, muatTerisi]
+  );
 
   // Arah layar (bila layar sendiri berputar, sensor tidak dipakai)
   useEffect(() => {
@@ -306,6 +340,7 @@ export default function KameraSigap({
     }
     void muatToken();
     void hitungAntre();
+    void muatTerisi();
     void kirimAntrean();
     const timer = setInterval(() => void muatToken(), 20 * 60_000);
     const online = () => void kirimAntrean();
@@ -315,7 +350,7 @@ export default function KameraSigap({
       window.removeEventListener("online", online);
       if (gpsRef.current !== null) navigator.geolocation.clearWatch(gpsRef.current);
     };
-  }, [muatToken, hitungAntre, kirimAntrean]);
+  }, [muatToken, hitungAntre, muatTerisi, kirimAntrean]);
 
   useEffect(() => () => { if (jepretan) URL.revokeObjectURL(jepretan.url); }, [jepretan]);
 
@@ -336,7 +371,10 @@ export default function KameraSigap({
   const sisaTunggu = Math.max(0, TUNGGU_AKURASI_KASAR_DTK - detikKasar);
   const siapPotret = akurasiOk || (akurasiKasar && sisaTunggu === 0);
   const etiket = labelFoto(jenis);
-  const adaTujuan = nomor !== null || tag.length > 0; // tanpa tombol "Hanya untuk rekan": foto minimal punya nomor sendiri atau dibagikan ke rekan
+  const terisiSemuaNomor = useMemo(() => new Set([...terisiServer, ...terisiAntre]), [terisiServer, terisiAntre]);
+  const saran = nomorBerikutnya(terisiSemuaNomor, jumlahNomor); // null = semua nomor hari ini sudah terisi
+  // Foto minimal punya nomor sendiri atau dibagikan ke rekan. Bila semua nomor hari ini sudah terisi, foto boleh dikirim tanpa nomor sebagai CADANGAN.
+  const adaTujuan = nomor !== null || tag.length > 0 || saran === null;
 
   async function potret() {
     const v = videoRef.current;
@@ -365,7 +403,7 @@ export default function KameraSigap({
     if (!blob) return setPesan({ jenis: "galat", teks: "Gagal mengambil gambar. Coba lagi." });
     const t = tokenRef.current;
     const umurToken = t ? mono - t.mono : null;
-    setJepretan({
+    const j: Jepretan = {
       blob,
       url: URL.createObjectURL(blob),
       pos: { ...posisi, mono: posisi.mono },
@@ -374,46 +412,129 @@ export default function KameraSigap({
       wall: t ? wall - t.wall : null,
       waktuHp: wall,
       umurPosisi: Math.max(0, mono - posisi.mono),
-    });
+      dibuatMs: wall,
+    };
+    // Pengaman: simpan sebagai DRAF di HP sebelum pratinjau tampil, supaya foto tidak hilang bila Kirim terlupa
+    drafIdRef.current = null;
+    try {
+      drafIdRef.current = (await tambahAntrean({ ...itemDari(j, kegiatanId, saran, []), draf: true, jantung_ms: Date.now() })) as number;
+    } catch {
+      /* IndexedDB tidak tersedia (mis. mode pribadi): tetap bisa dikirim lewat tombol */
+    }
+    setNomor(saran);
+    setNomorOtomatis(saran !== null);
+    setHitung(saran !== null ? DETIK_KIRIM_OTOMATIS : null);
+    setJepretan(j);
     setPesan(null);
     setHasil(null);
     void muatToken(); // token baru untuk jepretan berikutnya (token lama sekali pakai)
   }
 
-  function ulang() {
+  /** Menutup pratinjau TANPA menyentuh draf di HP (draf tetap milik antrean). */
+  function tutupPratinjau() {
     if (jepretan) URL.revokeObjectURL(jepretan.url);
     setJepretan(null);
     setNomor(null);
+    setNomorOtomatis(false);
+    setHitung(null);
     setTag([]);
     setBagikan(false);
-    setPesan(null);
     setHasil(null);
   }
 
-  // Back = kembali ke layar kamera (bukan keluar ke beranda) selama pratinjau/hasil foto terbuka
+  async function lepasDraf() {
+    const id = drafIdRef.current;
+    drafIdRef.current = null;
+    if (id !== null) await lepasAntrean(id).catch(() => undefined);
+  }
+
+  /** Simpan/perbarui draf di HP. draf=false = sudah menjadi antrean biasa (terkirim otomatis oleh kirimSemuaAntrean). */
+  const simpanDraf = useCallback(
+    async (j: Jepretan, n: number | null, t: TagPilihan[], draf: boolean) => {
+      const id = drafIdRef.current;
+      if (id === null) return;
+      try {
+        await perbaruiAntrean({ ...itemDari(j, kegiatanId, n, t), id, draf, jantung_ms: Date.now() });
+      } catch {
+        /* abaikan */
+      }
+    },
+    [kegiatanId]
+  );
+
+  /** "Buang & ulangi": satu-satunya jalan yang MEMBUANG foto. */
+  function ulang() {
+    void lepasDraf();
+    tutupPratinjau();
+    setPesan(null);
+  }
+
+  // Back = kembali ke layar kamera (bukan keluar ke beranda). Foto yang belum dikirim TIDAK dibuang: disimpan ke antrean dan terkirim otomatis.
   useTombolKembali(!!jepretan, () => {
     if (mengirim) return false; // jangan batalkan pratinjau saat foto sedang dikirim
-    ulang();
+    if (jepretan && !hasil) {
+      void simpanDraf(jepretan, nomor, tag, false).then(() => kirimAntrean());
+      setPesan({ jenis: "info", teks: "Foto belum Anda kirim, jadi disimpan di HP dan dikirim otomatis. Untuk membuang foto, pakai Buang & ulangi." });
+    }
+    drafIdRef.current = null;
+    tutupPratinjau();
   });
+
+  // Draf diperbarui tiap nomor/rekan berubah dan tiap 20 detik (detak: tanda pratinjau masih terbuka)
+  useEffect(() => {
+    if (!jepretan || hasil) return;
+    void simpanDraf(jepretan, nomor, tag, true);
+    const t = setInterval(() => void simpanDraf(jepretan, nomor, tag, true), 20_000);
+    return () => clearInterval(t);
+  }, [jepretan, nomor, tag, hasil, simpanDraf]);
+
+  // Pindah aplikasi / layar mati / tab ditutup saat pratinjau terbuka: foto langsung dilepas ke antrean (tidak hilang), dan ada peringatan tutup
+  useEffect(() => {
+    if (!jepretan || hasil) return;
+    const sembunyi = () => void simpanDraf(jepretan, nomor, tag, document.visibilityState !== "hidden");
+    const tutup = () => void simpanDraf(jepretan, nomor, tag, false);
+    const cegah = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    document.addEventListener("visibilitychange", sembunyi);
+    window.addEventListener("pagehide", tutup);
+    window.addEventListener("beforeunload", cegah);
+    return () => {
+      document.removeEventListener("visibilitychange", sembunyi);
+      window.removeEventListener("pagehide", tutup);
+      window.removeEventListener("beforeunload", cegah);
+    };
+  }, [jepretan, nomor, tag, hasil, simpanDraf]);
+
+  // Layar ditinggalkan lewat navigasi dalam aplikasi (komponen dilepas) saat pratinjau terbuka: foto menjadi antrean dan langsung dikirim
+  const keadaanRef = useRef({ jepretan, nomor, tag, hasil });
+  keadaanRef.current = { jepretan, nomor, tag, hasil };
+  useEffect(
+    () => () => {
+      const { jepretan: j, nomor: n, tag: t, hasil: h } = keadaanRef.current;
+      if (j && !h) void simpanDraf(j, n, t, false).then(() => kirimSemuaAntrean());
+    },
+    [simpanDraf]
+  );
+
+  // Hitung mundur kirim otomatis
+  useEffect(() => {
+    if (hitung === null || !jepretan || mengirim || hasil) return;
+    if (hitung <= 0) {
+      setHitung(null);
+      if (adaTujuan) void kirim();
+      return;
+    }
+    const t = setTimeout(() => setHitung((h) => (h === null ? null : h - 1)), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hitung, jepretan, mengirim, hasil]);
 
   async function kirim() {
     if (!jepretan) return;
-    const item: ItemAntrean = {
-      akun_id: pemilikSesi(),
-      dibuat_ms: Date.now(),
-      blob: jepretan.blob,
-      kegiatan_id: kegiatanId,
-      token: jepretan.token,
-      elapsed_mono_ms: jepretan.mono,
-      elapsed_wall_ms: jepretan.wall,
-      waktu_hp: jepretan.waktuHp,
-      lat: jepretan.pos.lat,
-      lng: jepretan.pos.lng,
-      akurasi: jepretan.pos.akurasi,
-      posisi_umur_ms: jepretan.umurPosisi,
-      slot: nomor,
-      tag: tag.map((t) => ({ akun_id: t.akun_id, slot_usulan: t.slot_usulan })),
-    };
+    setHitung(null);
+    const item: ItemAntrean = itemDari(jepretan, kegiatanId, nomor, tag);
     setMengirim(true);
     setPesan(null);
     try {
@@ -421,19 +542,23 @@ export default function KameraSigap({
       if (r.simulasi) {
         setPesan({ jenis: "info", teks: "Mode simulasi (masuk sebagai akun lain): foto TIDAK dikirim." });
       } else {
+        await lepasDraf(); // sudah di server; draf di HP tidak diperlukan lagi
         setHasil(r.data);
-        setPesan({ jenis: "ok", teks: r.data.sudah ? "Foto ini sudah tercatat sebelumnya." : "Foto terkirim." });
+        setPesan({ jenis: "ok", teks: r.data.sudah ? "Foto ini sudah tercatat sebelumnya." : nomor !== null ? `Foto terkirim sebagai Foto ${nomor}.` : "Foto terkirim." });
+        if (nomor !== null) setTerisiServer((p) => Array.from(new Set([...p, nomor]))); // langsung maju ke nomor berikutnya; muatTerisi meluruskan bila ditahan
+        void muatTerisi();
         onSelesai?.();
       }
     } catch (e) {
       const g = e as GalatFoto;
       if (g.message === "SESI_BERAKHIR") {
-        setPesan({ jenis: "galat", teks: "Sesi berakhir. Masuk kembali; foto Anda belum dikirim." });
+        setPesan({ jenis: "galat", teks: "Sesi berakhir. Masuk kembali; foto Anda masih tersimpan di HP ini dan akan terkirim setelah masuk." });
       } else if (g.status === undefined) {
-        await tambahAntrean(item);
+        await simpanDraf(jepretan, nomor, tag, false); // draf menjadi antrean biasa
+        drafIdRef.current = null;
         void hitungAntre();
         setPesan({ jenis: "info", teks: "Tidak ada sinyal. Foto tersimpan di HP ini dan terkirim otomatis saat ada sinyal." });
-        setJepretan(null);
+        tutupPratinjau();
       } else {
         setPesan({ jenis: "galat", teks: g.message });
       }
@@ -453,7 +578,31 @@ export default function KameraSigap({
 
       {antre > 0 && (
         <div role="status" className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold text-[#5E4300]">
-          {antre} foto menunggu terkirim. <button type="button" onClick={() => void kirimAntrean()} className="underline">Kirim sekarang</button>
+          {antre} foto menunggu terkirim dari HP ini (terkirim sendiri saat ada sinyal). <button type="button" onClick={() => void kirimAntrean(true)} className="underline">Kirim sekarang</button>
+        </div>
+      )}
+
+      {!jepretan && pesan && (
+        <div role={pesan.jenis === "galat" ? "alert" : "status"} className={`rounded-lg px-3 py-2 text-xs font-semibold ${pesan.jenis === "ok" ? "bg-[#E3F6EC] text-[#0B6B3F]" : pesan.jenis === "info" ? "bg-[#FFF4D6] text-[#5E4300]" : "bg-[#FDE8E8] text-[#9B1C23]"}`}>
+          {pesan.teks}
+        </div>
+      )}
+
+      {!jepretan && (
+        <div className="flex items-center gap-2 rounded-xl border border-[#C9D3E6] bg-white px-3 py-2" aria-label="Nomor foto hari ini">
+          <div className="flex gap-1.5">
+            {NOMOR(jumlahNomor).map((n) => {
+              const penuh = terisiSemuaNomor.has(n);
+              return (
+                <span key={n} className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold ${penuh ? "bg-[#1E8E4E] text-white" : n === saran ? "border-2 border-[#0F2A52] bg-white text-[#0F2A52]" : "bg-[#EEF2F7] text-[#5B6B84]"}`}>
+                  {penuh ? "✓" : n}
+                </span>
+              );
+            })}
+          </div>
+          <span className="min-w-0 flex-1 text-[11.5px] font-semibold leading-tight text-[#3C4C68]">
+            {saran !== null ? `Berikutnya: Foto ${saran} · ${etiket[saran - 1] ?? ""}` : "Semua nomor hari ini sudah terisi"}
+          </span>
         </div>
       )}
 
@@ -556,7 +705,11 @@ export default function KameraSigap({
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-bold text-[#0F2A52]">Foto ini untuk nomor berapa?</legend>
             <p className="text-xs leading-relaxed text-[#3C4C68]">
-              Tiap hari tugas ada {jumlahNomor} foto dokumentasi dengan keperluan berbeda. Pilih keperluan foto ini; satu nomor diisi satu foto per hari kerja.
+              {nomorOtomatis && nomor !== null
+                ? `Sudah dipilihkan Foto ${nomor} sesuai urutan foto hari ini. Ketuk nomor lain bila foto ini untuk keperluan yang berbeda.`
+                : saran === null
+                ? `Semua ${jumlahNomor} nomor hari ini sudah terisi. Foto ini akan disimpan sebagai cadangan; atau ketuk sebuah nomor untuk menggantikan fotonya (foto lama tetap tersimpan sebagai cadangan).`
+                : `Tiap hari tugas ada ${jumlahNomor} foto dokumentasi dengan keperluan berbeda. Pilih keperluan foto ini.`}
             </p>
             <div className="flex flex-col gap-2" role="group" aria-label="Nomor foto">
               {NOMOR(jumlahNomor).map((n) => {
@@ -567,22 +720,27 @@ export default function KameraSigap({
                     key={n}
                     type="button"
                     aria-pressed={pilih}
-                    onClick={() => setNomor(pilih ? null : n)}
+                    onClick={() => {
+                      setHitung(null); // petugas mengatur sendiri: hentikan kirim otomatis
+                      setNomorOtomatis(false);
+                      setNomor(pilih ? null : n);
+                    }}
                     className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${pilih ? "border-[#0F2A52] bg-[#E8EEF8]" : "border-[#C9D3E6] bg-white"}`}
                   >
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${pilih ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{n}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-bold text-[#0F2A52]">{etiket[n - 1] ?? `Foto ${n}`}</span>
                       {lokasi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
+                      {terisiSemuaNomor.has(n) && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah terisi hari ini; foto ini akan menggantikannya</span>}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-[#3C4C68]">Setelah foto diterima sebagai nomor foto, nomor tidak bisa diubah sendiri. Pilih dengan teliti.</p>
+            <p className="text-xs text-[#3C4C68]">Salah nomor setelah terkirim? Buka kartu hari (atau menu perbaikan): nomor foto bisa dipindah atau ditukar di sana.</p>
           </fieldset>
 
-          <button type="button" onClick={() => setBagikan((b) => !b)} aria-expanded={bagikan} className="min-h-[48px] rounded-xl border-2 border-[#0F2A52] text-sm font-bold text-[#0F2A52]">
+          <button type="button" onClick={() => { setHitung(null); setBagikan((b) => !b); }} aria-expanded={bagikan} className="min-h-[48px] rounded-xl border-2 border-[#0F2A52] text-sm font-bold text-[#0F2A52]">
             {bagikan ? "Sembunyikan pilihan rekan" : tag.length ? `Bagikan ke rekan (${tag.length})` : "Bagikan ke rekan"}
           </button>
           {bagikan && <BagikanFoto kegiatanId={kegiatanId} jumlahNomor={jumlahNomor} nilai={tag} onUbah={setTag} />}
@@ -595,6 +753,15 @@ export default function KameraSigap({
 
           {!hasil && !adaTujuan && <p className="px-1 text-xs font-semibold text-[#8A6200]">Pilih nomor foto di atas, atau pilih rekan lewat Bagikan ke rekan, lalu Kirim.</p>}
 
+          {!hasil && hitung !== null && !mengirim && (
+            <div role="status" className="flex items-center gap-3 rounded-xl bg-[#E8EEF8] px-3 py-2.5">
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#0F2A52] text-sm font-extrabold text-white" aria-hidden="true">{hitung}</span>
+              <span className="min-w-0 flex-1 text-xs font-semibold leading-snug text-[#0F2A52]">Terkirim otomatis sebagai Foto {nomor} dalam {hitung} detik. Foto sudah aman tersimpan di HP.</span>
+              <button type="button" onClick={() => setHitung(null)} className="min-h-[40px] flex-none rounded-lg border-2 border-[#0F2A52] px-3 text-xs font-bold text-[#0F2A52]">Ubah dulu</button>
+            </div>
+          )}
+          {!hasil && hitung === null && !mengirim && <p className="px-1 text-[11.5px] leading-snug text-[#3C4C68]">Foto sudah tersimpan di HP ini. Bila Kirim terlewat, foto tetap terkirim otomatis saat Anda keluar dari layar ini atau membuka aplikasi lagi.</p>}
+
           {hasil ? (
             <div className="flex flex-col gap-2 rounded-xl border border-[#C9D3E6] bg-white p-3">
               <div className="text-sm font-bold text-[#0F2A52]">Kode {hasil.foto.kode}</div>
@@ -606,9 +773,9 @@ export default function KameraSigap({
             </div>
           ) : (
             <div className="flex gap-2">
-              <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Ulangi foto</button>
+              <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Buang &amp; ulangi</button>
               <button type="button" onClick={() => void kirim()} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
-                {mengirim ? "Mengirim…" : "Kirim"}
+                {mengirim ? "Mengirim…" : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
           )}

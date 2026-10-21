@@ -1130,7 +1130,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>

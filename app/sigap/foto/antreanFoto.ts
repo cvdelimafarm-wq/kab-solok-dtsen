@@ -24,6 +24,10 @@ export type ItemAntrean = {
   slot: number | null;
   tag: { akun_id: number; slot_usulan: number | null }[];
   galat_terakhir?: string | null;
+  /** (21 Okt 2026) true = foto baru dipotret dan pratinjau masih terbuka (belum "milik antrean"); lihat kirimAntrean.ts */
+  draf?: boolean;
+  /** detak terakhir draf (ms): layar pratinjau yang masih terbuka memperbaruinya; draf yang detaknya lama dianggap tertinggal dan ikut terkirim */
+  jantung_ms?: number;
 };
 
 function buka(): Promise<IDBDatabase> {
