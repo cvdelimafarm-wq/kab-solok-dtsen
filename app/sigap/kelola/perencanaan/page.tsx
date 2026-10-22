@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Bingkai from "../../kontrak/Bingkai";
+import AnggaranTab from "./AnggaranTab";
+import { KUNCI_RAB } from "@/lib/anggaranRabUji";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, rupiah, SesiBerakhir, tglSedang } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH } from "../../admin/ui";
 import {
@@ -93,11 +95,12 @@ import {
   type SubKegiatan,
 } from "@/lib/perencanaanIdentifikasi";
 
-type Bagian = "kegiatan" | "pok" | "rencana";
+type Bagian = "kegiatan" | "pok" | "rencana" | "anggaran";
 const BAGIAN: { kode: Bagian; label: string }[] = [
   { kode: "kegiatan", label: "Kegiatan" },
   { kode: "pok", label: "Baris POK" },
   { kode: "rencana", label: "Rencana realisasi" },
+  { kode: "anggaran", label: "Anggaran (RAB)" }, // (22 Okt 2026) RAB berversi, vonis, RPD, saran revisi: AnggaranTab.tsx
 ];
 type Posisi = { ro: string | null; keg: string | null; tahap: KodeTahap | null; bagian?: Bagian };
 
@@ -110,7 +113,7 @@ function posisiDariAlamat(): Posisi {
     ro: q.get("ro"),
     keg: q.get("keg"),
     tahap: t && definisiTahap(t) ? (t as KodeTahap) : null,
-    bagian: b === "pok" || b === "rencana" ? b : undefined,
+    bagian: b === "pok" || b === "rencana" || b === "anggaran" ? b : undefined,
   };
 }
 
@@ -191,6 +194,12 @@ export default function PerencanaanKegiatan() {
   const sub = tahap ? `Tahap ${tahap.no} · GSBPM ${tahap.gsbpm} · ${keg?.nama}` : keg ? `RO ${ro?.kode} · ${ro?.nama}` : ro ? ro.nama : "RO anggaran → kegiatan → tahap GSBPM";
 
   const kembalikanContoh = () => {
+    // (22 Okt 2026) RAB (tab Anggaran) tersimpan di kunci terpisah dan ikut dihapus supaya tidak menempel pada POK yang sudah direset.
+    try {
+      localStorage.removeItem(KUNCI_RAB);
+    } catch {
+      /* penyimpanan tidak tersedia */
+    }
     simpan(dataContoh(sekarang()));
     pergi({ ro: null, keg: null, tahap: null });
   };
@@ -1560,6 +1569,7 @@ function TingkatRo({ data, ro, bagian, simpan, pergi }: { data: DataUji; ro: Ro;
       {bagian === "kegiatan" && <DaftarKegiatan data={data} ro={ro} simpan={simpan} pergi={pergi} />}
       {bagian === "pok" && <PanelPok data={data} ro={ro} simpan={simpan} />}
       {bagian === "rencana" && <PanelRencana data={data} ro={ro} pergi={pergi} />}
+      {bagian === "anggaran" && <AnggaranTab data={data} ro={ro} keBarisPok={() => pergi({ ro: ro.id, keg: null, tahap: null, bagian: "pok" })} />}
     </>
   );
 }
