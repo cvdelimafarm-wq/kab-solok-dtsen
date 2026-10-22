@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj } from "@/lib/spjAuth";
-import { UKURAN_MAKS_BYTE, bersihkanNamaFile } from "../../route";
+import { UKURAN_MAKS_BYTE, bersihkanNamaFile } from "@/lib/spjSuratTugas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
