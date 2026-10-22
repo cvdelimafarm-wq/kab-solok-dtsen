@@ -19,7 +19,7 @@
 // user) -- akun biasa (bukan PML) tetap dapat wilayahnya sendiri spt biasa.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { ambilWilayahAlokasi, wilayahKeJsonb, daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 

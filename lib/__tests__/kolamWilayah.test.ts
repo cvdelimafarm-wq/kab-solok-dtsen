@@ -1,14 +1,12 @@
-// (16 Okt 2026) Uji aturan Kolam Wilayah Kerja: syarat >70%, tambahan >=50%, maks 2, teks modal, dan pengelompokan kecamatan > nagari.
+// (16 Okt 2026) Uji aturan Kolam Wilayah Kerja: tanpa syarat wilayah (dihapus 22 Okt 2026), tambahan >=50%, maks 2, teks modal, dan pengelompokan kecamatan > nagari.
 import { describe, expect, it } from "vitest";
 import {
   jumlahBebas,
   kelompokKolam,
   lolosTambahan,
-  lolosWilayah,
   MAKS_PILIH_KOLAM,
   namaItemKolam,
   perluTambahan,
-  perluWilayah,
   periksaAturanKolam,
   persen,
   pesanTolak,
@@ -22,35 +20,16 @@ const IT = (id: string, kec: string, nag: string, sls: string, sub: string, ekst
   idsubsls: id, kecamatan: kec, nagari: nag, sls, sub_sls: sub, kk: 50, didata: 0, diambil_pml_id: null, diambil_nama: null, diambil_at: null, ...ekstra,
 });
 
-describe("syarat wilayah awal (lebih dari 70%)", () => {
-  it("tepat 70% belum lolos, di atasnya lolos", () => {
-    expect(lolosWilayah(P({ awal_total: 100, awal_didata: 70 }))).toBe(false);
-    expect(lolosWilayah(P({ awal_total: 100, awal_didata: 71 }))).toBe(true);
-    expect(lolosWilayah(P({ awal_total: 1031, awal_didata: 721 }))).toBe(false); // 69,9%
-    expect(lolosWilayah(P({ awal_total: 1031, awal_didata: 722 }))).toBe(true); // 70,03%
+describe("tanpa syarat progres wilayah (22 Okt 2026)", () => {
+  it("tim dengan wilayah 0% atau tanpa daftar KK tetap boleh memilih", () => {
+    expect(periksaAturanKolam({ bisaPilih: true, progres: P({ awal_total: 1213, awal_didata: 0 }), jumlahDipilih: 0 })).toBeNull();
+    expect(periksaAturanKolam({ bisaPilih: true, progres: P({ awal_total: 0, awal_didata: 0 }), jumlahDipilih: 0 })).toBeNull();
   });
-  it("tanpa daftar KK sama sekali belum lolos", () => {
-    expect(lolosWilayah(P({ awal_total: 0, awal_didata: 0 }))).toBe(false);
-  });
-  it("KK yang dibutuhkan sesuai pembulatan", () => {
-    expect(perluWilayah(1031)).toBe(722);
-    expect(perluWilayah(100)).toBe(71);
-    expect(perluWilayah(372)).toBe(261); // 260,4 -> 261
-  });
-});
-
-describe("izin khusus (dikecualikan dari syarat wilayah)", () => {
-  it("izin_wilayah selalu lolos syarat wilayah, walau 0% atau tanpa daftar KK", () => {
-    expect(lolosWilayah(P({ awal_total: 1213, awal_didata: 103, izin_wilayah: true }))).toBe(true);
-    expect(lolosWilayah(P({ awal_total: 0, awal_didata: 0, izin_wilayah: true }))).toBe(true);
-    expect(lolosWilayah(P({ awal_total: 1213, awal_didata: 103, izin_wilayah: false }))).toBe(false);
-  });
-  it("syarat lain tetap berlaku bagi yang diberi izin", () => {
-    const izin = P({ awal_total: 1213, awal_didata: 103, izin_wilayah: true });
-    expect(periksaAturanKolam({ bisaPilih: true, progres: izin, jumlahDipilih: 0 })).toBeNull();
-    expect(periksaAturanKolam({ bisaPilih: true, progres: izin, jumlahDipilih: 2 })).toBe("maks");
-    expect(periksaAturanKolam({ bisaPilih: true, progres: { ...izin, tambahan_sub: 2, tambahan_total: 228, tambahan_didata: 46 }, jumlahDipilih: 0 })).toBe("tambahan");
-    expect(periksaAturanKolam({ bisaPilih: false, progres: izin, jumlahDipilih: 0 })).toBe("ppl");
+  it("syarat lain tetap berlaku", () => {
+    const p = P({ awal_total: 1213, awal_didata: 103 });
+    expect(periksaAturanKolam({ bisaPilih: true, progres: p, jumlahDipilih: 2 })).toBe("maks");
+    expect(periksaAturanKolam({ bisaPilih: true, progres: { ...p, tambahan_sub: 2, tambahan_total: 228, tambahan_didata: 46 }, jumlahDipilih: 0 })).toBe("tambahan");
+    expect(periksaAturanKolam({ bisaPilih: false, progres: p, jumlahDipilih: 0 })).toBe("ppl");
   });
 });
 
@@ -71,13 +50,10 @@ describe("syarat tambahan dari kolam (sekurangnya 50%)", () => {
   });
 });
 
-describe("periksaAturanKolam: urutan PPL -> wilayah -> tambahan -> maks", () => {
+describe("periksaAturanKolam: urutan PPL -> tambahan -> maks", () => {
   const lolos = P({ awal_total: 1031, awal_didata: 804 });
   it("PPL selalu ditolak lebih dulu", () => {
     expect(periksaAturanKolam({ bisaPilih: false, progres: P(), jumlahDipilih: 0 })).toBe("ppl");
-  });
-  it("wilayah belum 70%", () => {
-    expect(periksaAturanKolam({ bisaPilih: true, progres: P(), jumlahDipilih: 0 })).toBe("wilayah");
   });
   it("tambahan belum 50%", () => {
     expect(periksaAturanKolam({ bisaPilih: true, progres: P({ awal_didata: 804, tambahan_sub: 2, tambahan_total: 228, tambahan_didata: 46 }), jumlahDipilih: 0 })).toBe("tambahan");
@@ -93,14 +69,6 @@ describe("periksaAturanKolam: urutan PPL -> wilayah -> tambahan -> maks", () => 
 });
 
 describe("teks modal", () => {
-  it("wilayah memuat persen, KK sekarang, dan kekurangan", () => {
-    const m = pesanTolak("wilayah", P({ awal_total: 1031, awal_didata: 274 }));
-    expect(m.judul).toContain("belum cukup selesai");
-    expect(m.angka?.judul).toBe("Tim Anda saat ini 26,6%");
-    expect(m.angka?.teks).toContain("274 dari 1.031 KK");
-    expect(m.angka?.teks).toContain("kurang 448 KK");
-    expect(m.angka?.syarat).toBe(70);
-  });
   it("tambahan memuat jumlah Sub SLS yang diambil dan kekurangan KK", () => {
     const m = pesanTolak("tambahan", P({ tambahan_sub: 2, tambahan_total: 228, tambahan_didata: 46 }));
     expect(m.isi).toContain("2 Sub SLS");
@@ -118,7 +86,7 @@ describe("teks modal", () => {
   });
   it("alasan dari server diterjemahkan", () => {
     expect(teksDariAlasan("maks")).toContain("Maksimal 2");
-    expect(teksDariAlasan("wilayah", P({ awal_total: 100, awal_didata: 10 }))).toContain("10%");
+    expect(teksDariAlasan("wilayah")).toBe("Pilihan ditolak."); // alasan lama tidak dikenal lagi
     expect(teksDariAlasan("diambil")).toContain("sudah dipilih");
     expect(teksDariAlasan("aneh")).toBe("Pilihan ditolak.");
   });

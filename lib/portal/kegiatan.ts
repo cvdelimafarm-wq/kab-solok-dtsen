@@ -236,7 +236,7 @@ export async function kegiatanTranslok(
 /**
  * (21 Okt 2026) Foto Kamera SIGAP milik akun yang sudah terkirim tetapi tidak menempati nomor mana pun (tag pemotret masih "diajukan" atau
  * "dilepas" = tergeser foto lain). Kunci hasil: "<kegiatan_id>|<tanggal>". Syarat sama dengan panel Nomor foto (app/api/sigap/foto/susun):
- * foto merah yang belum diperiksa dan foto "dipertanyakan" tidak dihitung. Gagal membaca = dianggap tidak ada (Beranda tidak boleh ikut rusak).
+ * foto "dipertanyakan" tidak dihitung (foto merah belum diperiksa ikut dihitung: ia tetap bisa diberi nomor sebagai tahanan). Gagal membaca = dianggap tidak ada (Beranda tidak boleh ikut rusak).
  */
 export async function hitungCadanganFoto(db: Db, akunId: number, fotoDipakai: (number | null)[]): Promise<Map<string, number>> {
   const hasil = new Map<string, number>();
@@ -247,7 +247,6 @@ export async function hitungCadanganFoto(db: Db, akunId: number, fotoDipakai: (n
     const { data: foto } = await db.from("sigap_foto").select("id, kegiatan_id, tanggal, kepercayaan, status_periksa").in("id", ids).eq("akun_pengambil", akunId);
     for (const f of foto ?? []) {
       if (f.status_periksa === "dipertanyakan") continue;
-      if (f.kepercayaan === "merah" && f.status_periksa !== "diperiksa") continue;
       const k = `${f.kegiatan_id}|${f.tanggal}`;
       hasil.set(k, (hasil.get(k) ?? 0) + 1);
     }

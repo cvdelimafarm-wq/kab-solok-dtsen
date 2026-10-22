@@ -57,7 +57,7 @@
 // sekaligus" di tab Monitoring SPJ.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { TARIF_TRANSLOK_PER_HARI_DEFAULT } from "@/lib/spjSetHariTugas";

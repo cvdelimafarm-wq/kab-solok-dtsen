@@ -30,7 +30,7 @@
 // supaya bisa ditelusuri siapa yang menjawab.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionSubject, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";

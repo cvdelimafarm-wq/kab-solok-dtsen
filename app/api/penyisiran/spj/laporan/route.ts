@@ -42,7 +42,7 @@
 // tujuannya cuma menampilkan, bukan menyimpan.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, roleUntukJenis, type SpjSession } from "@/lib/spjAuth";
 import { TANGGAL_WAJIB_PENYISIRAN, laporanTemplateBolehDisimpan } from "@/lib/spjLaporanAturan";

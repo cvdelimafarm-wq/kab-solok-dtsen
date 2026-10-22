@@ -22,7 +22,7 @@
 // gagal senyap saat PDF dibuat.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession } from "@/lib/spjAuth";
 

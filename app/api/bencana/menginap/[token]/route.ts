@@ -20,7 +20,7 @@
 //         manual sesudah melihat siapa yg bersedia (tab Alokasi Petugas).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { WA_GROUP_URL, punyaAkun } from "@/lib/undangan";
 
 const JADWAL_VALID = ["7 Oktober 2026", "8 Oktober 2026"] as const;

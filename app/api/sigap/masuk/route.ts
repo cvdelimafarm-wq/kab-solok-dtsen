@@ -23,7 +23,7 @@
 // POST { aksi:"masuk_sebagai", akun_id } + Bearer <sesi super>         -> { ok, sesi, sampai, token, nama, aktor }  (sesi memuat aktor; dicatat di sigap_audit)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import {
   MAKS_GAGAL,
   catatGagal,

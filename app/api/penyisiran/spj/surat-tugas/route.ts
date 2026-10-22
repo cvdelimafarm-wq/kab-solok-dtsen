@@ -12,7 +12,7 @@
 //         app/api/penyisiran/spj/surat-tugas/[id]/file/route.ts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj } from "@/lib/spjAuth";
 

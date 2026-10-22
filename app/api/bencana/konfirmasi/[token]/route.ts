@@ -62,7 +62,7 @@
 //         dikirim yg diupdate) -- petugas boleh isi sebagian & lanjut nanti.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { WA_GROUP_URL, punyaAkun } from "@/lib/undangan";
 
 export const runtime = "nodejs";

@@ -110,11 +110,23 @@ describe("GET /api/sigap/foto/susun", () => {
     const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-21"))).json();
     expect(j.href_kerja).toBe("/sigap/translok/tok123?p=49&tab=hari_ini&tgl=2026-10-21&fokus=foto");
   });
-  it("foto merah yang belum diperiksa dan foto 'dipertanyakan' tidak ikut cadangan", async () => {
+  it("foto 'dipertanyakan' tidak ikut cadangan; foto merah belum diperiksa ikut dengan penanda tahan", async () => {
     tabel.sigap_foto.push(foto(500, 5, { kepercayaan: "merah" }), foto(501, 6, { status_periksa: "dipertanyakan" }), foto(502, 7, { kepercayaan: "merah", status_periksa: "diperiksa" }));
     tabel.sigap_foto_tag.push(tag(600, 500), tag(601, 501), tag(602, 502));
     const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-20"))).json();
-    expect(j.cadangan.map((c: { id: number }) => c.id).sort()).toEqual([279, 364, 502]);
+    expect(j.cadangan.map((c: { id: number }) => c.id).sort()).toEqual([279, 364, 500, 502]);
+    expect(j.cadangan.find((c: { id: number }) => c.id === 500).tahan).toBe(true);
+    expect(j.cadangan.find((c: { id: number }) => c.id === 502).tahan).toBe(false);
+  });
+  it("foto tahanan memesan nomor: tampil di nomor itu dan dilewati oleh saran nomor berikutnya", async () => {
+    tabel.sigap_foto.push(foto(500, 5, { kepercayaan: "merah" }));
+    tabel.sigap_foto_tag.push({ ...tag(600, 500, "ditahan"), penugasan_id: 49, slot: 4 });
+    const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-20"))).json();
+    expect(j.ditahan).toEqual([4]);
+    expect(j.nomor[3].terisi).toBe(false);
+    expect(j.nomor[3].ditahan.id).toBe(500);
+    expect(j.kosong).toEqual([4]); // belum tercatat resmi
+    expect(j.saran).toBeNull(); // tetapi tidak disarankan lagi untuk foto lain
   });
   it("hari yang sudah ditutup: boleh=false dan alasan tampil", async () => {
     akses = { error: "Batas waktu tanggal ini sudah lewat", status: 403 };
@@ -217,5 +229,47 @@ describe("POST aksi 'pindah' dan 'pasang'", () => {
   });
   it("aksi tidak dikenal ditolak", async () => {
     expect((await POST(req({ aksi: "hapus" }))).status).toBe(400);
+  });
+});
+
+describe("foto merah tetap bernomor (tahanan)", () => {
+  it("isi otomatis: foto hijau mengisi nomor kosong dulu, foto merah diberi nomor sisa sebagai tahanan (p_tahan true)", async () => {
+    tabel.sigap_dokumentasi = tabel.sigap_dokumentasi.filter((d) => d.slot !== 5); // kosong: 4 dan 5
+    tabel.sigap_foto_tag = tabel.sigap_foto_tag.map((t) => (t.foto_id === 369 ? { ...t, status: "dilepas" } : t));
+    tabel.sigap_foto = tabel.sigap_foto.filter((f) => f.id !== 364);
+    tabel.sigap_foto_tag = tabel.sigap_foto_tag.filter((t) => t.foto_id !== 364);
+    tabel.sigap_foto.push(foto(500, 90, { kepercayaan: "merah" }));
+    tabel.sigap_foto_tag.push(tag(600, 500));
+    // cadangan hijau: 279 (menit 38), 369 (menit 80) -> 2 foto utk 2 nomor kosong; merah 500 tak kebagian nomor
+    const j = await (await POST(req({ aksi: "isi" }))).json();
+    expect(j.ditempatkan.map((d: { foto_id: number }) => d.foto_id).sort()).toEqual([279, 369]);
+    expect(j.ditahan).toEqual([]);
+  });
+  it("isi otomatis: satu nomor kosong, hanya foto merah -> nomor dipesan sebagai tahanan", async () => {
+    tabel.sigap_foto = tabel.sigap_foto.filter((f) => f.id !== 279 && f.id !== 364);
+    tabel.sigap_foto_tag = tabel.sigap_foto_tag.filter((t) => t.foto_id !== 279 && t.foto_id !== 364);
+    tabel.sigap_foto.push(foto(500, 90, { kepercayaan: "merah" }));
+    tabel.sigap_foto_tag.push(tag(600, 500));
+    const j = await (await POST(req({ aksi: "isi" }))).json();
+    expect(j.ditempatkan).toEqual([]);
+    expect(j.ditahan).toHaveLength(1);
+    expect(j.ditahan[0].slot).toBe(4);
+    expect(panggilanRpc).toHaveLength(1);
+    expect(panggilanRpc[0].arg).toMatchObject({ p_tag_id: 600, p_slot: 4, p_tahan: true });
+  });
+  it("nomor yang sudah dipesan tahanan tidak diisi foto hijau otomatis", async () => {
+    tabel.sigap_foto_tag.push({ ...tag(700, 800, "ditahan"), penugasan_id: 49, slot: 4 });
+    tabel.sigap_foto.push(foto(800, 95, { kepercayaan: "merah" }));
+    const j = await (await POST(req({ aksi: "isi" }))).json();
+    expect(j.ditempatkan).toEqual([]);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("pasang manual foto merah belum diperiksa: nomor dipesan (p_tahan true), bukan ditulis", async () => {
+    tabel.sigap_foto.push(foto(500, 90, { kepercayaan: "merah" }));
+    tabel.sigap_foto_tag.push(tag(600, 500));
+    const r = await POST(req({ aksi: "pasang", foto_id: 500, slot: 4 }));
+    expect(r.status).toBe(200);
+    expect((await r.json()).ditahan).toBe(true);
+    expect(panggilanRpc[0].arg).toMatchObject({ p_tag_id: 600, p_slot: 4, p_tahan: true });
   });
 });

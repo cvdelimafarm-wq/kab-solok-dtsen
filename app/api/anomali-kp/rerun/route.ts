@@ -7,7 +7,7 @@
 // yang sama berkali-kali cuma untuk lihat efek perubahan aturan.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabaseServer';
 import type { Tables } from '@/lib/anomalyChecks';
 import { runAnomaliPipeline } from '@/lib/runAnomaliPipeline';
 import { runKonsistensiPipeline } from '@/lib/runKonsistensiPipeline';

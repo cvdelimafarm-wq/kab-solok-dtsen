@@ -17,7 +17,7 @@
 // semua petugas penyisiran lain jg punya token role yang sama persis.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 

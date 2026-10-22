@@ -10,7 +10,7 @@
 // GET ?kegiatan_id=&surat_tugas_id=  -> URL bertanda tangan (1 jam) utk melihat file ST
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { PDFDocument } from "pdf-lib";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";

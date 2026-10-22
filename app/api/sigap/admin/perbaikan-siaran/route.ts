@@ -11,7 +11,7 @@
 // Modal pengingat di aplikasi petugas muncul dengan sendirinya (jenis "perbaikan" di susunKekurangan) begitu izin ada -- tidak perlu langkah lain.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { aturanDari, hariIniWib, penugasanAkun, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { muatMasukanTranslok } from "@/lib/portal/kegiatan";

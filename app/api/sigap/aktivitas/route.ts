@@ -5,7 +5,7 @@
 //                          atau body.token = token akun (halaman petugas)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { akunDariToken } from "@/lib/sigap";
 import { catatAudit, sesiDariHeader } from "@/lib/sigapAkses";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";

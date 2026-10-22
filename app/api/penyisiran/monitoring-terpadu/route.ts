@@ -17,7 +17,7 @@
 // satu RPC (penyisiran_monitoring_terpadu) supaya frontend cukup 1x fetch.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";

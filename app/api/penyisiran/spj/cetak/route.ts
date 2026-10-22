@@ -105,7 +105,7 @@
 //     ini dipanggil -- tidak menumpuk sampah di disk container.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
 import fs from "node:fs";

@@ -122,6 +122,7 @@ export default function KameraSigap({
   const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
   const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
+  const [ditahanServer, setDitahanServer] = useState<number[]>([]); // nomor hari ini yang dipesan foto kuning/merah yang menunggu diperiksa (tag 'ditahan')
   const [konfirmasiGanti, setKonfirmasiGanti] = useState<number | null>(null); // nomor terisi yang hendak diganti (menunggu modal "Yakin?")
   const [rapi, setRapi] = useState<{ cadangan: number; kosong: number[]; href: string } | null>(null); // foto terkirim yang belum bernomor + tautan ke kartu hari
   const drafIdRef = useRef<number | null>(null);
@@ -169,8 +170,9 @@ export default function KameraSigap({
 
   const muatTerisi = useCallback(async () => {
     try {
-      const d = await ambilJson<{ nomor: { slot: number; terisi: boolean }[]; kosong: number[]; cadangan: unknown[]; href_kerja: string }>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tglWib()}`);
+      const d = await ambilJson<{ nomor: { slot: number; terisi: boolean }[]; kosong: number[]; ditahan?: number[]; cadangan: unknown[]; href_kerja: string }>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tglWib()}`);
       setTerisiServer(d.nomor.filter((n) => n.terisi).map((n) => n.slot));
+      setDitahanServer(d.ditahan ?? []);
       setRapi({ cadangan: d.cadangan.length, kosong: d.kosong, href: d.href_kerja });
     } catch {
       /* tanpa sinyal: saran nomor memakai antrean HP saja */
@@ -376,7 +378,9 @@ export default function KameraSigap({
   const siapPotret = akurasiOk || (akurasiKasar && sisaTunggu === 0);
   const etiket = labelFoto(jenis);
   const terisiSemuaNomor = useMemo(() => new Set([...terisiServer, ...terisiAntre]), [terisiServer, terisiAntre]);
-  const saran = nomorBerikutnya(terisiSemuaNomor, jumlahNomor); // null = semua nomor hari ini sudah terisi
+  // nomor yang sudah dipesan foto kuning/merah (menunggu diperiksa) juga dilewati saat memilih nomor otomatis: foto tetap bernomor tahapannya
+  const dipesanSemua = useMemo(() => new Set([...terisiSemuaNomor, ...ditahanServer]), [terisiSemuaNomor, ditahanServer]);
+  const saran = nomorBerikutnya(dipesanSemua, jumlahNomor); // null = semua nomor hari ini sudah terisi/dipesan
   // Foto minimal punya nomor sendiri atau dibagikan ke rekan. Bila semua nomor hari ini sudah terisi, foto boleh dikirim tanpa nomor sebagai CADANGAN.
   const adaTujuan = nomor !== null || tag.length > 0 || saran === null;
 
@@ -733,6 +737,7 @@ export default function KameraSigap({
                 // (21 Okt 2026) Nomor yang sudah berisi foto "padam" (abu-abu + centang) supaya petugas langsung melihat mana yang masih perlu.
                 // Tetap bisa diketuk untuk MENGGANTI (foto lama jadi cadangan); ketuk lagi = batal ganti.
                 const terisi = terisiSemuaNomor.has(n);
+                const dipesan = !terisi && ditahanServer.includes(n);
                 const gaya = pilih
                   ? terisi ? "border-[#B7791F] bg-[#FFF4D6]" : "border-[#0F2A52] bg-[#E8EEF8]"
                   : terisi ? "border-[#E1E6EF] bg-[#F3F5F9]" : "border-[#C9D3E6] bg-white";
@@ -757,6 +762,7 @@ export default function KameraSigap({
                     <span className="min-w-0 flex-1">
                       <span className={`block text-sm font-bold ${terisi && !pilih ? "text-[#7A879C]" : "text-[#0F2A52]"}`}>{etiket[n - 1] ?? `Foto ${n}`}</span>
                       {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
+                      {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
                       {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengganti</span>}
                       {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto ini akan menggantikan foto lama (foto lama jadi cadangan) · ketuk lagi untuk batal</span>}
                     </span>
@@ -818,7 +824,7 @@ export default function KameraSigap({
               <div className="text-sm font-bold text-[#0F2A52]">Kode {hasil.foto.kode}</div>
               <div className="text-xs text-[#3C4C68]">Tingkat kepercayaan: <b>{LABEL_KEPERCAYAAN[hasil.foto.kepercayaan]}</b></div>
               {hasil.foto.alasan.length > 0 && <ul className="list-disc pl-5 text-xs text-[#3C4C68]">{hasil.foto.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>}
-              {hasil.ditahan && <div className="text-xs font-semibold text-[#8A6200]">Foto ditahan sampai PML atau admin memeriksa. Belum tercatat di nomor foto.</div>}
+              {hasil.ditahan && <div className="text-xs font-semibold text-[#8A6200]">{hasil.penempatan?.status === "ditahan" && nomor !== null ? `Foto ini sudah ditandai untuk Foto ${nomor} (${etiket[nomor - 1] ?? ""}). Nomornya tercatat resmi setelah PML atau admin memeriksa.` : "Foto ditahan sampai PML atau admin memeriksa. Belum tercatat di nomor foto."}</div>}
               {hasil.penempatan && hasil.penempatan.ok === false && <div className="text-xs text-[#9B1C23]">Belum masuk nomor foto: {hasil.penempatan.error}</div>}
               <button type="button" onClick={ulang} className="min-h-[48px] rounded-xl bg-[#0F2A52] text-sm font-bold text-white">Foto lagi</button>
             </div>

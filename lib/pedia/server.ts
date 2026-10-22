@@ -6,7 +6,7 @@
 // Server TIDAK PERNAH memanggil remove()/upsert utk bucket sigap-pedia.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@/lib/supabaseServer";
 import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { BUCKET_PEDIA, MAKS_BYTE_FILE, slug, slugNomor } from "./umum";
 import { validasiJenis, type JenisFile } from "./deteksi";

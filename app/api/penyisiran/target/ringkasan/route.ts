@@ -19,7 +19,7 @@
 // dari tab yang sama, bukan endpoint publik/tab lain.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 

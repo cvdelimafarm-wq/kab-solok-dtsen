@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 
 // (9 Okt 2026) /sigap/kelola/delego -- permintaan user: Delego masuk pola alamat /sigap/kelola/<modul>.
 // Delego adalah aplikasi terpisah; halaman ini meneruskan ke tautan Delego yang diatur Admin Aplikasi

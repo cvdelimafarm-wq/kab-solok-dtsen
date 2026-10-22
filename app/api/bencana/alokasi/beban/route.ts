@@ -28,7 +28,7 @@
 // Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";

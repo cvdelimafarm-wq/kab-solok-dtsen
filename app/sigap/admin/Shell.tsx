@@ -7,10 +7,13 @@
 // Monitoring, Administrasi), topbar tipis (breadcrumb, cari Ctrl K, pemilih kegiatan, TA, lonceng, avatar),
 // konten berlatar abu sangat muda. Di layar kecil (< lg) yang tampil tetap header gradien navy + BarisTab
 // (prop `mobile`). Konten (children) dirender SEKALI untuk kedua ukuran layar.
+// (22 Okt 2026) Isi sidebar & palet kini disusun oleh lib/sigapMenuV2.ts (susunan v2 mengikuti siklus kegiatan:
+// Beranda, Perencanaan, Pelaksanaan, Pengendalian, Pertanggungjawaban, Pengelolaan, + Referensi); Shell hanya menggambar.
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api";
+import { NAMA_PAYUNG, susunMenu, type NamaIkon } from "@/lib/sigapMenuV2";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
@@ -27,7 +30,6 @@ export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string
 ];
 
 // ---------------------------------------------------------------- Ikon SVG inline kecil (tanpa dependensi)
-type NamaIkon = "beranda" | "buku" | "revisi" | "motor" | "pesawat" | "uang" | "paket" | "grafik" | "tautan" | "perisai" | "gembok" | "cari" | "lonceng" | "panah" | "panel" | "pedia" | "arsip";
 function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
   const isi: Record<NamaIkon, React.ReactNode> = {
     beranda: (
@@ -91,6 +93,21 @@ function Ikon({ n, size = 15 }: { n: NamaIkon; size?: number }) {
         <path d="M9 3v18" />
       </>
     ),
+    alur: <path d="M5 5h5v5H5zM14 14h5v5h-5zM10 7.5h4a2 2 0 0 1 2 2V14" />,
+    kompas: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M15.5 8.5l-2 5-5 2 2-5z" />
+      </>
+    ),
+    orang: (
+      <>
+        <circle cx="9" cy="8" r="3.5" />
+        <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6" />
+      </>
+    ),
+    kantor: <path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M14 10h5a1 1 0 0 1 1 1v10M3 21h18M8 8h2M8 12h2M8 16h2" />,
+    siaran: <path d="M4 10v4h3l7 4V6l-7 4zM17 9a4 4 0 0 1 0 6" />,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
@@ -238,27 +255,45 @@ export default function Shell({
   const namaPeran = Array.from(new Set(ringkas.peran.map((p) => p.nama)));
   const tahun = (ringkas.hari_ini || "2026").slice(0, 4);
 
+  // (22 Okt 2026) Satu sumber untuk sidebar & palet: susunMenu (lib/sigapMenuV2.ts).
+  const menu = useMemo(
+    () =>
+      susunMenu({
+        tokenPetugas,
+        adaSubAdmin: subAdmin.length > 0,
+        perencanaan: bolehPerencanaan,
+        pelatihanKelola: bolehPelatihanKelola,
+        kontrak: bolehKontrak,
+        pediaKelola: bolehPediaKelola,
+        lapangan: bolehLapangan,
+        pendataanKelola: bolehPendataanKelola,
+        akses: bolehAkses,
+        aplikasi: bolehAplikasi,
+        delego: bolehDelego,
+      }),
+    [tokenPetugas, subAdmin.length, bolehPerencanaan, bolehPelatihanKelola, bolehKontrak, bolehPediaKelola, bolehLapangan, bolehPendataanKelola, bolehAkses, bolehAplikasi, bolehDelego]
+  );
+
   const itemPalet = useMemo<ItemPalet[]>(() => {
-    const out: ItemPalet[] = [{ id: "m-beranda", grup: "Menu", label: "Beranda", ket: "ringkasan & perlu tindakan", jalankan: () => pindahMenu("beranda") }];
-    for (const m of subAdmin) out.push({ id: `m-${m.kode}`, grup: "Menu", label: `Admin transport › ${m.label}`, jalankan: () => pindahMenu(m.kode) });
-    if (bolehKontrak) out.push({ id: "m-kontrak", grup: "Menu", label: "Pengadaan & kontrak", ket: "paket, master, penyedia", jalankan: () => (window.location.href = "/sigap/kelola/pengadaan") });
-    out.push({ id: "m-pedia", grup: "Menu", label: "SIGAP PEDIA", ket: "ensiklopedia konsultasi", jalankan: () => (window.location.href = "/sigap/pedia") });
-    if (bolehPediaKelola) out.push({ id: "m-pedia-kelola", grup: "Menu", label: "SIGAP PEDIA › Buku register & arsip bukti", jalankan: () => (window.location.href = "/sigap/kelola/pedia") });
-    if (tokenPetugas || bolehPelatihanKelola) out.push({ id: "m-pelatihan", grup: "Menu", label: "Pelatihan (langkah, pretest, presensi & posttest)", jalankan: () => (window.location.href = "/sigap/pelatihan") });
-    if (bolehPelatihanKelola) out.push({ id: "m-pelatihan-kelola", grup: "Menu", label: "Pelatihan › Kelola soal, jadwal & monitoring", jalankan: () => (window.location.href = "/sigap/kelola/pelatihan") });
-    if (bolehLapangan) out.push({ id: "m-lapangan", grup: "Menu", label: "Monitoring › Lapangan (translok, identifikasi, pendataan)", jalankan: () => (window.location.href = "/sigap/kelola/lapangan") });
-    if (bolehPendataanKelola) out.push({ id: "m-pendataan-unggah", grup: "Menu", label: "Pendataan › Unggah daftar KK (CSV FASIH)", jalankan: () => (window.location.href = "/sigap/kelola/pendataan") });
-    if (bolehPerencanaan) out.push({ id: "m-perencanaan", grup: "Menu", label: "Perencanaan kegiatan (uji coba)", ket: "RO → kegiatan utama → tahap GSBPM", jalankan: () => (window.location.href = "/sigap/kelola/perencanaan") });
-    if (bolehAplikasi) out.push({ id: "m-aplikasi", grup: "Menu", label: "Kelola aplikasi, admin & periode", jalankan: () => (window.location.href = "/sigap/kelola/aplikasi") });
-    if (bolehDelego) out.push({ id: "m-delego", grup: "Menu", label: "Delego", ket: "aplikasi delegasi kerja", jalankan: () => (window.location.href = "/sigap/kelola/delego") });
-    if (bolehAkses) out.push({ id: "m-akses", grup: "Menu", label: "Peran dan akses", jalankan: () => (window.location.href = "/sigap/kelola/akses") });
-    if (tokenPetugas) out.push({ id: "m-translok", grup: "Menu", label: "Transport lokal (halaman petugas saya)", jalankan: () => (window.location.href = `/sigap/translok/${tokenPetugas}`) });
+    const out: ItemPalet[] = [];
+    for (const kel of menu)
+      for (const it of kel.item) {
+        if (it.status) continue; // segera / nonaktif tidak bisa dibuka
+        const awalan = kel.label ? `${kel.label} › ` : "";
+        if (it.aksi === "beranda") out.push({ id: "m-beranda", grup: "Menu", label: "Beranda", ket: "ringkasan & perlu tindakan", jalankan: () => pindahMenu("beranda") });
+        else if (it.aksi === "admin_transport")
+          for (const m of subAdmin) out.push({ id: `m-${m.kode}`, grup: "Menu", label: `${awalan}Admin transport lokal › ${m.label}`, jalankan: () => pindahMenu(m.kode) });
+        else if (it.href) {
+          const href = it.href;
+          out.push({ id: `m-${it.id}`, grup: "Menu", label: `${awalan}${it.label}`, ket: it.ketPalet, jalankan: () => (window.location.href = href) });
+        }
+      }
     out.push({ id: "m-portal", grup: "Menu", label: "Beranda SIGAP", jalankan: () => (window.location.href = "/") });
     out.push(...aksiPalet);
     for (const k of ringkas.kegiatan)
       out.push({ id: `k-${k.id}`, grup: "Kegiatan", label: k.nama, ket: `${k.kode}${k.aktif ? "" : " · selesai"}${k.id === kegId ? " · terpilih" : ""}`, jalankan: () => pilihKegiatan(k.id) });
     return out;
-  }, [subAdmin, bolehAkses, bolehKontrak, bolehPediaKelola, bolehPelatihanKelola, bolehAplikasi, bolehPerencanaan, bolehDelego, bolehPendataanKelola, bolehLapangan, tokenPetugas, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
+  }, [menu, subAdmin, aksiPalet, ringkas.kegiatan, kegId, pindahMenu, pilihKegiatan]);
 
   const adaTindakan = (jumlahTindakan ?? 0) > 0;
 
@@ -282,77 +317,62 @@ export default function Shell({
           )}
         </Link>
         <nav aria-label="Menu SIGAP" className="flex flex-col gap-0.5 text-[13.5px]">
-          <ItemNav mini={mini} ikon="beranda" label="Beranda" aktif={aktif === "beranda"} onClick={() => pindahMenu("beranda")} />
-
-          <LabelGrup mini={mini}>Perencanaan</LabelGrup>
-          {bolehPerencanaan && <ItemNav mini={mini} ikon="panel" label="Perencanaan kegiatan" href="/sigap/kelola/perencanaan" aktif={aktif === "perencanaan"} title="Uji coba: RO anggaran → kegiatan utama → tahap GSBPM" />}
-          <ItemNav mini={mini} ikon="buku" label="RAB / POK" segera />
-          <ItemNav mini={mini} ikon="revisi" label="Revisi anggaran" segera />
-
-          <LabelGrup mini={mini}>Pelaksanaan</LabelGrup>
-          {tokenPetugas ? (
-            <ItemNav mini={mini} ikon="motor" label="Transport lokal" href={`/sigap/translok/${tokenPetugas}`} title="Halaman petugas transport lokal Anda" />
-          ) : (
-            <ItemNav mini={mini} ikon="motor" label="Transport lokal" nonaktif ket="—" title="Anda tidak punya penugasan transport lokal" />
-          )}
-          {(tokenPetugas || bolehPelatihanKelola) && <ItemNav mini={mini} ikon="buku" label="Pelatihan" href="/sigap/pelatihan" aktif={aktif === "pelatihan"} title="Langkah pelatihan: pretest, presensi, posttest" />}
-          {bolehPelatihanKelola && <ItemNav mini={mini} ikon="grafik" label="Kelola pelatihan" href="/sigap/kelola/pelatihan" aktif={aktif === "pelatihan_kelola"} title="Soal, jadwal & monitoring tes" />}
-          <ItemNav mini={mini} ikon="pesawat" label="Perjalanan dinas" segera />
-          <ItemNav mini={mini} ikon="uang" label="Honor" segera />
-          {bolehKontrak ? (
-            <ItemNav mini={mini} ikon="paket" label="Pengadaan" href="/sigap/kelola/pengadaan" aktif={aktif === "kontrak"} title="Pengadaan & kontrak" />
-          ) : (
-            <ItemNav mini={mini} ikon="paket" label="Pengadaan" nonaktif ket="—" title="Akun Anda belum diberi akses Pengadaan & Kontrak" />
-          )}
-
-          <LabelGrup mini={mini}>Referensi</LabelGrup>
-          <ItemNav mini={mini} ikon="pedia" label="SIGAP PEDIA" href="/sigap/pedia" aktif={aktif === "pedia"} title="Ensiklopedia konsultasi resmi" />
-          {bolehPediaKelola && <ItemNav mini={mini} ikon="arsip" label="Register & arsip bukti" href="/sigap/kelola/pedia" aktif={aktif === "pedia_kelola"} />}
-
-          <LabelGrup mini={mini}>Monitoring</LabelGrup>
-          <ItemNav mini={mini} ikon="grafik" label="Realisasi dan serapan" segera />
-          <ItemNav mini={mini} ikon="tautan" label="Sinkronisasi Delego" segera />
-          {bolehLapangan && <ItemNav mini={mini} ikon="grafik" label="Monitoring lapangan" href="/sigap/kelola/lapangan" title="Translok + hasil identifikasi/pendataan per petugas per tanggal" />}
-
-          {(subAdmin.length > 0 || bolehAkses || bolehAplikasi || bolehDelego || bolehPendataanKelola) && <LabelGrup mini={mini}>Administrasi</LabelGrup>}
-          {subAdmin.length > 0 && (
-            <>
-              <ItemNav
-                mini={mini}
-                ikon="perisai"
-                label="Admin transport lokal"
-                induk={aktif !== "beranda" && aktif !== "akses" && aktif !== "kontrak" && aktif !== "pedia" && aktif !== "pedia_kelola" && aktif !== "pelatihan" && aktif !== "pelatihan_kelola"}
-                onClick={() => pindahMenu(subAdmin[0].kode)}
-                badge={adaTindakan ? jumlahTindakan : null}
-              />
-              {!mini && (
-                <div className="ml-[19px] flex flex-col gap-0.5 border-l border-white/10 pl-2">
-                  {subAdmin.map((m) => (
-                    <button
-                      key={m.kode}
-                      type="button"
-                      onClick={() => pindahMenu(m.kode)}
-                      aria-current={aktif === m.kode ? "page" : undefined}
-                      className={`rounded-md px-2 py-1 text-left text-[12.5px] transition ${
-                        aktif === m.kode ? "bg-[#163A60] font-semibold text-white shadow-[inset_3px_0_0_#5C9DEB]" : "text-[#C9D6E6] hover:bg-[#163A60] hover:text-white"
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+          {menu.map((kel) => (
+            <Fragment key={kel.kode}>
+              {kel.label && <LabelGrup mini={mini}>{kel.label}</LabelGrup>}
+              {kel.item.map((it) =>
+                it.aksi === "admin_transport" ? (
+                  <Fragment key={it.id}>
+                    <ItemNav
+                      mini={mini}
+                      ikon={it.ikon}
+                      label={it.label}
+                      title={it.title}
+                      induk={MENU_ADMIN.some((m) => m.kode === aktif)}
+                      onClick={() => pindahMenu(subAdmin[0].kode)}
+                      badge={adaTindakan ? jumlahTindakan : null}
+                    />
+                    {!mini && (
+                      <div className="ml-[19px] flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                        {subAdmin.map((m) => (
+                          <button
+                            key={m.kode}
+                            type="button"
+                            onClick={() => pindahMenu(m.kode)}
+                            aria-current={aktif === m.kode ? "page" : undefined}
+                            className={`rounded-md px-2 py-1 text-left text-[12.5px] transition ${
+                              aktif === m.kode ? "bg-[#163A60] font-semibold text-white shadow-[inset_3px_0_0_#5C9DEB]" : "text-[#C9D6E6] hover:bg-[#163A60] hover:text-white"
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Fragment>
+                ) : (
+                  <ItemNav
+                    key={it.id}
+                    mini={mini}
+                    ikon={it.ikon}
+                    label={it.label}
+                    aktif={it.aktifKode != null && aktif === it.aktifKode}
+                    segera={it.status === "segera"}
+                    nonaktif={it.status === "nonaktif"}
+                    ket={it.ket}
+                    title={it.title}
+                    href={it.href}
+                    onClick={it.aksi === "beranda" ? () => pindahMenu("beranda") : undefined}
+                  />
+                )
               )}
-            </>
-          )}
-          {bolehAkses && <ItemNav mini={mini} ikon="gembok" label="Peran dan akses" href="/sigap/kelola/akses" aktif={aktif === "akses"} />}
-          {bolehAplikasi && <ItemNav mini={mini} ikon="panel" label="Aplikasi & periode" href="/sigap/kelola/aplikasi" title="Kelola aplikasi, admin & periode kegiatan" />}
-          {bolehDelego && <ItemNav mini={mini} ikon="tautan" label="Delego" href="/sigap/kelola/delego" title="Buka Delego" />}
-          {bolehPendataanKelola && <ItemNav mini={mini} ikon="arsip" label="Unggah daftar KK" href="/sigap/kelola/pendataan" title="Unggah CSV ekspor FASIH-SM untuk Pendataan keroyokan" />}
+            </Fragment>
+          ))}
         </nav>
         <div className="flex-1" />
         <div className="pt-3">
           <ItemNav mini={mini} ikon="panel" label={mini ? "Lebarkan menu" : "Ciutkan menu"} onClick={ciutkan} />
-          {!mini && <p className="px-2.5 pt-2 text-[10.5px] leading-snug text-[#7F95AE]">Gerak Anggaran &amp; Pertanggungjawaban · TA {tahun}</p>}
+          {!mini && <p className="px-2.5 pt-2 text-[10.5px] leading-snug text-[#7F95AE]">{NAMA_PAYUNG} · TA {tahun}</p>}
         </div>
       </aside>
 

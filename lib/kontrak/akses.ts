@@ -4,7 +4,7 @@
 // memuat data pribadi/keuangan, jadi wajib login (permintaan user).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });

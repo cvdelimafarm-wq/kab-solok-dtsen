@@ -36,7 +36,7 @@
 // lihat daftarIdUntukSesi) -- dicek di server, BUKAN cuma krn dropdown FE
 // sudah otomatis kescope (defense kalau body dimanipulasi).
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { ambilWilayahAlokasi, daftarIdUntukSesi, type AlokasiWilayahRow } from "@/lib/wilayahAlokasiPetugas";
 

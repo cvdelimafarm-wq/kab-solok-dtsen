@@ -8,7 +8,7 @@
 // email tanpa bergantung akses Storage lagi).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";

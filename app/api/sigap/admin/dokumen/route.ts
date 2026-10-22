@@ -7,7 +7,7 @@
 // (pratinjau); unduh=1 -> attachment.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { tanggalValid } from "@/lib/sigap";
 import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { GalatSpj, buatSpjPdf, headerBerkas, parseJenis } from "@/lib/sigapDokumen";

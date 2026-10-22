@@ -14,7 +14,7 @@
 //   atau 'keroyok' (ppl_id opsional = "PPL awal"). Data lama seluruhnya 'keroyok'.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
 import { rpcSemua } from "@/lib/supabaseRpc";
 

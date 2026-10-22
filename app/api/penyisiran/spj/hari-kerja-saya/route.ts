@@ -16,7 +16,7 @@
 // penjelasan kedua sumber (hari_tugas vs fallback_st_range).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession } from "@/lib/spjAuth";
 import { daftarHariKerjaPetugas } from "@/lib/spjHariKerja";

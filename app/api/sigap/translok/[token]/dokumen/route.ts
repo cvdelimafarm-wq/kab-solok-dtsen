@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { akunDariToken, penugasanAkun, tanggalValid } from "@/lib/sigap";
 import { GalatSpj, buatSpjPdf, headerBerkas, parseJenis } from "@/lib/sigapDokumen";
 

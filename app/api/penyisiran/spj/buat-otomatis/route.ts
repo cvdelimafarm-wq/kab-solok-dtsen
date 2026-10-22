@@ -41,7 +41,7 @@
 // menu pengelola (Monitoring/Cetak SPJ), bukan cuma dari sesi petugas ybs.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, SpjPetugasJenis } from "@/lib/spjAuth";
 import { TARIF_TRANSLOK_PER_HARI_DEFAULT } from "@/lib/spjSetHariTugas";

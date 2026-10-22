@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import sharp from "sharp";
 import { BUCKET_SIGAP, akunDariToken, cekAksesIsian } from "@/lib/sigap";
 

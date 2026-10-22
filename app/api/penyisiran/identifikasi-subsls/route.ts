@@ -15,7 +15,7 @@
 // utk PPL yang login personal.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";

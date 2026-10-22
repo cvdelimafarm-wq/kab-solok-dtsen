@@ -18,7 +18,7 @@
 //      sini via import supaya logika lepas-peran konsisten).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
 import { rpcSemua } from "@/lib/supabaseRpc";
 

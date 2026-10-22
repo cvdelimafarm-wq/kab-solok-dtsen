@@ -12,7 +12,7 @@
 //         lokasi_status='riil' (real GPS, bukan perkiraan/tanpa data).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

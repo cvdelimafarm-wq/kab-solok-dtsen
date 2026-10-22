@@ -7,7 +7,7 @@
 // SPJ boleh unduh siapa saja.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfLaporan, LaporanRekapSnapshot } from "@/lib/pdf/laporan";

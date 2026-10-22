@@ -20,7 +20,7 @@
 // celah baru secara mendasar, tapi tetap disarankan pakai versi yg diperbaiki.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabaseServer';
 import * as XLSX from 'xlsx';
 
 export const runtime = 'nodejs';

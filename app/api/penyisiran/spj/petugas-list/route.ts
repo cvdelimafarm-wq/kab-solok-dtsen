@@ -23,7 +23,7 @@
 // tapi ini belum pernah terjadi pada data yg ada.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj } from "@/lib/spjAuth";
 

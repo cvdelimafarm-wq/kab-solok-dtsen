@@ -13,7 +13,7 @@
 // Waktu memakai jam server. Setelah TUTUP_SAMPAI lewat, semua akun otomatis terbuka lagi tanpa deploy ulang.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { sesiLengkapDariHeader } from "@/lib/sigapAkses";
 
 export const runtime = "nodejs";

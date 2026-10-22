@@ -11,7 +11,7 @@
 //   -> { ok:false, error, sisa_percobaan } / 429 kalau terkunci
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { MAKS_GAGAL, cariPetugasByNama, catatGagal, cekKunci, cekPin, normNama, pinValid, resetGagal, tentukanTujuan } from "@/lib/undangan";
 
 export const runtime = "nodejs";

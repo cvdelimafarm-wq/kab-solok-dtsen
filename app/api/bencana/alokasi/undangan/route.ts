@@ -19,7 +19,7 @@
 // sementara pembatas), bukan data petugas/plot.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { normNama, type Db } from "@/lib/undangan";
 
 export const runtime = "nodejs";

@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { PESAN_ARSIP } from "@/lib/portal/periode";
 import {
   BATAS_JARAK_M,

@@ -19,7 +19,7 @@
 // SEMUA petugas, bukan milik personal).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";

@@ -4,7 +4,7 @@
 // Waktu SELALU dari jam server (bukan jam perangkat peserta). Finalisasi sesi yang kedaluwarsa
 // dilakukan "lazy": saat sesi dibaca/disimpan/dipantau dan batas_at sudah lewat.
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import type { NextRequest } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { sesiDariHeader } from "@/lib/sigapAkses";

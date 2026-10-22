@@ -23,7 +23,7 @@
 // Agregasi per wilayah dilakukan di FE supaya bisa dibuka/ditutup per kecamatan.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

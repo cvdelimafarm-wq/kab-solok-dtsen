@@ -27,7 +27,7 @@
 // .../alokasi/export-subsls/route.ts & .../alokasi/fasih-compare/route.ts.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import * as XLSX from "xlsx";
 import { verifySession, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";

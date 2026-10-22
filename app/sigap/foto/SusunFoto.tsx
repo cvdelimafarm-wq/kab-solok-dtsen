@@ -14,10 +14,10 @@ import { ambilFotoUrl, ambilJson } from "./klien";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { LABEL_KEPERCAYAAN, WARNA_KEPERCAYAAN, type Kepercayaan } from "@/lib/sigapFoto";
 
-type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string };
-type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null };
-type Keadaan = { boleh: boolean; susulan: boolean; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; cadangan: FotoRingkas[] };
-type HasilIsi = { ditempatkan: { foto_id: number; slot: number }[]; cadangan: number; gagal?: { foto_id: number; error: string }[] };
+type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string; tahan?: boolean };
+type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null; ditahan?: FotoRingkas | null };
+type Keadaan = { boleh: boolean; susulan: boolean; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[] };
+type HasilIsi = { ditempatkan: { foto_id: number; slot: number }[]; ditahan?: { foto_id: number; slot: number }[]; cadangan: number; gagal?: { foto_id: number; error: string }[] };
 
 const jam = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(11, 16).replace(":", ".");
 
@@ -113,9 +113,13 @@ export default function SusunFoto({
     setGalat(null);
     try {
       const r = (await kirimAksi({ aksi: "isi" })) as unknown as HasilIsi;
-      if (r.ditempatkan.length) {
+      const tahan = r.ditahan ?? [];
+      if (r.ditempatkan.length || tahan.length) {
         const urut = [...r.ditempatkan].sort((a, b) => a.slot - b.slot).map((x) => x.slot).join(", ");
-        setPesan(`${r.ditempatkan.length} foto Kamera SIGAP otomatis mengisi nomor ${urut}.${r.cadangan ? ` ${r.cadangan} foto lain disimpan sebagai cadangan.` : ""} Bila tidak sesuai, ketuk nomor lain pada foto itu.`);
+        const urutTahan = [...tahan].sort((a, b) => a.slot - b.slot).map((x) => x.slot).join(", ");
+        setPesan(
+          `${r.ditempatkan.length ? `${r.ditempatkan.length} foto Kamera SIGAP otomatis mengisi nomor ${urut}.` : ""}${tahan.length ? ` ${tahan.length} foto merah diberi nomor ${urutTahan} dan menunggu diperiksa PML/admin.` : ""}${r.cadangan ? ` ${r.cadangan} foto lain disimpan sebagai cadangan.` : ""} Bila tidak sesuai, ketuk nomor lain pada foto itu.`.trim()
+        );
         kabari();
       } else if (r.gagal?.length) setGalat("Sebagian foto belum bisa dipasang. Coba lagi atau pasang manual.");
       else setPesan(null);
@@ -181,7 +185,7 @@ export default function SusunFoto({
           <li key={n.slot} className={`rounded-xl border px-3 py-2 ${n.terisi ? "border-[#C9D3E6] bg-[#F7F9FD]" : "border-dashed border-[#C9D3E6] bg-white"}`}>
             <div className="flex items-center gap-3">
               <span className={`flex h-8 w-8 flex-none items-center justify-center rounded-full text-sm font-extrabold ${n.terisi ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{n.slot}</span>
-              {n.foto && <Mini id={n.foto.id} />}
+              {(n.foto ?? n.ditahan) && <Mini id={(n.foto ?? n.ditahan)!.id} />}
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-bold text-[#0F2A52]">{etiket[n.slot - 1] ?? `Foto ${n.slot}`}</div>
                 {n.terisi ? (
@@ -194,6 +198,11 @@ export default function SusunFoto({
                     ) : (
                       <span>Unggahan manual{n.susulan ? " · susulan" : ""}</span>
                     )}
+                  </div>
+                ) : n.ditahan ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] font-semibold text-[#8A6200]">
+                    <span>Dipesan foto {jam(n.ditahan.diambil_at)} WIB, menunggu diperiksa PML/admin</span>
+                    <Lencana k={n.ditahan.kepercayaan} />
                   </div>
                 ) : (
                   <div className="text-[11.5px] font-semibold text-[#8A6200]">Masih kosong</div>
@@ -216,6 +225,7 @@ export default function SusunFoto({
                 <div className="min-w-0 flex-1 text-[11.5px] text-[#3C4C68]">
                   <div className="text-[13px] font-bold text-[#0F2A52]">Foto {jam(f.diambil_at)} WIB</div>
                   <Lencana k={f.kepercayaan} />
+                  {f.tahan && <div className="mt-1 text-[11px] font-semibold text-[#8A6200]">Foto merah: nomornya dipesan dulu, baru tercatat setelah diperiksa PML/admin.</div>}
                 </div>
               </div>
               {bisaUbah && <Pilihan label="Pasang di nomor" jumlah={k.jumlah} sibuk={sibuk} onPilih={(slot) => void aksiNomor({ aksi: "pasang", foto_id: f.id, slot })} />}

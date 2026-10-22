@@ -33,7 +33,7 @@
 // rencana_tujuan/tempat_kedudukan di body).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession } from "@/lib/spjAuth";
 import { TEMPAT_KEDUDUKAN_DEFAULT } from "@/lib/spjPejabat";

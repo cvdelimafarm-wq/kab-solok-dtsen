@@ -15,7 +15,7 @@ import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
 import type { Tim } from "@/lib/portal/pendataan";
 import type { Galat } from "@/lib/portal/permintaanDaftar";
 import { labelJorong, tanggalWib, type Pilihan } from "@/lib/permintaanDaftar";
-import { MAKS_PILIH_KOLAM, SYARAT_TAMBAHAN_PERSEN, SYARAT_WILAYAH_PERSEN, teksDariAlasan, type ItemKolam, type ProgresKolam } from "@/lib/kolamWilayah";
+import { MAKS_PILIH_KOLAM, SYARAT_TAMBAHAN_PERSEN, teksDariAlasan, type ItemKolam, type ProgresKolam } from "@/lib/kolamWilayah";
 
 const n = (x: unknown): number => {
   const v = Number(x);
@@ -87,13 +87,13 @@ export async function pilihKolam(db: Db, akun: { id: number }, tim: Tim, pilihan
     p_tanggal: tanggalWib(Date.now()),
     p_pilihan: pilihan,
     p_maks: MAKS_PILIH_KOLAM,
-    p_syarat_awal: SYARAT_WILAYAH_PERSEN,
+    p_syarat_awal: 0, // (22 Okt 2026) syarat progres wilayah dihapus; parameter dipertahankan agar tanda tangan fungsi database tidak berubah (diabaikan)
     p_syarat_tambahan: SYARAT_TAMBAHAN_PERSEN,
   });
   if (error) return { galat: "Pilihan gagal disimpan. Coba lagi.", status: 500 };
   const r = (data ?? {}) as { status?: string; ids?: number[]; alasan?: string; d?: number; t?: number; n?: number };
   if (r.status !== "ok") {
-    const progres = bacaProgres({ awal_total: r.alasan === "wilayah" ? r.t : 0, awal_didata: r.alasan === "wilayah" ? r.d : 0, tambahan_total: r.alasan === "tambahan" ? r.t : 0, tambahan_didata: r.alasan === "tambahan" ? r.d : 0, tambahan_sub: r.alasan === "tambahan" ? r.n : 0 });
+    const progres = bacaProgres({ tambahan_total: r.alasan === "tambahan" ? r.t : 0, tambahan_didata: r.alasan === "tambahan" ? r.d : 0, tambahan_sub: r.alasan === "tambahan" ? r.n : 0 });
     return { galat: teksDariAlasan(r.alasan, progres), status: 409 };
   }
   const ids = r.ids ?? [];

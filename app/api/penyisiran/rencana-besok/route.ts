@@ -31,7 +31,7 @@
 // dibatasi.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionRole, getSessionSubject, extractBearer } from "@/lib/penyisiranAuth";
 import { ambilWilayahAlokasi, buildOrFilterWilayah, daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 

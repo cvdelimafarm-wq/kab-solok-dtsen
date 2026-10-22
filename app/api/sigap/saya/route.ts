@@ -5,7 +5,7 @@
 // GET (Authorization: Bearer <sesi>) -> { nama, token_petugas|null, peran[], izin, admin, kelola_akses }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { penugasanAkun } from "@/lib/sigap";
 import { boleh, izinAkun, punyaAksesAdmin, sesiDariHeader } from "@/lib/sigapAkses";
 import { idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";

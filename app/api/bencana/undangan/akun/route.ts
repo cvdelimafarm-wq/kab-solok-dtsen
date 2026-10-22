@@ -10,7 +10,7 @@
 // POST { jenis: "biasa" | "menginap" | "pml", token, pin }   (pml = token bencana_petugas, sama dgn biasa)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { hashPin, pinValid } from "@/lib/undangan";
 
 export const runtime = "nodejs";

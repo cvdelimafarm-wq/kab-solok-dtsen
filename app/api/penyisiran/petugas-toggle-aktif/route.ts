@@ -29,7 +29,7 @@
 // sekadar membuka tab monitoring ini/sekadar login personal biasa.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, extractBearer, checkPin } from "@/lib/penyisiranAuth";
 
 export const runtime = "nodejs";

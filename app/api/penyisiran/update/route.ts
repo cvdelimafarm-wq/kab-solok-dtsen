@@ -56,7 +56,7 @@
 // Lapangan" (dipakai PML) sedang aktif -- SATU-SATUNYA jalan buka kunci
 // ini (sesuai permintaan user, bukan terkunci permanen).
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, getSessionSubject, extractBearer, type PenyisiranRole } from "@/lib/penyisiranAuth";
 import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 

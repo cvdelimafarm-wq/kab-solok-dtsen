@@ -31,7 +31,7 @@
 // perlu tahu bentuk baris RPC, cuma memforward `data`), FE (monitoring-
 // terpadu.tsx) yg membaca field2 barunya.
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { verifySession, extractBearer } from "@/lib/penyisiranAuth";
 import { TARGET_HARIAN_KK } from "@/lib/monitoringKinerjaHarian";
 

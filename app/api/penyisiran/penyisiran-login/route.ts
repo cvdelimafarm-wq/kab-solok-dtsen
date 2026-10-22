@@ -13,7 +13,7 @@
 // dibedakan dari "nama/tanggal lahir salah total" -- lihat PESAN_ROLE.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { signSession } from "@/lib/penyisiranAuth";
 import { daftarIdUntukSesi } from "@/lib/wilayahAlokasiPetugas";
 

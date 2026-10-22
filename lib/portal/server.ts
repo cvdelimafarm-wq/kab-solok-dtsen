@@ -8,7 +8,7 @@
 //  - DTSEN      : operator Wali Nagari tetap akun Supabase (nomor HP + PIN 6 digit), diketik di form yg sama.
 // Kartu dihitung DI SERVER dari peran (sigap_akun_peran -> sigap_peran_izin) + periode kegiatan.
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin } from "@/lib/sigapAkses";

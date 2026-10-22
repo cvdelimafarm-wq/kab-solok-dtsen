@@ -7,7 +7,7 @@
 //  - <KolamTombol/>  tombol float berwarna ungu (khas, beda dari biru plotting tim) dengan lencana jumlah Sub SLS yang masih bebas;
 //  - <KolamPanel/>   menggantikan kartu "Plotting tim hari ini" selama mode kolam terbuka: PML mencentang maks. 2 Sub SLS, memilih PPL, lalu Kirim --
 //                    caranya sama dengan plotting tim biasa. PPL hanya melihat.
-// Semua pelanggaran syarat (bukan PML, wilayah <= 70%, tambahan < 50%, > 2 Sub SLS, sudah dipilih tim lain, PPL belum dipilih) ditampilkan lewat MODAL
+// Semua pelanggaran syarat (bukan PML, tambahan < 50%, > 2 Sub SLS, sudah dipilih tim lain, PPL belum dipilih) ditampilkan lewat MODAL
 // supaya petugas paham sebabnya. Aturan yang sama dijaga ulang di database (bencana_kolam_pilih), jadi layar basi pun tidak bisa menembus syarat.
 
 import { useMemo, useState } from "react";
@@ -20,11 +20,9 @@ import {
   API_KOLAM,
   MAKS_PILIH_KOLAM,
   SYARAT_TAMBAHAN_PERSEN,
-  SYARAT_WILAYAH_PERSEN,
   jumlahBebas,
   kelompokKolam,
   lolosTambahan,
-  lolosWilayah,
   namaItemKolam,
   periksaAturanKolam,
   persen,
@@ -112,9 +110,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
   const terpilih = Object.keys(pilih);
   const idPml = data?.pml.id ?? 0;
 
-  const lolosW = progres ? lolosWilayah(progres) : false;
   const lolosT = progres ? lolosTambahan(progres) : true;
-  const pctW = progres ? persen(progres.awal_didata, progres.awal_total) : 0;
   const pctT = progres ? persen(progres.tambahan_didata, progres.tambahan_total) : 0;
 
   const kunci = (kec: string, nag: string) => `${kec}|${nag}`;
@@ -189,24 +185,13 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
 
       <div className="px-4 pb-4 pt-3">
         <p className="rounded-[12px] bg-[#F6EFFB] px-3 py-2 text-[12.5px] leading-snug text-[#3B1A55]">
-          Sub SLS Terdampak yang <b>belum diplot ke tim mana pun</b>. Siapa pun boleh mengambilnya, <b>asal wilayah timnya sudah selesai lebih dari {SYARAT_WILAYAH_PERSEN}%</b>. Maksimal <mark className="rounded px-0.5 font-extrabold" style={{ background: "#FFE680" }}>{MAKS_PILIH_KOLAM} Sub SLS</mark> sekali pilih; pilih lagi setelah seluruh tambahan selesai {SYARAT_TAMBAHAN_PERSEN}% atau lebih. Pilihan dari kolam tidak mengurangi kuota Plotting tim.
+          Sub SLS Terdampak yang <b>belum diplot ke tim mana pun</b>. Semua tim boleh mengambilnya. Maksimal <mark className="rounded px-0.5 font-extrabold" style={{ background: "#FFE680" }}>{MAKS_PILIH_KOLAM} Sub SLS</mark> sekali pilih; pilih lagi setelah seluruh tambahan selesai {SYARAT_TAMBAHAN_PERSEN}% atau lebih. Pilihan dari kolam tidak mengurangi kuota Plotting tim.
         </p>
 
         {d.galat && !data && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">Kolam belum termuat. {d.galat === "SESI_BERAKHIR" ? "" : d.galat}</p>}
 
         {progres && (
           <div className="mt-3 grid gap-2">
-            <div className="rounded-[14px] border border-[#E3D3F0] px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12.5px] font-extrabold text-[#0F2A52]">Wilayah tim Anda</span>
-                <span className={`rounded-full px-2 py-[2px] text-[11px] font-extrabold ${lolosW ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>{progres.izin_wilayah ? "Dikecualikan" : lolosW ? "Syarat terpenuhi" : `Syarat > ${SYARAT_WILAYAH_PERSEN}%`}</span>
-              </div>
-              <Bar nilai={pctW} syarat={SYARAT_WILAYAH_PERSEN} lolos={lolosW} />
-              <p className="mt-1.5 text-[12px] text-[#52627A]">
-                <b className="text-[#0F2A52]">{String(pctW).replace(".", ",")}%</b> · {progres.awal_didata.toLocaleString("id-ID")} dari {progres.awal_total.toLocaleString("id-ID")} KK sudah didata
-              </p>
-              {progres.izin_wilayah && <p className="mt-1 text-[12px] font-bold text-[#13794B]">Tim Anda diberi izin khusus oleh admin: syarat wilayah {SYARAT_WILAYAH_PERSEN}% tidak berlaku. Syarat lain (maksimal {MAKS_PILIH_KOLAM} sekali pilih, tambahan {SYARAT_TAMBAHAN_PERSEN}%) tetap berlaku.</p>}
-            </div>
             <div className="rounded-[14px] border border-[#E3D3F0] px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12.5px] font-extrabold text-[#0F2A52]">Tambahan dari kolam</span>

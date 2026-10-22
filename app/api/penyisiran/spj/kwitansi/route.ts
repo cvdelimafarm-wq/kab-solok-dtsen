@@ -48,7 +48,7 @@
 // body (tidak ada sumber data wilayah tugas utk jenis ini).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, tabelAkun } from "@/lib/spjAuth";
 import { terbilangRupiah } from "@/lib/spjFormat";

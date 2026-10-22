@@ -19,7 +19,7 @@
 // menanganinya saat ini (jarak bukan bagian yang "dikunci").
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabaseServer";
 import { hitungJarakJalanMassal, haversineKm, type Titik } from "@/lib/jarakJalan";
 
 export const runtime = "nodejs";

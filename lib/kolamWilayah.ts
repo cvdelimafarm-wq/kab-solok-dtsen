@@ -1,19 +1,17 @@
 // lib/kolamWilayah.ts
 //
 // (16 Okt 2026) KOLAM WILAYAH KERJA pendataan pascabencana -- Sub SLS berstatus Terdampak (FASIH, 16 Okt 2026) yang belum terplot ke tim.
-// Tampil di Lembar Pendataan lewat tombol float; PML tim mana pun boleh memilih bila syaratnya terpenuhi (keputusan pemilik, 16 Okt 2026):
-//   1. wilayah kerja awal tim SELESAI LEBIH DARI 70% (KK ber-hasil / KK aktif di daftar; tambahan dari kolam tidak ikut dihitung);
-//   2. paling banyak 2 Sub SLS sekali pilih;
-//   3. pilih lagi hanya bila SELURUH tambahan dari kolam sudah selesai SEKURANGNYA 50% (KK ber-hasil / KK aktif);
-//   4. satu Sub SLS satu tim; tercatat tim mana dan kapan; pilihan kolam TIDAK menghabiskan kuota total 7/9/11.
+// Tampil di Lembar Pendataan lewat tombol float; PML tim mana pun boleh memilih (keputusan pemilik):
+//   (22 Okt 2026) SYARAT PROGRES WILAYAH AWAL (>70%) DIHAPUS -- semua tim boleh memilih tanpa ambang progres wilayah. Aturan yang tersisa:
+//   1. paling banyak 2 Sub SLS sekali pilih;
+//   2. pilih lagi hanya bila SELURUH tambahan dari kolam sudah selesai SEKURANGNYA 50% (KK ber-hasil / KK aktif);
+//   3. satu Sub SLS satu tim; tercatat tim mana dan kapan; pilihan kolam TIDAK menghabiskan kuota total 7/9/11.
 // Fungsi MURNI (tanpa DB/React): konstanta, tipe, pemeriksaan aturan, teks peringatan modal, dan pengelompokan kecamatan > nagari.
-// Aturan yang sama dijaga ATOMIK di fungsi database bencana_kolam_pilih (migrasi 20261016c).
+// Aturan yang sama dijaga ATOMIK di fungsi database bencana_kolam_pilih (migrasi 20261016c, diperbarui 20261022l).
 
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 
 export const API_KOLAM = "/api/portal/pendataan/kolam";
-/** Wilayah awal harus selesai LEBIH DARI angka ini (persen KK). */
-export const SYARAT_WILAYAH_PERSEN = 70;
 /** Seluruh tambahan dari kolam harus selesai SEKURANGNYA angka ini (persen KK) sebelum boleh memilih lagi. */
 export const SYARAT_TAMBAHAN_PERSEN = 50;
 /** Paling banyak Sub SLS sekali pilih. */
@@ -26,7 +24,7 @@ export type ProgresKolam = {
   tambahan_sub: number;
   tambahan_total: number;
   tambahan_didata: number;
-  /** (16 Okt 2026) PML dikecualikan dari syarat wilayah > 70% (tabel bencana_kolam_izin, mis. wilayah kerja sudah habis) */
+  /** (16 Okt 2026) Tidak dipakai lagi sejak syarat wilayah dihapus (22 Okt 2026); tetap dibaca dari database agar tipe sama. */
   izin_wilayah?: boolean;
 };
 
@@ -60,19 +58,15 @@ export function persen(d: number, t: number): number {
   return t > 0 ? Math.round((d / t) * 1000) / 10 : 0;
 }
 
-/** KK ber-hasil minimal agar wilayah awal LEBIH DARI 70%. */
-export const perluWilayah = (total: number): number => Math.floor((total * SYARAT_WILAYAH_PERSEN) / 100) + 1;
 /** KK ber-hasil minimal agar tambahan SEKURANGNYA 50%. */
 export const perluTambahan = (total: number): number => Math.ceil((total * SYARAT_TAMBAHAN_PERSEN) / 100);
 
-/** Wilayah awal lebih dari 70%? Tanpa daftar KK sama sekali -> belum lolos. PML dengan izin khusus (izin_wilayah) selalu lolos syarat ini. */
-export const lolosWilayah = (p: ProgresKolam): boolean => p.izin_wilayah === true || (p.awal_total > 0 && p.awal_didata * 100 > SYARAT_WILAYAH_PERSEN * p.awal_total);
 /** Belum pernah mengambil dari kolam -> lolos; kalau sudah, seluruh tambahan harus >= 50%. */
 export const lolosTambahan = (p: ProgresKolam): boolean => p.tambahan_sub === 0 || (p.tambahan_total > 0 && p.tambahan_didata * 100 >= SYARAT_TAMBAHAN_PERSEN * p.tambahan_total);
 
 // ---------------------------------------------------------------- pemeriksaan aturan + teks modal
 
-export type JenisTolak = "ppl" | "wilayah" | "tambahan" | "maks" | "diambil" | "ppl_kosong" | "sudah_didata";
+export type JenisTolak = "ppl" | "tambahan" | "maks" | "diambil" | "ppl_kosong" | "sudah_didata";
 
 export type PesanAturan = {
   jenis: JenisTolak;
@@ -93,22 +87,6 @@ export function pesanTolak(jenis: JenisTolak, p?: ProgresKolam, ekstra?: { pml?:
         judul: "Hanya PML yang bisa memilih",
         isi: `Anda masuk sebagai PPL, jadi kolam ini hanya untuk dilihat. Minta PML tim Anda${ekstra?.pml ? ` (${rapikanNama(ekstra.pml)})` : ""} memilih Sub SLS dari kolam bila tim siap menambah wilayah.`,
       };
-    case "wilayah": {
-      const t = p?.awal_total ?? 0;
-      const d = p?.awal_didata ?? 0;
-      const perlu = perluWilayah(t);
-      return {
-        jenis,
-        judul: "Wilayah kerja tim belum cukup selesai",
-        isi: `Kolam dibuka untuk tim yang sudah mendata lebih dari ${SYARAT_WILAYAH_PERSEN}% KK di wilayah kerjanya sendiri. Selesaikan wilayah tim dulu, lalu pilih dari kolam.`,
-        angka: {
-          judul: `Tim Anda saat ini ${koma(persen(d, t))}%`,
-          teks: t > 0 ? `${fmt(d)} dari ${fmt(t)} KK sudah didata. Butuh ${fmt(perlu)} KK, kurang ${fmt(Math.max(0, perlu - d))} KK lagi.` : "Belum ada daftar KK yang bisa dihitung di wilayah tim Anda.",
-          persen: persen(d, t),
-          syarat: SYARAT_WILAYAH_PERSEN,
-        },
-      };
-    }
     case "tambahan": {
       const t = p?.tambahan_total ?? 0;
       const d = p?.tambahan_didata ?? 0;
@@ -141,12 +119,11 @@ export function pesanTolak(jenis: JenisTolak, p?: ProgresKolam, ekstra?: { pml?:
 }
 
 /**
- * Aturan yang bisa dicek di layar sebelum Sub SLS dicentang (urutan tetap: PPL -> wilayah -> tambahan -> maks).
+ * Aturan yang bisa dicek di layar sebelum Sub SLS dicentang (urutan tetap: PPL -> tambahan -> maks).
  * `jumlahDipilih` = berapa yang sudah dicentang SEBELUM yang baru. null = lolos.
  */
 export function periksaAturanKolam(x: { bisaPilih: boolean; progres: ProgresKolam; jumlahDipilih: number }): JenisTolak | null {
   if (!x.bisaPilih) return "ppl";
-  if (!lolosWilayah(x.progres)) return "wilayah";
   if (!lolosTambahan(x.progres)) return "tambahan";
   if (x.jumlahDipilih >= MAKS_PILIH_KOLAM) return "maks";
   return null;
@@ -154,7 +131,7 @@ export function periksaAturanKolam(x: { bisaPilih: boolean; progres: ProgresKola
 
 /** Teks galat server untuk alasan penolakan fungsi database (dipakai saat layar pengguna sudah basi). */
 export function teksDariAlasan(alasan: string | undefined, p?: ProgresKolam): string {
-  const jenis: JenisTolak | null = alasan === "wilayah" || alasan === "tambahan" || alasan === "maks" || alasan === "diambil" ? alasan : null;
+  const jenis: JenisTolak | null = alasan === "tambahan" || alasan === "maks" || alasan === "diambil" ? alasan : null;
   if (jenis) {
     const m = pesanTolak(jenis, p);
     return m.angka ? `${m.judul}. ${m.angka.judul}: ${m.angka.teks}` : `${m.judul}. ${m.isi}`;
