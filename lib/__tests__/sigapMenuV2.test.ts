@@ -44,6 +44,11 @@ describe("susunMenu v2", () => {
     }
   });
 
+  it("item Pendataan bertanda aktif untuk halaman Kelola Pendataan (23 Okt 2026)", () => {
+    expect(cari(SEMUA, "pendataan")).toMatchObject({ href: "/sigap/kelola/pendataan", aktifKode: "pendataan_kelola" });
+    expect(cari(KOSONG, "pendataan")).toBeUndefined();
+  });
+
   it("Beranda selalu ada dan paling atas", () => {
     expect(susunMenu(KOSONG)[0].item[0]).toMatchObject({ id: "beranda", aksi: "beranda", aktifKode: "beranda" });
   });

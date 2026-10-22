@@ -130,8 +130,9 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           ikon: "arsip",
           label: "Pendataan",
           href: "/sigap/kelola/pendataan",
-          title: "Unggah CSV ekspor FASIH-SM (daftar KK) untuk Pendataan keroyokan",
-          ketPalet: "unggah daftar KK (CSV FASIH)",
+          aktifKode: "pendataan_kelola",
+          title: "Kelola Pendataan: daftar KK, tim, siaran, monitoring, pemeriksaan, administrasi",
+          ketPalet: "daftar KK, tim, siaran, monitoring, SPJ",
         }),
         i.tokenPetugas
           ? { id: "transport-lokal", ikon: "motor", label: "Transport lokal", href: `/sigap/translok/${i.tokenPetugas}`, title: "Halaman petugas transport lokal Anda", ketPalet: "halaman petugas saya" }

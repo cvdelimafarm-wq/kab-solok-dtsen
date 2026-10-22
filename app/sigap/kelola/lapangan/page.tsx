@@ -160,8 +160,8 @@ export default function MonitoringLapangan() {
       <div className="mx-auto max-w-[1280px]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <Link href="/" className="text-[12px] font-bold text-[#1F5FD1]">
-              ‹ Beranda
+            <Link href="/sigap/kelola/pendataan?tab=pemeriksaan" className="text-[12px] font-bold text-[#1F5FD1]">
+              ‹ Kelola Pendataan
             </Link>
             <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Kelola · Pendataan Pascabencana</p>
             <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Monitoring Lapangan</h1>
