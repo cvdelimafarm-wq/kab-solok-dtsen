@@ -41,6 +41,7 @@ import {
 } from "@/lib/undangan";
 import { aktorDariHeader, buatSesi, catatAudit, sesiDariHeader, sesiLengkapDariHeader } from "@/lib/sigapAkses";
 import { bacaTiketReset, buatTiketReset, masihPinAwal, simpanPinBaru } from "@/lib/sigapPin";
+import { nilaiKolomLupa, nipValid, normNip, pesanDataKurang, putusanLupa, type KolomLupa } from "@/lib/sigapLupaPin";
 import { bolehMasukPortal } from "@/lib/portal/server";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
 import { PIN_AWAL, alasanPinDitolak, cariNama, cocokkanNama, ketAkun, pesanGalatMasuk, type AkunNama, type Saran } from "@/lib/sigapMasukNama";
@@ -297,19 +298,20 @@ export async function POST(req: NextRequest) {
       const nik = normNik(typeof body?.nik === "string" ? body.nik : "");
       const email = normEmail(typeof body?.email === "string" ? body.email : "");
       const tgl = typeof body?.tanggal_lahir === "string" ? body.tanggal_lahir.trim() : "";
+      const nip = normNip(typeof body?.nip === "string" ? body.nip : ""); // (22 Okt 2026) opsional: pembanding tambahan
       if (!nama) return NextResponse.json({ error: "Nama wajib diisi." }, { status: 400 });
       if (!nikValid(nik)) return NextResponse.json({ error: "NIK harus 16 digit angka." }, { status: 400 });
       if (!emailValid(email)) return NextResponse.json({ error: "Format email tidak valid." }, { status: 400 });
       if (!tanggalValid(tgl)) return NextResponse.json({ error: "Tanggal lahir tidak valid." }, { status: 400 });
+      if (nip !== "" && !nipValid(nip)) return NextResponse.json({ error: "NIP harus 9 sampai 18 digit angka (kosongkan bila tidak punya)." }, { status: 400 });
       const kunci = `sigap_lupa:${normNama(nama)}`;
       const kondisi = await cekKunci(db, kunci);
       if (kondisi.terkunci) return NextResponse.json({ error: "Terlalu banyak percobaan salah. Coba lagi nanti atau hubungi admin.", terkunci_sampai: kondisi.sampai }, { status: 429 });
       const cocok = await cariAkun(db, nama);
       if (cocok.length > 1) return NextResponse.json({ error: "Ada lebih dari satu petugas dengan nama ini. Hubungi admin." }, { status: 409 });
-      type S = "benar" | "salah" | "belum_ada" | "belum_dicek";
-      let kolom: Record<"nama" | "nik" | "email" | "tanggal_lahir", S>;
+      let kolom: KolomLupa;
       if (cocok.length === 0) {
-        kolom = { nama: "salah", nik: "belum_dicek", email: "belum_dicek", tanggal_lahir: "belum_dicek" };
+        kolom = nilaiKolomLupa({ nik, email, tgl, nip }, null);
       } else {
         const kunciNama = normNama(cocok[0].nama);
         const kataPertama = cocok[0].nama.trim().split(/\s+/)[0].replace(/[%_,]/g, "");
@@ -318,29 +320,23 @@ export async function POST(req: NextRequest) {
         const nikS = baris.map((m) => normNik((m.nik as string) ?? "")).filter(nikValid);
         const emailS = baris.map((m) => normEmail((m.email as string) ?? "")).filter((e) => e !== "");
         const tglS = baris.map((m) => ((m.tanggal_lahir as string | null) ?? "").slice(0, 10)).filter((t) => t !== "");
-        // NIK yang tercatat di akun ikut jadi pembanding
-        const nikAkun = await db.from("sigap_akun").select("nik").eq("id", cocok[0].id).maybeSingle();
-        const nikAkunS = normNik((nikAkun.data?.nik as string | null) ?? "");
+        // NIK & NIP yang tercatat di akun ikut jadi pembanding
+        const dataAkun = await db.from("sigap_akun").select("nik, nip").eq("id", cocok[0].id).maybeSingle();
+        const nikAkunS = normNik((dataAkun.data?.nik as string | null) ?? "");
         if (nikValid(nikAkunS)) nikS.push(nikAkunS);
-        kolom = {
-          nama: "benar",
-          nik: nikS.length === 0 ? "belum_ada" : nikS.includes(nik) ? "benar" : "salah",
-          email: emailS.length === 0 ? "belum_ada" : emailS.includes(email) ? "benar" : "salah",
-          tanggal_lahir: tglS.length === 0 ? "belum_ada" : tglS.includes(tgl) ? "benar" : "salah",
-        };
+        const nipAkunS = normNip((dataAkun.data?.nip as string | null) ?? "");
+        const nipS = nipValid(nipAkunS) ? [nipAkunS] : [];
+        kolom = nilaiKolomLupa({ nik, email, tgl, nip }, { nik: nikS, email: emailS, tgl: tglS, nip: nipS });
       }
-      const cocokData = (["nik", "email", "tanggal_lahir"] as const).filter((k) => kolom[k] === "benar").length;
-      if (Object.values(kolom).includes("salah")) {
+      const { putusan, cocok: jumlahCocok } = putusanLupa(kolom);
+      if (putusan === "salah") {
         const g = await catatGagal(db, kunci);
         return NextResponse.json({ ok: false, kolom, sisa_percobaan: g.sisa, maks_percobaan: MAKS_GAGAL }, { status: g.terkunci ? 429 : 200 });
       }
-      // Reset mandiri lebih ketat dari pembuatan PIN: minimal 2 dari 3 data pribadi harus benar-benar cocok (bukan "belum ada").
-      if (cocokData < 2) {
-        const g = await catatGagal(db, kunci);
-        return NextResponse.json(
-          { ok: false, kolom, error: "Data pembanding Anda di sistem belum cukup untuk reset mandiri. Hubungi admin anggaran BPS Kabupaten Solok untuk reset PIN.", sisa_percobaan: g.sisa, maks_percobaan: MAKS_GAGAL },
-          { status: g.terkunci ? 429 : 200 }
-        );
+      // Reset mandiri lebih ketat dari pembuatan PIN: minimal 2 data pribadi harus benar-benar cocok (bukan "belum ada").
+      // (22 Okt 2026) Data pembanding yang KURANG (tak ada yang salah) bukan kesalahan petugas -> TIDAK dihitung gagal / tidak mengunci.
+      if (putusan === "kurang") {
+        return NextResponse.json({ ok: false, kolom, kurang_data: true, error: pesanDataKurang(kolom, jumlahCocok) }, { status: 200 });
       }
       await resetGagal(db, kunci);
       const a = cocok[0];

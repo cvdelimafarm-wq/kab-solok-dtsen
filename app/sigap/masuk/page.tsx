@@ -20,6 +20,7 @@ export default function SigapMasuk() {
   const [nik, setNik] = useState("");
   const [email, setEmail] = useState("");
   const [tgl, setTgl] = useState("");
+  const [nip, setNip] = useState(""); // (22 Okt 2026) opsional, hanya di "Lupa PIN"
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [kolom, setKolom] = useState<Record<string, StatusKolom> | null>(null);
@@ -118,7 +119,7 @@ export default function SigapMasuk() {
   async function lupaVerifikasi(e: React.FormEvent) {
     e.preventDefault();
     setKolom(null);
-    const r = await kirim({ aksi: "lupa_verifikasi", nama, nik, email, tanggal_lahir: tgl });
+    const r = await kirim({ aksi: "lupa_verifikasi", nama, nik, email, tanggal_lahir: tgl, nip });
     if (!r) return;
     if (r.json?.kolom) setKolom(r.json.kolom);
     if (r.json?.ok) {
@@ -149,7 +150,7 @@ export default function SigapMasuk() {
     setError((r.json?.error as string) ?? "Gagal membuat PIN.");
   }
 
-  const labelKolom: Record<string, string> = { nama: "Nama", nik: "NIK", email: "Email", tanggal_lahir: "Tanggal lahir" };
+  const labelKolom: Record<string, string> = { nama: "Nama", nik: "NIK", email: "Email", tanggal_lahir: "Tanggal lahir", nip: "NIP" };
 
   return (
     <main className="min-h-screen bg-[#EEF2F8] text-[#13213A]">
@@ -208,6 +209,7 @@ export default function SigapMasuk() {
               <label className="mb-1 block text-[13px] font-bold text-slate-700">Tanggal lahir</label>
               <input className={INPUT} type="date" value={tgl} onChange={(e) => setTgl(e.target.value)} required />
             </div>
+            <input className={INPUT} inputMode="numeric" maxLength={18} value={nip} onChange={(e) => setNip(e.target.value.replace(/\D/g, ""))} placeholder="NIP (opsional, bila punya)" />
             {kolom && (
               <div className="grid grid-cols-2 gap-1.5">
                 {Object.entries(kolom).map(([k, s]) => (

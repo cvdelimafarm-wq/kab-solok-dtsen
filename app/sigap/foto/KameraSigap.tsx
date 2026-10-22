@@ -123,6 +123,7 @@ export default function KameraSigap({
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
   const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
   const [ditahanServer, setDitahanServer] = useState<number[]>([]); // nomor hari ini yang dipesan foto kuning/merah yang menunggu diperiksa (tag 'ditahan')
+  const [konfirmasiTanpaNomor, setKonfirmasiTanpaNomor] = useState(false); // (22 Okt 2026) foto hanya dibagikan ke rekan, nomor sendiri kosong -> minta konfirmasi
   const [konfirmasiGanti, setKonfirmasiGanti] = useState<number | null>(null); // nomor terisi yang hendak diganti (menunggu modal "Yakin?")
   const [rapi, setRapi] = useState<{ cadangan: number; kosong: number[]; href: string } | null>(null); // foto terkirim yang belum bernomor + tautan ke kartu hari
   const drafIdRef = useRef<number | null>(null);
@@ -383,6 +384,9 @@ export default function KameraSigap({
   const saran = nomorBerikutnya(dipesanSemua, jumlahNomor); // null = semua nomor hari ini sudah terisi/dipesan
   // Foto minimal punya nomor sendiri atau dibagikan ke rekan. Bila semua nomor hari ini sudah terisi, foto boleh dikirim tanpa nomor sebagai CADANGAN.
   const adaTujuan = nomor !== null || tag.length > 0 || saran === null;
+  // (22 Okt 2026) Foto dibagikan ke rekan SAJA padahal masih ada nomor kosong milik sendiri: foto tidak mengisi nomor petugas (tag miliknya "menunggu"),
+  // sehingga tak masuk lampiran dokumentasi (kasus Widya Elvera & Puspita Putri). Kirim diminta konfirmasi dulu.
+  const tanpaNomorSendiri = nomor === null && tag.length > 0 && saran !== null;
 
   async function potret() {
     const v = videoRef.current;
@@ -797,6 +801,42 @@ export default function KameraSigap({
             </div>
           )}
 
+          {konfirmasiTanpaNomor && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="presentation" onClick={() => setKonfirmasiTanpaNomor(false)}>
+              <div role="alertdialog" aria-modal="true" aria-labelledby="judul-tanpa-nomor" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <h2 id="judul-tanpa-nomor" className="text-base font-extrabold text-[#0F2A52]">Foto ini belum masuk nomor Anda</h2>
+                <p className="mt-2 text-sm leading-relaxed text-[#3C4C68]">
+                  Foto hanya dibagikan ke {tag.length} rekan. Nomor Anda sendiri (mis. Foto {saran}{saran !== null && etiket[saran - 1] ? ` · ${etiket[saran - 1]}` : ""}) masih kosong dan tidak terisi oleh foto ini, sehingga belum tampil di lampiran dokumentasi Anda.
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-[#3C4C68]">Bila foto ini juga bukti kegiatan Anda, pilih nomor sendiri. Bila hanya untuk rekan, kirim saja; Anda masih bisa menempatkannya nanti lewat Foto saya &gt; Menunggu.</p>
+                <div className="mt-4 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKonfirmasiTanpaNomor(false);
+                      setNomor(saran);
+                      setNomorOtomatis(true);
+                    }}
+                    className="min-h-[48px] rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white"
+                  >
+                    Pakai Foto {saran} untuk saya juga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKonfirmasiTanpaNomor(false);
+                      void kirim();
+                    }}
+                    className="min-h-[48px] rounded-xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52]"
+                  >
+                    Kirim ke rekan saja
+                  </button>
+                  <button type="button" onClick={() => setKonfirmasiTanpaNomor(false)} className="min-h-[44px] rounded-xl text-sm font-semibold text-[#3C4C68]">Kembali</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <button type="button" onClick={() => { setHitung(null); setBagikan((b) => !b); }} aria-expanded={bagikan} className="min-h-[48px] rounded-xl border-2 border-[#0F2A52] text-sm font-bold text-[#0F2A52]">
             {bagikan ? "Sembunyikan pilihan rekan" : tag.length ? `Bagikan ke rekan (${tag.length})` : "Bagikan ke rekan"}
           </button>
@@ -807,6 +847,8 @@ export default function KameraSigap({
               {pesan.teks}
             </div>
           )}
+
+          {!hasil && tanpaNomorSendiri && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold leading-snug text-[#5E4300]">Foto ini dibagikan ke rekan saja dan belum mengisi nomor Anda sendiri. Pilih nomor di atas bila foto ini juga untuk Anda.</p>}
 
           {!hasil && !adaTujuan && <p className="px-1 text-xs font-semibold text-[#8A6200]">Pilih nomor foto di atas, atau pilih rekan lewat Bagikan ke rekan, lalu Kirim.</p>}
 
@@ -831,7 +873,7 @@ export default function KameraSigap({
           ) : (
             <div className="flex gap-2">
               <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Buang &amp; ulangi</button>
-              <button type="button" onClick={() => void kirim()} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
+              <button type="button" onClick={() => (tanpaNomorSendiri ? setKonfirmasiTanpaNomor(true) : void kirim())} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
                 {mengirim ? "Mengirim…" : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
