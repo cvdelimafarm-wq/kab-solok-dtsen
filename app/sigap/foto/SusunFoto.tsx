@@ -17,6 +17,7 @@
 // Tidak ada penghapusan foto di sini.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ambilFotoUrl, ambilJson, type GalatFoto } from "./klien";
 import { labelFoto } from "@/lib/sigapLabelFoto";
@@ -78,6 +79,21 @@ function IkonPeringatan({ kelas = "h-4 w-4" }: { kelas?: string }) {
   );
 }
 
+/**
+ * (23 Okt 2026) Lapisan penuh layar dipasang LANGSUNG di <body> (portal), bukan di dalam halaman. Bila dirender di dalam halaman, lapisan ini
+ * terjebak di konteks susunan induknya dan tampil DI BAWAH bilah navigasi bawah (Hari Ini / Hari Kerja / Arsip, z-30), sehingga tombol "Batal"
+ * tertutup dan tidak bisa diketuk. z-[100] memastikan di atas bilah navigasi mana pun; ruang bawah mengikuti area aman HP (gestur/tombol sistem).
+ */
+function Lapisan({ children, kelas, onKlik }: { children: ReactNode; kelas: string; onKlik?: () => void }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className={`fixed inset-0 z-[100] flex justify-center bg-black/50 ${kelas}`} role="presentation" onClick={onKlik} style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))", paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+      {children}
+    </div>,
+    document.body
+  );
+}
+
 /** Jendela konfirmasi. Ketuk di luar jendela TIDAK mengonfirmasi dan TIDAK menutup; hanya tombol Batal (atau Esc) yang menutup. */
 function Modal({ judul, idJudul, sibuk, onBatal, children }: { judul: string; idJudul: string; sibuk: boolean; onBatal: () => void; children: ReactNode }) {
   const kotak = useRef<HTMLDivElement>(null);
@@ -92,12 +108,12 @@ function Modal({ judul, idJudul, sibuk, onBatal, children }: { judul: string; id
     return () => window.removeEventListener("keydown", tekan);
   }, [sibuk, onBatal]);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" role="presentation">
-      <div ref={kotak} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={idJudul} className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-4 shadow-xl outline-none">
+    <Lapisan kelas="items-center px-3">
+      <div ref={kotak} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={idJudul} className="max-h-full w-full max-w-sm self-center overflow-y-auto rounded-2xl bg-white p-4 shadow-xl outline-none">
         <h2 id={idJudul} className="text-base font-extrabold leading-snug text-[#0F2A52]">{judul}</h2>
         {children}
       </div>
-    </div>
+    </Lapisan>
   );
 }
 
@@ -451,8 +467,8 @@ export default function SusunFoto({
     const terkait = nilai.bentrok.filter((b) => b.kecil === n.slot || b.besar === n.slot);
     const lokasi = f && typeof f.lat === "number" && typeof f.lng === "number" ? { lat: f.lat, lng: f.lng } : null;
     return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" role="presentation" onClick={() => setDetail(null)}>
-        <div role="dialog" aria-modal="true" aria-labelledby="judul-detail-foto" onClick={(e) => e.stopPropagation()} className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl">
+      <Lapisan kelas="items-end px-3" onKlik={() => setDetail(null)}>
+        <div role="dialog" aria-modal="true" aria-labelledby="judul-detail-foto" onClick={(e) => e.stopPropagation()} className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
           <h2 id="judul-detail-foto" className="text-base font-extrabold text-[#0F2A52]">Foto {n.slot} · {peranRingkas(jenis, n.slot)}</h2>
           <p className="text-[12px] text-[#55657D]">{etiket[n.slot - 1] ?? ""}</p>
           <div className="mt-3 overflow-hidden rounded-xl bg-[#EEF2F7]">
@@ -496,7 +512,7 @@ export default function SusunFoto({
             <button type="button" onClick={() => setDetail(null)} className={TOMBOL_SEKUNDER}>Tutup</button>
           </div>
         </div>
-      </div>
+      </Lapisan>
     );
   }
 
