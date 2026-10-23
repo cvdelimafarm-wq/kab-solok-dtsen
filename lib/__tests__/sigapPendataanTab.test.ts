@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PINTU_TAB, TAB_AWAL, TAB_PENDATAAN, bacaTabPendataan, labelTabPendataan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
+import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
 
 describe("TAB_PENDATAAN", () => {
   it("urutan runut mengikuti alur kerja; kode unik; Ringkasan paling depan", () => {
@@ -45,8 +45,35 @@ describe("urlTabPendataan", () => {
   });
 });
 
+describe("sub-pilihan tab Pemeriksaan", () => {
+  const P = "/sigap/kelola/pendataan";
+  it("tiga sub-pilihan berurutan, kode unik", () => {
+    expect(SUB_PEMERIKSAAN.map((x) => x.kode)).toEqual(["identifikasi", "lapangan", "foto"]);
+  });
+  it("bacaSubPemeriksaan: dikenal -> itu; kosong/tak dikenal -> identifikasi", () => {
+    expect(bacaSubPemeriksaan("foto")).toBe("foto");
+    expect(bacaSubPemeriksaan(" Lapangan ")).toBe("lapangan");
+    expect(bacaSubPemeriksaan(null)).toBe("identifikasi");
+    expect(bacaSubPemeriksaan("entah")).toBe("identifikasi");
+  });
+  it("urlSubPemeriksaan: selalu membawa ?tab=pemeriksaan; identifikasi = tanpa ?sub; buang ?v", () => {
+    expect(urlSubPemeriksaan(P, "?tab=pemeriksaan", "foto")).toBe(`${P}?tab=pemeriksaan&sub=foto`);
+    expect(urlSubPemeriksaan(P, "?tab=pemeriksaan&sub=foto", "identifikasi")).toBe(`${P}?tab=pemeriksaan`);
+    expect(urlSubPemeriksaan(P, "?v=poin", "lapangan")).toBe(`${P}?tab=pemeriksaan&sub=lapangan`);
+  });
+  it("?sub hanya hidup di tab Pemeriksaan", () => {
+    expect(urlTabPendataan(P, "?tab=pemeriksaan&sub=foto", "tim")).toBe(`${P}?tab=tim`);
+    expect(urlTabPendataan(P, "?tab=pemeriksaan&sub=foto", "pemeriksaan")).toBe(`${P}?tab=pemeriksaan&sub=foto`);
+  });
+});
+
 describe("PINTU_TAB", () => {
   const semua = Object.values(PINTU_TAB).flatMap((k) => (k ?? []).flatMap((g) => g.item));
+  it("Pemeriksaan: hanya item 'segera' (hasil lapangan & foto sudah tersemat)", () => {
+    const item = (PINTU_TAB.pemeriksaan ?? []).flatMap((g) => g.item);
+    expect(item.length).toBeGreaterThan(0);
+    expect(item.every((i) => i.status === "segera")).toBe(true);
+  });
   it("hanya tab yang isinya tautan memiliki pintu masuk", () => {
     const kunci = Object.keys(PINTU_TAB) as KodeTabPendataan[];
     expect(kunci.sort()).toEqual(["administrasi", "pemeriksaan", "tim"]);
@@ -58,8 +85,34 @@ describe("PINTU_TAB", () => {
       else expect(i.href).toMatch(/^\/[a-z]/);
     }
   });
-  it("tidak ada alamat tab admin transport yang salah ketik", () => {
-    const tl = semua.filter((i) => i.href?.startsWith("/sigap/kelola/translok")).map((i) => i.href);
-    expect(tl.sort()).toEqual(["/sigap/kelola/translok?tab=kegiatan", "/sigap/kelola/translok?tab=monitoring", "/sigap/kelola/translok?tab=penugasan", "/sigap/kelola/translok?tab=verifikasi"]);
+  it("transport lokal tidak lagi berupa tautan (sudah tersemat)", () => {
+    expect(semua.filter((i) => i.href?.startsWith("/sigap/kelola/translok"))).toEqual([]);
+  });
+  it("tersisa: alokasi (/bencana), pelatihan, anggaran, pengadaan", () => {
+    expect(semua.filter((i) => i.href).map((i) => i.href).sort()).toEqual(["/bencana", "/sigap/kelola/pelatihan", "/sigap/kelola/pengadaan", "/sigap/kelola/perencanaan"]);
+  });
+});
+
+describe("sub-pilihan umum (tim, administrasi)", () => {
+  const P = "/sigap/kelola/pendataan";
+  it("daftar, urutan, dan peta per tab", () => {
+    expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
+    expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "anggaran"]);
+    expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "tim"]);
+    expect(KEGIATAN_PENDATAAN).toBe(1);
+  });
+  it("bacaSubDari: dikenal -> itu; selain itu sub pertama", () => {
+    expect(bacaSubDari(SUB_ADMINISTRASI, "Verifikasi")).toBe("verifikasi");
+    expect(bacaSubDari(SUB_ADMINISTRASI, "x")).toBe("monitoring");
+    expect(bacaSubDari(SUB_TIM, null)).toBe("alokasi");
+  });
+  it("urlSubDari: sub pertama tanpa ?sub; lainnya mengisi ?sub; ?v dibuang", () => {
+    expect(urlSubDari(SUB_TIM, "tim", P, "?tab=tim&sub=penugasan", "alokasi")).toBe(`${P}?tab=tim`);
+    expect(urlSubDari(SUB_ADMINISTRASI, "administrasi", P, "?v=poin", "tarif")).toBe(`${P}?tab=administrasi&sub=tarif`);
+  });
+  it("urlTabPendataan: ?sub dipertahankan hanya bila tab sama; pindah tab membuangnya", () => {
+    expect(urlTabPendataan(P, "?tab=tim&sub=penugasan", "tim")).toBe(`${P}?tab=tim&sub=penugasan`);
+    expect(urlTabPendataan(P, "?tab=tim&sub=penugasan", "administrasi")).toBe(`${P}?tab=administrasi`);
+    expect(urlTabPendataan(P, "?tab=administrasi&sub=tarif", "siaran")).toBe(`${P}?tab=siaran`);
   });
 });

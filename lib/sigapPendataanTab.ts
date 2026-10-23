@@ -6,8 +6,12 @@
 // Rujukan rancangan yang sudah disetujui (21 Okt): claude/rancangan-kelola-pendataan-gsbpm.md.
 //
 // Yang SENGAJA tidak dilakukan di tahap ini:
-//  - halaman lama yang berat (/bencana, translok admin, identifikasi, lapangan, foto) belum disematkan ke dalam tab; tab memberi PINTU MASUK
-//    (kartu tautan) ke halaman itu. Item yang belum ada halamannya tampil "segera" tanpa tautan.
+//  - halaman lama yang berat (/bencana 555 KB, Kelola Pelatihan, Perencanaan, Pengadaan) belum disematkan; tab memberi PINTU MASUK (kartu tautan)
+//    ke halaman itu. Item yang belum ada halamannya tampil "segera" tanpa tautan.
+//  - (23 Okt 2026, tahap 2) Tab "5 · Pemeriksaan" kini MENYEMATKAN Monitoring Identifikasi SLS, Monitoring Lapangan, dan Foto & dokumentasi
+//    sebagai tiga sub-pilihan (?tab=pemeriksaan&sub=identifikasi|lapangan|foto); alamat lama /sigap/kelola/identifikasi|lapangan|foto tetap hidup.
+//  - (23 Okt 2026, tahap 3) Tab "2 · Tim & Surat Tugas" (sub: alokasi | penugasan) dan "6 · Administrasi & SPJ" (sub: monitoring | verifikasi | tarif | anggaran)
+//    menyematkan komponen tab Admin Transport Lokal (TabPenugasan, TabMonitoring, TabVerifikasi, TabKegiatan) untuk kegiatan Pendataan (id 1).
 //  - tidak ada alamat baru selain parameter ?tab= pada /sigap/kelola/pendataan.
 
 export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "monitoring" | "pemeriksaan" | "administrasi";
@@ -45,12 +49,72 @@ export function bacaTabPendataan(param: string | null | undefined): KodeTabPenda
  */
 export function urlTabPendataan(pathname: string, search: string, tab: KodeTabPendataan): string {
   const q = new URLSearchParams(search);
+  const tabSama = (q.get("tab") ?? TAB_AWAL) === tab;
   if (tab === TAB_AWAL) q.delete("tab");
   else q.set("tab", tab);
   if (tab !== "monitoring") q.delete("v");
+  // ?sub hanya hidup di tab yang punya sub-pilihan dan hanya bila tab tidak berpindah (pindah tab = mulai dari sub pertama)
+  if ((tab !== "pemeriksaan" && tab !== "tim" && tab !== "administrasi") || !tabSama) q.delete("sub");
   const s = q.toString();
   return s ? `${pathname}?${s}` : pathname;
 }
+
+export type KodeSubPemeriksaan = "identifikasi" | "lapangan" | "foto";
+export const SUB_PEMERIKSAAN: { kode: KodeSubPemeriksaan; label: string; ket: string }[] = [
+  { kode: "identifikasi", label: "Identifikasi SLS", ket: "Progres Lembar Identifikasi SLS seluruh PML; baris PML bisa dibuka sampai Sub SLS." },
+  { kode: "lapangan", label: "Lapangan per petugas", ket: "Hasil identifikasi, pendataan, dan status transport lokal per petugas per tanggal." },
+  { kode: "foto", label: "Foto & dokumentasi", ket: "Saklar Kamera SIGAP, foto yang perlu diperiksa, masa simpan dan usulan hapus." },
+];
+export const SUB_PEMERIKSAAN_AWAL: KodeSubPemeriksaan = "identifikasi";
+
+/** Nilai ?sub= di alamat -> sub-pilihan tab Pemeriksaan; tak dikenal / kosong -> Identifikasi SLS. */
+export function bacaSubPemeriksaan(param: string | null | undefined): KodeSubPemeriksaan {
+  const p = (param ?? "").trim().toLowerCase();
+  return SUB_PEMERIKSAAN.find((x) => x.kode === p)?.kode ?? SUB_PEMERIKSAAN_AWAL;
+}
+
+/** Alamat setelah memilih sub-pilihan: ?tab=pemeriksaan dipastikan ada, ?sub= diisi (Identifikasi = tanpa ?sub), parameter lain dibiarkan. */
+export function urlSubPemeriksaan(pathname: string, search: string, sub: KodeSubPemeriksaan): string {
+  const q = new URLSearchParams(search);
+  q.set("tab", "pemeriksaan");
+  if (sub === SUB_PEMERIKSAAN_AWAL) q.delete("sub");
+  else q.set("sub", sub);
+  q.delete("v");
+  return `${pathname}?${q.toString()}`;
+}
+
+/** (tahap 3) Sub-pilihan umum: tab Tim & Surat Tugas dan Administrasi & SPJ. Sub pertama = bawaan. */
+export type SubItem = { kode: string; label: string; ket: string };
+export const SUB_TIM: SubItem[] = [
+  { kode: "alokasi", label: "Alokasi & pelatihan", ket: "Alokasi PML/PPL per Sub SLS dan pelatihan petugas." },
+  { kode: "penugasan", label: "Penugasan & ST", ket: "Tautkan petugas ke kegiatan Pendataan, unggah Surat Tugas asli, dan lihat daftar ST." },
+];
+export const SUB_ADMINISTRASI: SubItem[] = [
+  { kode: "monitoring", label: "Monitoring transport lokal", ket: "Kelengkapan SPJ transport lokal per petugas." },
+  { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan lalu kunci transport lokal." },
+  { kode: "tarif", label: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal." },
+  { kode: "anggaran", label: "Anggaran & pengadaan", ket: "Anggaran kegiatan, pengadaan, dan pertanggungjawaban lain." },
+];
+export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI };
+
+/** Nilai ?sub= -> kode sub dalam daftar; kosong/tak dikenal -> sub pertama. */
+export function bacaSubDari(daftar: SubItem[], param: string | null | undefined): string {
+  const p = (param ?? "").trim().toLowerCase();
+  return daftar.find((x) => x.kode === p)?.kode ?? daftar[0].kode;
+}
+
+/** Alamat setelah memilih sub: ?tab= dipastikan, ?sub= diisi (sub pertama = tanpa ?sub), ?v dibuang. */
+export function urlSubDari(daftar: SubItem[], tab: KodeTabPendataan, pathname: string, search: string, sub: string): string {
+  const q = new URLSearchParams(search);
+  q.set("tab", tab);
+  if (sub === daftar[0].kode) q.delete("sub");
+  else q.set("sub", sub);
+  q.delete("v");
+  return `${pathname}?${q.toString()}`;
+}
+
+/** Kegiatan induk Pendataan di sigap_kegiatan (sama dengan KEGIATAN_PENDATAAN_ID di lib/pendataan.ts). */
+export const KEGIATAN_PENDATAAN = 1;
 
 export type PintuMasuk = {
   id: string;
@@ -64,6 +128,7 @@ export type KelompokPintu = { judul: string; ket?: string; item: PintuMasuk[] };
 
 /** Pintu masuk per tab (hanya tab yang isinya halaman lain). */
 export const PINTU_TAB: Partial<Record<KodeTabPendataan, KelompokPintu[]>> = {
+  // (23 Okt 2026, tahap 3) Penugasan & ST kini tersemat (SUB_TIM); tersisa tautan ke Alokasi dan Pelatihan.
   tim: [
     {
       judul: "Tim lapangan",
@@ -71,26 +136,12 @@ export const PINTU_TAB: Partial<Record<KodeTabPendataan, KelompokPintu[]>> = {
       item: [{ id: "alokasi", judul: "Alokasi & papan tim", ket: "Atur PML/PPL per Sub SLS, master petugas, peta, dan beban kerja.", href: "/bencana" }],
     },
     {
-      judul: "Penugasan & Surat Tugas",
-      item: [{ id: "penugasan", judul: "Penugasan & ST", ket: "Tautkan petugas ke kegiatan, unggah Surat Tugas asli, dan lihat daftar ST.", href: "/sigap/kelola/translok?tab=penugasan" }],
-    },
-    {
       judul: "Pelatihan petugas",
       item: [{ id: "pelatihan", judul: "Kelola pelatihan", ket: "Soal pretest/posttest, jadwal, Adu Sigap, presensi, dan monitoring tes.", href: "/sigap/kelola/pelatihan" }],
     },
   ],
+  // (23 Okt 2026) Hasil lapangan + Bukti & dokumentasi kini tersemat (SUB_PEMERIKSAAN); yang tersisa di sini hanya item "segera".
   pemeriksaan: [
-    {
-      judul: "Hasil lapangan",
-      item: [
-        { id: "identifikasi", judul: "Monitoring Identifikasi SLS", ket: "Progres Lembar Identifikasi SLS seluruh PML; baris PML bisa dibuka sampai Sub SLS.", href: "/sigap/kelola/identifikasi" },
-        { id: "lapangan", judul: "Monitoring lapangan per petugas", ket: "Hasil identifikasi, pendataan, dan status transport lokal per petugas per tanggal.", href: "/sigap/kelola/lapangan" },
-      ],
-    },
-    {
-      judul: "Bukti dan dokumentasi",
-      item: [{ id: "foto", judul: "Foto & dokumentasi", ket: "Saklar Kamera SIGAP, foto yang perlu diperiksa, masa simpan dan usulan hapus.", href: "/sigap/kelola/foto" }],
-    },
     {
       judul: "Segera hadir",
       item: [
@@ -99,15 +150,8 @@ export const PINTU_TAB: Partial<Record<KodeTabPendataan, KelompokPintu[]>> = {
       ],
     },
   ],
+  // (23 Okt 2026, tahap 3) Transport lokal (monitoring, verifikasi, tarif) kini tersemat (SUB_ADMINISTRASI); tersisa anggaran, pengadaan, dan item "segera".
   administrasi: [
-    {
-      judul: "Transport lokal",
-      item: [
-        { id: "tl-monitoring", judul: "Monitoring transport lokal", ket: "Kelengkapan SPJ transport lokal per petugas.", href: "/sigap/kelola/translok?tab=monitoring" },
-        { id: "tl-verifikasi", judul: "Verifikasi & Kunci", ket: "Periksa kelengkapan lalu kunci transport lokal.", href: "/sigap/kelola/translok?tab=verifikasi" },
-        { id: "tl-tarif", judul: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal.", href: "/sigap/kelola/translok?tab=kegiatan" },
-      ],
-    },
     {
       judul: "Anggaran dan pengadaan",
       item: [

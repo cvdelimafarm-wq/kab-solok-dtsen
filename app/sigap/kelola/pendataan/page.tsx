@@ -7,7 +7,8 @@
 //   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 Monitoring · 5 Pemeriksaan · 6 Administrasi & SPJ.
 // Isi lama dipindah APA ADANYA: Unggah daftar KK + Permintaan FASIH -> UnggahKk.tsx (tab 1), Siaran + KirimSatu (tab 3), Monitoring (tab 4).
 // Pilihan tab ikut di alamat (?tab=...); alamat lama ?tab=monitoring tetap berlaku, ?tab=unggah -> Persiapan.
-// Tab 2, 5, 6 memberi pintu masuk ke halaman yang sudah ada (PintuMasuk.tsx); penyematan isinya menyusul bertahap.
+// Tab 5 (Pemeriksaan) MENYEMATKAN Identifikasi SLS, Lapangan, Foto (tahap 2); tab 2 (Tim.tsx) dan tab 6 (Administrasi.tsx) menyematkan komponen Admin Transport
+// Lokal untuk kegiatan Pendataan (tahap 3) dan memberi pintu masuk (PintuMasuk.tsx) ke halaman yang masih terpisah (/bencana, pelatihan, perencanaan, pengadaan).
 // Judul sidebar: item "Pendataan" di lib/sigapMenuV2.ts kini bertanda aktif (aktifKode "pendataan_kelola"); "Beranda" di sidebar = Beranda admin SIGAP.
 
 import { useCallback, useEffect, useState } from "react";
@@ -16,9 +17,11 @@ import Bingkai from "../../kontrak/Bingkai";
 import { TAB_PENDATAAN, bacaTabPendataan, labelTabPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
 import KirimSatu from "./KirimSatu";
 import Monitoring from "./Monitoring";
-import PintuMasuk from "./PintuMasuk";
+import Administrasi from "./Administrasi";
+import Pemeriksaan from "./Pemeriksaan";
 import Ringkasan from "./Ringkasan";
 import Siaran from "./Siaran";
+import Tim from "./Tim";
 import UnggahKk from "./UnggahKk";
 
 export default function KelolaPendataan() {
@@ -53,7 +56,7 @@ export default function KelolaPendataan() {
     >
       {tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
       {tab === "persiapan" && <UnggahKk />}
-      {tab === "tim" && <PintuMasuk tab="tim" />}
+      {tab === "tim" && <Tim />}
       {tab === "siaran" && (
         <>
           <Siaran />
@@ -61,8 +64,8 @@ export default function KelolaPendataan() {
         </>
       )}
       {tab === "monitoring" && <Monitoring />}
-      {tab === "pemeriksaan" && <PintuMasuk tab="pemeriksaan" />}
-      {tab === "administrasi" && <PintuMasuk tab="administrasi" />}
+      {tab === "pemeriksaan" && <Pemeriksaan />}
+      {tab === "administrasi" && <Administrasi />}
     </Bingkai>
   );
 }
