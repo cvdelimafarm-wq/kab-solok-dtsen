@@ -8,17 +8,45 @@
 import type { Db } from "@/lib/sigap";
 import { kirimKeAkun } from "@/lib/sigapPush";
 import { catatAudit } from "@/lib/sigapAkses";
-import { akunPerPetugas, petaWilayah, type Galat } from "@/lib/portal/permintaanDaftar";
+import { akunPerPetugas, emailPerAkun, petaWilayah, type Galat } from "@/lib/portal/permintaanDaftar";
 import { labelJorong, tanggalWib } from "@/lib/permintaanDaftar";
 import { pesanTugas, susunPushTugas, urutBelum, type BelumItem, type DataBelum, type TimTugas, type TugasPilihan } from "@/lib/belumDiajukan";
 
 const adalahBanyak = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []);
 
+/**
+ * (24 Okt 2026) Menambah email FASIH PML dan PPL ke daftar tim untuk templat Pengawas-Pencacah di tab "Belum diajukan".
+ * Aturan sama dengan permintaan di tab Menunggu admin: bencana_petugas.email_fasih diutamakan, lalu email mitra akun. Gagal membaca email tidak
+ * menggagalkan daftar (email dibiarkan kosong; layar memberi peringatan).
+ */
+async function denganEmailTim(db: Db, tim: TimTugas[]): Promise<TimTugas[]> {
+  if (!tim.length) return tim;
+  try {
+    const pmlIds = tim.map((t) => t.pml_id);
+    const pplPetugas = tim.flatMap((t) => t.ppl.map((p) => p.petugas_id));
+    const [{ data: ep }, akunPml] = await Promise.all([
+      db.from("bencana_petugas").select("id, email_fasih").in("id", [...new Set([...pmlIds, ...pplPetugas])]),
+      akunPerPetugas(db, pmlIds),
+    ]);
+    const emailFasih = new Map<number, string>();
+    for (const p of ep ?? []) if (p.email_fasih) emailFasih.set(p.id as number, String(p.email_fasih));
+    const emailAkun = await emailPerAkun(db, [...akunPml.values(), ...tim.flatMap((t) => t.ppl.map((p) => p.akun_id))]);
+    return tim.map((t) => ({
+      ...t,
+      pml_email: emailFasih.get(t.pml_id) ?? emailAkun.get(akunPml.get(t.pml_id) ?? -1) ?? "",
+      ppl: t.ppl.map((p) => ({ ...p, email: emailFasih.get(p.petugas_id) ?? emailAkun.get(p.akun_id) ?? "" })),
+    }));
+  } catch (e) {
+    console.error("[belum email]", e instanceof Error ? e.message : e);
+    return tim;
+  }
+}
+
 export async function daftarBelumDiajukan(db: Db): Promise<Omit<DataBelum, "boleh_kelola">> {
   const [a, b] = await Promise.all([db.rpc("bencana_belum_diajukan"), db.rpc("bencana_tim_untuk_tugas")]);
   if (a.error) throw new Error("Gagal memuat daftar Sub SLS yang belum diajukan.");
   if (b.error) throw new Error("Gagal memuat daftar tim.");
-  return { items: urutBelum(adalahBanyak<BelumItem>(a.data)), tim: adalahBanyak<TimTugas>(b.data) };
+  return { items: urutBelum(adalahBanyak<BelumItem>(a.data)), tim: await denganEmailTim(db, adalahBanyak<TimTugas>(b.data)) };
 }
 
 type HasilRpc =

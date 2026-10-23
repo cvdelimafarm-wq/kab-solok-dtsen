@@ -43,8 +43,9 @@ export type BelumItem = {
   terakhir: TerakhirBelum;
 };
 
-export type PplTugas = { petugas_id: number; nama: string; akun_id: number };
-export type TimTugas = { pml_id: number; pml_nama: string; sub: number; ppl: PplTugas[] };
+// (24 Okt 2026) email = email FASIH petugas (bencana_petugas.email_fasih) lalu email mitra; diisi server untuk admin, dipakai templat FASIH.
+export type PplTugas = { petugas_id: number; nama: string; akun_id: number; email?: string };
+export type TimTugas = { pml_id: number; pml_nama: string; sub: number; ppl: PplTugas[]; pml_email?: string };
 export type DataBelum = { boleh_kelola: boolean; items: BelumItem[]; tim: TimTugas[] };
 
 export type TugasPilihan = { idsubsls: string; pml_id: number; ppl_akun_id: number };
@@ -140,6 +141,19 @@ export function bawaanTugas(b: Pick<BelumItem, "plotting">, tim: TimTugas[]): { 
   if (!t) return { pml_id: null, ppl_akun_id: null };
   const cocok = p.ppl_id != null ? t.ppl.find((x) => x.petugas_id === p.ppl_id) : undefined;
   return { pml_id: t.pml_id, ppl_akun_id: (cocok ?? t.ppl[0])?.akun_id ?? null };
+}
+
+/**
+ * (24 Okt 2026) Permintaan user: tab "Belum diajukan" perlu tombol unduh templat FASIH (format Pengawas-Pencacah) seperti tab "Menunggu admin".
+ * Email pengawas = PML tujuan, email pencacah = PPL penerima (sesuai pilihan penugasan). Hasilnya diumpankan ke barisTemplatFasih (lib/permintaanDaftar.ts).
+ * Email yang belum ada dikembalikan kosong (layar memberi peringatan, sama seperti ekspor di tab Menunggu admin).
+ */
+export function emailPilihanTugas(pilihan: TugasPilihan[], tim: TimTugas[]): { idsubsls: string; email_pengawas: string; email_pencacah: string }[] {
+  return pilihan.map((p) => {
+    const t = tim.find((x) => x.pml_id === p.pml_id);
+    const ppl = t?.ppl.find((x) => x.akun_id === p.ppl_akun_id);
+    return { idsubsls: p.idsubsls, email_pengawas: (t?.pml_email ?? "").trim(), email_pencacah: (ppl?.email ?? "").trim() };
+  });
 }
 
 /** Pilihan bawaan saat admin berganti PML: PPL pertama tim itu. */

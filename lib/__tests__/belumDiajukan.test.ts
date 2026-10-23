@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAKS_ISI_PUSH } from "@/lib/sigapPushUtil";
-import { adaPlotting, bawaanTugas, daftarKecamatan, periksaTugas, pesanTugas, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, SARINGAN_AWAL, susunPushTugas, urutBelum, type BelumItem, type TimTugas } from "@/lib/belumDiajukan";
+import { barisTemplatFasih } from "@/lib/permintaanDaftar";
+import { adaPlotting, bawaanTugas, daftarKecamatan, emailPilihanTugas, periksaTugas, pesanTugas, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, SARINGAN_AWAL, susunPushTugas, urutBelum, type BelumItem, type TimTugas } from "@/lib/belumDiajukan";
 
 const sub = (o: Partial<BelumItem>): BelumItem => ({ idsubsls: "1303080001000502", kecamatan: "GUNUNG TALANG", nagari: "CUPAK", sls: "JORONG BALAI TANGAH", sub_sls: "02", kk: 75, didata: 0, kolam: false, plotting: [], terakhir: null, ...o });
 const TIM: TimTugas[] = [
@@ -119,5 +120,27 @@ describe("susunPushTugas", () => {
       expect(r.isi).toMatch(/\(\+\d+ lagi\)/);
     }
     expect(susunPushTugas("pml", Array.from({ length: 40 }, (_, i) => item(i))).isi).toContain("Tidak memakai kuota");
+  });
+});
+
+describe("emailPilihanTugas (templat FASIH tab Belum diajukan, 24 Okt 2026)", () => {
+  const TIME: TimTugas[] = [
+    { pml_id: 236, pml_nama: "Yeni siswanti", pml_email: " Yeni@BPS.go.id ", sub: 3, ppl: [{ petugas_id: 116, nama: "PUSPITA PUTRI", akun_id: 900, email: "puspita@gmail.com" }, { petugas_id: 117, nama: "putri nasriati", akun_id: 901 }] },
+  ];
+  it("memetakan PML ke email pengawas dan PPL penerima ke email pencacah", () => {
+    const r = emailPilihanTugas([{ idsubsls: "1303080001000502", pml_id: 236, ppl_akun_id: 900 }], TIME);
+    expect(r).toEqual([{ idsubsls: "1303080001000502", email_pengawas: "Yeni@BPS.go.id", email_pencacah: "puspita@gmail.com" }]);
+  });
+  it("email yang belum ada atau tim/PPL tak dikenal menjadi kosong, bukan error", () => {
+    const r = emailPilihanTugas([{ idsubsls: "1303080001000502", pml_id: 236, ppl_akun_id: 901 }, { idsubsls: "1303080001000503", pml_id: 999, ppl_akun_id: 1 }], TIME);
+    expect(r[0].email_pencacah).toBe("");
+    expect(r[1]).toEqual({ idsubsls: "1303080001000503", email_pengawas: "", email_pencacah: "" });
+  });
+  it("hasilnya cocok dengan barisTemplatFasih (kode 6 digit terakhir, email huruf kecil)", () => {
+    const b = barisTemplatFasih(emailPilihanTugas([{ idsubsls: "1303080001000502", pml_id: 236, ppl_akun_id: 900 }], TIME));
+    expect(b).toHaveLength(1);
+    expect(b[0]["SLS/SUBSLS"]).toBe("000502");
+    expect(b[0]["Email Pengawas"]).toBe("yeni@bps.go.id");
+    expect(b[0]["Email Pencacah"]).toBe("puspita@gmail.com");
   });
 });

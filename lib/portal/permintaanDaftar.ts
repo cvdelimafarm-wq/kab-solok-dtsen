@@ -36,7 +36,7 @@ export async function petaWilayah(db: Db, ids: string[]): Promise<Map<string, Wi
 }
 
 /** Email mitra menurut akun SIGAP (sigap_akun.mitra_id -> bencana_mitra.email). */
-async function emailPerAkun(db: Db, akunIds: number[]): Promise<Map<number, string>> {
+export async function emailPerAkun(db: Db, akunIds: number[]): Promise<Map<number, string>> {
   const out = new Map<number, string>();
   const ids = [...new Set(akunIds)];
   if (!ids.length) return out;

@@ -9,8 +9,8 @@
 import { useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
-import { API_PERMINTAAN } from "@/lib/permintaanDaftar";
-import { SARINGAN_AWAL, adaPlotting, bawaanTugas, daftarKecamatan, labelSub, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, type BelumItem, type DataBelum, type SaringanBelum, type TugasPilihan } from "@/lib/belumDiajukan";
+import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, tanggalWib, tanpaEmail } from "@/lib/permintaanDaftar";
+import { SARINGAN_AWAL, adaPlotting, bawaanTugas, daftarKecamatan, emailPilihanTugas, labelSub, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, type BelumItem, type DataBelum, type SaringanBelum, type TugasPilihan } from "@/lib/belumDiajukan";
 
 type Mode = "plotting" | "lain";
 
@@ -22,6 +22,7 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
   const [pplLain, setPplLain] = useState<number | null>(null);
   const [yakin, setYakin] = useState(false);
   const [sibuk, setSibuk] = useState(false);
+  const [unduh, setUnduh] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -98,6 +99,37 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
     }
   }
 
+  // (24 Okt 2026) Unduh templat FASIH (Pengawas-Pencacah) untuk Sub SLS terpilih -- permintaan user: tab ini belum punya tombol unduh templat. Berkas memakai
+  // tujuan yang sedang dipilih (PML plotting atau PML/tim lain); Sub SLS yang dilewati tidak ikut. Hanya membuat berkas, TIDAK menugaskan.
+  async function unduhTemplat() {
+    if (!rencana.ok.length || unduh) return;
+    setUnduh(true);
+    setGalat(null);
+    setPesan(null);
+    try {
+      const XLSX = await import("xlsx");
+      const isi = emailPilihanTugas(rencana.ok, tim);
+      const baris = barisTemplatFasih(isi);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(baris, { header: [...JUDUL_TEMPLAT_FASIH] }), "Sheet0");
+      XLSX.writeFile(wb, namaBerkasTemplat(tanggalWib(Date.now())));
+      const kosong = isi.filter(tanpaEmail).length;
+      setPesan(`Templat FASIH diunduh (${baris.length} baris).${kosong ? ` ${kosong} baris email-nya kosong, lengkapi dulu sebelum diunggah ke FASIH.` : ""} Berkas ini belum menugaskan; tekan Tugaskan agar tercatat di tab Menunggu admin.`);
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : "Gagal membuat Excel.");
+    } finally {
+      setUnduh(false);
+    }
+  }
+  const tombolUnduh = (
+    <div>
+      <button type="button" disabled={unduh || rencana.ok.length === 0} onClick={() => void unduhTemplat()} className="min-h-[46px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#9DB8E8]">
+        {unduh ? "Membuat Excel…" : `Unduh templat FASIH (${rencana.ok.length} Sub SLS)`}
+      </button>
+      <p className="mt-1 text-[11.5px] text-[#6B7A90]">Format Pengawas-Pencacah untuk unggah dan assign di FASIH; PML sebagai pengawas, PPL penerima sebagai pencacah.</p>
+    </div>
+  );
+
   const jenis = (k: SaringanBelum["jenis"], teks: string, n: number) => (
     <button key={k} type="button" aria-pressed={saring.jenis === k} onClick={() => ubah(() => setSaring((s) => ({ ...s, jenis: k })))} className={`min-h-[38px] flex-1 rounded-full px-2 text-[12px] font-extrabold ${saring.jenis === k ? "bg-[#1F5FD1] text-white" : "bg-[#F5F8FE] text-[#55657D]"}`}>
       {teks} <b>{n}</b>
@@ -107,7 +139,7 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
   return (
     <div>
       <p className="mt-3 text-[12.5px] leading-snug text-[#55657D]">
-        Sub SLS yang <b>belum diajukan</b> PML dan belum didata. Kolom <b>Plotting awal</b> menunjukkan PML/PPL hasil plotting; Sub SLS tanpa plotting masih di kolam wilayah kerja. Admin dapat <b>menugaskan</b> ke PML plotting atau ke PML/tim lain. Hasilnya masuk tab Menunggu admin (bertanda <b>Ditugaskan admin</b>) dan <b>tidak memakai kuota</b> pengajuan PML.
+        Sub SLS yang <b>belum diajukan</b> PML dan belum didata. Kolom <b>Plotting awal</b> menunjukkan PML/PPL hasil plotting; Sub SLS tanpa plotting masih di kolam wilayah kerja. Admin dapat <b>menugaskan</b> ke PML plotting atau ke PML/tim lain. Hasilnya masuk tab Menunggu admin (bertanda <b>Ditugaskan admin</b>) dan <b>tidak memakai kuota</b> pengajuan PML. Setelah memilih Sub SLS, <b>templat FASIH</b> dapat diunduh dari panel di bawah daftar.
       </p>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
@@ -167,7 +199,10 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
         <div className="mt-3 space-y-2 rounded-[14px] border border-[#D9E3F2] bg-[#F9FBFF] p-3">
           <p className="text-[13px] font-extrabold text-[#0F2A52]">Tugaskan {dipilih.length} Sub SLS terpilih</p>
           {!boleh ? (
-            <p className="text-[12.5px] text-[#6B7A90]">Akun ini hanya boleh melihat; menugaskan butuh izin kelola pendataan.</p>
+            <>
+              <p className="text-[12.5px] text-[#6B7A90]">Akun ini hanya boleh melihat dan mengunduh templat; menugaskan butuh izin kelola pendataan.</p>
+              {tombolUnduh}
+            </>
           ) : (
             <>
               <div className="flex gap-2" role="group" aria-label="Tujuan penugasan">
@@ -216,6 +251,8 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
                 </p>
               )}
               {rencana.pindah > 0 && <p className="text-[12px] font-bold text-[#B42329]">{rencana.pindah} Sub SLS akan DIPINDAH dari plotting PML sebelumnya ke PML tujuan.</p>}
+
+              {tombolUnduh}
 
               {!yakin ? (
                 <button type="button" disabled={sibuk || rencana.ok.length === 0} onClick={() => setYakin(true)} className="min-h-[50px] w-full rounded-[14px] bg-[#13794B] px-4 text-[14px] font-extrabold text-white disabled:bg-[#9FCDB5]">
