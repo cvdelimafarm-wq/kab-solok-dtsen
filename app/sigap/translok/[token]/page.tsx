@@ -13,6 +13,7 @@ import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKek
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
+import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -383,7 +384,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
                 judul="Semua dokumen SPJ ada di Arsip"
                 isi="Kwitansi, Visum dan Surat Pernyataan Kendaraan Dinas dibuat otomatis dari hari kerja Anda dan ikut berubah bila hari kerja diubah. Surat Tugas diunggah admin anggaran. Laporan & Dokumentasi berasal dari isian harian Anda."
               />
-              <ArsipDokumen data={data} pen={pen} />
+              <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} ringkasSaja />
               <TombolLangkah onKembali={() => setLangkah(4)} onLanjut={selesai} teks="Selesai, mulai bekerja ✓" hijau />
             </>
           )}
@@ -468,7 +469,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             <DaftarHari token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
-        {tab === "arsip" && <ArsipDokumen data={data} pen={pen} />}
+        {tab === "arsip" && <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} />}
         <button type="button" onClick={() => setLangkah(1)} className="block w-full pt-1 text-center text-[12px] font-semibold text-[#55657D] underline">
           Lihat panduan lagi
         </button>
@@ -1143,7 +1144,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>
@@ -1197,6 +1198,210 @@ function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data
   );
 }
 
+// ---------------- (23 Okt 2026) Arsip PER TANGGAL (tab Arsip) ----------------
+// Satu kartu: deretan tanggal yang bisa digeser (usap kiri/kanan, tombol ‹ ›, atau ketuk tanggal), status tiap jenis dokumen pada tanggal itu,
+// unduh khusus tanggal itu, dan "Lengkapi / perbaiki" (laporan + nomor foto) bila masih diizinkan. Hari lampau yang terkunci menampilkan alasannya
+// (dan tombol WhatsApp izin susulan) lewat KartuHari/SusunFoto yang sudah ada -- aturan akses tidak diubah.
+const NADA_ARSIP: Record<NadaArsip, { titik: string; chip: string }> = {
+  hijau: { titik: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-800" },
+  kuning: { titik: "bg-amber-400", chip: "bg-amber-50 text-amber-800" },
+  merah: { titik: "bg-red-500", chip: "bg-red-50 text-red-800" },
+  abu: { titik: "bg-slate-300", chip: "bg-slate-100 text-slate-600" },
+};
+
+function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void> }) {
+  const aturan = { wajibLaporan: wajibLaporan(pen), jumlahFoto: nFoto(pen) };
+  const nilai = useMemo(
+    () => new Map(pen.hari.map((h) => [h.tanggal, nilaiHariArsip({ tanggal: h.tanggal, kunci: h.kunci, lengkap: h.lengkap, laporan: !!h.realisasi, laporanDianggap: !!h.laporan_dianggap, jumlahFoto: h.foto.length }, aturan)])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pen.hari, pen.kegiatan.wajib_laporan, pen.kegiatan.jumlah_foto]
+  );
+  const [saring, setSaring] = useState(false);
+  const [tgl, setTgl] = useState<string | null>(() => tanggalAwalArsip(pen.hari.map((h) => h.tanggal), data.hari_ini));
+  const [lengkapi, setLengkapi] = useState(false);
+  const [unduhTgl, setUnduhTgl] = useState<string | null>(null);
+  const jalur = useRef<HTMLDivElement>(null);
+  const sentuh = useRef<{ x: number; y: number } | null>(null);
+
+  const kurang = pen.hari.filter((h) => nilai.get(h.tanggal)?.kurang);
+  const daftar = saring ? kurang : pen.hari;
+  const tanggalDaftar = daftar.map((h) => h.tanggal);
+  const hari = daftar.find((h) => h.tanggal === tgl) ?? daftar[0] ?? null;
+  const tglAktif = hari?.tanggal ?? null;
+
+  // tanggal terpilih selalu terlihat di deretan
+  useEffect(() => {
+    if (!tglAktif) return;
+    const el = jalur.current?.querySelector<HTMLElement>(`[data-tgl="${tglAktif}"]`);
+    el?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [tglAktif]);
+
+  const pindah = (arah: -1 | 1) => {
+    if (!tglAktif) return;
+    setTgl(geserTanggal(tanggalDaftar, tglAktif, arah));
+    setLengkapi(false);
+  };
+  const pilih = (t: string) => {
+    setTgl(t);
+    setLengkapi(false);
+  };
+
+  if (pen.hari.length === 0)
+    return (
+      <section className="rounded-2xl bg-white p-4 shadow-md">
+        <p className="text-[15px] font-extrabold">Arsip per tanggal</p>
+        <p className="mt-1 text-[12.5px] text-[#55657D]">Belum ada hari kerja. Atur dulu di menu Hari Kerja; arsip tiap tanggal muncul di sini.</p>
+      </section>
+    );
+
+  const n = hari ? nilai.get(hari.tanggal) : undefined;
+  const kel = hari ? kelompokDariTanggal(pen.kelompok, hari.tanggal) : null;
+  const d = hari ? tglObj(hari.tanggal) : null;
+  const barisKel = (nama: string, ikon: string, rinci: string) => ({
+    nama,
+    ikon,
+    s: kel ? `${rentangPendek(kel.mulai, kel.selesai)} · ${rinci}` : hari?.kunci === "akan_datang" ? "Dibuat setelah hari kerja berjalan" : "Hari ini tidak masuk (laporan/foto tidak lengkap)",
+    ok: !!kel,
+    chip: kel ? "Masuk" : hari?.kunci === "akan_datang" ? "Rencana" : "Tidak masuk",
+  });
+  const baris: { nama: string; ikon: string; s: string; ok: boolean; chip: string }[] = hari
+    ? [
+        {
+          nama: "Surat Tugas",
+          ikon: "📄",
+          s: pen.surat_tugas ? `No. ${pen.surat_tugas.nomor} · berlaku seluruh penugasan` : "Diupload admin anggaran",
+          ok: !!pen.surat_tugas?.ada_file,
+          chip: pen.surat_tugas ? (pen.surat_tugas.ada_file ? "Tersedia" : "Menunggu file") : "Menunggu",
+        },
+        ...(aturan.wajibLaporan
+          ? [
+              {
+                nama: "Laporan",
+                ikon: "📝",
+                s: hari.realisasi ? `${hari.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${hari.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ") || "–"}` : n?.laporan === "dianggap" ? "Dianggap selesai dari hasil lembar" : "Belum diisi",
+                ok: n?.laporan === "ok" || n?.laporan === "dianggap",
+                chip: n?.laporan === "ok" ? "Terisi" : n?.laporan === "dianggap" ? "Dianggap" : "Kurang",
+              },
+            ]
+          : []),
+        {
+          nama: "Dokumentasi",
+          ikon: "📸",
+          s: `${hari.foto.length} dari ${aturan.jumlahFoto} nomor foto terisi`,
+          ok: !!n?.foto.ok,
+          chip: `${hari.foto.length}/${aturan.jumlahFoto}`,
+        },
+        { ...barisKel("Kwitansi", "🧾", kel ? rupiah(kel.nominal) : ""), },
+        barisKel("Visum", "✈️", kel ? `${kel.tanggal.length} hari` : ""),
+        barisKel("Surat Pernyataan Kendaraan Dinas", "🚗", kel ? `${kel.tanggal.length} hari` : ""),
+      ]
+    : [];
+
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-md">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[15px] font-extrabold">Arsip per tanggal</p>
+        <span className="text-[11px] font-semibold text-[#6B7890]">{pen.hari.length - kurang.length - pen.hari.filter((h) => h.kunci === "akan_datang").length} lengkap · {kurang.length} perlu dilengkapi</span>
+      </div>
+      <p className="text-[11.5px] text-[#6B7890]">Usap ke kiri/kanan atau ketuk tanggal. Titik: hijau lengkap, kuning belum lengkap, merah terlewat, abu rencana.</p>
+
+      <div className="mt-2.5 flex items-center gap-1">
+        <button type="button" onClick={() => pindah(-1)} disabled={!tglAktif || tglAktif === tanggalDaftar[0]} aria-label="Tanggal sebelumnya" className="flex h-11 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF1F5] text-[18px] font-extrabold text-[#0F3D7A] disabled:opacity-30">
+          ‹
+        </button>
+        <div ref={jalur} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-1" role="tablist" aria-label="Pilih tanggal">
+          {daftar.length === 0 && <p className="px-2 py-2 text-[12.5px] font-semibold text-emerald-800">Semua tanggal sudah lengkap ✓</p>}
+          {daftar.map((h) => {
+            const dd = tglObj(h.tanggal);
+            const on = h.tanggal === tglAktif;
+            return (
+              <button
+                key={h.tanggal}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                data-tgl={h.tanggal}
+                onClick={() => pilih(h.tanggal)}
+                className={`flex w-[52px] shrink-0 flex-col items-center rounded-xl border-2 px-1 py-1.5 ${on ? "border-[#0F3D7A] bg-[#E8EEF8]" : "border-transparent bg-[#F6F8FB]"}`}
+              >
+                <span className="text-[10px] font-bold text-[#8592A8]">{HARI[dd.getUTCDay()]}</span>
+                <span className="text-[16px] font-extrabold leading-tight">{dd.getUTCDate()}</span>
+                <span className="text-[9.5px] font-semibold text-[#8592A8]">{BULAN[dd.getUTCMonth()]}</span>
+                <span className={`mt-1 h-2 w-2 rounded-full ${NADA_ARSIP[nilai.get(h.tanggal)?.nada ?? "abu"].titik}`} />
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" onClick={() => pindah(1)} disabled={!tglAktif || tglAktif === tanggalDaftar[tanggalDaftar.length - 1]} aria-label="Tanggal berikutnya" className="flex h-11 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EEF1F5] text-[18px] font-extrabold text-[#0F3D7A] disabled:opacity-30">
+          ›
+        </button>
+      </div>
+
+      <button type="button" onClick={() => setSaring((v) => !v)} aria-pressed={saring} className={`mt-2 rounded-full px-3 py-1.5 text-[12px] font-bold ${saring ? "bg-[#0F3D7A] text-white" : "bg-[#EEF1F5] text-[#55657D]"}`}>
+        Belum lengkap saja ({kurang.length})
+      </button>
+
+      {hari && d && n && (
+        <div
+          className="mt-3 rounded-2xl bg-[#F6F8FB] p-3.5"
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            sentuh.current = { x: t.clientX, y: t.clientY };
+          }}
+          onTouchEnd={(e) => {
+            const a = sentuh.current;
+            sentuh.current = null;
+            const t = e.changedTouches[0];
+            if (!a || !t) return;
+            const arah = arahSapuan(t.clientX - a.x, t.clientY - a.y);
+            if (arah !== 0) pindah(arah);
+          }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[15px] font-extrabold">{tglPanjang(hari.tanggal)}</p>
+              {hari.kunci === "izin" && hari.izin_sampai && <p className="text-[11.5px] font-semibold text-violet-700">Izin susulan dari admin s.d. {new Date(hari.izin_sampai).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })} WIB</p>}
+            </div>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${NADA_ARSIP[n.nada].chip}`}>{n.label}</span>
+          </div>
+
+          <div className="mt-1 divide-y divide-[#E3E8F0]">
+            {baris.map((b) => (
+              <div key={b.nama} className="flex items-center gap-3 py-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[15px]">{b.ikon}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold">{b.nama}</p>
+                  <p className="text-[11.5px] text-[#6B7890]">{b.s}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${b.ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{b.chip}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button type="button" onClick={() => setUnduhTgl(hari.tanggal)} className="min-h-[44px] flex-1 rounded-xl bg-[#0F3D7A] px-3 text-[13.5px] font-extrabold text-white">
+              ⬇ Unduh tanggal ini
+            </button>
+            {hari.kunci !== "akan_datang" && (
+              <button type="button" onClick={() => setLengkapi((v) => !v)} aria-expanded={lengkapi} className={`min-h-[44px] flex-1 rounded-xl border-2 px-3 text-[13.5px] font-extrabold ${n.kurang ? "border-[#B7791F] bg-[#FFF4D6] text-[#5E4300]" : "border-[#C9D3E6] bg-white text-[#0F3D7A]"}`}>
+                {lengkapi ? "Tutup" : n.kurang ? "Lengkapi / perbaiki" : "Lihat laporan & foto"}
+              </button>
+            )}
+          </div>
+          {hari.kunci === "akan_datang" && <p className="mt-2 text-[11.5px] text-[#6B7890]">Hari ini baru rencana. Laporan dan foto diisi pada hari kerjanya.</p>}
+
+          {lengkapi && hari.kunci !== "akan_datang" && (
+            <div className="mt-3 space-y-3">
+              <KartuHari key={`ar-${pen.id}-${hari.tanggal}`} token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} />
+            </div>
+          )}
+        </div>
+      )}
+      {unduhTgl && <LembarUnduh pen={pen} hariIni={data.hari_ini} tanggalAwal={unduhTgl} onTutup={() => setUnduhTgl(null)} />}
+    </section>
+  );
+}
+
 // ---------------- Arsip dokumen + Unduh SPJ ----------------
 const JENIS_DOK = [
   { k: "surat_tugas", ikon: "📄", nama: "Surat Tugas" },
@@ -1207,7 +1412,7 @@ const JENIS_DOK = [
   { k: "surat_pernyataan", ikon: "🚗", nama: "Surat Pernyataan Kendaraan Dinas" },
 ] as const;
 
-function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
+function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void>; ringkasSaja?: boolean }) {
   const [unduh, setUnduh] = useState(false);
   const nLaporan = pen.hari.filter((h) => h.realisasi).length;
   const nDok = pen.hari.filter((h) => h.foto.length >= nFoto(pen)).length;
@@ -1224,9 +1429,13 @@ function ArsipDokumen({ data, pen }: { data: Data; pen: Pen }) {
   };
   return (
     <>
+      {!ringkasSaja && <ArsipPerTanggal token={token} data={data} pen={pen} onBerubah={onBerubah} />}
       <section className="rounded-2xl bg-white p-4 shadow-md">
         <div className="flex items-baseline justify-between">
-          <p className="text-[15px] font-extrabold">{pen.kegiatan.nama}</p>
+          <div className="min-w-0">
+            {!ringkasSaja && <p className="text-[11px] font-bold text-[#6B7890]">Ringkasan seluruh periode</p>}
+            <p className="text-[15px] font-extrabold">{pen.kegiatan.nama}</p>
+          </div>
           <span className="text-[11px] font-semibold text-[#6B7890]">{pen.peran.toUpperCase()}</span>
         </div>
         <div className="mt-1 divide-y divide-[#EEF1F5]">
@@ -1392,16 +1601,18 @@ function TombolUnduhMelayang({ onKlik }: { onKlik: () => void }) {
   );
 }
 
-function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onTutup: () => void }) {
+function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal }: { pen: Pen; hariIni: string; onTutup: () => void; tanggalAwal?: string | null }) {
   // (20 Okt 2026) permintaan user: utamakan unduh TANGGAL HARI INI / HARI LENGKAP TERAKHIR (cepat, hanya Laporan & Dokumentasi hari itu);
   // rentang (Semua / kelompok tanggal) dipilih belakangan lewat "Pilih rentang lain".
   const pil = pilihanTanggalUnduh(pen.hari.map((h) => ({ tanggal: h.tanggal, lengkap: h.lengkap })), hariIni);
-  const [tanggalPilih, setTanggalPilih] = useState<string | null>(pil.bawaan);
+  // (23 Okt 2026) dibuka dari tab Arsip per tanggal: langsung memilih tanggal itu (bukan tanggal bawaan)
+  const awal = tanggalAwal && pen.hari.some((h) => h.tanggal === tanggalAwal) ? tanggalAwal : pil.bawaan;
+  const [tanggalPilih, setTanggalPilih] = useState<string | null>(awal);
   const [rentangPilih, setRentangPilih] = useState<string>("semua");
-  const [bukaRentang, setBukaRentang] = useState<boolean>(pil.bawaan === null);
+  const [bukaRentang, setBukaRentang] = useState<boolean>(awal === null);
   const perHari = tanggalPilih !== null;
   const jenisPerHari = JENIS_PER_HARI as readonly string[];
-  const [jenis, setJenis] = useState<Set<string>>(new Set(pil.bawaan ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
+  const [jenis, setJenis] = useState<Set<string>>(new Set(awal ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
   const [format, setFormat] = useState<"gabungan" | "zip">("gabungan");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);
@@ -1503,8 +1714,13 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
 
         <div className="mt-3 rounded-2xl bg-white p-3.5">
           <p className="text-[12px] font-bold text-[#6B7890]">1 · Tanggal</p>
-          {(pil.hariIni || pil.terakhirLengkap) && (
+          {(pil.hariIni || pil.terakhirLengkap || awal) && (
             <div className="mt-2 flex flex-wrap gap-1.5">
+              {awal && awal !== pil.hariIni && awal !== pil.terakhirLengkap && (
+                <button type="button" className={CHIP(tanggalPilih === awal)} onClick={() => pilihHari(awal)}>
+                  Tanggal · {tglPendek(awal)}
+                </button>
+              )}
               {pil.hariIni && (
                 <button type="button" className={CHIP(tanggalPilih === pil.hariIni)} onClick={() => pilihHari(pil.hariIni as string)}>
                   Hari ini · {tglPendek(pil.hariIni)}
