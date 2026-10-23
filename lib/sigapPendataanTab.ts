@@ -93,7 +93,8 @@ export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "monitoring", label: "Monitoring transport lokal", ket: "Kelengkapan SPJ transport lokal per petugas." },
   { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan lalu kunci transport lokal." },
   { kode: "tarif", label: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal." },
-  { kode: "anggaran", label: "Anggaran & pengadaan", ket: "Anggaran kegiatan, pengadaan, dan pertanggungjawaban lain." },
+  { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
+  { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (paket SPJ, honor, perjalanan dinas)." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI };
 
@@ -150,13 +151,12 @@ export const PINTU_TAB: Partial<Record<KodeTabPendataan, KelompokPintu[]>> = {
       ],
     },
   ],
-  // (23 Okt 2026, tahap 3) Transport lokal (monitoring, verifikasi, tarif) kini tersemat (SUB_ADMINISTRASI); tersisa anggaran, pengadaan, dan item "segera".
+  // (23 Okt 2026, tahap 3) Transport lokal (monitoring, verifikasi, tarif) kini tersemat (SUB_ADMINISTRASI); tersisa anggaran dan item "segera"; Pengadaan & kontrak juga tersemat (tahap 4).
   administrasi: [
     {
-      judul: "Anggaran dan pengadaan",
+      judul: "Anggaran",
       item: [
         { id: "anggaran", judul: "Anggaran kegiatan (POK/RAB)", ket: "Perencanaan kegiatan per RO dan RAB berversi (uji coba).", href: "/sigap/kelola/perencanaan" },
-        { id: "pengadaan", judul: "Pengadaan & kontrak", ket: "Paket, master, dan penyedia.", href: "/sigap/kelola/pengadaan" },
       ],
     },
     {

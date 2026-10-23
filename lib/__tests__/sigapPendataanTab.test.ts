@@ -88,8 +88,8 @@ describe("PINTU_TAB", () => {
   it("transport lokal tidak lagi berupa tautan (sudah tersemat)", () => {
     expect(semua.filter((i) => i.href?.startsWith("/sigap/kelola/translok"))).toEqual([]);
   });
-  it("tersisa: alokasi (/bencana), pelatihan, anggaran, pengadaan", () => {
-    expect(semua.filter((i) => i.href).map((i) => i.href).sort()).toEqual(["/bencana", "/sigap/kelola/pelatihan", "/sigap/kelola/pengadaan", "/sigap/kelola/perencanaan"]);
+  it("tersisa: alokasi (/bencana), pelatihan, anggaran (perencanaan)", () => {
+    expect(semua.filter((i) => i.href).map((i) => i.href).sort()).toEqual(["/bencana", "/sigap/kelola/pelatihan", "/sigap/kelola/perencanaan"]);
   });
 });
 
@@ -97,7 +97,7 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
   const P = "/sigap/kelola/pendataan";
   it("daftar, urutan, dan peta per tab", () => {
     expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
-    expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "anggaran"]);
+    expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "pengadaan", "anggaran"]);
     expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "tim"]);
     expect(KEGIATAN_PENDATAAN).toBe(1);
   });
