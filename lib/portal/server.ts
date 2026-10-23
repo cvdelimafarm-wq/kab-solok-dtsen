@@ -154,17 +154,19 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
     if (!boleh(izin, menu, "lihat")) continue;
     const a = (apl ?? []).find((x) => x.kode === kode);
     if (!a) continue;
+    // (23 Okt 2026, audit Tahap 2) kartu Admin tanpa tautan tidak ditampilkan di Beranda (dulu berujung halaman "Tautan belum diatur"); admin aplikasi
+    // mengisi tautannya lewat "Kelola Aplikasi, Admin & Periode", setelah itu kartu muncul sendiri.
+    if (!(a.href as string | null | undefined)?.trim()) continue;
     kartu.push({
       kode: `admin-${kode}`,
       grup: "kelola",
       judul: `Admin ${a.nama as string}`,
       uraian: kode === "dtsen" ? `${(a.uraian as string) ?? ""}. Masuk dashboard dengan nomor HP akun DTSEN.` : ((a.uraian as string) ?? ""),
       href: (a.href as string | null) ?? null,
-      status: a.href ? undefined : { label: "Tautan belum diatur", nada: "info" },
     });
   }
   // (10 Okt 2026) Monitoring Lembar Identifikasi SLS: admin bencana (izin bencana.admin)
-  if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi SLS", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
+  if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
   // (11 Okt 2026) Unggah daftar KK sasaran TIDAK dibuat kartu di Beranda HP: unggah CSV dilakukan dari laptop lewat menu sidebar desktop (Shell.tsx) -- permintaan user.
   if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");

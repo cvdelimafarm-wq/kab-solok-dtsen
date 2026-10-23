@@ -432,7 +432,7 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
           {busy ? "Menambah…" : "＋ Tambah"}
         </button>
       </div>
-      {opsi.length === 0 && <p className="mt-2 text-[11.5px] text-amber-800">Kegiatan ini belum punya peran/tarif. Atur di tab ⚙️ Kegiatan &amp; Tarif.</p>}
+      {opsi.length === 0 && <p className="mt-2 text-[11.5px] text-amber-800">Kegiatan ini belum punya peran/tarif. Atur di tab Kegiatan &amp; Tarif.</p>}
       {galat && (
         <div className="mt-2">
           <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>

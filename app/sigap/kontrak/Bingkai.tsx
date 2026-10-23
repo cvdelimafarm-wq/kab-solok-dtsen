@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { ambil, keluar, SesiBerakhir, type Ringkas } from "../admin/api";
-import { BarisTab, HeaderAdmin, type ItemTab } from "../admin/ui";
+import { BarisTab, HeaderAdmin, PitaGeser, type ItemTab } from "../admin/ui";
 import Shell, { type KodeMenu } from "../admin/Shell";
 import TombolKembali from "@/app/components/TombolKembali";
 
@@ -76,8 +76,9 @@ export default function Bingkai<K extends string>({
         {kanan && <div className="flex items-center gap-2">{kanan(false)}</div>}
       </div>
       {tab && aktifTab && onTab && (
-        <div className="mb-1 hidden lg:flex" role="tablist">
-          <div className="flex overflow-hidden rounded-lg border border-[#E3E8EE] bg-white">
+        <div className="mb-1 hidden min-w-0 lg:block">
+          {/* (23 Okt 2026) tab yang tidak muat bisa digeser; tepi kanan memudar + panah "›" sebagai petunjuk (audit Tahap 2) */}
+          <PitaGeser role="tablist" kelas="flex overflow-y-hidden rounded-lg border border-[#E3E8EE] bg-white">
             {tab.map((t, i) => (
               <button
                 key={t.kode}
@@ -85,12 +86,12 @@ export default function Bingkai<K extends string>({
                 role="tab"
                 aria-selected={aktifTab === t.kode}
                 onClick={() => onTab(t.kode)}
-                className={`px-3.5 py-1.5 text-[13px] ${i > 0 ? "border-l border-[#E3E8EE]" : ""} ${aktifTab === t.kode ? "bg-[#E3EEFB] font-semibold text-[#1F6FD1]" : "text-[#4D5B6B] hover:bg-[#F8FAFC]"}`}
+                className={`flex-none whitespace-nowrap px-3.5 py-1.5 text-[13px] ${i > 0 ? "border-l border-[#E3E8EE]" : ""} ${aktifTab === t.kode ? "bg-[#E3EEFB] font-semibold text-[#1F6FD1]" : "text-[#4D5B6B] hover:bg-[#F8FAFC]"}`}
               >
                 {t.label}
               </button>
             ))}
-          </div>
+          </PitaGeser>
         </div>
       )}
       {children}

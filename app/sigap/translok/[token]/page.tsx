@@ -3,6 +3,7 @@
 import { use as usePromise, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import LogoSigap from "@/app/components/LogoSigap";
 import TombolKembali from "@/app/components/TombolKembali";
+import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
 import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
@@ -478,10 +479,10 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         <div className="mx-auto flex max-w-lg">
           {(
             [
-              ["hari_ini", "🏠", "Hari Ini"],
-              ["hari_kerja", "🗓", "Hari Kerja"],
-              ["arsip", "📁", "Arsip"],
-            ] as [Tab, string, string][]
+              ["hari_ini", "rumah", "Hari Ini"],
+              ["hari_kerja", "periode", "Hari Kerja"],
+              ["arsip", "arsip", "Arsip"],
+            ] as [Tab, NamaIkon, string][]
           ).map(([k, ikon, label]) => (
             <button
               key={k}
@@ -492,7 +493,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               }}
               className={`flex flex-1 flex-col items-center gap-0.5 border-t-[3px] pb-2.5 pt-2 text-[11.5px] font-bold ${tab === k ? "border-[#F5B841] text-[#0F3D7A]" : "border-transparent text-[#8592A8]"}`}
             >
-              <span className="text-[18px] leading-none">{ikon}</span>
+              <IkonMenu n={ikon} className="h-[22px] w-[22px]" />
               {label}
             </button>
           ))}
@@ -532,7 +533,7 @@ function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string;
 function Peringatan() {
   return (
     <div role="note" className="flex items-start gap-2.5 rounded-2xl border-2 border-[#F59E0B] bg-[#FEF3E2] px-3.5 py-3 text-[#7A3E06]">
-      <span aria-hidden className="mt-0.5 text-lg leading-none">⚠️</span>
+      <IkonMenu n="awas" className="mt-0.5 h-5 w-5 text-[#B45309]" />
       <p className="text-[12.5px] font-extrabold uppercase leading-snug tracking-wide">
         Upload dokumentasi wajib dilakukan segera per hari (s.d. 23:59 WIB). Dokumentasi yang terlewat tidak dapat diupload kembali.
       </p>
@@ -1782,7 +1783,7 @@ function FormRealisasi({
   const banding = oto ? bandingkanOtomatis({ lokasi, jumlah: jumlah === "" ? null : Number(jumlah) }, oto) : null;
   // (14 Okt 2026) Isian yang BERBEDA dari hasil lembar (lokasi atau jumlah) wajib disertai alasan singkat di kolom Kendala -- supaya selisih dengan data lembar tercatat.
   const butuhAlasan = !!banding && !banding.semuaSama && kendala.trim().length < 5;
-  const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi" : "Lembar Pendataan";
+  const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi SLS" : "Lembar Pendataan";
   function pakaiOtomatis() {
     if (!oto) return;
     setLokasi(oto.lokasi.map((l) => ({ ...l })));

@@ -23,6 +23,7 @@ import { ambil, bacaSesi, bolehKlien, keluar, keMasuk, pesanGalat, rentangPendek
 import { BarisTab, HeaderAdmin, LayarPenuh, Pesan, Putar, type ItemTab } from "./ui";
 import Shell, { MENU_ADMIN, type KodeTabAdmin } from "./Shell";
 import type { ItemPalet } from "./PaletPerintah";
+import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
 import Beranda, { daftarTindakan, type DataBeranda } from "./Beranda";
 import TabMonitoring from "./TabMonitoring";
 import TabPenugasan from "./TabPenugasan";
@@ -31,8 +32,9 @@ import TabVerifikasi from "./TabVerifikasi";
 import DaftarKegiatan from "../kelola/DaftarKegiatan"; // (10 Okt 2026) halaman awal = daftar kegiatan per kegiatan induk
 
 type Tab = KodeTabAdmin;
-const IKON_TAB: Record<Exclude<Tab, "beranda">, string> = { monitoring: "📈", penugasan: "👥", kegiatan: "⚙️", verifikasi: "✅" };
-const DAFTAR_TAB: (ItemTab<Tab> & { menu: string })[] = MENU_ADMIN.map((m) => ({ kode: m.kode, label: `${IKON_TAB[m.kode]} ${m.label}`, menu: m.menu }));
+// (23 Okt 2026, audit Tahap 2) ikon garis, bukan emoji
+const IKON_TAB: Record<Exclude<Tab, "beranda">, NamaIkon> = { monitoring: "grafik", penugasan: "akses", kegiatan: "kelola", verifikasi: "centang" };
+const DAFTAR_TAB: (ItemTab<Tab> & { menu: string })[] = MENU_ADMIN.map((m) => ({ kode: m.kode, label: m.label, ikon: IKON_TAB[m.kode], menu: m.menu }));
 const SEMUA_TAB: Tab[] = ["beranda", ...MENU_ADMIN.map((m) => m.kode)];
 const KUNCI_KEG = "sigap_admin_kegiatan"; // (5 Okt 2026) kegiatan terakhir dipilih (kenyamanan per browser)
 
@@ -191,7 +193,7 @@ export default function AdminTransportLokal() {
   const adaAksesAdmin = Object.keys(r.izin).some((k) => k.startsWith("translok."));
   const labelTab = MENU_ADMIN.find((m) => m.kode === tabAktif)?.label;
   const jejak = kegBaru ? ["Admin transport", "Kegiatan baru"] : tabAktif === "beranda" || !tabAktif ? ["Beranda"] : ["Admin transport", labelTab ?? ""];
-  const tabMobile: ItemTab<Tab>[] = [{ kode: "beranda", label: nTindakan ? `🏠 Beranda (${nTindakan})` : "🏠 Beranda" }, ...tabTampil];
+  const tabMobile: ItemTab<Tab>[] = [{ kode: "beranda", ikon: "rumah", label: nTindakan ? `Beranda (${nTindakan})` : "Beranda" }, ...tabTampil];
 
   const mobile = (
     <>
@@ -242,8 +244,9 @@ export default function AdminTransportLokal() {
             </button>
           )}
           {r.izin["akses.kelola"] && (
-            <Link href="/sigap/kelola/akses" className="rounded-full bg-[#D9971F] px-3 py-1.5 text-[12px] font-extrabold text-[#0E2A47] hover:brightness-105">
-              🔐 Kelola Peran &amp; Akses
+            <Link href="/sigap/kelola/akses" className="inline-flex items-center gap-1.5 rounded-full bg-[#D9971F] px-3 py-1.5 text-[12px] font-extrabold text-[#0E2A47] hover:brightness-105">
+              <IkonMenu n="kunci" className="h-3.5 w-3.5" />
+              Kelola Peran &amp; Akses
             </Link>
           )}
         </div>

@@ -181,7 +181,10 @@ const SKOR_KARTU: [RegExp, number, IkonKode][] = [
 ];
 
 /** Ikon untuk kartu beranda mana pun. */
-export function ikonKartu(kode: string): IkonKode {
+// (23 Okt 2026, audit Tahap 2) `judul` opsional: kartu Transport Lokal milik kegiatan PELATIHAN memakai ikon "langkah" agar tidak kembar dengan
+// kartu Transport Lokal kegiatan pendataan (keduanya dulu sama-sama "motor").
+export function ikonKartu(kode: string, judul?: string): IkonKode {
+  if (kode.startsWith("translok-") && judul && /pelatihan/i.test(judul)) return "langkah";
   if (kode.startsWith("translok-") || kode === "admin-translok") return "motor";
   if (kode === "bencana" || kode === "admin-bencana" || kode === "pendataan") return "bencana"; // (11 Okt 2026) kartu Lembar Pendataan
   if (kode === "penyisiran" || kode === "admin-penyisiran") return "peta";

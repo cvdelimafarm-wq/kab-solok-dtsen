@@ -6,6 +6,11 @@
 // halaman petugas (header gradien navy, aksen emas, kartu putih rounded-2xl) -- permintaan user.
 // (6 Okt 2026) Di layar lebar (lg) kartu ikut gaya backoffice yang flat & tenang (saran desain user):
 // rounded-xl, garis tipis #DDE6F3, tanpa bayangan (konstanta KARTU_LG).
+// (23 Okt 2026, audit Tahap 2) Tiga varian tombol baku: UTAMA (BTN), SEKUNDER (BTN_O), TEKS/TAUTAN (BTN_T). BTN_G (hijau) dan BTN_R (merah) tinggal untuk
+// aksi yang maknanya memang berwarna (simpan/setujui, hapus/tolak). Tombol kembali: app/components/TombolKembali.tsx.
+
+import { useEffect, useRef, useState } from "react";
+import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
 
 
 export const INPUT =
@@ -18,6 +23,9 @@ export const BTN_G =
   "inline-flex items-center justify-center gap-1 rounded-lg bg-[#13794B] px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-[#0F6340] disabled:cursor-not-allowed disabled:opacity-50";
 export const BTN_R =
   "inline-flex items-center justify-center gap-1 rounded-lg border border-[#F0C4BF] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#B42329] transition hover:bg-[#FDE8E8] disabled:cursor-not-allowed disabled:opacity-50";
+/** Varian TEKS/TAUTAN: tanpa kotak, untuk aksi ringan di dalam kartu (mis. "Lihat semua", "Batal"). */
+export const BTN_T =
+  "inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-2 text-[12.5px] font-bold text-[#1F5FD1] transition hover:bg-[#EAF1FC] active:bg-[#DCE8FB] disabled:opacity-50";
 export const TH = "sticky top-0 z-[1] whitespace-nowrap border-b border-[#CBD6E6] bg-[#F5F8FE] px-3.5 py-2.5 text-left text-[12px] font-semibold text-[#5B6B84]";
 export const TD = "border-t border-[#DDE6F3] px-3.5 py-2.5 align-middle";
 /** (6 Okt 2026) Gaya kartu layar lebar: flat, bertepi tipis. */
@@ -160,25 +168,80 @@ export function HeaderAdmin({
   );
 }
 
-export type ItemTab<K extends string> = { kode: K; label: string };
+// `ikon` opsional = ikon garis kecil di depan label (pengganti emoji, audit Tahap 2)
+export type ItemTab<K extends string> = { kode: K; label: string; ikon?: NamaIkon };
+/**
+ * (23 Okt 2026, audit Tahap 2) Pita yang bisa digeser mendatar dengan PETUNJUK GESER: bila isi masih terpotong di kanan, tepi kanan memudar
+ * dan muncul panah "›" (hilang setelah digeser sampai ujung). Dipakai baris tab agar tab di ujung kanan (mis. "6 · Administrasi & SPJ") tidak terlewat.
+ * `kelas` = kelas pita dalam; latar pemudaran putih (cocok dengan latar baris tab).
+ */
+export function PitaGeser({ children, kelas = "", role, ariaLabel, ujungRef }: { children: React.ReactNode; kelas?: string; role?: string; ariaLabel?: string; ujungRef?: React.RefObject<HTMLDivElement | null> }) {
+  const dalam = useRef<HTMLDivElement | null>(null);
+  const [masihKanan, setMasihKanan] = useState(false);
+  useEffect(() => {
+    const el = dalam.current;
+    if (!el) return;
+    const hitung = () => setMasihKanan(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    hitung();
+    el.addEventListener("scroll", hitung, { passive: true });
+    window.addEventListener("resize", hitung);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(hitung) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", hitung);
+      window.removeEventListener("resize", hitung);
+      ro?.disconnect();
+    };
+  }, [children]);
+  return (
+    <div className="relative min-w-0 max-w-full">
+      <div
+        ref={(n) => {
+          dalam.current = n;
+          if (ujungRef) (ujungRef as React.MutableRefObject<HTMLDivElement | null>).current = n;
+        }}
+        role={role}
+        aria-label={ariaLabel}
+        className={`overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${kelas}`}
+      >
+        {children}
+      </div>
+      {masihKanan && (
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 flex w-11 items-center justify-end bg-gradient-to-l from-white via-white/90 to-transparent pr-1.5 text-[18px] font-extrabold text-[#6B7A90]">
+          ›
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function BarisTab<K extends string>({ tab, aktif, onPilih }: { tab: ItemTab<K>[]; aktif: K; onPilih: (k: K) => void }) {
+  const pita = useRef<HTMLDivElement | null>(null);
+  // tab yang dipilih selalu terlihat penuh (tidak tersembunyi di balik tepi)
+  useEffect(() => {
+    const aktifEl = pita.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    aktifEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [aktif]);
   return (
     <nav className="sticky top-0 z-20 border-b border-[#DDE6F3] bg-white shadow-[0_2px_8px_rgba(15,42,82,.05)]">
-      <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4" role="tablist">
-        {tab.map((t) => (
-          <button
-            key={t.kode}
-            type="button"
-            role="tab"
-            aria-selected={aktif === t.kode}
-            onClick={() => onPilih(t.kode)}
-            className={`whitespace-nowrap border-b-[3px] px-3 py-3 text-[13px] font-bold transition ${
-              aktif === t.kode ? "border-[#F4B400] text-[#1F5FD1]" : "border-transparent text-[#6B7A90] hover:text-[#1F5FD1]"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mx-auto max-w-7xl px-2 sm:px-4">
+        <PitaGeser kelas="flex gap-1" role="tablist" ujungRef={pita}>
+          {tab.map((t) => (
+            <button
+              key={t.kode}
+              type="button"
+              role="tab"
+              aria-selected={aktif === t.kode}
+              onClick={() => onPilih(t.kode)}
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap border-b-[3px] px-3 py-3 text-[13px] font-bold transition ${
+                aktif === t.kode ? "border-[#F4B400] text-[#1F5FD1]" : "border-transparent text-[#6B7A90] hover:text-[#1F5FD1]"
+              }`}
+            >
+              {t.ikon && <IkonMenu n={t.ikon} className="h-4 w-4" />}
+              {t.label}
+            </button>
+          ))}
+        </PitaGeser>
       </div>
     </nav>
   );

@@ -324,17 +324,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           <p className="text-[13px] text-[#A9BCD8]">{tanggalIndo(nowMs)}</p>
           <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.3px]">Halo, {nama ? namaSapaan(nama) : "…"}</h1>
           <div className="-mx-5 mt-2.5 flex gap-1.5 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {/* (10 Okt 2026) label peran bisa ditekan -> membuka lembar pengelolaannya (tujuan dihitung server: peran_tautan) */}
-            {/* (11 Okt 2026) chip = nama ubin tujuan; tujuan sama digabung (peran_chip dari server; cadangan: data lama di HP) */}
-            {(data?.peran_chip ?? (data?.peran ?? []).map((p) => ({ label: p, href: data?.peran_tautan?.[p] ?? null }))).map(({ label: p, href: tujuan }) => {
-              if (!tujuan) return <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>;
-              const kelasTekan = "flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5] ring-1 ring-white/25 transition hover:bg-white/20 active:bg-white/25";
-              return tujuan.startsWith("http") ? (
-                <a key={p} href={tujuan} target="_blank" rel="noopener noreferrer" className={kelasTekan} title={`Buka ${p}`}>{p} ›</a>
-              ) : (
-                <Link key={p} href={tujuan} className={kelasTekan} title={`Buka ${p}`}>{p} ›</Link>
-              );
-            })}
+            {/* (23 Okt 2026, audit Tahap 2) chip peran kini label biasa: daftar menu admin hanya ada SATU, yaitu kisi "Pengelolaan" di bawah
+                (dulu tiap chip juga tautan ke menu yang sama -> daftar tampil dua kali). */}
+            {(data?.peran_chip ?? (data?.peran ?? []).map((p) => ({ label: p, href: data?.peran_tautan?.[p] ?? null }))).map(({ label: p }) => (
+              <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>
+            ))}
             {data?.jenis === "organik" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Pegawai organik</span>}
             {data?.jenis === "mitra" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Mitra statistik</span>}
             {dtsen && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Operator Wali Nagari</span>}
@@ -531,7 +525,7 @@ function TileMenu({ k, sibuk, onSso }: { k: Kartu; sibuk: boolean; onSso: () => 
   const isi = (
     <span className={`flex flex-col items-center gap-1.5 ${arsip ? "opacity-70" : ""}`}>
       <span className={`relative grid h-14 w-14 place-items-center rounded-[17px] border border-[#DDE6F3] bg-white text-[#0F2A52] shadow-[0_2px_6px_rgba(15,42,82,.05)] ${sibuk ? "animate-pulse" : ""}`}>
-        <IkonMenu n={ikonKartu(k.kode)} className="h-[25px] w-[25px]" />
+        <IkonMenu n={ikonKartu(k.kode, k.judul)} className="h-[25px] w-[25px]" />
         {adaTugas(k) && <span aria-hidden className="absolute -right-[3px] -top-[3px] h-2.5 w-2.5 rounded-full border-2 border-white bg-[#F4B400]" />}
       </span>
       <span className="line-clamp-2 min-h-[2.4em] text-center text-[11.5px] font-semibold leading-[1.2] text-[#1B2B4B]">{sibuk ? "Membuka…" : k.judul.replace(/^Transport Lokal — /, "Translok ").replace(/^Admin /, "Admin ")}</span>

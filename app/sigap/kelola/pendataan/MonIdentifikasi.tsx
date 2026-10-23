@@ -117,7 +117,7 @@ export default function MonIdentifikasi({ tertanam = false }: { tertanam?: boole
               <>
                 <TombolKembali tema="terang" induk="/sigap/kelola/pendataan?tab=pemeriksaan" />
                 <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Kelola · Pendataan Pascabencana</p>
-                <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Monitoring Identifikasi SLS</h1>
+                <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Monitoring Identifikasi</h1>
               </>
             )}
             <p className="mt-1.5 max-w-2xl text-[13px] leading-snug text-[#55657D]">Progres pengisian Lembar Identifikasi SLS oleh seluruh PML, mulai 10 Oktober 2026, atas pembagian per SLS (pelaksana terdekat + pendamping) di nagari terdampak. Ketuk baris PML untuk melihat Sub SLS-nya satu per satu.</p>

@@ -9,6 +9,7 @@ import UndanganAdminCard from "./UndanganAdminCard";
 import PapanTim from "./PapanTim";
 import ReportKonfirmasiWilayah from "./ReportKonfirmasiWilayah";
 import BrandBps from "@/app/components/BrandBps";
+import IkonMenu from "@/app/portal/IkonMenu";
 // (23 Okt 2026) tombol Kembali seragam + tautan logo ke Beranda (audit navigasi Tahap 1)
 import TombolKembali from "@/app/components/TombolKembali";
 
@@ -296,8 +297,8 @@ function IkonStatusKesediaanPpl({
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <button type="button" onClick={toggle} title={judul} className={`text-sm leading-none ${warna}`}>
-        ⚠️
+      <button type="button" onClick={toggle} title={judul} className={`inline-flex min-h-[24px] min-w-[24px] items-center justify-center leading-none ${warna}`}>
+        <IkonMenu n="awas" className="h-4 w-4" />
       </button>
       {buka &&
         pos &&
@@ -8509,7 +8510,7 @@ function AlokasiPetugasSection() {
             <h2 className="font-medium text-blue-950">Langkah 2 — Kebutuhan Petugas per Kecamatan</h2>
             <p className="mt-1 text-xs text-ink/60">
               Dihitung HANYA dari Sub SLS yang sudah dicentang sbg wilayah sampel di Langkah 1. Bobot KK terdampak,
-              KK tidak terdampak, dan jarak rumah petugas bisa diatur di tab &quot;⚙️ Kelola Perkiraan Beban&quot;.
+              KK tidak terdampak, dan jarak rumah petugas bisa diatur di tab &quot;Kelola Perkiraan Beban&quot;.
               Kapasitas dihitung dari ±15 menit/kuesioner, ±5 jam kerja/hari.
             </p>
           </div>
@@ -11334,7 +11335,7 @@ export default function BencanaPage() {
               : "text-blue-400 hover:text-blue-600"
           }`}
         >
-          ⚙️ Kelola Perkiraan Beban
+          Kelola Perkiraan Beban
         </button>
       </div>
 

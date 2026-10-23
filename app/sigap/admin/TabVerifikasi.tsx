@@ -8,6 +8,7 @@
 //    Buka kunci (bila boleh_buka, alasan wajib).
 //  - Peringatan bila belum_selesai (masih ada hari kerja mendatang).
 
+import IkonMenu from "@/app/portal/IkonMenu";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { aksi, ambil, ambilBlob, bukaBlob, pesanGalat, rentangPendek, rupiah, SesiBerakhir, waktuWib } from "./api";
 import { bagiBatch, namaZip, ringkasanMassal, unikanNama, type HasilMassal } from "@/lib/sigapUnduhMassal";
@@ -378,7 +379,7 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
                 {r.belum_selesai && !dikunci && data.boleh_kelola && (
                   <tr>
                     <td colSpan={6} className="px-3 pb-2 pt-0 text-[11px] text-amber-800">
-                      ⚠️ Masih ada hari kerja hari ini/mendatang — sebaiknya kunci setelah semua hari kerja selesai.
+                      <IkonMenu n="awas" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />Masih ada hari kerja hari ini/mendatang — sebaiknya kunci setelah semua hari kerja selesai.
                     </td>
                   </tr>
                 )}

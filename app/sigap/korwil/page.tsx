@@ -56,8 +56,10 @@ export default function MonitoringKorwil() {
             )}
           </div>
 
+          {/* (23 Okt 2026) tinggi baris chip kelompok dipesan selagi data dimuat supaya tab Lapangan/Administrasi tidak bergeser saat data muncul (audit Tahap 2) */}
+          {!data && !galat && <div aria-hidden className="h-[32px]" />}
           {data && data.pilihan.length > 1 && (
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Pilih kelompok">
+            <div className="-mx-1 flex min-h-[32px] gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Pilih kelompok">
               {data.pilihan.map((p) => (
                 <button
                   key={p.kelompok}

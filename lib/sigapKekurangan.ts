@@ -181,7 +181,7 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
   const sisa = (akhirHari - nowMs) / 1000;
   const mendesak = sisa < AMBANG_MENDESAK_DETIK;
   const url = (q: string) => `${m.hrefDasar}${m.hrefDasar.includes("?") ? "&" : "?"}${q}`;
-  const lembar = m.sumber === "identifikasi" ? "Lembar Identifikasi" : "Lembar Pendataan";
+  const lembar = m.sumber === "identifikasi" ? "Lembar Identifikasi SLS" : "Lembar Pendataan";
   const izin = m.izin ?? {};
 
   // --- 1. Perbaikan administrasi: hari lampau yang masih punya izin susulan (jendela 24 jam) dan belum lengkap.

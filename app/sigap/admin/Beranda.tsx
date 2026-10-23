@@ -7,6 +7,8 @@
 // angka contoh Pagu/Realisasi -- modul RAB/POK belum ada), lalu 2 kolom "Perlu tindakan" + "Akses cepat".
 
 import Link from "next/link";
+import type { ReactNode } from "react";
+import IkonMenu from "@/app/portal/IkonMenu";
 import { pesanGalat, rentangPendek, tglPanjang } from "./api";
 import type { KodeTabAdmin } from "./Shell";
 import { Memuat, Pesan } from "./ui";
@@ -183,8 +185,8 @@ export default function Beranda({
               <ul className="text-[12.5px]">
                 {kPen && <BarisCepat ikon="＋" label="Tambah penugasan" ket={kPen.nama} onClick={() => onBuka(kPen.id, "penugasan")} />}
                 {kPen && <BarisCepat ikon="⬆" label="Unggah PDF Surat Tugas" ket={kPen.nama} onClick={() => onBuka(kPen.id, "penugasan")} />}
-                {kTarif && <BarisCepat ikon="⚙" label="Atur tarif" ket={kTarif.nama} onClick={() => onBuka(kTarif.id, "kegiatan")} />}
-                {bolehAkses && <BarisCepat ikon="🔐" label="Kelola peran & akses" href="/sigap/kelola/akses" />}
+                {kTarif && <BarisCepat ikon={<IkonMenu n="kelola" className="h-3.5 w-3.5" />} label="Atur tarif" ket={kTarif.nama} onClick={() => onBuka(kTarif.id, "kegiatan")} />}
+                {bolehAkses && <BarisCepat ikon={<IkonMenu n="kunci" className="h-3.5 w-3.5" />} label="Kelola peran & akses" href="/sigap/kelola/akses" />}
                 {bolehBuatKegiatan && <BarisCepat ikon="✚" label="Kegiatan baru" onClick={onKegiatanBaru} />}
                 {!kPen && !kTarif && !bolehAkses && !bolehBuatKegiatan && <li className="py-4 text-[12px] text-[#7B8794]">Belum ada aksi yang tersedia untuk peran Anda.</li>}
               </ul>
@@ -226,7 +228,7 @@ function Angka({ label, nilai, ket }: { label: string; nilai: React.ReactNode; k
   );
 }
 
-function BarisCepat({ ikon, label, ket, onClick, href }: { ikon: string; label: string; ket?: string; onClick?: () => void; href?: string }) {
+function BarisCepat({ ikon, label, ket, onClick, href }: { ikon: ReactNode; label: string; ket?: string; onClick?: () => void; href?: string }) {
   const isi = (
     <>
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#E3EEFB] text-[12px] text-[#1F6FD1]" aria-hidden>

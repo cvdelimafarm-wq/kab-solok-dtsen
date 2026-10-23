@@ -173,7 +173,10 @@ describe("jarakEfektifM (titik terdekat dari KK atau rumah petugas)", () => {
   });
   it("jauh dari KK dan dari rumah tetap ditandai", () => {
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(7000, 8000) })).alasan).toContain("luar_wilayah_dekat");
-    expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(12_000, 15_000) })).tingkat).toBe("merah");
+    // (23 Okt 2026) > 10 km kini kuning (bukan merah) -- selaras dengan tes jarak wilayah di atas
+    const jauh = nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(12_000, 15_000) }));
+    expect(jauh.tingkat).toBe("kuning");
+    expect(jauh.alasan).toContain("jauh_dari_wilayah");
   });
 });
 

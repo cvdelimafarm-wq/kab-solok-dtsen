@@ -4,7 +4,7 @@
 
 import type { IkonKode } from "@/lib/sigapTugasUtama";
 
-const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda", React.ReactNode> = {
+const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda" | "rumah", React.ReactNode> = {
   motor: (
     <>
       <circle cx="6" cy="17" r="3" />
@@ -144,9 +144,17 @@ const BENTUK: Record<IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kemb
     </>
   ),
   tanda: <path d="m5 12 5 5 9-10" />,
+  // (23 Okt 2026, audit Tahap 2) pengganti emoji 🏠 di tab/navigasi bawah
+  rumah: (
+    <>
+      <path d="M3 11.5 12 4l9 7.5" />
+      <path d="M5.5 10v10h13V10" />
+      <path d="M10 20v-5.5h4V20" />
+    </>
+  ),
 };
 
-export type NamaIkon = IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda";
+export type NamaIkon = IkonKode | "lonceng" | "centang" | "awas" | "panah" | "kembali" | "kunci" | "kamera" | "tanda" | "rumah";
 
 export default function IkonMenu({ n, className = "h-[22px] w-[22px]" }: { n: NamaIkon; className?: string }) {
   return (
