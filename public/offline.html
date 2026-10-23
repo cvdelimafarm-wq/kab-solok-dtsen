@@ -3,6 +3,7 @@
 <!-- (11 Okt 2026) Temuan audit: (1) dulu selalu "Tidak ada sinyal" walau internet ada (server sedang restart/deploy) -> kini dibedakan memakai
      navigator.onLine dan dicoba ulang otomatis; (2) peta wilayah yang sudah tersimpan di HP bisa dibuka dari sini walau aplikasi gagal dibuka
      tanpa sinyal (nama Sub SLS diambil dari simpanan data terakhir di HP, sigap_cache_v2). Disajikan service worker (public/sw.js, cache sigap-v4). -->
+<!-- (23 Okt 2026) Ditambah kartu "Kamera SIGAP" (tautan ke /sigap/foto yang disimpan service worker v5) agar kamera bisa dibuka dari awal tanpa sinyal. -->
 <html lang="id">
 <head>
 <meta charset="utf-8">
@@ -20,6 +21,7 @@
   .peta{text-align:left}
   .peta h2{font-size:15px;margin:0 0 4px}
   .peta p{font-size:12.5px;margin:0 0 10px}
+  .tombol{display:flex;align-items:center;justify-content:center;min-height:46px;border-radius:12px;background:#0F2A52;color:#fff;font-weight:800;font-size:15px;text-decoration:none}
   .grup{margin-top:10px}
   .grup b{display:block;font-size:12px;color:#0F3D7A;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
   .grup a{display:inline-flex;align-items:center;min-height:36px;margin:0 6px 6px 0;padding:0 12px;border-radius:999px;background:#E6EEFC;color:#1F5FD1;font-weight:800;font-size:12.5px;text-decoration:none}
@@ -32,6 +34,11 @@
     <p id="pesan">SIGAP butuh internet. Periksa data seluler/Wi-Fi Anda, lalu coba lagi.</p>
     <button type="button" onclick="location.reload()">Coba lagi</button>
     <small id="otomatis"></small>
+  </div>
+  <div class="kartu peta" id="kamera" hidden>
+    <h2>Kamera SIGAP</h2>
+    <p>Foto tetap bisa diambil tanpa sinyal. Foto tersimpan di HP dan terkirim sendiri saat sinyal kembali.</p>
+    <a class="tombol" href="/sigap/foto">Buka Kamera SIGAP</a>
   </div>
   <div class="kartu peta" id="peta" hidden>
     <h2>Peta tersimpan di HP</h2>
@@ -56,6 +63,15 @@
   window.addEventListener("online", function () { location.reload(); });
   window.addEventListener("offline", atur);
   setInterval(function () { if (navigator.onLine) location.reload(); }, 15000);
+
+  // (23 Okt 2026) Kamera SIGAP tanpa sinyal: tautan hanya tampil bila halaman kamera sudah tersimpan di HP (cache "sigap-app-v1", diisi service worker)
+  try {
+    if ("caches" in window) {
+      caches.open("sigap-app-v1").then(function (cc) { return cc.match("/sigap/foto"); }).then(function (r) {
+        if (r) document.getElementById("kamera").hidden = false;
+      }).catch(function () {});
+    }
+  } catch (_) {}
 
   // daftar peta tersimpan
   try {

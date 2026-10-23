@@ -12,6 +12,7 @@ import Link from "next/link";
 import { ambilJson } from "./klien";
 import SusunFoto from "./SusunFoto";
 import { kirimSemuaAntrean } from "./kirimAntrean";
+import { siapkanPaket } from "./paketOffline";
 
 type Mode = { kegiatan: { kegiatan_id: number; mode: string }[] };
 
@@ -35,6 +36,11 @@ export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, la
       .catch(() => !batal && setMode("unggah")); // gagal membaca saklar -> metode lama, tidak pernah memaksa kamera
     return () => { batal = true; };
   }, [kegiatanId]);
+
+  // (23 Okt 2026) Kegiatan bermode kamera: siapkan paket token selagi ada sinyal (untuk kerja di daerah tanpa sinyal). Best-effort, diam bila gagal.
+  useEffect(() => {
+    if (mode === "kamera") void siapkanPaket();
+  }, [mode]);
 
   if (susulan) {
     return (

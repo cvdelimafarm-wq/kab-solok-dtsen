@@ -12,16 +12,40 @@ import KameraSigap from "./KameraSigap";
 import FotoSaya from "./FotoSaya";
 import PeriksaFoto from "./PeriksaFoto";
 import { ambilJson } from "./klien";
-import { bacaSesi } from "@/app/portal/sesi";
+import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 
 type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string }[] };
 type Tab = "kamera" | "saya" | "periksa";
+
+// (23 Okt 2026) Daftar kegiatan bermode kamera disimpan di HP tiap kali berhasil dimuat, supaya Kamera SIGAP tetap bisa dibuka di daerah tanpa sinyal.
+// Hanya dipakai bila permintaan gagal karena TIDAK ADA SAMBUNGAN (bukan bila server menolak); saklar yang dimatikan terbaca lagi begitu ada sinyal.
+const kunciMode = (akun: number) => `sigap-foto-mode:${akun}`;
+function bacaModeTersimpan(): Mode | null {
+  const akun = pemilikSesi();
+  if (!akun) return null;
+  try {
+    const d = JSON.parse(localStorage.getItem(kunciMode(akun)) ?? "null") as Mode | null;
+    return d && Array.isArray(d.kegiatan) ? d : null;
+  } catch {
+    return null;
+  }
+}
+function simpanMode(d: Mode) {
+  const akun = pemilikSesi();
+  if (!akun) return;
+  try {
+    localStorage.setItem(kunciMode(akun), JSON.stringify(d));
+  } catch {
+    /* penyimpanan penuh/dimatikan */
+  }
+}
 
 function Isi() {
   const router = useRouter();
   const sp = useSearchParams();
   const [mode, setMode] = useState<Mode | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
+  const [tanpaSinyal, setTanpaSinyal] = useState(false); // daftar kegiatan dari simpanan di HP karena tidak ada sambungan
   const [tab, setTab] = useState<Tab>("kamera");
   const [pilih, setPilih] = useState<number | null>(Number(sp.get("kegiatan")) || null);
   // (23 Okt 2026) ?nomor=N dari tombol "Ganti foto" pada panel nomor foto: jepretan berikutnya langsung menggantikan Foto N
@@ -29,10 +53,21 @@ function Isi() {
 
   useEffect(() => {
     if (!bacaSesi()) return router.replace("/");
-    ambilJson<Mode>("/api/sigap/foto/mode").then(setMode).catch((e: Error) => {
-      if (e.message === "SESI_BERAKHIR") return router.replace("/");
-      setGalat(e.message);
-    });
+    ambilJson<Mode>("/api/sigap/foto/mode")
+      .then((d) => {
+        setMode(d);
+        simpanMode(d);
+      })
+      .catch((e: Error & { status?: number }) => {
+        if (e.message === "SESI_BERAKHIR") return router.replace("/");
+        const tersimpan = e.status === undefined ? bacaModeTersimpan() : null;
+        if (tersimpan) {
+          setMode(tersimpan);
+          setTanpaSinyal(true);
+          return;
+        }
+        setGalat(e.message);
+      });
   }, [router]);
 
   const kamera = (mode?.kegiatan ?? []).filter((k) => k.mode === "kamera");
@@ -52,6 +87,7 @@ function Isi() {
         <TabBtn t="saya" teks="Foto saya" />
         <TabBtn t="periksa" teks="Periksa" />
       </div>
+      {tanpaSinyal && <div role="status" className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold leading-snug text-[#5E4300]">Tidak ada sinyal. Kamera tetap bisa dipakai: foto tersimpan di HP dan terkirim otomatis saat ada sinyal.</div>}
       {galat && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div>}
       {tab === "kamera" && (
         <>

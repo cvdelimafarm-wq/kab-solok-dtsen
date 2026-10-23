@@ -8,13 +8,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ambilFotoUrl, ambilJson } from "./klien";
-import { LABEL_ALASAN, WARNA_NADA_PERIKSA, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
+import { LABEL_ALASAN, WARNA_NADA_PERIKSA, labelFotoTanpaSinyal, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
 
 type TagSaya = {
   id: number; foto_id: number; peran_tag: string; status: string; penugasan_id: number | null; slot: number | null; slot_usulan: number | null;
   foto: { id: number; kode: string; kegiatan_id: number; tanggal: string; diambil_at: string; lokasi_teks: string | null; kepercayaan: Kepercayaan; status_periksa: string; pemotret: string } | null;
 };
-type Diambil = { id: number; kode: string; kegiatan_id: number; tanggal: string; diambil_at: string; lokasi_teks: string | null; kepercayaan: Kepercayaan; alasan: string[]; status_periksa: string; tag: { akun_id: number; nama: string; peran_tag: string; status: string; slot: number | null }[] };
+type Diambil = { id: number; kode: string; kegiatan_id: number; tanggal: string; diambil_at: string; diterima_at?: string | null; lokasi_teks: string | null; kepercayaan: Kepercayaan; alasan: string[]; status_periksa: string; tag: { akun_id: number; nama: string; peran_tag: string; status: string; slot: number | null }[] };
 type Mode = { kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran: string; jumlah_foto: number; mode: string }[] };
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -171,6 +171,7 @@ export default function FotoSaya() {
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-bold text-[#0F2A52]">{jam(f.diambil_at)} WIB{no ? ` · ${no}` : ""}</span>
                           <span className="block truncate text-[11px] tracking-wide text-[#6B7A90]">{banyakKegiatan ? `${nama(f.kegiatan_id)} · ` : ""}{f.kode}</span>
+                          {labelFotoTanpaSinyal(f.alasan, f.diambil_at, f.diterima_at) && <span className="block text-[11.5px] font-semibold leading-snug text-[#5E4300]">{labelFotoTanpaSinyal(f.alasan, f.diambil_at, f.diterima_at)}</span>}
                         </span>
                         <Lencana t={st} />
                       </button>

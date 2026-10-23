@@ -23,13 +23,15 @@ import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
-import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, LABEL_KEPERCAYAAN, LABEL_ALASAN, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
+import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
+import { jamWib } from "@/lib/sigapUrutanFoto";
 import { useTombolKembali } from "./useTombolKembali";
+import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
 
 type Pos = { lat: number; lng: number; akurasi: number; mono: number };
-type Hasil = { ok: true; sudah?: boolean; foto: { id: number; kode: string; kepercayaan: Kepercayaan; alasan: string[] }; penempatan: { ok?: boolean; status?: string; error?: string } | null; ditahan: boolean; jumlah_tag: number };
+type Hasil = { ok: true; sudah?: boolean; foto: { id: number; kode: string; kepercayaan: Kepercayaan; alasan: string[]; diambil_at?: string; diterima_at?: string | null }; penempatan: { ok?: boolean; status?: string; error?: string } | null; ditahan: boolean; jumlah_tag: number };
 type Hadap = "environment" | "user";
 
 const NOMOR = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -154,6 +156,7 @@ export default function KameraSigap({
     try {
       const d = await ambilJson<{ token: string }>("/api/sigap/foto/token");
       tokenRef.current = { token: d.token, mono, wall };
+      void siapkanPaket(); // (23 Okt 2026) ada sinyal: sekalian pastikan paket token untuk kerja tanpa sinyal masih segar
     } catch {
       // tanpa sinyal: foto tetap bisa diambil; server menandainya "waktu belum terverifikasi" (kuning)
     }
@@ -355,7 +358,10 @@ export default function KameraSigap({
     void muatTerisi();
     void kirimAntrean();
     const timer = setInterval(() => void muatToken(), 20 * 60_000);
-    const online = () => void kirimAntrean();
+    const online = () => {
+      void siapkanPaket();
+      void kirimAntrean();
+    };
     window.addEventListener("online", online);
     return () => {
       clearInterval(timer);
@@ -418,15 +424,25 @@ export default function KameraSigap({
     ctx?.drawImage(v, 0, 0);
     const blob = await new Promise<Blob | null>((ok) => kanvas.toBlob(ok, "image/jpeg", 0.9));
     if (!blob) return setPesan({ jenis: "galat", teks: "Gagal mengambil gambar. Coba lagi." });
+    // (23 Okt 2026) Token online (hijau) dipakai bila masih segar; token sekali pakai, jadi langsung dilepas (sebelumnya dipakai ulang oleh foto
+    // berikutnya saat tanpa sinyal -> ditolak server "token_terpakai"). Tanpa token segar -> satu token dari PAKET HP (foto tanpa sinyal, kuning).
     const t = tokenRef.current;
     const umurToken = t ? mono - t.mono : null;
+    let wTok: { token: string | null; mono: number | null; wall: number | null } = { token: null, mono: null, wall: null };
+    if (t && umurToken !== null && umurToken >= 0 && umurToken <= UMUR_TOKEN_MS) {
+      wTok = { token: t.token, mono: umurToken, wall: wall - t.wall };
+      tokenRef.current = null;
+    } else {
+      const pk = ambilTokenPaket();
+      if (pk) wTok = { token: pk.token, mono: pk.mono, wall: pk.wall };
+    }
     const j: Jepretan = {
       blob,
       url: URL.createObjectURL(blob),
       pos: { ...posisi, mono: posisi.mono },
-      token: t && umurToken !== null && umurToken >= 0 ? t.token : null,
-      mono: t && umurToken !== null ? umurToken : null,
-      wall: t ? wall - t.wall : null,
+      token: wTok.token,
+      mono: wTok.mono,
+      wall: wTok.wall,
       waktuHp: wall,
       umurPosisi: Math.max(0, mono - posisi.mono),
       dibuatMs: wall,
@@ -581,7 +597,7 @@ export default function KameraSigap({
         await simpanDraf(jepretan, nomor, tag, false); // draf menjadi antrean biasa
         drafIdRef.current = null;
         void hitungAntre();
-        setPesan({ jenis: "info", teks: "Tidak ada sinyal. Foto tersimpan di HP ini dan terkirim otomatis saat ada sinyal." });
+        setPesan({ jenis: "info", teks: `Tidak ada sinyal. Foto tersimpan di HP ini (dipotret ${jamWib(jepretan.waktuHp)}) dan terkirim otomatis saat ada sinyal.` });
         tutupPratinjau();
       } else {
         setPesan({ jenis: "galat", teks: g.message });
@@ -894,6 +910,7 @@ export default function KameraSigap({
             <div className="flex flex-col gap-2 rounded-xl border border-[#C9D3E6] bg-white p-3">
               <div className="text-sm font-bold text-[#0F2A52]">Kode {hasil.foto.kode}</div>
               <div className="text-xs text-[#3C4C68]">Tingkat kepercayaan: <b>{LABEL_KEPERCAYAAN[hasil.foto.kepercayaan]}</b></div>
+              {labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at) && <div className="text-xs font-semibold text-[#5E4300]">{labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at)}</div>}
               {hasil.foto.alasan.length > 0 && <ul className="list-disc pl-5 text-xs text-[#3C4C68]">{hasil.foto.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>}
               {hasil.ditahan && <div className="text-xs font-semibold text-[#8A6200]">{hasil.penempatan?.status === "ditahan" && nomor !== null ? `Foto ini sudah ditandai untuk Foto ${nomor} (${etiket[nomor - 1] ?? ""}). Nomornya tercatat resmi setelah PML atau admin memeriksa.` : "Foto ditahan sampai PML atau admin memeriksa. Belum tercatat di nomor foto."}</div>}
               {hasil.penempatan && hasil.penempatan.ok === false && <div className="text-xs text-[#9B1C23]">Belum masuk nomor foto: {hasil.penempatan.error}</div>}

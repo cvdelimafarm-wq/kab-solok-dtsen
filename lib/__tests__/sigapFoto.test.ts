@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   jarakEfektifM,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
+  TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
   type MasukanKepercayaan,
 } from "@/lib/sigapFoto";
@@ -66,6 +67,99 @@ describe("waktuResmi", () => {
   it("jam dinding melompat dibanding monotonik -> bendera", () => {
     const w = waktuResmi({ tokenT: T - 10_000, elapsedMonoMs: 10_000, elapsedWallMs: 400_000, waktuHpMs: T, terimaMs: T });
     expect(w.bendera).toContain("jam_hp_berubah_atau_tidur");
+  });
+});
+
+// (23 Okt 2026) Foto tanpa sinyal: token PAKET, waktu dari jam dinding HP sejak paket diterima, hasil selalu kuning.
+describe("waktuResmi: token paket (tanpa sinyal)", () => {
+  const paket = (o: Partial<Parameters<typeof waktuResmi>[0]> = {}) =>
+    waktuResmi({ tokenT: T - 5 * 3_600_000, elapsedMonoMs: null, elapsedWallMs: 5 * 3_600_000, waktuHpMs: T, terimaMs: T + 2 * 3_600_000, paket: true, ...o });
+  it("waktu foto = waktu paket + selang jam dinding HP (bukan waktu terima), bertanda waktu_offline, tidak terverifikasi", () => {
+    const w = paket();
+    expect(w.diambilMs).toBe(T);
+    expect(w.offline).toBe(true);
+    expect(w.terverifikasi).toBe(false);
+    expect(w.bendera).toEqual(["waktu_offline"]);
+    expect(w.selisihHpDetik).toBe(0);
+  });
+  it("hasil penilaian selalu kuning (tidak pernah hijau) walau semua kriteria lain baik", () => {
+    const h = nilaiKepercayaan({ akurasiM: 8, waktu: paket(), umurPosisiMs: 1000, jarakWilayahM: 300, kecepatanKmJam: 20, koordinatIdentik: false, hammingTerdekat: 30 });
+    expect(h.tingkat).toBe("kuning");
+    expect(h.alasan).toEqual(["waktu_offline"]);
+    expect(LABEL_ALASAN.waktu_offline).toMatch(/tanpa sinyal/i);
+  });
+  it("selang diukur dengan jam dinding walau jam monotonik ada; beda besar keduanya diberi bendera", () => {
+    const w = paket({ elapsedMonoMs: 60_000, elapsedWallMs: 5 * 3_600_000 });
+    expect(w.diambilMs).toBe(T);
+    expect(w.bendera).toContain("jam_hp_berubah_atau_tidur");
+    expect(w.bendera).toContain("waktu_offline");
+  });
+  it("paket berlaku 48 jam: 47 jam dipakai, lebih dari 48 jam diperlakukan tanpa token", () => {
+    const ok = paket({ tokenT: T - 47 * 3_600_000, elapsedWallMs: 47 * 3_600_000 });
+    expect(ok.offline).toBe(true);
+    const lewat = paket({ tokenT: T - 49 * 3_600_000, elapsedWallMs: 49 * 3_600_000, terimaMs: T });
+    expect(lewat.offline).toBe(false);
+    expect(lewat.diambilMs).toBe(T);
+    expect(lewat.bendera).toEqual(["waktu_belum_terverifikasi"]);
+    expect(UMUR_PAKET_MS).toBe(48 * 3_600_000);
+  });
+  it("token biasa (bukan paket) tetap berumur 30 menit dan memakai jam monotonik", () => {
+    const w = waktuResmi({ tokenT: T - 5 * 3_600_000, elapsedMonoMs: 5 * 3_600_000, elapsedWallMs: 5 * 3_600_000, waktuHpMs: T, terimaMs: T });
+    expect(w.offline).toBeFalsy();
+    expect(w.terverifikasi).toBe(false);
+  });
+  it("jam HP dimajukan melewati waktu terima -> tidak wajar (merah), bukan dipercaya", () => {
+    const w = paket({ elapsedWallMs: 9 * 3_600_000 }); // t = T + 4 jam, padahal diterima T + 2 jam
+    expect(w.offline).toBe(false);
+    expect(w.bendera).toContain("waktu_tidak_wajar");
+  });
+  it("jam HP dimundurkan (selang negatif) -> tanpa token (waktu terima)", () => {
+    const w = paket({ elapsedWallMs: -1000, elapsedMonoMs: null });
+    expect(w.offline).toBe(false);
+    expect(w.diambilMs).toBe(T + 2 * 3_600_000);
+  });
+  it("jam HP berbeda > 2 menit dari waktu hitung -> kuning tambahan; > 1 jam -> merah", () => {
+    expect(nilaiKepercayaan({ akurasiM: 8, waktu: paket({ waktuHpMs: T + 10 * 60_000 }), umurPosisiMs: 1000, jarakWilayahM: 300, kecepatanKmJam: 20, koordinatIdentik: false, hammingTerdekat: 30 }).alasan).toEqual(["waktu_offline", "jam_hp_beda_kecil"]);
+    expect(nilaiKepercayaan({ akurasiM: 8, waktu: paket({ waktuHpMs: T + 2 * 3_600_000 }), umurPosisiMs: 1000, jarakWilayahM: 300, kecepatanKmJam: 20, koordinatIdentik: false, hammingTerdekat: 30 }).tingkat).toBe("merah");
+  });
+});
+
+describe("labelFotoTanpaSinyal", () => {
+  const diambil = "2026-10-23T06:20:00.000Z"; // 13.20 WIB
+  it("foto tanpa sinyal: dipotret dan terkirim pada hari yang sama", () => {
+    expect(labelFotoTanpaSinyal(["waktu_offline"], diambil, "2026-10-23T10:05:00.000Z")).toBe("Dipotret 13.20 tanpa sinyal, terkirim 17.05 WIB");
+  });
+  it("terkirim hari berikutnya -> tanggal kirim ikut disebut (WIB, termasuk lewat tengah malam)", () => {
+    expect(labelFotoTanpaSinyal(["waktu_offline", "jauh_dari_wilayah"], diambil, "2026-10-24T01:10:00.000Z")).toBe("Dipotret 13.20 tanpa sinyal, terkirim 24 Okt 08.10 WIB");
+    expect(labelFotoTanpaSinyal(["waktu_offline"], "2026-10-23T16:50:00.000Z", "2026-10-23T17:10:00.000Z")).toBe("Dipotret 23.50 tanpa sinyal, terkirim 24 Okt 00.10 WIB");
+  });
+  it("tanpa waktu kirim -> hanya dipotret; bukan foto tanpa sinyal atau data rusak -> null", () => {
+    expect(labelFotoTanpaSinyal(["waktu_offline"], diambil, null)).toBe("Dipotret 13.20 tanpa sinyal");
+    expect(labelFotoTanpaSinyal(["jauh_dari_wilayah"], diambil, diambil)).toBeNull();
+    expect(labelFotoTanpaSinyal([], diambil, diambil)).toBeNull();
+    expect(labelFotoTanpaSinyal(undefined, diambil, diambil)).toBeNull();
+    expect(labelFotoTanpaSinyal(["waktu_offline"], "bukan-tanggal", diambil)).toBeNull();
+  });
+});
+
+describe("dalamToleransiKirim", () => {
+  it("batas bawaan 2 hari", () => {
+    expect(TOLERANSI_KIRIM_HARI).toBe(2);
+    expect(dalamToleransiKirim("2026-10-23", "2026-10-23")).toBe(true);
+    expect(dalamToleransiKirim("2026-10-22", "2026-10-23")).toBe(true);
+    expect(dalamToleransiKirim("2026-10-21", "2026-10-23")).toBe(true);
+    expect(dalamToleransiKirim("2026-10-20", "2026-10-23")).toBe(false);
+  });
+  it("tanggal masa depan atau tidak valid ditolak; lintas bulan benar", () => {
+    expect(dalamToleransiKirim("2026-10-24", "2026-10-23")).toBe(false);
+    expect(dalamToleransiKirim("bukan-tanggal", "2026-10-23")).toBe(false);
+    expect(dalamToleransiKirim("2026-09-30", "2026-10-01")).toBe(true);
+    expect(dalamToleransiKirim("2026-09-29", "2026-10-01")).toBe(true);
+    expect(dalamToleransiKirim("2026-09-28", "2026-10-01")).toBe(false);
+  });
+  it("hari = 0 berarti hanya hari yang sama", () => {
+    expect(dalamToleransiKirim("2026-10-22", "2026-10-23", 0)).toBe(false);
+    expect(dalamToleransiKirim("2026-10-23", "2026-10-23", 0)).toBe(true);
   });
 });
 

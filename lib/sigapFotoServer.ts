@@ -21,14 +21,25 @@ function kunciToken(): string {
 const tandaToken = (isi: string) => crypto.createHmac("sha256", kunciToken()).update(isi).digest("base64url");
 
 // ------------------------------------------------------------------ token potret
-/** Token sekali pakai: akunId.waktuServerMs.nonce.tanda. Dipakai server untuk menetapkan waktu resmi foto. */
-export function buatTokenPotret(akunId: number, sekarangMs = Date.now()): { token: string; t: number } {
-  const nonce = crypto.randomBytes(12).toString("base64url");
+/** Awalan nonce untuk token PAKET (dipakai saat tanpa sinyal). Base64url tidak pernah memuat "~", jadi awalan ini tidak bisa ditiru
+ *  oleh token biasa; dan karena nonce ikut ditandatangani, awalan tidak bisa ditambah/dibuang tanpa kunci server. */
+export const AWALAN_NONCE_PAKET = "P~";
+
+/** Token sekali pakai: akunId.waktuServerMs.nonce.tanda. Dipakai server untuk menetapkan waktu resmi foto.
+ *  `opsi.paket` = token paket (nonce berawalan "P~"): foto yang memakainya dinilai sebagai foto tanpa sinyal (kuning, bukan hijau). */
+export function buatTokenPotret(akunId: number, sekarangMs = Date.now(), opsi: { paket?: boolean } = {}): { token: string; t: number } {
+  const nonce = (opsi.paket ? AWALAN_NONCE_PAKET : "") + crypto.randomBytes(12).toString("base64url");
   const isi = `${akunId}.${sekarangMs}.${nonce}`;
   return { token: `${isi}.${tandaToken(isi)}`, t: sekarangMs };
 }
 
-export function bacaTokenPotret(token: unknown, akunId: number): { t: number; nonce: string } | null {
+/** (23 Okt 2026) Paket token untuk kerja tanpa sinyal: `jumlah` token sekali pakai, semuanya bercap waktu server yang sama (`t`). */
+export function buatPaketToken(akunId: number, jumlah: number, sekarangMs = Date.now()): { t: number; tokens: string[] } {
+  const n = Math.max(1, Math.min(Math.floor(jumlah), 100));
+  return { t: sekarangMs, tokens: Array.from({ length: n }, () => buatTokenPotret(akunId, sekarangMs, { paket: true }).token) };
+}
+
+export function bacaTokenPotret(token: unknown, akunId: number): { t: number; nonce: string; paket: boolean } | null {
   if (typeof token !== "string") return null;
   const p = token.split(".");
   if (p.length !== 4) return null;
@@ -39,7 +50,7 @@ export function bacaTokenPotret(token: unknown, akunId: number): { t: number; no
   if (Number(p[0]) !== akunId) return null;
   const t = Number(p[1]);
   if (!Number.isFinite(t) || t <= 0) return null;
-  return { t, nonce: p[2] };
+  return { t, nonce: p[2], paket: p[2].startsWith(AWALAN_NONCE_PAKET) };
 }
 
 export const sha256Hex = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");

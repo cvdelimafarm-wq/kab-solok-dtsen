@@ -7,11 +7,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ambilFotoUrl, ambilJson } from "./klien";
-import { LABEL_ALASAN, LABEL_KEPERCAYAAN, WARNA_KEPERCAYAAN, type Kepercayaan } from "@/lib/sigapFoto";
+import { LABEL_ALASAN, LABEL_KEPERCAYAAN, labelFotoTanpaSinyal, WARNA_KEPERCAYAAN, type Kepercayaan } from "@/lib/sigapFoto";
 
 /** 850 -> "850 m", 3276 -> "3,3 km". */
 const kmM = (m: number): string => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1).replace(".", ",")} km`);
-type Baris = { id: number; kode: string; pemotret: string; tanggal: string; diambil_at: string; lokasi_teks: string | null; jarak_wilayah_m: number | null; jarak_rumah_m?: number | null; akurasi_m: number | null; kepercayaan: Kepercayaan; alasan: string[] };
+type Baris = { id: number; kode: string; pemotret: string; tanggal: string; diambil_at: string; diterima_at?: string | null; lokasi_teks: string | null; jarak_wilayah_m: number | null; jarak_rumah_m?: number | null; akurasi_m: number | null; kepercayaan: Kepercayaan; alasan: string[] };
 
 function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -49,6 +49,7 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
         <span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: WARNA_KEPERCAYAAN[b.kepercayaan] }}>{LABEL_KEPERCAYAAN[b.kepercayaan]}</span>
       </div>
       <div className="text-xs text-[#3C4C68]">{b.tanggal} · {b.kode}{b.lokasi_teks ? ` · ${b.lokasi_teks}` : ""}{b.akurasi_m != null ? ` · ±${Math.round(b.akurasi_m)} m` : ""}</div>
+      {labelFotoTanpaSinyal(b.alasan, b.diambil_at, b.diterima_at) && <div className="rounded-lg bg-[#FFF4D6] px-3 py-1.5 text-xs font-semibold text-[#5E4300]">{labelFotoTanpaSinyal(b.alasan, b.diambil_at, b.diterima_at)}</div>}
       {(b.jarak_wilayah_m != null || b.jarak_rumah_m != null) && (
         <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold text-[#0F2A52]">
           {b.jarak_wilayah_m != null && <span className="rounded-full bg-[#E6EEFC] px-2 py-0.5">{kmM(b.jarak_wilayah_m)} dari KK terdekat</span>}

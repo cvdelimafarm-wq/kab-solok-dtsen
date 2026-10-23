@@ -15,7 +15,7 @@ import { cekAksesIsian, penugasanAkun, BUCKET_SIGAP } from "@/lib/sigap";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
   MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
-  slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, urlVerifikasi, waktuResmi, type PeranTag,
+  slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
 import {
@@ -53,7 +53,7 @@ function bacaTag(mentah: FormDataEntryValue | null): TagMasukan[] | null {
 
 function ringkas(f: Record<string, unknown>) {
   return {
-    id: f.id, kode: f.kode, kegiatan_id: f.kegiatan_id, tanggal: f.tanggal, diambil_at: f.diambil_at, lokasi_teks: f.lokasi_teks,
+    id: f.id, kode: f.kode, kegiatan_id: f.kegiatan_id, tanggal: f.tanggal, diambil_at: f.diambil_at, diterima_at: f.diterima_at, lokasi_teks: f.lokasi_teks,
     kepercayaan: f.kepercayaan, alasan: f.alasan, status_periksa: f.status_periksa, ukuran_byte: f.ukuran_byte,
   };
 }
@@ -119,11 +119,13 @@ export async function POST(req: NextRequest) {
     elapsedWallMs: angka(form.get("elapsed_wall_ms")),
     waktuHpMs: angka(form.get("waktu_hp")),
     terimaMs,
+    paket: tok?.paket === true, // (23 Okt 2026) token paket = foto tanpa sinyal: waktu dari jam HP, hasil selalu kuning
   });
   const tanggal = tanggalWib(w.diambilMs);
 
   // 4) Hari kerja, 23.59, kunci, periode -- sama seperti jalur unggah lama
-  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal);
+  // (23 Okt 2026) Foto tanpa sinyal yang waktunya lolos (w.offline) boleh terkirim sampai TOLERANSI_KIRIM_HARI hari sesudah tanggalnya.
+  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {});
   if ("error" in akses) return galat(akses.error, akses.status);
 
   // 5) Tag: rekan tim vs di luar tim
@@ -253,7 +255,7 @@ export async function GET(req: NextRequest) {
   if (m instanceof NextResponse) return m;
   const { db, akunId } = m;
   const tanggal = req.nextUrl.searchParams.get("tanggal");
-  let q = db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, lokasi_teks, kepercayaan, alasan, status_periksa, ukuran_byte").eq("akun_pengambil", akunId).order("diambil_at", { ascending: false }).limit(100);
+  let q = db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, diterima_at, lokasi_teks, kepercayaan, alasan, status_periksa, ukuran_byte").eq("akun_pengambil", akunId).order("diambil_at", { ascending: false }).limit(100);
   if (tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal)) q = q.eq("tanggal", tanggal);
   const [{ data: saya }, { data: tagSaya }] = await Promise.all([
     q,

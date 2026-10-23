@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/periode";
+import { dalamToleransiKirim } from "@/lib/sigapFoto";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Db = SupabaseClient<any, any, any>;
@@ -231,7 +232,10 @@ export async function cekAksesIsian(
   db: Db,
   akunId: number,
   penugasanId: number,
-  tanggal: unknown
+  tanggal: unknown,
+  /** (23 Okt 2026) Foto yang DIPOTRET tanpa sinyal (token paket) boleh terkirim sampai `toleransiOfflineHari` hari sesudah tanggalnya,
+   *  melewati batas 23:59 WIB. Hanya melonggarkan alasan "terlewat"; arsip, kunci SPJ, hari kerja, dan "akan datang" tetap berlaku. */
+  opsi: { toleransiOfflineHari?: number } = {}
 ): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean }> {
   if (!tanggalValid(tanggal)) return { error: "Tanggal tidak valid.", status: 400 };
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
@@ -242,6 +246,9 @@ export async function cekAksesIsian(
   const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
   if (!hk) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
   const kunci = await statusKunci(db, penugasanId, tanggal);
+  if (!kunci.boleh && kunci.alasan === "terlewat" && opsi.toleransiOfflineHari !== undefined && dalamToleransiKirim(tanggal, hariIniWib(), opsi.toleransiOfflineHari)) {
+    return { penugasan: pen, tanggal, susulan: false };
+  }
   if (!kunci.boleh) {
     return {
       error:

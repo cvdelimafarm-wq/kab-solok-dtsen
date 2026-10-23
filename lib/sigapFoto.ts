@@ -18,6 +18,21 @@ export const MAKS_AKURASI_DISPENSASI_M = 5000;
 /** Petugas menunggu sekian detik (sambil mengikuti panduan) sebelum tombol potret dispensasi aktif. */
 export const TUNGGU_AKURASI_KASAR_DTK = 30;
 export const UMUR_TOKEN_MS = 30 * 60_000; // token potret berlaku 30 menit sejak diminta
+// (23 Okt 2026) MODE TANPA SINYAL: "paket" token diambil HP selagi ada sinyal dan dipakai untuk foto yang dipotret di daerah tanpa internet.
+// Waktu foto = waktu server saat paket terbit + jam HP sejak paket diterima; hasilnya KUNING ("waktu_offline"), tidak pernah hijau.
+export const UMUR_PAKET_MS = 48 * 3_600_000; // paket berlaku 48 jam sejak terbit
+export const JUMLAH_TOKEN_PAKET = 30; // token sekali pakai per paket (satu per foto)
+// Foto yang dipotret tanpa sinyal boleh terkirim sampai sekian hari sesudah tanggalnya (melewati batas 23.59 WIB hari kerja). Hanya untuk foto bertoken paket.
+export const TOLERANSI_KIRIM_HARI = 2;
+
+/** true bila tanggal foto (YYYY-MM-DD, WIB) tidak lebih lama dari `hari` hari sebelum hariIni dan tidak di masa depan. */
+export function dalamToleransiKirim(tanggalFoto: string, hariIni: string, hari = TOLERANSI_KIRIM_HARI): boolean {
+  const a = Date.parse(`${hariIni}T00:00:00Z`);
+  const b = Date.parse(`${tanggalFoto}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  const selisih = Math.round((a - b) / 86_400_000);
+  return selisih >= 0 && selisih <= hari;
+}
 export const UMUR_POSISI_KUNING_MS = 2 * 60_000; // posisi GPS lebih tua dari ini saat potret = kuning
 export const BEDA_JAM_KUNING_DETIK = 120;
 export const BEDA_JAM_MERAH_DETIK = 3600;
@@ -80,8 +95,10 @@ export type MasukanWaktu = {
   waktuHpMs: number | null;
   /** Waktu server saat berkas diterima. */
   terimaMs: number;
+  /** (23 Okt 2026) true = token berasal dari PAKET tanpa sinyal (berlaku UMUR_PAKET_MS, jam dinding HP dipakai bila lintas sesi halaman). */
+  paket?: boolean;
 };
-export type HasilWaktu = { diambilMs: number; terverifikasi: boolean; selisihHpDetik: number | null; bendera: string[] };
+export type HasilWaktu = { diambilMs: number; terverifikasi: boolean; selisihHpDetik: number | null; bendera: string[]; /** true = waktu dari paket tanpa sinyal (kuning "waktu_offline") */ offline?: boolean };
 
 /**
  * Waktu resmi foto = waktu server saat token terbit + jam monotonik HP. Jam monotonik tidak ikut berubah bila
@@ -90,25 +107,33 @@ export type HasilWaktu = { diambilMs: number; terverifikasi: boolean; selisihHpD
  */
 export function waktuResmi(m: MasukanWaktu): HasilWaktu {
   const bendera: string[] = [];
-  const adaToken = m.tokenT !== null && m.elapsedMonoMs !== null && m.elapsedMonoMs >= 0 && Number.isFinite(m.elapsedMonoMs) && m.elapsedMonoMs <= UMUR_TOKEN_MS;
+  // Paket tanpa sinyal: lintas sesi halaman jam monotonik hilang, jadi selang waktu diukur dengan jam dinding HP (elapsedWallMs); jam monotonik
+  // (bila ada = halaman yang sama) hanya dipakai untuk mendeteksi jam HP berubah. Token online biasa tetap memakai jam monotonik.
+  const batas = m.paket ? UMUR_PAKET_MS : UMUR_TOKEN_MS;
+  const selang = m.paket ? m.elapsedWallMs ?? m.elapsedMonoMs : m.elapsedMonoMs;
+  const adaToken = m.tokenT !== null && selang !== null && selang >= 0 && Number.isFinite(selang) && selang <= batas;
   let diambilMs = m.terimaMs;
   let terverifikasi = false;
+  let offline = false;
   if (adaToken) {
-    const t = (m.tokenT as number) + (m.elapsedMonoMs as number);
+    const t = (m.tokenT as number) + (selang as number);
     if (t <= m.terimaMs + 5000) {
       diambilMs = Math.min(t, m.terimaMs);
-      terverifikasi = true;
+      if (m.paket) {
+        offline = true;
+        bendera.push("waktu_offline");
+      } else terverifikasi = true;
     } else {
       bendera.push("waktu_tidak_wajar");
     }
   }
-  if (!terverifikasi) bendera.push("waktu_belum_terverifikasi");
+  if (!terverifikasi && !offline) bendera.push("waktu_belum_terverifikasi");
   let selisihHpDetik: number | null = null;
   if (m.waktuHpMs !== null && Number.isFinite(m.waktuHpMs)) selisihHpDetik = Math.round((m.waktuHpMs - diambilMs) / 1000);
-  if (terverifikasi && m.elapsedWallMs !== null && m.elapsedMonoMs !== null) {
+  if ((terverifikasi || offline) && m.elapsedWallMs !== null && m.elapsedMonoMs !== null) {
     if (Math.abs(m.elapsedWallMs - m.elapsedMonoMs) / 1000 > BEDA_MONO_WALL_KUNING_DETIK) bendera.push("jam_hp_berubah_atau_tidur");
   }
-  return { diambilMs, terverifikasi, selisihHpDetik, bendera };
+  return { diambilMs, terverifikasi, selisihHpDetik, bendera, offline };
 }
 
 // ------------------------------------------------------------------ jarak & kecepatan
@@ -170,6 +195,7 @@ export type HasilKepercayaan = { tingkat: Kepercayaan; alasan: string[] };
 
 export const LABEL_ALASAN: Record<string, string> = {
   waktu_belum_terverifikasi: "Waktu memakai jam server saat berkas diterima (tanpa token potret)",
+  waktu_offline: "Dipotret tanpa sinyal: jam dari jam HP yang dicocokkan dengan server saat sinyal terakhir, foto terkirim kemudian",
   waktu_tidak_wajar: "Waktu dari token tidak wajar",
   jam_hp_berubah_atau_tidur: "Jam HP berubah atau HP tidur saat potret",
   jam_hp_beda_kecil: "Jam HP berbeda dari jam resmi lebih dari 2 menit",
@@ -232,6 +258,24 @@ export function kedaluwarsaTanpaTag(tanggalFoto: string): string {
 // ------------------------------------------------------------------ cap (teks yang dicetak)
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+/**
+ * (23 Okt 2026) Label jujur untuk foto yang dipotret tanpa sinyal: "Dipotret 13.20 tanpa sinyal, terkirim 17.05 WIB".
+ * Tanggal ditambahkan pada waktu kirim bila berbeda hari (WIB). null bila foto bukan foto tanpa sinyal (alasan tidak memuat waktu_offline)
+ * atau jamnya tidak terbaca. Hanya tampilan; penilaian jam/urutan tetap memakai waktu dipotret (diambil_at), bukan waktu kirim.
+ */
+export function labelFotoTanpaSinyal(alasan: string[] | null | undefined, diambilIso: string | null | undefined, diterimaIso: string | null | undefined): string | null {
+  if (!alasan?.includes("waktu_offline") || !diambilIso) return null;
+  const a = new Date(diambilIso).getTime();
+  if (!Number.isFinite(a)) return null;
+  const wib = (ms: number) => new Date(ms + 7 * 3_600_000);
+  const jam = (ms: number) => wib(ms).toISOString().slice(11, 16).replace(":", ".");
+  const b = diterimaIso ? new Date(diterimaIso).getTime() : NaN;
+  if (!Number.isFinite(b)) return `Dipotret ${jam(a)} tanpa sinyal`;
+  const bedaHari = wib(a).toISOString().slice(0, 10) !== wib(b).toISOString().slice(0, 10);
+  const tglKirim = bedaHari ? `${wib(b).getUTCDate()} ${BULAN[wib(b).getUTCMonth()]} ` : "";
+  return `Dipotret ${jam(a)} tanpa sinyal, terkirim ${tglKirim}${jam(b)} WIB`;
+}
 
 /** "Senin, 19 Okt 2026 · 14.32.07 WIB" dari ms epoch. */
 export function teksWaktuWib(ms: number): string {
