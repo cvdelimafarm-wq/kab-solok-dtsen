@@ -23,6 +23,8 @@ function Isi() {
   const [galat, setGalat] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("kamera");
   const [pilih, setPilih] = useState<number | null>(Number(sp.get("kegiatan")) || null);
+  // (23 Okt 2026) ?nomor=N dari tombol "Ganti foto" pada panel nomor foto: jepretan berikutnya langsung menggantikan Foto N
+  const nomorGanti = Number(sp.get("nomor")) || null;
 
   useEffect(() => {
     if (!bacaSesi()) return router.replace("/");
@@ -57,7 +59,7 @@ function Isi() {
               </select>
             </label>
           )}
-          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} />}
+          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} nomorGanti={nomorGanti} />}
         </>
       )}
       {tab === "saya" && <FotoSaya />}

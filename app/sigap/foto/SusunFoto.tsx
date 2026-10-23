@@ -10,6 +10,7 @@
 // Tidak ada penghapusan foto di sini.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ambilFotoUrl, ambilJson } from "./klien";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { LABEL_KEPERCAYAAN, WARNA_KEPERCAYAAN, type Kepercayaan } from "@/lib/sigapFoto";
@@ -18,6 +19,9 @@ type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil
 type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null; ditahan?: FotoRingkas | null };
 type Keadaan = { boleh: boolean; susulan: boolean; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[] };
 type HasilIsi = { ditempatkan: { foto_id: number; slot: number }[]; ditahan?: { foto_id: number; slot: number }[]; cadangan: number; gagal?: { foto_id: number; error: string }[] };
+
+// (23 Okt 2026) tanggal hari ini (WIB) di sisi klien: kamera hanya bisa memotret SEKARANG, jadi tombol "Ganti foto" hanya untuk hari ini
+const hariIniWibKlien = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
 
 const jam = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(11, 16).replace(":", ".");
 
@@ -166,13 +170,14 @@ export default function SusunFoto({
   if (k.nomor.every((n) => !n.terisi) && k.cadangan.length === 0 && !k.boleh) return null;
 
   const bisaUbah = k.boleh && !sibuk;
+  const bisaKamera = bisaUbah && !k.susulan && tanggal === hariIniWibKlien();
   return (
     <section className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3" aria-label="Nomor foto Kamera SIGAP">
       <div>
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto {k.nomor.filter((n) => n.terisi).length}/{k.jumlah}</div>
         <p className="text-[11.5px] leading-relaxed text-[#3C4C68]">
           {k.susulan && otomatis ? "Foto Kamera SIGAP tanggal ini disusun otomatis ke nomor yang masih kosong. " : ""}
-          Ketuk nomor lain pada sebuah foto untuk memindahkannya.
+          Ketuk nomor lain pada sebuah foto untuk memindahkannya.{bisaKamera ? " Salah foto? Ketuk Ganti foto: kamera terbuka dan foto baru langsung menggantikan nomor itu (foto lama tersimpan sebagai cadangan)." : ""}
         </p>
       </div>
 
@@ -210,6 +215,11 @@ export default function SusunFoto({
               </div>
             </div>
             {n.terisi && bisaUbah && <Pilihan label="Pindah ke nomor" jumlah={k.jumlah} kecuali={n.slot} sibuk={sibuk} onPilih={(ke) => void aksiNomor({ aksi: "pindah", dari: n.slot, ke })} />}
+            {n.terisi && bisaKamera && (
+              <Link href={`/sigap/foto?kegiatan=${kegiatanId}&nomor=${n.slot}`} className="mt-2 flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-[#0F2A52] bg-white px-3 text-[13px] font-extrabold text-[#0F2A52]">
+                📷 Ganti foto {n.slot}
+              </Link>
+            )}
           </li>
         ))}
       </ol>

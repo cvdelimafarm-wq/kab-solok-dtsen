@@ -99,6 +99,7 @@ export default function KameraSigap({
   namaSaya = "",
   peran = "",
   jenis = null,
+  nomorGanti = null,
   onSelesai,
 }: {
   kegiatanId: number;
@@ -107,6 +108,8 @@ export default function KameraSigap({
   namaSaya?: string;
   peran?: string;
   jenis?: string | null;
+  /** (23 Okt 2026) tombol "Ganti foto": jepretan berikutnya otomatis memakai nomor ini dan menggantikan foto lamanya (foto lama jadi cadangan) */
+  nomorGanti?: number | null;
   onSelesai?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -118,6 +121,7 @@ export default function KameraSigap({
   const [galatGps, setGalatGps] = useState<string | null>(null);
   const [jepretan, setJepretan] = useState<Jepretan | null>(null);
   const [nomor, setNomor] = useState<number | null>(null);
+  const [ganti, setGanti] = useState<number | null>(() => (nomorGanti !== null && Number.isInteger(nomorGanti) && nomorGanti >= 1 && nomorGanti <= jumlahNomor ? nomorGanti : null)); // mode ganti foto: nomor yang akan digantikan
   const [nomorOtomatis, setNomorOtomatis] = useState(false); // nomor dipilihkan sistem (belum diubah petugas)
   const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
@@ -430,13 +434,15 @@ export default function KameraSigap({
     // Pengaman: simpan sebagai DRAF di HP sebelum pratinjau tampil, supaya foto tidak hilang bila Kirim terlupa
     drafIdRef.current = null;
     try {
-      drafIdRef.current = (await tambahAntrean({ ...itemDari(j, kegiatanId, saran, []), draf: true, jantung_ms: Date.now() })) as number;
+      drafIdRef.current = (await tambahAntrean({ ...itemDari(j, kegiatanId, ganti ?? saran, []), draf: true, jantung_ms: Date.now() })) as number;
     } catch {
       /* IndexedDB tidak tersedia (mis. mode pribadi): tetap bisa dikirim lewat tombol */
     }
-    setNomor(saran);
-    setNomorOtomatis(saran !== null);
-    setHitung(saran !== null ? DETIK_KIRIM_OTOMATIS : null);
+    // mode ganti foto: nomor yang dituju sudah pasti (pilihan petugas), tanpa hitung mundur: petugas memeriksa pratinjau lalu menekan Kirim
+    const tujuan = ganti ?? saran;
+    setNomor(tujuan);
+    setNomorOtomatis(ganti === null && saran !== null);
+    setHitung(ganti === null && saran !== null ? DETIK_KIRIM_OTOMATIS : null);
     setJepretan(j);
     setPesan(null);
     setHasil(null);
@@ -454,6 +460,7 @@ export default function KameraSigap({
     setTag([]);
     setBagikan(false);
     setHasil(null);
+    setGanti(null); // keluar dari pratinjau (kirim/antre/kembali) = mode ganti selesai; hanya "Buang & ulangi" yang mempertahankannya (lihat ulang())
   }
 
   async function lepasDraf() {
@@ -478,8 +485,10 @@ export default function KameraSigap({
 
   /** "Buang & ulangi": satu-satunya jalan yang MEMBUANG foto. */
   function ulang() {
+    const g = ganti;
     void lepasDraf();
     tutupPratinjau();
+    setGanti(g); // memotret ulang untuk nomor yang sama
     setPesan(null);
   }
 
@@ -558,6 +567,7 @@ export default function KameraSigap({
       } else {
         await lepasDraf(); // sudah di server; draf di HP tidak diperlukan lagi
         setHasil(r.data);
+        setGanti(null); // penggantian sudah terkirim: jepretan berikutnya kembali memakai nomor berikutnya
         setPesan({ jenis: "ok", teks: r.data.sudah ? "Foto ini sudah tercatat sebelumnya." : nomor !== null ? `Foto terkirim sebagai Foto ${nomor}.` : "Foto terkirim." });
         if (nomor !== null) setTerisiServer((p) => Array.from(new Set([...p, nomor]))); // langsung maju ke nomor berikutnya; muatTerisi meluruskan bila ditahan
         void muatTerisi();
@@ -609,6 +619,14 @@ export default function KameraSigap({
       {!jepretan && pesan && (
         <div role={pesan.jenis === "galat" ? "alert" : "status"} className={`rounded-lg px-3 py-2 text-xs font-semibold ${pesan.jenis === "ok" ? "bg-[#E3F6EC] text-[#0B6B3F]" : pesan.jenis === "info" ? "bg-[#FFF4D6] text-[#5E4300]" : "bg-[#FDE8E8] text-[#9B1C23]"}`}>
           {pesan.teks}
+        </div>
+      )}
+
+      {!jepretan && ganti !== null && (
+        <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#B7791F] bg-[#FFF4D6] px-3 py-2.5">
+          <div className="text-[13px] font-extrabold text-[#5E4300]">Mode ganti foto: Foto {ganti} · {etiket[ganti - 1] ?? ""}</div>
+          <p className="text-xs leading-relaxed text-[#5E4300]">Foto yang Anda potret berikutnya akan menggantikan <b>Foto {ganti}</b> saja. Foto lama tidak dihapus, hanya menjadi cadangan.</p>
+          <button type="button" onClick={() => setGanti(null)} className="min-h-[40px] self-start rounded-full bg-white px-4 text-[12.5px] font-extrabold text-[#5E4300] shadow-sm">Batal ganti</button>
         </div>
       )}
 
@@ -733,6 +751,8 @@ export default function KameraSigap({
                 ? nomor !== null
                   ? `Foto ini sudah terkirim sebagai Foto ${nomor}. Salah nomor? Buka kartu hari: nomor foto bisa dipindah atau ditukar di sana.`
                   : "Foto ini sudah terkirim."
+                : ganti !== null && nomor === ganti
+                ? `Mode ganti foto: foto ini akan menggantikan Foto ${ganti} saja. Periksa pratinjau, lalu tekan Kirim. Foto lama tidak dihapus, hanya menjadi cadangan.`
                 : nomorOtomatis && nomor !== null
                 ? `Sudah dipilihkan Foto ${nomor} sesuai urutan foto hari ini. Ketuk nomor lain bila foto ini untuk keperluan yang berbeda.`
                 : saran === null
