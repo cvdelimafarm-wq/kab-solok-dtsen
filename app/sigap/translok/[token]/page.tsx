@@ -163,7 +163,6 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   const [loadError, setLoadError] = useState<string | null>(null);
   const [penId, setPenId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>("hari_ini");
-  const [unduhFab, setUnduhFab] = useState(false); // (6 Okt 2026) pintasan Unduh SPJ (tombol melayang)
   const [langkah, setLangkah] = useState<number | null>(null); // null = panduan tidak tampil
   // (21 Okt 2026) Verifikasi lokasi di langkah 1 baru saja berhasil (data belum dimuat ulang): membuka bar langkah di bawah panduan
   const [verifLokal, setVerifLokal] = useState(false);
@@ -408,7 +407,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   // ---------------- BERANDA (3 TAB) ----------------
   return (
     <FokusCtx.Provider value={ctxFokus}>
-    <main className="min-h-screen bg-[#EEF2F8] pb-44 text-[#13213A]">
+    <main className="min-h-screen bg-[#EEF2F8] pb-28 text-[#13213A]">
       <Header
         kecil={tab === "hari_ini" ? "SIGAP · Transport Lokal" : tab === "hari_kerja" ? "Hari Kerja" : "Arsip Dokumen"}
         judulBesar={tab === "hari_ini" ? `Halo, ${namaDepan}` : tab === "hari_kerja" ? "Rencana hari kerja" : "SPJ Transport Lokal"}
@@ -474,10 +473,6 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           Lihat panduan lagi
         </button>
       </div>
-
-      {/* ===== (6 Okt 2026) Tombol melayang pintasan Unduh SPJ -- permintaan user ===== */}
-      {!unduhFab && <TombolUnduhMelayang onKlik={() => setUnduhFab(true)} />}
-      {unduhFab && <LembarUnduh pen={pen} hariIni={data.hari_ini} onTutup={() => setUnduhFab(false)} />}
 
       {/* ===== NAVIGASI BAWAH ===== */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -990,7 +985,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
 
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#6B7890]">
         <span className="font-bold text-[#0F3D7A]">■</span> dipilih · <span className="font-bold text-[#1E7A4C]">■</span> lengkap ·{" "}
-        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain. Tanggal lewat terkunci, kecuali hari terlewat yang belum lengkap bisa dilepas lewat Edit hari kerja.
+        <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain.
       </p>
 
       {kelompokPilihan.length > 0 && (
@@ -1005,10 +1000,6 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
             ))}
           </ul>
           <dl className="mt-1.5 space-y-1 border-t border-[#E3E8F0] pt-1.5 text-[13px]">
-            <div className="flex justify-between">
-              <dt className="text-[#55657D]">Jumlah hari kerja</dt>
-              <dd className="font-semibold">{pilih.size} hari</dd>
-            </div>
             <div className="flex justify-between">
               <dt className="text-red-700">Jumlah terlewat (tidak dibayar)</dt>
               <dd className="font-semibold text-red-700">{nTerlewat} hari</dd>
@@ -1087,7 +1078,7 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
   );
 }
 
-function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto" }) {
+function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto"; tanpaJudul?: boolean }) {
   const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin");
   const { fokus, waAdmin, namaPetugas } = useContext(FokusCtx);
   const sorotLaporan = fokus?.tgl === hari.tanggal && fokus.bagian === "laporan";
@@ -1107,7 +1098,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya }: { token: string
       : null;
   return (
     <>
-      {hari.kunci !== "hari_ini" && (
+      {hari.kunci !== "hari_ini" && !tanpaJudul && (
         <div className="px-1 pt-1">
           <p className="text-[16px] font-extrabold">{tglPanjang(hari.tanggal)}</p>
           {hari.kunci === "izin" && hari.izin_sampai && (
@@ -1218,8 +1209,10 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
   );
   const [saring, setSaring] = useState(false);
   const [tgl, setTgl] = useState<string | null>(() => tanggalAwalArsip(pen.hari.map((h) => h.tanggal), data.hari_ini));
-  const [lengkapi, setLengkapi] = useState(false);
-  const [unduhTgl, setUnduhTgl] = useState<string | null>(null);
+  // (23 Okt 2026) baris Laporan/Dokumentasi membuka isiannya di bawah kartu; baris dokumen lain membuka lembar unduh yang sudah terisi jenis & rentangnya
+  const [bagian, setBagian] = useState<"laporan" | "foto" | null>(null);
+  const [unduh, setUnduh] = useState<{ tgl: string; jenis?: string[]; rentang?: string } | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const jalur = useRef<HTMLDivElement>(null);
   const sentuh = useRef<{ x: number; y: number } | null>(null);
 
@@ -1236,14 +1229,21 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
     el?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [tglAktif]);
 
+  // isian yang baru dibuka digulir ke layar
+  useEffect(() => {
+    if (!bagian) return;
+    const t = setTimeout(() => panel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
+    return () => clearTimeout(t);
+  }, [bagian, tglAktif]);
+
   const pindah = (arah: -1 | 1) => {
     if (!tglAktif) return;
     setTgl(geserTanggal(tanggalDaftar, tglAktif, arah));
-    setLengkapi(false);
+    setBagian(null);
   };
   const pilih = (t: string) => {
     setTgl(t);
-    setLengkapi(false);
+    setBagian(null);
   };
 
   if (pen.hari.length === 0)
@@ -1257,14 +1257,17 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
   const n = hari ? nilai.get(hari.tanggal) : undefined;
   const kel = hari ? kelompokDariTanggal(pen.kelompok, hari.tanggal) : null;
   const d = hari ? tglObj(hari.tanggal) : null;
-  const barisKel = (nama: string, ikon: string, rinci: string) => ({
+  type AksiBaris = { bagian: "laporan" | "foto" } | { unduh: string } | null;
+  const barisKel = (nama: string, ikon: string, rinci: string, dok: string): { nama: string; ikon: string; s: string; ok: boolean; chip: string; aksi: AksiBaris } => ({
     nama,
     ikon,
     s: kel ? `${rentangPendek(kel.mulai, kel.selesai)} · ${rinci}` : hari?.kunci === "akan_datang" ? "Dibuat setelah hari kerja berjalan" : "Hari ini tidak masuk (laporan/foto tidak lengkap)",
     ok: !!kel,
     chip: kel ? "Masuk" : hari?.kunci === "akan_datang" ? "Rencana" : "Tidak masuk",
+    aksi: kel ? { unduh: dok } : null,
   });
-  const baris: { nama: string; ikon: string; s: string; ok: boolean; chip: string }[] = hari
+  const bisaIsi = !!hari && hari.kunci !== "akan_datang";
+  const baris: { nama: string; ikon: string; s: string; ok: boolean; chip: string; aksi: AksiBaris }[] = hari
     ? [
         {
           nama: "Surat Tugas",
@@ -1272,6 +1275,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
           s: pen.surat_tugas ? `No. ${pen.surat_tugas.nomor} · berlaku seluruh penugasan` : "Diupload admin anggaran",
           ok: !!pen.surat_tugas?.ada_file,
           chip: pen.surat_tugas ? (pen.surat_tugas.ada_file ? "Tersedia" : "Menunggu file") : "Menunggu",
+          aksi: pen.surat_tugas?.ada_file ? { unduh: "surat_tugas" } : null,
         },
         ...(aturan.wajibLaporan
           ? [
@@ -1281,6 +1285,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
                 s: hari.realisasi ? `${hari.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${hari.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ") || "–"}` : n?.laporan === "dianggap" ? "Dianggap selesai dari hasil lembar" : "Belum diisi",
                 ok: n?.laporan === "ok" || n?.laporan === "dianggap",
                 chip: n?.laporan === "ok" ? "Terisi" : n?.laporan === "dianggap" ? "Dianggap" : "Kurang",
+                aksi: (bisaIsi ? { bagian: "laporan" } : null) as AksiBaris,
               },
             ]
           : []),
@@ -1290,18 +1295,26 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
           s: `${hari.foto.length} dari ${aturan.jumlahFoto} nomor foto terisi`,
           ok: !!n?.foto.ok,
           chip: `${hari.foto.length}/${aturan.jumlahFoto}`,
+          aksi: (bisaIsi ? { bagian: "foto" } : null) as AksiBaris,
         },
-        { ...barisKel("Kwitansi", "🧾", kel ? rupiah(kel.nominal) : ""), },
-        barisKel("Visum", "✈️", kel ? `${kel.tanggal.length} hari` : ""),
-        barisKel("Surat Pernyataan Kendaraan Dinas", "🚗", kel ? `${kel.tanggal.length} hari` : ""),
+        barisKel("Kwitansi", "🧾", kel ? rupiah(kel.nominal) : "", "kwitansi"),
+        barisKel("Visum", "✈️", kel ? `${kel.tanggal.length} hari` : "", "visum"),
+        barisKel("Surat Pernyataan Kendaraan Dinas", "🚗", kel ? `${kel.tanggal.length} hari` : "", "surat_pernyataan"),
       ]
     : [];
+  const ketukBaris = (aksi: NonNullable<AksiBaris>) => {
+    if (!hari) return;
+    if ("bagian" in aksi) {
+      const tujuan = aksi.bagian;
+      setBagian((v) => (v === tujuan ? null : tujuan));
+    } else setUnduh({ tgl: hari.tanggal, jenis: [aksi.unduh], rentang: kel?.mulai ?? "semua" });
+  };
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-md">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[15px] font-extrabold">Arsip per tanggal</p>
-        <span className="text-[11px] font-semibold text-[#6B7890]">{pen.hari.length - kurang.length - pen.hari.filter((h) => h.kunci === "akan_datang").length} lengkap · {kurang.length} perlu dilengkapi</span>
+        <span className="text-[11px] font-semibold text-[#6B7890]">{pen.hari.length - kurang.length - pen.hari.filter((h) => h.kunci === "akan_datang").length} hari lengkap</span>
       </div>
       <p className="text-[11.5px] text-[#6B7890]">Usap ke kiri/kanan atau ketuk tanggal. Titik: hijau lengkap, kuning belum lengkap, merah terlewat, abu rencana.</p>
 
@@ -1366,38 +1379,60 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
           </div>
 
           <div className="mt-1 divide-y divide-[#E3E8F0]">
-            {baris.map((b) => (
-              <div key={b.nama} className="flex items-center gap-3 py-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[15px]">{b.ikon}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-bold">{b.nama}</p>
-                  <p className="text-[11.5px] text-[#6B7890]">{b.s}</p>
+            {baris.map((b) => {
+              const aksi = b.aksi;
+              const terbuka = !!aksi && "bagian" in aksi && aksi.bagian === bagian;
+              const isi = (
+                <>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[15px]">{b.ikon}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-bold">{b.nama}</p>
+                    <p className="text-[11.5px] text-[#6B7890]">{b.s}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${b.ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{b.chip}</span>
+                  {aksi && (
+                    <span aria-hidden="true" className="w-3 shrink-0 text-center text-[14px] font-bold text-[#8592A8]">
+                      {"bagian" in aksi ? (terbuka ? "▴" : "▾") : "›"}
+                    </span>
+                  )}
+                </>
+              );
+              return aksi ? (
+                <button
+                  key={b.nama}
+                  type="button"
+                  onClick={() => ketukBaris(aksi)}
+                  aria-expanded={"bagian" in aksi ? terbuka : undefined}
+                  aria-label={"bagian" in aksi ? `${terbuka ? "Tutup" : "Buka"} ${b.nama}` : `Unduh ${b.nama}`}
+                  className={`flex min-h-[48px] w-full items-center gap-3 py-2 text-left ${terbuka ? "rounded-lg bg-[#E8EEF8] px-2" : ""}`}
+                >
+                  {isi}
+                </button>
+              ) : (
+                <div key={b.nama} className="flex items-center gap-3 py-2">
+                  {isi}
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${b.ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{b.chip}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {bisaIsi ? (
+            <p className="mt-1.5 text-[11px] text-[#8592A8]">Ketuk Laporan atau Dokumentasi untuk membuka isiannya; ketuk dokumen lain untuk mengunduhnya.</p>
+          ) : (
+            <p className="mt-2 text-[11.5px] text-[#6B7890]">Hari ini baru rencana. Laporan dan foto diisi pada hari kerjanya.</p>
+          )}
 
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            <button type="button" onClick={() => setUnduhTgl(hari.tanggal)} className="min-h-[44px] flex-1 rounded-xl bg-[#0F3D7A] px-3 text-[13.5px] font-extrabold text-white">
-              ⬇ Unduh tanggal ini
-            </button>
-            {hari.kunci !== "akan_datang" && (
-              <button type="button" onClick={() => setLengkapi((v) => !v)} aria-expanded={lengkapi} className={`min-h-[44px] flex-1 rounded-xl border-2 px-3 text-[13.5px] font-extrabold ${n.kurang ? "border-[#B7791F] bg-[#FFF4D6] text-[#5E4300]" : "border-[#C9D3E6] bg-white text-[#0F3D7A]"}`}>
-                {lengkapi ? "Tutup" : n.kurang ? "Lengkapi / perbaiki" : "Lihat laporan & foto"}
-              </button>
-            )}
-          </div>
-          {hari.kunci === "akan_datang" && <p className="mt-2 text-[11.5px] text-[#6B7890]">Hari ini baru rencana. Laporan dan foto diisi pada hari kerjanya.</p>}
+          <button type="button" onClick={() => setUnduh({ tgl: hari.tanggal })} className="mt-2.5 min-h-[44px] w-full rounded-xl bg-[#0F3D7A] px-3 text-[13.5px] font-extrabold text-white">
+            ⬇ Unduh tanggal ini
+          </button>
 
-          {lengkapi && hari.kunci !== "akan_datang" && (
-            <div className="mt-3 space-y-3">
-              <KartuHari key={`ar-${pen.id}-${hari.tanggal}`} token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} />
+          {bagian && bisaIsi && (
+            <div ref={panel} className="mt-3 space-y-3">
+              <KartuHari key={`ar-${pen.id}-${hari.tanggal}-${bagian}`} token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} hanya={bagian} tanpaJudul />
             </div>
           )}
         </div>
       )}
-      {unduhTgl && <LembarUnduh pen={pen} hariIni={data.hari_ini} tanggalAwal={unduhTgl} onTutup={() => setUnduhTgl(null)} />}
+      {unduh && <LembarUnduh pen={pen} hariIni={data.hari_ini} tanggalAwal={unduh.tgl} jenisAwal={unduh.jenis} rentangAwal={unduh.rentang} onTutup={() => setUnduh(null)} />}
     </section>
   );
 }
@@ -1412,11 +1447,62 @@ const JENIS_DOK = [
   { k: "surat_pernyataan", ikon: "🚗", nama: "Surat Pernyataan Kendaraan Dinas" },
 ] as const;
 
+// (23 Okt 2026) dokumen yang dibuat per kelompok tanggal (bukan per hari)
+const JENIS_RENTANG = ["surat_tugas", "kwitansi", "visum", "surat_pernyataan"];
+
 function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void>; ringkasSaja?: boolean }) {
   const [unduh, setUnduh] = useState(false);
+  const [unduhRentang, setUnduhRentang] = useState<{ rentang: string; jenis?: string[] } | null>(null);
+  const terlewat = pen.hari.filter((h) => h.kunci === "terlewat" && !h.lengkap);
+
+  // Tab Arsip: kartu per tanggal (semua baris bisa diketuk) + satu kartu kelompok tanggal. Daftar 6 jenis & tombol "Unduh SPJ" yang dulu ada di sini
+  // tinggal satu: tiap jenis sudah ada di kartu per tanggal, dan rentang lain dipilih lewat baris kelompok / lembar unduh.
+  if (!ringkasSaja) {
+    const totalNominal = pen.kelompok.reduce((a, k) => a + k.nominal, 0);
+    return (
+      <>
+        <ArsipPerTanggal token={token} data={data} pen={pen} onBerubah={onBerubah} />
+        {pen.kelompok.length > 0 && (
+          <section className="rounded-2xl bg-white p-4 shadow-md">
+            <p className="text-[15px] font-extrabold">Kwitansi, Visum &amp; Surat Pernyataan</p>
+            <p className="text-[11.5px] text-[#6B7890]">Dibuat per kelompok tanggal. Ketuk untuk mengunduh satu kelompok, atau semuanya.</p>
+            <div className="mt-1 divide-y divide-[#EEF1F5]">
+              {pen.kelompok.map((k) => (
+                <button key={k.mulai} type="button" onClick={() => setUnduhRentang({ rentang: k.mulai, jenis: JENIS_RENTANG })} className="flex min-h-[48px] w-full items-center gap-3 py-2 text-left" aria-label={`Unduh dokumen ${rentangPendek(k.mulai, k.selesai)}`}>
+                  <span className="min-w-0 flex-1 text-[13px] font-bold">
+                    {rentangPendek(k.mulai, k.selesai)}
+                    <span className="block text-[11.5px] font-normal text-[#6B7890]">{k.jumlah_hari} hari</span>
+                  </span>
+                  <b className="shrink-0 text-[13px]">{rupiah(k.nominal)}</b>
+                  <span aria-hidden="true" className="w-3 shrink-0 text-center text-[14px] font-bold text-[#8592A8]">›</span>
+                </button>
+              ))}
+              {pen.kelompok.length > 1 && (
+                <button type="button" onClick={() => setUnduhRentang({ rentang: "semua" })} className="flex min-h-[48px] w-full items-center gap-3 py-2 text-left" aria-label="Unduh semua tanggal">
+                  <span className="min-w-0 flex-1 text-[13px] font-bold">
+                    Semua tanggal
+                    <span className="block text-[11.5px] font-normal text-[#6B7890]">seluruh dokumen SPJ</span>
+                  </span>
+                  <b className="shrink-0 text-[13px]">{rupiah(totalNominal)}</b>
+                  <span aria-hidden="true" className="w-3 shrink-0 text-center text-[14px] font-bold text-[#8592A8]">›</span>
+                </button>
+              )}
+            </div>
+            {terlewat.length > 0 && (
+              <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-800">
+                {terlewat.map((h) => tglPendek(h.tanggal)).join(", ")} terlewat (laporan/foto tidak lengkap), tidak masuk Kwitansi.
+              </p>
+            )}
+          </section>
+        )}
+        {unduhRentang && <LembarUnduh pen={pen} hariIni={data.hari_ini} rentangAwal={unduhRentang.rentang} jenisAwal={unduhRentang.jenis} onTutup={() => setUnduhRentang(null)} />}
+      </>
+    );
+  }
+
+  // Ringkasan di panduan login langkah 5 (pengantar saja; tab Arsip memakai tampilan di atas)
   const nLaporan = pen.hari.filter((h) => h.realisasi).length;
   const nDok = pen.hari.filter((h) => h.foto.length >= nFoto(pen)).length;
-  const terlewat = pen.hari.filter((h) => h.kunci === "terlewat" && !h.lengkap);
   const info: Record<string, { s: string; chip: string; ok: boolean }> = {
     surat_tugas: pen.surat_tugas
       ? { s: `No. ${pen.surat_tugas.nomor} · Tujuan ${pen.surat_tugas.tujuan.map(judul).join(", ") || "–"}`, chip: pen.surat_tugas.ada_file ? "Tersedia" : "Menunggu file", ok: pen.surat_tugas.ada_file }
@@ -1429,13 +1515,9 @@ function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { to
   };
   return (
     <>
-      {!ringkasSaja && <ArsipPerTanggal token={token} data={data} pen={pen} onBerubah={onBerubah} />}
       <section className="rounded-2xl bg-white p-4 shadow-md">
         <div className="flex items-baseline justify-between">
-          <div className="min-w-0">
-            {!ringkasSaja && <p className="text-[11px] font-bold text-[#6B7890]">Ringkasan seluruh periode</p>}
-            <p className="text-[15px] font-extrabold">{pen.kegiatan.nama}</p>
-          </div>
+          <p className="text-[15px] font-extrabold">{pen.kegiatan.nama}</p>
           <span className="text-[11px] font-semibold text-[#6B7890]">{pen.peran.toUpperCase()}</span>
         </div>
         <div className="mt-1 divide-y divide-[#EEF1F5]">
@@ -1450,23 +1532,7 @@ function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { to
             </div>
           ))}
         </div>
-        {pen.kelompok.length > 0 && (
-          <div className="mt-2 rounded-xl bg-[#F6F8FB] px-3 py-2 text-[12.5px]">
-            <p className="text-[11px] font-bold text-[#6B7890]">Kwitansi / Visum / Surat Pernyataan</p>
-            {pen.kelompok.map((k) => (
-              <div key={k.mulai} className="flex justify-between">
-                <span>{rentangPendek(k.mulai, k.selesai)} · {k.jumlah_hari} hari</span>
-                <b>{rupiah(k.nominal)}</b>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
-      {terlewat.length > 0 && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-red-800">
-          {terlewat.map((h) => tglPendek(h.tanggal)).join(", ")} terlewat (laporan/foto tidak lengkap) — tidak masuk Kwitansi.
-        </p>
-      )}
       <button type="button" onClick={() => setUnduh(true)} className="w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow">
         ⬇ Unduh SPJ… <span className="font-semibold text-blue-200">(pilih tanggal &amp; jenis)</span>
       </button>
@@ -1475,144 +1541,21 @@ function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { to
   );
 }
 
-// ======================================================================
-// (6 Okt 2026) Tombol melayang "Unduh SPJ" yg bisa DIGESER dgn tekan-tahan -- permintaan user.
-//  - Ketuk biasa = buka lembar Unduh SPJ.
-//  - Tekan & tahan ±0,35 dtk (HP bergetar bila didukung) lalu geser = pindahkan tombol.
-//  - Posisi diingat di perangkat (localStorage, dicoba-tangkap) & selalu dijaga tetap di dalam layar.
-const KUNCI_POS_FAB = "sigap_fab_unduh_pos";
-function TombolUnduhMelayang({ onKlik }: { onKlik: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [seret, setSeret] = useState(false);
-  const st = useRef<{ timer: ReturnType<typeof setTimeout> | null; x0: number; y0: number; dx: number; dy: number; geser: boolean; batal: boolean }>({
-    timer: null,
-    x0: 0,
-    y0: 0,
-    dx: 0,
-    dy: 0,
-    geser: false,
-    batal: false,
-  });
-
-  const jepit = useCallback((x: number, y: number) => {
-    const el = ref.current;
-    const w = el?.offsetWidth ?? 150;
-    const h = el?.offsetHeight ?? 48;
-    const bawahAman = 72; // jangan menutupi navigasi bawah
-    return {
-      x: Math.min(Math.max(8, x), window.innerWidth - w - 8),
-      y: Math.min(Math.max(8, y), window.innerHeight - h - bawahAman),
-    };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(KUNCI_POS_FAB) ?? "null");
-      if (v && typeof v.x === "number" && typeof v.y === "number") setPos(jepit(v.x, v.y));
-    } catch {
-      /* abaikan */
-    }
-    const ubah = () => setPos((p) => (p ? jepit(p.x, p.y) : p));
-    window.addEventListener("resize", ubah);
-    return () => window.removeEventListener("resize", ubah);
-  }, [jepit]);
-
-  function turun(e: React.PointerEvent<HTMLButtonElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    const s = st.current;
-    s.x0 = e.clientX;
-    s.y0 = e.clientY;
-    s.dx = e.clientX - r.left;
-    s.dy = e.clientY - r.top;
-    s.geser = false;
-    s.batal = false;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    s.timer = setTimeout(() => {
-      s.geser = true;
-      setSeret(true);
-      try {
-        navigator.vibrate?.(25);
-      } catch {
-        /* abaikan */
-      }
-    }, 350);
-  }
-  function gerak(e: React.PointerEvent<HTMLButtonElement>) {
-    const s = st.current;
-    if (!s.geser) {
-      if (Math.hypot(e.clientX - s.x0, e.clientY - s.y0) > 10) {
-        s.batal = true; // bergerak sebelum tahan selesai -> bukan ketukan, bukan seret
-        if (s.timer) clearTimeout(s.timer);
-      }
-      return;
-    }
-    setPos(jepit(e.clientX - s.dx, e.clientY - s.dy));
-  }
-  function naik() {
-    const s = st.current;
-    if (s.timer) clearTimeout(s.timer);
-    if (s.geser) {
-      setSeret(false);
-      setPos((p) => {
-        try {
-          if (p) localStorage.setItem(KUNCI_POS_FAB, JSON.stringify(p));
-        } catch {
-          /* abaikan */
-        }
-        return p;
-      });
-    } else if (!s.batal) onKlik();
-    s.geser = false;
-  }
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label="Unduh SPJ (tekan-tahan untuk memindahkan)"
-      onPointerDown={turun}
-      onPointerMove={gerak}
-      onPointerUp={naik}
-      onPointerCancel={() => {
-        const s = st.current;
-        if (s.timer) clearTimeout(s.timer);
-        s.geser = false;
-        setSeret(false);
-      }}
-      onContextMenu={(e) => e.preventDefault()}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onKlik();
-        }
-      }}
-      className={`fixed z-30 flex select-none items-center gap-2 rounded-full bg-[#0F3D7A] py-3 pl-4 pr-5 text-[14px] font-extrabold text-white shadow-lg shadow-[#0F3D7A]/30 ring-4 ring-white/70 ${
-        seret ? "scale-110 cursor-grabbing opacity-90" : "transition active:scale-95"
-      }`}
-      style={{
-        touchAction: "none",
-        WebkitTouchCallout: "none",
-        ...(pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: "calc(76px + env(safe-area-inset-bottom))" }),
-      }}
-    >
-      <span className="text-[17px] leading-none">{seret ? "✥" : "⬇"}</span> {seret ? "Geser…" : "Unduh SPJ"}
-    </button>
-  );
-}
-
-function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal }: { pen: Pen; hariIni: string; onTutup: () => void; tanggalAwal?: string | null }) {
+function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal, jenisAwal, rentangAwal }: { pen: Pen; hariIni: string; onTutup: () => void; tanggalAwal?: string | null; jenisAwal?: string[]; rentangAwal?: string }) {
   // (20 Okt 2026) permintaan user: utamakan unduh TANGGAL HARI INI / HARI LENGKAP TERAKHIR (cepat, hanya Laporan & Dokumentasi hari itu);
   // rentang (Semua / kelompok tanggal) dipilih belakangan lewat "Pilih rentang lain".
   const pil = pilihanTanggalUnduh(pen.hari.map((h) => ({ tanggal: h.tanggal, lengkap: h.lengkap })), hariIni);
   // (23 Okt 2026) dibuka dari tab Arsip per tanggal: langsung memilih tanggal itu (bukan tanggal bawaan)
   const awal = tanggalAwal && pen.hari.some((h) => h.tanggal === tanggalAwal) ? tanggalAwal : pil.bawaan;
-  const [tanggalPilih, setTanggalPilih] = useState<string | null>(awal);
-  const [rentangPilih, setRentangPilih] = useState<string>("semua");
-  const [bukaRentang, setBukaRentang] = useState<boolean>(awal === null);
+  // (23 Okt 2026) dibuka dari baris dokumen / kelompok tanggal di tab Arsip: langsung memilih rentang & jenis yang diketuk
+  const rentangAwalOk = rentangAwal && (rentangAwal === "semua" || pen.kelompok.some((g) => g.mulai === rentangAwal)) ? rentangAwal : null;
+  const jenisAwalOk = (jenisAwal ?? []).filter((k) => JENIS_DOK.some((j) => j.k === k));
+  const [tanggalPilih, setTanggalPilih] = useState<string | null>(rentangAwalOk ? null : awal);
+  const [rentangPilih, setRentangPilih] = useState<string>(rentangAwalOk ?? "semua");
+  const [bukaRentang, setBukaRentang] = useState<boolean>(rentangAwalOk !== null || awal === null);
   const perHari = tanggalPilih !== null;
   const jenisPerHari = JENIS_PER_HARI as readonly string[];
-  const [jenis, setJenis] = useState<Set<string>>(new Set(awal ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
+  const [jenis, setJenis] = useState<Set<string>>(new Set(jenisAwalOk.length ? jenisAwalOk : awal && !rentangAwalOk ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
   const [format, setFormat] = useState<"gabungan" | "zip">("gabungan");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);

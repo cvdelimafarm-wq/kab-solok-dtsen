@@ -91,10 +91,10 @@ export const SUB_TIM: SubItem[] = [
 ];
 export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "monitoring", label: "Monitoring transport lokal", ket: "Kelengkapan SPJ transport lokal per petugas." },
-  { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan lalu kunci transport lokal." },
+  { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan, pratinjau SPJ per petugas, unduh paket SPJ semua petugas (ZIP), lalu kunci." },
   { kode: "tarif", label: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal." },
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
-  { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (paket SPJ, honor, perjalanan dinas)." },
+  { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (honor, perjalanan dinas)." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI };
 
@@ -162,7 +162,6 @@ export const PINTU_TAB: Partial<Record<KodeTabPendataan, KelompokPintu[]>> = {
     {
       judul: "Segera hadir",
       item: [
-        { id: "paket-spj", judul: "Kelengkapan SPJ dan paket SPJ per petugas", ket: "Satu paket berkas SPJ per petugas.", status: "segera" },
         { id: "honor", judul: "Honor", ket: "Honor petugas dari kegiatan ini.", status: "segera" },
         { id: "dinas", judul: "Perjalanan dinas", ket: "Perjalanan dinas terkait kegiatan ini.", status: "segera" },
       ],

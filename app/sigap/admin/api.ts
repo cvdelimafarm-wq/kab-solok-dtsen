@@ -129,6 +129,39 @@ export async function bukaBlob(url: string): Promise<void> {
 }
 
 /** Buka URL (didapat async) di tab baru tanpa diblokir pop-up. */
+/**
+ * (23 Okt 2026) Ambil berkas (PDF/ZIP) sebagai Blob + nama file dari header (dipakai unduh massal paket SPJ di Verifikasi & Kunci).
+ * 401 -> sesi dihapus & ke halaman masuk; galat lain -> Error dengan pesan server.
+ */
+export async function ambilBlob(url: string): Promise<{ blob: Blob; namaFile: string; dilewati: string[] }> {
+  const res = await fetch(url, { headers: header(), cache: "no-store" });
+  if (res.status === 401) {
+    hapusSesi();
+    keMasuk();
+    throw new SesiBerakhir();
+  }
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error((j as { error?: string })?.error ?? `Gagal mengambil dokumen (${res.status}).`);
+  }
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  let namaFile = "";
+  try {
+    namaFile = m ? decodeURIComponent(m[1]) : "";
+  } catch {
+    namaFile = "";
+  }
+  let dilewati: string[] = [];
+  try {
+    const p = JSON.parse(decodeURIComponent(res.headers.get("X-Spj-Dilewati") ?? "[]"));
+    if (Array.isArray(p)) dilewati = p.map(String);
+  } catch {
+    /* abaikan */
+  }
+  return { blob: await res.blob(), namaFile, dilewati };
+}
+
 export async function bukaUrlAsync(dapat: () => Promise<string | null>): Promise<void> {
   const w = window.open("", "_blank");
   try {

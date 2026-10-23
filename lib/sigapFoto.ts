@@ -25,6 +25,7 @@ export const BEDA_MONO_WALL_KUNING_DETIK = 120;
 export const KECEPATAN_MERAH_KMJAM = 120;
 // (20 Okt 2026) 2 km -> 5 km: wilayah tugas luas (KK tersebar 6-8 km dari rumah); jarak diukur ke titik terdekat dari KK ATAU rumah petugas (jarakEfektifM)
 export const WILAYAH_KUNING_M = 5000;
+// Batas pembeda alasan "luar_wilayah_dekat" (5-10 km) dan "jauh_dari_wilayah" (> 10 km); sejak 23 Okt 2026 keduanya kuning, bukan merah.
 export const WILAYAH_MERAH_M = 10_000;
 export const AMBANG_MIRIP_BIT = 10; // jarak Hamming dHash 64-bit yang dianggap "mirip"
 export const SLOT_BERLOKASI = [2, 3, 4] as const; // nomor foto yang diwajibkan berada di wilayah tugas
@@ -196,7 +197,8 @@ export function nilaiKepercayaan(m: MasukanKepercayaan): HasilKepercayaan {
   if (m.akurasiM > MAKS_AKURASI_M) kuning.push("akurasi_kasar");
   if (m.umurPosisiMs !== null && m.umurPosisiMs > UMUR_POSISI_KUNING_MS) kuning.push("posisi_basi");
   if (m.jarakWilayahM !== null) {
-    if (m.jarakWilayahM > WILAYAH_MERAH_M) merah.push("jauh_dari_wilayah");
+    // (23 Okt 2026) > 10 km TIDAK lagi merah/ditahan: foto tetap masuk nomor, hanya ditandai kuning untuk diperiksa PML/admin.
+    if (m.jarakWilayahM > WILAYAH_MERAH_M) kuning.push("jauh_dari_wilayah");
     else if (m.jarakWilayahM > WILAYAH_KUNING_M) kuning.push("luar_wilayah_dekat");
   }
   if (m.kecepatanKmJam !== null && m.kecepatanKmJam > KECEPATAN_MERAH_KMJAM) merah.push("kecepatan_tak_wajar");

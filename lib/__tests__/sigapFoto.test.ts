@@ -96,8 +96,12 @@ describe("nilaiKepercayaan", () => {
     expect(k(3 * 3600).tingkat).toBe("merah");
     expect(k(-3 * 3600).alasan).toContain("jam_hp_beda_besar");
   });
-  it("jauh dari wilayah 12 km = merah; 6 km = kuning; 3,3 km = hijau (batas kuning 5 km sejak 20 Okt)", () => {
-    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 12_000 })).tingkat).toBe("merah");
+  it("jauh dari wilayah 12 km = kuning (bukan merah sejak 23 Okt); 6 km = kuning; 3,3 km = hijau (batas kuning 5 km sejak 20 Okt)", () => {
+    const jauh = nilaiKepercayaan(dasar({ jarakWilayahM: 12_000 }));
+    expect(jauh.tingkat).toBe("kuning");
+    expect(jauh.alasan).toEqual(["jauh_dari_wilayah"]);
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 99_999 })).tingkat).toBe("kuning");
+    expect(nilaiKepercayaan(dasar({ jarakWilayahM: 6000 })).alasan).toEqual(["luar_wilayah_dekat"]);
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: 6000 })).tingkat).toBe("kuning");
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: 3300 })).tingkat).toBe("hijau");
   });
@@ -108,9 +112,10 @@ describe("nilaiKepercayaan", () => {
     expect(nilaiKepercayaan(dasar({ hammingTerdekat: AMBANG_MIRIP_BIT + 1 })).tingkat).toBe("hijau");
   });
   it("merah menang atas kuning, alasan merah lebih dulu", () => {
-    const h = nilaiKepercayaan(dasar({ akurasiM: 60, jarakWilayahM: 20_000 }));
+    const h = nilaiKepercayaan(dasar({ akurasiM: 60, kecepatanKmJam: 300, jarakWilayahM: 20_000 }));
     expect(h.tingkat).toBe("merah");
-    expect(h.alasan[0]).toBe("jauh_dari_wilayah");
+    expect(h.alasan[0]).toBe("kecepatan_tak_wajar");
+    expect(h.alasan).toContain("jauh_dari_wilayah");
   });
 });
 

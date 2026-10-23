@@ -8,8 +8,9 @@
 //    Buka kunci (bila boleh_buka, alasan wajib).
 //  - Peringatan bila belum_selesai (masih ada hari kerja mendatang).
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { aksi, ambil, bukaBlob, pesanGalat, rentangPendek, rupiah, SesiBerakhir, waktuWib } from "./api";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { aksi, ambil, ambilBlob, bukaBlob, pesanGalat, rentangPendek, rupiah, SesiBerakhir, waktuWib } from "./api";
+import { bagiBatch, namaZip, ringkasanMassal, unikanNama, type HasilMassal } from "@/lib/sigapUnduhMassal";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, KartuAngka, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 
 type Dok = { surat_tugas: boolean; kwitansi: boolean; visum: boolean; laporan: boolean; dokumentasi: boolean; surat_pernyataan: boolean };
@@ -53,6 +54,9 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
   const [bukaId, setBukaId] = useState<number | null>(null);
   const [alasan, setAlasan] = useState("");
   const [massal, setMassal] = useState<{ selesai: number; total: number; gagal: string[] } | null>(null);
+  // (23 Okt 2026) unduh massal paket SPJ (ZIP): progres + tombol batal
+  const [unduh, setUnduh] = useState<{ selesai: number; total: number; nama: string } | null>(null);
+  const batalUnduh = useRef(false);
 
   const muat = useCallback(async () => {
     try {
@@ -141,6 +145,69 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
     await muat();
   }
 
+  // (23 Okt 2026) "Unduh paket SPJ (ZIP)" -- permintaan user: paket SPJ semua petugas sekaligus. Dijalankan dari browser: PDF gabungan tiap petugas
+  // diambil SATU per satu lewat route yang sudah ada (/api/sigap/admin/dokumen), lalu disusun menjadi ZIP (maks. MAKS_PER_ZIP petugas per ZIP).
+  // Yang dipaketkan = petugas yang sedang tampil (ikut saringan status & pencarian) dan punya hari dibayar. Gagal satu petugas tidak menghentikan yang lain.
+  async function unduhMassal() {
+    const daftar = rows.filter((r) => r.hari_dibayar > 0);
+    if (daftar.length === 0) return setGalat("Tidak ada petugas dengan hari dibayar pada daftar yang sedang tampil.");
+    const batch = bagiBatch(daftar);
+    const info = batch.length > 1 ? `\n\nDibagi menjadi ${batch.length} berkas ZIP (maksimal ${batch[0].length} petugas per ZIP); browser bisa meminta izin mengunduh beberapa berkas.` : "";
+    if (!window.confirm(`Unduh paket SPJ ${daftar.length} petugas yang sedang tampil sebagai ZIP?\n\nSetiap petugas satu PDF gabungan (semua jenis dokumen). Proses berjalan satu per satu dan bisa memakan beberapa menit; jangan tutup halaman ini.${info}`)) return;
+    setGalat(null);
+    setOk(null);
+    batalUnduh.current = false;
+    const hasil: HasilMassal = { berhasil: [], dilewati: [], dibatalkan: false };
+    let selesai = 0;
+    setUnduh({ selesai: 0, total: daftar.length, nama: "" });
+    try {
+      const { default: JSZip } = await import("jszip");
+      const tgl = new Date().toISOString().slice(0, 10);
+      for (let b = 0; b < batch.length; b++) {
+        const zip = new JSZip();
+        const dipakai = new Set<string>();
+        let isi = 0;
+        for (const r of batch[b]) {
+          if (batalUnduh.current) {
+            hasil.dibatalkan = true;
+            break;
+          }
+          setUnduh({ selesai, total: daftar.length, nama: r.nama });
+          try {
+            const f = await ambilBlob(`/api/sigap/admin/dokumen?penugasan_id=${r.penugasan_id}&format=gabungan&unduh=1`);
+            zip.file(unikanNama(f.namaFile || `SPJ_${r.nama}.pdf`, dipakai), f.blob);
+            hasil.berhasil.push(r.nama);
+            isi++;
+          } catch (e) {
+            if (e instanceof SesiBerakhir) return;
+            hasil.dilewati.push({ nama: r.nama, alasan: pesanGalat(e) });
+          }
+          selesai++;
+        }
+        if (isi > 0) {
+          const blob = await zip.generateAsync({ type: "blob", compression: "STORE" }); // PDF sudah terkompres
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = namaZip(`kegiatan-${kegiatanId}`, tgl, b + 1, batch.length);
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+        if (hasil.dibatalkan) break;
+      }
+    } catch (e) {
+      setGalat(`Unduh massal terhenti: ${pesanGalat(e)}`);
+      return;
+    } finally {
+      setUnduh(null);
+    }
+    const teks = ringkasanMassal(hasil, daftar.length);
+    if (hasil.dilewati.length > 0 || hasil.berhasil.length === 0) setGalat(teks);
+    else setOk(teks);
+  }
+
   async function bukaKunci(r: Row) {
     if (alasan.trim().length < 5) return setGalat("Alasan membuka kunci wajib diisi (minimal 5 karakter).");
     setBusy(r.penugasan_id);
@@ -183,6 +250,17 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
           </button>
         </div>
       )}
+      {unduh && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#C9D9F0] bg-[#F2F7FE] px-3 py-2.5">
+          <span className="min-w-0 flex-1 text-[13px] text-[#1F4E8C]">
+            Menyusun paket SPJ {Math.min(unduh.selesai + 1, unduh.total)}/{unduh.total}
+            {unduh.nama ? ` · ${unduh.nama}` : ""}… jangan tutup halaman ini.
+          </span>
+          <button type="button" className={BTN_O} onClick={() => (batalUnduh.current = true)}>
+            Batalkan
+          </button>
+        </div>
+      )}
       {!data.boleh_kelola && <Pesan jenis="info">Mode lihat saja — Anda bisa melihat &amp; mempratinjau SPJ, tetapi tidak bisa mengunci.</Pesan>}
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -204,6 +282,9 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
               <option value="dikunci">Sudah dikunci</option>
             </select>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} w-40`} />
+            <button type="button" className={BTN_O} onClick={unduhMassal} disabled={!!unduh || !!massal || busy !== null || rows.every((r) => r.hari_dibayar <= 0)} title="PDF gabungan semua dokumen tiap petugas yang sedang tampil, dalam ZIP">
+              {unduh ? "Menyusun ZIP…" : `⬇ Paket SPJ (ZIP) · ${rows.filter((r) => r.hari_dibayar > 0).length}`}
+            </button>
           </div>
         }
       />
