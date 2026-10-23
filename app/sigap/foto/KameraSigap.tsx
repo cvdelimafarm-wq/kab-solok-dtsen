@@ -159,7 +159,8 @@ export default function KameraSigap({
     try {
       const a = await daftarAntrean();
       const saya = pemilikSesi();
-      const milik = a.filter((x) => x.akun_id === saya && !drafMasihBaru(x)); // draf yang pratinjaunya terbuka bukan "antre"
+      // draf yang pratinjaunya terbuka bukan "antre"; foto yang sedang dipratinjau sendiri (id draf) tidak boleh menghitung nomornya sebagai "sudah terisi"
+      const milik = a.filter((x) => x.akun_id === saya && !drafMasihBaru(x) && !(drafIdRef.current !== null && x.id === drafIdRef.current));
       setAntre(milik.length);
       const hariIni = tglWib();
       setTerisiAntre(milik.filter((x) => x.kegiatan_id === kegiatanId && x.slot !== null && tglWib(x.dibuat_ms) === hariIni && !x.galat_terakhir).map((x) => x.slot as number));
@@ -728,7 +729,11 @@ export default function KameraSigap({
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-bold text-[#0F2A52]">Foto ini untuk nomor berapa?</legend>
             <p className="text-xs leading-relaxed text-[#3C4C68]">
-              {nomorOtomatis && nomor !== null
+              {hasil
+                ? nomor !== null
+                  ? `Foto ini sudah terkirim sebagai Foto ${nomor}. Salah nomor? Buka kartu hari: nomor foto bisa dipindah atau ditukar di sana.`
+                  : "Foto ini sudah terkirim."
+                : nomorOtomatis && nomor !== null
                 ? `Sudah dipilihkan Foto ${nomor} sesuai urutan foto hari ini. Ketuk nomor lain bila foto ini untuk keperluan yang berbeda.`
                 : saran === null
                 ? `Semua ${jumlahNomor} nomor hari ini sudah terisi. Foto ini akan disimpan sebagai cadangan; atau ketuk sebuah nomor untuk menggantikan fotonya (foto lama tetap tersimpan sebagai cadangan).`
@@ -740,7 +745,9 @@ export default function KameraSigap({
                 const lokasi = (SLOT_BERLOKASI as readonly number[]).includes(n);
                 // (21 Okt 2026) Nomor yang sudah berisi foto "padam" (abu-abu + centang) supaya petugas langsung melihat mana yang masih perlu.
                 // Tetap bisa diketuk untuk MENGGANTI (foto lama jadi cadangan); ketuk lagi = batal ganti.
-                const terisi = terisiSemuaNomor.has(n);
+                // (23 Okt 2026) Setelah foto TERKIRIM, nomornya sendiri ikut terbaca "terisi" dari server. Itu bukan penggantian: tampil sebagai "terkirim".
+                const sudahKirim = !!hasil;
+                const terisi = terisiSemuaNomor.has(n) && !(sudahKirim && pilih);
                 const dipesan = !terisi && ditahanServer.includes(n);
                 const gaya = pilih
                   ? terisi ? "border-[#B7791F] bg-[#FFF4D6]" : "border-[#0F2A52] bg-[#E8EEF8]"
@@ -750,6 +757,7 @@ export default function KameraSigap({
                     key={n}
                     type="button"
                     aria-pressed={pilih}
+                    disabled={sudahKirim || mengirim}
                     aria-label={terisi ? `Nomor ${n} sudah terisi. ${pilih ? "Foto ini akan menggantikannya; ketuk lagi untuk membatalkan." : "Ketuk untuk mengganti."}` : undefined}
                     onClick={() => {
                       setHitung(null); // petugas mengatur sendiri: hentikan kirim otomatis
@@ -760,7 +768,7 @@ export default function KameraSigap({
                       }
                       setNomor(pilih ? null : n);
                     }}
-                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${gaya}`}
+                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${gaya} ${sudahKirim && !pilih ? "opacity-60" : ""}`}
                   >
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${pilih ? (terisi ? "bg-[#B7791F] text-white" : "bg-[#0F2A52] text-white") : terisi ? "bg-[#DDEFE5] text-[#1E8E4E]" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{terisi && !pilih ? "✓" : n}</span>
                     <span className="min-w-0 flex-1">
@@ -768,7 +776,8 @@ export default function KameraSigap({
                       {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
                       {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
                       {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengganti</span>}
-                      {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto ini akan menggantikan foto lama (foto lama jadi cadangan) · ketuk lagi untuk batal</span>}
+                      {sudahKirim && pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Foto ini sudah terkirim sebagai Foto {n} ✓</span>}
+                      {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto {n} sudah terisi. Bila dikirim, foto ini MENGGANTIKAN Foto {n} saja; foto lamanya tidak dihapus, hanya menjadi cadangan · ketuk lagi untuk batal</span>}
                     </span>
                   </button>
                 );

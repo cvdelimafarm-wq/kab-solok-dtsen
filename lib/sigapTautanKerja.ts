@@ -38,3 +38,17 @@ export function tanpaTautanKerja(pathname: string, search: string): string {
   const s = q.toString();
   return s ? `${pathname}?${s}` : pathname;
 }
+
+/**
+ * (23 Okt 2026) true bila alamat membawa tautan dalam yang sah (?tab= dikenal, ?tgl= berbentuk tanggal, atau ?fokus= dikenal).
+ * Dipakai halaman kerja: tautan dalam (mis. tombol "Rapikan nomor foto") TIDAK boleh ditelan panduan login pertama.
+ */
+export function adaTautanKerja(search: string): boolean {
+  const q = new URLSearchParams(search);
+  const tab = q.get("tab");
+  const tgl = q.get("tgl");
+  const fokus = q.get("fokus");
+  return Boolean(
+    TAB.some((t) => t === tab) || (tgl && /^\d{4}-\d{2}-\d{2}$/.test(tgl)) || BAGIAN.some((b) => b === fokus)
+  );
+}

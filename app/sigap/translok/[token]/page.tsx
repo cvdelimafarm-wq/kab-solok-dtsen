@@ -11,7 +11,7 @@ import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
 import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
-import { bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
+import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 
 // ------------------------------------------------------------------------
@@ -173,6 +173,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   const [fokus, setFokus] = useState<FokusKerja | null>(null);
   const [bukaTgl, setBukaTgl] = useState<string | null>(null);
   const tautanDiterapkan = useRef(false);
+  // (23 Okt 2026) panduan login pertama diputuskan SEKALI saat data pertama masuk (muat ulang sesudah menyimpan tidak boleh memunculkannya)
+  const panduanDiputuskan = useRef(false);
 
   const muat = useCallback(async () => {
     try {
@@ -186,7 +188,18 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       setData(json as Data);
       setLoadError(null);
       setSesiTidakSah(false);
-      setLangkah((l) => (l === null && !(json as Data).akun.onboarding_selesai ? 1 : l));
+      // (23 Okt 2026) Panduan login pertama TIDAK menelan tautan dalam: bila alamat membawa ?tab=/?tgl=/?fokus= (mis. tombol "Rapikan nomor foto"
+      // di Kamera SIGAP), langsung buka tujuannya. Panduan tetap bisa dibuka lewat "Lihat panduan lagi" dan tampil lagi pada kunjungan biasa.
+      if (!panduanDiputuskan.current) {
+        panduanDiputuskan.current = true;
+        let adaTautan = false;
+        try {
+          adaTautan = adaTautanKerja(window.location.search);
+        } catch {
+          /* abaikan */
+        }
+        if (!adaTautan && !(json as Data).akun.onboarding_selesai) setLangkah((l) => (l === null ? 1 : l));
+      }
     } catch (e) {
       // gagal sambung (TypeError dari fetch) = jaringan, bukan sesi habis
       setLoadError(e instanceof TypeError ? "Koneksi terputus. Periksa sinyal, lalu coba lagi." : e instanceof Error ? e.message : "Gagal memuat.");
@@ -1392,7 +1405,18 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
   const [format, setFormat] = useState<"gabungan" | "zip">("gabungan");
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => ref.current?.focus(), []);
+  // (23 Okt 2026) Petugas boleh mengunduh SEMUA jenis SPJ. Surat Tugas, Kwitansi, Visum & Surat Pernyataan dibuat per kelompok tanggal, jadi
+  // mencentangnya saat mode "Satu hari" memindahkan pilihan ke kelompok tanggal yang memuat hari itu (bukan lagi dinonaktifkan).
+  const [pindahRentang, setPindahRentang] = useState<string | null>(null); // teks pemberitahuan setelah otomatis pindah ke rentang
+  const keRentangDariHari = () => {
+    const kel = tanggalPilih ? pen.kelompok.find((g) => tanggalPilih >= g.mulai && tanggalPilih <= g.selesai) : undefined;
+    setRentangPilih(kel ? kel.mulai : "semua");
+    setTanggalPilih(null);
+    setBukaRentang(true);
+    setPindahRentang(kel ? `rentang ${rentangPendek(kel.mulai, kel.selesai)}` : "semua tanggal");
+  };
   const pilihHari = (t: string) => {
+    setPindahRentang(null);
     setTanggalPilih(t);
     setJenis((s) => {
       const n = new Set(Array.from(s).filter((k) => jenisPerHari.includes(k)));
@@ -1400,6 +1424,7 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
     });
   };
   const pilihRentang = (r: string) => {
+    setPindahRentang(null);
     if (tanggalPilih !== null) setJenis(new Set(JENIS_DOK.map((j) => j.k)));
     setTanggalPilih(null);
     setRentangPilih(r);
@@ -1454,13 +1479,15 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
       setProses(false);
     }
   };
-  const ubah = (k: string) =>
+  const ubah = (k: string) => {
+    if (perHari && !jenis.has(k) && !jenisPerHari.includes(k)) keRentangDariHari();
     setJenis((s) => {
       const n = new Set(s);
       if (n.has(k)) n.delete(k);
       else n.add(k);
       return n;
     });
+  };
   const CHIP = (on: boolean) => `rounded-full px-3 py-1.5 text-[12.5px] font-bold ${on ? "bg-[#0F3D7A] text-white" : "bg-[#EEF1F5] text-[#55657D]"}`;
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={onTutup}>
@@ -1491,7 +1518,8 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
               )}
             </div>
           )}
-          {perHari && <p className="mt-1.5 text-[11px] text-[#8592A8]">Satu hari: Laporan &amp; Dokumentasi tanggal itu saja (cepat). Surat Tugas, Kwitansi, Visum &amp; Surat Pernyataan ada di rentang.</p>}
+          {perHari && <p className="mt-1.5 text-[11px] text-[#8592A8]">Satu hari: Laporan &amp; Dokumentasi tanggal itu saja (cepat). Mencentang Surat Tugas, Kwitansi, Visum atau Surat Pernyataan otomatis berpindah ke rentang tanggalnya.</p>}
+          {pindahRentang && <p className="mt-1.5 rounded-lg bg-[#FFF4D6] px-2.5 py-1.5 text-[11.5px] font-semibold leading-snug text-[#5E4300]">Surat Tugas, Kwitansi, Visum &amp; Surat Pernyataan dibuat per rentang, jadi pilihan tanggal berpindah ke {pindahRentang}. Laporan &amp; Dokumentasi ikut mencakup rentang itu. Mau satu hari saja? Pilih &quot;Hari ini&quot; lagi.</p>}
           <button type="button" onClick={() => setBukaRentang((v) => !v)} className="mt-2 text-[12px] font-bold text-[#0F3D7A]">
             {bukaRentang ? "Sembunyikan rentang ▴" : "Pilih rentang lain ▾"}
           </button>
@@ -1516,21 +1544,26 @@ function LembarUnduh({ pen, hariIni, onTutup }: { pen: Pen; hariIni: string; onT
           <div className="flex items-center justify-between">
             <p className="text-[12px] font-bold text-[#6B7890]">2 · Jenis dokumen</p>
             <button type="button" onClick={() => {
-                const semua = JENIS_DOK.map((j) => j.k as string).filter((k) => !perHari || jenisPerHari.includes(k));
-                setJenis(new Set(jenis.size === semua.length ? [] : semua));
+                const semua = JENIS_DOK.map((j) => j.k as string);
+                if (jenis.size === semua.length) {
+                  setJenis(new Set());
+                  return;
+                }
+                if (perHari) keRentangDariHari();
+                setJenis(new Set(semua));
               }}
               className="text-[11.5px] font-bold text-[#0F3D7A]"
             >
-              {jenis.size === JENIS_DOK.filter((j) => !perHari || jenisPerHari.includes(j.k)).length ? "Kosongkan" : "Pilih semua"}
+              {jenis.size === JENIS_DOK.length ? "Kosongkan" : "Pilih semua"}
             </button>
           </div>
           <div className="mt-1">
             {JENIS_DOK.map((j) => (
-              <label key={j.k} className={`flex items-center gap-2.5 py-1.5 text-[13.5px] ${perHari && !jenisPerHari.includes(j.k) ? "opacity-40" : ""}`}>
-                <input type="checkbox" checked={jenis.has(j.k)} disabled={perHari && !jenisPerHari.includes(j.k)} onChange={() => ubah(j.k)} className="h-4 w-4 accent-[#0F3D7A]" />
+              <label key={j.k} className="flex items-center gap-2.5 py-1.5 text-[13.5px]">
+                <input type="checkbox" checked={jenis.has(j.k)} onChange={() => ubah(j.k)} className="h-4 w-4 accent-[#0F3D7A]" />
                 <span>
                   {j.ikon} {j.nama}
-                  {perHari && !jenisPerHari.includes(j.k) && <span className="text-[11px] font-semibold"> · per rentang</span>}
+                  {perHari && !jenisPerHari.includes(j.k) && <span className="text-[11px] font-semibold text-[#8592A8]"> · per rentang</span>}
                 </span>
               </label>
             ))}
