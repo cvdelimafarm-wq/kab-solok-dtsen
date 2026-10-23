@@ -103,8 +103,10 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
     }
   }
 
-  const chip = (p: Permintaan) => (
-    <span className="flex flex-none flex-col items-end gap-1">
+  // (23 Okt 2026) Di HP kartu Sub SLS berantakan: chip status ("Sudah keluar di FASIH", "Dari kolam") ber-lebar tetap di kanan memeras nama jorong
+  // menjadi satu huruf per baris. Sekarang chip ditaruh DI BAWAH keterangan pada layar sempit (`tumpuk`), dan di kanan hanya pada layar lebar.
+  const chip = (p: Permintaan, tumpuk = false) => (
+    <span className={tumpuk ? "mt-1.5 flex flex-wrap items-center gap-1 sm:hidden" : "hidden flex-none flex-col items-end gap-1 sm:flex"}>
       <span className={`rounded-full px-2 py-[2px] text-[10.5px] font-extrabold ${p.status === "sudah_keluar" ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>{LABEL_STATUS_MINTA[p.status]}</span>
       {p.dari_kolam && <span className="rounded-full bg-[#F1E4FA] px-2 py-[2px] text-[10.5px] font-extrabold text-[#6B1F96]">Dari kolam</span>}
       {p.dari_admin && <span className="rounded-full bg-[#E1ECFB] px-2 py-[2px] text-[10.5px] font-extrabold text-[#1F4E9E]">Ditugaskan admin</span>}
@@ -161,9 +163,11 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                       <small className="mt-0.5 block break-words text-[12px] leading-snug text-[#6B7A90]">
                         Nagari {rapikanNama(s.nagari)} · Kec. {rapikanNama(s.kecamatan)} · {n > 0 ? <b className="text-[#0F2A52]">{n} KK</b> : "daftar KK belum diunggah"}
                       </small>
+                      {p && chip(p, true)}
+                      {beku && <span className="mt-1.5 inline-block rounded-full bg-[#E3E7EE] px-2 py-[2px] text-[10.5px] font-extrabold text-[#4A5568] sm:hidden">Non aktif</span>}
                     </span>
                     {p && chip(p)}
-                    {beku && <span className="flex-none rounded-full bg-[#E3E7EE] px-2 py-[2px] text-[10.5px] font-extrabold text-[#4A5568]">Non aktif</span>}
+                    {beku && <span className="hidden flex-none rounded-full bg-[#E3E7EE] px-2 py-[2px] text-[10.5px] font-extrabold text-[#4A5568] sm:inline-block">Non aktif</span>}
                     {onBuka && (
                       <span aria-hidden className="flex-none text-[20px] font-bold leading-none text-[#1F5FD1]">
                         ›
