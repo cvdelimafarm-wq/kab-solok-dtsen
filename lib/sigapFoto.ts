@@ -248,6 +248,19 @@ export function teksKoordinat(lat: number, lng: number, akurasiM: number): strin
 export const WARNA_KEPERCAYAAN: Record<Kepercayaan, string> = { hijau: "#1E8E4E", kuning: "#B7791F", merah: "#C0392B" };
 export const LABEL_KEPERCAYAAN: Record<Kepercayaan, string> = { hijau: "Wajar", kuning: "Perlu perhatian", merah: "Ditahan, perlu diperiksa" };
 
+// (23 Okt 2026) Status yang dilihat PETUGAS: mengikuti hasil pemeriksaan PML/admin, bukan hanya tingkat kepercayaan sistem.
+// Sebelumnya foto merah yang sudah ditandai "Diperiksa" tetap berlabel "Ditahan, perlu diperiksa" di Foto saya.
+export type NadaPeriksa = "hijau" | "biru" | "kuning" | "merah";
+export type TampilPeriksa = { label: string; nada: NadaPeriksa; /** true = masih menunggu keputusan PML/admin (alasan perlu ditampilkan) */ perhatian: boolean };
+export const WARNA_NADA_PERIKSA: Record<NadaPeriksa, string> = { hijau: "#1E8E4E", biru: "#1F5FA8", kuning: "#B7791F", merah: "#C0392B" };
+export function statusPemeriksaan(kepercayaan: Kepercayaan, statusPeriksa: string | null | undefined): TampilPeriksa {
+  if (statusPeriksa === "diperiksa") return { label: "Sudah diperiksa", nada: "biru", perhatian: false };
+  if (statusPeriksa === "dipertanyakan") return { label: "Dipertanyakan PML/admin", nada: "kuning", perhatian: true };
+  if (kepercayaan === "merah") return { label: "Ditahan, menunggu diperiksa", nada: "merah", perhatian: true };
+  if (kepercayaan === "kuning") return { label: "Menunggu diperiksa", nada: "kuning", perhatian: true };
+  return { label: "Wajar", nada: "hijau", perhatian: false };
+}
+
 // ------------------------------------------------------------------ validasi masukan
 export function posisiMasukanValid(p: unknown): p is { lat: number; lng: number; akurasi: number } {
   if (!p || typeof p !== "object") return false;

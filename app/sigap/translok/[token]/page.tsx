@@ -244,7 +244,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     try {
       const f = bacaTautanKerja(window.location.search, pen.hari.map((h) => h.tanggal), data.hari_ini);
       if (!f) return;
-      setTab(f.tab);
+      // (23 Okt 2026) daftar "Status per hari kerja" digabung ke Arsip per tanggal: tautan lama ?tab=hari_kerja&tgl= membuka tanggal itu di tab Arsip
+      setTab(f.tab === "hari_kerja" && f.tgl ? "arsip" : f.tab);
       setBukaTgl(f.tgl);
       if (f.tgl) setFokus({ tgl: f.tgl, bagian: f.fokus });
       window.history.replaceState(window.history.state, "", tanpaTautanKerja(window.location.pathname, window.location.search));
@@ -465,7 +466,6 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         {tab === "hari_kerja" && (
           <>
             <KalenderHariKerja key={pen.id} token={token} pen={pen} hariIni={data.hari_ini} onTersimpan={muat} />
-            <DaftarHari token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
         {tab === "arsip" && <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} />}
@@ -1142,53 +1142,6 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
   );
 }
 
-// ---------------- Daftar hari kerja (tab Hari Kerja) ----------------
-function DaftarHari({ token, data, pen, onBerubah }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void> }) {
-  // (14 Okt 2026) hari yang dituju tautan dalam (mis. dari pengingat "13 Okt belum lengkap") terbuka otomatis dan disorot
-  const { bukaTgl, fokus } = useContext(FokusCtx);
-  const [buka, setBuka] = useState<string | null>(bukaTgl);
-  useEffect(() => {
-    if (bukaTgl) setBuka(bukaTgl);
-  }, [bukaTgl]);
-  if (pen.hari.length === 0) return null;
-  return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
-      <p className="text-[15px] font-extrabold">Status per hari kerja</p>
-      <div className="mt-1 divide-y divide-[#EEF1F5]">
-        {pen.hari.map((h) => {
-          const status = h.lengkap
-            ? { t: "Lengkap ✓", c: "bg-emerald-50 text-emerald-800" }
-            : h.kunci === "terlewat"
-            ? { t: "Terlewat", c: "bg-red-50 text-red-800" }
-            : h.kunci === "akan_datang"
-            ? { t: "Rencana", c: "bg-slate-100 text-slate-600" }
-            : { t: `${wajibLaporan(pen) ? `${h.realisasi || h.laporan_dianggap ? "Laporan ✓" : "Laporan –"} · ` : ""}${h.foto.length}/${nFoto(pen)} foto`, c: "bg-amber-50 text-amber-800" };
-          const d = tglObj(h.tanggal);
-          return (
-            <div key={h.tanggal} id={`hari-${h.tanggal}`} className={fokus?.tgl === h.tanggal && !fokus.bagian ? SOROT : undefined}>
-              <button type="button" onClick={() => setBuka((b) => (b === h.tanggal ? null : h.tanggal))} className="flex w-full items-center gap-3 py-2.5 text-left">
-                <span className="w-11 shrink-0 text-center">
-                  <span className="block text-[10px] font-bold text-[#8592A8]">{HARI[d.getUTCDay()]}</span>
-                  <span className="block text-[17px] font-extrabold leading-tight">{d.getUTCDate()}</span>
-                </span>
-                <span className="flex-1 text-[12.5px] text-[#55657D]">
-                  {h.realisasi ? `${h.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${h.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ")}` : h.otomatis && wajibLaporan(pen) ? `${h.otomatis.jumlah} ${h.otomatis.satuan} dari ${LABEL_SUMBER[h.otomatis.sumber]} · ${h.laporan_dianggap ? "laporan dianggap selesai" : "belum disimpan"}` : BULAN_PANJANG[d.getUTCMonth()]}
-                </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${status.c}`}>{status.t}</span>
-              </button>
-              {buka === h.tanggal && h.kunci !== "akan_datang" && (
-                <div className="space-y-3 pb-3">
-                  <KartuHari token={token} data={data} pen={pen} hari={h} onBerubah={onBerubah} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 // ---------------- (23 Okt 2026) Arsip PER TANGGAL (tab Arsip) ----------------
 // Satu kartu: deretan tanggal yang bisa digeser (usap kiri/kanan, tombol ‹ ›, atau ketuk tanggal), status tiap jenis dokumen pada tanggal itu,
 // unduh khusus tanggal itu, dan "Lengkapi / perbaiki" (laporan + nomor foto) bila masih diizinkan. Hari lampau yang terkunci menampilkan alasannya
@@ -1208,9 +1161,12 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
     [pen.hari, pen.kegiatan.wajib_laporan, pen.kegiatan.jumlah_foto]
   );
   const [saring, setSaring] = useState(false);
-  const [tgl, setTgl] = useState<string | null>(() => tanggalAwalArsip(pen.hari.map((h) => h.tanggal), data.hari_ini));
+  // tautan dalam (pengingat/push) yang masih berlaku (fokus dibersihkan beberapa detik setelah tiba) menentukan tanggal & bagian awal
+  const { fokus } = useContext(FokusCtx);
+  const tglTautan = fokus?.tgl && pen.hari.some((h) => h.tanggal === fokus.tgl) ? fokus.tgl : null;
+  const [tgl, setTgl] = useState<string | null>(() => tglTautan ?? tanggalAwalArsip(pen.hari.map((h) => h.tanggal), data.hari_ini));
   // (23 Okt 2026) baris Laporan/Dokumentasi membuka isiannya di bawah kartu; baris dokumen lain membuka lembar unduh yang sudah terisi jenis & rentangnya
-  const [bagian, setBagian] = useState<"laporan" | "foto" | null>(null);
+  const [bagian, setBagian] = useState<"laporan" | "foto" | null>(() => (tglTautan ? fokus?.bagian ?? null : null));
   const [unduh, setUnduh] = useState<{ tgl: string; jenis?: string[]; rentang?: string } | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const jalur = useRef<HTMLDivElement>(null);
@@ -1356,6 +1312,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
 
       {hari && d && n && (
         <div
+          id={`hari-${hari.tanggal}`}
           className="mt-3 rounded-2xl bg-[#F6F8FB] p-3.5"
           onTouchStart={(e) => {
             const t = e.touches[0];

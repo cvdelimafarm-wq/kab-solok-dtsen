@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   jarakEfektifM,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
-  nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, teksWaktuWib, urlVerifikasi, waktuResmi,
+  nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
   type MasukanKepercayaan,
 } from "@/lib/sigapFoto";
 
@@ -174,5 +174,24 @@ describe("jarakEfektifM (titik terdekat dari KK atau rumah petugas)", () => {
   it("jauh dari KK dan dari rumah tetap ditandai", () => {
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(7000, 8000) })).alasan).toContain("luar_wilayah_dekat");
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: jarakEfektifM(12_000, 15_000) })).tingkat).toBe("merah");
+  });
+});
+
+describe("status pemeriksaan yang dilihat petugas", () => {
+  it("foto merah yang sudah diperiksa = Sudah diperiksa, tidak lagi menunggu", () => {
+    const t = statusPemeriksaan("merah", "diperiksa");
+    expect(t.label).toBe("Sudah diperiksa");
+    expect(t.perhatian).toBe(false);
+  });
+  it("foto kuning yang sudah diperiksa juga Sudah diperiksa", () => expect(statusPemeriksaan("kuning", "diperiksa").nada).toBe("biru"));
+  it("belum diperiksa: merah ditahan, kuning menunggu, hijau wajar", () => {
+    expect(statusPemeriksaan("merah", "belum")).toMatchObject({ label: "Ditahan, menunggu diperiksa", perhatian: true });
+    expect(statusPemeriksaan("kuning", "belum")).toMatchObject({ label: "Menunggu diperiksa", perhatian: true });
+    expect(statusPemeriksaan("hijau", "belum")).toMatchObject({ label: "Wajar", perhatian: false });
+  });
+  it("dipertanyakan tetap perlu perhatian; nilai asing/kosong dianggap belum", () => {
+    expect(statusPemeriksaan("merah", "dipertanyakan").perhatian).toBe(true);
+    expect(statusPemeriksaan("merah", null).label).toBe("Ditahan, menunggu diperiksa");
+    expect(statusPemeriksaan("hijau", undefined).label).toBe("Wajar");
   });
 });
