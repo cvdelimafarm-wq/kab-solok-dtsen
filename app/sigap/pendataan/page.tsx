@@ -14,12 +14,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import TombolKembali from "@/app/components/TombolKembali";
 import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
-import IkonMenu from "@/app/portal/IkonMenu";
-import { keAtas } from "@/app/portal/navigasi";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
-import { dariAman } from "../identifikasi/useIdentifikasi";
 import PlottingTim from "./PlottingTim";
 import PetaWilayah from "./PetaWilayah";
 import { KolamPanel, KolamTombol } from "./KolamWilayah";
@@ -195,7 +193,6 @@ export default function LembarPendataan() {
   // (17 Okt 2026) Sumber data yang SAMA dengan kartu plotting (kunci cache sama, jadi tidak mengunduh dua kali): dipakai untuk tahu Sub SLS mana yang sudah diajukan.
   const minta = useData<DataPermintaanTim>(API_PERMINTAAN);
   const { menunggu } = useAntrean();
-  const [dari, setDari] = useState<string | null>(null);
   const [subPilih, setSubPilih] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("peta");
   const [fStatus, setFStatus] = useState<FStatus>("semua");
@@ -225,7 +222,6 @@ export default function LembarPendataan() {
   const [kirimPesan, setKirimPesan] = useState<string | null>(null);
 
   useEffect(() => {
-    setDari(dariAman());
     try {
       // (14 Okt 2026) hanya ?sub di alamat yang langsung membuka Sub SLS; tanpa itu tampil kartu plotting dulu
       setSubPilih(new URLSearchParams(window.location.search).get("sub"));
@@ -631,9 +627,7 @@ export default function LembarPendataan() {
       <header className="flex-none bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-2.5 pt-2 text-white">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            <button type="button" onClick={() => (subId ? keKartu() : keAtas(router, dari ?? "/"))} aria-label="Kembali" className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-white/[.14] active:bg-white/25">
-              <IkonMenu n="kembali" className="h-[18px] w-[18px] text-white" />
-            </button>
+            <TombolKembali tema="gelap" label={subId ? "Semua Sub SLS" : undefined} onKlik={subId ? keKartu : undefined} className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Lembar Pendataan</h1>
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Tim ${namaDepan(data.pml.nama)} · ${data.saya.peran === "pml" ? "PML" : "PPL"}` : "Pendataan Pascabencana"}</p>

@@ -7,7 +7,7 @@
 // Hanya jumlah yang ditampilkan (tanpa nama KK). Agregat = kumulatif orang itu sampai tanggal baris, tidak terpengaruh saringan tanggal.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { useRouter } from "next/navigation";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import type { AturanIsian } from "@/lib/sigap";
@@ -162,9 +162,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
           <div className="min-w-0">
             {!tertanam && (
               <>
-                <Link href="/sigap/kelola/pendataan?tab=pemeriksaan" className="text-[12px] font-bold text-[#1F5FD1]">
-                  ‹ Kelola Pendataan
-                </Link>
+                <TombolKembali tema="terang" induk="/sigap/kelola/pendataan?tab=pemeriksaan" />
                 <p className="mt-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#6B7A90]">Kelola · Pendataan Pascabencana</p>
                 <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.4px] text-[#0F2A52]">Monitoring Lapangan</h1>
               </>

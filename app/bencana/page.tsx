@@ -9,6 +9,8 @@ import UndanganAdminCard from "./UndanganAdminCard";
 import PapanTim from "./PapanTim";
 import ReportKonfirmasiWilayah from "./ReportKonfirmasiWilayah";
 import BrandBps from "@/app/components/BrandBps";
+// (23 Okt 2026) tombol Kembali seragam + tautan logo ke Beranda (audit navigasi Tahap 1)
+import TombolKembali from "@/app/components/TombolKembali";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -11216,16 +11218,27 @@ export default function BencanaPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-ink/60">Memuat...</p>
+      <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-5 py-6">
+        <div>
+          <TombolKembali tema="terang" />
+        </div>
+        <div role="status" aria-live="polite" className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <span aria-hidden className="h-8 w-8 animate-spin rounded-full border-[3px] border-blue-100 border-t-blue-600" />
+          <p className="text-sm font-semibold text-ink/70">Memuat data pendataan bencana…</p>
+        </div>
       </main>
     );
   }
 
   if (loadError) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-16 text-center">
-        <p className="rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>
+      <main className="mx-auto flex min-h-screen max-w-sm flex-col px-6 py-6">
+        <div>
+          <TombolKembali tema="terang" />
+        </div>
+        <div className="flex flex-1 flex-col justify-center py-10 text-center">
+          <p className="rounded-md bg-rust-100 px-4 py-3 text-rust-700">{loadError}</p>
+        </div>
       </main>
     );
   }
@@ -11242,7 +11255,10 @@ export default function BencanaPage() {
           : "max-w-2xl"
       }`}
     >
-      <BrandBps className="text-sm font-medium text-blue-400" ukuran={36} />
+      <TombolKembali tema="terang" className="mb-3" />
+      <a href="/" aria-label="Ke Beranda SIGAP" className="inline-block">
+        <BrandBps className="text-sm font-medium text-blue-400" ukuran={36} />
+      </a>
       <h1 className="mt-1 text-2xl font-semibold text-blue-950">
         Identifikasi SLS/Jorong Terdampak Bencana Hidrometeorologi
       </h1>

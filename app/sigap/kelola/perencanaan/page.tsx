@@ -15,7 +15,6 @@
 // ditandai "belum dipetakan"; RAB kegiatan = akumulasi alokasi; tiap alokasi punya rencana bayar per bulan. Logika: lib/perencanaanPok.ts.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import Bingkai from "../../kontrak/Bingkai";
 import AnggaranTab from "./AnggaranTab";
 import { KUNCI_RAB } from "@/lib/anggaranRabUji";
@@ -211,9 +210,6 @@ export default function PerencanaanKegiatan() {
     isi = (
       <Kartu judul="Hanya untuk Admin Aplikasi">
         <p className="text-[13.5px] text-[#4D5B6B]">Halaman uji coba perencanaan kegiatan saat ini hanya dapat dibuka Admin Aplikasi.</p>
-        <Link href="/" className={`${BTN_O} mt-3`}>
-          Ke Beranda
-        </Link>
       </Kartu>
     );
   else

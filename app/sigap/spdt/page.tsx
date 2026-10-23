@@ -8,10 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
-import IkonMenu from "@/app/portal/IkonMenu";
-import { keAtas } from "@/app/portal/navigasi";
-import { dariAman } from "../identifikasi/useIdentifikasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { buatProyeksi, warnaIndeks } from "@/lib/pendataan";
 import { LABEL_PERAN, daftarPpl, jarakM, judulKata, saringKk, type KkSpdt } from "@/lib/spdtNtp";
 import { kunciPetaSpdt } from "@/lib/petaDasar";
@@ -33,9 +30,7 @@ const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", peta: "Peta", daftar
 const SELECT = "h-11 min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-white px-2.5 text-[13px] font-semibold text-[#0F2A52] outline-none";
 
 export default function HalamanSpdt() {
-  const router = useRouter();
   const { data, galat, memuat } = useKkSpdt();
-  const [dari, setDari] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
   const [pplF, setPplF] = useState<number | null>(null);
   const [jorongF, setJorongF] = useState<string | null>(null);
@@ -48,7 +43,6 @@ export default function HalamanSpdt() {
   const [statusDasar, setStatusDasar] = useState<StatusDasar | null>(null);
   const [alasanDasar, setAlasanDasar] = useState<string | null>(null);
 
-  useEffect(() => setDari(dariAman()), []);
 
   const peran = data?.peran ?? null;
   const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : ["mon", "peta", "daftar"];
@@ -121,9 +115,7 @@ export default function HalamanSpdt() {
       <header className="flex-none bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-2.5 pt-2 text-white">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            <button type="button" onClick={() => keAtas(router, dari ?? "/")} aria-label="Kembali" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/[.14] active:bg-white/25">
-              <IkonMenu n="kembali" className="h-[18px] w-[18px] text-white" />
-            </button>
+            <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Lembar Pendataan</h1>
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{peran ? `SPDT NTP 2026 · ${LABEL_PERAN[peran]}` : "SPDT NTP 2026"}</p>

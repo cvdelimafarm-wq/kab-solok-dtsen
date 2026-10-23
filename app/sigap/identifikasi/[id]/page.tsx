@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import IkonMenu from "@/app/portal/IkonMenu";
+import TombolKembali from "@/app/components/TombolKembali";
 import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { kirimAtauAntre } from "@/app/portal/antreanKirim";
 import { BATAS_CATATAN, BATAS_KET, JENIS_DAMPAK, JENIS_LAMA, kodeDesa, periksaIsian, peringatanIsian, type KunciAngka } from "@/lib/identifikasi";
@@ -118,9 +118,7 @@ export default function IsianIdentifikasi() {
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-16 pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <button type="button" onClick={() => router.replace(daftar)} aria-label="Kembali ke daftar Sub SLS" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
-            <IkonMenu n="kembali" className="h-5 w-5 text-white" />
-          </button>
+          <TombolKembali tema="gelap" label="Daftar Sub SLS" onKlik={() => router.replace(daftar)} className="max-w-[40%] flex-none" />
           <span className="truncate text-[12.5px] font-bold text-[#D3E0F5]">Lembar Identifikasi SLS</span>
         </div>
         <div className="relative mx-auto mt-3 flex max-w-xl items-start justify-between gap-3">

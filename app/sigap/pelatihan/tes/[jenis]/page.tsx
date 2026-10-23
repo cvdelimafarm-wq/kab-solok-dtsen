@@ -9,7 +9,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { LABEL_JENIS_TES, jenisTesValid, type JenisTes } from "@/lib/sigapTes";
 import type { KeadaanTes } from "@/lib/sigapTesDb";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglPanjang } from "../../../admin/api";
@@ -221,7 +220,6 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
     return (
       <Kerangka aktif="pelatihan" judul={judul}>
         {galat ? <Pesan jenis="galat">{galat}</Pesan> : <Memuat />}
-        <Link href="/sigap/pelatihan" className={BTN_O}>← Kembali</Link>
       </Kerangka>
     );
 
@@ -387,7 +385,6 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
           </p>
           <p className="mt-2 text-[22px] font-extrabold tabular-nums text-[#0F2A52]">{formatSisa(sisaTutup)}</p>
           {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#5B6B84]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
-          <Link href="/sigap/pelatihan" className={`${BTN_O} mt-3`}>← Kembali ke Pelatihan</Link>
         </Kartu>
       )}
       {status === "selesai" && kartuUlang}
@@ -442,7 +439,6 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
               })}
             </ol>
           </Kartu>
-          <Link href="/sigap/pelatihan" className={BTN_O}>← Kembali ke Pelatihan</Link>
         </>
       )}
       {konfirmasiUlang && (

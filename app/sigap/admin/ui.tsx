@@ -117,12 +117,15 @@ export function HeaderAdmin({
   judul,
   kanan,
   onKeluar,
+  kembali,
   children,
 }: {
   kecil: string;
   judul: React.ReactNode;
   kanan?: React.ReactNode;
   onKeluar: () => void;
+  /** (23 Okt 2026) tombol Kembali seragam (app/components/TombolKembali.tsx), tampil di bawah baris logo, kiri atas. */
+  kembali?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
@@ -148,7 +151,8 @@ export function HeaderAdmin({
             </button>
           </div>
         </div>
-        <p className="mt-5 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F4B400]">{kecil}</p>
+        {kembali && <div className="mt-3">{kembali}</div>}
+        <p className={`${kembali ? "mt-3" : "mt-5"} text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F4B400]`}>{kecil}</p>
         <div className="mt-0.5 text-[22px] font-extrabold leading-tight tracking-[-0.3px] sm:text-[23px]">{judul}</div>
         {children}
       </div>

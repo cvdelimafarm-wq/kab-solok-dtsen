@@ -10,6 +10,10 @@ import { useEffect, useState } from "react";
 import { ambil, keluar, SesiBerakhir, type Ringkas } from "../admin/api";
 import { BarisTab, HeaderAdmin, type ItemTab } from "../admin/ui";
 import Shell, { type KodeMenu } from "../admin/Shell";
+import TombolKembali from "@/app/components/TombolKembali";
+
+/** (23 Okt 2026) Tombol Kembali seragam. Bawaan: tampil, tujuan = ?dari= atau induk logis halaman. `false` = tanpa tombol (mis. halaman yang disematkan). */
+export type OpsiKembali = false | { induk?: string; label?: string; onKlik?: () => void };
 
 export default function Bingkai<K extends string>({
   aktif = "kontrak",
@@ -21,6 +25,7 @@ export default function Bingkai<K extends string>({
   tab,
   aktifTab,
   onTab,
+  kembali,
   children,
 }: {
   /** (7 Okt 2026) menu sidebar yg aktif & label kecil header HP -- dipakai juga oleh SIGAP PEDIA. */
@@ -34,6 +39,7 @@ export default function Bingkai<K extends string>({
   tab?: ItemTab<K>[];
   aktifTab?: K;
   onTab?: (k: K) => void;
+  kembali?: OpsiKembali;
   children: React.ReactNode;
 }) {
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
@@ -45,9 +51,12 @@ export default function Bingkai<K extends string>({
       });
   }, []);
 
+  const tombolKembali = (tema: "gelap" | "terang") =>
+    kembali === false ? null : <TombolKembali tema={tema} induk={kembali?.induk} label={kembali?.label} onKlik={kembali?.onKlik} />;
+
   const mobile = (
     <>
-      <HeaderAdmin kecil={kecil} judul={judul} onKeluar={keluar} kanan={kanan?.(true)}>
+      <HeaderAdmin kecil={kecil} judul={judul} onKeluar={keluar} kanan={kanan?.(true)} kembali={tombolKembali("gelap")}>
         {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
       </HeaderAdmin>
       {tab && aktifTab && onTab && <BarisTab tab={tab} aktif={aktifTab} onPilih={onTab} />}
@@ -56,6 +65,8 @@ export default function Bingkai<K extends string>({
 
   const isi = (
     <>
+      {/* Tombol Kembali (layar lebar; di HP ada di header navy) */}
+      {kembali !== false && <div className="mb-1 hidden lg:block">{tombolKembali("terang")}</div>}
       {/* Judul halaman (layar lebar) */}
       <div className="mb-1 hidden flex-wrap items-end justify-between gap-4 lg:flex">
         <div className="min-w-0">

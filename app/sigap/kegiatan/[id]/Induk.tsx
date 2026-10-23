@@ -8,10 +8,9 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { buatRencana, useSiapkan } from "@/app/portal/siapkan";
 import { adalahTugas } from "@/lib/sigapPrioritas";
 import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
@@ -103,7 +102,6 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
 }
 
 export default function HalamanInduk({ kode }: { kode: string }) {
-  const router = useRouter();
   const { induk, tahap, siap, galat } = useInduk(kode);
   // (10 Okt 2026) Selagi petugas membaca tahapan, data & kode halaman TUJUAN (semua tahap yang sudah terbuka; tahap prioritas lebih dulu) diambil di belakang
   // supaya saat tahap ditekan langsung tampil -- permintaan user (lihat app/portal/siapkan.ts)
@@ -127,10 +125,7 @@ export default function HalamanInduk({ kode }: { kode: string }) {
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[62px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <button type="button" onClick={() => keAtas(router, "/")} aria-label="Kembali ke Beranda" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
-            <IkonMenu n="kembali" className="h-5 w-5 text-white" />
-          </button>
-          <span className="text-[12.5px] font-bold text-[#D3E0F5]">Beranda · Kegiatan saya</span>
+          <TombolKembali tema="gelap" />
         </div>
         <div className="relative mx-auto mt-3 flex max-w-xl items-center gap-3.5">
           <div className="min-w-0 flex-1">

@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { Chip, Kartu } from "../../admin/ui";
 import { PINTU_TAB, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
+import { denganDari } from "@/lib/sigapNavigasi";
 
 export default function PintuMasuk({ tab }: { tab: KodeTabPendataan }) {
   const kelompok = PINTU_TAB[tab] ?? [];
@@ -19,7 +20,7 @@ export default function PintuMasuk({ tab }: { tab: KodeTabPendataan }) {
             {g.item.map((it) =>
               it.href ? (
                 <li key={it.id}>
-                  <Link href={it.href} className="block h-full rounded-lg border border-[#DDE6F3] p-3 transition hover:border-[#1F5FD1] hover:bg-[#F8FAFC]">
+                  <Link href={denganDari(it.href, `/sigap/kelola/pendataan?tab=${tab}`)} className="block h-full rounded-lg border border-[#DDE6F3] p-3 transition hover:border-[#1F5FD1] hover:bg-[#F8FAFC]">
                     <span className="flex items-start justify-between gap-2">
                       <b className="text-[13.5px] text-[#0F2A52]">{it.judul}</b>
                       <span aria-hidden className="text-[#1F5FD1]">

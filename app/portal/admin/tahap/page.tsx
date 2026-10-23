@@ -7,7 +7,7 @@
 // Data: GET/POST /api/portal/admin/tahap.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { apiPortal, bacaSesi } from "../../sesi";
 import { NAMA_MODUL, periksaTahapAdmin, type BukaMode } from "@/lib/sigapTahap";
 
@@ -146,7 +146,7 @@ export default function AturTahapPage() {
     <main className="min-h-screen bg-[#F3F5F8] pb-24 text-[#14202E]">
       <header className="bg-[#0E2A47] px-4 py-5 text-white sm:px-8">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <Link href="/portal/admin" className="text-[13px] text-[#C9D6E6] hover:text-white">← Admin Aplikasi</Link>
+          <TombolKembali tema="gelap" induk="/sigap/kelola/aplikasi" />
           <span className="text-[12.5px] font-bold italic tracking-wide">BPS KABUPATEN SOLOK</span>
         </div>
         <div className="mx-auto mt-4 max-w-4xl">

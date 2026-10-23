@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import {KELAS_PILIHAN, labelKelas, warnaPosisi } from "@/lib/sigapKuis";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { efek, setSuaraAktif } from "../kuisSuara";
@@ -365,7 +366,7 @@ export default function KuisPeserta() {
   } else if (r && lihatReview) {
     isi = (
       <div className="mx-auto w-full max-w-md space-y-3">
-        <button type="button" onClick={() => setLihatReview(false)} className="rounded-full bg-white/15 px-3 py-1 text-[13px] font-bold hover:bg-white/25">← Kembali</button>
+        <TombolKembali tema="gelap" label="Hasil kuis" onKlik={() => setLihatReview(false)} />
         <p className="text-[18px] font-extrabold">📖 Review jawaban & penjelasan</p>
         {!review && <p className="text-[14px] font-semibold">Memuat…</p>}
         {review?.butir.length === 0 && <p className="text-[14px] text-white/85">Belum ada soal yang jawabannya dibuka.</p>}
@@ -542,7 +543,7 @@ export default function KuisPeserta() {
           </ol>
         )}
         <button type="button" onClick={bukaReview} className="w-full rounded-xl bg-white px-4 py-3 text-[15px] font-extrabold text-[#46178F]">📖 Review jawaban & penjelasan</button>
-        <Link href="/sigap/pelatihan" className="block rounded-xl bg-[#FFD02B] px-4 py-3 text-center text-[15px] font-extrabold text-[#2B0F55]">← Kembali ke Langkah</Link>
+        <Link href="/sigap/pelatihan" className="block rounded-xl bg-[#FFD02B] px-4 py-3 text-center text-[15px] font-extrabold text-[#2B0F55]">Kembali ke Pelatihan</Link>
       </div>
     );
   } else {
@@ -552,7 +553,7 @@ export default function KuisPeserta() {
   return (
     <div className="flex min-h-screen flex-col bg-[#46178F] px-3 pb-6 pt-3 text-white" style={{ minHeight: "100dvh" }}>
       <div className="mx-auto mb-3 flex w-full max-w-3xl items-center gap-2">
-        <Link href="/sigap/pelatihan" className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold hover:bg-white/25">← Langkah</Link>
+        <TombolKembali tema="gelap" induk="/sigap/pelatihan" className="max-w-[45%] shrink-0" />
         {kelas !== null && <span className="shrink-0 rounded-full bg-[#FFD02B] px-2.5 py-1 text-[12px] font-extrabold text-[#2B0F55]">{labelKelas(kelas)}</span>}
         {r && <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-white/90">{r.judul}</span>}
         {r && r.status !== "lobi" && r.soal_ke > 0 && <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[12.5px] font-bold tabular-nums">{r.soal_ke}/{r.total}</span>}

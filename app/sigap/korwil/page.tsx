@@ -8,11 +8,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import IkonMenu from "@/app/portal/IkonMenu";
 import { useData } from "@/app/portal/dataBersama";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { alamatMasukKembali } from "@/app/portal/sesi";
-import { dariAman } from "@/app/sigap/identifikasi/useIdentifikasi";
 import { angkaId, judulKata } from "@/app/sigap/kegiatan/format";
 import { persenKorwil, type DataKorwil } from "@/lib/korwilMonitor";
 import KorwilLapangan from "./KorwilLapangan";
@@ -28,10 +26,8 @@ function jamWib(iso: string): string {
 
 export default function MonitoringKorwil() {
   const router = useRouter();
-  const [dari, setDari] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("lapangan");
   const [pilih, setPilih] = useState<number | null>(null);
-  useEffect(() => setDari(dariAman()), []);
 
   const d = useData<DataKorwil>(`/api/portal/korwil/monitoring${pilih ? `?kelompok=${pilih}` : ""}`);
   useEffect(() => {
@@ -47,9 +43,7 @@ export default function MonitoringKorwil() {
       <header className="sticky top-0 z-20 bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-0 pt-2 text-white">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            <button type="button" onClick={() => keAtas(router, dari ?? "/sigap/kegiatan/pascabencana")} aria-label="Kembali" className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-white/[.14] active:bg-white/25">
-              <IkonMenu n="kembali" className="h-[18px] w-[18px] text-white" />
-            </button>
+            <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Monitoring Korwil</h1>
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => judulKata(x.split(",")[0]).split(" ").slice(0, 2).join(" ")).join(" & ")}` : "Pendataan Pascabencana"}</p>

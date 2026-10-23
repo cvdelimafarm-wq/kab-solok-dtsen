@@ -6,10 +6,9 @@
 // Undangan | Langkah | Instrumen | Transport Lokal), pengambil data hub, jam server & hitung mundur. Mockup disetujui user.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
 import { HeaderAdmin, Memuat, Pesan } from "../admin/ui";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
 import PengaturanAwal from "@/app/portal/PengaturanAwal";
@@ -147,7 +146,6 @@ export function Kerangka({
   nama?: string;
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
   useDetak({ sesi: sesiDetak }, "pelatihan");
   // (8 Okt 2026) Struktur 3 layer: tab Undangan | Langkah | Instrumen | Transport Lokal dihapus (membingungkan & menumpuk riwayat Back).
@@ -160,14 +158,9 @@ export function Kerangka({
         kecil="SIGAP · Pelatihan PSP Pascabencana 2026"
         judul={judul}
         onKeluar={keluar}
+        kembali={<TombolKembali tema="gelap" induk={induk} />}
         kanan={
           <>
-            <button type="button" onClick={() => keAtas(router, induk)} className="inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-full bg-white/10 pl-2 pr-3 text-[12px] font-semibold hover:bg-white/20 active:bg-white/25">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]" aria-hidden>
-                <path d="m15 6-6 6 6 6" />
-              </svg>
-              {aktif === "pelatihan" ? "Tahapan" : "Langkah"}
-            </button>
             {nama && <span className="hidden max-w-[160px] truncate text-[11.5px] text-blue-100 sm:inline">{nama}</span>}
           </>
         }

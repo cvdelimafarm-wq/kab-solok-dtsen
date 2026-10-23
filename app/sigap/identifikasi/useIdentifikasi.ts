@@ -8,14 +8,15 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/app/portal/dataBersama";
+import { dariAman as dariAmanMurni } from "@/lib/sigapNavigasi";
 import type { RingkasIdentifikasi, SubIdentifikasi } from "@/lib/identifikasi";
 
 export type DataIdentifikasi = { sekarang: string; pml: { id: number; nama: string }; sub: SubIdentifikasi[]; ringkas: RingkasIdentifikasi };
 
 export function dariAman(): string | null {
   try {
-    const d = new URLSearchParams(window.location.search).get("dari");
-    return d && d.startsWith("/") && !d.startsWith("//") ? d : null;
+    // (23 Okt 2026) validasi dipusatkan di lib/sigapNavigasi.ts (juga menolak "/\\host", karakter kendali, dan segmen "..")
+    return dariAmanMurni(new URLSearchParams(window.location.search).get("dari"));
   } catch {
     return null;
   }

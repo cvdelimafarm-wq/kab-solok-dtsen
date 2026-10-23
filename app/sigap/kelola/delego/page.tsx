@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabaseServer";
+import TombolKembali from "@/app/components/TombolKembali";
+import { createClient } from "@supabase/supabase-js";
 
 // (9 Okt 2026) /sigap/kelola/delego -- permintaan user: Delego masuk pola alamat /sigap/kelola/<modul>.
 // Delego adalah aplikasi terpisah; halaman ini meneruskan ke tautan Delego yang diatur Admin Aplikasi
@@ -32,9 +33,7 @@ export default async function KelolaDelego() {
           <Link href="/sigap/kelola/aplikasi" className="rounded-xl bg-[#0F3D7A] px-4 py-2.5 text-[13.5px] font-extrabold text-white">
             Buka Kelola Aplikasi
           </Link>
-          <Link href="/" className="rounded-xl bg-[#EEF1F5] px-4 py-2.5 text-[13.5px] font-bold text-[#55657D]">
-            Ke Beranda
-          </Link>
+          <TombolKembali tema="terang" induk="/" />
         </div>
       </div>
     </main>

@@ -9,7 +9,7 @@ import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { buatRencana, useSiapkan } from "@/app/portal/siapkan";
 import type { ModulTahap } from "@/lib/sigapTahap";
 import { adalahTugas } from "@/lib/sigapPrioritas";
@@ -97,10 +97,7 @@ export default function HalamanTahap() {
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[52px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <button type="button" onClick={() => keAtas(router, induk_)} aria-label="Kembali ke tahapan" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
-            <IkonMenu n="kembali" className="h-5 w-5 text-white" />
-          </button>
-          <span className="truncate text-[12.5px] font-bold text-[#D3E0F5]">{induk?.nama ?? "Kegiatan"} · Tahapan</span>
+          <TombolKembali tema="gelap" />
         </div>
         <div className="relative mx-auto mt-3 max-w-xl">
           <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.3px]">{t ? `Tahap ${t.no} · ${t.nama}` : "Tahap"}</h1>

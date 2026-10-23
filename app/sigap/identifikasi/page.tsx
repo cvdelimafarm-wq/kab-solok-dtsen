@@ -9,9 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import IkonMenu from "@/app/portal/IkonMenu";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { keadaanSub, kodeDesa, type SubIdentifikasi } from "@/lib/identifikasi";
 import KontakRekan from "./KontakRekan";
 import RekapIdentifikasi from "../kegiatan/[id]/[tahap]/RekapIdentifikasi";
@@ -36,7 +34,6 @@ function Penanda({ s }: { s: SubIdentifikasi }) {
 }
 
 export default function DaftarIdentifikasi() {
-  const router = useRouter();
   const { data, galat } = useIdentifikasi();
   const [dari, setDari] = useState<string | null>(null);
   const [saring, setSaring] = useState<Saring>("semua");
@@ -100,9 +97,7 @@ export default function DaftarIdentifikasi() {
       <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[74px] pt-5 text-white">
         <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
         <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <button type="button" onClick={() => keAtas(router, dari ?? "/")} aria-label="Kembali" className="grid h-11 w-11 flex-none place-items-center rounded-full bg-white/15 active:bg-white/25">
-            <IkonMenu n="kembali" className="h-5 w-5 text-white" />
-          </button>
+          <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
           <span className="truncate text-[12.5px] font-bold text-[#D3E0F5]">Pendataan Pascabencana · Pendataan</span>
         </div>
         <div className="relative mx-auto mt-3 max-w-xl">

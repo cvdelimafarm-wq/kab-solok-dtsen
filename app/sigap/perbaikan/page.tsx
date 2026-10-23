@@ -10,8 +10,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import IkonMenu from "@/app/portal/IkonMenu";
 import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { apiPortal } from "@/app/portal/sesi";
 import { tandaBasi, useData } from "@/app/portal/dataBersama";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
@@ -92,9 +92,7 @@ export default function PerbaikanAdministrasi() {
     <main className="flex min-h-[calc(100dvh_-_var(--tinggi-banner,0px))] flex-col bg-[#F2F6FC] text-[#1B2B4B]">
       <header className="flex-none bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-3 pt-2 text-white">
         <div className="mx-auto flex max-w-xl items-center gap-2.5">
-          <button type="button" onClick={() => keAtas(router, "/")} aria-label="Kembali" className="grid h-[34px] w-[34px] flex-none place-items-center rounded-full bg-white/[.14] active:bg-white/25">
-            <IkonMenu n="kembali" className="h-[18px] w-[18px] text-white" />
-          </button>
+          <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Perbaiki administrasi</h1>
             <p className="truncate text-[11.5px] text-[#A9BCD8]">{lengkap ? "Semua lengkap" : daftar.length > 0 ? `${daftar.reduce((n, k) => n + (k.hari?.length ?? 0), 0)} hari kerja perlu dilengkapi` : "Transport Lokal"}</p>

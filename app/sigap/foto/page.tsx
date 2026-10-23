@@ -7,6 +7,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import TombolKembali from "@/app/components/TombolKembali";
 import KameraSigap from "./KameraSigap";
 import FotoSaya from "./FotoSaya";
 import PeriksaFoto from "./PeriksaFoto";
@@ -43,6 +44,9 @@ function Isi() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-3 bg-[#F3F6FC] px-4 py-4">
+      <div>
+        <TombolKembali tema="terang" />
+      </div>
       <div role="tablist" aria-label="Bagian foto" className="flex gap-2">
         <TabBtn t="kamera" teks="Kamera" />
         <TabBtn t="saya" teks="Foto saya" />

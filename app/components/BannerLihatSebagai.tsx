@@ -6,6 +6,7 @@
 // (11 Okt 2026) Mode ini kini SIMULASI (app/portal/simulasi.ts): boleh mengisi/unggah/simpan, tetapi tidak ada yang dikirim ke server --
 // keputusan user. Teks spanduk diseragamkan ("Simulasi · tidak ada data yang dikirim"; dulu "aksi tersimpan atas nama akun ini" bertentangan
 // dengan halaman identifikasi). Tiap penulisan yang ditahan tampil sebentar sebagai catatan kecil di bawah spanduk.
+// (23 Okt 2026) tombol oranye "Kembali" diganti "Keluar simulasi" (audit navigasi): kata "Kembali" hanya untuk tombol kembali halaman (TombolKembali).
 // (11 Okt 2026) "Ganti" dulu diam bila sesi asli sudah habis; kini menampilkan pesan dan tombol masuk lagi.
 
 import { useEffect, useState } from "react";
@@ -86,8 +87,8 @@ export default function BannerLihatSebagai() {
         <button type="button" onClick={() => setGanti(true)} className="h-full flex-none px-1 text-[12px] font-bold opacity-90">
           Ganti
         </button>
-        <button type="button" onClick={kembali} className="h-full flex-none px-1 text-[12px] font-bold underline">
-          Kembali
+        <button type="button" onClick={kembali} aria-label="Keluar dari simulasi dan kembali ke akun saya" className="h-full flex-none px-1 text-[12px] font-bold underline">
+          Keluar simulasi
         </button>
       </div>
       {catatan && (

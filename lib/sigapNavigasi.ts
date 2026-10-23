@@ -32,6 +32,8 @@ export function indukDari(path: string): string | null {
   // (9 Okt 2026) halaman pengelolaan /sigap/kelola/<modul> -- permintaan user. Detail (mis. /sigap/kelola/pedia/12) naik ke daftar modulnya.
   const kelola = /^\/sigap\/kelola\/([^/]+)\/.+/.exec(p);
   if (kelola) return `/sigap/kelola/${kelola[1]}`;
+  // (23 Okt 2026) halaman penuh lama yang kini juga tersemat sebagai tab Kelola Pendataan -> induknya Kelola Pendataan
+  if (p === "/sigap/kelola/foto" || p === "/sigap/kelola/identifikasi" || p === "/sigap/kelola/lapangan") return "/sigap/kelola/pendataan";
   if (p === "/sigap/kelola" || p.startsWith("/sigap/kelola/")) return "/";
   if (/^\/sigap\/pelatihan\/(undangan|instrumen|kuis)$/.test(p) || /^\/sigap\/pelatihan\/tes(\/|$)/.test(p)) return "/sigap/pelatihan";
   if (p.startsWith("/sigap/pelatihan/")) return "/sigap/pelatihan";
@@ -64,4 +66,75 @@ export function perbaruiJejak(jejak: string[], path: string): string[] {
 /** Aman memanggil router.back()? Hanya bila halaman sebelumnya di jejak memang induk yang dituju. */
 export function bisaKembali(jejak: string[], induk: string): boolean {
   return jejak.length >= 2 && jejak[jejak.length - 2] === bersihkanPath(induk);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// (23 Okt 2026, audit navigasi Tahap 1) Tujuan & label tombol "Kembali" yang SERAGAM. Dipakai komponen app/components/TombolKembali.tsx.
+// Aturan tujuan (sama di semua halaman): ?dari= bila ada dan aman, kalau tidak induk logis halaman itu (indukDari), kalau tidak Beranda "/".
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Validasi ?dari=: hanya jalur INTERNAL (diawali "/"). Ditolak: kosong, "//..." (protokol-relatif), garis miring terbalik ("/\\evil" dibaca
+ * peramban sebagai "//evil"), skema ("javascript:", "https:"), karakter kendali, segmen "..", dan alamat > 300 karakter.
+ * Query/hash yang sah (mis. "/sigap/kelola/pendataan?tab=pemeriksaan") dipertahankan.
+ */
+export function dariAman(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const x = raw.trim();
+  if (x.length === 0 || x.length > 300) return null;
+  if (!x.startsWith("/") || x.startsWith("//")) return null;
+  if (x.includes("\\")) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(x)) return null;
+  if (bersihkanPath(x).split("/").includes("..")) return null;
+  return x;
+}
+
+/** Nama tujuan yang tampil di tombol Kembali ("‹ Kelola Pendataan"). Alamat di luar daftar -> "Halaman sebelumnya". */
+export function labelTujuan(path: string): string {
+  const p = bersihkanPath(path);
+  if (p === "/") return "Beranda";
+  const tetap: Record<string, string> = {
+    "/sigap": "Beranda",
+    "/sigap/kelola/pendataan": "Kelola Pendataan",
+    "/sigap/kelola/translok": "Admin Transport Lokal",
+    "/sigap/kelola/perencanaan": "Perencanaan",
+    "/sigap/kelola/pelatihan": "Kelola Pelatihan",
+    "/sigap/kelola/pengadaan": "Pengadaan",
+    "/sigap/kelola/akses": "Peran & Akses",
+    "/sigap/kelola/aplikasi": "Kelola Aplikasi",
+    "/sigap/kelola/pedia": "SIGAP PEDIA",
+    "/sigap/kelola/delego": "Delego",
+    "/sigap/kelola/foto": "Kelola Foto",
+    "/sigap/kelola/identifikasi": "Monitoring Identifikasi",
+    "/sigap/kelola/lapangan": "Monitoring Lapangan",
+    "/sigap/pelatihan": "Pelatihan",
+    "/sigap/korwil": "Monitoring Korwil",
+    "/sigap/pendataan": "Lembar Pendataan",
+    "/sigap/identifikasi": "Lembar Identifikasi",
+    "/sigap/spdt": "Lembar SPDT NTP",
+    "/sigap/foto": "Kamera SIGAP",
+    "/bencana": "Pendataan Bencana",
+  };
+  if (tetap[p]) return tetap[p];
+  if (/^\/sigap\/kegiatan\/[^/]+\/[^/]+$/.test(p)) return "Tahap kegiatan";
+  if (/^\/sigap\/kegiatan\/translok-[^/]+$/.test(p)) return "Kegiatan";
+  if (/^\/sigap\/kegiatan\/[^/]+$/.test(p)) return "Tahapan";
+  return "Halaman sebelumnya";
+}
+
+/** Tujuan Kembali untuk halaman `pathSaatIni`: ?dari= (aman, bukan halaman ini sendiri) > induk logis > Beranda. */
+export function tujuanKembali(dariRaw: string | null | undefined, pathSaatIni: string): { href: string; label: string } {
+  const d = dariAman(dariRaw);
+  const href = d && bersihkanPath(d) !== bersihkanPath(pathSaatIni) ? d : indukDari(pathSaatIni) ?? "/";
+  return { href, label: labelTujuan(href) };
+}
+
+/** Tambahkan ?dari=<asal> ke alamat tujuan (menjaga query yang sudah ada). `asal` harus lolos dariAman; bila tidak, alamat dikembalikan apa adanya. */
+export function denganDari(href: string, asal: string): string {
+  const a = dariAman(asal);
+  if (!a) return href;
+  const [tanpaHash, hash] = href.split("#");
+  const sambung = tanpaHash.includes("?") ? "&" : "?";
+  return `${tanpaHash}${sambung}dari=${encodeURIComponent(a)}${hash ? `#${hash}` : ""}`;
 }

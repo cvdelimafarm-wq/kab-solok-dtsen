@@ -8,7 +8,7 @@
 //  3. Masa simpan & usulan hapus: sistem TIDAK menghapus. Admin mengusulkan, akun super menyetujui, lalu pemilik menghapus berkas manual.
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { useRouter } from "next/navigation";
 import { ambilJson } from "@/app/sigap/foto/klien";
 import PeriksaFoto from "@/app/sigap/foto/PeriksaFoto";
@@ -102,7 +102,7 @@ export default function KelolaFoto({ tertanam = false }: { tertanam?: boolean })
     }
   }
 
-  if (galat && !p) return <div className={tertanam ? "" : "mx-auto max-w-3xl p-4"}><div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div><Link href="/" className="mt-3 inline-block text-sm underline">Kembali</Link></div>;
+  if (galat && !p) return <div className={tertanam ? "" : "mx-auto max-w-3xl p-4"}><div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div><div className="mt-3"><TombolKembali tema="terang" induk="/sigap/kelola/pendataan?tab=pemeriksaan" /></div></div>;
   if (!p || !u) return <div className={tertanam ? "text-sm" : "p-4 text-sm"}>Memuat…</div>;
 
   const seg = (on: boolean) => `min-h-[48px] flex-1 rounded-xl border-2 px-3 text-sm font-extrabold ${on ? "border-[#0F2A52] bg-[#0F2A52] text-white" : "border-[#C9D3E6] bg-white text-[#0F2A52]"}`;
@@ -111,6 +111,7 @@ export default function KelolaFoto({ tertanam = false }: { tertanam?: boolean })
     <div className={tertanam ? "flex w-full flex-col gap-4" : "mx-auto flex w-full max-w-3xl flex-col gap-4 bg-[#F3F6FC] px-4 py-5"}>
       {!tertanam && (
       <header>
+        <TombolKembali tema="terang" induk="/sigap/kelola/pendataan?tab=pemeriksaan" className="mb-2" />
         <div className="text-xs font-bold tracking-widest text-[#8A6200]">KELOLA · FOTO KAMERA</div>
         <h1 className="text-2xl font-extrabold text-[#0F2A52]">Saklar Kamera SIGAP</h1>
       </header>

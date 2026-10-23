@@ -1,9 +1,8 @@
 "use client";
 
 import { use as usePromise, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import LogoSigap from "@/app/components/LogoSigap";
-import { keAtas } from "@/app/portal/navigasi";
+import TombolKembali from "@/app/components/TombolKembali";
 import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
@@ -506,25 +505,21 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
 
 // ======================================================================
 function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string; judulBesar: string; sub?: string; onKeluar: () => void; children?: React.ReactNode }) {
-  const router = useRouter();
   return (
     <header className="relative overflow-hidden bg-gradient-to-br from-[#0F3D7A] via-[#123B70] to-[#1E2A47] px-5 pb-12 pt-5 text-white">
       <div aria-hidden className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/5" />
       <div aria-hidden className="absolute -bottom-24 right-10 h-48 w-48 rounded-full bg-[#F5B841]/10" />
       <div className="relative mx-auto max-w-lg">
         <div className="flex items-center justify-between gap-2">
-          <LogoSigap ukuran={34} />
+          <a href="/" aria-label="SIGAP, ke Beranda" className="inline-flex">
+            <LogoSigap ukuran={34} />
+          </a>
           <button type="button" onClick={onKeluar} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
             Keluar
           </button>
         </div>
-        {/* (8 Okt 2026) tombol kembali bertingkat: naik satu layer (Layer 2 kegiatan / Beranda), tidak menumpuk riwayat */}
-        <button type="button" onClick={() => keAtas(router)} className="mt-2 inline-flex min-h-[44px] items-center gap-1 rounded-full bg-white/10 pl-2 pr-3.5 text-[12.5px] font-semibold text-blue-50 active:bg-white/20">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden>
-            <path d="m15 6-6 6 6 6" />
-          </svg>
-          Kembali
-        </button>
+        {/* (23 Okt 2026) Kembali seragam (?dari= bila ada, kalau tidak induk logis); logo = tautan ke Beranda */}
+        <TombolKembali tema="gelap" className="mt-2" />
         <p className="mt-3 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F5B841]">{kecil}</p>
         <h1 className="mt-1 text-[23px] font-extrabold leading-tight">{judulBesar}</h1>
         {sub && <p className="mt-0.5 text-[13.5px] text-blue-100">{sub}</p>}
@@ -589,7 +584,7 @@ function TombolLangkah({ onKembali, onLanjut, teks, hijau }: { onKembali: () => 
   return (
     <div className="flex gap-2 pt-1">
       <button type="button" onClick={onKembali} className="rounded-xl border border-[#C9D6EA] bg-white px-4 py-3.5 text-[14px] font-bold text-[#0F3D7A]">
-        ← Kembali
+        ‹ Sebelumnya
       </button>
       <button type="button" onClick={onLanjut} className={`flex-1 rounded-xl py-3.5 text-[15px] font-extrabold text-white shadow ${hijau ? "bg-[#1E7A4C]" : "bg-[#0F3D7A]"}`}>
         {teks}

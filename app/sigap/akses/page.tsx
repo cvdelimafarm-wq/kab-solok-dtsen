@@ -10,6 +10,7 @@
 // topbar + palet Ctrl K; di HP tetap header navy + BarisTab -- saran desain widescreen user.
 
 import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, bacaSesi, keluar, keMasuk, pesanGalat, SesiBerakhir, type Ringkas } from "../admin/api";
 import { BarisTab, HeaderAdmin, LayarPenuh, Memuat, Pesan, Putar, type ItemTab } from "../admin/ui";
@@ -96,6 +97,7 @@ export default function KelolaPeranAkses() {
         kecil="Kelola Peran & Akses"
         judul="Siapa boleh membuka apa"
         onKeluar={keluar}
+        kembali={<TombolKembali tema="gelap" induk="/sigap/kelola/translok" />}
         kanan={
           <>
             {saya && (
@@ -112,9 +114,6 @@ export default function KelolaPeranAkses() {
         }
       >
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Link href="/sigap/kelola/translok" className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
-            ← Admin Transport Lokal
-          </Link>
           {!data.boleh_kelola && <span className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-blue-100">Mode lihat saja</span>}
         </div>
       </HeaderAdmin>
@@ -124,6 +123,9 @@ export default function KelolaPeranAkses() {
 
   const isi = (
     <>
+      <div className="hidden lg:block">
+        <TombolKembali tema="terang" induk="/sigap/kelola/translok" />
+      </div>
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {tab === "izin" ? (
         <PeranIzin data={data} setData={setData} onMuatUlang={muat} />

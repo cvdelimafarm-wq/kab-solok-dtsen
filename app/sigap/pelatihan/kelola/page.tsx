@@ -110,15 +110,7 @@ export default function KelolaPelatihan() {
       jejak={["Pelatihan", "Kelola", namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"]}
       judul="Kelola Pelatihan"
       sub={`Soal, jadwal, pengumuman, kuis live & monitoring · ${namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"}`}
-      kanan={(gelap) => (
-        <button
-          type="button"
-          onClick={keDaftar}
-          className={gelap ? "rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-white/20" : "rounded-lg border border-[#E3E8EE] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#14202E] hover:bg-[#F8FAFC]"}
-        >
-          ← Daftar pelatihan
-        </button>
-      )}
+      kembali={{ label: "Daftar pelatihan", onKlik: keDaftar }}
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Adu Sigap" },

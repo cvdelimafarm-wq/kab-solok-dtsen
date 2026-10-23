@@ -16,6 +16,7 @@
 //  - URL ?tab=<kode>&kegiatan=<id> dihormati (dipakai link dari halaman Peran & akses / palet).
 
 import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { useDetak } from "../useDetak";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, bacaSesi, bolehKlien, keluar, keMasuk, pesanGalat, rentangPendek, SesiBerakhir, tglPanjang, type Ringkas } from "./api";
@@ -198,6 +199,7 @@ export default function AdminTransportLokal() {
         kecil="Admin Transport Lokal"
         judul={daftar ? "Pilih kegiatan" : kegBaru ? "Kegiatan baru" : tabAktif === "beranda" ? "Beranda" : keg?.nama ?? "Belum ada kegiatan"}
         onKeluar={keluar}
+        kembali={daftar ? <TombolKembali tema="gelap" /> : <TombolKembali tema="gelap" label="Daftar kegiatan" onKlik={keDaftar} />}
         kanan={
           <>
             <span className="hidden max-w-[220px] truncate rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-bold md:inline" title={r.nama}>
@@ -212,11 +214,6 @@ export default function AdminTransportLokal() {
         }
       >
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {!daftar && (
-            <button type="button" onClick={keDaftar} className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
-              ← Daftar kegiatan
-            </button>
-          )}
           {!daftar && r.kegiatan.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="sr-only">Pilih kegiatan</span>
@@ -239,7 +236,7 @@ export default function AdminTransportLokal() {
           )}
           {keg && !kegBaru && <span className="text-[12.5px] text-blue-100">Periode {rentangPendek(keg.tanggal_mulai, keg.tanggal_selesai)} · {tglPanjang(r.hari_ini)}</span>}
           <div className="flex-1" />
-          {bolehBuatKegiatan && !kegBaru && (
+          {bolehBuatKegiatan && !kegBaru && !daftar && tabAktif !== "beranda" && (
             <button type="button" onClick={mulaiKegiatanBaru} className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-bold hover:bg-white/20">
               ＋ Kegiatan baru
             </button>
@@ -277,13 +274,12 @@ export default function AdminTransportLokal() {
       {/* (6 Okt 2026) Judul halaman versi layar lebar (header navy disembunyikan di lg). */}
       {!daftar && !kegBaru && tabAktif === "beranda" && (
         <div className="hidden pb-1 lg:flex">
-          <button type="button" onClick={keDaftar} className="rounded-lg border border-[#D5DCE7] bg-white px-2.5 py-1 text-[12px] font-bold text-[#4D5B6B] hover:border-[#1F6FD1] hover:text-[#1F6FD1]">
-            ← Daftar kegiatan
-          </button>
+          <TombolKembali tema="terang" label="Daftar kegiatan" onKlik={keDaftar} className="" />
         </div>
       )}
       {daftar && (
         <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 pb-1 lg:flex">
+          <TombolKembali tema="terang" className="mb-0.5" />
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">Admin transport lokal</p>
             <h1 className="truncate text-[17px] font-extrabold leading-tight">Pilih kegiatan</h1>
@@ -293,9 +289,7 @@ export default function AdminTransportLokal() {
       )}
       {!daftar && tabAktif !== "beranda" && (
         <div className="hidden flex-wrap items-end gap-x-3 gap-y-1 pb-1 lg:flex">
-          <button type="button" onClick={keDaftar} className="mb-0.5 rounded-lg border border-[#D5DCE7] bg-white px-2.5 py-1 text-[12px] font-bold text-[#4D5B6B] hover:border-[#1F6FD1] hover:text-[#1F6FD1]">
-            ← Daftar kegiatan
-          </button>
+          <TombolKembali tema="terang" label="Daftar kegiatan" onKlik={keDaftar} className="mb-0.5" />
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#7B8794]">{kegBaru ? "Admin transport" : labelTab ?? "Admin transport"}</p>
             <h1 className="truncate text-[17px] font-extrabold leading-tight">{kegBaru ? "Kegiatan baru" : keg?.nama ?? "Belum ada kegiatan"}</h1>

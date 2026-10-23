@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { apiPortal, bacaSesi } from "../sesi";
 
 type Pemegang = { akun_peran_id: number; akun_id: number; nama: string };
@@ -85,7 +86,7 @@ export default function AdminAplikasiPage() {
     <main className="min-h-screen bg-[#F3F5F8] pb-16 text-[#14202E]">
       <header className="bg-[#0E2A47] px-4 py-5 text-white sm:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <Link href="/" className="text-[13px] text-[#C9D6E6] hover:text-white">← Beranda portal</Link>
+          <TombolKembali tema="gelap" />
           <span className="flex items-center gap-4">
             {data?.boleh_admin && <Link href="/portal/admin/tahap" className="text-[13px] font-semibold text-[#F4B400] hover:underline">Atur tahap kegiatan →</Link>}
             <span className="text-[12.5px] font-bold italic tracking-wide">BPS KABUPATEN SOLOK</span>
