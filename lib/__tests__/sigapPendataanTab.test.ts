@@ -116,3 +116,11 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
     expect(urlTabPendataan(P, "?tab=administrasi&sub=tarif", "siaran")).toBe(`${P}?tab=siaran`);
   });
 });
+
+describe("nama tidak bentrok dengan menu Monitoring (23 Okt 2026)", () => {
+  it("sub-pilihan kelengkapan SPJ transport lokal bernama 'Kelengkapan SPJ', bukan 'Monitoring'", () => {
+    const sub = SUB_ADMINISTRASI.find((x) => x.kode === "monitoring")!;
+    expect(sub.label).toBe("Kelengkapan SPJ");
+    expect(sub.label).not.toMatch(/^Monitoring/);
+  });
+});

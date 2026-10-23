@@ -24,7 +24,8 @@ export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pe
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
-  { kode: "monitoring", label: "Monitoring", menu: "translok.monitoring" },
+  // (23 Okt 2026) dulu berlabel "Monitoring" -- bentrok dengan menu Monitoring (Pengendalian); isinya kelengkapan SPJ transport lokal per petugas.
+  { kode: "monitoring", label: "Kelengkapan SPJ", menu: "translok.monitoring" },
   { kode: "penugasan", label: "Penugasan & ST", menu: "translok.penugasan" },
   { kode: "kegiatan", label: "Kegiatan & Tarif", menu: "translok.kegiatan" },
   { kode: "verifikasi", label: "Verifikasi & Kunci", menu: "translok.verifikasi" },
@@ -141,7 +142,7 @@ export default function Shell({
   children,
 }: {
   aktif: KodeMenu;
-  /** Breadcrumb, mis. ["Admin transport", "Monitoring"]. */
+  /** Breadcrumb, mis. ["Admin transport", "Kelengkapan SPJ"]. */
   jejak: string[];
   ringkas: Ringkas;
   kegId?: number | null;

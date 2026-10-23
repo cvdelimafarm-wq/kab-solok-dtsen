@@ -90,7 +90,7 @@ export const SUB_TIM: SubItem[] = [
   { kode: "penugasan", label: "Penugasan & ST", ket: "Tautkan petugas ke kegiatan Pendataan, unggah Surat Tugas asli, dan lihat daftar ST." },
 ];
 export const SUB_ADMINISTRASI: SubItem[] = [
-  { kode: "monitoring", label: "Monitoring transport lokal", ket: "Kelengkapan SPJ transport lokal per petugas." },
+  { kode: "monitoring", label: "Kelengkapan SPJ", ket: "Kelengkapan SPJ transport lokal per petugas." },
   { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan, pratinjau SPJ per petugas, unduh paket SPJ semua petugas (ZIP), lalu kunci." },
   { kode: "tarif", label: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal." },
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
