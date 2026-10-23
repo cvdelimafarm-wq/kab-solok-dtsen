@@ -8,6 +8,11 @@
 //        aksi 'isi'    : foto saya yang belum terpasang disusun otomatis ke nomor KOSONG (tidak menimpa apa pun)
 //        aksi 'pasang' : { foto_id, slot } foto cadangan dipasang ke nomor pilihan (foto lama di nomor itu dilepas, tetap tersimpan sebagai cadangan); foto merah belum diperiksa -> dipesan sebagai tahanan
 //        aksi 'pindah' : { dari, ke } pindah/tukar nomor foto yang sudah terpasang (fungsi DB sigap_foto_pindah_nomor)
+//        aksi 'urutkan': (23 Okt 2026) foto Kamera SIGAP pada nomor terisi diurutkan menurut jam (terawal ke terakhir) lewat rangkaian 'pindah'
+//                        yang sama; aturan di lib/sigapUrutanFoto.ts (sama dengan peringatan jam). Semua cek dilakukan SEBELUM menulis; bila satu
+//                        langkah gagal, langkah yang sudah jalan dibatalkan (penukaran dapat dibalik), jadi urutan tidak pernah setengah berubah.
+//        Pindah/pasang/urutkan menerima `harap_*` (opsional): apa yang dilihat petugas di layar. Bila keadaan di server sudah berbeda
+//        (mis. diubah dari HP lain) jawabannya 409 dan tidak ada yang diubah.
 //
 // Kunci akses sama dengan jalur foto lain (cekAksesIsian: hari kerja, 23.59 WIB, izin susulan, SPJ belum dikunci). Foto kepercayaan merah yang belum
 // diperiksa dan foto "dipertanyakan" tidak ikut disusun. Foto yang diambil jauh dari wilayah tugas tidak ditempatkan di nomor berlokasi (2-4).
@@ -20,6 +25,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, hariIniWib, penugasanAkun, tanggalValid, type Db } from "@/lib/sigap";
 import { WILAYAH_MERAH_M, jarakEfektifM, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
 import { nomorBerikutnya, nomorKosong, susunFoto, type Kandidat } from "@/lib/sigapFotoSusun";
+import { kunciLangkah, rencanaUrutJam, type IsiNomor, type Langkah } from "@/lib/sigapUrutanFoto";
 import { jarakKeRumah, jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -42,7 +48,17 @@ async function diLuarWilayah(db: Db, akunId: number, f: { lat: number | null; ln
   return je !== null && je > WILAYAH_MERAH_M;
 }
 
-const ringkas = (f: FotoBaris) => ({ id: f.id, kode: f.kode, kepercayaan: f.kepercayaan, diambil_at: f.diambil_at });
+// (23 Okt 2026) lat/lng ikut dikirim (hanya foto milik/rekan sendiri) untuk lembar detail foto; tidak dipakai menilai apa pun
+const ringkas = (f: FotoBaris) => ({ id: f.id, kode: f.kode, kepercayaan: f.kepercayaan, diambil_at: f.diambil_at, lat: f.lat, lng: f.lng });
+
+/** Isi sebuah nomor seperti yang dilihat petugas: "kosong", "manual" (unggahan tanpa foto Kamera SIGAP), atau id fotonya. */
+type Harap = "kosong" | "manual" | number;
+const isiNomor = (baris: { slot: number; foto_id: number | null }[], slot: number): Harap => {
+  const b = baris.find((x) => x.slot === slot);
+  return !b ? "kosong" : b.foto_id === null ? "manual" : b.foto_id;
+};
+const harapAda = (b: Record<string, unknown>, kunci: string) => Object.prototype.hasOwnProperty.call(b, kunci) && b[kunci] !== undefined && b[kunci] !== null;
+const SUSUNAN_BERUBAH = "Susunan foto sudah berubah (mungkin dari HP lain). Muat ulang halaman, lalu coba lagi. Urutan tidak diubah.";
 
 async function keadaan(db: Db, akunId: number, pen: Pen, tanggal: string) {
   const jumlah = pen.kegiatan.jumlah_foto;
@@ -105,7 +121,7 @@ export async function GET(req: NextRequest) {
       terisi: !!b,
       sumber: b?.sumber ?? null,
       susulan: b?.susulan ?? false,
-      foto: f ? { id: f.id, kode: f.kode, kepercayaan: f.kepercayaan, diambil_at: f.diambil_at } : null,
+      foto: f ? ringkas(f) : null,
       ditahan: !b && k.tahanan.has(i + 1) ? ringkas(k.tahanan.get(i + 1)!) : null,
     };
   });
@@ -143,7 +159,7 @@ export async function POST(req: NextRequest) {
   const aksi = b.aksi;
   if (!Number.isInteger(kegiatanId) || kegiatanId <= 0) return galat("kegiatan_id wajib.");
   if (!tanggalValid(tanggal)) return galat("Tanggal tidak valid.");
-  if (aksi !== "isi" && aksi !== "pasang" && aksi !== "pindah") return galat("Aksi tidak dikenal.");
+  if (aksi !== "isi" && aksi !== "pasang" && aksi !== "pindah" && aksi !== "urutkan") return galat("Aksi tidak dikenal.");
 
   if ((await modeKegiatan(db, [kegiatanId]))[kegiatanId] !== "kamera") return galat("Kegiatan ini memakai unggah foto (metode lama).", 403, { mode: "unggah" });
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.kegiatan.id === kegiatanId);
@@ -160,6 +176,7 @@ export async function POST(req: NextRequest) {
     const a = k.baris.find((x) => x.slot === dari);
     const t = k.baris.find((x) => x.slot === ke);
     if (!a) return galat("Nomor asal belum berisi foto.");
+    if ((harapAda(b, "harap_dari") && b.harap_dari !== isiNomor(k.baris, dari)) || (harapAda(b, "harap_ke") && b.harap_ke !== isiNomor(k.baris, ke))) return galat(SUSUNAN_BERUBAH, 409);
     for (const [baris, slotBaru] of [[a, ke], [t, dari]] as const) {
       if (!baris?.foto_id || !slotBerlokasi(slotBaru)) continue;
       const f = k.semua.get(baris.foto_id);
@@ -172,6 +189,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: r.status });
   }
 
+  // ---- urutkan sesuai jam (23 Okt 2026)
+  if (aksi === "urutkan") {
+    const isi: IsiNomor[] = k.baris
+      .filter((r) => r.slot >= 1 && r.slot <= k.jumlah)
+      .map((r) => {
+        const f = r.foto_id !== null ? k.semua.get(r.foto_id) : undefined;
+        return { slot: r.slot, fotoId: r.foto_id, ms: f ? new Date(f.diambil_at).getTime() : null };
+      });
+    const rencana = rencanaUrutJam(isi);
+    if (Array.isArray(b.harap_langkah)) {
+      const diminta = (b.harap_langkah as unknown[]).map((p) => (Array.isArray(p) ? ([Number(p[0]), Number(p[1])] as Langkah) : ([NaN, NaN] as Langkah)));
+      if (kunciLangkah(diminta) !== kunciLangkah(rencana.langkah)) return galat(SUSUNAN_BERUBAH, 409);
+    }
+    if (!rencana.langkah.length) return NextResponse.json({ ok: true, status: "sudah_urut", langkah: [] });
+    // semua syarat dicek dulu: foto yang jauh dari wilayah tugas tidak boleh berakhir di nomor berlokasi (2-4), sama seperti 'pindah'
+    for (const u of rencana.berubah) {
+      if (!slotBerlokasi(u.slot)) continue;
+      const f = k.semua.get(u.fotoId);
+      if (f && (await diLuarWilayah(db, akunId, f))) return galat(`Foto ${f.kode} diambil jauh dari wilayah tugas, jadi tidak bisa dipakai untuk nomor ${u.slot}. Urutan tidak diubah.`, 422);
+    }
+    const jalan = async (x: number, y: number) => {
+      try {
+        const { data, error } = await db.rpc("sigap_foto_pindah_nomor", { p_akun: akunId, p_penugasan: pen.id, p_tanggal: tanggal, p_dari: x, p_ke: y });
+        const r = data as { ok?: boolean; error?: string } | null;
+        return error || !r?.ok ? (error?.message ?? r?.error ?? "tidak diketahui") : null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "tidak diketahui";
+      }
+    };
+    const selesai: Langkah[] = [];
+    for (const [x, y] of rencana.langkah) {
+      const gagal = await jalan(x, y);
+      if (gagal) {
+        for (const [p, q] of [...selesai].reverse()) await jalan(p, q); // penukaran dibalik persis urutan terbalik
+        return galat(`Gagal mengurutkan: ${gagal}. Urutan foto tidak diubah.`, 409);
+      }
+      selesai.push([x, y]);
+    }
+    await db.from("sigap_audit").insert({ akun_id: akunId, aksi: "foto.diurutkan_jam", detail: { penugasan_id: pen.id, tanggal, langkah: rencana.langkah, berubah: rencana.berubah } });
+    return NextResponse.json({ ok: true, status: "urut", langkah: rencana.langkah });
+  }
+
   // ---- pasang satu foto cadangan ke nomor pilihan
   if (aksi === "pasang") {
     const fotoId = Number(b.foto_id);
@@ -180,6 +239,7 @@ export async function POST(req: NextRequest) {
     const f = k.cadangan.find((x) => x.id === fotoId) ?? k.perluTahan.find((x) => x.id === fotoId);
     if (!f) return galat("Foto tidak ada di daftar cadangan hari ini.", 404);
     const tahan = k.perluTahan.some((x) => x.id === fotoId); // merah belum diperiksa: nomor dipesan dulu (tahanan)
+    if (harapAda(b, "harap_isi") && b.harap_isi !== isiNomor(k.baris, slot)) return galat(SUSUNAN_BERUBAH, 409);
     if (slotBerlokasi(slot) && (await diLuarWilayah(db, akunId, f))) return galat("Foto ini diambil jauh dari wilayah tugas, jadi tidak bisa dipakai untuk nomor " + slot + ".", 422);
     const tag = k.tagFoto.get(f.id)!;
     if (tag.status === "dilepas") await db.from("sigap_foto_tag").update({ status: "diajukan" }).eq("id", tag.id);

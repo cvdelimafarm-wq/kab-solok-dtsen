@@ -273,3 +273,94 @@ describe("foto merah tetap bernomor (tahanan)", () => {
     expect(panggilanRpc[0].arg).toMatchObject({ p_tag_id: 600, p_slot: 4, p_tahan: true });
   });
 });
+
+describe("POST aksi 'urutkan' (23 Okt 2026): urut sesuai jam, aturan sama dengan peringatan jam", () => {
+  const dok = (id: number, slot: number, foto_id: number | null): Baris => ({ id, penugasan_id: 49, tanggal: "2026-10-20", slot, sumber: foto_id ? "kamera" : "unggah", susulan: false, foto_id });
+  const tigaFoto = () => {
+    // nomor 1 = 20 menit, nomor 2 = 30 menit, nomor 3 = 10 menit -> lingkaran tiga: butuh dua penukaran
+    tabel.sigap_dokumentasi = [dok(1, 1, 21), dok(2, 2, 22), dok(3, 3, 23)];
+    tabel.sigap_foto = [foto(21, 20), foto(22, 30), foto(23, 10)];
+    tabel.sigap_foto_tag = [tag(31, 21, "diterima"), tag(32, 22, "diterima"), tag(33, 23, "diterima")];
+  };
+
+  it("dua foto terbalik: satu penukaran; unggahan manual tidak tersentuh; tercatat di audit", async () => {
+    tabel.sigap_foto = tabel.sigap_foto.map((f) => (f.id === 311 ? { ...f, diambil_at: new Date(Date.UTC(2026, 9, 20, 8, 95)).toISOString() } : f)); // 311 lebih akhir dari 369
+    const r = await POST(req({ aksi: "urutkan" }));
+    const j = await r.json();
+    expect(r.status).toBe(200);
+    expect(j.status).toBe("urut");
+    expect(j.langkah).toEqual([[3, 5]]);
+    expect(panggilanRpc).toHaveLength(1);
+    expect(panggilanRpc[0]).toEqual({ nama: "sigap_foto_pindah_nomor", arg: { p_akun: 266, p_penugasan: 49, p_tanggal: "2026-10-20", p_dari: 3, p_ke: 5 } });
+    expect(sisipan.some((s) => s.tabel === "sigap_audit" && s.baris.aksi === "foto.diurutkan_jam")).toBe(true);
+  });
+  it("sudah berurutan: tidak ada panggilan", async () => {
+    const j = await (await POST(req({ aksi: "urutkan" }))).json();
+    expect(j.status).toBe("sudah_urut");
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("jam sama (menit sama) tidak dianggap salah dan tidak ditukar", async () => {
+    tabel.sigap_foto = tabel.sigap_foto.map((f) => (f.id === 369 ? { ...f, diambil_at: tabel.sigap_foto.find((x) => x.id === 311)!.diambil_at } : f));
+    const j = await (await POST(req({ aksi: "urutkan" }))).json();
+    expect(j.langkah).toEqual([]);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("tiga foto berputar: dua penukaran berurutan", async () => {
+    tigaFoto();
+    const j = await (await POST(req({ aksi: "urutkan", harap_langkah: [[1, 3], [2, 3]] }))).json();
+    expect(j.langkah).toEqual([[1, 3], [2, 3]]);
+    expect(panggilanRpc.map((c) => [c.arg.p_dari, c.arg.p_ke])).toEqual([[1, 3], [2, 3]]);
+  });
+  it("keadaan di server beda dari yang dilihat petugas: 409 dan tidak ada yang diubah", async () => {
+    tigaFoto();
+    const r = await POST(req({ aksi: "urutkan", harap_langkah: [[1, 2]] }));
+    expect(r.status).toBe(409);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("satu langkah gagal: langkah yang sudah jalan dibalik, urutan tidak setengah berubah", async () => {
+    tigaFoto();
+    let n = 0;
+    jawabRpc = () => (++n === 2 ? { data: { ok: false, error: "asal_kosong" }, error: null } : { data: { ok: true }, error: null });
+    const r = await POST(req({ aksi: "urutkan" }));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toMatch(/tidak diubah/i);
+    expect(panggilanRpc.map((c) => [c.arg.p_dari, c.arg.p_ke])).toEqual([[1, 3], [2, 3], [1, 3]]); // langkah 1, langkah 2 gagal, langkah 1 dibalik
+  });
+  it("foto jauh dari wilayah akan berakhir di nomor berlokasi (2-4): ditolak sebelum menulis apa pun", async () => {
+    tigaFoto();
+    jarak = 50_000;
+    const r = await POST(req({ aksi: "urutkan" }));
+    expect(r.status).toBe(422);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("hari terkunci: ditolak", async () => {
+    akses = { error: "Batas waktu tanggal ini sudah lewat (23:59 WIB).", status: 403 };
+    expect((await POST(req({ aksi: "urutkan" }))).status).toBe(403);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+});
+
+describe("harap_* : tidak mengubah apa pun bila layar petugas sudah usang", () => {
+  it("pindah: nomor tujuan sekarang berisi foto lain -> 409", async () => {
+    const r = await POST(req({ aksi: "pindah", dari: 5, ke: 3, harap_dari: 369, harap_ke: 999 }));
+    expect(r.status).toBe(409);
+    expect(panggilanRpc).toHaveLength(0);
+  });
+  it("pindah: sesuai harapan -> jalan; nomor manual dan kosong dikenali", async () => {
+    expect((await POST(req({ aksi: "pindah", dari: 5, ke: 3, harap_dari: 369, harap_ke: 311 }))).status).toBe(200);
+    panggilanRpc.length = 0;
+    expect((await POST(req({ aksi: "pindah", dari: 5, ke: 4, harap_dari: 369, harap_ke: "kosong" }))).status).toBe(200);
+    panggilanRpc.length = 0;
+    expect((await POST(req({ aksi: "pindah", dari: 5, ke: 1, harap_dari: 369, harap_ke: "manual" }))).status).toBe(200);
+  });
+  it("pasang: nomor yang akan ditimpa sudah lain -> 409", async () => {
+    const r = await POST(req({ aksi: "pasang", foto_id: 279, slot: 3, harap_isi: 999 }));
+    expect(r.status).toBe(409);
+    expect(panggilanRpc).toHaveLength(0);
+    expect((await POST(req({ aksi: "pasang", foto_id: 279, slot: 3, harap_isi: 311 }))).status).toBe(200);
+  });
+  it("GET: foto di nomor membawa koordinat untuk lembar detail", async () => {
+    const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-20"))).json();
+    expect(j.nomor[2].foto).toMatchObject({ id: 311, lat: -0.8, lng: 100.6 });
+  });
+});

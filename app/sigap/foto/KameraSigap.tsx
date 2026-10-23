@@ -610,9 +610,9 @@ export default function KameraSigap({
         <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#F2B632] bg-[#FFF4D6] px-3 py-2.5">
           <div className="text-[13px] font-extrabold text-[#5E4300]">Nomor foto hari ini belum lengkap</div>
           <p className="text-xs leading-relaxed text-[#5E4300]">
-            {rapi.cadangan} foto Anda sudah terkirim tetapi belum menempati nomor, sementara nomor {rapi.kosong.join(", ")} masih kosong. Pasang fotonya ke nomor yang sesuai.
+            {rapi.cadangan} foto cadangan Anda sudah terkirim tetapi belum menempati nomor, sementara nomor {rapi.kosong.join(", ")} masih kosong. Pasang fotonya ke nomor yang sesuai.
           </p>
-          <Link href={rapi.href} className="flex min-h-[48px] items-center justify-center rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">Rapikan nomor foto</Link>
+          <Link href={rapi.href} className="flex min-h-[48px] items-center justify-center rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">Tukar urutan foto</Link>
         </div>
       )}
 
@@ -624,9 +624,9 @@ export default function KameraSigap({
 
       {!jepretan && ganti !== null && (
         <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#B7791F] bg-[#FFF4D6] px-3 py-2.5">
-          <div className="text-[13px] font-extrabold text-[#5E4300]">Mode ganti foto: Foto {ganti} · {etiket[ganti - 1] ?? ""}</div>
+          <div className="text-[13px] font-extrabold text-[#5E4300]">Mode ambil ulang foto: Foto {ganti} · {etiket[ganti - 1] ?? ""}</div>
           <p className="text-xs leading-relaxed text-[#5E4300]">Foto yang Anda potret berikutnya akan menggantikan <b>Foto {ganti}</b> saja. Foto lama tidak dihapus, hanya menjadi cadangan.</p>
-          <button type="button" onClick={() => setGanti(null)} className="min-h-[40px] self-start rounded-full bg-white px-4 text-[12.5px] font-extrabold text-[#5E4300] shadow-sm">Batal ganti</button>
+          <button type="button" onClick={() => setGanti(null)} className="min-h-[40px] self-start rounded-full bg-white px-4 text-[12.5px] font-extrabold text-[#5E4300] shadow-sm">Batal ambil ulang</button>
         </div>
       )}
 
@@ -749,14 +749,14 @@ export default function KameraSigap({
             <p className="text-xs leading-relaxed text-[#3C4C68]">
               {hasil
                 ? nomor !== null
-                  ? `Foto ini sudah terkirim sebagai Foto ${nomor}. Salah nomor? Buka kartu hari: nomor foto bisa dipindah atau ditukar di sana.`
+                  ? `Foto ini sudah terkirim sebagai Foto ${nomor}. Salah nomor? Buka kartu hari, lalu ketuk dua foto untuk menukar urutannya.`
                   : "Foto ini sudah terkirim."
                 : ganti !== null && nomor === ganti
-                ? `Mode ganti foto: foto ini akan menggantikan Foto ${ganti} saja. Periksa pratinjau, lalu tekan Kirim. Foto lama tidak dihapus, hanya menjadi cadangan.`
+                ? `Mode ambil ulang foto: foto ini akan menggantikan Foto ${ganti} saja. Periksa pratinjau, lalu tekan Kirim. Foto lama tidak dihapus, hanya menjadi cadangan.`
                 : nomorOtomatis && nomor !== null
                 ? `Sudah dipilihkan Foto ${nomor} sesuai urutan foto hari ini. Ketuk nomor lain bila foto ini untuk keperluan yang berbeda.`
                 : saran === null
-                ? `Semua ${jumlahNomor} nomor hari ini sudah terisi. Foto ini akan disimpan sebagai cadangan; atau ketuk sebuah nomor untuk menggantikan fotonya (foto lama tetap tersimpan sebagai cadangan).`
+                ? `Semua ${jumlahNomor} nomor hari ini sudah terisi. Foto ini akan disimpan sebagai cadangan; atau ketuk sebuah nomor untuk mengambil ulang fotonya (foto lama tetap tersimpan sebagai foto cadangan).`
                 : `Tiap hari tugas ada ${jumlahNomor} foto dokumentasi dengan keperluan berbeda. Pilih keperluan foto ini.`}
             </p>
             <div className="flex flex-col gap-2" role="group" aria-label="Nomor foto">
@@ -778,7 +778,7 @@ export default function KameraSigap({
                     type="button"
                     aria-pressed={pilih}
                     disabled={sudahKirim || mengirim}
-                    aria-label={terisi ? `Nomor ${n} sudah terisi. ${pilih ? "Foto ini akan menggantikannya; ketuk lagi untuk membatalkan." : "Ketuk untuk mengganti."}` : undefined}
+                    aria-label={terisi ? `Nomor ${n} sudah terisi. ${pilih ? "Foto ini akan menggantikannya; ketuk lagi untuk membatalkan." : "Ketuk untuk mengambil ulang foto."}` : undefined}
                     onClick={() => {
                       setHitung(null); // petugas mengatur sendiri: hentikan kirim otomatis
                       setNomorOtomatis(false);
@@ -795,7 +795,7 @@ export default function KameraSigap({
                       <span className={`block text-sm font-bold ${terisi && !pilih ? "text-[#7A879C]" : "text-[#0F2A52]"}`}>{etiket[n - 1] ?? `Foto ${n}`}</span>
                       {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
                       {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
-                      {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengganti</span>}
+                      {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengambil ulang</span>}
                       {sudahKirim && pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Foto ini sudah terkirim sebagai Foto {n} ✓</span>}
                       {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto {n} sudah terisi. Bila dikirim, foto ini MENGGANTIKAN Foto {n} saja; foto lamanya tidak dihapus, hanya menjadi cadangan · ketuk lagi untuk batal</span>}
                     </span>
@@ -803,15 +803,15 @@ export default function KameraSigap({
                 );
               })}
             </div>
-            <p className="text-xs text-[#3C4C68]">Salah nomor setelah terkirim? Buka kartu hari (atau menu perbaikan): nomor foto bisa dipindah atau ditukar di sana.</p>
+            <p className="text-xs text-[#3C4C68]">Salah nomor setelah terkirim? Buka kartu hari (atau menu perbaikan), lalu ketuk dua foto untuk menukar urutannya.</p>
           </fieldset>
 
           {konfirmasiGanti !== null && (
             <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="presentation" onClick={() => setKonfirmasiGanti(null)}>
               <div role="alertdialog" aria-modal="true" aria-labelledby="judul-ganti" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                <h2 id="judul-ganti" className="text-base font-extrabold text-[#0F2A52]">Yakin mengganti Foto {konfirmasiGanti}?</h2>
+                <h2 id="judul-ganti" className="text-base font-extrabold text-[#0F2A52]">Yakin mengambil ulang Foto {konfirmasiGanti}?</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[#3C4C68]">
-                  Nomor {konfirmasiGanti} ({etiket[konfirmasiGanti - 1] ?? `Foto ${konfirmasiGanti}`}) sudah berisi foto. Bila diganti, foto yang lama tidak dihapus: ia menjadi foto cadangan dan bisa dipasang kembali lewat kartu hari.
+                  Nomor {konfirmasiGanti} ({etiket[konfirmasiGanti - 1] ?? `Foto ${konfirmasiGanti}`}) sudah berisi foto. Bila diambil ulang, foto yang lama tidak dihapus: ia menjadi foto cadangan dan bisa dipasang kembali lewat kartu hari.
                 </p>
                 <div className="mt-4 flex gap-2">
                   <button type="button" onClick={() => setKonfirmasiGanti(null)} className="min-h-[48px] flex-1 rounded-xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52]">Batal</button>
@@ -823,7 +823,7 @@ export default function KameraSigap({
                     }}
                     className="min-h-[48px] flex-[1.4] rounded-xl bg-[#B7791F] text-sm font-extrabold text-white"
                   >
-                    Ya, ganti Foto {konfirmasiGanti}
+                    Ya, ambil ulang Foto {konfirmasiGanti}
                   </button>
                 </div>
               </div>

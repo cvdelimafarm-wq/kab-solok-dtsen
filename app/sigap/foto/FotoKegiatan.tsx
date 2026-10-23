@@ -54,7 +54,7 @@ export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, la
     return (
       <div className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-4">
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto tanggal ini</div>
-        <p className="text-xs leading-relaxed text-[#3C4C68]">Kamera SIGAP hanya memotret pada hari kerjanya sendiri. Di sini Anda dapat memeriksa dan merapikan nomor foto bila masih diizinkan.</p>
+        <p className="text-xs leading-relaxed text-[#3C4C68]">Kamera SIGAP hanya memotret pada hari kerjanya sendiri. Di sini Anda dapat memeriksa dan menukar urutan foto bila masih diizinkan.</p>
         <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} />
       </div>
     );
