@@ -132,6 +132,19 @@ export function susunMonitoring(masuk: { petugas: PetugasMon[]; sub: SubMon[]; n
       };
     })
     .sort((a, b) => (a.pml_nama ?? "~").localeCompare(b.pml_nama ?? "~") || a.nama.localeCompare(b.nama));
+  // (23 Okt 2026, audit Tahap 3) Target per PPL = BILANGAN BULAT: target tim dibagi rata, sisa pembagian diberikan satu-satu ke PPL pertama menurut urutan nama,
+  // sehingga jumlah target PPL tim = target tim (dulu pecahan, mis. 305,3). Rata-rata pecahan tetap ada di TimMon.target_per_ppl.
+  const sudahDiberi = new Map<number, number>();
+  for (const p of daftarPpl) {
+    if (p.pml_id == null) continue;
+    const t = timMap.get(p.pml_id);
+    if (!t || t.ppl <= 0) continue;
+    const dasar = Math.floor(t.kk_target / t.ppl);
+    const sisa = t.kk_target - dasar * t.ppl;
+    const urutan = sudahDiberi.get(p.pml_id) ?? 0;
+    p.target = dasar + (urutan < sisa ? 1 : 0);
+    sudahDiberi.set(p.pml_id, urutan + 1);
+  }
 
   const daftarTim = [...timMap.values()].sort((a, b) => a.pml_nama.localeCompare(b.pml_nama));
 

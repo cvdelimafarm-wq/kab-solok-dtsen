@@ -218,9 +218,9 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
     const status: StatusLangkah = f.didata >= f.total ? "selesai" : f.didata > 0 ? "berjalan" : "perlu";
     const ket =
       f.didata >= f.total
-        ? `Semua ${f.total} KK sudah didata · ${f.terdampak} terdampak`
+        ? `Semua ${f.total} KK sudah punya hasil · ${f.terdampak} terdampak` // (23 Okt 2026) "punya hasil" = terdampak/tidak terdampak/tidak ditemukan; beda dengan angka "didata" di Monitoring (hanya yang berhasil)
         : f.didata > 0
-          ? `${f.didata} dari ${f.total} KK tim sudah didata`
+          ? `${f.didata} dari ${f.total} KK tim sudah punya hasil`
           : `Belum ada yang didata · ${f.total} KK tim menunggu`;
     return [
       {

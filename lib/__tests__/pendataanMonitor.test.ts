@@ -46,10 +46,13 @@ describe("susunMonitoring", () => {
     expect(t1.sub).toBe(3);
     expect(t1.sub_nonaktif).toBe(1);
   });
-  it("target per PPL dibagi rata", () => {
+  it("target per PPL dibagi rata: rata-rata tim pecahan, target tiap PPL bilangan bulat dan jumlahnya = target tim", () => {
     expect(t1.ppl).toBe(2);
     expect(t1.target_per_ppl).toBe(21.5);
     expect(t2.target_per_ppl).toBe(t2.kk_target);
+    const tim1 = d.ppl.filter((p) => p.pml_id === 1);
+    expect(tim1.map((p) => p.target)).toEqual([22, 21]); // Ani lebih dulu menurut nama, menerima sisa 1
+    expect(tim1.reduce((a, p) => a + p.target, 0)).toBe(t1.kk_target);
   });
   it("hasil tim hanya dari PPL; tanda PML masuk 'oleh lain'", () => {
     expect(t1.hasil).toEqual({ terdampak: 6 + 7 + 4, tidak_terdampak: 2, tidak_ditemukan: 1 });
@@ -59,7 +62,7 @@ describe("susunMonitoring", () => {
   it("PPL: hasil per orang, target = target per PPL timnya", () => {
     const ani = d.ppl.find((p) => p.nama === "Ani")!;
     expect(ani.hasil).toEqual({ terdampak: 13, tidak_terdampak: 2, tidak_ditemukan: 0 });
-    expect(ani.target).toBe(21.5);
+    expect(ani.target).toBe(22);
     expect(ani.pml_nama).toBe("PML Satu");
   });
   it("Sub SLS bersama: hasil PPL tidak ganda, jumlah keseluruhan dihitung sekali", () => {

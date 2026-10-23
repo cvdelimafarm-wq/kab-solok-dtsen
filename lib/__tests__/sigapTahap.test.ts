@@ -199,7 +199,7 @@ describe("modul pendataan", () => {
   it("status: belum ada yang didata = perlu; sebagian = berjalan; semua = selesai", () => {
     const m = (p: NonNullable<Induk["pendataan"]>) => susunTahap(K(induk(p)))[0].modul[0];
     expect(m({ total: 40, didata: 0, terdampak: 0 })).toMatchObject({ kode: "pendataan", status: "perlu", aksi: "Buka lembar" });
-    expect(m({ total: 40, didata: 12, terdampak: 5 })).toMatchObject({ status: "berjalan", ket: "12 dari 40 KK tim sudah didata" });
+    expect(m({ total: 40, didata: 12, terdampak: 5 })).toMatchObject({ status: "berjalan", ket: "12 dari 40 KK tim sudah punya hasil" });
     expect(m({ total: 40, didata: 40, terdampak: 22 })).toMatchObject({ status: "selesai", aksi: "Lihat", pecahan: 1 });
   });
 

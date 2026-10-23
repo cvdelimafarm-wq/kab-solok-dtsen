@@ -96,8 +96,8 @@ function KartuTim({ t, no }: { t: TimProgres; no: number }) {
         ) : (
           <ul className="mt-1">
             {mode === "nagari"
-              ? t.nagari.map((n) => <BarisWilayah key={n.nagari} judul={`Nagari ${n.nagari}`} ket={`${n.sub} Sub SLS`} target={n.target} realisasi={n.realisasi} />)
-              : t.sub.map((s) => <BarisWilayah key={s.idsubsls} judul={s.label} ket={`Nagari ${s.nagari}${s.dibagi > 1 ? ` · total ${angkaId(s.kk_total)} KK dibagi ${s.dibagi} tim` : ""}`} target={s.target} realisasi={s.realisasi} dibagi={s.dibagi > 1} />)}
+              ? t.nagari.map((n) => <BarisWilayah key={n.nagari} judul={`Nagari ${n.nagari}`} ket={`${n.sub} Sub SLS${n.target === 0 ? " · daftar KK belum ada" : ""}`} target={n.target} realisasi={n.realisasi} />)
+              : t.sub.map((s) => <BarisWilayah key={s.idsubsls} judul={s.label} ket={`Nagari ${s.nagari}${s.kk_total === 0 ? " · daftar KK belum ada" : ""}${s.dibagi > 1 ? ` · total ${angkaId(s.kk_total)} KK dibagi ${s.dibagi} tim` : ""}`} target={s.target} realisasi={s.realisasi} dibagi={s.dibagi > 1} />)}
           </ul>
         )}
         {t.sub_dibagi > 0 && mode === "nagari" && <p className="mt-1 text-[11px] text-[#8A6200]">⇄ {t.sub_dibagi} Sub SLS dibagi dengan tim lain (target diproporsikan). Rinciannya ada di "Daftar Sub SLS".</p>}

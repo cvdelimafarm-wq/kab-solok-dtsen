@@ -533,7 +533,7 @@ function ItemNav({
     <>
       <Ikon n={ikon} size={18} />
       {!mini && <span className="min-w-0 flex-1 truncate">{label}</span>}
-      {!mini && segera && <span className="rounded-[10px] bg-white/[.08] px-[7px] py-px text-[11px] text-[#7F95AE]">segera</span>}
+      {!mini && segera && <span className="rounded-[10px] bg-white/[.08] px-[7px] py-px text-[11px] text-[#7F95AE]">Segera hadir</span>}
       {!mini && !segera && ket && <span className="text-[11px] text-[#7F95AE]">{ket}</span>}
       {badge != null && badge > 0 && (
         <span className={`rounded-[10px] bg-[#D9971F] px-[7px] py-px text-[11px] font-semibold text-[#2B1C00] ${mini ? "absolute -right-0.5 -top-1 px-[5px] text-[10px]" : ""}`}>{badge}</span>

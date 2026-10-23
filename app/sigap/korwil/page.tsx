@@ -37,6 +37,8 @@ export default function MonitoringKorwil() {
   const galat = !data && d.galat && d.galat !== "SESI_BERAKHIR" ? d.galat : null;
   const L = data?.lapangan.total;
   const persen = L ? persenKorwil(L.realisasi, L.target) : 0;
+  // (23 Okt 2026, audit Tahap 3) jumlah Sub SLS per tim bisa lebih besar dari jumlah unik (Sub SLS yang dipegang dua tim): beri catatan
+  const perTim = data ? data.lapangan.tim.reduce((a, t) => a + t.sub.length, 0) : 0;
 
   return (
     <main className="min-h-screen bg-[#F2F6FC] pb-16 text-[#1B2B4B]">
@@ -114,6 +116,11 @@ export default function MonitoringKorwil() {
                   <small className="text-[11px] text-[#6B7A90]">{L.sub} Sub SLS</small>
                 </div>
               </div>
+            )}
+            {tab === "lapangan" && perTim > L.sub && (
+              <p className="px-1 text-[11.5px] leading-snug text-[#8A6200]">
+                ⇄ {L.sub} Sub SLS unik: {perTim - L.sub} Sub SLS dipegang lebih dari satu tim, jadi jumlah Sub SLS per tim ({perTim}) lebih besar. Targetnya tidak dihitung ganda.
+              </p>
             )}
             {tab === "lapangan" ? <KorwilLapangan lap={data.lapangan} /> : <KorwilAdministrasi adm={data.administrasi} />}
             <p className="px-1 text-[11.5px] text-[#6B7A90]">

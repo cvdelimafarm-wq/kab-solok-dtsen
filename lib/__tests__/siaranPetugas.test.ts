@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HARI_MODAL_SIARAN, akhirModalSiaran, kunciBacaSiaran, urlInternalSigap, validasiSiaran } from "@/lib/siaranPetugas";
+import { HARI_MODAL_SIARAN, akhirModalSiaran, hitungKonfirmasiSiaran, kunciBacaSiaran, urlInternalSigap, validasiSiaran } from "@/lib/siaranPetugas";
 
 const dasar = { kirim_push: true, judul: "Info 1: Data FASIH keluarga belum ada", isi: "Tetap siaga ya.", url: "/", modal: { aktif: true, judul: "INFO 1", isi: "**Siaga** dulu", jenis: "info" } };
 
@@ -84,5 +84,17 @@ describe("validasiKirimSatu (17 Okt 2026)", () => {
     expect(validasiKirimSatu({ ...dasar1, judul: "  " }).ok).toBe(false);
     expect(validasiKirimSatu({ ...dasar1, isi: "x".repeat(241) }).ok).toBe(false);
     expect(validasiKirimSatu({ ...dasar1, url: "//evil.com" }).ok).toBe(false);
+  });
+});
+
+describe("hitungKonfirmasiSiaran (audit Tahap 3)", () => {
+  it("pembilang tidak pernah melebihi penyebut", () => {
+    const r = hitungKonfirmasiSiaran([1, 2, 3, 9, 10], [1, 2, 3, 4]);
+    expect(r).toEqual({ sudah: 3, dari: 4 }); // 9 dan 10 bukan penerima sekarang
+    expect(r.sudah).toBeLessThanOrEqual(r.dari);
+  });
+  it("akun kembar dihitung sekali; daftar kosong aman", () => {
+    expect(hitungKonfirmasiSiaran([1, 1, 2], [1, 2])).toEqual({ sudah: 2, dari: 2 });
+    expect(hitungKonfirmasiSiaran([], [])).toEqual({ sudah: 0, dari: 0 });
   });
 });

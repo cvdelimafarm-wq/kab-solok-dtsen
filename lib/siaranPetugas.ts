@@ -80,6 +80,17 @@ export const akhirModalSiaran = (dari: Date): string => new Date(dari.getTime() 
 export const kunciBacaSiaran = (id: number, versi: string): string => `${id}_${versi}`;
 
 /**
+ * (23 Okt 2026, audit Tahap 3) Konfirmasi siaran = pembaca yang MASIH penerima sekarang, terhadap jumlah penerima sekarang.
+ * Dulu penyebut = jumlah penerima saat kirim, sedangkan pembilang memuat semua pembaca (termasuk petugas yang baru ditugaskan sesudahnya),
+ * sehingga bisa tampil 95/85. Akun kembar dihitung sekali; pembaca di luar daftar penerima sekarang tidak dihitung.
+ */
+export function hitungKonfirmasiSiaran(pembaca: readonly number[], penerimaSekarang: readonly number[]): { sudah: number; dari: number } {
+  const penerima = new Set(penerimaSekarang);
+  const sudah = new Set(pembaca.filter((a) => penerima.has(a)));
+  return { sudah: sudah.size, dari: penerima.size };
+}
+
+/**
  * (17 Okt 2026) Notifikasi ke SATU petugas pendataan (mis. mengajak mencoba menu baru): validasi isian. Penerima dipilih admin dari daftar petugas
  * yang ditugaskan; server menolak akun di luar daftar itu. Tanpa modal, tidak masuk riwayat siaran massal.
  */

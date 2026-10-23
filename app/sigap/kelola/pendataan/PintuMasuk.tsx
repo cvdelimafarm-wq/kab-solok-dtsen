@@ -34,7 +34,7 @@ export default function PintuMasuk({ tab }: { tab: KodeTabPendataan }) {
                 <li key={it.id} className="rounded-lg border border-dashed border-[#DDE6F3] bg-[#FAFBFD] p-3">
                   <span className="flex items-start justify-between gap-2">
                     <b className="text-[13.5px] text-[#6B7A90]">{it.judul}</b>
-                    <Chip>segera</Chip>
+                    <Chip>Segera hadir</Chip>
                   </span>
                   <span className="mt-0.5 block text-[12.5px] leading-snug text-[#8794A6]">{it.ket}</span>
                 </li>

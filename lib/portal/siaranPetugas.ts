@@ -9,7 +9,7 @@ import { KOLOM_PENGUMUMAN, keBentukPeserta, type Pengumuman, type PengumumanPese
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { catatAudit } from "@/lib/sigapAkses";
 import type { PesanPush } from "@/lib/sigapPushUtil";
-import { HARI_MODAL_SIARAN, KODE_KEGIATAN_SIARAN, PERAN_PENERIMA_SIARAN, akhirModalSiaran, kunciBacaSiaran, modalBerlakuUntukPeran, type Siaran } from "@/lib/siaranPetugas";
+import { HARI_MODAL_SIARAN, KODE_KEGIATAN_SIARAN, PERAN_PENERIMA_SIARAN, akhirModalSiaran, hitungKonfirmasiSiaran, kunciBacaSiaran, modalBerlakuUntukPeran, type Siaran } from "@/lib/siaranPetugas";
 
 export type Galat = { galat: string; status: number };
 
@@ -79,12 +79,17 @@ export async function ringkasSiaran(db: Db): Promise<{ push_siap: boolean; pener
   }
   const [{ data: sia }, { data: baca }] = await Promise.all([
     db.from("sigap_audit").select("akun_id, waktu, detail").eq("aksi", "siaran_pendataan").order("waktu", { ascending: false }).limit(10),
-    db.from("sigap_audit").select("detail").eq("aksi", "siaran_pendataan_baca").limit(5000),
+    db.from("sigap_audit").select("akun_id, detail").eq("aksi", "siaran_pendataan_baca").limit(5000),
   ]);
-  const hitung = new Map<number, number>();
+  // (23 Okt 2026) pembaca dikelompokkan per siaran; dihitung terhadap penerima SEKARANG (lihat hitungKonfirmasiSiaran di lib/siaranPetugas.ts)
+  const pembacaPerSiaran = new Map<number, number[]>();
   for (const b of baca ?? []) {
     const id = Number((b.detail as Record<string, unknown>)?.id);
-    if (Number.isInteger(id)) hitung.set(id, (hitung.get(id) ?? 0) + 1);
+    const akunBaca = Number(b.akun_id);
+    if (!Number.isInteger(id) || !Number.isInteger(akunBaca)) continue;
+    const daftar = pembacaPerSiaran.get(id) ?? [];
+    daftar.push(akunBaca);
+    pembacaPerSiaran.set(id, daftar);
   }
   const olehIds = [...new Set((sia ?? []).map((s) => s.akun_id as number | null).filter((x): x is number => !!x))];
   const { data: ak } = olehIds.length ? await db.from("sigap_akun").select("id, nama").in("id", olehIds) : { data: [] as { id: number; nama: string }[] };
@@ -96,10 +101,10 @@ export async function ringkasSiaran(db: Db): Promise<{ push_siap: boolean; pener
       waktu: String(s.waktu),
       judul: String(d.judul ?? ""),
       oleh: nama.get(s.akun_id as number) ?? null,
-      akun: Number(d.akun ?? 0),
+      akun: Number.isInteger(pid) && pid > 0 ? hitungKonfirmasiSiaran([], penerima).dari : Number(d.akun ?? 0),
       terkirim: Number(d.terkirim ?? 0),
       modal: Number.isInteger(pid) && pid > 0,
-      sudah_konfirmasi: Number.isInteger(pid) ? hitung.get(pid) ?? 0 : 0,
+      sudah_konfirmasi: Number.isInteger(pid) ? hitungKonfirmasiSiaran(pembacaPerSiaran.get(pid) ?? [], penerima).sudah : 0,
     };
   });
   return { push_siap: pushSiap(), penerima: penerima.length, berlangganan, riwayat };

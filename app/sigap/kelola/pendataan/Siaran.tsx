@@ -222,7 +222,7 @@ export default function Siaran() {
       </p>
       {r && (
         <p className="mt-2 rounded-[12px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] text-[#55657D]">
-          Penerima: <b>{r.penerima}</b> petugas · sudah mengaktifkan notifikasi: <b>{r.berlangganan}</b>. Sisanya hanya melihat modal saat membuka aplikasi.
+          Penerima: <b>{r.penerima}</b> petugas pendataan (korwil, PML, PPL) · sudah mengaktifkan notifikasi: <b>{r.berlangganan}</b>. Sisanya hanya melihat modal saat membuka aplikasi.
           {!r.push_siap && <b className="mt-1 block text-[#B42329]">Kunci VAPID belum terpasang di server, notifikasi belum bisa dikirim.</b>}
         </p>
       )}
@@ -365,7 +365,7 @@ export default function Siaran() {
                 <b className="block text-[13px] text-[#1B2B4B]">{x.judul}</b>
                 <span className="block text-[11.5px] text-[#6B7A90]">
                   {waktuTeks(x.waktu)}
-                  {x.oleh ? ` · ${x.oleh}` : ""} · {x.terkirim} perangkat{x.modal ? ` · ${x.sudah_konfirmasi}/${x.akun} sudah menekan "Saya mengerti"` : ""}
+                  {x.oleh ? ` · ${x.oleh}` : ""} · {x.terkirim} perangkat{x.modal ? ` · ${x.sudah_konfirmasi} dari ${x.akun} petugas saat ini sudah menekan "Saya mengerti"` : ""}
                 </span>
               </li>
             ))}

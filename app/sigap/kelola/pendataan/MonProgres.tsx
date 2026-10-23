@@ -69,7 +69,7 @@ export default function MonProgres() {
     if (!data) return null;
     if (rekap === "ppl") {
       const h = jumlah(ppl.map((p) => p.hasil));
-      return { h, target: ppl.reduce((a, p) => a + p.target, 0), catat: "target = KK tim ÷ jumlah PPL tim" };
+      return { h, target: ppl.reduce((a, p) => a + p.target, 0), catat: "target PPL = KK tim dibagi rata (bilangan bulat)" };
     }
     if (!adaSaringan) return { h: data.total.hasil, target: data.total.kk_target, catat: "Sub SLS bersama dihitung sekali" };
     return { h: jumlah(tim.map((t) => t.hasil)), target: tim.reduce((a, t) => a + t.kk_target, 0), catat: "jumlah tim yang tampil" };
@@ -177,7 +177,7 @@ export default function MonProgres() {
                       <tr key={p.petugas_id}>
                         <td className={`${td} sticky left-0 bg-white font-bold`}>{p.nama}</td>
                         <td className={td}>{p.pml_nama ?? "—"}</td>
-                        <td className={tdAngka}>{fmt1(p.target)}</td>
+                        <td className={tdAngka}>{fmt(p.target)}</td>
                         <td className={tdAngka}>{fmt(p.hasil.terdampak)}</td>
                         <td className={tdAngka}>{fmt(p.hasil.tidak_terdampak)}</td>
                         <td className={`${tdAngka} font-bold`}>{fmt(b)}</td>
@@ -293,7 +293,7 @@ export default function MonProgres() {
           <div className="mt-4 space-y-2.5 md:hidden">
             {rekap === "ppl" &&
               ppl.map((p) => (
-                <Kartu key={p.petugas_id} judul={p.nama} sub={p.pml_nama ? `Tim ${p.pml_nama}` : "Belum masuk tim"} nilai={persen(berhasil(p.hasil), p.target)} utama={[["Terdampak", fmt(p.hasil.terdampak)], ["Tidak terdampak", fmt(p.hasil.tidak_terdampak)], ["Didata", fmt(berhasil(p.hasil))]]} lain={[["Target", fmt1(p.target)], ["Sisa", fmt(Math.max(0, p.target - berhasil(p.hasil)))], ["Tdk ditemukan", fmt(p.hasil.tidak_ditemukan)]]} />
+                <Kartu key={p.petugas_id} judul={p.nama} sub={p.pml_nama ? `Tim ${p.pml_nama}` : "Belum masuk tim"} nilai={persen(berhasil(p.hasil), p.target)} utama={[["Terdampak", fmt(p.hasil.terdampak)], ["Tidak terdampak", fmt(p.hasil.tidak_terdampak)], ["Didata", fmt(berhasil(p.hasil))]]} lain={[["Target", fmt(p.target)], ["Sisa", fmt(Math.max(0, p.target - berhasil(p.hasil)))], ["Tdk ditemukan", fmt(p.hasil.tidak_ditemukan)]]} />
               ))}
             {rekap === "tim" &&
               tim.map((t) => (
@@ -318,7 +318,7 @@ export default function MonProgres() {
             <summary className="cursor-pointer text-[12.5px] font-extrabold text-[#1F5FD1]">Cara membaca angka</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>
-              <b>Target tim</b> = seluruh KK di Sub SLS plotting tim (termasuk yang diajukan dari Kolam wilayah), tanpa Sub SLS yang dibekukan. <b>Target per PPL</b> = target tim ÷ jumlah PPL tim (dibagi rata).
+              <b>Target tim</b> = seluruh KK di Sub SLS plotting tim (termasuk yang diajukan dari Kolam wilayah), tanpa Sub SLS yang dibekukan. <b>Target per PPL</b> = target tim dibagi rata ke PPL tim dalam bilangan bulat (sisa pembagian diberikan satu-satu menurut urutan nama, jadi jumlahnya sama dengan target tim); kolom rata-rata tim tetap berupa pecahan.
             </li>
             <li>
               <b>Didata</b> = KK terdampak + tidak terdampak yang ditandai PPL itu. <b>Tidak ditemukan</b> ditampilkan terpisah. KK yang ditandai PML tidak dihitung pada PPL maupun tim (hanya info pada rekap PML).
