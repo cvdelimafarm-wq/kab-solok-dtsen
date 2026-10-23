@@ -33,7 +33,7 @@ export function indukDari(path: string): string | null {
   const kelola = /^\/sigap\/kelola\/([^/]+)\/.+/.exec(p);
   if (kelola) return `/sigap/kelola/${kelola[1]}`;
   // (23 Okt 2026) halaman penuh lama yang kini juga tersemat sebagai tab Kelola Pendataan -> induknya Kelola Pendataan
-  if (p === "/sigap/kelola/foto" || p === "/sigap/kelola/identifikasi" || p === "/sigap/kelola/lapangan") return "/sigap/kelola/pendataan";
+  if (p === "/sigap/kelola/foto" || p === "/sigap/kelola/identifikasi" || p === "/sigap/kelola/lapangan" || p === "/sigap/kelola/monitoring") return "/sigap/kelola/pendataan";
   if (p === "/sigap/kelola" || p.startsWith("/sigap/kelola/")) return "/";
   if (/^\/sigap\/pelatihan\/(undangan|instrumen|kuis)$/.test(p) || /^\/sigap\/pelatihan\/tes(\/|$)/.test(p)) return "/sigap/pelatihan";
   if (p.startsWith("/sigap/pelatihan/")) return "/sigap/pelatihan";
@@ -97,7 +97,8 @@ export function labelTujuan(path: string): string {
   const tetap: Record<string, string> = {
     "/sigap": "Beranda",
     "/sigap/kelola/pendataan": "Kelola Pendataan",
-    "/sigap/kelola/translok": "Admin Transport Lokal",
+    "/sigap/kelola/translok": "Administrasi & SPJ",
+    "/sigap/kelola/spj": "Administrasi & SPJ",
     "/sigap/kelola/perencanaan": "Perencanaan",
     "/sigap/kelola/pelatihan": "Kelola Pelatihan",
     "/sigap/kelola/pengadaan": "Pengadaan",
@@ -108,6 +109,7 @@ export function labelTujuan(path: string): string {
     "/sigap/kelola/foto": "Kelola Foto",
     "/sigap/kelola/identifikasi": "Monitoring Identifikasi",
     "/sigap/kelola/lapangan": "Monitoring Lapangan",
+    "/sigap/kelola/monitoring": "Monitoring Lapangan",
     "/sigap/pelatihan": "Pelatihan",
     "/sigap/korwil": "Monitoring Korwil",
     "/sigap/pendataan": "Lembar Pendataan",

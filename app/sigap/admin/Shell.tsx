@@ -9,7 +9,7 @@
 // (prop `mobile`). Konten (children) dirender SEKALI untuk kedua ukuran layar.
 // (23 Okt 2026) + "pendataan_kelola" (Kelola Pendataan, /sigap/kelola/pendataan, kini dibingkai Shell dengan tab) -- item "Pendataan" di sidebar jadi bertanda aktif.
 // (22 Okt 2026) Isi sidebar & palet kini disusun oleh lib/sigapMenuV2.ts (susunan v2 mengikuti siklus kegiatan:
-// Beranda, Perencanaan, Pelaksanaan, Pengendalian, Pertanggungjawaban, Pengelolaan, + Referensi); Shell hanya menggambar.
+// Beranda, Perencanaan, Pelaksanaan, Pengendalian, Pertanggungjawaban, Pengelolaan); Shell hanya menggambar.
 
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -145,9 +145,9 @@ export default function Shell({
   jejak: string[];
   ringkas: Ringkas;
   kegId?: number | null;
-  /** Bila ada: pemilih kegiatan topbar & palet memanggil ini. Bila tidak: pindah ke /sigap/admin?kegiatan=. */
+  /** Bila ada: pemilih kegiatan topbar & palet memanggil ini. Bila tidak: pindah ke /sigap/kelola/spj?kegiatan=. */
   onPilihKegiatan?: (id: number) => void;
-  /** Bila ada: menu admin berpindah tab di tempat. Bila tidak: Link ke /sigap/admin?tab=. */
+  /** Bila ada: menu admin berpindah tab di tempat. Bila tidak: Link ke /sigap/kelola/spj?tab=. */
   onMenu?: (k: KodeTabAdmin) => void;
   jumlahTindakan?: number | null;
   aksiPalet?: ItemPalet[];
@@ -227,14 +227,14 @@ export default function Shell({
   const pindahMenu = useCallback(
     (k: KodeTabAdmin) => {
       if (onMenu) onMenu(k);
-      else window.location.href = `/sigap/kelola/translok?tab=${k}`;
+      else window.location.href = `/sigap/kelola/spj?tab=${k}`;
     },
     [onMenu]
   );
   const pilihKegiatan = useCallback(
     (id: number) => {
       if (onPilihKegiatan) onPilihKegiatan(id);
-      else window.location.href = `/sigap/kelola/translok?kegiatan=${id}`;
+      else window.location.href = `/sigap/kelola/spj?kegiatan=${id}`;
     },
     [onPilihKegiatan]
   );

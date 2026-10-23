@@ -198,7 +198,7 @@ export default function AdminTransportLokal() {
   const mobile = (
     <>
       <HeaderAdmin
-        kecil="Admin Transport Lokal"
+        kecil="Administrasi & SPJ"
         judul={daftar ? "Pilih kegiatan" : kegBaru ? "Kegiatan baru" : tabAktif === "beranda" ? "Beranda" : keg?.nama ?? "Belum ada kegiatan"}
         onKeluar={keluar}
         kembali={daftar ? <TombolKembali tema="gelap" /> : <TombolKembali tema="gelap" label="Daftar kegiatan" onKlik={keDaftar} />}
@@ -363,7 +363,7 @@ export default function AdminTransportLokal() {
         />
       ) : !adaAksesAdmin ? (
         <Pesan jenis="info">
-          Akun Anda belum punya izin menu Admin Transport Lokal. Minta admin anggaran memberi peran lewat Kelola Peran &amp; Akses.{" "}
+          Akun Anda belum punya izin menu Administrasi &amp; SPJ. Minta admin anggaran memberi peran lewat Kelola Peran &amp; Akses.{" "}
           <Link href="/" className="font-bold underline">
             Kembali ke Beranda
           </Link>

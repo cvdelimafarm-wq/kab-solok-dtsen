@@ -96,7 +96,7 @@ async function labelTautan(db: Db, t: { jenis: string; ref_id: number | null; re
     let href: string | null = null;
     if (x.jenis === "kegiatan") {
       label = (k ?? []).find((y) => y.id === x.ref_id)?.nama ?? `Kegiatan #${x.ref_id}`;
-      href = `/sigap/admin?kegiatan=${x.ref_id}&tab=kegiatan`;
+      href = `/sigap/kelola/spj?kegiatan=${x.ref_id}&tab=kegiatan`;
     } else if (x.jenis === "penugasan") {
       const y = ((p ?? []) as unknown as { id: number; peran: string; sigap_akun: { nama: string } | null; sigap_kegiatan: { nama: string } | null }[]).find((z) => z.id === x.ref_id);
       label = y ? `SPJ ${y.sigap_akun?.nama ?? "?"} (${y.peran.toUpperCase()}) · ${y.sigap_kegiatan?.nama ?? ""}` : `Penugasan #${x.ref_id}`;

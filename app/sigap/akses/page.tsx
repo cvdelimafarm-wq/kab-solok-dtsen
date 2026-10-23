@@ -72,8 +72,8 @@ export default function KelolaPeranAkses() {
       <LayarPenuh>
         <Pesan>{galat}</Pesan>
         <div className="flex gap-3 text-sm font-bold text-[#1F6FD1]">
-          <Link href="/sigap/kelola/translok" className="underline">
-            Ke Admin Transport Lokal
+          <Link href="/sigap/kelola/spj" className="underline">
+            Ke Administrasi &amp; SPJ
           </Link>
           <button type="button" onClick={keluar} className="underline">
             Masuk dengan akun lain
@@ -97,7 +97,7 @@ export default function KelolaPeranAkses() {
         kecil="Kelola Peran & Akses"
         judul="Siapa boleh membuka apa"
         onKeluar={keluar}
-        kembali={<TombolKembali tema="gelap" induk="/sigap/kelola/translok" />}
+        kembali={<TombolKembali tema="gelap" induk="/sigap/kelola/spj" />}
         kanan={
           <>
             {saya && (
@@ -124,7 +124,7 @@ export default function KelolaPeranAkses() {
   const isi = (
     <>
       <div className="hidden lg:block">
-        <TombolKembali tema="terang" induk="/sigap/kelola/translok" />
+        <TombolKembali tema="terang" induk="/sigap/kelola/spj" />
       </div>
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {tab === "izin" ? (

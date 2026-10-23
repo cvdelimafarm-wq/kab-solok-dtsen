@@ -18,7 +18,7 @@ type Saya = {
 function modulPertama(s: Saya): string {
   const izin = s.izin ?? {};
   if (s.pelatihan_kelola) return "/sigap/kelola/pelatihan";
-  if (s.admin) return "/sigap/kelola/translok";
+  if (s.admin) return "/sigap/kelola/spj";
   if (s.kontrak) return "/sigap/kelola/pengadaan";
   if (izin["pedia.kelola"]) return "/sigap/kelola/pedia";
   if (s.kelola_akses) return "/sigap/kelola/akses";

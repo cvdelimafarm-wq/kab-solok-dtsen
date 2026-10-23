@@ -1,12 +1,17 @@
 // (9 Okt 2026) [alamat baru, alamat lama (berkas halaman)] -- /sigap/kelola/<modul>
 const PETA_KELOLA = [
   ["/sigap/kelola/pelatihan", "/sigap/pelatihan/kelola"],
-  ["/sigap/kelola/translok", "/sigap/admin"],
+  // (23 Okt 2026, Dokumen Induk SIGAP v2) rumah tunggal: Administrasi & SPJ dan Monitoring. /sigap/kelola/translok sekarang hanya pengalihan (ALIAS_LAMA).
+  ["/sigap/kelola/spj", "/sigap/admin"],
+  ["/sigap/kelola/monitoring", "/sigap/kelola/lapangan"],
   ["/sigap/kelola/pedia", "/sigap/pedia/kelola"],
   ["/sigap/kelola/pengadaan", "/sigap/kontrak"],
   ["/sigap/kelola/akses", "/sigap/akses"],
   ["/sigap/kelola/aplikasi", "/portal/admin"],
 ];
+
+// (23 Okt 2026) Alamat lama yang tidak punya berkas halaman sendiri: hanya dialihkan (307, query dipertahankan) ke alamat baru, tanpa rewrite.
+const ALIAS_LAMA = [["/sigap/kelola/translok", "/sigap/kelola/spj"]];
 
 // (10 Okt 2026) Id build: dipakai HP untuk mengetahui ada deploy baru (header X-Build-Id pada jawaban /api/*, lihat app/portal/PembaruanTersedia.tsx).
 // Data simpanan TIDAK dibuang karena deploy -- tiap jenis data punya nomor skema sendiri (app/portal/dataBersama.ts).
@@ -30,7 +35,7 @@ const nextConfig = {
   // Berkas halaman tidak dipindah: alamat baru dilayani lewat rewrites (isi = halaman lama), alamat lama dialihkan ke
   // alamat baru (redirects) supaya tautan yang sudah tersebar di WhatsApp/notifikasi tetap jalan.
   async redirects() {
-    return PETA_KELOLA.map(([baru, lama]) => ({ source: `${lama}/:path*`, destination: `${baru}/:path*`, permanent: false }));
+    return [...PETA_KELOLA, ...ALIAS_LAMA.map(([lama, baru]) => [baru, lama])].map(([baru, lama]) => ({ source: `${lama}/:path*`, destination: `${baru}/:path*`, permanent: false }));
   },
   async rewrites() {
     return PETA_KELOLA.map(([baru, lama]) => ({ source: `${baru}/:path*`, destination: `${lama}/:path*` }));

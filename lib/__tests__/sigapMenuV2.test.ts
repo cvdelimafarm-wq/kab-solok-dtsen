@@ -1,4 +1,4 @@
-// (22 Okt 2026) Uji susunan sidebar SIGAP v2: urutan kelompok mengikuti siklus kegiatan, syarat izin, tidak ada alamat baru yang belum disetujui.
+// (22 Okt 2026) Uji susunan sidebar SIGAP v2: urutan kelompok mengikuti siklus kegiatan, syarat izin. (23 Okt 2026) Dokumen Induk v2: grup Referensi dihapus, alamat baru /sigap/kelola/monitoring.
 import { describe, expect, it } from "vitest";
 import { NAMA_PORTAL } from "../halaman";
 import { NAMA_PAYUNG, susunMenu, URUTAN_KELOMPOK, type IzinMenuSidebar, type ItemMenu } from "../sigapMenuV2";
@@ -35,7 +35,7 @@ const cari = (i: IzinMenuSidebar, id: string) => semuaItem(i).find((x) => x.id =
 
 describe("susunMenu v2", () => {
   it("urutan kelompok = siklus kegiatan, sama untuk akun berizin penuh maupun tanpa izin", () => {
-    const label = ["Perencanaan", "Pelaksanaan", "Pengendalian", "Pertanggungjawaban", "Pengelolaan", "Referensi"];
+    const label = ["Perencanaan", "Pelaksanaan", "Pengendalian", "Pertanggungjawaban", "Pengelolaan"];
     for (const izin of [SEMUA, KOSONG]) {
       const m = susunMenu(izin);
       expect(m.map((k) => k.kode)).toEqual(URUTAN_KELOMPOK);
@@ -72,10 +72,12 @@ describe("susunMenu v2", () => {
       }
   });
 
-  it("hanya memakai alamat yang sudah hidup -- belum ada /sigap/kelola/monitoring atau /sigap/kelola/spj (menunggu persetujuan user)", () => {
+  it("memakai alamat baru Monitoring dan tidak lagi menaut ke alamat lama yang dialihkan (lapangan, translok, admin)", () => {
     const href = semuaItem(SEMUA).map((x) => x.href).filter(Boolean) as string[];
-    expect(href).not.toContain("/sigap/kelola/monitoring");
-    expect(href).not.toContain("/sigap/kelola/spj");
+    expect(href).toContain("/sigap/kelola/monitoring");
+    expect(href).not.toContain("/sigap/kelola/lapangan");
+    expect(href).not.toContain("/sigap/kelola/translok");
+    expect(href).not.toContain("/sigap/admin");
     for (const h of href) expect(h.startsWith("/sigap/")).toBe(true);
     expect(href).toEqual(
       expect.arrayContaining([
@@ -85,7 +87,7 @@ describe("susunMenu v2", () => {
         "/sigap/kelola/pendataan",
         "/sigap/translok/tok123",
         "/sigap/kelola/pengadaan",
-        "/sigap/kelola/lapangan",
+        "/sigap/kelola/monitoring",
         "/sigap/kelola/akses",
         "/sigap/kelola/aplikasi",
         "/sigap/kelola/delego",
@@ -125,17 +127,24 @@ describe("susunMenu v2", () => {
     expect(cari(KOSONG, "administrasi-spj")).toMatchObject({ status: "segera" });
   });
 
+  it("Audit dan bukti: membuka Register & arsip bukti bagi pengelola PEDIA, selain itu segera (Referensi dihapus)", () => {
+    expect(cari(SEMUA, "audit-bukti")).toMatchObject({ href: "/sigap/kelola/pedia", aktifKode: "pedia_kelola" });
+    expect(cari(KOSONG, "audit-bukti")).toMatchObject({ status: "segera" });
+    expect(cari({ ...KOSONG, pediaKelola: true }, "audit-bukti")).toMatchObject({ href: "/sigap/kelola/pedia" });
+    expect(susunMenu(SEMUA).some((k) => (k.kode as string) === "referensi")).toBe(false);
+  });
+
   it("Monitoring (lapangan) di Pengendalian hanya bila ada izin; Ruang keputusan masih segera", () => {
-    expect(cari(SEMUA, "monitoring")).toMatchObject({ href: "/sigap/kelola/lapangan" });
+    expect(cari(SEMUA, "monitoring")).toMatchObject({ href: "/sigap/kelola/monitoring" });
     expect(cari(KOSONG, "monitoring")).toBeUndefined();
     expect(cari(KOSONG, "ruang-keputusan")).toMatchObject({ status: "segera" });
   });
 
-  it("Pengelolaan memuat SDM & Mitra, Tata kelola, Kantor, Diseminasi (segera) lalu item pengaturan sesuai izin", () => {
+  it("Pengelolaan memuat SDM & Mitra, Tata kelola, SIGAP PEDIA, Kantor, Diseminasi lalu item pengaturan sesuai izin", () => {
     const k = susunMenu(SEMUA).find((x) => x.kode === "pengelolaan")!;
-    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego"]);
+    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego"]);
     const kosong = susunMenu(KOSONG).find((x) => x.kode === "pengelolaan")!;
-    expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "kantor", "diseminasi"]);
+    expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi"]);
   });
 
   it("Perencanaan: Alur GSBPM hanya untuk Admin Aplikasi; Anggaran masih segera", () => {

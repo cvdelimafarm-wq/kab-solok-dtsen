@@ -140,7 +140,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
 
   // 4. Pengelolaan (dari izin peran).
   const adaTranslok = Object.keys(izin).some((k) => k.startsWith("translok."));
-  if (adaTranslok) kartu.push({ kode: "admin-translok", grup: "kelola", judul: "Admin Transport Lokal", uraian: "Monitoring, penugasan, verifikasi & kunci SPJ, periode kegiatan.", href: "/sigap/kelola/translok" });
+  if (adaTranslok) kartu.push({ kode: "admin-translok", grup: "kelola", judul: "Administrasi & SPJ", uraian: "Monitoring, penugasan, verifikasi & kunci SPJ, periode kegiatan.", href: "/sigap/kelola/spj" });
   if (boleh(izin, "kontrak.kelola", "lihat")) kartu.push({ kode: "kontrak", grup: "kelola", judul: "Pengadaan & Kontrak", uraian: "Paket pengadaan, master & penyedia, dokumen kontrak.", href: "/sigap/kelola/pengadaan" });
   if (boleh(izin, "pedia.kelola", "lihat")) kartu.push({ kode: "pedia-kelola", grup: "kelola", judul: "SIGAP PEDIA — Penatausahaan", uraian: "Register, rekap & arsip bukti.", href: "/sigap/kelola/pedia" });
   const aplAdmin: [string, string][] = [

@@ -165,7 +165,7 @@ export default function AdminAplikasiPage() {
             <div className="border-b border-[#E3E8EE] px-5 py-4">
               <h2 className="text-[15px] font-bold">Periode kegiatan</h2>
               <p className="mt-1 text-[13px] text-[#4D5B6B]">
-                Kartu petugas ditutup otomatis pada <strong>tanggal selesai + masa tenggang</strong> (bawaan 7 hari), lalu menjadi arsip baca-saja. Tanggal mulai/selesai diatur di Admin Transport Lokal &rsaquo; Kegiatan.
+                Kartu petugas ditutup otomatis pada <strong>tanggal selesai + masa tenggang</strong> (bawaan 7 hari), lalu menjadi arsip baca-saja. Tanggal mulai/selesai diatur di Administrasi &amp; SPJ &rsaquo; Kegiatan.
               </p>
             </div>
             <div className="overflow-x-auto">

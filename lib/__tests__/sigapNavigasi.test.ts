@@ -30,6 +30,12 @@ describe("indukDari -- Kelola Pendataan", () => {
     expect(indukDari("/sigap/kelola/foto")).toBe("/sigap/kelola/pendataan");
     expect(indukDari("/sigap/kelola/identifikasi")).toBe("/sigap/kelola/pendataan");
     expect(indukDari("/sigap/kelola/lapangan")).toBe("/sigap/kelola/pendataan");
+    // (23 Okt 2026, Dokumen Induk v2) alamat baru Monitoring mengikuti perilaku yang sama
+    expect(indukDari("/sigap/kelola/monitoring")).toBe("/sigap/kelola/pendataan");
+  });
+  it("Administrasi & SPJ (alamat baru dan lama) naik ke Beranda", () => {
+    expect(indukDari("/sigap/kelola/spj")).toBe("/");
+    expect(indukDari("/sigap/kelola/translok")).toBe("/");
   });
   it("modul kelola lain tetap ke Beranda", () => {
     expect(indukDari("/sigap/kelola/pendataan")).toBe("/");
@@ -56,7 +62,9 @@ describe("labelTujuan", () => {
   it("nama tujuan yang dikenal", () => {
     expect(labelTujuan("/")).toBe("Beranda");
     expect(labelTujuan("/sigap/kelola/pendataan?tab=siaran")).toBe("Kelola Pendataan");
-    expect(labelTujuan("/sigap/kelola/translok")).toBe("Admin Transport Lokal");
+    expect(labelTujuan("/sigap/kelola/translok")).toBe("Administrasi & SPJ");
+    expect(labelTujuan("/sigap/kelola/spj")).toBe("Administrasi & SPJ");
+    expect(labelTujuan("/sigap/kelola/monitoring")).toBe("Monitoring Lapangan");
     expect(labelTujuan("/sigap/kegiatan/pascabencana")).toBe("Tahapan");
     expect(labelTujuan("/sigap/kegiatan/pascabencana/pendataan")).toBe("Tahap kegiatan");
     expect(labelTujuan("/sigap/kegiatan/translok-12")).toBe("Kegiatan");

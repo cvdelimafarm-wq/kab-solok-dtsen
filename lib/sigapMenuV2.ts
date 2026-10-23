@@ -4,10 +4,11 @@
 // Sidebar mengikuti siklus kegiatan: Beranda; Perencanaan; Pelaksanaan; Pengendalian; Pertanggungjawaban; Pengelolaan.
 // Logika murni (tanpa React/DB) supaya urutan & syarat tampil bisa diuji; app/sigap/admin/Shell.tsx hanya menggambar hasilnya.
 //
-// Yang SENGAJA tidak dilakukan (belum disetujui user, lihat catatan-susunan-menu-v2-22okt.md):
-//  - tidak ada alamat baru (/sigap/kelola/monitoring, /sigap/kelola/spj) dan tidak ada pengalihan baru; semua tautan memakai alamat yang sudah hidup;
-//  - tidak ada fitur baru: item yang belum ada halamannya tampil "segera" (tanpa tautan), seperti sebelumnya;
-//  - "Referensi" (SIGAP PEDIA) dipertahankan sebagai kelompok terakhir karena tempat SIGAP PEDIA masih pertanyaan terbuka.
+// (23 Okt 2026, Dokumen Induk SIGAP v2 -- usulan Claude disetujui user "setuju semua"):
+//  - alamat baru /sigap/kelola/monitoring (isi = halaman lapangan) dan /sigap/kelola/spj (isi = halaman admin); alamat lama dialihkan 307 (next.config.js);
+//  - kelompok "Referensi" dihapus: "Register & arsip bukti" menjadi isi "Audit dan bukti" (Pertanggungjawaban); SIGAP PEDIA (rujukan regulasi) tinggal di
+//    Pengelolaan dekat Tata kelola, supaya tetap terjangkau semua akun;
+//  - tidak ada fitur baru: item yang belum ada halamannya tampil "segera" (tanpa tautan), seperti sebelumnya.
 
 /** Nama payung SIGAP (disamakan dengan NAMA_PORTAL di lib/halaman.ts). */
 export const NAMA_PAYUNG = "Sistem Integrasi Kegiatan BPS";
@@ -36,10 +37,10 @@ export type NamaIkon =
   | "kantor"
   | "siaran";
 
-export type KodeKelompok = "beranda" | "perencanaan" | "pelaksanaan" | "pengendalian" | "pertanggungjawaban" | "pengelolaan" | "referensi";
+export type KodeKelompok = "beranda" | "perencanaan" | "pelaksanaan" | "pengendalian" | "pertanggungjawaban" | "pengelolaan";
 
 /** Urutan kelompok di sidebar (= siklus kegiatan). */
-export const URUTAN_KELOMPOK: KodeKelompok[] = ["beranda", "perencanaan", "pelaksanaan", "pengendalian", "pertanggungjawaban", "pengelolaan", "referensi"];
+export const URUTAN_KELOMPOK: KodeKelompok[] = ["beranda", "perencanaan", "pelaksanaan", "pengendalian", "pertanggungjawaban", "pengelolaan"];
 
 export type ItemMenu = {
   id: string;
@@ -153,7 +154,7 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           id: "monitoring",
           ikon: "grafik",
           label: "Monitoring",
-          href: "/sigap/kelola/lapangan",
+          href: "/sigap/kelola/monitoring",
           title: "Monitoring lapangan: translok + hasil identifikasi/pendataan per petugas per tanggal",
           ketPalet: "lapangan: translok, identifikasi, pendataan",
         }),
@@ -166,9 +167,12 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
       label: "Pertanggungjawaban",
       item: [
         i.adaSubAdmin
-          ? { id: "administrasi-spj", ikon: "perisai", label: "Administrasi & SPJ", aksi: "admin_transport", title: "Admin transport lokal: penugasan & ST, tarif, verifikasi & kunci" }
+          ? { id: "administrasi-spj", ikon: "perisai", label: "Administrasi & SPJ", aksi: "admin_transport", title: "Penugasan & ST, tarif, verifikasi & kunci SPJ" }
           : { id: "administrasi-spj", ikon: "perisai", label: "Administrasi & SPJ", status: "segera" },
-        { id: "audit-bukti", ikon: "arsip", label: "Audit dan bukti", status: "segera" },
+        // Dokumen Induk v2: arsip dan register bukti masuk "Audit dan bukti". Selama belum ada halaman audit lain, item ini membuka register SIGAP PEDIA bagi pengelolanya.
+        i.pediaKelola
+          ? { id: "audit-bukti", ikon: "arsip", label: "Audit dan bukti", href: "/sigap/kelola/pedia", aktifKode: "pedia_kelola", title: "Register & arsip bukti konsultasi resmi", ketPalet: "buku register & arsip bukti" }
+          : { id: "audit-bukti", ikon: "arsip", label: "Audit dan bukti", status: "segera" },
       ],
     },
 
@@ -178,6 +182,7 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
       item: [
         { id: "sdm-mitra", ikon: "orang", label: "SDM & Mitra", status: "segera" },
         { id: "tata-kelola", ikon: "perisai", label: "Tata kelola", status: "segera" },
+        { id: "pedia", ikon: "pedia", label: "SIGAP PEDIA", href: "/sigap/pedia", aktifKode: "pedia", title: "Ensiklopedia konsultasi resmi", ketPalet: "ensiklopedia konsultasi" },
         { id: "kantor", ikon: "kantor", label: "Kantor", status: "segera" },
         { id: "diseminasi", ikon: "siaran", label: "Diseminasi", status: "segera" },
         ...jika(i.akses, { id: "peran-akses", ikon: "gembok", label: "Peran dan akses", href: "/sigap/kelola/akses", aktifKode: "akses" }),
@@ -190,15 +195,6 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           ketPalet: "kelola aplikasi, admin & periode",
         }),
         ...jika(i.delego, { id: "delego", ikon: "tautan", label: "Delego", href: "/sigap/kelola/delego", title: "Buka Delego", ketPalet: "aplikasi delegasi kerja" }),
-      ],
-    },
-
-    referensi: {
-      kode: "referensi",
-      label: "Referensi",
-      item: [
-        { id: "pedia", ikon: "pedia", label: "SIGAP PEDIA", href: "/sigap/pedia", aktifKode: "pedia", title: "Ensiklopedia konsultasi resmi", ketPalet: "ensiklopedia konsultasi" },
-        ...jika(i.pediaKelola, { id: "pedia-kelola", ikon: "arsip", label: "Register & arsip bukti", href: "/sigap/kelola/pedia", aktifKode: "pedia_kelola", ketPalet: "buku register & arsip bukti" }),
       ],
     },
   };
