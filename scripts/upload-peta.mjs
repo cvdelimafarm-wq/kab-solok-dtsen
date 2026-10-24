@@ -93,7 +93,8 @@ if (desaDari) {
 bacaEnvLokal();
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const kunci = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").replace(/^["'<\s]+|["'>\s]+$/g, "");
-const kunciUtuh = !!kunci && kunci.split(".").length === 3;
+// (24 Okt 2026) Terima kunci JWT lama (3 bagian) maupun secret key baru Supabase (diawali sb_secret_).
+const kunciUtuh = !!kunci && (kunci.split(".").length === 3 || /^sb_secret_/.test(kunci));
 const db = url && kunciUtuh ? createClient(url, kunci, { auth: { persistSession: false } }) : null;
 
 // (10 Okt 2026) Lewati berkas yang petanya sudah ada di Storage -- permintaan user (hemat/cepat). Aturan "sudah ada" sama dengan aplikasi
@@ -146,7 +147,7 @@ if (dry) {
 }
 
 if (kunci && !kunciUtuh) {
-  console.error("SUPABASE_SERVICE_ROLE_KEY bukan kunci JWT yang utuh (harus 3 bagian dipisah titik, diawali eyJ). Periksa .env.local; kunci tidak ditampilkan.");
+  console.error("SUPABASE_SERVICE_ROLE_KEY bukan kunci yang utuh (JWT lama: 3 bagian dipisah titik, diawali eyJ; atau secret key baru: diawali sb_secret_). Periksa .env.local; kunci tidak ditampilkan.");
   process.exit(1);
 }
 if (!db) {

@@ -85,7 +85,8 @@ async function main() {
   const ref = (() => { try { return new URL(base).hostname.split(".")[0]; } catch { return "URL tidak valid"; } })();
   console.log(`Supabase proyek: ${ref} | panjang kunci: ${kunci.length} | awalan: ${kunci.slice(0, 6)}...`);
   if (ref !== "nlwkpakyfprugqwklxiu") console.warn("PERINGATAN: proyek bukan dtsen-usulan-solok (nlwkpakyfprugqwklxiu).");
-  const H = { apikey: kunci, Authorization: `Bearer ${kunci}`, "Content-Type": "application/json" };
+  // (24 Okt 2026) Secret key baru (sb_secret_) BUKAN JWT: kirim lewat header apikey saja, tanpa Authorization: Bearer.
+  const H = { apikey: kunci, ...(kunci.startsWith("sb_") ? {} : { Authorization: `Bearer ${kunci}` }), "Content-Type": "application/json" };
 
   async function ambil(path) {
     const semua = [];
