@@ -7,6 +7,7 @@
 // Di bawahnya tambahan pagu resmi. Semua orang organik boleh melihat; tombol hanya untuk akun berwenang (kewenangan `jadwal` dan `sahkan`),
 // dan yang memutuskan tetap basis data. Logika murni: lib/keu/revisi.ts.
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   DAFTAR_JENIS, dataJadwalBaru, jadwalKosong, periksaJadwalBaru, ringkasPok, statusTenggat, tglPanjang, type IsianJadwal, type PokDasar,
@@ -84,6 +85,7 @@ export default function HalamanRevisi() {
         <Tenang>
           PPK menentukan <b>kapan</b> kertas kerja revisi dibuka dan <b>jenisnya</b> (POK, DIPA jalur DJPb, DIPA jalur DJA, atau Administrasi). Untuk Revisi POK tersedia jadwal bawaan tiap tanggal 10; PPK dapat merealisasikan atau melewatinya. Usulan hanya dapat diajukan selama jendela terbuka. Setelah diterapkan, <b>PPK menyatakan revisi sah</b> dan status POK sistem ikut terbarui. Tenggat Pasal 175 hanya menjadi pengingat, tidak mengunci tombol.
         </Tenang>
+        <Link href="/sigap/revisi/kertas" className={`${tombolUtama} inline-flex items-center self-start no-underline`}>Buka Kertas kerja revisi (matriks per KRO)</Link>
 
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]">
           <div className={`${kartu} flex flex-col gap-2`}>
