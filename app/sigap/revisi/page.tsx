@@ -96,7 +96,8 @@ export default function HalamanRevisi() {
                 <span className="text-[12.5px] text-[#5B6B84]">{ringkasPokKini.ket}</span>
               </div>
             ) : <div className="h-12 animate-pulse rounded-lg bg-[#EEF2F7]" aria-busy="true" />}
-            <div className="text-[12px] text-[#5B6B84]">Pencocokan dengan PDF POK resmi dikerjakan pada tahap unggah POK resmi (belum tersedia di halaman ini).</div>
+            <div className="text-[12px] text-[#5B6B84]">Setelah revisi sah, PDF POK resmi dari SAKTI diunggah dan dicocokkan dengan POK sistem.</div>
+            <Link href="/sigap/revisi/pok" className={`${tombolKecil} inline-flex items-center self-start no-underline`}>Unggah dan cocokkan PDF POK resmi</Link>
             <Galat pesan={sah.galat ?? pok.galat} />
           </div>
 
