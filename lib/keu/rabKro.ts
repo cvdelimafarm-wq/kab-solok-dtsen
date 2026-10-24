@@ -13,7 +13,7 @@ export type StatusRabItem = (typeof STATUS_RAB_ITEM)[number];
 export const LABEL_STATUS_ITEM: Record<StatusRabItem, string> = { sama: "RAB = Item", rinci: "Rinci", belum: "Belum ada RAB", selesai: "Selesai" };
 
 export type BarisRabKro = {
-  id: number; ro: string; kode: string; uraian: string; akun: string; komponen: string; pok: number; rab: number | null; selisih: number | null;
+  id: number; ro: string; kode: string; uraian: string; akun: string; komponen: string; pok: number; semula: number; rab: number | null; selisih: number | null;
   booked: number; real: number; sisa: number; status: StatusRabItem; itemId: number | null; prioritas: string | null;
   /** Kunci stabil item POK (null untuk baris buatan), satuan dan volume Menjadi: bahan membuat RAB = Item dan item RAB baru. */
   kunci: string | null; satuan: string; volume: number;
@@ -37,7 +37,7 @@ export function sandingkanRab(baris: BarisMx[], item: ItemRabKro[]): { baris: Ba
     const status = statusDari(it);
     const pok = n(b.jumlah_menjadi), rab = it && status !== "belum" ? n(it.jumlah_rab) : null;
     hasil.push({
-      id: b.id, ro: b.ro_kode, kode: b.nomor ?? "", uraian: b.uraian_menjadi ?? b.uraian_semula ?? "", akun: b.akun_menjadi, komponen: b.komponen_kode, pok, rab,
+      id: b.id, ro: b.ro_kode, kode: b.nomor ?? "", uraian: b.uraian_menjadi ?? b.uraian_semula ?? "", akun: b.akun_menjadi, komponen: b.komponen_kode, pok, semula: n(b.jumlah_semula), rab,
       selisih: rab === null ? null : rab - pok, booked: b.booked, real: b.real, sisa: pok - b.booked - b.real, status, itemId: it ? Number(it.item_id) : null,
       prioritas: it?.prioritas_kode ?? b.prioritas_kode ?? null, kunci: b.pok_kunci, satuan: b.sat_menjadi ?? b.sat_semula ?? "", volume: n(b.vol_menjadi),
     });

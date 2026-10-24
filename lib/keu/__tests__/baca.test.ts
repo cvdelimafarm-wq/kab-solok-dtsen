@@ -44,8 +44,10 @@ describe("daftar putih tampilan", () => {
       expect(n).toMatch(/^keu_[a-z0-9_]+$/);
       expect(k.length).toBeGreaterThan(0);
       k.forEach((c) => expect(c).toMatch(/^[a-z][a-z0-9_]*$/));
-      expect(n).not.toMatch(/riwayat|audit|pemberian/);
+      // Satu-satunya pengecualian: tampilan riwayat master, yang hanya memuat jejak perubahan tabel master (keu_master_*, keu_struktur_level).
+      if (n !== "keu_v_master_riwayat") expect(n).not.toMatch(/riwayat|audit|pemberian/);
     }
+    expect(TAMPILAN_BACA.keu_v_master_riwayat).toEqual(["id", "waktu", "aksi", "detail", "oleh_nama"]);
     expect(TAMPILAN_BACA.keu_v_rab_ringkas).toContain("ro_kode");
   });
 });

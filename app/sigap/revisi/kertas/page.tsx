@@ -8,6 +8,7 @@
 // Alamat: /sigap/revisi/kertas?jadwal=<id>&kro=<2903.BMA>&ro=<kode>&dari=<alamat asal>. Semua orang organik boleh melihat; yang memutuskan basis data.
 // Logika murni: lib/keu/matriks.ts dan lib/keu/kk.ts.
 
+import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, statusTenggat, tglPanjang } from "@/lib/keu/revisi";
@@ -21,9 +22,12 @@ import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom,
 import { aksiKeu, tulisKeuKlien, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { FormBaru, FormPenggenap, KartuGeseran, KartuKecukupan, KartuPeriksa, PanelPasangan, type AkunMaster, type KeputusanRow } from "./Bagian";
 import Matriks, { type RincianRab } from "./Matriks";
+import { bukuDariSandingan } from "@/lib/keu/kecukupan";
+import { PanelKecukupan, type ParamMaster } from "./Kecukupan";
 import { PanelPerkiraan, PerubahanPok, SubBulanan, type StateBulanan } from "./Rab";
 import { AksiRabPagu } from "./Geseran";
-import { SubRab, type StatusRabRo } from "./RabInline";
+import { KartuVersiRab, SubRab, type StatusRabRo, type VersiRabRow } from "./RabInline";
+import { urlPeta } from "@/lib/keu/peta";
 import { sandingkanRab, type ItemRabKro, type JadwalItem } from "@/lib/keu/rabKro";
 import type { BarisRabRow as RincianRabRow } from "@/lib/keu/rab";
 
@@ -182,6 +186,7 @@ function Isi() {
   const putus = useBacaKeu<KeputusanRow>(u("keu_kk_keputusan_kro", {}));
   const akun = useBacaKeu<AkunMaster>(urlBaca("keu_master_akun", { aktif: "true" }, { kolom: ["kode", "nama"], urut: "kode", batas: 3000 }));
   const sat = useBacaKeu<{ kode: string }>(urlBaca("keu_master_satuan", { aktif: "true" }, { kolom: ["kode"], urut: "urut", batas: 200 }));
+  const param = useBacaKeu<ParamMaster>(urlBaca("keu_master_param", {}, { batas: 20 }));
   const prioritas = useBacaKeu<PrioritasMaster>(urlBaca("keu_master_prioritas", {}, { urut: "urut", batas: 50 }));
   const tenggat = useBacaKeu<Tenggat>(urlBaca("keu_v_tenggat", {}, { urut: "tanggal", batas: 20 }));
   const pokBerlaku = useBacaKeu<{ id: number; nomor_revisi: number; tanggal_efektif: string | null }>(urlBaca("keu_pok_versi", { status: "berlaku" }, { urut: "-id", batas: 1, kolom: ["id", "nomor_revisi", "tanggal_efektif"] }));
@@ -238,6 +243,7 @@ function Isi() {
   const aksiRab = useMemo(() => (
     mx && jd ? <AksiRabPagu jadwal={jd.id} jenisJadwal={jd.jenis} baris={mx} rab={sandingan ? sandingan.baris : null} rincian={rincianPerItem} prioritas={prioritas.baris ?? []} bisaUbah={bisaUbah} namaAkun={namaAkun} sesudah={segarkan} /> : null
   ), [mx, jd, sandingan, rincianPerItem, prioritas.baris, bisaUbah, namaAkun, segarkan]);
+  const bukuKlien = useMemo(() => bukuDariSandingan(sandingan?.baris ?? [], prioritas.baris ?? []), [sandingan, prioritas.baris]);
   const [stBulanan, setStBulanan] = useState<StateBulanan>({ format: "samping", ro: "" });
   const jadwalItem = useMemo(() => jadwalRab.baris ?? [], [jadwalRab.baris]);
   const jumlahRincian = useMemo(() => new Map((rabRows.baris ?? []).map((r) => [Number(r.baris_id), n(r.jumlah)] as const)), [rabRows.baris]);
@@ -295,6 +301,7 @@ function Isi() {
                     return { ok: true as const, data: null };
                   })}>Muat baris POK ({roKosong.length} RO)</button>
                 )}
+                <Link href={urlPeta(jd.id, `/sigap/revisi/kertas?jadwal=${jd.id}&kro=${kro}`)} className={`${tombolKecil} inline-flex items-center no-underline`}>Peta KRO Satker</Link>
                 {rows && <KembaliSemula rows={rows} geseran={geseran.baris ?? []} boleh={bisaUbah} sesudah={segarkan} />}
               </div>
             </div>
@@ -319,6 +326,7 @@ function Isi() {
           )}
 
           {sub === "rab" && (!sandingan || rabRows.memuat ? <Memuat tinggi="h-48" /> : <SubRab baris={sandingan.baris} ringkas={sandingan.ringkas} statusRo={statusRo} namaRo={namaRo} namaKomp={namaKomp} namaAkun={namaAkun} dari={`/sigap/revisi/kertas?jadwal=${jd.id}&kro=${kro}&sub=rab`} rincian={rincianPerItem} satuan={(sat.baris ?? []).map((x) => x.kode)} boleh={(ro) => hakRab[ro] ?? null} sesudah={segarkan} aksiBar={aksiRab} />)}
+          {sub === "rab" && ringkasRab.baris && <KartuVersiRab versi={ringkasRab.baris as unknown as VersiRabRow[]} namaRo={namaRo} />}
           {sub === "rab" && sandingan && idRab.length > 0 && <PanelPerkiraan jadwal={jadwalItem} jumlahRincian={jumlahRincian} roDaftar={roKro} st={stBulanan} ubah={setStBulanan} belumRab={belumRab} memuat={jadwalRab.memuat} />}
           {sub === "bulanan" && <SubBulanan jadwal={jadwalItem} jumlahRincian={jumlahRincian} kodeItem={kodeRabItem} namaRo={namaRo} roDaftar={roKro} st={stBulanan} ubah={setStBulanan} dari={`/sigap/revisi/kertas?jadwal=${jd.id}&kro=${kro}&sub=bulanan`} memuat={ringkasRab.memuat || (idRab.length > 0 && (jadwalRab.memuat || rabRows.memuat))} adaRab={idRab.length > 0} />}
 
@@ -341,6 +349,7 @@ function Isi() {
           </section>
 
           <KartuPeriksa p={periksa.baris ?? []} />
+          {sandingan && <PanelKecukupan baris={sandingan.baris} kro={kro} param={param.baris ?? []} prioritas={prioritas.baris ?? []} buku={bukuKlien} jenisJadwal={jd.jenis} />}
           <KartuKecukupan jadwal={jd.id} ro={roKro.join(", ")} kro={kro} kec={kec.baris ?? []} keputusan={putus.baris ?? []} bolehPutus={bolehSahkan} sesudah={segarkan} />
           <BukuSelisih item={kecItem.baris ?? []} baris={rows ?? []} prioritas={prioritas.baris ?? []} />
 
@@ -369,7 +378,7 @@ function Isi() {
             </section>
           )}
 
-          {mx && <PerubahanPok baris={mx} kro={kro} />}
+          {mx && <PerubahanPok baris={mx} kro={kro} jenisJadwal={jd.jenis} jenisNama={LABEL_JENIS_JADWAL[jd.jenis] ?? jd.jenis} />}
           {mx && <KartuGeseran jadwal={jd.id} baris={rows ?? []} geseran={geseran.baris ?? []} bisaUbah={roBisa.length > 0} sesudah={segarkan} />}
           </>)}
         </>

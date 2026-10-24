@@ -284,7 +284,34 @@ export function SubRab({ baris, ringkas, statusRo, namaRo, namaKomp, namaAkun, d
           </div>
         )}
       </section>
-      <Catatan>Versi RAB (v1 Salinan POK, v2 Penyesuaian kebutuhan) dan alasan versi belum tersedia di halaman ini; RAB aktif dikelola per RO dengan alur ajukan, setujui, dan sahkan. Item baru atau Dana penggenap (tanpa kunci POK) diatur di tab RAB tiap RO.</Catatan>
+      <Catatan>RAB aktif dikelola per RO dengan alur ajukan, setujui, dan sahkan; riwayat versinya ada di kartu Versi RAB di bawah. Alasan versi (wajib, minimal 10 karakter) belum disimpan oleh basis data, jadi belum ada isiannya di sini. Item baru atau Dana penggenap (tanpa kunci POK) diatur di tab RAB tiap RO.</Catatan>
     </div>
+  );
+}
+
+export type VersiRabRow = { rab_id: number; ro_kode: string; nomor: number | string | null; status: string; n_item: number | string; jumlah_rab: number | string };
+const LABEL_VERSI: Record<string, string> = { draf: "Draf", menunggu_ketua: "Menunggu ketua tim", menunggu_ppk: "Menunggu PPK", dikembalikan: "Dikembalikan", disetujui: "Disahkan", dibatalkan: "Dibatalkan" };
+const WARNA_VERSI: Record<string, "abu" | "kuning" | "hijau" | "merah" | "biru"> = { draf: "abu", menunggu_ketua: "kuning", menunggu_ppk: "kuning", dikembalikan: "merah", disetujui: "hijau", dibatalkan: "abu" };
+
+/** Riwayat versi RAB per RO (v1, v2, ...): nomor, status, jumlah item dan jumlah RAB. Hanya membaca. */
+export function KartuVersiRab({ versi, namaRo }: { versi: VersiRabRow[]; namaRo: Map<string, string> }) {
+  if (versi.length === 0) return null;
+  const per = new Map<string, VersiRabRow[]>();
+  for (const v of [...versi].sort((a, b) => Number(a.nomor ?? 0) - Number(b.nomor ?? 0))) { const a = per.get(v.ro_kode) ?? []; a.push(v); per.set(v.ro_kode, a); }
+  return (
+    <section className={`${kartu} flex flex-col gap-2`}>
+      <h2 className={judulKartu}>Versi RAB</h2>
+      <p className="text-[12.5px] text-[#5B6B84]">Tiap RO punya satu RAB aktif; versi lama tetap tercatat. Versi baru dibuat dari tab RAB di RO.</p>
+      <div className="flex flex-col gap-1.5">
+        {[...per.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([ro, daftar]) => (
+          <div key={ro} className="flex flex-wrap items-center gap-2 rounded-lg border border-[#E8EDF5] bg-[#F9FBFE] px-2.5 py-1.5 text-[12.5px]">
+            <span className="min-w-[200px] font-semibold text-[#0F2A52]"><span className="font-mono text-[11.5px]">{ro.split(".").pop()}</span> {namaRo.get(ro) ?? ""}</span>
+            {daftar.map((v) => (
+              <span key={v.rab_id} className="inline-flex items-center gap-1.5"><Chip warna={WARNA_VERSI[v.status] ?? "abu"}>v{v.nomor ?? "?"} · {LABEL_VERSI[v.status] ?? v.status}</Chip><span className="text-[11.5px] text-[#7A8AA3]">{Number(v.n_item)} item · {rupiah(Number(v.jumlah_rab))}</span></span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

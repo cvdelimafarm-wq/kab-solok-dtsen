@@ -48,7 +48,7 @@ describe("rencanaSimpan", () => {
 });
 
 const kro = (o: Partial<BarisRabKro> & { id: number }): BarisRabKro => ({
-  ro: "2906.BMA.005", kode: "", uraian: "u", akun: "521213", komponen: "051", pok: 1000, rab: null, selisih: null, booked: 0, real: 0, sisa: 1000, status: "belum", itemId: null, prioritas: null,
+  ro: "2906.BMA.005", kode: "", uraian: "u", akun: "521213", komponen: "051", pok: 1000, semula: 1000, rab: null, selisih: null, booked: 0, real: 0, sisa: 1000, status: "belum", itemId: null, prioritas: null,
   kunci: "k", satuan: "OH", volume: 1, ...o,
 });
 describe("kelompokkanRab dan calon", () => {

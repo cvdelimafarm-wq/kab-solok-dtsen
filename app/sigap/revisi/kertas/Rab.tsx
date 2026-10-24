@@ -14,6 +14,7 @@ import {
   barisBerubah, barisJadwalBeda, bayangBiru, kelompokBulanan, keCsv, ketBulan, NAMA_BULAN_PANJANG, NAMA_BULAN_PENDEK, PILIHAN_FORMAT, RENTANG_MINGGU, rentangBulan, susunBulanan, susunPencairan,
   teksBeda, teksCatatanPencairan, teksTag, USULAN_TAG, type FormatBulanan, type ItemBulanan, type JadwalItem,
 } from "@/lib/keu/rabKro";
+import { lembarExcel, susunIsiLembar } from "@/lib/keu/lembarPerubahan";
 import { Catatan, Chip, judulKartu, kartu, Kosong, tombolAktif, tombolKecil } from "../../keu-ui";
 
 const fmtD = (v: number) => (v === 0 ? "0" : `${v > 0 ? "+" : "-"}${angka(Math.abs(v))}`);
@@ -239,8 +240,33 @@ export function PanelPerkiraan({ jadwal, jumlahRincian, roDaftar, st, ubah, belu
 }
 
 // ---------------------------------------------------------------- matriks perubahan POK
-export function PerubahanPok({ baris, kro }: { baris: BarisMx[]; kro: string }) {
+export function PerubahanPok({ baris, kro, jenisJadwal, jenisNama }: { baris: BarisMx[]; kro: string; jenisJadwal: string; jenisNama: string }) {
   const b = useMemo(() => barisBerubah(baris), [baris]);
+  const lembar = useMemo(() => susunIsiLembar(baris, kro, jenisJadwal, jenisNama), [baris, kro, jenisJadwal, jenisNama]);
+  const [galatEkspor, setGalatEkspor] = useState("");
+  const simpan = (blob: Blob, nama: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = nama; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  const unduhExcel = async () => {
+    setGalatEkspor("");
+    try {
+      const XLSX = await import("xlsx");
+      const ws = XLSX.utils.aoa_to_sheet(lembarExcel(lembar));
+      ws["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 9 }, { wch: 40 }, { wch: 9 }, { wch: 12 }, { wch: 14 }, { wch: 40 }, { wch: 9 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Perubahan POK");
+      const out = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+      simpan(new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `perubahan-pok-${kro}.xlsx`);
+    } catch { setGalatEkspor("Berkas Excel gagal dibuat. Coba lagi, atau pakai ekspor CSV."); }
+  };
+  const unduhPdf = async () => {
+    setGalatEkspor("");
+    try {
+      const { buatPdfLembar } = await import("@/lib/keu/lembarPdf");
+      const bytes = await buatPdfLembar(lembar);
+      simpan(new Blob([bytes as BlobPart], { type: "application/pdf" }), `perubahan-pok-${kro}.pdf`);
+    } catch { setGalatEkspor("Berkas PDF gagal dibuat. Coba lagi, atau pakai ekspor Excel."); }
+  };
   const tot = useMemo(() => ({ s: b.reduce((x, y) => x + n(y.jumlah_semula), 0), m: b.reduce((x, y) => x + n(y.jumlah_menjadi), 0) }), [b]);
   const unduh = () => {
     const isi = b.map((x) => [x.ro_kode, x.nomor ?? "", x.akun_menjadi, x.uraian_semula ?? "", n(x.vol_semula), n(x.harga_semula), n(x.jumlah_semula), x.uraian_menjadi ?? "", n(x.vol_menjadi), n(x.harga_menjadi), n(x.jumlah_menjadi), n(x.selisih), x.booked, x.real, x.pemicu ?? ""]);
@@ -273,7 +299,17 @@ export function PerubahanPok({ baris, kro }: { baris: BarisMx[]; kro: string }) 
               </tbody>
             </table>
           </div>
-          <button type="button" className={`${tombolKecil} self-start`} onClick={unduh}>Ekspor CSV (dibuka di Excel)</button>
+          <div className="grid gap-3 rounded-lg border border-[#DCE3EE] bg-[#F9FBFE] p-3 text-[12.5px] sm:grid-cols-3">
+            <div><div className="text-[11px] text-[#7A8AA3]">Jenis revisi</div><div className="font-semibold text-[#0F2A52]">{lembar.jenis}</div></div>
+            <div><div className="text-[11px] text-[#7A8AA3]">Disusun</div><div className="font-semibold text-[#0F2A52]">{lembar.disusun}</div><div className="text-[11px] text-[#7A8AA3]">{lembar.catatanTanggal}</div></div>
+            <div><div className="text-[11px] text-[#7A8AA3]">Penetap</div><div className="font-semibold text-[#0F2A52]">{lembar.penetap}</div><div className="text-[11px] text-[#7A8AA3]">{lembar.catatanPenetap}</div></div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" className={tombolKecil} onClick={() => void unduhExcel()}>Ekspor Excel</button>
+            <button type="button" className={tombolKecil} onClick={() => void unduhPdf()}>Ekspor PDF</button>
+            <button type="button" className={tombolKecil} onClick={unduh}>Ekspor CSV</button>
+          </div>
+          {galatEkspor && <p role="alert" className="text-[12.5px] text-[#9B1C23]">{galatEkspor}</p>}
         </>
       )}
     </details>

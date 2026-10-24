@@ -15,7 +15,7 @@ const mx = (o: Partial<BarisMx>): BarisMx => {
   } as BarisMx;
 };
 const rb = (b: BarisMx, rab: number | null, status: BarisRabKro["status"], prio: string | null = null): BarisRabKro => ({
-  id: b.id, ro: b.ro_kode, kode: "", uraian: b.uraian_menjadi ?? "", akun: b.akun_menjadi, komponen: b.komponen_kode, pok: Number(b.jumlah_menjadi), rab, selisih: rab === null ? null : rab - Number(b.jumlah_menjadi),
+  id: b.id, ro: b.ro_kode, kode: "", uraian: b.uraian_menjadi ?? "", akun: b.akun_menjadi, komponen: b.komponen_kode, pok: Number(b.jumlah_menjadi), semula: Number(b.jumlah_semula), rab, selisih: rab === null ? null : rab - Number(b.jumlah_menjadi),
   booked: b.booked, real: b.real, sisa: 0, status, itemId: rab === null ? null : b.id, prioritas: prio, kunci: "k", satuan: "OH", volume: Number(b.vol_menjadi),
 });
 const urut = new Map([["inti", 1], ["penting", 2], ["tunda", 3]]);

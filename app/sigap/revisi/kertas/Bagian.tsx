@@ -144,7 +144,7 @@ export function KartuKecukupan({ jadwal, ro, kro, kec, keputusan, bolehPutus, se
   const g = kro ? periksaKeputusan(pilih, jml, kurang) : [];
   return (
     <section className={`${kartu} flex flex-col gap-2`}>
-      <h2 className={judulKartu}>Kecukupan POK terhadap RAB{kro ? ` · KRO ${kro}` : ""}</h2>
+      <h2 className={judulKartu}>Kecukupan menurut RAB yang sudah disahkan dan keputusan PPK{kro ? ` · KRO ${kro}` : ""}</h2>
       {!kro && <p className="text-[13px] text-[#5B6B84]">RO sementara belum punya KRO.</p>}
       {kro && dataKro.length === 0 && <p className="text-[13px] text-[#5B6B84]">Belum ada RAB disetujui yang terhubung ke baris kertas kerja KRO ini, jadi kecukupan belum dapat dihitung.</p>}
       {dataKro.length > 0 && (
