@@ -11,7 +11,7 @@ import { rupiah } from "@/lib/keu/ro";
 import { LABEL_JENIS_JADWAL } from "@/lib/keu/revisi";
 import type { BarisBuku, PrioritasMaster } from "@/lib/keu/matriks";
 import type { BarisRabKro } from "@/lib/keu/rabKro";
-import { dasarKebutuhan, FAKTOR_BAWAAN, hitungKecukupan, LABEL_KECUKUPAN, TOLERANSI_BAWAAN, teksCakupan, teksFaktor, WARNA_STATUS_KECUKUPAN } from "@/lib/keu/kecukupan";
+import { dasarKebutuhan, FAKTOR_BAWAAN, hitungKecukupan, jalurPenutup, LABEL_KECUKUPAN, TOLERANSI_BAWAAN, teksCakupan, teksFaktor, WARNA_STATUS_KECUKUPAN } from "@/lib/keu/kecukupan";
 import { Catatan, Chip, judulKartu, kartu } from "../../keu-ui";
 
 export type ParamMaster = { kode: string; nilai: number | string };
@@ -31,6 +31,7 @@ export function PanelKecukupan({ baris, kro, param, prioritas, buku, jenisJadwal
     return [...m.entries()];
   }, [buku]);
   const dasar = useMemo(() => dasarKebutuhan(kro, h, faktor, toleransi), [kro, h, faktor, toleransi]);
+  const jalur = useMemo(() => jalurPenutup(baris, dipa, prioritas.find((p) => p.kode === "tunda")?.nama ?? null), [baris, dipa, prioritas]);
   return (
     <section className={`${kartu} flex flex-col gap-2.5`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -87,6 +88,17 @@ export function PanelKecukupan({ baris, kro, param, prioritas, buku, jenisJadwal
               Kekurangan pagu KRO terhadap RAB {rupiah(totalBuku)} masuk daftar PPK dan menunggu keputusan (terima semua, terima sebagian, atau tunda) pada kartu keputusan di bawah.
             </div>
           )}
+          <div className="rounded-md border border-[#DCE3EE] bg-white px-2.5 py-2">
+            <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-[#5B6B84]">{dipa ? "Jalur penutup pada Revisi DIPA (diputuskan PPK dan pejabat berwenang)" : "Jalur penutup pada Revisi POK (hanya yang menjadi wewenang satker; PPK menyatakan sah, KPA menerima laporan)"}</div>
+            <ol className="m-0 mt-1.5 grid list-none gap-2 p-0">
+              {jalur.map((j) => (
+                <li key={j.no} className="flex min-w-0 gap-2.5">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[#E3EEFF] text-[12px] font-bold text-[#1F5FD1]">{j.no}</span>
+                  <div className="min-w-0 text-[12.5px] text-[#44546F]"><span className="font-semibold text-[#0F2A52]">{j.judul}</span> <Chip warna="abu">{j.jalur}</Chip><p className="m-0 mt-0.5">{j.teks}</p></div>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
       <Catatan><b>Dasar tertulis untuk nota atau surat:</b> {dasar}</Catatan>

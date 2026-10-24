@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BarisRabKro } from "../rabKro";
-import { bukuDariSandingan, dasarKebutuhan, hitungKecukupan, statusKecukupan, teksCakupan, teksFaktor } from "../kecukupan";
+import { bukuDariSandingan, dasarKebutuhan, hitungKecukupan, jalurPenutup, statusKecukupan, teksCakupan, teksFaktor } from "../kecukupan";
 
 let id = 0;
 const B = (o: Partial<BarisRabKro>): BarisRabKro => ({
@@ -68,5 +68,22 @@ describe("bukuDariSandingan", () => {
     const bk = bukuDariSandingan(baris, [{ kode: "inti", nama: "Inti", urut: 1 }, { kode: "penting", nama: "Penting", urut: 2 }]);
     expect(bk.map((x) => x.uraian)).toEqual(["b", "a", "c"]);
     expect(bk[0]).toMatchObject({ kurang: 400, prioritasNama: "Inti", kelompok: "52L" });
+  });
+});
+
+describe("jalurPenutup", () => {
+  const baris = [B({ prioritas: "tunda", rab: 2_000_000 }), B({ prioritas: "tunda", rab: 500_000, status: "selesai" }), B({ prioritas: "inti", rab: 900_000 })];
+  it("Revisi POK: dua jalur, jalur 1 menghitung item boleh ditunda yang belum selesai", () => {
+    const j = jalurPenutup(baris, false, "Dapat ditunda");
+    expect(j.map((x) => x.no)).toEqual([1, 2]);
+    expect(j[0].teks).toContain("1 item berkategori Dapat ditunda");
+    expect(j[0].teks).toContain("2.000.000");
+    expect(j[1].jalur).toBe("Perlu Revisi DIPA");
+  });
+  it("Revisi DIPA: lima jalur dimulai dari keputusan PPK", () => {
+    const j = jalurPenutup(baris, true, null);
+    expect(j.map((x) => x.judul)[0]).toBe("Teruskan ke PPK untuk diputuskan");
+    expect(j).toHaveLength(5);
+    expect(j[4].judul).toBe("Tunda kegiatan");
   });
 });

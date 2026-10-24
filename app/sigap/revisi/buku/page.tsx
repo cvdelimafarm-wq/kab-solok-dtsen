@@ -7,7 +7,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { KELOMPOK_BUKU, ringkasBuku, type CatatanKek } from "@/lib/keu/bukuselisih";
+import { keCsv } from "@/lib/keu/rabKro";
+import { KELOMPOK_BUKU, lembarBuku, ringkasBuku, type CatatanKek } from "@/lib/keu/bukuselisih";
 import { angka, rupiah, STATUS_KEK, urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu } from "../../ro/useKeu";
 import { Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, Kosong, Kpi, Memuat, Potong, Tenang, tombolAktif, tombolKecil } from "../../keu-ui";
@@ -21,6 +22,29 @@ export default function Halaman() {
   const data = useBacaKeu<CatatanKek>(urlBaca("keu_v_kekurangan", {}, { urut: "prioritas_urut", batas: 2000, kolom: KOLOM }));
   const semua = useMemo(() => (data.baris ? ringkasBuku(data.baris) : null), [data.baris]);
   const r = useMemo(() => (data.baris ? ringkasBuku(data.baris, { kelompok, prioritas }) : null), [data.baris, kelompok, prioritas]);
+
+  const [galatEkspor, setGalatEkspor] = useState("");
+  const ket = `Penyaring: ${kelompok ? `kelompok ${kelompok}` : "semua kelompok"}, ${prioritas ? `prioritas ${prioritas}` : "semua prioritas"}`;
+  const simpan = (blob: Blob, nama: string) => {
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement("a"); el.href = url; el.download = nama; document.body.appendChild(el); el.click(); el.remove(); URL.revokeObjectURL(url);
+  };
+  const unduhCsv = () => {
+    if (!r) return;
+    const l = lembarBuku(r, ket);
+    simpan(new Blob([keCsv(l[3] as string[], l.slice(4))], { type: "text/csv;charset=utf-8" }), "buku-selisih-satker.csv");
+  };
+  const unduhExcel = async () => {
+    if (!r) return;
+    setGalatEkspor("");
+    try {
+      const XLSX = await import("xlsx");
+      const ws = XLSX.utils.aoa_to_sheet(lembarBuku(r, ket));
+      ws["!cols"] = [{ wch: 14 }, { wch: 9 }, { wch: 9 }, { wch: 44 }, { wch: 14 }, { wch: 11 }, { wch: 14 }];
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Buku selisih");
+      simpan(new Blob([XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "buku-selisih-satker.xlsx");
+    } catch { setGalatEkspor("Berkas Excel gagal dibuat. Coba lagi, atau pakai ekspor CSV."); }
+  };
 
   return (
     <HalamanKeu
@@ -64,6 +88,14 @@ export default function Halaman() {
           <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="buku-ro">
             <h2 id="buku-ro" className={judulKartu}>Per RO <span className="text-[13px] font-normal text-[#5B6B84]">({r.nRo} RO, {rupiah(r.total)})</span></h2>
             {data.terpotong && <Potong />}
+            {r.nCatatan > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className={tombolKecil} onClick={() => void unduhExcel()}>Ekspor Excel</button>
+                <button type="button" className={tombolKecil} onClick={unduhCsv}>Ekspor CSV</button>
+                <span className="text-[12px] text-[#5B6B84]">Mengikuti penyaring yang aktif.</span>
+                {galatEkspor && <p role="alert" className="text-[12.5px] text-[#9B1C23]">{galatEkspor}</p>}
+              </div>
+            )}
             {r.perRo.length === 0 && <Kosong teks={semua.nCatatan === 0 ? "Belum ada kekurangan RAB yang tercatat terbuka." : "Tidak ada catatan yang cocok dengan penyaring."} />}
             {r.perRo.map((x) => (
               <div key={x.ro} className="min-w-0 rounded-lg border border-[#DCE3EE]">

@@ -100,3 +100,33 @@ export function bukuDariSandingan(baris: BarisRabKro[], prioritas: PrioritasMast
     }))
     .sort((a, b) => u(a.prioritas) - u(b.prioritas) || b.kurang - a.kurang || a.itemId - b.itemId);
 }
+
+// ---------------------------------------------------------------- jalur penutup (papan 1 mockup, tahap 24)
+export type JalurPenutup = { no: number; judul: string; jalur: string; teks: string };
+
+/**
+ * Jalur untuk menutup kekurangan yang tercatat di Buku selisih, menurut mode jenis revisi (diporting dari kk-kec.js mockup).
+ * Revisi POK: hanya turunkan volume item yang boleh ditunda (kode prioritas "tunda"); selebihnya perlu Revisi DIPA.
+ * Revisi DIPA: lima jalur dimulai dari keputusan PPK. Hanya saran urutan; tidak mengubah data.
+ */
+export function jalurPenutup(baris: BarisRabKro[], dipa: boolean, namaKategoriTunda: string | null): JalurPenutup[] {
+  const ditunda = baris.filter((b) => b.prioritas === "tunda" && b.rab !== null && b.rab > 0 && b.status !== "selesai");
+  const potensi = ditunda.reduce((s, b) => s + (b.rab ?? 0), 0);
+  const j1 = {
+    judul: "Turunkan volume item yang boleh ditunda", jalur: "Revisi POK, wewenang KPA",
+    teks: `${ditunda.length} item berkategori ${namaKategoriTunda ?? "boleh ditunda"} memiliki RAB ${rp(potensi)}. Penurunan hanya dalam kelompok belanja yang sama (524xxx dengan 524xxx, 52xxxx lain dengan 52xxxx lain) dan tidak di bawah Booked + Realisasi. Selisih tetap tercatat di Buku selisih; RAB tidak perlu dibuat ulang.`,
+  };
+  const daftar = dipa
+    ? [
+      { judul: "Teruskan ke PPK untuk diputuskan", jalur: "Keputusan PPK", teks: "Kekurangan per KRO masuk daftar PPK. PPK memutuskan menerima semua usulan, menerima sebagian, atau menunda (tetap tercatat di Buku selisih). Keputusan dilihat pada papan Peta KRO Satker, bagian Tampilan PPK." },
+      j1,
+      { judul: "Cari sumber di KRO lain pada Kegiatan yang sama", jalur: "Revisi DIPA jalur DJPb (tingkat 3)", teks: "Lihat Peta KRO Satker untuk KRO lain pada Kegiatan yang sama yang berstatus Cukup atau Lebih; sisanya dapat menjadi sumber." },
+      { judul: "Tambah pagu atau pindahkan antar-Program", jalur: "Revisi DIPA jalur DJA (tingkat 5), tidak dijamin", teks: "Dipakai bila seluruh KRO pada Satker masih kurang setelah dijumlahkan. Perlu Kanwil atau Eselon I; lihat jumlah seluruh KRO pada Peta KRO Satker." },
+      { judul: "Tunda kegiatan", jalur: "Keputusan tim", teks: "Kebutuhan yang belum terdanai dicatat sebagai angka, bukan baris POK. RAB tetap utuh sebagai dasar tertulis." },
+    ]
+    : [
+      j1,
+      { judul: "Jalur lain bukan wewenang Revisi POK", jalur: "Perlu Revisi DIPA", teks: "Sumber dari KRO lain, antar-Kegiatan, atau tambahan pagu tidak dapat dilakukan lewat Revisi POK. Bila kekurangan ingin ditutup, ubah jenis revisi menjadi Revisi DIPA (DJPb atau DJA); daftar kekurangan lalu diputuskan PPK pada tampilan PPK (papan Peta KRO Satker)." },
+    ];
+  return daftar.map((x, i) => ({ no: i + 1, ...x }));
+}

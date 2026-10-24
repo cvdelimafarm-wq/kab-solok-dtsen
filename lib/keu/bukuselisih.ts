@@ -48,3 +48,11 @@ export function ringkasBuku(rows: CatatanKek[], saring: { kelompok?: string; pri
     perRo,
   };
 }
+
+export const KEPALA_BUKU = ["RO", "Akun", "Kelompok", "Uraian", "Prioritas", "Status", "Jumlah"] as const;
+
+/** Larik-of-larik untuk Excel/CSV: judul, kepala, satu baris per catatan (urut RO lalu prioritas), jumlah total. Sesuai penyaring yang dipakai. */
+export function lembarBuku(r: RingkasBuku, ket: string): (string | number)[][] {
+  const isi = r.perRo.flatMap((x) => x.baris.map((b) => [x.ro, b.akun_kode, b.kelompok_kode ?? "", b.uraian, b.prioritas_nama ?? b.prioritas_kode, b.status, n(b.jumlah)] as (string | number)[]));
+  return [["Buku selisih seluruh Satker (kekurangan RAB terbuka)"], [ket], [], [...KEPALA_BUKU], ...isi, ["Total", "", "", "", "", "", r.total]];
+}
