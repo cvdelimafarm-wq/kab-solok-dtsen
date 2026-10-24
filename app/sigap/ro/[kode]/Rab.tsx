@@ -1,0 +1,348 @@
+"use client";
+
+// app/sigap/ro/[kode]/Rab.tsx
+//
+// (24 Okt 2026) Tab RAB: menyusun RAB per item POK (RAB = item, atau rincian), menandai item selesai, dan menjalankan alur persetujuan
+// (ajukan, setuju ketua, sahkan, kembalikan, batalkan). Tombol hanya tampil bila akun berwenang; yang memutuskan penjaga tabel dan
+// fungsi keu_rab_aksi di basis data. Logika murni: lib/keu/rab.ts.
+
+import { useMemo, useState } from "react";
+import {
+  aksiTersedia, AKSI_BUTUH_CATATAN, barisKosong, bisaDiubah, bolehSusunBaru, dataBaris, dataItemRab, dataSamaDenganItem, itemRabYatim, jumlahBaris,
+  LABEL_AKSI, LABEL_PERIODE, LABEL_STATUS_RAB, NAMA_BULAN, periksaBaris, periksaCatatanAksi, petakanRab, type AksiRab, type BarisRabRow, type HakRab,
+  type IsianBaris, type PemetaanItem, type Periode,
+} from "@/lib/keu/rab";
+import { PRIORITAS } from "@/lib/keu/kekurangan";
+import { angka, rupiah } from "@/lib/keu/ro";
+import { aksiKeu, tulisKeuKlien, useAnggaranRo, useBoleh, useKirim, useRabRo } from "../useKeu";
+
+const kartu = "rounded-[20px] bg-white p-4 shadow-[0_4px_16px_rgba(15,42,82,0.08)]";
+const kolom = "box-border min-h-[44px] w-full rounded-[12px] border-[1.5px] border-[#C5D0E2] bg-[#F8FBFF] px-3 text-[14px] font-semibold text-[#0F2A52]";
+const label = "mb-1 block text-[12px] font-bold text-[#44546F]";
+const tombol = "min-h-[44px] rounded-[12px] px-4 text-[13.5px] font-extrabold disabled:opacity-50";
+const WARNA_STATUS: Record<string, string> = { draf: "bg-[#EEF2F7] text-[#44546F]", dikembalikan: "bg-[#FDE8E8] text-[#9B1C23]", menunggu_ketua: "bg-[#FFF4D6] text-[#8A6200]", menunggu_ppk: "bg-[#FFF4D6] text-[#8A6200]", disetujui: "bg-[#E3F6EC] text-[#0B6B3F]" };
+const LABEL_ITEM: Record<PemetaanItem["status"], string> = { belum: "Belum ada RAB", sama: "RAB = Item", rinci: "RAB rinci", selesai: "Selesai" };
+
+const Galat = ({ pesan }: { pesan: string }) => <p role="alert" className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{pesan}</p>;
+
+function PilihBulan({ id, nilai, ubah, teks }: { id: string; nilai: number; ubah: (n: number) => void; teks: string }) {
+  return (
+    <div>
+      <label className={label} htmlFor={id}>{teks}</label>
+      <select id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
+        {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
+      </select>
+    </div>
+  );
+}
+function PilihMinggu({ id, nilai, ubah }: { id: string; nilai: number; ubah: (n: number) => void }) {
+  return (
+    <div>
+      <label className={label} htmlFor={id}>Minggu cair</label>
+      <select id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
+        {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ satu item POK
+type Ctx = { rabId: number; editable: boolean; muat: () => Promise<void> };
+
+function FormSama({ p, ctx, tutup }: { p: PemetaanItem; ctx: Ctx; tutup: () => void }) {
+  const [bulan, setBulan] = useState(new Date().getMonth() + 1);
+  const [minggu, setMinggu] = useState(3);
+  const [prioritas, setPrioritas] = useState(p.rab?.prioritas_kode ?? "");
+  const { jalankan, mengirim, galat } = useKirim(ctx.muat);
+  const simpan = async () => {
+    const ok = await jalankan(async () => {
+      let itemId = p.rab?.id;
+      if (itemId === undefined) {
+        const r = await tulisKeuKlien<{ id: number }>("keu_rab_item", "insert", dataItemRab(ctx.rabId, p.pok, prioritas));
+        if (!r.ok) return r;
+        itemId = r.data.id;
+      }
+      return tulisKeuKlien("keu_rab_baris", "insert", dataSamaDenganItem(itemId, p.pok, bulan, minggu));
+    });
+    if (ok) tutup();
+  };
+  return (
+    <div className="mt-2 space-y-3 rounded-[14px] bg-[#F5F8FE] p-3">
+      <p className="text-[12.5px] text-[#44546F]">RAB menyamai pagu POK ({rupiah(p.pok.pok)}), dicairkan sekali pada bulan dan minggu yang dipilih.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <PilihBulan id={`sb-${p.pok.detail_id}`} nilai={bulan} ubah={setBulan} teks="Bulan cair" />
+        <PilihMinggu id={`sm-${p.pok.detail_id}`} nilai={minggu} ubah={setMinggu} />
+      </div>
+      {!p.rab && (
+        <div>
+          <label className={label} htmlFor={`sp-${p.pok.detail_id}`}>Prioritas (boleh kosong)</label>
+          <select id={`sp-${p.pok.detail_id}`} className={kolom} value={prioritas} onChange={(e) => setPrioritas(e.target.value)}>
+            <option value="">Tanpa prioritas</option>
+            {PRIORITAS.map((x) => <option key={x.kode} value={x.kode}>{x.nama}</option>)}
+          </select>
+        </div>
+      )}
+      {galat && <Galat pesan={galat} />}
+      <div className="flex gap-2">
+        <button type="button" onClick={simpan} disabled={mengirim} className={`${tombol} flex-1 bg-[#1F5FD1] text-white`}>{mengirim ? "Menyimpan…" : "Simpan RAB = Item"}</button>
+        <button type="button" onClick={tutup} disabled={mengirim} className={`${tombol} bg-[#EEF2F7] text-[#44546F]`}>Batal</button>
+      </div>
+    </div>
+  );
+}
+
+function FormBaris({ p, ctx, awal, barisId, tutup }: { p: PemetaanItem; ctx: Ctx; awal: IsianBaris; barisId?: number; tutup: () => void }) {
+  const [v, setV] = useState<IsianBaris>(awal);
+  const [pesan, setPesan] = useState<string[]>([]);
+  const { jalankan, mengirim, galat } = useKirim(ctx.muat);
+  const ubah = (x: Partial<IsianBaris>) => setV((a) => ({ ...a, ...x }));
+  const jml = jumlahBaris(v);
+  const simpan = async () => {
+    const g = periksaBaris(v);
+    setPesan(g);
+    if (g.length) return;
+    const ok = await jalankan(async () => {
+      if (barisId !== undefined) return tulisKeuKlien("keu_rab_baris", "update", { ...dataBaris(v), sama_dengan_item: false, jumlah_tetap: null }, { id: barisId });
+      let itemId = p.rab?.id;
+      if (itemId === undefined) {
+        const r = await tulisKeuKlien<{ id: number }>("keu_rab_item", "insert", dataItemRab(ctx.rabId, p.pok, null));
+        if (!r.ok) return r;
+        itemId = r.data.id;
+      }
+      return tulisKeuKlien("keu_rab_baris", "insert", { ...dataBaris(v), item_id: itemId, urut: p.baris.length + 1 });
+    });
+    if (ok) tutup();
+  };
+  return (
+    <div className="mt-2 space-y-3 rounded-[14px] bg-[#F5F8FE] p-3">
+      <div>
+        <label className={label} htmlFor={`bk-${barisId ?? "n"}-${p.pok.detail_id}`}>Keterangan (mis. PML, PPL)</label>
+        <input id={`bk-${barisId ?? "n"}-${p.pok.detail_id}`} className={kolom} maxLength={200} value={v.ket} onChange={(e) => ubah({ ket: e.target.value })} />
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className={label} htmlFor={`bv-${p.pok.detail_id}`}>Volume</label>
+          <input id={`bv-${p.pok.detail_id}`} className={kolom} inputMode="decimal" value={v.volume} onChange={(e) => ubah({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
+        </div>
+        <div>
+          <label className={label} htmlFor={`bs-${p.pok.detail_id}`}>Satuan</label>
+          <input id={`bs-${p.pok.detail_id}`} className={kolom} maxLength={20} value={v.satuan} onChange={(e) => ubah({ satuan: e.target.value })} />
+        </div>
+        <div>
+          <label className={label} htmlFor={`bh-${p.pok.detail_id}`}>Harga satuan</label>
+          <input id={`bh-${p.pok.detail_id}`} className={kolom} inputMode="numeric" value={v.harga} onChange={(e) => ubah({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={label} htmlFor={`bp-${p.pok.detail_id}`}>Jadwal</label>
+          <select id={`bp-${p.pok.detail_id}`} className={kolom} value={v.periode} onChange={(e) => ubah({ periode: e.target.value as Periode })}>
+            {(Object.keys(LABEL_PERIODE) as Periode[]).map((k) => <option key={k} value={k}>{LABEL_PERIODE[k]}</option>)}
+          </select>
+        </div>
+        <PilihMinggu id={`bm-${p.pok.detail_id}`} nilai={v.minggu} ubah={(n) => ubah({ minggu: n })} />
+        <PilihBulan id={`bbm-${p.pok.detail_id}`} nilai={v.bulan_mulai} ubah={(n) => ubah({ bulan_mulai: n, bulan_sampai: Math.max(v.bulan_sampai, n) })} teks={v.periode === "sekali" ? "Bulan cair" : "Mulai bulan"} />
+        {v.periode !== "sekali" && <PilihBulan id={`bbs-${p.pok.detail_id}`} nilai={v.bulan_sampai} ubah={(n) => ubah({ bulan_sampai: n })} teks="Sampai bulan" />}
+      </div>
+      <p className="text-[13px] font-bold text-[#0F2A52]">Jumlah rincian: {jml === null ? "-" : rupiah(jml)}</p>
+      {(pesan.length > 0 || galat) && (
+        <ul role="alert" className="space-y-1 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
+          {[...pesan, ...(galat ? [galat] : [])].map((x) => <li key={x}>{x}</li>)}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <button type="button" onClick={simpan} disabled={mengirim} className={`${tombol} flex-1 bg-[#1F5FD1] text-white`}>{mengirim ? "Menyimpan…" : "Simpan rincian"}</button>
+        <button type="button" onClick={tutup} disabled={mengirim} className={`${tombol} bg-[#EEF2F7] text-[#44546F]`}>Batal</button>
+      </div>
+    </div>
+  );
+}
+
+function ringkasJadwal(b: BarisRabRow): string {
+  const m = NAMA_BULAN[b.bulan_mulai - 1], s = NAMA_BULAN[b.bulan_sampai - 1];
+  return b.periode === "sekali" ? `${m}, minggu ${b.minggu}` : `${LABEL_PERIODE[b.periode]} ${m}–${s}, minggu ${b.minggu}`;
+}
+
+function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
+  const [mode, setMode] = useState<null | "sama" | "baris" | { ubah: number }>(null);
+  const { jalankan, mengirim, galat } = useKirim(ctx.muat);
+  const bisa = ctx.editable;
+  const hapus = (id: number) => jalankan(() => aksiKeu("keu_rab_hapus_baris", { p_baris: id }));
+  const selesai = (nilai: boolean) =>
+    jalankan(async () => {
+      if (p.rab) return tulisKeuKlien("keu_rab_item", "update", { selesai: nilai }, { id: p.rab.id });
+      return tulisKeuKlien("keu_rab_item", "insert", { ...dataItemRab(ctx.rabId, p.pok, null), selesai: nilai });
+    });
+  return (
+    <li className={kartu}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 break-words text-[13.5px] font-bold leading-snug text-[#0F2A52]">{p.pok.nomor_item ? `${p.pok.nomor_item}. ` : ""}{p.pok.uraian}</p>
+        <span className={`flex-none rounded-full px-2.5 py-1 text-[11px] font-extrabold ${p.status === "belum" ? "bg-[#EEF2F7] text-[#6B7A93]" : p.status === "selesai" ? "bg-[#E6EFFD] text-[#1F4EA8]" : "bg-[#E3F6EC] text-[#0B6B3F]"}`}>{LABEL_ITEM[p.status]}</span>
+      </div>
+      <p className="mt-0.5 text-[12px] text-[#6B7A93]">Akun {p.pok.akun} · {angka(p.pok.volume)} {p.pok.satuan}</p>
+      <dl className="mt-1.5 grid grid-cols-2 gap-2 text-[12.5px]">
+        <div><dt className="text-[#6B7A93]">Pagu POK</dt><dd className="font-extrabold text-[#0F2A52]">{angka(p.pok.pok)}</dd></div>
+        <div><dt className="text-[#6B7A93]">RAB</dt><dd className="font-extrabold text-[#0F2A52]">{p.status === "belum" ? "-" : angka(p.jumlahRab)}</dd></div>
+      </dl>
+      {p.selisih !== null && p.selisih !== 0 && p.status !== "selesai" && (
+        <p className="mt-1 text-[12px] font-bold text-[#8A6200]">RAB {p.selisih > 0 ? "melebihi" : "kurang dari"} pagu POK sebesar {rupiah(Math.abs(p.selisih))}.</p>
+      )}
+      {p.baris.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {p.baris.map((b) => (
+            <li key={b.baris_id} className="rounded-[12px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] text-[#44546F]">
+              {mode !== null && typeof mode === "object" && mode.ubah === b.baris_id ? (
+                <FormBaris p={p} ctx={ctx} barisId={b.baris_id} tutup={() => setMode(null)} awal={{ ket: b.ket, volume: String(b.volume).replace(".", ","), satuan: b.satuan, harga: String(Math.round(Number(b.harga_satuan))), periode: b.periode, bulan_mulai: b.bulan_mulai, bulan_sampai: b.bulan_sampai, minggu: b.minggu }} />
+              ) : (
+                <>
+                  <p className="break-words font-bold text-[#0F2A52]">{b.ket || "Rincian"} · {rupiah(b.jumlah)}</p>
+                  <p>{angka(Number(b.volume))} {b.satuan}{b.sama_dengan_item ? "" : ` × ${angka(Number(b.harga_satuan))}`} · {ringkasJadwal(b)}</p>
+                  {bisa && mode === null && (
+                    <div className="mt-1.5 flex gap-2">
+                      <button type="button" disabled={mengirim} onClick={() => setMode({ ubah: b.baris_id })} className={`${tombol} min-h-[40px] bg-[#E6EFFD] text-[#1F4EA8]`}>Ubah</button>
+                      <button type="button" disabled={mengirim} onClick={() => hapus(b.baris_id)} className={`${tombol} min-h-[40px] bg-[#FDE8E8] text-[#9B1C23]`}>Hapus</button>
+                    </div>
+                  )}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {galat && <div className="mt-2"><Galat pesan={galat} /></div>}
+      {bisa && mode === null && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {p.status === "belum" && <button type="button" disabled={mengirim} onClick={() => setMode("sama")} className={`${tombol} bg-[#1F5FD1] text-white`}>RAB = Item</button>}
+          {p.status !== "selesai" && <button type="button" disabled={mengirim} onClick={() => setMode("baris")} className={`${tombol} bg-[#E6EFFD] text-[#1F4EA8]`}>{p.baris.length ? "Tambah rincian" : "Rinci"}</button>}
+          {p.status === "selesai" ? (
+            <button type="button" disabled={mengirim} onClick={() => selesai(false)} className={`${tombol} bg-[#EEF2F7] text-[#44546F]`}>Batalkan selesai</button>
+          ) : (
+            <button type="button" disabled={mengirim} onClick={() => selesai(true)} className={`${tombol} bg-[#EEF2F7] text-[#44546F]`}>Tandai selesai</button>
+          )}
+        </div>
+      )}
+      {mode === "sama" && <FormSama p={p} ctx={ctx} tutup={() => setMode(null)} />}
+      {mode === "baris" && <FormBaris p={p} ctx={ctx} tutup={() => setMode(null)} awal={barisKosong(p.pok.satuan, new Date().getMonth() + 1)} />}
+    </li>
+  );
+}
+
+// ------------------------------------------------------------ alur persetujuan
+function BilahAksi({ rabId, status, hak, muat }: { rabId: number; status: string; hak: HakRab; muat: () => Promise<void> }) {
+  const aksi = aksiTersedia(status, hak);
+  const [pilih, setPilih] = useState<AksiRab | null>(null);
+  const [catatan, setCatatan] = useState("");
+  const [pesan, setPesan] = useState<string | null>(null);
+  const { kirim, mengirim, galat } = useKirim(muat);
+  if (aksi.length === 0) return null;
+  const jalan = async (a: AksiRab) => {
+    const c = periksaCatatanAksi(a, catatan);
+    setPesan(c);
+    if (c) return;
+    if (await kirim("keu_rab_aksi", { p_rab: rabId, p_aksi: a, p_catatan: catatan.trim() })) { setPilih(null); setCatatan(""); }
+  };
+  const butuhForm = (a: AksiRab) => AKSI_BUTUH_CATATAN.includes(a) || a === "batalkan";
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {aksi.map((a) => (
+          <button key={a} type="button" disabled={mengirim} onClick={() => (butuhForm(a) ? (setPilih(a), setPesan(null)) : jalan(a))}
+            className={`${tombol} ${a === "ajukan" || a === "sahkan" || a === "setuju_ketua" ? "bg-[#1F5FD1] text-white" : "bg-[#FDE8E8] text-[#9B1C23]"}`}>
+            {mengirim && pilih === null ? "Memproses…" : LABEL_AKSI[a]}
+          </button>
+        ))}
+      </div>
+      {pilih && (
+        <div className="space-y-2 rounded-[14px] bg-[#F5F8FE] p-3">
+          <label className={label} htmlFor="rab-catatan">{pilih === "kembalikan" ? "Alasan pengembalian" : "Catatan pembatalan (boleh kosong)"}</label>
+          <textarea id="rab-catatan" className={`${kolom} py-2`} rows={2} maxLength={500} value={catatan} onChange={(e) => setCatatan(e.target.value)} />
+          {pesan && <p role="alert" className="text-[13px] text-[#7A1D22]">{pesan}</p>}
+          <div className="flex gap-2">
+            <button type="button" disabled={mengirim} onClick={() => jalan(pilih)} className={`${tombol} flex-1 bg-[#B42329] text-white`}>{mengirim ? "Memproses…" : LABEL_AKSI[pilih]}</button>
+            <button type="button" disabled={mengirim} onClick={() => { setPilih(null); setPesan(null); }} className={`${tombol} bg-[#EEF2F7] text-[#44546F]`}>Batal</button>
+          </div>
+        </div>
+      )}
+      {galat && <Galat pesan={galat} />}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------ tab
+export function TabRab({ kode }: { kode: string }) {
+  const rab = useRabRo(kode);
+  const ang = useAnggaranRo(kode);
+  const hakRab = useBoleh("rab", kode);
+  const hakDraf = useBoleh("draf", kode);
+  const hakSetuju = useBoleh("setuju_ketua", kode);
+  const hakSahkan = useBoleh("sahkan", kode);
+  const hak: HakRab = { rab: hakRab === true, draf: hakDraf === true, setuju_ketua: hakSetuju === true, sahkan: hakSahkan === true };
+  const items = useMemo(() => (ang.anggaran ?? []).flatMap((k) => k.akun.flatMap((a) => a.item)), [ang.anggaran]);
+  const peta = useMemo(() => petakanRab(items, rab.itemRab, rab.barisRab), [items, rab.itemRab, rab.barisRab]);
+  const yatim = useMemo(() => itemRabYatim(items, rab.itemRab), [items, rab.itemRab]);
+  const sahTerbaru = useMemo(() => rab.riwayatRab.filter((r) => r.status === "disetujui").sort((a, b) => Number(b.nomor) - Number(a.nomor))[0] ?? null, [rab.riwayatRab]);
+  const susun = useKirim(rab.muatSemua);
+
+  const galat = rab.galat ?? ang.galat;
+  if (galat) return <Galat pesan={galat} />;
+  if (!rab.siap || !ang.anggaran) return <div className="h-40 animate-pulse rounded-[20px] bg-white" aria-busy="true" />;
+
+  const status = rab.rab?.status ?? null;
+  const editable = bisaDiubah(status) && (hak.rab || hak.draf);
+  const totalPok = items.reduce((a, i) => a + i.pok, 0);
+  const totalRab = peta.filter((x) => x.status !== "selesai").reduce((a, x) => a + x.jumlahRab, 0);
+  const nBelum = peta.filter((x) => x.status === "belum").length;
+  const ctx: Ctx = { rabId: rab.rab?.rab_id ?? 0, editable, muat: rab.muatSemua };
+
+  return (
+    <div className="space-y-3">
+      <section className={`${kartu} space-y-3`}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="text-[13px] font-extrabold uppercase tracking-wide text-[#44546F]">{rab.rab ? `RAB nomor ${rab.rab.nomor}` : "RAB"}</h2>
+            {!rab.rab && <p className="mt-1 text-[13.5px] text-[#5B6B84]">RO ini belum punya RAB.</p>}
+          </div>
+          {status && <span className={`flex-none rounded-full px-2.5 py-1 text-[11.5px] font-extrabold ${WARNA_STATUS[status] ?? "bg-[#EEF2F7] text-[#44546F]"}`}>{LABEL_STATUS_RAB[status] ?? status}</span>}
+        </div>
+        {rab.rab && (
+          <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+            <div><p className="text-[#6B7A93]">Pagu POK</p><p className="text-[15px] font-extrabold text-[#0F2A52]">{rupiah(totalPok)}</p></div>
+            <div><p className="text-[#6B7A93]">Jumlah RAB</p><p className="text-[15px] font-extrabold text-[#0F2A52]">{rupiah(totalRab)}</p><p className="text-[#6B7A93]">{nBelum} item belum ber-RAB</p></div>
+          </div>
+        )}
+        {status === "dikembalikan" && rab.catatan && <p className="rounded-[14px] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Dikembalikan: {rab.catatan}</p>}
+        {rab.rab && <BilahAksi rabId={rab.rab.rab_id} status={status!} hak={hak} muat={rab.muatSemua} />}
+        {bolehSusunBaru(status, hak) && (
+          <div className="space-y-2">
+            <button type="button" disabled={susun.mengirim} onClick={() => susun.kirim("keu_rab_baru", { p_ro: kode, p_dari: sahTerbaru?.rab_id ?? null })} className={`${tombol} bg-[#1F5FD1] text-white`}>
+              {susun.mengirim ? "Menyiapkan…" : sahTerbaru ? "Susun revisi RAB (salinan dari RAB sah)" : "Susun RAB"}
+            </button>
+            {susun.galat && <Galat pesan={susun.galat} />}
+          </div>
+        )}
+        {!rab.rab && !bolehSusunBaru(status, hak) && <p className="text-[12.5px] text-[#6B7A93]">Hanya ketua tim atau admin RO yang dapat menyusun RAB.</p>}
+        {rab.rab && !editable && bisaDiubah(status) && <p className="text-[12.5px] text-[#6B7A93]">Hanya ketua tim atau admin RO yang dapat mengubah isi RAB.</p>}
+      </section>
+
+      {rab.rab && (
+        <>
+          {yatim.length > 0 && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
+          <ul className="space-y-2.5">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
+          {rab.jejak.length > 0 && (
+            <details className={kartu}>
+              <summary className="min-h-[44px] cursor-pointer list-none text-[13px] font-extrabold text-[#0F2A52]">Jejak RAB ({rab.jejak.length})</summary>
+              <ul className="mt-1 space-y-2">
+                {rab.jejak.map((j) => (
+                  <li key={j.id} className="text-[12.5px] text-[#44546F]">
+                    <span className="font-bold text-[#0F2A52]">{j.aksi}</span> · {LABEL_STATUS_RAB[j.dari] ?? j.dari} → {LABEL_STATUS_RAB[j.ke] ?? j.ke} · {j.oleh_nama ?? "-"} · {new Date(j.waktu).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                    {j.catatan && <span className="block break-words text-[#6B7A93]">{j.catatan}</span>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

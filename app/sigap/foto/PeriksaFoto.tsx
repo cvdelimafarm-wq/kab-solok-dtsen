@@ -18,6 +18,7 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
   const [alasan, setAlasan] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
+  const [terbalik, setTerbalik] = useState(false);
   useEffect(() => {
     let batal = false;
     let u: string | null = null;
@@ -39,8 +40,15 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
   return (
     <li className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3">
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={`Foto ${b.kode}`} className="max-h-72 w-full rounded-lg bg-black object-contain" />
+        <div className="relative overflow-hidden rounded-lg bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={`Foto ${b.kode}`} style={{ transform: terbalik ? "rotate(180deg)" : undefined }} className="max-h-[60vh] w-full object-contain" />
+          {/* (24 Okt 2026) Foto landscape lama yang terlanjur terbalik (bug arah putar kamera, sudah diperbaiki untuk foto baru): PML dapat memutar TAMPILAN 180°.
+              Hanya di layar ini, tidak mengubah berkas dan tidak tersimpan. */}
+          <button type="button" onClick={() => setTerbalik((v) => !v)} aria-pressed={terbalik} className="absolute right-2 top-2 min-h-[44px] rounded-full bg-white/90 px-3 text-xs font-bold text-[#0F2A52] shadow">
+            {terbalik ? "Kembalikan" : "Putar 180°"}
+          </button>
+        </div>
       ) : (
         <div className="h-32 animate-pulse rounded-lg bg-[#EEF2F7]" />
       )}

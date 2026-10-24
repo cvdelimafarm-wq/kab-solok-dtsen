@@ -6,7 +6,7 @@
 // Tiap tab mengambil datanya sendiri dan baru dimuat saat tab dibuka (hooks di app/sigap/ro/useKeu.ts, logika di lib/keu/ro.ts).
 
 import { useMemo } from "react";
-import { angka, persen, ringkasRo, rupiah, STATUS_ADM, STATUS_KEK, STATUS_RAB, urlBaca, WARNA_KATEGORI, type KomponenAnggaran } from "@/lib/keu/ro";
+import { angka, persen, ringkasRo, rupiah, STATUS_ADM, STATUS_RAB, urlBaca, WARNA_KATEGORI, type KomponenAnggaran } from "@/lib/keu/ro";
 import { useAnggaranRo, useBacaKeu } from "../useKeu";
 
 const kartu = "rounded-[20px] bg-white p-4 shadow-[0_4px_16px_rgba(15,42,82,0.08)]";
@@ -129,58 +129,29 @@ export function TabAnggaran({ kode }: { kode: string }) {
 }
 
 // ---------------------------------------------------------------- Administrasi
-type ItemAdm = { detail_id: number; nomor_item: string | null; uraian: string; jumlah: number | string; n_dok: number | string; n_belum: number | string; n_terverifikasi: number | string; status_item: string };
+type ItemAdm = { detail_id: number; akun_kode: string; komponen_kode: string; nomor_item: string | null; uraian: string; jumlah: number | string; n_dok: number | string; n_belum: number | string; n_terverifikasi: number | string; status_item: string };
 const WARNA_ADM: Record<string, string> = { lengkap: "bg-[#E3F6EC] text-[#0B6B3F]", diperiksa: "bg-[#E6EFFD] text-[#1F4EA8]", berjalan: "bg-[#FFF4D6] text-[#8A6200]", belum: "bg-[#EEF2F7] text-[#44546F]", tanpa_dokumen: "bg-[#EEF2F7] text-[#6B7A93]" };
 
 export function TabAdministrasi({ kode }: { kode: string }) {
-  const adm = useBacaKeu<ItemAdm>(urlBaca("keu_v_adm_item", { ro_kode: kode }, { urut: "nomor_item", batas: 5000, kolom: ["detail_id", "nomor_item", "uraian", "jumlah", "n_dok", "n_belum", "n_terverifikasi", "status_item"] }));
+  const adm = useBacaKeu<ItemAdm>(urlBaca("keu_v_adm_item", { ro_kode: kode }, { urut: "akun_kode", batas: 5000, kolom: ["detail_id", "akun_kode", "komponen_kode", "nomor_item", "uraian", "jumlah", "n_dok", "n_belum", "n_terverifikasi", "status_item"] }));
   if (adm.galat) return <Galat pesan={adm.galat} />;
   if (!adm.baris) return <Memuat />;
   if (adm.baris.length === 0) return <Kosong teks="RO ini belum punya item pada POK yang berlaku." />;
+  const urut = [...adm.baris].sort((a, b) => a.komponen_kode.localeCompare(b.komponen_kode) || a.akun_kode.localeCompare(b.akun_kode) || (a.nomor_item ?? "~").localeCompare(b.nomor_item ?? "~") || a.uraian.localeCompare(b.uraian));
   return (
     <div className="space-y-2.5">
       {adm.terpotong && <Potong />}
       <p className="text-[12px] text-[#6B7A93]">Hanya untuk melihat. Mengunggah dan memverifikasi dokumen belum tersedia di halaman ini.</p>
       <ul className="space-y-2.5">
-        {adm.baris.map((i) => (
+        {urut.map((i) => (
           <li key={i.detail_id} className={kartu}>
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 break-words text-[13.5px] font-bold leading-snug text-[#0F2A52]">{i.nomor_item ? `${i.nomor_item}. ` : ""}{i.uraian}</p>
               <span className={`flex-none rounded-full px-2.5 py-1 text-[11px] font-extrabold ${WARNA_ADM[i.status_item] ?? "bg-[#EEF2F7] text-[#44546F]"}`}>{STATUS_ADM[i.status_item] ?? i.status_item}</span>
             </div>
             <p className="mt-1 text-[12.5px] text-[#6B7A93]">
-              {rupiah(i.jumlah)}{Number(i.n_dok) > 0 ? ` · ${angka(i.n_terverifikasi)} dari ${angka(i.n_dok)} dokumen terverifikasi` : ""}
+              Akun {i.akun_kode} · {rupiah(i.jumlah)}{Number(i.n_dok) > 0 ? ` · ${angka(i.n_terverifikasi)} dari ${angka(i.n_dok)} dokumen terverifikasi` : ""}
             </p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Kekurangan RAB
-type Kek = { id: number; akun_kode: string; uraian: string; jumlah: number | string; prioritas_nama: string | null; prioritas_urut: number | string | null; alasan: string | null; status: string; terbuka: boolean; kali_ditunda: number | string | null };
-
-export function TabKekurangan({ kode }: { kode: string }) {
-  const kek = useBacaKeu<Kek>(urlBaca("keu_v_kekurangan", { ro_kode: kode }, { urut: "prioritas_urut", batas: 2000, kolom: ["id", "akun_kode", "uraian", "jumlah", "prioritas_nama", "prioritas_urut", "alasan", "status", "terbuka", "kali_ditunda"] }));
-  if (kek.galat) return <Galat pesan={kek.galat} />;
-  if (!kek.baris) return <Memuat />;
-  if (kek.baris.length === 0) return <Kosong teks="Belum ada catatan kekurangan RAB untuk RO ini." />;
-  const terbuka = kek.baris.filter((k) => k.terbuka);
-  const jumlah = terbuka.reduce((a, k) => a + Number(k.jumlah), 0);
-  return (
-    <div className="space-y-2.5">
-      {kek.terpotong && <Potong />}
-      <p className="text-[13px] font-bold text-[#0F2A52]">{terbuka.length} catatan terbuka · {rupiah(jumlah)}</p>
-      <ul className="space-y-2.5">
-        {kek.baris.map((k) => (
-          <li key={k.id} className={`${kartu} ${k.terbuka ? "" : "opacity-70"}`}>
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 break-words text-[13.5px] font-bold leading-snug text-[#0F2A52]">{k.uraian}</p>
-              <span className="flex-none rounded-full bg-[#EEF2F7] px-2.5 py-1 text-[11px] font-extrabold text-[#44546F]">{STATUS_KEK[k.status] ?? k.status}</span>
-            </div>
-            <p className="mt-1 text-[12.5px] text-[#6B7A93]">Akun {k.akun_kode} · {rupiah(k.jumlah)}{k.prioritas_nama ? ` · ${k.prioritas_nama}` : ""}{Number(k.kali_ditunda) > 0 ? ` · ditunda ${k.kali_ditunda}×` : ""}</p>
-            {k.alasan && <p className="mt-1 break-words text-[12.5px] text-[#44546F]">{k.alasan}</p>}
           </li>
         ))}
       </ul>

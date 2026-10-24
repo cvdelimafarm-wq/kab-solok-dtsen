@@ -57,6 +57,8 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_pok_selisih: ["node_id", "versi_id", "tingkat", "kode", "pagu", "jumlah_bawahan", "selisih"],
   keu_v_pok_unggah_kunci: ["id", "unggah_id", "urut", "prog_kode", "prog_nama", "keg_kode", "keg_nama", "kro_kode", "kro_nama", "ro_sub", "ro_nama", "ro_volume", "ro_satuan", "komp_kode", "komp_nama", "sub_kode", "sub_nama", "akun_kode", "akun_nama", "uraian", "volume", "satuan", "harga_satuan", "jumlah", "sumber_dana", "tanda_blokir", "catatan_khusus", "ro_kode", "kunci", "kemunculan_hitung"],
   keu_v_pok_unggah_ringkas: ["unggah_id", "tahun", "nomor_revisi", "status", "n_baris", "total_unggah", "total_berlaku", "n_sama", "n_berubah", "n_dipadankan", "n_baru", "n_hilang", "n_di_luar_usulan", "n_ro_tak_terdaftar"],
+  keu_v_rab_baris: ["baris_id", "item_id", "rab_id", "pok_kunci", "urut", "ket", "volume", "satuan", "harga_satuan", "jumlah", "jumlah_dikunci", "sama_dengan_item", "catatan", "tautan", "periode", "bulan_mulai", "bulan_sampai", "minggu", "manual"],
+  keu_v_rab_jejak: ["id", "rab_id", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"],
   keu_v_rab_item: ["item_id", "rab_id", "pok_kunci", "baru", "komponen_kode", "akun_kode", "akun_menjadi", "uraian", "prioritas_kode", "selesai", "jumlah_rincian", "volume_total", "jumlah_rab", "status"],
   keu_v_rab_jadwal_beda: ["baris_id", "item_id", "jumlah", "total_jadwal", "selisih"],
   keu_v_rab_pencairan: ["rab_id", "bulan", "minggu", "nilai"],

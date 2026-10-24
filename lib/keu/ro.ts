@@ -5,9 +5,9 @@
 // Sumber data (semua lewat GET /api/sigap/keu/baca): keu_v_adm_lembar (item POK berlaku per RO), keu_v_realisasi_terbaru,
 // keu_v_rab_ringkas + keu_v_rab_item, keu_v_adm_ringkas + keu_v_adm_item, keu_v_kekurangan(_ro), keu_v_skor_ro, keu_v_penugasan_ro.
 
-export const TAB_RO = ["ringkasan", "anggaran", "administrasi", "kekurangan"] as const;
+export const TAB_RO = ["ringkasan", "anggaran", "rab", "administrasi", "kekurangan"] as const;
 export type TabRo = (typeof TAB_RO)[number];
-export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", administrasi: "Administrasi", kekurangan: "Kekurangan RAB" };
+export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", rab: "RAB", administrasi: "Administrasi", kekurangan: "Kekurangan RAB" };
 
 /** Alamat GET /api/sigap/keu/baca. `saring` = pasangan kolom->nilai (larik = salah satu dari; null = kosong). Urutan kunci dibuat tetap supaya simpanan klien konsisten. */
 export function urlBaca(tampilan: string, saring: Record<string, string | number | null | (string | number)[]> = {}, opsi: { urut?: string; batas?: number; kolom?: string[] } = {}): string {
@@ -67,7 +67,7 @@ export type BarisLembar = { detail_id: number; ro_kode: string; komponen_kode: s
 export type BarisRealisasi = { detail_id: number | null; real_sd: number | string; pagu: number | string };
 export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean };
 
-export type ItemAnggaran = { detail_id: number; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean };
+export type ItemAnggaran = { detail_id: number; kunci: string; komponen: string; akun: string; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean };
 export type AkunAnggaran = { akun: string; item: ItemAnggaran[]; pok: number; realisasi: number; rab: number };
 export type KomponenAnggaran = { komponen: string; akun: AkunAnggaran[]; pok: number; realisasi: number; rab: number };
 
@@ -85,7 +85,7 @@ export function susunAnggaran(lembar: BarisLembar[], realisasi: BarisRealisasi[]
   for (const b of lembar) {
     const r = rabPer.get(b.kunci_stabil);
     const item: ItemAnggaran = {
-      detail_id: b.detail_id, nomor_item: b.nomor_item, uraian: b.uraian, volume: num(b.volume), satuan: b.satuan, pok: num(b.jumlah),
+      detail_id: b.detail_id, kunci: b.kunci_stabil, komponen: b.komponen_kode, akun: b.akun_kode, nomor_item: b.nomor_item, uraian: b.uraian, volume: num(b.volume), satuan: b.satuan, pok: num(b.jumlah),
       realisasi: real.get(b.detail_id) ?? 0, rab: r ? num(r.jumlah_rab) : null, statusRab: r ? r.status : null, selesai: r?.selesai ?? false,
     };
     const akunPeta = peta.get(b.komponen_kode) ?? new Map<string, ItemAnggaran[]>();

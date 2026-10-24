@@ -11,7 +11,9 @@ import { useParams, useSearchParams } from "next/navigation";
 import TombolKembali from "@/app/components/TombolKembali";
 import { kodeRoSah, LABEL_TAB, penugasanRo, tabDari, TAB_RO, urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu, usePenugasan } from "../useKeu";
-import { TabAdministrasi, TabAnggaran, TabKekurangan, TabRingkasan } from "./Tab";
+import { TabKekurangan } from "./Kekurangan";
+import { TabRab } from "./Rab";
+import { TabAdministrasi, TabAnggaran, TabRingkasan } from "./Tab";
 
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
 
@@ -36,7 +38,7 @@ function Isi() {
         <div className="relative mx-auto mt-3 max-w-xl">
           <p className="text-[12.5px] font-extrabold tracking-wide text-[#A9C6F5]">{sah ? kode : "RO"}{baris?.sementara ? " · sementara" : ""}</p>
           <h1 className="mt-0.5 break-words text-[20px] font-extrabold leading-tight tracking-[-0.3px]">{baris?.nama ?? (sah ? "Memuat…" : "Kode RO tidak sah")}</h1>
-          {p && (
+          {sah && p && (
             <p className="mt-1.5 text-[12.5px] text-[#A9BCD8]">
               Ketua tim: {p.adaKetua ? p.ketua.join(", ") : "belum ditugaskan"}{p.adminRo.length > 0 ? ` · Admin RO: ${p.adminRo.join(", ")}` : ""}
             </p>
@@ -67,6 +69,7 @@ function Isi() {
             </nav>
             {tab === "ringkasan" && <TabRingkasan kode={kode} />}
             {tab === "anggaran" && <TabAnggaran kode={kode} />}
+            {tab === "rab" && <TabRab kode={kode} />}
             {tab === "administrasi" && <TabAdministrasi kode={kode} />}
             {tab === "kekurangan" && <TabKekurangan kode={kode} />}
           </>

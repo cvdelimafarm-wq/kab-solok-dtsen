@@ -26,6 +26,7 @@ describe("format dan kode", () => {
   it("tabDari menolak nilai tak dikenal", () => {
     expect(tabDari("anggaran")).toBe("anggaran");
     expect(tabDari("kekurangan")).toBe("kekurangan");
+    expect(tabDari("rab")).toBe("rab");
     expect(tabDari("x")).toBe("ringkasan");
     expect(tabDari(null)).toBe("ringkasan");
   });

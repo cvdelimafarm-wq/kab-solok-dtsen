@@ -34,5 +34,17 @@ Keputusan Bapak 24 Okt 2026: semua pegawai organik boleh MELIHAT semua RO (hanya
 
 Nama ketua tim, admin RO, dan akses Administrasi diambil dari tampilan `keu_v_penugasan_ro` (berkas SQL `20261024m_keu_v_penugasan_ro.sql`). Sebelum berkas itu dijalankan halaman tetap jalan; hanya nama penugasan yang kosong.
 
+## Tahap 3: mengubah dari halaman RO + unggah realisasi
+Semua perubahan lewat gerbang (`/panggil`, `/tulis`); tombol hanya tampil bila `keu_boleh` mengizinkan, yang memutuskan tetap basis data.
+
+- `lib/keu/kekurangan.ts` + `app/sigap/ro/[kode]/Kekurangan.tsx`: tab Kekurangan RAB (catat, ubah, tarik). Tes 9.
+- `lib/keu/rab.ts` + `app/sigap/ro/[kode]/Rab.tsx`: tab RAB (susun baru/revisi, item, rincian baris, "sama dengan item", hapus rincian, tandai selesai, ajukan, setuju ketua, sahkan, kembalikan dengan catatan, batalkan, jejak). Tes 13.
+- `app/sigap/ro/useKeu.ts`: tambahan `aksiKeu`, `useBoleh`, `tulisKeuKlien`, `useKirim`, `useRabRo`.
+- `lib/keu/glp039.ts`: penguraian Excel GLP039 (murni; diuji pada berkas asli Kegiatan 2906: 52 item, Rp 395.774.000, semua pemeriksaan lolos). Tes 13.
+- `lib/keu/glp039-xlsx.ts`: pembungkus SheetJS (dimuat dinamis), hash SHA-256, `argsRealisasiMasuk`. Tes 2.
+- `app/sigap/realisasi/page.tsx`: bendahara memilih Excel, pratinjau dan pemeriksaan di perangkat, kirim ke `keu_realisasi_masuk`, daftar unggahan, batalkan dengan alasan.
+- Prasyarat SQL: `20261024n_keu_v_rab_baris.sql` (tampilan `keu_v_rab_baris` dan `keu_v_rab_jejak`), lalu `20261024z9_cek_kesehatan_keu_n.sql` (empat baris pertama harus 0).
+- Tes seluruh `lib/keu`: 83 lulus.
+
 ## Yang sengaja belum ada
-Tombol mengubah di halaman RO (RAB, kertas kerja revisi, usulan struktur, unggah dokumen Administrasi, catatan kekurangan), pembaca berkas POK PDF dan Excel realisasi GLP039, serta layar PPK (jadwal dan pengesahan).
+Layar PPK (jadwal dan pengesahan revisi, unggah POK resmi), usulan struktur, kertas kerja revisi, unggah dokumen Administrasi, dan pembaca POK PDF.
