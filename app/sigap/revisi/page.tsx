@@ -91,6 +91,8 @@ export default function HalamanRevisi() {
           <Link href="/sigap/revisi/versi" className={`${tombolKecil} inline-flex items-center no-underline`}>Versi, RPD, dan dampak sesudah revisi</Link>
           <Link href="/sigap/revisi/lampiran" className={`${tombolKecil} inline-flex items-center no-underline`}>Lampiran, tenggat, dan draf surat usulan</Link>
           <Link href="/sigap/revisi/status" className={`${tombolKecil} inline-flex items-center no-underline`}>Status, peran, dan riwayat jadwal</Link>
+          <Link href="/sigap/revisi/alur" className={`${tombolKecil} inline-flex items-center no-underline`}>Alur kertas kerja (sebelum, saat, sesudah)</Link>
+          <Link href="/sigap/revisi/pemicu" className={`${tombolKecil} inline-flex items-center no-underline`}>Pemicu dan tingkat pergeseran</Link>
           <Link href="/sigap/master" className={`${tombolKecil} inline-flex items-center no-underline`}>Master data (akun, satuan, waktu, skor)</Link>
           <Link href="/sigap/struktur" className={`${tombolKecil} inline-flex items-center no-underline`}>Tambah level mata anggaran (usulan struktur)</Link>
         </div>
