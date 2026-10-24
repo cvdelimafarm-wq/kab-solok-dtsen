@@ -3,20 +3,24 @@
 // app/sigap/ro/[kode]/page.tsx
 //
 // (24 Okt 2026) Ruang kerja satu Rincian Output (RO) -- Kertas Kerja Revisi POK, papan 9 mockup. Satu alamat per RO dan per tab (aturan D-24):
-// /sigap/ro/<KODE>?tab=ringkasan|anggaran|rab|administrasi|kekurangan. Bilah tab menempel di atas saat menggulir; lencana oranye menandai
+// /sigap/ro/<KODE>?tab=ringkasan|anggaran|rab|administrasi|revisi|kertas|kekurangan|tim[&dari=<alamat asal>]. Tanpa ?tab=, tab terakhir yang dibuka
+// pada RO itu dipulihkan (disimpan di peramban, boleh gagal). dari= (hanya jalur /sigap/...) menentukan tujuan dan nama tombol Kembali. Bilah tab menempel di atas saat menggulir; lencana oranye menandai
 // pekerjaan yang menunggu (dokumen belum ada, RAB menunggu persetujuan, catatan kekurangan terbuka). "Pindah RO" mempertahankan tab.
 // Semua pegawai organik boleh melihat; mengubah mengikuti hak (ditegakkan basis data).
 
 import Link from "next/link";
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { kodeRoSah, LABEL_TAB, penugasanRo, tabDari, TAB_RO, urlBaca, type TabRo } from "@/lib/keu/ro";
 import { Galat, HalamanKeu, Kosong, kolom } from "../../keu-ui";
+import { bacaTabTerakhir, dariAman, jumlahMenunggu, KUNCI_TAB_TERAKHIR, labelDari, simpanTabTerakhir } from "@/lib/keu/usulan";
 import { useBacaKeu, usePenugasan } from "../useKeu";
 import { TabKekurangan } from "./Kekurangan";
 import { TabRab } from "./Rab";
 import { TabAdministrasi } from "./Administrasi";
 import { TabKertas } from "./Kertas";
+import { TabRevisi, useHakUsulan, useUsulanRo } from "./Revisi";
+import { TabTim } from "./Tim";
 import { TabAnggaran, TabRingkasan } from "./Tab";
 
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
@@ -25,7 +29,11 @@ function Isi() {
   const { kode: kodeParam } = useParams<{ kode: string }>();
   const router = useRouter();
   const kode = decodeURIComponent(kodeParam ?? "");
-  const tab = tabDari(useSearchParams().get("tab"));
+  const sp = useSearchParams();
+  const tabParam = sp.get("tab");
+  const tab = tabDari(tabParam);
+  const dari = dariAman(sp.get("dari"));
+  const akhiran = dari ? `&dari=${encodeURIComponent(dari)}` : "";
   const sah = kodeRoSah(kode);
   const ro = useBacaKeu<RoRow>(sah ? urlBaca("keu_ro", { kode }, { batas: 1 }) : null);
   const semua = useBacaKeu<RoRow>(urlBaca("keu_ro", {}, { urut: "kode", batas: 2000, kolom: ["kode", "nama", "sementara", "aktif"] }));
@@ -35,20 +43,40 @@ function Isi() {
   const tugas = usePenugasan();
   const p = useMemo(() => (tugas.baris ? penugasanRo(tugas.baris, kode) : null), [tugas.baris, kode]);
   const baris = ro.baris?.[0] ?? null;
+  const { jadwal: jdw, usulan: usl } = useUsulanRo(kode);
+  const hak = useHakUsulan(kode);
+
+  // tab terakhir: tanpa ?tab= pulihkan yang tersimpan; dengan ?tab= simpan (peramban boleh menolak penyimpanan)
+  useEffect(() => {
+    if (!sah) return;
+    try {
+      if (!tabParam) {
+        const t = bacaTabTerakhir(window.localStorage.getItem(KUNCI_TAB_TERAKHIR), kode, TAB_RO);
+        if (t && t !== "ringkasan") router.replace(`/sigap/ro/${encodeURIComponent(kode)}?tab=${t}${akhiran}`, { scroll: false });
+      } else if (tabParam === tab) {
+        window.localStorage.setItem(KUNCI_TAB_TERAKHIR, simpanTabTerakhir(window.localStorage.getItem(KUNCI_TAB_TERAKHIR), kode, tab));
+      }
+    } catch {
+      /* penyimpanan tidak tersedia: abaikan */
+    }
+  }, [sah, kode, tab, tabParam, akhiran, router]);
+
+  const statusJadwal = useMemo(() => new Map((jdw.baris ?? []).map((j) => [j.id, j.status] as const)), [jdw.baris]);
 
   // lencana: pekerjaan yang menunggu
   const lencana: Partial<Record<TabRo, number>> = {
     administrasi: Number(adm.baris?.[0]?.n_belum ?? 0),
     kekurangan: Number(kek.baris?.[0]?.n_terbuka ?? 0),
     rab: rab.baris?.[0] && ["menunggu_ketua", "menunggu_ppk"].includes(rab.baris[0].status) ? 1 : 0,
+    revisi: usl.baris && hak ? jumlahMenunggu(usl.baris, statusJadwal, hak) : 0,
   };
   const daftarRo = (semua.baris ?? []).filter((r) => r.aktif);
 
   return (
     <HalamanKeu
       jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Anggaran", href: "/sigap/ro" }, { t: sah ? kode : "RO" }]}
-      induk="/sigap/ro"
-      labelKembali="Daftar RO"
+      induk={dari ?? "/sigap/ro"}
+      labelKembali={dari ? labelDari(dari) : "Daftar RO"}
       judul={sah ? <>{kode}{baris?.sementara ? " (sementara)" : ""} {baris?.nama ?? "Memuat…"}</> : "Kode RO tidak sah"}
       sub={sah && p ? <>Ketua tim: {p.adaKetua ? p.ketua.join(", ") : "belum ditugaskan"}{p.adminRo.length > 0 ? ` · Admin RO: ${p.adminRo.join(", ")}` : ""}</> : undefined}
     >
@@ -63,7 +91,7 @@ function Isi() {
               <label htmlFor="pindah-ro" className="text-[12px] text-[#5B6B84]">Pindah RO</label>
               <select
                 id="pindah-ro" className={`${kolom} !w-auto max-w-full`} value={kode}
-                onChange={(e) => router.replace(`/sigap/ro/${encodeURIComponent(e.target.value)}?tab=${tab}`, { scroll: false })}
+                onChange={(e) => router.replace(`/sigap/ro/${encodeURIComponent(e.target.value)}?tab=${tab}${akhiran}`, { scroll: false })}
               >
                 {daftarRo.map((r) => <option key={r.kode} value={r.kode}>{r.kode} {r.nama.slice(0, 50)}</option>)}
               </select>
@@ -75,7 +103,7 @@ function Isi() {
                 key={t}
                 replace
                 scroll={false}
-                href={`/sigap/ro/${encodeURIComponent(kode)}?tab=${t}`}
+                href={`/sigap/ro/${encodeURIComponent(kode)}?tab=${t}${akhiran}`}
                 aria-current={t === tab ? "page" : undefined}
                 className={`flex min-h-[40px] flex-none items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold ${t === tab ? "border-[#1F5FD1] bg-[#1F5FD1] text-white" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}
               >
@@ -88,8 +116,10 @@ function Isi() {
           {tab === "anggaran" && <TabAnggaran kode={kode} />}
           {tab === "rab" && <TabRab kode={kode} />}
           {tab === "administrasi" && <TabAdministrasi kode={kode} />}
+          {tab === "revisi" && <TabRevisi kode={kode} />}
           {tab === "kertas" && <TabKertas kode={kode} />}
           {tab === "kekurangan" && <TabKekurangan kode={kode} />}
+          {tab === "tim" && <TabTim kode={kode} />}
         </>
       )}
     </HalamanKeu>
