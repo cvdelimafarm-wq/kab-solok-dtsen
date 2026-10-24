@@ -20,5 +20,19 @@ const j = await r.json(); // { data } atau { error, kode } dengan status 403/422
 ```
 `p_akun` tidak pernah dikirim klien; server mengisinya dari sesi. Hak ditegakkan basis data, bukan rute ini.
 
+## Tahap 2: baca data dan halaman RO (hanya baca)
+Keputusan Bapak 24 Okt 2026: semua pegawai organik boleh MELIHAT semua RO (hanya baca); daftar RO mengikuti hak lihat itu. Mengubah tetap lewat gerbang di atas, hak ditegakkan basis data.
+
+- `lib/keu/tampilan.ts`: daftar putih tampilan (`keu_v_*`) dan tabel yang boleh dibaca beserta kolomnya. Bila kolom tampilan berubah di SQL, perbarui daftar ini.
+- `lib/keu/baca.ts`: `periksaMasukanBaca`, `akunBolehBaca` (akun aktif dan organik atau super), `bacaKeu` (halaman 1000 baris), `tanganiBaca`.
+- `app/api/sigap/keu/baca/route.ts`: `GET ?tampilan=&kolom=&urut=&batas=&<kolom>=<nilai>` (`a|b` = salah satu dari, `null` = kosong). Balasan `{ data, jumlah, terpotong }`, tanpa simpanan HTTP.
+- `lib/keu/ro.ts`: logika murni halaman RO (format angka, tab, `susunAnggaran`, `pilihRab`, `penugasanRo`, `ringkasRo`, `urlBaca`).
+- `app/sigap/ro/useKeu.ts`: `useBacaKeu` (lewat `useData`), `usePenugasan`, `useAnggaranRo`.
+- `app/sigap/ro/page.tsx`: daftar RO (cari kode atau nama; pagu, realisasi, ketua tim, kekurangan).
+- `app/sigap/ro/[kode]/page.tsx` + `Tab.tsx`: satu alamat per RO dan per tab: `/sigap/ro/<KODE>?tab=ringkasan|anggaran|administrasi|kekurangan`.
+- Tes: `gerbang.test.ts` (19), `baca.test.ts` (13), `ro.test.ts` (14).
+
+Nama ketua tim, admin RO, dan akses Administrasi diambil dari tampilan `keu_v_penugasan_ro` (berkas SQL `20261024m_keu_v_penugasan_ro.sql`). Sebelum berkas itu dijalankan halaman tetap jalan; hanya nama penugasan yang kosong.
+
 ## Yang sengaja belum ada
-Pembacaan data (view `keu_v_*`) lewat rute terpisah per layar, dengan saringan hak akses per RO; dibangun bersama halaman `/sigap/ro/<KODE>`.
+Tombol mengubah di halaman RO (RAB, kertas kerja revisi, usulan struktur, unggah dokumen Administrasi, catatan kekurangan), pembaca berkas POK PDF dan Excel realisasi GLP039, serta layar PPK (jadwal dan pengesahan).
