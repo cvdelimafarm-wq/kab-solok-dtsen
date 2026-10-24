@@ -15,7 +15,9 @@ import { Galat, HalamanKeu, Kosong, kolom } from "../../keu-ui";
 import { useBacaKeu, usePenugasan } from "../useKeu";
 import { TabKekurangan } from "./Kekurangan";
 import { TabRab } from "./Rab";
-import { TabAdministrasi, TabAnggaran, TabRingkasan } from "./Tab";
+import { TabAdministrasi } from "./Administrasi";
+import { TabKertas } from "./Kertas";
+import { TabAnggaran, TabRingkasan } from "./Tab";
 
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
 
@@ -86,6 +88,7 @@ function Isi() {
           {tab === "anggaran" && <TabAnggaran kode={kode} />}
           {tab === "rab" && <TabRab kode={kode} />}
           {tab === "administrasi" && <TabAdministrasi kode={kode} />}
+          {tab === "kertas" && <TabKertas kode={kode} />}
           {tab === "kekurangan" && <TabKekurangan kode={kode} />}
         </>
       )}

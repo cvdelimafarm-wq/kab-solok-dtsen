@@ -5,9 +5,9 @@
 // Sumber data (semua lewat GET /api/sigap/keu/baca): keu_v_adm_lembar (item POK berlaku per RO), keu_v_realisasi_terbaru,
 // keu_v_rab_ringkas + keu_v_rab_item, keu_v_adm_ringkas + keu_v_adm_item, keu_v_kekurangan(_ro), keu_v_skor_ro, keu_v_penugasan_ro.
 
-export const TAB_RO = ["ringkasan", "anggaran", "rab", "administrasi", "kekurangan"] as const;
+export const TAB_RO = ["ringkasan", "anggaran", "rab", "administrasi", "kertas", "kekurangan"] as const;
 export type TabRo = (typeof TAB_RO)[number];
-export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", rab: "RAB", administrasi: "Administrasi", kekurangan: "Kekurangan RAB" };
+export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", rab: "RAB", administrasi: "Administrasi", kertas: "Kertas kerja", kekurangan: "Kekurangan RAB" };
 
 /** Alamat GET /api/sigap/keu/baca. `saring` = pasangan kolom->nilai (larik = salah satu dari; null = kosong). Urutan kunci dibuat tetap supaya simpanan klien konsisten. */
 export function urlBaca(tampilan: string, saring: Record<string, string | number | null | (string | number)[]> = {}, opsi: { urut?: string; batas?: number; kolom?: string[] } = {}): string {

@@ -6,10 +6,10 @@
 // Tiap tab mengambil datanya sendiri dan baru dimuat saat tab dibuka (hooks di app/sigap/ro/useKeu.ts, logika di lib/keu/ro.ts).
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { angka, persen, ringkasRo, rupiah, STATUS_ADM, STATUS_RAB, urlBaca, type KomponenAnggaran } from "@/lib/keu/ro";
+import { useMemo } from "react";
+import { angka, persen, ringkasRo, rupiah, STATUS_RAB, urlBaca, type KomponenAnggaran } from "@/lib/keu/ro";
 import type { WarnaChip } from "@/lib/keu/revisi";
-import { Catatan, Chip, Galat, judulKartu, kartu, kisi, Kosong, Kpi, Memuat, Potong, Progres, tombolAktif, tombolKecil } from "../../keu-ui";
+import { Chip, Galat, judulKartu, kartu, kisi, Kosong, Kpi, Memuat, Potong, tombolKecil } from "../../keu-ui";
 import { useAnggaranRo, useBacaKeu } from "../useKeu";
 
 // ---------------------------------------------------------------- Ringkasan
@@ -135,71 +135,6 @@ export function TabAnggaran({ kode }: { kode: string }) {
           ))}
         </section>
       ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Administrasi
-type ItemAdm = { detail_id: number; akun_kode: string; komponen_kode: string; nomor_item: string | null; uraian: string; jumlah: number | string; n_dok: number | string; n_belum: number | string; n_terverifikasi: number | string; status_item: string };
-type RingkasAdm = { n_item: number | string; n_item_lengkap: number | string; n_item_tanpa_dokumen: number | string; n_dok: number | string; n_belum: number | string; n_draf: number | string; n_terunggah: number | string; n_terverifikasi: number | string; persen_terverifikasi: number | string | null };
-const WARNA_ADM: Record<string, WarnaChip> = { lengkap: "hijau", diperiksa: "biru", berjalan: "kuning", belum: "abu", tanpa_dokumen: "abu" };
-const FILTER_ADM: { kode: string; nama: string }[] = [{ kode: "", nama: "Semua" }, { kode: "belum", nama: "Belum dimulai" }, { kode: "berjalan", nama: "Berjalan" }, { kode: "diperiksa", nama: "Menunggu verifikasi" }, { kode: "lengkap", nama: "Lengkap" }, { kode: "tanpa_dokumen", nama: "Tanpa dokumen" }];
-
-export function TabAdministrasi({ kode }: { kode: string }) {
-  const adm = useBacaKeu<ItemAdm>(urlBaca("keu_v_adm_item", { ro_kode: kode }, { urut: "akun_kode", batas: 5000, kolom: ["detail_id", "akun_kode", "komponen_kode", "nomor_item", "uraian", "jumlah", "n_dok", "n_belum", "n_terverifikasi", "status_item"] }));
-  const rk = useBacaKeu<RingkasAdm>(urlBaca("keu_v_adm_ringkas", { ro_kode: kode }, { batas: 1 }));
-  const [saring, setSaring] = useState("");
-  if (adm.galat) return <Galat pesan={adm.galat} />;
-  if (!adm.baris) return <Memuat />;
-  if (adm.baris.length === 0) return <Kosong teks="RO ini belum punya item pada POK yang berlaku." />;
-  const urut = [...adm.baris].sort((a, b) => a.komponen_kode.localeCompare(b.komponen_kode) || a.akun_kode.localeCompare(b.akun_kode) || (a.nomor_item ?? "~").localeCompare(b.nomor_item ?? "~") || a.uraian.localeCompare(b.uraian));
-  const tampil = urut.filter((i) => !saring || i.status_item === saring);
-  const k = rk.baris?.[0];
-  const nMenunggu = k ? Number(k.n_terunggah) + Number(k.n_draf) : 0;
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className={`${kartu} flex flex-col gap-1`}>
-        <h2 className={judulKartu}>Administrasi: kelengkapan dokumen tiap item POK</h2>
-        <p className="text-[12.5px] text-[#5B6B84]">Hanya untuk melihat. Mengunggah dan memverifikasi dokumen belum tersedia di halaman ini.</p>
-      </div>
-      {k && (
-        <div className={kisi}>
-          <Kpi label="Item dengan lembar dokumen" nilai={angka(Number(k.n_item) - Number(k.n_item_tanpa_dokumen))} sub={`dari ${angka(k.n_item)} baris POK`} />
-          <Kpi label="Dokumen terverifikasi" nilai={angka(k.n_terverifikasi)} sub={`dari ${angka(k.n_dok)} dokumen${k.persen_terverifikasi === null ? "" : ` (${angka(k.persen_terverifikasi)}%)`}`} warna="hj" />
-          <Kpi label="Menunggu verifikasi" nilai={angka(nMenunggu)} sub="sudah diunggah atau dibuat" />
-          <Kpi label="Belum ada" nilai={angka(k.n_belum)} sub="dokumen belum tersedia" warna={Number(k.n_belum) > 0 ? "mr" : undefined} />
-        </div>
-      )}
-      <div className={`${kartu} flex flex-col gap-3`}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className={judulKartu}>Item POK</h2>
-          <span className="text-[12px] text-[#5B6B84]">{angka(tampil.length)} dari {angka(urut.length)} item</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {FILTER_ADM.map((f) => <button key={f.kode} type="button" aria-pressed={saring === f.kode} onClick={() => setSaring(f.kode)} className={saring === f.kode ? tombolAktif : tombolKecil}>{f.nama}</button>)}
-        </div>
-        {adm.terpotong && <Potong />}
-        {tampil.length === 0 && <p className="text-[13px] text-[#5B6B84]">Tidak ada item untuk filter ini.</p>}
-        <ul className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr))]">
-          {tampil.map((i) => {
-            const nd = Number(i.n_dok), tv = Number(i.n_terverifikasi), nb = Number(i.n_belum);
-            return (
-              <li key={i.detail_id} className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-[#DCE3EE] bg-white px-3 py-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 break-words text-[13px] text-[#0F2A52]"><b className="font-mono">{i.akun_kode}</b> {i.nomor_item ? `${i.nomor_item}. ` : ""}{i.uraian}</span>
-                  <span className="whitespace-nowrap font-mono text-[12px] text-[#44546F]">{angka(i.jumlah)}</span>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Chip warna={WARNA_ADM[i.status_item] ?? "abu"}>{STATUS_ADM[i.status_item] ?? i.status_item}</Chip>
-                  {nd > 0 && <span className="text-[12px] text-[#5B6B84]">{angka(tv)} dari {angka(nd)} dokumen terverifikasi</span>}
-                </div>
-                {nd > 0 && <Progres hijau={(tv / nd) * 100} kuning={((nd - nb - tv) / nd) * 100} />}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <Catatan>Dokumen yang diperlukan tiap item ditentukan dari lembar kelengkapan menurut akun dan uraiannya; item tanpa lembar tidak memiliki daftar dokumen.</Catatan>
     </div>
   );
 }

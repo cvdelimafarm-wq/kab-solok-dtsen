@@ -42,6 +42,8 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_kekurangan: ["id", "tahun", "ro_kode", "kro_kode", "komponen_kode", "akun_kode", "akun_nama", "kelompok_kode", "uraian", "jumlah", "prioritas_kode", "prioritas_nama", "prioritas_urut", "alasan", "status", "dicatat_oleh", "dicatat_at", "tambahan_id", "diputus_oleh", "diputus_at", "alasan_putus", "rab_item_id", "terbuka", "kali_ditunda"],
   keu_v_kekurangan_kro: ["tahun", "kro_kode", "kelompok_kode", "n_ro", "n_catatan", "jumlah_terbuka", "jumlah_inti", "jumlah_penting", "jumlah_tunda"],
   keu_v_kekurangan_ro: ["tahun", "ro_kode", "n_terbuka", "jumlah_terbuka", "jumlah_inti", "jumlah_penting", "jumlah_tunda", "n_ditunda", "n_dipenuhi", "jumlah_dipenuhi", "n_ditolak", "tambahan_terbuka_id", "tambahan_terbuka_jumlah"],
+  keu_kk_geseran: ["id", "jadwal_id", "donor_id", "penerima_id", "jumlah", "catatan", "dibuat_oleh", "dibuat_at", "batal", "batal_oleh", "batal_at"],
+  keu_kk_keputusan_kro: ["id", "jadwal_id", "kro", "keputusan", "jumlah", "catatan", "diputuskan_oleh", "diputuskan_at", "diubah_at"],
   keu_v_kk_baris: ["id", "jadwal_id", "ro_kode", "kro", "detail_id", "pok_kunci", "komponen_kode", "akun_semula", "akun_menjadi", "uraian_semula", "uraian_menjadi", "vol_semula", "vol_menjadi", "sat_semula", "sat_menjadi", "harga_semula", "harga_menjadi", "jumlah_semula", "jumlah_menjadi", "selisih", "pindah_dari", "pindah_ke", "penggenap", "baru", "prioritas_kode", "rab_item_id", "catatan", "urut", "pemicu"],
   keu_v_kk_buku_selisih: ["jadwal_id", "kro", "kelompok", "rab", "pok", "kurang", "kurang_kro", "keputusan", "jumlah_diterima", "catatan_ppk", "diputuskan_at"],
   keu_v_kk_geseran_beda: ["jadwal_id", "baris_id", "peran", "dicatat", "sebenarnya"],
