@@ -146,12 +146,15 @@ export default function SusunFoto({
   tanggal,
   jenis = null,
   otomatis = false,
+  polos = false,
   onBerubah,
 }: {
   kegiatanId: number;
   tanggal: string;
   jenis?: string | null;
   otomatis?: boolean;
+  /** (24 Okt 2026) true bila sudah berada di dalam kartu pembungkus: tanpa bingkai dan jarak sendiri, supaya kisi foto tidak menyempit (kartu bersarang) */
+  polos?: boolean;
   onBerubah?: () => void | Promise<void>;
 }) {
   const [k, setK] = useState<Keadaan | null>(null);
@@ -520,7 +523,7 @@ export default function SusunFoto({
   const dipilihCadangan = pilih?.tipe === "cadangan" ? k.cadangan.find((f) => f.id === pilih.id) ?? null : null;
 
   return (
-    <section className="flex flex-col gap-2.5 rounded-2xl border border-[#C9D3E6] bg-white p-3" aria-label="Nomor foto Kamera SIGAP">
+    <section className={`flex flex-col gap-2.5 ${polos ? "" : "rounded-2xl border border-[#C9D3E6] bg-white p-3"}`} aria-label="Nomor foto Kamera SIGAP">
       <div>
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto {k.nomor.filter((n) => n.terisi).length}/{k.jumlah}</div>
         {boleh && (
@@ -554,19 +557,20 @@ export default function SusunFoto({
           const nyala = kilat.includes(n.slot);
           const batas = nyala ? "border-[#1AA37A] ring-4 ring-[#BFEBD9] motion-safe:animate-pulse" : dipilihIni ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : masalah ? "border-[#F2B632]" : n.terisi ? "border-[#C9D3E6]" : "border-dashed border-[#C9D3E6]";
           return (
-            <li key={n.slot} className="min-w-0">
+            <li key={n.slot} className="h-full min-w-0">
               <button
                 type="button"
                 onClick={() => ketukSlot(n.slot)}
                 aria-pressed={dipilihIni}
                 aria-label={`Foto ${n.slot}, ${peranRingkas(jenis, n.slot)}, ${n.terisi ? subNomor(n) : n.ditahan ? "dipesan, menunggu diperiksa" : "kosong"}${masalah ? ", urutan jam terbalik" : ""}`}
-                className={`flex w-full flex-col overflow-hidden rounded-xl border-2 bg-white text-left transition ${batas}`}
+                className={`flex h-full w-full flex-col overflow-hidden rounded-xl border-2 bg-white text-left transition ${batas}`}
               >
-                <span className={`relative block aspect-square w-full ${n.terisi ? "bg-[#EEF2F7]" : "bg-[#F7F9FD]"}`}>
+                {/* 4:3: foto landscape (cap kartu kiri-bawah) tampil hampir utuh dan kartu lebih pendek; tinggi semua kartu sama */}
+                <span className={`relative block aspect-[4/3] w-full ${n.terisi ? "bg-[#EEF2F7]" : "bg-[#F7F9FD]"}`}>
                   {f ? (
                     <Gambar id={f.id} kelas={`h-full w-full object-cover ${n.terisi ? "" : "opacity-50"}`} alt={`Foto ${n.slot}`} />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center px-1 text-center text-[11px] font-bold text-[#8A6200]">{n.terisi ? "Unggahan manual" : "Kosong"}</span>
+                    <span className="flex h-full w-full items-end justify-center px-1 pb-1.5 text-center text-[11px] font-bold text-[#8A6200]">{n.terisi ? "Unggahan manual" : "Kosong"}</span>
                   )}
                   <span className={`absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold ${n.terisi ? "bg-[#0F2A52] text-white" : "bg-white text-[#0F2A52] ring-1 ring-[#C9D3E6]"}`}>{n.slot}</span>
                   {masalah && (
@@ -576,7 +580,8 @@ export default function SusunFoto({
                   )}
                 </span>
                 <span className="block px-1.5 pb-1.5 pt-1">
-                  <span className="block break-words text-[11.5px] font-extrabold leading-tight text-[#0F2A52]">{peranRingkas(jenis, n.slot)}</span>
+                  {/* break-normal: kata tidak pernah dipecah di tengah ("Berangk/at"); frasa panjang turun ke baris berikut di antara kata */}
+                  <span className="block break-normal text-[11.5px] font-extrabold leading-tight text-[#0F2A52]">{peranRingkas(jenis, n.slot)}</span>
                   <span className="mt-0.5 block text-[11px] leading-tight text-[#3C4C68]">
                     {n.terisi ? (n.foto ? `${jamIso(n.foto.diambil_at)} WIB` : "Manual") : n.ditahan ? `${jamIso(n.ditahan.diambil_at)} · dipesan` : "\u00a0"}
                   </span>
@@ -620,8 +625,8 @@ export default function SusunFoto({
       {k.cadangan.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="text-[13px] font-extrabold text-[#0F2A52]">Foto cadangan ({k.cadangan.length})</div>
-          <p className="text-[11.5px] leading-relaxed text-[#3C4C68]">Sudah terkirim dari Kamera SIGAP tetapi belum menempati nomor. Tetap tersimpan. Ketuk satu foto, lalu ketuk nomor tujuannya.</p>
-          {k.cadangan.map((f) => {
+          <p className="text-[11.5px] leading-snug text-[#3C4C68]">Tersimpan, belum bernomor. Ketuk satu foto, lalu nomor tujuannya.</p>
+          {k.cadangan.map((f, urutan) => {
             const dipilihIni = dipilihCadangan?.id === f.id;
             return (
               <button
@@ -631,11 +636,12 @@ export default function SusunFoto({
                 onClick={() => ketukCadangan(f.id)}
                 aria-pressed={dipilihIni}
                 aria-label={`Foto cadangan ${jamIso(f.diambil_at)}`}
-                className={`flex min-h-[56px] w-full items-center gap-3 rounded-xl border-2 bg-white px-2.5 py-2 text-left ${dipilihIni ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : "border-[#C9D3E6]"}`}
+                className={`flex min-h-[52px] w-full items-center gap-2.5 rounded-xl border-2 bg-white px-2 py-1.5 text-left ${dipilihIni ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : "border-[#C9D3E6]"}`}
               >
-                <Gambar id={f.id} kelas="h-12 w-12 flex-none rounded-lg object-cover" alt="Foto cadangan" />
+                <Gambar id={f.id} kelas="h-11 w-14 flex-none rounded-lg object-cover" alt={`Foto cadangan ${String.fromCharCode(65 + (urutan % 26))}`} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-bold text-[#0F2A52]">Foto cadangan · {jamIso(f.diambil_at)} WIB</span>
+                  {/* huruf pembeda (A, B, ...) supaya dua foto dengan jam sama tidak tampak kembar */}
+                  <span className="block text-[13px] font-bold text-[#0F2A52]">Cadangan {String.fromCharCode(65 + (urutan % 26))} · {jamIso(f.diambil_at)} WIB</span>
                   {dipilihIni && <span className="mt-0.5 block text-[11.5px] font-semibold leading-snug text-[#0F2A52]">Dipilih. Ketuk nomor tujuannya di kisi di atas.</span>}
                   {f.tahan && <span className="mt-0.5 block text-[11px] leading-snug text-[#3C4C68]">Menunggu diperiksa PML/admin; nomornya dipesan dulu, baru tercatat setelah diperiksa.</span>}
                 </span>

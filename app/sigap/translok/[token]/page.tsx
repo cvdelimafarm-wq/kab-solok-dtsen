@@ -1263,7 +1263,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
   };
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-md">
+    <section className="rounded-2xl bg-white p-3 shadow-md sm:p-4">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-[15px] font-extrabold">Arsip per tanggal</p>
         <span className="text-[11px] font-semibold text-[#6B7890]">{pen.hari.length - kurang.length - pen.hari.filter((h) => h.kunci === "akan_datang").length} hari lengkap</span>
@@ -1309,7 +1309,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
       {hari && d && n && (
         <div
           id={`hari-${hari.tanggal}`}
-          className="mt-3 rounded-2xl bg-[#F6F8FB] p-3.5"
+          className="mt-3 rounded-2xl bg-[#F6F8FB] p-2.5 sm:p-3.5"
           onTouchStart={(e) => {
             const t = e.touches[0];
             sentuh.current = { x: t.clientX, y: t.clientY };

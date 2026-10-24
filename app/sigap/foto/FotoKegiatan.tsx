@@ -58,18 +58,18 @@ export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, la
   if (mode === "unggah") return <>{fallback}</>;
   if (lampau && tanggal)
     return (
-      <div className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-4">
+      <div className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4">
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto tanggal ini</div>
         <p className="text-xs leading-relaxed text-[#3C4C68]">Kamera SIGAP hanya memotret pada hari kerjanya sendiri. Di sini Anda dapat memeriksa dan menukar urutan foto bila masih diizinkan.</p>
-        <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} />
+        <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} polos />
       </div>
     );
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-4">
+    <div className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4">
       <div className="text-sm font-extrabold text-[#0F2A52]">Foto dokumentasi lewat Kamera SIGAP</div>
       <p className="text-xs leading-relaxed text-[#3C4C68]">Waktu dan lokasi tercetak otomatis di foto. Foto dari galeri tidak dipakai untuk kegiatan ini.</p>
       <Link href={`/sigap/foto?kegiatan=${kegiatanId}`} className="flex min-h-[52px] items-center justify-center rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">Buka Kamera SIGAP</Link>
-      {tanggal && <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} />}
+      {tanggal && <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} polos />}
     </div>
   );
 }

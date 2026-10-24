@@ -26,6 +26,7 @@ import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
+import { matriksPutarBingkai } from "@/lib/sigapFotoPutar";
 import { jamWib } from "@/lib/sigapUrutanFoto";
 import { useTombolKembali } from "./useTombolKembali";
 import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
@@ -406,17 +407,14 @@ export default function KameraSigap({
     const wall = Date.now();
     const kanvas = document.createElement("canvas");
     const ctx = kanvas.getContext("2d");
-    // HP dipegang miring tetapi layar terkunci tegak: bingkai kamera tetap tegak, jadi diputar 90 derajat agar foto jadi landscape dan atasnya benar
+    // HP dipegang miring tetapi layar terkunci tegak: bingkai kamera tetap tegak, jadi diputar 90 derajat agar foto jadi landscape dan atasnya benar.
+    // (24 Okt 2026) PERBAIKAN foto landscape terbalik 180 derajat: arah putar sebelumnya tertukar (HP ke kiri diputar searah jarum jam, ke kanan
+    // berlawanan). Kini memakai lib/sigapFotoPutar.ts (diuji): HP ke kiri -> sisi kanan bingkai jadi atas; HP ke kanan -> sisi kiri bingkai jadi atas.
     if (putar !== 0 && v.videoHeight > v.videoWidth) {
       kanvas.width = v.videoHeight;
       kanvas.height = v.videoWidth;
-      if (putar === 1) {
-        ctx?.translate(kanvas.width, 0);
-        ctx?.rotate(Math.PI / 2);
-      } else {
-        ctx?.translate(0, kanvas.height);
-        ctx?.rotate(-Math.PI / 2);
-      }
+      const m = matriksPutarBingkai(putar, v.videoWidth, v.videoHeight);
+      ctx?.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
     } else {
       kanvas.width = v.videoWidth;
       kanvas.height = v.videoHeight;
