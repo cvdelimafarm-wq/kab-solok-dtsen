@@ -46,5 +46,15 @@ Semua perubahan lewat gerbang (`/panggil`, `/tulis`); tombol hanya tampil bila `
 - Prasyarat SQL: `20261024n_keu_v_rab_baris.sql` (tampilan `keu_v_rab_baris` dan `keu_v_rab_jejak`), lalu `20261024z9_cek_kesehatan_keu_n.sql` (empat baris pertama harus 0).
 - Tes seluruh `lib/keu`: 83 lulus.
 
+## Tahap 4: layar PPK dan keputusan kekurangan
+Tanpa SQL baru (cukup berkas n dari tahap 3). Hak ditegakkan basis data; tombol hanya tampil bila `keu_boleh` mengizinkan.
+
+- `lib/keu/revisi.ts`: logika murni jadwal (aksi tersedia per status), pengesahan (nomor + tanggal dokumen), tambahan pagu resmi, keputusan penuhi/tunda/tolak (jumlah dipenuhi tidak boleh melebihi tambahan; tolak wajib alasan). Tes 10.
+- `app/sigap/revisi/page.tsx` (`/sigap/revisi`): jadwal revisi (buat jadwal bulanan, buka, tutup, terapkan, nyatakan sah, lewati, pulihkan), daftar usulan RO per jadwal dengan sahkan/kembalikan, tambahan pagu resmi (catat, batalkan). Semua pegawai dapat melihat.
+- `app/sigap/ro/[kode]/Kekurangan.tsx`: panel keputusan kekurangan untuk ketua tim saat ada tambahan pagu terbuka (saran sistem sebagai titik awal, simpan semua sekaligus).
+- `lib/keu/tampilan.ts`: ditambah `keu_revisi_sah`.
+- Uji SQL 48 (`claude/skema-sql/fase-a/uji/48_uji_layar_ppk_realisasi.sql`) membuktikan muatan JSON yang dikirim aplikasi diterima gerbang.
+- Tes seluruh `lib/keu`: 93 lulus.
+
 ## Yang sengaja belum ada
-Layar PPK (jadwal dan pengesahan revisi, unggah POK resmi), usulan struktur, kertas kerja revisi, unggah dokumen Administrasi, dan pembaca POK PDF.
+Kertas kerja Semula/Menjadi, usulan struktur (level baru), unggah dokumen Administrasi, unggah POK resmi (pembaca PDF), dan Master data.

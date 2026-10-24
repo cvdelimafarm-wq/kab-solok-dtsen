@@ -83,6 +83,10 @@ export default function DaftarRo() {
           <span>Realisasi anggaran (unggah GLP039)</span>
           <span aria-hidden>›</span>
         </Link>
+        <Link href="/sigap/revisi" className={`${kartu} flex min-h-[44px] items-center justify-between gap-2 text-[13.5px] font-extrabold text-[#1F5FD1] active:bg-[#F0F5FF]`}>
+          <span>Jadwal dan pengesahan revisi</span>
+          <span aria-hidden>›</span>
+        </Link>
 
         {ro.galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{ro.galat}</p>}
         {ro.memuat && <div className="h-40 animate-pulse rounded-[20px] bg-white" aria-busy="true" />}

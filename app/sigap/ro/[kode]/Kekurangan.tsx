@@ -5,10 +5,11 @@
 // (24 Okt 2026) Tab Kekurangan RAB: daftar catatan + formulir catat, ubah, tarik. Tombol hanya tampil bila akun berwenang (kewenangan
 // kek_catat: ketua tim dan admin RO untuk RO sendiri); yang memutuskan tetap basis data. Logika isian: lib/keu/kekurangan.ts.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { argsCatat, argsTarik, argsUbah, bentukIsian, periksaKekurangan, PRIORITAS, type IsianKekurangan } from "@/lib/keu/kekurangan";
 import { angka, rupiah, STATUS_KEK, urlBaca } from "@/lib/keu/ro";
-import { useAnggaranRo, useBacaKeu, useBoleh, useKirim } from "../useKeu";
+import { argsPutuskan, awalKeputusan, LABEL_PUTUSAN, periksaKeputusan, type Keputusan, type Putusan } from "@/lib/keu/revisi";
+import { aksiKeu, useAnggaranRo, useBacaKeu, useBoleh, useKirim } from "../useKeu";
 
 const kartu = "rounded-[20px] bg-white p-4 shadow-[0_4px_16px_rgba(15,42,82,0.08)]";
 const kolom = "box-border min-h-[44px] w-full rounded-[12px] border-[1.5px] border-[#C5D0E2] bg-[#F8FBFF] px-3 text-[14px] font-semibold text-[#0F2A52]";
@@ -116,6 +117,82 @@ function Tarik({ id, tutup, sesudah }: { id: number; tutup: () => void; sesudah:
   );
 }
 
+
+type RingkasKek = { tambahan_terbuka_id: number | string | null; tambahan_terbuka_jumlah: number | string | null };
+
+/** Ketua tim memutuskan SEMUA catatan terbuka sekaligus saat ada tambahan pagu resmi terbuka (K4-K6). Saran sistem hanya titik awal. */
+function PanelPutus({ kode, terbuka, sesudah }: { kode: string; terbuka: Kek[]; sesudah: () => Promise<void> }) {
+  const ringkas = useBacaKeu<RingkasKek>(urlBaca("keu_v_kekurangan_ro", { ro_kode: kode }, { batas: 1, kolom: ["tambahan_terbuka_id", "tambahan_terbuka_jumlah"] }));
+  const boleh = useBoleh("kek_putus", kode);
+  const tid = ringkas.baris?.[0]?.tambahan_terbuka_id ?? null;
+  const jumlahTambahan = Number(ringkas.baris?.[0]?.tambahan_terbuka_jumlah ?? 0);
+  const [daftar, setDaftar] = useState<Keputusan[] | null>(null);
+  const [salah, setSalah] = useState<string[]>([]);
+  const { kirim, mengirim, galat } = useKirim(async () => { await ringkas.muat(); await sesudah(); });
+  const idKunci = terbuka.map((k) => k.id).join(",");
+
+  useEffect(() => {
+    if (!boleh || tid === null) return;
+    let hidup = true;
+    void aksiKeu<{ kekurangan_id: number | string; saran: string }[]>("keu_kekurangan_saran", { p_tambahan: Number(tid) }).then((r) => {
+      if (hidup) setDaftar(awalKeputusan(terbuka.map((k) => k.id), r.ok && Array.isArray(r.data) ? r.data : []));
+    });
+    return () => { hidup = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boleh, tid, idKunci]);
+
+  const jml = useMemo(() => new Map(terbuka.map((k) => [k.id, Number(k.jumlah)])), [terbuka]);
+  if (!boleh || tid === null || terbuka.length === 0) return null;
+  const hitung = daftar ? periksaKeputusan(daftar, jml, jumlahTambahan) : null;
+  const ubah = (id: number, p: Partial<Keputusan>) => setDaftar((d) => (d ? d.map((x) => (x.id === id ? { ...x, ...p } : x)) : d));
+  const simpan = async () => {
+    if (!daftar || !hitung) return;
+    setSalah(hitung.galat);
+    if (hitung.galat.length) return;
+    await kirim("keu_kekurangan_putuskan", argsPutuskan(Number(tid), daftar));
+  };
+  return (
+    <section className={`${kartu} space-y-3 border-l-4 border-[#1F5FD1]`} aria-labelledby="judul-putus">
+      <h3 id="judul-putus" className="text-[14px] font-extrabold text-[#0F2A52]">Tambahan pagu {rupiah(jumlahTambahan)} menunggu keputusan</h3>
+      <p className="text-[12.5px] text-[#5B6B84]">Putuskan semua catatan sekaligus: penuhi, tunda, atau tolak (tolak wajib alasan). Awalnya terisi saran sistem menurut prioritas lalu tanggal catat; Bapak/Ibu yang memutuskan. Sisa tambahan menjadi dana penggenap.</p>
+      {!daftar && <div className="h-16 animate-pulse rounded-[12px] bg-[#EEF2F7]" aria-busy="true" />}
+      {daftar && (
+        <ul className="space-y-2">
+          {terbuka.map((k) => {
+            const d = daftar.find((x) => x.id === k.id);
+            if (!d) return null;
+            return (
+              <li key={k.id} className="rounded-[12px] bg-[#F5F8FE] p-3">
+                <p className="break-words text-[13px] font-bold text-[#0F2A52]">{k.uraian}</p>
+                <p className="text-[12px] text-[#6B7A93]">{rupiah(k.jumlah)}{k.prioritas_nama ? ` · ${k.prioritas_nama}` : ""}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label={`Keputusan untuk ${k.uraian}`}>
+                  {(["penuhi", "tunda", "tolak"] as Putusan[]).map((p) => (
+                    <button key={p} type="button" role="radio" aria-checked={d.keputusan === p} onClick={() => ubah(k.id, { keputusan: p })}
+                      className={`min-h-[44px] flex-1 rounded-[12px] px-3 text-[13px] font-extrabold ${d.keputusan === p ? "bg-[#1F5FD1] text-white" : "border-[1.5px] border-[#C5D0E2] bg-white text-[#44546F]"}`}>{LABEL_PUTUSAN[p]}</button>
+                  ))}
+                </div>
+                {d.keputusan === "tolak" && (
+                  <div className="mt-2">
+                    <label className={label} htmlFor={`pt-${k.id}`}>Alasan menolak</label>
+                    <input id={`pt-${k.id}`} className={kolom} maxLength={300} value={d.alasan} onChange={(e) => ubah(k.id, { alasan: e.target.value })} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hitung && <p className="text-[13px] font-bold text-[#0F2A52]">Dipenuhi {rupiah(hitung.dipenuhi)} · sisa jadi dana penggenap {rupiah(Math.max(0, hitung.sisa))}</p>}
+      {(salah.length > 0 || galat) && (
+        <ul role="alert" className="space-y-1 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
+          {[...salah, ...(galat ? [galat] : [])].map((x) => <li key={x}>{x}</li>)}
+        </ul>
+      )}
+      <button type="button" disabled={mengirim || !daftar} onClick={() => void simpan()} className={`${tombol} w-full bg-[#1F5FD1] text-white`}>{mengirim ? "Menyimpan..." : "Simpan keputusan"}</button>
+    </section>
+  );
+}
+
 export function TabKekurangan({ kode }: { kode: string }) {
   const kek = useBacaKeu<Kek>(urlBaca("keu_v_kekurangan", { ro_kode: kode }, { urut: "prioritas_urut", batas: 2000, kolom: ["id", "akun_kode", "uraian", "jumlah", "prioritas_kode", "prioritas_nama", "prioritas_urut", "alasan", "status", "terbuka", "kali_ditunda", "alasan_putus"] }));
   const boleh = useBoleh("kek_catat", kode);
@@ -135,6 +212,7 @@ export function TabKekurangan({ kode }: { kode: string }) {
         <p className="text-[13px] font-bold text-[#0F2A52]">{terbuka.length} catatan terbuka · {rupiah(jumlah)}</p>
         {boleh && mode === null && <button type="button" onClick={() => setMode({ jenis: "baru" })} className={`${tombol} bg-[#1F5FD1] text-white`}>Catat kekurangan</button>}
       </div>
+      <PanelPutus kode={kode} terbuka={terbuka} sesudah={sesudah} />
       {mode?.jenis === "baru" && <Formulir ro={kode} akunPilihan={akunPilihan} awal={bentukIsian()} tutup={() => setMode(null)} sesudah={sesudah} />}
       {kek.baris.length === 0 && <p className={`${kartu} text-[13.5px] text-[#5B6B84]`}>Belum ada catatan kekurangan RAB untuk RO ini.{boleh ? "" : " Hanya ketua tim dan admin RO yang dapat mencatat."}</p>}
       <ul className="space-y-2.5">
