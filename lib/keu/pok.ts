@@ -139,7 +139,7 @@ export function calonPadan(baru: BarisBanding, semua: BarisBanding[]): Calon[] {
 export type KesiapanTerima = { blok: string | null; peringatan: string[] };
 
 /** `jenisJadwal` = jenis jadwal dasar unggahan (null bila tanpa jadwal). Revisi pok/administrasi mempertahankan pagu satker, jadi total harus sama (mencerminkan keu_pok_unggah_terima). */
-export function kesiapanTerima(r: RingkasUnggah | null, jumlahBaris: number, jenisJadwal: string | null = null): KesiapanTerima {
+export function kesiapanTerima(r: RingkasUnggah | null, jumlahBaris: number, jenisJadwal: string | null = null, keputusan: KeputusanUnggah | null = null): KesiapanTerima {
   const peringatan: string[] = [];
   if (!r) return { blok: "Ringkasan pencocokan belum dimuat.", peringatan };
   if (r.status !== "diunggah") return { blok: "Unggahan ini sudah diputuskan.", peringatan };
@@ -151,7 +151,86 @@ export function kesiapanTerima(r: RingkasUnggah | null, jumlahBaris: number, jen
     if (jenisJadwal === "pok" || jenisJadwal === "administrasi") return { blok: `Revisi ${jenisJadwal === "pok" ? "POK" : "administrasi"} mempertahankan pagu satker, tetapi total PDF ${arah} dari POK berlaku. Periksa berkasnya atau tolak.`, peringatan };
     peringatan.push(`Total PDF ${arah} dari POK berlaku. Tanpa jadwal revisi POK/administrasi, sistem tidak memeriksa kesamaan total; pastikan perubahan pagu ini memang sah (DIPA).`);
   }
+  if (keputusan && n(keputusan.n_ditanyakan) > 0) return { blok: `${n(keputusan.n_ditanyakan)} baris masih ditandai ditanyakan. Putuskan (pakai angka berkas) atau tolak unggahan.`, peringatan };
+  if (keputusan && n(keputusan.n_menunggu) > 0) peringatan.push(`${n(keputusan.n_menunggu)} baris selisih belum diputuskan operator; bila diterima, angka pada berkas dipakai untuk semuanya.`);
   if (n(r.n_di_luar_usulan) > 0) peringatan.push(`${n(r.n_di_luar_usulan)} perubahan tidak ada dalam usulan RO yang disetujui.`);
   if (n(r.n_baru) > 0 || n(r.n_hilang) > 0) peringatan.push(`${n(r.n_baru)} baris baru dan ${n(r.n_hilang)} baris hilang belum dipadankan; riwayat RAB hanya mengikuti baris yang dipadankan.`);
   return { blok: null, peringatan };
 }
+
+// ---------- papan 6: pencocokan dengan usulan dan keputusan operator (keu_v_pok_banding_rinci, 20261024s) ----------
+export type TandaBaris = "belum" | "pakai" | "ditanyakan";
+export type BarisRinci = BarisBanding & {
+  jadwal_id: number | string | null; kunci: string | null; kunci_padan: string | null; jumlah_usulan: number | string | null;
+  sesuai_usulan: boolean | null; tanda: TandaBaris; tanda_catatan: string; otomatis: boolean;
+};
+export type KeputusanUnggah = {
+  unggah_id: number; n_otomatis: number | string; n_menunggu: number | string; n_pakai: number | string; n_ditanyakan: number | string; n_di_luar_usulan: number | string;
+};
+
+export type Saringan = "perlu" | "semua" | "sama" | "berubah" | "baru" | "hilang" | "dipadankan" | "luar";
+export const URUTAN_SARINGAN: Saringan[] = ["perlu", "semua", "sama", "berubah", "baru", "hilang", "dipadankan", "luar"];
+export const LABEL_SARINGAN: Record<Saringan, string> = {
+  perlu: "Perlu keputusan", semua: "Semua", sama: "Sama", berubah: "Berubah", baru: "Baru", hilang: "Hilang", dipadankan: "Dipadankan", luar: "Di luar usulan",
+};
+
+/** Baris selisih yang belum selesai diputuskan: bukan sama, tidak otomatis diterima, dan operator belum memilih 'pakai angka berkas'. */
+export const perluKeputusan = (b: BarisRinci): boolean => b.status !== "sama" && !b.otomatis && b.tanda !== "pakai";
+
+export function cocokSaringan(b: BarisRinci, s: Saringan): boolean {
+  if (s === "semua") return true;
+  if (s === "perlu") return perluKeputusan(b);
+  if (s === "luar") return b.sesuai_usulan === false;
+  return b.status === s;
+}
+
+export function hitungSaringan(baris: BarisRinci[]): Record<Saringan, number> {
+  const h: Record<Saringan, number> = { perlu: 0, semua: baris.length, sama: 0, berubah: 0, baru: 0, hilang: 0, dipadankan: 0, luar: 0 };
+  for (const b of baris) {
+    h[b.status] += 1;
+    if (perluKeputusan(b)) h.perlu += 1;
+    if (b.sesuai_usulan === false) h.luar += 1;
+  }
+  return h;
+}
+
+/** Selisih angka berkas terhadap usulan (Menjadi); null bila tidak ada pembanding usulan. */
+export function selisihUsulan(b: BarisRinci): number | null {
+  if (b.jumlah_usulan === null || b.jumlah_usulan === undefined) return null;
+  if (b.status === "hilang") return null;
+  return n(b.jumlah_baru) - n(b.jumlah_usulan);
+}
+
+/** Kolom Catatan papan 6: menjelaskan mengapa baris itu diberi status tersebut. */
+export function catatanBaris(b: BarisRinci): string {
+  const adaUsulan = b.jadwal_id !== null && b.jadwal_id !== undefined;
+  switch (b.status) {
+    case "sama": return "";
+    case "dipadankan": return `dipadankan PPK dengan baris lama${b.kunci_padan ? ` (${b.kunci_padan})` : ""}`;
+    case "baru":
+      if (!adaUsulan) return "baris baru pada berkas; kunci baris baru diberikan";
+      return b.sesuai_usulan ? "kunci baris baru diberikan; sesuai usulan" : "baris baru pada berkas yang tidak ada dalam usulan";
+    case "hilang":
+      if (!adaUsulan) return "tidak ada pada berkas";
+      return b.sesuai_usulan ? "dikosongkan atau dipindah sesuai usulan" : "tidak ada pada berkas dan tidak dikosongkan dalam usulan";
+    default: {
+      if (!adaUsulan) return "angka pada berkas berbeda dari POK sistem";
+      if (b.sesuai_usulan) return "angka pada berkas sama dengan usulan";
+      const d = selisihUsulan(b);
+      return d === null ? "tidak ada baris usulan untuk item ini" : `angka pada berkas beda Rp ${Math.abs(d).toLocaleString("id-ID")} dari usulan (pembulatan?)`;
+    }
+  }
+}
+
+/** Kolom Keputusan operator papan 6 (teks tetap bila tidak ada tombol). */
+export function teksKeputusan(b: BarisRinci): string {
+  if (b.status === "sama") return "Tidak perlu";
+  if (b.tanda === "pakai") return "Pakai angka berkas";
+  if (b.tanda === "ditanyakan") return "Ditanyakan";
+  if (b.status === "dipadankan") return "Dipadankan PPK";
+  if (b.otomatis) return b.status === "baru" ? "Kunci baris baru diberikan" : "Diterima otomatis";
+  return "Menunggu keputusan operator";
+}
+
+export const argsTandai = (unggah: number, kunci: string, tanda: TandaBaris, catatan = ""): Record<string, unknown> => ({ p_unggah: unggah, p_kunci: kunci, p_tanda: tanda, p_catatan: catatan });
+export const argsTandaiSemua = (unggah: number): Record<string, unknown> => ({ p_unggah: unggah });

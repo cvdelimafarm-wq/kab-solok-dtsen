@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import {
   argsUnggahBaru, argsUnggahIsi, kesiapanTerima, LABEL_STATUS_UNGGAH, periksaAlasanTolak, periksaIsianUnggah, tahunUnggah, unggahKosong,
-  type BerkasPdf, type IsianUnggah, type PokBerlaku, type RingkasUnggah, type UnggahPok,
+  type BerkasPdf, type IsianUnggah, type KeputusanUnggah, type PokBerlaku, type RingkasUnggah, type UnggahPok,
 } from "@/lib/keu/pok";
 import { berkasUtuh } from "@/lib/keu/rkks";
 import { LABEL_JENIS_JADWAL, tglPanjang } from "@/lib/keu/revisi";
@@ -29,16 +29,18 @@ export default function HalamanPokResmi() {
   const berlaku = useBacaKeu<PokBerlaku>(urlBaca("keu_pok_versi", { status: "berlaku" }, { urut: "-id", batas: 1, kolom: ["id", "tahun", "nomor_revisi", "nomor_pok", "tanggal_efektif"] }));
   const unggah = useBacaKeu<UnggahPok>(urlBaca("keu_pok_unggah", {}, { urut: "-id", batas: 50, kolom: ["id", "tahun", "nomor_revisi", "jadwal_id", "nama_berkas", "hash_berkas", "nomor_pok", "tanggal_efektif", "status", "versi_id", "alasan_tolak", "dibuat_at"] }));
   const ringkas = useBacaKeu<RingkasUnggah>(urlBaca("keu_v_pok_unggah_ringkas", {}, { urut: "-unggah_id", batas: 50 }));
+  const keputusan = useBacaKeu<KeputusanUnggah>(urlBaca("keu_v_pok_unggah_keputusan", {}, { urut: "-unggah_id", batas: 50 }));
   const jadwal = useBacaKeu<Jadwal>(urlBaca("keu_revisi_jadwal", {}, { urut: "-id", batas: 200, kolom: ["id", "tahun", "jenis", "judul", "status"] }));
   const ro = useBacaKeu<{ kode: string; nama: string }>(urlBaca("keu_ro", {}, { urut: "kode", batas: 500, kolom: ["kode", "nama"] }));
   const boleh = useBoleh("pok_pdf", null);
 
-  const muatSemua = async () => { await Promise.all([berlaku.muat(), unggah.muat(), ringkas.muat()]); };
+  const muatSemua = async () => { await Promise.all([berlaku.muat(), unggah.muat(), ringkas.muat(), keputusan.muat()]); };
   const { kirim, jalankan, mengirim, galat: galatKirim, hapusGalat } = useKirim(muatSemua);
 
   const pokBerlaku = berlaku.baris?.[0] ?? null;
   const namaRo = useMemo(() => new Map((ro.baris ?? []).map((r) => [r.kode, r.nama.replace(" (contoh)", "")])), [ro.baris]);
   const ringkasPer = useMemo(() => new Map((ringkas.baris ?? []).map((r) => [Number(r.unggah_id), r])), [ringkas.baris]);
+  const keputusanPer = useMemo(() => new Map((keputusan.baris ?? []).map((k) => [Number(k.unggah_id), k])), [keputusan.baris]);
   const jadwalPer = useMemo(() => new Map((jadwal.baris ?? []).map((j) => [Number(j.id), j])), [jadwal.baris]);
   const menunggu = (unggah.baris ?? []).filter((u) => u.status === "diunggah");
   const totalBerlaku = ringkas.baris?.[0] ? Number(ringkas.baris[0].total_berlaku) : null;
@@ -200,9 +202,10 @@ export default function HalamanPokResmi() {
         <ul className="flex flex-col gap-3">
           {(unggah.baris ?? []).map((u) => {
             const r = ringkasPer.get(Number(u.id)) ?? null;
+            const kp = keputusanPer.get(Number(u.id)) ?? null;
             const j = u.jadwal_id ? jadwalPer.get(Number(u.jadwal_id)) : undefined;
             const terbukaIni = terbuka === u.id;
-            const kes = u.status === "diunggah" ? kesiapanTerima(r, Number(r?.n_baris ?? 0), j?.jenis ?? null) : null;
+            const kes = u.status === "diunggah" ? kesiapanTerima(r, Number(r?.n_baris ?? 0), j?.jenis ?? null, kp) : null;
             return (
               <li key={u.id} className="rounded-lg border border-[#DCE3EE] p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -230,12 +233,15 @@ export default function HalamanPokResmi() {
                     {Number(r.n_hilang) > 0 && <Chip warna="merah">{angka(r.n_hilang)} hilang</Chip>}
                     {Number(r.n_dipadankan) > 0 && <Chip warna="biru">{angka(r.n_dipadankan)} dipadankan</Chip>}
                     {Number(r.n_ro_tak_terdaftar) > 0 && <Chip warna="merah">{angka(r.n_ro_tak_terdaftar)} baris RO belum terdaftar</Chip>}
+                    {kp && Number(kp.n_di_luar_usulan) > 0 && <Chip warna="ungu">{angka(kp.n_di_luar_usulan)} di luar usulan</Chip>}
+                    {kp && Number(kp.n_menunggu) > 0 && <Chip warna="kuning">{angka(kp.n_menunggu)} menunggu keputusan</Chip>}
+                    {kp && Number(kp.n_ditanyakan) > 0 && <Chip warna="merah">{angka(kp.n_ditanyakan)} ditanyakan</Chip>}
                   </div>
                 )}
 
                 {terbukaIni && u.status === "diunggah" && (
                   <div className="mt-3 border-t border-[#EEF2F7] pt-3">
-                    <Banding unggahId={u.id} boleh={boleh === true} namaRo={namaRo} ringkas={r} muatUlang={muatSemua} />
+                    <Banding unggahId={u.id} boleh={boleh === true} namaRo={namaRo} ringkas={r} keputusan={kp} muatUlang={muatSemua} />
                   </div>
                 )}
 
@@ -264,8 +270,11 @@ export default function HalamanPokResmi() {
                       </div>
                     )}
                     {aksi?.id !== u.id && (
+                      <p className="text-[12.5px] text-[#44546F]"><b>Jadikan POK semula yang baru.</b> Baris yang sama, baru, dan hilang diterima otomatis bila sesuai usulan. Baris berubah dan baris di luar usulan menunggu keputusan operator; sistem tidak menebak mana yang benar. Setelah diterima, hasil penetapan ini menjadi kolom Semula untuk revisi berikutnya dan masuk ke daftar versi berurutan.</p>
+                    )}
+                    {aksi?.id !== u.id && (
                       <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" disabled={mengirim || !!kes?.blok} className={tombolUtama} onClick={() => { hapusGalat(); setAksi({ id: u.id, jenis: "terima", alasan: "" }); }}>Terima dan berlakukan...</button>
+                        <button type="button" disabled={mengirim || !!kes?.blok} className={tombolUtama} onClick={() => { hapusGalat(); setAksi({ id: u.id, jenis: "terima", alasan: "" }); }}>Simpan sebagai POK semula berikutnya...</button>
                         <button type="button" disabled={mengirim} className={tombolBahaya} onClick={() => { hapusGalat(); setAksi({ id: u.id, jenis: "tolak", alasan: "" }); }}>Tolak...</button>
                         {kes?.blok && <span className="text-[12.5px] font-semibold text-[#8A6200]">{kes.blok}</span>}
                       </div>

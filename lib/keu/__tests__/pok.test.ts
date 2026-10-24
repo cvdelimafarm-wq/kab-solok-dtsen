@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   argsUnggahBaru, argsUnggahIsi, bandingRo, calonPadan, kemiripan, kesiapanTerima, nomorRevisiBerikut, periksaAlasanTolak, periksaIsianUnggah,
-  ringkasPerRo, unggahKosong, type BarisBanding, type BerkasPdf, type PokBerlaku, type RingkasUnggah,
+  ringkasPerRo, unggahKosong, argsTandai, argsTandaiSemua, catatanBaris, cocokSaringan, hitungSaringan, perluKeputusan, selisihUsulan, teksKeputusan,
+  type BarisBanding, type BarisRinci, type BerkasPdf, type KeputusanUnggah, type PokBerlaku, type RingkasUnggah,
 } from "../pok";
 import type { HasilUrai } from "../rkks";
 
@@ -106,5 +107,75 @@ describe("kesiapan terima", () => {
     expect(kesiapanTerima(beda, 100, "administrasi").blok).toMatch(/administrasi/);
     expect(kesiapanTerima(beda, 100, "dipa_dja").blok).toBeNull();
     expect(kesiapanTerima(r, 100, "pok").blok).toBeNull();
+  });
+});
+
+
+describe("papan 6: usulan dan keputusan operator", () => {
+  const r = (o: Partial<BarisRinci>): BarisRinci => ({
+    ...bb({}), jadwal_id: 7, kunci: "2904.BMA.006/051/521211/belanja bahan#1", kunci_padan: null, jumlah_usulan: null, sesuai_usulan: null,
+    tanda: "belum", tanda_catatan: "", otomatis: false, ...o,
+  });
+  const sama = r({ status: "sama", otomatis: true });
+  const berubahSesuai = r({ status: "berubah", jumlah_baru: 1500, jumlah_usulan: 1500, sesuai_usulan: true, otomatis: true });
+  const berubahBeda = r({ status: "berubah", jumlah_lama: 11660000, jumlah_baru: 11659000, jumlah_usulan: 11660000, sesuai_usulan: false });
+  const berubahTanpaUsulan = r({ status: "berubah", jumlah_usulan: null, sesuai_usulan: false });
+  const baruSesuai = r({ status: "baru", sesuai_usulan: true, otomatis: true, jumlah_usulan: 100 });
+  const baruLuar = r({ status: "baru", sesuai_usulan: false });
+  const hilangSesuai = r({ status: "hilang", sesuai_usulan: true, otomatis: true, jumlah_usulan: 0 });
+  const hilangLuar = r({ status: "hilang", sesuai_usulan: false });
+  const padan = r({ status: "dipadankan", otomatis: true, kunci_padan: "lama#1" });
+  const semua = [sama, berubahSesuai, berubahBeda, berubahTanpaUsulan, baruSesuai, baruLuar, hilangSesuai, hilangLuar, padan];
+
+  it("perlu keputusan = bukan sama, tidak otomatis, belum 'pakai'", () => {
+    expect(semua.filter(perluKeputusan)).toEqual([berubahBeda, berubahTanpaUsulan, baruLuar, hilangLuar]);
+    expect(perluKeputusan({ ...berubahBeda, tanda: "pakai" })).toBe(false);
+    expect(perluKeputusan({ ...berubahBeda, tanda: "ditanyakan" })).toBe(true);
+  });
+  it("saringan dan hitungan konsisten", () => {
+    const h = hitungSaringan(semua);
+    expect(h).toEqual({ perlu: 4, semua: 9, sama: 1, berubah: 3, baru: 2, hilang: 2, dipadankan: 1, luar: 4 });
+    for (const s of ["perlu", "semua", "sama", "berubah", "baru", "hilang", "dipadankan", "luar"] as const) {
+      expect(semua.filter((b) => cocokSaringan(b, s))).toHaveLength(h[s]);
+    }
+  });
+  it("selisih terhadap usulan hanya bila ada pembanding dan bukan baris hilang", () => {
+    expect(selisihUsulan(berubahBeda)).toBe(-1000);
+    expect(selisihUsulan(berubahTanpaUsulan)).toBeNull();
+    expect(selisihUsulan(hilangSesuai)).toBeNull();
+  });
+  it("catatan menjelaskan alasan status", () => {
+    expect(catatanBaris(sama)).toBe("");
+    expect(catatanBaris(berubahSesuai)).toMatch(/sama dengan usulan/);
+    expect(catatanBaris(berubahBeda)).toMatch(/beda Rp 1\.000 dari usulan/);
+    expect(catatanBaris(berubahTanpaUsulan)).toMatch(/tidak ada baris usulan/);
+    expect(catatanBaris(baruSesuai)).toMatch(/kunci baris baru diberikan/);
+    expect(catatanBaris(baruLuar)).toMatch(/tidak ada dalam usulan/);
+    expect(catatanBaris(hilangSesuai)).toMatch(/sesuai usulan/);
+    expect(catatanBaris(hilangLuar)).toMatch(/tidak dikosongkan/);
+    expect(catatanBaris(padan)).toMatch(/lama#1/);
+    expect(catatanBaris(r({ status: "berubah", jadwal_id: null }))).toMatch(/POK sistem/);
+    expect(catatanBaris(r({ status: "hilang", jadwal_id: null }))).toBe("tidak ada pada berkas");
+  });
+  it("teks keputusan", () => {
+    expect(teksKeputusan(sama)).toBe("Tidak perlu");
+    expect(teksKeputusan(baruSesuai)).toBe("Kunci baris baru diberikan");
+    expect(teksKeputusan(hilangSesuai)).toBe("Diterima otomatis");
+    expect(teksKeputusan(padan)).toBe("Dipadankan PPK");
+    expect(teksKeputusan(berubahBeda)).toBe("Menunggu keputusan operator");
+    expect(teksKeputusan({ ...berubahBeda, tanda: "pakai" })).toBe("Pakai angka berkas");
+    expect(teksKeputusan({ ...berubahBeda, tanda: "ditanyakan" })).toBe("Ditanyakan");
+  });
+  it("argumen tanpa p_akun", () => {
+    expect(argsTandai(3, "k#1", "ditanyakan", "tanya")).toEqual({ p_unggah: 3, p_kunci: "k#1", p_tanda: "ditanyakan", p_catatan: "tanya" });
+    expect(argsTandaiSemua(3)).toEqual({ p_unggah: 3 });
+  });
+  it("kesiapan terima memperhitungkan keputusan operator", () => {
+    const ring: RingkasUnggah = { unggah_id: 1, tahun: 2026, nomor_revisi: 5, status: "diunggah", n_baris: 10, total_unggah: 100, total_berlaku: 100, n_sama: 10, n_berubah: 0, n_dipadankan: 0, n_baru: 0, n_hilang: 0, n_di_luar_usulan: 0, n_ro_tak_terdaftar: 0 };
+    const k = (o: Partial<KeputusanUnggah>): KeputusanUnggah => ({ unggah_id: 1, n_otomatis: 0, n_menunggu: 0, n_pakai: 0, n_ditanyakan: 0, n_di_luar_usulan: 0, ...o });
+    expect(kesiapanTerima(ring, 10, null, k({}))).toEqual({ blok: null, peringatan: [] });
+    expect(kesiapanTerima(ring, 10, null, k({ n_ditanyakan: 2 })).blok).toMatch(/2 baris masih ditandai ditanyakan/);
+    expect(kesiapanTerima(ring, 10, null, k({ n_menunggu: 3 })).peringatan.join()).toMatch(/3 baris selisih belum diputuskan/);
+    expect(kesiapanTerima(ring, 10, null, null)).toEqual({ blok: null, peringatan: [] });
   });
 });
