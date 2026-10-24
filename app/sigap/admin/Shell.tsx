@@ -139,7 +139,6 @@ export default function Shell({
   jumlahTindakan = null,
   aksiPalet = [],
   pemilihKegiatan = true,
-  penuh = false,
   mobile,
   children,
 }: {
@@ -156,7 +155,7 @@ export default function Shell({
   aksiPalet?: ItemPalet[];
   /** (6 Okt 2026) false = sembunyikan pemilih kegiatan di topbar (mis. modul Pengadaan & Kontrak). */
   pemilihKegiatan?: boolean;
-  /** (24 Okt 2026) true = isi selebar layar (tanpa batas 1440px), untuk matriks lebar seperti kertas kerja revisi. */
+  /** (25 Okt 2026) Tidak lagi berpengaruh: SEMUA halaman dibatasi selebar laptop (1440px) dan diletakkan di tengah; tabel lebar menggulir di dalam kartunya. Dipertahankan agar pemanggil lama tetap valid. */
   penuh?: boolean;
   /** Header + tab versi HP (dirender hanya < lg). */
   mobile: React.ReactNode;
@@ -481,7 +480,7 @@ export default function Shell({
           </div>
         </header>
 
-        <div className={`mx-auto space-y-3 px-3 pb-16 pt-4 sm:px-5 lg:px-6 lg:pt-[22px] ${penuh ? "max-w-none" : "max-w-7xl lg:max-w-[1440px]"}`}>{children}</div>
+        <div className={`mx-auto space-y-3 px-3 pb-16 pt-4 sm:px-5 lg:px-6 lg:pt-[22px] max-w-7xl lg:max-w-[1440px]`}>{children}</div>
       </div>
 
       <PaletPerintah buka={palet} onTutup={() => setPalet(false)} item={itemPalet} />

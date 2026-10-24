@@ -41,7 +41,7 @@ export default function Bingkai<K extends string>({
   aktifTab?: K;
   onTab?: (k: K) => void;
   kembali?: OpsiKembali;
-  /** (24 Okt 2026) isi selebar layar (lihat Shell). */
+  /** (25 Okt 2026) tidak berpengaruh lagi: lebar isi selalu dibatasi selebar laptop (lihat Shell). */
   penuh?: boolean;
   children: React.ReactNode;
 }) {

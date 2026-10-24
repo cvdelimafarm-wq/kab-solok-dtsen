@@ -276,7 +276,6 @@ function Isi() {
       jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Revisi anggaran" }, { t: "Kertas kerja" }]}
       induk={dari || "/sigap/revisi"}
       labelKembali={dari.startsWith("/sigap/ro/") ? "RO" : "Jadwal revisi"}
-      penuh
       judul={<>Kertas Kerja Revisi POK{jd ? `, TA ${jd.tahun}` : ""}</>}
       sub={kro ? <>KRO {kro} · {roKro.length} RO{mx ? ` · ${kpi.nItem} detail · ${rupiah(kpi.menjadi)}` : ""}</> : undefined}
     >

@@ -167,7 +167,6 @@ function Isi() {
       jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Revisi anggaran" }, { t: "Peta KRO Satker" }]}
       induk={dari || "/sigap/revisi"}
       labelKembali={dari.startsWith("/sigap/revisi/kertas") ? "Kertas kerja" : "Jadwal revisi"}
-      penuh
       judul={<>Peta KRO Satker: kecukupan seluruh KRO</>}
       sub={pokBerlaku.baris?.[0] ? <>POK berlaku revisi {pokBerlaku.baris[0].nomor_revisi}{pokBerlaku.baris[0].tanggal_efektif ? `, efektif ${pokBerlaku.baris[0].tanggal_efektif}` : ""} · {struktur.length} KRO · RAB dibaca dari RAB masing-masing RO</> : undefined}
     >

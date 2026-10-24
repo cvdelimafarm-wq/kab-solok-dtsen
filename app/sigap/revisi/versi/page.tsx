@@ -275,7 +275,6 @@ function Isi() {
       jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Revisi anggaran", href: "/sigap/revisi" }, { t: "Versi, RPD, dampak" }]}
       induk="/sigap/revisi"
       labelKembali="Jadwal revisi"
-      penuh
       judul="Sesudah revisi: versi berurutan, RPD, dan dampak"
       sub={dasar ? <>POK berlaku: {labelVersi(dasar)}{dasar.tanggal_efektif ? `, efektif ${tglPanjang(dasar.tanggal_efektif)}` : ""}. Halaman ini hanya membaca; tidak ada yang diubah.</> : undefined}
     >
