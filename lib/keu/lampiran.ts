@@ -23,8 +23,20 @@ export const KODE_WAKTU: Record<JenisRevisi, string> = { pok: "tenggat_pok", adm
 export const adalahJenis = (v: unknown): v is JenisRevisi => typeof v === "string" && (URUTAN_JENIS as string[]).includes(v);
 
 // ---------------------------------------------------------------- hari kerja
-/** Libur nasional dan cuti bersama yang diketahui (Okt-Des 2026). Tetap konstanta di sini; bila tahun berganti, hanya Sabtu dan Minggu yang dihitung sampai daftar diperbarui. */
-export const LIBUR: Readonly<Record<string, string>> = { "2026-12-24": "Cuti bersama Natal", "2026-12-25": "Natal (libur nasional)" };
+/**
+ * Libur nasional dan cuti bersama pada hari kerja (Senin-Jumat) yang diketahui: Okt-Des 2026 dan seluruh 2027 (SKB 3 Menteri 2027; dua sumber berita cocok,
+ * diperiksa 25 Okt 2026). Sabtu dan Minggu sudah dihitung terpisah, jadi libur yang jatuh akhir pekan tidak dicantumkan. Hari raya yang bergantung rukyat
+ * (Idulfitri, Iduladha) dapat bergeser; perbarui daftar ini bila pemerintah menetapkan perubahan. Di luar rentang ini hanya Sabtu dan Minggu yang dihitung.
+ */
+export const LIBUR: Readonly<Record<string, string>> = {
+  "2026-12-24": "Cuti bersama Natal", "2026-12-25": "Natal (libur nasional)",
+  "2027-01-01": "Tahun Baru 2027 Masehi", "2027-01-05": "Isra Mikraj Nabi Muhammad SAW", "2027-02-05": "Cuti bersama Tahun Baru Imlek",
+  "2027-03-08": "Hari Suci Nyepi", "2027-03-09": "Cuti bersama Idulfitri 1448 H", "2027-03-10": "Idulfitri 1448 H", "2027-03-11": "Idulfitri 1448 H",
+  "2027-03-12": "Cuti bersama Idulfitri 1448 H", "2027-03-15": "Cuti bersama Idulfitri 1448 H", "2027-03-25": "Cuti bersama Wafat Yesus Kristus",
+  "2027-03-26": "Wafat Yesus Kristus", "2027-05-06": "Kenaikan Yesus Kristus", "2027-05-17": "Iduladha 1448 H", "2027-05-18": "Cuti bersama Iduladha",
+  "2027-05-19": "Cuti bersama Waisak", "2027-05-20": "Hari Raya Waisak", "2027-06-01": "Hari Lahir Pancasila", "2027-08-17": "Proklamasi Kemerdekaan",
+  "2027-12-24": "Cuti bersama Natal",
+};
 
 const utc = (iso: string): Date => { const p = iso.split("-"); return new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))); };
 const isoDari = (d: Date): string => d.toISOString().slice(0, 10);

@@ -11,6 +11,9 @@ describe("hari kerja dan tenggat", () => {
     expect(hariKerja("2026-10-25")).toBe(false);  // Minggu
     expect(hariKerja("2026-12-24")).toBe(false);  // cuti bersama
     expect(hariKerja("2026-12-25")).toBe(false);  // Natal
+    expect(hariKerja("2027-03-10")).toBe(false);  // Idulfitri 2027
+    expect(hariKerja("2027-03-16")).toBe(true);   // Selasa sesudah cuti bersama
+    expect(hariKerja("2027-08-17")).toBe(false);  // Proklamasi
   });
   it("efektif: dimajukan ke hari kerja terakhir (27 Des 2026 Minggu, 24-25 libur -> 23 Des)", () => {
     expect(efektif("2026-12-27")).toBe("2026-12-23");
@@ -107,5 +110,12 @@ describe("draf surat", () => {
     expect(s).not.toContain("Persetujuan Menteri");
     expect(susunSurat("pok", ringkasSurat([], null), [], "x")).toContain("Keputusan KPA");
     expect(susunSurat("pok", ringkasSurat([], null), [], "x")).toContain("[belum ada lampiran yang tercatat]");
+  });
+});
+
+describe("tenggat 2027 yang jatuh pada libur", () => {
+  it("dimajukan ke hari kerja terakhir sebelumnya", () => {
+    expect(efektif("2027-03-10")).toBe("2027-03-05");  // Rabu libur Idulfitri; mundur melewati cuti bersama 9 Mar dan Nyepi 8 Mar ke Jumat 5 Mar
+    expect(efektif("2027-01-02")).toBe("2026-12-31");  // Sabtu; Jumat 1 Jan libur
   });
 });
