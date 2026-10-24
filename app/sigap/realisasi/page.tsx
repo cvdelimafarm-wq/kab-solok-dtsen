@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { argsRealisasiMasuk, bacaBerkasGlp, periksaUnggahan, type HasilBerkas } from "@/lib/keu/glp039-xlsx";
 import { angka, persen, rupiah, urlBaca } from "@/lib/keu/ro";
 import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../ro/useKeu";
+import BagianSkor from "./Skor";
 import { Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kpi, kisi, label, Memuat, Tenang, tombol, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
 
 type Unggah = {
@@ -211,7 +212,8 @@ export default function HalamanRealisasi() {
           )}
           <p className="text-[12px] text-[#5B6B84]">Setiap baris Excel dicocokkan ke POK (RO, komponen, akun, uraian). Angka kumulatif per RO dan per akun dipakai tab Anggaran, tab Administrasi, dan skor RAB. Satu tanggal data hanya dapat diterima satu kali.</p>
         </section>
- 
+
+      <BagianSkor />
     </HalamanKeu>
   );
 }

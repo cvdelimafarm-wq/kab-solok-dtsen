@@ -89,6 +89,8 @@ export default function HalamanRevisi() {
           <Link href="/sigap/revisi/kertas" className={`${tombolUtama} inline-flex items-center no-underline`}>Buka Kertas kerja revisi (matriks per KRO)</Link>
           <Link href="/sigap/revisi/peta" className={`${tombolKecil} inline-flex items-center no-underline`}>Peta KRO Satker (kecukupan seluruh KRO)</Link>
           <Link href="/sigap/revisi/versi" className={`${tombolKecil} inline-flex items-center no-underline`}>Versi, RPD, dan dampak sesudah revisi</Link>
+          <Link href="/sigap/revisi/lampiran" className={`${tombolKecil} inline-flex items-center no-underline`}>Lampiran, tenggat, dan draf surat usulan</Link>
+          <Link href="/sigap/revisi/status" className={`${tombolKecil} inline-flex items-center no-underline`}>Status, peran, dan riwayat jadwal</Link>
           <Link href="/sigap/master" className={`${tombolKecil} inline-flex items-center no-underline`}>Master data (akun, satuan, waktu, skor)</Link>
           <Link href="/sigap/struktur" className={`${tombolKecil} inline-flex items-center no-underline`}>Tambah level mata anggaran (usulan struktur)</Link>
         </div>

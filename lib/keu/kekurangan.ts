@@ -3,6 +3,7 @@
 // (24 Okt 2026) Kertas Kerja Revisi POK -- logika murni formulir catatan Kekurangan RAB (tanpa React/DB): pembacaan rupiah, pemeriksaan isian
 // (cermin aturan fungsi basis data keu_kekurangan_catat/ubah/tarik supaya pesan muncul sebelum dikirim; basis data tetap yang memutuskan),
 // dan penyusunan argumen untuk gerbang keu_jalankan. p_akun tidak pernah dikirim: server mengisinya dari sesi.
+import { argsPutuskan as _argsPutuskan, awalKeputusan, type Keputusan, type Putusan } from "@/lib/keu/revisi";
 
 export const PRIORITAS = [
   { kode: "inti", nama: "Inti" },
@@ -60,3 +61,56 @@ export function argsTarik(id: number, alasan: string): { args: Record<string, un
 }
 
 export const bentukIsian = (): IsianKekurangan => ({ akun_kode: "", uraian: "", jumlah: "", prioritas: "", alasan: "" });
+
+// ---------------------------------------------------------------- keputusan atas tambahan pagu (papan 15, bagian 3)
+
+export type PilihanPutus = Record<number, Putusan | undefined>;
+export type CatatanTerbuka = { id: number; uraian: string; jumlah: number | string };
+
+/** Isian awal dari saran sistem (catatan tanpa saran ditunda). Hanya titik awal: ketua tim yang memutuskan. */
+export function pilihanDariSaran(ids: number[], saran: { kekurangan_id: number | string; saran: string }[]): PilihanPutus {
+  const p: PilihanPutus = {};
+  for (const k of awalKeputusan(ids, saran)) p[k.id] = k.keputusan;
+  return p;
+}
+
+export type RingkasPutus = { dipenuhi: number; sisa: number; belum: number; galat: string[]; siap: boolean; daftar: Keputusan[] };
+/**
+ * Ringkasan keputusan yang sedang dipilih. Siap diterapkan bila semua catatan sudah diputuskan, tolak punya alasan (minimal 5 huruf),
+ * dan total yang dipenuhi tidak melebihi tambahan pagu (dana penggenap tidak boleh minus). Cermin aturan keu_kekurangan_putuskan.
+ */
+export function ringkasPutus(terbuka: CatatanTerbuka[], pilih: PilihanPutus, alasan: Record<number, string>, tambahan: number): RingkasPutus {
+  const galat: string[] = [];
+  const daftar: Keputusan[] = [];
+  let dipenuhi = 0, belum = 0;
+  for (const k of terbuka) {
+    const p = pilih[k.id];
+    if (!p) { belum++; continue; }
+    const a = (alasan[k.id] ?? "").trim();
+    if (p === "tolak" && a.length < 5) galat.push(`Alasan menolak "${k.uraian}" wajib diisi (minimal 5 huruf).`);
+    if (p === "penuhi") dipenuhi += Number(k.jumlah) || 0;
+    daftar.push({ id: k.id, keputusan: p, alasan: p === "tolak" ? a : "" });
+  }
+  if (dipenuhi > tambahan) galat.push(`Yang dipenuhi melebihi tambahan pagu (kelebihan ${dipenuhi - tambahan}). Dana penggenap tidak boleh minus.`);
+  return { dipenuhi, sisa: tambahan - dipenuhi, belum, galat, siap: terbuka.length > 0 && belum === 0 && galat.length === 0, daftar };
+}
+export const argsTerapkan = (tambahan: number, daftar: Keputusan[]): Record<string, unknown> => _argsPutuskan(tambahan, daftar);
+
+// ---------------------------------------------------------------- riwayat (dari kolom dicatat_* dan diputus_*)
+export type BarisKek = {
+  id: number; ro_kode?: string; akun_kode: string; uraian: string; jumlah: number | string; prioritas_nama?: string | null; status: string;
+  dicatat_oleh?: number | string | null; dicatat_at?: string | null; diputus_oleh?: number | string | null; diputus_at?: string | null; alasan_putus?: string | null;
+};
+export type PeristiwaKek = { waktu: string; akun: number | null; teks: string };
+const rp = (n: number | string) => `Rp ${Math.round(Number(n)).toLocaleString("id-ID")}`;
+const KATA_PUTUS: Record<string, string> = { dipenuhi: "memenuhi", ditunda: "menunda", ditolak: "menolak", ditarik: "menarik" };
+/** Peristiwa terbaru dahulu: pencatatan dan keputusan. */
+export function peristiwaKekurangan(baris: BarisKek[], batas = 30): PeristiwaKek[] {
+  const hasil: PeristiwaKek[] = [];
+  for (const k of baris) {
+    const nama = `${k.akun_kode} ${k.uraian}`;
+    if (k.dicatat_at) hasil.push({ waktu: k.dicatat_at, akun: k.dicatat_oleh == null ? null : Number(k.dicatat_oleh), teks: `mencatat kekurangan ${nama} sebesar ${rp(k.jumlah)}${k.prioritas_nama ? ` (prioritas ${k.prioritas_nama})` : ""}.` });
+    if (k.diputus_at) hasil.push({ waktu: k.diputus_at, akun: k.diputus_oleh == null ? null : Number(k.diputus_oleh), teks: `${KATA_PUTUS[k.status] ?? "memutuskan"} ${nama}${k.alasan_putus ? `: ${k.alasan_putus}` : ""}.` });
+  }
+  return hasil.sort((a, b) => Date.parse(b.waktu) - Date.parse(a.waktu)).slice(0, batas);
+}

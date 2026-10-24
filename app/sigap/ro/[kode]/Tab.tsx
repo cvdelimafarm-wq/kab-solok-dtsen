@@ -16,7 +16,7 @@ import { useAnggaranRo, useBacaKeu } from "../useKeu";
 type Skor = { total: number | string | null; kategori: string | null; ada_rab_sah: boolean; n_penarikan: number | string | null; n_volume: number | string | null; n_cakupan: number | string | null; n_disiplin: number | string | null; sampai_bulan: number | string };
 type KekRo = { n_terbuka: number | string; jumlah_terbuka: number | string };
 type AdmRo = { persen_terverifikasi: number | string | null; n_dok: number | string; n_belum: number | string };
-const WARNA_KATEGORI_CHIP: Record<string, WarnaChip> = { Baik: "hijau", Cukup: "kuning", Kurang: "merah" };
+const WARNA_KATEGORI_CHIP: Record<string, WarnaChip> = { Baik: "hijau", Cukup: "kuning", "Perlu pembinaan": "merah", Kurang: "merah" };
 const tautTab = (kode: string, t: string) => `/sigap/ro/${encodeURIComponent(kode)}?tab=${t}`;
 
 export function TabRingkasan({ kode }: { kode: string }) {
