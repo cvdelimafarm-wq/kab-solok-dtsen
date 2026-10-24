@@ -45,9 +45,11 @@ describe("daftar putih tampilan", () => {
       expect(k.length).toBeGreaterThan(0);
       k.forEach((c) => expect(c).toMatch(/^[a-z][a-z0-9_]*$/));
       // Satu-satunya pengecualian: tampilan riwayat master, yang hanya memuat jejak perubahan tabel master (keu_master_*, keu_struktur_level).
-      if (n !== "keu_v_master_riwayat") expect(n).not.toMatch(/riwayat|audit|pemberian/);
+      // Pengecualian kedua: riwayat usulan struktur (level baru), yang hanya memuat jejak keu_struktur_usulan_riwayat.
+      if (n !== "keu_v_master_riwayat" && n !== "keu_v_struktur_riwayat") expect(n).not.toMatch(/riwayat|audit|pemberian/);
     }
     expect(TAMPILAN_BACA.keu_v_master_riwayat).toEqual(["id", "waktu", "aksi", "detail", "oleh_nama"]);
+    expect(TAMPILAN_BACA.keu_v_struktur_riwayat).toEqual(["id", "usulan_id", "kode_sementara", "level", "level_nama", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"]);
     expect(TAMPILAN_BACA.keu_v_rab_ringkas).toContain("ro_kode");
   });
 });
