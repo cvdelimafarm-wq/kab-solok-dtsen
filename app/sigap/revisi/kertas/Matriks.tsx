@@ -7,11 +7,11 @@
 // kolom Menjadi yang dapat diketik (rumus =18*2 diterima), serta rincian RAB per item. Logika murni: lib/keu/matriks.ts.
 // Menulis: keu_tulis (keu_kk_baris, keu_rab_item) dan fungsi keu_kk_* lewat gerbang; hak dan aturan ditegakkan basis data.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { angka } from "@/lib/keu/ro";
 import { LABEL_PEMICU, n } from "@/lib/keu/kk";
 import {
-  adaSaring, aksiMassal, idDalam, KOLOM, hitungRumus, keadaanPilih, nilaiBeda, putarUrut, ratakan, ubahPilih,
+  adaSaring, aksiMassal, idDalam, KOLOM, hitungRumus, keadaanPilih, nilaiBeda, putarUrut, ratakan, ringkasKaki, ubahPilih,
   type BarisMx, type IdKolom, type Saring, type Simpul, type Urut,
 } from "@/lib/keu/matriks";
 import { Catatan, Galat, tombolBahaya, tombolKecil } from "../../keu-ui";
@@ -33,6 +33,7 @@ function SelEdit({ nilai, aria, aktif, ubah, onSimpan }: { nilai: number; aria: 
   const [t, setT] = useState(String(nilai));
   const [kerja, setKerja] = useState(false);
   const [salah, setSalah] = useState<string | null>(null);
+  const [fokus, setFokus] = useState(false);
   useEffect(() => { setT(String(nilai)); setSalah(null); }, [nilai]);
   if (!aktif) return <span className="px-1">{fmtJ(nilai)}</span>;
   const simpan = async () => {
@@ -47,8 +48,10 @@ function SelEdit({ nilai, aria, aktif, ubah, onSimpan }: { nilai: number; aria: 
   };
   return (
     <input
-      aria-label={aria} title={salah ?? "Ketik angka atau rumus (mis. =18*2), lalu Enter"} inputMode="decimal" value={t} disabled={kerja}
-      onChange={(e) => setT(e.target.value)} onBlur={() => void simpan()} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setT(String(nilai)); setSalah(null); } }}
+      aria-label={aria} title={salah ?? "Ketik angka atau rumus (mis. =18*2), lalu Enter"} inputMode="decimal" disabled={kerja}
+      value={fokus || t !== String(nilai) ? t : fmtJ(nilai)}
+      onFocus={(e) => { setFokus(true); e.currentTarget.select(); }}
+      onChange={(e) => setT(e.target.value)} onBlur={() => { setFokus(false); void simpan(); }} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setT(String(nilai)); setSalah(null); } }}
       className={`h-[24px] w-full min-w-0 rounded border px-1 text-right font-mono text-[12px] tabular-nums focus:outline-2 focus:outline-[#1F5FD1] ${salah ? "border-[#B42329] bg-[#FDE8E8]" : ubah ? "border-[#E2B84A] bg-[#FFF3C4]" : "border-[#C5D0E2] bg-white"} ${kerja ? "opacity-50" : ""}`}
     />
   );
@@ -97,8 +100,9 @@ function KepalaKolom({ id, label, angka: ang, saring, setSaring, urut, setUrut, 
 }
 
 // ---------------------------------------------------------------- matriks
-export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesudah, onGanti, onTambah }: {
-  pohon: Simpul[]; semua: BarisMx[]; namaRo: Map<string, string>; bisaUbah: (ro: string) => boolean; rincian: Map<number, RincianRab[]>;
+export default function Matriks({ pohon, semua, namaRo, namaKomp, namaAkun, kodeItem, judul, bisaUbah, rincian, sesudah, onGanti, onTambah, aksiBar }: {
+  pohon: Simpul[]; semua: BarisMx[]; namaRo: Map<string, string>; namaKomp: Map<string, string>; namaAkun: Map<string, string>; kodeItem: Map<number, string>;
+  judul: { semula: string; menjadi: string }; aksiBar?: ReactNode; bisaUbah: (ro: string) => boolean; rincian: Map<number, RincianRab[]>;
   sesudah: () => Promise<void>; onGanti: (b: BarisMx) => void; onTambah: (d: { ro: string; komponen: string; akun: string }) => void;
 }) {
   const [tutup, setTutup] = useState<Set<string>>(new Set());
@@ -154,11 +158,21 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
 
   return (
     <div className="flex flex-col gap-2">
+      {aksiBar}
       <div className="flex flex-wrap items-center gap-1.5">
         <button type="button" className={tombolKecil} onClick={() => setTutup(new Set(pohon.map((r) => r.kunci)))}>Ciutkan sampai RO</button>
         <button type="button" className={tombolKecil} onClick={() => setTutup(new Set())}>Buka semua</button>
         <button type="button" className={tombolKecil} disabled={!adaSaring(saring) && urut === null} onClick={() => { setSaring({}); setUrut(null); }}>Hapus filter dan urutan kolom</button>
         <span className="text-[12px] text-[#5B6B84]">{tampil.length} dari {semua.length} baris tampil. Kolom Menjadi dapat diketik langsung; rumus sederhana seperti =18*2 diterima.</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-[#44546F]" aria-label="Legenda warna">
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#1F3B63]" />RO</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#D4E2F6] ring-1 ring-[#2F6FD0]" />Komponen</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#FFEFC2] ring-1 ring-[#E2B84A]" />Akun</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-white ring-1 ring-[#C5D0E2]" />Item</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#E5F6EC] ring-1 ring-[#13794B]" />Rincian RAB</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#EEF4FD] ring-1 ring-[#2F6FD0]" />kolom POK ({judul.semula.replace(/^SEMULA \(POK ke-(\d+).*$/, "revisi ke-$1")})</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#EAF6EF] ring-1 ring-[#13794B]" />kolom RAB</span>
       </div>
 
       {dipilih.length > 0 ? (
@@ -184,8 +198,8 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
           {/* kepala kelompok */}
           <div className={`sticky top-0 z-20 ${GRID} bg-[#E8EEF8] text-[11px] font-bold tracking-wide text-[#1B2B4B]`}>
             <div /><div />
-            <div className="col-span-4 border-b-[3px] border-[#2F6FD0] py-1 text-center text-[#1B4B99]">SEMULA (POK berlaku)</div>
-            <div className="col-span-4 border-b-[3px] border-[#13794B] py-1 text-center text-[#0B5A38]">MENJADI (usulan)</div>
+            <div className="col-span-4 border-b-[3px] border-[#2F6FD0] py-1 text-center text-[#1B4B99]">{judul.semula}</div>
+            <div className="col-span-4 border-b-[3px] border-[#13794B] py-1 text-center text-[#0B5A38]">{judul.menjadi}</div>
             <div className="col-span-2 py-1 text-center">PERUBAHAN</div>
             <div className="col-span-3 py-1 text-center">KETERSEDIAAN</div>
           </div>
@@ -212,7 +226,7 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
               const gelap = ro;
               const lat = ro ? "bg-[#1F3B63] text-white" : kom ? "bg-[#D4E2F6] text-[#12315E]" : "bg-[#FFEFC2] text-[#3B2A00] border-t border-[#E2B84A]";
               const bar = ro ? "" : kom ? "shadow-[inset_4px_0_0_#2F6FD0]" : "shadow-[inset_5px_0_0_#C98A00]";
-              const teksJudul = ro ? (namaRo.get(s.ro) ?? "") : kom ? `Komponen ${s.komponen}` : "";
+              const teksJudul = ro ? (namaRo.get(s.ro) ?? "") : kom ? (namaKomp.get(`${s.ro}|${s.komponen}`) ?? `Komponen ${s.komponen}`) : (namaAkun.get(s.akun ?? "") ?? "");
               return (
                 <div key={s.kunci} className={`${GRID} ${lat} text-[12.5px] font-semibold`}>
                   <div className={`flex items-center gap-1 px-1.5 py-1 ${bar}`} style={{ paddingLeft: 6 + x.kedalaman * 12 }}>
@@ -220,7 +234,7 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
                     <button type="button" aria-label={x.tutup ? "Buka" : "Ciutkan"} aria-expanded={!x.tutup} className="h-5 w-5 rounded text-[11px] hover:bg-black/10" onClick={() => alih(s.kunci)}>{x.tutup ? "▶" : "▼"}</button>
                     <span className="font-mono">{s.label}</span>
                   </div>
-                  <div className="flex min-w-0 items-center truncate px-1.5">{teksJudul}{s.jenis === "akun" && <span className="font-normal opacity-80">{s.item.length} baris</span>}</div>
+                  <div className="flex min-w-0 items-center gap-1.5 truncate px-1.5" title={teksJudul}><span className="truncate">{teksJudul}</span>{s.jenis === "akun" && <span className="flex-none font-normal opacity-80">· {s.item.length} baris</span>}{s.jenis === "akun" && <span aria-hidden title={`Akun ${s.akun}: ${teksJudul}`} className="inline-flex h-4 w-4 flex-none items-center justify-center rounded-full border border-current text-[10px] font-bold opacity-70">i</span>}</div>
                   <div className="col-span-3" />
                   <div className="flex items-center justify-end px-1.5 font-mono tabular-nums">{fmtJ(s.semula)}</div>
                   <div className="col-span-3" />
@@ -245,10 +259,10 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
                 <div className={`${GRID} ${bgBaris} border-t border-[#EEF2F7] text-[12px]`}>
                   <div className="flex items-center gap-1 px-1.5 py-0.5" style={{ paddingLeft: 6 + x.kedalaman * 12 }}>
                     <input type="checkbox" aria-label={`Pilih ${b.uraian_menjadi ?? b.uraian_semula ?? "baris"}`} checked={pilih.has(b.id)} onChange={(e) => setPilih((p) => ubahPilih(p, [b.id], e.target.checked))} />
-                    <span className="truncate font-mono text-[11.5px] text-[#44546F]">{b.nomor ?? (b.penggenap ? "penggenap" : baru ? "baru" : "")}</span>
+                    <span className="truncate font-mono text-[11.5px] text-[#44546F]" title={b.nomor ?? kodeItem.get(b.id) ?? ""}>{b.nomor ?? (b.penggenap ? "penggenap" : baru ? "baru" : (kodeItem.get(b.id) ?? ""))}</span>
                   </div>
                   <div className="flex min-w-0 flex-col justify-center px-1.5 py-0.5">
-                    <span className="break-words font-semibold text-[#0F2A52]">{b.uraian_menjadi ?? b.uraian_semula}</span>
+                    <span className="flex items-start gap-1"><span className="break-words font-semibold text-[#0F2A52]">{b.uraian_menjadi ?? b.uraian_semula}</span>{bisa && !b.penggenap && b.pindah_ke === null && <button type="button" aria-label="Ganti redaksi item" title="Ganti redaksi atau akun item" disabled={sibuk} className="flex h-5 w-5 flex-none items-center justify-center rounded text-[12px] text-[#5B6B84] hover:bg-[#DCE6F5]" onClick={() => onGanti(b)}>✎</button>}</span>
                     {b.uraian_semula && b.uraian_menjadi && b.uraian_semula !== b.uraian_menjadi && <span className="text-[11px] text-[#7A8AA3]">semula: {b.uraian_semula}</span>}
                     {b.akun_semula && b.akun_semula !== b.akun_menjadi && <span className="text-[11px] text-[#6B3FA0]">pindahan dari akun {b.akun_semula}</span>}
                     {b.pindah_ke !== null && <span className="text-[11px] text-[#6B3FA0]">dipindah ke akun lain (pasangan)</span>}
@@ -289,9 +303,10 @@ export default function Matriks({ pohon, semua, namaRo, bisaUbah, rincian, sesud
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-[11.5px] text-[#44546F]">
+        <b className="text-[#1B2B4B]">{ringkasKaki(tampil.length, new Set(tampil.map((b) => b.ro_kode)).size, adaSaring(saring))}</b>
         <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#FFF3C4] ring-1 ring-[#E2B84A]" />Kuning: sel yang berubah</span>
         <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#E5F6EC] ring-1 ring-[#BFE3CE]" />Hijau: baris baru</span>
-        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#F3EEFB] ring-1 ring-[#CBB8E8]" />Ungu: pasangan akun/redaksi</span>
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#F3EEFB] ring-1 ring-[#CBB8E8]" />Ungu: pasangan akun/redaksi atau RO penerima di luar KRO</span>
         <span className="inline-flex items-center gap-1"><i className="inline-block h-3.5 w-3.5 rounded-sm bg-[#FFFBEB] ring-1 ring-[#E2B84A]" />Dana penggenap</span>
       </div>
       {semua.length > 0 && !dipilih.every((b) => bisaUbah(b.ro_kode)) && dipilih.length > 0 && <Catatan>Sebagian baris terpilih berada pada RO yang tidak dapat Anda ubah pada jadwal ini.</Catatan>}

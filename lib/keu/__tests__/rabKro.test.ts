@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BarisKk } from "../kk";
 import { gabungKetersediaan, type BarisMx } from "../matriks";
-import { barisBerubah, keCsv, rentangBulan, sandingkanRab, susunBulanan, type ItemRabKro, type JadwalItem } from "../rabKro";
+import { barisBerubah, barisJadwalBeda, bayangBiru, kelompokBulanan, keCsv, ketBulan, rentangBulan, sandingkanRab, susunBulanan, susunPencairan, teksCatatanPencairan, teksTag, USULAN_TAG, type ItemRabKro, type JadwalItem } from "../rabKro";
 
 let seq = 0;
 const B = (o: Partial<BarisKk> = {}): BarisMx => {
@@ -49,5 +49,55 @@ describe("barisBerubah dan keCsv", () => {
   });
   it("CSV mengutip sel bertanda kutip atau titik koma", () => {
     expect(keCsv(["a", "b"], [["x;y", 'q"r'], [1, 2]])).toBe('﻿a;b\r\n"x;y";"q""r"\r\n1;2');
+  });
+});
+
+describe("tampilan RAB bulanan dan perkiraan pencairan", () => {
+  const J = (o: Partial<JadwalItem>): JadwalItem => ({ rab_id: 1, ro_kode: "2903.BMA.007", item_id: 1, pok_kunci: "K1", akun_menjadi: "521811", uraian: "Honor", baris_id: 1, ket: "", bulan: 3, minggu: 2, nilai: 100, ...o });
+  const data = [J({}), J({ baris_id: 2, minggu: 4, nilai: 50 }), J({ bulan: 5, minggu: 1, nilai: 70 }), J({ ro_kode: "2903.BMA.009", item_id: 2, baris_id: 3, uraian: "ATK", bulan: 3, nilai: 30 })];
+
+  it("tag minggu penuh dan jumlah baris tiap item", () => {
+    const honor = susunBulanan(data).item.find((x) => x.itemId === 1)!;
+    expect(honor.tag[2]).toEqual([2, 4]); expect(honor.tag[4]).toEqual([1]); expect(honor.tag[0]).toEqual([]);
+    expect(honor.nBaris).toBe(2); expect(honor.pokKunci).toBe("K1");
+    expect(teksTag(honor.tag[2])).toBe("M2, M4");
+  });
+  it("kelompokBulanan: per RO dengan subtotal, filter RO, dan nilai terbesar", () => {
+    const item = susunBulanan(data).item;
+    const semua = kelompokBulanan(item);
+    expect(semua.kelompok.map((k) => k.ro)).toEqual(["2903.BMA.007", "2903.BMA.009"]);
+    expect(semua.kelompok[0].perBulan[2]).toBe(150); expect(semua.kelompok[0].total).toBe(220);
+    expect(semua.perBulan[2]).toBe(180); expect(semua.total).toBe(250); expect(semua.maks).toBe(150);
+    const satu = kelompokBulanan(item, "2903.BMA.009");
+    expect(satu.kelompok).toHaveLength(1); expect(satu.total).toBe(30);
+    expect(kelompokBulanan(item, "2903.BMA.999").kelompok).toEqual([]);
+  });
+  it("bayangBiru: kosong transparan, makin besar makin pekat, tahan nilai terbesar nol", () => {
+    expect(bayangBiru(0, 100)).toBe("transparent");
+    expect(bayangBiru(100, 100)).toBe("rgba(29,95,180,0.38)");
+    expect(bayangBiru(50, 100)).toBe("rgba(29,95,180,0.23)");
+    expect(bayangBiru(5, 0)).toBe("rgba(29,95,180,1.58)".replace("1.58", (0.08 + 0.3 * 5).toFixed(2)));
+  });
+  it("susunPencairan: per bulan, per minggu, rincian urut minggu, filter RO", () => {
+    const p = susunPencairan(data);
+    expect(p.total).toBe(250); expect(p.bulan).toHaveLength(12);
+    expect(p.bulan[2].total).toBe(180); expect(p.bulan[2].minggu).toEqual([0, 130, 0, 50]);
+    expect(p.bulan[2].rincian.map((r) => r.minggu)).toEqual([2, 2, 4]);
+    expect(p.maks).toBe(130);
+    expect(susunPencairan(data, "2903.BMA.009").total).toBe(30);
+  });
+  it("ketBulan", () => {
+    const p = susunPencairan(data);
+    expect(ketBulan(p.bulan[2])).toBe("3 baris rincian · M2, M4");
+    expect(ketBulan(p.bulan[0])).toBe("tidak ada pencairan");
+  });
+  it("barisJadwalBeda: hanya baris yang jumlah jadwalnya tak sama dengan rincian", () => {
+    const rincian = new Map([[1, 170], [2, 50], [3, 40], [99, 10]]);
+    expect(barisJadwalBeda(data, rincian)).toEqual([3]);
+    expect(barisJadwalBeda(data, new Map([[1, 170], [2, 50], [3, 30]]))).toEqual([]);
+  });
+  it("catatan kaki memuat jumlah POK tanpa RAB; usulan tag lengkap", () => {
+    expect(teksCatatanPencairan(1500000, (v) => String(v))).toContain("POK Rp 1500000");
+    expect(USULAN_TAG.every((t) => t.tag >= 1 && t.tag <= 4 && /^\d{6}$/.test(t.akun))).toBe(true);
   });
 });

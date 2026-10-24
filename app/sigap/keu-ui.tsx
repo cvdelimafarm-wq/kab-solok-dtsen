@@ -76,11 +76,11 @@ export type Jejak = { t: string; href?: string };
  * Kerangka halaman anggaran: bingkai Shell SIGAP (sidebar, topbar dengan jejak, Ctrl K; header navy di HP) dengan menu "Anggaran" aktif,
  * lalu tombol Kembali bernama, judul, keterangan, dan isi. Dipakai /sigap/revisi, /sigap/ro (+ /[kode]) dan /sigap/realisasi.
  */
-export function HalamanKeu({ jejak, judul, sub, induk, labelKembali, children }: {
-  jejak: Jejak[]; judul: ReactNode; sub?: ReactNode; induk?: string; labelKembali?: string; children: ReactNode;
+export function HalamanKeu({ jejak, judul, sub, induk, labelKembali, penuh, children }: {
+  jejak: Jejak[]; judul: ReactNode; sub?: ReactNode; induk?: string; labelKembali?: string; penuh?: boolean; children: ReactNode;
 }) {
   return (
-    <Bingkai aktif="anggaran" kecil="SIGAP · Anggaran" jejak={jejak.map((j) => j.t)} judul={judul} sub={sub} kembali={{ induk, label: labelKembali }}>
+    <Bingkai aktif="anggaran" kecil="SIGAP · Anggaran" jejak={jejak.map((j) => j.t)} judul={judul} sub={sub} kembali={{ induk, label: labelKembali }} penuh={penuh}>
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">{children}</div>
     </Bingkai>
   );

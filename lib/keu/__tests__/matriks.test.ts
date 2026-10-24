@@ -190,3 +190,27 @@ describe("bukuSelisihItem", () => {
     expect(r[0].kurang).toBe(200); expect(r[0].prioritasNama).toBe("Wajib"); expect(r[2].prioritas).toBeNull();
   });
 });
+
+describe("tahap 4k: tampilan sesuai mockup", () => {
+  it("petaNamaKomponen memakai RO induk simpul komponen", async () => {
+    const { petaNamaKomponen } = await import("@/lib/keu/matriks");
+    const m = petaNamaKomponen([
+      { id: 1, induk_id: null, tingkat: "ro", kode: "005", nama: "RO", ro_kode: "2906.BMA.005" },
+      { id: 2, induk_id: 1, tingkat: "komponen", kode: "051", nama: "PERSIAPAN", ro_kode: null },
+      { id: 3, induk_id: 99, tingkat: "komponen", kode: "052", nama: "YATIM", ro_kode: null },
+    ]);
+    expect(m.get("2906.BMA.005|051")).toBe("PERSIAPAN");
+    expect(m.size).toBe(1);
+  });
+  it("judulKelompok dan tglPendek", async () => {
+    const { judulKelompok, tglPendek } = await import("@/lib/keu/matriks");
+    expect(tglPendek("2026-09-30")).toBe("30 Sep 2026");
+    expect(judulKelompok({ nomor_revisi: 1, tanggal_efektif: "2026-09-30" })).toEqual({ semula: "SEMULA (POK ke-1, 30 Sep 2026)", menjadi: "MENJADI (POK ke-2, usulan)" });
+    expect(judulKelompok(null).menjadi).toBe("MENJADI (usulan)");
+  });
+  it("ringkasKaki", async () => {
+    const { ringkasKaki } = await import("@/lib/keu/matriks");
+    expect(ringkasKaki(80, 3, false)).toBe("80 baris detail pada 3 RO");
+    expect(ringkasKaki(5, 1, true)).toBe("5 baris detail pada 1 RO (filter kolom aktif)");
+  });
+});

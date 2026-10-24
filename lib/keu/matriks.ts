@@ -349,3 +349,51 @@ export function bukuSelisihItem(item: ItemKecukupan[], baris: BarisKk[], priorit
   const u = (p: string | null) => (p === null ? Number.MAX_SAFE_INTEGER : (urutP.get(p)?.urut ?? Number.MAX_SAFE_INTEGER - 1));
   return [...per.values()].filter((x) => x.kurang > 0).sort((a, b) => u(a.prioritas) - u(b.prioritas) || b.kurang - a.kurang || a.itemId - b.itemId);
 }
+
+// ---------------------------------------------------------------- tampilan sesuai mockup (24 Okt 2026, tahap 4k)
+export type NodePok = { id: number; induk_id: number | null; tingkat: string; kode: string; nama: string; ro_kode: string | null };
+
+/** Nama komponen POK berlaku per "ro|komponen" (simpul komponen tidak membawa ro_kode; RO-nya adalah induknya). */
+export function petaNamaKomponen(simpul: NodePok[]): Map<string, string> {
+  const roDariId = new Map<number, string>();
+  for (const s of simpul) if (s.tingkat === "ro" && s.ro_kode) roDariId.set(s.id, s.ro_kode);
+  const m = new Map<string, string>();
+  for (const s of simpul) {
+    if (s.tingkat !== "komponen" || s.induk_id === null) continue;
+    const ro = roDariId.get(s.induk_id);
+    if (ro) m.set(`${ro}|${s.kode}`, s.nama);
+  }
+  return m;
+}
+
+const dua = (i: number): string => String(i).padStart(2, "0");
+
+/** Kode item "komponen.akun.nn" (nn = urutan dalam akun pada RO itu). Dipakai bila POK belum memberi nomor item. */
+export function petaKodeItem(pohon: Simpul[]): Map<number, string> {
+  const m = new Map<number, string>();
+  const jalan = (s: Simpul) => {
+    if (s.jenis === "akun") s.item.forEach((b, i) => m.set(b.id, `${b.komponen_kode}.${b.akun_menjadi}.${dua(i + 1)}`));
+    else s.anak.forEach(jalan);
+  };
+  pohon.forEach(jalan);
+  return m;
+}
+
+/** "2026-09-30" menjadi "30 Sep 2026". */
+export function tglPendek(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const bln = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${bln[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+/** Judul kelompok kolom: "SEMULA (POK ke-N, tanggal)" dan "MENJADI (POK ke-N+1, usulan)". Tanpa data POK berlaku: judul umum. */
+export function judulKelompok(berlaku: { nomor_revisi: number; tanggal_efektif: string | null } | null): { semula: string; menjadi: string } {
+  if (!berlaku) return { semula: "SEMULA (POK berlaku)", menjadi: "MENJADI (usulan)" };
+  const tgl = berlaku.tanggal_efektif ? `, ${tglPendek(berlaku.tanggal_efektif)}` : "";
+  return { semula: `SEMULA (POK ke-${berlaku.nomor_revisi}${tgl})`, menjadi: `MENJADI (POK ke-${berlaku.nomor_revisi + 1}, usulan)` };
+}
+
+/** Teks kaki matriks: "N baris detail pada M RO" (+ penanda filter aktif). */
+export function ringkasKaki(nItem: number, nRo: number, saringAktif: boolean): string {
+  return `${nItem} baris detail pada ${nRo} RO${saringAktif ? " (filter kolom aktif)" : ""}`;
+}

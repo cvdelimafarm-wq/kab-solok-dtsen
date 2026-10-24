@@ -26,6 +26,7 @@ export default function Bingkai<K extends string>({
   aktifTab,
   onTab,
   kembali,
+  penuh,
   children,
 }: {
   /** (7 Okt 2026) menu sidebar yg aktif & label kecil header HP -- dipakai juga oleh SIGAP PEDIA. */
@@ -40,6 +41,8 @@ export default function Bingkai<K extends string>({
   aktifTab?: K;
   onTab?: (k: K) => void;
   kembali?: OpsiKembali;
+  /** (24 Okt 2026) isi selebar layar (lihat Shell). */
+  penuh?: boolean;
   children: React.ReactNode;
 }) {
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
@@ -106,7 +109,7 @@ export default function Bingkai<K extends string>({
       </div>
     );
   return (
-    <Shell aktif={aktif} jejak={jejak} ringkas={ringkas} pemilihKegiatan={false} mobile={mobile}>
+    <Shell aktif={aktif} jejak={jejak} ringkas={ringkas} pemilihKegiatan={false} penuh={penuh} mobile={mobile}>
       {isi}
     </Shell>
   );
