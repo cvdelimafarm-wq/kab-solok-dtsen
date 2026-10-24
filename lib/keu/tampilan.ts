@@ -64,6 +64,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_rab_jejak: ["id", "rab_id", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"],
   keu_v_rab_item: ["item_id", "rab_id", "pok_kunci", "baru", "komponen_kode", "akun_kode", "akun_menjadi", "uraian", "prioritas_kode", "selesai", "jumlah_rincian", "volume_total", "jumlah_rab", "status"],
   keu_v_rab_jadwal_beda: ["baris_id", "item_id", "jumlah", "total_jadwal", "selisih"],
+  keu_v_rab_jadwal_item: ["rab_id", "ro_kode", "item_id", "pok_kunci", "komponen_kode", "akun_kode", "akun_menjadi", "uraian", "baris_id", "ket", "bulan", "minggu", "nilai"],
   keu_v_rab_pencairan: ["rab_id", "bulan", "minggu", "nilai"],
   keu_v_rab_ringkas: ["rab_id", "ro_kode", "nomor", "status", "n_item", "n_belum", "n_sama", "n_rinci", "n_selesai", "jumlah_rab"],
   keu_v_realisasi_bulan: ["tahun", "bulan", "nomor_item", "ro_kode", "detail_id", "realisasi_bulan", "real_sd", "sampai_tanggal"],

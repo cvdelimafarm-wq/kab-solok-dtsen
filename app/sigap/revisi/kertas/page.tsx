@@ -11,16 +11,18 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, statusTenggat, tglPanjang } from "@/lib/keu/revisi";
-import { rupiah, urlBaca } from "@/lib/keu/ro";
+import { pilihRab, rupiah, urlBaca, type BarisRabRingkas } from "@/lib/keu/ro";
 import { n, sisaTerhadapPagu, type BarisKk, type BarisPeriksa, type Geseran, type Kecukupan } from "@/lib/keu/kk";
 import {
   bangunPohon, bukuSelisihItem, gabungKetersediaan, JENIS_NAMA, kpiMatriks, kroDariRo, rencanaKembali, roDalamKro, sarankanJenis,
   type ItemKecukupan, type Ketersediaan, type PrioritasMaster, type RingkasRoKk,
 } from "@/lib/keu/matriks";
-import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom, Kosong, Kpi, label, Memuat, Potong, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
+import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom, Kosong, Kpi, label, Memuat, Potong, tombolAktif, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { FormBaru, FormPenggenap, KartuGeseran, KartuKecukupan, KartuPeriksa, PanelPasangan, type AkunMaster, type KeputusanRow } from "./Bagian";
 import Matriks, { type RincianRab } from "./Matriks";
+import { PerubahanPok, SubBulanan, SubRab, type StatusRabRo } from "./Rab";
+import { sandingkanRab, susunBulanan, type ItemRabKro, type JadwalItem } from "@/lib/keu/rabKro";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string; buka: string; tutup: string };
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
@@ -129,14 +131,17 @@ function Isi() {
   const kro = sp.get("kro") && daftarKro.includes(sp.get("kro")!) ? sp.get("kro")! : (roParam ? kroDariRo(roParam) : null) ?? daftarKro[0] ?? null;
   const roKro = useMemo(() => (kro ? roDalamKro(daftarRo.map((r) => r.kode), kro) : []), [daftarRo, kro]);
 
-  const ke = useCallback((p: { jadwal?: number | null; kro?: string | null }) => {
+  const subParam = sp.get("sub");
+  const sub: "kertas" | "rab" | "bulanan" = subParam === "rab" || subParam === "bulanan" ? subParam : "kertas";
+  const ke = useCallback((p: { jadwal?: number | null; kro?: string | null; sub?: "kertas" | "rab" | "bulanan" }) => {
     const q = new URLSearchParams();
-    const j = p.jadwal === undefined ? jid : p.jadwal, k = p.kro === undefined ? kro : p.kro;
+    const j = p.jadwal === undefined ? jid : p.jadwal, k = p.kro === undefined ? kro : p.kro, t = p.sub === undefined ? sub : p.sub;
     if (j) q.set("jadwal", String(j));
     if (k) q.set("kro", k);
+    if (t !== "kertas") q.set("sub", t);
     if (dari) q.set("dari", dari);
     router.replace(`/sigap/revisi/kertas?${q.toString()}`, { scroll: false });
-  }, [router, jid, kro, dari]);
+  }, [router, jid, kro, dari, sub]);
 
   const [ulang, setUlang] = useState(0);
   const izin = useIzinBanyak(roKro, jid, ulang);
@@ -161,10 +166,16 @@ function Isi() {
   const rabIds = useMemo(() => [...new Set((kecItem.baris ?? []).map((x) => Number(x.rab_id)))].filter(Boolean), [kecItem.baris]);
   const rabBaris = useBacaKeu<BarisRabRow>(rabIds.length ? urlBaca("keu_v_rab_baris", { rab_id: rabIds }, { batas: 20000, urut: "urut", kolom: ["baris_id", "item_id", "ket", "volume", "satuan", "harga_satuan", "jumlah"] }) : null);
 
+  const ringkasRab = useBacaKeu<BarisRabRingkas>(sub !== "kertas" && roKro.length ? urlBaca("keu_v_rab_ringkas", { ro_kode: roKro }, { batas: 500 }) : null);
+  const statusRo: StatusRabRo[] = useMemo(() => roKro.map((ro) => { const r = ringkasRab.baris ? pilihRab(ringkasRab.baris, ro) : null; return { ro, status: r?.status ?? null, nomor: r?.nomor ?? null }; }), [roKro, ringkasRab.baris]);
+  const idRab = useMemo(() => (ringkasRab.baris ? roKro.map((ro) => pilihRab(ringkasRab.baris!, ro)?.rab_id).filter((x): x is number => x !== undefined) : []), [roKro, ringkasRab.baris]);
+  const itemRab = useBacaKeu<ItemRabKro>(idRab.length ? urlBaca("keu_v_rab_item", { rab_id: idRab }, { batas: 5000, kolom: ["item_id", "rab_id", "pok_kunci", "baru", "status", "jumlah_rab", "selesai", "prioritas_kode"] }) : null);
+  const jadwalRab = useBacaKeu<JadwalItem>(sub === "bulanan" && idRab.length ? urlBaca("keu_v_rab_jadwal_item", { rab_id: idRab }, { batas: 20000 }) : null);
+
   const segarkan = useCallback(async () => {
-    await Promise.all([baris.muat(), real.muat(), r06.muat(), ringkas.muat(), periksa.muat(), kec.muat(), kecItem.muat(), geseran.muat(), putus.muat(), rabBaris.muat()]);
+    await Promise.all([baris.muat(), real.muat(), r06.muat(), ringkas.muat(), periksa.muat(), kec.muat(), kecItem.muat(), geseran.muat(), putus.muat(), rabBaris.muat(), ringkasRab.muat(), itemRab.muat(), jadwalRab.muat()]);
     setUlang((x) => x + 1);
-  }, [baris, real, r06, ringkas, periksa, kec, kecItem, geseran, putus, rabBaris]);
+  }, [baris, real, r06, ringkas, periksa, kec, kecItem, geseran, putus, rabBaris, ringkasRab, itemRab, jadwalRab]);
   const { jalankan: muatBaris, mengirim: memuatBaris, galat: galatMuat } = useKirim(segarkan);
 
   const rows = baris.baris;
@@ -187,6 +198,9 @@ function Isi() {
     for (const b of mx ?? []) if (b.rab_item_id !== null && per.has(b.rab_item_id)) m.set(b.id, per.get(b.rab_item_id)!);
     return m;
   }, [rabBaris.baris, mx]);
+
+  const sandingan = useMemo(() => (mx && (idRab.length === 0 || itemRab.baris) ? sandingkanRab(mx, itemRab.baris ?? []) : null), [mx, idRab.length, itemRab.baris]);
+  const bulanan = useMemo(() => susunBulanan(jadwalRab.baris ?? []), [jadwalRab.baris]);
 
   // formulir bawah matriks
   const [pasang, setPasang] = useState<BarisKk | null>(null);
@@ -237,10 +251,16 @@ function Isi() {
                 {rows && <KembaliSemula rows={rows} geseran={geseran.baris ?? []} boleh={bisaUbah} sesudah={segarkan} />}
               </div>
             </div>
-            <p className="text-[12.5px] text-[#5B6B84]">{daftarKro.length} KRO. RO dalam KRO ini: {roKro.map((r) => `${r} ${namaRo.get(r) ?? ""}`.trim()).join("; ") || "-"}. Semula = POK berlaku, tidak dapat diubah. Menjadi = usulan; setiap RO harus tepat sampai pagu resmi.</p>
+            <p className="text-[12.5px] text-[#5B6B84]">RO dalam KRO ini: {roKro.map((r) => `${r} ${namaRo.get(r) ?? ""}`.trim()).join("; ") || "-"}. Semula = POK berlaku, tidak dapat diubah. Menjadi = usulan; setiap RO harus tepat sampai pagu resmi.</p>
             <Galat pesan={galatMuat} />
             {pesanIzin.length > 0 && <Catatan>Hanya lihat untuk RO berikut: {pesanIzin.join("; ")}.</Catatan>}
           </section>
+
+          <nav aria-label="Bagian kertas kerja" className="flex flex-wrap gap-1.5">
+            {([["kertas", "Kertas kerja"], ["rab", "RAB"], ["bulanan", "RAB bulanan"]] as const).map(([k, l]) => (
+              <button key={k} type="button" aria-current={sub === k ? "page" : undefined} className={sub === k ? tombolAktif : tombolKecil} onClick={() => ke({ sub: k })}>{l}</button>
+            ))}
+          </nav>
 
           {mx && (
             <div className={kisi}>
@@ -251,6 +271,10 @@ function Isi() {
             </div>
           )}
 
+          {sub === "rab" && (!sandingan ? <Memuat tinggi="h-48" /> : <SubRab baris={sandingan.baris} ringkas={sandingan.ringkas} statusRo={statusRo} namaRo={namaRo} dari={`/sigap/revisi/kertas?jadwal=${jd.id}&kro=${kro}&sub=rab`} />)}
+          {sub === "bulanan" && <SubBulanan r={bulanan} namaRo={namaRo} dari={`/sigap/revisi/kertas?jadwal=${jd.id}&kro=${kro}&sub=bulanan`} memuat={ringkasRab.memuat || (idRab.length > 0 && jadwalRab.memuat)} adaRab={idRab.length > 0} />}
+
+          {sub === "kertas" && (<>
           <section className={`${kartu} flex flex-col gap-2`}>
             <h2 className={judulKartu}>Jenis revisi</h2>
             <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -297,7 +321,9 @@ function Isi() {
             </section>
           )}
 
+          {mx && <PerubahanPok baris={mx} kro={kro} />}
           {mx && <KartuGeseran jadwal={jd.id} baris={rows ?? []} geseran={geseran.baris ?? []} bisaUbah={roBisa.length > 0} sesudah={segarkan} />}
+          </>)}
         </>
       )}
     </HalamanKeu>
