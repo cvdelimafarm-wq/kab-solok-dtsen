@@ -117,3 +117,89 @@ export function periksaKeputusan(daftar: Keputusan[], jumlahPerId: Map<number, n
 export function argsPutuskan(tambahan: number, daftar: Keputusan[]): Record<string, unknown> {
   return { p_tambahan: tambahan, p_keputusan: daftar.map((k) => ({ id: k.id, keputusan: k.keputusan, alasan: k.alasan.trim() })) };
 }
+
+// ---------- tampilan jadwal (papan 11) ----------
+export type WarnaChip = "hijau" | "kuning" | "abu" | "merah" | "biru" | "ungu";
+/** Kelas Tailwind untuk chip bertitik (papan 11): latar + teks. */
+export const KELAS_CHIP: Record<WarnaChip, string> = {
+  hijau: "bg-[#E6F6EC] text-[#14653A]", kuning: "bg-[#FFF4D6] text-[#8A6200]", abu: "bg-[#EEF2F7] text-[#44546F]",
+  merah: "bg-[#FDE8E8] text-[#B42329]", biru: "bg-[#E3EEFF] text-[#1F5FD1]", ungu: "bg-[#EFE9FB] text-[#5B3FA6]",
+};
+export const WARNA_CHIP_STATUS_JADWAL: Record<string, WarnaChip> = {
+  terjadwal: "abu", dibuka: "hijau", terkumpul: "kuning", diterapkan: "biru", sah: "hijau", dilewati: "abu",
+};
+export const WARNA_CHIP_STATUS_USULAN: Record<string, WarnaChip> = {
+  draf: "abu", menunggu_ketua: "kuning", menunggu_ppk: "kuning", disetujui: "hijau", dikembalikan: "merah",
+};
+export type JenisJadwal = "pok" | "administrasi" | "dipa_djpb" | "dipa_dja";
+export const DAFTAR_JENIS: { kode: JenisJadwal; nama: string; warna: WarnaChip }[] = [
+  { kode: "pok", nama: "Revisi POK", warna: "biru" },
+  { kode: "administrasi", nama: "Administrasi", warna: "abu" },
+  { kode: "dipa_djpb", nama: "DIPA jalur DJPb", warna: "ungu" },
+  { kode: "dipa_dja", nama: "DIPA jalur DJA", warna: "kuning" },
+];
+export const WARNA_CHIP_JENIS: Record<string, WarnaChip> = Object.fromEntries(DAFTAR_JENIS.map((j) => [j.kode, j.warna]));
+export const SIAPA_USULAN: Record<string, string> = {
+  menunggu_ketua: "menunggu ketua tim", menunggu_ppk: "menunggu PPK", draf: "belum diajukan", dikembalikan: "perlu perbaikan", disetujui: "",
+};
+
+const BLN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+/** "2026-10-24" -> "24 Okt 2026" (nilai tak dikenal dikembalikan apa adanya). */
+export function tglPanjang(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${BLN[Number(m[2]) - 1]} ${m[1]}` : (iso ?? "");
+}
+
+/** Pengingat tenggat Pasal 175: warna menurut sisa hari (merah <= 7 hari atau lewat, kuning <= 30, selain itu abu) dan teks sisa. Tidak mengunci apa pun. */
+export function statusTenggat(sisaHari: number | string | null | undefined): { warna: WarnaChip; teks: string } {
+  const n = Number(sisaHari);
+  if (sisaHari === null || sisaHari === undefined || !Number.isFinite(n)) return { warna: "abu", teks: "" };
+  if (n < 0) return { warna: "merah", teks: `lewat ${-n} hari` };
+  if (n === 0) return { warna: "merah", teks: "hari ini" };
+  return { warna: n <= 7 ? "merah" : n <= 30 ? "kuning" : "abu", teks: `${n} hari lagi` };
+}
+
+/** Usulan RO tidak ikut paket bila jadwal sudah ditutup (terkumpul/diterapkan/sah) dan usulan itu belum disetujui. */
+export const tidakIkutPaket = (statusJadwal: string, statusUsulan: string): boolean =>
+  ["terkumpul", "diterapkan", "sah"].includes(statusJadwal) && statusUsulan !== "disetujui";
+
+export const labelNomorSah = (jenis: string): string =>
+  jenis === "pok" ? "Nomor keputusan atau nota PPK" : jenis === "administrasi" ? "Nomor surat pengesahan" : "Nomor surat pengesahan Kanwil atau DJA";
+export const petunjukSah = (jenis: string): string =>
+  jenis === "pok"
+    ? "Revisi POK dinyatakan sah oleh PPK: catat nomor keputusan atau nota PPK sebagai dasar. KPA menerima laporan, tidak menyetujui."
+    : "Catat nomor dan tanggal surat hasil pengesahan; bila dikembalikan atau ditolak, kembalikan jadwal ke Dikumpulkan dengan versi berikutnya.";
+
+/** Kartu "POK sistem yang berlaku" dan riwayat versi, dari catatan sah (keu_revisi_sah) dan POK berlaku (keu_pok_versi). */
+export type CatatanSah = { jadwal_id: number; versi_sistem: number | string; nomor_dokumen: string; tanggal_dokumen: string };
+export type PokDasar = { nomor_pok: string; tanggal_efektif: string | null } | null;
+export function ringkasPok(sah: CatatanSah[], judulJadwal: Map<number, string>, dasar: PokDasar): { label: string; ket: string; riwayat: { label: string; ket: string }[] } {
+  const urut = [...sah].sort((a, b) => Number(b.versi_sistem) - Number(a.versi_sistem));
+  const riwayat = urut.map((s) => ({
+    label: `Versi ${Number(s.versi_sistem)}: ${judulJadwal.get(s.jadwal_id) ?? "jadwal revisi"}`,
+    ket: `Sah pada ${tglPanjang(s.tanggal_dokumen)}, dasar ${s.nomor_dokumen}.`,
+  }));
+  const ketDasar = dasar ? `${dasar.nomor_pok}${dasar.tanggal_efektif ? `, efektif ${tglPanjang(dasar.tanggal_efektif)}` : ""}.` : "Belum ada POK dasar di sistem.";
+  riwayat.push({ label: "POK dasar sistem", ket: ketDasar });
+  return urut.length ? { label: `Versi ${Number(urut[0].versi_sistem)}`, ket: `${judulJadwal.get(urut[0].jadwal_id) ?? "jadwal revisi"}, sah ${tglPanjang(urut[0].tanggal_dokumen)}`, riwayat } : { label: "POK dasar", ket: ketDasar.replace(/\.$/, "") + "; belum ada revisi sah", riwayat };
+}
+
+// ---------- tambah jadwal manual ----------
+export type IsianJadwal = { jenis: JenisJadwal; judul: string; buka: string; tutup: string };
+export const jadwalKosong = (): IsianJadwal => ({ jenis: "dipa_djpb", judul: "", buka: "", tutup: "" });
+/** `tahunTerdaftar` = tahun pada keu_tahun_anggaran; jadwal hanya boleh untuk tahun anggaran yang sudah terdaftar. */
+export function periksaJadwalBaru(v: IsianJadwal, tahunTerdaftar: number[]): string[] {
+  const g: string[] = [];
+  if (v.judul.trim().length < 3) g.push("Judul jadwal minimal 3 karakter.");
+  const bukaOk = tanggalSah(v.buka), tutupOk = tanggalSah(v.tutup);
+  if (!bukaOk) g.push("Tanggal jendela dibuka tidak valid.");
+  if (!tutupOk) g.push("Tanggal jendela ditutup tidak valid.");
+  if (bukaOk && tutupOk && v.tutup < v.buka) g.push("Jendela ditutup tidak boleh lebih awal dari jendela dibuka.");
+  if (bukaOk) {
+    const th = Number(v.buka.slice(0, 4));
+    if (!tahunTerdaftar.includes(th)) g.push(`Tahun anggaran ${th} belum terdaftar${tahunTerdaftar.length ? ` (terdaftar: ${tahunTerdaftar.join(", ")})` : ""}.`);
+  }
+  return g;
+}
+/** Baris untuk keu_tulis('keu_revisi_jadwal','insert'); status awal otomatis Terjadwal (ditetapkan basis data). */
+export const dataJadwalBaru = (v: IsianJadwal): Record<string, unknown> => ({ tahun: Number(v.buka.slice(0, 4)), jenis: v.jenis, judul: v.judul.trim(), buka: v.buka, tutup: v.tutup });

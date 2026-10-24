@@ -14,16 +14,13 @@ import {
 } from "@/lib/keu/rab";
 import { PRIORITAS } from "@/lib/keu/kekurangan";
 import { angka, rupiah } from "@/lib/keu/ro";
+import type { WarnaChip } from "@/lib/keu/revisi";
+import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, tombol } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useAnggaranRo, useBoleh, useKirim, useRabRo } from "../useKeu";
 
-const kartu = "rounded-[20px] bg-white p-4 shadow-[0_4px_16px_rgba(15,42,82,0.08)]";
-const kolom = "box-border min-h-[44px] w-full rounded-[12px] border-[1.5px] border-[#C5D0E2] bg-[#F8FBFF] px-3 text-[14px] font-semibold text-[#0F2A52]";
-const label = "mb-1 block text-[12px] font-bold text-[#44546F]";
-const tombol = "min-h-[44px] rounded-[12px] px-4 text-[13.5px] font-extrabold disabled:opacity-50";
-const WARNA_STATUS: Record<string, string> = { draf: "bg-[#EEF2F7] text-[#44546F]", dikembalikan: "bg-[#FDE8E8] text-[#9B1C23]", menunggu_ketua: "bg-[#FFF4D6] text-[#8A6200]", menunggu_ppk: "bg-[#FFF4D6] text-[#8A6200]", disetujui: "bg-[#E3F6EC] text-[#0B6B3F]" };
+const WARNA_STATUS: Record<string, WarnaChip> = { draf: "abu", dikembalikan: "merah", menunggu_ketua: "kuning", menunggu_ppk: "kuning", disetujui: "hijau" };
 const LABEL_ITEM: Record<PemetaanItem["status"], string> = { belum: "Belum ada RAB", sama: "RAB = Item", rinci: "RAB rinci", selesai: "Selesai" };
 
-const Galat = ({ pesan }: { pesan: string }) => <p role="alert" className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{pesan}</p>;
 
 function PilihBulan({ id, nilai, ubah, teks }: { id: string; nilai: number; ubah: (n: number) => void; teks: string }) {
   return (
@@ -67,7 +64,7 @@ function FormSama({ p, ctx, tutup }: { p: PemetaanItem; ctx: Ctx; tutup: () => v
     if (ok) tutup();
   };
   return (
-    <div className="mt-2 space-y-3 rounded-[14px] bg-[#F5F8FE] p-3">
+    <div className="mt-2 space-y-3 rounded-lg bg-[#F5F8FE] p-3">
       <p className="text-[12.5px] text-[#44546F]">RAB menyamai pagu POK ({rupiah(p.pok.pok)}), dicairkan sekali pada bulan dan minggu yang dipilih.</p>
       <div className="grid grid-cols-2 gap-3">
         <PilihBulan id={`sb-${p.pok.detail_id}`} nilai={bulan} ubah={setBulan} teks="Bulan cair" />
@@ -114,7 +111,7 @@ function FormBaris({ p, ctx, awal, barisId, tutup }: { p: PemetaanItem; ctx: Ctx
     if (ok) tutup();
   };
   return (
-    <div className="mt-2 space-y-3 rounded-[14px] bg-[#F5F8FE] p-3">
+    <div className="mt-2 space-y-3 rounded-lg bg-[#F5F8FE] p-3">
       <div>
         <label className={label} htmlFor={`bk-${barisId ?? "n"}-${p.pok.detail_id}`}>Keterangan (mis. PML, PPL)</label>
         <input id={`bk-${barisId ?? "n"}-${p.pok.detail_id}`} className={kolom} maxLength={200} value={v.ket} onChange={(e) => ubah({ ket: e.target.value })} />
@@ -146,7 +143,7 @@ function FormBaris({ p, ctx, awal, barisId, tutup }: { p: PemetaanItem; ctx: Ctx
       </div>
       <p className="text-[13px] font-bold text-[#0F2A52]">Jumlah rincian: {jml === null ? "-" : rupiah(jml)}</p>
       {(pesan.length > 0 || galat) && (
-        <ul role="alert" className="space-y-1 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
+        <ul role="alert" className="space-y-1 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
           {[...pesan, ...(galat ? [galat] : [])].map((x) => <li key={x}>{x}</li>)}
         </ul>
       )}
@@ -174,15 +171,15 @@ function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
       return tulisKeuKlien("keu_rab_item", "insert", { ...dataItemRab(ctx.rabId, p.pok, null), selesai: nilai });
     });
   return (
-    <li className={kartu}>
+    <li className={`${kartu} !p-3`}>
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 break-words text-[13.5px] font-bold leading-snug text-[#0F2A52]">{p.pok.nomor_item ? `${p.pok.nomor_item}. ` : ""}{p.pok.uraian}</p>
-        <span className={`flex-none rounded-full px-2.5 py-1 text-[11px] font-extrabold ${p.status === "belum" ? "bg-[#EEF2F7] text-[#6B7A93]" : p.status === "selesai" ? "bg-[#E6EFFD] text-[#1F4EA8]" : "bg-[#E3F6EC] text-[#0B6B3F]"}`}>{LABEL_ITEM[p.status]}</span>
+        <p className="min-w-0 break-words text-[13px] font-bold leading-snug text-[#0F2A52]">{p.pok.nomor_item ? `${p.pok.nomor_item}. ` : ""}{p.pok.uraian}</p>
+        <Chip warna={p.status === "belum" ? "abu" : p.status === "selesai" ? "biru" : "hijau"}>{LABEL_ITEM[p.status]}</Chip>
       </div>
       <p className="mt-0.5 text-[12px] text-[#6B7A93]">Akun {p.pok.akun} · {angka(p.pok.volume)} {p.pok.satuan}</p>
       <dl className="mt-1.5 grid grid-cols-2 gap-2 text-[12.5px]">
-        <div><dt className="text-[#6B7A93]">Pagu POK</dt><dd className="font-extrabold text-[#0F2A52]">{angka(p.pok.pok)}</dd></div>
-        <div><dt className="text-[#6B7A93]">RAB</dt><dd className="font-extrabold text-[#0F2A52]">{p.status === "belum" ? "-" : angka(p.jumlahRab)}</dd></div>
+        <div><dt className="text-[#6B7A93]">Pagu POK</dt><dd className="font-semibold text-[#0F2A52]">{angka(p.pok.pok)}</dd></div>
+        <div><dt className="text-[#6B7A93]">RAB</dt><dd className="font-semibold text-[#0F2A52]">{p.status === "belum" ? "-" : angka(p.jumlahRab)}</dd></div>
       </dl>
       {p.selisih !== null && p.selisih !== 0 && p.status !== "selesai" && (
         <p className="mt-1 text-[12px] font-bold text-[#8A6200]">RAB {p.selisih > 0 ? "melebihi" : "kurang dari"} pagu POK sebesar {rupiah(Math.abs(p.selisih))}.</p>
@@ -190,7 +187,7 @@ function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
       {p.baris.length > 0 && (
         <ul className="mt-2 space-y-1.5">
           {p.baris.map((b) => (
-            <li key={b.baris_id} className="rounded-[12px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] text-[#44546F]">
+            <li key={b.baris_id} className="rounded-md bg-[#F5F8FE] px-3 py-2 text-[12.5px] text-[#44546F]">
               {mode !== null && typeof mode === "object" && mode.ubah === b.baris_id ? (
                 <FormBaris p={p} ctx={ctx} barisId={b.baris_id} tutup={() => setMode(null)} awal={{ ket: b.ket, volume: String(b.volume).replace(".", ","), satuan: b.satuan, harga: String(Math.round(Number(b.harga_satuan))), periode: b.periode, bulan_mulai: b.bulan_mulai, bulan_sampai: b.bulan_sampai, minggu: b.minggu }} />
               ) : (
@@ -253,7 +250,7 @@ function BilahAksi({ rabId, status, hak, muat }: { rabId: number; status: string
         ))}
       </div>
       {pilih && (
-        <div className="space-y-2 rounded-[14px] bg-[#F5F8FE] p-3">
+        <div className="space-y-2 rounded-lg bg-[#F5F8FE] p-3">
           <label className={label} htmlFor="rab-catatan">{pilih === "kembalikan" ? "Alasan pengembalian" : "Catatan pembatalan (boleh kosong)"}</label>
           <textarea id="rab-catatan" className={`${kolom} py-2`} rows={2} maxLength={500} value={catatan} onChange={(e) => setCatatan(e.target.value)} />
           {pesan && <p role="alert" className="text-[13px] text-[#7A1D22]">{pesan}</p>}
@@ -285,7 +282,7 @@ export function TabRab({ kode }: { kode: string }) {
 
   const galat = rab.galat ?? ang.galat;
   if (galat) return <Galat pesan={galat} />;
-  if (!rab.siap || !ang.anggaran) return <div className="h-40 animate-pulse rounded-[20px] bg-white" aria-busy="true" />;
+  if (!rab.siap || !ang.anggaran) return <Memuat tinggi="h-40" />;
 
   const status = rab.rab?.status ?? null;
   const editable = bisaDiubah(status) && (hak.rab || hak.draf);
@@ -296,21 +293,20 @@ export function TabRab({ kode }: { kode: string }) {
 
   return (
     <div className="space-y-3">
-      <section className={`${kartu} space-y-3`}>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h2 className="text-[13px] font-extrabold uppercase tracking-wide text-[#44546F]">{rab.rab ? `RAB nomor ${rab.rab.nomor}` : "RAB"}</h2>
-            {!rab.rab && <p className="mt-1 text-[13.5px] text-[#5B6B84]">RO ini belum punya RAB.</p>}
-          </div>
-          {status && <span className={`flex-none rounded-full px-2.5 py-1 text-[11.5px] font-extrabold ${WARNA_STATUS[status] ?? "bg-[#EEF2F7] text-[#44546F]"}`}>{LABEL_STATUS_RAB[status] ?? status}</span>}
+      <section className={`${kartu} flex flex-col gap-3`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={judulKartu}>{rab.rab ? `RAB nomor ${rab.rab.nomor}` : "RAB"}</h2>
+          {status && <Chip warna={WARNA_STATUS[status] ?? "abu"}>{LABEL_STATUS_RAB[status] ?? status}</Chip>}
         </div>
+        {!rab.rab && <p className="text-[13px] text-[#5B6B84]">RO ini belum punya RAB.</p>}
         {rab.rab && (
-          <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-            <div><p className="text-[#6B7A93]">Pagu POK</p><p className="text-[15px] font-extrabold text-[#0F2A52]">{rupiah(totalPok)}</p></div>
-            <div><p className="text-[#6B7A93]">Jumlah RAB</p><p className="text-[15px] font-extrabold text-[#0F2A52]">{rupiah(totalRab)}</p><p className="text-[#6B7A93]">{nBelum} item belum ber-RAB</p></div>
+          <div className={kisi}>
+            <Kpi label="Pagu POK" nilai={rupiah(totalPok)} />
+            <Kpi label="Jumlah RAB" nilai={rupiah(totalRab)} sub={`${nBelum} item belum ber-RAB`} />
+            <Kpi label="Selisih RAB dengan POK" nilai={rupiah(Math.abs(totalRab - totalPok))} sub={totalRab > totalPok ? "RAB melebihi pagu; dicatat sebagai kekurangan" : totalRab < totalPok ? "RAB di bawah pagu" : "RAB tepat sama dengan pagu"} warna={totalRab > totalPok ? "kn" : undefined} />
           </div>
         )}
-        {status === "dikembalikan" && rab.catatan && <p className="rounded-[14px] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Dikembalikan: {rab.catatan}</p>}
+        {status === "dikembalikan" && rab.catatan && <p className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Dikembalikan: {rab.catatan}</p>}
         {rab.rab && <BilahAksi rabId={rab.rab.rab_id} status={status!} hak={hak} muat={rab.muatSemua} />}
         {bolehSusunBaru(status, hak) && (
           <div className="space-y-2">
@@ -326,11 +322,11 @@ export function TabRab({ kode }: { kode: string }) {
 
       {rab.rab && (
         <>
-          {yatim.length > 0 && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
-          <ul className="space-y-2.5">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
+          {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
+          <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
           {rab.jejak.length > 0 && (
             <details className={kartu}>
-              <summary className="min-h-[44px] cursor-pointer list-none text-[13px] font-extrabold text-[#0F2A52]">Jejak RAB ({rab.jejak.length})</summary>
+              <summary className="min-h-[40px] cursor-pointer list-none text-[13px] font-semibold text-[#0F2A52]">Jejak RAB ({rab.jejak.length})</summary>
               <ul className="mt-1 space-y-2">
                 {rab.jejak.map((j) => (
                   <li key={j.id} className="text-[12.5px] text-[#44546F]">

@@ -8,15 +8,10 @@
 // tombol hanya tampil bila akun berwenang. Semua pegawai organik boleh melihat daftar unggahan.
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import TombolKembali from "@/app/components/TombolKembali";
 import { argsRealisasiMasuk, bacaBerkasGlp, periksaUnggahan, type HasilBerkas } from "@/lib/keu/glp039-xlsx";
-import { angka, rupiah, urlBaca } from "@/lib/keu/ro";
+import { angka, persen, rupiah, urlBaca } from "@/lib/keu/ro";
 import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../ro/useKeu";
-
-const kartu = "rounded-[20px] bg-white p-4 shadow-[0_4px_16px_rgba(15,42,82,0.08)]";
-const kolom = "box-border min-h-[44px] w-full rounded-[12px] border-[1.5px] border-[#C5D0E2] bg-[#F8FBFF] px-3 text-[14px] font-semibold text-[#0F2A52]";
-const label = "mb-1 block text-[12px] font-bold text-[#44546F]";
-const tombol = "min-h-[44px] rounded-[12px] px-4 text-[13.5px] font-extrabold disabled:opacity-50";
+import { Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kpi, kisi, label, Memuat, Tenang, tombol, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
 
 type Unggah = {
   id: number; tahun: number; sampai_tanggal: string; nama_berkas: string; n_item: number | string; total_pagu: number | string;
@@ -74,35 +69,36 @@ export default function HalamanRealisasi() {
     }
   }
 
+  const terbaru = (daftar.baris ?? []).find((u) => u.status === "diterima") ?? null;
   return (
-    <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
-      <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-16 pt-5 text-white">
-        <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
-        <div className="relative mx-auto flex max-w-xl items-center gap-2">
-          <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
-          <span className="truncate text-[12.5px] font-bold text-[#D3E0F5]">Kertas Kerja Revisi POK</span>
-        </div>
-        <h1 className="relative mx-auto mt-3 max-w-xl text-[20px] font-extrabold leading-tight tracking-[-0.3px]">Realisasi Anggaran</h1>
-        <p className="relative mx-auto mt-1.5 max-w-xl text-[12.5px] text-[#A9BCD8]">Unggah Excel Laporan Ketersediaan Dana Detail (GLP039) dari SAKTI.</p>
-      </header>
-
-      <div className="relative z-10 mx-auto -mt-10 max-w-xl space-y-3 px-3.5">
+    <HalamanKeu
+      jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Anggaran", href: "/sigap/ro" }, { t: "Realisasi anggaran" }]}
+      judul="Realisasi anggaran mingguan (Excel Laporan Ketersediaan Dana Detail)"
+    >
+      <Tenang>
+        <b>Bendahara</b> mengunggah Excel realisasi (GLP039) dari SAKTI setiap minggu. Berkas dibaca di perangkat dan diperiksa lebih dulu; yang dikirim hanya isi tabelnya. Angka realisasi dipakai tab Anggaran per RO dan skor kualitas RAB. Semua pegawai organik dapat melihat daftar unggahan.
+      </Tenang>
+      <div className={kisi}>
+        <Kpi label="Data terakhir diterima" nilai={terbaru ? tgl(terbaru.sampai_tanggal) : "-"} sub={terbaru ? terbaru.nama_berkas : "belum ada unggahan"} />
+        <Kpi label="Realisasi kumulatif" nilai={terbaru ? rupiah(terbaru.total_sd) : "-"} sub={terbaru ? `${persen(Number(terbaru.total_sd), Number(terbaru.total_pagu))} dari pagu` : undefined} warna="hj" />
+        <Kpi label="Item pada unggahan terakhir" nilai={terbaru ? angka(terbaru.n_item) : "-"} />
+      </div>
         {boleh === true && (
-          <section className={kartu} aria-labelledby="judul-unggah">
-            <h2 id="judul-unggah" className="text-[15px] font-extrabold text-[#0F2A52]">Unggah laporan baru</h2>
-            <p className="mt-1 text-[12.5px] text-[#5B6B84]">Berkas dibaca di perangkat Bapak/Ibu; yang dikirim hanya isi tabelnya setelah diperiksa. Satu tanggal data hanya dapat diterima satu kali.</p>
-            <label htmlFor="berkas-glp" className={`${label} mt-3`}>Berkas Excel (.xlsx)</label>
+          <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="judul-unggah">
+            <h2 id="judul-unggah" className={judulKartu}>Unggah laporan baru</h2>
+            <p className="text-[12.5px] text-[#5B6B84]">Berkas dibaca di perangkat Bapak/Ibu; yang dikirim hanya isi tabelnya setelah diperiksa. Satu tanggal data hanya dapat diterima satu kali.</p>
+            <label htmlFor="berkas-glp" className={label}>Berkas Excel (.xlsx)</label>
             <input
               id="berkas-glp" ref={inputBerkas} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={(e) => void pilih(e.target.files?.[0])}
-              className="block w-full text-[13px] file:mr-3 file:min-h-[44px] file:rounded-[12px] file:border-0 file:bg-[#1F5FD1] file:px-4 file:text-[13.5px] file:font-extrabold file:text-white"
+              className="block w-full text-[13px] file:mr-3 file:min-h-[40px] file:rounded-md file:border-0 file:bg-[#1F5FD1] file:px-3 file:text-[13px] file:font-semibold file:text-white"
             />
-            {membaca && <p className="mt-2 text-[13px] font-bold text-[#44546F]" aria-live="polite">Membaca berkas...</p>}
-            {galatBaca && <p role="alert" className="mt-2 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galatBaca}</p>}
+            {membaca && <p className="text-[13px] font-bold text-[#44546F]" aria-live="polite">Membaca berkas...</p>}
+            {galatBaca && <p role="alert" className="rounded-md border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galatBaca}</p>}
 
             {b && ringkas && (
-              <div className="mt-3 space-y-3">
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12.5px]">
+              <div className="space-y-3">
+                <dl className="grid gap-x-3 gap-y-1.5 text-[12.5px] [grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))]">
                   <div><dt className="text-[#6B7A93]">Item</dt><dd className="font-extrabold text-[#0F2A52]">{angka(ringkas.nItem)} item · {angka(ringkas.nRo)} RO</dd></div>
                   <div><dt className="text-[#6B7A93]">Pagu revisi</dt><dd className="font-extrabold text-[#0F2A52]">{rupiah(ringkas.pagu)}</dd></div>
                   <div><dt className="text-[#6B7A93]">Lock pagu</dt><dd className="font-extrabold text-[#0F2A52]">{rupiah(ringkas.lock)}</dd></div>
@@ -112,16 +108,16 @@ export default function HalamanRealisasi() {
                 </dl>
 
                 {b.hasil.galat.length > 0 && (
-                  <div role="alert" className="rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">
+                  <div role="alert" className="rounded-md border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">
                     <p className="font-extrabold">Berkas belum lolos pemeriksaan ({b.hasil.galat.length}):</p>
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    <ul className="list-disc space-y-0.5 pl-4">
                       {b.hasil.galat.slice(0, 8).map((g) => <li key={g}>{g}</li>)}
                     </ul>
                     {b.hasil.galat.length > 8 && <p className="mt-1">dan {b.hasil.galat.length - 8} lainnya.</p>}
                   </div>
                 )}
                 {b.hasil.peringatan.length > 0 && (
-                  <div className="rounded-[12px] border-l-4 border-[#B8860B] bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#6B4E00]">
+                  <div className="rounded-md border-l-4 border-[#B8860B] bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#6B4E00]">
                     <ul className="list-disc space-y-0.5 pl-4">{b.hasil.peringatan.slice(0, 5).map((g) => <li key={g}>{g}</li>)}</ul>
                   </div>
                 )}
@@ -129,15 +125,15 @@ export default function HalamanRealisasi() {
                 <div>
                   <label className={label} htmlFor="sampai-tanggal">Data sampai tanggal</label>
                   <input id="sampai-tanggal" type="date" className={kolom} value={sampai} onChange={(e) => setSampai(e.target.value)} />
-                  <p className="mt-1 text-[12px] text-[#6B7A93]">{b.hasil.judul.find((t) => /Periode/i.test(t)) ?? "Periode tidak terbaca dari judul"}. Periksa tanggalnya sebelum mengirim.</p>
-                  {sudahAda && <p className="mt-1 text-[12.5px] font-bold text-[#8A6200]">Sudah ada unggahan diterima untuk tanggal ini ({sudahAda.nama_berkas}). Batalkan dulu bila ingin menggantinya.</p>}
+                  <p className="text-[12px] text-[#6B7A93]">{b.hasil.judul.find((t) => /Periode/i.test(t)) ?? "Periode tidak terbaca dari judul"}. Periksa tanggalnya sebelum mengirim.</p>
+                  {sudahAda && <p className="text-[12.5px] font-bold text-[#8A6200]">Sudah ada unggahan diterima untuk tanggal ini ({sudahAda.nama_berkas}). Batalkan dulu bila ingin menggantinya.</p>}
                 </div>
 
-                <button type="button" onClick={() => setLihatItem((x) => !x)} className={`${tombol} border-[1.5px] border-[#C5D0E2] bg-white text-[#0F2A52]`}>
+                <button type="button" onClick={() => setLihatItem((x) => !x)} className={tombolKecil}>
                   {lihatItem ? "Sembunyikan item" : "Lihat item"}
                 </button>
                 {lihatItem && (
-                  <div className="max-h-72 overflow-auto rounded-[12px] border border-[#DDE5F2]">
+                  <div className="max-h-72 overflow-auto rounded-md border border-[#DDE5F2]">
                     <table className="w-full min-w-[520px] text-left text-[12px]">
                       <thead className="sticky top-0 bg-[#EEF3FB] text-[#44546F]"><tr><th className="px-2 py-1.5">No.</th><th className="px-2 py-1.5">RO</th><th className="px-2 py-1.5">Uraian</th><th className="px-2 py-1.5 text-right">Pagu</th><th className="px-2 py-1.5 text-right">Real. s.d.</th></tr></thead>
                       <tbody>
@@ -153,56 +149,69 @@ export default function HalamanRealisasi() {
                 )}
 
                 {salah && b.hasil.ok && <p className="text-[12.5px] font-bold text-[#8A6200]">{salah}</p>}
-                <button type="button" disabled={mengirim || !!salah || !!sudahAda} onClick={() => void kirimUnggahan()} className={`${tombol} w-full bg-[#1F5FD1] text-white`}>
+                <button type="button" disabled={mengirim || !!salah || !!sudahAda} onClick={() => void kirimUnggahan()} className={`${tombolUtama} w-full sm:w-auto`}>
                   {mengirim ? "Mengirim..." : "Kirim realisasi"}
                 </button>
               </div>
             )}
-            {galatKirim && <p role="alert" className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galatKirim}</p>}
-            {berhasil && <p role="status" className="mt-3 rounded-[12px] border-l-4 border-[#1F8A4C] bg-[#E6F6EC] px-3 py-2 text-[13px] font-bold text-[#14653A]">{berhasil}</p>}
+            {galatKirim && <p role="alert" className="rounded-md border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galatKirim}</p>}
+            {berhasil && <p role="status" className="rounded-md border-l-4 border-[#1F8A4C] bg-[#E6F6EC] px-3 py-2 text-[13px] font-bold text-[#14653A]">{berhasil}</p>}
           </section>
         )}
-        {boleh === false && <p className={`${kartu} text-[13px] text-[#44546F]`}>Mengunggah realisasi hanya untuk bendahara. Halaman ini menampilkan daftar unggahan untuk dilihat.</p>}
+        {boleh === false && <Catatan>Mengunggah realisasi hanya untuk bendahara. Halaman ini menampilkan daftar unggahan untuk dilihat.</Catatan>}
 
-        <section aria-labelledby="judul-daftar" className="space-y-2.5">
-          <h2 id="judul-daftar" className="px-1 text-[14px] font-extrabold text-[#0F2A52]">Unggahan realisasi</h2>
-          {daftar.galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{daftar.galat}</p>}
-          {daftar.memuat && <div className="h-24 animate-pulse rounded-[20px] bg-white" aria-busy="true" />}
-          {daftar.baris && daftar.baris.length === 0 && <p className={`${kartu} text-[13px] text-[#5B6B84]`}>Belum ada realisasi yang diunggah.</p>}
-          {(daftar.baris ?? []).map((u) => (
-            <article key={u.id} className={`${kartu} ${u.status === "diterima" ? "" : "opacity-70"}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[14.5px] font-extrabold text-[#0F2A52]">s.d. {tgl(u.sampai_tanggal)}</p>
-                  <p className="break-words text-[12px] text-[#6B7A93]">{u.nama_berkas}</p>
-                </div>
-                <span className={`flex-none rounded-full px-2.5 py-1 text-[11.5px] font-extrabold ${u.status === "diterima" ? "bg-[#E6F6EC] text-[#14653A]" : "bg-[#EEF2F7] text-[#44546F]"}`}>{u.status === "diterima" ? "Diterima" : "Dibatalkan"}</span>
-              </div>
-              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px]">
-                <div><dt className="text-[#6B7A93]">Item</dt><dd className="font-bold text-[#0F2A52]">{angka(u.n_item)}</dd></div>
-                <div><dt className="text-[#6B7A93]">Pagu</dt><dd className="font-bold text-[#0F2A52]">{rupiah(u.total_pagu)}</dd></div>
-                <div><dt className="text-[#6B7A93]">Realisasi s.d.</dt><dd className="font-bold text-[#0F2A52]">{rupiah(u.total_sd)}</dd></div>
-                <div><dt className="text-[#6B7A93]">Lock pagu</dt><dd className="font-bold text-[#0F2A52]">{rupiah(u.total_lock)}</dd></div>
-              </dl>
-              {u.status !== "diterima" && u.alasan_batal && <p className="mt-2 text-[12.5px] text-[#5B6B84]">Alasan batal: {u.alasan_batal}</p>}
-              {boleh === true && u.status === "diterima" && (
-                batal?.id === u.id ? (
-                  <div className="mt-3 space-y-2">
-                    <label className={label} htmlFor={`alasan-${u.id}`}>Alasan pembatalan (minimal 5 huruf)</label>
-                    <textarea id={`alasan-${u.id}`} rows={2} maxLength={300} className={`${kolom} py-2`} value={batal.alasan} onChange={(e) => setBatal({ id: u.id, alasan: e.target.value })} />
-                    <div className="flex gap-2">
-                      <button type="button" disabled={mengirim || batal.alasan.trim().length < 5} className={`${tombol} bg-[#B42329] text-white`} onClick={async () => { if (await kirim("keu_realisasi_batalkan", { p_unggah: u.id, p_alasan: batal.alasan.trim() })) setBatal(null); }}>Batalkan unggahan</button>
-                      <button type="button" className={`${tombol} border-[1.5px] border-[#C5D0E2] bg-white text-[#0F2A52]`} onClick={() => setBatal(null)}>Kembali</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button type="button" className={`${tombol} mt-3 border-[1.5px] border-[#C5D0E2] bg-white text-[#7A1D22]`} onClick={() => { hapusGalat(); setBatal({ id: u.id, alasan: "" }); }}>Batalkan unggahan</button>
-                )
-              )}
-            </article>
-          ))}
+        <section aria-labelledby="judul-daftar" className={`${kartu} flex flex-col gap-3`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="judul-daftar" className={judulKartu}>Unggahan realisasi</h2>
+            {terbaru && <Chip warna="hijau">Penyerapan terakhir: {rupiah(terbaru.total_sd)} dari pagu {rupiah(terbaru.total_pagu)} ({persen(Number(terbaru.total_sd), Number(terbaru.total_pagu))})</Chip>}
+          </div>
+          <Galat pesan={daftar.galat} />
+          {daftar.memuat && <Memuat tinggi="h-24" />}
+          {daftar.baris && daftar.baris.length === 0 && <p className="text-[13px] text-[#5B6B84]">Belum ada realisasi yang diunggah.</p>}
+          {(daftar.baris ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-[#DCE3EE]">
+              <table className="w-full min-w-[860px] text-left text-[12.5px]">
+                <thead className="bg-[#EEF3FB] text-[#44546F]">
+                  <tr><th className="px-2.5 py-2">Data s.d.</th><th className="px-2.5 py-2">Berkas</th><th className="px-2.5 py-2">Diunggah</th><th className="px-2.5 py-2 text-right">Item</th><th className="px-2.5 py-2 text-right">Realisasi kumulatif</th><th className="px-2.5 py-2">Penyerapan</th><th className="px-2.5 py-2">Hasil</th><th className="px-2.5 py-2">Aksi</th></tr>
+                </thead>
+                <tbody>
+                  {(daftar.baris ?? []).map((u) => {
+                    const lebar = Number(u.total_pagu) > 0 ? Math.min(100, (Number(u.total_sd) / Number(u.total_pagu)) * 100) : 0;
+                    return (
+                      <tr key={u.id} className={`border-t border-[#EEF2F7] align-top ${u.status === "diterima" ? "" : "opacity-70"}`}>
+                        <td className="whitespace-nowrap px-2.5 py-2 font-semibold text-[#0F2A52]">{tgl(u.sampai_tanggal)}</td>
+                        <td className="break-words px-2.5 py-2 text-[#5B6B84]">{u.nama_berkas}{u.status !== "diterima" && u.alasan_batal && <div className="mt-0.5 text-[#7A1D22]">Alasan batal: {u.alasan_batal}</div>}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-[#5B6B84]">{tgl(u.dibuat_at)}</td>
+                        <td className="px-2.5 py-2 text-right">{angka(u.n_item)}</td>
+                        <td className="whitespace-nowrap px-2.5 py-2 text-right font-semibold text-[#0F2A52]">{rupiah(u.total_sd)}</td>
+                        <td className="min-w-[110px] px-2.5 py-2"><div className="h-1.5 overflow-hidden rounded-[3px] bg-[#E6EBF3]" aria-hidden><i className="block h-full bg-[#1F5FD1]" style={{ width: `${lebar}%` }} /></div><span className="text-[11.5px] text-[#5B6B84]">{persen(Number(u.total_sd), Number(u.total_pagu))} dari pagu {rupiah(u.total_pagu)}</span></td>
+                        <td className="px-2.5 py-2"><Chip warna={u.status === "diterima" ? "hijau" : "abu"}>{u.status === "diterima" ? "Diterima" : "Dibatalkan"}</Chip></td>
+                        <td className="px-2.5 py-2">
+                          {boleh === true && u.status === "diterima" && (
+                            batal?.id === u.id ? (
+                              <div className="flex min-w-[220px] flex-col gap-2">
+                                <label className={label} htmlFor={`alasan-${u.id}`}>Alasan pembatalan (minimal 5 huruf)</label>
+                                <textarea id={`alasan-${u.id}`} rows={2} maxLength={300} className={`${kolom} py-2`} value={batal.alasan} onChange={(e) => setBatal({ id: u.id, alasan: e.target.value })} />
+                                <div className="flex gap-2">
+                                  <button type="button" disabled={mengirim || batal.alasan.trim().length < 5} className={tombolBahaya} onClick={async () => { if (await kirim("keu_realisasi_batalkan", { p_unggah: u.id, p_alasan: batal.alasan.trim() })) setBatal(null); }}>Batalkan unggahan</button>
+                                  <button type="button" className={tombolKecil} onClick={() => setBatal(null)}>Kembali</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button type="button" className={tombolBahaya} onClick={() => { hapusGalat(); setBatal({ id: u.id, alasan: "" }); }}>Batalkan</button>
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-[12px] text-[#5B6B84]">Setiap baris Excel dicocokkan ke POK (RO, komponen, akun, uraian). Angka kumulatif per RO dan per akun dipakai tab Anggaran, tab Administrasi, dan skor RAB. Satu tanggal data hanya dapat diterima satu kali.</p>
         </section>
-      </div>
-    </main>
+ 
+    </HalamanKeu>
   );
 }

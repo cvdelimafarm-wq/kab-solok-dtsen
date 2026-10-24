@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aksiJadwalTersedia, argsJadwalAksi, argsPutuskan, argsTambahan, awalKeputusan, bacaBulat, periksaKeputusan, periksaSah, periksaTambahan, tambahanKosong, tanggalSah } from "../revisi";
+import { dataJadwalBaru, jadwalKosong, periksaJadwalBaru, ringkasPok, statusTenggat, tglPanjang, tidakIkutPaket, aksiJadwalTersedia, argsJadwalAksi, argsPutuskan, argsTambahan, awalKeputusan, bacaBulat, periksaKeputusan, periksaSah, periksaTambahan, tambahanKosong, tanggalSah } from "../revisi";
 
 describe("aksiJadwalTersedia", () => {
   it("mengikuti urutan status", () => {
@@ -72,5 +72,74 @@ describe("keputusan kekurangan", () => {
     d[1].alasan = "tidak prioritas";
     expect(periksaKeputusan(d, jml, 1000).galat).toEqual([]);
     expect(argsPutuskan(7, d)).toEqual({ p_tambahan: 7, p_keputusan: [{ id: 1, keputusan: "penuhi", alasan: "" }, { id: 2, keputusan: "tolak", alasan: "tidak prioritas" }, { id: 3, keputusan: "tunda", alasan: "" }] });
+  });
+});
+
+describe("tampilan jadwal (papan 11)", () => {
+  it("tglPanjang", () => {
+    expect(tglPanjang("2026-10-24")).toBe("24 Okt 2026");
+    expect(tglPanjang("2026-12-07T00:00:00Z")).toBe("7 Des 2026");
+    expect(tglPanjang("bukan")).toBe("bukan");
+    expect(tglPanjang(null)).toBe("");
+  });
+  it("statusTenggat: warna menurut sisa hari", () => {
+    expect(statusTenggat(6)).toEqual({ warna: "merah", teks: "6 hari lagi" });
+    expect(statusTenggat("37")).toEqual({ warna: "abu", teks: "37 hari lagi" });
+    expect(statusTenggat(20).warna).toBe("kuning");
+    expect(statusTenggat(0)).toEqual({ warna: "merah", teks: "hari ini" });
+    expect(statusTenggat(-3)).toEqual({ warna: "merah", teks: "lewat 3 hari" });
+    expect(statusTenggat(null).teks).toBe("");
+  });
+  it("tidakIkutPaket hanya setelah jendela ditutup dan belum disetujui", () => {
+    expect(tidakIkutPaket("dibuka", "draf")).toBe(false);
+    expect(tidakIkutPaket("terkumpul", "menunggu_ppk")).toBe(true);
+    expect(tidakIkutPaket("sah", "disetujui")).toBe(false);
+  });
+  it("ringkasPok: tanpa revisi sah memakai POK dasar", () => {
+    const r = ringkasPok([], new Map(), { nomor_pok: "POK posisi 30 Sep 2026", tanggal_efektif: "2026-09-30" });
+    expect(r.label).toBe("POK dasar");
+    expect(r.ket).toContain("belum ada revisi sah");
+    expect(r.riwayat).toHaveLength(1);
+    expect(ringkasPok([], new Map(), null).riwayat[0].ket).toBe("Belum ada POK dasar di sistem.");
+  });
+  it("ringkasPok: versi tertinggi di atas, dasar di bawah", () => {
+    const r = ringkasPok(
+      [{ jadwal_id: 1, versi_sistem: 1, nomor_dokumen: "N-1", tanggal_dokumen: "2026-10-12" }, { jadwal_id: 2, versi_sistem: "2", nomor_dokumen: "N-2", tanggal_dokumen: "2026-11-12" }],
+      new Map([[1, "Revisi POK Okt"], [2, "Revisi POK Nov"]]), null,
+    );
+    expect(r.label).toBe("Versi 2");
+    expect(r.ket).toBe("Revisi POK Nov, sah 12 Nov 2026");
+    expect(r.riwayat.map((v) => v.label)).toEqual(["Versi 2: Revisi POK Nov", "Versi 1: Revisi POK Okt", "POK dasar sistem"]);
+  });
+  it("jadwal baru: pemeriksaan dan data", () => {
+    const ok = { ...jadwalKosong(), judul: " Revisi DIPA Nov ", buka: "2026-11-02", tutup: "2026-11-06" };
+    expect(periksaJadwalBaru(ok, [2026])).toEqual([]);
+    expect(dataJadwalBaru(ok)).toEqual({ tahun: 2026, jenis: "dipa_djpb", judul: "Revisi DIPA Nov", buka: "2026-11-02", tutup: "2026-11-06" });
+    expect(periksaJadwalBaru({ ...ok, judul: "a" }, [2026])).toHaveLength(1);
+    expect(periksaJadwalBaru({ ...ok, tutup: "2026-11-01" }, [2026])[0]).toContain("lebih awal");
+    expect(periksaJadwalBaru({ ...ok, buka: "2027-01-05", tutup: "2027-01-08" }, [2026])[0]).toContain("2027 belum terdaftar");
+    expect(periksaJadwalBaru(jadwalKosong(), [2026]).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("halaman revisi: alamat baca sesuai daftar putih", () => {
+  it("setiap urlBaca yang dipakai lolos periksaMasukanBaca", async () => {
+    const { urlBaca } = await import("../ro");
+    const { periksaMasukanBaca } = await import("../baca");
+    const daftar = [
+      urlBaca("keu_v_revisi_ringkas", {}, { urut: "buka", batas: 200 }),
+      urlBaca("keu_revisi_jadwal", {}, { urut: "buka", batas: 200, kolom: ["id", "ulang", "catatan"] }),
+      urlBaca("keu_revisi_sah", {}, { batas: 200, kolom: ["jadwal_id", "versi_sistem", "nomor_dokumen", "tanggal_dokumen"] }),
+      urlBaca("keu_v_tenggat", {}, { urut: "tanggal", batas: 20 }),
+      urlBaca("keu_pok_versi", { status: "berlaku" }, { urut: "-id", batas: 1, kolom: ["id", "nomor_pok", "tanggal_efektif"] }),
+      urlBaca("keu_tahun_anggaran", {}, { urut: "tahun", batas: 20, kolom: ["tahun"] }),
+      urlBaca("keu_ro", {}, { urut: "kode", batas: 500, kolom: ["kode", "nama"] }),
+      urlBaca("keu_revisi_usulan", { jadwal_id: 5 }, { urut: "ro_kode", batas: 500, kolom: ["id", "ro_kode", "status", "catatan"] }),
+    ];
+    for (const u of daftar) {
+      const q = Object.fromEntries(new URL(u, "http://x").searchParams.entries());
+      const r = periksaMasukanBaca(q);
+      expect(r.ok, u).toBe(true);
+    }
   });
 });
