@@ -88,6 +88,7 @@ export default function HalamanRevisi() {
         <div className="flex flex-wrap gap-2">
           <Link href="/sigap/revisi/kertas" className={`${tombolUtama} inline-flex items-center no-underline`}>Buka Kertas kerja revisi (matriks per KRO)</Link>
           <Link href="/sigap/revisi/peta" className={`${tombolKecil} inline-flex items-center no-underline`}>Peta KRO Satker (kecukupan seluruh KRO)</Link>
+          <Link href="/sigap/revisi/versi" className={`${tombolKecil} inline-flex items-center no-underline`}>Versi, RPD, dan dampak sesudah revisi</Link>
           <Link href="/sigap/master" className={`${tombolKecil} inline-flex items-center no-underline`}>Master data (akun, satuan, waktu, skor)</Link>
           <Link href="/sigap/struktur" className={`${tombolKecil} inline-flex items-center no-underline`}>Tambah level mata anggaran (usulan struktur)</Link>
         </div>
