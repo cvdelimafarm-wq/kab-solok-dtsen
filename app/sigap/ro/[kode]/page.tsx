@@ -67,7 +67,7 @@ function Isi() {
               </select>
             </div>
           )}
-          <nav aria-label="Tab RO" className="sticky top-0 z-10 -mx-4 flex gap-1.5 overflow-x-auto border-b border-[#DCE3EE] bg-[#F5F8FE] px-4 py-2 sm:-mx-6 sm:px-6">
+          <nav aria-label="Tab RO" className="sticky top-0 z-20 -mx-3 flex gap-1.5 overflow-x-auto border-b border-[#DCE3EE] bg-[#F3F5F8] px-3 py-2 sm:-mx-5 sm:px-5 lg:top-[56px] lg:-mx-6 lg:px-6">
             {TAB_RO.map((t) => (
               <Link
                 key={t}

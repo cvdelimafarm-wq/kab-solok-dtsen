@@ -25,10 +25,10 @@ export const LABEL_STATUS_USULAN: Record<string, string> = {
 export type PilihanAksi = { aksi: AksiJadwal; label: string; perluDokumen: boolean; berbahaya: boolean };
 
 /** Aksi jadwal yang masuk akal untuk status ini. `tutup`/`hariIni` berbentuk YYYY-MM-DD (pulihkan hanya selama jendela belum lewat). */
-export function aksiJadwalTersedia(status: string, tutup: string, hariIni: string): PilihanAksi[] {
+export function aksiJadwalTersedia(status: string, tutup: string, hariIni: string, berulang = true): PilihanAksi[] {
   const p = (aksi: AksiJadwal, label: string, perluDokumen = false, berbahaya = false): PilihanAksi => ({ aksi, label, perluDokumen, berbahaya });
   switch (status) {
-    case "terjadwal": return [p("buka", "Buka jendela usulan"), p("lewati", "Lewati bulan ini", false, true)];
+    case "terjadwal": return [p("buka", "Buka jendela usulan"), p("lewati", berulang ? "Lewati bulan ini" : "Lewati", false, true)];
     case "dibuka": return [p("tutup", "Tutup dan kumpulkan usulan"), p("lewati", "Lewati", false, true)];
     case "terkumpul": return [p("terapkan", "Tandai sudah diterapkan di SAKTI")];
     case "diterapkan": return [p("sah", "Nyatakan sah", true)];

@@ -162,9 +162,10 @@ function ringkasJadwal(b: BarisRabRow): string {
 
 function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
   const [mode, setMode] = useState<null | "sama" | "baris" | { ubah: number }>(null);
+  const [hapusId, setHapusId] = useState<number | null>(null);
   const { jalankan, mengirim, galat } = useKirim(ctx.muat);
   const bisa = ctx.editable;
-  const hapus = (id: number) => jalankan(() => aksiKeu("keu_rab_hapus_baris", { p_baris: id }));
+  const hapus = async (id: number) => { await jalankan(() => aksiKeu("keu_rab_hapus_baris", { p_baris: id })); setHapusId(null); };
   const selesai = (nilai: boolean) =>
     jalankan(async () => {
       if (p.rab) return tulisKeuKlien("keu_rab_item", "update", { selesai: nilai }, { id: p.rab.id });
@@ -194,10 +195,19 @@ function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
                 <>
                   <p className="break-words font-bold text-[#0F2A52]">{b.ket || "Rincian"} · {rupiah(b.jumlah)}</p>
                   <p>{angka(Number(b.volume))} {b.satuan}{b.sama_dengan_item ? "" : ` × ${angka(Number(b.harga_satuan))}`} · {ringkasJadwal(b)}</p>
-                  {bisa && mode === null && (
+                  {bisa && mode === null && hapusId === b.baris_id && (
+                    <div className="mt-1.5 space-y-1.5 rounded-md bg-[#FDE8E8] px-2.5 py-2">
+                      <p className="text-[12.5px] font-semibold text-[#7A1D22]">Hapus rincian ini? Tindakan ini tidak dapat dibatalkan.</p>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={mengirim} onClick={() => void hapus(b.baris_id)} className={`${tombol} min-h-[40px] bg-[#B42329] text-white`}>{mengirim ? "Menghapus…" : "Ya, hapus"}</button>
+                        <button type="button" disabled={mengirim} onClick={() => setHapusId(null)} className={`${tombol} min-h-[40px] bg-white text-[#44546F]`}>Batal</button>
+                      </div>
+                    </div>
+                  )}
+                  {bisa && mode === null && hapusId !== b.baris_id && (
                     <div className="mt-1.5 flex gap-2">
                       <button type="button" disabled={mengirim} onClick={() => setMode({ ubah: b.baris_id })} className={`${tombol} min-h-[40px] bg-[#E6EFFD] text-[#1F4EA8]`}>Ubah</button>
-                      <button type="button" disabled={mengirim} onClick={() => hapus(b.baris_id)} className={`${tombol} min-h-[40px] bg-[#FDE8E8] text-[#9B1C23]`}>Hapus</button>
+                      <button type="button" disabled={mengirim} onClick={() => setHapusId(b.baris_id)} className={`${tombol} min-h-[40px] bg-[#FDE8E8] text-[#9B1C23]`}>Hapus</button>
                     </div>
                   )}
                 </>
@@ -323,7 +333,7 @@ export function TabRab({ kode }: { kode: string }) {
       {rab.rab && (
         <>
           {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
-          <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
+          <ul className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
           {rab.jejak.length > 0 && (
             <details className={kartu}>
               <summary className="min-h-[40px] cursor-pointer list-none text-[13px] font-semibold text-[#0F2A52]">Jejak RAB ({rab.jejak.length})</summary>

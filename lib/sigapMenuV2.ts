@@ -101,7 +101,7 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           title: "Uji coba: RO anggaran → kegiatan utama → tahap GSBPM",
           ketPalet: "RO → kegiatan utama → tahap GSBPM (uji coba)",
         }),
-        { id: "anggaran", ikon: "buku", label: "Anggaran", status: "segera", title: "RAB / POK dan revisi anggaran — segera hadir" },
+        { id: "anggaran", ikon: "buku", label: "Anggaran", href: "/sigap/ro", aktifKode: "anggaran", title: "Rincian Output (RO): POK, RAB, kekurangan, administrasi, realisasi, dan jadwal revisi", ketPalet: "RO, RAB, revisi anggaran, realisasi" },
       ],
     },
 

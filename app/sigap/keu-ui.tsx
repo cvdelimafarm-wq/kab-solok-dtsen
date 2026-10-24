@@ -4,7 +4,7 @@
 // realisasi), mengikuti papan mockup: halaman lebar dengan jejak dan judul, kartu berbingkai, KPI, chip bertitik, tombol kecil, kolom isian.
 
 import type { ReactNode } from "react";
-import TombolKembali from "@/app/components/TombolKembali";
+import Bingkai from "./kontrak/Bingkai";
 import { KELAS_CHIP, type WarnaChip } from "@/lib/keu/revisi";
 
 export const kartu = "min-w-0 rounded-xl border border-[#DCE3EE] bg-white p-4";
@@ -72,29 +72,16 @@ export function Progres({ hijau, kuning }: { hijau: number; kuning: number }) {
 
 export type Jejak = { t: string; href?: string };
 
-/** Kerangka halaman: tombol Kembali bernama, jejak, judul, keterangan, lalu isi. */
+/**
+ * Kerangka halaman anggaran: bingkai Shell SIGAP (sidebar, topbar dengan jejak, Ctrl K; header navy di HP) dengan menu "Anggaran" aktif,
+ * lalu tombol Kembali bernama, judul, keterangan, dan isi. Dipakai /sigap/revisi, /sigap/ro (+ /[kode]) dan /sigap/realisasi.
+ */
 export function HalamanKeu({ jejak, judul, sub, induk, labelKembali, children }: {
   jejak: Jejak[]; judul: ReactNode; sub?: ReactNode; induk?: string; labelKembali?: string; children: ReactNode;
 }) {
-  const akhir = jejak[jejak.length - 1];
   return (
-    <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3.5 px-4 pt-4 sm:px-6">
-        <div className="flex flex-col gap-2">
-          <div><TombolKembali tema="terang" induk={induk} label={labelKembali} /></div>
-          <nav aria-label="Jejak halaman" className="flex flex-wrap items-center gap-1.5 text-[12px] text-[#5B6B84]">
-            {jejak.slice(0, -1).map((j) => (
-              <span key={j.t} className="flex items-center gap-1.5">
-                {j.href ? <a href={j.href} className="hover:underline">{j.t}</a> : <span>{j.t}</span>}<span aria-hidden>/</span>
-              </span>
-            ))}
-            <b className="text-[#1B2B4B]">{akhir.t}</b>
-          </nav>
-          <h1 className="break-words text-[22px] font-extrabold leading-tight tracking-[-0.3px] text-[#0F2A52]">{judul}</h1>
-          {sub && <div className="text-[12.5px] text-[#5B6B84]">{sub}</div>}
-        </div>
-        {children}
-      </div>
-    </main>
+    <Bingkai aktif="anggaran" kecil="SIGAP · Anggaran" jejak={jejak.map((j) => j.t)} judul={judul} sub={sub} kembali={{ induk, label: labelKembali }}>
+      <div className="flex flex-col gap-3.5 text-[#1B2B4B]">{children}</div>
+    </Bingkai>
   );
 }

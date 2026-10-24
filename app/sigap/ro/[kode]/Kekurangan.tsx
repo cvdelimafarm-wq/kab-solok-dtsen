@@ -5,7 +5,7 @@
 // (24 Okt 2026) Tab Kekurangan RAB: daftar catatan + formulir catat, ubah, tarik. Tombol hanya tampil bila akun berwenang (kewenangan
 // kek_catat: ketua tim dan admin RO untuk RO sendiri); yang memutuskan tetap basis data. Logika isian: lib/keu/kekurangan.ts.
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { argsCatat, argsTarik, argsUbah, bentukIsian, periksaKekurangan, PRIORITAS, type IsianKekurangan } from "@/lib/keu/kekurangan";
 import { angka, rupiah, STATUS_KEK, urlBaca } from "@/lib/keu/ro";
 import { argsPutuskan, awalKeputusan, LABEL_PUTUSAN, periksaKeputusan, type Keputusan, type Putusan } from "@/lib/keu/revisi";
@@ -246,7 +246,8 @@ export function TabKekurangan({ kode }: { kode: string }) {
               </thead>
               <tbody>
                 {tampil.map((k) => (
-                  <tr key={k.id} className={`border-t border-[#EEF2F7] align-top ${k.terbuka ? "" : "opacity-70"}`}>
+                  <Fragment key={k.id}>
+                  <tr className={`border-t border-[#EEF2F7] align-top ${k.terbuka ? "" : "opacity-70"}`}>
                     {mode?.jenis === "ubah" && mode.id === k.id ? (
                       <td colSpan={6} className="px-2.5 py-2.5">
                         <Formulir ro={kode} akunPilihan={akunPilihan} tandaId={k.id} lama={k} awal={{ akun_kode: k.akun_kode, uraian: k.uraian, jumlah: String(Math.round(Number(k.jumlah))), prioritas: k.prioritas_kode, alasan: k.alasan ?? "" }} tutup={() => setMode(null)} sesudah={sesudah} />
@@ -266,11 +267,14 @@ export function TabKekurangan({ kode }: { kode: string }) {
                               <button type="button" onClick={() => setMode({ jenis: "tarik", id: k.id })} className={`${tombolKecil} text-[#7A1D22]`}>Tarik</button>
                             </div>
                           )}
-                          {mode?.jenis === "tarik" && mode.id === k.id && <Tarik id={k.id} tutup={() => setMode(null)} sesudah={sesudah} />}
                         </td>
                       </>
                     )}
                   </tr>
+                  {mode?.jenis === "tarik" && mode.id === k.id && (
+                    <tr className="bg-[#FFF7F7]"><td colSpan={6} className="px-2.5 py-2.5"><Tarik id={k.id} tutup={() => setMode(null)} sesudah={sesudah} /></td></tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

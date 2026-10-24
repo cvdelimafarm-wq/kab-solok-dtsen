@@ -14,6 +14,9 @@ describe("aksiJadwalTersedia", () => {
   });
   it("sah memerlukan dokumen", () => {
     expect(aksiJadwalTersedia("diterapkan", "2026-12-31", "2026-10-24")[0].perluDokumen).toBe(true);
+    // jadwal bawaan bulanan: "Lewati bulan ini"; jadwal sekali-jalan: "Lewati"
+    expect(aksiJadwalTersedia("terjadwal", "2026-12-31", "2026-10-24", true).find((x) => x.aksi === "lewati")?.label).toBe("Lewati bulan ini");
+    expect(aksiJadwalTersedia("terjadwal", "2026-12-31", "2026-10-24", false).find((x) => x.aksi === "lewati")?.label).toBe("Lewati");
   });
 });
 

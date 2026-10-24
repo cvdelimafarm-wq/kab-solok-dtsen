@@ -82,7 +82,7 @@ export default function KartuJadwal({ j, sah, namaRo, terbuka, ubahTerbuka, bole
   const { kirim, mengirim, galat, hapusGalat } = useKirim(sesudah);
   const [dok, setDok] = useState<{ nomor: string; tanggal: string } | null>(null);
   const [salah, setSalah] = useState<string[]>([]);
-  const aksi = bolehJadwal ? aksiJadwalTersedia(j.status, j.tutup, hariIni()) : [];
+  const aksi = bolehJadwal ? aksiJadwalTersedia(j.status, j.tutup, hariIni(), Boolean(j.ulang)) : [];
   const nUsulan = Number(j.n_usulan) || 0;
 
   const jalankan = async (a: AksiJadwal) => {
