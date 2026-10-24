@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aksiTersedia, barisKosong, bacaVolume, bisaDiubah, bolehSusunBaru, dataBaris, dataItemRab, dataSamaDenganItem, itemRabYatim, jumlahBaris, periksaBaris,
-  periksaCatatanAksi, petakanRab, type BarisRabRow, type HakRab, type IsianBaris,
+  periksaAlasanVersi, periksaCatatanAksi, petakanRab, type BarisRabRow, type HakRab, type IsianBaris,
 } from "../rab";
 import type { ItemAnggaran } from "../ro";
 
@@ -102,5 +102,14 @@ describe("petakanRab", () => {
   });
   it("item RAB yatim (kunci tak ada di POK) terpisah; item baru (tanpa kunci) bukan yatim", () => {
     expect(itemRabYatim(items, rab).map((x) => x.id)).toEqual([4]);
+  });
+});
+
+describe("periksaAlasanVersi", () => {
+  it("minimal 10 karakter setelah dipangkas", () => {
+    expect(periksaAlasanVersi("")).toContain("minimal 10");
+    expect(periksaAlasanVersi("  pendek  ")).toContain("sekarang 6");
+    expect(periksaAlasanVersi("kebutuhan bahan naik")).toBeNull();
+    expect(periksaAlasanVersi("x".repeat(501))).toContain("terlalu panjang");
   });
 });

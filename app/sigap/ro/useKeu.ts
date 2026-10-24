@@ -138,7 +138,7 @@ export function useKirim(sesudah: () => void | Promise<void>) {
   return { kirim, jalankan, mengirim, galat, hapusGalat: () => setGalat(null) };
 }
 
-type RabDetail = { id: number; catatan: string; nomor: number | string; status: string };
+type RabDetail = { id: number; catatan: string; nomor: number | string; status: string; alasan_versi: string | null };
 type Jejak = { id: number; aksi: string; dari: string; ke: string; oleh_nama: string | null; catatan: string; waktu: string };
 
 /** RAB yang ditampilkan untuk satu RO (yang sedang disusun, atau yang disahkan terbaru) beserta item, rincian, dan jejaknya. */
@@ -146,7 +146,7 @@ export function useRabRo(kode: string) {
   const ringkas = useBacaKeu<BarisRabRingkas>(urlBaca("keu_v_rab_ringkas", { ro_kode: kode }, { batas: 200 }));
   const pilih = useMemo(() => (ringkas.baris ? pilihRab(ringkas.baris, kode) : null), [ringkas.baris, kode]);
   const id = pilih?.rab_id ?? null;
-  const detail = useBacaKeu<RabDetail>(id ? urlBaca("keu_rab", { id }, { batas: 1, kolom: ["id", "catatan", "nomor", "status"] }) : null);
+  const detail = useBacaKeu<RabDetail>(id ? urlBaca("keu_rab", { id }, { batas: 1, kolom: ["id", "catatan", "nomor", "status", "alasan_versi"] }) : null);
   const item = useBacaKeu<ItemRabRow>(id ? urlBaca("keu_rab_item", { rab_id: id }, { batas: 5000, kolom: ["id", "pok_kunci", "selesai", "prioritas_kode", "akun_tujuan"] }) : null);
   const baris = useBacaKeu<BarisRabRow>(id ? urlBaca("keu_v_rab_baris", { rab_id: id }, { batas: 20000 }) : null);
   const jejak = useBacaKeu<Jejak>(id ? urlBaca("keu_v_rab_jejak", { rab_id: id }, { urut: "-id", batas: 200 }) : null);
@@ -157,7 +157,7 @@ export function useRabRo(kode: string) {
   const galat = ringkas.galat ?? detail.galat ?? item.galat ?? baris.galat ?? jejak.galat;
   const siap = ringkas.baris !== null && (id === null || (item.baris !== null && baris.baris !== null));
   return {
-    rab: pilih, catatan: detail.baris?.[0]?.catatan ?? "", itemRab: item.baris ?? [], barisRab: baris.baris ?? [], jejak: jejak.baris ?? [],
+    rab: pilih, catatan: detail.baris?.[0]?.catatan ?? "", alasanVersi: detail.baris?.[0]?.alasan_versi ?? null, itemRab: item.baris ?? [], barisRab: baris.baris ?? [], jejak: jejak.baris ?? [],
     riwayatRab: ringkas.baris ?? [], siap, galat, muatSemua,
   };
 }

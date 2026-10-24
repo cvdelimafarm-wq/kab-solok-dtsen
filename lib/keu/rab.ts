@@ -126,3 +126,12 @@ export function itemRabYatim(items: ItemAnggaran[], itemRab: ItemRabRow[]): Item
   const ada = new Set(items.map((i) => i.kunci));
   return itemRab.filter((r) => r.pok_kunci !== null && !ada.has(r.pok_kunci));
 }
+
+/** Alasan versi RAB baru dari RAB sebelumnya: wajib, minimal 10 karakter (sama dengan aturan keu_rab_baru_alasan). Null bila sah. */
+export const MIN_ALASAN_VERSI = 10;
+export function periksaAlasanVersi(teks: string): string | null {
+  const t = teks.trim();
+  if (t.length < MIN_ALASAN_VERSI) return `Alasan versi minimal ${MIN_ALASAN_VERSI} karakter (sekarang ${t.length}).`;
+  if (t.length > 500) return "Alasan versi terlalu panjang (maksimal 500 karakter).";
+  return null;
+}

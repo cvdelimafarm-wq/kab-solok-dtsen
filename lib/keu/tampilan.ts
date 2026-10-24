@@ -27,7 +27,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_pok_detail: ["id", "versi_id", "akun_node_id", "kunci_stabil", "kemunculan", "nomor_item", "uraian", "volume", "satuan", "harga_satuan", "jumlah", "selisih_pembulatan", "sumber_dana", "tanda_blokir", "catatan_khusus"],
   keu_pok_unggah: ["id", "tahun", "nomor_revisi", "jadwal_id", "nama_berkas", "hash_berkas", "nomor_pok", "tanggal_efektif", "status", "versi_id", "alasan_tolak", "diunggah_oleh", "dibuat_at", "diubah_at"],
   keu_pok_versi: ["id", "tahun", "nomor_revisi", "jenis", "nomor_pok", "tanggal_efektif", "sumber_berkas", "hash_berkas", "status", "diimpor_oleh", "dibuat_at", "diubah_at"],
-  keu_rab: ["id", "ro_kode", "pok_versi_id", "nomor", "status", "dibuat_oleh", "diajukan_oleh", "diajukan_at", "disetujui_ketua_oleh", "disetujui_ketua_at", "disahkan_oleh", "disahkan_at", "catatan", "dibuat_at", "diubah_at"],
+  keu_rab: ["id", "ro_kode", "pok_versi_id", "nomor", "status", "dibuat_oleh", "diajukan_oleh", "diajukan_at", "disetujui_ketua_oleh", "disetujui_ketua_at", "disahkan_oleh", "disahkan_at", "catatan", "dibuat_at", "diubah_at", "alasan_versi"],
   keu_rab_baris: ["id", "item_id", "urut", "ket", "volume", "satuan", "harga_satuan", "jumlah_tetap", "jumlah", "sama_dengan_item", "catatan", "tautan", "periode", "bulan_mulai", "bulan_sampai", "minggu", "manual", "dibuat_at"],
   keu_rab_item: ["id", "rab_id", "pok_kunci", "komponen_kode", "akun_kode", "akun_tujuan", "uraian", "satuan", "prioritas_kode", "selesai", "catatan", "dibuat_at", "baru"],
   keu_rab_jadwal: ["baris_id", "bulan", "nilai", "minggu"],

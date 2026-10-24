@@ -9,13 +9,13 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { bisaDiubah, dataItemRab, dataSamaDenganItem, jumlahBaris, LABEL_PERIODE, LABEL_STATUS_RAB, NAMA_BULAN, type BarisRabRow, type IsianBaris, type Periode } from "@/lib/keu/rab";
-import { angka, rupiah } from "@/lib/keu/ro";
+import { bisaDiubah, dataItemRab, dataSamaDenganItem, jumlahBaris, LABEL_PERIODE, LABEL_STATUS_RAB, NAMA_BULAN, periksaAlasanVersi, type BarisRabRow, type IsianBaris, type Periode } from "@/lib/keu/rab";
+import { angka, rupiah, urlBaca } from "@/lib/keu/ro";
 import { calonSamaDenganItem, drafBaru, drafDariRows, jumlahDraft, kelompokkanRab, rencanaSimpan, type Draft } from "@/lib/keu/rabInline";
 import { LABEL_STATUS_ITEM, STATUS_RAB_ITEM, type BarisRabKro, type RingkasRabKro, type StatusRabItem } from "@/lib/keu/rabKro";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Catatan, Chip, Galat, judulKartu, kartu, kisi, kolom, Kosong, Kpi, label, tombolAktif, tombolKecil, tombolUtama } from "../../keu-ui";
-import { aksiKeu, tulisKeuKlien } from "../../ro/useKeu";
+import { aksiKeu, tulisKeuKlien, useBacaKeu } from "../../ro/useKeu";
 
 const WARNA_ITEM: Record<StatusRabItem, WarnaChip> = { sama: "hijau", rinci: "biru", belum: "kuning", selesai: "abu" };
 const fmtD = (v: number) => (v === 0 ? "0" : `${v > 0 ? "+" : "-"}${angka(Math.abs(v))}`);
@@ -161,7 +161,14 @@ export function SubRab({ baris, ringkas, statusRo, namaRo, namaKomp, namaAkun, d
     setKonfirmasi(false);
     return null;
   });
-  const susun = (ro: string) => jalan(async () => { const r = await aksiKeu("keu_rab_baru", { p_ro: ro, p_dari: null }); return r.ok ? null : r.pesan; });
+  const [mintaAlasan, setMintaAlasan] = useState<string | null>(null);
+  const [alasanBaru, setAlasanBaru] = useState("");
+  /** RAB pertama: tanpa alasan. Revisi dari RAB sah: salinan dari RAB itu dengan alasan wajib (minimal 10 karakter). */
+  const susun = (ro: string, dariRab: number | null = null, alasan = "") => jalan(async () => {
+    const r = dariRab === null ? await aksiKeu("keu_rab_baru", { p_ro: ro, p_dari: null }) : await aksiKeu("keu_rab_baru_alasan", { p_ro: ro, p_dari: dariRab, p_alasan: alasan.trim() });
+    if (r.ok) { setMintaAlasan(null); setAlasanBaru(""); }
+    return r.ok ? null : r.pesan;
+  });
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -175,7 +182,14 @@ export function SubRab({ baris, ringkas, statusRo, namaRo, namaKomp, namaAkun, d
                 <Chip warna={x.status === "disetujui" ? "hijau" : x.status ? "kuning" : "abu"}>{x.ro}: {x.status ? `${LABEL_STATUS_RAB[x.status] ?? x.status}${x.nomor ? ` v${x.nomor}` : ""}` : "belum ada RAB"}</Chip>
               </Link>
               {(!x.status || x.status === "disetujui") && boleh(x.ro) === true && (
-                <button type="button" disabled={sibuk} className={`${tombolKecil} !min-h-[28px] !px-2 !text-[12px]`} onClick={() => void susun(x.ro)}>{x.status ? "Susun revisi RAB" : "Susun RAB"}</button>
+                <button type="button" disabled={sibuk} className={`${tombolKecil} !min-h-[28px] !px-2 !text-[12px]`} onClick={() => (x.status && x.rabId ? (setMintaAlasan(mintaAlasan === x.ro ? null : x.ro), setAlasanBaru("")) : void susun(x.ro))}>{x.status ? "Susun revisi RAB" : "Susun RAB"}</button>
+              )}
+              {mintaAlasan === x.ro && x.rabId && (
+                <span className="flex w-full flex-wrap items-center gap-1.5">
+                  <input className={`${kolom} !min-h-[32px] !w-auto min-w-[260px] flex-1 !text-[12.5px]`} aria-label={`Alasan versi baru RAB ${x.ro}`} maxLength={500} placeholder="Alasan versi baru (minimal 10 karakter)" value={alasanBaru} onChange={(e) => setAlasanBaru(e.target.value)} />
+                  <button type="button" disabled={sibuk || periksaAlasanVersi(alasanBaru) !== null} className={`${tombolUtama} !min-h-[32px] !px-2.5 !text-[12px]`} onClick={() => void susun(x.ro, x.rabId ?? null, alasanBaru)}>Buat versi baru</button>
+                  {alasanBaru.trim() !== "" && periksaAlasanVersi(alasanBaru) && <span className="text-[12px] text-[#9B1C23]">{periksaAlasanVersi(alasanBaru)}</span>}
+                </span>
               )}
             </span>
           ))}
@@ -295,6 +309,8 @@ const WARNA_VERSI: Record<string, "abu" | "kuning" | "hijau" | "merah" | "biru">
 
 /** Riwayat versi RAB per RO (v1, v2, ...): nomor, status, jumlah item dan jumlah RAB. Hanya membaca. */
 export function KartuVersiRab({ versi, namaRo }: { versi: VersiRabRow[]; namaRo: Map<string, string> }) {
+  const alasan = useBacaKeu<{ id: number; alasan_versi: string | null }>(versi.length ? urlBaca("keu_rab", { id: versi.map((v) => v.rab_id) }, { batas: 500, kolom: ["id", "alasan_versi"] }) : null);
+  const alasanDari = new Map((alasan.baris ?? []).map((a) => [Number(a.id), a.alasan_versi]));
   if (versi.length === 0) return null;
   const per = new Map<string, VersiRabRow[]>();
   for (const v of [...versi].sort((a, b) => Number(a.nomor ?? 0) - Number(b.nomor ?? 0))) { const a = per.get(v.ro_kode) ?? []; a.push(v); per.set(v.ro_kode, a); }
@@ -308,6 +324,9 @@ export function KartuVersiRab({ versi, namaRo }: { versi: VersiRabRow[]; namaRo:
             <span className="min-w-[200px] font-semibold text-[#0F2A52]"><span className="font-mono text-[11.5px]">{ro.split(".").pop()}</span> {namaRo.get(ro) ?? ""}</span>
             {daftar.map((v) => (
               <span key={v.rab_id} className="inline-flex items-center gap-1.5"><Chip warna={WARNA_VERSI[v.status] ?? "abu"}>v{v.nomor ?? "?"} · {LABEL_VERSI[v.status] ?? v.status}</Chip><span className="text-[11.5px] text-[#7A8AA3]">{Number(v.n_item)} item · {rupiah(Number(v.jumlah_rab))}</span></span>
+            ))}
+            {daftar.filter((v) => Number(v.nomor) > 1 && alasanDari.get(Number(v.rab_id))).map((v) => (
+              <p key={`a${v.rab_id}`} className="m-0 w-full text-[12px] text-[#44546F]"><span className="font-semibold text-[#0F2A52]">Alasan v{v.nomor}:</span> {alasanDari.get(Number(v.rab_id))}</p>
             ))}
           </div>
         ))}

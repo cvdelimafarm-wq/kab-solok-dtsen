@@ -13,6 +13,7 @@ import {
   type IsianBaris, type PemetaanItem, type Periode,
 } from "@/lib/keu/rab";
 import { PRIORITAS } from "@/lib/keu/kekurangan";
+import { periksaAlasanVersi } from "@/lib/keu/rab";
 import { angka, rupiah } from "@/lib/keu/ro";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, tombol } from "../../keu-ui";
@@ -289,6 +290,7 @@ export function TabRab({ kode }: { kode: string }) {
   const yatim = useMemo(() => itemRabYatim(items, rab.itemRab), [items, rab.itemRab]);
   const sahTerbaru = useMemo(() => rab.riwayatRab.filter((r) => r.status === "disetujui").sort((a, b) => Number(b.nomor) - Number(a.nomor))[0] ?? null, [rab.riwayatRab]);
   const susun = useKirim(rab.muatSemua);
+  const [alasanVersi, setAlasanVersi] = useState("");
 
   const galat = rab.galat ?? ang.galat;
   if (galat) return <Galat pesan={galat} />;
@@ -316,11 +318,19 @@ export function TabRab({ kode }: { kode: string }) {
             <Kpi label="Selisih RAB dengan POK" nilai={rupiah(Math.abs(totalRab - totalPok))} sub={totalRab > totalPok ? "RAB melebihi pagu; dicatat sebagai kekurangan" : totalRab < totalPok ? "RAB di bawah pagu" : "RAB tepat sama dengan pagu"} warna={totalRab > totalPok ? "kn" : undefined} />
           </div>
         )}
+        {rab.rab && rab.alasanVersi && Number(rab.rab.nomor) > 1 && <p className="text-[12.5px] text-[#44546F]"><span className="font-semibold text-[#0F2A52]">Alasan versi {rab.rab.nomor}:</span> {rab.alasanVersi}</p>}
         {status === "dikembalikan" && rab.catatan && <p className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Dikembalikan: {rab.catatan}</p>}
         {rab.rab && <BilahAksi rabId={rab.rab.rab_id} status={status!} hak={hak} muat={rab.muatSemua} />}
         {bolehSusunBaru(status, hak) && (
           <div className="space-y-2">
-            <button type="button" disabled={susun.mengirim} onClick={() => susun.kirim("keu_rab_baru", { p_ro: kode, p_dari: sahTerbaru?.rab_id ?? null })} className={`${tombol} bg-[#1F5FD1] text-white`}>
+            {sahTerbaru && (
+              <div>
+                <label className={label} htmlFor="alasan-versi">Alasan versi baru (wajib, minimal 10 karakter)</label>
+                <textarea id="alasan-versi" className={`${kolom} py-2`} rows={2} maxLength={500} value={alasanVersi} onChange={(e) => setAlasanVersi(e.target.value)} placeholder="Mis. kebutuhan bahan naik karena jumlah peserta bertambah" />
+                {alasanVersi.trim() !== "" && periksaAlasanVersi(alasanVersi) && <p className="mt-1 text-[12px] text-[#9B1C23]">{periksaAlasanVersi(alasanVersi)}</p>}
+              </div>
+            )}
+            <button type="button" disabled={susun.mengirim || (!!sahTerbaru && periksaAlasanVersi(alasanVersi) !== null)} onClick={() => (sahTerbaru ? susun.kirim("keu_rab_baru_alasan", { p_ro: kode, p_dari: sahTerbaru.rab_id, p_alasan: alasanVersi.trim() }) : susun.kirim("keu_rab_baru", { p_ro: kode, p_dari: null }))} className={`${tombol} bg-[#1F5FD1] text-white`}>
               {susun.mengirim ? "Menyiapkan…" : sahTerbaru ? "Susun revisi RAB (salinan dari RAB sah)" : "Susun RAB"}
             </button>
             {susun.galat && <Galat pesan={susun.galat} />}
