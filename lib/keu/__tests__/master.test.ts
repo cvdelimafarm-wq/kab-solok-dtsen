@@ -130,5 +130,8 @@ describe("riwayat dan bagian", () => {
     expect(ringkasRiwayat({ id: 2, waktu: "", aksi: "keu.keu_master_param.update", detail: { tabel: "keu_master_param", lama: { nilai: 0.9 }, baru: { nilai: 0.85 } }, oleh_nama: null })).toBe("mengubah parameter: nilai 0.9 menjadi 0.85");
     expect(ringkasRiwayat({ id: 3, waktu: "", aksi: "keu.keu_master_akun.update", detail: { tabel: "keu_master_akun", lama: { aktif: true }, baru: { aktif: false } }, oleh_nama: null })).toContain("aktif ya menjadi tidak");
   });
+  it("riwayat menyembunyikan kolom pencatat otomatis", () => {
+    expect(ringkasRiwayat({ id: 4, waktu: "", aksi: "keu.keu_master_skor.update", detail: { tabel: "keu_master_skor", lama: { diubah_oleh: null, ambang_cukup: 70 }, baru: { diubah_oleh: 354, diubah_at: "x", ambang_cukup: 71 } }, oleh_nama: null })).toBe("mengubah skor RAB: ambang_cukup 70 menjadi 71");
+  });
   it("bagian sah", () => { expect(bagianMasterSah("skor")).toBe("skor"); expect(bagianMasterSah("aneh")).toBe("akun"); expect(bagianMasterSah(null)).toBe("akun"); });
 });

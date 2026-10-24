@@ -224,13 +224,15 @@ const NAMA_TABEL: Record<string, string> = {
   keu_master_kewenangan_peran: "kewenangan-peran", keu_master_peran: "peran", keu_master_jalur: "jalur", keu_master_profil_penarikan: "profil penarikan", keu_struktur_level: "level struktur",
 };
 const KOLOM: Record<string, string> = { aktif: "aktif", pola_kode: "pola", nama: "nama", arti: "arti", pasti: "arti pasti", nilai: "nilai", nilai_tanggal: "tanggal", gen: "dapat dibuat SIGAP", tampil: "tampil", ket: "keterangan", warna: "warna", urut: "urutan" };
+/** Kolom pencatat otomatis pemicu basis data; bukan perubahan yang dibuat pengguna. */
+const KOLOM_TEKNIS = new Set(["id", "diubah_oleh", "diubah_at", "dibuat_at"]);
 const teksNilai = (v: unknown): string => (v === null || v === undefined ? "kosong" : typeof v === "boolean" ? (v ? "ya" : "tidak") : String(v));
 export function ringkasRiwayat(r: RiwayatRow): string {
   const tabel = r.detail?.tabel ?? r.aksi.replace(/^keu\./, "").replace(/\.(insert|update)$/, "");
   const nama = NAMA_TABEL[tabel] ?? tabel;
   if (r.aksi.endsWith(".insert")) { const b = r.detail?.baru ?? {}; return `menambah ${nama} ${teksNilai(b.kode ?? b.alias ?? b.nama ?? b.id)}`; }
   const baru = r.detail?.baru ?? {}, lama = r.detail?.lama ?? {};
-  const bagian = Object.keys(baru).filter((k) => k !== "id").map((k) => `${KOLOM[k] ?? k} ${teksNilai(lama[k])} menjadi ${teksNilai(baru[k])}`);
+  const bagian = Object.keys(baru).filter((k) => !KOLOM_TEKNIS.has(k)).map((k) => `${KOLOM[k] ?? k} ${teksNilai(lama[k])} menjadi ${teksNilai(baru[k])}`);
   return `mengubah ${nama}${bagian.length ? `: ${bagian.join("; ")}` : ""}`;
 }
 

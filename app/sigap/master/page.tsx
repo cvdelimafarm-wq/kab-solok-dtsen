@@ -14,7 +14,7 @@ import {
   BAGIAN_MASTER, bagianMasterSah, GRUP_MASTER, kelompokDokumen, pakaiAkun, pakaiSatuan,
   type AkunMaster, type AliasSatuan, type DokMaster, type Kewenangan, type KewenanganPeran, type PeranMaster, type RiwayatRow, type SatuanMaster, type SkorRo, type SkorRow, type WaktuMaster,
 } from "@/lib/keu/master";
-import { Galat, HalamanKeu, kisi, Kpi, Memuat, Potong, Tenang, tombolAktif, tombolKecil } from "../keu-ui";
+import { Catatan, Galat, HalamanKeu, kisi, Kpi, Memuat, Potong, Tenang, tombolAktif, tombolKecil } from "../keu-ui";
 import { useBacaKeu, useBoleh } from "../ro/useKeu";
 import { BagianAkun, BagianSatuan, type PolaMaster } from "./Akun";
 import { BagianKelompok, BagianSkor, BagianStruktur, BagianWaktu, type KelompokBelanja, type LevelStruktur, type ParamRow, type Prioritas } from "./Anggaran";
@@ -57,7 +57,8 @@ function Isi() {
   const semua = [akun, pola, kelompok, prioritas, satuan, alias, param, waktu, skor, skorRo, level, kew, kp, peran, dok, riwayat, versi, node, detail];
   const muatSemua = useCallback(async () => { await Promise.all(semua.map((h) => h.muat())); }, semua.map((h) => h.muat)); // eslint-disable-line react-hooks/exhaustive-deps
   const galat = semua.map((h) => h.galat).find((g) => g !== null) ?? null;
-  const potong = semua.some((h) => h.terpotong);
+  // `versi` memakai batas 1 (hanya butuh yang berlaku), jadi "terpotong" miliknya selalu benar dan tidak dihitung.
+  const potong = semua.some((h) => h !== versi && h.terpotong);
 
   const simpulAkun = useMemo(() => (node.baris ?? []).filter((n) => n.tingkat === "akun").map((n) => ({ id: n.id, kode: n.kode })), [node.baris]);
   const pakai = useMemo(() => pakaiAkun(simpulAkun, detail.baris ?? []), [simpulAkun, detail.baris]);
@@ -79,6 +80,12 @@ function Isi() {
     return m;
   }, [node.baris]);
 
+  // Akun yang ada di POK berlaku tetapi belum terdaftar di master (aturan M5: Admin Aplikasi menetapkan kelompok, pola, dan arti).
+  const akunBelumTerdaftar = useMemo(() => {
+    if (!akun.baris) return [];
+    const ada = new Set(akun.baris.map((a) => a.kode));
+    return [...new Set(simpulAkun.map((s) => s.kode))].filter((k) => !ada.has(k)).sort();
+  }, [akun.baris, simpulAkun]);
   const nSatuanPenulisan = useMemo(() => new Set((detail.baris ?? []).map((d) => (d.satuan ?? "").trim().toUpperCase()).filter(Boolean)).size, [detail.baris]);
   const nBakuTerpakai = useMemo(() => (satuan.baris && alias.baris ? pakaiSatuan(satuanPok, satuan.baris, alias.baris).size : 0), [satuan.baris, alias.baris, satuanPok]);
   const grupDok = useMemo(() => (dok.baris && pola.baris ? kelompokDokumen(dok.baris, pola.baris) : []), [dok.baris, pola.baris]);
@@ -111,6 +118,7 @@ function Isi() {
       <Galat pesan={galat} />
       {potong && <Potong />}
 
+      {bagian === "akun" && akunBelumTerdaftar.length > 0 && <Catatan>{akunBelumTerdaftar.length} akun ada di POK yang berlaku tetapi belum terdaftar di master: {akunBelumTerdaftar.join(", ")}. Tambahkan lewat "Tambah akun baru" di bawah (nama sesuai POK) supaya pola dokumennya dapat ditetapkan.</Catatan>}
       {bagian === "akun" && (siap(akun, pola, node, detail) ? <BagianAkun akun={akun.baris!} pola={pola.baris!} pakai={pakai} boleh={bolehMaster} sesudah={muatSemua} /> : sedangMuat)}
       {bagian === "struktur" && (siap(level, node, detail) ? <BagianStruktur level={level.baris!} jumlah={jumlahLevel} boleh={bolehMaster} sesudah={muatSemua} /> : sedangMuat)}
       {bagian === "satuan" && (siap(satuan, alias, detail) ? <BagianSatuan satuan={satuan.baris!} alias={alias.baris!} satuanPok={satuanPok} boleh={bolehMaster} sesudah={muatSemua} /> : sedangMuat)}
