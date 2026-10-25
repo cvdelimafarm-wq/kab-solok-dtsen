@@ -101,6 +101,8 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           title: "Uji coba: RO anggaran → kegiatan utama → tahap GSBPM",
           ketPalet: "RO → kegiatan utama → tahap GSBPM (uji coba)",
         }),
+        // (25 Okt 2026) Identifikasi survei: tahap awal GSBPM, dijawab sekali oleh ketua tim/admin RO, disahkan PPK -> Tata Usaha -> KPA. Terbuka bagi semua akun organik (hak menulis ditegakkan basis data).
+        { id: "identifikasi-survei", ikon: "kompas", label: "Identifikasi survei", href: "/sigap/kelola/perencanaan/identifikasi", aktifKode: "identifikasi_survei", title: "Identifikasi survei: periode, jadwal, pelatihan, petugas, dan kebutuhan anggaran", ketPalet: "jadwal, petugas, anggaran; disahkan PPK, Tata Usaha, KPA" },
         { id: "anggaran", ikon: "buku", label: "Anggaran", href: "/sigap/ro", aktifKode: "anggaran", title: "Rincian Output (RO): POK, RAB, kekurangan, administrasi, realisasi, dan jadwal revisi", ketPalet: "RO, RAB, revisi anggaran, realisasi" },
       ],
     },

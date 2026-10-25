@@ -97,9 +97,9 @@ describe("susunMenu v2", () => {
     );
   });
 
-  it("tanpa izin apa pun: hanya Beranda, SIGAP PEDIA, dan item segera/nonaktif", () => {
+  it("tanpa izin apa pun: hanya Beranda, Identifikasi survei, Anggaran, SIGAP PEDIA, dan item segera/nonaktif", () => {
     const hidup = semuaItem(KOSONG).filter((x) => !x.status);
-    expect(hidup.map((x) => x.id)).toEqual(["beranda", "anggaran", "pedia"]);
+    expect(hidup.map((x) => x.id)).toEqual(["beranda", "identifikasi-survei", "anggaran", "pedia"]); // (25 Okt 2026) Identifikasi survei terbuka bagi semua akun organik
   });
 
   it("izin pelatihan: halaman peserta tampil untuk petugas, Kelola pelatihan hanya untuk pengelola", () => {
@@ -147,11 +147,17 @@ describe("susunMenu v2", () => {
     expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi"]);
   });
 
-  it("Perencanaan: Alur GSBPM hanya untuk Admin Aplikasi; Anggaran terbuka untuk semua", () => {
+  it("Perencanaan: Alur GSBPM hanya untuk Admin Aplikasi; Identifikasi survei dan Anggaran terbuka untuk semua", () => {
     expect(cari(SEMUA, "alur-gsbpm")).toMatchObject({ href: "/sigap/kelola/perencanaan", aktifKode: "perencanaan" });
     expect(cari(KOSONG, "alur-gsbpm")).toBeUndefined();
     expect(cari(KOSONG, "anggaran")).toMatchObject({ href: "/sigap/ro", aktifKode: "anggaran" });
     expect(cari(KOSONG, "anggaran")?.status).toBeUndefined();
+  });
+
+  it("Identifikasi survei: di Perencanaan, sesudah Alur GSBPM, terbuka bagi semua akun organik", () => {
+    for (const izin of [SEMUA, KOSONG]) expect(cari(izin, "identifikasi-survei")).toMatchObject({ href: "/sigap/kelola/perencanaan/identifikasi", aktifKode: "identifikasi_survei" });
+    const k = susunMenu(SEMUA).find((x) => x.kode === "perencanaan")!;
+    expect(k.item.map((x) => x.id)).toEqual(["alur-gsbpm", "identifikasi-survei", "anggaran"]);
   });
 });
 
