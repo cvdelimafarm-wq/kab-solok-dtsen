@@ -125,6 +125,7 @@ function Isi() {
         {row && row.ver >= 1 && row.status !== "dibatalkan" && (
           <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]">
             <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/pelaksanaan`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Pelaksanaan: tautan kegiatan, penugasan, laporan, Bendahara →</Link>
+            <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/kebutuhan`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Rekrutmen mitra dan draf pengadaan →</Link>
           </div>
         )}
         {row && formSah && h15 && (

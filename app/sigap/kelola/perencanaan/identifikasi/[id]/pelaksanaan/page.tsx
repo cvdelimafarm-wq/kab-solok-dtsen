@@ -116,6 +116,7 @@ function Isi() {
                 <Chip warna={tersimpan?.status === "final" ? "hijau" : "kuning"}>{tersimpan ? `Lanjutan ${tersimpan.status === "final" ? "Final" : "Draf"} v${tersimpan.ver}` : "Lanjutan belum ada"}</Chip>
                 <Chip warna="biru">{pl.tertaut.length} kegiatan tertaut</Chip>
                 <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/gap`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Gap rencana dan pelaksanaan →</Link>
+                <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/kebutuhan`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Rekrutmen dan pengadaan →</Link>
               </div>
               <KartuEvaluasi form={formSah} kegiatan={pl.bahan?.kegiatan ?? []} hariIni={hariIni} />
               <KartuBendahara baris={biaya?.baris ?? []} adaLaporan={biaya?.adaLaporan ?? false} sampai={pl.bahan?.realisasi_sampai ?? null} syarat={syarat} />
