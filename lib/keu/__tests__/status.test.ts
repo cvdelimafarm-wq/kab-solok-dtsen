@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  argsLangkah, barisRiwayat, daftarTahap, kartuTahap, keteranganJalur, labelDokumen, matriksBoleh, periksaLangkah, posisiJadwal, subStatusDari,
+  argsLangkah, barisRiwayat, catatanSahDenganPdf, periksaLampiranPok, perluLampiranPok, daftarTahap, kartuTahap, keteranganJalur, labelDokumen, matriksBoleh, periksaLangkah, posisiJadwal, subStatusDari,
   tindakanTersedia, versiDari, waktuWib, type RiwayatJadwal,
 } from "../status";
 
@@ -81,7 +81,7 @@ describe("tindakan", () => {
     const s = tindakanTersedia("pok", "diterapkan", null, "2026-12-31", "2026-10-25", false, true);
     expect(s).toHaveLength(1);
     expect(s[0]).toMatchObject({ aksi: "sah", perluDokumen: true, utama: true });
-    expect(s[0].label).toContain("keputusan PPK");
+    expect(s[0].label).toContain("PDF POK resmi");
   });
   it("siklus DIPA: ajukan, lalu hasil, lalu perbaiki", () => {
     expect(ada("dipa_djpb", "diterapkan", null)).toEqual(["ajukan"]);
@@ -156,5 +156,46 @@ describe("siapa boleh apa", () => {
     const susun = m.baris.find((b) => b.tindakan.startsWith("Menyusun"))!;
     expect(susun.sel).toEqual([true, true, false]);
     expect(m.baris[m.baris.length - 1].sel).toEqual([true, true, true]);
+  });
+});
+
+describe("lampiran PDF POK resmi saat Sahkan", () => {
+  const sah = tindakanTersedia("pok", "diterapkan", null, "", "", false, true)[0];
+  const tutup = tindakanTersedia("pok", "dibuka", null, "", "", false, true)[0];
+  const ajukan = tindakanTersedia("dipa_djpb", "diterapkan", null, "", "", false, true)[0];
+  it("hanya aksi sah yang mewajibkan lampiran", () => {
+    expect(perluLampiranPok(sah)).toBe(true);
+    expect(perluLampiranPok(tutup)).toBe(false);
+    expect(perluLampiranPok(ajukan)).toBe(false);
+    const sahDipa = tindakanTersedia("dipa_dja", "diterapkan", "diajukan", "", "", false, true).find((x) => x.aksi === "sah")!;
+    expect(perluLampiranPok(sahDipa)).toBe(true);
+  });
+  it("tanpa berkas, berkas tak utuh, atau kosong: ditolak; berkas utuh: boleh (pagu beda tidak menghalangi)", () => {
+    expect(periksaLampiranPok(sah, null)).toHaveLength(1);
+    expect(periksaLampiranPok(sah, { utuh: false, nBaris: 10 })).toHaveLength(1);
+    expect(periksaLampiranPok(sah, { utuh: true, nBaris: 0 })).toHaveLength(1);
+    expect(periksaLampiranPok(sah, { utuh: true, nBaris: 10 })).toEqual([]);
+    expect(periksaLampiranPok(tutup, null)).toEqual([]);
+  });
+  const hasil = (nSama: number, nTak: number) => ({
+    baris: Array.from({ length: nSama + nTak }, (_, i) => ({ ro: "R", akun: String(i), resmi: 1, sistem: 1, selisih: 0, status: "sama" as const })),
+    nSama, nBeda: nTak, nHanyaResmi: 0, nHanyaSistem: 0, totalResmi: 0, totalSistem: 0, selisihTotal: 0, roBermasalah: [], roTakDibandingkan: [], sama: nTak === 0,
+  });
+  it("catatan memuat nama berkas, 12 karakter awal hash, dan hasil cek", () => {
+    const c = catatanSahDenganPdf({ nama: "POK.pdf", hash: "abcdef0123456789ffff" }, hasil(5, 0), "");
+    expect(c).toContain("POK.pdf");
+    expect(c).toContain("abcdef012345");
+    expect(c).not.toContain("abcdef0123456");
+    expect(c).toContain("5 akun sama");
+    expect(catatanSahDenganPdf({ nama: "a.pdf", hash: "0".repeat(64) }, hasil(3, 2), "")).toContain("2 dari 5 akun pagu berbeda");
+    expect(catatanSahDenganPdf({ nama: "a.pdf", hash: "0".repeat(64) }, null, "")).toContain("tidak dapat dibandingkan");
+  });
+  it("catatan pengguna dipotong, bagian sistem utuh, total maksimum 300", () => {
+    const panjang = "x".repeat(500);
+    const c = catatanSahDenganPdf({ nama: "n".repeat(200), hash: "f".repeat(64) }, hasil(1, 1), panjang);
+    expect(c.length).toBeLessThanOrEqual(300);
+    expect(c).toContain("sha256 ffffffffffff");
+    const tanpa = catatanSahDenganPdf({ nama: "a.pdf", hash: "f".repeat(64) }, hasil(1, 0), "Sesuai SPAN");
+    expect(tanpa.endsWith("Sesuai SPAN")).toBe(true);
   });
 });

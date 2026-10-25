@@ -2,11 +2,12 @@
 //
 // (25 Okt 2026, tahap 22) Papan 2 mockup: alur kertas kerja sebelum, saat, dan sesudah revisi (butir GSBPM F1-06). Halaman keterangan (tanpa
 // data dari basis data): teks bersumber lib/keu/alur.ts, tiap langkah ditautkan ke halaman SIGAP yang mengerjakannya. Contoh KRO 2903.BMA.
+// (25 Okt 2026) Ditambah bagian D: alur impor realisasi (POK hanya diimpor di awal tahun).
 
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
-  CABANG_DIPA, CABANG_POK, HASIL_B4, KURANG_AWAL, KURANG_UMUM, PENUTUP, SAAT, SAAT_CATATAN, SEBELUM, SESUDAH, TAUTAN_LANGKAH, TENGGAT_CATATAN, type Langkah,
+  CABANG_DIPA, CABANG_POK, HASIL_B4, KURANG_AWAL, KURANG_UMUM, PENUTUP, REALISASI, REALISASI_CATATAN, SAAT, SAAT_CATATAN, SEBELUM, SESUDAH, TAUTAN_LANGKAH, TENGGAT_CATATAN, type Langkah,
 } from "@/lib/keu/alur";
 import { Chip, HalamanKeu, judulKartu, kartu, Tenang } from "../../keu-ui";
 
@@ -49,7 +50,7 @@ export default function Halaman() {
     <HalamanKeu
       jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Revisi anggaran", href: "/sigap/revisi" }, { t: "Alur kertas kerja" }]}
       judul="Alur kertas kerja: sebelum, saat, dan sesudah revisi" induk="/sigap/revisi" labelKembali="Jadwal revisi"
-      sub="Urutan kerja satu kertas kerja revisi dari POK semula sampai arsip. Contoh KRO 2903.BMA."
+      sub="Urutan kerja satu kertas kerja revisi dari POK semula sampai pengesahan, dan alur impor realisasi sepanjang tahun. Contoh KRO 2903.BMA."
     >
       <div className="flex flex-wrap gap-2"><Chip warna="biru">GSBPM F1-06</Chip><Chip warna="abu">Contoh KRO 2903.BMA</Chip></div>
       <Tenang>Halaman ini keterangan alur. Pekerjaan sebenarnya dilakukan di halaman yang ditautkan pada tiap langkah. Sistem menyarankan dan menandai; keputusan tetap pada operator, PPK, dan pejabat berwenang.</Tenang>
@@ -86,6 +87,11 @@ export default function Halaman() {
 
       <Bagian id="alur-c" judul="C. Sesudah revisi" status={<Chip warna="hijau">Status: Disahkan</Chip>}>
         <Daftar langkah={SESUDAH} />
+      </Bagian>
+
+      <Bagian id="alur-d" judul="D. Impor realisasi sepanjang tahun" status={<Chip warna="biru">Laporan GLP039</Chip>}>
+        <Tenang>{REALISASI_CATATAN}</Tenang>
+        <Daftar langkah={REALISASI} />
       </Bagian>
 
       <p className="m-0 text-[12.5px] text-[#5B6B84]">{PENUTUP}</p>

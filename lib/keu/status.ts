@@ -9,6 +9,7 @@
 
 import { aksiJadwalTersedia, tanggalSah } from "@/lib/keu/revisi";
 import type { JenisRevisi } from "@/lib/keu/lampiran";
+import type { HasilCekPagu } from "@/lib/keu/cekPagu";
 
 export type AksiLangkah = "buka" | "tutup" | "terapkan" | "sah" | "lewati" | "pulihkan" | "ajukan" | "kembalikan" | "tolak" | "perbaiki";
 export type SubStatus = "diajukan" | "dikembalikan" | "ditolak" | null;
@@ -103,8 +104,8 @@ export function kartuTahap(jenis: string, status: string, p: Posisi): KartuTahap
 /** Kalimat penjelas di bawah deret tahap (mengikuti papan 5). */
 export function keteranganJalur(jenis: string): string {
   switch (jenis) {
-    case "pok": return "Revisi POK ditetapkan di satker (Pasal 173): PPK menyatakan sah dari keputusan atau nota, dan KPA menerima laporannya, tanpa pengajuan ke luar satker. Tahap Diajukan dan hasil dari pihak lain tidak dipakai.";
-    case "administrasi": return "Revisi administrasi ditetapkan di satker: PPK menyatakan sah dari dokumen dasarnya. Tidak ada pengajuan ke luar satker.";
+    case "pok": return "Revisi POK ditetapkan di satker (Pasal 173): pengesahan yang sebenarnya dilakukan di SPAN dengan acuan kertas kerja. Di SIGAP PPK menekan Sahkan dan melampirkan PDF POK resmi dari SPAN; sistem mencocokkan pagu tiap akun per RO dengan kertas kerja. KPA menerima laporannya, tanpa pengajuan ke luar satker.";
+    case "administrasi": return "Revisi administrasi ditetapkan di satker: PPK menekan Sahkan dan melampirkan PDF POK resmi dari SPAN beserta dokumen dasarnya. Tidak ada pengajuan ke luar satker.";
     case "dipa_djpb": return "Jalur DJPb: setelah diterapkan, pengajuan ke Kanwil DJPb dicatat dari suratnya. Hasil resmi berupa salah satu dari Dikembalikan, Ditolak, atau Disahkan, dicatat dari surat balasan.";
     case "dipa_dja": return "Jalur DJA: setelah diterapkan, pengajuan ke Eselon I atau DJA dicatat dari suratnya. Hasil resmi berupa salah satu dari Dikembalikan, Ditolak, atau Disahkan, dicatat dari surat balasan.";
     default: return "";
@@ -125,7 +126,7 @@ export function tindakanTersedia(jenis: string, status: string, sub: SubStatus, 
   const dipa = adalahDipa(jenis);
   if (status === "diterapkan") {
     if (!dipa) {
-      return [t("sah", jenis === "pok" ? "Catat revisi POK berlaku (keputusan PPK)" : "Nyatakan sah", { utama: true, perluDokumen: true })];
+      return [t("sah", jenis === "pok" ? "Sahkan revisi POK (lampirkan PDF POK resmi SPAN)" : "Sahkan revisi (lampirkan PDF POK resmi SPAN)", { utama: true, perluDokumen: true })];
     }
     const tujuan = jenis === "dipa_dja" ? "Eselon I / DJA" : "Kanwil DJPb";
     if (sub === null) return [t("ajukan", `Catat pengajuan ke ${tujuan}`, { utama: true, perluDokumen: true })];
@@ -145,7 +146,7 @@ export function tindakanTersedia(jenis: string, status: string, sub: SubStatus, 
 
 export function teksKosongTindakan(boleh: boolean, status: string, p: Posisi): string {
   if (!boleh) return "Akun ini hanya dapat melihat. Tindakan jadwal dilakukan PPK (kewenangan jadwal).";
-  if (status === "sah") return "Siklus jadwal ini selesai. Langkah berikutnya: impor hasil penetapan.";
+  if (status === "sah") return "Siklus jadwal ini selesai. Pagu POK resmi sudah dicek saat Sahkan; pengecekan ulang ada di halaman Versi POK dan saat mengunggah realisasi.";
   if (status === "dilewati") return "Jadwal dilewati dan jendelanya sudah lewat, sehingga tidak dapat dipulihkan.";
   return `Tidak ada tindakan pada tahap ini${p.sub ? ` (${p.sub})` : ""}.`;
 }
@@ -168,6 +169,39 @@ export function periksaLangkah(tindakan: TindakanLangkah, nomor: string, tanggal
   const g: string[] = [];
   if (nomor.trim().length < 3 || !tanggalSah(tanggal)) g.push(PESAN_DOKUMEN);
   return g;
+}
+
+// ---------------------------------------------------------------- lampiran PDF POK resmi saat Sahkan
+// (25 Okt 2026) Sahkan di SIGAP hanya mencatat bahwa revisi sudah disahkan di SPAN dengan acuan kertas kerja. Agar kertas kerja tidak berubah lagi,
+// PPK melampirkan PDF POK resmi dari SPAN. PDF dibaca di perangkat; yang dicatat hanya nama berkas, sidik jarinya (SHA-256, 12 karakter awal), dan
+// hasil cek pagu per akun per RO terhadap kertas kerja jadwal itu. Beda pagu = peringatan, bukan penghalang.
+
+/** Apakah tindakan ini mewajibkan lampiran PDF POK resmi (semua pernyataan sah). */
+export const perluLampiranPok = (tindakan: TindakanLangkah): boolean => tindakan.aksi === "sah";
+
+export const PESAN_LAMPIRAN_POK = "Lampirkan PDF POK resmi dari SPAN lebih dahulu. Berkas dibaca di perangkat ini dan tidak dikirim utuh.";
+
+/** Alasan Sahkan belum boleh dijalankan karena lampiran (kosong = boleh). Pagu yang berbeda TIDAK menghalangi. */
+export function periksaLampiranPok(tindakan: TindakanLangkah, berkas: { utuh: boolean; nBaris: number } | null): string[] {
+  if (!perluLampiranPok(tindakan)) return [];
+  if (!berkas) return [PESAN_LAMPIRAN_POK];
+  if (berkas.nBaris === 0 || !berkas.utuh) return ["PDF belum lolos pemeriksaan jumlah atau tidak ada baris terbaca. Gunakan PDF asli Rincian Kertas Kerja Satker dari SPAN."];
+  return [];
+}
+
+/**
+ * Catatan yang dikirim ke keu_jadwal_langkah (maksimum 300 karakter): bagian sistem dahulu (berkas, sidik jari, hasil cek), lalu catatan pengguna
+ * yang dipotong bila perlu. Bagian sistem tidak pernah dipotong.
+ */
+export function catatanSahDenganPdf(berkas: { nama: string; hash: string }, hasil: HasilCekPagu | null, catatanPengguna: string): string {
+  const akun = hasil ? hasil.baris.length - hasil.nSama : null;
+  const cek = hasil === null || hasil.baris.length === 0 ? "pagu tidak dapat dibandingkan dengan kertas kerja"
+    : akun === 0 ? `pagu ${hasil.baris.length} akun sama dengan kertas kerja` : `${akun} dari ${hasil.baris.length} akun pagu berbeda dari kertas kerja`;
+  const nama = berkas.nama.length > 60 ? `${berkas.nama.slice(0, 57)}...` : berkas.nama;
+  const sistem = `PDF POK resmi ${nama} (sha256 ${berkas.hash.slice(0, 12)}); ${cek}.`;
+  const sisa = 300 - sistem.length - 1;
+  const cat = catatanPengguna.trim();
+  return cat && sisa > 0 ? `${sistem} ${cat.slice(0, sisa)}` : sistem.slice(0, 300);
 }
 
 export function argsLangkah(jadwal: number, aksi: AksiLangkah, nomor: string, tanggal: string, catatan: string): Record<string, unknown> {

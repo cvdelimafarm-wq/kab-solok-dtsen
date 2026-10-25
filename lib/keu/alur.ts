@@ -3,6 +3,8 @@
 // (25 Okt 2026, tahap 22) Papan 2 mockup "Alur kertas kerja: sebelum, saat, dan sesudah revisi" (butir GSBPM F1-06). Isi teks halaman Alur: langkah A1-A6,
 // percabangan kekurangan K1-K5 dan P1-P4, siklus status B1-B4, dan penutupan C1-C4. Tanpa React/DB. Teks mengikuti mockup yang disetujui dan ketentuan
 // kantor 24 Okt 2026 (PPK menyatakan sah, KPA menerima laporan).
+// (25 Okt 2026) Perubahan model: POK diimpor HANYA di awal tahun anggaran. Sesudah revisi, PPK menekan Sahkan dan melampirkan PDF POK resmi dari SPAN (C1),
+// sistem hanya memeriksa pagu per akun per RO terhadap kertas kerja. Bagian D menambahkan alur impor realisasi sepanjang tahun (D1-D5).
 
 export type Langkah = { no: string; judul: string; isi: string };
 
@@ -34,13 +36,13 @@ export const CABANG_DIPA: { judul: string; sub: string; langkah: Langkah[] } = {
     { no: "P1", judul: "Daftar kekurangan per KRO", isi: "Kekurangan secara pagu KRO (RAB dikurangi POK) masuk Tampilan PPK pada papan Peta KRO Satker. Operator tidak menutupnya sendiri." },
     { no: "P2", judul: "PPK memutuskan per KRO", isi: "Tiga pilihan: terima semua usulan, terima sebagian (dengan jumlah), atau tunda. Selama belum diputuskan statusnya Menunggu." },
     { no: "P3", judul: "Yang diterima menjadi usulan DIPA", isi: "Bagian yang diterima ditelusuri sumbernya menurut tangga wewenang: KRO lain pada Kegiatan yang sama (DJPb, tingkat 3), Kegiatan lain pada Program yang sama (Eselon I, tingkat 4), sisanya pagu tambahan atau antar-Program (DJA, tingkat 5, tidak dijamin). Pemicu R-01 muncul." },
-    { no: "P4", judul: "Ditunda atau menunggu tetap tercatat", isi: "Bagian yang ditunda tetap di Buku selisih. Setelah DIPA disahkan dan POK baru diimpor (C1), kekurangan dihitung ulang terhadap POK baru; RAB tetap utuh." },
+    { no: "P4", judul: "Ditunda atau menunggu tetap tercatat", isi: "Bagian yang ditunda tetap di Buku selisih. Setelah DIPA disahkan dan PDF POK resminya dilampirkan (C1), kekurangan dihitung ulang terhadap POK baru; RAB tetap utuh." },
   ],
 };
 
 export const SAAT_CATATAN = "Perpindahan status dicatat operator berdasarkan surat atau dokumen resmi. Sistem tidak memutuskan.";
 export const SAAT: Langkah[] = [
-  { no: "B1", judul: "Diterapkan", isi: "Kertas kerja dikunci sebagai usulan. Menjadi versi bernomor." },
+  { no: "B1", judul: "Diterapkan", isi: "Kertas kerja ditandai sudah diterapkan di SAKTI dan menjadi usulan bernomor. Pada Revisi POK dan Administrasi, PPK masih dapat menyesuaikan kertas kerja sampai Sah, supaya sama dengan POK resmi dari SPAN." },
   { no: "B2", judul: "Disetujui PPK", isi: "Dicatat bila PPK menyatakan sah usulan di lingkup satker; KPA menerima laporan (ketentuan kantor, 24 Okt 2026)." },
   { no: "B3", judul: "Diajukan", isi: "Untuk jalur DJPb atau DJA: tanggal, nomor surat, dan tujuan dicatat. Revisi POK tidak memakai surat usulan: yang dicatat nomor keputusan PPK atau nota (laporan ke KPA)." },
   { no: "B4", judul: "Hasil", isi: "Salah satu dicatat dari surat balasan. Dikembalikan dapat kembali ke B1 sebagai versi berikutnya." },
@@ -49,11 +51,21 @@ export const HASIL_B4 = ["Dikembalikan", "Ditolak", "Disahkan"] as const;
 export const TENGGAT_CATATAN = "Tenggat Pasal 175 (30 Okt untuk DJA, 30 Nov untuk DJPb, 27 Des untuk administrasi dan POK) hanya muncul sebagai pengingat. Bila jatuh pada hari libur, tanggal dimajukan ke hari kerja terakhir sebelumnya. Tidak ada tombol yang dikunci karena tenggat.";
 
 export const SESUDAH: Langkah[] = [
-  { no: "C1", judul: "Impor POK hasil penetapan", isi: "Berkas dari Kanwil atau DJA dicocokkan dengan kertas kerja lewat kunci baris. Hasil: sama, berubah, baru, hilang, atau di luar usulan." },
-  { no: "C2", judul: "Versi berurutan", isi: "POK semula, versi 1, versi 2, dan seterusnya tersimpan berurutan. Selisih antar-versi dapat dibuka per RO dan per akun." },
+  { no: "C1", judul: "Lampirkan PDF POK resmi dan cek pagu per akun", isi: "Pengesahan yang sebenarnya dilakukan di SPAN dengan acuan kertas kerja. Di SIGAP PPK menekan Sahkan dan melampirkan PDF POK resmi dari SPAN; berkas dibaca di perangkat. Sistem hanya memeriksa apakah pagu tiap akun pada tiap RO sama dengan kertas kerja (tidak sampai item). Bila beda: peringatan dan tautan ke kertas kerja RO itu, karena yang dipakai seharusnya POK resmi. Sahkan tetap dapat dilanjutkan." },
+  { no: "C2", judul: "Versi berurutan", isi: "POK semula (impor awal tahun) dan versi sesudahnya tersimpan berurutan. Selisih antar-versi dapat dibuka per RO dan per akun." },
   { no: "C3", judul: "RPD dan dampak", isi: "Rencana penarikan dana per bulan dibandingkan sebelum dan sesudah. Dampak ke Booked, Realisasi, dan RAB ditandai." },
   { no: "C4", judul: "Arsip", isi: "Surat, lampiran, matriks, dan riwayat status disimpan pada satu paket per revisi." },
 ];
+// ---------------------------------------------------------------- D. Impor realisasi sepanjang tahun
+export const REALISASI_CATATAN = "Sepanjang tahun anggaran yang diimpor hanya realisasi (Laporan Ketersediaan Dana Detail, GLP039). Impor POK hanya dilakukan di awal tahun. Halaman Realisasi menampilkan kelima langkah ini dengan status tiap langkah.";
+export const REALISASI: Langkah[] = [
+  { no: "D1", judul: "Siapkan dan pilih berkas", isi: "Bendahara mengunduh Laporan Ketersediaan Dana Detail format Excel dari SAKTI atau SPAN, lalu memilihnya di halaman Realisasi. Berkas dibaca di perangkat dan tidak dikirim utuh." },
+  { no: "D2", judul: "Periksa berkas", isi: "Sistem memeriksa identitas angka (realisasi s.d. = lalu + ini; sisa = pagu - lock - s.d.), jumlah total, dan tanggal data. Berkas yang tidak lolos tidak dapat dikirim." },
+  { no: "D3", judul: "Cocokkan pagu dengan POK", isi: "Pagu tiap akun pada tiap RO dibandingkan dengan POK berlaku atau kertas kerja. Hanya jumlah per akun, tidak sampai item. Bila beda: peringatan (tidak menghalangi) dan tautan ke kertas kerja RO itu, karena POK resmi yang harus diikuti." },
+  { no: "D4", judul: "Kirim realisasi", isi: "Satu tanggal data hanya dapat diterima satu kali. Salah kirim: batalkan unggahan itu dengan alasan, lalu unggah ulang." },
+  { no: "D5", judul: "Pantau dampak", isi: "Tab Anggaran per RO, peringatan SPAN, skor kualitas RAB, dan batas R-06 pada kertas kerja memakai angka terbaru." },
+];
+
 export const PENUTUP = "Alur ini menjadi satu butir pada tahap GSBPM F1 (F1-06). Tahap yang lebih awal dan lebih akhir dari butir ini tidak diubah.";
 
 /** Tautan ke halaman SIGAP yang mengerjakan tiap langkah (hanya yang sudah ada). */
@@ -70,9 +82,14 @@ export const TAUTAN_LANGKAH: Record<string, { href: string; teks: string }> = {
   B2: { href: "/sigap/revisi/status", teks: "Status dan riwayat" },
   B3: { href: "/sigap/revisi/lampiran", teks: "Lampiran dan draf surat" },
   B4: { href: "/sigap/revisi/status", teks: "Status dan riwayat" },
-  C1: { href: "/sigap/revisi/pok", teks: "PDF POK resmi dan pencocokan" },
+  C1: { href: "/sigap/revisi/status", teks: "Status dan riwayat (Sahkan dengan PDF POK resmi)" },
   C2: { href: "/sigap/revisi/versi", teks: "Versi, RPD, dan dampak" },
   C3: { href: "/sigap/revisi/versi", teks: "Versi, RPD, dan dampak" },
   C4: { href: "/sigap/revisi/lampiran", teks: "Lampiran dan draf surat" },
+  D1: { href: "/sigap/realisasi", teks: "Realisasi" },
+  D2: { href: "/sigap/realisasi", teks: "Realisasi" },
+  D3: { href: "/sigap/realisasi", teks: "Realisasi" },
+  D4: { href: "/sigap/realisasi", teks: "Realisasi" },
+  D5: { href: "/sigap/ro", teks: "Anggaran per RO" },
 };
-export const semuaLangkah = (): Langkah[] => [...SEBELUM, ...KURANG_AWAL, ...CABANG_POK.langkah, ...CABANG_DIPA.langkah, ...SAAT, ...SESUDAH];
+export const semuaLangkah = (): Langkah[] => [...SEBELUM, ...KURANG_AWAL, ...CABANG_POK.langkah, ...CABANG_DIPA.langkah, ...SAAT, ...SESUDAH, ...REALISASI];

@@ -5,21 +5,29 @@
 // (25 Okt 2026, tahap 20) Papan 5 mockup: "Siklus status, peran, dan riwayat".
 //  - Posisi sebuah jadwal revisi pada deret tahap (POK: 4 tahap; DIPA: 5 tahap termasuk Diajukan dan Hasil resmi).
 //  - Tindakan yang tersedia untuk akun ini, dengan isian nomor, tanggal, dan catatan. Semua lewat keu_jadwal_langkah; PPK (kewenangan jadwal).
+//  - (25 Okt 2026) Sahkan mewajibkan melampirkan PDF POK resmi dari SPAN. PDF dibaca di perangkat (tanpa unggah berkas), pagu tiap akun per RO
+//    dibandingkan dengan kertas kerja jadwal ini; beda = peringatan + tautan ke kertas kerja (tidak memblokir). Yang dicatat: nama berkas,
+//    sidik jari, dan hasil cek, di kolom catatan riwayat.
 //  - "Siapa boleh apa" dibaca dari master peran dan kewenangan.
 //  - Riwayat tahap dari keu_v_jadwal_riwayat (baris awal = keadaan saat pencatatan dimulai).
 // Logika murni: lib/keu/status.ts. Alamat: /sigap/revisi/status?jadwal=<id>.
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, tglPanjang } from "@/lib/keu/revisi";
 import {
-  argsLangkah, barisRiwayat, kartuTahap, keteranganJalur, labelDokumen, matriksBoleh, periksaLangkah, posisiJadwal, teksKosongTindakan, tindakanTersedia,
-  type KewPeran, type Peran, type RiwayatJadwal, type TindakanLangkah,
+  argsLangkah, barisRiwayat, catatanSahDenganPdf, kartuTahap, keteranganJalur, labelDokumen, matriksBoleh, periksaLampiranPok, periksaLangkah, perluLampiranPok,
+  posisiJadwal, teksKosongTindakan, tindakanTersedia, type KewPeran, type Peran, type RiwayatJadwal, type TindakanLangkah,
 } from "@/lib/keu/status";
-import { urlBaca } from "@/lib/keu/ro";
+import { bandingPaguAkun, paguDariPdf } from "@/lib/keu/cekPagu";
+import type { BerkasPdf } from "@/lib/keu/pok";
+import { berkasUtuh } from "@/lib/keu/rkks";
+import { angka, rupiah, urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kosong, label, Memuat, tombolAktif, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
+import KartuCekPagu, { useSisiSistem } from "../CekPaguAkun";
+import { bacaBerkasPok } from "../pok/pdf";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; buka: string; tutup: string; ulang: string; status: string };
 type PeranBaca = Peran & { aktif?: boolean };
@@ -55,6 +63,10 @@ function Isi() {
   const [cat, setCat] = useState("");
   const [pesan, setPesan] = useState("");
   const [aksiTerakhir, setAksiTerakhir] = useState<TindakanLangkah["aksi"] | null>(null);
+  const [berkas, setBerkas] = useState<BerkasPdf | null>(null);
+  const [galatBaca, setGalatBaca] = useState<string | null>(null);
+  const [membaca, setMembaca] = useState(false);
+  const inputBerkas = useRef<HTMLInputElement>(null);
 
   const sesudah = useCallback(async () => { await riwayat.muat(); await jadwal.muat(); }, [riwayat, jadwal]);
   const { kirim, mengirim, galat: galatKirim, hapusGalat } = useKirim(sesudah);
@@ -67,6 +79,13 @@ function Isi() {
     [jd, posisi, boleh],
   );
   const butuhDokumen = tindakan.some((x) => x.perluDokumen);
+  const butuhLampiran = tindakan.some(perluLampiranPok);
+  const sumberKk = useMemo(() => ({ jenis: "kertas" as const, jadwalId: jid ?? 0 }), [jid]);
+  const sisiKk = useSisiSistem(sumberKk, butuhLampiran && jid !== null && berkas !== null);
+  const cek = useMemo(
+    () => (berkas && sisiKk.sistem ? bandingPaguAkun(paguDariPdf(berkas.hasil.baris), sisiKk.sistem, { lingkup: "irisan" }) : null),
+    [berkas, sisiKk.sistem],
+  );
   const lab = labelDokumen(jd?.jenis ?? "pok", tindakan.find((x) => x.perluDokumen)?.aksi ?? null);
   const baris = useMemo(() => (jd ? barisRiwayat(rw, jd.jenis) : []), [jd, rw]);
   const matriks = useMemo(() => {
@@ -75,16 +94,28 @@ function Isi() {
   }, [peran.baris, kewPeran.baris]);
 
   const ke = (id: number | null) => router.replace(`/sigap/revisi/status${id ? `?jadwal=${id}` : ""}`, { scroll: false });
-  const ganti = (id: number) => { setNomor(""); setTgl(""); setCat(""); setPesan(""); hapusGalat(); ke(id); };
+  const kosongkanBerkas = () => { setBerkas(null); setGalatBaca(null); if (inputBerkas.current) inputBerkas.current.value = ""; };
+  const ganti = (id: number) => { setNomor(""); setTgl(""); setCat(""); setPesan(""); kosongkanBerkas(); hapusGalat(); ke(id); };
+
+  async function pilihBerkas(f: File | undefined) {
+    setBerkas(null); setGalatBaca(null); setPesan(""); hapusGalat();
+    if (!f) return;
+    setMembaca(true);
+    try { setBerkas(await bacaBerkasPok(f)); }
+    catch (e) { setGalatBaca(e instanceof Error ? e.message : "Berkas tidak dapat dibaca."); }
+    finally { setMembaca(false); }
+  }
 
   const jalan = async (t: TindakanLangkah) => {
     if (jid === null) return;
     hapusGalat();
-    const g = periksaLangkah(t, nomor, tgl);
+    const g = [...periksaLangkah(t, nomor, tgl), ...periksaLampiranPok(t, berkas ? { utuh: berkasUtuh(berkas.hasil), nBaris: berkas.hasil.baris.length } : null)];
     if (g.length) { setPesan(g[0]); return; }
     setPesan("");
     setAksiTerakhir(t.aksi);
-    if (await kirim("keu_jadwal_langkah", argsLangkah(jid, t.aksi, nomor, tgl, cat))) { setNomor(""); setTgl(""); setCat(""); }
+    // Pagu yang berbeda hanya peringatan; cek dicatat pada catatan riwayat bersama nama dan sidik jari berkas.
+    const catatan = perluLampiranPok(t) && berkas ? catatanSahDenganPdf(berkas, cek, cat) : cat;
+    if (await kirim("keu_jadwal_langkah", argsLangkah(jid, t.aksi, nomor, tgl, catatan))) { setNomor(""); setTgl(""); setCat(""); kosongkanBerkas(); }
   };
 
   const galat = jadwal.galat ?? riwayat.galat ?? peran.galat ?? kewPeran.galat;
@@ -157,6 +188,39 @@ function Isi() {
                         <div><label className={label} htmlFor="st-tgl">{lab.tanggal}</label><input id="st-tgl" type="date" className={kolom} value={tgl} onChange={(e) => setTgl(e.target.value)} /></div>
                       </div>
                     )}
+                    {butuhLampiran && (
+                      <div className="flex flex-col gap-2 rounded-lg border border-[#DCE3EE] bg-[#F7F9FD] p-3">
+                        <label className={label} htmlFor="st-pdf">PDF POK resmi dari SPAN (wajib, maksimum 40 MB)</label>
+                        <input
+                          id="st-pdf" ref={inputBerkas} type="file" accept=".pdf,application/pdf" onChange={(e) => void pilihBerkas(e.target.files?.[0])}
+                          className="block w-full text-[13px] file:mr-3 file:min-h-[40px] file:rounded-md file:border-0 file:bg-[#1F5FD1] file:px-3 file:text-[13px] file:font-semibold file:text-white"
+                        />
+                        <p className="text-[12px] text-[#5B6B84]">Pengesahan yang sebenarnya dilakukan di SPAN dengan acuan kertas kerja. Lampiran ini mengunci kesesuaian: sistem membaca PDF di perangkat ini (tidak dikirim utuh) dan memeriksa apakah pagu tiap akun per RO sama dengan kertas kerja ini.</p>
+                        {membaca && <p className="text-[13px] font-bold text-[#44546F]" aria-live="polite">Membaca PDF...</p>}
+                        {galatBaca && <p role="alert" className="rounded-md border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galatBaca}</p>}
+                        {berkas && (
+                          <>
+                            <p className="break-words text-[12.5px] text-[#44546F]">
+                              <b>{berkas.nama}</b> · {angka(berkas.hasil.baris.length)} baris · jumlah {rupiah(berkas.hasil.total)} · sidik jari {berkas.hash.slice(0, 12)}
+                            </p>
+                            {!berkasUtuh(berkas.hasil) && (
+                              <p role="alert" className="rounded-md border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">
+                                PDF belum lolos pemeriksaan jumlah ({berkas.hasil.tidakCocok.length} ketidakcocokan){berkas.hasil.baris.length === 0 ? " dan tidak ada baris terbaca" : ""}. Gunakan PDF asli Rincian Kertas Kerja Satker.
+                              </p>
+                            )}
+                            {berkasUtuh(berkas.hasil) && (
+                              <KartuCekPagu
+                                hasil={cek} memuat={sisiKk.memuat} galat={sisiKk.galat} terpotong={sisiKk.terpotong}
+                                namaResmi="PDF POK resmi" namaSistem="kertas kerja jadwal ini" jadwalId={jid} judul="Cek pagu: PDF POK resmi dan kertas kerja"
+                              />
+                            )}
+                            {berkasUtuh(berkas.hasil) && cek && !cek.sama && cek.baris.length > 0 && (
+                              <p className="text-[12.5px] font-semibold text-[#6B4E00]">Pagu berbeda hanya peringatan: Sahkan tetap dapat dilanjutkan. Karena yang berlaku adalah POK resmi, sebaiknya kertas kerja diubah dahulu lewat tombol &ldquo;Buka kertas kerja&rdquo; di atas (kertas kerja tetap dapat diubah sampai Sah).</p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                     <div><label className={label} htmlFor="st-cat">Catatan (opsional)</label><input id="st-cat" className={kolom} maxLength={300} value={cat} onChange={(e) => setCat(e.target.value)} /></div>
                     <div className="flex flex-wrap gap-2">
                       {tindakan.map((t) => (
@@ -171,7 +235,7 @@ function Isi() {
                 {pesan && <Catatan>{pesan}</Catatan>}
                 <Galat pesan={galatKirim} />
                 {posisi.sah && (
-                  <Link href="/sigap/revisi/pok" className="w-fit rounded-lg bg-[#1F5FD1] px-3.5 py-2 text-[13px] font-semibold text-white no-underline">Lanjut ke impor hasil penetapan</Link>
+                  <Link href={`/sigap/revisi/versi?tab=versi&jadwal=${jd.id}`} className="w-fit rounded-lg bg-[#1F5FD1] px-3.5 py-2 text-[13px] font-semibold text-white no-underline">Cek ulang pagu di halaman Versi POK</Link>
                 )}
               </section>
 

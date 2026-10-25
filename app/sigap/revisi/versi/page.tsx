@@ -6,7 +6,9 @@
 //  - Versi berurutan: versi POK sistem, total, perbandingan dua versi per RO (dikelompokkan per KRO) dan rincian baris yang berbeda.
 //  - RPD sebelum dan sesudah: kertas kerja jadwal terpilih, disebar ke bulan menurut pola pencairan RAB baris yang sama.
 //  - Dampak ke Booked dan Realisasi: pagu Menjadi baris yang berubah dibandingkan dengan realisasi terbaru; Booked belum punya sumber data.
-// Logika murni: lib/keu/versi.ts. Alamat: /sigap/revisi/versi?tab=versi|rpd|dampak&jadwal=<id>.
+//  - (25 Okt 2026) Tab Cek pagu per akun: pagu tiap akun per RO pada laporan realisasi terakhir (SPAN, GLP039) dibandingkan dengan POK berlaku atau
+//    kertas kerja terpilih. Hanya pengecekan: bila beda ada peringatan dan tautan ke kertas kerja (yang dipakai seharusnya POK resmi).
+// Logika murni: lib/keu/versi.ts dan lib/keu/cekPagu.ts. Alamat: /sigap/revisi/versi?tab=versi|rpd|dampak|cek&jadwal=<id>.
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,12 +18,16 @@ import {
 } from "@/lib/keu/versi";
 import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, tglPanjang } from "@/lib/keu/revisi";
 import { angka, urlBaca } from "@/lib/keu/ro";
+import { bandingPaguAkun, paguDariGlp } from "@/lib/keu/cekPagu";
+import KartuCekPagu, { useSisiSistem } from "../CekPaguAkun";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kosong, label, Memuat, Potong, tombolAktif, tombolKecil } from "../../keu-ui";
 import { useBacaKeu } from "../../ro/useKeu";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
-type Tab = "versi" | "rpd" | "dampak";
-const TAB: { k: Tab; nama: string }[] = [{ k: "versi", nama: "Versi berurutan" }, { k: "rpd", nama: "RPD sebelum dan sesudah" }, { k: "dampak", nama: "Dampak ke Booked dan Realisasi" }];
+type Tab = "versi" | "rpd" | "dampak" | "cek";
+const TAB: { k: Tab; nama: string }[] = [
+  { k: "versi", nama: "Versi berurutan" }, { k: "rpd", nama: "RPD sebelum dan sesudah" }, { k: "dampak", nama: "Dampak ke Booked dan Realisasi" }, { k: "cek", nama: "Cek pagu per akun" },
+];
 
 const warnaSel = (v: number) => (v < 0 ? "text-[#9B1C23]" : v > 0 ? "text-[#1F5FD1]" : "text-[#5B6B84]");
 const sel = (v: number) => selisihTeks(v);
@@ -158,6 +164,48 @@ function PilihJadwal({ jadwal, jid, ubah }: { jadwal: Jadwal[]; jid: number | nu
   );
 }
 
+type PembandingCek = "pok" | "kertas";
+
+/** Pagu per akun per RO: laporan realisasi terakhir (SPAN) vs POK berlaku atau kertas kerja terpilih. Hanya pengecekan. */
+function TabCek({ jadwal, jid, ubahJadwal }: { jadwal: Jadwal[]; jid: number | null; ubahJadwal: (id: number) => void }) {
+  const [pembanding, setPembanding] = useState<PembandingCek>("pok");
+  const real = useBacaKeu<{ ro_kode: string; akun_kode: string; pagu: number | string; sampai_tanggal: string }>(
+    urlBaca("keu_v_realisasi_terbaru", {}, { batas: 20000, kolom: ["ro_kode", "akun_kode", "pagu", "sampai_tanggal"] }),
+  );
+  const sumber = useMemo(() => (pembanding === "pok" ? { jenis: "pok" as const } : { jenis: "kertas" as const, jadwalId: jid ?? 0 }), [pembanding, jid]);
+  const sisi = useSisiSistem(sumber, pembanding === "pok" || jid !== null);
+  const resmi = useMemo(() => (real.baris ? paguDariGlp(real.baris) : null), [real.baris]);
+  const hasil = useMemo(
+    () => (resmi && resmi.length > 0 && sisi.sistem ? bandingPaguAkun(resmi, sisi.sistem, { lingkup: pembanding === "pok" ? "ro_resmi" : "irisan" }) : null),
+    [resmi, sisi.sistem, pembanding],
+  );
+  const tanggal = real.baris?.[0]?.sampai_tanggal ?? null;
+  const namaSistem = pembanding === "pok" ? "POK berlaku" : `kertas kerja #${jid ?? "-"}`;
+
+  return (
+    <>
+      <section className={`${kartu} flex flex-col gap-3`}>
+        <h2 className={judulKartu}>Bandingkan dengan</h2>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pembanding">
+          <button type="button" aria-pressed={pembanding === "pok"} onClick={() => setPembanding("pok")} className={pembanding === "pok" ? tombolAktif : tombolKecil}>POK berlaku</button>
+          <button type="button" aria-pressed={pembanding === "kertas"} onClick={() => setPembanding("kertas")} className={pembanding === "kertas" ? tombolAktif : tombolKecil}>Kertas kerja</button>
+        </div>
+        {pembanding === "kertas" && (jadwal.length > 0 ? <PilihJadwal jadwal={jadwal} jid={jid} ubah={ubahJadwal} /> : <p className="text-[13px] text-[#5B6B84]">Belum ada jadwal revisi.</p>)}
+        <p className="text-[12.5px] text-[#5B6B84]">
+          Acuan: laporan realisasi terakhir dari SPAN{tanggal ? ` (per ${tglPanjang(tanggal)})` : ""}. Laporan itu mencerminkan POK resmi di SPAN. Hanya jumlah pagu tiap akun pada tiap RO yang dibandingkan.
+        </p>
+      </section>
+      {real.baris && real.baris.length === 0 && <Kosong teks="Belum ada laporan realisasi yang diunggah, jadi belum ada acuan POK resmi. Unggah laporan pada halaman Realisasi." />}
+      {(real.baris === null || real.baris.length > 0) && (
+        <KartuCekPagu
+          hasil={hasil} memuat={!real.baris || sisi.memuat} galat={real.galat ?? sisi.galat} terpotong={real.terpotong || sisi.terpotong}
+          namaResmi="laporan realisasi (POK resmi)" namaSistem={namaSistem} jadwalId={pembanding === "kertas" ? jid : null}
+        />
+      )}
+    </>
+  );
+}
+
 function TabRpd({ kk, pola, memuat }: { kk: BarisKkVersi[]; pola: PolaJadwal[]; memuat: boolean }) {
   const h = useMemo(() => hitungRpd(kk, pola), [kk, pola]);
   if (memuat) return <Memuat />;
@@ -260,7 +308,7 @@ function Isi() {
   const daftarJadwal = jadwal.baris ?? [];
   const jid = jidQ && daftarJadwal.some((j) => j.id === jidQ) ? jidQ : (daftarJadwal[0]?.id ?? null);
 
-  const perluKk = tab !== "versi" && jid !== null;
+  const perluKk = (tab === "rpd" || tab === "dampak") && jid !== null;
   const kk = useBacaKeu<BarisKkVersi>(perluKk ? urlBaca("keu_v_kk_baris", { jadwal_id: jid! }, { urut: "id", batas: 5000, kolom: ["id", "jadwal_id", "ro_kode", "detail_id", "pok_kunci", "akun_menjadi", "uraian_menjadi", "jumlah_semula", "jumlah_menjadi", "selisih", "baru"] }) : null);
   const pola = useBacaKeu<PolaJadwal>(tab === "rpd" ? urlBaca("keu_v_rab_jadwal_item", {}, { batas: 5000, kolom: ["pok_kunci", "bulan", "nilai"] }) : null);
   const real = useBacaKeu<RealisasiVersi>(tab === "dampak" ? urlBaca("keu_v_realisasi_terbaru", {}, { batas: 10000, kolom: ["detail_id", "real_sd"] }) : null);
@@ -286,7 +334,9 @@ function Isi() {
       {tab === "versi" && (versi.baris && nodeRingkas.baris ? <TabVersi versi={versi.baris} nodeRingkas={nodeRingkas.baris} /> : galat ? null : <Memuat />)}
       {nodeRingkas.terpotong && tab === "versi" && <Potong />}
 
-      {tab !== "versi" && (
+      {tab === "cek" && <TabCek jadwal={daftarJadwal} jid={jid} ubahJadwal={(id) => ke("cek", id)} />}
+
+      {(tab === "rpd" || tab === "dampak") && (
         <>
           {jadwal.baris && daftarJadwal.length === 0 && <Kosong teks="Belum ada jadwal revisi, jadi belum ada kertas kerja untuk dibandingkan." />}
           {daftarJadwal.length > 0 && <PilihJadwal jadwal={daftarJadwal} jid={jid} ubah={(id) => ke(tab, id)} />}
@@ -295,7 +345,7 @@ function Isi() {
           {tab === "dampak" && jid !== null && <TabDampak kk={kk.baris ?? []} real={real.baris ?? []} memuat={!kk.baris || !real.baris} terpotong={real.terpotong} />}
         </>
       )}
-      <p className={caps}>Sumber: keu_pok_versi, keu_v_pok_node_tampil, keu_pok_detail, keu_v_kk_baris, keu_v_rab_jadwal_item, keu_v_realisasi_terbaru</p>
+      <p className={caps}>Sumber: keu_pok_versi, keu_v_pok_node_tampil, keu_pok_detail, keu_v_kk_baris, keu_v_rab_jadwal_item, keu_v_realisasi_terbaru, keu_v_adm_lembar</p>
     </HalamanKeu>
   );
 }

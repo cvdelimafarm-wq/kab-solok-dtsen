@@ -145,7 +145,10 @@ function Isi() {
   const semuaRo = useBacaKeu<RoRow>(urlBaca("keu_ro", {}, { urut: "kode", batas: 2000, kolom: ["kode", "nama", "sementara", "aktif"] }));
   const urutJadwal = useMemo(() => {
     const j = jadwal.baris ?? [];
-    return [...j.filter((x) => x.status === "dibuka" || x.status === "terkumpul"), ...j.filter((x) => !(x.status === "dibuka" || x.status === "terkumpul"))];
+    // (25 Okt 2026) Draf (dibuka/terkumpul) dahulu, lalu Revisi POK/Administrasi yang diterapkan tetapi belum Sah: kertas kerjanya masih dapat disesuaikan dengan POK resmi.
+    const draf = (x: Jadwal) => x.status === "dibuka" || x.status === "terkumpul";
+    const menungguSah = (x: Jadwal) => x.status === "diterapkan" && (x.jenis === "pok" || x.jenis === "administrasi");
+    return [...j.filter(draf), ...j.filter(menungguSah), ...j.filter((x) => !draf(x) && !menungguSah(x))];
   }, [jadwal.baris]);
   const jid = Number(sp.get("jadwal")) || urutJadwal[0]?.id || null;
   const jd = urutJadwal.find((x) => x.id === jid) ?? null;
@@ -291,7 +294,11 @@ function Isi() {
                 <select id="kk-j" className={`${kolom} !w-auto max-w-full`} value={jd.id} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>{urutJadwal.map((x) => <option key={x.id} value={x.id}>{x.judul}</option>)}</select></div>
               <div><label className={label} htmlFor="kk-k">KRO</label>
                 <select id="kk-k" className={`${kolom} !w-auto max-w-full`} value={kro} onChange={(e) => ke({ kro: e.target.value })}>{daftarKro.map((k) => <option key={k} value={k}>{k}</option>)}</select></div>
-              <Chip warna={jd.status === "dibuka" ? "hijau" : jd.status === "terkumpul" ? "kuning" : "abu"}>{jd.status === "dibuka" || jd.status === "terkumpul" ? "Draf, belum diterapkan" : (LABEL_STATUS_JADWAL[jd.status] ?? jd.status)}</Chip>
+              <Chip warna={jd.status === "dibuka" ? "hijau" : jd.status === "terkumpul" || (jd.status === "diterapkan" && (jd.jenis === "pok" || jd.jenis === "administrasi")) ? "kuning" : "abu"}>
+                {jd.status === "dibuka" || jd.status === "terkumpul" ? "Draf, belum diterapkan"
+                  : jd.status === "diterapkan" && (jd.jenis === "pok" || jd.jenis === "administrasi") ? "Diterapkan, menunggu Sah (masih dapat disesuaikan dengan POK resmi)"
+                  : (LABEL_STATUS_JADWAL[jd.status] ?? jd.status)}
+              </Chip>
               <Chip warna="biru">{LABEL_JENIS_JADWAL[jd.jenis] ?? jd.jenis}</Chip>
               <div className="ml-auto flex flex-wrap items-center gap-1.5">
                 {roKosong.length > 0 && (

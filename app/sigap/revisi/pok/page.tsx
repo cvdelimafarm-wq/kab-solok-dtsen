@@ -5,6 +5,8 @@
 // (24 Okt 2026) Papan 12 dan 6 mockup: unggah PDF POK resmi (Rincian Kertas Kerja Satker) hasil revisi, cocokkan dengan POK sistem, lalu terima
 // (menjadi versi POK berlaku) atau tolak. PDF dibaca DI PERAMBAN (pdf.js, tanpa unggah berkas ke server); yang dikirim hanya baris tabelnya setelah
 // jumlahnya diperiksa (rincian = akun = ... = program = ALOKASI). Hak (kewenangan `pok_pdf`, PPK) ditegakkan basis data; semua pegawai organik boleh melihat.
+// (25 Okt 2026) Impor POK hanya untuk awal tahun anggaran. Sesudahnya PPK menekan Sahkan dan melampirkan PDF POK resmi pada halaman Status, dan
+// pagu per akun per RO diperiksa di halaman Versi POK dan Realisasi. Formulir unggah di sini karena itu dilipat bila POK berlaku sudah ada.
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
@@ -54,9 +56,12 @@ export default function HalamanPokResmi() {
   const [lihatGalat, setLihatGalat] = useState(false);
   const inputBerkas = useRef<HTMLInputElement>(null);
 
+  const [bukaUnggah, setBukaUnggah] = useState(false);
   const [terbuka, setTerbuka] = useState<number | null>(null);
   const [aksi, setAksi] = useState<{ id: number; jenis: "terima" | "tolak"; alasan: string } | null>(null);
 
+  const awalTahun = berlaku.baris !== null && berlaku.baris.length === 0;
+  const formUnggah = awalTahun || bukaUnggah;
   const nomorBawaan = String((pokBerlaku?.nomor_revisi ?? 0) + 1);
   const isianKini: IsianUnggah = revisiDiubah ? isian : { ...isian, nomorRevisi: nomorBawaan };
   const tahunDiharapkan = pokBerlaku?.tahun ?? null;
@@ -101,7 +106,8 @@ export default function HalamanPokResmi() {
       labelKembali="Jadwal dan pengesahan"
     >
       <Tenang>
-        Setelah revisi disahkan, <b>PPK mengunggah PDF Rincian Kertas Kerja Satker</b> dari SAKTI. Berkas dibaca di perangkat (tidak dikirim utuh); sistem memeriksa jumlahnya, mencocokkannya dengan POK sistem per RO dan akun, lalu menandai baris yang berubah, baru, atau hilang. Setelah <b>diterima</b>, PDF itu menjadi versi POK yang berlaku. Semua pegawai organik dapat melihat hasilnya.
+        <b>Impor POK hanya dilakukan di awal tahun anggaran</b>: PPK mengunggah PDF Rincian Kertas Kerja Satker dari SAKTI untuk membangun POK semula. Berkas dibaca di perangkat (tidak dikirim utuh); sistem memeriksa jumlahnya, mencocokkannya dengan POK sistem, lalu menandai baris yang berubah, baru, atau hilang. Setelah <b>diterima</b>, PDF itu menjadi versi POK yang berlaku.{" "}
+        Sepanjang tahun berjalan tidak ada impor POK lagi: revisi disahkan di SPAN, lalu di SIGAP PPK menekan <b>Sahkan</b> dan melampirkan PDF POK resmi pada halaman <Link href="/sigap/revisi/status" className="font-semibold text-[#1F5FD1] underline">Status dan riwayat</Link>. Kesamaan pagu tiap akun per RO dicek di <Link href="/sigap/revisi/versi?tab=cek" className="font-semibold text-[#1F5FD1] underline">Versi POK</Link> dan saat mengunggah realisasi; bila beda, kertas kerja yang disesuaikan.
       </Tenang>
 
       <div className={kisi}>
@@ -110,9 +116,19 @@ export default function HalamanPokResmi() {
         <Kpi label="Menunggu keputusan" nilai={angka(menunggu.length)} warna={menunggu.length ? "kn" : undefined} sub="unggahan belum diterima/ditolak" />
       </div>
 
-      {boleh === true && (
+      {boleh === true && !formUnggah && (
+        <section className={`${kartu} flex flex-col gap-2`} aria-labelledby="judul-unggah-tutup">
+          <h2 id="judul-unggah-tutup" className={judulKartu}>Impor PDF POK resmi (khusus awal tahun anggaran)</h2>
+          <p className="text-[12.5px] text-[#5B6B84]">POK berlaku sudah ada, jadi impor tidak diperlukan untuk revisi tahun berjalan. Untuk mengesahkan revisi, lampirkan PDF POK resmi pada halaman Status. Buka formulir ini hanya bila POK semula memang harus dibangun ulang (mis. awal tahun anggaran baru).</p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/sigap/revisi/status" className="inline-flex min-h-[40px] items-center rounded-md border border-[#1F5FD1] bg-[#1F5FD1] px-3 text-[13px] font-semibold text-white no-underline">Ke halaman Status (Sahkan)</Link>
+            <button type="button" className={tombolKecil} aria-expanded={false} onClick={() => setBukaUnggah(true)}>Buka formulir impor awal tahun</button>
+          </div>
+        </section>
+      )}
+      {boleh === true && formUnggah && (
         <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="judul-unggah">
-          <h2 id="judul-unggah" className={judulKartu}>Unggah PDF POK resmi</h2>
+          <h2 id="judul-unggah" className={judulKartu}>Impor PDF POK resmi (awal tahun anggaran)</h2>
           <p className="text-[12.5px] text-[#5B6B84]">Gunakan PDF asli &ldquo;Rincian Kertas Kerja Satker&rdquo; (bukan hasil pindai atau foto). Nomor revisi harus lebih besar dari POK berlaku. Unggahan hanya mencatat; POK baru berlaku setelah Bapak menekan Terima.</p>
           <label htmlFor="berkas-pok" className={label}>Berkas PDF (maksimum 40 MB)</label>
           <input
