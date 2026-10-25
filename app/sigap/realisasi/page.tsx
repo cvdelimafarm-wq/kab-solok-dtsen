@@ -7,10 +7,14 @@
 // pratinjau, lalu dikirim sebagai JSON ke keu_realisasi_masuk lewat gerbang. Hak (kewenangan `realisasi`) ditegakkan basis data;
 // tombol hanya tampil bila akun berwenang. Semua pegawai organik boleh melihat daftar unggahan.
 
+import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { langkahBerjalan, langkahRealisasi, LABEL_STATUS_LANGKAH, RINGKAS_ATURAN_REALISASI, type StatusLangkah } from "@/lib/keu/alurRealisasi";
+import { paguDariGlp } from "@/lib/keu/cekPagu";
 import { argsRealisasiMasuk, bacaBerkasGlp, periksaUnggahan, type HasilBerkas } from "@/lib/keu/glp039-xlsx";
 import { angka, persen, rupiah, urlBaca } from "@/lib/keu/ro";
 import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../ro/useKeu";
+import KartuCekPagu, { statusCek, useSisiSistem, type SumberSistem } from "../revisi/CekPaguAkun";
 import BagianSkor from "./Skor";
 import { Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kpi, kisi, label, Memuat, Tenang, tombol, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
 
@@ -19,6 +23,11 @@ type Unggah = {
   total_lock: number | string; total_sd: number | string; status: string; alasan_batal: string | null; dibuat_at: string;
 };
 type RingkasRo = { ro_kode: string; sampai_tanggal: string; n_item: number | string; pagu: number | string; real_sd: number | string; persen: number | string | null };
+
+const KELAS_LANGKAH: Record<StatusLangkah, string> = {
+  selesai: "border-[#BFE3CD] bg-[#F4FBF7]", sekarang: "border-[#1F5FD1] bg-[#EAF1FC]", perhatian: "border-[#E6C766] bg-[#FFF8E6]", menunggu: "border-[#DCE3EE] bg-white",
+};
+const WARNA_LANGKAH: Record<StatusLangkah, "hijau" | "biru" | "kuning" | "abu"> = { selesai: "hijau", sekarang: "biru", perhatian: "kuning", menunggu: "abu" };
 
 const tgl = (s: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -38,6 +47,12 @@ export default function HalamanRealisasi() {
   const [berhasil, setBerhasil] = useState<string | null>(null);
   const [batal, setBatal] = useState<{ id: number; alasan: string } | null>(null);
   const inputBerkas = useRef<HTMLInputElement>(null);
+
+  // Cek pagu per akun per RO (hanya peringatan): laporan GLP039 vs POK berlaku atau kertas kerja yang sudah diterapkan/sah.
+  const jadwal = useBacaKeu<{ id: number; judul: string; jenis: string; status: string }>(urlBaca("keu_revisi_jadwal", {}, { urut: "-id", batas: 100, kolom: ["id", "judul", "jenis", "status"] }));
+  const pokBerlaku = useBacaKeu<{ id: number; nomor_revisi: number }>(urlBaca("keu_pok_versi", { status: "berlaku" }, { urut: "-id", batas: 1, kolom: ["id", "nomor_revisi"] }));
+  const daftarRo = useBacaKeu<{ kode: string; nama: string }>(urlBaca("keu_ro", {}, { urut: "kode", batas: 2000, kolom: ["kode", "nama"] }));
+  const [pembanding, setPembanding] = useState("pok");
 
   const pilih = useCallback(async (f: File | undefined) => {
     setB(null); setGalatBaca(null); setBerhasil(null); hapusGalat();
@@ -59,6 +74,26 @@ export default function HalamanRealisasi() {
   const sudahAda = useMemo(() => (daftar.baris ?? []).find((u) => u.status === "diterima" && (u.sampai_tanggal === sampai)), [daftar.baris, sampai]);
   const ringkas = b?.hasil.ringkas;
 
+  const jadwalAcuan = useMemo(() => (jadwal.baris ?? []).filter((j) => j.status === "diterapkan" || j.status === "sah"), [jadwal.baris]);
+  const sumber: SumberSistem = pembanding.startsWith("kertas:") ? { jenis: "kertas", jadwalId: Number(pembanding.slice(7)) } : { jenis: "pok" };
+  const sisi = useSisiSistem(sumber, b !== null && b.hasil.item.length > 0);
+  const resmiPagu = useMemo(() => (b && b.hasil.item.length > 0 ? paguDariGlp(b.hasil.item) : null), [b]);
+  const cek = useMemo(
+    () => statusCek(resmiPagu, sisi.sistem, sisi.galat, { lingkup: sumber.jenis === "kertas" ? "irisan" : "ro_resmi" }),
+    [resmiPagu, sisi.sistem, sisi.galat, sumber.jenis],
+  );
+  const namaRo = useMemo(() => new Map((daftarRo.baris ?? []).map((r) => [r.kode, r.nama.replace(" (contoh)", "")])), [daftarRo.baris]);
+  const namaSistem = sumber.jenis === "kertas" ? `kertas kerja #${sumber.jadwalId}` : `POK berlaku${pokBerlaku.baris?.[0] ? ` (revisi ${pokBerlaku.baris[0].nomor_revisi})` : ""}`;
+  const tanggalSah = /^\d{4}-\d{2}-\d{2}$/.test(sampai) && !Number.isNaN(Date.parse(sampai));
+  const langkah = useMemo(
+    () => langkahRealisasi({
+      boleh, adaBerkas: b !== null, membaca, galatBaca, berkasLolos: b ? b.hasil.ok : null, tanggalSah, sudahAdaTanggal: !!sudahAda,
+      cek: cek.status, mengirim, diterima: berhasil !== null,
+    }),
+    [boleh, b, membaca, galatBaca, tanggalSah, sudahAda, cek.status, mengirim, berhasil],
+  );
+  const berjalan = langkahBerjalan(langkah);
+
   async function kirimUnggahan() {
     if (!b || salah) return;
     setBerhasil(null);
@@ -77,16 +112,41 @@ export default function HalamanRealisasi() {
       judul="Realisasi anggaran mingguan (Excel Laporan Ketersediaan Dana Detail)"
     >
       <Tenang>
-        <b>Bendahara</b> mengunggah Excel realisasi (GLP039) dari SAKTI setiap minggu. Berkas dibaca di perangkat dan diperiksa lebih dulu; yang dikirim hanya isi tabelnya. Angka realisasi dipakai tab Anggaran per RO dan skor kualitas RAB. Semua pegawai organik dapat melihat daftar unggahan.
+        <b>Bendahara</b> mengunggah Excel realisasi (GLP039) dari SAKTI/SPAN setiap minggu. Berkas dibaca di perangkat dan diperiksa lebih dulu; yang dikirim hanya isi tabelnya. Angka realisasi dipakai tab Anggaran per RO, peringatan SPAN, dan skor kualitas RAB. Semua pegawai organik dapat melihat daftar unggahan.
+        <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[12.5px]">
+          {RINGKAS_ATURAN_REALISASI.map((t) => <li key={t}>{t}</li>)}
+        </ul>
       </Tenang>
       <div className={kisi}>
         <Kpi label="Data terakhir diterima" nilai={terbaru ? tgl(terbaru.sampai_tanggal) : "-"} sub={terbaru ? terbaru.nama_berkas : "belum ada unggahan"} />
         <Kpi label="Realisasi kumulatif" nilai={terbaru ? rupiah(terbaru.total_sd) : "-"} sub={terbaru ? `${persen(Number(terbaru.total_sd), Number(terbaru.total_pagu))} dari pagu` : undefined} warna="hj" />
         <Kpi label="Item pada unggahan terakhir" nilai={terbaru ? angka(terbaru.n_item) : "-"} />
       </div>
+
+      <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="judul-alur">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="judul-alur" className={judulKartu}>Alur impor realisasi</h2>
+          <span className="text-[12px] font-semibold text-[#5B6B84]">{berjalan ? `Langkah ${berjalan} dari ${langkah.length}` : "Semua langkah selesai"}</span>
+        </div>
+        <ol className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr))]">
+          {langkah.map((l) => (
+            <li key={l.kunci} aria-current={l.no === berjalan ? "step" : undefined}
+              className={`flex min-w-0 flex-col gap-1.5 rounded-lg border p-3 ${KELAS_LANGKAH[l.status]}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span aria-hidden className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-[12px] font-extrabold ${l.status === "selesai" ? "bg-[#1F8A4C] text-white" : l.status === "menunggu" ? "bg-[#E6EBF3] text-[#5B6B84]" : l.status === "perhatian" ? "bg-[#B8860B] text-white" : "bg-[#1F5FD1] text-white"}`}>{l.status === "selesai" ? "✓" : l.no}</span>
+                <Chip warna={WARNA_LANGKAH[l.status]}>{LABEL_STATUS_LANGKAH[l.status]}</Chip>
+              </div>
+              <h3 className="text-[14px] font-bold text-[#0F2A52]">{l.no}. {l.judul}</h3>
+              <span className="text-[11.5px] font-semibold text-[#5B6B84]">Oleh: {l.siapa}</span>
+              <p className="text-[12px] leading-snug text-[#44546F]">{l.uraian}</p>
+              <p className="mt-auto text-[12px] font-bold text-[#1B2B4B]" aria-live={l.no === berjalan ? "polite" : undefined}>{l.ket}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
         {boleh === true && (
           <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="judul-unggah">
-            <h2 id="judul-unggah" className={judulKartu}>Unggah laporan baru</h2>
+            <h2 id="judul-unggah" className={judulKartu}>Langkah 1 sampai 4: unggah laporan baru</h2>
             <p className="text-[12.5px] text-[#5B6B84]">Berkas dibaca di perangkat Bapak/Ibu; yang dikirim hanya isi tabelnya setelah diperiksa. Satu tanggal data hanya dapat diterima satu kali.</p>
             <label htmlFor="berkas-glp" className={label}>Berkas Excel (.xlsx)</label>
             <input
@@ -129,6 +189,22 @@ export default function HalamanRealisasi() {
                   <p className="text-[12px] text-[#6B7A93]">{b.hasil.judul.find((t) => /Periode/i.test(t)) ?? "Periode tidak terbaca dari judul"}. Periksa tanggalnya sebelum mengirim.</p>
                   {sudahAda && <p className="text-[12.5px] font-bold text-[#8A6200]">Sudah ada unggahan diterima untuk tanggal ini ({sudahAda.nama_berkas}). Batalkan dulu bila ingin menggantinya.</p>}
                 </div>
+
+                {b.hasil.ok && resmiPagu && (
+                  <div className="flex flex-col gap-2">
+                    <div className="max-w-[560px]">
+                      <label className={label} htmlFor="pembanding-pagu">Langkah 3: bandingkan pagu laporan dengan</label>
+                      <select id="pembanding-pagu" className={kolom} value={pembanding} onChange={(e) => setPembanding(e.target.value)}>
+                        <option value="pok">POK berlaku{pokBerlaku.baris?.[0] ? ` (revisi ${pokBerlaku.baris[0].nomor_revisi})` : ""}</option>
+                        {jadwalAcuan.map((j) => <option key={j.id} value={`kertas:${j.id}`}>Kertas kerja #{j.id} · {j.judul} ({j.status})</option>)}
+                      </select>
+                    </div>
+                    <KartuCekPagu
+                      hasil={cek.hasil} memuat={cek.status === "memuat"} galat={sisi.galat} terpotong={sisi.terpotong}
+                      namaResmi="laporan realisasi" namaSistem={namaSistem} jadwalId={sumber.jenis === "kertas" ? sumber.jadwalId : null} namaRo={namaRo}
+                    />
+                  </div>
+                )}
 
                 <button type="button" onClick={() => setLihatItem((x) => !x)} className={tombolKecil}>
                   {lihatItem ? "Sembunyikan item" : "Lihat item"}
@@ -212,6 +288,16 @@ export default function HalamanRealisasi() {
           )}
           <p className="text-[12px] text-[#5B6B84]">Setiap baris Excel dicocokkan ke POK (RO, komponen, akun, uraian). Angka kumulatif per RO dan per akun dipakai tab Anggaran, tab Administrasi, dan skor RAB. Satu tanggal data hanya dapat diterima satu kali.</p>
         </section>
+
+      <section aria-labelledby="judul-dampak" className={`${kartu} flex flex-col gap-2`}>
+        <h2 id="judul-dampak" className={judulKartu}>Langkah 5: setelah diterima, angka ini dipakai di</h2>
+        <ul className="list-disc space-y-1 pl-5 text-[13px] text-[#1B2B4B]">
+          <li><Link href="/sigap/ro" className="font-semibold text-[#1F5FD1] underline">Tab Anggaran per RO</Link>: realisasi tiap item, akun, dan komponen.</li>
+          <li><Link href="/sigap/revisi/kertas" className="font-semibold text-[#1F5FD1] underline">Kertas kerja revisi</Link>: batas R-06 (pagu Menjadi tidak boleh di bawah realisasi) dan kolom Realisasi.</li>
+          <li>Peringatan SPAN (realisasi tanpa RAB, melebihi RAB, atau jatuh di bulan yang tidak terjadwal) dan skor kualitas RAB di bagian bawah halaman ini.</li>
+        </ul>
+        <p className="text-[12px] text-[#5B6B84]">Pagu pada laporan juga menjadi alat cek: bila pagu suatu akun berbeda dari POK, langkah 3 menampilkan peringatan dan tautan ke kertas kerja RO yang bersangkutan.</p>
+      </section>
 
       <BagianSkor />
     </HalamanKeu>
