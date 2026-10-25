@@ -18,6 +18,12 @@ export function useDaftarIdent() {
   return useBacaKeu<BarisDaftar>(urlBaca("keu_v_ident", {}, { urut: "ro_kode", batas: 500, kolom: KOLOM_DAFTAR }));
 }
 
+/** Versi Gap terbaru per identifikasi (untuk lencana temuan keras pada daftar). Kegagalan membaca tidak mengganggu daftar. */
+export type GapTerbaru = { ident_id: number; ver: number; jenis: "berjalan" | "akhir"; n_keras: number; n_sedang: number; n_info: number; dibuat_at: string };
+export function useGapTerbaru() {
+  return useBacaKeu<GapTerbaru>(urlBaca("keu_v_gap_terbaru", {}, { batas: 1000 }));
+}
+
 export type RoRingkas = { kode: string; nama: string; aktif: boolean; sementara: boolean };
 export function useDaftarRo() {
   return useBacaKeu<RoRingkas>(urlBaca("keu_ro", {}, { urut: "kode", batas: 2000, kolom: ["kode", "nama", "aktif", "sementara"] }));

@@ -19,7 +19,7 @@ export type HasilKeu<T = unknown> = { ok: true; data: T } | { ok: false; galat: 
 /** Fungsi yang hanya membaca/menghitung. Hanya inilah yang boleh dipanggil saat sesi "masuk sebagai" (akun super menyamar untuk uji tampilan). */
 export const FUNGSI_BACA: readonly string[] = [
   "keu_boleh", "keu_peran_akun", "keu_adm_buka", "keu_adm_ro_terbuka", "keu_adm_lembar", "keu_jadwal_bulanan", "keu_kk_izin",
-  "keu_kk_muat_ro", "keu_kelompok_akun", "keu_ro_kro", "keu_rab_bulan_cair", "keu_kekurangan_saran", "keu_ident_hak", "keu_kebijakan_hak",
+  "keu_kk_muat_ro", "keu_kelompok_akun", "keu_ro_kro", "keu_rab_bulan_cair", "keu_kekurangan_saran", "keu_ident_hak", "keu_kebijakan_hak", "keu_notifikasi_saya", "keu_usulan_penugasan", "keu_pelaksanaan_bahan",
 ];
 
 const RE_FUNGSI = /^keu_[a-z0-9_]{1,60}$/;

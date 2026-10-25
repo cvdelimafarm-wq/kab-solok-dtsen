@@ -6,7 +6,7 @@
 // Tombol hanya tampil bila hak dan statusnya cocok; yang memutuskan tetap fungsi keu_kebijakan_aksi di basis data.
 
 import {
-  ID_BAGIAN, labelPeran, labelStatus, ringkasPengesahan,
+  ID_BAGIAN, kalimatMenunggu, labelPeran, labelStatus, ringkasPengesahan,
   type AksiLembar, type BarisLembar, type BarisPengesah, type RiwayatLembar,
 } from "@/lib/keu/kebijakan";
 import { Chip, Galat, kolom, tombolBahaya, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
@@ -53,11 +53,14 @@ export function Pengesahan({ row, pengesah, meta, ubahMeta, bisaUbah, kotor, aks
           ...(row.catatan_kembali ? [`Dikembalikan oleh ${row.kembali_oleh ?? "pengesah"} (${waktu(row.kembali_at)}): ${row.catatan_kembali}`] : []),
         ] : row.status === "menunggu" ? [
           "Disahkan paralel: semua ketua tim aktif, PPK, dan Kepala (KPA). Satu akun yang memegang beberapa peran cukup menyetujui sekali.",
-          r.lengkap ? "Semua syarat pengesahan terpenuhi." : `Masih menunggu: ${r.menunggu.join("; ")}.`,
+          r.lengkap ? "Semua syarat pengesahan terpenuhi." : `Masih menunggu: ${kalimatMenunggu(r.menunggu)}.`,
           "Pengesah dapat mengembalikan lembar ke penyusun dengan catatan; pengesahan yang sudah masuk direset.",
         ] : row.status === "berlaku" ? [
           "Lembar ini berlaku dan terkunci; isinya tidak dapat diubah langsung.",
           "Perubahan dilakukan lewat revisi: membuat versi baru yang disahkan ulang, sedangkan versi ini tetap berlaku sampai versi baru disahkan.",
+        ] : row.status === "dibatalkan" ? [
+          "Versi ini dibatalkan dan hanya dapat dibaca; riwayat tindakannya tetap tersimpan.",
+          "Nomor versi tidak dipakai ulang. Untuk menyusun lagi, buat lembar baru dari versi yang berlaku atau dari angka predefined.",
         ] : [
           "Versi ini sudah diarsipkan karena digantikan versi yang lebih baru, dan hanya dapat dibaca.",
         ]
@@ -75,7 +78,7 @@ export function Pengesahan({ row, pengesah, meta, ubahMeta, bisaUbah, kotor, aks
         <textarea className={`${kolom} min-h-[72px] py-2`} aria-label="Tujuan mutu" value={meta.tujuan} maxLength={600} disabled={!bisaUbah} onChange={(e) => ubahMeta({ ...meta, tujuan: e.target.value })} />
       </Isian>
 
-      {(row.status === "menunggu" || row.status === "berlaku" || row.status === "arsip" || aktif.length > 0) && (
+      {(row.status === "menunggu" || row.status === "berlaku" || row.status === "arsip") && (
         <div className="flex flex-col gap-1.5">
           <span className="text-[11.5px] font-semibold text-[#5B6B84]">Pengesah (dibekukan saat diajukan)</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">

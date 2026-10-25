@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import vektor from "./kebijakan.vektor.json";
 import {
   HAK_KOSONG, JABATAN, KODE_JABATAN, KODE_PARAM, KODE_STRATA, aksiTersedia, isiPredefined, ketMinimal, ketStrata, labelNilai, labelStatus,
-  kanonik, nilaiPersen, pilihLembar, periksaIsi, tujuanGalat, ID_BAGIAN, rentangStrata, ringkasPengesahan, strataUntuk, totalMinimal,
+  kalimatMenunggu, kanonik, nilaiPersen, pilihLembar, periksaIsi, tujuanGalat, ID_BAGIAN, rentangStrata, ringkasPengesahan, strataUntuk, totalMinimal,
   type BarisPengesah, type HakKebijakan, type IsiKebijakan,
 } from "../kebijakan";
 
@@ -218,5 +218,14 @@ describe("kanonik dan pilihLembar", () => {
     expect(pilihLembar([{ id: 1, ver: 1, status: "arsip" }], false)).toBe(1);
     expect(pilihLembar([], true)).toBeNull();
     expect(pilihLembar([{ id: 9, ver: 1, status: "dibatalkan" }], true)).toBeNull();
+  });
+});
+
+describe("kalimatMenunggu: tanpa titik ganda", () => {
+  it("menghapus titik akhir dari nama bergelar", () => {
+    expect(kalimatMenunggu(["Ketua tim M. Iqbal Hadi, SST.", "PPK Ani, S.E."])).toBe("Ketua tim M. Iqbal Hadi, SST.; PPK Ani, S.E");
+  });
+  it("tidak mengubah butir tanpa titik akhir", () => {
+    expect(kalimatMenunggu(["Kepala (KPA)"])).toBe("Kepala (KPA)");
   });
 });

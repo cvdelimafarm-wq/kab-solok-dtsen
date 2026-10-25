@@ -9,10 +9,11 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
+import LencanaNotif from "../notifikasi/LencanaNotif";
 import { Catatan, Chip, Galat, Kosong, Memuat, judulKartu, kartu, tombolUtama } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import {
-  ID_BAGIAN, aksiTersedia, isiPredefined, kanonik, labelStatus, periksaIsi, pilihLembar, ringkasPengesahan, tujuanGalat,
+  ID_BAGIAN, aksiTersedia, isiPredefined, kalimatMenunggu, kanonik, labelStatus, periksaIsi, pilihLembar, ringkasPengesahan, tujuanGalat,
   type AksiLembar, type IsiKebijakan,
 } from "@/lib/keu/kebijakan";
 import { Poin, Tautan, loncat } from "../identifikasi/Kontrol";
@@ -102,6 +103,7 @@ function Isi() {
       judul="Kebijakan manajemen tim"
       sub="Templat susunan tim (strata S1–S9) dan kebijakan anggaran disimpan sebagai data, disepakati pada rapat awal tahun, lalu dikunci. Identifikasi, rencana realisasi, dan evaluasi membaca lembar yang berlaku."
       kembali={{ induk: "/sigap/kelola/perencanaan/identifikasi", label: "Identifikasi survei" }}
+      kanan={(gelap) => <LencanaNotif gelap={gelap} />}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">
         <Galat pesan={daftar.galat ?? lembar.galat} />
@@ -197,7 +199,7 @@ function Isi() {
                 ]} />
                 {row.status === "menunggu" && (
                   <p className="m-0 text-[12.5px] text-[#44546F]">
-                    {ringkas.lengkap ? "Semua syarat pengesahan terpenuhi." : `Menunggu: ${ringkas.menunggu.join("; ")}.`} ({ringkas.setuju}/{ringkas.total} persetujuan)
+                    {ringkas.lengkap ? "Semua syarat pengesahan terpenuhi." : `Menunggu: ${kalimatMenunggu(ringkas.menunggu)}.`} ({ringkas.setuju}/{ringkas.total} persetujuan)
                   </p>
                 )}
               </section>

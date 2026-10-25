@@ -9,11 +9,12 @@ import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
+import LencanaNotif from "../notifikasi/LencanaNotif";
 import { Catatan, Chip, Galat, Kosong, Memuat, judulKartu, kartu, kolom, label, tombolUtama } from "@/app/sigap/keu-ui";
 import { aksiKeu } from "@/app/sigap/ro/useKeu";
 import { awalForm, normalisasi } from "@/lib/keu/identifikasi";
 import { barisH15, labelStatus, type UpdTercatat } from "@/lib/keu/identifikasiHilir";
-import { hariIniWib, useDaftarIdent, useDaftarRo, type BarisDaftar } from "./useIdent";
+import { hariIniWib, useDaftarIdent, useDaftarRo, useGapTerbaru, type BarisDaftar } from "./useIdent";
 
 const URUT_STATUS: Record<string, number> = { menunggu_ketua: 0, menunggu_setuju: 0, draf: 1, revisi: 1, sah: 2, dibatalkan: 3 };
 
@@ -27,6 +28,8 @@ function Isi() {
   const router = useRouter();
   const daftar = useDaftarIdent();
   const ros = useDaftarRo();
+  const gap = useGapTerbaru();
+  const gapPer = useMemo(() => new Map((gap.baris ?? []).map((g) => [g.ident_id, g])), [gap.baris]);
   const [roFilter, setRoFilter] = useState("");
   const [roBaru, setRoBaru] = useState("");
   const [namaBaru, setNamaBaru] = useState("");
@@ -65,6 +68,7 @@ function Isi() {
       judul="Identifikasi survei"
       sub="Jawab sekali di sini. Jadwal, petugas, kebutuhan anggaran, agenda Delego, evaluasi, dan rekrutmen mengikuti jawaban yang sudah disahkan (identifikasi awal, lalu versi terupdate)."
       kembali={{ induk: "/sigap", label: "Beranda SIGAP" }}
+      kanan={(gelap) => <LencanaNotif gelap={gelap} />}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">
         <Galat pesan={daftar.galat ?? ros.galat} />
@@ -122,6 +126,7 @@ function Isi() {
                     <span className="text-[12.5px] text-[#5B6B84]">{b.ro_kode} {namaRo.get(b.ro_kode)?.slice(0, 40) ?? ""}</span>
                     <Chip warna={st.nada}>{st.teks}</Chip>
                     {nTempo > 0 && <Chip warna="kuning">{nTempo} periode perlu ditegaskan (H-15)</Chip>}
+                    {(gapPer.get(b.id)?.n_keras ?? 0) > 0 && <Chip warna="merah">{gapPer.get(b.id)?.n_keras} temuan keras pelaksanaan</Chip>}
                   </Link>
                 </li>
               );

@@ -7,6 +7,8 @@
 // Formulir terkunci selama menunggu persetujuan dan setelah sah; perubahan sesudahnya lewat Ajukan revisi.
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import LencanaNotif from "../../notifikasi/LencanaNotif";
 import { useParams } from "next/navigation";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
 import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
@@ -112,6 +114,7 @@ function Isi() {
       jejak={["SIGAP", "Perencanaan", "Identifikasi survei", row?.nama ?? "Survei"]}
       judul={row ? <>{row.nama}</> : "Identifikasi survei"}
       sub={row ? <>RO {row.ro_kode} · Tahun {row.tahun}</> : undefined}
+      kanan={(gelap) => <LencanaNotif gelap={gelap} />}
       kembali={{ induk: "/sigap/kelola/perencanaan/identifikasi", label: "Daftar survei" }}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">
@@ -123,6 +126,12 @@ function Isi() {
             <Chip warna={st.nada}>{st.teks}</Chip>
             {dirty && !terkunciStatus && <Chip warna="kuning">Ada perubahan belum disimpan</Chip>}
             {hakSiap && !hak.susun && <span className="text-[12.5px] text-[#5B6B84]">Anda dapat melihat; menyusun hanya untuk ketua tim, admin RO, atau PPK RO ini.</span>}
+            {row.ver >= 1 && row.status !== "dibatalkan" && (
+              <Link
+                href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/lanjutan`}
+                className="ml-auto rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]"
+              >Identifikasi lanjutan (Fix, petugas, dokumen) →</Link>
+            )}
           </div>
         )}
         {row && f && (() => {

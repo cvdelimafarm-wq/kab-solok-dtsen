@@ -395,6 +395,11 @@ export function ringkasPengesahan(daftar: BarisPengesah[]): RingkasPengesahan {
   return { lengkap: menunggu.length === 0, menunggu, setuju: aktif.filter((x) => x.setuju_at).length, total: aktif.length };
 }
 
+/** Menggabungkan butir "masih menunggu" menjadi satu kalimat tanpa titik ganda (nama bergelar sering berakhir titik). */
+export function kalimatMenunggu(menunggu: string[]): string {
+  return menunggu.join("; ").replace(/\.+\s*$/, "");
+}
+
 export type AksiLembar = "simpan" | "ajukan" | "setuju" | "kembalikan" | "tarik" | "batal" | "revisi";
 
 /** Aksi yang ditawarkan di layar bagi akun ini. */
