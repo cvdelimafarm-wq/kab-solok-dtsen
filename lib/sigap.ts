@@ -14,6 +14,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/periode";
+import { BATAS_HARI_SUSUN, jendelaSusunFoto } from "@/lib/sigapFotoSusun";
 import { dalamToleransiKirim } from "@/lib/sigapFoto";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -259,6 +260,32 @@ export async function cekAksesIsian(
     };
   }
   return { penugasan: pen, tanggal, susulan: kunci.alasan === "izin" };
+}
+
+/**
+ * (25 Okt 2026) Akses MENGATUR NOMOR foto Kamera SIGAP (tukar, pindah, pasang cadangan, susun otomatis).
+ * Berbeda dari cekAksesIsian: batas 23:59 WIB tidak berlaku. Nomor foto hari lampau tetap boleh diatur sampai umur harinya
+ * melewati BATAS_HARI_SUSUN (5 hari), baru terkunci sepenuhnya. Tetap berlaku: penugasan milik akun, SPJ belum dikunci admin,
+ * tanggal hari kerja, dan bukan tanggal mendatang. `susulan` tetap berarti izin susulan admin; `lampau` berarti tanggalnya sudah lewat.
+ */
+export async function cekAksesSusunFoto(
+  db: Db,
+  akunId: number,
+  penugasanId: number,
+  tanggal: unknown
+): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean; lampau: boolean }> {
+  if (!tanggalValid(tanggal)) return { error: "Tanggal tidak valid.", status: 400 };
+  const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
+  if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
+  if (pen.dikunci_at) return { error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin.", status: 403 };
+  const hariIni = hariIniWib();
+  const jendela = jendelaSusunFoto(tanggal, hariIni);
+  if (jendela === "akan_datang") return { error: "Laporan & foto baru bisa diisi pada hari kerjanya.", status: 403 };
+  if (jendela === "terkunci") return { error: `Nomor foto hanya bisa diatur sampai ${BATAS_HARI_SUSUN} hari sesudah tanggalnya. Tanggal ini sudah terkunci.`, status: 403 };
+  const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
+  if (!hk) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
+  const kunci = await statusKunci(db, penugasanId, tanggal);
+  return { penugasan: pen, tanggal, susulan: kunci.alasan === "izin", lampau: tanggal < hariIni };
 }
 
 /** (6 Okt 2026) Jarak dua titik (meter), rumus haversine. */

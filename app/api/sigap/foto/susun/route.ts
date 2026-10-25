@@ -14,7 +14,7 @@
 //        Pindah/pasang/urutkan menerima `harap_*` (opsional): apa yang dilihat petugas di layar. Bila keadaan di server sudah berbeda
 //        (mis. diubah dari HP lain) jawabannya 409 dan tidak ada yang diubah.
 //
-// Kunci akses sama dengan jalur foto lain (cekAksesIsian: hari kerja, 23.59 WIB, izin susulan, SPJ belum dikunci). Foto kepercayaan merah yang belum
+// Kunci akses (cekAksesSusunFoto, 25 Okt 2026): hari kerja, SPJ belum dikunci, dan umur tanggal <= 5 hari (batas 23.59 WIB tidak berlaku untuk mengatur nomor). Foto kepercayaan merah yang belum
 // diperiksa dan foto "dipertanyakan" tidak ikut disusun. Foto yang diambil jauh dari wilayah tugas tidak ditempatkan di nomor berlokasi (2-4).
 // (21 Okt 2026) Foto kuning/merah TETAP ikut bernomor: kuning langsung masuk nomor (hanya ditandai), merah dan yang belum diperiksa diberi
 // nomor sebagai TAHANAN (tag 'ditahan' + slot; belum ditulis ke nomor foto sampai PML/admin memeriksa, lalu sigap_foto_lepas_tahan memasangnya
@@ -22,9 +22,9 @@
 // Tidak ada penghapusan di sini.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cekAksesIsian, hariIniWib, penugasanAkun, tanggalValid, type Db } from "@/lib/sigap";
+import { cekAksesSusunFoto, hariIniWib, penugasanAkun, tanggalValid, type Db } from "@/lib/sigap";
 import { WILAYAH_MERAH_M, jarakEfektifM, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
-import { nomorBerikutnya, nomorKosong, susunFoto, type Kandidat } from "@/lib/sigapFotoSusun";
+import { BATAS_HARI_SUSUN, nomorBerikutnya, nomorKosong, susunFoto, umurHari, type Kandidat } from "@/lib/sigapFotoSusun";
 import { kunciLangkah, rencanaUrutJam, type IsiNomor, type Langkah } from "@/lib/sigapUrutanFoto";
 import { jarakKeRumah, jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.kegiatan.id === kegiatanId);
   if (!pen) return galat("Anda tidak terdaftar pada kegiatan ini.", 403);
   const k = await keadaan(db, akunId, pen, tanggal);
-  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal);
+  const akses = await cekAksesSusunFoto(db, akunId, pen.id, tanggal);
   const nomor = Array.from({ length: k.jumlah }, (_, i) => {
     const b = k.baris.find((x) => x.slot === i + 1);
     const f = b?.foto_id ? k.semua.get(b.foto_id) : undefined;
@@ -130,6 +130,9 @@ export async function GET(req: NextRequest) {
     ok: true,
     boleh: !("error" in akses),
     susulan: !("error" in akses) && akses.susulan,
+    // (25 Okt 2026) hari yang sudah lewat tetap bisa diatur sampai umurnya melewati BATAS_HARI_SUSUN; sisa_hari = berapa hari lagi (0 = hari terakhir)
+    lampau: !("error" in akses) && akses.lampau,
+    sisa_hari: !("error" in akses) && akses.lampau ? Math.max(0, BATAS_HARI_SUSUN - umurHari(tanggal, hariIniWib())) : null,
     alasan_tutup: "error" in akses ? akses.error : null,
     jumlah: k.jumlah,
     nomor,
@@ -164,7 +167,7 @@ export async function POST(req: NextRequest) {
   if ((await modeKegiatan(db, [kegiatanId]))[kegiatanId] !== "kamera") return galat("Kegiatan ini memakai unggah foto (metode lama).", 403, { mode: "unggah" });
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.kegiatan.id === kegiatanId);
   if (!pen) return galat("Anda tidak terdaftar pada kegiatan ini.", 403);
-  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal);
+  const akses = await cekAksesSusunFoto(db, akunId, pen.id, tanggal);
   if ("error" in akses) return galat(akses.error, akses.status);
   const k = await keadaan(db, akunId, pen, tanggal);
 
@@ -243,7 +246,7 @@ export async function POST(req: NextRequest) {
     if (slotBerlokasi(slot) && (await diLuarWilayah(db, akunId, f))) return galat("Foto ini diambil jauh dari wilayah tugas, jadi tidak bisa dipakai untuk nomor " + slot + ".", 422);
     const tag = k.tagFoto.get(f.id)!;
     if (tag.status === "dilepas") await db.from("sigap_foto_tag").update({ status: "diajukan" }).eq("id", tag.id);
-    const { data, error } = await db.rpc("sigap_foto_tempatkan", { p_tag_id: tag.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: slot, p_susulan: akses.susulan, p_tahan: tahan });
+    const { data, error } = await db.rpc("sigap_foto_tempatkan", { p_tag_id: tag.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: slot, p_susulan: akses.susulan || akses.lampau, p_tahan: tahan });
     if (error) return galat(error.message, 500);
     const r = data as { ok?: boolean; error?: string };
     if (!r?.ok) return galat(`Gagal memasang: ${r?.error ?? "tidak diketahui"}`, 409);
@@ -265,7 +268,7 @@ export async function POST(req: NextRequest) {
   const pasang = async (id: number, slot: number, tahan: boolean) => {
     const tag = k.tagFoto.get(id)!;
     if (tag.status === "dilepas") await db.from("sigap_foto_tag").update({ status: "diajukan" }).eq("id", tag.id);
-    const { data, error } = await db.rpc("sigap_foto_tempatkan", { p_tag_id: tag.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: slot, p_susulan: akses.susulan, p_tahan: tahan });
+    const { data, error } = await db.rpc("sigap_foto_tempatkan", { p_tag_id: tag.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: slot, p_susulan: akses.susulan || akses.lampau, p_tahan: tahan });
     const r = data as { ok?: boolean; error?: string } | null;
     if (error || !r?.ok) gagal.push({ foto_id: id, error: error?.message ?? r?.error ?? "tidak diketahui" });
     else (tahan ? ditahan : ditempatkan).push({ foto_id: id, kode: k.semua.get(id)?.kode ?? "", slot });

@@ -40,7 +40,7 @@ function rantai(nama: string) {
 }
 const db = { from: (n: string) => rantai(n), rpc: async (nama: string, arg: Record<string, unknown>) => { panggilanRpc.push({ nama, arg }); return jawabRpc(nama, arg); } };
 
-let akses: unknown = { penugasan: {}, tanggal: "2026-10-20", susulan: true };
+let akses: unknown = { penugasan: {}, tanggal: "2026-10-20", susulan: true, lampau: true };
 let jarak = 100; // m dari wilayah untuk semua foto
 let mode = "kamera";
 
@@ -48,7 +48,7 @@ vi.mock("@/lib/sigap", () => ({
   hariIniWib: () => "2026-10-21",
   tanggalValid: (t: unknown) => typeof t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t),
   penugasanAkun: async () => [{ id: 49, kegiatan: { id: 1, nama: "Pendataan", jumlah_foto: 5 } }],
-  cekAksesIsian: async () => akses,
+  cekAksesSusunFoto: async () => akses,
 }));
 vi.mock("@/lib/sigapFotoServer", () => ({
   modeKegiatan: async () => ({ 1: mode }),
@@ -76,7 +76,7 @@ beforeEach(() => {
   panggilanRpc.length = 0;
   sisipan.length = 0;
   jawabRpc = () => ({ data: { ok: true }, error: null });
-  akses = { penugasan: {}, tanggal: "2026-10-20", susulan: true };
+  akses = { penugasan: {}, tanggal: "2026-10-20", susulan: true, lampau: true };
   jarak = 100;
   mode = "kamera";
   // kasus penugasan 49 (20 Okt): nomor 3 dan 5 sudah kamera; 1 dan 2 unggahan manual; nomor 4 kosong; dua foto tak bernomor
@@ -128,11 +128,40 @@ describe("GET /api/sigap/foto/susun", () => {
     expect(j.kosong).toEqual([4]); // belum tercatat resmi
     expect(j.saran).toBeNull(); // tetapi tidak disarankan lagi untuk foto lain
   });
+  it("hari lampau tanpa izin susulan: tetap boleh diatur; sisa hari dihitung dari batas 5 hari", async () => {
+    akses = { penugasan: {}, tanggal: "2026-10-20", susulan: false, lampau: true };
+    const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-20"))).json();
+    expect(j.boleh).toBe(true);
+    expect(j.susulan).toBe(false);
+    expect(j.lampau).toBe(true);
+    expect(j.sisa_hari).toBe(4); // 20 Okt, hari ini 21 Okt: umur 1 hari, batas 5
+  });
+  it("hari ini: bukan lampau, tanpa sisa hari", async () => {
+    akses = { penugasan: {}, tanggal: "2026-10-21", susulan: false, lampau: false };
+    const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-21"))).json();
+    expect(j.lampau).toBe(false);
+    expect(j.sisa_hari).toBeNull();
+  });
   it("hari yang sudah ditutup: boleh=false dan alasan tampil", async () => {
     akses = { error: "Batas waktu tanggal ini sudah lewat", status: 403 };
     const j = await (await GET(new NextRequest("http://x/api/sigap/foto/susun?kegiatan=1&tanggal=2026-10-20"))).json();
     expect(j.boleh).toBe(false);
     expect(j.alasan_tutup).toMatch(/Batas waktu/);
+  });
+});
+
+describe("POST pada hari lampau tanpa izin susulan", () => {
+  it("memasang cadangan tetap berhasil dan ditandai susulan", async () => {
+    akses = { penugasan: {}, tanggal: "2026-10-20", susulan: false, lampau: true };
+    const r = await POST(req({ aksi: "pasang", foto_id: 279, slot: 4 }));
+    expect(r.status).toBe(200);
+    expect(panggilanRpc[0].arg).toMatchObject({ p_slot: 4, p_susulan: true });
+  });
+  it("tanggal yang sudah terkunci (umur lebih dari 5 hari): ditolak dengan pesan dari akses", async () => {
+    akses = { error: "Nomor foto hanya bisa diatur sampai 5 hari sesudah tanggalnya. Tanggal ini sudah terkunci.", status: 403 };
+    const r = await POST(req({ aksi: "pindah", dari: 3, ke: 4 }));
+    expect(r.status).toBe(403);
+    expect(panggilanRpc).toHaveLength(0);
   });
 });
 

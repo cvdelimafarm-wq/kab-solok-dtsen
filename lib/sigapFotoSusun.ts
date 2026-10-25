@@ -17,6 +17,24 @@ export type HasilSusun = { dipasang: Penempatan[]; cadangan: Kandidat[] };
 
 const berlokasi = (s: number) => (SLOT_BERLOKASI as readonly number[]).includes(s);
 
+/**
+ * (25 Okt 2026) Nomor foto (tukar, pindah, pasang cadangan) tetap boleh diatur sesudah hari itu lewat, sampai umur harinya melewati
+ * BATAS_HARI_SUSUN; sesudah itu terkunci sepenuhnya. Ini hanya soal NOMOR foto yang sudah tersimpan, bukan pengambilan foto baru.
+ */
+export const BATAS_HARI_SUSUN = 5;
+
+/** Selisih hari (bilangan bulat) antara hari ini dan tanggal; positif bila tanggal sudah lewat. Keduanya YYYY-MM-DD. */
+export function umurHari(tanggal: string, hariIni: string): number {
+  return Math.round((Date.parse(`${hariIni}T00:00:00Z`) - Date.parse(`${tanggal}T00:00:00Z`)) / 86_400_000);
+}
+
+/** Apakah nomor foto tanggal ini masih boleh diatur pada hariIni? 'ok' (hari ini atau umur <= batas), 'akan_datang', atau 'terkunci' (umur > batas). */
+export function jendelaSusunFoto(tanggal: string, hariIni: string, batas = BATAS_HARI_SUSUN): "ok" | "akan_datang" | "terkunci" {
+  const u = umurHari(tanggal, hariIni);
+  if (u < 0) return "akan_datang";
+  return u > batas ? "terkunci" : "ok";
+}
+
 /** Nomor kosong terkecil (1..jumlah) dari himpunan nomor yang sudah terisi; null bila semua terisi. */
 export function nomorBerikutnya(terisi: Iterable<number>, jumlah = 5): number | null {
   const ada = new Set(terisi);

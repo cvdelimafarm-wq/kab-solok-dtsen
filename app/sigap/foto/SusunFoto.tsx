@@ -26,7 +26,7 @@ import { alasanBentrok, jamWib, kalimatJam, nilaiJam, pasangIsi, peranRingkas, r
 
 type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string; lat?: number | null; lng?: number | null; tahan?: boolean };
 type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null; ditahan?: FotoRingkas | null };
-type Keadaan = { boleh: boolean; susulan: boolean; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[] };
+type Keadaan = { boleh: boolean; susulan: boolean; lampau?: boolean; sisa_hari?: number | null; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[] };
 type HasilIsi = { ditempatkan: { foto_id: number; slot: number }[]; ditahan?: { foto_id: number; slot: number }[]; cadangan: number; gagal?: { foto_id: number; error: string }[] };
 
 type Pilih = { tipe: "slot"; slot: number } | { tipe: "cadangan"; id: number } | null;
@@ -548,6 +548,11 @@ export default function SusunFoto({
       {petunjuk && <div role="status" className="rounded-lg bg-[#EEF2F7] px-3 py-2 text-xs font-semibold leading-relaxed text-[#1B2B4B]">{petunjuk}</div>}
       {galat && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galat}</div>}
       {!k.boleh && k.alasan_tutup && <div className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs text-[#5E4300]">{k.alasan_tutup}</div>}
+      {k.boleh && k.lampau && typeof k.sisa_hari === "number" && (
+        <div className="rounded-lg bg-[#EEF2F7] px-3 py-2 text-xs text-[#3C4C68]">
+          Hari ini sudah lewat, tetapi nomor foto masih bisa diatur {k.sisa_hari === 0 ? "sampai akhir hari ini" : `${k.sisa_hari} hari lagi`}. Sesudah itu terkunci.
+        </div>
+      )}
 
       <ol className="grid grid-cols-3 gap-2">
         {k.nomor.map((n) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nomorBerikutnya, nomorKosong, ringkasKosong, susunFoto, type Kandidat } from "@/lib/sigapFotoSusun";
+import { BATAS_HARI_SUSUN, jendelaSusunFoto, nomorBerikutnya, nomorKosong, ringkasKosong, susunFoto, umurHari, type Kandidat } from "@/lib/sigapFotoSusun";
 
 const k = (id: number, menit: number, o: Partial<Kandidat> = {}): Kandidat => ({ id, ms: Date.UTC(2026, 9, 20, 8, menit), ...o });
 
@@ -85,5 +85,23 @@ describe("susunFoto", () => {
   it("deterministik: urutan masukan tidak memengaruhi hasil", () => {
     const foto = [4, 1, 3, 2, 6, 5, 7].map((i) => k(i, i * 3));
     expect(susunFoto(foto, [1, 2, 3, 4, 5])).toEqual(susunFoto([...foto].reverse(), [1, 2, 3, 4, 5]));
+  });
+});
+
+describe("jendela mengatur nomor foto (umur tanggal)", () => {
+  it("umur hari dihitung dari selisih tanggal, termasuk lintas bulan dan tahun", () => {
+    expect(umurHari("2026-10-20", "2026-10-20")).toBe(0);
+    expect(umurHari("2026-10-20", "2026-10-25")).toBe(5);
+    expect(umurHari("2026-09-29", "2026-10-03")).toBe(4);
+    expect(umurHari("2026-12-30", "2027-01-02")).toBe(3);
+    expect(umurHari("2026-10-26", "2026-10-25")).toBe(-1);
+  });
+  it("hari ini sampai umur 5 hari boleh; lebih dari 5 hari terkunci; tanggal mendatang belum", () => {
+    expect(BATAS_HARI_SUSUN).toBe(5);
+    expect(jendelaSusunFoto("2026-10-25", "2026-10-25")).toBe("ok");
+    expect(jendelaSusunFoto("2026-10-24", "2026-10-25")).toBe("ok");
+    expect(jendelaSusunFoto("2026-10-20", "2026-10-25")).toBe("ok"); // tepat 5 hari: hari terakhir
+    expect(jendelaSusunFoto("2026-10-19", "2026-10-25")).toBe("terkunci"); // 6 hari
+    expect(jendelaSusunFoto("2026-10-26", "2026-10-25")).toBe("akan_datang");
   });
 });
