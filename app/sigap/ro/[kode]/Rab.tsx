@@ -344,7 +344,7 @@ export function TabRab({ kode }: { kode: string }) {
       {rab.rab && (
         <>
           {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
-          {editable && <UsulanIdentifikasi kode={kode} rabId={ctx.rabId} peta={peta} muat={rab.muatSemua} />}
+          <UsulanIdentifikasi kode={kode} rabId={ctx.rabId} peta={peta} muat={rab.muatSemua} editable={editable} />
           <ul className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
           {rab.jejak.length > 0 && (
             <details className={kartu}>

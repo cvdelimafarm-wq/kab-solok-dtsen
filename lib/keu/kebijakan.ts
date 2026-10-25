@@ -147,10 +147,17 @@ const PARAM_PREDEFINED: Param[] = [
   p({ k: "pulsa_fasih", nama: "Pulsa FASIH", grup: "Lain-lain", jenis: "angka", satuan: "Rp per orang per bulan", aturan: 100000, kebijakan: 100000, dasar: "", ket: "" }),
   p({ k: "konsumsi_rapat", nama: "Konsumsi rapat", grup: "Lain-lain", jenis: "angka", satuan: "Rp", aturan: 40000, kebijakan: 40000, dasar: "", ket: "" }),
   p({ k: "batas_spj", nama: "Batas waktu SPJ", grup: "Lain-lain", jenis: "angka", satuan: "hari kerja", aturan: 5, kebijakan: 5, dasar: "", ket: "" }),
+  p({ k: "hari_cair_maks", nama: "Batas hari pencairan setelah kegiatan", grup: "Lain-lain", jenis: "angka", satuan: "hari (H+)", aturan: 5, kebijakan: 5, dasar: "", ket: "Pencairan dijadwalkan paling lambat H+ sekian dari hari terakhir pelaksanaan kegiatan; dipakai untuk saran jadwal cair di RAB. Tanpa batas awal." }),
 ];
 
+/**
+ * Parameter OPSIONAL: tidak wajib ada (lembar yang sudah disahkan sebelum parameter ini dibuat tetap sah), tetapi bila ada diperiksa sama seperti yang lain.
+ * Pemakai hilir memakai nilai bawaan bila tidak ada.
+ */
+export const KODE_PARAM_OPSIONAL: readonly string[] = ["hari_cair_maks"];
+
 /** Kode parameter yang wajib ada pada setiap lembar (urutan = urutan tampil). */
-export const KODE_PARAM: readonly string[] = PARAM_PREDEFINED.map((x) => x.k);
+export const KODE_PARAM: readonly string[] = PARAM_PREDEFINED.map((x) => x.k).filter((k) => !KODE_PARAM_OPSIONAL.includes(k));
 
 /** Isi predefined (salinan baru setiap dipanggil). Belum sah: dikirim ke basis data sebagai draf versi 1. */
 export function isiPredefined(): IsiKebijakan {
@@ -233,7 +240,7 @@ export function periksaIsi(isi: unknown): HasilPeriksa {
   }
   for (const k of KODE_PARAM) if (!lihat.has(k)) galat.push(`Parameter ${k} belum ada`);
   for (const [k, x] of lihat) {
-    if (!KODE_PARAM.includes(k)) continue;
+    if (!KODE_PARAM.includes(k) && !KODE_PARAM_OPSIONAL.includes(k)) continue;
     const jenis = x.jenis;
     if (jenis === "angka" || jenis === "persen") {
       const n = x.aturan, b = x.kebijakan;
@@ -257,6 +264,11 @@ export function periksaIsi(isi: unknown): HasilPeriksa {
     } else if (jenis === "rujukan" || jenis === "dokumen") {
       /* tidak dihitung otomatis */
     } else galat.push(`Parameter ${k}: jenis tidak dikenal`);
+  }
+
+  const hc = lihat.get("hari_cair_maks");
+  if (hc && hc.jenis === "angka") {
+    for (const v of [hc.aturan, hc.kebijakan]) if (adalahAngka(v) && !bulat(v, 0, 60)) { galat.push("Parameter hari_cair_maks: harus bilangan bulat 0 sampai 60"); break; }
   }
 
   // peringatan (tidak memblokir; hanya TS, untuk layar)

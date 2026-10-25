@@ -2,7 +2,7 @@
 
 // app/sigap/kelola/perencanaan/kebijakan/Anggaran.tsx
 //
-// (25 Okt 2026, tahap 28) Kebijakan anggaran pada lembar kebijakan: 21 parameter biaya dan batas. Setiap parameter punya nilai ATURAN (batas dari peraturan
+// (25 Okt 2026, tahap 28) Kebijakan anggaran pada lembar kebijakan: 22 parameter biaya dan batas. Setiap parameter punya nilai ATURAN (batas dari peraturan
 // atau juknis pusat) dan nilai KEBIJAKAN (kesepakatan rapat awal tahun; sama atau lebih ketat dari aturan). Hanya tampilan dan penyuntingan.
 
 import { ID_BAGIAN, labelNilai, nilaiPersen, type IsiKebijakan, type Param } from "@/lib/keu/kebijakan";
@@ -97,7 +97,7 @@ export function Anggaran({ isi, ubah, mati }: { isi: IsiKebijakan; ubah: UbahIsi
   const grup: string[] = [];
   for (const x of isi.param) if (!grup.includes(x.grup)) grup.push(x.grup);
   return (
-    <Bagian huruf="E" judul="Kebijakan anggaran" gsbpm="21 parameter biaya dan batas" id={ID_BAGIAN.anggaran}>
+    <Bagian huruf="E" judul="Kebijakan anggaran" gsbpm="22 parameter biaya dan batas" id={ID_BAGIAN.anggaran}>
       <Poin butir={[
         "Aturan adalah batas atas dari peraturan atau juknis pusat; melampauinya memicu peringatan keras (temuan Gap dan notifikasi PPK) pada tahap berikutnya.",
         "Kebijakan adalah kesepakatan rapat awal tahun: sama dengan atau lebih ketat dari aturan, tidak boleh melebihinya.",

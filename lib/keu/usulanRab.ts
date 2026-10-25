@@ -14,10 +14,12 @@
 //   - Baris RAB yang sudah ada TIDAK ditimpa; usulan yang sudah pernah disalin ditandai dan tidak ditawarkan lagi.
 //   - Usulan dipasangkan ke item POK RO yang akunnya sama (enam angka). Bila ada lebih dari satu kandidat, pengguna memilih.
 
+import { NAMA_AKUN } from "./identifikasi";
 import type { ItemAnggaran } from "./ro";
 import { bacaRupiah } from "./kekurangan";
 import { barisKosong, bacaVolume, type IsianBaris, type PemetaanItem } from "./rab";
 import type { BarisRincian, IsiLanjutan } from "./lanjutan";
+import type { IsiKebijakan } from "./kebijakan";
 
 export const MINGGU_BAWAAN = 3;
 const MAKS_KET = 200;
@@ -34,9 +36,11 @@ export type UsulanBaris = {
   harga: string;
   bulan: number;
   minggu: number;
-  /** Hari terakhir pelaksanaan yang menjadi acuan jadwal cair, dan batas paling lambat pencairan (H+5); null bila tanggal belum ada. */
+  /** Hari terakhir pelaksanaan yang menjadi acuan jadwal cair, dan batas paling lambat pencairan (H+hariCair); null bila tanggal belum ada atau tanpa batas. */
   selesai: string | null;
   lambat: string | null;
+  /** Jendela pencairan yang dipakai (hari setelah hari terakhir pelaksanaan); null = tanpa batas. */
+  hariCair: number | null;
   /** Batas tertinggi harga menurut lembar kebijakan (null bila belum ada tarif). Harga lebih rendah boleh. */
   batasHarga: number | null;
   perk: boolean;
@@ -65,8 +69,33 @@ export function tambahHariTgl(tgl: string, n: number): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-/** Batas hari antara pelaksanaan terakhir dan pencairan (penjelasan pengguna: paling lambat H+5; cek aturan). */
-export const HARI_CAIR_MAKS = 5;
+/** Batas hari bawaan antara pelaksanaan terakhir dan pencairan bila lembar kebijakan belum memuatnya (penjelasan pengguna: paling lambat H+5; cek aturan). */
+export const HARI_CAIR_BAWAAN = 5;
+export const HARI_CAIR_MAKS = HARI_CAIR_BAWAAN;
+
+export type JendelaCair = { hari: number | null; dariLembar: boolean };
+
+/**
+ * Jendela pencairan dari lembar kebijakan berlaku (parameter hari_cair_maks, nilai KEBIJAKAN). Tanpa lembar atau tanpa parameter (lembar lama) -> bawaan H+5.
+ * Nilai kosong pada lembar = tanpa batas (hari null). Nilai yang bukan bilangan bulat 0..60 diabaikan (bawaan).
+ */
+export function jendelaCair(lembar: Pick<IsiKebijakan, "param"> | null | undefined): JendelaCair {
+  const bawaan: JendelaCair = { hari: HARI_CAIR_BAWAAN, dariLembar: false };
+  const daftar: unknown = lembar?.param;
+  if (!Array.isArray(daftar)) return bawaan;
+  const x = (daftar as Record<string, unknown>[]).find((p) => p && p.k === "hari_cair_maks");
+  if (!x || x.jenis !== "angka") return bawaan;
+  if (x.kebijakan === null) return { hari: null, dariLembar: true };
+  const n = x.kebijakan;
+  if (typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 60) return { hari: n, dariLembar: true };
+  return bawaan;
+}
+
+/** Kalimat jendela untuk layar; "(cek aturan)" hanya bila angkanya bawaan, bukan dari lembar kebijakan. */
+export function teksJendela(j: JendelaCair): string {
+  if (j.hari === null) return "tanpa batas hari (lembar kebijakan)";
+  return `paling lambat H+${j.hari}${j.dariLembar ? " (lembar kebijakan)" : " (bawaan, cek aturan)"}`;
+}
 
 /** Minggu pencairan menurut tanggal: 1-7 -> 1, 8-14 -> 2, 15-21 -> 3, 22 dan seterusnya -> 4. */
 export function mingguDari(tgl: string): number | null {
@@ -94,21 +123,21 @@ export function acuanSelesai(b: Pick<BarisRincian, "kelompok" | "uraian">, isi: 
   return terakhir(pendataan.map((p) => sah(p.selesai))) ?? terakhir(isi.kelas.map((k) => sah(k.selesai)));
 }
 
-/** Saran jadwal cair dari hari terakhir pelaksanaan: bulan dan minggu yang memuat hari itu, serta batas paling lambat (H+5). */
-export function saranCair(selesai: string | null, cadangan: { bulan: number }): { bulan: number; minggu: number; lambat: string | null } {
+/** Saran jadwal cair dari hari terakhir pelaksanaan: bulan dan minggu yang memuat hari itu, serta batas paling lambat (H+hari; null hari = tanpa batas). */
+export function saranCair(selesai: string | null, cadangan: { bulan: number }, hari: number | null = HARI_CAIR_BAWAAN): { bulan: number; minggu: number; lambat: string | null } {
   if (!selesai) return { bulan: cadangan.bulan, minggu: MINGGU_BAWAAN, lambat: null };
-  return { bulan: bulanDari(selesai) ?? cadangan.bulan, minggu: mingguDari(selesai) ?? MINGGU_BAWAAN, lambat: tambahHariTgl(selesai, HARI_CAIR_MAKS) };
+  return { bulan: bulanDari(selesai) ?? cadangan.bulan, minggu: mingguDari(selesai) ?? MINGGU_BAWAAN, lambat: hari === null ? null : tambahHariTgl(selesai, hari) };
 }
 
 /**
  * Peringatan jadwal cair (tidak memblokir). Hanya menandai yang pasti terlambat: minggu yang hari pertamanya sudah sesudah batas H+5.
  * `tahun` = tahun batas lambat bila diketahui; bulan lebih awal dari bulan pelaksanaan tidak diperiksa (pencairan di muka diperbolehkan).
  */
-export function periksaCair(lambat: string | null, bulan: number, minggu: number): string | null {
+export function periksaCair(lambat: string | null, bulan: number, minggu: number, hari: number | null = HARI_CAIR_BAWAAN): string | null {
   const m = lambat ? TGL.exec(lambat) : null;
   if (!lambat || !m) return null;
   const awal = awalMinggu(Number(m[1]), bulan, minggu);
-  if (awal > lambat) return `Jadwal cair sesudah batas H+${HARI_CAIR_MAKS} dari hari terakhir pelaksanaan (paling lambat ${lambat}). Pilih minggu yang lebih awal.`;
+  if (awal > lambat) return `Jadwal cair sesudah batas H+${hari ?? HARI_CAIR_BAWAAN} dari hari terakhir pelaksanaan (paling lambat ${lambat}). Pilih minggu yang lebih awal.`;
   return null;
 }
 
@@ -140,7 +169,7 @@ export function teksHarga(t: number | null): string {
 }
 
 /** Rincian identifikasi -> usulan baris RAB. Urutan sama dengan rincian. `pendataan` = jadwal efektif per periode (sudah memuat pembaruan H-15). */
-export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan: { mulai: string; selesai: string }[], bulanCadangan: number): UsulanBaris[] {
+export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan: { mulai: string; selesai: string }[], bulanCadangan: number, hariCair: number | null = HARI_CAIR_BAWAAN): UsulanBaris[] {
   const dipakai = new Map<string, number>();
   return rincian.map((b) => {
     const dasar = `${b.akun}|${b.uraian}`;
@@ -148,12 +177,12 @@ export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan:
     dipakai.set(dasar, n);
     const harga = teksHarga(b.tarif);
     const selesai = acuanSelesai(b, isi, pendataan);
-    const cair = saranCair(selesai, { bulan: bulanCadangan });
+    const cair = saranCair(selesai, { bulan: bulanCadangan }, hariCair);
     return {
       kunci: n === 1 ? dasar : `${dasar}#${n}`,
       kelompok: b.kelompok, akun: b.akun, uraian: b.uraian,
       volume: teksVolume(b.volume), satuan: satuanRab(b.satuan), harga,
-      bulan: cair.bulan, minggu: cair.minggu, selesai, lambat: cair.lambat,
+      bulan: cair.bulan, minggu: cair.minggu, selesai, lambat: cair.lambat, hariCair,
       batasHarga: harga ? b.tarif : null,
       perk: b.perk, catatan: b.catatan, asalHarga: harga ? "kebijakan" : "manual",
     };
@@ -212,4 +241,52 @@ export function labelSumber(o: { lanjutanAda: boolean; lanjutanVer: number | nul
     return { panjang: `Identifikasi lanjutan versi ${o.lanjutanVer} (${st})`, pendek: `identifikasi lanjutan v${o.lanjutanVer}` };
   }
   return { panjang: "Identifikasi awal (belum ada lanjutan)", pendek: "identifikasi awal" };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Rencana realisasi dari identifikasi (tahap 33, sambungan kedua)
+// ---------------------------------------------------------------------------------------------------------------------
+// Penjagaan konsistensi sengaja sederhana (keputusan pengguna, 26 Okt 2026): hanya MENGECEK apakah anggaran akun itu ADA pada POK RO atau BELUM ADA,
+// berapa pun nilainya. Tidak membandingkan nominal rencana dengan pagu (urusan RAB dan revisi), dan item "Selesai" tetap dihitung ada.
+
+export type JagaAkun = { akun: string; nama: string; status: "ada" | "belum_ada"; usulan: number; item: string[]; pesan: string };
+
+/** Per akun yang dibutuhkan identifikasi: ada atau belum ada pada POK RO. Urutan menurut kemunculan pertama. */
+export function jagaAnggaran(daftar: Pick<UsulanBaris, "akun">[], peta: PemetaanItem[]): JagaAkun[] {
+  const urut: string[] = []; const hitung = new Map<string, number>();
+  for (const u of daftar) { const k = akun6(u.akun); if (!hitung.has(k)) urut.push(k); hitung.set(k, (hitung.get(k) ?? 0) + 1); }
+  return urut.map((k) => {
+    const item = peta.filter((p) => akun6(p.pok.akun) === k).map((p) => namaItem(p.pok));
+    const ada = item.length > 0;
+    return {
+      akun: k, nama: NAMA_AKUN[k] ?? "", status: ada ? "ada" : "belum_ada", usulan: hitung.get(k) ?? 0, item,
+      pesan: ada ? `Anggaran akun ${k} ada pada POK RO ini.` : `Belum ada anggaran akun ${k} pada POK RO ini. Tambahkan lewat revisi POK, atau ubah kebutuhan di identifikasi.`,
+    };
+  });
+}
+
+export type SelCair = { bulan: number; minggu: number; baris: number; tanpaHarga: number; sudahDisalin: number; jumlah: number };
+export type RencanaCair = { sel: SelCair[]; total: number; tanpaHarga: number; sudahDisalin: number; selesaiAkhir: string | null; lambatAkhir: string | null };
+
+/**
+ * Perkiraan pencairan dari identifikasi menurut jadwal saran (bulan dan minggu) tiap usulan. Jumlah = volume x harga bila keduanya sah;
+ * baris tanpa harga atau volume dihitung terpisah (tidak masuk jumlah). `sudahDisalin` = usulan yang sudah menjadi baris RAB.
+ */
+export function rencanaBulanan(daftar: UsulanBaris[], peta: PemetaanItem[]): RencanaCair {
+  const peta2 = new Map<string, SelCair>();
+  let total = 0; let tanpa = 0; let sudah = 0;
+  let selesaiAkhir: string | null = null; let lambatAkhir: string | null = null;
+  for (const u of daftar) {
+    const kunci = `${u.bulan}-${u.minggu}`;
+    const sel = peta2.get(kunci) ?? { bulan: u.bulan, minggu: u.minggu, baris: 0, tanpaHarga: 0, sudahDisalin: 0, jumlah: 0 };
+    sel.baris += 1;
+    const v = bacaVolume(u.volume); const h = bacaRupiah(u.harga);
+    if (v !== null && h !== null) { const j = Math.round(v * h); sel.jumlah += j; total += j; } else { sel.tanpaHarga += 1; tanpa += 1; }
+    if (sudahDisalin(u, peta)) { sel.sudahDisalin += 1; sudah += 1; }
+    peta2.set(kunci, sel);
+    if (u.selesai && (selesaiAkhir === null || u.selesai > selesaiAkhir)) selesaiAkhir = u.selesai;
+    if (u.lambat && (lambatAkhir === null || u.lambat > lambatAkhir)) lambatAkhir = u.lambat;
+  }
+  const sel = [...peta2.values()].sort((a, b) => a.bulan - b.bulan || a.minggu - b.minggu);
+  return { sel, total, tanpaHarga: tanpa, sudahDisalin: sudah, selesaiAkhir, lambatAkhir };
 }
