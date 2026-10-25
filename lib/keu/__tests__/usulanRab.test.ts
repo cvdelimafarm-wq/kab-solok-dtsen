@@ -205,6 +205,9 @@ describe("kandidat item dan penanda sudah disalin", () => {
     const q = [peta(2, "524113", "rinci", ["Translok PML · identifikasi awal"]), peta(5, "521211", "belum")];
     const daftar = [u("524113"), u("524113", "Translok PPL"), { ...u("521211", "Konsumsi"), harga: "" }, u("999999", "Lain")];
     expect(ringkasUsulan(daftar, q)).toEqual({ jumlah: 4, sudah: 1, siap: 1, butuhHarga: 1, tanpaItem: 1, total: 400000 });
+    // volume kosong juga menunggu isian (tombol salin menolaknya)
+    const tanpaVolume = [u("524113", "Tanpa volume")]; tanpaVolume[0].volume = "";
+    expect(ringkasUsulan(tanpaVolume, q)).toMatchObject({ siap: 0, butuhHarga: 1, total: 0 });
     const q2 = [peta(2, "524113", "rinci")];
     expect(ringkasUsulan([u("524113")], q2)).toMatchObject({ siap: 1, total: 400000 });
   });
@@ -230,11 +233,21 @@ describe("rencana realisasi dari identifikasi", () => {
     expect(j[0].status).toBe("ada");
   });
   it("rencana bulanan: jumlah per bulan dan minggu, baris tanpa harga terpisah, penanda sudah disalin", () => {
-    const p = [peta(1, "524113", "rinci", 1000, ["Translok · identifikasi awal"])];
+    const p = [peta(1, "524113", "rinci", 1000)];
     const r = rencanaBulanan([u("524113", "Translok"), u("524113", "Lain", { minggu: 2 }), u("524113", "Kosong", { harga: "", bulan: 4, minggu: 1 }), u("524113", "Akhir", { bulan: 3, minggu: 4, selesai: "2026-03-28", lambat: "2026-04-02" })], p);
-    expect(r.sel.map((x) => [x.bulan, x.minggu, x.baris, x.jumlah, x.tanpaHarga, x.sudahDisalin])).toEqual([[3, 2, 2, 400000, 0, 1], [3, 4, 1, 200000, 0, 0], [4, 1, 1, 0, 1, 0]]);
-    expect(r.total).toBe(600000); expect(r.tanpaHarga).toBe(1); expect(r.sudahDisalin).toBe(1);
+    expect(r.sel.map((x) => [x.bulan, x.minggu, x.baris, x.jumlah, x.tanpaHarga, x.sudahDisalin])).toEqual([[3, 2, 2, 400000, 0, 0], [3, 4, 1, 200000, 0, 0], [4, 1, 1, 0, 1, 0]]);
+    expect(r.total).toBe(600000); expect(r.tanpaHarga).toBe(1); expect(r.sudahDisalin).toBe(0);
     expect(r.selesaiAkhir).toBe("2026-03-28"); expect(r.lambatAkhir).toBe("2026-04-02");
+  });
+  it("usulan yang sudah disalin dihitung dari baris RAB-nya: jumlah dan jadwal sebenarnya", () => {
+    const p = [peta(1, "524113", "rinci", 1000, ["Translok · identifikasi awal"])];
+    Object.assign(p[0].baris[0], { jumlah: 640000, bulan_mulai: 5, bulan_sampai: 5, minggu: 1 });
+    const r = rencanaBulanan([u("524113", "Translok"), u("524113", "Lain")], p);
+    expect(r.sel.map((x) => [x.bulan, x.minggu, x.baris, x.jumlah, x.tanpaHarga, x.sudahDisalin])).toEqual([[3, 2, 1, 200000, 0, 0], [5, 1, 1, 640000, 0, 1]]);
+    expect(r.total).toBe(840000); expect(r.sudahDisalin).toBe(1);
+    // baris RAB berjumlah nol dihitung tanpa harga
+    Object.assign(p[0].baris[0], { jumlah: 0 });
+    expect(rencanaBulanan([u("524113", "Translok")], p)).toMatchObject({ total: 0, tanpaHarga: 1, sudahDisalin: 1 });
   });
   it("rencana kosong", () => {
     expect(rencanaBulanan([], [])).toEqual({ sel: [], total: 0, tanpaHarga: 0, sudahDisalin: 0, selesaiAkhir: null, lambatAkhir: null });

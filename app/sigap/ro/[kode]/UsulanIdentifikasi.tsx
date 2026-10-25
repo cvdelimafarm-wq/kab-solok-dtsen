@@ -142,22 +142,23 @@ function hitungBahan(b: BarisAcuan, lembar: IsiKebijakan | null): Bahan {
 
 const sumberDari = (b: BarisAcuan) => labelSumber({ lanjutanAda: b.lanjutan_ada, lanjutanVer: b.lanjutan_ver, lanjutanStatus: b.lanjutan_status });
 
-function KeteranganSumber({ b }: { b: BarisAcuan }) {
+/** `lembarVer` = versi lembar kebijakan yang BERLAKU sekarang (dipakai menghitung tarif dan jendela); bukan versi yang dipakai saat lanjutan disusun. */
+function KeteranganSumber({ b, lembarVer }: { b: BarisAcuan; lembarVer: number | null }) {
   return (
     <p className="text-[12.5px] text-[#44546F]">
-      Sumber: <span className="font-semibold text-[#0F2A52]">{sumberDari(b).panjang}</span>{b.kebijakan_ver ? `; lembar kebijakan versi ${b.kebijakan_ver}` : "; belum ada lembar kebijakan yang berlaku"}.
+      Sumber: <span className="font-semibold text-[#0F2A52]">{sumberDari(b).panjang}</span>{lembarVer ? `; tarif dan jendela dari lembar kebijakan versi ${lembarVer}` : "; belum ada lembar kebijakan yang berlaku"}.
       {b.lanjutan_status === "draf" && " Masih Draf: angka dapat berubah."}
     </p>
   );
 }
 
 // ------------------------------------------------------------ kartu usulan
-function IsiUsulan({ b, daftar, props, jendela }: { b: BarisAcuan; daftar: UsulanBaris[]; props: PropsUsulan; jendela: JendelaCair }) {
+function IsiUsulan({ b, daftar, props, jendela, lembarVer }: { b: BarisAcuan; daftar: UsulanBaris[]; props: PropsUsulan; jendela: JendelaCair; lembarVer: number | null }) {
   const sumber = sumberDari(b);
   const r = ringkasUsulan(daftar, props.peta);
   return (
     <div className="space-y-3">
-      <KeteranganSumber b={b} />
+      <KeteranganSumber b={b} lembarVer={lembarVer} />
       <p className="rounded-lg bg-[#EAF1FC] px-3 py-2 text-[12.5px] leading-relaxed text-[#1B2B4B]">
         Usulan hanya saran. Tarif kebijakan adalah batas tertinggi: harga yang lebih rendah boleh, yang lebih tinggi diberi peringatan. Baris RAB yang sudah ada tidak diubah.
       </p>
@@ -188,21 +189,21 @@ function IsiUsulan({ b, daftar, props, jendela }: { b: BarisAcuan; daftar: Usula
         })}
       </ul>
       <p className="text-[12px] text-[#6B7A93]">
-        {r.jumlah} usulan: {r.sudah} sudah disalin, {r.siap} siap disalin{r.siap > 0 ? ` (${rupiah(r.total)})` : ""}, {r.butuhHarga} menunggu harga, {r.tanpaItem} tanpa item POK.
+        {r.jumlah} usulan: {r.sudah} sudah disalin, {r.siap} siap disalin{r.siap > 0 ? ` (${rupiah(r.total)})` : ""}, {r.butuhHarga} menunggu volume atau harga, {r.tanpaItem} tanpa item POK.
       </p>
     </div>
   );
 }
 
 // ------------------------------------------------------------ kartu rencana realisasi (hanya baca)
-function IsiRencana({ b, daftar, peta, jendela }: { b: BarisAcuan; daftar: UsulanBaris[]; peta: PemetaanItem[]; jendela: JendelaCair }) {
+function IsiRencana({ b, daftar, peta, jendela, lembarVer }: { b: BarisAcuan; daftar: UsulanBaris[]; peta: PemetaanItem[]; jendela: JendelaCair; lembarVer: number | null }) {
   const jaga = useMemo(() => jagaAnggaran(daftar, peta), [daftar, peta]);
   const rencana = useMemo(() => rencanaBulanan(daftar, peta), [daftar, peta]);
   const belumAda = jaga.filter((x) => x.status === "belum_ada");
   if (daftar.length === 0) return <p className="text-[13px] text-[#6B7A93]">Identifikasi ini belum menghasilkan kebutuhan biaya, jadi belum ada rencana realisasi.</p>;
   return (
     <div className="space-y-3">
-      <KeteranganSumber b={b} />
+      <KeteranganSumber b={b} lembarVer={lembarVer} />
       <div className="space-y-1.5">
         <p className={label}>Anggaran pada POK RO (hanya ada atau belum ada, berapa pun nilainya)</p>
         {belumAda.length > 0 && (
@@ -248,7 +249,7 @@ function IsiRencana({ b, daftar, peta, jendela }: { b: BarisAcuan; daftar: Usula
         </div>
         <p className="text-[12px] text-[#6B7A93]">
           {rencana.tanpaHarga} dari {daftar.length} kebutuhan belum punya volume atau harga sehingga belum masuk jumlah; {rencana.sudahDisalin} sudah menjadi baris RAB.
-          Harga awal dari tarif kebijakan adalah batas tertinggi, jadi jumlah ini batas atas.
+          Kebutuhan yang belum disalin memakai harga awal dari tarif kebijakan (batas tertinggi), jadi jumlah ini batas atas; yang sudah disalin dihitung dari baris RAB-nya.
           {rencana.selesaiAkhir ? ` Kegiatan berakhir paling akhir ${rencana.selesaiAkhir}; pencairan ${teksJendela(jendela)}${rencana.lambatAkhir ? `: ${rencana.lambatAkhir}` : ""}.` : " Tanggal kegiatan belum lengkap pada identifikasi."}
         </p>
       </div>
@@ -268,6 +269,7 @@ export function UsulanIdentifikasi(props: PropsUsulan & { editable: boolean }) {
   const b = daftarIdent.find((x) => x.ident_id === pilih) ?? daftarIdent[0] ?? null;
   const lembar = useBacaKeu<LembarBerlaku>(b ? urlBaca("keu_v_kebijakan_berlaku", { tahun: b.tahun }, { batas: 1 }) : null);
   const siap = b !== null && (lembar.baris !== null || lembar.galat !== null);
+  const lembarVer = lembar.baris?.[0]?.ver ?? null;
   const bahan = useMemo(() => (b && siap ? hitungBahan(b, lembar.baris?.[0]?.isi ?? null) : null), [b, siap, lembar.baris]);
 
   if (acuan.galat || acuan.baris === null || b === null) return null;
@@ -292,14 +294,14 @@ export function UsulanIdentifikasi(props: PropsUsulan & { editable: boolean }) {
           <summary className="min-h-[40px] cursor-pointer list-none">
             <span className={judulKartu}>Usulan dari identifikasi</span><span className="ml-2 text-[12.5px] text-[#6B7A93]">{ringkasan}</span>
           </summary>
-          <div className="mt-2">{isiKartu((d, j) => <IsiUsulan b={b} daftar={d} props={props} jendela={j} />)}</div>
+          <div className="mt-2">{isiKartu((d, j) => <IsiUsulan b={b} daftar={d} props={props} jendela={j} lembarVer={lembarVer} />)}</div>
         </details>
       )}
       <details className={kartu}>
         <summary className="min-h-[40px] cursor-pointer list-none">
           <span className={judulKartu}>Rencana realisasi dari identifikasi</span><span className="ml-2 text-[12.5px] text-[#6B7A93]">{ringkasan}</span>
         </summary>
-        <div className="mt-2">{isiKartu((d, j) => <IsiRencana b={b} daftar={d} peta={props.peta} jendela={j} />)}</div>
+        <div className="mt-2">{isiKartu((d, j) => <IsiRencana b={b} daftar={d} peta={props.peta} jendela={j} lembarVer={lembarVer} />)}</div>
       </details>
     </div>
   );

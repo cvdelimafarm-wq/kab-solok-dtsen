@@ -17,7 +17,7 @@
 import { NAMA_AKUN } from "./identifikasi";
 import type { ItemAnggaran } from "./ro";
 import { bacaRupiah } from "./kekurangan";
-import { barisKosong, bacaVolume, type IsianBaris, type PemetaanItem } from "./rab";
+import { barisKosong, bacaVolume, type BarisRabRow, type IsianBaris, type PemetaanItem } from "./rab";
 import type { BarisRincian, IsiLanjutan } from "./lanjutan";
 import type { IsiKebijakan } from "./kebijakan";
 
@@ -209,24 +209,34 @@ export function kandidatItem(akun: string, peta: PemetaanItem[]): { bisa: Pemeta
   return { bisa: cocok.filter((p) => p.status !== "sama"), sama: cocok.filter((p) => p.status === "sama") };
 }
 
+/** Baris RAB hasil salinan usulan (keterangan diawali uraian usulan, pada item beakun sama); null bila belum disalin. */
+export function barisSalinan(u: Pick<UsulanBaris, "uraian" | "akun">, peta: PemetaanItem[]): BarisRabRow | null {
+  const awalan = u.uraian.slice(0, 120);
+  for (const p of peta) {
+    if (akun6(p.pok.akun) !== akun6(u.akun)) continue;
+    const b = p.baris.find((x) => x.ket.startsWith(awalan));
+    if (b) return b;
+  }
+  return null;
+}
+
 /** Usulan sudah disalin bila ada baris RAB (pada item mana pun) yang keterangannya diawali uraian usulan dan akun itemnya sama. */
 export function sudahDisalin(u: Pick<UsulanBaris, "uraian" | "akun">, peta: PemetaanItem[]): boolean {
-  const awalan = u.uraian.slice(0, 120);
-  return peta.some((p) => akun6(p.pok.akun) === akun6(u.akun) && p.baris.some((b) => b.ket.startsWith(awalan)));
+  return barisSalinan(u, peta) !== null;
 }
 
 export type RingkasUsulan = { jumlah: number; sudah: number; siap: number; butuhHarga: number; tanpaItem: number; total: number };
 
-/** Ringkasan kartu: berapa usulan, berapa sudah disalin, berapa siap disalin, berapa menunggu harga, berapa tanpa item POK. */
+/** Ringkasan kartu: berapa usulan, berapa sudah disalin, berapa siap disalin, berapa menunggu volume atau harga, berapa tanpa item POK. */
 export function ringkasUsulan(daftar: UsulanBaris[], peta: PemetaanItem[]): RingkasUsulan {
   let sudah = 0; let siap = 0; let butuhHarga = 0; let tanpaItem = 0; let total = 0;
   for (const u of daftar) {
     if (sudahDisalin(u, peta)) { sudah += 1; continue; }
     if (kandidatItem(u.akun, peta).bisa.length === 0) { tanpaItem += 1; continue; }
-    if (u.harga === "") { butuhHarga += 1; continue; }
-    siap += 1;
     const v = bacaVolume(u.volume); const h = bacaRupiah(u.harga);
-    if (v !== null && h !== null) total += Math.round(v * h);
+    if (v === null || h === null) { butuhHarga += 1; continue; } // menunggu volume atau harga
+    siap += 1;
+    total += Math.round(v * h);
   }
   return { jumlah: daftar.length, sudah, siap, butuhHarga, tanpaItem, total };
 }
@@ -270,6 +280,7 @@ export type RencanaCair = { sel: SelCair[]; total: number; tanpaHarga: number; s
 
 /**
  * Perkiraan pencairan dari identifikasi menurut jadwal saran (bulan dan minggu) tiap usulan. Jumlah = volume x harga bila keduanya sah;
+ * usulan yang sudah disalin memakai jumlah dan jadwal baris RAB-nya;
  * baris tanpa harga atau volume dihitung terpisah (tidak masuk jumlah). `sudahDisalin` = usulan yang sudah menjadi baris RAB.
  */
 export function rencanaBulanan(daftar: UsulanBaris[], peta: PemetaanItem[]): RencanaCair {
@@ -277,12 +288,18 @@ export function rencanaBulanan(daftar: UsulanBaris[], peta: PemetaanItem[]): Ren
   let total = 0; let tanpa = 0; let sudah = 0;
   let selesaiAkhir: string | null = null; let lambatAkhir: string | null = null;
   for (const u of daftar) {
-    const kunci = `${u.bulan}-${u.minggu}`;
-    const sel = peta2.get(kunci) ?? { bulan: u.bulan, minggu: u.minggu, baris: 0, tanpaHarga: 0, sudahDisalin: 0, jumlah: 0 };
+    // Usulan yang sudah disalin dihitung dari baris RAB-nya (jumlah dan jadwal sebenarnya), bukan dari isian awal usulan.
+    const salinan = barisSalinan(u, peta);
+    const bulan = salinan ? salinan.bulan_mulai : u.bulan;
+    const minggu = salinan ? salinan.minggu : u.minggu;
+    const kunci = `${bulan}-${minggu}`;
+    const sel = peta2.get(kunci) ?? { bulan, minggu, baris: 0, tanpaHarga: 0, sudahDisalin: 0, jumlah: 0 };
     sel.baris += 1;
-    const v = bacaVolume(u.volume); const h = bacaRupiah(u.harga);
-    if (v !== null && h !== null) { const j = Math.round(v * h); sel.jumlah += j; total += j; } else { sel.tanpaHarga += 1; tanpa += 1; }
-    if (sudahDisalin(u, peta)) { sel.sudahDisalin += 1; sudah += 1; }
+    let j: number | null = null;
+    if (salinan) { const n = Number(salinan.jumlah); j = Number.isFinite(n) && n > 0 ? Math.round(n) : null; }
+    else { const v = bacaVolume(u.volume); const h = bacaRupiah(u.harga); if (v !== null && h !== null) j = Math.round(v * h); }
+    if (j !== null) { sel.jumlah += j; total += j; } else { sel.tanpaHarga += 1; tanpa += 1; }
+    if (salinan) { sel.sudahDisalin += 1; sudah += 1; }
     peta2.set(kunci, sel);
     if (u.selesai && (selesaiAkhir === null || u.selesai > selesaiAkhir)) selesaiAkhir = u.selesai;
     if (u.lambat && (lambatAkhir === null || u.lambat > lambatAkhir)) lambatAkhir = u.lambat;
