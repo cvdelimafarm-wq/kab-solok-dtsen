@@ -18,6 +18,7 @@ import { angka, rupiah } from "@/lib/keu/ro";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, tombol } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useAnggaranRo, useBoleh, useKirim, useRabRo } from "../useKeu";
+import { UsulanIdentifikasi } from "./UsulanIdentifikasi";
 
 const WARNA_STATUS: Record<string, WarnaChip> = { draf: "abu", dikembalikan: "merah", menunggu_ketua: "kuning", menunggu_ppk: "kuning", disetujui: "hijau" };
 const LABEL_ITEM: Record<PemetaanItem["status"], string> = { belum: "Belum ada RAB", sama: "RAB = Item", rinci: "RAB rinci", selesai: "Selesai" };
@@ -343,6 +344,7 @@ export function TabRab({ kode }: { kode: string }) {
       {rab.rab && (
         <>
           {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
+          {editable && <UsulanIdentifikasi kode={kode} rabId={ctx.rabId} peta={peta} muat={rab.muatSemua} />}
           <ul className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
           {rab.jejak.length > 0 && (
             <details className={kartu}>
