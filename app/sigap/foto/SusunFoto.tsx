@@ -147,6 +147,7 @@ export default function SusunFoto({
   jenis = null,
   otomatis = false,
   polos = false,
+  rapat = false,
   onBerubah,
 }: {
   kegiatanId: number;
@@ -155,6 +156,8 @@ export default function SusunFoto({
   otomatis?: boolean;
   /** (24 Okt 2026) true bila sudah berada di dalam kartu pembungkus: tanpa bingkai dan jarak sendiri, supaya kisi foto tidak menyempit (kartu bersarang) */
   polos?: boolean;
+  /** (25 Okt 2026) true di panel yang sudah selebar layar HP: kisi foto nyaris tanpa jarak (seperti umpan Facebook) supaya tiap foto lebih besar; teks lain diberi jarak sendiri. Layar lebar (640px ke atas) tampil biasa. */
+  rapat?: boolean;
   onBerubah?: () => void | Promise<void>;
 }) {
   const [k, setK] = useState<Keadaan | null>(null);
@@ -523,7 +526,7 @@ export default function SusunFoto({
   const dipilihCadangan = pilih?.tipe === "cadangan" ? k.cadangan.find((f) => f.id === pilih.id) ?? null : null;
 
   return (
-    <section className={`flex flex-col gap-2.5 ${polos ? "" : "rounded-2xl border border-[#C9D3E6] bg-white p-3"}`} aria-label="Nomor foto Kamera SIGAP">
+    <section className={`flex flex-col gap-2.5 ${polos ? "" : "rounded-2xl border border-[#C9D3E6] bg-white p-3"} ${rapat ? "[&>*:not(ol)]:mx-2 min-[640px]:[&>*:not(ol)]:mx-0" : ""}`} aria-label="Nomor foto Kamera SIGAP">
       <div>
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto {k.nomor.filter((n) => n.terisi).length}/{k.jumlah}</div>
         {boleh && (
@@ -554,7 +557,7 @@ export default function SusunFoto({
         </div>
       )}
 
-      <ol className="grid grid-cols-3 gap-2">
+      <ol className={`grid grid-cols-3 ${rapat ? "gap-1 min-[640px]:gap-2" : "gap-2"}`}>
         {k.nomor.map((n) => {
           const f = n.foto ?? n.ditahan ?? null;
           const dipilihIni = dipilihSlot === n.slot;

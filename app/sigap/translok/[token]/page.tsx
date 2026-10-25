@@ -1131,7 +1131,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} penuh={!!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>
@@ -1379,7 +1379,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
           </button>
 
           {bagian && bisaIsi && (
-            <div ref={panel} className="mt-3 space-y-3">
+            <div ref={panel} className={`mt-3 space-y-3 ${bagian === "foto" ? "-mx-[38px] min-[640px]:mx-0 [&>div:not([id^=bag-foto-])]:mx-3 min-[640px]:[&>div:not([id^=bag-foto-])]:mx-0" : ""}`}>
               <KartuHari key={`ar-${pen.id}-${hari.tanggal}-${bagian}`} token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} hanya={bagian} tanpaJudul />
             </div>
           )}
