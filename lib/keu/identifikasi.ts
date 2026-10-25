@@ -570,6 +570,49 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Tujuan navigasi: kalimat peringatan/catatan menuju kartu formulir yang bersangkutan
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Kata kunci -> id elemen pada halaman identifikasi. Kata yang paling awal muncul dalam kalimat menentukan tujuan. */
+const PETA_TUJUAN: [RegExp, string][] = [
+  [/fasih|papi|instrumen|pulsa/i, "bagian-d"],
+  [/pasca pengolahan|pasca/i, "tahap-pasca"],
+  [/updating/i, "tahap-updating"],
+  [/pengolahan/i, "tahap-pengolahan"],
+  [/diseminasi/i, "tahap-diseminasi"],
+  [/pendataan|pola jendela|pengecualian jadwal/i, "tahap-pendataan"],
+  [/nama survei|periode/i, "bagian-a"],
+  [/briefing|pelatihan|dirujuk|rujukan/i, "bagian-b"],
+  [/rapat/i, "bagian-c"],
+  [/petugas|supervisor|kortim|\bpml\b|\bppl\b|peran lapangan|honor|translok|organik|mitra/i, "bagian-e"],
+  [/konsultasi|rekonsiliasi|cetak|buku/i, "bagian-f"],
+];
+
+/** Penegasan H-15 dan kartu lain di sisi kanan (id kartu). */
+const KARTU_TUJUAN: [RegExp, string][] = [
+  [/penegasan tanggal/i, "h-h15"],
+  [/\((fasih|papi)\)/i, "bagian-d"],
+];
+
+/**
+ * Id elemen tujuan untuk sebuah kalimat hasil/peringatan/kematangan/agenda, atau null bila tidak ada tujuan yang pasti.
+ * Kalimat berakhiran "(X)" dengan X = huruf bagian formulir (A-F) langsung menuju bagian itu.
+ */
+export function tujuanPesan(teks: string): string | null {
+  const t = String(teks || "");
+  const h = /\(([A-F])\)\s*$/.exec(t);
+  if (h) return `bagian-${h[1].toLowerCase()}`;
+  for (const [re, id] of KARTU_TUJUAN) if (re.test(t)) return id;
+  let terbaik: { i: number; id: string } | null = null;
+  for (const [re, id] of PETA_TUJUAN) {
+    const m = re.exec(t);
+    if (m && (terbaik === null || m.index < terbaik.i)) terbaik = { i: m.index, id };
+  }
+  if (terbaik) return terbaik.id;
+  return /jadwal/i.test(t) ? "bagian-a" : null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Kematangan (Fix atau Perkiraan)
 // ---------------------------------------------------------------------------------------------------------------------
 

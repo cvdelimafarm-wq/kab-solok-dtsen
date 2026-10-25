@@ -129,8 +129,8 @@ function Isi() {
           const h15 = tanggalH15(row.ver > 0 && formSah ? formSah : f, row.tahun);
           if (!h15 || !(sesudahH15(row.ver > 0 && formSah ? formSah : f, row.tahun, hariIniWib()))) return null;
           return row.ver > 0
-            ? <Catatan>H-15 ({tglIndo(h15)}) sudah lewat: versi terakhir dianggap final. Revisi yang dikirim sekarang hanya perlu persetujuan KPA dan dicatat untuk evaluasi.</Catatan>
-            : <Catatan>H-15 ({tglIndo(h15)}) sudah lewat: identifikasi awal ini terlambat dan dicatat untuk evaluasi. Semua identifikasi wajib selesai disahkan paling lambat H-15.</Catatan>;
+            ? <Catatan><ul className="m-0 list-disc space-y-0.5 pl-5"><li>H-15 ({tglIndo(h15)}) sudah lewat; versi terakhir dianggap final.</li><li>Revisi yang dikirim sekarang hanya perlu persetujuan KPA dan dicatat untuk evaluasi.</li></ul></Catatan>
+            : <Catatan><ul className="m-0 list-disc space-y-0.5 pl-5"><li>H-15 ({tglIndo(h15)}) sudah lewat; identifikasi awal ini terlambat dan dicatat untuk evaluasi.</li><li>Semua identifikasi wajib selesai disahkan paling lambat H-15.</li></ul></Catatan>;
         })()}
         {row && f && (
           <>

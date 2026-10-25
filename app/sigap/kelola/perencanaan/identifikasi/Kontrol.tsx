@@ -83,7 +83,7 @@ export function Isian({ judul, ket, children }: { judul: string; ket?: ReactNode
 /** Kartu satu bagian formulir: huruf, judul, dan penanda GSBPM. */
 export function Bagian({ huruf, judul, gsbpm, children, id }: { huruf: string; judul: string; gsbpm?: string; children: ReactNode; id?: string }) {
   return (
-    <section id={id} className={`${kartu} flex flex-col gap-3.5`} aria-labelledby={`h-${huruf}`}>
+    <section id={id} className={`${kartu} flex scroll-mt-20 flex-col gap-3.5`} aria-labelledby={`h-${huruf}`}>
       <header className="flex flex-wrap items-center gap-2 border-b border-[#EEF2F7] pb-2">
         <span aria-hidden className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[#0F2A52] text-[13px] font-extrabold text-[#E7C15A]">{huruf}</span>
         <h2 id={`h-${huruf}`} className="m-0 text-[16px] font-bold text-[#0F2A52]">{judul}</h2>
@@ -98,3 +98,44 @@ export function Bagian({ huruf, judul, gsbpm, children, id }: { huruf: string; j
 export const Cat = ({ children }: { children: ReactNode }) => (
   <p className="m-0 rounded-lg border border-[#D5DEEC] bg-[#F3F6FA] px-3 py-2 text-[12.5px] leading-snug text-[#44546F]">{children}</p>
 );
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Navigasi dari kartu samping ke kartu/isian formulir, dan daftar poin
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Menggulir ke elemen berid `id`, menyorotnya sebentar, lalu memfokuskan isian pertama di dalamnya. Mengembalikan false bila elemen tidak ada. */
+export function loncat(id: string): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.getElementById(id);
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.add("ring-2", "ring-[#1F5FD1]", "ring-offset-2", "transition-shadow");
+  window.setTimeout(() => el.classList.remove("ring-2", "ring-[#1F5FD1]", "ring-offset-2"), 1800);
+  const f = el.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+  if (f) window.setTimeout(() => f.focus({ preventScroll: true }), 350);
+  return true;
+}
+
+/**
+ * Teks yang bila diklik menuju kartu/isian `ke`. Tanpa tujuan, tampil sebagai teks biasa.
+ * Tombol (bukan tautan) agar tidak mengubah alamat halaman; dapat dijangkau papan ketik.
+ */
+export function Tautan({ ke, children }: { ke: string | null; children: ReactNode }) {
+  if (!ke) return <>{children}</>;
+  return (
+    <button type="button" onClick={() => { if (!loncat(ke) && ke.startsWith("tahap-")) loncat("bagian-a"); }}
+      className="m-0 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit underline decoration-[#1F5FD1]/50 decoration-dotted underline-offset-[3px] hover:text-[#1F5FD1] hover:decoration-solid focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5FD1]"
+      title="Buka bagian yang bersangkutan">
+      {children}<span aria-hidden className="ml-1 text-[#1F5FD1]">→</span>
+    </button>
+  );
+}
+
+/** Daftar poin ringkas. Tiap butir satu kalimat; butir boleh berupa elemen. */
+export function Poin({ butir, kelas = "" }: { butir: ReactNode[]; kelas?: string }) {
+  return (
+    <ul className={`m-0 list-disc space-y-1 pl-5 text-[12.5px] leading-snug text-[#44546F] marker:text-[#8FA3C2] ${kelas}`}>
+      {butir.map((b, i) => <li key={i}>{b}</li>)}
+    </ul>
+  );
+}

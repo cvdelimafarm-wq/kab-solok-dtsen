@@ -180,7 +180,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
           const r = k === "pendataan" ? null : f.rel[k];
           const perk = x ? x.perk : false;
           return (
-            <div key={k} className={`rounded-lg border-l-4 border border-[#DCE3EE] p-3 ${x && x.mulai ? (perk ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63] bg-[#F5FBF7]") : "border-l-[#C5D0E2] bg-white"}`}>
+            <div key={k} id={`tahap-${k}`} className={`scroll-mt-20 rounded-lg border-l-4 border border-[#DCE3EE] p-3 ${x && x.mulai ? (perk ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63] bg-[#F5FBF7]") : "border-l-[#C5D0E2] bg-white"}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <strong className="text-[14px] text-[#0F2A52]">{nama}</strong>
                 {x && x.mulai && <span className={`rounded-full px-2 py-[1px] text-[11.5px] font-bold ${perk ? "bg-[#FFF4D6] text-[#8A6200]" : "bg-[#E6F6EC] text-[#14653A]"}`}>{perk ? "≈ Perkiraan" : "Fix"}</span>}

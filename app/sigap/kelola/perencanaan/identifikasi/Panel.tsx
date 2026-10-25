@@ -16,8 +16,8 @@ import {
   agendaPeriode, barisH15, cocokkanPok, evaluasiDari, labelStatus, langkahTampil, namaVersi, paketUntukAkun, periksaGeser, rekrutmenDari, siapaMenunggu,
   type AksiIdent, type AnggaranAkun, type BarisIdent, type BarisPok, type RiwayatIdent, type UpdTercatat,
 } from "@/lib/keu/identifikasiHilir";
-import { kebutuhan } from "@/lib/keu/identifikasi";
-import { Cat } from "./Kontrol";
+import { kebutuhan, tujuanPesan } from "@/lib/keu/identifikasi";
+import { Cat, Poin, Tautan } from "./Kontrol";
 
 const NADA_LANGKAH = { abu: "border-[#DCE3EE] bg-white text-[#44546F]", hijau: "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]", kuning: "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]", merah: "border-[#B42329] bg-[#FDE8E8] text-[#B42329]", biru: "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" } as const;
 const WAKTU = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
@@ -46,7 +46,7 @@ export function KartuPengesahan(p: {
   return (
     <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="h-pengesahan">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 id="h-pengesahan" className={`${judulKartu} m-0`}>Pengesahan identifikasi</h2>
+        <h2 id="h-pengesahan" className={`${judulKartu} m-0 scroll-mt-24`}>Pengesahan identifikasi</h2>
         <Chip warna={st.nada}>{st.teks}</Chip>
       </header>
       <p className="m-0 text-[13px] text-[#44546F]">{st.ket}</p>
@@ -59,7 +59,12 @@ export function KartuPengesahan(p: {
           </li>
         ))}
       </ol>
-      <p className="m-0 text-[12px] text-[#5B6B84]">PPK dan Tata Usaha menyetujui secara paralel (urutan bebas), lalu KPA mengesahkan. Revisi yang dikirim sesudah H-15 cukup disetujui KPA dan dicatat untuk evaluasi. Sebelum disahkan, modul lain (anggaran, Delego, evaluasi, rekrutmen) belum memakai identifikasi ini.</p>
+      <Poin butir={[
+        "PPK dan Tata Usaha menyetujui secara paralel (urutan bebas).",
+        "KPA mengesahkan sesudah keduanya.",
+        "Revisi yang dikirim sesudah H-15 cukup disetujui KPA dan dicatat untuk evaluasi.",
+        "Sebelum disahkan, modul lain (anggaran, Delego, evaluasi, rekrutmen) belum memakai identifikasi ini.",
+      ]} />
 
       {revisi && (
         <div>
@@ -110,8 +115,16 @@ export function KartuHasil({ masalah, peringatan }: { masalah: string[]; peringa
   return (
     <section className={`${kartu} flex flex-col gap-2.5`} aria-labelledby="h-hasil">
       <header className="flex flex-wrap items-center gap-2"><h2 id="h-hasil" className={`${judulKartu} m-0`}>Hasil identifikasi</h2><Chip warna={warna}>{teks}</Chip></header>
-      {masalah.length > 0 && <Galat pesan={masalah} />}
-      {peringatan.length > 0 && <ul className="m-0 space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[13px] text-[#5C4300]">{peringatan.map((x) => <li key={x} className="list-none">{x}</li>)}</ul>}
+      {masalah.length > 0 && (
+        <ul role="alert" className="m-0 list-disc space-y-1 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] py-2 pl-7 pr-3 text-[13px] text-[#7A1D22]">
+          {masalah.map((x) => <li key={x}><Tautan ke={tujuanPesan(x)}>{x}</Tautan></li>)}
+        </ul>
+      )}
+      {peringatan.length > 0 && (
+        <ul className="m-0 list-disc space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] py-2 pl-7 pr-3 text-[13px] text-[#5C4300]">
+          {peringatan.map((x) => <li key={x}><Tautan ke={tujuanPesan(x)}>{x}</Tautan></li>)}
+        </ul>
+      )}
       {masalah.length === 0 && peringatan.length === 0 && <p className="m-0 text-[13px] text-[#44546F]">Semua isian wajib sudah lengkap.</p>}
     </section>
   );
@@ -126,8 +139,8 @@ export function KartuKematangan({ butir, nFix, nPerk }: { butir: Butir[]; nFix: 
       </div>
       {nPerk > 0 ? (
         <>
-          <p className="m-0 text-[13px] text-[#44546F]">Butir yang masih perkiraan (boleh dikirim; tegaskan lewat revisi atau penegasan tanggal H-15):</p>
-          <ul className="m-0 space-y-0.5 pl-5 text-[13px]">{butir.filter((b) => b.perk).map((b) => <li key={b.t}>{b.t}</li>)}</ul>
+          <p className="m-0 text-[13px] font-semibold text-[#44546F]">Butir yang masih perkiraan (boleh dikirim; tegaskan lewat revisi atau penegasan tanggal H-15):</p>
+          <ul className="m-0 list-disc space-y-1 pl-5 text-[13px] text-[#1B2B4B]">{butir.filter((b) => b.perk).map((b) => <li key={b.t}><Tautan ke={tujuanPesan(b.t)}>{b.t}</Tautan></li>)}</ul>
         </>
       ) : butir.length > 0 ? <p className="m-0 text-[13px] text-[#14653A]">Semua butir sudah Fix.</p> : null}
     </section>
@@ -148,10 +161,14 @@ export function KartuH15({ formSah, tahun, upd, hariIni, bisa, mengirim, galat, 
   return (
     <section className={`${kartu} flex flex-col gap-2.5`} aria-labelledby="h-h15">
       <header className="flex flex-wrap items-center gap-2">
-        <h2 id="h-h15" className={`${judulKartu} m-0`}>Penegasan tanggal periode (H-15)</h2>
+        <h2 id="h-h15" className={`${judulKartu} m-0 scroll-mt-24`}>Penegasan tanggal periode (H-15)</h2>
         <Chip warna={nTempo > 0 ? "kuning" : "hijau"}>{nTempo > 0 ? `${nTempo} periode perlu ditegaskan` : "Tidak ada yang jatuh tempo"}</Chip>
       </header>
-      <p className="m-0 text-[12.5px] text-[#44546F]">Ketua tim atau admin RO menegaskan tanggal pendataan setiap periode paling lambat 15 hari sebelum mulai (Perkiraan menjadi Fix). Tanggal tidak dapat digeser di sini: perubahan tanggal lewat revisi identifikasi, disetujui PPK dan Tata Usaha lalu KPA; sesudah H-15 versi terakhir dianggap final dan perubahan cukup disetujui KPA dengan dicatat untuk evaluasi.</p>
+      <Poin butir={[
+        "Ketua tim atau admin RO menegaskan tanggal pendataan setiap periode paling lambat 15 hari sebelum mulai (Perkiraan menjadi Fix).",
+        <>Tanggal tidak dapat digeser di sini; perubahan tanggal lewat revisi identifikasi, disetujui PPK dan Tata Usaha lalu KPA. <Tautan ke="h-pengesahan">Buka pengesahan</Tautan></>,
+        "Sesudah H-15 versi terakhir dianggap final; perubahan cukup disetujui KPA dan dicatat untuk evaluasi.",
+      ]} />
       <Galat pesan={galat} />
       {baris.map((b) => {
         const e = edit[b.periode] ?? {};
@@ -208,11 +225,21 @@ export function KartuAnggaran({ f, pok, memuat, galat, bisaPetakan, mengirim, on
       {hasil?.map((h) => (
         <div key={h.akun} className={`rounded-lg border border-l-4 border-[#DCE3EE] p-3 ${h.perlu ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63]"}`}>
           <div className="flex flex-wrap items-center gap-2"><strong className="text-[14px] text-[#0F2A52]">{h.akun}</strong><span className="text-[12.5px] text-[#44546F]">{h.nama}</span><Chip warna={WARNA_STATUS_AKUN[h.status]}>{h.label}</Chip></div>
-          <p className="my-1 text-[12.5px] text-[#1B2B4B]">Dibutuhkan untuk: {h.alasan}</p>
-          <p className="m-0 text-[12px] text-[#5B6B84]">Paket: {h.paket} · Jalur: {h.jalur}</p>
-          <p className="my-1 text-[12.5px] text-[#44546F]">{h.ket}</p>
-          {h.baris && <p className="m-0 text-[12px] text-[#5B6B84]">Baris POK: {h.baris}</p>}
-          {h.saran && <p className="mt-1 text-[12.5px] text-[#1F5FD1]">{h.saran}</p>}
+          <p className="mb-0.5 mt-1.5 text-[12px] font-bold text-[#0F2A52]">Dibutuhkan untuk</p>
+          <Poin kelas="!text-[#1B2B4B]" butir={h.butirAlasan.map((b) => <Tautan key={`${b.teks}-${b.bagian}`} ke={`bagian-${b.bagian.toLowerCase()}`}>{b.teks} <span className="text-[#5B6B84]">(bagian {b.bagian})</span></Tautan>)} />
+          <p className="mb-0.5 mt-2 text-[12px] font-bold text-[#0F2A52]">Status</p>
+          <Poin butir={[
+            <>Paket: {h.paket}</>,
+            <>Jalur: {h.jalur}</>,
+            h.ket,
+            ...(h.saran ? [<span key="s" className="text-[#1F5FD1]">{h.saran}</span>] : []),
+          ]} />
+          {h.barisList.length > 0 && (
+            <details className="mt-2 text-[12px] text-[#5B6B84]">
+              <summary className="cursor-pointer font-semibold text-[#44546F]">Baris POK pada akun ini ({h.barisList.length})</summary>
+              <Poin kelas="mt-1" butir={h.barisList} />
+            </details>
+          )}
         </div>
       ))}
       {hasil && barisPetakan.length > 0 && (
@@ -267,15 +294,15 @@ export function KartuHilir({ f, tahun, upd, sumber, pa, setPa }: { f: Form; tahu
       )}
       <div>
         <h3 className="m-0 mb-1 text-[13px] font-bold text-[#0F2A52]">Agenda{lst.length > 1 ? ` · ${P}` : ""}</h3>
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">{agenda.map((a, i) => <li key={`${i}-${a.t}`} className={`border-l-4 bg-[#FAFBFD] px-2.5 py-1.5 text-[13px] text-[#1B2B4B] ${MARK[a.kelas]}`}>{a.t}</li>)}{agenda.length === 0 && <li className="text-[13px] text-[#5B6B84]">Belum ada agenda.</li>}</ul>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">{agenda.map((a, i) => <li key={`${i}-${a.t}`} className={`border-l-4 bg-[#FAFBFD] px-2.5 py-1.5 text-[13px] text-[#1B2B4B] ${MARK[a.kelas]}`}><Tautan ke={tujuanPesan(a.t)}>{a.t}</Tautan></li>)}{agenda.length === 0 && <li className="text-[13px] text-[#5B6B84]">Belum ada agenda.</li>}</ul>
       </div>
       <div>
         <h3 className="m-0 mb-1 text-[13px] font-bold text-[#0F2A52]">Evaluasi</h3>
-        <ul className="m-0 space-y-0.5 pl-5 text-[13px] text-[#1B2B4B]">{evaluasi.map((t) => <li key={t}>{t}</li>)}</ul>
+        <ul className="m-0 space-y-0.5 pl-5 text-[13px] text-[#1B2B4B]">{evaluasi.map((t) => <li key={t}><Tautan ke={tujuanPesan(t)}>{t}</Tautan></li>)}</ul>
       </div>
       <div>
         <h3 className="m-0 mb-1 text-[13px] font-bold text-[#0F2A52]">Rekrutmen</h3>
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">{rekrut.map((a, i) => <li key={`${i}-${a.t}`} className={`border-l-4 bg-[#FAFBFD] px-2.5 py-1.5 text-[13px] text-[#1B2B4B] ${MARK[a.kelas]}`}>{a.t}</li>)}</ul>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">{rekrut.map((a, i) => <li key={`${i}-${a.t}`} className={`border-l-4 bg-[#FAFBFD] px-2.5 py-1.5 text-[13px] text-[#1B2B4B] ${MARK[a.kelas]}`}><Tautan ke={tujuanPesan(a.t)}>{a.t}</Tautan></li>)}</ul>
       </div>
       <div>
         <h3 className="m-0 mb-1 text-[13px] font-bold text-[#0F2A52]">Tahap yang aktif</h3>

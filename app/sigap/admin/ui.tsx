@@ -139,7 +139,7 @@ export function HeaderAdmin({
   return (
     <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-4 pb-5 pt-4 text-white sm:px-6">
       <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
-      <div className="relative mx-auto max-w-7xl">
+      <div className="relative w-full">
         <div className="flex items-center justify-between gap-2">
           {/* (8 Okt 2026) Identitas SIGAP: petak putih berisi lambang S biru-emas + nama + kepanjangan (mockup identitas visual) */}
           <a href="/" className="flex min-w-0 items-center gap-2.5" aria-label="SIGAP, ke Beranda">
@@ -224,7 +224,7 @@ export function BarisTab<K extends string>({ tab, aktif, onPilih }: { tab: ItemT
   }, [aktif]);
   return (
     <nav className="sticky top-0 z-20 border-b border-[#DDE6F3] bg-white shadow-[0_2px_8px_rgba(15,42,82,.05)]">
-      <div className="mx-auto max-w-7xl px-2 sm:px-4">
+      <div className="w-full px-2 sm:px-4">
         <PitaGeser kelas="flex gap-1" role="tablist" ujungRef={pita}>
           {tab.map((t) => (
             <button

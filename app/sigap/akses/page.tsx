@@ -148,7 +148,7 @@ export default function KelolaPeranAkses() {
     return (
       <main className="min-h-screen bg-[#F3F5F8] pb-16 text-[#14202E]">
         {mobile}
-        <div className="mx-auto max-w-7xl space-y-3 px-3 pt-4 sm:px-5">{isi}</div>
+        <div className="w-full space-y-3 px-3 pt-4 sm:px-5 lg:px-6">{isi}</div>
       </main>
     );
 

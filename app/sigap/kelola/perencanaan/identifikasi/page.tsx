@@ -68,7 +68,16 @@ function Isi() {
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">
         <Galat pesan={daftar.galat ?? ros.galat} />
-        <Catatan>Identifikasi dikirim oleh ketua tim, admin RO, atau PPK, lalu disetujui PPK dan Tata Usaha secara paralel, kemudian disahkan KPA. Semua identifikasi wajib selesai paling lambat H-15. Perubahan sesudah disahkan lewat pengajuan revisi yang disetujui seperti identifikasi awal; revisi yang dikirim sesudah H-15 cukup disetujui KPA dan dicatat untuk evaluasi.</Catatan>
+        <Catatan>
+          <ul className="m-0 list-disc space-y-1 pl-5">
+            <li>Identifikasi dikirim oleh ketua tim, admin RO, atau PPK.</li>
+            <li>PPK dan Tata Usaha menyetujui secara paralel, lalu KPA mengesahkan.</li>
+            <li>Semua identifikasi wajib selesai paling lambat H-15.</li>
+            <li>Perubahan sesudah disahkan lewat pengajuan revisi yang disetujui seperti identifikasi awal.</li>
+            <li>Revisi yang dikirim sesudah H-15 cukup disetujui KPA dan dicatat untuk evaluasi.</li>
+            <li>Templat susunan tim dan batas anggaran mengikuti <Link href="/sigap/kelola/perencanaan/kebijakan" className="font-semibold text-[#1F5FD1] underline decoration-dotted underline-offset-[3px]">lembar kebijakan manajemen tim →</Link></li>
+          </ul>
+        </Catatan>
 
         <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="h-baru">
           <h2 id="h-baru" className={`${judulKartu} m-0`}>Survei baru</h2>

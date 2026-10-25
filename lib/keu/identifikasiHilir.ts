@@ -256,6 +256,10 @@ export type StatusAkun = "ada" | "paket_belum" | "hilang";
 export type AnggaranAkun = {
   akun: string; nama: string; alasan: string; paket: string; jalur: string; status: StatusAkun; label: string; ket: string;
   baris: string; saran: string; aksi: string; perlu: boolean;
+  /** Alasan kebutuhan per butir: teks tanpa huruf bagian, dan huruf bagian formulir (A-F) tempat jawabannya. */
+  butirAlasan: { teks: string; bagian: string }[];
+  /** Baris POK pada akun ini, satu per butir. */
+  barisList: string[];
 };
 
 /** Paket yang boleh dipilih untuk baris POK berakun `akun` (awalan 6 angka harus sama). */
@@ -304,6 +308,8 @@ export function cocokkanPok(need: Kebutuhan[], pok: BarisPok[]): AnggaranAkun[] 
       status, label, ket,
       baris: baris.map((r) => `"${r.uraian}"${r.paket.length ? ` → ${r.paket.join(", ")}` : " (belum dipetakan)"}`).join("; "),
       saran, aksi, perlu: status !== "ada",
+      butirAlasan: a.items.map((n) => ({ teks: n.teks, bagian: n.sumber })),
+      barisList: baris.map((r) => `${r.uraian}${r.paket.length ? ` → ${r.paket.join(", ")}` : " (belum dipetakan)"}`),
     };
   });
 }

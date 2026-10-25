@@ -48,12 +48,14 @@ describe("daftar putih tampilan", () => {
       // Pengecualian kedua: riwayat usulan struktur (level baru), yang hanya memuat jejak keu_struktur_usulan_riwayat.
       // Pengecualian ketiga: riwayat tahap jadwal revisi (keu_jadwal_riwayat), yang hanya memuat pelaku, aksi, status, nomor dan tanggal dokumen resmi, dan catatan.
       // Pengecualian keempat: riwayat identifikasi survei (keu_v_ident_riwayat), yang hanya memuat jejak pengiriman, persetujuan, revisi, dan catatan identifikasi.
-      if (n !== "keu_v_master_riwayat" && n !== "keu_v_struktur_riwayat" && n !== "keu_v_jadwal_riwayat" && n !== "keu_v_ident_riwayat") expect(n).not.toMatch(/riwayat|audit|pemberian/);
+      // Pengecualian kelima: riwayat lembar kebijakan manajemen tim (keu_v_kebijakan_riwayat), yang hanya memuat jejak pengajuan, persetujuan, pengembalian, dan catatan lembar.
+      if (n !== "keu_v_master_riwayat" && n !== "keu_v_struktur_riwayat" && n !== "keu_v_jadwal_riwayat" && n !== "keu_v_ident_riwayat" && n !== "keu_v_kebijakan_riwayat") expect(n).not.toMatch(/riwayat|audit|pemberian/);
     }
     expect(TAMPILAN_BACA.keu_v_master_riwayat).toEqual(["id", "waktu", "aksi", "detail", "oleh_nama"]);
     expect(TAMPILAN_BACA.keu_v_struktur_riwayat).toEqual(["id", "usulan_id", "kode_sementara", "level", "level_nama", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"]);
     expect(TAMPILAN_BACA.keu_v_jadwal_riwayat).toEqual(["id", "jadwal_id", "waktu", "aksi", "status_ke", "nomor", "tanggal", "catatan", "oleh_nama"]);
     expect(TAMPILAN_BACA.keu_v_ident_riwayat).toEqual(["id", "ident_id", "nama", "ro_kode", "aksi", "dari", "ke", "ver", "oleh_nama", "catatan", "waktu"]);
+    expect(TAMPILAN_BACA.keu_v_kebijakan_riwayat).toEqual(["id", "lembar_id", "aksi", "dari", "ke", "ver", "oleh_nama", "catatan", "waktu"]);
     expect(TAMPILAN_BACA.keu_v_rab_ringkas).toContain("ro_kode");
   });
 });
