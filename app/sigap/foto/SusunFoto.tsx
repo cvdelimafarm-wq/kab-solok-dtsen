@@ -630,7 +630,13 @@ export default function SusunFoto({
       {k.cadangan.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="text-[13px] font-extrabold text-[#0F2A52]">Foto cadangan ({k.cadangan.length})</div>
-          <p className="text-[11.5px] leading-snug text-[#3C4C68]">Tersimpan, belum bernomor. Ketuk satu foto, lalu nomor tujuannya.</p>
+          {/* (25 Okt 2026) petunjuk disorot: langkah yang sedang berlaku diberi latar kuning (1 = pilih foto, 2 = pilih nomor tujuan) */}
+          <div role="note" className="rounded-lg border border-[#BFD0F0] bg-[#EAF1FF] px-3 py-2 text-[12.5px] font-semibold leading-relaxed text-[#0F2A52]">
+            Tersimpan, belum bernomor.{" "}
+            <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-transparent" : "bg-[#FFE08A]"}`}>1. Ketuk satu foto</mark>
+            , lalu{" "}
+            <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-[#FFE08A]" : "bg-transparent"}`}>2. ketuk nomor tujuannya</mark> di kisi.
+          </div>
           {k.cadangan.map((f, urutan) => {
             const dipilihIni = dipilihCadangan?.id === f.id;
             return (
@@ -641,7 +647,7 @@ export default function SusunFoto({
                 onClick={() => ketukCadangan(f.id)}
                 aria-pressed={dipilihIni}
                 aria-label={`Foto cadangan ${jamIso(f.diambil_at)}`}
-                className={`flex min-h-[52px] w-full items-center gap-2.5 rounded-xl border-2 bg-white px-2 py-1.5 text-left ${dipilihIni ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : "border-[#C9D3E6]"}`}
+                className={`flex min-h-[52px] w-full items-center gap-2.5 rounded-xl border-2 px-2 py-1.5 text-left ${dipilihIni ? "border-[#0F2A52] bg-[#FFF6D6] ring-4 ring-[#FFE08A]" : "border-[#C9D3E6] bg-white"}`}
               >
                 <Gambar id={f.id} kelas="h-11 w-14 flex-none rounded-lg object-cover" alt={`Foto cadangan ${String.fromCharCode(65 + (urutan % 26))}`} />
                 <span className="min-w-0 flex-1">
