@@ -28,7 +28,7 @@ const SIKLUS: { no: string; judul: string; isi: string }[] = [
   { no: "J2", judul: "Dibuka", isi: "Ketua tim dan admin RO mengajukan usulan; persetujuan berjalan per RO." },
   { no: "J3", judul: "Dikumpulkan", isi: "Jendela ditutup. Hanya usulan berstatus Disetujui yang ikut paket." },
   { no: "J4", judul: "Diterapkan", isi: "Paket menjadi kertas kerja satker. Jalur DJPb dan DJA dilanjutkan ke surat usulan." },
-  { no: "J5", judul: "Sah", isi: "PPK mencatat dokumen dasar. Status POK sistem naik versi; PDF resmi diunggah dan dicocokkan." },
+  { no: "J5", judul: "Sah", isi: "PPK menekan Sahkan setelah revisi disahkan di SPAN, dengan melampirkan PDF POK resmi. Pagu tiap akun per RO dicek terhadap kertas kerja (peringatan saja); setelah Sah, kertas kerja terkunci." },
 ];
 
 export default function HalamanRevisi() {
