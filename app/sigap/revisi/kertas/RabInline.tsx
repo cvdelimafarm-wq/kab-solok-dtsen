@@ -298,7 +298,7 @@ export function SubRab({ baris, ringkas, statusRo, namaRo, namaKomp, namaAkun, d
           </div>
         )}
       </section>
-      <Catatan>RAB aktif dikelola per RO dengan alur ajukan, setujui, dan sahkan; riwayat versinya ada di kartu Versi RAB di bawah. Alasan versi (wajib, minimal 10 karakter) belum disimpan oleh basis data, jadi belum ada isiannya di sini. Item baru atau Dana penggenap (tanpa kunci POK) diatur di tab RAB tiap RO.</Catatan>
+      <Catatan>RAB aktif dikelola per RO dengan alur ajukan, setujui, dan sahkan; riwayat versinya ada di kartu Versi RAB di bawah. Versi baru wajib beralasan (minimal 10 karakter); alasannya tampil di kartu Versi RAB. Item baru atau Dana penggenap (tanpa kunci POK) diatur di tab RAB tiap RO.</Catatan>
     </div>
   );
 }
