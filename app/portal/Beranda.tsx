@@ -272,6 +272,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     if (kt) bukaSso(kt);
   };
   const memuatAwal = adaSesi && !data && !error;
+  // (26 Okt 2026) Pintu ke Delego (tampilan HP hijau) di "Kegiatan saya". Sementara hanya untuk akun super (akun Ketua Tim); dibuka untuk semua petugas setelah uji.
+  const tampilDelego = !!data?.super_akun;
 
   return (
     <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">
@@ -403,11 +405,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           </p>
         )}
 
-        {kegiatan.length > 0 && (
+        {(kegiatan.length > 0 || tampilDelego) && (
           <section aria-label="Kegiatan saya">
             <div className="mb-2.5 flex items-baseline gap-2 px-1">
               <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kegiatan saya</h2>
-              <span className="text-[11.5px] text-[#6B7A90]">{kegiatan.length} kegiatan</span>
+              <span className="text-[11.5px] text-[#6B7A90]">{kegiatan.length + (tampilDelego ? 1 : 0)} kegiatan</span>
               {kegiatan.length > 1 && <span className="ml-auto text-[11.5px] text-[#6B7A90]">mendesak di depan</span>}
             </div>
             <ul className="grid grid-cols-3 gap-x-1.5 gap-y-4">
@@ -416,6 +418,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
                   <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
                 </li>
               ))}
+              {tampilDelego && (
+                <li>
+                  <KegiatanDelego />
+                </li>
+              )}
             </ul>
           </section>
         )}
@@ -514,6 +521,37 @@ function GrupIkon({ judul, isi, sibuk, onSso }: { judul: string; isi: Kartu[]; s
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Ikon "Delego" di Kegiatan saya: membuka tampilan HP Delego (hijau, merek sendiri). Ukuran dan susunan sama dengan IkonKegiatan. */
+function KegiatanDelego() {
+  return (
+    <Link
+      href="/sigap/delego/saya"
+      aria-label="Delego: delegasi, laporan harian, dan penilaian saya"
+      className="block w-full rounded-[14px] px-0.5 py-1 outline-none transition active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#0F6B63]/50"
+    >
+      <span className="flex flex-col items-center gap-[5px]">
+        <span className="relative grid flex-none place-items-center" style={{ width: 64, height: 64 }}>
+          <svg width={64} height={64} viewBox="0 0 64 64" className="absolute inset-0" aria-hidden>
+            <circle cx={32} cy={32} r={28} fill="none" stroke="#CFE4E1" strokeWidth={5} />
+            <circle cx={32} cy={32} r={28} fill="none" stroke="#0F6B63" strokeWidth={5} strokeDasharray="3 6" />
+          </svg>
+          <span className="grid place-items-center rounded-full bg-[#E3F0EE]" style={{ width: 44, height: 44 }}>
+            <svg width={28} height={28} viewBox="0 0 32 32" aria-hidden>
+              <rect width="32" height="32" rx="8" fill="#0F6B63" />
+              <path d="M7 16h7m0 0c3 0 3-7 7-7h4M14 16h11M14 16c3 0 3 7 7 7h4" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="26.5" cy="9" r="1.8" fill="#CFE4E1" />
+              <circle cx="26.5" cy="16" r="1.8" fill="#CFE4E1" />
+              <circle cx="26.5" cy="23" r="1.8" fill="#CFE4E1" />
+            </svg>
+          </span>
+        </span>
+        <span className="line-clamp-2 min-h-[2.4em] text-center text-[11.5px] font-bold leading-[1.2] text-[#0F2A52]">Delego</span>
+        <span className="line-clamp-2 text-center text-[10.5px] font-bold leading-[1.15] text-[#0F6B63]">Tugas dan laporan</span>
+      </span>
+    </Link>
   );
 }
 
