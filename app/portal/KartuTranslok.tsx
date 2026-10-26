@@ -5,6 +5,9 @@
 // (19 Okt 2026) Kartu Transport Lokal sendiri di Beranda (mockup alur per peran, disetujui): 5 langkah kecil, apa yang belum lengkap, dan SATU tombol ke
 // bagian yang perlu dikerjakan. Dulu Transport Lokal hanya terlihat bila kebetulan menjadi kartu utama atau lewat tahap Pendataan (tugas terakhir).
 // Muncul bila Transport Lokal belum selesai dan bukan kartu utama (lihat translokDariInduk di lib/sigapPrioritas.ts).
+// (27 Okt 2026) Permintaan user: kotak langkah dan baris "yang belum lengkap" bisa DIKETUK dan membuka tempat yang sesuai (langkah 3 / baris foto ->
+// lembar foto di bagian dokumentasi; baris laporan -> formulir laporan; langkah 2 -> Hari Kerja; langkah 1/4/5 -> Arsip). Langkah yang terkunci
+// (tanpa tautan) tetap kotak biasa.
 
 import Link from "next/link";
 import type { KartuTranslokBeranda } from "@/lib/sigapPrioritas";
@@ -40,19 +43,41 @@ export default function KartuTranslok({ d }: { d: KartuTranslokBeranda }) {
       </div>
       <h3 className="mt-1.5 text-[15px] font-extrabold leading-snug text-[#0F2A52]">{k.judul}</h3>
       <ol className="mt-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}>
-        {(k.langkah ?? []).map((l) => (
-          <li key={l.kode} className={`flex min-h-[40px] flex-col items-center justify-center rounded-[10px] px-1 py-1 text-center text-[10px] font-bold leading-tight ${LANGKAH[l.status]}`} aria-label={`${l.judul}: ${l.status}`}>
-            {l.status === "selesai" && <span aria-hidden>✓</span>}
-            <span className="line-clamp-2">{l.judul}</span>
-          </li>
-        ))}
+        {(k.langkah ?? []).map((l) => {
+          const isi = (
+            <>
+              {l.status === "selesai" && <span aria-hidden>✓</span>}
+              <span className="line-clamp-2">{l.judul}</span>
+            </>
+          );
+          const kelas = `flex min-h-[44px] flex-col items-center justify-center rounded-[10px] px-1 py-1 text-center text-[10px] font-bold leading-tight ${LANGKAH[l.status]}`;
+          const bisa = !!l.href && !l.pesanKunci;
+          return (
+            <li key={l.kode} className="contents">
+              {bisa ? (
+                <Link href={l.href!} className={`${kelas} transition active:scale-[0.96] active:brightness-95`} aria-label={`${l.judul}: ${l.status}. Ketuk untuk membuka.`}>
+                  {isi}
+                </Link>
+              ) : (
+                <div className={kelas} aria-label={`${l.judul}: ${l.status}`}>
+                  {isi}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
       {kek.length > 0 ? (
         <ul className="mt-3 space-y-1.5">
           {kek.map((x) => (
-            <li key={x.kode} className="flex items-baseline justify-between gap-3 rounded-[10px] bg-[#F5F8FE] px-3 py-2 text-[12.5px]">
-              <span className="text-[#55657D]">{x.judul}</span>
-              <b className={NADA_KEK[x.nada]}>{x.ringkas}</b>
+            <li key={x.kode}>
+              <Link href={x.href} className="flex min-h-[44px] items-center justify-between gap-3 rounded-[10px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] transition active:bg-[#E6EEFC]" aria-label={`${x.judul}. ${x.ringkas}. Ketuk untuk melengkapi.`}>
+                <span className="text-[#55657D]">{x.judul}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <b className={NADA_KEK[x.nada]}>{x.ringkas}</b>
+                  <span aria-hidden className="text-[15px] font-bold text-[#8592A8]">›</span>
+                </span>
+              </Link>
             </li>
           ))}
           {lebih > 0 && <li className="px-1 text-[11.5px] text-[#6B7A90]">+{lebih} lagi yang belum lengkap</li>}

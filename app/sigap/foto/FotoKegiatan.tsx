@@ -25,8 +25,10 @@ type Mode = { kegiatan: { kegiatan_id: number; mode: string }[] };
 // panel nomor foto, yang sendiri menjelaskan bila perbaikan sudah tidak diizinkan.
 // (25 Okt 2026) `penuh` = dipasang di dalam panel Arsip yang sudah dilebarkan sampai tepi layar HP: kartu tanpa sudut dan tanpa garis kiri-kanan,
 // jarak dalam kecil, supaya kisi foto memakai hampir seluruh lebar layar. Di layar lebar (sm ke atas) tampilan kartu biasa.
-export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, lampau = false, penuh = false, tanggal, jenis = null, onBerubah }: { kegiatanId: number; fallback: ReactNode; susulan?: boolean; lampau?: boolean; penuh?: boolean; tanggal?: string; jenis?: string | null; onBerubah?: () => void | Promise<void> }) {
+// (27 Okt 2026) `tepi` = pembungkus halaman bergaris sisi 16 px (tab Hari Ini): kartu ditarik ke kiri-kanan sampai tepi layar HP (-mx-4), di layar lebar (640px ke atas) kembali normal.
+export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, lampau = false, penuh = false, tepi = false, tanggal, jenis = null, onBerubah }: { kegiatanId: number; fallback: ReactNode; susulan?: boolean; lampau?: boolean; penuh?: boolean; tepi?: boolean; tanggal?: string; jenis?: string | null; onBerubah?: () => void | Promise<void> }) {
   const [mode, setMode] = useState<"kamera" | "unggah" | null>(null);
+  const bleed = tepi ? " -mx-4 min-[640px]:mx-0" : "";
   useEffect(() => {
     void kirimSemuaAntrean().then((n) => { if (n > 0) void Promise.resolve(onBerubah?.()).catch(() => undefined); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,7 +50,7 @@ export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, la
     return (
       <>
         {mode === "kamera" && tanggal && (
-          <div className={penuh ? "mb-3 border-y border-[#C9D3E6] bg-white px-0.5 py-3 sm:rounded-2xl sm:border sm:p-3" : "mb-3"}>
+          <div className={(penuh ? "mb-3 border-y border-[#C9D3E6] bg-white px-0.5 py-3 sm:rounded-2xl sm:border sm:p-3" : "mb-3") + bleed}>
             <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} otomatis onBerubah={onBerubah} polos={penuh} rapat={penuh} />
           </div>
         )}
@@ -60,14 +62,14 @@ export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, la
   if (mode === "unggah") return <>{fallback}</>;
   if (lampau && tanggal)
     return (
-      <div className={penuh ? "flex flex-col gap-2 border-y border-[#C9D3E6] bg-white px-0.5 py-3 [&>*:not(section)]:mx-2 min-[640px]:[&>*:not(section)]:mx-0 sm:rounded-2xl sm:border sm:p-4" : "flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4"}>
+      <div className={(penuh ? "flex flex-col gap-2 border-y border-[#C9D3E6] bg-white px-0.5 py-3 [&>*:not(section)]:mx-2 min-[640px]:[&>*:not(section)]:mx-0 sm:rounded-2xl sm:border sm:p-4" : "flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4") + bleed}>
         <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto tanggal ini</div>
         <p className="text-xs leading-relaxed text-[#3C4C68]">Kamera SIGAP hanya memotret pada hari kerjanya sendiri. Di sini Anda dapat memeriksa dan menukar urutan foto bila masih diizinkan.</p>
         <SusunFoto kegiatanId={kegiatanId} tanggal={tanggal} jenis={jenis} onBerubah={onBerubah} polos rapat={penuh} />
       </div>
     );
   return (
-    <div className={penuh ? "flex flex-col gap-2 border-y border-[#C9D3E6] bg-white px-0.5 py-3 [&>*:not(section)]:mx-2 min-[640px]:[&>*:not(section)]:mx-0 sm:rounded-2xl sm:border sm:p-4" : "flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4"}>
+    <div className={(penuh ? "flex flex-col gap-2 border-y border-[#C9D3E6] bg-white px-0.5 py-3 [&>*:not(section)]:mx-2 min-[640px]:[&>*:not(section)]:mx-0 sm:rounded-2xl sm:border sm:p-4" : "flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3 sm:p-4") + bleed}>
       <div className="text-sm font-extrabold text-[#0F2A52]">Foto dokumentasi lewat Kamera SIGAP</div>
       <p className="text-xs leading-relaxed text-[#3C4C68]">Waktu dan lokasi tercetak otomatis di foto. Foto dari galeri tidak dipakai untuk kegiatan ini.</p>
       <Link href={`/sigap/foto?kegiatan=${kegiatanId}`} className="flex min-h-[52px] items-center justify-center rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">Buka Kamera SIGAP</Link>

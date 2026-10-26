@@ -26,6 +26,12 @@ describe("susunTranslok: tautan dalam per langkah", () => {
     expect(r.langkah![1].href).toBe(`${HREF}&tab=hari_kerja`);
     expect(r.langkah![4].href).toBe(`${HREF}&tab=arsip`);
   });
+  it("(27 Okt 2026) langkah 1 dan 4 ikut punya tautan ke tab Arsip (kartu Beranda: semua kotak bisa diketuk)", () => {
+    const r = susunTranslok(masuk());
+    expect(r.langkah![0].href).toBe(`${HREF}&tab=arsip`);
+    expect(r.langkah![3].href).toBe(`${HREF}&tab=arsip`);
+    expect(r.langkah![1].href).toBe(`${HREF}&tab=hari_kerja`);
+  });
   it("langkah 3 hari ini: tombol langsung ke bagian foto bila foto yang kurang", () => {
     const r = susunTranslok(masuk({ isian: { [HARI_INI]: { laporan: true, foto: 2, slot: [1, 2] } } }));
     const l3 = r.langkah![2];

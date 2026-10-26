@@ -149,7 +149,8 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
 
   const s2: StatusLangkah = hariKerja.length > 0 ? "selesai" : aktif ? "perlu" : "menunggu";
   const langkah: LangkahKegiatan[] = [
-    { no: 1, kode: "penugasan", kelompok: "Persiapan", judul: "Terima penugasan", ket: p.label_jabatan, status: "selesai" },
+    // (27 Okt 2026) Langkah 1 dan 4 ikut bisa diketuk (kartu Transport Lokal di Beranda): penugasan = Surat Tugas, rekap & verifikasi = dokumen SPJ; keduanya ada di tab Arsip.
+    { no: 1, kode: "penugasan", kelompok: "Persiapan", judul: "Terima penugasan", ket: p.label_jabatan, status: "selesai", href: tambahQ(hrefKerja, "tab=arsip"), aksi: "Lihat surat tugas" },
     {
       no: 2,
       kode: "hari_kerja",
@@ -172,7 +173,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
       batas: batas3,
       pesanKunci: pesanKunci3,
     },
-    { no: 4, kode: "verifikasi", kelompok: "Penyelesaian", judul: "Rekap & verifikasi admin", ket: dikunci ? "SPJ sudah dikunci admin" : "Setelah semua hari kerja terisi", status: dikunci ? "selesai" : "menunggu" },
+    { no: 4, kode: "verifikasi", kelompok: "Penyelesaian", judul: "Rekap & verifikasi admin", ket: dikunci ? "SPJ sudah dikunci admin" : "Setelah semua hari kerja terisi", status: dikunci ? "selesai" : "menunggu", href: tambahQ(hrefKerja, "tab=arsip"), aksi: "Lihat arsip" },
     { no: 5, kode: "spj", kelompok: "Penyelesaian", judul: "Unduh SPJ", ket: dikunci ? "SPJ siap diunduh" : "Setelah SPJ dikunci admin", status: dikunci ? "sekarang" : "terkunci", href: dikunci ? tambahQ(hrefKerja, "tab=arsip") : null, aksi: "Unduh SPJ" },
   ];
 

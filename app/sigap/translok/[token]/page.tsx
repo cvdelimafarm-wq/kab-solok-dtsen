@@ -259,10 +259,15 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   useEffect(() => {
     if (!fokus?.tgl) return;
     const id = fokus.bagian ? `bag-${fokus.bagian}-${fokus.tgl}` : `hari-${fokus.tgl}`;
-    const t1 = setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 250);
+    // (27 Okt 2026) Gulir ke AWAL bagian yang dituju (lembar foto / formulir laporan), bukan ke tengahnya; diulang sekali karena kartu foto memuat dulu
+    // (tingginya berubah) sehingga gulir pertama bisa meleset.
+    const gulir = () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t1 = setTimeout(gulir, 250);
+    const t1b = setTimeout(gulir, 1100);
     const t2 = setTimeout(() => setFokus(null), 6000);
     return () => {
       clearTimeout(t1);
+      clearTimeout(t1b);
       clearTimeout(t2);
     };
   }, [fokus]);
@@ -1045,8 +1050,19 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
 }
 
 // ---------------- Isian hari ini (laporan + foto) ----------------
+// (27 Okt 2026) Tab Hari Ini dipecah menjadi dua bagian: FOTO dulu (berangkat, tiba, mendata, pulang, tiba di rumah), baru LAPORAN. Satu bagian tampil
+// sekali; tautan dalam ?fokus=laporan membuka bagian Laporan, ?fokus=foto (atau tanpa fokus) membuka Foto. Pemanggil dengan `hanya` (panduan awal)
+// tidak berubah.
 function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto" }) {
   const hari = pen.hari.find((h) => h.tanggal === data.hari_ini) ?? null;
+  const { fokus } = useContext(FokusCtx);
+  const adaLaporan = wajibLaporan(pen);
+  const [bagianAktif, setBagianAktif] = useState<"foto" | "laporan">("foto");
+  useEffect(() => {
+    if (fokus?.bagian === "laporan" && adaLaporan) setBagianAktif("laporan");
+    else if (fokus?.bagian === "foto") setBagianAktif("foto");
+  }, [fokus?.bagian, adaLaporan]);
+  const tampil: "laporan" | "foto" | undefined = hanya ?? (adaLaporan ? bagianAktif : "foto");
   const izin = pen.hari.filter((h) => h.kunci === "izin");
   const berikut = pen.hari_kerja.find((t) => t > data.hari_ini);
   if (!hari)
@@ -1060,7 +1076,7 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
           </p>
         </div>
         {izin.map((h) => (
-          <KartuHari key={h.tanggal} token={token} data={data} pen={pen} hari={h} onBerubah={onBerubah} hanya={hanya} />
+          <KartuHari key={h.tanggal} token={token} data={data} pen={pen} hari={h} onBerubah={onBerubah} hanya={tampil} />
         ))}
       </>
     );
@@ -1073,9 +1089,32 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
         </div>
         <p className="text-[26px] font-extrabold tabular-nums text-[#A3261B]">{sisaWaktu(data.hari_ini)}</p>
       </div>
-      <KartuHari token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} hanya={hanya} />
+      {!hanya && adaLaporan && (
+        <div role="tablist" aria-label="Bagian isian hari ini" className="grid grid-cols-2 gap-1.5 rounded-2xl bg-white p-1.5 shadow-sm">
+          {(
+            [
+              ["foto", "📸", "Foto", `${hari.foto.length}/${nFoto(pen)}`, hari.foto.length >= nFoto(pen)],
+              ["laporan", "📝", "Laporan", hari.realisasi || hari.laporan_dianggap ? "Terisi" : "Belum", !!(hari.realisasi || hari.laporan_dianggap)],
+            ] as [string, string, string, string, boolean][]
+          ).map(([k, ikon, nama, ket, ok]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={bagianAktif === k}
+              onClick={() => setBagianAktif(k as "foto" | "laporan")}
+              className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-2 text-[13.5px] font-extrabold ${bagianAktif === k ? "bg-[#0F3D7A] text-white" : "bg-[#F1F4F9] text-[#0F3D7A]"}`}
+            >
+              <span aria-hidden>{ikon}</span>
+              {nama}
+              <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${ok ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{ok ? `✓ ${ket}` : ket}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <KartuHari token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} hanya={tampil} />
       {izin.map((h) => (
-        <KartuHari key={h.tanggal} token={token} data={data} pen={pen} hari={h} onBerubah={onBerubah} hanya={hanya} />
+        <KartuHari key={h.tanggal} token={token} data={data} pen={pen} hari={h} onBerubah={onBerubah} hanya={tampil} />
       ))}
     </>
   );
@@ -1132,13 +1171,14 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
         </div>
       )}
       {hanya !== "foto" && wajibLaporan(pen) && (
-        <div id={`bag-laporan-${hari.tanggal}`} className={sorotLaporan ? SOROT : undefined}>
+        <div id={`bag-laporan-${hari.tanggal}`} className={`scroll-mt-3 ${sorotLaporan ? SOROT : ""}`}>
           <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />
         </div>
       )}
       {hanya !== "laporan" && (
-        <div id={`bag-foto-${hari.tanggal}`} className={sorotFoto ? SOROT : undefined}>
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} penuh={!!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+        <div id={`bag-foto-${hari.tanggal}`} className={`scroll-mt-3 ${sorotFoto ? SOROT : ""}`}>
+          {/* (27 Okt 2026) lembar foto selebar layar HP (tanpa sudut dan garis kiri-kanan) di Hari Ini; di Arsip lebarnya sudah diatur panel pembungkus (tepi=false) */}
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} penuh tepi={!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
       )}
     </>
@@ -1191,8 +1231,15 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
   // isian yang baru dibuka digulir ke layar
   useEffect(() => {
     if (!bagian) return;
-    const t = setTimeout(() => panel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
-    return () => clearTimeout(t);
+    // (27 Okt 2026) Ketuk baris Dokumentasi/Laporan = layar bergerak ke bawah sampai AWAL kartu isiannya (bukan sekadar "terlihat sedikit"); diulang sekali
+    // karena kartu foto memuat dulu sehingga tingginya berubah.
+    const gulir = () => panel.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const t = setTimeout(gulir, 80);
+    const t2 = setTimeout(gulir, 900);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(t2);
+    };
   }, [bagian, tglAktif]);
 
   const pindah = (arah: -1 | 1) => {
@@ -1386,7 +1433,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
           </button>
 
           {bagian && bisaIsi && (
-            <div ref={panel} className={`mt-3 space-y-3 ${bagian === "foto" ? "-mx-[38px] min-[640px]:mx-0 [&>div:not([id^=bag-foto-])]:mx-3 min-[640px]:[&>div:not([id^=bag-foto-])]:mx-0" : ""}`}>
+            <div ref={panel} className={`mt-3 scroll-mt-3 space-y-3 ${bagian === "foto" ? "-mx-[38px] min-[640px]:mx-0 [&>div:not([id^=bag-foto-])]:mx-3 min-[640px]:[&>div:not([id^=bag-foto-])]:mx-0" : ""}`}>
               <KartuHari key={`ar-${pen.id}-${hari.tanggal}-${bagian}`} token={token} data={data} pen={pen} hari={hari} onBerubah={onBerubah} hanya={bagian} tanpaJudul />
             </div>
           )}
