@@ -26,7 +26,7 @@ import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
-import { matriksPutarBingkai } from "@/lib/sigapFotoPutar";
+import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDariArah, kunciKondisi, matriksKuartal, type ArahHp, type BelajarPeta } from "@/lib/sigapFotoPutar";
 import { jamWib } from "@/lib/sigapUrutanFoto";
 import { useTombolKembali } from "./useTombolKembali";
 import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
@@ -39,7 +39,9 @@ const NOMOR = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 const DETIK_KIRIM_OTOMATIS = 10;
 const tglWib = (ms = Date.now()) => new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
 
-type Jepretan = { blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number; dibuatMs: number };
+type Jepretan = { blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number; dibuatMs: number;
+  /** (26 Okt 2026) kondisi saat memotret (kunci belajar, mis. "s1" = HP miring kiri), keadaan sensor/layar untuk diagnosa, dan total putar manual petugas (searah jarum jam, kelipatan 90 derajat) */
+  kunci: string; diag: Record<string, unknown>; kuartal: number };
 
 function itemDari(j: Jepretan, kegiatanId: number, slot: number | null, tag: TagPilihan[]): ItemAntrean {
   return {
@@ -144,7 +146,35 @@ export default function KameraSigap({
   const [banyakKamera, setBanyakKamera] = useState<boolean | null>(null); // null = belum diketahui (tombol tetap tampil)
   // (21 Okt 2026) Landscape otomatis ala kamera cap waktu: aplikasi tetap terkunci tegak, arah HP dibaca dari sensor gerak (gravitasi).
   // miring: 0 = HP tegak; 1 = HP diputar ke kiri (atas HP ke kiri); -1 = HP diputar ke kanan. Tidak bergantung pada putar otomatis (auto-rotate) di HP.
-  const [miring, setMiring] = useState<0 | 1 | -1>(0);
+  // (26 Okt 2026) 2 = HP terbalik (atas HP ke bawah), seperti kamera biasa yang mengenali empat arah.
+  const [miring, setMiring] = useState<ArahHp>(0);
+  // Belajar per HP dan per kondisi (HP miring kiri/kanan/terbalik, atau layar sendiri landscape): bila petugas berulang kali memutar 180 derajat foto yang
+  // sudah diputar otomatis pada kondisi itu, kondisi itu diberi tambahan putaran 180 derajat di HP ini (lib/sigapFotoPutar.ts).
+  const belajarRef = useRef<BelajarPeta>({});
+  const belajarDicatatRef = useRef<number | null>(null);
+  const kunciBelajar = () => `sigap-foto-belajar:${pemilikSesi()}`;
+  useEffect(() => {
+    try {
+      belajarRef.current = bacaBelajarPeta(localStorage.getItem(kunciBelajar()));
+    } catch {
+      /* penyimpanan tidak tersedia: pakai bawaan */
+    }
+  }, []);
+  function catatBelajar(j: Jepretan) {
+    if (belajarDicatatRef.current === j.dibuatMs) return;
+    belajarDicatatRef.current = j.dibuatMs;
+    const b = catatKoreksi(belajarRef.current, j.kunci, j.kuartal);
+    belajarRef.current = b;
+    try {
+      localStorage.setItem(kunciBelajar(), JSON.stringify(b));
+    } catch {
+      /* abaikan */
+    }
+  }
+  /** Diagnosa orientasi (tanpa foto): kondisi HP, putaran otomatis, dan koreksi petugas -> catatan audit, untuk memastikan arah putar di tiap merek HP. Gagal = diabaikan. */
+  function laporOrientasi(fotoId: number, j: Jepretan) {
+    void ambilJson("/api/sigap/foto/orientasi", { method: "POST", body: { foto_id: fotoId, diag: { ...j.diag, kuartal_manual: j.kuartal % 4 } } }).catch(() => undefined);
+  }
   const [layarLebar, setLayarLebar] = useState(false); // layar sendiri sudah landscape (peramban biasa dengan putar otomatis): tidak perlu diputar manual
   const izinGerakRef = useRef(false);
   const gerakAdaRef = useRef(false);
@@ -227,10 +257,7 @@ export default function KameraSigap({
         sy = sy * 0.8 + gy * 0.2;
       }
       diagRef.current = { sumber, n: diagRef.current.n + 1, x: sx, y: sy };
-      const ax = Math.abs(sx);
-      const ay = Math.abs(sy);
-      if (ax > 6.5 && ax > ay + 2) setMiring(sx > 0 ? 1 : -1);
-      else if (ay > 6.5 && ay > ax + 2) setMiring(0);
+      setMiring((p) => arahDariGravitasi(sx, sy, p)); // empat arah, dengan histeresis (lib/sigapFotoPutar.ts)
     };
     const onGerak = (e: DeviceMotionEvent) => {
       const g = e.accelerationIncludingGravity;
@@ -282,7 +309,7 @@ export default function KameraSigap({
       const v = videoRef.current;
       const d = diagRef.current;
       const tipe = typeof screen !== "undefined" ? screen.orientation?.type ?? "?" : "?";
-      setDiag(`v3 · sensor ${d.n ? `${d.sumber} (${d.n}) x=${d.x.toFixed(1)} y=${d.y.toFixed(1)}` : "tidak ada kabar"} · layar ${tipe} · bingkai ${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`);
+      setDiag(`v4 · sensor ${d.n ? `${d.sumber} (${d.n}) x=${d.x.toFixed(1)} y=${d.y.toFixed(1)}` : "tidak ada kabar"} · layar ${tipe} · bingkai ${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}${Object.values(belajarRef.current).some((b) => b.balik) ? " · arah dikoreksi" : ""}`);
     }, 700);
     return () => clearInterval(t);
   }, []);
@@ -331,8 +358,9 @@ export default function KameraSigap({
 
   // Setelah "Ulangi"/"Foto lagi" elemen video dibuat ulang: sambungkan lagi ke aliran kamera yang masih menyala
   // (juga saat tampilan landscape penuh layar dibuka/ditutup: elemen video berpindah tempat)
-  const putar: 0 | 1 | -1 = layarLebar ? 0 : miring;
-  const landPenuh = putar !== 0 && !galatKamera;
+  const putar: ArahHp = layarLebar ? 0 : miring;
+  // Tampilan landscape penuh layar hanya untuk HP miring ke samping; HP terbalik (2) tetap memakai tata letak biasa.
+  const landPenuh = (putar === 1 || putar === -1) && !galatKamera;
   useEffect(() => {
     const v = videoRef.current;
     if (!jepretan && v && aliranRef.current && v.srcObject !== aliranRef.current) {
@@ -410,11 +438,18 @@ export default function KameraSigap({
     // HP dipegang miring tetapi layar terkunci tegak: bingkai kamera tetap tegak, jadi diputar 90 derajat agar foto jadi landscape dan atasnya benar.
     // (24 Okt 2026) PERBAIKAN foto landscape terbalik 180 derajat: arah putar sebelumnya tertukar (HP ke kiri diputar searah jarum jam, ke kanan
     // berlawanan). Kini memakai lib/sigapFotoPutar.ts (diuji): HP ke kiri -> sisi kanan bingkai jadi atas; HP ke kanan -> sisi kiri bingkai jadi atas.
-    if (putar !== 0 && v.videoHeight > v.videoWidth) {
-      kanvas.width = v.videoHeight;
-      kanvas.height = v.videoWidth;
-      const m = matriksPutarBingkai(putar, v.videoWidth, v.videoHeight);
-      ctx?.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    // (26 Okt 2026) Empat arah seperti kamera biasa: tegak, kiri, kanan, dan TERBALIK (180 derajat), ditambah koreksi hasil belajar per HP dan per kondisi.
+    const sudutLayar = typeof screen !== "undefined" ? screen.orientation?.angle ?? 0 : 0;
+    const kunci = kunciKondisi(layarLebar, sudutLayar, miring);
+    const kuartalDasar = layarLebar ? 0 : kuartalDariArah(miring);
+    const kuartalOtomatis = kuartalAkhir(kuartalDasar, belajarRef.current, kunci);
+    let kuartalDipakai = 0;
+    if (kuartalOtomatis === 2 || (kuartalOtomatis !== 0 && v.videoHeight > v.videoWidth)) {
+      const r = matriksKuartal(kuartalOtomatis as 1 | 2 | 3, v.videoWidth, v.videoHeight);
+      kanvas.width = r.lebar;
+      kanvas.height = r.tinggi;
+      ctx?.setTransform(r.m[0], r.m[1], r.m[2], r.m[3], r.m[4], r.m[5]);
+      kuartalDipakai = kuartalOtomatis;
     } else {
       kanvas.width = v.videoWidth;
       kanvas.height = v.videoHeight;
@@ -444,6 +479,13 @@ export default function KameraSigap({
       waktuHp: wall,
       umurPosisi: Math.max(0, mono - posisi.mono),
       dibuatMs: wall,
+      kunci,
+      kuartal: 0,
+      diag: {
+        kunci, miring, layar_lebar: layarLebar, sudut_layar: sudutLayar, tipe_layar: typeof screen !== "undefined" ? screen.orientation?.type ?? null : null,
+        bingkai: [v.videoWidth, v.videoHeight], hadap, sensor: [Number(diagRef.current.x.toFixed(1)), Number(diagRef.current.y.toFixed(1))], sumber: diagRef.current.sumber,
+        kuartal_dasar: kuartalDasar, kuartal_dipakai: kuartalDipakai, balik: !!belajarRef.current[kunci]?.balik,
+      },
     };
     // Pengaman: simpan sebagai DRAF di HP sebelum pratinjau tampil, supaya foto tidak hilang bila Kirim terlupa
     drafIdRef.current = null;
@@ -461,6 +503,33 @@ export default function KameraSigap({
     setPesan(null);
     setHasil(null);
     void muatToken(); // token baru untuk jepretan berikutnya (token lama sekali pakai)
+  }
+
+  /**
+   * (26 Okt 2026) Putar foto di pratinjau sebelum Kirim (k x 90 derajat searah jarum jam). Jaring pengaman bila arah HP salah dibaca: foto yang sudah
+   * diputar ikut tersimpan sebagai draf di HP, dan hitung mundur kirim otomatis dihentikan supaya petugas sempat memeriksa hasilnya.
+   */
+  async function putarFoto(k: 1 | 2 | 3) {
+    if (!jepretan || mengirim || hasil) return;
+    setHitung(null);
+    try {
+      const bmp = await createImageBitmap(jepretan.blob);
+      const r = matriksKuartal(k, bmp.width, bmp.height);
+      const kv = document.createElement("canvas");
+      kv.width = r.lebar;
+      kv.height = r.tinggi;
+      const c = kv.getContext("2d");
+      if (!c) throw new Error("kanvas");
+      c.setTransform(r.m[0], r.m[1], r.m[2], r.m[3], r.m[4], r.m[5]);
+      c.drawImage(bmp, 0, 0);
+      bmp.close?.();
+      const blob = await new Promise<Blob | null>((ok) => kv.toBlob(ok, "image/jpeg", 0.9));
+      if (!blob) throw new Error("blob");
+      const url = URL.createObjectURL(blob);
+      setJepretan((p) => (p ? { ...p, blob, url, kuartal: (p.kuartal + k) % 4 } : p)); // url lama dilepas oleh efek pada jepretan
+    } catch {
+      setPesan({ jenis: "galat", teks: "Foto tidak dapat diputar. Coba lagi, atau pakai Buang & ulangi." });
+    }
   }
 
   /** Menutup pratinjau TANPA menyentuh draf di HP (draf tetap milik antrean). */
@@ -580,6 +649,8 @@ export default function KameraSigap({
         setPesan({ jenis: "info", teks: "Mode simulasi (masuk sebagai akun lain): foto TIDAK dikirim." });
       } else {
         await lepasDraf(); // sudah di server; draf di HP tidak diperlukan lagi
+        catatBelajar(jepretan);
+        laporOrientasi(r.data.foto.id, jepretan);
         setHasil(r.data);
         setGanti(null); // penggantian sudah terkirim: jepretan berikutnya kembali memakai nomor berikutnya
         setPesan({ jenis: "ok", teks: r.data.sudah ? "Foto ini sudah tercatat sebelumnya." : nomor !== null ? `Foto terkirim sebagai Foto ${nomor}.` : "Foto terkirim." });
@@ -593,6 +664,7 @@ export default function KameraSigap({
         setPesan({ jenis: "galat", teks: "Sesi berakhir. Masuk kembali; foto Anda masih tersimpan di HP ini dan akan terkirim setelah masuk." });
       } else if (g.status === undefined) {
         await simpanDraf(jepretan, nomor, tag, false); // draf menjadi antrean biasa
+        catatBelajar(jepretan);
         drafIdRef.current = null;
         void hitungAntre();
         setPesan({ jenis: "info", teks: `Tidak ada sinyal. Foto tersimpan di HP ini (dipotret ${jamWib(jepretan.waktuHp)}) dan terkirim otomatis saat ada sinyal.` });
@@ -756,6 +828,16 @@ export default function KameraSigap({
       {jepretan && (
         <>
           <PratinjauCap url={jepretan.url} waktuMs={jepretan.waktuHp} pos={jepretan.pos} nama={namaSaya} peran={peran.toUpperCase()} kegiatan={namaKegiatan} />
+          {!hasil && (
+            <div className="flex flex-col gap-1.5">
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Putar foto">
+                <button type="button" onClick={() => void putarFoto(3)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">↺ Putar kiri</button>
+                <button type="button" onClick={() => void putarFoto(2)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar 180°</button>
+                <button type="button" onClick={() => void putarFoto(1)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar kanan ↻</button>
+              </div>
+              <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Foto terbalik atau miring? Ketuk Putar sampai orangnya tegak, lalu Kirim. Cap tulisan di foto resmi mengikuti arah akhir foto.</p>
+            </div>
+          )}
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Ini draft tampilan cap. Cap resmi dicetak server saat Kirim: jam resmi mengikuti server, lalu ditambah nama lokasi, kode, dan QR.</p>
 
           <fieldset className="flex flex-col gap-2">
