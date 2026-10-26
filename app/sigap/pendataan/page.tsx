@@ -29,6 +29,7 @@ import dynamic from "next/dynamic";
 import KontrolPetaDasar from "./KontrolPetaDasar";
 import { useDasarTim } from "./useDasar";
 import type { StatusDasar } from "./PetaDasar";
+import { namaTampil } from "@/lib/namaTampil";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
 import { muatData, tandaBasi, useData } from "@/app/portal/dataBersama";
@@ -69,7 +70,7 @@ const WARNA_BAR = { terdampak: "#0F2A52", tidak_terdampak: "#4C86E8", tidak_dite
 const PIL: Record<HasilKk | "belum", [string, string, string]> = {
   terdampak: ["#0F2A52", "#FFFFFF", "Terdampak"],
   tidak_terdampak: ["#E6EEFC", "#1F5FD1", "Tidak"],
-  tidak_ditemukan: ["#FFF4D6", "#8A6200", "Tdk temu"],
+  tidak_ditemukan: ["#FFF4D6", "#8A6200", "Tidak ditemukan"],
   belum: ["#EEF2F7", "#5B6B84", "Belum"],
 };
 
@@ -511,12 +512,12 @@ export default function LembarPendataan() {
       if (sudahAdaHasil(k)) return setToast({ pesan: "KK ini sudah punya hasil, tidak bisa diubah lewat perbaikan." });
       const { [k.id]: _buang, ...sisa } = tampung; // eslint-disable-line @typescript-eslint/no-unused-vars
       simpanTampung(sisa);
-      return setToast({ pesan: "Dikembalikan ke belum didata" });
+      return setToast({ pesan: "Dikembalikan ke belum ada hasil" });
     }
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
     const r = tandaiKk(subId, k, "belum");
     if (!r.ok) return setToast({ pesan: r.pesan });
-    setToast({ pesan: "Dikembalikan ke belum didata", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan) : undefined });
+    setToast({ pesan: "Dikembalikan ke belum ada hasil", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan) : undefined });
   }
 
   /**
@@ -598,7 +599,7 @@ export default function LembarPendataan() {
   const urutSub = subAktif && data ? data.sub.findIndex((s) => s.idsubsls === subAktif.idsubsls) + 1 : 0;
   const hdrDidata = semuaSub ? didata : perSub[subAktif!.idsubsls]?.didata ?? 0;
   const hdrTotal = semuaSub ? total : perSub[subAktif!.idsubsls]?.total ?? 0;
-  const hdrKet = semuaSub ? "KK tim" : "KK didata";
+  const hdrKet = semuaSub ? "KK tim" : "KK punya hasil";
 
   // kelompok per nagari (urutan kemunculan) untuk lembar pilih Sub SLS dan kartu Per Sub SLS
   const kelompok = useMemo(() => {
@@ -665,7 +666,7 @@ export default function LembarPendataan() {
                   ["mon", "Monitoring"],
                   ["wilayah", "Batas"],
                 ] as [Tab, string][]).map(([k, t]) => (
-                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`relative flex h-[34px] min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[9px] px-0.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`relative flex h-[44px] min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[9px] px-0.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
                     {k === "wilayah" && <Ik n="batas" className="h-[15px] w-[15px]" />}
                     {t}
                     {k === "wilayah" && TAB_BATAS_BARU && (
@@ -701,7 +702,7 @@ export default function LembarPendataan() {
         </div>
       )}
 
-      <div className={`mx-auto flex w-full max-w-xl flex-1 flex-col ${subId ? "" : "pb-28"}`}>
+      <div className={`mx-auto flex w-full max-w-xl flex-1 flex-col ${subId ? "" : "pb-40"}`}>
         <div className="space-y-2 px-2.5 pt-2.5 empty:hidden">
             {tim.galat && (
               <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
@@ -742,7 +743,7 @@ export default function LembarPendataan() {
               <div className="flex-1">
                 <BilahTumpuk
                   total={hitung.semua}
-                  label={`${hitung.semua - hitung.belum} dari ${hitung.semua} KK didata`}
+                  label={`${hitung.semua - hitung.belum} dari ${hitung.semua} KK sudah punya hasil`}
                   bagian={[
                     { n: hitung.terdampak, warna: WARNA_BAR.terdampak },
                     { n: hitung.tidak_terdampak, warna: WARNA_BAR.tidak_terdampak },
@@ -770,8 +771,8 @@ export default function LembarPendataan() {
             <div className="grid grid-cols-4 gap-[3px]" role="group" aria-label="Saring menurut status">
               {([
                 ["terdampak", "Terdampak", hitung.terdampak],
-                ["tidak_terdampak", "Tdk terdampak", hitung.tidak_terdampak],
-                ["tidak_ditemukan", "Tdk ditemukan", hitung.tidak_ditemukan],
+                ["tidak_terdampak", "Tidak terdampak", hitung.tidak_terdampak],
+                ["tidak_ditemukan", "Tidak ditemukan", hitung.tidak_ditemukan],
                 ["belum", "Belum", hitung.belum],
               ] as [FStatus, string, number][]).map(([k, teks, n]) => {
                 const on = fStatus === k;
@@ -783,13 +784,13 @@ export default function LembarPendataan() {
                     type="button"
                     aria-pressed={on}
                     onClick={() => setFStatus(on ? "semua" : k)}
-                    className={`flex min-w-0 flex-col items-center gap-px rounded-[10px] px-0 py-1 ${on ? "bg-[#0F2A52]" : "bg-[#F5F8FE] shadow-[inset_0_0_0_1px_#E4ECF8]"}`}
+                    className={`flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-px rounded-[10px] px-0 py-1 ${on ? "bg-[#0F2A52]" : "bg-[#F5F8FE] shadow-[inset_0_0_0_1px_#E4ECF8]"}`}
                   >
                     <span className="inline-flex items-center gap-[5px] text-[15px] font-extrabold leading-tight" style={{ color: ink }}>
                       <Penanda k={bentuk} warna={k === "belum" && !on ? "#9AA6B6" : on ? "#D3E0F5" : ink} />
                       {n}
                     </span>
-                    <span className="whitespace-nowrap text-[10.5px] font-semibold leading-tight tracking-[-0.4px]" style={{ color: on ? "#D3E0F5" : "#6B7A90" }}>
+                    <span className="px-0.5 text-center text-[10.5px] font-semibold leading-tight" style={{ color: on ? "#D3E0F5" : "#6B7A90" }}>
                       {teks}
                     </span>
                   </button>
@@ -831,10 +832,10 @@ export default function LembarPendataan() {
                   <Ik n="lokasi" />
                 </button>
                 {/* legenda bentuk kecil, kiri bawah (di atas tombol capaian yang mengambang di kiri bawah layar) */}
-                <div className="absolute bottom-[88px] left-2.5flex max-w-[150px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
+                <div className="absolute bottom-[88px] left-2.5 flex max-w-[170px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
                   <span className="inline-flex items-center gap-1.5"><Penanda k="terdampak" warna="#44546F" />Terdampak</span>
                   <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_terdampak" warna="#44546F" />Tidak terdampak</span>
-                  <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_ditemukan" warna="#44546F" />Tdk ditemukan</span>
+                  <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_ditemukan" warna="#44546F" />Tidak ditemukan</span>
                   <span className="font-semibold text-[#5B6B84]">Warna = PPL</span>
                   {tanpaKoordinat > 0 && <span className="font-semibold leading-tight text-[#5B6B84]">{tanpaKoordinat} KK tanpa koordinat hanya di Daftar KK</span>}
                 </div>
@@ -920,7 +921,7 @@ export default function LembarPendataan() {
                 <span className="text-[12.5px] font-bold text-[#5B6B84]">Progres tim</span>
                 <b className="ml-auto text-[22px] font-extrabold leading-none text-[#0F2A52]">{didata}</b>
                 <span className="text-[12.5px] text-[#6B7A90]">
-                  / {total} KK · {persen(didata, total)}%
+                  / {total} KK · {persen(didata, total)}% sudah punya hasil
                 </span>
               </div>
               <p className="-mt-1 text-[11.5px] text-[#6B7A90]">
@@ -930,7 +931,7 @@ export default function LembarPendataan() {
               </p>
               <BilahTumpuk
                 total={total}
-                label={`${didata} dari ${total} KK didata`}
+                label={`${didata} dari ${total} KK sudah punya hasil`}
                 bagian={[
                   { n: timHasil.terdampak, warna: WARNA_BAR.terdampak },
                   { n: timHasil.tidak_terdampak, warna: WARNA_BAR.tidak_terdampak },
@@ -939,8 +940,8 @@ export default function LembarPendataan() {
               />
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[#5B6B84]">
                 <span><b className="text-[#0F2A52]">{timHasil.terdampak}</b> terdampak</span>
-                <span><b className="text-[#0F2A52]">{timHasil.tidak_terdampak}</b> tidak</span>
-                <span><b className="text-[#0F2A52]">{timHasil.tidak_ditemukan}</b> tdk ditemukan</span>
+                <span><b className="text-[#0F2A52]">{timHasil.tidak_terdampak}</b> tidak terdampak</span>
+                <span><b className="text-[#0F2A52]">{timHasil.tidak_ditemukan}</b> tidak ditemukan</span>
                 <span className="ml-auto text-[#8A96A8]">{waktuRingkas(new Date(tim.tiba || Date.now()).toISOString())}</span>
               </div>
               {menunggu.length > 0 && <p className="text-[11.5px] text-[#8A6200]">{menunggu.length} penandaan di HP ini belum terkirim, jadi belum masuk angka di bawah.</p>}
@@ -1022,17 +1023,18 @@ export default function LembarPendataan() {
       {lembar === "sub" && data && (
         <LembarBawah judulLembar="Pilih Sub SLS" kanan={`${data.sub.length} Sub SLS tim`} onTutup={() => setLembar(null)}>
           <div className="flex flex-col gap-1.5 pb-1">
+            <p className="px-0.5 text-[11.5px] leading-snug text-[#6B7A90]">Angka di kanan = KK yang sudah punya hasil dari seluruh KK Sub SLS itu.</p>
             <button
               type="button"
               onClick={() => {
                 setLembar(null);
                 if (tab !== "mon") keKartu();
               }}
-              className={`flex items-center gap-2.5 rounded-[13px] border border-[#E4ECF8] px-3 py-[9px] text-left ${semuaSub ? "bg-[#EEF3FC]" : "bg-white"}`}
+              className={`flex min-h-[44px] items-center gap-2.5 rounded-[13px] border border-[#E4ECF8] px-3 py-[9px] text-left ${semuaSub ? "bg-[#EEF3FC]" : "bg-white"}`}
             >
               <Ik n="lapis" className="h-[18px] w-[18px] text-[#1F5FD1]" />
               <span className="flex-1 text-[13.5px] font-extrabold text-[#0F2A52]">Semua Sub SLS tim</span>
-              <span className="text-[12px] text-[#5B6B84]"><b className="text-[#0F2A52]">{didata}</b>/{total}</span>
+              <span className="text-[12px] text-[#5B6B84]"><b className="text-[#0F2A52]">{didata}</b>/{total} KK</span>
             </button>
             {kelompok.map((g) => (
               <div key={g.nagari} className="flex flex-col gap-1">
@@ -1050,13 +1052,13 @@ export default function LembarPendataan() {
                         if (s.idsubsls !== subId) gantiSub(s.idsubsls);
                         if (tab === "mon") setTab("peta");
                       }}
-                      className={`flex items-center gap-2.5 rounded-[12px] px-3 py-2 text-left ${aktif ? "border-[1.5px] border-[#1F5FD1] bg-[#EEF3FC]" : "border border-[#EEF2F7] bg-white"}`}
+                      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] px-3 py-2 text-left ${aktif ? "border-[1.5px] border-[#1F5FD1] bg-[#EEF3FC]" : "border border-[#EEF2F7] bg-white"}`}
                     >
                       <span className="min-w-0 flex-1 truncate text-[13.5px] font-bold text-[#0F2A52]">{namaPendek(s)}</span>
                       <span className="h-[5px] w-14 flex-none overflow-hidden rounded-full bg-[#E3E9F2]">
                         <span className="block h-full bg-[#1F5FD1]" style={{ width: `${persen(t?.didata ?? 0, t?.total ?? 0)}%` }} />
                       </span>
-                      <span className="w-[50px] flex-none text-right text-[12px] text-[#5B6B84]"><b className="text-[#0F2A52]">{t?.didata ?? 0}</b>/{t?.total ?? 0}</span>
+                      <span className="w-[64px] flex-none text-right text-[12px] text-[#5B6B84]"><b className="text-[#0F2A52]">{t?.didata ?? 0}</b>/{t?.total ?? 0} KK</span>
                     </button>
                   );
                 })}
@@ -1092,9 +1094,9 @@ export default function LembarPendataan() {
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-bold text-[#0F2A52]">
-                      {a ? `${a.nama}${a.akun_id === sayaAkun ? " (saya)" : ""}` : "Semua PPL"}
+                      {a ? `${namaTampil(a.nama)}${a.akun_id === sayaAkun ? " (saya)" : ""}` : "Semua PPL"}
                     </span>
-                    <span className="block text-[11px] text-[#6B7A90]">{r ? `${r.n} KK · ${r.td} terdampak` : `${hitung.semua - hitung.belum} KK didata di Sub SLS ini`}</span>
+                    <span className="block text-[11px] text-[#6B7A90]">{r ? `${r.n} KK · ${r.td} terdampak` : `${hitung.semua - hitung.belum} KK sudah punya hasil di Sub SLS ini`}</span>
                   </span>
                   <span className="h-5 w-5 flex-none rounded-full" style={{ border: aktif ? "6px solid #1F5FD1" : "2px solid #CBD6E4" }} />
                 </button>
@@ -1118,7 +1120,7 @@ export default function LembarPendataan() {
 
           {terpilih.hasil && terpilih.ppl_akun_id !== sayaAkun && (
             <p className="mt-3 rounded-[12px] bg-[#FDEBDD] px-3 py-2 text-[12.5px] text-[#8A3B0C]">
-              Sudah didata {anggota.get(terpilih.ppl_akun_id ?? 0)?.nama ? namaDepan(anggota.get(terpilih.ppl_akun_id ?? 0)!.nama) : "rekan tim"} ({waktuRingkas(terpilih.status_at)}): {LABEL_PENDEK[terpilih.hasil]}. Menandai ulang akan menimpa hasil ini; riwayat tetap tercatat.
+              Sudah ada hasil dari {anggota.get(terpilih.ppl_akun_id ?? 0)?.nama ? namaDepan(anggota.get(terpilih.ppl_akun_id ?? 0)!.nama) : "rekan tim"} ({waktuRingkas(terpilih.status_at)}): {LABEL_PENDEK[terpilih.hasil]}. Menandai ulang akan menimpa hasil ini; riwayat tetap tercatat.
             </p>
           )}
           {terpilih.hasil && terpilih.ppl_akun_id === sayaAkun && <p className="mt-3 text-[12px] text-[#6B7A90]">Anda menandai {waktuRingkas(terpilih.status_at)}.</p>}
@@ -1184,7 +1186,7 @@ export default function LembarPendataan() {
             )}
             {terpilih.hasil && (
               <button type="button" onClick={() => kembalikan(terpilih)} className={`${chipBase} ${chipOff}`}>
-                Kembalikan ke belum didata
+                Kembalikan ke belum ada hasil
               </button>
             )}
           </div>

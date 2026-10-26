@@ -1,6 +1,6 @@
 // (9 Okt 2026) Uji tahap kegiatan induk: status modul/tahap, aturan buka, ringkasan Layer 1, pemeriksaan masukan admin.
 import { describe, expect, it } from "vitest";
-import { periksaTahapAdmin, ringkasInduk, susunTahap, tahapSekarang, tanggalWib, type Induk, type KonteksTahap, type TahapDef } from "../sigapTahap";
+import { chipPeranTim, periksaTahapAdmin, ringkasInduk, susunTahap, tahapSekarang, tanggalWib, type Induk, type KonteksTahap, type TahapDef } from "../sigapTahap";
 import type { RingkasKegiatan } from "../sigapKegiatan";
 
 const T = (kode: string, urutan: number, isi: string[], buka_mode: TahapDef["buka_mode"] = "langsung", buka_tanggal: string | null = null): TahapDef => ({
@@ -74,10 +74,18 @@ describe("susunTahap", () => {
     const h = susunTahap(K(INDUK([T("pendataan", 1, ["wilayah_tim"])])));
     expect(h[0].status).toBe("berjalan");
     expect(h[0].pecahan).toBeCloseTo(3 / 15);
+    expect(h[0].modul[0].ket).toBe("15 Sub SLS pendataan · 3 sudah ada laporan"); // (26 Okt 2026) jelas: ini Sub SLS pendataan, bukan Sub SLS identifikasi
     const semua = susunTahap(K(INDUK([T("pendataan", 1, ["wilayah_tim"])], { wilayah: { total: 4, ada_laporan: 4, kk: 1, kk_terdampak: 1 } })));
     expect(semua[0].status).toBe("selesai");
     const kosong = susunTahap(K(INDUK([T("pendataan", 1, ["wilayah_tim"])], { wilayah: { total: 0, ada_laporan: 0, kk: 0, kk_terdampak: 0 } })));
     expect(kosong).toHaveLength(0); // tak ada wilayah -> modul tak berlaku -> tahap disembunyikan
+  });
+
+  it("identifikasi: teks menyebut 'Sub SLS identifikasi' (beda dengan Sub SLS pendataan)", () => {
+    const ket = (terisi: number) => susunTahap(K(INDUK([T("pendataan", 1, ["identifikasi"])], { identifikasi: { total: 31, terisi, hasil: 120 } })))[0].modul[0].ket;
+    expect(ket(31)).toBe("Semua 31 Sub SLS identifikasi sudah terisi · 120 KK terdampak");
+    expect(ket(10)).toBe("10 dari 31 Sub SLS identifikasi terisi");
+    expect(ket(0)).toBe("Belum ada yang terisi · 31 Sub SLS identifikasi menunggu hasil");
   });
 
   it("Transport Lokal dipilih menurut kegiatan_id & membawa tautan balik ke tahap", () => {
@@ -199,6 +207,8 @@ describe("modul pendataan", () => {
   it("status: belum ada yang didata = perlu; sebagian = berjalan; semua = selesai", () => {
     const m = (p: NonNullable<Induk["pendataan"]>) => susunTahap(K(induk(p)))[0].modul[0];
     expect(m({ total: 40, didata: 0, terdampak: 0 })).toMatchObject({ kode: "pendataan", status: "perlu", aksi: "Buka lembar" });
+    expect(m({ total: 40, didata: 0, terdampak: 0 }).ket).toBe("Belum ada yang punya hasil · 40 KK tim menunggu"); // (26 Okt 2026) satu istilah: "punya hasil"
+    expect(m({ total: 40, didata: 40, terdampak: 22 }).ket).toBe("Semua 40 KK sudah punya hasil · 22 terdampak");
     expect(m({ total: 40, didata: 12, terdampak: 5 })).toMatchObject({ status: "berjalan", ket: "12 dari 40 KK tim sudah punya hasil" });
     expect(m({ total: 40, didata: 40, terdampak: 22 })).toMatchObject({ status: "selesai", aksi: "Lihat", pecahan: 1 });
   });
@@ -242,5 +252,19 @@ describe("modul spdt_lembar", () => {
     const r = ringkasInduk(K(induk({ peran: "pml", total: 45, ppl: 2, pml: 1 })));
     expect(r?.nada).toBe("biru");
     expect(r?.href).toBe("/sigap/kegiatan/spdt_ntp");
+  });
+});
+
+describe("chipPeranTim (Beranda PML/PPL)", () => {
+  const depan = (n: string | null | undefined) => (n ?? "").split(" ")[0];
+  const w = { total: 3, ada_laporan: 1, kk: 10, kk_terdampak: 4 };
+  it("menampilkan peran dan nama tim", () => {
+    expect(chipPeranTim({ ...w, peran: "pml", pml_nama: "Budi Santoso" }, depan)).toBe("PML · Tim Budi");
+    expect(chipPeranTim({ ...w, peran: "ppl", pml_nama: "Budi Santoso" }, depan)).toBe("PPL · Tim Budi");
+  });
+  it("tanpa nama PML hanya peran; tanpa peran / tanpa wilayah -> null", () => {
+    expect(chipPeranTim({ ...w, peran: "ppl", pml_nama: null }, depan)).toBe("PPL");
+    expect(chipPeranTim(w, depan)).toBeNull();
+    expect(chipPeranTim(null, depan)).toBeNull();
   });
 });

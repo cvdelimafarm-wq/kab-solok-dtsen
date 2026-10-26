@@ -34,7 +34,8 @@ describe("susunTranslok: tautan dalam per langkah", () => {
     expect(l3.aksi).toBe("Unggah foto 3–5");
     expect(l3.ket).toContain("Foto kurang 3: nomor 3, 4, 5");
     expect(r.kekurangan![0].jenis).toBe("foto");
-    expect(r.sub).toContain("Foto kurang 3");
+    expect(r.sub).toContain("Foto belum lengkap");
+    expect(r.sub).not.toContain("Foto kurang 3"); // (26 Okt 2026) judul langkah sudah memuat "Foto kurang 3: nomor ..."; ringkas tidak mengulang
   });
   it("langkah 3 hari lengkap = 'Buka isian' ke halaman kerja biasa", () => {
     const r = susunTranslok(masuk({ isian: { [HARI_INI]: { laporan: true, foto: 5 } } }));

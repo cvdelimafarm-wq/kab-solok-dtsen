@@ -96,7 +96,7 @@ export default function KorwilAdministrasi({ adm }: { adm: Administrasi }) {
         p && <p className="rounded-[14px] bg-[#DDF3E5] px-3 py-2.5 text-[12.5px] font-bold text-[#0F5A2D]">Semua petugas lengkap pada {tglPendek(p.tanggal)}.</p>
       )}
       <p className="px-1 text-[11.5px] text-[#6B7A90]">
-        Total lengkap {angkaId(adm.ringkas.lengkap)} dari {angkaId(adm.ringkas.wajib)} hari kerja petugas (hari ini belum dihitung). Geser ke kiri untuk hari sebelumnya.
+        Hari kerja yang sudah lewat: {angkaId(adm.ringkas.lengkap)} lengkap dari {angkaId(adm.ringkas.wajib)} ({angkaId(adm.ringkas.wajib - adm.ringkas.lengkap)} terlewat). Hari ini dan hari yang akan datang belum dihitung; rencana seluruh periode ada di Transport Lokal tiap petugas. Geser ke kiri untuk hari sebelumnya.
       </p>
     </div>
   );

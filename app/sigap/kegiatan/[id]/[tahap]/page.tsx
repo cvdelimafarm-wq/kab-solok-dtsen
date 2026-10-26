@@ -127,7 +127,7 @@ export default function HalamanTahap() {
             <b className="block text-[13.5px]">
               Ada {tugas.length} tugas di tahap ini{tugasSelesai > 0 ? ` · ${tugasSelesai} selesai` : ""}
             </b>
-            Kerjakan satu per satu sesuai nomor: {tugas.map((m, i) => `${i + 1}. ${m.judul}`).join(" → ")}.
+            Kerjakan satu per satu sesuai nomor di bawah.
           </div>
         )}
         {t &&
@@ -137,19 +137,15 @@ export default function HalamanTahap() {
             if (m.kode === "wilayah_tim") return null;
             const i = tugas.indexOf(m);
             const baris = <BarisModul m={m} no={tugas.length >= 2 && i >= 0 ? i + 1 : undefined} />;
-            // (19 Okt 2026) Rekap hasil identifikasi = tautan pintas tepat di bawah tugas Lembar Identifikasi (PML) -- atau Lembar Pendataan bila tahap
-            // tak memuat Identifikasi (PPL) -- bukan tombol melayang yang menutupi isi halaman.
-            return m.kode === jangkarRekap ? (
-              <div key={m.kode} className="space-y-2">
-                {baris}
-                <div>
-                  <RekapIdentifikasi sebaris />
-                </div>
-              </div>
-            ) : (
-              <div key={m.kode}>{baris}</div>
-            );
+            return <div key={m.kode}>{baris}</div>;
           })}
+        {/* (26 Okt 2026, C3) Rekap hasil identifikasi = tautan pintas, ditaruh SESUDAH semua tugas bernomor (dulu terselip di antara tugas 1 dan 2).
+            Berlaku bagi tahap yang memuat Lembar Identifikasi (PML) atau Lembar Pendataan (PPL). */}
+        {t && !t.terkunci && jangkarRekap && (
+          <div>
+            <RekapIdentifikasi sebaris />
+          </div>
+        )}
         {t && !t.terkunci && !sembunyikanWilayah && t.modul.some((m) => m.kode === "wilayah_tim") && (
           <details className="group rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)] open:pb-3">
             <summary className="flex min-h-[56px] cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">

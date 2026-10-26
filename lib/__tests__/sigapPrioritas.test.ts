@@ -34,7 +34,7 @@ import { ketTranslok } from "@/lib/sigapTahap";
 describe("ketTranslok: keterangan baris Transport Lokal", () => {
   it("memakai kekurangan teratas, dengan jumlah sisanya", () => {
     const k = (ringkas: string) => ({ ringkas }) as never;
-    expect(ketTranslok({ sub: "2/5 · x", kekurangan: [k("Foto kurang 2"), k("Laporan 14 Okt kosong")] })).toBe("Foto kurang 2 · +1 lagi");
+    expect(ketTranslok({ sub: "2/5 · x", kekurangan: [k("Foto kurang 2"), k("Laporan 14 Okt kosong")] })).toBe("Foto kurang 2 dan 1 hal lain");
     expect(ketTranslok({ sub: "2/5 · x", kekurangan: [k("Foto kurang 2")] })).toBe("Foto kurang 2");
   });
   it("tanpa kekurangan: '3/5 ·' dibaca 'Langkah 3 dari 5 ·'", () => {

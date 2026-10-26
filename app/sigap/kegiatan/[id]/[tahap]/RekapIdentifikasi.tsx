@@ -40,6 +40,7 @@ import {
   type UrutPml,
 } from "@/lib/rekapIdentifikasi";
 import { buatGambarPml, buatGambarRekap } from "./gambarRekap";
+import { namaTampil } from "@/lib/namaTampil";
 
 type Data = { sekarang: string; baris: BarisRekap[]; pml: BarisPml[] };
 type Mode = TingkatRekap | "pml" | "sanggah";
@@ -337,7 +338,7 @@ export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boole
                           return (
                             <li key={b.id} className="border-t border-[#EEF2F7] px-4 py-2.5 first:border-t-0">
                               <div className="flex items-baseline justify-between gap-3">
-                                <span className="min-w-0 truncate text-[14px] font-bold text-[#1B2B4B]">{rapikanNama(b.nama)}</span>
+                                <span className="min-w-0 truncate text-[14px] font-bold text-[#1B2B4B]">{namaTampil(b.nama)}</span>
                                 <span className={`flex-none text-[13.5px] font-extrabold ${p >= 100 ? "text-[#13794B]" : b.target > 0 && b.realisasi === 0 ? "text-[#B42329]" : "text-[#0F2A52]"}`}>
                                   {b.target > 0 ? `${b.realisasi}/${b.target} · ${p}%` : "–"}
                                 </span>

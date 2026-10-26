@@ -147,14 +147,14 @@ describe("susunMenu v2", () => {
     expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi"]);
   });
 
-  it("Perencanaan: Alur GSBPM hanya untuk Admin Aplikasi; Identifikasi survei dan Anggaran terbuka untuk semua", () => {
-    expect(cari(SEMUA, "alur-gsbpm")).toMatchObject({ href: "/sigap/kelola/perencanaan", aktifKode: "perencanaan" });
+  it("Perencanaan: Perencanaan kegiatan (id alur-gsbpm) hanya untuk Admin Aplikasi; Identifikasi survei dan Anggaran terbuka untuk semua", () => {
+    expect(cari(SEMUA, "alur-gsbpm")).toMatchObject({ label: "Perencanaan kegiatan", href: "/sigap/kelola/perencanaan", aktifKode: "perencanaan" });
     expect(cari(KOSONG, "alur-gsbpm")).toBeUndefined();
     expect(cari(KOSONG, "anggaran")).toMatchObject({ href: "/sigap/ro", aktifKode: "anggaran" });
     expect(cari(KOSONG, "anggaran")?.status).toBeUndefined();
   });
 
-  it("Identifikasi survei: di Perencanaan, sesudah Alur GSBPM, terbuka bagi semua akun organik", () => {
+  it("Identifikasi survei: di Perencanaan, sesudah Perencanaan kegiatan, terbuka bagi semua akun organik", () => {
     for (const izin of [SEMUA, KOSONG]) expect(cari(izin, "identifikasi-survei")).toMatchObject({ href: "/sigap/kelola/perencanaan/identifikasi", aktifKode: "identifikasi_survei" });
     const k = susunMenu(SEMUA).find((x) => x.kode === "perencanaan")!;
     expect(k.item.map((x) => x.id)).toEqual(["alur-gsbpm", "identifikasi-survei", "anggaran"]);

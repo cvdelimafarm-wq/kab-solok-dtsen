@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import { useData } from "@/app/portal/dataBersama";
 import TombolKembali from "@/app/components/TombolKembali";
 import { alamatMasukKembali } from "@/app/portal/sesi";
-import { angkaId, judulKata } from "@/app/sigap/kegiatan/format";
+import { angkaId } from "@/app/sigap/kegiatan/format";
+import { namaSingkatTampil } from "@/lib/namaTampil";
 import { persenKorwil, type DataKorwil } from "@/lib/korwilMonitor";
 import KorwilLapangan from "./KorwilLapangan";
 import KorwilAdministrasi from "./KorwilAdministrasi";
@@ -48,27 +49,27 @@ export default function MonitoringKorwil() {
             <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Monitoring Korwil</h1>
-              <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => judulKata(x.split(",")[0]).split(" ").slice(0, 2).join(" ")).join(" & ")}` : "Pendataan Pascabencana"}</p>
+              <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => namaSingkatTampil(x)).join(" & ")}` : "Pendataan Pascabencana"}</p>
             </div>
             {L && (
               <div className="flex-none text-right">
                 <div className="text-[15px] font-extrabold leading-[1.1]">{String(persen).replace(".", ",")}%</div>
-                <div className="text-[10.5px] text-[#A9BCD8]">KK didata</div>
+                <div className="text-[10.5px] text-[#A9BCD8]">Berhasil didata</div>
               </div>
             )}
           </div>
 
           {/* (23 Okt 2026) tinggi baris chip kelompok dipesan selagi data dimuat supaya tab Lapangan/Administrasi tidak bergeser saat data muncul (audit Tahap 2) */}
-          {!data && !galat && <div aria-hidden className="h-[32px]" />}
+          {!data && !galat && <div aria-hidden className="h-[44px]" />}
           {data && data.pilihan.length > 1 && (
-            <div className="-mx-1 flex min-h-[32px] gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Pilih kelompok">
+            <div className="-mx-1 flex min-h-[44px] items-center gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Pilih kelompok">
               {data.pilihan.map((p) => (
                 <button
                   key={p.kelompok}
                   type="button"
                   aria-pressed={p.kelompok === data.kelompok}
                   onClick={() => setPilih(p.kelompok)}
-                  className={`h-[30px] flex-none rounded-full px-3 text-[12px] font-extrabold ${p.kelompok === data.kelompok ? "bg-white text-[#0F2A52]" : "bg-white/[.14] text-white active:bg-white/25"}`}
+                  className={`h-[44px] flex-none rounded-full px-4 text-[12px] font-extrabold ${p.kelompok === data.kelompok ? "bg-white text-[#0F2A52]" : "bg-white/[.14] text-white active:bg-white/25"}`}
                 >
                   Kelompok {p.kelompok}
                 </button>
@@ -83,7 +84,7 @@ export default function MonitoringKorwil() {
                 ["administrasi", "Administrasi"],
               ] as [Tab, string][]
             ).map(([k, t]) => (
-              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`h-[42px] border-b-[3px] text-[13.5px] font-extrabold ${tab === k ? "border-[#F4B400] text-white" : "border-transparent text-[#A9BCD8]"}`}>
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`h-[44px] border-b-[3px] text-[13.5px] font-extrabold ${tab === k ? "border-[#F4B400] text-white" : "border-transparent text-[#A9BCD8]"}`}>
                 {t}
               </button>
             ))}
@@ -109,17 +110,22 @@ export default function MonitoringKorwil() {
                 </div>
                 <div className="rounded-[14px] bg-white px-1 py-2.5 shadow-[0_2px_8px_rgba(15,42,82,.08)]">
                   <b className="block text-[19px] text-[#0F2A52]">{angkaId(L.realisasi)}</b>
-                  <small className="text-[11px] text-[#6B7A90]">Sudah didata</small>
+                  <small className="text-[11px] text-[#6B7A90]">KK berhasil didata</small>
                 </div>
                 <div className="rounded-[14px] bg-white px-1 py-2.5 shadow-[0_2px_8px_rgba(15,42,82,.08)]">
                   <b className="block text-[19px] text-[#1F5FD1]">{String(persen).replace(".", ",")}%</b>
-                  <small className="text-[11px] text-[#6B7A90]">{L.sub} Sub SLS</small>
+                  <small className="text-[11px] text-[#6B7A90]">Capaian</small>
                 </div>
               </div>
             )}
-            {tab === "lapangan" && perTim > L.sub && (
-              <p className="px-1 text-[11.5px] leading-snug text-[#8A6200]">
-                ⇄ {L.sub} Sub SLS unik: {perTim - L.sub} Sub SLS dipegang lebih dari satu tim, jadi jumlah Sub SLS per tim ({perTim}) lebih besar. Targetnya tidak dihitung ganda.
+            {tab === "lapangan" && (
+              <p className="px-1 text-[11.5px] leading-snug text-[#52627A]">
+                {L.sub} Sub SLS di {L.tim} tim.
+                {perTim > L.sub && (
+                  <span className="text-[#8A6200]">
+                    {" "}⇄ Kalau dijumlah per tim hasilnya {perTim}, sebab {perTim - L.sub} Sub SLS dipegang lebih dari satu tim. Target KK tidak dihitung ganda.
+                  </span>
+                )}
               </p>
             )}
             {tab === "lapangan" ? <KorwilLapangan lap={data.lapangan} /> : <KorwilAdministrasi adm={data.administrasi} />}

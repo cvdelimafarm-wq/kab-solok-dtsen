@@ -8,6 +8,7 @@
 // - Penandaan hasil memakai antrean kirim (antreanKirim.ts): tampil seketika di HP, dikirim saat ada sinyal; hasil terakhir menurut waktu kejadian.
 
 import { useEffect } from "react";
+import { namaDepanTampil } from "@/lib/namaTampil";
 import { useRouter } from "next/navigation";
 import { siapkanData, useData } from "@/app/portal/dataBersama";
 import { kirimAtauAntre } from "@/app/portal/antreanKirim";
@@ -84,7 +85,8 @@ export function inisial(nama: string): string {
   if (k.length === 0) return "?";
   return (k[0][0] + (k[1]?.[0] ?? k[0][1] ?? "")).toUpperCase();
 }
-export const namaDepan = (nama: string) => nama.trim().split(/\s+/)[0] ?? nama;
+// (26 Okt 2026) satu gaya nama di semua layar: lib/namaTampil.ts
+export const namaDepan = (nama: string) => namaDepanTampil(nama) || nama;
 
 export function jamWib(iso: string | null): string {
   if (!iso) return "-";

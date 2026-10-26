@@ -95,11 +95,11 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
         ...jika(i.perencanaan, {
           id: "alur-gsbpm",
           ikon: "alur",
-          label: "Alur GSBPM",
+          label: "Perencanaan kegiatan", // (26 Okt 2026) dulu "Alur GSBPM"; isinya kini pintu masuk perencanaan (identifikasi sampai pelaksanaan)
           href: "/sigap/kelola/perencanaan",
           aktifKode: "perencanaan",
-          title: "Uji coba: RO anggaran → kegiatan utama → tahap GSBPM",
-          ketPalet: "RO → kegiatan utama → tahap GSBPM (uji coba)",
+          title: "Perencanaan kegiatan: dari identifikasi sampai pelaksanaan",
+          ketPalet: "identifikasi, persetujuan, kebutuhan, pelaksanaan",
         }),
         // (25 Okt 2026) Identifikasi survei: tahap awal GSBPM, dijawab sekali oleh ketua tim/admin RO, disahkan PPK -> Tata Usaha -> KPA. Terbuka bagi semua akun organik (hak menulis ditegakkan basis data).
         { id: "identifikasi-survei", ikon: "kompas", label: "Identifikasi survei", href: "/sigap/kelola/perencanaan/identifikasi", aktifKode: "identifikasi_survei", title: "Identifikasi survei: periode, jadwal, pelatihan, petugas, dan kebutuhan anggaran", ketPalet: "jadwal, petugas, anggaran; disahkan PPK, Tata Usaha, KPA" },

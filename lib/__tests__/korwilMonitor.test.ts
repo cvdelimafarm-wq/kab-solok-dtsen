@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BarisKkMon } from "@/lib/pendataanMonitor";
-import { judulWilayah, labelSubKorwil, persenKorwil, susunAdministrasi, susunLapanganKorwil, type BarisHariKorwil, type TimKorwilMasuk } from "@/lib/korwilMonitor";
+import { judulWilayah, labelSubKorwil, persenKorwil, susunAdministrasi, timCapaianTerendah, susunLapanganKorwil, type BarisHariKorwil, type TimKorwilMasuk } from "@/lib/korwilMonitor";
 
 const orang = (id: number, nama: string, akun: number[]) => ({ petugas_id: id, nama, akun_ids: akun });
 const TIM_A: TimKorwilMasuk = { pml: orang(1, "Pml A", [101]), ppl: [orang(11, "Ppl A1", [111]), orang(12, "Ppl A2", [112])], tampil: true };
@@ -160,6 +160,16 @@ describe("susunAdministrasi", () => {
     expect([a1.lengkap, a1.wajib]).toEqual([0, 2]);
     expect(r.tim[0].baris[0]).toMatchObject({ lengkap: 1, wajib: 1 });
   });
+  it("hari ini yang sudah lengkap pun tidak masuk hitungan lengkap/wajib (sama dengan Transport Lokal)", () => {
+    const x = susunAdministrasi({
+      tim: [TIM_A],
+      mulai: "2026-10-10",
+      hariIni: "2026-10-11",
+      baris: [hari(101, "2026-10-10", { lengkap: true, ada_laporan: true, jumlah_foto: 5, aktif: false }), hari(101, "2026-10-11", { lengkap: true, ada_laporan: true, jumlah_foto: 5, aktif: false })],
+    });
+    expect(x.tim[0].baris[0].sel).toEqual(["lengkap", "lengkap"]);
+    expect(x.tim[0].baris[0]).toMatchObject({ lengkap: 1, wajib: 1 });
+  });
   it("perhatian = hari kerja terakhir sebelum hari ini", () => {
     expect(r.perhatian).toEqual({ tanggal: "2026-10-12", kosong: ["Ppl A1"], sebagian: [] });
   });
@@ -170,5 +180,20 @@ describe("susunAdministrasi", () => {
   });
   it("mulai setelah hari ini -> tanpa kolom", () => {
     expect(susunAdministrasi({ ...masuk, mulai: "2026-10-20" }).tanggal).toEqual([]);
+  });
+});
+
+describe("timCapaianTerendah (tanda di Monitoring Korwil)", () => {
+  const t = (pml_id: number, target: number, realisasi: number) => ({ pml_id, target, realisasi });
+  it("menandai tim dengan capaian terendah", () => {
+    expect(timCapaianTerendah([t(1, 100, 80), t(2, 100, 40), t(3, 100, 60)])).toEqual([2]);
+  });
+  it("seri: semua yang terendah ditandai; semua sama: tidak ada", () => {
+    expect(timCapaianTerendah([t(1, 100, 40), t(2, 50, 20), t(3, 100, 90)])).toEqual([1, 2]);
+    expect(timCapaianTerendah([t(1, 100, 50), t(2, 100, 50)])).toEqual([]);
+  });
+  it("satu tim atau tim tanpa target tidak dinilai", () => {
+    expect(timCapaianTerendah([t(1, 100, 10)])).toEqual([]);
+    expect(timCapaianTerendah([t(1, 100, 10), t(2, 0, 0)])).toEqual([]);
   });
 });

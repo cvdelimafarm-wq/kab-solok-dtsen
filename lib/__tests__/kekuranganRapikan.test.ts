@@ -26,7 +26,7 @@ describe("kartu foto di Beranda", () => {
     const k = kartuFoto({ laporan: true, slot: [1, 2, 4, 5] })!;
     expect(k.aksi).toBe("Unggah foto 3");
     expect(k.judul).toMatch(/Tinggal 1 foto lagi/);
-    expect(k.ringkas).toBe("Foto kurang 1");
+    expect(k.ringkas).toBe("Foto belum lengkap"); // tidak mengulang judul "Tinggal 1 foto lagi"
   });
 
   it("ada foto cadangan: tombol 'Rapikan nomor foto' dan jumlah foto belum terpakai", () => {

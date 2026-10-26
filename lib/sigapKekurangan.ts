@@ -302,7 +302,7 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
         judul: rapikan
           ? `Nomor ${rentangNomor(b.foto)} masih kosong, ada ${nCadangan} foto belum terpakai`
           : semua ? `Unggah ${aturan.jumlah_foto} foto dokumentasi` : b.fotoN === 1 ? `Tinggal 1 foto lagi (nomor ${b.foto[0]})` : `Foto kurang ${b.fotoN}: nomor ${b.foto.join(", ")}`,
-        ringkas: rapikan ? `${nCadangan} foto belum bernomor` : `Foto kurang ${b.fotoN}`,
+        ringkas: rapikan ? `${nCadangan} foto belum bernomor` : "Foto belum lengkap", // (26 Okt 2026, B7) tidak mengulang judul ("Tinggal 1 foto lagi (nomor 5)" / "Foto kurang 3: nomor 3, 4, 5")
         uraian: ket(
           rapikan
             ? `Foto baru tercatat ${nFoto} dari ${aturan.jumlah_foto} nomor, padahal ${nCadangan} foto Kamera SIGAP sudah terkirim tetapi belum menempati nomor. Buka bagian foto, lalu pasang ke nomor yang kosong.${aturan.wajib_laporan && !b.laporan ? " Laporan sudah tersimpan." : ""}`
@@ -354,7 +354,7 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
       label: "PERLU TINDAKAN",
       judul: `${tglPendekKek(t)} belum lengkap (${kurang})`,
       ringkas: `${tglPendekKek(t)} terlewat`,
-      uraian: `Waktu isian sudah lewat. Hari itu masuk Kwitansi hanya bila admin memberi izin susulan.${baru.length > 1 ? ` Ada ${baru.length} hari terlewat.` : ""}`,
+      uraian: `Isian tanggal ini sudah tutup. Minta izin susulan ke admin bila perlu.${baru.length > 1 ? ` Ada ${baru.length} hari terlewat.` : ""}`,
       batas: null,
       lencana: { teks: "terlewat", nada: "emas" },
       aksi: `Lihat hari ${tglPendekKek(t)}`,

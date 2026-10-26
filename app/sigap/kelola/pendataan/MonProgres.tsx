@@ -148,7 +148,7 @@ export default function MonProgres() {
           <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Progres petugas — rekap per {rekap === "ppl" ? "PPL" : rekap === "pml" ? "PML" : "tim"}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
             <Kpi lebar judul="Capaian terhadap target" nilai={`${persen(berhasil(ringkas.h), ringkas.target)}%`} catatan={`target ${fmt(ringkas.target)} KK · ${ringkas.catat}`} />
-            <Kpi judul="KK didata (terdampak + tidak)" nilai={fmt(berhasil(ringkas.h))} />
+            <Kpi judul="KK berhasil didata (terdampak + tidak)" nilai={fmt(berhasil(ringkas.h))} />
             <Kpi judul="KK terdampak" nilai={fmt(ringkas.h.terdampak)} />
             <Kpi judul="KK tidak terdampak" nilai={fmt(ringkas.h.tidak_terdampak)} />
             <Kpi judul="Tidak ditemukan" nilai={fmt(ringkas.h.tidak_ditemukan)} catatan="tidak dihitung berhasil" />
@@ -164,7 +164,7 @@ export default function MonProgres() {
                     <th className={`${th} text-right`}>Target</th>
                     <th className={`${th} text-right`}>Terdampak</th>
                     <th className={`${th} text-right`}>Tidak terdampak</th>
-                    <th className={`${th} text-right`}>Didata</th>
+                    <th className={`${th} text-right`}>Berhasil didata</th>
                     <th className={th}>Capaian</th>
                     <th className={`${th} text-right`}>Tdk ditemukan</th>
                     <th className={`${th} text-right`}>Sisa</th>
@@ -211,7 +211,7 @@ export default function MonProgres() {
                     <th className={`${th} text-right`}>Target/PPL</th>
                     <th className={`${th} text-right`}>Terdampak</th>
                     <th className={`${th} text-right`}>Tidak terdampak</th>
-                    <th className={`${th} text-right`}>Didata</th>
+                    <th className={`${th} text-right`}>Berhasil didata</th>
                     <th className={th}>Capaian</th>
                     <th className={`${th} text-right`}>Tdk ditemukan</th>
                     <th className={`${th} text-right`}>Sisa</th>
@@ -321,7 +321,7 @@ export default function MonProgres() {
               <b>Target tim</b> = seluruh KK di Sub SLS plotting tim (termasuk yang diajukan dari Kolam wilayah), tanpa Sub SLS yang dibekukan. <b>Target per PPL</b> = target tim dibagi rata ke PPL tim dalam bilangan bulat (sisa pembagian diberikan satu-satu menurut urutan nama, jadi jumlahnya sama dengan target tim); kolom rata-rata tim tetap berupa pecahan.
             </li>
             <li>
-              <b>Didata</b> = KK terdampak + tidak terdampak yang ditandai PPL itu. <b>Tidak ditemukan</b> ditampilkan terpisah. KK yang ditandai PML tidak dihitung pada PPL maupun tim (hanya info pada rekap PML).
+              <b>Berhasil didata</b> = KK terdampak + tidak terdampak yang ditandai PPL itu. <b>Tidak ditemukan</b> ditampilkan terpisah. KK yang ditandai PML tidak dihitung pada PPL maupun tim (hanya info pada rekap PML).
             </li>
             <li>Sub SLS yang dipakai bersama dua tim dimuat pada target masing-masing tim, tetapi dihitung sekali pada jumlah keseluruhan.</li>
           </ul>

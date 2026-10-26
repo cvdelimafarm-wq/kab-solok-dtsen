@@ -136,6 +136,7 @@ describe("susunKekurangan: hari lampau", () => {
     expect(k).toHaveLength(1);
     expect(k[0].jenis).toBe("hari_terlewat");
     expect(k[0].judul).toBe("13 Okt belum lengkap (foto 4/5)");
+    expect(k[0].uraian).toBe("Isian tanggal ini sudah tutup. Minta izin susulan ke admin bila perlu."); // (26 Okt 2026, B5)
     expect(k[0].href).toBe("/sigap/translok/tok?p=88&tab=hari_kerja&tgl=2026-10-13");
     expect(k[0].sekunder?.luar).toBe(true);
     expect(k[0].sekunder?.href).toContain("wa.me/6281200000000");

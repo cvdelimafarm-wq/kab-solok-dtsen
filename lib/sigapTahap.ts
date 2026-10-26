@@ -27,7 +27,22 @@ export type TahapDef = {
 /** Perencanaan (konfirmasi kesediaan & wilayah) untuk akun yang terhubung ke petugas bencana. */
 export type InfoPerencanaan = { konfirmasi: boolean | null; href: string | null; pesan?: string | null };
 /** Ringkasan wilayah tugas tim (detail lengkap di /api/portal/wilayah-tim). */
-export type InfoWilayah = { total: number; ada_laporan: number; kk: number; kk_terdampak: number };
+export type InfoWilayah = {
+  total: number;
+  ada_laporan: number;
+  kk: number;
+  kk_terdampak: number;
+  /** (26 Okt 2026, B6) peran akun ini di tim dan nama PML tim itu, untuk chip Beranda "PML · Tim Budi"; opsional agar data lama/uji tetap sah */
+  peran?: "pml" | "ppl";
+  pml_nama?: string | null;
+};
+
+/** (26 Okt 2026, B6) Chip peran di Beranda: "PML · Tim Budi" / "PPL · Tim Budi". null bila peran belum diketahui. */
+export function chipPeranTim(w: InfoWilayah | null | undefined, namaDepan: (n: string | null | undefined) => string): string | null {
+  if (!w || !w.peran) return null;
+  const tim = w.pml_nama ? namaDepan(w.pml_nama) : "";
+  return `${w.peran === "pml" ? "PML" : "PPL"}${tim ? ` · Tim ${tim}` : ""}`;
+}
 /** (10 Okt 2026) Ringkasan Lembar Identifikasi SLS milik PML (detail di /api/portal/identifikasi). */
 export type InfoIdentifikasi = { total: number; terisi: number; tidak_terdampak: number; hasil: number };
 
@@ -137,11 +152,11 @@ function tglPendek(iso: string): string {
 
 /**
  * (19 Okt 2026) Keterangan baris Transport Lokal di halaman tahap: yang belum lengkap SEBENARNYA ("Foto kurang 2 · +1 lagi"), bukan label "2/5 · …" yang tak jelas
- * (audit alur per peran). Tanpa daftar kekurangan: "3/5 · …" dibaca "Langkah 3 dari 5 · …".
+ * (audit alur per peran). 26 Okt 2026: lebih dari satu = "Foto belum lengkap dan 1 hal lain". Tanpa daftar kekurangan: "3/5 · …" dibaca "Langkah 3 dari 5 · …".
  */
 export function ketTranslok(x: Pick<RingkasKegiatan, "sub" | "kekurangan">): string {
   const kek = x.kekurangan ?? [];
-  if (kek.length > 0) return kek.length > 1 ? `${kek[0].ringkas} · +${kek.length - 1} lagi` : kek[0].ringkas;
+  if (kek.length > 0) return kek.length > 1 ? `${kek[0].ringkas} dan ${kek.length - 1} hal lain` : kek[0].ringkas; // (26 Okt 2026, B7) dulu "· +1 lagi" (tidak jelas)
   return x.sub.replace(/^(\d+)\/(\d+) · /, "Langkah $1 dari $2 · ");
 }
 
@@ -181,7 +196,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
       {
         kode,
         judul: "Wilayah tugas tim",
-        ket: `${w.total} Sub SLS · ${w.ada_laporan} sudah ada laporan`,
+        ket: `${w.total} Sub SLS pendataan · ${w.ada_laporan} sudah ada laporan`,
         status,
         href: null,
         pecahan: w.total ? Math.min(1, w.ada_laporan / w.total) : 0,
@@ -195,10 +210,10 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
     const status: StatusLangkah = f.terisi >= f.total ? "selesai" : f.terisi > 0 ? "berjalan" : "perlu";
     const ket =
       f.terisi >= f.total
-        ? `Semua ${f.total} Sub SLS sudah terisi · ${f.hasil} KK terdampak`
+        ? `Semua ${f.total} Sub SLS identifikasi sudah terisi · ${f.hasil} KK terdampak`
         : f.terisi > 0
-          ? `${f.terisi} dari ${f.total} Sub SLS terisi`
-          : `Belum ada yang terisi · ${f.total} Sub SLS menunggu hasil identifikasi`;
+          ? `${f.terisi} dari ${f.total} Sub SLS identifikasi terisi`
+          : `Belum ada yang terisi · ${f.total} Sub SLS identifikasi menunggu hasil`;
     return [
       {
         kode,
@@ -221,7 +236,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         ? `Semua ${f.total} KK sudah punya hasil · ${f.terdampak} terdampak` // (23 Okt 2026) "punya hasil" = terdampak/tidak terdampak/tidak ditemukan; beda dengan angka "didata" di Monitoring (hanya yang berhasil)
         : f.didata > 0
           ? `${f.didata} dari ${f.total} KK tim sudah punya hasil`
-          : `Belum ada yang didata · ${f.total} KK tim menunggu`;
+          : `Belum ada yang punya hasil · ${f.total} KK tim menunggu`;
     return [
       {
         kode,

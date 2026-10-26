@@ -13,6 +13,8 @@ import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKek
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
+import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
+import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
 import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
 
 // ------------------------------------------------------------------------
@@ -306,7 +308,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </main>
     );
 
-  const namaDepan = judul(data.akun.nama.split(/\s+/)[0] ?? data.akun.nama);
+  const namaDepan = namaDepanTampil(data.akun.nama) || judul(data.akun.nama);
 
   // ---------------- PANDUAN LOGIN PERTAMA ----------------
   if (langkah !== null) {
@@ -459,7 +461,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         )}
         {tab === "hari_ini" && (
           <>
-            <Ringkasan pen={pen} />
+            <Ringkasan pen={pen} hariIni={data.hari_ini} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
@@ -512,10 +514,10 @@ function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string;
       <div aria-hidden className="absolute -bottom-24 right-10 h-48 w-48 rounded-full bg-[#F5B841]/10" />
       <div className="relative mx-auto max-w-lg">
         <div className="flex items-center justify-between gap-2">
-          <a href="/" aria-label="SIGAP, ke Beranda" className="inline-flex">
+          <a href="/" aria-label="SIGAP, ke Beranda" className="inline-flex min-h-[44px] items-center">
             <LogoSigap ukuran={34} />
           </a>
-          <button type="button" onClick={onKeluar} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
+          <button type="button" onClick={onKeluar} className="min-h-[44px] shrink-0 rounded-full bg-white/10 px-4 py-1 text-[11.5px] font-semibold hover:bg-white/20">
             Keluar
           </button>
         </div>
@@ -693,7 +695,7 @@ function LangkahDataDiri({ token, data, onLanjut, onTerverifikasi }: { token: st
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-[11px] font-bold text-[#6B7890]">Nama</p>
-            <p className="text-[14px] font-extrabold">{data.akun.nama}</p>
+            <p className="text-[14px] font-extrabold">{namaTampil(data.akun.nama)}</p>
           </div>
           <div>
             <p className="text-[11px] font-bold text-[#6B7890]">{data.akun.identitas.label}</p>
@@ -789,12 +791,15 @@ function LangkahDataDiri({ token, data, onLanjut, onTerverifikasi }: { token: st
 
 // ---------------- Ringkasan ----------------
 // (10 Okt 2026) Kolom "Estimasi diterima" (nominal & "N hari sudah pasti") DIHAPUS dari ringkasan -- permintaan user. Ringkasan kini 2 kolom: Hari kerja & Hari lengkap.
-function Ringkasan({ pen }: { pen: Pen }) {
+function Ringkasan({ pen, hariIni }: { pen: Pen; hariIni: string }) {
   const lengkap = pen.hari.filter((h) => h.lengkap).length;
+  // (26 Okt 2026) angka dan kalimat yang sama dengan Monitoring Korwil > Administrasi (lib/ringkasHariKerja)
+  const r = ringkasHariKerja(pen.hari_kerja, pen.hari.filter((h) => h.lengkap).map((h) => h.tanggal), hariIni);
   return (
-    <div className="grid grid-cols-2 rounded-2xl bg-white px-1 py-3.5 shadow-md">
+    <div className="rounded-2xl bg-white px-1 py-3.5 shadow-md">
+    <div className="grid grid-cols-2">
       <div className="flex flex-col items-center border-r border-[#E4E9F0]">
-        <span className="text-[10.5px] font-semibold text-[#55657D]">Hari kerja</span>
+        <span className="text-[10.5px] font-semibold text-[#55657D]">Hari kerja direncanakan</span>
         <span className="text-[17px] font-extrabold">
           {pen.hari_kerja.length}
           {pen.maks_hari ? <span className="text-[12px] font-bold text-[#8592A8]">/{pen.maks_hari}</span> : null}
@@ -804,6 +809,8 @@ function Ringkasan({ pen }: { pen: Pen }) {
         <span className="text-[10.5px] font-semibold text-[#55657D]">Hari lengkap</span>
         <span className="text-[17px] font-extrabold">{lengkap}</span>
       </div>
+    </div>
+    <p className="mt-2 border-t border-[#E4E9F0] px-3 pt-2 text-[12px] leading-snug text-[#55657D]">{kalimatHariKerja(r)}</p>
     </div>
   );
 }
@@ -1406,6 +1413,8 @@ const JENIS_RENTANG = ["surat_tugas", "kwitansi", "visum", "surat_pernyataan"];
 function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { token: string; data: Data; pen: Pen; onBerubah: () => Promise<void>; ringkasSaja?: boolean }) {
   const [unduh, setUnduh] = useState(false);
   const [unduhRentang, setUnduhRentang] = useState<{ rentang: string; jenis?: string[] } | null>(null);
+  // (26 Okt 2026) baris jenis di ringkasan panduan langkah 5 kembali bisa diketuk (laporan user: "tidak dapat diklik lagi"): membuka lembar Unduh dengan jenis itu sudah terpilih
+  const [unduhJenis, setUnduhJenis] = useState<{ jenis: string[]; rentang?: string } | null>(null);
   const terlewat = pen.hari.filter((h) => h.kunci === "terlewat" && !h.lengkap);
 
   // Tab Arsip: kartu per tanggal (semua baris bisa diketuk) + satu kartu kelompok tanggal. Daftar 6 jenis & tombol "Unduh SPJ" yang dulu ada di sini
@@ -1474,22 +1483,43 @@ function ArsipDokumen({ token, data, pen, onBerubah, ringkasSaja = false }: { to
           <span className="text-[11px] font-semibold text-[#6B7890]">{pen.peran.toUpperCase()}</span>
         </div>
         <div className="mt-1 divide-y divide-[#EEF1F5]">
-          {JENIS_DOK.map((j) => (
-            <div key={j.k} className="flex items-center gap-3 py-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E8EEF8] text-[16px]">{j.ikon}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-bold">{j.nama}</p>
-                <p className="text-[11.5px] text-[#6B7890]">{info[j.k].s}</p>
+          {JENIS_DOK.map((j) => {
+            const isi = (
+              <>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#E8EEF8] text-[16px]">{j.ikon}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13.5px] font-bold">{j.nama}</p>
+                  <p className="text-[11.5px] text-[#6B7890]">{info[j.k].s}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${info[j.k].ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{info[j.k].chip}</span>
+              </>
+            );
+            // hanya baris yang sudah ada isinya yang bisa diketuk; Surat Tugas yang belum diunggah admin tetap keterangan saja
+            const bisa = info[j.k].ok;
+            return bisa ? (
+              <button
+                key={j.k}
+                type="button"
+                onClick={() => setUnduhJenis({ jenis: [j.k], rentang: j.k === "surat_tugas" || JENIS_RENTANG.includes(j.k) ? "semua" : undefined })}
+                className="flex min-h-[48px] w-full items-center gap-3 py-2.5 text-left"
+                aria-label={`Unduh ${j.nama}`}
+              >
+                {isi}
+                <span aria-hidden="true" className="w-3 shrink-0 text-center text-[14px] font-bold text-[#8592A8]">›</span>
+              </button>
+            ) : (
+              <div key={j.k} className="flex items-center gap-3 py-2.5">
+                {isi}
               </div>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${info[j.k].ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{info[j.k].chip}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
       <button type="button" onClick={() => setUnduh(true)} className="w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow">
         ⬇ Unduh SPJ… <span className="font-semibold text-blue-200">(pilih tanggal &amp; jenis)</span>
       </button>
       {unduh && <LembarUnduh pen={pen} hariIni={data.hari_ini} onTutup={() => setUnduh(false)} />}
+      {unduhJenis && <LembarUnduh pen={pen} hariIni={data.hari_ini} rentangAwal={unduhJenis.rentang} jenisAwal={unduhJenis.jenis} onTutup={() => setUnduhJenis(null)} />}
     </>
   );
 }

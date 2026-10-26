@@ -209,7 +209,16 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     perlu("wilayah_tim")
       ? (async (): Promise<InfoWilayah | null> => {
           const w = akun.petugas_bencana_id ? await wilayahTim(db, akun.petugas_bencana_id) : null;
-          return w ? { total: w.sub_sls.length, ada_laporan: w.ada_laporan, kk: w.total_kk, kk_terdampak: w.total_terdampak } : null;
+          return w
+            ? {
+                total: w.sub_sls.length,
+                ada_laporan: w.ada_laporan,
+                kk: w.total_kk,
+                kk_terdampak: w.total_terdampak,
+                peran: w.pml && w.pml.id === akun.petugas_bencana_id ? "pml" : "ppl", // (26 Okt 2026, B6) untuk chip peran di Beranda
+                pml_nama: w.pml?.nama ?? null,
+              }
+            : null;
         })()
       : Promise.resolve<InfoWilayah | null>(null),
     // Lembar Identifikasi SLS: hanya PML (ambilPml null = bukan PML -> modul tidak tampil)

@@ -17,6 +17,7 @@
 
 import type { BarisKkMon } from "@/lib/pendataanMonitor";
 import { daftarTanggal, kelasHari, type KelasHari } from "@/lib/monitorKinerja";
+import { ringkasDariSel } from "@/lib/ringkasHariKerja";
 
 // ----------------------------------------------------------------------------------------------- masukan
 export type AnggotaKorwil = { petugas_id: number; nama: string; akun_ids: number[] };
@@ -267,8 +268,9 @@ export function susunAdministrasi(m: { tim: TimKorwilMasuk[]; baris: BarisHariKo
   };
   const baris = (p: AnggotaKorwil, peran: "pml" | "ppl"): BarisAdm => {
     const s = tanggal.map((t) => sel(p.akun_ids, t, peran));
-    const wajib = s.filter((x) => x === "lengkap" || x === "sebagian" || x === "kosong").length;
-    return { petugas_id: p.petugas_id, nama: p.nama, peran, sel: s, lengkap: s.filter((x) => x === "lengkap").length, wajib };
+    // (26 Okt 2026) hitungan hari kerja memakai fungsi bersama dengan Transport Lokal (lib/ringkasHariKerja): hanya hari yang SUDAH LEWAT; hari ini tidak dihitung
+    const r = ringkasDariSel(tanggal, s, m.hariIni);
+    return { petugas_id: p.petugas_id, nama: p.nama, peran, sel: s, lengkap: r.lengkap, wajib: r.sudahLewat };
   };
   const tim: TimAdm[] = m.tim
     .filter((t) => t.tampil)
@@ -314,3 +316,13 @@ export type DataKorwil = {
 };
 
 export const persenKorwil = (nilai: number, target: number): number => (target > 0 ? Math.min(100, Math.round((nilai / target) * 1000) / 10) : 0);
+
+/** (26 Okt 2026, C2) id PML tim dengan capaian terendah; kosong bila hanya satu tim dinilai atau capaian semua tim sama. Tim tanpa target tidak dinilai. */
+export function timCapaianTerendah(tim: ReadonlyArray<Pick<TimProgres, "pml_id" | "target" | "realisasi">>): number[] {
+  const dinilai = tim.filter((t) => t.target > 0);
+  if (dinilai.length < 2) return [];
+  const nilai = dinilai.map((t) => ({ id: t.pml_id, p: persenKorwil(t.realisasi, t.target) }));
+  const min = Math.min(...nilai.map((x) => x.p));
+  if (nilai.every((x) => x.p === min)) return [];
+  return nilai.filter((x) => x.p === min).map((x) => x.id);
+}

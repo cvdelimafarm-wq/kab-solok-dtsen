@@ -15,6 +15,7 @@ import { useData } from "@/app/portal/dataBersama";
 import { apiPortal } from "@/app/portal/sesi";
 import { namaDepan, waktuRingkas } from "./usePendataan";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
+import { namaTampil } from "@/lib/namaTampil";
 import type { Anggota } from "@/lib/pendataan";
 import {
   API_KOLAM,
@@ -132,7 +133,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
       return;
     }
     if (it.diambil_pml_id) {
-      setModal(pesanTolak("diambil", progres, { nama: it.diambil_nama ?? undefined, waktu: it.diambil_at ? `pada ${waktuRingkas(it.diambil_at)}` : undefined, sub: namaItemKolam(it) }));
+      setModal(pesanTolak("diambil", progres, { nama: it.diambil_nama ? namaTampil(it.diambil_nama) : undefined, waktu: it.diambil_at ? `pada ${waktuRingkas(it.diambil_at)}` : undefined, sub: namaItemKolam(it) }));
       return;
     }
     const jenis = periksaAturanKolam({ bisaPilih, progres, jumlahDipilih: terpilih.length });
@@ -154,7 +155,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
     try {
       await apiPortal(API_KOLAM, { method: "POST", body: JSON.stringify({ aksi: "pilih", pilihan: terpilih.map((id) => ({ idsubsls: id, ppl_akun_id: pilih[id] })) }) });
       setPilih({});
-      setSukses(`Terkirim: ${terpilih.length} Sub SLS dari kolam sudah menjadi wilayah tim Anda dan diteruskan ke admin untuk di-assign di FASIH. Kuota 7/9/11 Sub SLS pada Plotting tim tidak berkurang.`);
+      setSukses(`Terkirim: ${terpilih.length} Sub SLS dari kolam sudah menjadi wilayah tim Anda dan diteruskan ke admin untuk di-assign di FASIH. Kuota Plotting tim tidak berkurang.`);
       await d.muat();
     } catch (e) {
       const teks = e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal mengirim. Periksa sambungan lalu coba lagi.";
@@ -286,7 +287,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
                                 </div>
                                 {diambil && (
                                   <p className="mt-1 pl-9 text-[12px] text-[#52627A]">
-                                    Dipilih <b className="text-[#0F2A52]">{milikSaya ? "tim Anda" : `Tim ${namaDepan(rapikanNama(it.diambil_nama ?? "tim lain"))}`}</b> · {waktuRingkas(it.diambil_at)}
+                                    Dipilih <b className="text-[#0F2A52]">{milikSaya ? "tim Anda" : `Tim ${namaDepan(it.diambil_nama ?? "tim lain")}`}</b> · {waktuRingkas(it.diambil_at)}
                                     {milikSaya && onBuka ? " · ketuk untuk membuka" : ""}
                                   </p>
                                 )}
@@ -338,7 +339,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
 
         <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
           <p className="font-extrabold text-[#0F2A52]">Salah pilih?</p>
-          <p className="mt-1">PML dapat membatalkan lewat kartu <b>Plotting tim hari ini</b> (tombol Batalkan atau Ajukan pembatalan). Sub SLS kembali ke kolam, selama belum ada KK yang didata di dalamnya.</p>
+          <p className="mt-1">PML dapat membatalkan lewat kartu <b>Plotting tim</b> (tombol Batalkan atau Ajukan pembatalan). Sub SLS kembali ke kolam, selama belum ada KK yang didata di dalamnya.</p>
         </div>
       </div>
 

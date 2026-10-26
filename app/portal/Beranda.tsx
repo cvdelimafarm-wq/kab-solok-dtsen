@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
+import { chipPeranTim, ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
 import { peringatanDariInduk, translokDariInduk, tugasDariInduk, type KartuTranslokBeranda, type PeringatanBeranda } from "@/lib/sigapPrioritas";
 import { ketModulSpdt } from "@/lib/spdtNtp";
 import KartuTranslok from "./KartuTranslok"; // (19 Okt 2026) kartu Transport Lokal sendiri di bawah kartu utama
@@ -26,6 +26,7 @@ import ModalRapat from "./ModalRapat"; // (9 Okt 2026) presensi rapat Zoom (moda
 import ModalPengingat from "./ModalPengingat"; // (15 Okt 2026) pengingat dinamis: foto/laporan/lembar yang belum lengkap
 import PengumumanPetugas from "@/app/sigap/kegiatan/[id]/[tahap]/PengumumanPetugas"; // (13 Okt 2026) siaran admin untuk petugas pendataan (sekali konfirmasi)
 import GantiPinCepat from "./GantiPinCepat";
+import { namaDepanTampil, namaTanpaGelar } from "@/lib/namaTampil";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
@@ -62,7 +63,7 @@ const LENCANA: Record<NadaLencana, string> = {
 };
 
 /** "M. Iqbal Hadi, SST." -> "M. Iqbal Hadi"; inisial "MH". */
-const namaSapaan = (n: string) => n.split(",")[0].trim();
+const namaSapaan = (n: string) => namaTanpaGelar(n); // (26 Okt 2026) satu gaya nama: lib/namaTampil.ts
 const inisial = (n: string) => {
   const k = namaSapaan(n).split(/\s+/).filter((x) => x && !/\.$/.test(x));
   return ((k[0]?.[0] ?? "") + (k.length > 1 ? k[k.length - 1][0] : "")).toUpperCase() || "S";
@@ -86,6 +87,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const keg = dKeg.data?.kegiatan ?? null;
   const induk = dInduk.data?.induk ?? null;
   const lembarSpdt = induk?.map((i) => i.spdt).find((f) => !!f && (f.total > 0 || f.peran === "supervisor")) ?? null; // (20 Okt 2026) pintasan Lembar Pendataan SPDT NTP
+  // (26 Okt 2026, B6) chip peran PML/PPL + nama tim (menggantikan chip "Mitra statistik" bila peran di tim diketahui)
+  const chipTim = induk?.map((i) => chipPeranTim(i.wilayah, (n) => namaDepanTampil(n))).find((c): c is string => !!c) ?? null;
   const hubMuat: "memuat" | "siap" | "gagal" = hub ? "siap" : dHub.galat ? "gagal" : "memuat";
   const offset = hub ? Date.parse(hub.sekarang) - dHub.tiba : 0; // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
@@ -308,7 +311,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
               onClick={() => setLihatSebagai(true)}
               aria-label="Lihat sebagai akun lain"
               title="Lihat sebagai akun lain"
-              className="relative grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52] ring-2 ring-white/40 active:scale-95"
+              className="relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52] ring-2 ring-white/40 active:scale-95"
             >
               {inisial(nama)}
               <span aria-hidden className="absolute -bottom-1 -right-1 grid h-[17px] w-[17px] place-items-center rounded-full bg-[#B8560F] ring-2 ring-[#1A4590]">
@@ -321,7 +324,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           ) : (
             nama && <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-[#F4B400] text-[13px] font-extrabold text-[#0F2A52]">{inisial(nama)}</span>
           )}
-          <button type="button" onClick={tekanKeluar} className={`flex-none rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold hover:bg-white/10 ${yakinKeluar ? "border-[#F4B400] bg-[#F4B400] text-[#0F2A52]" : "border-white/25 text-[#D3E0F5]"}`}>
+          <button type="button" onClick={tekanKeluar} className={`min-h-[44px] flex-none rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold hover:bg-white/10 ${yakinKeluar ? "border-[#F4B400] bg-[#F4B400] text-[#0F2A52]" : "border-white/25 text-[#D3E0F5]"}`}>
             {yakinKeluar ? "Ketuk lagi untuk keluar" : "Keluar"}
           </button>
         </div>
@@ -335,7 +338,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
               <span key={p} className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{p}</span>
             ))}
             {data?.jenis === "organik" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Pegawai organik</span>}
-            {data?.jenis === "mitra" && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Mitra statistik</span>}
+            {chipTim && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">{chipTim}</span>}
+            {data?.jenis === "mitra" && !chipTim && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Mitra statistik</span>}
             {dtsen && <span className="flex-none whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-[#D3E0F5]">Operator Wali Nagari</span>}
           </div>
         </div>
