@@ -3,20 +3,22 @@
 // app/sigap/delego/beban/page.tsx
 //
 // (26 Okt 2026) Beban kerja mingguan per orang (sasaran 80-100%) dan saran pemerataan. Hanya saran: pemberi yang memutuskan dan memindahkan tugas
-// dengan mengubah/menambah delegasi. Kapasitas 60 poin per hari kerja, 5 hari per minggu (cek aturan).
+// dengan mengubah/menambah delegasi. Kapasitas 70 poin per hari kerja (berlaku 26 Okt 2026), 5 hari per minggu (cek aturan).
+// (26 Okt 2026) Tabel beban per hari (Senin-Jumat; Sabtu/Minggu bila ada) dan tombol "Terapkan usulan": memindahkan delegasi lewat keu_dlg_pindah
+// (delegasi lama ditutup selesai dengan tenggat kemarin, delegasi baru untuk penampung mulai hari ini). Tanpa dialog konfirmasi (keputusan pengguna).
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { bebanDelegasiMinggu, bebanPerOrang, HARI_KERJA_MINGGU, KAPASITAS_HARIAN, SASARAN_BEBAN, usulPemerataan } from "@/lib/delego/hitung";
+import { bebanDelegasiMinggu, bebanPerOrang, HARI_KERJA_MINGGU, KAPASITAS_HARIAN, matriksBebanHarian, SASARAN_BEBAN, tglPendek, usulPemerataan, type UsulanPemerataan } from "@/lib/delego/hitung";
 import { NAMA_PERAN } from "@/lib/delego/tipe";
-import { useBahan, useCalon } from "../data";
+import { useBahan, useCalon, useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
 
 export default function Beban() {
-  const { hari, hak, pemberi } = useKonteksDelego();
+  const { hari, hak, pemberi, bolehBeri } = useKonteksDelego();
   const f = useFilterRo();
   const b = useBahan();
   const roCalon = pemberi ? (f.ro && hak.beri_ro.includes(f.ro) ? f.ro : hak.beri_ro[0] ?? null) : null;
@@ -27,6 +29,16 @@ export default function Beban() {
   const orang = useMemo(() => bebanPerOrang(delegasi, hari, calon.data?.organik ?? []), [delegasi, hari, calon.data]);
   const saran = useMemo(() => usulPemerataan(orang, delegasi, hari), [orang, delegasi, hari]);
   const skala = Math.max(150, ...orang.map((o) => o.persen));
+  const tabel = useMemo(() => matriksBebanHarian(orang, delegasi, hari), [orang, delegasi, hari]);
+  const kolom = tabel.adaAkhirPekan ? 7 : 5;
+  const kirim = useKirim(b.muat);
+  const [selesai, setSelesai] = useState<string | null>(null);
+
+  async function terapkan(s: UsulanPemerataan) {
+    setSelesai(null);
+    const ok = await kirim.kirim("keu_dlg_pindah", { p_id: s.delegasiId, p_ke: s.keAkun, p_ver: s.ver });
+    if (ok) setSelesai(`"${s.judul}" dipindahkan dari ${s.dariNama} ke ${s.keNama} mulai hari ini. Delegasi lama ditutup selesai (tenggat kemarin, laporannya tetap tersimpan); keduanya sudah diberi tahu. Bila keliru, ubah atau tambah delegasi lewat Papan.`);
+  }
 
   return (
     <Halaman judul="Beban kerja" sub={`Minggu ini · kapasitas ${KAPASITAS_HARIAN} poin × ${HARI_KERJA_MINGGU} hari kerja = ${KAPASITAS_HARIAN * HARI_KERJA_MINGGU} poin per orang`} kanan={<PilihRo {...f} />}>
@@ -34,6 +46,46 @@ export default function Beban() {
       {b.memuat && !b.data && <Memuat />}
       {b.galat && !b.data && <Galat>{b.galat}</Galat>}
       {b.data && orang.length === 0 && <Kosong>Belum ada delegasi yang berjalan.</Kosong>}
+      {selesai && <Info>{selesai}</Info>}
+      {kirim.galat && <Galat>{kirim.galat}</Galat>}
+      {b.data && orang.length > 0 && (
+        <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari {KAPASITAS_HARIAN} poin/hari</span>}>
+          <div className="overflow-x-auto" role="table" aria-label="Beban per orang per hari minggu ini">
+            <div className="grid min-w-[300px] items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(84px,1fr) repeat(${kolom}, minmax(34px,46px))` }} role="row">
+              <div className="text-left text-[12px] font-semibold text-[#3B4A57]" role="columnheader">Nama</div>
+              {tabel.tanggal.slice(0, kolom).map((t) => (
+                <div key={t} role="columnheader" className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`} title={tglPendek(t)}>
+                  {tglPendek(t).split(" ")[0]}
+                  <span className="block text-[11px] font-normal">{Number(t.slice(8, 10))}</span>
+                </div>
+              ))}
+              {tabel.baris.map((o) => (
+                <div key={o.akun} className="contents" role="row">
+                  <div className="truncate pr-1 text-left text-[13px] font-semibold text-[#14212B]" role="rowheader" title={o.nama}>{o.nama}</div>
+                  {o.sel.slice(0, kolom).map((c) => (
+                    <div
+                      key={c.tanggal}
+                      role="cell"
+                      title={`${tglPendek(c.tanggal)}: ${fmt(c.poin, 0)} poin`}
+                      className={`rounded-md py-1.5 text-[12.5px] font-bold ${c.tanggal === hari ? "ring-2 ring-[#0F6B63]" : ""} ${
+                        c.kategori === "kosong" ? "bg-[#F3F5F7] font-normal text-[#7A8793]" : c.kategori === "berlebih" ? "bg-[#F5CFCF] text-[#7A1F1F]" : c.kategori === "sasaran" ? "bg-[#CFE8E3] text-[#0B524C]" : "bg-[#E4E8EC] text-[#33404B]"
+                      }`}
+                    >
+                      {c.kategori === "kosong" ? "·" : c.persen}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#3B4A57]">
+            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#F5CFCF] align-middle" /> berlebih (&gt;{SASARAN_BEBAN.max}%)</span>
+            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#CFE8E3] align-middle" /> sesuai sasaran ({SASARAN_BEBAN.min}–{SASARAN_BEBAN.max}%)</span>
+            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#E4E8EC] align-middle" /> longgar (&lt;{SASARAN_BEBAN.min}%)</span>
+            <span>· tidak ada beban</span>
+          </div>
+        </Kartu>
+      )}
       {b.data && orang.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
           <Kartu judul={`Per orang (${orang.length})`}>
@@ -84,12 +136,21 @@ export default function Beban() {
                   <li key={s.delegasiId} className="space-y-1 text-[13.5px]">
                     <div>Pindahkan <b>{s.judul}</b> ({fmt(s.poinMinggu, 0)} poin/minggu)</div>
                     <div className="text-[#3B4A57]">dari {s.dariNama} ({s.sesudahDari}% sesudahnya) ke {s.keNama} ({s.sesudahKe}% sesudahnya)</div>
-                    <Link href={`/sigap/delego/papan?buka=${s.delegasiId}`} className={KELAS.tombolKecil}>Buka delegasi</Link>
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {bolehBeri(s.roKode) ? (
+                        <button type="button" onClick={() => void terapkan(s)} disabled={kirim.mengirim} className={KELAS.tombolKecilUtama}>
+                          {kirim.mengirim ? "Menerapkan..." : "Terapkan usulan"}
+                        </button>
+                      ) : (
+                        <span className="text-[12px] text-[#3B4A57]">Hanya pemberi delegasi RO ini yang dapat menerapkan.</span>
+                      )}
+                      <Link href={`/sigap/delego/papan?buka=${s.delegasiId}`} className={KELAS.tombolKecil}>Buka delegasi</Link>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="m-0 mt-3 text-[12px] text-[#3B4A57]">Untuk memindahkan: tandai delegasi lama selesai atau batal dengan alasan, lalu buat delegasi baru untuk penampung.</p>
+            <p className="m-0 mt-3 text-[12px] text-[#3B4A57]">Terapkan usulan: delegasi lama ditutup selesai (tenggat kemarin, laporan tetap tersimpan) dan delegasi baru untuk penampung mulai hari ini; keduanya diberi tahu. Tanpa dialog konfirmasi, jadi periksa nama dan angka sebelum mengetuk.</p>
           </Kartu>
         </div>
       )}

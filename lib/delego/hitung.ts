@@ -3,11 +3,11 @@
 // (26 Okt 2026) Delego -- hitungan murni (tanpa jaringan, tanpa React): hari kerja, target dan hutang poin kumulatif, status laporan harian,
 // beban kerja mingguan, usulan pemerataan, tangga pembinaan, dan skor kinerja. Sistem hanya MENYARANKAN; manusia yang memutuskan.
 // Semua tanggal berbentuk "YYYY-MM-DD" (zona WIB sudah diselesaikan basis data pada `hari_ini`).
-// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas 60 poin per orang per hari, hari kerja Senin-Jumat tanpa kalender libur.
+// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas 70 poin per orang per hari (26 Okt 2026: naik dari 60, berlaku mulai hari ini; bobot poin per keluarga tidak berubah), hari kerja Senin-Jumat tanpa kalender libur.
 
-import type { Delegasi, Laporan, Penilaian } from "./tipe";
+import type { Delegasi, Laporan, PeranDelegasi, Penilaian } from "./tipe";
 
-export const KAPASITAS_HARIAN = 60;
+export const KAPASITAS_HARIAN = 70;
 export const HARI_KERJA_MINGGU = 5;
 export const JAM_PENGINGAT = 18;
 export const HUTANG_CATATAN_LISAN = 20;
@@ -196,6 +196,35 @@ export function bebanPerOrang(delegasi: Delegasi[], hari: string, tambahan: { id
   return out.sort((a, b) => b.persen - a.persen || a.nama.localeCompare(b.nama));
 }
 
+// ------------------------------------------------------------------ Beban harian (tabel mingguan)
+/** Beban satu delegasi pada satu tanggal: target harian bila tanggal itu hari kerjanya dan masih dalam masa delegasi. */
+export function bebanDelegasiHari(d: Delegasi, tanggal: string): number {
+  if (d.status !== "baru" && d.status !== "berjalan") return 0;
+  if (tanggal < d.mulai || tanggal > d.tenggat) return 0;
+  return d.hari_kerja.includes(hariKe(tanggal)) ? angka(d.target_harian) : 0;
+}
+
+export type SelHarian = { tanggal: string; hk: number; poin: number; persen: number; kategori: KategoriBeban | "kosong" };
+export type BarisHarian = { akun: number; nama: string; jenis: "organik" | "mitra"; sel: SelHarian[] };
+
+/** Tabel beban per orang per hari untuk minggu (Senin-Minggu) yang memuat `hari`. Persen terhadap KAPASITAS_HARIAN. */
+export function matriksBebanHarian(orang: OrangBeban[], delegasi: Delegasi[], hari: string): { tanggal: string[]; baris: BarisHarian[]; adaAkhirPekan: boolean } {
+  const awal = awalMinggu(hari);
+  const tanggal = Array.from({ length: 7 }, (_, i) => tambahHari(awal, i));
+  const baris = orang.map((o) => ({
+    akun: o.akun,
+    nama: o.nama,
+    jenis: o.jenis,
+    sel: tanggal.map((t) => {
+      const poin = delegasi.filter((d) => d.penerima_akun === o.akun).reduce((s, d) => s + bebanDelegasiHari(d, t), 0);
+      const persen = Math.round((poin / KAPASITAS_HARIAN) * 100);
+      return { tanggal: t, hk: hariKe(t), poin, persen, kategori: poin === 0 ? ("kosong" as const) : kategoriBeban(persen) };
+    }),
+  }));
+  const adaAkhirPekan = baris.some((b) => b.sel.some((s) => s.hk >= 6 && s.poin > 0));
+  return { tanggal, baris, adaAkhirPekan };
+}
+
 export type UsulanPemerataan = {
   delegasiId: number;
   judul: string;
@@ -206,6 +235,10 @@ export type UsulanPemerataan = {
   poinMinggu: number;
   sesudahDari: number;
   sesudahKe: number;
+  /** Untuk menerapkan usulan: versi delegasi saat usulan dihitung (menolak bila sudah berubah), RO-nya, dan perannya. */
+  ver: number;
+  roKode: string;
+  peran: PeranDelegasi;
 };
 
 /** Saran memindahkan delegasi dari yang berlebih (>100%) ke yang masih longgar. Hanya saran; pemberi memutuskan dan membuat delegasi baru bila setuju. */
@@ -240,6 +273,9 @@ export function usulPemerataan(orang: OrangBeban[], delegasi: Delegasi[], hari: 
         poinMinggu: cukup.w,
         sesudahDari: Math.round(((sisa.get(sumber.akun) ?? 0) / kap) * 100),
         sesudahKe: Math.round(((sisa.get(penampung.akun) ?? 0) / kap) * 100),
+        ver: cukup.d.ver,
+        roKode: cukup.d.ro_kode,
+        peran: cukup.d.peran_penerima,
       });
     }
   }

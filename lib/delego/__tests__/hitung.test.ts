@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   angka, awalMinggu, bebanDelegasiMinggu, bebanPerOrang, hariKe, hariKerjaAntara, hariTanpaLapor, jamWib, hariWib, ringkasHariIni, ringkasTim, saranPembinaan,
-  skorPenerima, statusLaporanHariIni, targetKumulatif, tglPendek, tindakanDisarankan, usulPemerataan,
+  bebanDelegasiHari, KAPASITAS_HARIAN, matriksBebanHarian, skorPenerima, statusLaporanHariIni, targetKumulatif, tglPendek, tindakanDisarankan, usulPemerataan,
 } from "../hitung";
 import type { Delegasi, Laporan, Penilaian } from "../tipe";
 
@@ -96,10 +96,10 @@ describe("beban dan pemerataan", () => {
   it("kategori beban per orang", () => {
     const a = dg({ penerima_akun: 4 });
     const b = dg({ penerima_akun: 4 });
-    const c = dg({ penerima_akun: 6, penerima_nama: "Pegawai B", target_harian: "48" });
+    const c = dg({ penerima_akun: 6, penerima_nama: "Pegawai B", target_harian: "56" });
     const o = bebanPerOrang([a, b, c], "2026-10-28");
     expect(o[0].akun).toBe(4);
-    expect(o[0].persen).toBe(200);
+    expect(o[0].persen).toBe(171); // 600 poin / (70 x 5 = 350)
     expect(o[0].kategori).toBe("berlebih");
     expect(o.find((x) => x.akun === 6)?.persen).toBe(80);
     expect(o.find((x) => x.akun === 6)?.kategori).toBe("sasaran");
@@ -112,12 +112,50 @@ describe("beban dan pemerataan", () => {
     expect(u).toHaveLength(1);
     expect(u[0].delegasiId).toBe(a.id);
     expect(u[0].keAkun).toBe(9);
-    expect(u[0].sesudahDari).toBe(100);
+    expect(u[0].sesudahDari).toBe(86); // 300 / 350
+    expect(u[0].ver).toBe(a.ver);
+    expect(u[0].roKode).toBe("2903.BMA.009");
+    expect(u[0].peran).toBe("pegawai");
     const hanyaMitra = bebanPerOrang([a, b], "2026-10-28", [{ id: 77, nama: "Mitra X", jenis: "mitra" }]);
     expect(usulPemerataan(hanyaMitra, [a, b], "2026-10-28")).toEqual([]);
     const p = dg({ penerima_akun: 4, peran_penerima: "ppl" });
     const orang2 = bebanPerOrang([p, b], "2026-10-28", [{ id: 77, nama: "Mitra X", jenis: "mitra" }]);
     expect(usulPemerataan(orang2, [p, b], "2026-10-28")[0].keAkun).toBe(77);
+  });
+  it("kapasitas harian 70 poin (berlaku 26 Okt 2026)", () => {
+    expect(KAPASITAS_HARIAN).toBe(70);
+    expect(bebanPerOrang([dg({ target_harian: "70" })], "2026-10-28")[0].persen).toBe(100);
+  });
+  it("beban harian per delegasi: hanya hari kerja dalam masa delegasi yang berstatus berjalan/baru", () => {
+    const d = dg({ mulai: "2026-10-28", hari_kerja: [1, 2, 3, 4, 5] });
+    expect(bebanDelegasiHari(d, "2026-10-27")).toBe(0); // sebelum mulai
+    expect(bebanDelegasiHari(d, "2026-10-28")).toBe(60);
+    expect(bebanDelegasiHari(d, "2026-10-31")).toBe(0); // Sabtu
+    expect(bebanDelegasiHari(dg({ status: "selesai" }), "2026-10-28")).toBe(0);
+    expect(bebanDelegasiHari(dg({ tenggat: "2026-10-28" }), "2026-10-29")).toBe(0); // lewat tenggat
+  });
+  it("tabel mingguan: 7 hari Senin-Minggu, jumlah per orang sama dengan beban mingguan, persen terhadap 70", () => {
+    const a = dg({ penerima_akun: 4, target_harian: "70" });
+    const b = dg({ penerima_akun: 4, target_harian: "35", mulai: "2026-10-28" });
+    const orang = bebanPerOrang([a, b], "2026-10-29", [{ id: 9, nama: "Pegawai C", jenis: "organik" }]);
+    const m = matriksBebanHarian(orang, [a, b], "2026-10-29");
+    expect(m.tanggal).toHaveLength(7);
+    expect(m.tanggal[0]).toBe("2026-10-26");
+    expect(m.tanggal[6]).toBe("2026-11-01");
+    expect(m.adaAkhirPekan).toBe(false);
+    const baris4 = m.baris.find((x) => x.akun === 4)!;
+    expect(baris4.sel.map((x) => x.poin)).toEqual([70, 70, 105, 105, 105, 0, 0]);
+    expect(baris4.sel.map((x) => x.persen)).toEqual([100, 100, 150, 150, 150, 0, 0]);
+    expect(baris4.sel[0].kategori).toBe("sasaran");
+    expect(baris4.sel[2].kategori).toBe("berlebih");
+    expect(baris4.sel[5].kategori).toBe("kosong");
+    expect(baris4.sel.reduce((s, x) => s + x.poin, 0)).toBe(orang.find((x) => x.akun === 4)!.beban);
+    expect(m.baris.find((x) => x.akun === 9)!.sel.every((x) => x.kategori === "kosong")).toBe(true);
+  });
+  it("tabel mingguan menandai akhir pekan bila ada beban Sabtu/Minggu", () => {
+    const a = dg({ hari_kerja: [1, 2, 3, 4, 5, 6] });
+    const m = matriksBebanHarian(bebanPerOrang([a], "2026-10-28"), [a], "2026-10-28");
+    expect(m.adaAkhirPekan).toBe(true);
   });
   it("ringkasan tim", () => {
     const a = dg({ poin_total: "60" });

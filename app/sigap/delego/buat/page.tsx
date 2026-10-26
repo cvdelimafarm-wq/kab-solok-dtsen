@@ -44,7 +44,7 @@ export default function Buat() {
 
   const [judul, setJudul] = useState("");
   const [uraian, setUraian] = useState("");
-  const [harian, setHarian] = useState("60");
+  const [harian, setHarian] = useState(String(KAPASITAS_HARIAN));
   const [total, setTotal] = useState("");
   const [satuan, setSatuan] = useState("poin");
   const [bobot, setBobot] = useState("1");
