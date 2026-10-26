@@ -4,24 +4,21 @@
 //
 // (26 Okt 2026) Lapor harian (HP-first). Satu laporan per delegasi per tanggal; mengirim lagi memperbarui laporan tanggal itu.
 // Terlambat hanya ditandai, tidak diblokir. PML dapat melapor mewakili mitra (ditandai "diwakili").
+// Bukti: foto (ambil atau galeri, dikecilkan di HP; BuktiFoto.tsx) dan/atau teks/tautan; tersimpan pada keu_dlg_laporan.bukti.
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { angka, bulat, ringkasHariIni, tambahHari, tglPendek } from "@/lib/delego/hitung";
+import { bacaDaftar, muatDiBatas, untukSimpan } from "@/lib/delego/bukti";
 import { NAMA_PERAN, type Delegasi } from "@/lib/delego/tipe";
 import { aksiKeu, useKirim, useSaya } from "../data";
+import { PenyuntingBukti, type ButirForm } from "../BuktiFoto";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Galat, Halaman, Info, Kartu, Kosong, Medan, Memuat, Peringatan, fmt } from "../ui";
 
 type Hasil = { id: number; tanggal: string; terlambat: boolean; mewakili: boolean };
-
-function keteranganBukti(x: unknown): string {
-  if (typeof x === "string") return x;
-  if (x && typeof x === "object" && "ket" in x && typeof (x as { ket: unknown }).ket === "string") return (x as { ket: string }).ket;
-  return "";
-}
 
 export default function Lapor() {
   const { hari, hak } = useKonteksDelego();
@@ -36,7 +33,7 @@ export default function Lapor() {
   const [poin, setPoin] = useState("");
   const [uraian, setUraian] = useState("");
   const [kendala, setKendala] = useState("");
-  const [bukti, setBukti] = useState<string[]>([""]);
+  const [bukti, setBukti] = useState<ButirForm[]>([]);
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const kirim = useKirim(s.muat);
 
@@ -55,8 +52,7 @@ export default function Lapor() {
     setPoin(ada ? String(angka(ada.poin)) : "");
     setUraian(ada?.uraian ?? "");
     setKendala(ada?.kendala ?? "");
-    const b = (ada?.bukti ?? []).map(keteranganBukti).filter(Boolean);
-    setBukti(b.length ? b : [""]);
+    setBukti(bacaDaftar(ada?.bukti).map((b) => ({ ket: b.ket, path: b.path })));
     setHasil(null);
   }, [ada?.id, terpilih?.id, tanggal]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -64,7 +60,8 @@ export default function Lapor() {
   const mewakili = !!terpilih && !!d && terpilih.penerima_akun !== d.akun.id;
   const batasAwal = hak.semua || hak.beri_ro.length > 0 ? (terpilih?.mulai ?? tambahHari(hari, -7)) : tambahHari(hari, -7);
   const poinAngka = Number(poin);
-  const sah = !!terpilih && poin.trim() !== "" && Number.isFinite(poinAngka) && poinAngka >= 0 && poinAngka <= 1000 && tanggal >= batasAwal && tanggal <= hari;
+  const buktiSimpan = untukSimpan(bukti);
+  const sah = !!terpilih && poin.trim() !== "" && Number.isFinite(poinAngka) && poinAngka >= 0 && poinAngka <= 1000 && tanggal >= batasAwal && tanggal <= hari && muatDiBatas(buktiSimpan);
 
   async function kirimLaporan() {
     if (!terpilih || !sah) return;
@@ -76,7 +73,7 @@ export default function Lapor() {
         p_poin: poinAngka,
         p_uraian: uraian.trim(),
         p_kendala: kendala.trim(),
-        p_bukti: bukti.map((b) => b.trim()).filter(Boolean).slice(0, 5),
+        p_bukti: buktiSimpan,
       });
       if (res.ok) setHasil(res.data);
       return res;
@@ -93,7 +90,7 @@ export default function Lapor() {
         </Kosong>
       )}
       {d && terpilih && (
-        <div className="mx-auto grid max-w-3xl gap-4">
+        <div className="mx-auto grid grid-cols-1 max-w-3xl gap-4">
           <Kartu>
             <div className="space-y-3">
               <Medan label="Delegasi">
@@ -113,7 +110,7 @@ export default function Lapor() {
                 </select>
               </Medan>
               {mewakili && <Info>Anda melapor mewakili <b>{terpilih.penerima_nama}</b>. Laporan akan ditandai &quot;diwakili&quot;.</Info>}
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Medan label="Tanggal" bantu="Laporan susulan boleh sampai 7 hari ke belakang.">
                   <input type="date" className={KELAS.isian} value={tanggal} min={batasAwal} max={hari} onChange={(e) => setTanggal(e.target.value || hari)} />
                 </Medan>
@@ -132,25 +129,7 @@ export default function Lapor() {
               <Medan label="Kendala" bantu="Tulis bila beban terlalu berat atau ada hambatan di lapangan agar Ketua Tim dapat membantu.">
                 <textarea className={KELAS.isian} rows={2} maxLength={500} value={kendala} onChange={(e) => setKendala(e.target.value)} placeholder="Kosongkan bila tidak ada" />
               </Medan>
-              <div className="space-y-2">
-                <div className="text-[13px] font-semibold">Bukti (opsional, maksimal 5)</div>
-                {bukti.map((b, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input className={KELAS.isian} value={b} maxLength={200} placeholder="Nama berkas atau tautan bukti" onChange={(e) => setBukti((x) => x.map((y, j) => (j === i ? e.target.value : y)))} />
-                    {bukti.length > 1 && (
-                      <button type="button" className={KELAS.tombolKecil} aria-label={`Hapus bukti ${i + 1}`} onClick={() => setBukti((x) => x.filter((_, j) => j !== i))}>
-                        Hapus
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {bukti.length < 5 && (
-                  <button type="button" className={KELAS.tombolKecil} onClick={() => setBukti((x) => [...x, ""])}>
-                    + Tambah bukti
-                  </button>
-                )}
-                <p className="m-0 text-[12.5px] text-[#3B4A57]">Tulis nama berkas atau tautan; pengunggahan foto ke Delego belum tersedia.</p>
-              </div>
+              <PenyuntingBukti delegasi={terpilih.id} butir={bukti} onUbah={setBukti} mati={kirim.mengirim} />
               {tanggal < hari && !ada && <Peringatan>Laporan untuk {tglPendek(tanggal)} akan ditandai terlambat.</Peringatan>}
               {ada && <Info>Sudah ada laporan {tglPendek(tanggal)} ({fmt(angka(ada.poin), 1)} {terpilih.satuan}). Mengirim akan memperbarui laporan itu.</Info>}
               {kirim.galat && <Galat>{kirim.galat}</Galat>}

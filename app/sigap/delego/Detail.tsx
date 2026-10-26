@@ -5,12 +5,14 @@
 // (26 Okt 2026) Panel rincian satu delegasi (dari Papan): progres, laporan, tanggapan. Pemberi dapat mengubah isian, status, dan menanggapi.
 // Perubahan lewat keu_dlg_ubah / keu_dlg_tanggapi; hak ditegakkan basis data.
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { angka, bulat, ringkasHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
+import { angka, bulat, identBerubah, namaLibur, ringkasHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_PERAN, NAMA_STATUS, type BahanTim, type Delegasi, type StatusDelegasi } from "@/lib/delego/tipe";
 import { useKirim } from "./data";
+import { DaftarBukti } from "./BuktiFoto";
 import { KELAS } from "./merek";
-import { Batang, Galat, Kartu, Lencana, Medan, NADA_STATUS, fmt } from "./ui";
+import { Batang, Galat, Info, Kartu, Lencana, Medan, NADA_STATUS, Peringatan, fmt } from "./ui";
 
 const STATUS: StatusDelegasi[] = ["baru", "berjalan", "ditunda", "selesai", "batal"];
 
@@ -31,7 +33,13 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
   const [alasan, setAlasan] = useState(d.alasan);
   const [isi, setIsi] = useState("");
   const [lap, setLap] = useState("");
+  const [tMulai, setTMulai] = useState("");
+  const [tBaru, setTBaru] = useState("");
+  const [tAlasan, setTAlasan] = useState("");
   const kirim = useKirim(muat);
+  const berubah = identBerubah(d);
+  const riwayat = [...(d.riwayat_target ?? [])].sort((a, z) => a.berlaku_mulai.localeCompare(z.berlaku_mulai));
+  const dasarIdent = d.ident_id ? `/sigap/kelola/perencanaan/identifikasi/${d.ident_id}` : null;
 
   useEffect(() => {
     // data segar dari basis data menggantikan isian formulir
@@ -50,6 +58,15 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
       p_id: d.id,
       p_data: { judul, uraian, pj_bidang: pj, target_harian: harian, target_total: total.trim() === "" ? null : total, bobot, tenggat, status, alasan },
     });
+  const aturTarget = async () => {
+    const ok = await kirim.kirim("keu_dlg_target_atur", { p_id: d.id, p_mulai: tMulai, p_target: tBaru, p_alasan: tAlasan });
+    if (ok) {
+      setTMulai("");
+      setTBaru("");
+      setTAlasan("");
+    }
+  };
+  const tinjau = () => kirim.kirim("keu_dlg_tinjau_ident", { p_id: d.id });
   const tanggapi = async () => {
     if (!isi.trim()) return;
     const ok = await kirim.kirim("keu_dlg_tanggapi", { p_delegasi: d.id, p_isi: isi.trim(), ...(lap ? { p_laporan: Number(lap) } : {}) });
@@ -74,6 +91,15 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
         </div>
 
         <div className="space-y-3">
+          {berubah && (
+            <Peringatan>
+              <b>Identifikasi berubah.</b> Versi identifikasi naik dari {d.ident_ver} ke {d.ident_ver_kini} sejak delegasi ini dibuat atau terakhir ditinjau. Periksa apakah target, tenggat, atau penerima masih sesuai.
+              <div className="mt-2 flex flex-wrap gap-2">
+                {dasarIdent && <Link href={dasarIdent} className={KELAS.tombolKecil}>Buka identifikasi</Link>}
+                {bolehUbah && <button type="button" className={KELAS.tombolKecilUtama} disabled={kirim.mengirim} onClick={() => void tinjau()}>Tandai sudah ditinjau</button>}
+              </div>
+            </Peringatan>
+          )}
           <Kartu>
             <div className="flex justify-between text-[13.5px]"><span>{fmt(r.poinTotal, 1)} dari {fmt(penuh, 1)} {d.satuan}</span><b>{r.persenSelesai}%</b></div>
             <div className="mt-1.5"><Batang persen={r.persenSelesai} /></div>
@@ -85,6 +111,13 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
               {r.hutangKemarin > 0 && <b className="text-[#8A4605]">Hutang {fmt(bulat(r.hutangKemarin), 1)}</b>}
             </div>
             {d.uraian && <p className="m-0 mt-2 whitespace-pre-line text-[13.5px] leading-snug">{d.uraian}</p>}
+            {dasarIdent && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[12.5px]">
+                <Link href={dasarIdent} className="font-semibold text-[#0B524C] underline">Identifikasi</Link>
+                <Link href={`${dasarIdent}/gap`} className="font-semibold text-[#0B524C] underline">Gap</Link>
+                <Link href={`${dasarIdent}/lanjutan`} className="font-semibold text-[#0B524C] underline">Lanjutan</Link>
+              </div>
+            )}
           </Kartu>
 
           <Kartu judul="Laporan (35 hari)">
@@ -100,11 +133,41 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                     </div>
                     {l.uraian && <div className="text-[#33404B]">{l.uraian}</div>}
                     {l.kendala && <div className="text-[#8A4605]">Kendala: {l.kendala}</div>}
+                    <DaftarBukti bukti={l.bukti} ukuran={64} />
                   </li>
                 ))}
               </ul>
             )}
           </Kartu>
+
+          {(riwayat.length > 1 || bolehUbah) && (d.status === "baru" || d.status === "berjalan" || d.status === "ditunda") && (
+            <Kartu judul="Target harian per tanggal">
+              {riwayat.length > 0 ? (
+                <ul className="m-0 mb-3 list-none space-y-1 p-0 text-[13px]">
+                  {riwayat.map((x) => (
+                    <li key={x.berlaku_mulai} className="flex flex-wrap justify-between gap-2">
+                      <span>Mulai {tglPendek(x.berlaku_mulai.slice(0, 10))}{x.alasan ? ` · ${x.alasan}` : ""}</span>
+                      <b>{fmt(angka(x.target_harian), 1)}</b>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="m-0 mb-3 text-[13px] text-[#3B4A57]">Target tetap {fmt(angka(d.target_harian), 1)} per hari kerja sejak awal.</p>
+              )}
+              {bolehUbah && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Medan label="Berlaku mulai"><input type="date" min={hari} max={d.tenggat} className={KELAS.isian} value={tMulai} onChange={(e) => setTMulai(e.target.value)} /></Medan>
+                    <Medan label="Target baru"><input type="number" min={0} step="any" className={KELAS.isian} value={tBaru} onChange={(e) => setTBaru(e.target.value)} /></Medan>
+                  </div>
+                  {tMulai && namaLibur(tMulai) && <Info>Tanggal itu libur ({namaLibur(tMulai)}); target mulai berlaku pada hari kerja berikutnya.</Info>}
+                  <Medan label="Alasan (minimal 5 huruf)"><input className={KELAS.isian} maxLength={300} value={tAlasan} onChange={(e) => setTAlasan(e.target.value)} placeholder="mis. sebagian pekerjaan beralih ke rekan" /></Medan>
+                  <button type="button" className={KELAS.tombolSekunder} disabled={kirim.mengirim || !tMulai || tBaru === "" || tAlasan.trim().length < 5} onClick={() => void aturTarget()}>Terapkan target baru</button>
+                  <p className="m-0 text-[12px] text-[#3B4A57]">Tidak berlaku surut: hari sebelum tanggal berlaku tetap memakai target lama, jadi hutang dan skor masa lalu tidak berubah. Penerima mendapat notifikasi.</p>
+                </div>
+              )}
+            </Kartu>
+          )}
 
           <Kartu judul="Tanggapan">
             {tanggapan.length > 0 && (
@@ -139,7 +202,7 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                 <Medan label="Judul"><input className={KELAS.isian} value={judul} maxLength={200} onChange={(e) => setJudul(e.target.value)} /></Medan>
                 <Medan label="Petunjuk"><textarea className={KELAS.isian} rows={3} maxLength={1000} value={uraian} onChange={(e) => setUraian(e.target.value)} /></Medan>
                 <div className="grid grid-cols-2 gap-3">
-                  <Medan label="Target harian"><input type="number" min={0} step="any" className={KELAS.isian} value={harian} onChange={(e) => setHarian(e.target.value)} /></Medan>
+                  <Medan label="Target harian" bantu="Berlaku mulai hari ini, tidak surut. Untuk tanggal lain pakai kartu Target harian per tanggal."><input type="number" min={0} step="any" className={KELAS.isian} value={harian} onChange={(e) => setHarian(e.target.value)} /></Medan>
                   <Medan label="Target total (opsional)"><input type="number" min={0} step="any" className={KELAS.isian} value={total} onChange={(e) => setTotal(e.target.value)} /></Medan>
                   <Medan label="Bobot (1-5)"><input type="number" min={1} max={5} className={KELAS.isian} value={bobot} onChange={(e) => setBobot(e.target.value)} /></Medan>
                   <Medan label="Tenggat"><input type="date" min={d.mulai} className={KELAS.isian} value={tenggat} onChange={(e) => setTenggat(e.target.value)} /></Medan>

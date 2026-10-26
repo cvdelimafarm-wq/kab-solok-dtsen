@@ -4,7 +4,7 @@
 // Berkas MURNI: bentuk data, label, dan aturan tombol. Yang memutuskan tetap basis data (berkas 20261025zh).
 
 export type JenisNotif = "ident_fix" | "ident_pasca_h15" | "nama_terisi" | "lembar_menunggu" | "pengecualian_diajukan" | "pengecualian_putus" | "penugasan_diterapkan" | "gap_keras" | "gap_akhir"
-  | "delegasi_baru" | "delegasi_ubah" | "delegasi_tanggapan" | "delegasi_pembinaan" | "delegasi_penghargaan";
+  | "delegasi_baru" | "delegasi_ubah" | "delegasi_tanggapan" | "delegasi_pembinaan" | "delegasi_penghargaan" | "delegasi_pengingat";
 export type Nada = "abu" | "biru" | "kuning" | "hijau" | "merah";
 
 export type Notifikasi = {
@@ -28,6 +28,7 @@ export const LABEL_NOTIF: Record<JenisNotif, { teks: string; nada: Nada }> = {
   delegasi_tanggapan: { teks: "Tanggapan delegasi", nada: "biru" },
   delegasi_pembinaan: { teks: "Pembinaan", nada: "kuning" },
   delegasi_penghargaan: { teks: "Penghargaan", nada: "hijau" },
+  delegasi_pengingat: { teks: "Pengingat lapor", nada: "kuning" },
 };
 
 /** Tautan yang boleh dibuka dari notifikasi: hanya alamat dalam SIGAP (diawali /sigap/). */

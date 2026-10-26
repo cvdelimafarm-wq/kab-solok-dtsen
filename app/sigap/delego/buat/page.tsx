@@ -44,7 +44,7 @@ export default function Buat() {
 
   const [judul, setJudul] = useState("");
   const [uraian, setUraian] = useState("");
-  const [harian, setHarian] = useState(String(KAPASITAS_HARIAN));
+  const [harian, setHarian] = useState("60");
   const [total, setTotal] = useState("");
   const [satuan, setSatuan] = useState("poin");
   const [bobot, setBobot] = useState("1");
@@ -116,7 +116,7 @@ export default function Buat() {
   const roSaja = hak.beri_ro;
   return (
     <Halaman judul="Buat delegasi" sub="Langsung dari Ketua Tim ke wakil, pegawai, PML, dan PPL">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <Kartu judul="1. Asal pekerjaan">
             <div className="space-y-3">
@@ -162,7 +162,7 @@ export default function Buat() {
                     </label>
                   ))}
                 </div>
-                <p className="m-0 mt-1 text-[12px] text-[#3B4A57]">Hari libur nasional belum dikecualikan otomatis; atur lewat hari kerja atau tenggat (cek aturan).</p>
+                <p className="m-0 mt-1 text-[12px] text-[#3B4A57]">Tanggal yang ditandai libur di Kalender libur otomatis tidak dihitung hari kerja (cek aturan libur daerah).</p>
               </fieldset>
             </div>
           </Kartu>

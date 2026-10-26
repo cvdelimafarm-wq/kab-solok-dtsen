@@ -9,6 +9,7 @@ import { useState } from "react";
 import { angka, bebanPerOrang, bulat, jamWib, ringkasHariIni, statusLaporanHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_PERAN, NAMA_STATUS, type BahanSaya, type Delegasi } from "@/lib/delego/tipe";
 import { useKonteksDelego } from "../konteks";
+import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, NADA_STATUS, Peringatan, fmt } from "../ui";
 import { useKirim, useSaya } from "../data";
@@ -67,9 +68,12 @@ function KartuTugas({ d, s, terima, sibuk }: { d: Delegasi; s: BahanSaya; terima
           {riwayat.length > 0 && (
             <ul className="m-0 list-none space-y-1 p-0">
               {riwayat.map((l) => (
-                <li key={l.id} className="flex justify-between gap-2 text-[13px]">
-                  <span>{tglPendek(l.tanggal)}{l.mewakili ? " · diwakili" : ""}{l.terlambat ? " · terlambat" : ""}</span>
-                  <span className="font-semibold">{fmt(angka(l.poin), 1)}</span>
+                <li key={l.id} className="text-[13px]">
+                  <div className="flex justify-between gap-2">
+                    <span>{tglPendek(l.tanggal)}{l.mewakili ? " · diwakili" : ""}{l.terlambat ? " · terlambat" : ""}</span>
+                    <span className="font-semibold">{fmt(angka(l.poin), 1)}</span>
+                  </div>
+                  <DaftarBukti bukti={l.bukti} ukuran={56} />
                 </li>
               ))}
             </ul>
@@ -109,7 +113,7 @@ export default function Saya() {
       {s.galat && !d && <Galat>{s.galat}</Galat>}
       {kirim.galat && <Galat>{kirim.galat}</Galat>}
       {d && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-3">
             {aktif.length === 0 ? (
               <Kosong>Belum ada delegasi untuk Anda. Pemberi delegasi akan mengirim tugas ke sini dan Anda mendapat notifikasi.</Kosong>

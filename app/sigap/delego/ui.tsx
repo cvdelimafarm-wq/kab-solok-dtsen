@@ -10,7 +10,7 @@ import type { StatusDelegasi } from "@/lib/delego/tipe";
 
 export function Halaman({ judul, sub, kanan, children }: { judul: string; sub?: ReactNode; kanan?: ReactNode; children: ReactNode }) {
   return (
-    <section className="space-y-4">
+    <section className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="m-0 text-[22px] font-bold tracking-[-0.2px] text-[#14212B]">{judul}</h1>

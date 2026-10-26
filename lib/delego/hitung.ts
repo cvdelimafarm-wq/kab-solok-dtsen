@@ -3,7 +3,14 @@
 // (26 Okt 2026) Delego -- hitungan murni (tanpa jaringan, tanpa React): hari kerja, target dan hutang poin kumulatif, status laporan harian,
 // beban kerja mingguan, usulan pemerataan, tangga pembinaan, dan skor kinerja. Sistem hanya MENYARANKAN; manusia yang memutuskan.
 // Semua tanggal berbentuk "YYYY-MM-DD" (zona WIB sudah diselesaikan basis data pada `hari_ini`).
-// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas 70 poin per orang per hari (26 Okt 2026: naik dari 60, berlaku mulai hari ini; bobot poin per keluarga tidak berubah), hari kerja Senin-Jumat tanpa kalender libur.
+// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas 70 poin per orang per hari (26 Okt 2026: naik dari 60, berlaku mulai hari ini; bobot poin per keluarga tidak berubah), hari kerja Senin-Jumat.
+//
+// (26 Okt 2026, lanjutan) Tiga tambahan:
+//  * KALENDER LIBUR: tanggal libur aktif (keu_dlg_libur) tidak dihitung hari kerja. Daftar dipasang sekali dari keu_dlg_hak lewat `aturLibur()` (keadaan modul,
+//    karena hampir semua hitungan membutuhkannya); tanpa daftar, perilaku sama seperti sebelumnya (hanya Senin-Jumat / hari_kerja delegasi).
+//  * TARGET BERLAKU PER TANGGAL: `riwayat_target` pada delegasi (baris pertama = target awal). Perubahan tidak berlaku surut; target kumulatif, beban, dan hutang
+//    dihitung hari demi hari memakai target yang berlaku pada hari itu (`targetHarianPada`). Tanpa riwayat: memakai `target_harian` biasa.
+//  * BOBOT SKOR: `skorPenerima(..., bobot)` sudah menerima bobot; bobot bawaan 25/25/25/25 dan dapat diganti pemberi (keu_dlg_bobot).
 
 import type { Delegasi, Laporan, PeranDelegasi, Penilaian } from "./tipe";
 
@@ -55,20 +62,59 @@ export const jamWib = (sekarang: Date) => {
 };
 export const hariWib = (sekarang: Date) => new Date(sekarang.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
 
-/** Jumlah hari kerja (menurut `hk`, 1-7) pada rentang tertutup [mulai, sampai]. */
+// ------------------------------------------------------------------ Kalender libur
+export type Libur = { tanggal: string; nama: string; jenis: "nasional" | "cuti_bersama" | "lainnya"; aktif: boolean };
+
+let LIBUR = new Map<string, string>();
+
+/** Pasang daftar libur (hanya yang aktif dihitung). Dipanggil sekali saat hak Delego dimuat. Daftar kosong = tanpa kalender libur. */
+export function aturLibur(daftar: Pick<Libur, "tanggal" | "nama" | "aktif">[] | null | undefined) {
+  LIBUR = new Map((daftar ?? []).filter((l) => l.aktif).map((l) => [l.tanggal.slice(0, 10), l.nama]));
+}
+/** Nama libur pada tanggal itu, atau null. */
+export const namaLibur = (t: string): string | null => LIBUR.get(t) ?? null;
+export const hariLibur = (t: string) => LIBUR.has(t);
+/** Hari kerja menurut `hk` (1-7) dan bukan libur. */
+export const hariKerjaTanggal = (t: string, hk: number[]) => hk.includes(hariKe(t)) && !LIBUR.has(t);
+
+/** Jumlah hari kerja (menurut `hk`, 1-7, tanpa tanggal libur) pada rentang tertutup [mulai, sampai]. */
 export function hariKerjaAntara(mulai: string, sampai: string, hk: number[]): number {
   if (sampai < mulai) return 0;
   const selisih = Math.min(selisihHari(mulai, sampai), 800);
   let n = 0;
-  for (let i = 0; i <= selisih; i++) if (hk.includes(hariKe(tambahHari(mulai, i)))) n++;
+  for (let i = 0; i <= selisih; i++) if (hariKerjaTanggal(tambahHari(mulai, i), hk)) n++;
   return n;
 }
 
 // ------------------------------------------------------------------ Target dan hutang
+type DasarTarget = Pick<Delegasi, "mulai" | "tenggat" | "hari_kerja" | "target_harian" | "target_total"> & { riwayat_target?: Delegasi["riwayat_target"] };
+
+/** Target harian yang berlaku pada tanggal itu (riwayat terakhir yang berlaku mulai <= tanggal; selain itu target_harian). Belum memperhitungkan hari kerja/libur. */
+export function targetHarianPada(d: Pick<Delegasi, "target_harian"> & { riwayat_target?: Delegasi["riwayat_target"] }, tanggal: string): number {
+  const r = d.riwayat_target;
+  if (r && r.length > 0) {
+    let pakai: (typeof r)[number] | null = null;
+    for (const x of r) if (x.berlaku_mulai.slice(0, 10) <= tanggal && (pakai === null || x.berlaku_mulai >= pakai.berlaku_mulai)) pakai = x;
+    if (pakai) return angka(pakai.target_harian);
+    return angka(r[0].target_harian);
+  }
+  return angka(d.target_harian);
+}
+
+/** Target pada satu tanggal: target harian yang berlaku bila itu hari kerja delegasi (bukan libur) dan masih dalam masanya; selain itu 0. */
+export function targetHariIni(d: DasarTarget, tanggal: string): number {
+  if (tanggal < d.mulai || tanggal > d.tenggat) return 0;
+  return hariKerjaTanggal(tanggal, d.hari_kerja) ? targetHarianPada(d, tanggal) : 0;
+}
+
 /** Target kumulatif sejak mulai sampai `sampai` (tertutup), dibatasi tenggat dan target total bila ada. */
-export function targetKumulatif(d: Pick<Delegasi, "mulai" | "tenggat" | "hari_kerja" | "target_harian" | "target_total">, sampai: string): number {
+export function targetKumulatif(d: DasarTarget, sampai: string): number {
   const akhir = mini(sampai, d.tenggat);
-  const t = hariKerjaAntara(d.mulai, akhir, d.hari_kerja) * angka(d.target_harian);
+  let t = 0;
+  if (akhir >= d.mulai) {
+    const selisih = Math.min(selisihHari(d.mulai, akhir), 800);
+    for (let i = 0; i <= selisih; i++) t += targetHariIni(d, tambahHari(d.mulai, i));
+  }
   const total = d.target_total === null || d.target_total === undefined ? null : angka(d.target_total);
   return total !== null && total > 0 ? Math.min(t, total) : t;
 }
@@ -92,17 +138,17 @@ export type RingkasHariIni = {
 export function ringkasHariIni(d: Delegasi, laporan: Laporan[], hari: string): RingkasHariIni {
   const lap = laporan.find((l) => l.delegasi_id === d.id && l.tanggal === hari) ?? null;
   const poinHariIni = lap ? angka(lap.poin) : 0;
-  const hariKerjaIni = d.hari_kerja.includes(hariKe(hari)) && hari >= d.mulai && hari <= d.tenggat;
-  const targetHariIni = hariKerjaIni ? angka(d.target_harian) : 0;
+  const hariKerjaIni = hariKerjaTanggal(hari, d.hari_kerja) && hari >= d.mulai && hari <= d.tenggat;
+  const targetHariIniNilai = hariKerjaIni ? targetHarianPada(d, hari) : 0;
   const poinTotal = angka(d.poin_total);
   const poinSampaiKemarin = Math.max(0, poinTotal - poinHariIni);
   const targetSampaiKemarin = targetKumulatif(d, tambahHari(hari, -1));
   const penuh = targetPenuh(d);
   return {
     hariKerjaIni,
-    targetHariIni,
+    targetHariIni: targetHariIniNilai,
     poinHariIni,
-    sisaHariIni: Math.max(0, targetHariIni - poinHariIni),
+    sisaHariIni: Math.max(0, targetHariIniNilai - poinHariIni),
     poinTotal,
     targetSampaiKemarin,
     hutangKemarin: Math.max(0, targetSampaiKemarin - poinSampaiKemarin),
@@ -115,12 +161,12 @@ export function ringkasHariIni(d: Delegasi, laporan: Laporan[], hari: string): R
 
 export type StatusLaporan = "tidak_berlaku" | "libur" | "sudah" | "belum" | "perlu_pengingat";
 
-/** Status kewajiban lapor satu delegasi pada `hari`. `jam` = jam WIB saat ini (pecahan). */
+/** Status kewajiban lapor satu delegasi pada `hari`. `jam` = jam WIB saat ini (pecahan). Tanggal libur (kalender atau di luar hari kerja delegasi) = "libur". */
 export function statusLaporanHariIni(d: Delegasi, laporan: Laporan[], hari: string, jam: number): StatusLaporan {
   if (d.status !== "baru" && d.status !== "berjalan") return "tidak_berlaku";
   if (hari < d.mulai || hari > d.tenggat) return "tidak_berlaku";
   if (laporan.some((l) => l.delegasi_id === d.id && l.tanggal === hari)) return "sudah";
-  if (!d.hari_kerja.includes(hariKe(hari))) return "libur";
+  if (!hariKerjaTanggal(hari, d.hari_kerja)) return "libur";
   return jam >= JAM_PENGINGAT ? "perlu_pengingat" : "belum";
 }
 
@@ -131,7 +177,7 @@ export function hariTanpaLapor(d: Delegasi, laporan: Laporan[], hari: string): n
   for (let i = 1; i <= 30; i++) {
     const t = tambahHari(hari, -i);
     if (t < d.mulai) break;
-    if (t > d.tenggat || !d.hari_kerja.includes(hariKe(t))) continue;
+    if (t > d.tenggat || !hariKerjaTanggal(t, d.hari_kerja)) continue;
     if (ada.has(t)) break;
     n++;
   }
@@ -156,14 +202,19 @@ export function tindakanDisarankan(d: Delegasi, laporan: Laporan[], hari: string
 export type KategoriBeban = "ringan" | "sasaran" | "berlebih";
 export const kategoriBeban = (persen: number): KategoriBeban => (persen < SASARAN_BEBAN.min ? "ringan" : persen <= SASARAN_BEBAN.max ? "sasaran" : "berlebih");
 
+/** Beban satu delegasi pada satu tanggal: target harian yang berlaku bila tanggal itu hari kerjanya (bukan libur) dan masih dalam masa delegasi. */
+export function bebanDelegasiHari(d: Delegasi, tanggal: string): number {
+  if (d.status !== "baru" && d.status !== "berjalan") return 0;
+  return targetHariIni(d, tanggal);
+}
+
 /** Poin per minggu yang dibebankan sebuah delegasi pada minggu (Senin-Minggu) yang memuat `hari`. */
 export function bebanDelegasiMinggu(d: Delegasi, hari: string): number {
   if (d.status !== "baru" && d.status !== "berjalan") return 0;
   const awal = awalMinggu(hari);
-  const akhir = tambahHari(awal, 6);
-  const dari = maks(awal, d.mulai);
-  const sampai = mini(akhir, d.tenggat);
-  return hariKerjaAntara(dari, sampai, d.hari_kerja) * angka(d.target_harian);
+  let total = 0;
+  for (let i = 0; i < 7; i++) total += targetHariIni(d, tambahHari(awal, i));
+  return total;
 }
 
 export type OrangBeban = {
@@ -197,17 +248,10 @@ export function bebanPerOrang(delegasi: Delegasi[], hari: string, tambahan: { id
 }
 
 // ------------------------------------------------------------------ Beban harian (tabel mingguan)
-/** Beban satu delegasi pada satu tanggal: target harian bila tanggal itu hari kerjanya dan masih dalam masa delegasi. */
-export function bebanDelegasiHari(d: Delegasi, tanggal: string): number {
-  if (d.status !== "baru" && d.status !== "berjalan") return 0;
-  if (tanggal < d.mulai || tanggal > d.tenggat) return 0;
-  return d.hari_kerja.includes(hariKe(tanggal)) ? angka(d.target_harian) : 0;
-}
-
-export type SelHarian = { tanggal: string; hk: number; poin: number; persen: number; kategori: KategoriBeban | "kosong" };
+export type SelHarian = { tanggal: string; hk: number; poin: number; persen: number; kategori: KategoriBeban | "kosong"; libur?: string | null };
 export type BarisHarian = { akun: number; nama: string; jenis: "organik" | "mitra"; sel: SelHarian[] };
 
-/** Tabel beban per orang per hari untuk minggu (Senin-Minggu) yang memuat `hari`. Persen terhadap KAPASITAS_HARIAN. */
+/** Tabel beban per orang per hari untuk minggu (Senin-Minggu) yang memuat `hari`. Persen terhadap KAPASITAS_HARIAN. `libur` terisi bila tanggal itu libur kalender. */
 export function matriksBebanHarian(orang: OrangBeban[], delegasi: Delegasi[], hari: string): { tanggal: string[]; baris: BarisHarian[]; adaAkhirPekan: boolean } {
   const awal = awalMinggu(hari);
   const tanggal = Array.from({ length: 7 }, (_, i) => tambahHari(awal, i));
@@ -218,7 +262,7 @@ export function matriksBebanHarian(orang: OrangBeban[], delegasi: Delegasi[], ha
     sel: tanggal.map((t) => {
       const poin = delegasi.filter((d) => d.penerima_akun === o.akun).reduce((s, d) => s + bebanDelegasiHari(d, t), 0);
       const persen = Math.round((poin / KAPASITAS_HARIAN) * 100);
-      return { tanggal: t, hk: hariKe(t), poin, persen, kategori: poin === 0 ? ("kosong" as const) : kategoriBeban(persen) };
+      return { tanggal: t, hk: hariKe(t), poin, persen, kategori: poin === 0 ? ("kosong" as const) : kategoriBeban(persen), libur: namaLibur(t) };
     }),
   }));
   const adaAkhirPekan = baris.some((b) => b.sel.some((s) => s.hk >= 6 && s.poin > 0));
@@ -308,7 +352,7 @@ export function saranPembinaan(p: { hutang: number; hariTanpaLapor: number; belu
 export type KomponenSkor = { kode: "ketepatan" | "capaian" | "kualitas" | "kepatuhan"; nama: string; nilai: number | null; bobot: number };
 export type Skor = { total: number | null; komponen: KomponenSkor[] };
 
-/** Skor 0-100 satu orang dari seluruh delegasinya. Komponen tanpa data dikeluarkan dan bobot sisanya dinormalkan. */
+/** Skor 0-100 satu orang dari seluruh delegasinya. Komponen tanpa data dikeluarkan dan bobot sisanya dinormalkan. `bobot` dari keu_dlg_bobot (hak.bobot); bawaan 25 tiap komponen. */
 export function skorPenerima(delegasi: Delegasi[], laporan: Laporan[], penilaian: Penilaian[], hari: string, bobot: Record<string, number> = BOBOT_SKOR): Skor {
   let harapan = 0;
   let tepat = 0;
@@ -321,7 +365,7 @@ export function skorPenerima(delegasi: Delegasi[], laporan: Laporan[], penilaian
     harapan += hariKerjaAntara(awal, akhir, d.hari_kerja);
     for (const l of laporan) {
       if (l.delegasi_id !== d.id || l.terlambat) continue;
-      if (l.tanggal >= awal && l.tanggal <= akhir && d.hari_kerja.includes(hariKe(l.tanggal))) tepat++;
+      if (l.tanggal >= awal && l.tanggal <= akhir && hariKerjaTanggal(l.tanggal, d.hari_kerja)) tepat++;
     }
     const r = ringkasHariIni(d, laporan, hari);
     tk += r.targetSampaiKemarin;
@@ -341,6 +385,11 @@ export function skorPenerima(delegasi: Delegasi[], laporan: Laporan[], penilaian
   const total = ada.length === 0 || sumB === 0 ? null : Math.round(ada.reduce((s, k) => s + (k.nilai as number) * k.bobot, 0) / sumB);
   return { total, komponen };
 }
+
+// ------------------------------------------------------------------ Identifikasi berubah
+/** Identifikasi (keu_ident.ver) sudah naik sejak delegasi dibuat atau terakhir ditinjau pemberi. */
+export const identBerubah = (d: Pick<Delegasi, "ident_id" | "ident_ver" | "ident_ver_kini" | "status">): boolean =>
+  d.ident_id !== null && d.ident_ver != null && d.ident_ver_kini != null && d.ident_ver_kini > d.ident_ver && (d.status === "baru" || d.status === "berjalan" || d.status === "ditunda");
 
 // ------------------------------------------------------------------ Ringkasan tim
 export type RingkasTim = {

@@ -272,8 +272,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     if (kt) bukaSso(kt);
   };
   const memuatAwal = adaSesi && !data && !error;
-  // (26 Okt 2026) Pintu ke Delego (tampilan HP hijau) di "Kegiatan saya". Sementara hanya untuk akun super (akun Ketua Tim); dibuka untuk semua petugas setelah uji.
-  const tampilDelego = !!data?.super_akun;
+  // (26 Okt 2026) Pintu ke Delego (tampilan HP hijau) di "Kegiatan saya". Sementara hanya untuk akun super (Ketua Tim) dan tiga pegawai penguji;
+  // dibuka untuk semua petugas setelah uji (ganti dengan `true` atau saring lewat hak Delego).
+  const PENGUJI_DELEGO = ["mailani putri", "nurafiza thamrin", "dina marizka"];
+  const namaAkun = (data?.nama ?? "").trim().toLowerCase();
+  const tampilDelego = !!data?.super_akun || (namaAkun !== "" && PENGUJI_DELEGO.some((n) => namaAkun.startsWith(n)));
 
   return (
     <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">

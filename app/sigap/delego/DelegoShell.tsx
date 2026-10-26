@@ -9,13 +9,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { jamWib, tglPendek } from "@/lib/delego/hitung";
+import { aturLibur, jamWib, tglPendek } from "@/lib/delego/hitung";
 import { useHakDelegasi } from "./data";
 import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian";
+type Ikon = "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur";
 const JALUR: Record<Ikon, string> = {
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
   papan: "M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v12h-4z",
@@ -26,6 +26,7 @@ const JALUR: Record<Ikon, string> = {
   tugas: "M4 6h16M4 12h16M4 18h10",
   lapor: "M5 12l4 4 10-10M5 20h14",
   riwayat: "M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4",
+  libur: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4M9 14h2M13 14h2",
   penilaian: "M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z",
 };
 function Gambar({ n, ukuran = 18 }: { n: Ikon; ukuran?: number }) {
@@ -56,6 +57,7 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/laporan", label: "Laporan tim", ikon: "laporan" },
   { href: "/sigap/delego/beban", label: "Beban kerja", ikon: "beban" },
   { href: "/sigap/delego/pembinaan", label: "Pembinaan dan skor", ikon: "pembinaan" },
+  { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
 ];
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };
 const BUTIR_SAYA: Butir[] = [
@@ -91,6 +93,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
   const hak = h.data;
   const konteks = useMemo<KonteksDelego | null>(() => {
     if (!hak) return null;
+    aturLibur(hak.libur ?? []); // kalender libur dipakai semua hitungan hari kerja (lib/delego/hitung.ts)
     const manajer = hak.semua || hak.lihat_ro.length > 0 || hak.beri_ro.length > 0;
     const pemberi = hak.semua || hak.beri_ro.length > 0;
     return { hak, hari: hak.hari_ini, jam, manajer, pemberi, bolehBeri: (ro) => hak.semua || hak.beri_ro.includes(ro), muatHak: h.muat };

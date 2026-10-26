@@ -70,7 +70,7 @@ export default function BerandaTim() {
             <Statistik label="Beban berlebih" nilai={tim.berlebih} ket="orang di atas 100% minggu ini" nada={tim.berlebih > 0 ? "merah" : "biasa"} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
             <Kartu judul="Perlu perhatian" kanan={<span className="text-[12.5px] text-[#3B4A57]">Saran sistem, Anda yang memutuskan</span>}>
               {perhatian.length === 0 ? (
                 <p className="m-0 text-[14px] text-[#3B4A57]">Tidak ada yang perlu ditindaklanjuti saat ini.</p>

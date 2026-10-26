@@ -9,9 +9,9 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  hariTanpaLapor, ringkasHariIni, saranPembinaan, skorPenerima, statusLaporanHariIni, tglPendek, TANGGA_PEMBINAAN, tambahHari,
+  hariTanpaLapor, ringkasHariIni, saranPembinaan, skorPenerima, statusLaporanHariIni, tglPendek, TANGGA_PEMBINAAN, tambahHari, BOBOT_SKOR,
 } from "@/lib/delego/hitung";
-import type { BahanTim, Delegasi } from "@/lib/delego/tipe";
+import type { BahanTim, BobotSkor, Delegasi } from "@/lib/delego/tipe";
 import { useBahan, useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
@@ -34,7 +34,8 @@ function susunOrang(delegasi: Delegasi[]): Orang[] {
 }
 
 export default function Pembinaan() {
-  const { hari, jam, bolehBeri } = useKonteksDelego();
+  const { hari, jam, bolehBeri, hak, muatHak } = useKonteksDelego();
+  const bobot = hak.bobot ?? BOBOT_SKOR;
   const q = useSearchParams();
   const f = useFilterRo();
   const b = useBahan();
@@ -74,10 +75,10 @@ export default function Pembinaan() {
         const berjalan = (data?.pembinaan ?? []).filter((p) => p.penerima_akun === o.akun && p.status === "berjalan");
         const terakhir = berjalan.reduce<number | null>((m, p) => (m === null || p.langkah > m ? p.langkah : m), null);
         const saran = saranPembinaan({ hutang, hariTanpaLapor: tanpa, belumLaporLewatPengingat: lewat, langkahTerakhir: terakhir });
-        const skor = skorPenerima(o.delegasi, data?.laporan ?? [], (data?.penilaian ?? []).filter((n) => n.penerima_akun === o.akun), hari);
+        const skor = skorPenerima(o.delegasi, data?.laporan ?? [], (data?.penilaian ?? []).filter((n) => n.penerima_akun === o.akun), hari, bobot);
         return { o, hutang, tanpa, terakhir, saran, skor, berjalan };
       }),
-    [orang, data, hari, jam],
+    [orang, data, hari, jam, bobot],
   );
 
   const bukaForm = (akun: number, ro: string, lk?: number, al?: string) => {
@@ -116,7 +117,7 @@ export default function Pembinaan() {
       {b.galat && !b.data && <Galat>{b.galat}</Galat>}
 
       {data && tab === "pembinaan" && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-4">
             <Kartu judul="Tangga pembinaan">
               <ol className="m-0 list-none space-y-1.5 p-0 text-[13.5px]">
@@ -217,7 +218,7 @@ export default function Pembinaan() {
         </div>
       )}
 
-      {data && tab === "skor" && <TabSkor baris={baris} data={data} hari={hari} muat={b.muat} bolehBeri={bolehBeri} />}
+      {data && tab === "skor" && <TabSkor baris={baris} data={data} hari={hari} muat={b.muat} bolehBeri={bolehBeri} bobot={bobot} bisaUbahBobot={hak.semua} muatHak={muatHak} />}
       {data && tab === "penghargaan" && <TabHargai orang={orang} data={data} roFilter={f.ro} bolehBeri={bolehBeri} muat={b.muat} />}
     </Halaman>
   );
@@ -250,7 +251,7 @@ function TutupBaris({ id, langkah, alasan, tinjau, tanggal, boleh, muat }: { id:
 
 type BarisSkor = { o: Orang; skor: ReturnType<typeof skorPenerima> };
 
-function TabSkor({ baris, data, hari, muat, bolehBeri }: { baris: BarisSkor[]; data: BahanTim; hari: string; muat: () => Promise<void>; bolehBeri: (r: string) => boolean }) {
+function TabSkor({ baris, data, hari, muat, bolehBeri, bobot, bisaUbahBobot, muatHak }: { baris: BarisSkor[]; data: BahanTim; hari: string; muat: () => Promise<void>; bolehBeri: (r: string) => boolean; bobot: BobotSkor; bisaUbahBobot: boolean; muatHak: () => Promise<void> }) {
   const kirim = useKirim(muat);
   const [pilih, setPilih] = useState<{ akun: number; ro: string } | null>(null);
   const [kualitas, setKualitas] = useState("80");
@@ -265,9 +266,10 @@ function TabSkor({ baris, data, hari, muat, bolehBeri }: { baris: BarisSkor[]; d
   const awal = tambahHari(hari, -34);
   return (
     <div className="space-y-4">
-      <Info>Skor adalah bahan percakapan, bukan penilaian resmi. Dihitung dari laporan {tglPendek(awal)} sampai kemarin; kualitas dan kepatuhan dari penilaian bulanan pemberi. Terlihat oleh yang berwenang pada RO terkait (Ketua Tim, ADMINRO, PPK, KPA). Bobot awal sama rata (cek aturan).</Info>
+      <Info>Skor adalah bahan percakapan, bukan penilaian resmi. Dihitung dari laporan {tglPendek(awal)} sampai kemarin; kualitas dan kepatuhan dari penilaian bulanan pemberi. Terlihat oleh yang berwenang pada RO terkait (Ketua Tim, ADMINRO, PPK, KPA). Bobot diatur Ketua Tim di kartu di bawah (awal sama rata, cek aturan).</Info>
+      <KartuBobot bobot={bobot} bisaUbah={bisaUbahBobot} muatHak={muatHak} />
       {baris.length === 0 && <Kosong>Belum ada penerima delegasi.</Kosong>}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {baris.map(({ o, skor }) => (
           <Kartu key={o.akun} judul={o.nama} kanan={<span className="text-[22px] font-bold text-[#0B524C]">{skor.total === null ? "–" : skor.total}<span className="text-[12px] font-medium text-[#3B4A57]"> / 100</span></span>}>
             <div className="space-y-2">
@@ -307,6 +309,45 @@ function TabSkor({ baris, data, hari, muat, bolehBeri }: { baris: BarisSkor[]; d
   );
 }
 
+function KartuBobot({ bobot, bisaUbah, muatHak }: { bobot: BobotSkor; bisaUbah: boolean; muatHak: () => Promise<void> }) {
+  const kirim = useKirim(muatHak);
+  const [buka, setBuka] = useState(false);
+  const [isi, setIsi] = useState({ ketepatan: String(bobot.ketepatan), capaian: String(bobot.capaian), kualitas: String(bobot.kualitas), kepatuhan: String(bobot.kepatuhan) });
+  const jumlah = (Object.values(isi) as string[]).reduce((s, v) => s + (Number(v) || 0), 0);
+  const NAMA: Record<keyof BobotSkor, string> = { ketepatan: "Ketepatan lapor", capaian: "Capaian terhadap target", kualitas: "Kualitas data", kepatuhan: "Kepatuhan prosedur" };
+  const simpan = async () => {
+    const ok = await kirim.kirim("keu_dlg_bobot_atur", { p_data: { ketepatan: Number(isi.ketepatan), capaian: Number(isi.capaian), kualitas: Number(isi.kualitas), kepatuhan: Number(isi.kepatuhan) } });
+    if (ok) setBuka(false);
+  };
+  return (
+    <Kartu
+      judul="Bobot skor"
+      kanan={bisaUbah && !buka ? <button type="button" className={KELAS.tombolKecil} onClick={() => { setIsi({ ketepatan: String(bobot.ketepatan), capaian: String(bobot.capaian), kualitas: String(bobot.kualitas), kepatuhan: String(bobot.kepatuhan) }); setBuka(true); }}>Ubah bobot</button> : undefined}
+    >
+      {!buka ? (
+        <div className="grid grid-cols-2 gap-2 text-[13px] md:grid-cols-4">
+          {(Object.keys(NAMA) as (keyof BobotSkor)[]).map((k) => (<div key={k}><div className="text-[#3B4A57]">{NAMA[k]}</div><b className="text-[18px] text-[#0B524C]">{bobot[k]}%</b></div>))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {(Object.keys(NAMA) as (keyof BobotSkor)[]).map((k) => (
+              <Medan key={k} label={NAMA[k]}><input type="number" min={0} max={100} className={KELAS.isian} value={isi[k]} onChange={(e) => setIsi({ ...isi, [k]: e.target.value })} /></Medan>
+            ))}
+          </div>
+          <div className={`text-[13px] font-semibold ${jumlah === 100 ? "text-[#0B524C]" : "text-[#9B2C2C]"}`}>Jumlah {jumlah} dari 100{jumlah !== 100 ? " (harus tepat 100)" : ""}</div>
+          {kirim.galat && <Galat>{kirim.galat}</Galat>}
+          <div className="flex gap-2">
+            <button type="button" className={KELAS.tombolUtama} disabled={kirim.mengirim || jumlah !== 100} onClick={() => void simpan()}>Simpan bobot</button>
+            <button type="button" className={KELAS.tombolSekunder} onClick={() => setBuka(false)}>Batal</button>
+          </div>
+          <p className="m-0 text-[12px] text-[#3B4A57]">Berlaku untuk semua orang dan dihitung ulang seketika, termasuk skor masa lalu. Komponen yang belum ada datanya tetap dikeluarkan dan bobot sisanya dinormalkan.</p>
+        </div>
+      )}
+    </Kartu>
+  );
+}
+
 function TabHargai({ orang, data, roFilter, bolehBeri, muat }: { orang: Orang[]; data: BahanTim; roFilter: string; bolehBeri: (r: string) => boolean; muat: () => Promise<void> }) {
   const kirim = useKirim(muat);
   const [penerima, setPenerima] = useState("");
@@ -319,7 +360,7 @@ function TabHargai({ orang, data, roFilter, bolehBeri, muat }: { orang: Orang[];
     if (ok) { setAlasan(""); setPenerima(""); setRo(""); }
   };
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
       <Kartu judul="Penghargaan tercatat">
         {data.penghargaan.filter((h) => !roFilter || h.ro_kode === roFilter).length === 0 ? (
           <p className="m-0 text-[13.5px] text-[#3B4A57]">Belum ada penghargaan.</p>

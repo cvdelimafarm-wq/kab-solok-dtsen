@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { angka, tglPendek } from "@/lib/delego/hitung";
 import { useSaya } from "../data";
+import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
 import { Galat, Halaman, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
 
@@ -55,6 +56,7 @@ export default function Riwayat() {
                       </div>
                       {l.uraian && <p className="m-0 text-[13.5px] leading-snug text-[#33404B]">{l.uraian}</p>}
                       {l.kendala && <p className="m-0 text-[13.5px] leading-snug text-[#8A4605]">Kendala: {l.kendala}</p>}
+                      <DaftarBukti bukti={l.bukti} ukuran={72} />
                       {tg.map((t) => (
                         <div key={t.id} className="rounded-lg bg-[#F1F7F6] px-3 py-2 text-[13px]">
                           <b className="text-[#0B524C]">{t.dari_nama ?? "Pemberi"}:</b> {t.isi}

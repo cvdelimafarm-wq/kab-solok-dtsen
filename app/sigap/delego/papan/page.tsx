@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { bulat, ringkasHariIni, statusLaporanHariIni, tglPendek } from "@/lib/delego/hitung";
+import { bulat, identBerubah, ringkasHariIni, statusLaporanHariIni, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_PERAN, NAMA_STATUS, type Delegasi, type StatusDelegasi } from "@/lib/delego/tipe";
 import { useBahan } from "../data";
 import Detail from "../Detail";
@@ -55,6 +55,7 @@ export default function Papan() {
           {st === "belum" && <Lencana nada="abu">Belum lapor</Lencana>}
           {st === "perlu_pengingat" && <Lencana nada="amber">Belum lapor</Lencana>}
           {r.hutangKemarin > 0 && <Lencana nada="amber">Hutang {fmt(bulat(r.hutangKemarin), 0)}</Lencana>}
+          {identBerubah(d) && <Lencana nada="biru">Identifikasi berubah</Lencana>}
         </div>
       </button>
     );
@@ -83,7 +84,7 @@ export default function Papan() {
       {b.galat && !b.data && <Galat>{b.galat}</Galat>}
       {b.data && daftar.length === 0 && <Kosong>Tidak ada delegasi yang cocok.</Kosong>}
       {b.data && daftar.length > 0 && (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {KOLOM.map((s) => {
             const isi = daftar.filter((d) => d.status === s);
             return (
@@ -99,7 +100,7 @@ export default function Papan() {
           {tampilBatal && (
             <section className="space-y-2 md:col-span-2 xl:col-span-4" aria-label="Batal">
               <Lencana nada="merah">Batal</Lencana>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">{daftar.filter((d) => d.status === "batal").map(kartu)}</div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">{daftar.filter((d) => d.status === "batal").map(kartu)}</div>
             </section>
           )}
         </div>

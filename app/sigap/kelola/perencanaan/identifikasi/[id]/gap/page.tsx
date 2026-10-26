@@ -5,8 +5,9 @@
 // (25 Okt 2026, tahap 32) Peringatan pelaksanaan dan laporan Gap: rencana pada identifikasi lanjutan dibanding kenyataan di SIGAP (penugasan, laporan harian, jadwal,
 // pagu, evaluasi). Temuan dihitung di sini (lib/keu/gap.ts) dari bahan yang dibaca lewat keu_pelaksanaan_bahan, disimpan berversi lewat keu_gap_simpan, dan
 // ditanggapi lewat keu_gap_tanggapi. Tidak memblokir apa pun; temuan keras baru diberitahukan ke PPK.
+// (26 Okt 2026) Kartu C "Delegasi pada survei ini" (KartuDelego.tsx): kenyataan pembagian tugas dari Delego, hanya tampilan.
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
@@ -15,11 +16,13 @@ import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { jadwalPendataan, normalisasiLanjutan, rincianBiaya } from "@/lib/keu/lanjutan";
 import { hitungGap, layakLaporanAkhir, ringkasGap, sidikTemuan, type JenisGap, type MasukanGap } from "@/lib/keu/gap";
+import { jamWib } from "@/lib/delego/hitung";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { hariIniWib, useIdent } from "../../useIdent";
 import { useLanjutan } from "../lanjutan/useLanjutan";
 import { usePelaksanaan } from "../pelaksanaan/usePelaksanaan";
 import { KartuBanding, KartuSimpanGap, KartuTemuanSaatIni, KartuVersiGap } from "./Kartu";
+import { KartuDelego } from "./KartuDelego";
 import { useGap, type StatusTanggapan } from "./useGap";
 
 function Isi() {
@@ -33,6 +36,11 @@ function Isi() {
   const muatSemua = useCallback(async () => { await Promise.all([ident.muatSemua(), lj.muatSemua(), pl.muatSemua(), gap.muatSemua()]); }, [ident, lj, pl, gap]);
   const kirim = useKirim(muatSemua);
   const [pesan, setPesan] = useState<string | null>(null);
+  const [jam, setJam] = useState(() => jamWib(new Date()));
+  useEffect(() => {
+    const t = window.setInterval(() => setJam(jamWib(new Date())), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const formSah = useMemo(() => (row && row.ver >= 1 && row.form_sah ? normalisasi(row.form_sah) : null), [row]);
   const tersimpan = lj.row;
@@ -112,6 +120,7 @@ function Isi() {
                 {terbaru ? <Chip warna={terbaru.n_keras > 0 ? "merah" : "hijau"}>Terakhir disimpan: v{terbaru.ver}</Chip> : <Chip warna="abu">Belum ada versi tersimpan</Chip>}
               </div>
               <KartuBanding r={ringkas} />
+              <KartuDelego identId={row.id} jam={jam} />
               <KartuSimpanGap bisa={bisa} mengirim={kirim.mengirim} galat={kirim.galat} sama={sama} layakAkhir={layakAkhir} onSimpan={simpan} pesan={pesan} />
             </div>
           </div>

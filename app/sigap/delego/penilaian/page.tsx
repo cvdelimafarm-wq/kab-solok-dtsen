@@ -20,7 +20,7 @@ export default function Penilaian() {
       {s.memuat && !d && <Memuat />}
       {s.galat && !d && <Galat>{s.galat}</Galat>}
       {d && skor && (
-        <div className="mx-auto grid max-w-3xl gap-4">
+        <div className="mx-auto grid grid-cols-1 max-w-3xl gap-4">
           <Kartu
             judul="Skor kinerja saya"
             kanan={

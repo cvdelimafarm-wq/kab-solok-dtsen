@@ -7,10 +7,11 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { angka, hariKe, jamWib, JAM_PENGINGAT, tambahHari, tglPendek } from "@/lib/delego/hitung";
+import { angka, hariKerjaTanggal, jamWib, JAM_PENGINGAT, namaLibur, tambahHari, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_PERAN, type Delegasi, type Laporan } from "@/lib/delego/tipe";
 import { useBahan, useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
+import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Galat, Halaman, Kartu, Kosong, Lencana, Memuat, Statistik, fmt } from "../ui";
@@ -44,11 +45,11 @@ export default function LaporanTim() {
       const dalamMasa = tanggal >= d.mulai && tanggal <= d.tenggat;
       if (!l && (!dalamMasa || (d.status !== "baru" && d.status !== "berjalan"))) continue;
       if (l) hasil.push({ d, l, status: l.terlambat ? "Terlambat" : "Tepat waktu", nada: l.terlambat ? "amber" : "hijau" });
-      else if (!d.hari_kerja.includes(hariKe(tanggal))) hasil.push({ d, l, status: "Libur", nada: "abu" });
+      else if (!hariKerjaTanggal(tanggal, d.hari_kerja)) hasil.push({ d, l, status: namaLibur(tanggal) ? "Libur (" + namaLibur(tanggal) + ")" : "Libur", nada: "abu" });
       else if (tanggal < hari) hasil.push({ d, l, status: "Tidak lapor", nada: "merah" });
       else hasil.push({ d, l, status: jam >= JAM_PENGINGAT ? "Belum (lewat pengingat)" : "Belum", nada: jam >= JAM_PENGINGAT ? "amber" : "abu" });
     }
-    const urut = (x: Baris) => (x.status.startsWith("Tidak") ? 0 : x.status.startsWith("Belum") ? 1 : x.status === "Terlambat" ? 2 : x.status === "Libur" ? 4 : 3);
+    const urut = (x: Baris) => (x.status.startsWith("Tidak") ? 0 : x.status.startsWith("Belum") ? 1 : x.status === "Terlambat" ? 2 : x.status.startsWith("Libur") ? 4 : 3);
     return hasil.sort((a, c) => urut(a) - urut(c) || a.d.penerima_nama.localeCompare(c.d.penerima_nama));
   }, [b.data, f.ro, tanggal, hari, jam]);
 
@@ -86,7 +87,7 @@ export default function LaporanTim() {
             <div className="space-y-2">
               {baris.map((x) => (
                 <Kartu key={x.d.id} className="!p-3">
-                  <div className="grid gap-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_110px_170px_auto] lg:items-center">
+                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_110px_170px_auto] lg:items-center">
                     <div className="min-w-0">
                       <div className="truncate text-[14.5px] font-semibold">{x.d.penerima_nama}</div>
                       <div className="text-[12.5px] text-[#3B4A57]">{NAMA_PERAN[x.d.peran_penerima]}{x.d.penerima_jenis === "mitra" ? " · mitra" : ""}</div>
@@ -95,6 +96,7 @@ export default function LaporanTim() {
                       <div className="truncate">{x.d.judul}</div>
                       {x.l?.kendala && <div className="text-[12.5px] text-[#8A4605]">Kendala: {x.l.kendala}</div>}
                       {x.l?.uraian && <div className="truncate text-[12.5px] text-[#3B4A57]">{x.l.uraian}</div>}
+                      {x.l && <DaftarBukti bukti={x.l.bukti} ukuran={48} />}
                     </div>
                     <div className="text-[13px]">
                       <span className="font-bold">{x.l ? fmt(angka(x.l.poin), 1) : "–"}</span>

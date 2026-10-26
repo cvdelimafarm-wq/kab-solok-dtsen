@@ -11,11 +11,15 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { bebanDelegasiMinggu, bebanPerOrang, HARI_KERJA_MINGGU, KAPASITAS_HARIAN, matriksBebanHarian, SASARAN_BEBAN, tglPendek, usulPemerataan, type UsulanPemerataan } from "@/lib/delego/hitung";
 import { NAMA_PERAN } from "@/lib/delego/tipe";
+import { gradienLegenda, warnaBeban } from "@/lib/delego/warna";
 import { useBahan, useCalon, useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
+
+/** Persentase beban yang dipetakan ke warna paling jenuh pada skala. */
+const PUNCAK_SKALA = 150;
 
 export default function Beban() {
   const { hari, hak, pemberi, bolehBeri } = useKonteksDelego();
@@ -51,7 +55,7 @@ export default function Beban() {
       {b.data && orang.length > 0 && (
         <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari {KAPASITAS_HARIAN} poin/hari</span>}>
           <div className="overflow-x-auto" role="table" aria-label="Beban per orang per hari minggu ini">
-            <div className="grid min-w-[300px] items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(84px,1fr) repeat(${kolom}, minmax(34px,46px))` }} role="row">
+            <div className="grid min-w-[250px] items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(72px,1fr) repeat(${kolom}, minmax(30px,46px))` }} role="row">
               <div className="text-left text-[12px] font-semibold text-[#3B4A57]" role="columnheader">Nama</div>
               {tabel.tanggal.slice(0, kolom).map((t) => (
                 <div key={t} role="columnheader" className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`} title={tglPendek(t)}>
@@ -62,32 +66,43 @@ export default function Beban() {
               {tabel.baris.map((o) => (
                 <div key={o.akun} className="contents" role="row">
                   <div className="truncate pr-1 text-left text-[13px] font-semibold text-[#14212B]" role="rowheader" title={o.nama}>{o.nama}</div>
-                  {o.sel.slice(0, kolom).map((c) => (
-                    <div
-                      key={c.tanggal}
-                      role="cell"
-                      title={`${tglPendek(c.tanggal)}: ${fmt(c.poin, 0)} poin`}
-                      className={`rounded-md py-1.5 text-[12.5px] font-bold ${c.tanggal === hari ? "ring-2 ring-[#0F6B63]" : ""} ${
-                        c.kategori === "kosong" ? "bg-[#F3F5F7] font-normal text-[#7A8793]" : c.kategori === "berlebih" ? "bg-[#F5CFCF] text-[#7A1F1F]" : c.kategori === "sasaran" ? "bg-[#CFE8E3] text-[#0B524C]" : "bg-[#E4E8EC] text-[#33404B]"
-                      }`}
-                    >
-                      {c.kategori === "kosong" ? "·" : c.persen}
-                    </div>
-                  ))}
+                  {o.sel.slice(0, kolom).map((c) => {
+                    const w = c.kategori === "kosong" ? null : warnaBeban(c.persen, SASARAN_BEBAN.min, SASARAN_BEBAN.max, PUNCAK_SKALA);
+                    return (
+                      <div
+                        key={c.tanggal}
+                        role="cell"
+                        title={`${tglPendek(c.tanggal)}: ${fmt(c.poin, 0)} poin (${c.persen}%)`}
+                        className={`rounded-md py-1.5 text-[12.5px] ${w ? "font-bold" : "bg-[#F3F5F7] font-normal text-[#7A8793]"} ${c.tanggal === hari ? "ring-2 ring-[#0F6B63]" : ""}`}
+                        style={w ? { backgroundColor: w.latar, color: w.teks } : undefined}
+                      >
+                        {w ? c.persen : "·"}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#3B4A57]">
-            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#F5CFCF] align-middle" /> berlebih (&gt;{SASARAN_BEBAN.max}%)</span>
-            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#CFE8E3] align-middle" /> sesuai sasaran ({SASARAN_BEBAN.min}–{SASARAN_BEBAN.max}%)</span>
-            <span><b className="inline-block h-2.5 w-2.5 rounded-sm bg-[#E4E8EC] align-middle" /> longgar (&lt;{SASARAN_BEBAN.min}%)</span>
-            <span>· tidak ada beban</span>
+          <div className="mt-3" aria-label="Skala warna beban">
+            <div className="h-3 w-full rounded-full border border-[#D5DCE2]" style={{ backgroundImage: gradienLegenda(SASARAN_BEBAN.min, SASARAN_BEBAN.max, PUNCAK_SKALA) }} />
+            <div className="relative mt-1 h-4 text-[11.5px] text-[#3B4A57]">
+              <span className="absolute left-0">0%</span>
+              <span className="absolute -translate-x-1/2" style={{ left: `${(SASARAN_BEBAN.min / PUNCAK_SKALA) * 100}%` }}>{SASARAN_BEBAN.min}%</span>
+              <span className="absolute -translate-x-1/2" style={{ left: `${(SASARAN_BEBAN.max / PUNCAK_SKALA) * 100}%` }}>{SASARAN_BEBAN.max}%</span>
+              <span className="absolute right-0">{PUNCAK_SKALA}%+</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#3B4A57]">
+              <span><b className="text-[#1D3F6B]">Biru</b>: longgar (&lt;{SASARAN_BEBAN.min}%)</span>
+              <span><b className="text-[#0B524C]">Hijau</b>: sesuai sasaran ({SASARAN_BEBAN.min}–{SASARAN_BEBAN.max}%)</span>
+              <span><b className="text-[#9B2C2C]">Kuning ke merah</b>: berlebih (&gt;{SASARAN_BEBAN.max}%)</span>
+              <span>· tidak ada beban</span>
+            </div>
           </div>
         </Kartu>
       )}
       {b.data && orang.length > 0 && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
           <Kartu judul={`Per orang (${orang.length})`}>
             <ul className="m-0 list-none divide-y divide-[#EEF1F4] p-0">
               {orang.map((o) => {

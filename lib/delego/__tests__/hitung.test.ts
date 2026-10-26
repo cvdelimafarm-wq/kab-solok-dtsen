@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
-  angka, awalMinggu, bebanDelegasiMinggu, bebanPerOrang, hariKe, hariKerjaAntara, hariTanpaLapor, jamWib, hariWib, ringkasHariIni, ringkasTim, saranPembinaan,
-  bebanDelegasiHari, KAPASITAS_HARIAN, matriksBebanHarian, skorPenerima, statusLaporanHariIni, targetKumulatif, tglPendek, tindakanDisarankan, usulPemerataan,
+  angka, aturLibur, awalMinggu, bebanDelegasiMinggu, bebanPerOrang, hariKe, hariKerjaAntara, hariTanpaLapor, jamWib, hariWib, ringkasHariIni, ringkasTim, saranPembinaan,
+  bebanDelegasiHari, identBerubah, KAPASITAS_HARIAN, matriksBebanHarian, namaLibur, skorPenerima, statusLaporanHariIni, targetHarianPada, targetKumulatif, tglPendek,
+  tindakanDisarankan, usulPemerataan,
 } from "../hitung";
 import type { Delegasi, Laporan, Penilaian } from "../tipe";
 
@@ -14,6 +15,8 @@ const dg = (o: Partial<Delegasi> = {}): Delegasi => ({
 const lp = (d: Delegasi, tanggal: string, poin: number, o: Partial<Laporan> = {}): Laporan => ({
   id: ++seq, delegasi_id: d.id, tanggal, poin, uraian: "", kendala: "", bukti: [], dikirim_oleh: d.penerima_akun, mewakili: false, terlambat: false, dikirim_at: "", ...o,
 });
+
+afterEach(() => aturLibur([]));
 
 describe("tanggal", () => {
   it("hari dalam pekan memakai Senin=1 sampai Minggu=7", () => {
@@ -194,5 +197,89 @@ describe("skor kinerja", () => {
   });
   it("tanpa data sama sekali: null", () => {
     expect(skorPenerima([], [], [], "2026-10-30").total).toBeNull();
+  });
+  it("bobot dapat diganti: mengubah total, tetap dinormalkan", () => {
+    const n: Penilaian[] = [{ ro_kode: "2903.BMA.009", periode: "2026-10-01", kualitas: 80, kepatuhan: 60, catatan: "" }];
+    // ketepatan 75, capaian 75, kualitas 80, kepatuhan 60
+    expect(skorPenerima([d], laporan, n, "2026-10-30", { ketepatan: 10, capaian: 10, kualitas: 70, kepatuhan: 10 }).total).toBe(77); // (7.5+7.5+56+6)/1
+    expect(skorPenerima([d], laporan, n, "2026-10-30", { ketepatan: 0, capaian: 0, kualitas: 0, kepatuhan: 100 }).total).toBe(60);
+    expect(skorPenerima([d], laporan, [], "2026-10-30", { ketepatan: 0, capaian: 0, kualitas: 50, kepatuhan: 50 }).total).toBeNull(); // bobot komponen yang ada = 0
+  });
+});
+
+describe("kalender libur", () => {
+  it("tanggal libur aktif tidak dihitung hari kerja", () => {
+    aturLibur([{ tanggal: "2026-10-28", nama: "Libur uji", aktif: true }, { tanggal: "2026-10-29", nama: "Nonaktif", aktif: false }]);
+    expect(namaLibur("2026-10-28")).toBe("Libur uji");
+    expect(namaLibur("2026-10-29")).toBeNull();
+    expect(hariKerjaAntara("2026-10-26", "2026-11-01", [1, 2, 3, 4, 5])).toBe(4);
+  });
+  it("target kumulatif, beban mingguan, dan beban harian melewati hari libur", () => {
+    aturLibur([{ tanggal: "2026-10-28", nama: "Libur uji", aktif: true }]);
+    const d = dg();
+    expect(targetKumulatif(d, "2026-10-30")).toBe(240); // Sen, Sel, Kam, Jum (Rab libur)
+    expect(bebanDelegasiMinggu(d, "2026-10-28")).toBe(240);
+    expect(bebanDelegasiHari(d, "2026-10-28")).toBe(0);
+    expect(bebanDelegasiHari(d, "2026-10-29")).toBe(60);
+    const m = matriksBebanHarian(bebanPerOrang([d], "2026-10-28"), [d], "2026-10-28");
+    expect(m.baris[0].sel[2].libur).toBe("Libur uji");
+    expect(m.baris[0].sel[2].kategori).toBe("kosong");
+  });
+  it("status laporan: hari libur kalender = libur, tidak ada hutang atau hitungan hari tanpa laporan", () => {
+    aturLibur([{ tanggal: "2026-10-28", nama: "Libur uji", aktif: true }]);
+    const d = dg();
+    expect(statusLaporanHariIni(d, [], "2026-10-28", 19)).toBe("libur");
+    expect(ringkasHariIni(d, [], "2026-10-28").hariKerjaIni).toBe(false);
+    expect(ringkasHariIni(d, [], "2026-10-28").targetHariIni).toBe(0);
+    expect(hariTanpaLapor(d, [], "2026-10-29")).toBe(2); // Sen, Sel (Rab libur)
+    expect(statusLaporanHariIni(d, [lp(d, "2026-10-28", 30)], "2026-10-28", 19)).toBe("sudah"); // tetap boleh melapor
+  });
+  it("tanpa daftar libur perilaku lama", () => {
+    aturLibur(null);
+    expect(hariKerjaAntara("2026-10-26", "2026-11-01", [1, 2, 3, 4, 5])).toBe(5);
+  });
+});
+
+describe("target berlaku per tanggal", () => {
+  const riwayat = [
+    { berlaku_mulai: "2026-10-26", target_harian: "60.00", alasan: "Target awal" },
+    { berlaku_mulai: "2026-10-29", target_harian: "30.00", alasan: "Sebagian beralih" },
+  ];
+  it("target harian mengikuti riwayat, tidak surut", () => {
+    const d = dg({ riwayat_target: riwayat, target_harian: "30.00" });
+    expect(targetHarianPada(d, "2026-10-27")).toBe(60);
+    expect(targetHarianPada(d, "2026-10-29")).toBe(30);
+    expect(targetHarianPada(d, "2026-11-05")).toBe(30);
+    expect(targetHarianPada(dg({ target_harian: "45" }), "2026-10-27")).toBe(45);
+  });
+  it("target kumulatif, beban, dan hutang memakai target pada harinya", () => {
+    const d = dg({ riwayat_target: riwayat, target_harian: "30.00" });
+    expect(targetKumulatif(d, "2026-10-28")).toBe(180); // Sen, Sel, Rab @60
+    expect(targetKumulatif(d, "2026-10-30")).toBe(240); // + Kam, Jum @30
+  });
+  it("beban minggu: hari sebelum perubahan memakai target lama", () => {
+    const d = dg({ riwayat_target: riwayat, target_harian: "30.00" });
+    expect(bebanDelegasiHari(d, "2026-10-28")).toBe(60);
+    expect(bebanDelegasiHari(d, "2026-10-29")).toBe(30);
+    expect(bebanDelegasiMinggu(d, "2026-10-28")).toBe(60 * 3 + 30 * 2);
+  });
+  it("ringkasan hari ini memakai target hari itu", () => {
+    const d = dg({ riwayat_target: riwayat, target_harian: "30.00" });
+    expect(ringkasHariIni(d, [], "2026-10-30").targetHariIni).toBe(30);
+    expect(ringkasHariIni(d, [], "2026-10-28").targetHariIni).toBe(60);
+  });
+  it("target total tetap membatasi", () => {
+    const d = dg({ riwayat_target: riwayat, target_harian: "30.00", target_total: "250" });
+    expect(targetKumulatif(d, "2026-11-13")).toBe(250);
+  });
+});
+
+describe("identifikasi berubah", () => {
+  it("lencana hanya bila versi kini lebih besar dan delegasi masih aktif", () => {
+    expect(identBerubah({ ident_id: 1, ident_ver: 2, ident_ver_kini: 3, status: "berjalan" })).toBe(true);
+    expect(identBerubah({ ident_id: 1, ident_ver: 2, ident_ver_kini: 2, status: "berjalan" })).toBe(false);
+    expect(identBerubah({ ident_id: 1, ident_ver: 2, ident_ver_kini: 3, status: "selesai" })).toBe(false);
+    expect(identBerubah({ ident_id: null, ident_ver: null, ident_ver_kini: null, status: "baru" })).toBe(false);
+    expect(identBerubah({ ident_id: 1, status: "baru" })).toBe(false);
   });
 });
