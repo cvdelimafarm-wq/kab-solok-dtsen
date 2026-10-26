@@ -249,7 +249,8 @@ export default function Shell({
   const bolehPediaKelola = ringkas.izin["pedia.kelola"]?.level === "kelola";
   const bolehPelatihanKelola = !!ringkas.izin["pelatihan.kelola"]; // (7 Okt 2026) Kelola Pelatihan
   // (9 Okt 2026) /sigap/kelola/<modul> -- permintaan user: Delego & Kelola Aplikasi ikut di sidebar pengelolaan
-  const bolehDelego = !!ringkas.izin["delego.admin"];
+  // (26 Okt 2026) Delego kini bagian SIGAP (/sigap/delego) dan hak aksesnya ditegakkan di dalam modul; menu selalu tampil.
+  const bolehDelego = true;
   // (11 Okt 2026) Pendataan keroyokan PPL/PML -- permintaan user (lembar petugas lewat tahap Pendataan di Beranda; sidebar desktop hanya memuat menu admin unggah, karena unggah CSV dari laptop)
   const bolehPendataanKelola = ringkas.izin["bencana.admin"]?.level === "kelola";
   // (11 Okt 2026) Monitoring Lapangan (translok + identifikasi/pendataan per petugas per tanggal) -- permintaan user; cukup izin bencana.admin level lihat

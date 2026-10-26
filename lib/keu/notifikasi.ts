@@ -3,7 +3,8 @@
 // (25 Okt 2026, tahap 30) Notifikasi SIGAP (pesan per akun) dan keputusan KPA atas perubahan sesudah H-15 serta pengecualian kebijakan.
 // Berkas MURNI: bentuk data, label, dan aturan tombol. Yang memutuskan tetap basis data (berkas 20261025zh).
 
-export type JenisNotif = "ident_fix" | "ident_pasca_h15" | "nama_terisi" | "lembar_menunggu" | "pengecualian_diajukan" | "pengecualian_putus" | "penugasan_diterapkan" | "gap_keras" | "gap_akhir";
+export type JenisNotif = "ident_fix" | "ident_pasca_h15" | "nama_terisi" | "lembar_menunggu" | "pengecualian_diajukan" | "pengecualian_putus" | "penugasan_diterapkan" | "gap_keras" | "gap_akhir"
+  | "delegasi_baru" | "delegasi_ubah" | "delegasi_tanggapan" | "delegasi_pembinaan" | "delegasi_penghargaan";
 export type Nada = "abu" | "biru" | "kuning" | "hijau" | "merah";
 
 export type Notifikasi = {
@@ -22,6 +23,11 @@ export const LABEL_NOTIF: Record<JenisNotif, { teks: string; nada: Nada }> = {
   penugasan_diterapkan: { teks: "Penugasan diterapkan", nada: "hijau" },
   gap_keras: { teks: "Temuan keras pelaksanaan", nada: "merah" },
   gap_akhir: { teks: "Laporan Gap akhir", nada: "biru" },
+  delegasi_baru: { teks: "Delegasi baru", nada: "hijau" },
+  delegasi_ubah: { teks: "Delegasi diubah", nada: "biru" },
+  delegasi_tanggapan: { teks: "Tanggapan delegasi", nada: "biru" },
+  delegasi_pembinaan: { teks: "Pembinaan", nada: "kuning" },
+  delegasi_penghargaan: { teks: "Penghargaan", nada: "hijau" },
 };
 
 /** Tautan yang boleh dibuka dari notifikasi: hanya alamat dalam SIGAP (diawali /sigap/). */
