@@ -33,6 +33,12 @@ export function dalamToleransiKirim(tanggalFoto: string, hariIni: string, hari =
   const selisih = Math.round((a - b) / 86_400_000);
   return selisih >= 0 && selisih <= hari;
 }
+// (26 Okt 2026) BERBAGI FOTO (menandai rekan + penerima menekan Terima) dibuka paling lama sampai akhir H+1:
+// foto tanggal H masih bisa dibagikan dan diterima sampai 23.59 WIB tanggal H+1. Nomor foto milik pemotret sendiri tidak ikut dilonggarkan.
+export const BATAS_HARI_BAGI = 1;
+export function jendelaBagiFoto(tanggalFoto: string, hariIni: string): boolean {
+  return dalamToleransiKirim(tanggalFoto, hariIni, BATAS_HARI_BAGI);
+}
 export const UMUR_POSISI_KUNING_MS = 2 * 60_000; // posisi GPS lebih tua dari ini saat potret = kuning
 export const BEDA_JAM_KUNING_DETIK = 120;
 export const BEDA_JAM_MERAH_DETIK = 3600;

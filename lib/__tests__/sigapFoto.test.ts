@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   jarakEfektifM,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
-  TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, LABEL_ALASAN, labelFotoTanpaSinyal,
+  TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, BATAS_HARI_BAGI, jendelaBagiFoto, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
   type MasukanKepercayaan,
 } from "@/lib/sigapFoto";
@@ -139,6 +139,21 @@ describe("labelFotoTanpaSinyal", () => {
     expect(labelFotoTanpaSinyal([], diambil, diambil)).toBeNull();
     expect(labelFotoTanpaSinyal(undefined, diambil, diambil)).toBeNull();
     expect(labelFotoTanpaSinyal(["waktu_offline"], "bukan-tanggal", diambil)).toBeNull();
+  });
+});
+
+describe("jendelaBagiFoto (berbagi foto sampai H+1)", () => {
+  it("batas 1 hari: H dan H+1 boleh, H+2 tidak", () => {
+    expect(BATAS_HARI_BAGI).toBe(1);
+    expect(jendelaBagiFoto("2026-10-23", "2026-10-23")).toBe(true);
+    expect(jendelaBagiFoto("2026-10-23", "2026-10-24")).toBe(true);
+    expect(jendelaBagiFoto("2026-10-23", "2026-10-25")).toBe(false);
+  });
+  it("lintas bulan dan tanggal tidak wajar", () => {
+    expect(jendelaBagiFoto("2026-09-30", "2026-10-01")).toBe(true);
+    expect(jendelaBagiFoto("2026-09-29", "2026-10-01")).toBe(false);
+    expect(jendelaBagiFoto("2026-10-24", "2026-10-23")).toBe(false);
+    expect(jendelaBagiFoto("bukan-tanggal", "2026-10-23")).toBe(false);
   });
 });
 

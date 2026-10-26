@@ -4,7 +4,8 @@
 // POST { foto_id, tag: [{ akun_id, slot_usulan? }] } -> { ok, ditambah }
 
 import { NextRequest, NextResponse } from "next/server";
-import { MAKS_TAG, slotValid, type PeranTag } from "@/lib/sigapFoto";
+import { MAKS_TAG, jendelaBagiFoto, slotValid, type PeranTag } from "@/lib/sigapFoto";
+import { hariIniWib } from "@/lib/sigap";
 import { rekanTim } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -18,8 +19,10 @@ export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => null)) as { foto_id?: unknown; tag?: unknown } | null;
   const fotoId = Number(b?.foto_id);
   if (!Number.isInteger(fotoId) || !Array.isArray(b?.tag) || !b.tag.length) return galat("foto_id dan tag wajib.");
-  const { data: foto } = await db.from("sigap_foto").select("id, kegiatan_id, akun_pengambil").eq("id", fotoId).maybeSingle();
+  const { data: foto } = await db.from("sigap_foto").select("id, kegiatan_id, akun_pengambil, tanggal").eq("id", fotoId).maybeSingle();
   if (!foto || foto.akun_pengambil !== akunId) return galat("Hanya pemotret yang dapat menambah tag.", 403);
+  // (26 Okt 2026) Berbagi foto dibuka sampai akhir H+1 (23.59 WIB sehari sesudah tanggal foto).
+  if (!jendelaBagiFoto(foto.tanggal as string, hariIniWib())) return galat("Berbagi foto sudah ditutup. Foto hanya bisa dibagikan sampai akhir hari sesudah tanggal foto (H+1).", 403);
 
   const baru: { akun_id: number; slot_usulan: number | null }[] = [];
   for (const x of b.tag as { akun_id?: unknown; slot_usulan?: unknown }[]) {

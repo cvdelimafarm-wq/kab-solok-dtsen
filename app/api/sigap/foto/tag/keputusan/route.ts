@@ -7,13 +7,14 @@
 //  - Penerima dari tim / pemotret: penugasan harus di kegiatan yang SAMA dengan foto.
 //  - Penerima di luar tim: boleh penugasan miliknya sendiri; kegiatan itu harus bermode kamera (keputusan user: sah sebagai bukti).
 //  - Hari kerja, 23.59 WIB, kunci, periode: cekAksesIsian terhadap TANGGAL FOTO (bukan hari ini).
+//    Foto yang dibagikan (bukan tag pemotret) boleh diterima sampai akhir H+1 (BATAS_HARI_BAGI, 26 Okt 2026).
 //  - Foto merah / dipertanyakan / di luar wilayah penerima (nomor 2-4) -> tag 'ditahan' sampai PML/admin menandai 'diperiksa'.
 //  - Setelah diterima, nomor tidak diubah penerima (mengubah berarti mencabut baris = hapus). Pilih nomor dengan teliti sebelum Terima.
 //  - Nomor sudah terisi foto lain: foto lama DILEPAS (bukan dihapus), berkas lama dicatat ke sigap_audit (di dalam fungsi SQL).
 
 import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, penugasanAkun } from "@/lib/sigap";
-import { WILAYAH_MERAH_M, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
+import { BATAS_HARI_BAGI, WILAYAH_MERAH_M, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
 import { jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -55,7 +56,9 @@ export async function POST(req: NextRequest) {
     if (mode !== "kamera") return galat("Kegiatan tujuan memakai unggah foto (metode lama), jadi foto kamera tidak bisa dipakai sebagai bukti di sana.", 403, { mode: "unggah" });
   }
 
-  const akses = await cekAksesIsian(db, akunId, penugasanId, foto.tanggal as string);
+  // (26 Okt 2026) Foto yang DIBAGIKAN (tag tim / luar tim) boleh diterima sampai akhir H+1 (melewati 23.59 WIB hari foto). Hanya melonggarkan
+  // alasan "terlewat"; hari kerja, kunci SPJ/arsip, dan periode tetap berlaku. Tag pemotret untuk fotonya sendiri tidak dilonggarkan.
+  const akses = await cekAksesIsian(db, akunId, penugasanId, foto.tanggal as string, tag.peran_tag === "pemotret" ? {} : { toleransiOfflineHari: BATAS_HARI_BAGI });
   if ("error" in akses) return galat(akses.error, akses.status);
 
   let tahan = foto.kepercayaan === "merah" && foto.status_periksa !== "diperiksa";

@@ -7,6 +7,8 @@
 // Keputusan user 11 Okt: halaman uji coba di web (bukan mockup), hanya Admin Aplikasi (izin portal.kelola), data disimpan di
 // browser dulu (localStorage, kunci sigap_uji_perencanaan_v1) sampai aturan disetujui -- tidak ada tabel/migrasi, modul lain tidak disentuh.
 // Posisi hierarki ada di alamat (?ro=&keg=&tahap=) supaya tombol Back naik satu tingkat.
+// (26 Okt 2026) Alamat tanpa parameter kini membuka PintuMasuk.tsx (urutan perencanaan + tautan ke fitur berbasis database). Uji coba ini tidak dihapus:
+// daftar RO-nya ada di ?uji=1, dan semua tautan lama (?ro=...) tetap berfungsi.
 // (11 Okt 2026, langkah 3) Halaman tahap = form identifikasi yang bisa diisi & disimpan (pengelola kegiatan/ketua tim; uji coba: Admin Aplikasi),
 // paket administrasi per mata anggaran diturunkan langsung dari jawaban dan dicek ke baris POK. Logika: lib/perencanaanIdentifikasi.ts.
 // Logika murni & uji: lib/perencanaanGsbpm.ts, lib/__tests__/perencanaanGsbpm.test.ts. Rancangan: claude/rancangan-identifikasi-gsbpm-ro.md.
@@ -17,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Bingkai from "../../kontrak/Bingkai";
 import AnggaranTab from "./AnggaranTab";
+import PintuMasuk from "./PintuMasuk";
 import { KUNCI_RAB } from "@/lib/anggaranRabUji";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, rupiah, SesiBerakhir, tglSedang } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH } from "../../admin/ui";
@@ -101,7 +104,8 @@ const BAGIAN: { kode: Bagian; label: string }[] = [
   { kode: "rencana", label: "Rencana realisasi" },
   { kode: "anggaran", label: "Anggaran (RAB)" }, // (22 Okt 2026) RAB berversi, vonis, RPD, saran revisi: AnggaranTab.tsx
 ];
-type Posisi = { ro: string | null; keg: string | null; tahap: KodeTahap | null; bagian?: Bagian };
+// (26 Okt 2026) `uji` = daftar semua RO milik uji coba lama. Tanpa ?ro= dan tanpa ?uji=1, alamat ini membuka PintuMasuk (halaman penunjuk).
+type Posisi = { ro: string | null; keg: string | null; tahap: KodeTahap | null; bagian?: Bagian; uji?: boolean };
 
 function posisiDariAlamat(): Posisi {
   if (typeof window === "undefined") return { ro: null, keg: null, tahap: null };
@@ -113,11 +117,13 @@ function posisiDariAlamat(): Posisi {
     keg: q.get("keg"),
     tahap: t && definisiTahap(t) ? (t as KodeTahap) : null,
     bagian: b === "pok" || b === "rencana" || b === "anggaran" ? b : undefined,
+    uji: q.get("uji") === "1",
   };
 }
 
 function alamat(p: Posisi): string {
   const q = new URLSearchParams();
+  if (!p.ro && p.uji) q.set("uji", "1");
   if (p.ro) q.set("ro", p.ro);
   if (p.keg) q.set("keg", p.keg);
   if (p.tahap) q.set("tahap", p.tahap);
@@ -189,8 +195,8 @@ export default function PerencanaanKegiatan() {
   const tahap = keg && pos.tahap ? definisiTahap(pos.tahap) : null;
 
   const jejak = ["Perencanaan kegiatan", ...(ro ? [ro.kode] : []), ...(keg ? [keg.nama] : []), ...(tahap ? [tahap.nama] : [])];
-  const judul = tahap ? tahap.nama : keg ? keg.nama : ro ? `RO ${ro.kode}` : "Perencanaan kegiatan";
-  const sub = tahap ? `Tahap ${tahap.no} · GSBPM ${tahap.gsbpm} · ${keg?.nama}` : keg ? `RO ${ro?.kode} · ${ro?.nama}` : ro ? ro.nama : "RO anggaran → kegiatan → tahap GSBPM";
+  const judul = tahap ? tahap.nama : keg ? keg.nama : ro ? `RO ${ro.kode}` : pos.uji ? "Perencanaan kegiatan" : "Perencanaan";
+  const sub = tahap ? `Tahap ${tahap.no} · GSBPM ${tahap.gsbpm} · ${keg?.nama}` : keg ? `RO ${ro?.kode} · ${ro?.nama}` : ro ? ro.nama : pos.uji ? "RO anggaran → kegiatan → tahap GSBPM" : "Urutan perencanaan dan pintu ke setiap langkahnya";
 
   const kembalikanContoh = () => {
     // (22 Okt 2026) RAB (tab Anggaran) tersimpan di kunci terpisah dan ikut dihapus supaya tidak menempel pada POK yang sudah direset.
@@ -200,11 +206,17 @@ export default function PerencanaanKegiatan() {
       /* penyimpanan tidak tersedia */
     }
     simpan(dataContoh(sekarang()));
-    pergi({ ro: null, keg: null, tahap: null });
+    pergi({ ro: null, keg: null, tahap: null, uji: true });
   };
 
+  // (26 Okt 2026) Pintu masuk: tanpa ?ro= dan tanpa ?uji=1. Dapat dilihat semua yang sudah masuk; uji coba lama hanya untuk Admin Aplikasi.
+  // `data` baru terisi bersamaan dengan posisi dari alamat, jadi tidak ada kedipan pintu masuk pada tautan lama (?ro=...).
+  const masuk = !!data && !pos.ro && !pos.uji;
+
   let isi: React.ReactNode;
-  if (galat && izin === "memuat") isi = <Pesan jenis="galat">{galat}</Pesan>;
+  if (masuk)
+    isi = <PintuMasuk bolehUji={izin === "boleh"} keUji={() => pergi({ ro: null, keg: null, tahap: null, uji: true })} />;
+  else if (galat && izin === "memuat") isi = <Pesan jenis="galat">{galat}</Pesan>;
   else if (izin === "memuat" || !data) isi = <Memuat />;
   else if (izin === "tidak")
     isi = (
@@ -242,7 +254,14 @@ export default function PerencanaanKegiatan() {
     );
 
   return (
-    <Bingkai aktif="perencanaan" kecil="SIGAP · Perencanaan kegiatan · Uji coba" jejak={jejak} judul={judul} sub={sub}>
+    <Bingkai
+      aktif="perencanaan"
+      kecil={masuk ? "SIGAP · Perencanaan" : "SIGAP · Perencanaan kegiatan · Uji coba"}
+      jejak={masuk ? ["SIGAP", "Perencanaan"] : jejak}
+      judul={judul}
+      sub={sub}
+      kembali={masuk ? { induk: "/sigap", label: "Beranda SIGAP" } : undefined}
+    >
       {isi}
     </Bingkai>
   );
@@ -250,7 +269,10 @@ export default function PerencanaanKegiatan() {
 
 // ---------------------------------------------------------------- Jejak hierarki (bisa diklik)
 function JejakHierarki({ ro, keg, tahap, pergi }: { ro: Ro | null; keg: KegiatanUtama | null; tahap: string | null; pergi: (p: Posisi) => void }) {
-  const item: { label: string; ke: Posisi | null; tingkat: string }[] = [{ label: "Semua RO", ke: { ro: null, keg: null, tahap: null }, tingkat: "Anggaran" }];
+  const item: { label: string; ke: Posisi | null; tingkat: string }[] = [
+    { label: "Perencanaan", ke: { ro: null, keg: null, tahap: null }, tingkat: "Pintu masuk" },
+    { label: "Semua RO", ke: { ro: null, keg: null, tahap: null, uji: true }, tingkat: "Anggaran" },
+  ];
   if (ro) item.push({ label: ro.kode, ke: { ro: ro.id, keg: null, tahap: null }, tingkat: "RO" });
   if (ro && keg) item.push({ label: keg.nama, ke: { ro: ro.id, keg: keg.id, tahap: null }, tingkat: "Kegiatan" });
   if (tahap) item.push({ label: tahap, ke: null, tingkat: "Tahap GSBPM" });
