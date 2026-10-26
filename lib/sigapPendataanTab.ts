@@ -8,13 +8,13 @@
 // Yang SENGAJA tidak dilakukan di tahap ini:
 //  - halaman lama yang berat (/bencana 555 KB, Kelola Pelatihan, Perencanaan, Pengadaan) belum disematkan; tab memberi PINTU MASUK (kartu tautan)
 //    ke halaman itu. Item yang belum ada halamannya tampil "segera" tanpa tautan.
-//  - (23 Okt 2026, tahap 2) Tab "5 · Pemeriksaan" kini MENYEMATKAN Monitoring Identifikasi SLS, Monitoring Lapangan, dan Foto & dokumentasi
+//  - (23 Okt 2026, tahap 2) Tab "6 · Pemeriksaan" kini MENYEMATKAN Monitoring Identifikasi SLS, Monitoring Lapangan, dan Foto & dokumentasi
 //    sebagai tiga sub-pilihan (?tab=pemeriksaan&sub=identifikasi|lapangan|foto); alamat lama /sigap/kelola/identifikasi|lapangan|foto tetap hidup.
-//  - (23 Okt 2026, tahap 3) Tab "2 · Tim & Surat Tugas" (sub: alokasi | penugasan) dan "6 · Administrasi & SPJ" (sub: monitoring | verifikasi | tarif | anggaran)
+//  - (23 Okt 2026, tahap 3) Tab "2 · Tim & Surat Tugas" (sub: alokasi | penugasan) dan "7 · Administrasi & SPJ" (sub: monitoring | verifikasi | tarif | anggaran)
 //    menyematkan komponen tab Admin Transport Lokal (TabPenugasan, TabMonitoring, TabVerifikasi, TabKegiatan) untuk kegiatan Pendataan (id 1).
 //  - tidak ada alamat baru selain parameter ?tab= pada /sigap/kelola/pendataan.
 
-export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "monitoring" | "pemeriksaan" | "administrasi";
+export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "qc" | "monitoring" | "pemeriksaan" | "administrasi";
 
 export type ItemTabPendataan = { kode: KodeTabPendataan; label: string; ket: string };
 
@@ -24,9 +24,10 @@ export const TAB_PENDATAAN: ItemTabPendataan[] = [
   { kode: "persiapan", label: "1 · Persiapan", ket: "Unggah daftar KK sasaran, permintaan daftar KK ke FASIH, dan Sub SLS yang belum diajukan." },
   { kode: "tim", label: "2 · Tim & Surat Tugas", ket: "Alokasi PML/PPL per Sub SLS, penugasan, Surat Tugas, dan pelatihan petugas." },
   { kode: "siaran", label: "3 · Siaran & Notifikasi", ket: "Siaran ke seluruh petugas dan notifikasi ke satu petugas." },
-  { kode: "monitoring", label: "4 · Monitoring", ket: "Progres petugas, transport lokal, poin kinerja harian, dan perkiraan kebutuhan anggaran." },
-  { kode: "pemeriksaan", label: "5 · Pemeriksaan", ket: "Hasil identifikasi, pemantauan lapangan per petugas, dan foto dokumentasi." },
-  { kode: "administrasi", label: "6 · Administrasi & SPJ", ket: "Transport lokal (verifikasi, kunci, tarif), pengadaan, dan pertanggungjawaban." },
+  { kode: "qc", label: "4 · QC Pemahaman", ket: "Kuis harian wajib PML dan PPL: pantauan hari ini, pengaturan jadwal, dan bank soal." },
+  { kode: "monitoring", label: "5 · Monitoring", ket: "Progres petugas, transport lokal, poin kinerja harian, dan perkiraan kebutuhan anggaran." },
+  { kode: "pemeriksaan", label: "6 · Pemeriksaan", ket: "Hasil identifikasi, pemantauan lapangan per petugas, dan foto dokumentasi." },
+  { kode: "administrasi", label: "7 · Administrasi & SPJ", ket: "Transport lokal (verifikasi, kunci, tarif), pengadaan, dan pertanggungjawaban." },
 ];
 
 export const TAB_AWAL: KodeTabPendataan = "ringkasan";
@@ -54,7 +55,7 @@ export function urlTabPendataan(pathname: string, search: string, tab: KodeTabPe
   else q.set("tab", tab);
   if (tab !== "monitoring") q.delete("v");
   // ?sub hanya hidup di tab yang punya sub-pilihan dan hanya bila tab tidak berpindah (pindah tab = mulai dari sub pertama)
-  if ((tab !== "pemeriksaan" && tab !== "tim" && tab !== "administrasi") || !tabSama) q.delete("sub");
+  if ((tab !== "pemeriksaan" && tab !== "tim" && tab !== "administrasi" && tab !== "qc") || !tabSama) q.delete("sub");
   const s = q.toString();
   return s ? `${pathname}?${s}` : pathname;
 }
@@ -96,7 +97,13 @@ export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
   { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (honor, perjalanan dinas)." },
 ];
-export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI };
+/** (26 Okt 2026) Tab "4 · QC Pemahaman": pantauan hari ini, pengaturan jadwal, bank soal. */
+export const SUB_QC: SubItem[] = [
+  { kode: "hari", label: "Hari ini", ket: "Siapa sudah mengisi, nilai per tim, soal yang paling banyak salah, dan siapa yang belum mengaktifkan notifikasi." },
+  { kode: "pengaturan", label: "Pengaturan", ket: "Nyalakan QC, jam rilis dan batas, ulangan, pengingat, dan periode berlaku." },
+  { kode: "soal", label: "Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
+];
+export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI, qc: SUB_QC };
 
 /** Nilai ?sub= -> kode sub dalam daftar; kosong/tak dikenal -> sub pertama. */
 export function bacaSubDari(daftar: SubItem[], param: string | null | undefined): string {

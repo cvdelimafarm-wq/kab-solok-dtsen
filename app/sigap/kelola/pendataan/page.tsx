@@ -4,7 +4,7 @@
 //
 // (23 Okt 2026) Kelola Pendataan dibingkai Shell SIGAP (sidebar + topbar + tab) seperti Kelola Pelatihan -- permintaan user: halaman tanpa sidebar,
 // tombol "Beranda" salah arah, dan kelengkapan pendataan belum terpadu. Tab disusun RUNUT mengikuti alur kerja (lib/sigapPendataanTab.ts):
-//   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 Monitoring · 5 Pemeriksaan · 6 Administrasi & SPJ.
+//   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 QC Pemahaman (26 Okt) · 5 Monitoring · 6 Pemeriksaan · 7 Administrasi & SPJ.
 // Isi lama dipindah APA ADANYA: Unggah daftar KK + Permintaan FASIH -> UnggahKk.tsx (tab 1), Siaran + KirimSatu (tab 3), Monitoring (tab 4).
 // Pilihan tab ikut di alamat (?tab=...); alamat lama ?tab=monitoring tetap berlaku, ?tab=unggah -> Persiapan.
 // Tab 5 (Pemeriksaan) MENYEMATKAN Identifikasi SLS, Lapangan, Foto (tahap 2); tab 2 (Tim.tsx) dan tab 6 (Administrasi.tsx) menyematkan komponen Admin Transport
@@ -19,6 +19,7 @@ import KirimSatu from "./KirimSatu";
 import Monitoring from "./Monitoring";
 import Administrasi from "./Administrasi";
 import Pemeriksaan from "./Pemeriksaan";
+import QcPemahaman from "./QcPemahaman";
 import Ringkasan from "./Ringkasan";
 import Siaran from "./Siaran";
 import Tim from "./Tim";
@@ -63,6 +64,7 @@ export default function KelolaPendataan() {
           <KirimSatu />
         </>
       )}
+      {tab === "qc" && <QcPemahaman />}
       {tab === "monitoring" && <Monitoring />}
       {tab === "pemeriksaan" && <Pemeriksaan />}
       {tab === "administrasi" && <Administrasi />}

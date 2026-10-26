@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
+import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_QC, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
 
 describe("TAB_PENDATAAN", () => {
   it("urutan runut mengikuti alur kerja; kode unik; Ringkasan paling depan", () => {
-    expect(TAB_PENDATAAN.map((t) => t.kode)).toEqual(["ringkasan", "persiapan", "tim", "siaran", "monitoring", "pemeriksaan", "administrasi"]);
+    expect(TAB_PENDATAAN.map((t) => t.kode)).toEqual(["ringkasan", "persiapan", "tim", "siaran", "qc", "monitoring", "pemeriksaan", "administrasi"]);
     expect(new Set(TAB_PENDATAAN.map((t) => t.kode)).size).toBe(TAB_PENDATAAN.length);
     expect(TAB_AWAL).toBe("ringkasan");
   });
-  it("tab bernomor 1-6 berurutan", () => {
+  it("tab bernomor 1-7 berurutan", () => {
     const nomor = TAB_PENDATAAN.map((t) => /^(\d) ·/.exec(t.label)?.[1]).filter(Boolean);
-    expect(nomor).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(nomor).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
   });
   it("label ditemukan per kode", () => {
-    expect(labelTabPendataan("monitoring")).toBe("4 · Monitoring");
+    expect(labelTabPendataan("monitoring")).toBe("5 · Monitoring");
+    expect(labelTabPendataan("qc")).toBe("4 · QC Pemahaman");
   });
 });
 
@@ -98,7 +99,8 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
   it("daftar, urutan, dan peta per tab", () => {
     expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
     expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "pengadaan", "anggaran"]);
-    expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "tim"]);
+    expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "qc", "tim"]);
+    expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal"]);
     expect(KEGIATAN_PENDATAAN).toBe(1);
   });
   it("bacaSubDari: dikenal -> itu; selain itu sub pertama", () => {
@@ -114,6 +116,25 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
     expect(urlTabPendataan(P, "?tab=tim&sub=penugasan", "tim")).toBe(`${P}?tab=tim&sub=penugasan`);
     expect(urlTabPendataan(P, "?tab=tim&sub=penugasan", "administrasi")).toBe(`${P}?tab=administrasi`);
     expect(urlTabPendataan(P, "?tab=administrasi&sub=tarif", "siaran")).toBe(`${P}?tab=siaran`);
+  });
+});
+
+describe("tab QC Pemahaman (26 Okt 2026)", () => {
+  const P = "/sigap/kelola/pendataan";
+  it("terletak di tengah, antara Siaran dan Monitoring; alamat ?tab=qc dikenal", () => {
+    const k = TAB_PENDATAAN.map((t) => t.kode);
+    expect(k.indexOf("qc")).toBe(k.indexOf("siaran") + 1);
+    expect(k.indexOf("qc")).toBe(k.indexOf("monitoring") - 1);
+    expect(bacaTabPendataan("QC")).toBe("qc");
+  });
+  it("?sub hidup di tab qc bila tab sama, hilang saat pindah tab", () => {
+    expect(urlTabPendataan(P, "?tab=qc&sub=soal", "qc")).toBe(`${P}?tab=qc&sub=soal`);
+    expect(urlTabPendataan(P, "?tab=qc&sub=soal", "monitoring")).toBe(`${P}?tab=monitoring`);
+    expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc&sub=soal", "hari")).toBe(`${P}?tab=qc`);
+    expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc", "pengaturan")).toBe(`${P}?tab=qc&sub=pengaturan`);
+  });
+  it("tidak punya pintu masuk (isinya tersemat)", () => {
+    expect(PINTU_TAB.qc).toBeUndefined();
   });
 });
 
