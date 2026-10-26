@@ -11,7 +11,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import Sorot from "@/app/portal/qc/Sorot";
 import { tglPanjang } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan } from "../../admin/ui";
-import { labelStatusPpl, menitKeJam, jamKeMenit, type QcPengaturan, type QcRekapTim } from "@/lib/sigapQc";
+import { labelStatusPpl, menitKeJam, jamKeMenit, ringkasStatusQc, type QcPengaturan, type QcRekapTim } from "@/lib/sigapQc";
 import { SUB_QC } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
 
@@ -208,18 +208,23 @@ function HariIni({ d, kirim }: { d: Data; kirim: Kirim }) {
 // ====================================================================== Pengaturan
 function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
   const p = d.pengaturan;
-  const [f, setF] = useState(() => ({
-    aktif: p?.aktif ?? false,
-    rilis_jam: jam(p?.rilis_jam ?? "19:00"),
-    batas_jam: jam(p?.batas_jam ?? "20:00"),
-    rekap_jam: jam(p?.rekap_jam ?? "07:00"),
-    soal_per_hari: String(p?.soal_per_hari ?? 10),
-    maks_ulang: String(p?.maks_ulang ?? 3),
-    ingat_menit: (p?.ingat_menit ?? [30, 50]).join(", "),
-    ingat_berkala_menit: String(p?.ingat_berkala_menit ?? 60),
-    mulai: p?.mulai ?? "",
-    akhir: p?.akhir ?? "",
-  }));
+  const awal = (x: Peng | null) => ({
+    aktif: x?.aktif ?? false,
+    rilis_jam: jam(x?.rilis_jam ?? "19:00"),
+    batas_jam: jam(x?.batas_jam ?? "20:00"),
+    rekap_jam: jam(x?.rekap_jam ?? "07:00"),
+    soal_per_hari: String(x?.soal_per_hari ?? 10),
+    maks_ulang: String(x?.maks_ulang ?? 3),
+    ingat_menit: (x?.ingat_menit ?? [30, 50]).join(", "),
+    ingat_berkala_menit: String(x?.ingat_berkala_menit ?? 60),
+    mulai: x?.mulai ?? "",
+    akhir: x?.akhir ?? "",
+  });
+  const [f, setF] = useState(() => awal(p));
+  // (27 Okt 2026) formulir berbeda dari yang tersimpan di server = ada perubahan yang BELUM berlaku
+  const belumDisimpan = JSON.stringify(f) !== JSON.stringify(awal(p));
+  // keadaan menurut pengaturan yang TERSIMPAN (yang dialami petugas sekarang), bukan isi formulir
+  const status = p ? ringkasStatusQc(new Date(d.sekarang), p, !!d.susulan_at) : null;
   const [sibuk, setSibuk] = useState(false);
   const ubah = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
   const simpan = async () => {
@@ -243,7 +248,7 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
           akhir: f.akhir || null,
         },
       },
-      f.aktif ? "Pengaturan disimpan. QC Pemahaman AKTIF." : "Pengaturan disimpan. QC Pemahaman nonaktif."
+      f.aktif ? "Tersimpan dan sudah berlaku sekarang. QC Pemahaman AKTIF." : "Tersimpan dan sudah berlaku sekarang. QC Pemahaman nonaktif: petugas tidak lagi melihat soal."
     );
     setSibuk(false);
   };
@@ -253,6 +258,17 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
   return (
     <Kartu judul="Pengaturan QC Pemahaman" ket={p?.diubah_oleh ? `terakhir diubah oleh ${p.diubah_oleh}` : "belum pernah disimpan"}>
       <div className="space-y-3">
+        {status ? (
+          <div role="status" className={`rounded-lg border px-3 py-2.5 ${status.status === "berjalan" || status.status === "susulan" ? "border-[#A8DDBF] bg-[#EAF7F0]" : status.status === "belum_mulai" ? "border-[#BFD0F0] bg-[#EAF1FF]" : "border-[#DDE6F3] bg-[#F8FAFC]"}`}>
+            <p className="text-[13.5px] font-extrabold text-[#0F2A52]">Yang berlaku sekarang: {status.judul}</p>
+            {status.baris.map((b) => (
+              <p key={b} className="mt-0.5 text-[12.5px] leading-snug text-[#33455F]">{b}</p>
+            ))}
+            <p className="mt-1 text-[11.5px] text-[#6B7A90]">Ini keadaan pengaturan yang sudah tersimpan di server, bukan isi formulir di bawah.</p>
+          </div>
+        ) : (
+          <div role="status" className="rounded-lg border border-[#DDE6F3] bg-[#F8FAFC] px-3 py-2.5 text-[12.5px] text-[#33455F]">Belum ada pengaturan tersimpan. QC belum berlaku.</div>
+        )}
         <label className="flex items-center gap-2.5 rounded-lg border border-[#DDE6F3] bg-[#F8FAFC] px-3 py-2.5">
           <input type="checkbox" className="h-5 w-5 accent-[#1F5FD1]" disabled={!bisa} checked={f.aktif} onChange={(e) => ubah("aktif", e.target.checked)} />
           <span className="text-[13.5px] font-bold text-[#0F2A52]">Aktifkan QC Pemahaman Petugas (modal wajib untuk PML dan PPL Pendataan Pascabencana)</span>
@@ -307,9 +323,17 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
           Bank soal aktif: <b>{soalAktif}</b> butir dari {new Set(d.soal.filter((s) => s.aktif).map((s) => s.paket)).size} paket. Tiap hari diundi {f.soal_per_hari || "…"} soal yang sama untuk semua petugas, setiap paket terwakili.
         </p>
         {bisa && (
-          <button type="button" className={BTN_G} disabled={sibuk} onClick={simpan}>
-            {sibuk ? "Menyimpan…" : "Simpan pengaturan"}
-          </button>
+          <div className="space-y-2">
+            {belumDisimpan && <Pesan jenis="peringatan">Ada perubahan yang belum disimpan, jadi belum berlaku bagi petugas.</Pesan>}
+            <button type="button" className={BTN_G} disabled={sibuk} onClick={simpan}>
+              {sibuk ? "Menyimpan…" : "Simpan dan terapkan sekarang"}
+            </button>
+            <ul className="list-disc space-y-0.5 pl-5 text-[12px] leading-snug text-[#6B7A90]">
+              <li>Menyimpan langsung berlaku. Tidak ada tahap draf. Modal petugas mengikuti pengaturan terbaru saat dibuka, termasuk untuk hari yang sedang berjalan.</li>
+              <li>Notifikasi dikirim oleh Railway Cron yang berjalan tiap 5 menit, jadi jam baru dipakai mulai putaran berikutnya.</li>
+              <li>Soal hari ini yang sudah diundi tidak berubah walau jumlah soal diganti. Undi ulang bisa di sub Hari ini selama belum ada yang menjawab.</li>
+            </ul>
+          </div>
         )}
       </div>
     </Kartu>

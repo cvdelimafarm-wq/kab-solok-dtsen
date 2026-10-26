@@ -128,6 +128,59 @@ export function teksSisaWaktu(j: Pick<JendelaQc, "lewatBatas" | "sisaMenit">, su
 }
 
 // ---------------------------------------------------------------------------
+// Ringkasan status QC untuk admin (27 Okt 2026): "pengaturan yang tersimpan sekarang berlaku apa"
+// ---------------------------------------------------------------------------
+
+export type StatusQc = { status: "nonaktif" | "belum_mulai" | "berjalan" | "susulan" | "selesai" | "tidak_sah"; judul: string; baris: string[] };
+
+const BULAN_PENDEK = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+/** "2026-10-27" -> "27 Okt 2026" */
+export function tanggalPendekQc(t: string): string {
+  const [y, m, d] = t.split("-").map(Number);
+  return `${d} ${BULAN_PENDEK[(m || 1) - 1] ?? ""} ${y}`;
+}
+
+/**
+ * Keadaan QC menurut pengaturan yang TERSIMPAN (bukan isi formulir yang belum disimpan), dihitung dari jam sekarang.
+ * Aturan sama dengan sigap_qc_status / hariBerlaku / jendelaQc, jadi apa yang tertulis di sini = apa yang dialami petugas.
+ */
+export function ringkasStatusQc(now: Date, p: Pick<QcPengaturan, "aktif" | "rilis_jam" | "batas_jam" | "mulai" | "akhir">, susulan = false): StatusQc {
+  const rilis = jamKeMenit(p.rilis_jam);
+  const batas = jamKeMenit(p.batas_jam);
+  if (rilis === null || batas === null) return { status: "tidak_sah", judul: "Pengaturan jam belum sah", baris: ["Periksa jam rilis dan jam batas, lalu simpan."] };
+  if (!p.aktif) return { status: "nonaktif", judul: "Nonaktif", baris: ["Petugas tidak melihat soal QC dan tidak ada notifikasi QC.", "Centang Aktifkan lalu simpan untuk mulai berlaku."] };
+
+  const jamRilis = menitKeJam(rilis);
+  const jamBatas = menitKeJam(batas);
+  const hari = hariBerlaku(now, p);
+  if (!hari) {
+    if (p.mulai && instanWib(p.mulai, rilis).getTime() > now.getTime()) {
+      return { status: "belum_mulai", judul: "Aktif, belum mulai", baris: [`Soal pertama dirilis ${tanggalPendekQc(p.mulai)} pukul ${jamRilis} WIB.`, "Sebelum itu petugas belum melihat modal QC."] };
+    }
+    return { status: "selesai", judul: "Periode sudah selesai", baris: [p.akhir ? `Periode berakhir ${tanggalPendekQc(p.akhir)}. Petugas tidak lagi melihat modal QC.` : "Petugas tidak melihat modal QC."] };
+  }
+  const j = jendelaQc(now, p, susulan);
+  const baris: string[] = [];
+  let status: StatusQc["status"] = "berjalan";
+  let judul = "Aktif dan berlaku";
+  if (susulan) {
+    status = "susulan";
+    judul = "Aktif, hari susulan";
+    baris.push(`Soal ${tanggalPendekQc(hari)} ditandai susulan: tanpa label terlambat, petugas yang belum 100 tetap terkunci modal.`);
+  } else if (j?.lewatBatas) {
+    baris.push(`Soal ${tanggalPendekQc(hari)} (dirilis ${jamRilis}) sudah lewat batas ${jamBatas}. Petugas yang belum selesai tetap terkunci modal dan tercatat terlambat.`);
+  } else {
+    const m = j ? Math.max(j.sisaMenit, 0) : null;
+    const sisa = m === null ? "" : m < 60 ? `, sisa ${m} menit` : `, sisa ${Math.floor(m / 60)} jam${m % 60 ? ` ${m % 60} menit` : ""}`;
+    baris.push(`Soal ${tanggalPendekQc(hari)} sudah dirilis pukul ${jamRilis}. Batas pengisian pukul ${jamBatas}${sisa}.`);
+  }
+  const besok = geserHari(hari, 1);
+  if (!p.akhir || besok <= p.akhir) baris.push(`Soal berikutnya dirilis ${tanggalPendekQc(besok)} pukul ${jamRilis} WIB.`);
+  else baris.push(`Hari ini hari terakhir periode (${tanggalPendekQc(p.akhir)}).`);
+  return { status, judul, baris };
+}
+
+// ---------------------------------------------------------------------------
 // Sorotan kata kunci (soal, pilihan jawaban, pembahasan)
 // ---------------------------------------------------------------------------
 export type Segmen = { teks: string; sorot: boolean };

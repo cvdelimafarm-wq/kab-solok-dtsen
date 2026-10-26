@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   bagianWib, jamKeMenit, menitKeJam, geserHari, instanWib, hariBerlaku, jendelaQc, teksSisaWaktu, sorotKata, hitungSkor, labelPercobaan, labelStatusPpl,
-  rencanaAksi, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, type QcPengaturan, type QcRekapTim,
+  rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, type QcPengaturan, type QcRekapTim,
 } from "../sigapQc";
 
 const P: QcPengaturan = { aktif: true, rilis_jam: "19:00", batas_jam: "20:00", soal_per_hari: 10, maks_ulang: 3, rekap_jam: "07:00", ingat_menit: [30, 50], ingat_berkala_menit: 60, mulai: null, akhir: null };
@@ -313,5 +313,42 @@ describe("validasiSoal", () => {
     expect(validasiSoal({ ...dasar, paket: 0 })).toMatchObject({ ok: false });
     expect(validasiSoal({ ...dasar, id: "" })).toMatchObject({ ok: false });
     expect(validasiSoal(null)).toMatchObject({ ok: false });
+  });
+});
+
+describe("ringkasStatusQc (apa yang berlaku sekarang menurut pengaturan tersimpan)", () => {
+  const Q = { ...P, mulai: "2026-10-27", akhir: "2026-11-07", rilis_jam: "05:30", batas_jam: "20:00" };
+  it("tanggalPendekQc", () => expect(tanggalPendekQc("2026-10-27")).toBe("27 Okt 2026"));
+  it("nonaktif", () => {
+    const r = ringkasStatusQc(wib("2026-10-27", "10:00"), { ...Q, aktif: false });
+    expect(r.status).toBe("nonaktif");
+  });
+  it("aktif tetapi sebelum rilis pertama = belum mulai", () => {
+    const r = ringkasStatusQc(wib("2026-10-27", "04:53"), Q);
+    expect(r.status).toBe("belum_mulai");
+    expect(r.baris[0]).toContain("27 Okt 2026 pukul 05:30");
+  });
+  it("sesudah rilis, sebelum batas = berjalan dengan sisa waktu dan rilis berikutnya", () => {
+    const r = ringkasStatusQc(wib("2026-10-27", "18:00"), Q);
+    expect(r.status).toBe("berjalan");
+    expect(r.baris[0]).toContain("dirilis pukul 05:30");
+    expect(r.baris[0]).toContain("sisa 2 jam");
+    expect(r.baris[1]).toContain("28 Okt 2026 pukul 05:30");
+  });
+  it("sesudah batas: tetap terkunci dan terlambat", () => {
+    const r = ringkasStatusQc(wib("2026-10-27", "21:00"), Q);
+    expect(r.status).toBe("berjalan");
+    expect(r.baris[0]).toContain("lewat batas 20:00");
+  });
+  it("hari susulan", () => {
+    const r = ringkasStatusQc(wib("2026-10-27", "21:00"), Q, true);
+    expect(r.status).toBe("susulan");
+  });
+  it("hari terakhir periode dan sesudah periode", () => {
+    expect(ringkasStatusQc(wib("2026-11-07", "10:00"), Q).baris[1]).toContain("hari terakhir");
+    expect(ringkasStatusQc(wib("2026-11-08", "06:00"), Q).status).toBe("selesai");
+  });
+  it("jam tidak sah", () => {
+    expect(ringkasStatusQc(new Date(), { ...Q, rilis_jam: "x" }).status).toBe("tidak_sah");
   });
 });
