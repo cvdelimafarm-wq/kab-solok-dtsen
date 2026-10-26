@@ -82,7 +82,7 @@ describe("susunTahap", () => {
   });
 
   it("identifikasi: teks menyebut 'Sub SLS identifikasi' (beda dengan Sub SLS pendataan)", () => {
-    const ket = (terisi: number) => susunTahap(K(INDUK([T("pendataan", 1, ["identifikasi"])], { identifikasi: { total: 31, terisi, hasil: 120 } })))[0].modul[0].ket;
+    const ket = (terisi: number) => susunTahap(K(INDUK([T("pendataan", 1, ["identifikasi"])], { identifikasi: { total: 31, terisi, tidak_terdampak: 0, hasil: 120 } })))[0].modul[0].ket;
     expect(ket(31)).toBe("Semua 31 Sub SLS identifikasi sudah terisi · 120 KK terdampak");
     expect(ket(10)).toBe("10 dari 31 Sub SLS identifikasi terisi");
     expect(ket(0)).toBe("Belum ada yang terisi · 31 Sub SLS identifikasi menunggu hasil");
