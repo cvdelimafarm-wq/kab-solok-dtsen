@@ -7,12 +7,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Catatan, Chip, tombolKecil } from "@/app/sigap/keu-ui";
+import { Catatan, Chip, Galat, kolom, label, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
 import { tglIndo } from "@/lib/keu/identifikasi";
 import { NAMA_AKUN } from "@/lib/keu/identifikasi";
 import { NAMA_PERAN } from "@/lib/keu/lanjutan";
 import { LABEL_MITRA, teksTenggat, type RingkasRekrutmen } from "@/lib/keu/rekrutmen";
 import { ringkasPengadaan, sisaHariButuh, teksDraf, urutkanPengadaan, type ItemPengadaan } from "@/lib/keu/pengadaan";
+import { LABEL_STATUS, URUTAN_STATUS, periksaCatatan, ringkasStatus, statusBerikut, statusButir, type CatatanStatus, type StatusPengadaan } from "@/lib/keu/statusPengadaan";
 import { Bagian, Poin } from "../../Kontrol";
 
 export const ID_KB = { rekrutmen: "kb-rekrutmen", pengadaan: "kb-pengadaan" } as const;
@@ -110,12 +111,75 @@ function ChipButuh({ it, hariIni }: { it: ItemPengadaan; hariIni: string }) {
   return <Chip warna={sisa <= 14 ? "kuning" : "biru"}>{sisa} hari lagi</Chip>;
 }
 
-export function KartuPengadaan({ identId, ro, judul, daftar, hariIni, dariAwal, halamanIni }: {
-  identId: number; ro: string; judul: string; daftar: ItemPengadaan[]; hariIni: string; dariAwal: boolean; halamanIni: string;
+/** Pelacakan satu butir: status terkini dan pengubah sebaris. Basis data yang memutuskan hak; galat ditampilkan apa adanya. */
+export type PelacakanProps = {
+  tersedia: boolean;
+  peta: ReadonlyMap<string, CatatanStatus>;
+  mengirim: boolean;
+  galat: string | null;
+  hapusGalat: () => void;
+  catat: (it: Pick<ItemPengadaan, "id" | "uraian">, status: StatusPengadaan, rujukan: string, catatan: string) => Promise<boolean>;
+};
+
+function SelPelacakan({ it, p }: { it: ItemPengadaan; p: PelacakanProps }) {
+  const [buka, setBuka] = useState(false);
+  const cat = p.peta.get(it.id);
+  const sekarang = statusButir(p.peta, it.id);
+  const [status, setStatus] = useState<StatusPengadaan>(sekarang);
+  const [rujukan, setRujukan] = useState(cat?.rujukan ?? "");
+  const [catatan, setCatatan] = useState(cat?.catatan ?? "");
+  const [salah, setSalah] = useState<string | null>(null);
+  const mulai = () => { setStatus(statusBerikut(sekarang) ?? sekarang); setRujukan(cat?.rujukan ?? ""); setCatatan(cat?.catatan ?? ""); setSalah(null); p.hapusGalat(); setBuka(true); };
+  const simpan = async () => {
+    const g = periksaCatatan(status, rujukan, catatan);
+    if (g) { setSalah(g); return; }
+    setSalah(null);
+    if (await p.catat(it, status, rujukan, catatan)) setBuka(false);
+  };
+  const info = LABEL_STATUS[sekarang];
+  return (
+    <div>
+      <Chip warna={info.warna}>{info.teks}</Chip>
+      {cat && cat.rujukan && <div className="mt-0.5 text-[11.5px] text-[#44546F]">{cat.rujukan}</div>}
+      {cat && cat.catatan && <div className="text-[11.5px] text-[#5B6B84]">{cat.catatan}</div>}
+      {cat && cat.oleh && cat.status !== "belum" && <div className="text-[11px] text-[#7A8AA3]">{cat.oleh}{cat.waktu ? `, ${tglIndo(cat.waktu.slice(0, 10))}` : ""}</div>}
+      {!buka ? (
+        <button type="button" className={`${tombolKecil} mt-1 !min-h-[32px] !px-2 !text-[12px]`} onClick={mulai}>Ubah status</button>
+      ) : (
+        <div className="mt-1.5 grid w-[220px] max-w-full gap-1.5 rounded-md border border-[#DCE3EE] bg-[#F7F9FC] p-2">
+          <div>
+            <label className={label} htmlFor={`st-${it.id}`}>Status</label>
+            <select id={`st-${it.id}`} className={kolom} value={status} onChange={(e) => setStatus(e.target.value as StatusPengadaan)}>
+              {URUTAN_STATUS.map((s) => <option key={s} value={s}>{LABEL_STATUS[s].teks}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label} htmlFor={`rj-${it.id}`}>Rujukan (nomor permintaan, SPK, atau kontrak)</label>
+            <input id={`rj-${it.id}`} className={kolom} maxLength={100} value={rujukan} onChange={(e) => setRujukan(e.target.value)} />
+          </div>
+          <div>
+            <label className={label} htmlFor={`ct-${it.id}`}>Catatan{status === "batal" ? " (wajib: alasan pembatalan)" : ""}</label>
+            <input id={`ct-${it.id}`} className={kolom} maxLength={300} value={catatan} onChange={(e) => setCatatan(e.target.value)} />
+          </div>
+          <Galat pesan={salah ?? p.galat} />
+          <div className="flex gap-1.5">
+            <button type="button" className={tombolUtama} disabled={p.mengirim} onClick={() => void simpan()}>{p.mengirim ? "Menyimpan..." : "Simpan"}</button>
+            <button type="button" className={tombolKecil} disabled={p.mengirim} onClick={() => { setBuka(false); setSalah(null); p.hapusGalat(); }}>Batal</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function KartuPengadaan({ identId, ro, judul, daftar, hariIni, dariAwal, halamanIni, pelacakan }: {
+  identId: number; ro: string; judul: string; daftar: ItemPengadaan[]; hariIni: string; dariAwal: boolean; halamanIni: string; pelacakan: PelacakanProps;
 }) {
   const [salinan, setSalinan] = useState<"" | "ok" | "gagal">("");
   const urut = urutkanPengadaan(daftar);
   const ringkas = ringkasPengadaan(daftar);
+  const lacak = pelacakan.tersedia;
+  const rs = ringkasStatus(daftar, pelacakan.peta);
   const salin = async () => {
     try { await navigator.clipboard.writeText(teksDraf(daftar, judul, ro)); setSalinan("ok"); } catch { setSalinan("gagal"); }
   };
@@ -134,13 +198,23 @@ export function KartuPengadaan({ identId, ro, judul, daftar, hariIni, dariAwal, 
             {ringkas.perluDilengkapi > 0 && <Chip warna="kuning">{ringkas.perluDilengkapi} perlu dilengkapi</Chip>}
             {ringkas.perkiraan > 0 && <Chip warna="abu">{ringkas.perkiraan} masih Perkiraan</Chip>}
             <Chip warna={ringkas.denganNilai > 0 ? "biru" : "abu"}>{ringkas.denganNilai > 0 ? `${rp(ringkas.total)} dari ${ringkas.denganNilai} item bertarif` : "belum ada item bertarif"}</Chip>
+            {lacak && rs.per.diajukan + rs.per.diproses > 0 && <Chip warna="biru">{rs.per.diajukan + rs.per.diproses} diajukan atau diproses</Chip>}
+            {lacak && rs.per.selesai > 0 && <Chip warna="hijau">{rs.per.selesai} selesai</Chip>}
+            {lacak && rs.per.batal > 0 && <Chip warna="merah">{rs.per.batal} dibatalkan</Chip>}
           </div>
+          {lacak && rs.diajukanBelumLengkap > 0 && <Catatan>{rs.diajukanBelumLengkap} butir sudah diajukan atau diproses padahal draf masih memuat hal yang perlu dilengkapi; periksa kembali kelas pada lanjutan.</Catatan>}
+          {lacak && rs.yatim.length > 0 && (
+            <Catatan>
+              Ada status tercatat untuk butir yang tidak lagi ada pada draf (mis. kelas dihapus atau diganti): {rs.yatim.map((y) => `${y.uraian} (${LABEL_STATUS[y.status].teks})`).join("; ")}. Catatan lama tetap tersimpan di riwayat identifikasi.
+            </Catatan>
+          )}
+          {!lacak && !pelacakan.mengirim && <p className="m-0 text-[12.5px] text-[#5B6B84]">Pelacakan status pengadaan belum aktif di basis data; daftar tetap dapat dibaca dan disalin.</p>}
           <div className="min-w-0 overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
+            <table className={`w-full ${lacak ? "min-w-[980px]" : "min-w-[760px]"} border-collapse text-left text-[12.5px]`}>
               <thead>
                 <tr className="border-b border-[#DCE3EE] text-[#5B6B84]">
                   <th className="py-1.5 pr-2 font-semibold">Barang atau jasa</th><th className="pr-2 font-semibold">Akun</th><th className="pr-2 text-right font-semibold">Volume</th>
-                  <th className="pr-2 font-semibold">Dibutuhkan</th><th className="pr-2 text-right font-semibold">Perkiraan nilai</th><th className="font-semibold">Status</th>
+                  <th className="pr-2 font-semibold">Dibutuhkan</th><th className="pr-2 text-right font-semibold">Perkiraan nilai</th><th className="pr-2 font-semibold">Kelengkapan</th>{lacak && <th className="font-semibold">Pelacakan</th>}
                 </tr>
               </thead>
               <tbody>
@@ -155,10 +229,11 @@ export function KartuPengadaan({ identId, ro, judul, daftar, hariIni, dariAwal, 
                     <td className="pr-2 text-right tabular-nums">{it.volume === null ? "—" : `${it.volume.toLocaleString("id-ID")} ${it.satuan}`}</td>
                     <td className="pr-2">{it.butuhMulai ? (it.butuhSelesai && it.butuhSelesai !== it.butuhMulai ? `${tglIndo(it.butuhMulai)} s.d. ${tglIndo(it.butuhSelesai)}` : tglIndo(it.butuhMulai)) : "—"}<div className="mt-0.5"><ChipButuh it={it} hariIni={hariIni} /></div></td>
                     <td className="pr-2 text-right tabular-nums">{it.nilai === null ? "—" : rp(it.nilai)}{it.tarif !== null && <div className="text-[11.5px] text-[#5B6B84]">tarif {rp(it.tarif)}</div>}</td>
-                    <td>
+                    <td className="pr-2">
                       {it.perlu.length === 0 ? <Chip warna="hijau">Lengkap</Chip> : <Chip warna="kuning">Perlu dilengkapi</Chip>}
                       {it.perlu.length > 0 && <div className="mt-0.5 text-[11.5px] text-[#5B6B84]">{it.perlu.join("; ")}</div>}
                     </td>
+                    {lacak && <td><SelPelacakan key={`${it.id}-${statusButir(pelacakan.peta, it.id)}`} it={it} p={pelacakan} /></td>}
                   </tr>
                 ))}
               </tbody>

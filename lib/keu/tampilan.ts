@@ -72,6 +72,8 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_ident_acuan: ["ident_id", "tahun", "ro_kode", "nama", "ident_ver", "form_sah", "upd", "lanjutan_ada", "lanjutan_ver", "lanjutan_status", "pasca_h15", "lanjutan_isi", "kebijakan_id", "kebijakan_ver", "sumber"],
   keu_v_ident_kegiatan: ["id", "ident_id", "kegiatan_id", "fungsi", "disarankan", "catatan", "ditautkan_at", "ditautkan_oleh_nama", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "n_penugasan"],
   keu_v_kegiatan_calon: ["ident_id", "kegiatan_id", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "disarankan", "tertaut"],
+  keu_v_ident_pengadaan: ["id", "ident_id", "item", "uraian", "status", "rujukan", "catatan", "diubah_at", "diubah_oleh_nama"],
+  keu_v_ident_pengadaan_jejak: ["id", "ident_id", "item", "uraian", "dari", "ke", "rujukan", "catatan", "waktu", "oleh_nama"],
   keu_v_gap: ["id", "ident_id", "ro_kode", "tahun", "nama", "ver", "jenis", "temuan", "ringkas", "n_keras", "n_sedang", "n_info", "lanjutan_ver", "dibuat_oleh_nama", "dibuat_at"],
   keu_v_gap_tanggapan: ["id", "gap_id", "ident_id", "kunci", "status", "catatan", "oleh_nama", "at"],
   keu_v_gap_terbaru: ["ident_id", "ver", "jenis", "n_keras", "n_sedang", "n_info", "dibuat_at"],

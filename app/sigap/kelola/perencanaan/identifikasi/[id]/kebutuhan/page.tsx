@@ -5,6 +5,7 @@
 // (26 Okt 2026, tahap 34) Kebutuhan hilir dari identifikasi: rekrutmen mitra dan draf pengadaan. Halaman ini hanya MEMBACA identifikasi lanjutan (atau perkiraan dari
 // identifikasi awal bila lanjutan belum disimpan) dan lembar kebijakan yang berlaku; tidak ada yang tertulis, tidak ada yang memblokir. Data: keu_v_ident, keu_v_ident_lanjutan,
 // keu_v_ident_dokumen, keu_v_kebijakan_berlaku (semua lewat gerbang baca). Aturan: lib/keu/rekrutmen.ts dan lib/keu/pengadaan.ts.
+// (tahap 35) Satu-satunya yang tertulis: status pelacakan pengadaan per butir (keu_v_ident_pengadaan dibaca, keu_pengadaan_catat ditulis); tidak memblokir apa pun.
 
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
@@ -20,6 +21,7 @@ import { hariIniWib, useIdent } from "../../useIdent";
 import { loncat } from "../../Kontrol";
 import { useLanjutan } from "../lanjutan/useLanjutan";
 import { ID_KB, KartuPengadaan, KartuRekrutmen } from "./Kartu";
+import { useStatusPengadaan } from "./useStatusPengadaan";
 
 function Isi() {
   const { id: idParam } = useParams<{ id: string }>();
@@ -27,6 +29,7 @@ function Isi() {
   const ident = useIdent(id);
   const row = ident.row;
   const lj = useLanjutan(id, row?.tahun ?? null, row?.ro_kode ?? null);
+  const sp = useStatusPengadaan(id);
   const hariIni = hariIniWib();
 
   const formSah = useMemo(() => (row && row.ver >= 1 && row.form_sah ? normalisasi(row.form_sah) : null), [row]);
@@ -82,7 +85,7 @@ function Isi() {
             {rekrutmen && isi && (
               <div className="grid min-w-0 items-start gap-3.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <KartuRekrutmen identId={row.id} r={rekrutmen} dariAwal={dariAwal} />
-                <KartuPengadaan identId={row.id} ro={ro} judul={row.nama} daftar={pengadaan} hariIni={hariIni} dariAwal={dariAwal} halamanIni={halamanIni} />
+                <KartuPengadaan identId={row.id} ro={ro} judul={row.nama} daftar={pengadaan} hariIni={hariIni} dariAwal={dariAwal} halamanIni={halamanIni} pelacakan={{ tersedia: sp.tersedia, peta: sp.peta, mengirim: sp.mengirim, galat: sp.galat, hapusGalat: sp.hapusGalat, catat: sp.catat }} />
               </div>
             )}
           </>

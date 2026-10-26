@@ -15,6 +15,8 @@ export type KelompokPengadaan = "Pelatihan" | "Rapat" | "Pendataan" | "Diseminas
 
 export type ItemPengadaan = {
   kunci: string;
+  /** Kode TETAP butir (tidak bergeser bila susunan berubah): dipakai untuk menyimpan status pengadaan. Hanya a-z, 0-9, titik dua, garis bawah, strip; maksimal 80. */
+  id: string;
   kelompok: KelompokPengadaan;
   jenis: JenisPengadaan;
   uraian: string;
@@ -43,6 +45,9 @@ const tgl = (t: string): string | null => (tglValid(t) ? t : null);
 const ada = (s: string): boolean => s.replace(/^ +| +$/g, "") !== "";
 const awalTerkecil = (a: (string | null)[]): string | null => { const x = a.filter((t): t is string => t !== null).sort(); return x.length ? x[0] : null; };
 const akhirTerbesar = (a: (string | null)[]): string | null => { const x = a.filter((t): t is string => t !== null).sort(); return x.length ? x[x.length - 1] : null; };
+
+/** Kode tetap yang aman bagi basis data: huruf kecil, angka, titik dua, garis bawah, strip. */
+export const kodeTetap = (...bagian: string[]): string => bagian.map((b) => b.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")).filter((b) => b !== "").join(":").slice(0, 80);
 
 const namaKelas = (k: Kelas): string => k.nama || (k.sesi === "briefing" ? "Briefing" : "Pelatihan");
 
@@ -82,7 +87,9 @@ export function susunPengadaan(
   const tambah = (b: Omit<ItemPengadaan, "kunci" | "nilai"> & { nilai?: number | null }): void => {
     n += 1;
     const nilai = b.nilai !== undefined ? b.nilai : b.volume !== null && b.tarif !== null ? b.volume * b.tarif : null;
-    out.push({ ...b, kunci: `pg${n}`, nilai });
+    let id = b.id; let c = 2;
+    while (out.some((o) => o.id === id)) { id = `${b.id.slice(0, 74)}-${c}`; c += 1; } // dua kelas tanpa kode tidak boleh berbagi satu kode
+    out.push({ ...b, id, kunci: `pg${n}`, nilai });
   };
 
   // ----- kelas pelatihan dan briefing
@@ -108,7 +115,7 @@ export function susunPengadaan(
         if (peserta === 0) perlu.push("jumlah peserta belum diketahui");
         if (k.oh === 0) perlu.push("jumlah OH belum diisi");
         tambah({
-          kelompok: "Pelatihan", jenis: "Paket meeting", uraian, akun, volume: oh || null, satuan: "orang-hari", tarif: r?.tarif ?? null, tempat: tempatTeks, paket: k.paket,
+          id: kodeTetap(k.id, "paket"), kelompok: "Pelatihan", jenis: "Paket meeting", uraian, akun, volume: oh || null, satuan: "orang-hari", tarif: r?.tarif ?? null, tempat: tempatTeks, paket: k.paket,
           butuhMulai: mulai, butuhSelesai: selesai, perkiraan: !k.fix, perlu, catatan: r && r.catatan ? [r.catatan] : [],
         });
       } else {
@@ -119,7 +126,7 @@ export function susunPengadaan(
         if (peserta === 0) perlu.push("jumlah peserta belum diketahui");
         if (k.oh === 0) perlu.push("jumlah OH belum diisi");
         tambah({
-          kelompok: "Pelatihan", jenis: "Konsumsi", uraian, akun, volume: oh || null, satuan: "orang-hari", tarif: r?.tarif ?? null, tempat: k.tempat ? tempatTeks : "", paket: "",
+          id: kodeTetap(k.id, "konsumsi"), kelompok: "Pelatihan", jenis: "Konsumsi", uraian, akun, volume: oh || null, satuan: "orang-hari", tarif: r?.tarif ?? null, tempat: k.tempat ? tempatTeks : "", paket: "",
           butuhMulai: mulai, butuhSelesai: selesai, perkiraan: !k.fix, perlu, catatan: r && r.catatan ? [r.catatan] : [],
         });
       }
@@ -128,7 +135,7 @@ export function susunPengadaan(
       const perlu = [...tanggalKurang];
       if (peserta === 0) perlu.push("jumlah peserta belum diketahui");
       tambah({
-        kelompok: "Pelatihan", jenis: "Perlengkapan", uraian: `${nama}: perlengkapan pelatihan`, akun: "521211", volume: peserta || null, satuan: "paket", tarif: null, tempat: k.tempat ? tempatTeks : "", paket: "",
+        id: kodeTetap(k.id, "perlengkapan"), kelompok: "Pelatihan", jenis: "Perlengkapan", uraian: `${nama}: perlengkapan pelatihan`, akun: "521211", volume: peserta || null, satuan: "paket", tarif: null, tempat: k.tempat ? tempatTeks : "", paket: "",
         butuhMulai: mulai, butuhSelesai: selesai, perkiraan: !k.fix, perlu: [...perlu, "jenis dan harga perlengkapan belum diidentifikasi"], catatan: [],
       });
     }
@@ -140,7 +147,7 @@ export function susunPengadaan(
       const perlu = [...tanggalKurang];
       if (vol === 0) perlu.push("jumlah peserta mitra belum diketahui");
       tambah({
-        kelompok: "Pelatihan", jenis: "Pulsa", uraian, akun: "521211", volume: vol || null, satuan: "orang", tarif: r?.tarif ?? null, tempat: "", paket: "",
+        id: kodeTetap(k.id, "pulsa"), kelompok: "Pelatihan", jenis: "Pulsa", uraian, akun: "521211", volume: vol || null, satuan: "orang", tarif: r?.tarif ?? null, tempat: "", paket: "",
         butuhMulai: mulai, butuhSelesai: selesai, perkiraan: !k.fix, perlu, catatan: r && r.catatan ? [r.catatan] : [],
       });
     }
@@ -155,7 +162,7 @@ export function susunPengadaan(
     const uraian = `Konsumsi rapat ${nama} tatap muka`;
     const rr = cariRincian(rincian, "521211", uraian);
     tambah({
-      kelompok: "Rapat", jenis: "Konsumsi", uraian, akun: "521211", volume: null, satuan: "orang", tarif: rr?.tarif ?? null, tempat: "", paket: "",
+      id: kodeTetap("rapat", id), kelompok: "Rapat", jenis: "Konsumsi", uraian, akun: "521211", volume: null, satuan: "orang", tarif: rr?.tarif ?? null, tempat: "", paket: "",
       butuhMulai: null, butuhSelesai: null, perkiraan: false, perlu: ["tanggal rapat belum ditetapkan", "jumlah peserta rapat belum diidentifikasi"], catatan: rr && rr.catatan ? [rr.catatan] : [],
     });
   }
@@ -163,7 +170,7 @@ export function susunPengadaan(
   // ----- instrumen
   if (form.instrumen === "PAPI" && form.cetakPapi) {
     tambah({
-      kelompok: "Pendataan", jenis: "Penggandaan", uraian: "Penggandaan dokumen PAPI di kabupaten", akun: "521211", volume: null, satuan: "eksemplar", tarif: null, tempat: "", paket: "",
+      id: "papi", kelompok: "Pendataan", jenis: "Penggandaan", uraian: "Penggandaan dokumen PAPI di kabupaten", akun: "521211", volume: null, satuan: "eksemplar", tarif: null, tempat: "", paket: "",
       butuhMulai: mulaiData, butuhSelesai: mulaiData, perkiraan: false,
       perlu: [...(mulaiData === null ? ["jadwal pendataan belum lengkap"] : []), "jumlah eksemplar dan harga per lembar belum diidentifikasi"], catatan: ["Dibutuhkan paling lambat pada hari pertama pendataan."],
     });
@@ -171,7 +178,7 @@ export function susunPengadaan(
   if (form.instrumen === "FASIH" && !adaPulsaPeserta && form.pulsaLap) {
     const petugas = isi.petugas.length > 0 ? isi.petugas.length : Object.values(isi.peran).reduce((s, x) => s + (x.on ? x.nOrg + x.nMit : 0), 0);
     tambah({
-      kelompok: "Pendataan", jenis: "Pulsa", uraian: "Pulsa petugas lapangan (FASIH)", akun: "521211", volume: petugas || null, satuan: "orang", tarif: null, tempat: "", paket: "",
+      id: "pulsa-lapangan", kelompok: "Pendataan", jenis: "Pulsa", uraian: "Pulsa petugas lapangan (FASIH)", akun: "521211", volume: petugas || null, satuan: "orang", tarif: null, tempat: "", paket: "",
       butuhMulai: mulaiData, butuhSelesai: selesaiData, perkiraan: false,
       perlu: [...(mulaiData === null ? ["jadwal pendataan belum lengkap"] : []), ...(petugas === 0 ? ["jumlah petugas belum diketahui"] : []), "tarif pulsa petugas lapangan belum ada pada lembar kebijakan"], catatan: [],
     });
@@ -183,7 +190,7 @@ export function susunPengadaan(
     const mulaiDis = awalTerkecil(jadwalDis.map((j) => tgl(j?.mulai ?? "")));
     const selesaiDis = akhirTerbesar(jadwalDis.map((j) => tgl(j?.selesai ?? "")));
     tambah({
-      kelompok: "Diseminasi", jenis: "Cetak buku", uraian: "Cetak buku publikasi di kabupaten (belanja persediaan)", akun: "521811", volume: null, satuan: "eksemplar", tarif: null, tempat: "", paket: "",
+      id: "cetak-buku", kelompok: "Diseminasi", jenis: "Cetak buku", uraian: "Cetak buku publikasi di kabupaten (belanja persediaan)", akun: "521811", volume: null, satuan: "eksemplar", tarif: null, tempat: "", paket: "",
       butuhMulai: mulaiDis, butuhSelesai: selesaiDis, perkiraan: true,
       perlu: [...(mulaiDis === null ? ["jadwal diseminasi belum lengkap"] : []), "oplah dan harga cetak per eksemplar belum diidentifikasi"], catatan: [],
     });
