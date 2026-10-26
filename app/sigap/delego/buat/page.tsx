@@ -210,11 +210,11 @@ export default function Buat() {
                     {ident && (
                       <div>
                         <div className={KELAS.labelKecil}>Dari lanjutan identifikasi</div>
-                        {calon.data.lanjutan.length === 0 ? (
+                        {calon.data.lanjutan.filter((c) => c.akun_id !== hak.akun.id).length === 0 ? (
                           <p className="m-0 mt-1 text-[13px] text-[#3B4A57]">Belum ada petugas pada lanjutan final identifikasi ini.</p>
                         ) : (
                           <ul className="m-0 mt-1 list-none space-y-1 p-0">
-                            {calon.data.lanjutan.map((c, i) => (
+                            {calon.data.lanjutan.filter((c) => c.akun_id !== hak.akun.id).map((c, i) => (
                               <li key={`${c.nama}-${i}`} className="flex items-center justify-between gap-2 text-[13.5px]">
                                 <span className="min-w-0 truncate">{c.nama} <span className="text-[#3B4A57]">{c.peran ? `· ${c.peran}` : ""}</span></span>
                                 {c.akun_id ? (
@@ -231,7 +231,7 @@ export default function Buat() {
                     <div>
                       <div className={KELAS.labelKecil}>Pegawai organik</div>
                       <ul className="m-0 mt-1 max-h-48 list-none space-y-1 overflow-y-auto p-0">
-                        {calon.data.organik.map((c) => (
+                        {calon.data.organik.filter((c) => c.id !== hak.akun.id).map((c) => (
                           <li key={c.id} className="flex items-center justify-between gap-2 text-[13.5px]">
                             <span className="min-w-0 truncate">{c.nama}{beban.get(c.id) ? <span className="text-[12px] text-[#3B4A57]"> · beban {beban.get(c.id)?.persen}%</span> : null}</span>
                             <button type="button" className={KELAS.tombolKecil} disabled={sudah(c.id)} onClick={() => tambahPilih(c.id, c.nama, "organik")}>{sudah(c.id) ? "Dipilih" : "Pilih"}</button>
@@ -249,7 +249,7 @@ export default function Buat() {
                   </label>
                   {calon.data && cariTunda.length >= 2 && (
                     <ul className="m-0 mt-2 max-h-48 list-none space-y-1 overflow-y-auto p-0">
-                      {calon.data.cari.map((c) => (
+                      {calon.data.cari.filter((c) => c.id !== hak.akun.id).map((c) => (
                         <li key={c.id} className="flex items-center justify-between gap-2 text-[13.5px]">
                           <span className="min-w-0 truncate">{c.nama} <span className="text-[12px] text-[#3B4A57]">· {c.jenis}{c.kecamatan ? ` · ${c.kecamatan}` : ""}</span></span>
                           <button type="button" className={KELAS.tombolKecil} disabled={sudah(c.id)} onClick={() => tambahPilih(c.id, c.nama, c.jenis)}>{sudah(c.id) ? "Dipilih" : "Pilih"}</button>
