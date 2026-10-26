@@ -13,7 +13,8 @@ export type TagPilihan = { akun_id: number; nama: string; luar_tim: boolean; slo
 type Rekan = { akun_id: number; nama: string; jenis: string; peran_di_tim: string | null };
 type Cari = { akun_id: number; nama: string; jenis: string };
 
-export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah }: { kegiatanId: number; jumlahNomor: number; nilai: TagPilihan[]; onUbah: (n: TagPilihan[]) => void }) {
+// (26 Okt 2026) `kecuali` = akun yang sudah di-tag pada foto ini (dipakai saat membagikan foto yang sudah terkirim); `maks` = sisa kuota tag foto itu.
+export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah, kecuali = [], maks = MAKS_TAG }: { kegiatanId: number; jumlahNomor: number; nilai: TagPilihan[]; onUbah: (n: TagPilihan[]) => void; kecuali?: number[]; maks?: number }) {
   const [rekan, setRekan] = useState<Rekan[] | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [cariBuka, setCariBuka] = useState(false);
@@ -51,7 +52,7 @@ export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah }: 
   }, [q, kegiatanId]);
 
   const dipilih = (id: number) => nilai.some((n) => n.akun_id === id);
-  const penuh = nilai.length >= MAKS_TAG;
+  const penuh = nilai.length >= maks;
 
   function ganti(id: number, nama: string, luar: boolean) {
     if (dipilih(id)) onUbah(nilai.filter((n) => n.akun_id !== id));
@@ -73,7 +74,7 @@ export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah }: 
       )}
 
       <ul className="flex flex-col gap-2">
-        {(rekan ?? []).map((r) => (
+        {(rekan ?? []).filter((r) => !kecuali.includes(r.akun_id)).map((r) => (
           <li key={r.akun_id}>
             <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border border-[#C9D3E6] bg-white px-3 py-2">
               <input type="checkbox" className="h-5 w-5 accent-[#0F2A52]" checked={dipilih(r.akun_id)} disabled={!dipilih(r.akun_id) && penuh} onChange={() => ganti(r.akun_id, r.nama, false)} />
@@ -96,7 +97,7 @@ export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah }: 
           <input id="cari-luar" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ketik minimal 2 huruf" className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-3 text-sm" autoComplete="off" />
           {mencari && <div className="text-xs text-[#3C4C68]">Mencari…</div>}
           <ul className="flex flex-col gap-2">
-            {hasil.map((c) => (
+            {hasil.filter((c) => !kecuali.includes(c.akun_id)).map((c) => (
               <li key={c.akun_id}>
                 <button type="button" onClick={() => ganti(c.akun_id, c.nama, true)} aria-pressed={dipilih(c.akun_id)} className={`flex min-h-[48px] w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left ${dipilih(c.akun_id) ? "border-[#0F2A52] bg-[#E8EEF8]" : "border-[#C9D3E6] bg-white"}`}>
                   <span className="min-w-0">
@@ -113,7 +114,7 @@ export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah }: 
 
       {nilai.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="text-xs font-bold text-[#0F2A52]">Dipilih ({nilai.length}/{MAKS_TAG})</div>
+          <div className="text-xs font-bold text-[#0F2A52]">Dipilih ({nilai.length}/{maks})</div>
           {nilai.map((n) => (
             <div key={n.akun_id} className="flex items-center gap-2 rounded-xl bg-[#E8EEF8] px-3 py-2">
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F2A52]">{n.nama}{n.luar_tim ? " (di luar tim)" : ""}</span>

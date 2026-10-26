@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ambilFotoUrl, ambilJson } from "./klien";
-import { LABEL_ALASAN, WARNA_NADA_PERIKSA, labelFotoTanpaSinyal, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
+import { LABEL_ALASAN, MAKS_TAG, WARNA_NADA_PERIKSA, jendelaBagiFoto, labelFotoTanpaSinyal, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
+import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 
 type TagSaya = {
   id: number; foto_id: number; peran_tag: string; status: string; penugasan_id: number | null; slot: number | null; slot_usulan: number | null;
@@ -40,6 +41,63 @@ function Gambar({ id, alt }: { id: number; alt: string }) {
   if (!url) return <div className="h-40 animate-pulse rounded-lg bg-[#EEF2F7]" aria-label="Memuat foto" />;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt={alt} className="max-h-72 w-full rounded-lg object-contain bg-black" />;
+}
+
+// (26 Okt 2026) Membagikan foto yang SUDAH terkirim ke rekan, selama masih dalam H+1 (23.59 WIB sehari sesudah tanggal foto). Server menolak bila lewat.
+function BagikanSusulan({ f, jumlahNomor, muat }: { f: Diambil; jumlahNomor: number; muat: () => void }) {
+  const hariIni = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+  const [buka, setBuka] = useState(false);
+  const [tag, setTag] = useState<TagPilihan[]>([]);
+  const [sibuk, setSibuk] = useState(false);
+  const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
+  const lain = f.tag.filter((x) => x.peran_tag !== "pemotret");
+  const sisa = Math.max(0, MAKS_TAG - lain.length);
+  if (!jendelaBagiFoto(f.tanggal, hariIni)) {
+    return <p className="text-[11.5px] leading-snug text-[#55657D]">Berbagi foto ditutup: hanya bisa sampai akhir hari sesudah tanggal foto (H+1).</p>;
+  }
+  async function kirim() {
+    setSibuk(true);
+    setPesan(null);
+    try {
+      const r = await ambilJson<{ ok: boolean; simulasi?: boolean; ditambah?: number }>("/api/sigap/foto/tag", {
+        method: "POST",
+        body: { foto_id: f.id, tag: tag.map((t) => ({ akun_id: t.akun_id, slot_usulan: t.slot_usulan })) },
+      });
+      if (r.simulasi) {
+        setPesan({ jenis: "galat", teks: "Mode simulasi (masuk sebagai akun lain): ajakan TIDAK dikirim." });
+      } else {
+        setPesan({ jenis: "ok", teks: r.ditambah ? `Ajakan terkirim ke ${r.ditambah} orang. Mereka memilih nomor fotonya sendiri.` : "Semua yang dipilih sudah pernah diajak." });
+        setTag([]);
+        setBuka(false);
+        muat();
+      }
+    } catch (e) {
+      setPesan({ jenis: "galat", teks: (e as Error).message });
+    } finally {
+      setSibuk(false);
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {pesan && <div role={pesan.jenis === "galat" ? "alert" : "status"} className={`rounded-lg px-3 py-2 text-xs ${pesan.jenis === "ok" ? "bg-[#E3F6EC] text-[#0B6B3F]" : "bg-[#FDE8E8] text-[#9B1C23]"}`}>{pesan.teks}</div>}
+      {sisa === 0 ? (
+        <p className="text-[11.5px] text-[#55657D]">Foto ini sudah mencapai batas {MAKS_TAG} orang yang diajak.</p>
+      ) : (
+        <button type="button" onClick={() => setBuka((b) => !b)} aria-expanded={buka} className="min-h-[44px] rounded-xl border-2 border-[#0F2A52] text-sm font-bold text-[#0F2A52]">
+          {buka ? "Sembunyikan pilihan rekan" : "Bagikan ke rekan"}
+        </button>
+      )}
+      {buka && sisa > 0 && (
+        <>
+          <BagikanFoto kegiatanId={f.kegiatan_id} jumlahNomor={jumlahNomor} nilai={tag} onUbah={setTag} kecuali={lain.map((x) => x.akun_id)} maks={sisa} />
+          <button type="button" onClick={() => void kirim()} disabled={sibuk || tag.length === 0} className="min-h-[48px] rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-40">
+            {sibuk ? "Mengirim…" : tag.length ? `Kirim ajakan ke ${tag.length} orang` : "Pilih rekan dulu"}
+          </button>
+          <p className="text-[11px] leading-snug text-[#55657D]">Foto tidak dikirim ulang. Hanya ajakan; rekan menerima dan memilih nomornya sendiri.</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 function KartuMenunggu({ t, mode, muat }: { t: TagSaya; mode: Mode["kegiatan"]; muat: () => void }) {
@@ -186,6 +244,7 @@ export default function FotoSaya() {
                         <div className="mt-2 flex flex-col gap-2">
                           <Gambar id={f.id} alt={`Foto ${f.kode}`} />
                           {!st.perhatian && f.kepercayaan !== "hijau" && alasan.length > 0 && <div className="text-xs text-[#3C4C68]">Catatan sistem (sudah ditinjau): {alasan.join("; ")}.</div>}
+                          <BagikanSusulan f={f} jumlahNomor={mode.find((k) => k.kegiatan_id === f.kegiatan_id)?.jumlah_foto ?? 5} muat={muat} />
                           {f.tag.some((x) => x.peran_tag !== "pemotret") && (
                             <div className="text-xs text-[#3C4C68]">Dibagikan: {f.tag.filter((x) => x.peran_tag !== "pemotret").map((x) => `${x.nama}: ${LABEL_STATUS[x.status] ?? x.status}${x.slot ? ` (foto ${x.slot})` : ""}`).join(" · ")}</div>
                           )}
