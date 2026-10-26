@@ -4,6 +4,8 @@
 // masa simpan, dan penentuan mode (kamera/unggah). Keputusan user: masa simpan 3 tahun; foto TIDAK dihapus
 // otomatis; tag di luar tim boleh menjadi bukti kegiatan penerima; saklar kamera/unggah per kegiatan + bawaan global.
 
+import { rapikanNama } from "@/lib/rekapIdentifikasi";
+
 /** Masa simpan foto kamera (tahun). Keputusan user 19 Okt 2026. Dihitung dari tanggal selesai kegiatan (atau tanggal foto). */
 export const MASA_SIMPAN_TAHUN = 3;
 /** Foto yang tidak pernah diterima sebagai nomor foto mana pun ditandai kedaluwarsa setelah sekian hari (hanya TANDA, bukan hapus). */
@@ -284,6 +286,25 @@ export function labelFotoTanpaSinyal(alasan: string[] | null | undefined, diambi
 }
 
 /** "Senin, 19 Okt 2026 · 14.32.07 WIB" dari ms epoch. */
+/**
+ * (26 Okt 2026) Teks lokasi pada cap: "SLS <nama> Sub <kode>, Nagari <nama>, Kec. <nama>". Bagian yang kosong dilewati; semua kosong = null.
+ * Satu baris (juga tersimpan di sigap_foto.lokasi_teks); cap server memecahnya di ", Nagari" menjadi dua baris (lihat lokasiDuaBaris).
+ */
+export function teksLokasiWilayah(w: { sls?: string | null; sub_sls?: string | null; nagari?: string | null; kecamatan?: string | null }): string | null {
+  const rapi = (v: string | null | undefined) => (typeof v === "string" ? rapikanNama(v) : "");
+  const sls = rapi(w.sls);
+  const sub = typeof w.sub_sls === "string" ? w.sub_sls.trim() : "";
+  const nagari = rapi(w.nagari);
+  const kec = rapi(w.kecamatan);
+  const bagian = [sls ? `SLS ${sls}${sub ? ` Sub ${sub}` : ""}` : null, nagari ? `Nagari ${nagari}` : null, kec ? `Kec. ${kec}` : null].filter((x): x is string => !!x);
+  return bagian.length ? bagian.join(", ") : null;
+}
+
+/** Cap: pecah teks lokasi menjadi dua baris ("SLS ..." di atas, "Nagari ..., Kec. ..." di bawah) bila keduanya ada. */
+export function lokasiDuaBaris(lokasi: string): string {
+  return lokasi.replace(/^(SLS .+?), (Nagari .+|Kec\. .+)$/, "$1\n$2");
+}
+
 export function teksWaktuWib(ms: number): string {
   const d = new Date(ms + 7 * 3_600_000);
   const p = (n: number) => String(n).padStart(2, "0");

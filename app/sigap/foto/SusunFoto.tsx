@@ -13,7 +13,11 @@
 //  - Peringatan ⚠ HANYA soal urutan jam (lib/sigapUrutanFoto.ts), selalu disertai alasan satu kalimat di bawah kisi. Lencana kepercayaan
 //    (Wajar/Perlu perhatian) tidak lagi tampil di sini; kriterianya tetap dipakai di tempat lain (PeriksaFoto, Foto saya, SPJ).
 //  - "Urutkan sesuai jam" dengan pratinjau; foto cadangan dipasang lewat alur yang sama (ketuk cadangan, ketuk nomor, konfirmasi).
-//  - Lembar detail foto: foto besar, jam, lokasi, "Ambil ulang foto" (foto lama tersimpan sebagai cadangan) dan "Tukar dengan…".
+//  - Penampil foto layar penuh: foto besar, jam, lokasi, "Ambil ulang foto" (foto lama tersimpan sebagai cadangan) dan "Ganti urutan foto ini".
+// (26 Okt 2026) PERUBAHAN TAMPILAN (aturan penomoran dan penyimpanan TIDAK berubah):
+//  - Ketuk foto = membuka penampil layar penuh (foto selebar layar, geser kiri/kanan atau tombol ‹ › antar foto, seperti Instagram/Facebook).
+//  - Tukar urutan HANYA lewat tombol "Ganti urutan": selama aktif, ketuk dua foto = tukar (konfirmasi tetap ada). Selesai atau berhasil = kembali ke mode lihat.
+//  - Kisi nomor dan kisi foto cadangan memakai ubin persegi seragam (gambar diisi absolut supaya foto tegak tidak menarik tinggi ubin).
 // Tidak ada penghapusan foto di sini.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -168,7 +172,9 @@ export default function SusunFoto({
   const [pilih, setPilih] = useState<Pilih>(null);
   const [konf, setKonf] = useState<Konf | null>(null);
   const [galatModal, setGalatModal] = useState<GalatModal | null>(null);
-  const [detail, setDetail] = useState<number | null>(null);
+  const [lihat, setLihat] = useState<string | null>(null); // kunci penampil: "s<nomor>" atau "c<id foto cadangan>"
+  const [modeUbah, setModeUbah] = useState(false); // tombol "Ganti urutan" aktif
+  const sentuh = useRef<{ x: number; y: number } | null>(null);
   const [kilat, setKilat] = useState<number[]>([]);
   const sudahOtomatis = useRef(false);
   const penjedaKilat = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -238,7 +244,8 @@ export default function SusunFoto({
       await muat();
       setKonf(null);
       setPilih(null);
-      setDetail(null);
+      setLihat(null);
+      setModeUbah(false);
       if (r.status === "sudah_urut") setPesan("Urutan foto sudah sesuai jam.");
       else {
         setPesan(sukses);
@@ -283,6 +290,42 @@ export default function SusunFoto({
   const alasan = useMemo(() => alasanBentrok(nilai.bentrok, isiNomor), [nilai, isiNomor]);
   const rencana = useMemo(() => rencanaUrutJam(isiNomor), [isiNomor]);
 
+  // (26 Okt 2026) daftar foto untuk penampil: nomor yang berisi (atau dipesan) menurut nomor, lalu foto cadangan
+  type ItemGaleri = { kunci: string; slot: number | null; huruf: string | null; foto: FotoRingkas | null; ditahan: boolean };
+  const galeri = useMemo<ItemGaleri[]>(() => {
+    if (!k) return [];
+    const a: ItemGaleri[] = [];
+    for (const n of k.nomor) if (n.terisi || n.ditahan) a.push({ kunci: `s${n.slot}`, slot: n.slot, huruf: null, foto: n.foto ?? n.ditahan ?? null, ditahan: !n.terisi });
+    k.cadangan.forEach((f, i) => a.push({ kunci: `c${f.id}`, slot: null, huruf: String.fromCharCode(65 + (i % 26)), foto: f, ditahan: !!f.tahan }));
+    return a;
+  }, [k]);
+  const posLihat = lihat ? galeri.findIndex((g) => g.kunci === lihat) : -1;
+  const geserLihat = useCallback(
+    (arah: -1 | 1) => {
+      setLihat((cur) => {
+        const i = galeri.findIndex((g) => g.kunci === cur);
+        if (i < 0) return cur;
+        const j = i + arah;
+        return j < 0 || j >= galeri.length ? cur : galeri[j].kunci;
+      });
+    },
+    [galeri]
+  );
+  useEffect(() => {
+    if (lihat === null) return;
+    const tekan = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLihat(null);
+      else if (e.key === "ArrowLeft") geserLihat(-1);
+      else if (e.key === "ArrowRight") geserLihat(1);
+    };
+    window.addEventListener("keydown", tekan);
+    return () => window.removeEventListener("keydown", tekan);
+  }, [lihat, geserLihat]);
+  // foto yang dilihat sudah tidak ada (data dimuat ulang): penampil ditutup
+  useEffect(() => {
+    if (lihat !== null && k && posLihat < 0) setLihat(null);
+  }, [lihat, k, posLihat]);
+
   if (!k) return galat ? <div role="alert" className="rounded-xl bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galat}</div> : <div className="h-24 animate-pulse rounded-2xl bg-[#EEF2F7]" aria-label="Memuat nomor foto" />;
   if (k.nomor.every((n) => !n.terisi) && k.cadangan.length === 0 && !k.boleh) return null;
 
@@ -298,8 +341,10 @@ export default function SusunFoto({
     if (!n) return;
     setPesan(null);
     setPetunjuk(null);
-    if (!boleh) {
-      if (n.terisi) setDetail(slot); // hari ditutup: hanya melihat
+    // Mode lihat (bawaan): ketuk foto = buka penampil. Tukar urutan hanya saat "Ganti urutan" aktif.
+    if (!boleh || !modeUbah) {
+      if (n.terisi || n.ditahan) setLihat(`s${slot}`);
+      else if (boleh) setPetunjuk(`Nomor ${slot} masih kosong. Tekan Ganti urutan, ketuk foto cadangan, lalu ketuk nomor ini.`);
       return;
     }
     if (sibuk) return;
@@ -320,14 +365,25 @@ export default function SusunFoto({
   }
 
   function ketukCadangan(id: number) {
-    if (!boleh || sibuk) return;
     setPesan(null);
     setPetunjuk(null);
+    if (!boleh || !modeUbah) {
+      setLihat(`c${id}`);
+      return;
+    }
+    if (sibuk) return;
     if (!pilih || pilih.tipe === "cadangan") {
       setPilih(pilih && pilih.tipe === "cadangan" && pilih.id === id ? null : { tipe: "cadangan", id });
       return;
     }
     siapPasang(id, pilih.slot);
+  }
+
+  function aturUbah(nyala: boolean) {
+    setModeUbah(nyala);
+    setPilih(null);
+    setPesan(null);
+    setPetunjuk(null);
   }
 
   function siapPasang(fotoId: number, slot: number) {
@@ -464,61 +520,119 @@ export default function SusunFoto({
     );
   }
 
-  // ---------- lembar detail satu foto ----------
-  function LembarDetail() {
-    if (detail === null || !k) return null;
-    const n = nomorDi(detail);
-    if (!n) return null;
-    const f = fotoNomor(n);
-    const terkait = nilai.bentrok.filter((b) => b.kecil === n.slot || b.besar === n.slot);
+  // ---------- penampil foto layar penuh ----------
+  function LembarLihat() {
+    if (lihat === null || !k || posLihat < 0) return null;
+    const g = galeri[posLihat];
+    const f = g.foto;
+    const n = g.slot !== null ? nomorDi(g.slot) : null;
+    const judul = g.slot !== null ? `Foto ${g.slot} · ${peranRingkas(jenis, g.slot)}` : `Foto cadangan ${g.huruf}`;
+    const terkait = g.slot !== null ? nilai.bentrok.filter((b) => b.kecil === g.slot || b.besar === g.slot) : [];
     const lokasi = f && typeof f.lat === "number" && typeof f.lng === "number" ? { lat: f.lat, lng: f.lng } : null;
+    const adaSebelum = posLihat > 0;
+    const adaSesudah = posLihat < galeri.length - 1;
+    const panah = "absolute top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-[26px] font-bold leading-none text-white disabled:hidden";
     return (
-      <Lapisan kelas="items-end px-3" onKlik={() => setDetail(null)}>
-        <div role="dialog" aria-modal="true" aria-labelledby="judul-detail-foto" onClick={(e) => e.stopPropagation()} className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
-          <h2 id="judul-detail-foto" className="text-base font-extrabold text-[#0F2A52]">Foto {n.slot} · {peranRingkas(jenis, n.slot)}</h2>
-          <p className="text-[12px] text-[#55657D]">{etiket[n.slot - 1] ?? ""}</p>
-          <div className="mt-3 overflow-hidden rounded-xl bg-[#EEF2F7]">
-            {f ? <Gambar id={f.id} kelas="max-h-[48vh] w-full object-contain" alt={`Foto ${n.slot}`} /> : <div className="flex h-32 items-center justify-center text-sm font-semibold text-[#55657D]">Unggahan manual</div>}
-          </div>
-          <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px] text-[#1B2B4B]">
-            <dt className="font-bold text-[#55657D]">Jam</dt>
-            <dd>{f ? `${jamIso(f.diambil_at)} WIB · Kamera SIGAP` : "Tidak tercatat (unggahan manual)"}</dd>
-            <dt className="font-bold text-[#55657D]">Lokasi</dt>
-            <dd>
-              {lokasi ? (
-                <>
-                  {lokasi.lat.toFixed(5)}, {lokasi.lng.toFixed(5)}
-                  <a href={`https://www.google.com/maps?q=${lokasi.lat},${lokasi.lng}`} target="_blank" rel="noopener noreferrer" className="flex min-h-[44px] items-center font-bold text-[#1F5FBF] underline">Buka di peta</a>
-                </>
-              ) : (
-                "Tidak tercatat"
-              )}
-            </dd>
-          </dl>
-          {terkait.length > 0 && (
-            <div className="mt-2 flex items-start gap-2 rounded-lg bg-[#FFF4D6] px-2.5 py-2 text-[12.5px] font-semibold text-[#5E4300]">
-              <IkonPeringatan kelas="mt-0.5 h-4 w-4 flex-none" />
-              <div>{alasanBentrok(terkait, isiNomor).baris.map((t) => <p key={t}>{t}</p>)}</div>
+      <Lapisan kelas="flex-col !bg-black !p-0 !pb-0 !pt-0">
+        <div role="dialog" aria-modal="true" aria-label={judul} className="flex h-full w-full flex-col" style={{ paddingTop: "max(8px, env(safe-area-inset-top))" }}>
+          <div className="flex items-center gap-2 px-2 pb-2 text-white">
+            <button type="button" onClick={() => setLihat(null)} aria-label="Tutup foto" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-[20px] font-bold">
+              ✕
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-extrabold leading-tight">{judul}</p>
+              <p className="truncate text-[11.5px] leading-tight text-white/70">{f ? `${jamIso(f.diambil_at)} WIB` : "Unggahan manual"}</p>
             </div>
-          )}
-          <div className="mt-4 flex flex-col gap-2">
-            {boleh && (
-              <button type="button" disabled={!bisaUbah} onClick={() => { setDetail(null); setPilih({ tipe: "slot", slot: n.slot }); }} className={TOMBOL_UTAMA}>
-                Tukar dengan…
-              </button>
-            )}
-            {n.terisi && bisaKamera && (
-              <div>
-                <Link href={`/sigap/foto?kegiatan=${kegiatanId}&nomor=${n.slot}`} className="flex min-h-[48px] w-full items-center justify-center whitespace-nowrap rounded-xl border-2 border-[#C9D3E6] bg-white px-3 text-sm font-bold text-[#0F2A52]">
-                  Ambil ulang foto
-                </Link>
-                <p className="mt-1 text-center text-[11.5px] text-[#55657D]">Foto lama tersimpan sebagai cadangan.</p>
+            <span className="shrink-0 pr-1 text-[12.5px] font-bold text-white/80">{posLihat + 1}/{galeri.length}</span>
+          </div>
+
+          <div
+            className="relative min-h-0 flex-1 touch-pan-y select-none"
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              sentuh.current = { x: t.clientX, y: t.clientY };
+            }}
+            onTouchEnd={(e) => {
+              const m = sentuh.current;
+              sentuh.current = null;
+              const t = e.changedTouches[0];
+              if (!m || !t) return;
+              const dx = t.clientX - m.x;
+              const dy = t.clientY - m.y;
+              if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.5) geserLihat(dx < 0 ? 1 : -1);
+            }}
+          >
+            {f ? <Gambar id={f.id} kelas="h-full w-full object-contain" alt={judul} /> : <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/80">Unggahan manual (tidak ada gambar dari kamera)</div>}
+            <button type="button" onClick={() => geserLihat(-1)} disabled={!adaSebelum} aria-label="Foto sebelumnya" className={`${panah} left-2`}>‹</button>
+            <button type="button" onClick={() => geserLihat(1)} disabled={!adaSesudah} aria-label="Foto berikutnya" className={`${panah} right-2`}>›</button>
+          </div>
+
+          <div className="max-h-[42vh] shrink-0 overflow-y-auto rounded-t-2xl bg-white px-4 pb-3 pt-3" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+            <p className="text-[12.5px] text-[#55657D]">
+              {g.slot !== null ? `${etiket[g.slot - 1] ?? ""} · ` : "Tersimpan, belum bernomor · "}
+              {lokasi ? (
+                <a href={`https://www.google.com/maps?q=${lokasi.lat},${lokasi.lng}`} target="_blank" rel="noopener noreferrer" className="font-bold text-[#1F5FBF] underline">Buka lokasi di peta</a>
+              ) : (
+                "Lokasi tidak tercatat"
+              )}
+            </p>
+            {g.ditahan && <p className="mt-1.5 rounded-lg bg-[#EEF2F7] px-2.5 py-1.5 text-[12px] font-semibold text-[#1B2B4B]">Menunggu diperiksa PML/admin.</p>}
+            {terkait.length > 0 && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-[#FFF4D6] px-2.5 py-2 text-[12.5px] font-semibold text-[#5E4300]">
+                <IkonPeringatan kelas="mt-0.5 h-4 w-4 flex-none" />
+                <div>{alasanBentrok(terkait, isiNomor).baris.map((t) => <p key={t}>{t}</p>)}</div>
               </div>
             )}
-            <button type="button" onClick={() => setDetail(null)} className={TOMBOL_SEKUNDER}>Tutup</button>
+            <div className="mt-3 flex flex-col gap-2">
+              {boleh && g.slot !== null && n?.terisi && (
+                <button type="button" disabled={!bisaUbah} onClick={() => { setLihat(null); setModeUbah(true); setPilih({ tipe: "slot", slot: g.slot as number }); }} className={TOMBOL_UTAMA}>
+                  Ganti urutan foto ini
+                </button>
+              )}
+              {boleh && g.slot === null && f && (
+                <button type="button" disabled={!bisaUbah} onClick={() => { setLihat(null); setModeUbah(true); setPilih({ tipe: "cadangan", id: f.id }); }} className={TOMBOL_UTAMA}>
+                  Pasang ke nomor…
+                </button>
+              )}
+              {g.slot !== null && n?.terisi && bisaKamera && (
+                <div>
+                  <Link href={`/sigap/foto?kegiatan=${kegiatanId}&nomor=${g.slot}`} className="flex min-h-[48px] w-full items-center justify-center whitespace-nowrap rounded-xl border-2 border-[#C9D3E6] bg-white px-3 text-sm font-bold text-[#0F2A52]">
+                    Ambil ulang foto
+                  </Link>
+                  <p className="mt-1 text-center text-[11.5px] text-[#55657D]">Foto lama tersimpan sebagai cadangan.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </Lapisan>
+    );
+  }
+
+  /** Ubin foto persegi seragam (nomor maupun cadangan). Gambar diisi absolut supaya foto tegak/landscape tidak mengubah tinggi ubin. */
+  function ubin(o: { badge: string; terisi: boolean; cadangan?: boolean; fotoId: number | null; judul: string; sub: string; kosongTeks: string; dipilih: boolean; masalah: boolean; nyala: boolean; label: string; onKlik: () => void }) {
+    const batas = o.nyala ? "border-[#1AA37A] ring-4 ring-[#BFEBD9] motion-safe:animate-pulse" : o.dipilih ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : o.masalah ? "border-[#F2B632]" : o.terisi ? "border-[#C9D3E6]" : "border-dashed border-[#C9D3E6]";
+    return (
+      <button type="button" onClick={o.onKlik} aria-pressed={modeUbah ? o.dipilih : undefined} aria-label={o.label} className={`flex h-full w-full flex-col overflow-hidden rounded-xl border-2 bg-white text-left transition ${batas}`}>
+        <span className={`relative block aspect-square w-full overflow-hidden ${o.terisi ? "bg-[#EEF2F7]" : "bg-[#F7F9FD]"}`}>
+          {o.fotoId !== null ? (
+            <Gambar id={o.fotoId} kelas={`absolute inset-0 h-full w-full object-cover ${o.terisi ? "" : "opacity-50"}`} alt={o.judul} />
+          ) : (
+            <span className="absolute inset-0 flex items-end justify-center px-1 pb-1.5 text-center text-[11px] font-bold text-[#8A6200]">{o.kosongTeks}</span>
+          )}
+          <span className={`absolute left-1 top-1 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full px-1 text-xs font-extrabold ${o.cadangan ? "bg-[#F2B632] text-[#3D2B00]" : o.terisi ? "bg-[#0F2A52] text-white" : "bg-white text-[#0F2A52] ring-1 ring-[#C9D3E6]"}`}>{o.badge}</span>
+          {o.masalah && (
+            <span className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow" title="Urutan jam terbalik">
+              <IkonPeringatan kelas="h-4 w-4" />
+            </span>
+          )}
+        </span>
+        <span className="block px-1.5 pb-1.5 pt-1">
+          {/* break-normal: kata tidak pernah dipecah di tengah ("Berangk/at"); frasa panjang turun ke baris berikut di antara kata */}
+          <span className="block break-normal text-[11.5px] font-extrabold leading-tight text-[#0F2A52]">{o.judul}</span>
+          <span className="mt-0.5 block text-[11px] leading-tight text-[#3C4C68]">{o.sub}</span>
+        </span>
+      </button>
     );
   }
 
@@ -528,21 +642,40 @@ export default function SusunFoto({
   return (
     <section className={`flex flex-col gap-2.5 ${polos ? "" : "rounded-2xl border border-[#C9D3E6] bg-white p-3"} ${rapat ? "[&>*:not(ol)]:mx-2 min-[640px]:[&>*:not(ol)]:mx-0" : ""}`} aria-label="Nomor foto Kamera SIGAP">
       <div>
-        <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto {k.nomor.filter((n) => n.terisi).length}/{k.jumlah}</div>
-        {boleh && (
-          <p className={`mt-0.5 min-h-[2.6em] text-[12.5px] font-semibold leading-snug ${pilih ? "text-[#0F2A52]" : "text-[#1B2B4B]"}`} aria-live="polite">
-            {dipilihSlot !== null ? `Foto ${dipilihSlot} dipilih. Pilih foto yang mau ditukar.` : dipilihCadangan ? "Foto cadangan dipilih. Ketuk nomor tujuannya di kisi." : "Ketuk dua foto untuk menukar urutannya."}
-          </p>
-        )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-extrabold text-[#0F2A52]">Nomor foto {k.nomor.filter((n) => n.terisi).length}/{k.jumlah}</div>
+            <p className={`mt-0.5 text-[12.5px] font-semibold leading-snug ${pilih ? "text-[#0F2A52]" : "text-[#1B2B4B]"}`} aria-live="polite">
+              {!boleh || !modeUbah
+                ? "Ketuk foto untuk melihatnya lebih besar."
+                : dipilihSlot !== null
+                  ? `Foto ${dipilihSlot} dipilih. Pilih foto yang mau ditukar.`
+                  : dipilihCadangan
+                    ? "Foto cadangan dipilih. Ketuk nomor tujuannya di kisi."
+                    : "Ganti urutan aktif: ketuk dua foto untuk menukarnya."}
+            </p>
+          </div>
+          {boleh && (
+            <button
+              type="button"
+              onClick={() => aturUbah(!modeUbah)}
+              disabled={sibuk}
+              aria-pressed={modeUbah}
+              className={`min-h-[44px] shrink-0 whitespace-nowrap rounded-xl px-3 text-[13px] font-extrabold disabled:opacity-50 ${modeUbah ? "bg-[#0F2A52] text-white" : "border-2 border-[#C9D3E6] bg-white text-[#0F2A52]"}`}
+            >
+              {modeUbah ? "Selesai" : "⇅ Ganti urutan"}
+            </button>
+          )}
+        </div>
         {k.susulan && otomatis && <p className="mt-0.5 text-[11.5px] leading-snug text-[#3C4C68]">Foto Kamera SIGAP tanggal ini disusun otomatis ke nomor yang masih kosong.</p>}
         <details className="mt-1 text-[11.5px] leading-relaxed text-[#3C4C68]">
           <summary className="cursor-pointer select-none py-1.5 font-bold text-[#1F5FBF]">Lihat panduan</summary>
           <ul className="list-disc space-y-1 pl-4">
-            <li>Ketuk satu foto, lalu ketuk foto lain. Anda akan diminta konfirmasi sebelum urutan berubah.</li>
-            <li>Ketuk foto yang sama sekali lagi untuk membatalkan pilihan. “Detail foto” ada pada kotak pilihan di atas kisi.</li>
+            <li>Ketuk foto untuk membukanya selebar layar. Geser ke kiri atau kanan, atau ketuk ‹ ›, untuk foto lainnya.</li>
+            <li>Untuk menukar urutan, tekan Ganti urutan dulu. Lalu ketuk satu foto dan foto lain; Anda diminta konfirmasi sebelum urutan berubah. Ketuk foto yang sama lagi untuk membatalkan pilihan.</li>
             <li>Tanda ⚠ berarti urutan jam foto tidak sesuai nomornya. Alasannya tertulis di bawah kisi; tukar boleh tetap dilakukan.</li>
-            <li>Foto cadangan tetap tersimpan. Ketuk salah satu, lalu ketuk nomor tujuannya.</li>
-            {bisaKamera && <li>Salah foto? Buka Detail foto lalu ketuk Ambil ulang foto. Foto lama tersimpan sebagai cadangan.</li>}
+            <li>Foto cadangan tetap tersimpan. Tekan Ganti urutan, ketuk salah satu, lalu ketuk nomor tujuannya.</li>
+            {bisaKamera && <li>Salah foto? Buka foto itu lalu ketuk Ambil ulang foto. Foto lama tersimpan sebagai cadangan.</li>}
           </ul>
         </details>
       </div>
@@ -560,41 +693,22 @@ export default function SusunFoto({
       <ol className={`grid grid-cols-3 ${rapat ? "gap-1 min-[640px]:gap-2" : "gap-2"}`}>
         {k.nomor.map((n) => {
           const f = n.foto ?? n.ditahan ?? null;
-          const dipilihIni = dipilihSlot === n.slot;
           const masalah = bermasalah.has(n.slot);
-          const nyala = kilat.includes(n.slot);
-          const batas = nyala ? "border-[#1AA37A] ring-4 ring-[#BFEBD9] motion-safe:animate-pulse" : dipilihIni ? "border-[#0F2A52] ring-4 ring-[#BFD0F0]" : masalah ? "border-[#F2B632]" : n.terisi ? "border-[#C9D3E6]" : "border-dashed border-[#C9D3E6]";
           return (
             <li key={n.slot} className="h-full min-w-0">
-              <button
-                type="button"
-                onClick={() => ketukSlot(n.slot)}
-                aria-pressed={dipilihIni}
-                aria-label={`Foto ${n.slot}, ${peranRingkas(jenis, n.slot)}, ${n.terisi ? subNomor(n) : n.ditahan ? "dipesan, menunggu diperiksa" : "kosong"}${masalah ? ", urutan jam terbalik" : ""}`}
-                className={`flex h-full w-full flex-col overflow-hidden rounded-xl border-2 bg-white text-left transition ${batas}`}
-              >
-                {/* 4:3: foto landscape (cap kartu kiri-bawah) tampil hampir utuh dan kartu lebih pendek; tinggi semua kartu sama */}
-                <span className={`relative block aspect-[4/3] w-full ${n.terisi ? "bg-[#EEF2F7]" : "bg-[#F7F9FD]"}`}>
-                  {f ? (
-                    <Gambar id={f.id} kelas={`h-full w-full object-cover ${n.terisi ? "" : "opacity-50"}`} alt={`Foto ${n.slot}`} />
-                  ) : (
-                    <span className="flex h-full w-full items-end justify-center px-1 pb-1.5 text-center text-[11px] font-bold text-[#8A6200]">{n.terisi ? "Unggahan manual" : "Kosong"}</span>
-                  )}
-                  <span className={`absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold ${n.terisi ? "bg-[#0F2A52] text-white" : "bg-white text-[#0F2A52] ring-1 ring-[#C9D3E6]"}`}>{n.slot}</span>
-                  {masalah && (
-                    <span className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow" title="Urutan jam terbalik">
-                      <IkonPeringatan kelas="h-4 w-4" />
-                    </span>
-                  )}
-                </span>
-                <span className="block px-1.5 pb-1.5 pt-1">
-                  {/* break-normal: kata tidak pernah dipecah di tengah ("Berangk/at"); frasa panjang turun ke baris berikut di antara kata */}
-                  <span className="block break-normal text-[11.5px] font-extrabold leading-tight text-[#0F2A52]">{peranRingkas(jenis, n.slot)}</span>
-                  <span className="mt-0.5 block text-[11px] leading-tight text-[#3C4C68]">
-                    {n.terisi ? (n.foto ? `${jamIso(n.foto.diambil_at)} WIB` : "Manual") : n.ditahan ? `${jamIso(n.ditahan.diambil_at)} · dipesan` : "\u00a0"}
-                  </span>
-                </span>
-              </button>
+              {ubin({
+                badge: String(n.slot),
+                terisi: n.terisi,
+                fotoId: f?.id ?? null,
+                judul: peranRingkas(jenis, n.slot),
+                sub: n.terisi ? (n.foto ? `${jamIso(n.foto.diambil_at)} WIB` : "Manual") : n.ditahan ? `${jamIso(n.ditahan.diambil_at)} · dipesan` : "\u00a0",
+                kosongTeks: n.terisi ? "Unggahan manual" : "Kosong",
+                dipilih: dipilihSlot === n.slot,
+                masalah,
+                nyala: kilat.includes(n.slot),
+                label: `Foto ${n.slot}, ${peranRingkas(jenis, n.slot)}, ${n.terisi ? subNomor(n) : n.ditahan ? "dipesan, menunggu diperiksa" : "kosong"}${masalah ? ", urutan jam terbalik" : ""}`,
+                onKlik: () => ketukSlot(n.slot),
+              })}
             </li>
           );
         })}
@@ -603,7 +717,7 @@ export default function SusunFoto({
       {pilih && (
         <div className="flex gap-2">
           {dipilihSlot !== null && (
-            <button type="button" onClick={() => setDetail(dipilihSlot)} className="min-h-[44px] flex-1 whitespace-nowrap rounded-lg border-2 border-[#C9D3E6] bg-white px-2 text-[13px] font-bold text-[#0F2A52]">Detail foto</button>
+            <button type="button" onClick={() => setLihat(`s${dipilihSlot}`)} className="min-h-[44px] flex-1 whitespace-nowrap rounded-lg border-2 border-[#C9D3E6] bg-white px-2 text-[13px] font-bold text-[#0F2A52]">Lihat besar</button>
           )}
           <button type="button" onClick={() => setPilih(null)} className="min-h-[44px] flex-1 whitespace-nowrap rounded-lg border-2 border-[#C9D3E6] bg-white px-2 text-[13px] font-bold text-[#0F2A52]">Batal pilih</button>
         </div>
@@ -631,47 +745,57 @@ export default function SusunFoto({
       )}
 
       {k.cadangan.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <>
           <div className="text-[13px] font-extrabold text-[#0F2A52]">Foto cadangan ({k.cadangan.length})</div>
-          {/* (25 Okt 2026) petunjuk disorot: langkah yang sedang berlaku diberi latar kuning (1 = pilih foto, 2 = pilih nomor tujuan) */}
+          {/* petunjuk disorot: saat Ganti urutan aktif, langkah yang sedang berlaku diberi latar kuning (1 = pilih foto, 2 = pilih nomor tujuan) */}
           <div role="note" className="rounded-lg border border-[#BFD0F0] bg-[#EAF1FF] px-3 py-2 text-[12.5px] font-semibold leading-relaxed text-[#0F2A52]">
-            Tersimpan, belum bernomor.{" "}
-            <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-transparent" : "bg-[#FFE08A]"}`}>1. Ketuk satu foto</mark>
-            , lalu{" "}
-            <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-[#FFE08A]" : "bg-transparent"}`}>2. ketuk nomor tujuannya</mark> di kisi.
+            {boleh ? (
+              <>
+                Tersimpan, belum bernomor. Untuk memasang ke sebuah nomor, tekan Ganti urutan.{" "}
+                {modeUbah && (
+                  <>
+                    <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-transparent" : "bg-[#FFE08A]"}`}>1. Ketuk satu foto</mark>, lalu{" "}
+                    <mark className={`rounded px-1 font-extrabold text-[#0F2A52] ${dipilihCadangan ? "bg-[#FFE08A]" : "bg-transparent"}`}>2. ketuk nomor tujuannya</mark> di kisi.
+                  </>
+                )}
+              </>
+            ) : (
+              "Tersimpan, belum bernomor."
+            )}
           </div>
-          {k.cadangan.map((f, urutan) => {
-            const dipilihIni = dipilihCadangan?.id === f.id;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                disabled={!boleh}
-                onClick={() => ketukCadangan(f.id)}
-                aria-pressed={dipilihIni}
-                aria-label={`Foto cadangan ${jamIso(f.diambil_at)}`}
-                className={`flex min-h-[52px] w-full items-center gap-2.5 rounded-xl border-2 px-2 py-1.5 text-left ${dipilihIni ? "border-[#0F2A52] bg-[#FFF6D6] ring-4 ring-[#FFE08A]" : "border-[#C9D3E6] bg-white"}`}
-              >
-                <Gambar id={f.id} kelas="h-11 w-14 flex-none rounded-lg object-cover" alt={`Foto cadangan ${String.fromCharCode(65 + (urutan % 26))}`} />
-                <span className="min-w-0 flex-1">
-                  {/* huruf pembeda (A, B, ...) supaya dua foto dengan jam sama tidak tampak kembar */}
-                  <span className="block text-[13px] font-bold text-[#0F2A52]">Cadangan {String.fromCharCode(65 + (urutan % 26))} · {jamIso(f.diambil_at)} WIB</span>
-                  {dipilihIni && <span className="mt-0.5 block text-[11.5px] font-semibold leading-snug text-[#0F2A52]">Dipilih. Ketuk nomor tujuannya di kisi di atas.</span>}
-                  {f.tahan && <span className="mt-0.5 block text-[11px] leading-snug text-[#3C4C68]">Menunggu diperiksa PML/admin; nomornya dipesan dulu, baru tercatat setelah diperiksa.</span>}
-                </span>
-              </button>
-            );
-          })}
-          {bisaUbah && k.kosong.length > 0 && (
+          <ol className={`grid grid-cols-3 ${rapat ? "gap-1 min-[640px]:gap-2" : "gap-2"}`}>
+            {k.cadangan.map((f, urutan) => {
+              const huruf = String.fromCharCode(65 + (urutan % 26));
+              return (
+                <li key={f.id} className="h-full min-w-0">
+                  {ubin({
+                    badge: huruf,
+                    terisi: true,
+                    cadangan: true,
+                    fotoId: f.id,
+                    judul: `Cadangan ${huruf}`,
+                    sub: f.tahan ? `${jamIso(f.diambil_at)} · menunggu periksa` : `${jamIso(f.diambil_at)} WIB`,
+                    kosongTeks: "",
+                    dipilih: dipilihCadangan?.id === f.id,
+                    masalah: false,
+                    nyala: false,
+                    label: `Foto cadangan ${huruf}, ${jamIso(f.diambil_at)}`,
+                    onKlik: () => ketukCadangan(f.id),
+                  })}
+                </li>
+              );
+            })}
+          </ol>
+          {bisaUbah && modeUbah && k.kosong.length > 0 && (
             <button type="button" onClick={() => void isi()} disabled={sibuk} className={TOMBOL_UTAMA}>
               {sibuk ? "Menyusun…" : "Isi nomor kosong otomatis"}
             </button>
           )}
-        </div>
+        </>
       )}
 
       {ModalKonfirmasi()}
-      {LembarDetail()}
+      {LembarLihat()}
     </section>
   );
 }

@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs/promises";
 import sharp from "sharp";
 import QRCode from "qrcode";
+import { lokasiDuaBaris } from "@/lib/sigapFoto";
 
 sharp.cache(false);
 sharp.concurrency(1);
@@ -21,7 +22,7 @@ const LOGO = () => path.join(process.cwd(), "public", "sigap-logo-cap.png");
 export type DataCap = {
   waktu: string; // "Senin, 19 Okt 2026 · 14.32.07 WIB"
   koordinat: string; // "-0.78930, 100.65120 (±12 m)"
-  lokasi: string | null; // "Nagari X, Kec. Y" bila dikenali
+  lokasi: string | null; // "SLS X Sub 01, Nagari Y, Kec. Z" bila dikenali (dicetak dua baris)
   pemotret: string; // nama
   peran: string; // "PPL"
   kegiatan: string;
@@ -103,7 +104,7 @@ export async function bubuhiCap(mentah: Buffer, d: DataCap): Promise<{ buf: Buff
   const baris = [
     await teks(d.waktu, lebarTeks, { tebal: true, ukuran: Math.round(27 * u), warna: "#FFFFFF" }),
     await teks(d.koordinat, lebarTeks, { tebal: false, ukuran: Math.round(23 * u), warna: "#F2B632" }),
-    ...(d.lokasi ? [await teks(d.lokasi, lebarTeks, { tebal: false, ukuran: Math.round(22 * u), warna: "#E8EEF8" })] : []),
+    ...(d.lokasi ? [await teks(lokasiDuaBaris(d.lokasi), lebarTeks, { tebal: false, ukuran: Math.round(22 * u), warna: "#E8EEF8" })] : []),
     await teks(`${d.pemotret} · ${d.peran}`, lebarTeks, { tebal: true, ukuran: Math.round(22 * u), warna: "#FFFFFF" }),
     await teks(d.kegiatan, lebarTeks, { tebal: false, ukuran: Math.round(20 * u), warna: "#C5D0E4" }),
   ];
@@ -159,7 +160,7 @@ async function bubuhiLandscape(dasar: Buffer, W: number, H: number, d: DataCap):
   const baris = [
     await teks(d.waktu, lebarMaks, { tebal: true, ukuran: Math.round(26 * u), warna: "#FFFFFF" }),
     await teks(d.koordinat, lebarMaks, { tebal: false, ukuran: Math.round(22 * u), warna: "#F2B632" }),
-    ...(d.lokasi ? [await teks(d.lokasi, lebarMaks, { tebal: false, ukuran: Math.round(21 * u), warna: "#E8EEF8" })] : []),
+    ...(d.lokasi ? [await teks(lokasiDuaBaris(d.lokasi), lebarMaks, { tebal: false, ukuran: Math.round(21 * u), warna: "#E8EEF8" })] : []),
     await teks(`${d.pemotret} · ${d.peran}`, lebarMaks, { tebal: true, ukuran: Math.round(21 * u), warna: "#FFFFFF" }),
     await teks(d.kegiatan, lebarMaks, { tebal: false, ukuran: Math.round(19 * u), warna: "#C5D0E4" }),
   ];

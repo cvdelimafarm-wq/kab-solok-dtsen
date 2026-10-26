@@ -7,7 +7,7 @@
 import crypto from "crypto";
 import type { Db } from "@/lib/sigap";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
-import { jarakM, modeEfektif, slotBerlokasi, type ModeFoto, type ModeKegiatan } from "@/lib/sigapFoto";
+import { jarakM, modeEfektif, slotBerlokasi, teksLokasiWilayah, type ModeFoto, type ModeKegiatan } from "@/lib/sigapFoto";
 
 /** Menu izin (sigap_peran_izin.menu_kode, level 'kelola') yang boleh mengelola saklar dan usulan hapus selain akun super.
  *  Dipilih 'translok.verifikasi' (verifikasi SPJ; dimiliki 4 peran) karena foto adalah bukti SPJ. Mudah diganti ke menu lain yang ada. */
@@ -238,7 +238,7 @@ export async function jarakKeRumah(db: Db, akunId: number, lat: number, lng: num
   return Math.round(jarakM(lat, lng, a, b));
 }
 
-/** Teks lokasi ("Nagari X, Kec. Y") hanya bila ada KK pada Sub SLS alokasi dalam 1,5 km dari titik; selain itu null. */
+/** Teks lokasi ("SLS X Sub 01, Nagari Y, Kec. Z") hanya bila ada KK pada Sub SLS alokasi dalam 1,5 km dari titik; selain itu null. */
 export async function teksLokasi(db: Db, akunId: number, lat: number, lng: number): Promise<string | null> {
   const titik = await titikKkSekitar(db, akunId, lat, lng);
   let terdekat: { idsubsls: string; d: number } | null = null;
@@ -247,10 +247,9 @@ export async function teksLokasi(db: Db, akunId: number, lat: number, lng: numbe
     if (d <= 1500 && (!terdekat || d < terdekat.d)) terdekat = { idsubsls: t.idsubsls, d };
   }
   if (!terdekat) return null;
-  const { data } = await db.from("bencana_wilayah").select("nagari, kecamatan").eq("idsubsls", terdekat.idsubsls).maybeSingle();
+  const { data } = await db.from("bencana_wilayah").select("sls, sub_sls, nagari, kecamatan").eq("idsubsls", terdekat.idsubsls).maybeSingle();
   if (!data) return null;
-  const bagian = [data.nagari ? `Nagari ${data.nagari}` : null, data.kecamatan ? `Kec. ${data.kecamatan}` : null].filter(Boolean);
-  return bagian.length ? bagian.join(", ") : null;
+  return teksLokasiWilayah(data as { sls?: string | null; sub_sls?: string | null; nagari?: string | null; kecamatan?: string | null });
 }
 
 // ------------------------------------------------------------------ pembanding untuk tingkat kepercayaan

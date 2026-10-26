@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  jarakEfektifM,
+  jarakEfektifM, teksLokasiWilayah, lokasiDuaBaris,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
   TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, BATAS_HARI_BAGI, jendelaBagiFoto, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
@@ -305,5 +305,25 @@ describe("status pemeriksaan yang dilihat petugas", () => {
     expect(statusPemeriksaan("merah", "dipertanyakan").perhatian).toBe(true);
     expect(statusPemeriksaan("merah", null).label).toBe("Ditahan, menunggu diperiksa");
     expect(statusPemeriksaan("hijau", undefined).label).toBe("Wajar");
+  });
+});
+
+describe("teks lokasi cap (SLS, Nagari, Kecamatan)", () => {
+  it("menyusun SLS + Sub, Nagari, Kec. dengan huruf rapi", () => {
+    expect(teksLokasiWilayah({ sls: "JORONG SAWAH TALUAK", sub_sls: "01", nagari: "KOTO BARU", kecamatan: "X KOTO DIATAS" })).toBe(
+      "SLS Jorong Sawah Taluak Sub 01, Nagari Koto Baru, Kec. X Koto Diatas",
+    );
+  });
+  it("melewati bagian yang kosong; semua kosong = null", () => {
+    expect(teksLokasiWilayah({ sls: "RT 02", sub_sls: "", nagari: "Koto Baru", kecamatan: null })).toBe("SLS Rt 02, Nagari Koto Baru");
+    expect(teksLokasiWilayah({ sls: null, sub_sls: "01", nagari: "Koto Baru", kecamatan: "Lembang" })).toBe("Nagari Koto Baru, Kec. Lembang");
+    expect(teksLokasiWilayah({ sls: " ", nagari: "", kecamatan: undefined })).toBeNull();
+  });
+  it("dua baris di cap: SLS di atas, Nagari dan kecamatan di bawah", () => {
+    expect(lokasiDuaBaris("SLS Rt 02 Sub 01, Nagari Koto Baru, Kec. Lembang")).toBe("SLS Rt 02 Sub 01\nNagari Koto Baru, Kec. Lembang");
+  });
+  it("tanpa SLS atau tanpa Nagari tidak dipecah", () => {
+    expect(lokasiDuaBaris("Nagari Koto Baru, Kec. Lembang")).toBe("Nagari Koto Baru, Kec. Lembang");
+    expect(lokasiDuaBaris("SLS Rt 02")).toBe("SLS Rt 02");
   });
 });

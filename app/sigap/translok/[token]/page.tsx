@@ -374,8 +374,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           )}
           {langkah === 4 && (
             <>
-              <Peringatan />
               <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} hanya="foto" />
+              <Peringatan />
               <TombolLangkah onKembali={() => setLangkah(3)} onLanjut={lanjut} teks="Lanjut →" />
             </>
           )}
@@ -386,7 +386,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
                 judul="Semua dokumen SPJ ada di Arsip"
                 isi="Kwitansi, Visum dan Surat Pernyataan Kendaraan Dinas dibuat otomatis dari hari kerja Anda dan ikut berubah bila hari kerja diubah. Surat Tugas diunggah admin anggaran. Laporan & Dokumentasi berasal dari isian harian Anda."
               />
-              <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} ringkasSaja />
+              {/* (26 Okt 2026) Langkah 5 memakai tampilan Arsip yang sama dengan tab Arsip (geser tanggal, tiap baris bisa diketuk), bukan ringkasan 6 baris */}
+              <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} />
               <TombolLangkah onKembali={() => setLangkah(4)} onLanjut={selesai} teks="Selesai, mulai bekerja ✓" hijau />
             </>
           )}
@@ -532,14 +533,13 @@ function Header({ kecil, judulBesar, sub, onKeluar, children }: { kecil: string;
   );
 }
 
+/** (26 Okt 2026) Catatan batas unggah: satu baris kecil di bawah area foto (sebelumnya kotak oranye besar berhuruf kapital di atas). */
 function Peringatan() {
   return (
-    <div role="note" className="flex items-start gap-2.5 rounded-2xl border-2 border-[#F59E0B] bg-[#FEF3E2] px-3.5 py-3 text-[#7A3E06]">
-      <IkonMenu n="awas" className="mt-0.5 h-5 w-5 text-[#B45309]" />
-      <p className="text-[12.5px] font-extrabold uppercase leading-snug tracking-wide">
-        Upload dokumentasi wajib dilakukan segera per hari (s.d. 23:59 WIB). Dokumentasi yang terlewat tidak dapat diupload kembali.
-      </p>
-    </div>
+    <p role="note" className="flex items-start gap-1.5 px-1 text-[12px] leading-snug text-[#7A3E06]">
+      <IkonMenu n="awas" className="mt-px h-3.5 w-3.5 shrink-0 text-[#B45309]" />
+      <span>Batas unggah foto tiap hari sampai 23:59 WIB. Yang terlewat tidak bisa diunggah lagi.</span>
+    </p>
   );
 }
 
