@@ -13,12 +13,15 @@
 //  - Grafik ringkasan (./GrafikMonitoring): tren harian bertumpuk + kepatuhan per kecamatan tujuan ST.
 //  - Tampilan utama = tabel per petugas (kolom bisa diurutkan); matriks harian lama tetap tersedia lewat
 //    toggle "Tabel | Matriks harian" (default Tabel, pilihan diingat per browser).
+// (27 Okt 2026) Permintaan user: tanggal hari kerja petugas (di detail baris maupun kotak Matriks harian) bisa diketuk -> jendela "Rincian hari"
+//  (./RincianHari): laporan + dokumentasi foto petugas hari itu; foto bisa dibuka besar dan di-zoom.
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ambil, aksi, bulanSingkat, hariSingkat, pesanGalat, SesiBerakhir, tglAngka, tglPanjang, tglPendek, waktuWib, type KegiatanRingkas } from "./api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import GrafikMonitoring from "./GrafikMonitoring";
 import PanelSiaranPerbaikan from "./PanelSiaranPerbaikan";
+import RincianHari from "./RincianHari";
 
 type Status = "lengkap" | "sebagian" | "terlewat" | "rencana";
 type Row = {
@@ -44,7 +47,7 @@ type Data = {
 };
 
 const BERGARIS = { backgroundImage: "repeating-linear-gradient(135deg, #E3E8EE 0 3px, #F8FAFC 3px 6px)" };
-function Sel({ s, izin, t }: { s: Status | undefined; izin: boolean; t: string }) {
+function Sel({ s, izin, t, onKlik }: { s: Status | undefined; izin: boolean; t: string; onKlik?: () => void }) {
   const kelas =
     s === "lengkap"
       ? "bg-emerald-600"
@@ -67,7 +70,22 @@ function Sel({ s, izin, t }: { s: Status | undefined; izin: boolean; t: string }
           : s === "rencana"
             ? "rencana"
             : "bukan hari kerja";
-  return <span title={`${tglPanjang(t)}: ${ket}`} className={`inline-block h-[18px] w-[18px] rounded-[4px] ${kelas}`} style={s === "rencana" ? BERGARIS : undefined} />;
+  const judul = `${tglPanjang(t)}: ${ket}${onKlik ? " — klik untuk melihat laporan & foto" : ""}`;
+  const kotak = `inline-block h-[18px] w-[18px] rounded-[4px] ${kelas}`;
+  if (!onKlik) return <span title={judul} className={kotak} style={s === "rencana" ? BERGARIS : undefined} />;
+  return (
+    <button
+      type="button"
+      title={judul}
+      aria-label={judul}
+      onClick={(e) => {
+        e.stopPropagation();
+        onKlik();
+      }}
+      className={`${kotak} cursor-pointer align-top transition hover:scale-125 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5FD1] focus-visible:ring-offset-1`}
+      style={s === "rencana" ? BERGARIS : undefined}
+    />
+  );
 }
 
 // (6 Okt 2026) Pengingat petugas -- desain user (tombol "Ingatkan"). Keputusan user: TIDAK dikirim otomatis;
@@ -125,6 +143,8 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
   const [fPeran, setFPeran] = useState("");
   const [cari, setCari] = useState("");
   const [buka, setBuka] = useState<number | null>(null);
+  // (27 Okt 2026) jendela "Rincian hari": petugas (penugasan) + tanggal yang sedang dilihat
+  const [rinci, setRinci] = useState<{ pen: number; tgl: string } | null>(null);
   // form izin susulan
   const [izPen, setIzPen] = useState<number | "">("");
   const [izTgl, setIzTgl] = useState("");
@@ -219,6 +239,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
   }
   const punyaTerlewat = useMemo(() => (data?.rows ?? []).filter((r) => r.terlewat.length > 0), [data]);
   const rowIzin = data?.rows.find((r) => r.penugasan_id === izPen) ?? null;
+  const rowRinci = rinci ? (data?.rows.find((r) => r.penugasan_id === rinci.pen) ?? null) : null;
 
   function pilihIzin(r: Row, tanggal?: string) {
     setIzPen(r.penugasan_id);
@@ -348,7 +369,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
             <Sel s="terlewat" izin t={hariIni} /> terlewat + izin <Sel s="rencana" izin={false} t={hariIni} /> rencana <Sel s={undefined} izin={false} t={hariIni} /> bukan hari kerja
           </span>
         )}
-        {tampilan === "tabel" && <span className="text-[11.5px] text-[#7B8794]">klik judul kolom untuk mengurutkan · klik baris untuk detail</span>}
+        {tampilan === "tabel" && <span className="text-[11.5px] text-[#7B8794]">klik judul kolom untuk mengurutkan · klik baris untuk detail · klik tanggal untuk laporan &amp; foto</span>}
         <div className="flex-1" />
         <div role="tablist" aria-label="Pilih tampilan" className="inline-flex rounded-lg border border-[#D5DCE7] bg-white p-0.5 text-[12px] font-bold">
           {(["tabel", "matriks"] as const).map((t) => (
@@ -503,7 +524,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                       </div>
                     </td>
                   </tr>
-                  {terbuka && <BarisDetail r={r} nKol={nKolTabel} bolehIzin={data.boleh_izin} onIzin={(t) => pilihIzin(r, t)} />}
+                  {terbuka && <BarisDetail r={r} nKol={nKolTabel} bolehIzin={data.boleh_izin} onIzin={(t) => pilihIzin(r, t)} onRincian={(t) => setRinci({ pen: r.penugasan_id, tgl: t })} />}
                 </Fragment>
               );
             })}
@@ -562,7 +583,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                     <td className={TD}>
                       <div className="flex gap-[3px]">
                         {data.tanggal.map((t) => (
-                          <Sel key={t} t={t} s={r.status[t]} izin={r.izin.includes(t)} />
+                          <Sel key={t} t={t} s={r.status[t]} izin={r.izin.includes(t)} onKlik={r.status[t] ? () => setRinci({ pen: r.penugasan_id, tgl: t }) : undefined} />
                         ))}
                       </div>
                     </td>
@@ -589,7 +610,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                       </td>
                     )}
                   </tr>
-                  {terbuka && <BarisDetail r={r} nKol={nKolMatriks} bolehIzin={data.boleh_izin} onIzin={(t) => pilihIzin(r, t)} />}
+                  {terbuka && <BarisDetail r={r} nKol={nKolMatriks} bolehIzin={data.boleh_izin} onIzin={(t) => pilihIzin(r, t)} onRincian={(t) => setRinci({ pen: r.penugasan_id, tgl: t })} />}
                 </Fragment>
               );
             })}
@@ -598,6 +619,24 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
       )}
 
       {data.boleh_izin && <PanelSiaranPerbaikan kegiatanId={kegiatanId} />}
+
+      {rinci && rowRinci && (
+        <RincianHari
+          kegiatanId={kegiatanId}
+          petugas={{ penugasan_id: rowRinci.penugasan_id, nama: rowRinci.nama, peran: rowRinci.peran }}
+          tanggal={rinci.tgl}
+          daftarTanggal={Object.keys(rowRinci.status)}
+          status={rowRinci.status}
+          izin={rowRinci.izin}
+          bolehIzin={data.boleh_izin}
+          onPindah={(t) => setRinci({ pen: rinci.pen, tgl: t })}
+          onIzin={(t) => {
+            setRinci(null);
+            pilihIzin(rowRinci, t);
+          }}
+          onTutup={() => setRinci(null)}
+        />
+      )}
 
       {data.boleh_izin && (
         <div ref={formRef}>
@@ -684,7 +723,7 @@ function ThUrut({
   );
 }
 
-function BarisDetail({ r, nKol, bolehIzin, onIzin }: { r: Row; nKol: number; bolehIzin: boolean; onIzin: (t: string) => void }) {
+function BarisDetail({ r, nKol, bolehIzin, onIzin, onRincian }: { r: Row; nKol: number; bolehIzin: boolean; onIzin: (t: string) => void; onRincian: (t: string) => void }) {
   const tgl = Object.keys(r.status).sort();
   return (
     <tr>
@@ -698,24 +737,37 @@ function BarisDetail({ r, nKol, bolehIzin, onIzin }: { r: Row; nKol: number; bol
         {tgl.length === 0 ? (
           <p className="mt-2 text-[12px] text-[#7B8794]">Petugas belum memilih hari kerja.</p>
         ) : (
-          <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {tgl.map((t) => {
-              const s = r.status[t];
-              const izin = r.izin.includes(t);
-              return (
-                <div key={t} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-[12px] shadow-sm">
-                  <span className="flex-1">{tglPanjang(t)}</span>
-                  <Chip w={LABEL_STATUS[s]?.w ?? "mut"}>{LABEL_STATUS[s]?.teks ?? s}</Chip>
-                  {izin && <Chip w="vio">izin</Chip>}
-                  {bolehIzin && s === "terlewat" && !izin && (
-                    <button type="button" onClick={() => onIzin(t)} className="text-[11px] font-bold text-[#1F6FD1] underline">
-                      beri izin
+          <>
+            <p className="mt-1.5 text-[11.5px] text-[#7B8794]">Klik tanggal untuk melihat laporan dan foto dokumentasi hari itu.</p>
+            <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {tgl.map((t) => {
+                const s = r.status[t];
+                const izin = r.izin.includes(t);
+                return (
+                  <div key={t} className="group flex items-center gap-1 rounded-lg bg-white shadow-sm ring-1 ring-transparent transition hover:shadow-md hover:ring-[#1F5FD1]/40">
+                    <button
+                      type="button"
+                      onClick={() => onRincian(t)}
+                      aria-label={`Lihat laporan dan foto ${r.nama}, ${tglPanjang(t)}`}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-[#1F5FD1]"
+                    >
+                      <span className="flex-1 truncate">{tglPanjang(t)}</span>
+                      <Chip w={LABEL_STATUS[s]?.w ?? "mut"}>{LABEL_STATUS[s]?.teks ?? s}</Chip>
+                      {izin && <Chip w="vio">izin</Chip>}
+                      <span aria-hidden className="text-[15px] font-bold leading-none text-[#9AA6B5] transition group-hover:translate-x-0.5 group-hover:text-[#1F5FD1]">
+                        ›
+                      </span>
                     </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    {bolehIzin && s === "terlewat" && !izin && (
+                      <button type="button" onClick={() => onIzin(t)} className="mr-2 shrink-0 text-[11px] font-bold text-[#1F6FD1] underline">
+                        beri izin
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </td>
     </tr>

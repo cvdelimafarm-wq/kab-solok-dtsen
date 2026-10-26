@@ -6,6 +6,7 @@
 //
 // GET ?bagian=ringkas                       -> kegiatan yg terlihat + izin saya
 // GET ?bagian=monitoring&kegiatan_id=       -> matriks harian per petugas
+// GET ?bagian=hari&kegiatan_id=&penugasan_id=&tanggal= -> laporan + foto dokumentasi satu hari kerja satu petugas (izin Monitoring)
 // GET ?bagian=penugasan&kegiatan_id=        -> petugas + ST
 // GET ?bagian=cari_akun&q=                  -> cari akun master (maks 20)
 // GET ?bagian=kegiatan&kegiatan_id=         -> data kegiatan + peran/tarif
@@ -16,7 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
-import { HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
+import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
 
@@ -215,6 +216,72 @@ export async function GET(req: NextRequest) {
       if (q.length < 2) return NextResponse.json({ akun: [] });
       const { data } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).ilike("nama", `%${q.replace(/[%_]/g, "")}%`).order("nama").limit(20);
       return NextResponse.json({ akun: data ?? [] });
+    }
+
+    // (27 Okt 2026) Rincian satu hari kerja satu petugas untuk jendela "Rincian hari" di tab Monitoring: laporan harian + foto dokumentasi
+    // nomor 1..n. HANYA BACA. Izin: menu Monitoring pada kegiatan itu (sama dengan yang melihat status harian); foto dikirim sebagai URL
+    // bertanda tangan 1 jam dari berkas dokumentasi yang sudah tercatat (berkas yang sama dengan PDF Dokumentasi SPJ).
+    if (bagian === "hari") {
+      if (!kegiatanId) return galat("Pilih kegiatan.");
+      if (!perlu("translok.monitoring")) return galat("Tidak punya izin untuk menu ini.", 403);
+      const penId = Number(sp.get("penugasan_id"));
+      const tanggal = sp.get("tanggal") ?? "";
+      if (!Number.isInteger(penId) || penId <= 0 || !tanggalValid(tanggal)) return galat("Petugas dan tanggal wajib.");
+      const { data: pen } = await db.from("sigap_penugasan").select("id, kegiatan_id, akun_id, peran").eq("id", penId).maybeSingle();
+      if (!pen || Number(pen.kegiatan_id) !== kegiatanId) return galat("Penugasan tidak ditemukan pada kegiatan ini.", 404);
+      const [{ data: keg }, { data: akun }, { data: lap }, { data: dok }, { data: hk }] = await Promise.all([
+        db.from("sigap_kegiatan").select("id, nama, jenis, satuan_realisasi, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
+        db.from("sigap_akun").select("nama").eq("id", pen.akun_id as number).maybeSingle(),
+        db.from("sigap_realisasi").select("lokasi, jumlah_realisasi, kendala, diperbarui_at").eq("penugasan_id", penId).eq("tanggal", tanggal).maybeSingle(),
+        db.from("sigap_dokumentasi").select("slot, file_path, foto_id, sumber, susulan, diunggah_at").eq("penugasan_id", penId).eq("tanggal", tanggal).order("slot"),
+        db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penId).eq("tanggal", tanggal).or(HK_AKTIF()).limit(1),
+      ]);
+      const daftar = (dok ?? []) as { slot: number; file_path: string; foto_id: number | null; sumber: string | null; susulan: boolean | null; diunggah_at: string | null }[];
+      const fotoIds = Array.from(new Set(daftar.map((d) => d.foto_id).filter((x): x is number => typeof x === "number")));
+      let sf: Record<string, unknown>[] = [];
+      if (fotoIds.length) {
+        const r = await db.from("sigap_foto").select("id, kode, diambil_at, lokasi_teks, kepercayaan, status_periksa").in("id", fotoIds);
+        sf = (r.data ?? []) as Record<string, unknown>[];
+      }
+      const url = new Map<string, string>();
+      if (daftar.length) {
+        const { data: ttd } = await db.storage.from(BUCKET_SIGAP).createSignedUrls(daftar.map((d) => d.file_path), 3600);
+        for (const t of ttd ?? []) if (t.path && t.signedUrl) url.set(t.path, t.signedUrl);
+      }
+      const info = new Map(sf.map((f) => [f.id as number, f]));
+      return NextResponse.json({
+        penugasan_id: penId,
+        nama: (akun?.nama as string | undefined) ?? "-",
+        peran: pen.peran as string,
+        tanggal,
+        hari_kerja: (hk ?? []).length > 0,
+        kegiatan: {
+          nama: (keg?.nama as string | undefined) ?? "",
+          jenis: (keg?.jenis as string | null | undefined) ?? null,
+          satuan: (keg?.satuan_realisasi as string | null | undefined) ?? "",
+          wajib_laporan: keg?.wajib_laporan !== false,
+          jumlah_foto: Number(keg?.jumlah_foto ?? 5) || 5,
+        },
+        laporan: lap
+          ? { lokasi: Array.isArray(lap.lokasi) ? lap.lokasi : [], jumlah: Number(lap.jumlah_realisasi ?? 0), kendala: (lap.kendala as string | null) ?? null, diperbarui_at: (lap.diperbarui_at as string | null) ?? null }
+          : null,
+        foto: daftar.map((d) => {
+          const f = d.foto_id != null ? info.get(d.foto_id) : undefined;
+          return {
+            slot: d.slot,
+            url: url.get(d.file_path) ?? null,
+            foto_id: d.foto_id ?? null,
+            sumber: d.sumber ?? null,
+            susulan: !!d.susulan,
+            diunggah_at: d.diunggah_at ?? null,
+            kode: (f?.kode as string | undefined) ?? null,
+            diambil_at: (f?.diambil_at as string | undefined) ?? null,
+            lokasi_teks: (f?.lokasi_teks as string | null | undefined) ?? null,
+            kepercayaan: (f?.kepercayaan as string | undefined) ?? null,
+            status_periksa: (f?.status_periksa as string | null | undefined) ?? null,
+          };
+        }),
+      });
     }
 
     if (bagian === "monitoring" || bagian === "penugasan" || bagian === "verifikasi" || bagian === "kegiatan") {
