@@ -129,6 +129,7 @@ export default function KameraSigap({
   const [ganti, setGanti] = useState<number | null>(() => (nomorGanti !== null && Number.isInteger(nomorGanti) && nomorGanti >= 1 && nomorGanti <= jumlahNomor ? nomorGanti : null)); // mode ganti foto: nomor yang akan digantikan
   const [nomorOtomatis, setNomorOtomatis] = useState(false); // nomor dipilihkan sistem (belum diubah petugas)
   const [hitung, setHitung] = useState<number | null>(null); // detik menuju kirim otomatis; null = tidak aktif
+  const [arahOk, setArahOk] = useState(false); // langkah 1 "Periksa arah foto" sudah dikonfirmasi petugas (sebelum nomor, bagikan, dan Kirim)
   const [terisiServer, setTerisiServer] = useState<number[]>([]); // nomor hari ini yang sudah terisi di server
   const [terisiAntre, setTerisiAntre] = useState<number[]>([]); // nomor hari ini yang foto-nya masih antre di HP ini
   const [ditahanServer, setDitahanServer] = useState<number[]>([]); // nomor hari ini yang dipesan foto kuning/merah yang menunggu diperiksa (tag 'ditahan')
@@ -498,7 +499,8 @@ export default function KameraSigap({
     const tujuan = ganti ?? saran;
     setNomor(tujuan);
     setNomorOtomatis(ganti === null && saran !== null);
-    setHitung(ganti === null && saran !== null ? DETIK_KIRIM_OTOMATIS : null);
+    setHitung(null); // hitung mundur kirim otomatis baru mulai setelah petugas memastikan arah foto (langkah 1)
+    setArahOk(false);
     setJepretan(j);
     setPesan(null);
     setHasil(null);
@@ -540,6 +542,7 @@ export default function KameraSigap({
     setKonfirmasiGanti(null);
     setNomorOtomatis(false);
     setHitung(null);
+    setArahOk(false);
     setTag([]);
     setBagikan(false);
     setHasil(null);
@@ -828,16 +831,34 @@ export default function KameraSigap({
       {jepretan && (
         <>
           <PratinjauCap url={jepretan.url} waktuMs={jepretan.waktuHp} pos={jepretan.pos} nama={namaSaya} peran={peran.toUpperCase()} kegiatan={namaKegiatan} />
-          {!hasil && (
-            <div className="flex flex-col gap-1.5">
+          {!hasil && !arahOk && (
+            <div className="flex flex-col gap-2 rounded-xl border-2 border-[#0F2A52] bg-[#F4F7FC] p-3" role="group" aria-label="Langkah 1: periksa arah foto">
+              <div className="text-sm font-extrabold text-[#0F2A52]">Langkah 1 · Periksa arah foto</div>
+              <p className="text-xs leading-relaxed text-[#3C4C68]">Orang, bangunan, dan tulisan di foto harus tegak. Bila foto terbalik atau miring, ketuk Putar sampai tegak. Cap resmi dicetak sesudah Kirim dan mengikuti arah akhir foto ini.</p>
               <div className="grid grid-cols-3 gap-2" role="group" aria-label="Putar foto">
-                <button type="button" onClick={() => void putarFoto(3)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">↺ Putar kiri</button>
-                <button type="button" onClick={() => void putarFoto(2)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar 180°</button>
-                <button type="button" onClick={() => void putarFoto(1)} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar kanan ↻</button>
+                <button type="button" onClick={() => void putarFoto(3)} disabled={mengirim} className="min-h-[48px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">↺ Putar kiri</button>
+                <button type="button" onClick={() => void putarFoto(2)} disabled={mengirim} className="min-h-[48px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar 180°</button>
+                <button type="button" onClick={() => void putarFoto(1)} disabled={mengirim} className="min-h-[48px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Putar kanan ↻</button>
               </div>
-              <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Foto terbalik atau miring? Ketuk Putar sampai orangnya tegak, lalu Kirim. Cap tulisan di foto resmi mengikuti arah akhir foto.</p>
+              <button
+                type="button"
+                onClick={() => { setArahOk(true); if (nomorOtomatis && nomor !== null) setHitung(DETIK_KIRIM_OTOMATIS); }}
+                disabled={mengirim}
+                className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50"
+              >
+                Arah sudah benar, lanjut
+              </button>
+              <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[44px] rounded-xl text-sm font-semibold text-[#3C4C68] disabled:opacity-50">Buang &amp; ulangi</button>
+              <p className="px-1 text-[11.5px] leading-snug text-[#3C4C68]">Foto sudah tersimpan di HP ini. Bila layar ini ditinggalkan sebelum Kirim, foto tetap terkirim otomatis dengan arah seperti yang tampak sekarang.</p>
             </div>
           )}
+          {!hasil && arahOk && (
+            <button type="button" onClick={() => { setHitung(null); setArahOk(false); }} disabled={mengirim} className="min-h-[44px] rounded-xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">
+              Periksa arah foto lagi (putar)
+            </button>
+          )}
+          {(arahOk || hasil) && (
+            <>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Ini draft tampilan cap. Cap resmi dicetak server saat Kirim: jam resmi mengikuti server, lalu ditambah nama lokasi, kode, dan QR.</p>
 
           <fieldset className="flex flex-col gap-2">
@@ -1003,6 +1024,8 @@ export default function KameraSigap({
                 {mengirim ? "Mengirim…" : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
+          )}
+            </>
           )}
         </>
       )}
