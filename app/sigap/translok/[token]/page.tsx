@@ -12,6 +12,7 @@ import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOt
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
+import { bacaTampilanKerja, kemasTampilan, kunciTampilanKerja } from "@/lib/sigapPanduan";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
 import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
@@ -237,6 +238,40 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       null
     );
   }, [data, penId]);
+
+  // (27 Okt 2026) Tab dan langkah panduan yang sedang dibuka diingat di sessionStorage HP. Back dari halaman Kamera SIGAP memuat halaman ini dari awal;
+  // tanpa ini tampilan kembali ke "Hari Ini" atau ke panduan Langkah 1. Tautan dalam (?tab=&tgl=&fokus=) tetap menang atas ingatan ini.
+  const [tampilanPulih, setTampilanPulih] = useState(false);
+  useEffect(() => {
+    try {
+      let adaTautan = false;
+      try {
+        adaTautan = adaTautanKerja(window.location.search);
+      } catch {
+        /* abaikan */
+      }
+      if (!adaTautan) {
+        const s = bacaTampilanKerja(window.sessionStorage.getItem(kunciTampilanKerja(token)), Date.now());
+        if (s) {
+          panduanDiputuskan.current = true; // yang diingat (termasuk "tanpa panduan") menggantikan keputusan awal dari data
+          setTab(s.tab);
+          setLangkah(s.langkah);
+          if (s.pen && !new URLSearchParams(window.location.search).get("p")) setPenId(s.pen);
+        }
+      }
+    } catch {
+      /* sessionStorage tidak tersedia: tampilan biasa */
+    }
+    setTampilanPulih(true);
+  }, [token]);
+  useEffect(() => {
+    if (!tampilanPulih) return;
+    try {
+      window.sessionStorage.setItem(kunciTampilanKerja(token), kemasTampilan({ tab, langkah, pen: pen?.id ?? penId }, Date.now()));
+    } catch {
+      /* abaikan */
+    }
+  }, [tampilanPulih, token, tab, langkah, pen?.id, penId]);
 
   // (14 Okt 2026) Terapkan tautan dalam sekali, setelah data siap dan panduan login pertama tidak sedang tampil:
   // buka tab/hari yang dituju, sorot bagian yang kurang, lalu bersihkan alamat (muat ulang halaman = tampilan biasa).

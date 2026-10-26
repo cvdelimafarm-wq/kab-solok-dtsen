@@ -185,6 +185,8 @@ export default function KameraSigap({
   function laporOrientasi(fotoId: number, j: Jepretan) {
     void ambilJson("/api/sigap/foto/orientasi", { method: "POST", body: { foto_id: fotoId, diag: { ...j.diag, kuartal_manual: j.kuartal % 4 } } }).catch(() => undefined);
   }
+  // (27 Okt 2026) Kamera tegak layar penuh (tanpa scroll: tombol Potret selalu terlihat). true = petugas menutupnya untuk melihat panduan GPS, kabar, dan tab lain.
+  const [penuhTutup, setPenuhTutup] = useState(false);
   const [layarLebar, setLayarLebar] = useState(false); // layar sendiri sudah landscape (peramban biasa dengan putar otomatis): tidak perlu diputar manual
   const izinGerakRef = useRef(false);
   const gerakAdaRef = useRef(false);
@@ -372,13 +374,25 @@ export default function KameraSigap({
   const putar: ArahHp = layarLebar ? 0 : miring;
   // Tampilan landscape penuh layar hanya untuk HP miring ke samping; HP terbalik (2) tetap memakai tata letak biasa.
   const landPenuh = (putar === 1 || putar === -1) && !galatKamera;
+  // (27 Okt 2026) HP tegak: kamera layar penuh. Bingkai 3:4 di dalam halaman setinggi >1.100 px sehingga tombol Potret terdorong keluar layar (harus di-scroll).
+  const tegakPenuh = !landPenuh && !galatKamera && !penuhTutup;
   useEffect(() => {
     const v = videoRef.current;
     if (!jepretan && v && aliranRef.current && v.srcObject !== aliranRef.current) {
       v.srcObject = aliranRef.current;
       void v.play().catch(() => undefined);
     }
-  }, [jepretan, landPenuh, awalSiap]);
+  }, [jepretan, landPenuh, tegakPenuh, awalSiap]);
+  // layar penuh tegak aktif: halaman di belakangnya tidak boleh ikut tergulir
+  const kunciGulir = tegakPenuh && !jepretan && awalSiap;
+  useEffect(() => {
+    if (!kunciGulir) return;
+    const lama = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = lama;
+    };
+  }, [kunciGulir]);
 
   // GPS, token waktu, dan antrean tanpa sinyal
   useEffect(() => {
@@ -725,6 +739,20 @@ export default function KameraSigap({
 
   if (!bacaSesi()) return <div className="p-4 text-sm">Sesi tidak ditemukan. Masuk dulu.</div>;
 
+  // (27 Okt 2026) keterangan ringkas untuk kamera layar penuh: nomor yang akan dipotret (sama dengan tujuanAwal di potret())
+  const nomorTarget = ganti ?? nomorAwal ?? saran;
+  const ketNomor = (n: number) => `Foto ${n}${etiket[n - 1] ? ` · ${etiket[n - 1]}` : ""}`;
+  const labelTarget = ganti !== null ? `Ambil ulang ${ketNomor(ganti)}` : nomorTarget !== null ? ketNomor(nomorTarget) : "Foto cadangan";
+  const ketGps = !posisi
+    ? galatGps ?? "Mencari lokasi…"
+    : akurasiBuruk
+      ? `Akurasi GPS ±${Math.round(posisi.akurasi)} m terlalu kasar. Foto belum bisa diambil.`
+      : akurasiKasar && sisaTunggu > 0
+        ? `Menunggu GPS lebih akurat… ${sisaTunggu} dtk`
+        : akurasiKasar
+          ? "Akurasi GPS kasar: foto akan diperiksa PML/admin."
+          : null;
+
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-3 pb-6 landscape:max-w-xl" onPointerDown={mintaIzinGerak}>
       <div className="px-1">
@@ -874,6 +902,84 @@ export default function KameraSigap({
               </div>,
               document.body
             )
+          ) : tegakPenuh ? (
+            createPortal(
+              <div className="fixed inset-0 z-[10000] flex touch-none select-none flex-col overscroll-contain bg-black text-white" data-kamera-tegak="1">
+                {/* Seluruh bingkai yang akan dipotret terlihat (object-contain); foto selalu diambil dari bingkai penuh, bukan dari potongan di layar */}
+                <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-contain ${hadap === "user" ? "-scale-x-100" : ""}`} aria-label="Pratinjau kamera" />
+                <div className="relative z-10 flex items-start gap-2 bg-gradient-to-b from-black/75 via-black/35 to-transparent px-3 pb-8" style={{ paddingTop: "max(10px, env(safe-area-inset-top))" }}>
+                  <button type="button" onClick={() => setPenuhTutup(true)} aria-label="Tutup layar penuh kamera" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/55 text-[20px] font-bold leading-none active:bg-black/75">
+                    ✕
+                  </button>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className={`inline-block max-w-full truncate rounded-full px-3 py-1 text-[13px] font-extrabold ${ganti !== null ? "bg-[#B7791F]" : "bg-[#0F2A52]/90"}`}>{labelTarget}</div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${akurasiOk ? "bg-[#1E8E4E]" : "bg-[#B7791F]"}`} role="status">
+                        {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (kasar)"}` : galatGps ?? "Mencari lokasi…"}
+                      </span>
+                      {antre > 0 && <span className="rounded-full bg-black/55 px-2.5 py-0.5 text-[11.5px] font-semibold">{antre} foto menunggu terkirim</span>}
+                    </div>
+                  </div>
+                  {banyakKamera !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setHadap((h) => (h === "environment" ? "user" : "environment"))}
+                      aria-label={hadap === "environment" ? "Ganti ke kamera depan" : "Ganti ke kamera belakang"}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/55 active:bg-black/75"
+                    >
+                      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+                        <path d="M21 3v5h-5" />
+                        <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+                        <path d="M3 21v-5h5" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1" />
+                {pesan && (
+                  <div role={pesan.jenis === "galat" ? "alert" : "status"} className={`relative z-10 mx-3 mb-2 rounded-lg px-3 py-2 text-xs font-semibold ${pesan.jenis === "ok" ? "bg-[#E3F6EC] text-[#0B6B3F]" : pesan.jenis === "info" ? "bg-[#FFF4D6] text-[#5E4300]" : "bg-[#FDE8E8] text-[#9B1C23]"}`}>
+                    {pesan.teks}
+                  </div>
+                )}
+                <div className="relative z-10 flex flex-col items-center gap-2 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-4 pt-10" style={{ paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+                  <div className="flex items-center gap-1.5" aria-label="Nomor foto hari ini">
+                    {NOMOR(jumlahNomor).map((n) => {
+                      const penuh = terisiSemuaNomor.has(n);
+                      const tujuan = n === nomorTarget;
+                      return (
+                        <span key={n} className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold ${tujuan ? "border-2 border-white bg-white text-[#0F2A52]" : penuh ? "bg-[#1E8E4E] text-white" : "bg-white/25 text-white"}`}>
+                          {penuh && !tujuan ? "✓" : n}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {ketGps && (
+                    <p className="text-center text-[12px] font-semibold leading-snug text-white/90">
+                      {ketGps}
+                      {posisi && !akurasiOk && (
+                        <>
+                          {" "}
+                          <button type="button" onClick={() => setPenuhTutup(true)} className="underline">
+                            Cara memperbaiki
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void potret()}
+                    disabled={!siapPotret || !!galatKamera}
+                    aria-label="Potret"
+                    className="flex h-[78px] w-[78px] items-center justify-center rounded-full border-4 border-white bg-white/25 active:scale-95 disabled:opacity-40"
+                  >
+                    <span className="h-[58px] w-[58px] rounded-full bg-white" />
+                  </button>
+                </div>
+              </div>,
+              document.body
+            )
           ) : (
             <div className="relative overflow-hidden rounded-2xl bg-black">
               {galatKamera ? (
@@ -900,6 +1006,11 @@ export default function KameraSigap({
               <div className={`absolute left-2 top-2 rounded-full px-3 py-1 text-xs font-bold ${akurasiOk ? "bg-[#1E8E4E] text-white" : "bg-[#B7791F] text-white"}`} role="status">
                 {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (kasar)"}` : galatGps ?? "Mencari lokasi…"}
               </div>
+              {!galatKamera && !landPenuh && (
+                <button type="button" onClick={() => setPenuhTutup(false)} className="absolute bottom-2 right-2 flex min-h-[40px] items-center gap-1.5 rounded-full bg-black/60 px-3 text-xs font-bold text-white active:bg-black/80">
+                  Layar penuh
+                </button>
+              )}
             </div>
           )}
           {galatGps && posisi === null && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galatGps}</div>}

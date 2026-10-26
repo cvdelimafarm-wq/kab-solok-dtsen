@@ -30,6 +30,7 @@ import {
 } from "@/lib/sigap";
 import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
 import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
+import { panduanSelesai } from "@/lib/sigapPanduan";
 import { laporanDianggap, satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
 
 export const runtime = "nodejs";
@@ -129,7 +130,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         jenis: akun.jenis,
         identitas: akun.jenis === "organik" ? { label: "NIP", nilai: samarkan(akun.nip) } : { label: "NIK", nilai: samarkan(akun.nik) },
         alamat_kecamatan: akun.alamat_kecamatan,
-        onboarding_selesai: !!akun.onboarding_selesai_at,
+        // (27 Okt 2026) akun yang sudah punya hari kerja dianggap selesai panduan (lib/sigapPanduan): panduan tidak muncul lagi setiap halaman dimuat ulang
+        onboarding_selesai: panduanSelesai(akun.onboarding_selesai_at, (hk ?? []).length),
         // (6 Okt 2026) koordinat tempat tinggal dari master + status verifikasi lokasi
         domisili: akun.domisili_lat != null && akun.domisili_lng != null ? { lat: akun.domisili_lat, lng: akun.domisili_lng, sumber: akun.domisili_sumber } : null,
         verifikasi: akun.verif_at ? { at: akun.verif_at, jarak_m: akun.verif_jarak_m, alasan: akun.verif_alasan } : null,
