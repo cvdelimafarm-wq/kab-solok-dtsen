@@ -32,6 +32,18 @@ export function kuartalDariArah(arah: ArahHp): 0 | 1 | 2 | 3 {
   return 0;
 }
 
+/**
+ * (26 Okt 2026, malam) Putaran dasar menurut kamera yang dipakai. Data lapangan 181 foto (sigap_audit `foto.orientasi`):
+ *  - kamera BELAKANG, HP miring kiri (s1): 5 dari 5 foto sudah benar dengan putaran dasar 3;
+ *  - kamera DEPAN, HP miring kiri (s1): 21 dari 27 foto harus diputar 180 derajat lagi oleh petugas (14 HP berbeda); kamera depan pada posisi tegak (s0) dan layar landscape (l90, l270) sudah benar.
+ * Bingkai kamera depan datang dengan arah putar tertukar bila HP miring ke samping (90 derajat), jadi pada miring kiri/kanan kamera depan diberi tambahan 180 derajat.
+ * HP tegak dan terbalik tidak berubah. Miring kanan (-1) belum pernah muncul di data; diperlakukan sama dengan miring kiri, dan belajar per HP meluruskan bila ternyata beda.
+ */
+export function kuartalDasarKamera(arah: ArahHp, depan: boolean): 0 | 1 | 2 | 3 {
+  const k = kuartalDariArah(arah);
+  return depan && (arah === 1 || arah === -1) ? (((k + 2) % 4) as 0 | 1 | 2 | 3) : k;
+}
+
 /** Kompatibel dengan versi 24 Okt: matriks putar bingkai untuk arah 1 (kiri), -1 (kanan), atau 2 (terbalik). */
 export function matriksPutarBingkai(putar: 1 | -1 | 2, lebarBingkai: number, tinggiBingkai: number): MatriksKanvas {
   return matriksKuartal(kuartalDariArah(putar) as 1 | 2 | 3, lebarBingkai, tinggiBingkai).m;
@@ -76,10 +88,10 @@ export type BelajarPeta = Record<string, BelajarArah>;
 export const BELAJAR_AWAL: BelajarArah = { balik: false, koreksi: 0, benar: 0 };
 export const AMBANG_KOREKSI = 2;
 
-/** Kunci kondisi: layar sendiri sudah landscape -> "l<sudut layar>"; selain itu -> "s<arah HP>" (s0, s1, s-1, s2). */
-export function kunciKondisi(layarLebar: boolean, sudutLayar: number, arah: ArahHp): string {
-  if (layarLebar) return `l${(((Math.round(sudutLayar) % 360) + 360) % 360)}`;
-  return `s${arah}`;
+/** Kunci kondisi: layar sendiri sudah landscape -> "l<sudut layar>"; selain itu -> "s<arah HP>" (s0, s1, s-1, s2). Kamera depan diberi awalan "d" (ds1, dl90, ...). */
+export function kunciKondisi(layarLebar: boolean, sudutLayar: number, arah: ArahHp, depan = false): string {
+  const dasar = layarLebar ? `l${(((Math.round(sudutLayar) % 360) + 360) % 360)}` : `s${arah}`;
+  return depan ? `d${dasar}` : dasar; // kamera depan belajar terpisah dari kamera belakang
 }
 
 /** Putaran searah jarum jam (kelipatan 90 derajat) yang akhirnya dipakai: dasar menurut sensor, ditambah 180 derajat bila kondisi itu sudah dipelajari terbalik. */

@@ -26,7 +26,7 @@ import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
-import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDariArah, kunciKondisi, matriksKuartal, type ArahHp, type BelajarPeta } from "@/lib/sigapFotoPutar";
+import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDasarKamera, kunciKondisi, matriksKuartal, type ArahHp, type BelajarPeta } from "@/lib/sigapFotoPutar";
 import { jamWib } from "@/lib/sigapUrutanFoto";
 import { useTombolKembali } from "./useTombolKembali";
 import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
@@ -153,7 +153,7 @@ export default function KameraSigap({
   // sudah diputar otomatis pada kondisi itu, kondisi itu diberi tambahan putaran 180 derajat di HP ini (lib/sigapFotoPutar.ts).
   const belajarRef = useRef<BelajarPeta>({});
   const belajarDicatatRef = useRef<number | null>(null);
-  const kunciBelajar = () => `sigap-foto-belajar:${pemilikSesi()}`;
+  const kunciBelajar = () => `sigap-foto-belajar2:${pemilikSesi()}`;
   useEffect(() => {
     try {
       belajarRef.current = bacaBelajarPeta(localStorage.getItem(kunciBelajar()));
@@ -310,7 +310,7 @@ export default function KameraSigap({
       const v = videoRef.current;
       const d = diagRef.current;
       const tipe = typeof screen !== "undefined" ? screen.orientation?.type ?? "?" : "?";
-      setDiag(`v4 · sensor ${d.n ? `${d.sumber} (${d.n}) x=${d.x.toFixed(1)} y=${d.y.toFixed(1)}` : "tidak ada kabar"} · layar ${tipe} · bingkai ${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}${Object.values(belajarRef.current).some((b) => b.balik) ? " · arah dikoreksi" : ""}`);
+      setDiag(`v5 · sensor ${d.n ? `${d.sumber} (${d.n}) x=${d.x.toFixed(1)} y=${d.y.toFixed(1)}` : "tidak ada kabar"} · layar ${tipe} · bingkai ${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}${Object.values(belajarRef.current).some((b) => b.balik) ? " · arah dikoreksi" : ""}`);
     }, 700);
     return () => clearInterval(t);
   }, []);
@@ -441,8 +441,8 @@ export default function KameraSigap({
     // berlawanan). Kini memakai lib/sigapFotoPutar.ts (diuji): HP ke kiri -> sisi kanan bingkai jadi atas; HP ke kanan -> sisi kiri bingkai jadi atas.
     // (26 Okt 2026) Empat arah seperti kamera biasa: tegak, kiri, kanan, dan TERBALIK (180 derajat), ditambah koreksi hasil belajar per HP dan per kondisi.
     const sudutLayar = typeof screen !== "undefined" ? screen.orientation?.angle ?? 0 : 0;
-    const kunci = kunciKondisi(layarLebar, sudutLayar, miring);
-    const kuartalDasar = layarLebar ? 0 : kuartalDariArah(miring);
+    const kunci = kunciKondisi(layarLebar, sudutLayar, miring, hadap === "user");
+    const kuartalDasar = layarLebar ? 0 : kuartalDasarKamera(miring, hadap === "user");
     const kuartalOtomatis = kuartalAkhir(kuartalDasar, belajarRef.current, kunci);
     let kuartalDipakai = 0;
     if (kuartalOtomatis === 2 || (kuartalOtomatis !== 0 && v.videoHeight > v.videoWidth)) {

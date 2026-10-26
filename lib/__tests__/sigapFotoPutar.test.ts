@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  AMBANG_KOREKSI, BELAJAR_AWAL, arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDariArah, kunciKondisi, matriksKuartal, matriksPutarBingkai, perbaruiBelajar, petakTitik,
+  AMBANG_KOREKSI, BELAJAR_AWAL, arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDariArah, kuartalDasarKamera, kunciKondisi, matriksKuartal, matriksPutarBingkai, perbaruiBelajar, petakTitik,
 } from "../sigapFotoPutar";
 
 // Bingkai tegak 90 x 160 (lebar x tinggi). Kanvas hasil untuk putar samping: 160 x 90.
@@ -116,6 +116,23 @@ describe("belajar dari koreksi petugas (per kondisi)", () => {
     expect(kunciKondisi(false, 90, 0)).toBe("s0");
     expect(kunciKondisi(true, 270, 0)).toBe("l270");
     expect(kunciKondisi(true, -90, 0)).toBe("l270");
+  });
+  it("kamera depan punya kunci sendiri (belajar terpisah dari kamera belakang)", () => {
+    expect(kunciKondisi(false, 0, 1, true)).toBe("ds1");
+    expect(kunciKondisi(true, 90, 0, true)).toBe("dl90");
+    expect(kunciKondisi(false, 0, 1, false)).toBe("s1");
+  });
+  it("kuartalDasarKamera: kamera depan miring ke samping +180 derajat, selain itu sama dengan kamera belakang", () => {
+    // data lapangan 26 Okt 2026: belakang miring kiri benar dengan 3; depan miring kiri perlu 3 + 2 = 1
+    expect(kuartalDasarKamera(1, false)).toBe(3);
+    expect(kuartalDasarKamera(1, true)).toBe(1);
+    expect(kuartalDasarKamera(-1, false)).toBe(1);
+    expect(kuartalDasarKamera(-1, true)).toBe(3);
+    // tegak dan terbalik tidak berubah
+    expect(kuartalDasarKamera(0, true)).toBe(0);
+    expect(kuartalDasarKamera(2, true)).toBe(2);
+    expect(kuartalDasarKamera(0, false)).toBe(0);
+    expect(kuartalDasarKamera(2, false)).toBe(2);
   });
   it("kuartalAkhir menambah 180 derajat hanya pada kondisi yang sudah dipelajari terbalik", () => {
     const peta = { s1: { balik: true, koreksi: 0, benar: 0 }, l90: { balik: false, koreksi: 1, benar: 0 } };
