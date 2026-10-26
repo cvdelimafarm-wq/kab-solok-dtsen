@@ -27,7 +27,7 @@ import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
-import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
+import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, MAKS_TAG, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
 import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDasarKamera, kunciKondisi, matriksKuartal, type ArahHp, type BelajarPeta } from "@/lib/sigapFotoPutar";
@@ -40,7 +40,9 @@ type Hasil = { ok: true; sudah?: boolean; foto: { id: number; kode: string; kepe
 type Hadap = "environment" | "user";
 
 const NOMOR = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
-const DETIK_KIRIM_OTOMATIS = 10;
+// (27 Okt 2026) Jaga-jaga petugas lupa menekan "Arah sudah benar, kirim": foto terkirim sendiri sesudah sekian detik (hanya bila nomor dipilihkan sistem/petugas
+// sebelum memotret; mode ambil ulang tidak pernah kirim otomatis). Memutar foto menghentikan hitungan lalu memulainya lagi dari awal.
+const DETIK_KIRIM_OTOMATIS = 30;
 const tglWib = (ms = Date.now()) => new Date(ms + 7 * 3_600_000).toISOString().slice(0, 10);
 
 type Jepretan = { blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number; dibuatMs: number;
@@ -151,6 +153,13 @@ export default function KameraSigap({
   const [mengirim, setMengirim] = useState(false);
   const [pesan, setPesan] = useState<{ jenis: "ok" | "info" | "galat"; teks: string } | null>(null);
   const [hasil, setHasil] = useState<Hasil | null>(null);
+  // (27 Okt 2026) Alur sesudah terkirim: popup "Foto ke-n berhasil terkirim", lalu tanya "Bagikan ke rekan?" (Ya = pilih rekan, Tidak = lanjut memotret).
+  const [popupKirim, setPopupKirim] = useState<{ judul: string; sub: string | null } | null>(null);
+  const [bagiLangkah, setBagiLangkah] = useState<"tanya" | "pilih">("tanya");
+  const [tagBagi, setTagBagi] = useState<TagPilihan[]>([]);
+  const [sibukBagi, setSibukBagi] = useState(false);
+  const [pesanBagi, setPesanBagi] = useState<string | null>(null);
+  const [bagiN, setBagiN] = useState<number | null>(null); // jumlah rekan yang sudah diajak (null = belum membagikan)
   const [antre, setAntre] = useState(0);
   const [hadap, setHadap] = useState<Hadap>("environment"); // kamera belakang dulu; tombol Putar kamera untuk depan
   const [banyakKamera, setBanyakKamera] = useState<boolean | null>(null); // null = belum diketahui (tombol tetap tampil)
@@ -524,7 +533,7 @@ export default function KameraSigap({
     const tujuan = tujuanAwal;
     setNomor(tujuan);
     setNomorOtomatis(ganti === null && tujuan !== null);
-    setHitung(null); // hitung mundur kirim otomatis baru mulai setelah petugas memastikan arah foto (langkah 1)
+    setHitung(ganti === null && tujuan !== null ? DETIK_KIRIM_OTOMATIS : null); // kirim otomatis jaga-jaga lupa menekan kirim (tidak untuk mode ambil ulang)
     setArahOk(false);
     setJepretan(j);
     setPesan(null);
@@ -554,6 +563,7 @@ export default function KameraSigap({
       if (!blob) throw new Error("blob");
       const url = URL.createObjectURL(blob);
       setJepretan((p) => (p ? { ...p, blob, url, kuartal: (p.kuartal + k) % 4 } : p)); // url lama dilepas oleh efek pada jepretan
+      if (nomorOtomatis && nomor !== null) setHitung(DETIK_KIRIM_OTOMATIS); // sudah memeriksa arah: hitungan jaga-jaga mulai lagi dari awal
     } catch {
       setPesan({ jenis: "galat", teks: "Foto tidak dapat diputar. Coba lagi, atau pakai Buang & ulangi." });
     }
@@ -571,6 +581,11 @@ export default function KameraSigap({
     setTag([]);
     setBagikan(false);
     setHasil(null);
+    setPopupKirim(null);
+    setBagiLangkah("tanya");
+    setTagBagi([]);
+    setPesanBagi(null);
+    setBagiN(null);
     setGanti(null); // keluar dari pratinjau (kirim/antre/kembali) = mode ganti selesai; hanya "Buang & ulangi" yang mempertahankannya (lihat ulang())
     // (27 Okt 2026) foto berikutnya: pilih nomornya dulu lagi (bawaan = nomor kosong berikutnya); kamera tetap menyala
     setAwalSiap(false);
@@ -666,13 +681,23 @@ export default function KameraSigap({
     if (hitung === null || !jepretan || mengirim || hasil) return;
     if (hitung <= 0) {
       setHitung(null);
-      if (adaTujuan) void kirim();
+      if (adaTujuan) {
+        setArahOk(true); // bila gagal, layar cadangan (nomor + Kirim) yang tampil
+        void kirim();
+      }
       return;
     }
     const t = setTimeout(() => setHitung((h) => (h === null ? null : h - 1)), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hitung, jepretan, mengirim, hasil]);
+
+  // Popup "berhasil terkirim" tertutup sendiri setelah 3,5 detik (atau diketuk)
+  useEffect(() => {
+    if (!popupKirim) return;
+    const t = setTimeout(() => setPopupKirim(null), 3500);
+    return () => clearTimeout(t);
+  }, [popupKirim]);
 
   async function kirim() {
     if (!jepretan) return;
@@ -690,7 +715,15 @@ export default function KameraSigap({
         laporOrientasi(r.data.foto.id, jepretan);
         setHasil(r.data);
         setGanti(null); // penggantian sudah terkirim: jepretan berikutnya kembali memakai nomor berikutnya
-        setPesan({ jenis: "ok", teks: r.data.sudah ? "Foto ini sudah tercatat sebelumnya." : nomor !== null ? `Foto terkirim sebagai Foto ${nomor}.` : "Foto terkirim." });
+        setPesan(null);
+        setBagiLangkah("tanya");
+        setTagBagi([]);
+        setPesanBagi(null);
+        setBagiN(null);
+        setPopupKirim({
+          judul: r.data.sudah ? "Foto ini sudah tercatat sebelumnya" : nomor !== null ? `Foto ke-${nomor} berhasil terkirim` : "Foto berhasil terkirim",
+          sub: r.data.ditahan ? "Menunggu diperiksa PML/admin sebelum tercatat di nomor foto." : nomor === null ? "Disimpan sebagai foto cadangan." : null,
+        });
         if (nomor !== null) setTerisiServer((p) => Array.from(new Set([...p, nomor]))); // langsung maju ke nomor berikutnya; muatTerisi meluruskan bila ditahan
         void muatTerisi();
         onSelesai?.();
@@ -711,6 +744,33 @@ export default function KameraSigap({
       }
     } finally {
       setMengirim(false);
+    }
+  }
+
+  /** (27 Okt 2026) Foto sudah terkirim: ajak rekan yang dipilih (foto tidak dikirim ulang; rekan memilih nomor fotonya sendiri). */
+  async function bagiKeRekan() {
+    if (!hasil || tagBagi.length === 0 || sibukBagi) return;
+    setSibukBagi(true);
+    setPesanBagi(null);
+    try {
+      const r = await ambilJson<{ ok: boolean; simulasi?: boolean; ditambah?: number }>("/api/sigap/foto/tag", {
+        method: "POST",
+        body: { foto_id: hasil.foto.id, tag: tagBagi.map((t) => ({ akun_id: t.akun_id, slot_usulan: t.slot_usulan })) },
+      });
+      if (r.simulasi) {
+        setPesanBagi("Mode simulasi (masuk sebagai akun lain): ajakan TIDAK dikirim.");
+      } else {
+        setBagiN(r.ditambah ?? 0);
+        setPopupKirim({
+          judul: r.ditambah ? `Ajakan terkirim ke ${r.ditambah} orang` : "Semua yang dipilih sudah pernah diajak",
+          sub: r.ditambah ? "Rekan memilih nomor fotonya sendiri." : null,
+        });
+      }
+    } catch (e) {
+      const g = e as GalatFoto;
+      setPesanBagi(g.message === "SESI_BERAKHIR" ? "Sesi berakhir. Masuk kembali, lalu bagikan lewat Foto saya." : g.message);
+    } finally {
+      setSibukBagi(false);
     }
   }
 
@@ -1040,6 +1100,16 @@ export default function KameraSigap({
       {jepretan && (
         <>
           <PratinjauCap url={jepretan.url} waktuMs={jepretan.waktuHp} pos={jepretan.pos} nama={namaSaya} peran={peran.toUpperCase()} kegiatan={namaKegiatan} />
+          {popupKirim && (
+            <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-6" role="presentation" onClick={() => setPopupKirim(null)}>
+              <div role="status" aria-live="polite" className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E3F6EC] text-3xl font-extrabold text-[#1E8E4E]" aria-hidden="true">✓</div>
+                <h2 className="mt-3 text-base font-extrabold text-[#0F2A52]">{popupKirim.judul}</h2>
+                {popupKirim.sub && <p className="mt-1 text-sm leading-snug text-[#3C4C68]">{popupKirim.sub}</p>}
+                <button type="button" onClick={() => setPopupKirim(null)} className="mt-4 min-h-[44px] w-full rounded-xl bg-[#0F2A52] text-sm font-extrabold text-white">OK</button>
+              </div>
+            </div>
+          )}
           {!hasil && !arahOk && (
             <div className="flex flex-col gap-2 rounded-xl border-2 border-[#0F2A52] bg-[#F4F7FC] p-3" role="group" aria-label="Langkah 1: periksa arah foto">
               <div className="text-sm font-extrabold text-[#0F2A52]">Langkah 1 · Periksa arah foto</div>
@@ -1051,12 +1121,19 @@ export default function KameraSigap({
               </div>
               <button
                 type="button"
-                onClick={() => { setArahOk(true); if (nomorOtomatis && nomor !== null) setHitung(DETIK_KIRIM_OTOMATIS); }}
+                onClick={() => { setArahOk(true); void kirim(); }}
                 disabled={mengirim}
                 className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50"
               >
-                Arah sudah benar, lanjut
+                {mengirim ? "Mengirim…" : "Arah sudah benar, kirim"}
               </button>
+              {hitung !== null && !mengirim && (
+                <div role="status" className="flex items-center gap-3 rounded-xl bg-[#E8EEF8] px-3 py-2.5">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#0F2A52] text-sm font-extrabold text-white" aria-hidden="true">{hitung}</span>
+                  <span className="min-w-0 flex-1 text-xs font-semibold leading-snug text-[#0F2A52]">Bila tidak ada tindakan, terkirim otomatis sebagai Foto {nomor} dalam {hitung} detik. Foto sudah aman tersimpan di HP.</span>
+                  <button type="button" onClick={() => setHitung(null)} className="min-h-[40px] flex-none rounded-lg border-2 border-[#0F2A52] px-3 text-xs font-bold text-[#0F2A52]">Tunda</button>
+                </div>
+              )}
               <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[44px] rounded-xl text-sm font-semibold text-[#3C4C68] disabled:opacity-50">Buang &amp; ulangi</button>
               <p className="px-1 text-[11.5px] leading-snug text-[#3C4C68]">Foto sudah tersimpan di HP ini. Bila layar ini ditinggalkan sebelum Kirim, foto tetap terkirim otomatis dengan arah seperti yang tampak sekarang.</p>
             </div>
@@ -1066,18 +1143,14 @@ export default function KameraSigap({
               Periksa arah foto lagi (putar)
             </button>
           )}
-          {(arahOk || hasil) && (
+          {arahOk && !hasil && (
             <>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Ini draft tampilan cap. Cap resmi dicetak server saat Kirim: jam resmi mengikuti server, lalu ditambah nama lokasi, kode, dan QR.</p>
 
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-bold text-[#0F2A52]">Foto ini untuk nomor berapa?</legend>
             <p className="text-xs leading-relaxed text-[#3C4C68]">
-              {hasil
-                ? nomor !== null
-                  ? `Foto ini sudah terkirim sebagai Foto ${nomor}. Salah nomor? Buka kartu hari, lalu ketuk dua foto untuk menukar urutannya.`
-                  : "Foto ini sudah terkirim."
-                : ganti !== null && nomor === ganti
+              {ganti !== null && nomor === ganti
                 ? `Mode ambil ulang foto: foto ini akan menggantikan Foto ${ganti} saja. Periksa pratinjau, lalu tekan Kirim. Foto lama tidak dihapus, hanya menjadi cadangan.`
                 : nomorOtomatis && nomor !== null && nomorAwal === nomor
                 ? `Sesuai pilihan Anda sebelum memotret: Foto ${nomor}. Ketuk nomor lain bila foto ini untuk keperluan yang berbeda.`
@@ -1093,9 +1166,7 @@ export default function KameraSigap({
                 const lokasi = (SLOT_BERLOKASI as readonly number[]).includes(n);
                 // (21 Okt 2026) Nomor yang sudah berisi foto "padam" (abu-abu + centang) supaya petugas langsung melihat mana yang masih perlu.
                 // Tetap bisa diketuk untuk MENGGANTI (foto lama jadi cadangan); ketuk lagi = batal ganti.
-                // (23 Okt 2026) Setelah foto TERKIRIM, nomornya sendiri ikut terbaca "terisi" dari server. Itu bukan penggantian: tampil sebagai "terkirim".
-                const sudahKirim = !!hasil;
-                const terisi = terisiSemuaNomor.has(n) && !(sudahKirim && pilih);
+                const terisi = terisiSemuaNomor.has(n);
                 const dipesan = !terisi && ditahanServer.includes(n);
                 const gaya = pilih
                   ? terisi ? "border-[#B7791F] bg-[#FFF4D6]" : "border-[#0F2A52] bg-[#E8EEF8]"
@@ -1105,7 +1176,7 @@ export default function KameraSigap({
                     key={n}
                     type="button"
                     aria-pressed={pilih}
-                    disabled={sudahKirim || mengirim}
+                    disabled={mengirim}
                     aria-label={terisi ? `Nomor ${n} sudah terisi. ${pilih ? "Foto ini akan menggantikannya; ketuk lagi untuk membatalkan." : "Ketuk untuk mengambil ulang foto."}` : undefined}
                     onClick={() => {
                       setHitung(null); // petugas mengatur sendiri: hentikan kirim otomatis
@@ -1116,7 +1187,7 @@ export default function KameraSigap({
                       }
                       setNomor(pilih ? null : n);
                     }}
-                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${gaya} ${sudahKirim && !pilih ? "opacity-60" : ""}`}
+                    className={`flex min-h-[52px] items-center gap-3 rounded-xl border-2 px-3 text-left ${gaya}`}
                   >
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${pilih ? (terisi ? "bg-[#B7791F] text-white" : "bg-[#0F2A52] text-white") : terisi ? "bg-[#DDEFE5] text-[#1E8E4E]" : "bg-[#EEF2F7] text-[#0F2A52]"}`}>{terisi && !pilih ? "✓" : n}</span>
                     <span className="min-w-0 flex-1">
@@ -1124,14 +1195,12 @@ export default function KameraSigap({
                       {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
                       {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
                       {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengambil ulang</span>}
-                      {sudahKirim && pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Foto ini sudah terkirim sebagai Foto {n} ✓</span>}
                       {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto {n} sudah terisi. Bila dikirim, foto ini MENGGANTIKAN Foto {n} saja; foto lamanya tidak dihapus, hanya menjadi cadangan · ketuk lagi untuk batal</span>}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-[#3C4C68]">Salah nomor setelah terkirim? Buka kartu hari (atau menu perbaikan), lalu ketuk dua foto untuk menukar urutannya.</p>
           </fieldset>
 
           {konfirmasiGanti !== null && (
@@ -1205,38 +1274,72 @@ export default function KameraSigap({
             </div>
           )}
 
-          {!hasil && tanpaNomorSendiri && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold leading-snug text-[#5E4300]">Foto ini dibagikan ke rekan saja dan belum mengisi nomor Anda sendiri. Pilih nomor di atas bila foto ini juga untuk Anda.</p>}
+          {tanpaNomorSendiri && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold leading-snug text-[#5E4300]">Foto ini dibagikan ke rekan saja dan belum mengisi nomor Anda sendiri. Pilih nomor di atas bila foto ini juga untuk Anda.</p>}
 
-          {!hasil && !adaTujuan && <p className="px-1 text-xs font-semibold text-[#8A6200]">Pilih nomor foto di atas, atau pilih rekan lewat Bagikan ke rekan, lalu Kirim.</p>}
+          {!adaTujuan && <p className="px-1 text-xs font-semibold text-[#8A6200]">Pilih nomor foto di atas, atau pilih rekan lewat Bagikan ke rekan, lalu Kirim.</p>}
 
-          {!hasil && hitung !== null && !mengirim && (
+          {hitung !== null && !mengirim && (
             <div role="status" className="flex items-center gap-3 rounded-xl bg-[#E8EEF8] px-3 py-2.5">
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#0F2A52] text-sm font-extrabold text-white" aria-hidden="true">{hitung}</span>
               <span className="min-w-0 flex-1 text-xs font-semibold leading-snug text-[#0F2A52]">Terkirim otomatis sebagai Foto {nomor} dalam {hitung} detik. Foto sudah aman tersimpan di HP.</span>
               <button type="button" onClick={() => setHitung(null)} className="min-h-[40px] flex-none rounded-lg border-2 border-[#0F2A52] px-3 text-xs font-bold text-[#0F2A52]">Ubah dulu</button>
             </div>
           )}
-          {!hasil && hitung === null && !mengirim && <p className="px-1 text-[11.5px] leading-snug text-[#3C4C68]">Foto sudah tersimpan di HP ini. Bila Kirim terlewat, foto tetap terkirim otomatis saat Anda keluar dari layar ini atau membuka aplikasi lagi.</p>}
+          {hitung === null && !mengirim && <p className="px-1 text-[11.5px] leading-snug text-[#3C4C68]">Foto sudah tersimpan di HP ini. Bila Kirim terlewat, foto tetap terkirim otomatis saat Anda keluar dari layar ini atau membuka aplikasi lagi.</p>}
 
-          {hasil ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-[#C9D3E6] bg-white p-3">
-              <div className="text-sm font-bold text-[#0F2A52]">Kode {hasil.foto.kode}</div>
-              <div className="text-xs text-[#3C4C68]">Tingkat kepercayaan: <b>{LABEL_KEPERCAYAAN[hasil.foto.kepercayaan]}</b></div>
-              {labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at) && <div className="text-xs font-semibold text-[#5E4300]">{labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at)}</div>}
-              {hasil.foto.alasan.length > 0 && <ul className="list-disc pl-5 text-xs text-[#3C4C68]">{hasil.foto.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>}
-              {hasil.ditahan && <div className="text-xs font-semibold text-[#8A6200]">{hasil.penempatan?.status === "ditahan" && nomor !== null ? `Foto ini sudah ditandai untuk Foto ${nomor} (${etiket[nomor - 1] ?? ""}). Nomornya tercatat resmi setelah PML atau admin memeriksa.` : "Foto ditahan sampai PML atau admin memeriksa. Belum tercatat di nomor foto."}</div>}
-              {hasil.penempatan && hasil.penempatan.ok === false && <div className="text-xs text-[#9B1C23]">Belum masuk nomor foto: {hasil.penempatan.error}</div>}
-              <button type="button" onClick={ulang} className="min-h-[48px] rounded-xl bg-[#0F2A52] text-sm font-bold text-white">Foto lagi</button>
-            </div>
-          ) : (
             <div className="flex gap-2">
               <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Buang &amp; ulangi</button>
               <button type="button" onClick={() => (tanpaNomorSendiri ? setKonfirmasiTanpaNomor(true) : void kirim())} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
                 {mengirim ? "Mengirim…" : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
-          )}
             </>
+          )}
+          {hasil && (
+            <div className="flex flex-col gap-3" role="group" aria-label="Foto sudah terkirim">
+              <div className="flex flex-col gap-2 rounded-xl border border-[#C9D3E6] bg-white p-3">
+                <div className="text-sm font-extrabold text-[#1E8E4E]">✓ {nomor !== null ? `Foto ${nomor}${etiket[nomor - 1] ? ` · ${etiket[nomor - 1]}` : ""} sudah terkirim` : "Foto sudah terkirim"}</div>
+                <div className="text-sm font-bold text-[#0F2A52]">Kode {hasil.foto.kode}</div>
+                <div className="text-xs text-[#3C4C68]">Tingkat kepercayaan: <b>{LABEL_KEPERCAYAAN[hasil.foto.kepercayaan]}</b></div>
+                {labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at) && <div className="text-xs font-semibold text-[#5E4300]">{labelFotoTanpaSinyal(hasil.foto.alasan, hasil.foto.diambil_at, hasil.foto.diterima_at)}</div>}
+                {hasil.foto.alasan.length > 0 && <ul className="list-disc pl-5 text-xs text-[#3C4C68]">{hasil.foto.alasan.map((a) => <li key={a}>{LABEL_ALASAN[a] ?? a}</li>)}</ul>}
+                {hasil.ditahan && <div className="text-xs font-semibold text-[#8A6200]">{hasil.penempatan?.status === "ditahan" && nomor !== null ? `Foto ini sudah ditandai untuk Foto ${nomor} (${etiket[nomor - 1] ?? ""}). Nomornya tercatat resmi setelah PML atau admin memeriksa.` : "Foto ditahan sampai PML atau admin memeriksa. Belum tercatat di nomor foto."}</div>}
+                {hasil.penempatan && hasil.penempatan.ok === false && <div className="text-xs text-[#9B1C23]">Belum masuk nomor foto: {hasil.penempatan.error}</div>}
+                <p className="text-[11.5px] leading-snug text-[#55657D]">Salah nomor? Buka kartu hari (atau menu perbaikan), lalu ketuk dua foto untuk menukar urutannya.</p>
+              </div>
+
+              {bagiN !== null ? (
+                <>
+                  <div role="status" className="rounded-xl bg-[#E3F6EC] px-3 py-2.5 text-sm font-semibold text-[#0B6B3F]">
+                    {bagiN > 0 ? `Ajakan terkirim ke ${bagiN} rekan. Mereka memilih nomor fotonya sendiri.` : "Semua rekan yang dipilih sudah pernah diajak."}
+                  </div>
+                  <button type="button" onClick={ulang} className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white">Foto lagi</button>
+                </>
+              ) : MAKS_TAG - tag.length <= 0 ? (
+                <button type="button" onClick={ulang} className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white">Foto lagi</button>
+              ) : bagiLangkah === "tanya" ? (
+                <div className="flex flex-col gap-2 rounded-xl border-2 border-[#0F2A52] bg-[#F4F7FC] p-3" role="group" aria-label="Bagikan foto ke rekan">
+                  <div className="text-sm font-extrabold text-[#0F2A52]">Bagikan foto ini ke rekan?</div>
+                  <p className="text-xs leading-relaxed text-[#3C4C68]">Foto tidak dikirim ulang. Rekan hanya menerima ajakan dan memilih sendiri nomor fotonya.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={ulang} className="min-h-[52px] rounded-2xl border-2 border-[#C9D3E6] bg-white text-sm font-extrabold text-[#0F2A52]">Tidak</button>
+                    <button type="button" onClick={() => setBagiLangkah("pilih")} className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white">Ya, pilih rekan</button>
+                  </div>
+                  <p className="px-1 text-[11.5px] leading-snug text-[#55657D]">Tidak = lanjut memotret. Anda masih bisa membagikannya nanti lewat Foto saya (sampai akhir hari sesudah tanggal foto).</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 rounded-xl border-2 border-[#0F2A52] bg-[#F4F7FC] p-3">
+                  <BagikanFoto kegiatanId={kegiatanId} jumlahNomor={jumlahNomor} nilai={tagBagi} onUbah={setTagBagi} kecuali={tag.map((t) => t.akun_id)} maks={Math.max(0, MAKS_TAG - tag.length)} />
+                  {pesanBagi && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{pesanBagi}</div>}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setBagiLangkah("tanya"); setTagBagi([]); setPesanBagi(null); }} disabled={sibukBagi} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52] disabled:opacity-50">Kembali</button>
+                    <button type="button" onClick={() => void bagiKeRekan()} disabled={sibukBagi || tagBagi.length === 0} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-40">
+                      {sibukBagi ? "Mengirim…" : tagBagi.length ? `Kirim ajakan ke ${tagBagi.length} orang` : "Pilih rekan dulu"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

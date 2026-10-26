@@ -38,20 +38,25 @@ const n = (v: unknown): number => {
 
 type BarisKelompok = { kelompok: number; peran: string; akun_id: number; urutan: number | null };
 
-/** Kelompok tempat akun ini menjadi kortim (korwil); null = bukan kortim. */
-export async function kelompokKortim(db: Db, akunId: number): Promise<number | null> {
+/** Semua kelompok tempat akun ini menjadi kortim (korwil), urut (urutan, kelompok); kosong = bukan kortim. Yang pertama = kelompok bawaan. */
+export async function daftarKelompokKortim(db: Db, akunId: number): Promise<number[]> {
   const { data, error } = await db
     .from("bencana_kelompok_tim")
-    .select("kelompok")
+    .select("kelompok, urutan")
     .eq("kegiatan_id", KEGIATAN_PENDATAAN_ID)
     .eq("aktif", true)
     .eq("peran", "kortim")
-    .eq("akun_id", akunId)
-    .order("kelompok")
-    .limit(1);
+    .eq("akun_id", akunId);
   if (error) throw new Error(`Gagal membaca kelompok: ${error.message}`);
-  const k = (data ?? [])[0] as { kelompok: number } | undefined;
-  return k ? n(k.kelompok) : null;
+  return ((data ?? []) as { kelompok: number; urutan: number | null }[])
+    .map((b) => ({ kelompok: n(b.kelompok), urutan: n(b.urutan) }))
+    .sort((a, b) => a.urutan - b.urutan || a.kelompok - b.kelompok)
+    .map((b) => b.kelompok);
+}
+
+/** Kelompok bawaan akun ini sebagai kortim (yang pertama); null = bukan kortim. */
+export async function kelompokKortim(db: Db, akunId: number): Promise<number | null> {
+  return (await daftarKelompokKortim(db, akunId))[0] ?? null;
 }
 
 /** Semua kelompok beserta nama kortimnya (untuk pemilih kelompok bagi admin). */

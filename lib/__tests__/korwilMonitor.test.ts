@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BarisKkMon } from "@/lib/pendataanMonitor";
-import { judulWilayah, labelSubKorwil, persenKorwil, susunAdministrasi, timCapaianTerendah, susunLapanganKorwil, type BarisHariKorwil, type TimKorwilMasuk } from "@/lib/korwilMonitor";
+import { judulWilayah, labelSubKorwil, persenKorwil, pilihanKelompokUntuk, tentukanKelompok, susunAdministrasi, timCapaianTerendah, susunLapanganKorwil, type BarisHariKorwil, type TimKorwilMasuk } from "@/lib/korwilMonitor";
 
 const orang = (id: number, nama: string, akun: number[]) => ({ petugas_id: id, nama, akun_ids: akun });
 const TIM_A: TimKorwilMasuk = { pml: orang(1, "Pml A", [101]), ppl: [orang(11, "Ppl A1", [111]), orang(12, "Ppl A2", [112])], tampil: true };
@@ -195,5 +195,38 @@ describe("timCapaianTerendah (tanda di Monitoring Korwil)", () => {
   it("satu tim atau tim tanpa target tidak dinilai", () => {
     expect(timCapaianTerendah([t(1, 100, 10)])).toEqual([]);
     expect(timCapaianTerendah([t(1, 100, 10), t(2, 0, 0)])).toEqual([]);
+  });
+});
+
+describe("tentukanKelompok / pilihanKelompokUntuk: kortim memegang banyak kelompok", () => {
+  const semua = [1, 2, 3, 4, 5, 6];
+  const peta = semua.map((k) => ({ kelompok: k, korwil: [`Kortim ${k}`] }));
+
+  it("kortim satu kelompok: kelompoknya, ?kelompok= lain diabaikan, tanpa pilihan", () => {
+    expect(tentukanKelompok({ admin: false, saya: [3], semua, minta: null })).toBe(3);
+    expect(tentukanKelompok({ admin: false, saya: [3], semua, minta: 1 })).toBe(3);
+    expect(pilihanKelompokUntuk({ admin: false, saya: [3], semua: peta })).toEqual([]);
+  });
+  it("kortim banyak kelompok: bawaan = yang pertama (urutan), boleh memilih di antara miliknya saja", () => {
+    const saya = [5, 1, 2, 3, 4, 6]; // Muzahar: kelompok 5 (urutan 2) lebih dulu, lalu 1-4 dan 6
+    expect(tentukanKelompok({ admin: false, saya, semua, minta: null })).toBe(5);
+    expect(tentukanKelompok({ admin: false, saya, semua, minta: 2 })).toBe(2);
+    expect(tentukanKelompok({ admin: false, saya, semua, minta: 99 })).toBe(5);
+    expect(tentukanKelompok({ admin: false, saya: [5, 6], semua, minta: 1 })).toBe(5);
+    expect(pilihanKelompokUntuk({ admin: false, saya, semua: peta }).map((x) => x.kelompok)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(pilihanKelompokUntuk({ admin: false, saya: [5, 6], semua: peta }).map((x) => x.kelompok)).toEqual([5, 6]);
+  });
+  it("admin: semua kelompok; bawaan tetap kelompok miliknya, atau yang pertama, atau 1", () => {
+    expect(tentukanKelompok({ admin: true, saya: [], semua, minta: 4 })).toBe(4);
+    expect(tentukanKelompok({ admin: true, saya: [], semua, minta: null })).toBe(1);
+    expect(tentukanKelompok({ admin: true, saya: [2], semua, minta: null })).toBe(2);
+    expect(tentukanKelompok({ admin: true, saya: [], semua: [], minta: null })).toBe(1);
+    expect(pilihanKelompokUntuk({ admin: true, saya: [], semua: peta })).toEqual(peta);
+  });
+  it("bukan kortim dan bukan admin: ditolak (null); ?kelompok= tidak sah diabaikan", () => {
+    expect(tentukanKelompok({ admin: false, saya: [], semua, minta: 1 })).toBeNull();
+    expect(tentukanKelompok({ admin: true, saya: [], semua, minta: NaN })).toBe(1);
+    expect(tentukanKelompok({ admin: true, saya: [], semua, minta: -2 })).toBe(1);
+    expect(tentukanKelompok({ admin: true, saya: [], semua, minta: 2.5 })).toBe(1);
   });
 });

@@ -309,13 +309,35 @@ export type DataKorwil = {
   mulai: string;
   kelompok: number;
   korwil: string[];
-  /** hanya untuk akun dengan izin bencana.admin: pilihan kelompok lain */
+  /** untuk akun dengan izin bencana.admin (semua kelompok) atau kortim yang memegang lebih dari satu kelompok (kelompok miliknya) */
   pilihan: PilihanKelompok[];
   lapangan: LapanganKorwil;
   administrasi: Administrasi;
 };
 
-export const persenKorwil = (nilai: number, target: number): number => (target > 0 ? Math.min(100, Math.round((nilai / target) * 1000) / 10) : 0);
+/**
+ * (27 Okt 2026) Kelompok yang ditampilkan di Monitoring Korwil.
+ *  - saya  = kelompok tempat akun menjadi kortim, urut (urutan, kelompok): yang pertama = bawaan.
+ *  - semua = semua kelompok yang ada (dipakai admin).
+ *  - minta = ?kelompok= dari alamat. Admin boleh kelompok mana pun; kortim hanya kelompok miliknya, selain itu diabaikan.
+ * null = tidak berhak (bukan kortim dan bukan admin).
+ */
+export function tentukanKelompok(p: { admin: boolean; saya: number[]; semua: number[]; minta: number | null }): number | null {
+  const m = p.minta != null && Number.isInteger(p.minta) && p.minta > 0 ? p.minta : null;
+  if (m != null && (p.admin || p.saya.includes(m))) return m;
+  if (p.saya.length > 0) return p.saya[0];
+  if (p.admin) return p.semua[0] ?? 1;
+  return null;
+}
+
+/** Pilihan kelompok yang ditawarkan: admin = semua; kortim yang memegang lebih dari satu kelompok = kelompok miliknya; selain itu kosong. */
+export function pilihanKelompokUntuk(p: { admin: boolean; saya: number[]; semua: PilihanKelompok[] }): PilihanKelompok[] {
+  if (p.admin) return p.semua;
+  if (p.saya.length > 1) return p.semua.filter((x) => p.saya.includes(x.kelompok));
+  return [];
+}
+
+export const persenKorwil =(nilai: number, target: number): number => (target > 0 ? Math.min(100, Math.round((nilai / target) * 1000) / 10) : 0);
 
 /** (26 Okt 2026, C2) id PML tim dengan capaian terendah; kosong bila hanya satu tim dinilai atau capaian semua tim sama. Tim tanpa target tidak dinilai. */
 export function timCapaianTerendah(tim: ReadonlyArray<Pick<TimProgres, "pml_id" | "target" | "realisasi">>): number[] {
