@@ -8,7 +8,8 @@
 //   Jenis ditentukan dari byte awal berkas, bukan dari nama atau tipe kiriman klien. Balasan: { data: { path, ukuran, jenis } }.
 //   Berkas yang tidak jadi dilampirkan pada laporan dibiarkan di penyimpanan (tidak ada penghapusan).
 // GET ?path=delego/<delegasi>/<hash>.<ext>  mengirim gambar. Hanya bila path tercatat pada laporan yang boleh dilihat akun itu
-//   (laporan sendiri/diwakili dari keu_dlg_saya, atau laporan tim dari keu_dlg_bahan).
+//   atau hasil kerja (tahap 39) yang boleh dilihat akun itu (milik sendiri/diwakili dari keu_dlg_saya, atau milik tim dari keu_dlg_bahan).
+//   Unggah foto untuk hasil kerja memakai rute POST yang sama (penerima delegasi yang masih baru/berjalan).
 // Sesi "masuk sebagai" (simulasi) tidak boleh mengunggah. Logika murni ada di lib/delego/bukti.ts.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,7 +17,7 @@ import { createClient } from "@/lib/supabaseServer";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { sesiLengkapDariHeader } from "@/lib/sigapAkses";
 import { panggilKeu } from "@/lib/keu/gerbang";
-import { ditemukanDiLaporan, delegasiDariPath, EKSTENSI, jenisGambar, lokasiBukti, periksaUkuran, tipeDariPath, TIPE_ISI } from "@/lib/delego/bukti";
+import { ditemukanDiBukti, delegasiDariPath, EKSTENSI, jenisGambar, lokasiBukti, periksaUkuran, tipeDariPath, TIPE_ISI } from "@/lib/delego/bukti";
 import type { BahanSaya, BahanTim } from "@/lib/delego/tipe";
 
 export const runtime = "nodejs";
@@ -78,10 +79,10 @@ export async function GET(req: NextRequest) {
 
   // hak lihat: path harus tercatat pada laporan yang boleh dilihat akun ini
   const s = await panggilKeu<BahanSaya>(db, sesi.akunId, "keu_dlg_saya", {});
-  let boleh = s.ok && ditemukanDiLaporan(path, [...s.data.laporan, ...s.data.laporan_diwakili]);
+  let boleh = s.ok && ditemukanDiBukti(path, [...s.data.laporan, ...s.data.laporan_diwakili], s.data.hasil);
   if (!boleh) {
     const b = await panggilKeu<BahanTim>(db, sesi.akunId, "keu_dlg_bahan", {});
-    boleh = b.ok && ditemukanDiLaporan(path, b.data.laporan);
+    boleh = b.ok && ditemukanDiBukti(path, b.data.laporan, b.data.hasil);
   }
   if (!boleh) return galat("Foto tidak ditemukan atau Anda tidak berwenang melihatnya.", 404);
 

@@ -11,6 +11,7 @@ import { bulat, identBerubah, ringkasHariIni, statusLaporanHariIni, tglPendek } 
 import { NAMA_PERAN, NAMA_STATUS, type Delegasi, type StatusDelegasi } from "@/lib/delego/tipe";
 import { useBahan } from "../data";
 import Detail from "../Detail";
+import { Penanda } from "../KerjaTeknis";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
@@ -47,6 +48,7 @@ export default function Papan() {
       <button key={d.id} type="button" onClick={() => setBuka(d.id)} className="w-full rounded-xl border border-[#D5DCE2] bg-white p-3 text-left transition-colors hover:border-[#0F6B63] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F6B63]">
         <div className="text-[14px] font-semibold leading-snug">{d.judul}</div>
         <div className="mt-1 text-[12.5px] text-[#3B4A57]">{d.penerima_nama} · {NAMA_PERAN[d.peran_penerima]}</div>
+        <div className="mt-1.5"><Penanda d={d} hasil={b.data?.hasil} langkah={b.data?.langkah} /></div>
         <div className="mt-2"><Batang persen={r.persenSelesai} tinggi={6} /></div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-[#3B4A57]">
           <span>{r.persenSelesai}%</span>

@@ -5,11 +5,14 @@
 // (26 Okt 2026) Lapor harian (HP-first). Satu laporan per delegasi per tanggal; mengirim lagi memperbarui laporan tanggal itu.
 // Terlambat hanya ditandai, tidak diblokir. PML dapat melapor mewakili mitra (ditandai "diwakili").
 // Bukti: foto (ambil atau galeri, dikecilkan di HP; BuktiFoto.tsx) dan/atau teks/tautan; tersimpan pada keu_dlg_laporan.bukti.
+// Delegasi berjenis (pekerjaan teknis, tahap 39) melapor dalam JUMLAH satuan (mis. 3 dokumen); poin = jumlah x poin per satuan dihitung basis data
+// (keu_dlg_lapor_jumlah). Delegasi lain tetap melapor dalam poin/satuan bebas.
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { angka, bulat, ringkasHariIni, tambahHari, tglPendek } from "@/lib/delego/hitung";
+import { berjenis, jumlahDariPoin, poinDariJumlah, teksJumlah } from "@/lib/delego/teknis";
 import { bacaDaftar, muatDiBatas, untukSimpan } from "@/lib/delego/bukti";
 import { NAMA_PERAN, type Delegasi } from "@/lib/delego/tipe";
 import { aksiKeu, useKirim, useSaya } from "../data";
@@ -30,7 +33,7 @@ export default function Lapor() {
 
   const [id, setId] = useState<number | null>(null);
   const [tanggal, setTanggal] = useState(hari);
-  const [poin, setPoin] = useState("");
+  const [poin, setPoin] = useState(""); // untuk delegasi berjenis: jumlah satuan
   const [uraian, setUraian] = useState("");
   const [kendala, setKendala] = useState("");
   const [bukti, setBukti] = useState<ButirForm[]>([]);
@@ -49,7 +52,8 @@ export default function Lapor() {
   const ada = terpilih ? semuaLaporan.find((l) => l.delegasi_id === terpilih.id && l.tanggal === tanggal) ?? null : null;
   useEffect(() => {
     // isi ulang formulir dengan laporan yang sudah ada untuk delegasi dan tanggal ini
-    setPoin(ada ? String(angka(ada.poin)) : "");
+    const pp = terpilih ? angka(terpilih.poin_per_satuan) : 0;
+    setPoin(ada ? (pp > 0 ? String(ada.jumlah !== null && ada.jumlah !== undefined ? angka(ada.jumlah) : jumlahDariPoin(pp, angka(ada.poin))) : String(angka(ada.poin))) : "");
     setUraian(ada?.uraian ?? "");
     setKendala(ada?.kendala ?? "");
     setBukti(bacaDaftar(ada?.bukti).map((b) => ({ ket: b.ket, path: b.path })));
@@ -59,22 +63,21 @@ export default function Lapor() {
   const r = terpilih && d ? ringkasHariIni(terpilih, semuaLaporan, tanggal) : null;
   const mewakili = !!terpilih && !!d && terpilih.penerima_akun !== d.akun.id;
   const batasAwal = hak.semua || hak.beri_ro.length > 0 ? (terpilih?.mulai ?? tambahHari(hari, -7)) : tambahHari(hari, -7);
-  const poinAngka = Number(poin);
+  const jenis = !!terpilih && berjenis(terpilih);
+  const pps = terpilih ? angka(terpilih.poin_per_satuan) : 0;
+  const isiAngka = Number(poin.replace(",", "."));
+  const poinAngka = jenis ? poinDariJumlah(pps, isiAngka) : isiAngka;
   const buktiSimpan = untukSimpan(bukti);
-  const sah = !!terpilih && poin.trim() !== "" && Number.isFinite(poinAngka) && poinAngka >= 0 && poinAngka <= 1000 && tanggal >= batasAwal && tanggal <= hari && muatDiBatas(buktiSimpan);
+  const sah = !!terpilih && poin.trim() !== "" && Number.isFinite(isiAngka) && isiAngka >= 0 && Number.isFinite(poinAngka) && poinAngka <= 1000 && tanggal >= batasAwal && tanggal <= hari && muatDiBatas(buktiSimpan);
 
   async function kirimLaporan() {
     if (!terpilih || !sah) return;
     setHasil(null);
     await kirim.jalankan(async () => {
-      const res = await aksiKeu<Hasil>("keu_dlg_lapor", {
-        p_delegasi: terpilih.id,
-        p_tanggal: tanggal,
-        p_poin: poinAngka,
-        p_uraian: uraian.trim(),
-        p_kendala: kendala.trim(),
-        p_bukti: buktiSimpan,
-      });
+      const dasar = { p_delegasi: terpilih.id, p_tanggal: tanggal, p_uraian: uraian.trim(), p_kendala: kendala.trim(), p_bukti: buktiSimpan };
+      const res = jenis
+        ? await aksiKeu<Hasil>("keu_dlg_lapor_jumlah", { ...dasar, p_jumlah: isiAngka })
+        : await aksiKeu<Hasil>("keu_dlg_lapor", { ...dasar, p_poin: poinAngka });
       if (res.ok) setHasil(res.data);
       return res;
     });
@@ -114,14 +117,23 @@ export default function Lapor() {
                 <Medan label="Tanggal" bantu="Laporan susulan boleh sampai 7 hari ke belakang.">
                   <input type="date" className={KELAS.isian} value={tanggal} min={batasAwal} max={hari} onChange={(e) => setTanggal(e.target.value || hari)} />
                 </Medan>
-                <Medan label={`Capaian (${terpilih.satuan})`} bantu={r ? `Target ${r.hariKerjaIni ? fmt(r.targetHariIni, 1) : "0 (bukan hari kerja)"}${r.hutangKemarin > 0 ? `; hutang sebelumnya ${fmt(bulat(r.hutangKemarin), 1)}` : ""}.` : undefined}>
-                  <input type="number" inputMode="decimal" min={0} max={1000} step="any" className={KELAS.isian} value={poin} onChange={(e) => setPoin(e.target.value)} placeholder="0" />
+                <Medan
+                  label={jenis ? `Jumlah (${terpilih.satuan})` : `Capaian (${terpilih.satuan})`}
+                  bantu={r ? `Target ${r.hariKerjaIni ? (jenis ? `${fmt(jumlahDariPoin(pps, r.targetHariIni), 1)} ${terpilih.satuan} (${fmt(r.targetHariIni, 1)} poin)` : fmt(r.targetHariIni, 1)) : "0 (bukan hari kerja)"}${r.hutangKemarin > 0 ? `; hutang sebelumnya ${fmt(bulat(r.hutangKemarin), 1)} poin` : ""}.` : undefined}
+                >
+                  <input type="number" inputMode="decimal" min={0} max={jenis ? undefined : 1000} step="any" className={KELAS.isian} value={poin} onChange={(e) => setPoin(e.target.value)} placeholder="0" />
                 </Medan>
               </div>
               {r && r.sisaHariIni > 0 && (
-                <button type="button" className={KELAS.tombolKecil} onClick={() => setPoin(String(r.targetHariIni))}>
-                  Isi sesuai target ({fmt(r.targetHariIni, 1)})
+                <button type="button" className={KELAS.tombolKecil} onClick={() => setPoin(String(jenis ? jumlahDariPoin(pps, r.targetHariIni) : r.targetHariIni))}>
+                  Isi sesuai target ({jenis ? `${fmt(jumlahDariPoin(pps, r.targetHariIni), 1)} ${terpilih.satuan}` : fmt(r.targetHariIni, 1)})
                 </button>
+              )}
+              {jenis && poin.trim() !== "" && Number.isFinite(isiAngka) && (
+                <Info>{fmt(isiAngka, 2)} {terpilih.satuan} × {fmt(pps, 1)} = <b>{fmt(poinAngka, 1)} poin</b>.</Info>
+              )}
+              {terpilih.insidental && terpilih.perlu_hasil && (
+                <Info>Pekerjaan mendadak: cukup <Link href="/sigap/delego/saya" className="font-semibold underline">serahkan hasil di Delegasi saya</Link>; laporan hari ini dibuat otomatis.</Info>
               )}
               <Medan label="Uraian pekerjaan">
                 <textarea className={KELAS.isian} rows={3} maxLength={1000} value={uraian} onChange={(e) => setUraian(e.target.value)} placeholder="Apa yang dikerjakan hari ini" />
@@ -131,7 +143,7 @@ export default function Lapor() {
               </Medan>
               <PenyuntingBukti delegasi={terpilih.id} butir={bukti} onUbah={setBukti} mati={kirim.mengirim} />
               {tanggal < hari && !ada && <Peringatan>Laporan untuk {tglPendek(tanggal)} akan ditandai terlambat.</Peringatan>}
-              {ada && <Info>Sudah ada laporan {tglPendek(tanggal)} ({fmt(angka(ada.poin), 1)} {terpilih.satuan}). Mengirim akan memperbarui laporan itu.</Info>}
+              {ada && <Info>Sudah ada laporan {tglPendek(tanggal)} ({teksJumlah(terpilih, angka(ada.poin), (n) => fmt(n, 1))}). Mengirim akan memperbarui laporan itu.</Info>}
               {kirim.galat && <Galat>{kirim.galat}</Galat>}
               {hasil && (
                 <Info>

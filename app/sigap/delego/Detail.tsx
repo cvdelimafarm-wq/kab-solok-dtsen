@@ -8,10 +8,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { angka, bulat, identBerubah, namaLibur, ringkasHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
+import { berjenis, halanganSelesai, hasilDelegasi, jamTenggat, jumlahDariPoin, satuanAngka } from "@/lib/delego/teknis";
 import { NAMA_PERAN, NAMA_STATUS, type BahanTim, type Delegasi, type StatusDelegasi } from "@/lib/delego/tipe";
 import { useKirim } from "./data";
 import { DaftarBukti } from "./BuktiFoto";
 import { KELAS } from "./merek";
+import { PanelHasil, PanelLangkah, Penanda } from "./KerjaTeknis";
 import { Batang, Galat, Info, Kartu, Lencana, Medan, NADA_STATUS, Peringatan, fmt } from "./ui";
 
 const STATUS: StatusDelegasi[] = ["baru", "berjalan", "ditunda", "selesai", "batal"];
@@ -31,6 +33,9 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
   const [tenggat, setTenggat] = useState(d.tenggat);
   const [status, setStatus] = useState<StatusDelegasi>(d.status);
   const [alasan, setAlasan] = useState(d.alasan);
+  const [perluHasil, setPerluHasil] = useState(!!d.perlu_hasil);
+  const [perluTinjau, setPerluTinjau] = useState(!!d.perlu_tinjau);
+  const [jamT, setJamT] = useState(jamTenggat(d.tenggat_waktu) ?? "");
   const [isi, setIsi] = useState("");
   const [lap, setLap] = useState("");
   const [tMulai, setTMulai] = useState("");
@@ -39,12 +44,17 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
   const kirim = useKirim(muat);
   const berubah = identBerubah(d);
   const riwayat = [...(d.riwayat_target ?? [])].sort((a, z) => a.berlaku_mulai.localeCompare(z.berlaku_mulai));
+  const hasilD = hasilDelegasi(b.hasil, d.id);
+  const jenisD = berjenis(d);
+  const ppsD = angka(d.poin_per_satuan);
+  const halangan = status === "selesai" && d.status !== "selesai" ? halanganSelesai({ perlu_hasil: perluHasil, perlu_tinjau: perluTinjau }, hasilD) : null;
   const dasarIdent = d.ident_id ? `/sigap/kelola/perencanaan/identifikasi/${d.ident_id}` : null;
 
   useEffect(() => {
     // data segar dari basis data menggantikan isian formulir
     setJudul(d.judul); setUraian(d.uraian); setPj(d.pj_bidang); setHarian(String(angka(d.target_harian)));
     setTotal(d.target_total === null ? "" : String(angka(d.target_total))); setBobot(String(d.bobot)); setTenggat(d.tenggat); setStatus(d.status); setAlasan(d.alasan);
+    setPerluHasil(!!d.perlu_hasil); setPerluTinjau(!!d.perlu_tinjau); setJamT(jamTenggat(d.tenggat_waktu) ?? "");
   }, [d.ver]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -56,7 +66,7 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
   const simpan = () =>
     kirim.kirim("keu_dlg_ubah", {
       p_id: d.id,
-      p_data: { judul, uraian, pj_bidang: pj, target_harian: harian, target_total: total.trim() === "" ? null : total, bobot, tenggat, status, alasan },
+      p_data: { judul, uraian, pj_bidang: pj, target_harian: harian, target_total: total.trim() === "" ? null : total, bobot, tenggat, status, alasan, perlu_hasil: perluHasil, perlu_tinjau: perluTinjau, tenggat_jam: jamT },
     });
   const aturTarget = async () => {
     const ok = await kirim.kirim("keu_dlg_target_atur", { p_id: d.id, p_mulai: tMulai, p_target: tBaru, p_alasan: tAlasan });
@@ -84,8 +94,9 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
             <h2 className="m-0 text-[18px] font-bold leading-snug">{d.judul}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-[#3B4A57]">
               <Lencana nada={NADA_STATUS[d.status]}>{NAMA_STATUS[d.status]}</Lencana>
-              <span>{d.penerima_nama} · {NAMA_PERAN[d.peran_penerima]}{d.pj_bidang ? ` · PJ ${d.pj_bidang}` : ""}</span>
+              <span>{d.penerima_nama} · {NAMA_PERAN[d.peran_penerima]}{d.pj_bidang ? ` · PJ ${d.pj_bidang}` : ""}{d.kelompok_nama ? ` · ${d.kelompok_nama}` : ""}</span>
             </div>
+            <div className="mt-1.5"><Penanda d={d} hasil={b.hasil} langkah={b.langkah} /></div>
           </div>
           <button type="button" className={KELAS.tombolKecil} onClick={tutup} aria-label="Tutup">Tutup</button>
         </div>
@@ -101,7 +112,7 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
             </Peringatan>
           )}
           <Kartu>
-            <div className="flex justify-between text-[13.5px]"><span>{fmt(r.poinTotal, 1)} dari {fmt(penuh, 1)} {d.satuan}</span><b>{r.persenSelesai}%</b></div>
+            <div className="flex justify-between text-[13.5px]"><span>{fmt(r.poinTotal, 1)} dari {fmt(penuh, 1)} {satuanAngka(d)}{jenisD ? ` (sekitar ${fmt(jumlahDariPoin(ppsD, r.poinTotal), 1)} dari ${fmt(jumlahDariPoin(ppsD, penuh), 1)} ${d.satuan})` : ""}</span><b>{r.persenSelesai}%</b></div>
             <div className="mt-1.5"><Batang persen={r.persenSelesai} /></div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-[#3B4A57]">
               <span>{tglPendek(d.mulai)} sampai {tglPendek(d.tenggat)}</span>
@@ -120,6 +131,9 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
             )}
           </Kartu>
 
+          <PanelHasil d={d} hasil={b.hasil ?? []} sebagai="pemberi" bolehTinjau={bolehUbah} muat={muat} />
+          <PanelLangkah d={d} langkah={b.langkah ?? []} bolehAtur={bolehUbah} bolehCentang={bolehUbah} muat={muat} />
+
           <Kartu judul="Laporan (35 hari)">
             {laporan.length === 0 ? (
               <p className="m-0 text-[13.5px] text-[#3B4A57]">Belum ada laporan.</p>
@@ -129,7 +143,7 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                   <li key={l.id} className="text-[13px]">
                     <div className="flex justify-between gap-2">
                       <span className="font-semibold">{tglPendek(l.tanggal)} {l.terlambat && <Lencana nada="amber">Terlambat</Lencana>} {l.mewakili && <Lencana nada="biru">Diwakili</Lencana>}</span>
-                      <b>{fmt(angka(l.poin), 1)}</b>
+                      <b>{jenisD && l.jumlah !== null && l.jumlah !== undefined ? `${fmt(angka(l.jumlah), 1)} ${d.satuan} · ` : ""}{fmt(angka(l.poin), 1)}{jenisD ? " poin" : ""}</b>
                     </div>
                     {l.uraian && <div className="text-[#33404B]">{l.uraian}</div>}
                     {l.kendala && <div className="text-[#8A4605]">Kendala: {l.kendala}</div>}
@@ -207,6 +221,13 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                   <Medan label="Bobot (1-5)"><input type="number" min={1} max={5} className={KELAS.isian} value={bobot} onChange={(e) => setBobot(e.target.value)} /></Medan>
                   <Medan label="Tenggat"><input type="date" min={d.mulai} className={KELAS.isian} value={tenggat} onChange={(e) => setTenggat(e.target.value)} /></Medan>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Medan label="Jam tenggat (WIB)" bantu="Kosongkan untuk menghapus jam."><input type="time" className={KELAS.isian} value={jamT} onChange={(e) => setJamT(e.target.value)} /></Medan>
+                  <div className="space-y-1 pt-5 text-[13.5px]">
+                    <label className="flex cursor-pointer items-start gap-2"><input type="checkbox" className="mt-1 accent-[#0F6B63]" checked={perluHasil} onChange={(e) => { setPerluHasil(e.target.checked); if (!e.target.checked) setPerluTinjau(false); }} /> Perlu hasil kerja</label>
+                    <label className={`flex items-start gap-2 ${perluHasil ? "cursor-pointer" : "opacity-50"}`}><input type="checkbox" className="mt-1 accent-[#0F6B63]" checked={perluTinjau} disabled={!perluHasil} onChange={(e) => setPerluTinjau(e.target.checked)} /> Perlu tinjau</label>
+                  </div>
+                </div>
                 <Medan label="PJ bidang (opsional)"><input className={KELAS.isian} value={pj} maxLength={80} onChange={(e) => setPj(e.target.value)} placeholder="mis. kualitas data" /></Medan>
                 <Medan label="Status">
                   <select className={KELAS.isian} value={status} onChange={(e) => setStatus(e.target.value as StatusDelegasi)}>
@@ -216,8 +237,9 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                 {(status === "ditunda" || status === "batal") && (
                   <Medan label="Alasan (wajib, minimal 5 huruf)"><input className={KELAS.isian} value={alasan} maxLength={300} onChange={(e) => setAlasan(e.target.value)} /></Medan>
                 )}
+                {halangan && <Peringatan>{halangan}</Peringatan>}
                 {kirim.galat && <Galat>{kirim.galat}</Galat>}
-                <button type="button" className={`${KELAS.tombolUtama} w-full`} disabled={kirim.mengirim} onClick={() => void simpan()}>{kirim.mengirim ? "Menyimpan..." : "Simpan perubahan"}</button>
+                <button type="button" className={`${KELAS.tombolUtama} w-full`} disabled={kirim.mengirim || !!halangan} onClick={() => void simpan()}>{kirim.mengirim ? "Menyimpan..." : "Simpan perubahan"}</button>
                 <p className="m-0 text-[12px] text-[#3B4A57]">Penerima tidak dapat diganti; buat delegasi baru untuk memindahkan tugas. Penerima mendapat notifikasi setiap perubahan.</p>
               </div>
             </Kartu>

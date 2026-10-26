@@ -7,17 +7,21 @@
 import Link from "next/link";
 import { useState } from "react";
 import { angka, bebanPerOrang, bulat, jamWib, ringkasHariIni, statusLaporanHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
+import { hasilDelegasi, keadaanHasil, satuanAngka } from "@/lib/delego/teknis";
 import { NAMA_PERAN, NAMA_STATUS, type BahanSaya, type Delegasi } from "@/lib/delego/tipe";
 import { useKonteksDelego } from "../konteks";
 import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
+import { PanelHasil, PanelLangkah, Penanda } from "../KerjaTeknis";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, NADA_STATUS, Peringatan, fmt } from "../ui";
 import { useKirim, useSaya } from "../data";
 
 const aktifSaja = (d: Delegasi) => d.status === "baru" || d.status === "berjalan" || d.status === "ditunda";
 
-function KartuTugas({ d, s, terima, sibuk }: { d: Delegasi; s: BahanSaya; terima: (id: number) => void; sibuk: boolean }) {
-  const [buka, setBuka] = useState(false);
+function KartuTugas({ d, s, terima, sibuk, muat }: { d: Delegasi; s: BahanSaya; terima: (id: number) => void; sibuk: boolean; muat: () => Promise<void> }) {
+  const hasil = hasilDelegasi(s.hasil, d.id);
+  const keadaan = keadaanHasil({ perlu_hasil: !!d.perlu_hasil, perlu_tinjau: !!d.perlu_tinjau }, hasil);
+  const [buka, setBuka] = useState(keadaan === "perlu_revisi");
   const r = ringkasHariIni(d, s.laporan, s.hari_ini);
   const penuh = targetPenuh(d);
   const riwayat = s.laporan.filter((l) => l.delegasi_id === d.id).slice(0, 5);
@@ -30,14 +34,16 @@ function KartuTugas({ d, s, terima, sibuk }: { d: Delegasi; s: BahanSaya; terima
           <div className="mt-0.5 text-[12.5px] text-[#3B4A57]">
             {NAMA_PERAN[d.peran_penerima]}
             {d.pj_bidang ? ` · PJ ${d.pj_bidang}` : ""}
+            {d.kelompok_nama ? ` · ${d.kelompok_nama}` : ""}
           </div>
         </div>
         <Lencana nada={NADA_STATUS[d.status]}>{NAMA_STATUS[d.status]}</Lencana>
       </div>
+      <Penanda d={d} hasil={s.hasil} langkah={s.langkah} />
       <div className="space-y-1.5">
         <div className="flex justify-between text-[13px] text-[#3B4A57]">
           <span>
-            {fmt(r.poinTotal, 1)} dari {fmt(penuh, 1)} {d.satuan}
+            {fmt(r.poinTotal, 1)} dari {fmt(penuh, 1)} {satuanAngka(d)}
           </span>
           <span className="font-semibold text-[#14212B]">{r.persenSelesai}%</span>
         </div>
@@ -56,15 +62,17 @@ function KartuTugas({ d, s, terima, sibuk }: { d: Delegasi; s: BahanSaya; terima
           </button>
         )}
         <button type="button" className={`${KELAS.tombolSekunder} flex-1`} onClick={() => setBuka((b) => !b)} aria-expanded={buka}>
-          {buka ? "Tutup petunjuk dan riwayat" : "Lihat petunjuk dan riwayat"}
+          {buka ? "Tutup rincian" : d.perlu_hasil || (s.langkah ?? []).some((l) => l.delegasi_id === d.id) ? "Buka langkah, hasil, dan riwayat" : "Lihat petunjuk dan riwayat"}
         </button>
       </div>
       {buka && (
         <div className="space-y-3 border-t border-[#E3E8EE] pt-3 text-[13.5px]">
           {d.uraian ? <p className="m-0 whitespace-pre-line leading-relaxed">{d.uraian}</p> : <p className="m-0 text-[#3B4A57]">Tidak ada petunjuk tertulis.</p>}
           <div className="text-[12.5px] text-[#3B4A57]">
-            Target {fmt(angka(d.target_harian), 1)} {d.satuan} per hari kerja, {tglPendek(d.mulai)} sampai {tglPendek(d.tenggat)}.
+            Target {fmt(angka(d.target_harian), 1)} {satuanAngka(d)} per hari kerja, {tglPendek(d.mulai)} sampai {tglPendek(d.tenggat)}.
           </div>
+          <PanelLangkah d={d} langkah={s.langkah ?? []} bolehAtur={false} bolehCentang muat={muat} />
+          <PanelHasil d={d} hasil={s.hasil ?? []} sebagai="penerima" muat={muat} />
           {riwayat.length > 0 && (
             <ul className="m-0 list-none space-y-1 p-0">
               {riwayat.map((l) => (
@@ -144,7 +152,7 @@ export default function Saya() {
 
             {aktif.length > 0 && <div className={KELAS.labelKecil}>Tugas saya ({aktif.length})</div>}
             {aktif.map((x) => (
-              <KartuTugas key={x.id} d={x} s={d} sibuk={kirim.mengirim} terima={(id) => void kirim.kirim("keu_dlg_terima", { p_id: id })} />
+              <KartuTugas key={x.id} d={x} s={d} sibuk={kirim.mengirim} muat={s.muat} terima={(id) => void kirim.kirim("keu_dlg_terima", { p_id: id })} />
             ))}
 
             {d.diwakili.length > 0 && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bacaButir, ditemukanDiLaporan, bacaDaftar, daftarPath, delegasiDariPath, jenisGambar, lokasiBukti, MAKS_BUTIR, muatDiBatas, periksaUkuran, tipeDariPath, ukuranKecil, untukSimpan } from "@/lib/delego/bukti";
+import { bacaButir, ditemukanDiLaporan, ditemukanDiHasil, ditemukanDiBukti, bacaDaftar, daftarPath, delegasiDariPath, jenisGambar, lokasiBukti, MAKS_BUTIR, muatDiBatas, periksaUkuran, tipeDariPath, ukuranKecil, untukSimpan } from "@/lib/delego/bukti";
 
 const HASH = "a".repeat(64);
 
@@ -105,5 +105,23 @@ describe("ditemukanDiLaporan", () => {
     expect(ditemukanDiLaporan(q, lap)).toBe(false);
     expect(ditemukanDiLaporan(p, null)).toBe(false);
     expect(ditemukanDiLaporan(p, [{ bukti: null }])).toBe(false);
+  });
+});
+
+describe("ditemukanDiHasil / ditemukanDiBukti", () => {
+  const p = `delego/5/${"b".repeat(32)}.jpg`;
+  const q = `delego/5/${"c".repeat(32)}.jpg`;
+  const hasil = [{ butir: ["https://contoh.id/a", { ket: "foto", path: p }] }];
+  it("path tercatat pada butir hasil kerja", () => {
+    expect(ditemukanDiHasil(p, hasil)).toBe(true);
+    expect(ditemukanDiHasil(q, hasil)).toBe(false);
+    expect(ditemukanDiHasil(p, null)).toBe(false);
+    expect(ditemukanDiHasil(p, [{ butir: null }])).toBe(false);
+  });
+  it("gabungan laporan dan hasil", () => {
+    expect(ditemukanDiBukti(p, [], hasil)).toBe(true);
+    expect(ditemukanDiBukti(q, [{ bukti: [{ ket: "", path: q }] }], hasil)).toBe(true);
+    expect(ditemukanDiBukti(q, [], hasil)).toBe(false);
+    expect(ditemukanDiBukti(q, undefined, undefined)).toBe(false);
   });
 });

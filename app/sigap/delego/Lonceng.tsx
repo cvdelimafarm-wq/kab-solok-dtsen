@@ -77,7 +77,8 @@ export default function Lonceng() {
           <ul className="max-h-[360px] divide-y divide-[#EEF1F4] overflow-y-auto">
             {daftar.length === 0 && <li className="px-3 py-6 text-center text-[13.5px] text-[#3B4A57]">Belum ada notifikasi.</li>}
             {daftar.map((n) => {
-              const tujuan = tautanAman(n.tautan);
+              // hasil kerja yang diserahkan dibaca pemberi di Papan (tautan basis data menuju Delegasi saya, halaman penerima)
+              const tujuan = n.jenis === "delegasi_hasil" ? "/sigap/delego/papan" : tautanAman(n.tautan);
               const isi = (
                 <>
                   <span className="flex items-start justify-between gap-2">

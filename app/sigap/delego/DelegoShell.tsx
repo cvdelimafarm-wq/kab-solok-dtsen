@@ -15,7 +15,7 @@ import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur";
+type Ikon = "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang";
 const JALUR: Record<Ikon, string> = {
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
   papan: "M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v12h-4z",
@@ -27,6 +27,8 @@ const JALUR: Record<Ikon, string> = {
   lapor: "M5 12l4 4 10-10M5 20h14",
   riwayat: "M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4",
   libur: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4M9 14h2M13 14h2",
+  katalog: "M5 4h11l3 3v13H5zM8 11h8M8 15h8M8 8h4",
+  ulang: "M4 12a8 8 0 0 1 13.7-5.6L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.6L4 16M4 20v-4h4",
   penilaian: "M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z",
 };
 function Gambar({ n, ukuran = 18 }: { n: Ikon; ukuran?: number }) {
@@ -57,6 +59,8 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/laporan", label: "Laporan tim", ikon: "laporan" },
   { href: "/sigap/delego/beban", label: "Beban kerja", ikon: "beban" },
   { href: "/sigap/delego/pembinaan", label: "Pembinaan dan skor", ikon: "pembinaan" },
+  { href: "/sigap/delego/jenis", label: "Katalog pekerjaan", ikon: "katalog" },
+  { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
 ];
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };

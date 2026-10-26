@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bacaSesi } from "@/app/portal/sesi";
 import { bacaDaftar, MAKS_BYTE, ukuranKecil } from "@/lib/delego/bukti";
+import { tautanButir } from "@/lib/delego/teknis";
 
 const KELAS_TOMBOL = "inline-flex min-h-[40px] items-center justify-center rounded-lg border border-[#B8C4CC] bg-white px-3 text-[13px] font-semibold text-[#14212B] hover:bg-[#F1F5F4] disabled:opacity-60";
 
@@ -113,10 +114,37 @@ export function DaftarBukti({ bukti, ukuran = 72 }: { bukti: unknown[] | null | 
   );
 }
 
+/** Butir hasil kerja: foto sebagai gambar mini, tautan http/https dapat diklik, teks lain apa adanya. */
+export function DaftarButir({ butir, ukuran = 72 }: { butir: unknown[] | null | undefined; ukuran?: number }) {
+  const daftar = bacaDaftar(butir);
+  if (daftar.length === 0) return null;
+  return (
+    <ul className="m-0 list-none space-y-1.5 p-0">
+      {daftar.map((b, i) => {
+        const url = b.path ? null : tautanButir(b.teks);
+        return (
+          <li key={`${b.path ?? b.teks}-${i}`} className="text-[13px]">
+            {b.path ? (
+              <div className="flex items-center gap-2">
+                <FotoBukti path={b.path} ket={b.ket} ukuran={ukuran} />
+                {b.ket && <span className="text-[#33404B]">{b.ket}</span>}
+              </div>
+            ) : url ? (
+              <a href={url} target="_blank" rel="noreferrer noopener" className="break-all font-semibold text-[#0B524C] underline">{url}</a>
+            ) : (
+              <span className="break-words text-[#33404B]">{b.teks}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export type ButirForm = { ket: string; path: string | null };
 
 /** Penyunting bukti pada formulir Lapor: foto (ambil atau pilih), keterangan tiap butir, dan tautan/teks. */
-export function PenyuntingBukti({ delegasi, butir, onUbah, maks = 5, mati }: { delegasi: number; butir: ButirForm[]; onUbah: (b: ButirForm[]) => void; maks?: number; mati?: boolean }) {
+export function PenyuntingBukti({ delegasi, butir, onUbah, maks = 5, mati, judul, teksBantu, wajib }: { delegasi: number; butir: ButirForm[]; onUbah: (b: ButirForm[]) => void; maks?: number; mati?: boolean; judul?: string; teksBantu?: string; wajib?: boolean }) {
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const kamera = useRef<HTMLInputElement>(null);
@@ -147,7 +175,7 @@ export function PenyuntingBukti({ delegasi, butir, onUbah, maks = 5, mati }: { d
 
   return (
     <div className="space-y-2">
-      <div className="text-[13px] font-semibold">Bukti (opsional, maksimal {maks})</div>
+      <div className="text-[13px] font-semibold">{judul ?? `Bukti (${wajib ? "wajib, " : "opsional, "}maksimal ${maks})`}</div>
       {butir.map((b, i) => (
         <div key={i} className="flex items-start gap-2">
           {b.path && <FotoBukti path={b.path} ket={b.ket} ukuran={56} />}
@@ -172,7 +200,7 @@ export function PenyuntingBukti({ delegasi, butir, onUbah, maks = 5, mati }: { d
         </div>
       )}
       {galat && <p role="alert" className="m-0 text-[12.5px] text-[#B42329]">{galat}</p>}
-      <p className="m-0 text-[12px] text-[#3B4A57]">Foto dikecilkan otomatis sebelum diunggah. Foto baru tersimpan pada laporan setelah Anda menekan Kirim laporan.</p>
+      <p className="m-0 text-[12px] text-[#3B4A57]">{teksBantu ?? "Foto dikecilkan otomatis sebelum diunggah. Foto baru tersimpan pada laporan setelah Anda menekan Kirim laporan."}</p>
     </div>
   );
 }

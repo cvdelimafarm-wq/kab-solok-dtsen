@@ -47,6 +47,21 @@ export type Delegasi = {
   penerima_jenis: JenisAkun;
   poin_total: string | number;
   lapor_hari: number;
+  // --- Pekerjaan teknis (20261026i). Opsional supaya data lama dan contoh uji tetap sah.
+  /** Jenis dari katalog (null = delegasi poin langsung). */
+  jenis_id?: number | null;
+  jenis_nama?: string | null;
+  /** Poin satu satuan jenis saat delegasi dibuat (salinan). Bila ada, target_total dan target_harian berupa POIN dan laporan memakai jumlah satuan. */
+  poin_per_satuan?: string | number | null;
+  perlu_hasil?: boolean;
+  perlu_tinjau?: boolean;
+  /** Pekerjaan mendadak: selesai dalam satu hari (boleh dengan tenggat jam). */
+  insidental?: boolean;
+  /** Tenggat berikut jam (ISO UTC dari basis data; tampilkan dalam WIB). */
+  tenggat_waktu?: string | null;
+  rutin_id?: number | null;
+  /** Nama kelompok "Pekerjaan tim" bila ro_kode berawalan TIM-. */
+  kelompok_nama?: string | null;
 };
 
 export type Laporan = {
@@ -61,6 +76,8 @@ export type Laporan = {
   mewakili: boolean;
   terlambat: boolean;
   dikirim_at: string;
+  /** Jumlah satuan (hanya laporan delegasi berjenis); poin = jumlah x poin_per_satuan. */
+  jumlah?: string | number | null;
 };
 
 export type Tanggapan = { id: number; delegasi_id: number; laporan_id: number | null; isi: string; dibuat_at: string; dari_nama: string | null };
@@ -100,6 +117,65 @@ export type HakDelegasi = {
   libur?: LiburDelegasi[];
   /** Bobot skor. Tersedia setelah 20261026g. */
   bobot?: BobotSkor;
+  /** Katalog jenis pekerjaan (semua bila akun pemberi tingkat tim, selain itu hanya yang aktif). Tersedia setelah 20261026i. */
+  jenis?: JenisPekerjaan[];
+  /** Kelompok "Pekerjaan tim". Tersedia setelah 20261026i. */
+  kelompok?: Kelompok[];
+  /** Kode kelompok aktif yang boleh didelegasikan akun ini (hanya pemberi tingkat tim). */
+  beri_kelompok?: string[];
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Pekerjaan teknis (20261026i): katalog jenis, kelompok, langkah, hasil kerja, templat berulang
+// ---------------------------------------------------------------------------------------------------------------------
+export type JenisPekerjaan = {
+  id: number;
+  kode: string;
+  nama: string;
+  satuan: string;
+  poin_per_satuan: string | number;
+  uraian: string;
+  perlu_hasil: boolean;
+  perlu_tinjau: boolean;
+  langkah_bawaan: string[];
+  urut: number;
+  aktif: boolean;
+};
+export type Kelompok = { kode: string; nama: string; aktif: boolean };
+export type Langkah = { id: number; delegasi_id: number; urut: number; judul: string; selesai: boolean; selesai_at: string | null };
+export type StatusHasil = "diserahkan" | "diterima" | "revisi";
+export type HasilKerja = {
+  id: number;
+  delegasi_id: number;
+  nomor: number;
+  catatan: string;
+  /** 1 sampai 5 butir: teks/tautan atau { ket, path } untuk foto (sama dengan bukti laporan). */
+  butir: unknown[];
+  status: StatusHasil;
+  catatan_tinjau: string;
+  diserahkan_at: string;
+  ditinjau_at: string | null;
+  ditinjau_nama: string | null;
+};
+export type Frekuensi = "mingguan" | "bulanan";
+export type Rutin = {
+  id: number;
+  judul: string;
+  uraian: string;
+  ro_kode: string;
+  jenis_id: number;
+  jumlah: string | number;
+  bobot: number;
+  frekuensi: Frekuensi;
+  /** Mingguan: 1 (Senin) sampai 7 (Minggu). Bulanan: tanggal 1 sampai 28. */
+  hari: number;
+  durasi_hari: number;
+  hari_kerja: number[];
+  mulai_berlaku: string;
+  berakhir: string | null;
+  aktif: boolean;
+  terakhir_jalan: string | null;
+  penerima: { akun: number; peran: PeranDelegasi; nama: string | null }[];
 };
 
 export type BahanSaya = {
@@ -113,6 +189,8 @@ export type BahanSaya = {
   pembinaan: Pembinaan[];
   penghargaan: Penghargaan[];
   penilaian: Penilaian[];
+  langkah?: Langkah[];
+  hasil?: HasilKerja[];
 };
 
 export type BahanTim = {
@@ -123,6 +201,10 @@ export type BahanTim = {
   pembinaan: Pembinaan[];
   penghargaan: Penghargaan[];
   penilaian: Penilaian[];
+  langkah?: Langkah[];
+  hasil?: HasilKerja[];
+  /** Templat berulang (hanya saat tidak disaring per identifikasi). */
+  rutin?: Rutin[];
 };
 
 export type CalonLanjutan = { nama: string; peran: string | null; jenis: string | null; akun_id: number | null };

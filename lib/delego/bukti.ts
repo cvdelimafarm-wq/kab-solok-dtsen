@@ -102,3 +102,11 @@ export function ukuranKecil(lebar: number, tinggi: number, maks = 1600): { w: nu
 /** True bila `path` tercatat pada salah satu laporan yang diberikan (laporan yang boleh dilihat akun itu, dari basis data). */
 export const ditemukanDiLaporan = (path: string, laporan: { bukti?: unknown[] | null }[] | null | undefined): boolean =>
   (laporan ?? []).some((l) => daftarPath(l.bukti).includes(path));
+
+/** True bila `path` tercatat pada salah satu hasil kerja yang diberikan (hasil yang boleh dilihat akun itu, dari basis data). */
+export const ditemukanDiHasil = (path: string, hasil: { butir?: unknown[] | null }[] | null | undefined): boolean =>
+  (hasil ?? []).some((h) => daftarPath(h.butir).includes(path));
+
+/** Gabungan: path tercatat pada laporan atau hasil kerja yang boleh dilihat. */
+export const ditemukanDiBukti = (path: string, laporan: { bukti?: unknown[] | null }[] | null | undefined, hasil: { butir?: unknown[] | null }[] | null | undefined): boolean =>
+  ditemukanDiLaporan(path, laporan) || ditemukanDiHasil(path, hasil);
