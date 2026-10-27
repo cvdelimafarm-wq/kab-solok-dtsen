@@ -20,7 +20,8 @@ function IkonWa({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-export default function BagikanWa({ fotoId, kode, lokasi, diambil_at, kegiatan }: { fotoId: number } & InfoFotoBagikan) {
+/** `ringkas` = tanpa judul dan petunjuk panjang (dipakai di penampil foto layar penuh). */
+export default function BagikanWa({ fotoId, kode, lokasi, diambil_at, kegiatan, ringkas = false }: { fotoId: number; ringkas?: boolean } & InfoFotoBagikan) {
   const [berkas, setBerkas] = useState<File | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export default function BagikanWa({ fotoId, kode, lokasi, diambil_at, kegiatan }
   const dasar = "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-3 text-sm font-extrabold disabled:opacity-50";
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-[#C9D3E6] bg-white p-3" aria-label="Bagikan foto ke WhatsApp">
-      <div className="text-sm font-bold text-[#0F2A52]">Bagikan foto resmi (ber-cap)</div>
+      {!ringkas && <div className="text-sm font-bold text-[#0F2A52]">Bagikan foto resmi (ber-cap)</div>}
       <div className="flex gap-2">
         <button type="button" disabled={!siap || sibuk} onClick={() => void bagikan("chat")} className={`${dasar} bg-[#1FA855] text-white`}>
           <IkonWa /> WhatsApp
@@ -95,7 +96,7 @@ export default function BagikanWa({ fotoId, kode, lokasi, diambil_at, kegiatan }
       {!siap && !galat && <p className="text-xs text-[#6B7A90]" role="status">Menyiapkan foto…</p>}
       {galat && <p className="text-xs font-semibold text-[#9B1C23]" role="alert">{galat}</p>}
       {pesan && <p className="rounded-lg bg-[#E3F6EC] px-3 py-2 text-xs font-semibold text-[#0B6B3F]" role="status">{pesan}</p>}
-      <p className="text-[11px] leading-snug text-[#6B7A90]">Story: lembar bagikan HP terbuka, pilih WhatsApp lalu &quot;Status saya&quot;. Foto memuat cap lokasi dan waktu resmi.</p>
+      {!ringkas && <p className="text-[11px] leading-snug text-[#6B7A90]">Story: lembar bagikan HP terbuka, pilih WhatsApp lalu &quot;Status saya&quot;. Foto memuat cap lokasi dan waktu resmi.</p>}
     </div>
   );
 }

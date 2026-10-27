@@ -13,6 +13,7 @@
 //  - Peringatan ⚠ HANYA soal urutan jam (lib/sigapUrutanFoto.ts), selalu disertai alasan satu kalimat di bawah kisi. Lencana kepercayaan
 //    (Wajar/Perlu perhatian) tidak lagi tampil di sini; kriterianya tetap dipakai di tempat lain (PeriksaFoto, Foto saya, SPJ).
 //  - "Urutkan sesuai jam" dengan pratinjau; foto cadangan dipasang lewat alur yang sama (ketuk cadangan, ketuk nomor, konfirmasi).
+//  - (27 Okt 2026) Penampil foto layar penuh juga punya tombol WhatsApp / Story WhatsApp (BagikanWa.tsx).
 //  - Penampil foto layar penuh: foto besar, jam, lokasi, "Ambil ulang foto" (foto lama tersimpan sebagai cadangan) dan "Ganti urutan foto ini".
 // (26 Okt 2026) PERUBAHAN TAMPILAN (aturan penomoran dan penyimpanan TIDAK berubah):
 //  - Ketuk foto = membuka penampil layar penuh (foto selebar layar, geser kiri/kanan atau tombol ‹ › antar foto, seperti Instagram/Facebook).
@@ -24,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ambilFotoUrl, ambilJson, type GalatFoto } from "./klien";
+import BagikanWa from "./BagikanWa";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import type { Kepercayaan } from "@/lib/sigapFoto";
 import { alasanBentrok, jamWib, kalimatJam, nilaiJam, pasangIsi, peranRingkas, rencanaUrutJam, slotBermasalah, tukarIsi, type IsiNomor } from "@/lib/sigapUrutanFoto";
@@ -584,6 +586,8 @@ export default function SusunFoto({
               </div>
             )}
             <div className="mt-3 flex flex-col gap-2">
+              {/* (27 Okt 2026) bagikan foto resmi (ber-cap) ke WhatsApp / Story, lengkap dengan keterangan dan tautan verifikasi */}
+              {f && <BagikanWa ringkas fotoId={f.id} kode={f.kode} diambil_at={f.diambil_at} />}
               {boleh && g.slot !== null && n?.terisi && (
                 <button type="button" disabled={!bisaUbah} onClick={() => { setLihat(null); setModeUbah(true); setPilih({ tipe: "slot", slot: g.slot as number }); }} className={TOMBOL_UTAMA}>
                   Ganti urutan foto ini
