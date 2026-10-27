@@ -88,7 +88,7 @@ export default function PintuMasuk({ bolehUji, keUji }: { bolehUji: boolean; keU
       {bolehUji && (
         <section className={`${kartu} flex flex-wrap items-center gap-3`} aria-labelledby="h-uji">
           <div className="min-w-0 flex-1">
-            <h2 id="h-uji" className="m-0 text-[14.5px] font-bold text-[#0F2A52]">Uji coba Alur GSBPM (lama)</h2>
+            <h2 id="h-uji" className="m-0 text-[14.5px] font-bold text-[#0F2A52]">Uji coba Perencanaan per RO (lama)</h2>
             <p className="m-0 mt-0.5 text-[13px] leading-snug text-[#4D5B6B]">RO → kegiatan utama → tahap GSBPM. Data hanya tersimpan di browser ini dan tidak terlihat petugas. Tidak dihapus; dibiarkan untuk rujukan.</p>
           </div>
           <button type="button" onClick={keUji} className="rounded-md border border-[#BFCBDD] bg-white px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] hover:bg-[#F7F9FC]">Buka uji coba</button>

@@ -3,13 +3,16 @@
 // app/verifikasi/page.tsx   ->  /verifikasi?k=SGP-XXXX-XXXX-XXXX   (PUBLIK, tanpa login)
 //
 // (19 Okt 2026) Verifikasi foto Kamera SIGAP. Langkah 1: kode (atau QR yang membuka halaman ini dengan ?k=). Langkah 2: unggah foto untuk dibandingkan.
-// Yang menentukan keaslian adalah catatan server; teks pada gambar hanya kunci untuk membukanya. Halaman ini tidak menampilkan koordinat tepat atau foto arsip.
+// Yang menentukan keaslian adalah catatan server; teks pada gambar hanya kunci untuk membukanya. Halaman ini tidak menampilkan kolom koordinat.
+// (27 Okt 2026) Foto arsip (versi kecil ±800 px, penuh bila ditekan) tampil berdampingan dengan foto yang diunggah pemeriksa. Tautan tanpa batas umur;
+// bila berkas dihapus / dinonaktifkan, yang tersisa hanya verifikasi kode (lihat lib/sigapVerifikasi.ts). Gambar dilayani /api/verifikasi-foto/gambar.
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { normalisasiKode } from "@/lib/sigapFoto";
+import { teksTanpaFoto, urlGambarVerifikasi, type StatusTampilFoto } from "@/lib/sigapVerifikasi";
 
-type Catatan = { kode: string; waktu: string; waktu_dari_server: boolean; lokasi: string | null; kegiatan: string | null; pengambil: string | null; dalam_pemeriksaan: boolean; berkas_dihapus: boolean };
+type Catatan = { kode: string; waktu: string; waktu_dari_server: boolean; lokasi: string | null; kegiatan: string | null; pengambil: string | null; dalam_pemeriksaan: boolean; berkas_dihapus: boolean; foto_tersedia?: boolean; foto_status?: StatusTampilFoto };
 type Jawab = { ada?: boolean; hasil?: "cocok" | "mirip" | "beda"; pesan?: string; catatan?: Catatan; error?: string; kode?: string };
 
 function Isi() {
@@ -19,10 +22,21 @@ function Isi() {
   const [berkas, setBerkas] = useState<File | null>(null);
   const [j, setJ] = useState<Jawab | null>(null);
   const [sibuk, setSibuk] = useState(false);
+  const [pratinjau, setPratinjau] = useState<string | null>(null);
+  const [gagalFoto, setGagalFoto] = useState(false);
+
+  // Pratinjau foto yang diunggah pemeriksa, ditaruh di samping foto arsip (tidak dikirim ke mana pun selain pemeriksaan di atas).
+  useEffect(() => {
+    if (!berkas) return setPratinjau(null);
+    const u = URL.createObjectURL(berkas);
+    setPratinjau(u);
+    return () => URL.revokeObjectURL(u);
+  }, [berkas]);
 
   async function periksa(k: string, f: File | null) {
     setSibuk(true);
     setJ(null);
+    setGagalFoto(false);
     try {
       const norm = normalisasiKode(k);
       let res: Response;
@@ -88,7 +102,39 @@ function Isi() {
         </section>
       )}
 
-      <p className="text-xs leading-relaxed text-[#3C4C68]">Yang menentukan keaslian adalah catatan server SIGAP. Teks pada gambar hanyalah kunci untuk membukanya. Koordinat tepat dan foto arsip hanya dapat dilihat petugas berwenang setelah masuk.</p>
+      {j?.catatan && (
+        <section className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm" aria-label="Perbandingan foto">
+          <div className={`grid gap-3 ${pratinjau ? "grid-cols-2" : "grid-cols-1"}`}>
+            {j.catatan.foto_tersedia && !gagalFoto ? (
+              <figure className="flex flex-col gap-1">
+                <a href={urlGambarVerifikasi(j.catatan.kode, "penuh")} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl border border-[#C9D3E6] bg-[#E8EDF7]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={urlGambarVerifikasi(j.catatan.kode, "kecil")} alt="Foto arsip di SIGAP" loading="lazy" decoding="async" onError={() => setGagalFoto(true)} className="h-auto w-full" />
+                </a>
+                <figcaption className="text-[11px] font-bold text-[#0F2A52]">Foto di SIGAP <span className="font-normal text-[#3C4C68]">· tekan untuk foto penuh</span></figcaption>
+              </figure>
+            ) : (
+              <p className="rounded-xl bg-[#EEF2F9] px-3 py-3 text-[13px] leading-relaxed text-[#3C4C68]">
+                {gagalFoto ? "Foto arsip belum dapat dimuat. Verifikasi cukup dengan kode di atas." : teksTanpaFoto(j.catatan.foto_status ?? "dihapus")}
+              </p>
+            )}
+            {pratinjau && (
+              <figure className="flex flex-col gap-1">
+                <div className="overflow-hidden rounded-xl border border-[#C9D3E6] bg-[#E8EDF7]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={pratinjau} alt="Foto yang Anda unggah" className="h-auto w-full" />
+                </div>
+                <figcaption className="text-[11px] font-bold text-[#0F2A52]">Foto yang Anda terima</figcaption>
+              </figure>
+            )}
+          </div>
+          {j.catatan.foto_tersedia && !gagalFoto && !pratinjau && (
+            <p className="text-xs leading-relaxed text-[#3C4C68]">Bandingkan dengan foto yang Anda terima: unggah fotonya pada kolom 2 di atas agar tampil berdampingan di sini.</p>
+          )}
+        </section>
+      )}
+
+      <p className="text-xs leading-relaxed text-[#3C4C68]">Yang menentukan keaslian adalah catatan server SIGAP. Teks pada gambar hanyalah kunci untuk membukanya. Foto arsip ditampilkan selama berkasnya masih disimpan; bila sudah dihapus atau dinonaktifkan, verifikasi tetap dapat dilakukan dengan kode. Koordinat tepat tidak ditampilkan di halaman ini.</p>
     </main>
   );
 }

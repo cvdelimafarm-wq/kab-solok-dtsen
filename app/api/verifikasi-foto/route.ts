@@ -1,7 +1,8 @@
 // app/api/verifikasi-foto/route.ts  (PUBLIK, tanpa sesi)
 //
 // (19 Okt 2026) Verifikasi foto Kamera SIGAP oleh siapa pun (mis. pemeriksa SPJ, BPK) tanpa login.
-// GET  ?k=SGP-XXXX-XXXX-XXXX        -> catatan server (waktu, nagari bila ada, kegiatan, pengambil). TANPA koordinat tepat dan TANPA foto arsip.
+// GET  ?k=SGP-XXXX-XXXX-XXXX        -> catatan server (waktu, nagari bila ada, kegiatan, pengambil) + foto_tersedia. Tidak ada kolom koordinat.
+//                                      Fotonya sendiri dilayani /api/verifikasi-foto/gambar (kecil ±800 px; penuh lewat tautan bertanda tangan).
 // POST multipart { berkas, k? }     -> bandingkan berkas dengan catatan: 'cocok' (SHA-256 sama persis), 'mirip' (sidik gambar dekat; mis. dikompres WhatsApp), 'beda'.
 //                                      Tanpa k: hanya bisa cocok persis (SHA-256 berkas ber-cap).
 // Pembatasan laju per IP (di-hash): 30 pemeriksaan / 10 menit, dicatat di sigap_foto_cek. Foto arsip dilihat setelah login (endpoint berkas).
@@ -11,6 +12,7 @@ import { dbPortal } from "@/lib/portal/server";
 import { AMBANG_MIRIP_BIT, jarakHamming, normalisasiKode, teksWaktuWib } from "@/lib/sigapFoto";
 import { sidikGambar } from "@/lib/sigapFotoCap";
 import { hashIp, ipDariHeader, sha256Hex } from "@/lib/sigapFotoServer";
+import { statusTampilFoto } from "@/lib/sigapVerifikasi";
 import type { Db } from "@/lib/sigap";
 
 export const runtime = "nodejs";
@@ -32,13 +34,14 @@ async function catat(db: Db, kode: string | null, hasil: string, ipHash: string)
   await db.from("sigap_foto_cek").insert({ kode, hasil, ip_hash: ipHash });
 }
 
-type FotoRow = { id: number; kode: string; kegiatan_id: number; akun_pengambil: number; diambil_at: string; lokasi_teks: string | null; status_periksa: string; file_dihapus_at: string | null; waktu_terverifikasi: boolean; sha256: string; sidik_gambar: string | null };
+type FotoRow = { id: number; kode: string; kegiatan_id: number; akun_pengambil: number; diambil_at: string; lokasi_teks: string | null; status_periksa: string; file_path: string | null; file_dihapus_at: string | null; hapus_disetujui_at: string | null; waktu_terverifikasi: boolean; sha256: string; sidik_gambar: string | null };
 
 async function catatanPublik(db: Db, f: FotoRow) {
   const [{ data: keg }, { data: ak }] = await Promise.all([
     db.from("sigap_kegiatan").select("nama").eq("id", f.kegiatan_id).maybeSingle(),
     db.from("sigap_akun").select("nama").eq("id", f.akun_pengambil).maybeSingle(),
   ]);
+  const tampil = statusTampilFoto(f);
   return {
     kode: f.kode,
     waktu: teksWaktuWib(new Date(f.diambil_at).getTime()),
@@ -48,10 +51,13 @@ async function catatanPublik(db: Db, f: FotoRow) {
     pengambil: (ak?.nama as string | undefined) ?? null,
     dalam_pemeriksaan: f.status_periksa === "dipertanyakan",
     berkas_dihapus: !!f.file_dihapus_at,
+    // (27 Okt 2026) Foto kecil di halaman verifikasi: hanya bila berkas belum dihapus dan belum disetujui untuk dihapus.
+    foto_tersedia: tampil === "tampil",
+    foto_status: tampil,
   };
 }
 
-const KOLOM = "id, kode, kegiatan_id, akun_pengambil, diambil_at, lokasi_teks, status_periksa, file_dihapus_at, waktu_terverifikasi, sha256, sidik_gambar";
+const KOLOM = "id, kode, kegiatan_id, akun_pengambil, diambil_at, lokasi_teks, status_periksa, file_path, file_dihapus_at, hapus_disetujui_at, waktu_terverifikasi, sha256, sidik_gambar";
 
 export async function GET(req: NextRequest) {
   const db = dbPortal();
