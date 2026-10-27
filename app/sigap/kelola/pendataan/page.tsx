@@ -2,6 +2,7 @@
 
 // app/sigap/kelola/pendataan/page.tsx
 //
+// (27 Okt 2026) Tab 1 Persiapan ditambah "Pengaturan Lembar Pendataan" per kegiatan (PengaturanLembar.tsx): istilah/warna/bentuk/alasan tombol hasil + variabel radar.
 // (23 Okt 2026) Kelola Pendataan dibingkai Shell SIGAP (sidebar + topbar + tab) seperti Kelola Pelatihan -- permintaan user: halaman tanpa sidebar,
 // tombol "Beranda" salah arah, dan kelengkapan pendataan belum terpadu. Tab disusun RUNUT mengikuti alur kerja (lib/sigapPendataanTab.ts):
 //   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 QC Pemahaman (26 Okt) · 5 Monitoring · 6 Pemeriksaan · 7 Administrasi & SPJ.
@@ -23,6 +24,7 @@ import QcPemahaman from "./QcPemahaman";
 import Ringkasan from "./Ringkasan";
 import Siaran from "./Siaran";
 import Tim from "./Tim";
+import PengaturanLembar from "./PengaturanLembar";
 import UnggahKk from "./UnggahKk";
 
 export default function KelolaPendataan() {
@@ -56,7 +58,12 @@ export default function KelolaPendataan() {
       onTab={pilihTab}
     >
       {tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
-      {tab === "persiapan" && <UnggahKk />}
+      {tab === "persiapan" && (
+        <>
+          <UnggahKk />
+          <PengaturanLembar />
+        </>
+      )}
       {tab === "tim" && <Tim />}
       {tab === "siaran" && (
         <>

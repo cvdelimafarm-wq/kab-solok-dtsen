@@ -11,6 +11,7 @@ import { useState } from "react";
 import { apiPortal, type GalatApi } from "@/app/portal/sesi";
 import { muatData } from "@/app/portal/dataBersama";
 import { API_PENDATAAN, dalamKotak, pathKkSub, type SubTim } from "@/lib/pendataan";
+import { KONFIG_BAWAAN, type KonfigLembar } from "@/lib/lembarKonfig";
 import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
 
 type Hasil = "terdampak" | "tidak_terdampak";
@@ -27,7 +28,7 @@ function uuid(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; namaSub: string; onSelesai: (pesan: string) => void }) {
+export default function TambahKk({ sub, namaSub, onSelesai, konfig = KONFIG_BAWAAN }: { sub: SubTim; namaSub: string; onSelesai: (pesan: string) => void; konfig?: KonfigLembar }) {
   const [buka, setBuka] = useState(false);
   const [nama, setNama] = useState("");
   const [patokan, setPatokan] = useState("");
@@ -88,7 +89,7 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
         body: JSON.stringify({ aksi: "tambah", idsubsls: sub.idsubsls, nama: nama.trim(), patokan: patokan.trim() || null, lat: pos?.lat ?? null, lng: pos?.lng ?? null, hasil, waktu: new Date().toISOString(), kunci, paksa }),
       });
       await Promise.allSettled([muatData(pathKkSub(sub.idsubsls)), muatData(API_PENDATAAN)]);
-      onSelesai(`Keluarga baru "${nama.trim()}" ditambahkan dan tercatat ${hasil === "terdampak" ? "terdampak" : "tidak terdampak"}.`);
+      onSelesai(`Keluarga baru "${nama.trim()}" ditambahkan dan tercatat ${konfig.hasil[hasil].label_pendek.toLowerCase()}.`);
       setBuka(false);
       reset();
     } catch (e) {
@@ -140,10 +141,9 @@ export default function TambahKk({ sub, namaSub, onSelesai }: { sub: SubTim; nam
             </span>
             <div className="mt-1.5 grid grid-cols-2 gap-2" role="group" aria-label="Hasil pendataan">
               {(
-                [
-                  ["terdampak", "Terdampak"],
-                  ["tidak_terdampak", "Tidak terdampak"],
-                ] as [Hasil, string][]
+                (["terdampak", "tidak_terdampak"] as Hasil[])
+                  .filter((h) => konfig.hasil[h].aktif)
+                  .map((h) => [h, konfig.hasil[h].label_pendek] as [Hasil, string])
               ).map(([k, t]) => (
                 <button key={k} type="button" aria-pressed={hasil === k} onClick={() => setHasil(k)} className={`min-h-[48px] rounded-[14px] border-2 px-3 text-[13.5px] font-extrabold ${hasil === k ? "border-[#1F5FD1] bg-[#E3ECFB] text-[#0F2A52]" : "border-[#D9E3F2] bg-white text-[#52627A]"}`}>
                   {t}

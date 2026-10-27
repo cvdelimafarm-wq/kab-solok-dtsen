@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ambilFotoUrl, ambilJson } from "./klien";
 import { LABEL_ALASAN, MAKS_TAG, WARNA_NADA_PERIKSA, jendelaBagiFoto, labelFotoTanpaSinyal, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
+import BagikanWa from "./BagikanWa";
 
 type TagSaya = {
   id: number; foto_id: number; peran_tag: string; status: string; penugasan_id: number | null; slot: number | null; slot_usulan: number | null;
@@ -243,6 +244,7 @@ export default function FotoSaya() {
                       {buka === f.id && (
                         <div className="mt-2 flex flex-col gap-2">
                           <Gambar id={f.id} alt={`Foto ${f.kode}`} />
+                          <BagikanWa fotoId={f.id} kode={f.kode} lokasi={f.lokasi_teks} diambil_at={f.diambil_at} kegiatan={nama(f.kegiatan_id)} />
                           {!st.perhatian && f.kepercayaan !== "hijau" && alasan.length > 0 && <div className="text-xs text-[#3C4C68]">Catatan sistem (sudah ditinjau): {alasan.join("; ")}.</div>}
                           <BagikanSusulan f={f} jumlahNomor={mode.find((k) => k.kegiatan_id === f.kegiatan_id)?.jumlah_foto ?? 5} muat={muat} />
                           {f.tag.some((x) => x.peran_tag !== "pemotret") && (

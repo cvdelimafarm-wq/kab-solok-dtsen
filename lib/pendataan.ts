@@ -472,7 +472,8 @@ export type DataTimPendataan = { sekarang: string; saya: { akun_id: number; pera
   /** (19 Okt 2026) angka KK tim PROPORSIONAL (sama dengan Monitoring Korwil & Beranda); null/tak ada = pakai jumlah dari `ringkas` */
   proporsional?: { total: number; didata: number } | null;
 };
-export type DataKkSub = { sekarang: string; idsubsls: string; kk: KkLembar[] };
+// (27 Okt 2026) `konfig` = pengaturan tampilan Lembar untuk kegiatan Sub SLS ini (lib/lembarKonfig.ts); kosong/rusak -> tampilan bawaan.
+export type DataKkSub = { sekarang: string; idsubsls: string; kk: KkLembar[]; konfig?: unknown };
 
 
 export type Hitung = { terdampak: number; tidak_terdampak: number; tidak_ditemukan: number };

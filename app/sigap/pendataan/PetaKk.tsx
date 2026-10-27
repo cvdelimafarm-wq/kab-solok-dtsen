@@ -10,7 +10,8 @@
 // (14 Okt 2026) Desain ringkas: kanvas mengisi wadah induknya (h-full w-full; dulu rasio tetap 360:440 maks. 64vh) -- permintaan user, tampilan saja.
 
 import { useRef } from "react";
-import { WARNA_BELUM, WARNA_PML, warnaIndeks, type Anggota, type KkLembar, type Proyeksi } from "@/lib/pendataan";
+import { WARNA_BELUM, WARNA_PML, warnaIndeks, type Anggota, type HasilKk, type KkLembar, type Proyeksi } from "@/lib/pendataan";
+import { KONFIG_BAWAAN, bentukPeta, type BentukHasil } from "@/lib/lembarKonfig";
 import { inisial } from "./usePendataan";
 
 export type Pandang = { cx: number; cy: number; z: number };
@@ -18,6 +19,9 @@ export const PANDANG_AWAL: Pandang = { cx: 180, cy: 220, z: 1 };
 const L = 360;
 const T = 440;
 const Z_MAKS = 8;
+/** (27 Okt 2026) bentuk penanda per hasil; diatur per kegiatan (Kelola Pendataan). Bawaan = bentuk lama. */
+export type PetaBentuk = Record<HasilKk, BentukHasil>;
+export const PETA_BAWAAN: PetaBentuk = bentukPeta(KONFIG_BAWAAN);
 
 export function warnaPelaku(a: Anggota | undefined): string {
   if (!a) return WARNA_PML;
@@ -25,20 +29,31 @@ export function warnaPelaku(a: Anggota | undefined): string {
 }
 
 /** Bentuk hasil untuk daftar/legenda (ukuran px). */
-export function IkonHasil({ hasil, warna, ukuran = 22 }: { hasil: KkLembar["hasil"]; warna: string; ukuran?: number }) {
+export function IkonHasil({ hasil, warna, ukuran = 22, peta = PETA_BAWAAN }: { hasil: KkLembar["hasil"]; warna: string; ukuran?: number; peta?: PetaBentuk }) {
   return (
     <svg width={ukuran} height={ukuran} viewBox="0 0 22 22" aria-hidden="true" className="flex-none">
-      <Bentuk hasil={hasil} warna={warna} cx={11} cy={11} r={6.5} z={1} />
+      <Bentuk hasil={hasil} warna={warna} cx={11} cy={11} r={6.5} z={1} peta={peta} />
     </svg>
   );
 }
 
-function Bentuk({ hasil, warna, cx, cy, r, z }: { hasil: KkLembar["hasil"]; warna: string; cx: number; cy: number; r: number; z: number }) {
+function Bentuk({ hasil, warna, cx, cy, r, z, peta }: { hasil: KkLembar["hasil"]; warna: string; cx: number; cy: number; r: number; z: number; peta: PetaBentuk }) {
   if (!hasil) return <circle cx={cx} cy={cy} r={r * 0.78} fill={WARNA_BELUM} stroke="#fff" strokeWidth={1.4 / z} />;
-  if (hasil === "terdampak") return <circle cx={cx} cy={cy} r={r} fill={warna} stroke="#fff" strokeWidth={1.4 / z} />;
-  if (hasil === "tidak_terdampak") return <circle cx={cx} cy={cy} r={r} fill="#fff" stroke={warna} strokeWidth={2.4 / z} />;
-  const q = r * 1.25;
-  return <polygon points={`${cx},${cy - q} ${cx + q},${cy} ${cx},${cy + q} ${cx - q},${cy}`} fill={warna} stroke="#fff" strokeWidth={1.4 / z} />;
+  const b = peta[hasil];
+  if (b === "bulat_kosong") return <circle cx={cx} cy={cy} r={r} fill="#fff" stroke={warna} strokeWidth={2.4 / z} />;
+  if (b === "belah_ketupat") {
+    const q = r * 1.25;
+    return <polygon points={`${cx},${cy - q} ${cx + q},${cy} ${cx},${cy + q} ${cx - q},${cy}`} fill={warna} stroke="#fff" strokeWidth={1.4 / z} />;
+  }
+  if (b === "kotak") {
+    const t = r * 0.92;
+    return <rect x={cx - t} y={cy - t} width={t * 2} height={t * 2} rx={r * 0.18} fill={warna} stroke="#fff" strokeWidth={1.4 / z} />;
+  }
+  if (b === "segitiga") {
+    const q = r * 1.3;
+    return <polygon points={`${cx},${cy - q} ${cx + q * 0.95},${cy + q * 0.75} ${cx - q * 0.95},${cy + q * 0.75}`} fill={warna} stroke="#fff" strokeWidth={1.4 / z} strokeLinejoin="round" />;
+  }
+  return <circle cx={cx} cy={cy} r={r} fill={warna} stroke="#fff" strokeWidth={1.4 / z} />;
 }
 
 type Props = {
@@ -55,6 +70,8 @@ type Props = {
   saya: { lat: number; lng: number } | null;
   /** (20 Okt 2026) true = ada peta dasar di bawah: latar dan kisi dibuat bening supaya peta terlihat */
   tanpaLatar?: boolean;
+  /** (27 Okt 2026) bentuk penanda per hasil (pengaturan kegiatan); kosong = bentuk lama */
+  peta?: PetaBentuk;
 };
 
 function klem(p: Pandang): Pandang {
@@ -63,7 +80,7 @@ function klem(p: Pandang): Pandang {
   return { z: p.z, cx: Math.max(hw, Math.min(L - hw, p.cx)), cy: Math.max(hh, Math.min(T - hh, p.cy)) };
 }
 
-export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya, tanpaLatar = false }: Props) {
+export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya, tanpaLatar = false, peta = PETA_BAWAAN }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const ptr = useRef(new Map<number, { x: number; y: number }>());
   const gerak = useRef({ geser: false, jarak0: 0, z0: 1 });
@@ -168,7 +185,7 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
             }}
           >
             {pilih && <circle cx={x} cy={y} r={r * 1.9} fill="none" stroke="#0F2A52" strokeWidth={2.2 / z} />}
-            <Bentuk hasil={k.hasil} warna={warna} cx={x} cy={y} r={r} z={z} />
+            <Bentuk hasil={k.hasil} warna={warna} cx={x} cy={y} r={r} z={z} peta={peta} />
             {pakaiInisial && k.hasil && (
               <text
                 x={x}
@@ -177,7 +194,7 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
                 fontSize={r * 0.95}
                 fontWeight={800}
                 fontFamily="inherit"
-                {...(k.hasil === "tidak_terdampak"
+                {...(peta[k.hasil] === "bulat_kosong"
                   ? { fill: "#0F2A52" }
                   : { fill: "#fff", stroke: "rgba(0,0,0,.45)", strokeWidth: 0.5 / z, paintOrder: "stroke" })}
               >

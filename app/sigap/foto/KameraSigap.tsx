@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
+import BagikanWa from "./BagikanWa";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
@@ -1307,6 +1308,8 @@ export default function KameraSigap({
                 {hasil.penempatan && hasil.penempatan.ok === false && <div className="text-xs text-[#9B1C23]">Belum masuk nomor foto: {hasil.penempatan.error}</div>}
                 <p className="text-[11.5px] leading-snug text-[#55657D]">Salah nomor? Buka kartu hari (atau menu perbaikan), lalu ketuk dua foto untuk menukar urutannya.</p>
               </div>
+
+              <BagikanWa fotoId={hasil.foto.id} kode={hasil.foto.kode} diambil_at={hasil.foto.diambil_at ?? null} kegiatan={namaKegiatan} />
 
               {bagiN !== null ? (
                 <>

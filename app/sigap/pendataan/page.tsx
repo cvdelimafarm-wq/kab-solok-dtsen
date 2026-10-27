@@ -19,12 +19,14 @@ import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import PlottingTim from "./PlottingTim";
+import { WARNA_BELUM_BILAH, bentukPeta, hasilAktif, lencanaHasil, normalisasiKonfig, type BentukHasil } from "@/lib/lembarKonfig";
 import PetaWilayah from "./PetaWilayah";
 import { KolamPanel, KolamTombol } from "./KolamWilayah";
 import TambahKk from "./TambahKk";
 import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
 import CapaianFloat from "./CapaianFloat";
-import PetaKk, { IkonHasil, PANDANG_AWAL, warnaPelaku, type Pandang } from "./PetaKk";
+import RadarSekitar from "./RadarSekitar";
+import PetaKk, { IkonHasil, PANDANG_AWAL, PETA_BAWAAN, warnaPelaku, type Pandang, type PetaBentuk } from "./PetaKk";
 import dynamic from "next/dynamic";
 import KontrolPetaDasar from "./KontrolPetaDasar";
 import { useDasarTim } from "./useDasar";
@@ -60,19 +62,10 @@ type Lembar = null | "sub" | "ppl";
 
 const KUNCI_SUB = "sigap_pendataan_sub";
 const KUNCI_PERBAIKAN = "sigap_perbaikan_tampung_v1";
-const ALASAN_TIDAK_DITEMUKAN = ["Rumah kosong", "Pindah", "Menolak", "Alamat tidak ada"];
-const SUBTEKS: Record<HasilKk, string> = { terdampak: "Keluarga terdampak bencana", tidak_terdampak: "Keluarga tidak terdampak", tidak_ditemukan: "Rumah kosong, pindah, menolak, atau alamat tidak ada" };
 const URUT_LABEL: Record<Urut, string> = { belum: "Belum dulu", nama: "Nama", dekat: "Terdekat" };
 const URUT_BERIKUT: Record<Urut, Urut> = { belum: "nama", nama: "dekat", dekat: "belum" };
 
-// (14 Okt 2026) warna bilah progres: sama untuk kartu filter, Monitoring, dan lembar pilih
-const WARNA_BAR = { terdampak: "#0F2A52", tidak_terdampak: "#4C86E8", tidak_ditemukan: "#B7791F", belum: "#CBD6E4" } as const;
-const PIL: Record<HasilKk | "belum", [string, string, string]> = {
-  terdampak: ["#0F2A52", "#FFFFFF", "Terdampak"],
-  tidak_terdampak: ["#E6EEFC", "#1F5FD1", "Tidak"],
-  tidak_ditemukan: ["#FFF4D6", "#8A6200", "Tidak ditemukan"],
-  belum: ["#EEF2F7", "#5B6B84", "Belum"],
-};
+// (27 Okt 2026) warna bilah, lencana, nama tombol, alasan dan bentuk penanda kini dari pengaturan kegiatan (lib/lembarKonfig.ts; bawaan = tampilan lama).
 
 const namaSub = (s: SubTim) => `${s.nagari} · ${s.sls}${s.sub_sls ? ` / ${s.sub_sls}` : ""}`;
 const fmtJarak = (m: number) => (!Number.isFinite(m) ? "" : m >= 1000 ? `${(m / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(m / 10) * 10} m`);
@@ -152,10 +145,13 @@ function Av({ a, u = 22, tepi = true }: { a: Anggota | undefined; u?: number; te
   );
 }
 
-/** Penanda bentuk hasil kecil (CSS) -- dipakai di kartu filter dan baris PPL. */
-function Penanda({ k, warna, ukuran = 9 }: { k: HasilKk | "belum"; warna: string; ukuran?: number }) {
-  if (k === "tidak_ditemukan") return <span className="inline-block flex-none rotate-45" style={{ width: ukuran - 1, height: ukuran - 1, background: warna }} />;
-  if (k === "tidak_terdampak") return <span className="inline-block flex-none rounded-full border-2" style={{ width: ukuran, height: ukuran, borderColor: warna }} />;
+/** Penanda bentuk hasil kecil (CSS) -- dipakai di kartu filter dan baris PPL. Bentuk mengikuti pengaturan kegiatan (`peta`). */
+function Penanda({ k, warna, ukuran = 9, peta = PETA_BAWAAN }: { k: HasilKk | "belum"; warna: string; ukuran?: number; peta?: PetaBentuk }) {
+  const b: BentukHasil = k === "belum" ? "bulat_penuh" : peta[k];
+  if (b === "belah_ketupat") return <span className="inline-block flex-none rotate-45" style={{ width: ukuran - 1, height: ukuran - 1, background: warna }} />;
+  if (b === "bulat_kosong") return <span className="inline-block flex-none rounded-full border-2" style={{ width: ukuran, height: ukuran, borderColor: warna }} />;
+  if (b === "kotak") return <span className="inline-block flex-none rounded-[2px]" style={{ width: ukuran - 1, height: ukuran - 1, background: warna }} />;
+  if (b === "segitiga") return <span className="inline-block flex-none" style={{ width: ukuran + 1, height: ukuran, background: warna, clipPath: "polygon(50% 4%, 100% 92%, 0 92%)" }} />;
   return <span className="inline-block flex-none rounded-full" style={{ width: ukuran, height: ukuran, background: warna }} />;
 }
 
@@ -274,6 +270,9 @@ export default function LembarPendataan() {
 
   const anggota = useMemo(() => new Map((data?.anggota ?? []).map((a) => [a.akun_id, a])), [data]);
   const kkAsli = useMemo(() => kkQ.data?.kk ?? [], [kkQ.data]);
+  // (27 Okt 2026) pengaturan tampilan kegiatan Sub SLS ini; tanpa pengaturan = tampilan lama (Pascabencana)
+  const konfig = useMemo(() => normalisasiKonfig(kkQ.data?.konfig), [kkQ.data]);
+  const peta = useMemo(() => bentukPeta(konfig), [konfig]);
   // mode perbaikan: tampilkan penandaan yang masih ditampung di atas daftar server (hanya KK yang belum punya hasil)
   const kk = useMemo(
     () => (perbaikan ? kkAsli.map((k) => (!k.hasil && tampung[k.id] ? { ...k, hasil: tampung[k.id].hasil, alasan: tampung[k.id].alasan, ppl_akun_id: data?.saya.akun_id ?? null } : k)) : kkAsli),
@@ -494,7 +493,7 @@ export default function LembarPendataan() {
     if (perbaikan) {
       if (sudahAdaHasil(k)) return setToast({ pesan: "KK ini sudah punya hasil, tidak bisa diubah lewat perbaikan." });
       simpanTampung({ ...tampung, [k.id]: { hasil, alasan: alasan ?? null, kunci: tampung[k.id]?.kunci ?? uuid() } });
-      return setToast({ pesan: `Ditandai: ${LABEL_HASIL[hasil]} (belum dikirim)` });
+      return setToast({ pesan: `Ditandai: ${konfig.hasil[hasil].label} (belum dikirim)` });
     }
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
     const r = tandaiKk(subId, k, hasil, alasan);
@@ -502,7 +501,7 @@ export default function LembarPendataan() {
     // Urungkan hanya bila tidak menggeser atribusi rekan: KK sebelumnya belum didata, atau hasil milik saya sendiri
     const bisaUrung = sebelum.hasil === null || sebelum.ppl === sayaAkun;
     setToast({
-      pesan: `Tersimpan: ${LABEL_HASIL[hasil]}`,
+      pesan: `Tersimpan: ${konfig.hasil[hasil].label}`,
       urungkan: bisaUrung ? () => void tandaiKk(subId, k, sebelum.hasil ?? "belum", sebelum.hasil ? sebelum.alasan : null) : undefined,
     });
   }
@@ -567,6 +566,11 @@ export default function LembarPendataan() {
     setTab("peta");
   }
 
+  // (27 Okt 2026) kartu saring: nama dari pengaturan kegiatan; kategori yang dimatikan hanya muncul bila masih ada KK-nya
+  const chipStatus: [FStatus, string, number][] = [
+    ...HASIL_KK.filter((h) => konfig.hasil[h].aktif || hitung[h] > 0).map((h) => [h, konfig.hasil[h].label_pendek, hitung[h]] as [FStatus, string, number]),
+    ["belum", "Belum", hitung.belum],
+  ];
   const chipBase = "min-h-[40px] flex-none rounded-full px-3 text-[12px] font-extrabold inline-flex items-center gap-1.5";
   const chipOn = "bg-[#0F2A52] text-white";
   const chipOff = "bg-white text-[#55657D] shadow-[0_2px_6px_rgba(15,42,82,.08)]";
@@ -745,10 +749,10 @@ export default function LembarPendataan() {
                   total={hitung.semua}
                   label={`${hitung.semua - hitung.belum} dari ${hitung.semua} KK sudah punya hasil`}
                   bagian={[
-                    { n: hitung.terdampak, warna: WARNA_BAR.terdampak },
-                    { n: hitung.tidak_terdampak, warna: WARNA_BAR.tidak_terdampak },
-                    { n: hitung.tidak_ditemukan, warna: WARNA_BAR.tidak_ditemukan },
-                    { n: hitung.belum, warna: WARNA_BAR.belum },
+                    { n: hitung.terdampak, warna: konfig.hasil.terdampak.warna },
+                    { n: hitung.tidak_terdampak, warna: konfig.hasil.tidak_terdampak.warna },
+                    { n: hitung.tidak_ditemukan, warna: konfig.hasil.tidak_ditemukan.warna },
+                    { n: hitung.belum, warna: WARNA_BELUM_BILAH },
                   ]}
                 />
               </div>
@@ -768,13 +772,8 @@ export default function LembarPendataan() {
                 <Ik n="turun" className="h-3.5 w-3.5 text-[#5B6B84]" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-[3px]" role="group" aria-label="Saring menurut status">
-              {([
-                ["terdampak", "Terdampak", hitung.terdampak],
-                ["tidak_terdampak", "Tidak terdampak", hitung.tidak_terdampak],
-                ["tidak_ditemukan", "Tidak ditemukan", hitung.tidak_ditemukan],
-                ["belum", "Belum", hitung.belum],
-              ] as [FStatus, string, number][]).map(([k, teks, n]) => {
+            <div className="grid gap-[3px]" style={{ gridTemplateColumns: `repeat(${chipStatus.length}, minmax(0, 1fr))` }} role="group" aria-label="Saring menurut status">
+              {chipStatus.map(([k, teks, n]) => {
                 const on = fStatus === k;
                 const ink = on ? "#FFFFFF" : "#0F2A52";
                 const bentuk = (k === "belum" ? "belum" : k) as HasilKk | "belum";
@@ -787,7 +786,7 @@ export default function LembarPendataan() {
                     className={`flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-px rounded-[10px] px-0 py-1 ${on ? "bg-[#0F2A52]" : "bg-[#F5F8FE] shadow-[inset_0_0_0_1px_#E4ECF8]"}`}
                   >
                     <span className="inline-flex items-center gap-[5px] text-[15px] font-extrabold leading-tight" style={{ color: ink }}>
-                      <Penanda k={bentuk} warna={k === "belum" && !on ? "#9AA6B6" : on ? "#D3E0F5" : ink} />
+                      <Penanda peta={peta} k={bentuk} warna={k === "belum" && !on ? "#9AA6B6" : on ? "#D3E0F5" : ink} />
                       {n}
                     </span>
                     <span className="px-0.5 text-center text-[10.5px] font-semibold leading-tight" style={{ color: on ? "#D3E0F5" : "#6B7A90" }}>
@@ -805,6 +804,21 @@ export default function LembarPendataan() {
           <PetaWilayah sub={subAktif} judulSub={namaPendek(subAktif)} judulNagari={judul(subAktif.nagari)} onKePeta={() => setTab("peta")} onSubLain={() => setLembar("sub")} />
         )}
 
+        {/* (27 Okt 2026) Radar sekitar: hitung KK di sekitar PPL selagi bergerak (sudah / belum didata); radius bebas diatur */}
+        {data && subId && (tab === "peta" || tab === "daftar") && kk.length > 0 && (
+          <RadarSekitar
+            konfig={konfig}
+            kk={kk}
+            sayaAkun={sayaAkun}
+            onPosisi={(p) => setSaya(p)}
+            onPilih={(id) => {
+              const k = kk.find((x) => x.id === id);
+              setTerpilihId(id);
+              if (k) lihatDiPeta(k);
+            }}
+          />
+        )}
+
         {/* ---------------------------------------------------------------- Peta: mengisi sisa layar */}
         {data && subId && tab === "peta" && kk.length > 0 && (
           <section className="relative m-2.5 min-h-[340px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">
@@ -812,7 +826,7 @@ export default function LembarPendataan() {
               <>
                 {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={(s, a) => { setStatusDasar(s); setAlasanDasar(a ?? null); }} />}
                 <div className="absolute inset-0">
-                  <PetaKk kk={kk} proj={proj} anggota={anggota} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} tampil={tampil} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
+                  <PetaKk peta={peta} kk={kk} proj={proj} anggota={anggota} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} tampil={tampil} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
                 </div>
                 <KontrolPetaDasar dasar={dasar} status={statusDasar} alasan={alasanDasar} />
                 {/* satu pil vertikal: perbesar, perkecil, tampilkan semua */}
@@ -833,9 +847,9 @@ export default function LembarPendataan() {
                 </button>
                 {/* legenda bentuk kecil, kiri bawah (di atas tombol capaian yang mengambang di kiri bawah layar) */}
                 <div className="absolute bottom-[88px] left-2.5 flex max-w-[170px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
-                  <span className="inline-flex items-center gap-1.5"><Penanda k="terdampak" warna="#44546F" />Terdampak</span>
-                  <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_terdampak" warna="#44546F" />Tidak terdampak</span>
-                  <span className="inline-flex items-center gap-1.5"><Penanda k="tidak_ditemukan" warna="#44546F" />Tidak ditemukan</span>
+                  {HASIL_KK.filter((h) => konfig.hasil[h].aktif || hitung[h] > 0).map((h) => (
+                    <span key={h} className="inline-flex items-center gap-1.5"><Penanda peta={peta} k={h} warna="#44546F" />{konfig.hasil[h].label_pendek}</span>
+                  ))}
                   <span className="font-semibold text-[#5B6B84]">Warna = PPL</span>
                   {tanpaKoordinat > 0 && <span className="font-semibold leading-tight text-[#5B6B84]">{tanpaKoordinat} KK tanpa koordinat hanya di Daftar KK</span>}
                 </div>
@@ -866,13 +880,13 @@ export default function LembarPendataan() {
               {daftar.map((k) => {
                 const a = k.ppl_akun_id ? anggota.get(k.ppl_akun_id) : undefined;
                 const jarak = saya && k.lat !== null && k.lng !== null ? fmtJarak(jarakMeter(saya, { lat: k.lat, lng: k.lng })) : "";
-                const p = PIL[k.hasil ?? "belum"];
+                const p = lencanaHasil(konfig, k.hasil);
                 const baru = !!k.ditambah_oleh_akun;
                 const bisaBatal = !perbaikan && bisaBatalkanKkBaru(k, sayaAkun, data?.saya.peran ?? null);
                 return (
                   <div key={k.id} className="border-b border-[#EEF2F7] last:border-b-0">
                   <button type="button" onClick={() => setTerpilihId(k.id)} className="flex w-full items-center gap-[11px] px-3 py-2 text-left active:bg-[#F1F6FE]">
-                    <IkonHasil hasil={k.hasil} warna={k.hasil ? warnaPelaku(a) : WARNA_BELUM} ukuran={20} />
+                    <IkonHasil hasil={k.hasil} warna={k.hasil ? warnaPelaku(a) : WARNA_BELUM} ukuran={20} peta={peta} />
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-[14px] font-bold leading-[1.25] text-[#0F2A52]">{k.nama_kk}</b>
                       <small className="block truncate text-[11.5px] leading-[1.3] text-[#6B7A90]">{[k.no_urut ? `No. ${k.no_urut}` : null, k.anggota_lain, a ? namaDepan(a.nama) : null, jarak].filter(Boolean).join(" · ") || "-"}</small>
@@ -933,15 +947,15 @@ export default function LembarPendataan() {
                 total={total}
                 label={`${didata} dari ${total} KK sudah punya hasil`}
                 bagian={[
-                  { n: timHasil.terdampak, warna: WARNA_BAR.terdampak },
-                  { n: timHasil.tidak_terdampak, warna: WARNA_BAR.tidak_terdampak },
-                  { n: timHasil.tidak_ditemukan, warna: WARNA_BAR.tidak_ditemukan },
+                  { n: timHasil.terdampak, warna: konfig.hasil.terdampak.warna },
+                  { n: timHasil.tidak_terdampak, warna: konfig.hasil.tidak_terdampak.warna },
+                  { n: timHasil.tidak_ditemukan, warna: konfig.hasil.tidak_ditemukan.warna },
                 ]}
               />
               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-[#5B6B84]">
-                <span><b className="text-[#0F2A52]">{timHasil.terdampak}</b> terdampak</span>
-                <span><b className="text-[#0F2A52]">{timHasil.tidak_terdampak}</b> tidak terdampak</span>
-                <span><b className="text-[#0F2A52]">{timHasil.tidak_ditemukan}</b> tidak ditemukan</span>
+                {HASIL_KK.filter((h) => konfig.hasil[h].aktif || timHasil[h] > 0).map((h) => (
+                  <span key={h}><b className="text-[#0F2A52]">{timHasil[h]}</b> {konfig.hasil[h].label_pendek.toLowerCase()}</span>
+                ))}
                 <span className="ml-auto text-[#8A96A8]">{waktuRingkas(new Date(tim.tiba || Date.now()).toISOString())}</span>
               </div>
               {menunggu.length > 0 && <p className="text-[11.5px] text-[#8A6200]">{menunggu.length} penandaan di HP ini belum terkirim, jadi belum masuk angka di bawah.</p>}
@@ -973,9 +987,9 @@ export default function LembarPendataan() {
                         {a.akun_id === sayaAkun ? " (saya)" : ""}
                       </span>
                       <span className="mt-0.5 flex flex-wrap gap-x-2.5 text-[11.5px] text-[#5B6B84]">
-                        <span className="inline-flex items-center gap-1"><Penanda k="terdampak" warna={w} />{r?.total.terdampak ?? 0}</span>
-                        <span className="inline-flex items-center gap-1"><Penanda k="tidak_terdampak" warna={w} />{r?.total.tidak_terdampak ?? 0}</span>
-                        <span className="inline-flex items-center gap-1"><Penanda k="tidak_ditemukan" warna={w} />{r?.total.tidak_ditemukan ?? 0}</span>
+                        {HASIL_KK.filter((h) => konfig.hasil[h].aktif || (r?.total[h] ?? 0) > 0).map((h) => (
+                          <span key={h} className="inline-flex items-center gap-1"><Penanda peta={peta} k={h} warna={w} />{r?.total[h] ?? 0}</span>
+                        ))}
                         <span className="text-[#8A96A8]">hari ini {r?.didata_hari_ini ?? 0}</span>
                       </span>
                     </span>
@@ -1096,7 +1110,7 @@ export default function LembarPendataan() {
                     <span className="block truncate text-[13.5px] font-bold text-[#0F2A52]">
                       {a ? `${namaTampil(a.nama)}${a.akun_id === sayaAkun ? " (saya)" : ""}` : "Semua PPL"}
                     </span>
-                    <span className="block text-[11px] text-[#6B7A90]">{r ? `${r.n} KK · ${r.td} terdampak` : `${hitung.semua - hitung.belum} KK sudah punya hasil di Sub SLS ini`}</span>
+                    <span className="block text-[11px] text-[#6B7A90]">{r ? `${r.n} KK · ${r.td} ${konfig.hasil.terdampak.label_pendek.toLowerCase()}` : `${hitung.semua - hitung.belum} KK sudah punya hasil di Sub SLS ini`}</span>
                   </span>
                   <span className="h-5 w-5 flex-none rounded-full" style={{ border: aktif ? "6px solid #1F5FD1" : "2px solid #CBD6E4" }} />
                 </button>
@@ -1120,32 +1134,32 @@ export default function LembarPendataan() {
 
           {terpilih.hasil && terpilih.ppl_akun_id !== sayaAkun && (
             <p className="mt-3 rounded-[12px] bg-[#FDEBDD] px-3 py-2 text-[12.5px] text-[#8A3B0C]">
-              Sudah ada hasil dari {anggota.get(terpilih.ppl_akun_id ?? 0)?.nama ? namaDepan(anggota.get(terpilih.ppl_akun_id ?? 0)!.nama) : "rekan tim"} ({waktuRingkas(terpilih.status_at)}): {LABEL_PENDEK[terpilih.hasil]}. Menandai ulang akan menimpa hasil ini; riwayat tetap tercatat.
+              Sudah ada hasil dari {anggota.get(terpilih.ppl_akun_id ?? 0)?.nama ? namaDepan(anggota.get(terpilih.ppl_akun_id ?? 0)!.nama) : "rekan tim"} ({waktuRingkas(terpilih.status_at)}): {konfig.hasil[terpilih.hasil].label_pendek}. Menandai ulang akan menimpa hasil ini; riwayat tetap tercatat.
             </p>
           )}
           {terpilih.hasil && terpilih.ppl_akun_id === sayaAkun && <p className="mt-3 text-[12px] text-[#6B7A90]">Anda menandai {waktuRingkas(terpilih.status_at)}.</p>}
 
           <div className="mt-3 space-y-2" role="group" aria-label="Hasil pendataan">
-            {HASIL_KK.map((h) => {
+            {hasilAktif(konfig).map((h) => {
               const aktif = terpilih.hasil === h && terpilih.ppl_akun_id === sayaAkun;
               return (
                 <button key={h} type="button" aria-pressed={aktif} onClick={() => tandai(terpilih, h)} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${aktif ? "border-[#1F5FD1] bg-[#E3ECFB]" : "border-[#D9E3F2] bg-white active:bg-[#F1F6FE]"}`}>
-                  <IkonHasil hasil={h} warna={warnaPelaku(anggota.get(sayaAkun))} ukuran={26} />
+                  <IkonHasil hasil={h} warna={warnaPelaku(anggota.get(sayaAkun))} ukuran={26} peta={peta} />
                   <span className="text-[14px] font-extrabold text-[#0F2A52]">
-                    {LABEL_HASIL[h]}
-                    <small className="block text-[11.5px] font-medium text-[#6B7A90]">{SUBTEKS[h]}</small>
+                    {konfig.hasil[h].label}
+                    {konfig.hasil[h].subteks && <small className="block text-[11.5px] font-medium text-[#6B7A90]">{konfig.hasil[h].subteks}</small>}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          {terpilih.hasil === "tidak_ditemukan" && terpilih.ppl_akun_id === sayaAkun && (
+          {terpilih.hasil && konfig.hasil[terpilih.hasil].alasan.length > 0 && terpilih.ppl_akun_id === sayaAkun && (
             <div className="mt-3">
               <span className="text-[11.5px] font-bold text-[#52627A]">Alasan (boleh dikosongkan)</span>
               <div className="mt-1.5 flex flex-wrap gap-2">
-                {ALASAN_TIDAK_DITEMUKAN.map((a) => (
-                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} onClick={() => tandai(terpilih, "tidak_ditemukan", a)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
+                {konfig.hasil[terpilih.hasil].alasan.map((a) => (
+                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} onClick={() => tandai(terpilih, terpilih.hasil as HasilKk, a)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
                     {a}
                   </button>
                 ))}
@@ -1194,7 +1208,7 @@ export default function LembarPendataan() {
       )}
 
       {/* (14 Okt 2026) tombol tambah keluarga baru -- hanya saat Sub SLS dibuka, tab Peta / Daftar KK */}
-      {!perbaikan && subAktif && tabKk && !terpilih && !lembar && <TambahKk sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
+      {!perbaikan && subAktif && tabKk && !terpilih && !lembar && <TambahKk konfig={konfig} sub={subAktif} namaSub={namaSub(subAktif)} onSelesai={(p) => setToast({ pesan: p })} />}
 
       {/* (15 Okt 2026) tombol float capaian hari ini (PPL): bertumpuk di atas "+ Keluarga baru" bila tombol itu tampil; tidak tampil di tab Monitoring */}
       {!perbaikan && !terpilih && !lembar && (!subAktif || tabKk) && <CapaianFloat />}
