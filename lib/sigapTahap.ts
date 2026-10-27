@@ -114,7 +114,7 @@ export const KATALOG_MODUL: { kode: string; label: string; ket: string }[] = [
   { kode: "wilayah_tim", label: "Wilayah tugas per tim", ket: "Tim (PML + semua PPL) dan Sub SLS yang didata bersama, lengkap dengan perkiraan KK." },
   { kode: "identifikasi", label: "Lembar Identifikasi SLS (PML)", ket: "PML mengisi hasil identifikasi tiap Sub SLS wilayah tim: KK terdampak & rincian dampak. Hanya tampil bagi PML." },
   { kode: "pendataan", label: "Lembar Pendataan KK (PML & PPL)", ket: "Daftar KK sasaran tim: tandai hasil (terdampak / tidak terdampak / tidak ditemukan), peta sebaran, pantau progres. Tampil bila tim sudah punya daftar KK." },
-  { kode: "monitoring_korwil", label: "Monitoring Korwil (kortim)", ket: "Pantau kelompok pendataan: progres lapangan tiap tim PML (target, realisasi, wilayah) dan progres administrasi PPL/PML per hari. Hanya tampil bagi kortim (korwil) kelompok." },
+  { kode: "monitoring_korwil", label: "Supervisi (kortim)", ket: "Supervisi kelompok pendataan: monitoring lapangan tiap tim PML (target, realisasi, wilayah), lembar quality check, dan hasil QC Pemahaman petugas. Hanya tampil bagi kortim (korwil) kelompok." },
   { kode: "spdt_lembar", label: "Lembar Pendataan SPDT NTP", ket: "Lembar bantu SPDT NTP: peta, daftar nama KK, dan navigasi ke koordinat (PPL: wilayahnya; PML: semua PPL-nya; Supervisor: semua + Monitoring)." },
   { kode: "translok:", label: "Transport Lokal", ket: "Hari kerja, laporan & foto harian, SPJ untuk satu kegiatan anggaran." },
 ];
@@ -125,7 +125,7 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
   if (kode === "wilayah_tim") return "Wilayah tugas per tim";
   if (kode === "identifikasi") return "Lembar Identifikasi SLS";
   if (kode === "pendataan") return "Lembar Pendataan KK";
-  if (kode === "monitoring_korwil") return "Monitoring Korwil";
+  if (kode === "monitoring_korwil") return "Supervisi";
   if (kode === "spdt_lembar") return "Lembar Pendataan SPDT NTP";
   if (kode.startsWith("translok:")) return `Transport Lokal${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(9)})`}`;
   return kode;
@@ -256,11 +256,11 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
     return [
       {
         kode,
-        judul: "Monitoring Korwil",
+        judul: "Supervisi",
         ket: `Kelompok ${f.kelompok} · ${f.tim} tim PML · ${f.ppl} PPL`,
         status: "berjalan",
         href: `/sigap/korwil?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
-        aksi: "Buka monitoring",
+        aksi: "Buka supervisi",
         pecahan: 0,
       },
     ];

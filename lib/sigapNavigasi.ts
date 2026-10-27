@@ -111,7 +111,7 @@ export function labelTujuan(path: string): string {
     "/sigap/kelola/lapangan": "Monitoring Lapangan",
     "/sigap/kelola/monitoring": "Monitoring Lapangan",
     "/sigap/pelatihan": "Pelatihan",
-    "/sigap/korwil": "Monitoring Korwil",
+    "/sigap/korwil": "Supervisi",
     "/sigap/pendataan": "Lembar Pendataan",
     "/sigap/identifikasi": "Lembar Identifikasi SLS",
     "/sigap/spdt": "Lembar SPDT NTP",

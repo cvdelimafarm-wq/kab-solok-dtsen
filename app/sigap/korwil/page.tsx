@@ -3,10 +3,10 @@
 // app/sigap/korwil/page.tsx
 //
 // (19 Okt 2026) Monitoring Korwil di HP (permintaan user, mockup disetujui): halaman kerja tahap Pendataan bagi kortim (korwil) kelompok.
-// (27 Okt 2026) Diganti nama menjadi LEMBAR SUPERVISI dengan tiga tab: Monitoring Lapangan (progres tim PML: target, realisasi, wilayah, petugas),
-// Lembar Quality Check (kuesioner QC yang diunggah admin; diisi korwil untuk petugas atau KK) dan Administrasi (PPL/PML x tanggal; paling ujung).
-// Monitoring dan Administrasi HANYA-BACA; Lembar Quality Check menulis lewat /api/portal/qc/kuesioner. Akun dengan izin bencana.admin (lihat) boleh memilih
-// kelompok lain. Data monitoring: /api/portal/korwil/monitoring (lib/portal/korwilMonitor.ts).
+// (27 Okt 2026) Diganti nama menjadi SUPERVISI (Lembar Supervisi) dengan tiga tab: Monitoring Lapangan (progres tim PML: target, realisasi, wilayah, petugas),
+// Lembar Quality Check (kuesioner QC yang diunggah admin; diisi korwil untuk petugas atau KK) dan Hasil QC Pemahaman (jawaban salah petugas per tim / matriks).
+// Tab Administrasi dihapus dari halaman ini (KorwilAdministrasi.tsx tidak lagi dipakai). Monitoring dan Hasil QC HANYA-BACA; Lembar Quality Check menulis lewat
+// /api/portal/qc/kuesioner. Akun dengan izin bencana.admin (lihat) boleh memilih kelompok lain. Data monitoring: /api/portal/korwil/monitoring (lib/portal/korwilMonitor.ts).
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -17,10 +17,10 @@ import { angkaId } from "@/app/sigap/kegiatan/format";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import { persenKorwil, type DataKorwil } from "@/lib/korwilMonitor";
 import KorwilLapangan from "./KorwilLapangan";
-import KorwilAdministrasi from "./KorwilAdministrasi";
 import KorwilLembarQc from "./KorwilLembarQc";
+import KorwilHasilQc from "./KorwilHasilQc";
 
-type Tab = "lapangan" | "kuesioner" | "administrasi";
+type Tab = "lapangan" | "kuesioner" | "hasil";
 
 function jamWib(iso: string): string {
   const w = new Date(Date.parse(iso) + 7 * 3_600_000);
@@ -62,7 +62,7 @@ export default function MonitoringKorwil() {
             )}
           </div>
 
-          {/* (23 Okt 2026) tinggi baris chip kelompok dipesan selagi data dimuat supaya tab Lapangan/Administrasi tidak bergeser saat data muncul (audit Tahap 2) */}
+          {/* (23 Okt 2026) tinggi baris chip kelompok dipesan selagi data dimuat supaya tab tidak bergeser saat data muncul (audit Tahap 2) */}
           {!data && !galat && <div aria-hidden className="h-[44px]" />}
           {data && data.pilihan.length > 1 && (
             <div className="-mx-1 flex min-h-[44px] items-center gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Pilih kelompok">
@@ -85,7 +85,7 @@ export default function MonitoringKorwil() {
               [
                 ["lapangan", "Monitoring Lapangan"],
                 ["kuesioner", "Lembar Quality Check"],
-                ["administrasi", "Administrasi"],
+                ["hasil", "Hasil QC Pemahaman"],
               ] as [Tab, string][]
             ).map(([k, t]) => (
               <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-[44px] border-b-[3px] px-1 text-[12px] font-extrabold leading-[1.15] ${tab === k ? "border-[#F4B400] text-white" : "border-transparent text-[#A9BCD8]"}`}>
@@ -134,8 +134,8 @@ export default function MonitoringKorwil() {
             )}
             {tab === "lapangan" && <KorwilLapangan lap={data.lapangan} />}
             {tab === "kuesioner" && <KorwilLembarQc kelompok={data.kelompok} />}
-            {tab === "administrasi" && <KorwilAdministrasi adm={data.administrasi} />}
-            {tab !== "kuesioner" && (
+            {tab === "hasil" && <KorwilHasilQc kelompok={data.kelompok} />}
+            {tab === "lapangan" && (
               <p className="px-1 text-[11.5px] text-[#6B7A90]">
                 Diperbarui {jamWib(data.sekarang)} WIB · {L.tim} tim PML · {L.ppl} PPL. Data disegarkan otomatis tiap menit.
               </p>

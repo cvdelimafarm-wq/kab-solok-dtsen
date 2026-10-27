@@ -3,7 +3,7 @@
 // (27 Okt 2026) Lembar Supervisi > Lembar Quality Check. Akses: kortim (korwil) mengisi lembar untuk KELOMPOKNYA sendiri;
 // pemegang bencana.admin (lihat) boleh melihat kelompok mana pun, dan (kelola) mengisi untuk kelompok mana pun. PML tidak mengisi.
 // GET [?kelompok=n][&ppl=<akun PPL>]  -> DataLembar + pilihan kelompok + bisa_isi + saya_akun_id (+ kk[] bila ppl diberikan: KK yang sudah didata PPL itu)
-// POST {kelompok, objek, tanggal, subjek_akun_id, kk_id?, jawaban:{diperiksa:{QC-1:true}, jawab:{"1.1":"Semua"}}, identitas?, catatan?, tindak_lanjut?, tenggat?}  -> simpan/ubah satu lembar
+// POST {kelompok, objek, tanggal, subjek_akun_id, kk_id?, jawaban:{diperiksa:{QC-1:true}, jawab:{"1.1":"Semua"}}, catatan?, tindak_lanjut?, tenggat?}  -> simpan/ubah satu lembar
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const [saya, { izin }] = await Promise.all([daftarKelompokKortim(db, akun.id), izinAkun(db, akun.id)]);
     if (!saya.includes(kelompok) && !boleh(izin, "bencana.admin", "kelola")) return galat("Anda tidak punya akses mengisi lembar untuk kelompok ini.", 403);
 
-    const r = await simpanLembar(db, akun.id, { kelompok, objek, tanggal: body?.tanggal, subjekAkunId: subjek, kkId, jawaban: body?.jawaban, identitas: body?.identitas, catatan: body?.catatan, tindakLanjut: body?.tindak_lanjut, tenggat: body?.tenggat });
+    const r = await simpanLembar(db, akun.id, { kelompok, objek, tanggal: body?.tanggal, subjekAkunId: subjek, kkId, jawaban: body?.jawaban, catatan: body?.catatan, tindakLanjut: body?.tindak_lanjut, tenggat: body?.tenggat });
     await catatAudit(db, akun.id, "qc_lembar_simpan", { id: r.id, kelompok, objek, subjek, kk: kkId, tanggal: body?.tanggal });
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {

@@ -27,7 +27,6 @@ import {
 
 type Anggota = { akun_id: number; nama: string; peran: "pml" | "ppl"; pml_nama: string | null };
 type Kuesioner = { id: number; objek: ObjekKuesioner; versi: number; judul: string; struktur: StrukturKuesioner };
-type Identitas = { kecamatan: string; nagari: string; sls: string; jenis_qc: string };
 type Lembar = {
   id: number;
   objek: ObjekKuesioner;
@@ -38,7 +37,6 @@ type Lembar = {
   subjek_nama: string | null;
   kk_id: number | null;
   kk_nama: string | null;
-  identitas: Partial<Identitas>;
   jawaban: Partial<Jawaban>;
   ringkas: Partial<Kesimpulan>;
   catatan: string;
@@ -67,7 +65,6 @@ const SELECT = "h-[44px] w-full rounded-[12px] border border-[#CBD6E6] bg-white 
 const WARNA_NILAI: Record<NilaiSoal, string> = { 1: "border-[#13794B] bg-[#13794B] text-white", 2: "border-[#C98900] bg-[#C98900] text-white", 3: "border-[#B42329] bg-[#B42329] text-white" };
 const WARNA_SKOR: Record<NilaiSoal, string> = { 1: "bg-[#E3F6EC] text-[#13794B]", 2: "bg-[#FFF4D6] text-[#8A6200]", 3: "bg-[#FDE8E8] text-[#B42329]" };
 const WARNA_KATEGORI: Record<string, string> = { Baik: "bg-[#E3F6EC] text-[#13794B]", Cukup: "bg-[#FFF4D6] text-[#8A6200]", "Perlu pembinaan": "bg-[#FDE8E8] text-[#B42329]", "Belum dinilai": "bg-[#EEF2F7] text-[#5B6B84]" };
-const IDENTITAS_KOSONG: Identitas = { kecamatan: "", nagari: "", sls: "", jenis_qc: "" };
 
 export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   const [d, setD] = useState<Data | null>(null);
@@ -80,7 +77,6 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   const [tanggal, setTanggal] = useState("");
   const [diperiksa, setDiperiksa] = useState<Record<string, boolean>>({});
   const [jawab, setJawab] = useState<Record<string, string | number>>({});
-  const [identitas, setIdentitas] = useState<Identitas>(IDENTITAS_KOSONG);
   const [catatan, setCatatan] = useState("");
   const [tindak, setTindak] = useState("");
   const [tenggat, setTenggat] = useState("");
@@ -132,27 +128,24 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   const ku = d?.kuesioner[objek] ?? null;
   const struktur = ku?.struktur ?? null;
   const calon = useMemo(() => (d ? d.anggota.filter((a) => (objek === "kk" ? a.peran === "ppl" : a.akun_id !== d.saya_akun_id)) : []), [d, objek]);
-  const peranSubjek = d?.anggota.find((a) => a.akun_id === subjek)?.peran ?? null;
   const ada = useMemo(() => {
     if (!d || !ku || !subjek || !tanggal) return null;
     return d.lembar.find((l) => l.objek === objek && l.versi === ku.versi && l.tanggal === tanggal && l.subjek_akun_id === subjek && (objek === "petugas" || l.kk_id === kkId) && l.pemeriksa_akun_id === d.saya_akun_id) ?? null;
   }, [d, ku, objek, subjek, kkId, tanggal]);
   const kunciAda = ada ? `${ada.id}:${ada.diubah_at}` : "baru";
 
-  // isi formulir: dari lembar yang sudah ada, atau awal (aspek dicentang menurut peran petugas)
+  // isi formulir: dari lembar yang sudah ada, atau awal (27 Okt 2026: SEMUA aspek PML dan PPL digabung dan dicentang; peran hanya jadi keterangan "Untuk:")
   useEffect(() => {
     if (!struktur) return;
     if (ada) {
       setDiperiksa({ ...diperiksaBawaan(struktur, null), ...(ada.jawaban.diperiksa ?? {}) });
       setJawab({ ...(ada.jawaban.jawab ?? {}) });
-      setIdentitas({ ...IDENTITAS_KOSONG, ...ada.identitas });
       setCatatan(ada.catatan);
       setTindak(ada.tindak_lanjut);
       setTenggat(ada.tenggat ?? "");
     } else {
-      setDiperiksa(diperiksaBawaan(struktur, objek === "kk" ? "ppl" : peranSubjek));
+      setDiperiksa(diperiksaBawaan(struktur, null));
       setJawab({});
-      setIdentitas(IDENTITAS_KOSONG);
       setCatatan("");
       setTindak("");
       setTenggat("");
@@ -178,7 +171,7 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
     try {
       await apiPortal(`/api/portal/qc/kuesioner`, {
         method: "POST",
-        body: JSON.stringify({ kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, identitas, catatan, tindak_lanjut: tindak, tenggat: tenggat || null }),
+        body: JSON.stringify({ kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, catatan, tindak_lanjut: tindak, tenggat: tenggat || null }),
       });
       setInfo(ada ? "Lembar diperbarui." : "Lembar tersimpan.");
       await muat(objek === "kk" ? subjek : null);
@@ -278,23 +271,6 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
               Tanggal QC
               <input type="date" className={`${SELECT} mt-1`} value={tanggal} max={d.hari_ini} onChange={(e) => setTanggal(e.target.value)} />
             </label>
-            {siap && (
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ["kecamatan", "Kecamatan"],
-                    ["nagari", "Nagari"],
-                    ["sls", "SLS / jorong"],
-                    ["jenis_qc", "Jenis QC"],
-                  ] as [keyof Identitas, string][]
-                ).map(([k, t]) => (
-                  <label key={k} className="block text-[12px] font-bold text-[#52627A]">
-                    {t}
-                    <input value={identitas[k]} disabled={nonaktif} maxLength={k === "sls" ? 120 : 80} onChange={(e) => setIdentitas((x) => ({ ...x, [k]: e.target.value }))} placeholder={k === "jenis_qc" ? "mis. QC awal" : ""} className="mt-1 h-[44px] w-full rounded-[12px] border border-[#CBD6E6] bg-white px-3 text-[14px] font-normal" />
-                  </label>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </section>

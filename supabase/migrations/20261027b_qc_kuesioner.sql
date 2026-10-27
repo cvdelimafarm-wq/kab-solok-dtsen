@@ -38,7 +38,7 @@ create table if not exists public.sigap_qc_lembar (
   pemeriksa_akun_id bigint not null,
   subjek_akun_id    bigint,            -- petugas yang diperiksa (objek petugas) / PPL pendata KK (objek kk)
   kk_id             bigint,            -- bencana_pendataan_kk.id (objek kk)
-  identitas         jsonb  not null default '{}'::jsonb,   -- {kecamatan, nagari, sls, jenis_qc}
+  identitas         jsonb  not null default '{}'::jsonb,   -- tidak dipakai lagi (27 Okt 2026: isian Kecamatan/Nagari/SLS/Jenis QC dihapus); dibiarkan kosong
   jawaban           jsonb  not null default '{}'::jsonb check (jsonb_typeof(jawaban) = 'object'),  -- {diperiksa:{QC-1:true}, jawab:{"1.1":"Semua"}}
   ringkas           jsonb  not null default '{}'::jsonb,   -- kesimpulan: skor per aspek, jumlah 1/2/3, kategori, qc_ulang, lengkap
   catatan           text   not null default '',            -- temuan utama

@@ -11,14 +11,14 @@ describe("modul monitoring_korwil", () => {
   it("terdaftar di katalog dan sah", () => {
     expect(modulSah("monitoring_korwil")).toBe(true);
     expect(KATALOG_MODUL.some((m) => m.kode === "monitoring_korwil")).toBe(true);
-    expect(NAMA_MODUL("monitoring_korwil")).toBe("Monitoring Korwil");
+    expect(NAMA_MODUL("monitoring_korwil")).toBe("Supervisi");
     expect(periksaTahapAdmin({ kode: "pendataan", nama: "Pendataan", isi: tahapPendataan.isi, buka_mode: "langsung", buka_tanggal: null }, [1, 3])).toBeNull();
   });
   it("tampil bagi kortim: berjalan, tautan membawa ?dari= ke tahap", () => {
     const t = susunTahap(ctx(induk({ korwil: { kelompok: 1, tim: 3, ppl: 8 } })));
     expect(t).toHaveLength(1);
     const m = t[0].modul[0];
-    expect(m).toMatchObject({ kode: "monitoring_korwil", status: "berjalan", judul: "Monitoring Korwil", ket: "Kelompok 1 · 3 tim PML · 8 PPL" });
+    expect(m).toMatchObject({ kode: "monitoring_korwil", status: "berjalan", judul: "Supervisi", ket: "Kelompok 1 · 3 tim PML · 8 PPL" });
     expect(m.href).toBe("/sigap/korwil?dari=%2Fsigap%2Fkegiatan%2Fpascabencana%2Fpendataan");
   });
   it("tidak tampil bagi akun lain (tahap ikut disembunyikan bila tak ada modul lain yang berlaku)", () => {

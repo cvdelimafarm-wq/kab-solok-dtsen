@@ -85,7 +85,6 @@ export async function rekapLembarAdmin(db: Db): Promise<RekapLembar[]> {
 
 // ---------------------------------------------------------------- korwil / admin mengisi lembar
 export type KkPeriksa = { id: number; nama_kk: string; idsubsls: string; hasil: string };
-export type Identitas = { kecamatan: string; nagari: string; sls: string; jenis_qc: string };
 export type LembarTersimpan = {
   id: number;
   objek: ObjekKuesioner;
@@ -97,7 +96,6 @@ export type LembarTersimpan = {
   subjek_nama: string | null;
   kk_id: number | null;
   kk_nama: string | null;
-  identitas: Partial<Identitas>;
   jawaban: Partial<Jawaban>;
   ringkas: Partial<Kesimpulan>;
   catatan: string;
@@ -145,7 +143,7 @@ export async function dataLembar(db: Db, kelompok: number): Promise<DataLembar |
   const [petugas, kk, lem] = await Promise.all([
     kuesionerAktif(db, "petugas"),
     kuesionerAktif(db, "kk"),
-    db.from("sigap_qc_lembar").select("id, kuesioner_id, objek, kelompok, tanggal, pemeriksa_akun_id, subjek_akun_id, kk_id, identitas, jawaban, ringkas, catatan, tindak_lanjut, tenggat, diubah_at").eq("kegiatan_id", KEGIATAN_PENDATAAN_ID).eq("kelompok", kelompok).order("tanggal", { ascending: false }).order("diubah_at", { ascending: false }).limit(200),
+    db.from("sigap_qc_lembar").select("id, kuesioner_id, objek, kelompok, tanggal, pemeriksa_akun_id, subjek_akun_id, kk_id, jawaban, ringkas, catatan, tindak_lanjut, tenggat, diubah_at").eq("kegiatan_id", KEGIATAN_PENDATAAN_ID).eq("kelompok", kelompok).order("tanggal", { ascending: false }).order("diubah_at", { ascending: false }).limit(200),
   ]);
   if (lem.error) throw new Error(`Gagal membaca lembar: ${lem.error.message}`);
   type Baris = Omit<LembarTersimpan, "pemeriksa_nama" | "subjek_nama" | "kk_nama" | "versi"> & { kuesioner_id: number };
@@ -174,7 +172,6 @@ export async function dataLembar(db: Db, kelompok: number): Promise<DataLembar |
     subjek_nama: b.subjek_akun_id == null ? null : (nama.get(n(b.subjek_akun_id)) ?? `Akun ${b.subjek_akun_id}`),
     kk_id: b.kk_id == null ? null : n(b.kk_id),
     kk_nama: b.kk_id == null ? null : (kkNama.get(n(b.kk_id)) ?? `KK ${b.kk_id}`),
-    identitas: b.identitas ?? {},
     jawaban: b.jawaban ?? {},
     ringkas: b.ringkas ?? {},
     catatan: String(b.catatan ?? ""),
@@ -193,7 +190,6 @@ export type MasukanLembar = {
   subjekAkunId: number;
   kkId: number | null;
   jawaban: unknown;
-  identitas: unknown;
   catatan: unknown;
   tindakLanjut: unknown;
   tenggat: unknown;
@@ -232,11 +228,8 @@ export async function simpanLembar(db: Db, pemeriksaAkunId: number, m: MasukanLe
   const p = periksaJawaban(ku.struktur, m.jawaban);
   if (Object.keys(p.galat).length > 0) throw new GalatJawaban(p.galat);
 
-  const idn = m.identitas && typeof m.identitas === "object" ? (m.identitas as Record<string, unknown>) : {};
-  const identitas: Identitas = { kecamatan: potong(idn.kecamatan, 80), nagari: potong(idn.nagari, 80), sls: potong(idn.sls, 120), jenis_qc: potong(idn.jenis_qc, 40) };
   const tenggat = typeof m.tenggat === "string" && /^\d{4}-\d{2}-\d{2}$/.test(m.tenggat) && !Number.isNaN(Date.parse(m.tenggat)) ? m.tenggat : null;
   const isi = {
-    identitas,
     jawaban: p.jawaban,
     ringkas: p.kesimpulan,
     catatan: potong(m.catatan, 2000),
