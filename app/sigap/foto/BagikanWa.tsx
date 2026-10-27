@@ -11,11 +11,22 @@ import { useEffect, useRef, useState } from "react";
 import { ambilFotoUrl } from "./klien";
 import { bisaBagikanBerkas, namaBerkasFoto, petunjukTujuan, teksBagikanFoto, type InfoFotoBagikan, type TujuanWa } from "@/lib/bagikanWa";
 
-function IkonWa({ className = "h-5 w-5" }: { className?: string }) {
+// (27 Okt 2026) Ikon sederhana buatan sendiri (garis rapi 2 px, ukuran ikon sama): gelembung obrolan berpanah = kirim ke obrolan; lingkaran putus-putus bertanda plus = Story/Status.
+// Sengaja bukan tiruan logo resmi WhatsApp (gambar logo resmi mudah tampak berantakan bila digambar ulang); nama "WhatsApp" tetap tertulis di tombol.
+function IkonObrolan({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 21l1.65-4.8A8.5 8.5 0 1 1 8 19.4L3 21z" />
-      <path d="M9 10c0 3 2 5 5 5l1.3-1.3a.8.8 0 0 0 0-1.1l-1.2-.9a.8.8 0 0 0-1 .1l-.5.5c-.9-.4-1.6-1.1-2-2l.5-.5a.8.8 0 0 0 .1-1l-.9-1.2a.8.8 0 0 0-1.1 0L9 10z" />
+      <path d="M6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.4V16h-.5A2.5 2.5 0 0 1 4 13.5v-8A2.5 2.5 0 0 1 6.5 3z" />
+      <path d="M8.5 9.5H15M12.5 7l2.5 2.5-2.5 2.5" />
+    </svg>
+  );
+}
+
+function IkonStory({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" strokeDasharray="3.2 2.6" />
+      <path d="M12 8.5v7M8.5 12h7" />
     </svg>
   );
 }
@@ -87,10 +98,10 @@ export default function BagikanWa({ fotoId, kode, lokasi, diambil_at, kegiatan, 
       {!ringkas && <div className="text-sm font-bold text-[#0F2A52]">Bagikan foto resmi (ber-cap)</div>}
       <div className="flex gap-2">
         <button type="button" disabled={!siap || sibuk} onClick={() => void bagikan("chat")} className={`${dasar} bg-[#1FA855] text-white`}>
-          <IkonWa /> WhatsApp
+          <IkonObrolan /> WhatsApp
         </button>
         <button type="button" disabled={!siap || sibuk} onClick={() => void bagikan("status")} className={`${dasar} border-2 border-[#1FA855] bg-white text-[#12703A]`}>
-          <IkonWa /> Story WhatsApp
+          <IkonStory /> Story WhatsApp
         </button>
       </div>
       {!siap && !galat && <p className="text-xs text-[#6B7A90]" role="status">Menyiapkan foto…</p>}

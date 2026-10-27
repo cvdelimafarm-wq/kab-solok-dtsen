@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adaAktivitas, agregatAkhir, kkDihitung, alasanAnomali, daftarTim, geserTanggal, jumlahAgregat, jumlahBerhasil, periksaRentang, ringkas, SARINGAN_AWAL, saring, statusLapangan, statusTranslok, urutkan, type BarisLapangan } from "@/lib/lapangan";
+import { adaAktivitas, agregatAkhir, hariQc, kkDihitung, qcDihitung, satuanBaris, alasanAnomali, daftarTim, geserTanggal, jumlahAgregat, jumlahBerhasil, periksaRentang, ringkas, SARINGAN_AWAL, saring, statusLapangan, statusTranslok, urutkan, type BarisLapangan } from "@/lib/lapangan";
 import { ATURAN_BAWAAN } from "@/lib/sigap";
 
 // (11 Okt 2026) Uji aturan Monitoring Lapangan: jumlah berhasil, status lapangan/translok, saringan, ringkasan.
@@ -150,7 +150,7 @@ describe("saring, urutkan, ringkas", () => {
       b({ akun_id: 2, tanggal: "2026-10-11", agg_kk: 2 }),
       b({ akun_id: 10, peran: "pml", tanggal: "2026-10-11", agg_sub: 6, agg_kk: 99 }),
     ];
-    expect(agregatAkhir(d)).toEqual({ sub: 6, kk: 11 });
+    expect(agregatAkhir(d)).toEqual({ sub: 6, kk: 11, qc: 0 });
   });
   it("daftar tim unik dan terurut", () => {
     expect(daftarTim(data)).toEqual([{ id: 11, nama: "Dewi" }, { id: 10, nama: "Ilham" }]);
@@ -168,5 +168,38 @@ describe("tanggal", () => {
     expect(periksaRentang("10-10-2026", null).ok).toBe(false);
     expect(periksaRentang("2026-02-30", null).ok).toBe(false);
     expect(periksaRentang("2026-10-12", "2026-10-11").ok).toBe(false);
+  });
+});
+
+describe("korwil <- Lembar Quality Check (27 Okt 2026)", () => {
+  const k = (o: Partial<BarisLapangan> = {}) => b({ peran: "korwil", pml_id: null, pml_nama: null, ...o });
+  it("hari lama tetap pendataan (KK), sejak 27 Okt = Quality Check (lembar QC lengkap)", () => {
+    expect(hariQc(k({ tanggal: "2026-10-26" }))).toBe(false);
+    expect(hariQc(k({ tanggal: "2026-10-27" }))).toBe(true);
+    expect(hariQc(b({ tanggal: "2026-10-27" }))).toBe(false); // PPL tidak terpengaruh
+    expect(statusLapangan(k({ tanggal: "2026-10-26", kk_berhasil: 4 }))).toBe("pendataan");
+    expect(statusLapangan(k({ tanggal: "2026-10-27", kk_berhasil: 2 }))).toBe("qc");
+    expect(statusLapangan(k({ tanggal: "2026-10-27" }))).toBe("belum");
+    expect(satuanBaris(k({ tanggal: "2026-10-26" }))).toBe("KK");
+    expect(satuanBaris(k({ tanggal: "2026-10-27" }))).toBe("lembar QC");
+    expect(satuanBaris(b({ tanggal: "2026-10-27" }))).toBe("KK");
+  });
+  it("lembar QC tidak dicampur ke KK berhasil", () => {
+    expect(kkDihitung(k({ tanggal: "2026-10-27", kk_berhasil: 3 }))).toBe(0);
+    expect(qcDihitung(k({ tanggal: "2026-10-27", kk_berhasil: 3 }))).toBe(3);
+    expect(kkDihitung(k({ tanggal: "2026-10-26", kk_berhasil: 3 }))).toBe(3);
+    expect(qcDihitung(k({ tanggal: "2026-10-26", kk_berhasil: 3 }))).toBe(0);
+    expect(kkDihitung(b({ tanggal: "2026-10-27", kk_berhasil: 5 }))).toBe(5);
+    const r = ringkas([k({ akun_id: 50, tanggal: "2026-10-27", kk_berhasil: 3 }), k({ akun_id: 50, tanggal: "2026-10-26", kk_berhasil: 4 }), b({ tanggal: "2026-10-27", kk_berhasil: 6 })], A);
+    expect(r.kk_berhasil).toBe(10);
+    expect(r.qc_lengkap).toBe(3);
+  });
+  it("agregat akhir korwil dipisah per satuan", () => {
+    const d = [k({ akun_id: 50, tanggal: "2026-10-27", agg_kk: 3 }), k({ akun_id: 51, tanggal: "2026-10-26", agg_kk: 9 }), b({ akun_id: 1, tanggal: "2026-10-27", agg_kk: 7 })];
+    expect(agregatAkhir(d)).toEqual({ sub: 0, kk: 16, qc: 3 });
+  });
+  it("hari kerja korwil dengan lembar QC tanpa hari kerja dipilih = anomali (ada aktivitas), tanpa lembar tetap wajar", () => {
+    expect(statusTranslok(k({ tanggal: "2026-10-27", kk_berhasil: 1 }), A)).toBe("anomali");
+    expect(statusTranslok(k({ tanggal: "2026-10-27", hari_kerja: true }), A)).toBe("sebagian");
   });
 });

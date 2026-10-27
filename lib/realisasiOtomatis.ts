@@ -27,7 +27,9 @@ export const MAKS_LOKASI = 10;
 
 export const LABEL_SUMBER: Record<SumberOtomatis, string> = { identifikasi: "data identifikasi", pendataan: "data pendataan", qc: "Lembar Quality Check" };
 
-/** Satuan angka laporan korwil (jumlah lembar QC yang disimpan). */
+/** Tanggal (WIB) mulai korwil dihitung dari Lembar Quality Check; sebelum ini tetap dari data pendataan. Harus sama dengan tanggal di migrasi 20261027e. */
+export const BATAS_QC_KORWIL = "2026-10-27";
+/** Satuan angka laporan korwil (jumlah lembar QC LENGKAP yang disimpan). */
 export const SATUAN_QC = "lembar QC";
 /** Satuan hari lampau korwil yang masih dari data pendataan (sebelum Lembar Quality Check dipakai). */
 export const SATUAN_PENDATAAN_LAMA = "keluarga";

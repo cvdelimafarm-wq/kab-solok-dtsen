@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import type { AturanIsian } from "@/lib/sigap";
 import {
-  LABEL_LAPANGAN,
   LABEL_PERAN,
   LABEL_STATUS_LAPANGAN,
   LABEL_STATUS_TRANSLOK,
@@ -23,8 +22,11 @@ import {
   geserTanggal,
   jumlahAgregat,
   jumlahBerhasil,
+  hariQc,
   kkDihitung,
+  qcDihitung,
   ringkas,
+  satuanBaris,
   saring,
   statusLapangan,
   statusTranslok,
@@ -127,11 +129,12 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
         "Tim (PML)": b.pml_nama ?? "",
         "Status lapangan": LABEL_STATUS_LAPANGAN[statusLapangan(b)],
         "Sub SLS diidentifikasi": b.peran === "pml" ? b.sub_idf : "",
-        "KK berhasil (terdampak + tidak terdampak)": b.peran === "pml" ? "" : b.kk_berhasil,
-        "KK tidak ditemukan": b.peran === "pml" ? "" : b.kk_tdk_ditemukan,
+        "KK berhasil (terdampak + tidak terdampak)": b.peran === "pml" ? "" : kkDihitung(b),
+        "Lembar QC lengkap (korwil)": qcDihitung(b) || (hariQc(b) ? 0 : ""),
+        "KK tidak ditemukan": b.peran === "pml" || hariQc(b) ? "" : b.kk_tdk_ditemukan,
         "KK ditandai PML (tidak dihitung)": b.peran === "pml" ? b.kk_berhasil : "",
         "Agregat s.d. tanggal ini": jumlahAgregat(b),
-        "Satuan agregat": LABEL_LAPANGAN[b.peran].satuan,
+        "Satuan agregat": satuanBaris(b),
         "Hari kerja": b.hari_kerja ? "Ya" : "Tidak",
         Laporan: b.ada_laporan ? "Ada" : "Tidak",
         "Foto (slot)": b.jumlah_foto,
@@ -219,6 +222,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                     <option value="semua">Semua</option>
                     <option value="identifikasi">Ada identifikasi</option>
                     <option value="pendataan">Ada pendataan</option>
+                    <option value="qc">Ada Quality Check</option>
                     <option value="belum">Belum ada hasil</option>
                   </select>
                 </label>
@@ -265,6 +269,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                   agregat PPL s.d. akhir rentang: {fmt(agr.kk)}
                   {ringk.kk_tdk_ditemukan > 0 && ` · ${fmt(ringk.kk_tdk_ditemukan)} tidak ditemukan`}
                   {ringk.kk_oleh_pml > 0 && ` · ${fmt(ringk.kk_oleh_pml)} KK ditandai PML (tidak dihitung)`}
+                  {(ringk.qc_lengkap > 0 || agr.qc > 0) && ` · korwil: ${fmt(ringk.qc_lengkap)} lembar QC lengkap (agregat ${fmt(agr.qc)})`}
                 </small>
               </div>
               <div className={ringk.translok.anomali > 0 ? "rounded-[16px] bg-[#FDE8E8] p-4" : kartu}>
@@ -304,12 +309,13 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                       <span className="truncate text-[#55657D]" title={b.pml_nama ?? ""}>{b.pml_nama ?? "–"}</span>
                       <span className={`text-[12.5px] font-bold ${sl === "belum" ? "text-[#8A97AB]" : sl === "identifikasi" ? "text-[#12618F]" : "text-[#13794B]"}`}>{LABEL_STATUS_LAPANGAN[sl]}</span>
                       <span className="text-right font-extrabold text-[#0F2A52]">{b.peran === "pml" ? (b.sub_idf || "–") : "–"}</span>
-                      <span className="text-right font-extrabold text-[#0F2A52]" title={b.peran === "pml" && b.kk_berhasil > 0 ? `PML menandai ${b.kk_berhasil} KK di Lembar Pendataan (tidak dihitung di sini)` : undefined}>
-                        {kkDihitung(b) || "–"}
-                        {b.peran !== "pml" && b.kk_tdk_ditemukan > 0 && <small className="block text-[10.5px] font-semibold text-[#8A97AB]">+{b.kk_tdk_ditemukan} tdk ditemukan</small>}
+                      <span className="text-right font-extrabold text-[#0F2A52]" title={b.peran === "pml" && b.kk_berhasil > 0 ? `PML menandai ${b.kk_berhasil} KK di Lembar Pendataan (tidak dihitung di sini)` : hariQc(b) ? "Korwil: jumlah lembar Quality Check yang lengkap pada tanggal ini" : undefined}>
+                        {hariQc(b) ? (b.kk_berhasil || "–") : (kkDihitung(b) || "–")}
+                        {hariQc(b) && b.kk_berhasil > 0 && <small className="block text-[10.5px] font-semibold text-[#8A97AB]">lembar QC</small>}
+                        {b.peran !== "pml" && !hariQc(b) && b.kk_tdk_ditemukan > 0 && <small className="block text-[10.5px] font-semibold text-[#8A97AB]">+{b.kk_tdk_ditemukan} tdk ditemukan</small>}
                       </span>
-                      <span className="text-right text-[#55657D]" title={`Kumulatif ${LABEL_LAPANGAN[b.peran].satuan} sampai ${b.tanggal}`}>
-                        {fmt(jumlahAgregat(b))} <small className="text-[10.5px] text-[#8A97AB]">{LABEL_LAPANGAN[b.peran].satuan}</small>
+                      <span className="text-right text-[#55657D]" title={`Kumulatif ${satuanBaris(b)} sampai ${b.tanggal}`}>
+                        {fmt(jumlahAgregat(b))} <small className="text-[10.5px] text-[#8A97AB]">{satuanBaris(b)}</small>
                       </span>
                       <span className={`text-center font-extrabold ${b.hari_kerja ? "text-[#13794B]" : "text-[#C5CFDF]"}`}>{b.hari_kerja ? "✓" : "✗"}</span>
                       <span className={`text-center font-extrabold ${b.ada_laporan ? "text-[#13794B]" : "text-[#C5CFDF]"}`}>{b.ada_laporan ? "✓" : "✗"}</span>
@@ -336,7 +342,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
             </div>
 
             <div className="mt-4 rounded-[16px] bg-white p-4 text-[12.5px] leading-snug text-[#55657D] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
-              <b className="text-[#0F2A52]">Cara membaca.</b> <b>Sub SLS diidentifikasi</b> (PML): Sub SLS yang hasilnya diisi PML pada tanggal itu. <b>KK berhasil</b> (PPL dan korwil; penandaan KK oleh PML tidak dihitung): KK dengan hasil terdampak atau tidak terdampak pada tanggal itu; &quot;tidak ditemukan&quot; tidak dihitung. <b>Agregat</b>: jumlah kumulatif orang itu dari awal sampai tanggal baris, tidak terpengaruh saringan tanggal. <b>Translok</b> ({data.kegiatan?.nama ?? "kegiatan Pendataan"}): hari kerja dipilih, laporan harian{aturan.wajib_laporan ? "" : " (tidak wajib)"}, dan {aturan.jumlah_foto} foto. <b>Lengkap</b> = hari kerja + hasil + laporan + foto sesuai aturan; <b>Sebagian</b> = hari kerja dan hasil ada tetapi laporan/foto belum lengkap; <b>Anomali</b> = ada hasil, laporan, atau foto tanpa hari kerja, atau hari kerja tanpa hasil lapangan (hari berjalan bisa tampil anomali sementara hasil belum masuk); <b>Tidak ada klaim</b> = tidak ada hari kerja dan tidak ada hasil. Penandaan di HP yang belum terkirim belum masuk hitungan. <b>Korwil</b> = pegawai organik (selain PML organik) yang mengoordinasi wilayah; hari kerja tanpa hasil lapangan tidak dianggap anomali bagi korwil. Hanya jumlah yang ditampilkan; nama KK tidak muncul di halaman ini.
+              <b className="text-[#0F2A52]">Cara membaca.</b> <b>Sub SLS diidentifikasi</b> (PML): Sub SLS yang hasilnya diisi PML pada tanggal itu. <b>KK berhasil</b> (PPL dan korwil; penandaan KK oleh PML tidak dihitung): KK dengan hasil terdampak atau tidak terdampak pada tanggal itu; &quot;tidak ditemukan&quot; tidak dihitung. <b>Agregat</b>: jumlah kumulatif orang itu dari awal sampai tanggal baris, tidak terpengaruh saringan tanggal. <b>Translok</b> ({data.kegiatan?.nama ?? "kegiatan Pendataan"}): hari kerja dipilih, laporan harian{aturan.wajib_laporan ? "" : " (tidak wajib)"}, dan {aturan.jumlah_foto} foto. <b>Lengkap</b> = hari kerja + hasil + laporan + foto sesuai aturan; <b>Sebagian</b> = hari kerja dan hasil ada tetapi laporan/foto belum lengkap; <b>Anomali</b> = ada hasil, laporan, atau foto tanpa hari kerja, atau hari kerja tanpa hasil lapangan (hari berjalan bisa tampil anomali sementara hasil belum masuk); <b>Tidak ada klaim</b> = tidak ada hari kerja dan tidak ada hasil. Penandaan di HP yang belum terkirim belum masuk hitungan. <b>Korwil</b> = pegawai organik (selain PML organik) yang mengoordinasi wilayah; hari kerja tanpa hasil lapangan tidak dianggap anomali bagi korwil. Sejak 27 Okt 2026 hasil korwil = <b>lembar Quality Check yang lengkap</b> (satuan &quot;lembar QC&quot;), bukan KK; sebelum tanggal itu tetap KK pendataan. Hanya jumlah yang ditampilkan; nama KK tidak muncul di halaman ini.
             </div>
           </>
         )}

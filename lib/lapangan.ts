@@ -8,6 +8,7 @@
 //  - Status translok dari hari kerja yang dipilih + laporan harian + foto dokumentasi (aturan kegiatan Pendataan).
 
 import { hariLengkap, type AturanIsian } from "@/lib/sigap";
+import { BATAS_QC_KORWIL, SATUAN_QC } from "@/lib/realisasiOtomatis";
 
 export type PeranLapangan = "pml" | "ppl" | "korwil"; // korwil = pegawai organik (bukan PML/PPL) yang bertindak sebagai koordinator wilayah
 
@@ -20,7 +21,7 @@ export type BarisLapangan = {
   pml_nama: string | null;
   tanggal: string; // YYYY-MM-DD (WIB)
   sub_idf: number; // Sub SLS diidentifikasi pada tanggal itu
-  kk_berhasil: number; // KK terdampak + tidak terdampak pada tanggal itu
+  kk_berhasil: number; // KK terdampak + tidak terdampak pada tanggal itu (korwil sejak BATAS_QC_KORWIL: lembar QC lengkap, lihat hariQc)
   kk_tdk_ditemukan: number;
   agg_sub: number; // kumulatif sampai tanggal baris
   agg_kk: number;
@@ -31,7 +32,7 @@ export type BarisLapangan = {
   jumlah_foto: number;
 };
 
-export type StatusLapangan = "identifikasi" | "pendataan" | "belum";
+export type StatusLapangan = "identifikasi" | "pendataan" | "qc" | "belum";
 export type StatusTranslok = "lengkap" | "sebagian" | "anomali" | "tidak_ada";
 
 export const LABEL_LAPANGAN: Record<PeranLapangan, { hasil: string; satuan: string }> = {
@@ -56,20 +57,39 @@ export function jumlahAgregat(b: Pick<BarisLapangan, "peran" | "agg_sub" | "agg_
   return b.peran === "pml" ? b.agg_sub : b.agg_kk;
 }
 
-export const LABEL_STATUS_LAPANGAN: Record<StatusLapangan, string> = { identifikasi: "Ada identifikasi", pendataan: "Ada pendataan", belum: "Belum ada hasil" };
+export const LABEL_STATUS_LAPANGAN: Record<StatusLapangan, string> = { identifikasi: "Ada identifikasi", pendataan: "Ada pendataan", qc: "Ada Quality Check", belum: "Belum ada hasil" };
+
+/**
+ * (27 Okt 2026, permintaan user) Korwil mulai BATAS_QC_KORWIL dihitung dari Lembar Quality Check, bukan pendataan KK: pada baris itu `kk_berhasil` dan `agg_kk`
+ * berisi jumlah LEMBAR QC LENGKAP (fungsi database bencana_monitoring_lapangan, migrasi 20261027e), `kk_tdk_ditemukan` = 0. Sebelum tanggal itu tetap KK pendataan.
+ */
+export function hariQc(b: Pick<BarisLapangan, "peran" | "tanggal">): boolean {
+  return b.peran === "korwil" && b.tanggal >= BATAS_QC_KORWIL;
+}
+/** Satuan angka berhasil/agregat pada baris itu. */
+export function satuanBaris(b: Pick<BarisLapangan, "peran" | "tanggal">): string {
+  return hariQc(b) ? SATUAN_QC : LABEL_LAPANGAN[b.peran].satuan;
+}
+/** Lembar QC lengkap yang dihitung pada baris (hanya korwil sejak BATAS_QC_KORWIL). */
+export function qcDihitung(b: Pick<BarisLapangan, "peran" | "tanggal" | "kk_berhasil">): number {
+  return hariQc(b) ? b.kk_berhasil : 0;
+}
 
 /**
  * KK berhasil yang DIHITUNG: PML tidak (ukuran PML hanya Sub SLS diidentifikasi -- keputusan user 11 Okt 2026).
  * Penandaan KK oleh PML di Lembar Pendataan tetap tersimpan, hanya tidak masuk angka Monitoring Lapangan.
  */
-export function kkDihitung(b: Pick<BarisLapangan, "peran" | "kk_berhasil">): number {
-  return b.peran === "pml" ? 0 : b.kk_berhasil;
+export function kkDihitung(b: Pick<BarisLapangan, "peran" | "kk_berhasil"> & { tanggal?: string }): number {
+  if (b.peran === "pml") return 0;
+  if (b.peran === "korwil" && b.tanggal !== undefined && b.tanggal >= BATAS_QC_KORWIL) return 0; // angkanya lembar QC, bukan KK
+  return b.kk_berhasil;
 }
 
-/** PML = identifikasi bila ada Sub SLS diidentifikasi; PPL/korwil = pendataan bila ada KK berhasil. */
+/** PML = identifikasi bila ada Sub SLS diidentifikasi; PPL = pendataan bila ada KK berhasil; korwil = Quality Check (sejak BATAS_QC_KORWIL) atau pendataan (hari lama). */
 export function statusLapangan(b: BarisLapangan): StatusLapangan {
   if (b.peran === "pml") return b.sub_idf > 0 ? "identifikasi" : "belum";
-  return b.kk_berhasil > 0 ? "pendataan" : "belum";
+  if (b.kk_berhasil <= 0) return "belum";
+  return hariQc(b) ? "qc" : "pendataan";
 }
 
 /** Ada aktivitas lapangan pada tanggal itu (termasuk KK "tidak ditemukan" yang tidak dihitung berhasil). */
@@ -149,7 +169,8 @@ export type RingkasLapangan = {
   orang: number;
   orang_berhasil: number; // orang yang punya hasil minimal sekali pada baris tersaring
   sub_idf: number; // jumlah Sub SLS diidentifikasi (PML)
-  kk_berhasil: number; // jumlah KK terdampak + tidak terdampak (PPL dan korwil; penandaan oleh PML tidak dihitung)
+  kk_berhasil: number; // jumlah KK terdampak + tidak terdampak (PPL, dan korwil sebelum BATAS_QC_KORWIL; penandaan oleh PML tidak dihitung)
+  qc_lengkap: number; // jumlah lembar Quality Check lengkap (korwil sejak BATAS_QC_KORWIL)
   kk_oleh_pml: number; // KK berhasil yang ditandai PML (tidak dihitung, sekadar info)
   kk_tdk_ditemukan: number;
   translok: Record<StatusTranslok, number>;
@@ -157,13 +178,14 @@ export type RingkasLapangan = {
 };
 
 export function ringkas(baris: BarisLapangan[], aturan: AturanIsian): RingkasLapangan {
-  const r: RingkasLapangan = { baris: baris.length, orang: 0, orang_berhasil: 0, sub_idf: 0, kk_berhasil: 0, kk_oleh_pml: 0, kk_tdk_ditemukan: 0, translok: { lengkap: 0, sebagian: 0, anomali: 0, tidak_ada: 0 }, belum_ada_hasil: 0 };
+  const r: RingkasLapangan = { baris: baris.length, orang: 0, orang_berhasil: 0, sub_idf: 0, kk_berhasil: 0, qc_lengkap: 0, kk_oleh_pml: 0, kk_tdk_ditemukan: 0, translok: { lengkap: 0, sebagian: 0, anomali: 0, tidak_ada: 0 }, belum_ada_hasil: 0 };
   const orang = new Set<number>();
   const berhasil = new Set<number>();
   for (const b of baris) {
     orang.add(b.akun_id);
     r.sub_idf += b.sub_idf;
     r.kk_berhasil += kkDihitung(b);
+    r.qc_lengkap += qcDihitung(b);
     if (b.peran === "pml") r.kk_oleh_pml += b.kk_berhasil;
     if (b.peran !== "pml") r.kk_tdk_ditemukan += b.kk_tdk_ditemukan;
     r.translok[statusTranslok(b, aturan)] += 1;
@@ -176,7 +198,7 @@ export function ringkas(baris: BarisLapangan[], aturan: AturanIsian): RingkasLap
 }
 
 /** Agregat terakhir tiap orang pada baris tersaring (baris dengan tanggal terbaru), dijumlahkan: Sub SLS (PML) dan KK (PPL). */
-export function agregatAkhir(baris: BarisLapangan[]): { sub: number; kk: number } {
+export function agregatAkhir(baris: BarisLapangan[]): { sub: number; kk: number; qc: number } {
   const akhir = new Map<number, BarisLapangan>();
   for (const b of baris) {
     const a = akhir.get(b.akun_id);
@@ -184,11 +206,13 @@ export function agregatAkhir(baris: BarisLapangan[]): { sub: number; kk: number 
   }
   let sub = 0;
   let kk = 0;
+  let qc = 0;
   for (const b of akhir.values()) {
     if (b.peran === "pml") sub += b.agg_sub;
+    else if (hariQc(b)) qc += b.agg_kk;
     else kk += b.agg_kk;
   }
-  return { sub, kk };
+  return { sub, kk, qc };
 }
 
 /** Daftar tim (PML) untuk pilihan saringan, urut nama. */
