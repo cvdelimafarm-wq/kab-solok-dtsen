@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BATAS_AWAL, BATAS_MAKS, batasDaftar, galatSinyal, jalurFotoSaya, potongDaftar, umurTeks } from "../sigapFotoCache";
+import { BATAS_AWAL, BATAS_MAKS, batasDaftar, galatSinyal, jalurFotoSaya, potongDaftar, teksProgresKirim, umurTeks } from "../sigapFotoCache";
 
 describe("batasDaftar (server)", () => {
   it("tanpa parameter atau tidak sah -> batas lama (100), aman untuk klien lama", () => {
@@ -71,5 +71,22 @@ describe("umurTeks", () => {
     expect(umurTeks(0, t)).toBe("belum pernah");
     expect(umurTeks(NaN, t)).toBe("belum pernah");
     expect(umurTeks(t + 10_000, t)).toBe("baru saja");
+  });
+});
+
+describe("teksProgresKirim", () => {
+  it("tanpa data kemajuan", () => {
+    expect(teksProgresKirim(null)).toBe("Mengirim…");
+    expect(teksProgresKirim(NaN)).toBe("Mengirim…");
+  });
+  it("persen dibulatkan ke bawah dan tidak pernah 100% sebelum selesai", () => {
+    expect(teksProgresKirim(0)).toBe("Mengunggah 0%…");
+    expect(teksProgresKirim(0.456)).toBe("Mengunggah 45%…");
+    expect(teksProgresKirim(0.999)).toBe("Mengunggah 99%…");
+    expect(teksProgresKirim(-1)).toBe("Mengunggah 0%…");
+  });
+  it("semua byte sampai -> server memproses", () => {
+    expect(teksProgresKirim(1)).toBe("Memproses di server…");
+    expect(teksProgresKirim(1.2)).toBe("Memproses di server…");
   });
 });

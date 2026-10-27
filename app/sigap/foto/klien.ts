@@ -18,18 +18,45 @@ function galat(pesan: string, status?: number, kode?: string): GalatFoto {
 export type HasilKirim<T> = { simulasi: true } | { simulasi: false; data: T };
 
 /** POST multipart. Melempar GalatFoto (status undefined = tidak ada sambungan). 401 -> "SESI_BERAKHIR" (halaman memutuskan arah). */
-export async function kirimMultipart<T>(path: string, form: FormData): Promise<HasilKirim<T>> {
+export async function kirimMultipart<T>(path: string, form: FormData, onProgres?: (bagian: number) => void): Promise<HasilKirim<T>> {
   const s = bacaSesi();
-  let res: Response;
-  try {
-    res = await fetch(path, { method: "POST", body: form, headers: s ? { Authorization: `Bearer ${s}` } : {} });
-  } catch (e) {
-    throw galat(e instanceof Error ? e.message : "Tidak ada sambungan.");
+  let status: number;
+  let json: Record<string, unknown>;
+  if (onProgres) {
+    // (27 Okt 2026) Dengan penghitung kemajuan unggah (fetch tidak punya): XMLHttpRequest. Jalur tanpa onProgres tetap fetch seperti semula.
+    const hasil = await new Promise<{ status: number; teks: string }>((ok, tolak) => {
+      const x = new XMLHttpRequest();
+      x.open("POST", path);
+      if (s) x.setRequestHeader("Authorization", `Bearer ${s}`);
+      x.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) onProgres(e.loaded / e.total);
+      };
+      x.upload.onload = () => onProgres(1);
+      x.onload = () => ok({ status: x.status, teks: x.responseText });
+      x.onerror = () => tolak(galat("Tidak ada sambungan."));
+      x.ontimeout = () => tolak(galat("Tidak ada sambungan."));
+      x.onabort = () => tolak(galat("Tidak ada sambungan."));
+      x.send(form);
+    });
+    status = hasil.status;
+    try {
+      json = JSON.parse(hasil.teks) as Record<string, unknown>;
+    } catch {
+      json = {};
+    }
+  } else {
+    let res: Response;
+    try {
+      res = await fetch(path, { method: "POST", body: form, headers: s ? { Authorization: `Bearer ${s}` } : {} });
+    } catch (e) {
+      throw galat(e instanceof Error ? e.message : "Tidak ada sambungan.");
+    }
+    status = res.status;
+    json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   }
-  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (res.status === 401) throw galat("SESI_BERAKHIR", 401);
+  if (status === 401) throw galat("SESI_BERAKHIR", 401);
   if (json.simulasi === true) return { simulasi: true };
-  if (!res.ok) throw galat(typeof json.error === "string" ? json.error : `Gagal (${res.status})`, res.status, typeof json.kode === "string" ? json.kode : undefined);
+  if (status < 200 || status >= 300) throw galat(typeof json.error === "string" ? json.error : `Gagal (${status})`, status, typeof json.kode === "string" ? json.kode : undefined);
   return { simulasi: false, data: json as T };
 }
 

@@ -47,3 +47,10 @@ export function umurTeks(tibaMs: number, sekarangMs: number): string {
   if (jam < 24) return `${jam} jam lalu`;
   return `${Math.floor(jam / 24)} hari lalu`;
 }
+
+/** Teks tombol saat foto dikirim. null = kemajuan belum diketahui; >= 1 = semua byte sudah sampai, server masih memproses (cap, simpan, catat). */
+export function teksProgresKirim(bagian: number | null): string {
+  if (bagian === null || !Number.isFinite(bagian)) return "Mengirim…";
+  if (bagian >= 1) return "Memproses di server…";
+  return `Mengunggah ${Math.max(0, Math.min(99, Math.floor(bagian * 100)))}%…`;
+}

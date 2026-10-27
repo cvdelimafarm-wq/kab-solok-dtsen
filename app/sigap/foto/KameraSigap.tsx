@@ -26,6 +26,7 @@ import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import BagikanWa from "./BagikanWa";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
 import { tandaBasi } from "@/app/portal/dataBersama";
+import { teksProgresKirim } from "@/lib/sigapFotoCache";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
@@ -153,6 +154,7 @@ export default function KameraSigap({
   const [tag, setTag] = useState<TagPilihan[]>([]);
   const [bagikan, setBagikan] = useState(false);
   const [mengirim, setMengirim] = useState(false);
+  const [progres, setProgres] = useState<number | null>(null); // (27 Okt 2026) bagian foto yang sudah terunggah (0..1); null = belum diketahui
   const [pesan, setPesan] = useState<{ jenis: "ok" | "info" | "galat"; teks: string } | null>(null);
   const [hasil, setHasil] = useState<Hasil | null>(null);
   // (27 Okt 2026) Alur sesudah terkirim: popup "Foto ke-n berhasil terkirim", lalu tanya "Bagikan ke rekan?" (Ya = pilih rekan, Tidak = lanjut memotret).
@@ -707,9 +709,17 @@ export default function KameraSigap({
     setHitung(null);
     const item: ItemAntrean = itemDari(jepretan, kegiatanId, nomor, tag);
     setMengirim(true);
+    setProgres(0);
     setPesan(null);
     try {
-      const r = await kirimMultipart<Hasil>("/api/sigap/foto", formDariItem(item));
+      let persenTerakhir = -1;
+      const r = await kirimMultipart<Hasil>("/api/sigap/foto", formDariItem(item), (b) => {
+        const p = Math.floor(b * 100);
+        if (p !== persenTerakhir) {
+          persenTerakhir = p;
+          setProgres(b);
+        }
+      });
       if (r.simulasi) {
         setPesan({ jenis: "info", teks: "Mode simulasi (masuk sebagai akun lain): foto TIDAK dikirim." });
       } else {
@@ -748,6 +758,7 @@ export default function KameraSigap({
       }
     } finally {
       setMengirim(false);
+      setProgres(null);
     }
   }
 
@@ -1129,7 +1140,7 @@ export default function KameraSigap({
                 disabled={mengirim}
                 className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50"
               >
-                {mengirim ? "Mengirim…" : "Arah sudah benar, kirim"}
+                {mengirim ? teksProgresKirim(progres) : "Arah sudah benar, kirim"}
               </button>
               {hitung !== null && !mengirim && (
                 <div role="status" className="flex items-center gap-3 rounded-xl bg-[#E8EEF8] px-3 py-2.5">
@@ -1294,9 +1305,14 @@ export default function KameraSigap({
             <div className="flex gap-2">
               <button type="button" onClick={ulang} disabled={mengirim} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Buang &amp; ulangi</button>
               <button type="button" onClick={() => (tanpaNomorSendiri ? setKonfirmasiTanpaNomor(true) : void kirim())} disabled={mengirim || !adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
-                {mengirim ? "Mengirim…" : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
+                {mengirim ? teksProgresKirim(progres) : nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
+            {mengirim && (
+              <div role="progressbar" aria-label="Kemajuan unggah foto" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((progres ?? 0) * 100)} className="h-1.5 w-full overflow-hidden rounded-full bg-[#DCE4F2]">
+                <div className={`h-full rounded-full bg-[#0F2A52] transition-[width] duration-200 ${progres !== null && progres >= 1 ? "animate-pulse" : ""}`} style={{ width: `${Math.round((progres ?? 0) * 100)}%` }} />
+              </div>
+            )}
             </>
           )}
           {hasil && (
