@@ -28,11 +28,18 @@ import { ambilFotoUrl, ambilJson, type GalatFoto } from "./klien";
 import BagikanWa from "./BagikanWa";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import type { Kepercayaan } from "@/lib/sigapFoto";
+import { labelDariRekan } from "@/lib/sigapFotoRekan";
 import { alasanBentrok, jamWib, kalimatJam, nilaiJam, pasangIsi, peranRingkas, rencanaUrutJam, slotBermasalah, tukarIsi, type IsiNomor } from "@/lib/sigapUrutanFoto";
 
-type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string; lat?: number | null; lng?: number | null; tahan?: boolean };
+type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string; lat?: number | null; lng?: number | null; tahan?: boolean; dari?: string };
 type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null; ditahan?: FotoRingkas | null };
-type Keadaan = { boleh: boolean; susulan: boolean; lampau?: boolean; sisa_hari?: number | null; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[] };
+type Keadaan = { boleh: boolean; susulan: boolean; lampau?: boolean; sisa_hari?: number | null; alasan_tutup: string | null; jumlah: number; nomor: Nomor[]; kosong: number[]; saran: number | null; ditahan?: number[]; cadangan: FotoRingkas[]; cadangan_rekan?: FotoRingkas[] };
+
+// (27 Okt 2026) Foto cadangan = foto saya + foto rekan yang pernah diterima lalu tergeser (label "dari <nama>"). Foto rekan hanya dipasang lewat ketukan
+// manual; "Isi nomor kosong otomatis" (server) tidak memakainya, jadi pemicu/tombol otomatis tetap memeriksa `k.cadangan` saja.
+const semuaCadangan = (k: Keadaan): FotoRingkas[] => [...k.cadangan, ...(k.cadangan_rekan ?? [])];
+/** Keterangan jam foto cadangan; foto rekan diberi label asalnya. */
+const subCadangan = (f: FotoRingkas, jam: string) => (f.dari !== undefined ? `${jam} WIB · ${labelDariRekan(f.dari)}` : f.tahan ? `${jam} · menunggu periksa` : `${jam} WIB`);
 type HasilIsi = { ditempatkan: { foto_id: number; slot: number }[]; ditahan?: { foto_id: number; slot: number }[]; cadangan: number; gagal?: { foto_id: number; error: string }[] };
 
 type Pilih = { tipe: "slot"; slot: number } | { tipe: "cadangan"; id: number } | null;
@@ -280,7 +287,7 @@ export default function SusunFoto({
   useEffect(() => {
     if (!k || !pilih) return;
     if (pilih.tipe === "slot" && !k.nomor.find((n) => n.slot === pilih.slot)?.terisi) setPilih(null);
-    if (pilih.tipe === "cadangan" && !k.cadangan.some((f) => f.id === pilih.id)) setPilih(null);
+    if (pilih.tipe === "cadangan" && !semuaCadangan(k).some((f) => f.id === pilih.id)) setPilih(null);
   }, [k, pilih]);
 
   const isiNomor = useMemo<IsiNomor[]>(
@@ -298,7 +305,7 @@ export default function SusunFoto({
     if (!k) return [];
     const a: ItemGaleri[] = [];
     for (const n of k.nomor) if (n.terisi || n.ditahan) a.push({ kunci: `s${n.slot}`, slot: n.slot, huruf: null, foto: n.foto ?? n.ditahan ?? null, ditahan: !n.terisi });
-    k.cadangan.forEach((f, i) => a.push({ kunci: `c${f.id}`, slot: null, huruf: String.fromCharCode(65 + (i % 26)), foto: f, ditahan: !!f.tahan }));
+    semuaCadangan(k).forEach((f, i) => a.push({ kunci: `c${f.id}`, slot: null, huruf: String.fromCharCode(65 + (i % 26)), foto: f, ditahan: !!f.tahan }));
     return a;
   }, [k]);
   const posLihat = lihat ? galeri.findIndex((g) => g.kunci === lihat) : -1;
@@ -329,7 +336,7 @@ export default function SusunFoto({
   }, [lihat, k, posLihat]);
 
   if (!k) return galat ? <div role="alert" className="rounded-xl bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galat}</div> : <div className="h-24 animate-pulse rounded-2xl bg-[#EEF2F7]" aria-label="Memuat nomor foto" />;
-  if (k.nomor.every((n) => !n.terisi) && k.cadangan.length === 0 && !k.boleh) return null;
+  if (k.nomor.every((n) => !n.terisi) && semuaCadangan(k).length === 0 && !k.boleh) return null;
 
   const boleh = k.boleh;
   const bisaUbah = boleh && !sibuk;
@@ -389,7 +396,7 @@ export default function SusunFoto({
   }
 
   function siapPasang(fotoId: number, slot: number) {
-    const f = k?.cadangan.find((x) => x.id === fotoId);
+    const f = k ? semuaCadangan(k).find((x) => x.id === fotoId) : undefined;
     const n = nomorDi(slot);
     if (!f || !n) return;
     if (n.terisi && !n.foto) {
@@ -461,7 +468,7 @@ export default function SusunFoto({
     }
 
     if (konf.jenis === "pasang") {
-      const f = k.cadangan.find((x) => x.id === konf.fotoId);
+      const f = semuaCadangan(k).find((x) => x.id === konf.fotoId);
       const n = nomorDi(konf.slot);
       if (!f || !n) return null;
       const sesudah = f.tahan ? nilai : nilaiJam(pasangIsi(isiNomor, konf.slot, { fotoId: f.id, ms: Date.parse(f.diambil_at) }));
@@ -469,7 +476,7 @@ export default function SusunFoto({
       return (
         <Modal judul="Apakah Anda yakin memasang foto cadangan ini?" idJudul="judul-konf-pasang" sibuk={sibuk} onBatal={tutupKonf}>
           <div className="mt-3 flex items-start gap-1.5">
-            <KartuModal fotoId={f.id} judul="Foto cadangan" sub={`${jamIso(f.diambil_at)} WIB`} />
+            <KartuModal fotoId={f.id} judul="Foto cadangan" sub={f.dari !== undefined ? `${jamIso(f.diambil_at)} WIB · ${labelDariRekan(f.dari)}` : `${jamIso(f.diambil_at)} WIB`} />
             <span className="mt-8 flex-none text-xl font-extrabold text-[#0F2A52]" aria-label="menggantikan">⇄</span>
             <KartuModal fotoId={n.foto?.id ?? null} judul={`Foto ${n.slot}`} sub={n.terisi ? `${peran(n.slot)} · ${n.foto ? jamIso(n.foto.diambil_at) : "tanpa jam"}` : peran(n.slot)} kosong={!n.terisi} />
           </div>
@@ -543,7 +550,7 @@ export default function SusunFoto({
             </button>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[14px] font-extrabold leading-tight">{judul}</p>
-              <p className="truncate text-[11.5px] leading-tight text-white/70">{f ? `${jamIso(f.diambil_at)} WIB` : "Unggahan manual"}</p>
+              <p className="truncate text-[11.5px] leading-tight text-white/70">{f ? `${jamIso(f.diambil_at)} WIB${f.dari !== undefined ? ` · ${labelDariRekan(f.dari)}` : ""}` : "Unggahan manual"}</p>
             </div>
             <span className="shrink-0 pr-1 text-[12.5px] font-bold text-white/80">{posLihat + 1}/{galeri.length}</span>
           </div>
@@ -641,7 +648,8 @@ export default function SusunFoto({
   }
 
   const dipilihSlot = pilih?.tipe === "slot" ? pilih.slot : null;
-  const dipilihCadangan = pilih?.tipe === "cadangan" ? k.cadangan.find((f) => f.id === pilih.id) ?? null : null;
+  const dipilihCadangan = pilih?.tipe === "cadangan" ? semuaCadangan(k).find((f) => f.id === pilih.id) ?? null : null;
+  const daftarCadangan = semuaCadangan(k);
 
   return (
     <section className={`flex flex-col gap-2.5 ${polos ? "" : "rounded-2xl border border-[#C9D3E6] bg-white p-3"} ${rapat ? "[&>*:not(ol)]:mx-2 min-[640px]:[&>*:not(ol)]:mx-0" : ""}`} aria-label="Nomor foto Kamera SIGAP">
@@ -748,9 +756,9 @@ export default function SusunFoto({
         </div>
       )}
 
-      {k.cadangan.length > 0 && (
+      {daftarCadangan.length > 0 && (
         <>
-          <div className="text-[13px] font-extrabold text-[#0F2A52]">Foto cadangan ({k.cadangan.length})</div>
+          <div className="text-[13px] font-extrabold text-[#0F2A52]">Foto cadangan ({daftarCadangan.length})</div>
           {/* petunjuk disorot: saat Ganti urutan aktif, langkah yang sedang berlaku diberi latar kuning (1 = pilih foto, 2 = pilih nomor tujuan) */}
           <div role="note" className="rounded-lg border border-[#BFD0F0] bg-[#EAF1FF] px-3 py-2 text-[12.5px] font-semibold leading-relaxed text-[#0F2A52]">
             {boleh ? (
@@ -766,9 +774,14 @@ export default function SusunFoto({
             ) : (
               "Tersimpan, belum bernomor."
             )}
+            {(k.cadangan_rekan ?? []).length > 0 && (
+              <>
+                {" "}Foto berlabel “dari …” dikirim rekan dan tergeser dari nomornya; dipasang kembali hanya oleh ketukan Anda, tidak ikut susun otomatis.
+              </>
+            )}
           </div>
           <ol className={`grid grid-cols-3 ${rapat ? "gap-1 min-[640px]:gap-2" : "gap-2"}`}>
-            {k.cadangan.map((f, urutan) => {
+            {daftarCadangan.map((f, urutan) => {
               const huruf = String.fromCharCode(65 + (urutan % 26));
               return (
                 <li key={f.id} className="h-full min-w-0">
@@ -778,19 +791,19 @@ export default function SusunFoto({
                     cadangan: true,
                     fotoId: f.id,
                     judul: `Cadangan ${huruf}`,
-                    sub: f.tahan ? `${jamIso(f.diambil_at)} · menunggu periksa` : `${jamIso(f.diambil_at)} WIB`,
+                    sub: subCadangan(f, jamIso(f.diambil_at)),
                     kosongTeks: "",
                     dipilih: dipilihCadangan?.id === f.id,
                     masalah: false,
                     nyala: false,
-                    label: `Foto cadangan ${huruf}, ${jamIso(f.diambil_at)}`,
+                    label: `Foto cadangan ${huruf}, ${jamIso(f.diambil_at)}${f.dari !== undefined ? `, ${labelDariRekan(f.dari)}` : ""}`,
                     onKlik: () => ketukCadangan(f.id),
                   })}
                 </li>
               );
             })}
           </ol>
-          {bisaUbah && modeUbah && k.kosong.length > 0 && (
+          {bisaUbah && modeUbah && k.kosong.length > 0 && k.cadangan.length > 0 && (
             <button type="button" onClick={() => void isi()} disabled={sibuk} className={TOMBOL_UTAMA}>
               {sibuk ? "Menyusun…" : "Isi nomor kosong otomatis"}
             </button>

@@ -7,6 +7,8 @@
 // POST JSON { kegiatan_id, tanggal, aksi }
 //        aksi 'isi'    : foto saya yang belum terpasang disusun otomatis ke nomor KOSONG (tidak menimpa apa pun)
 //        aksi 'pasang' : { foto_id, slot } foto cadangan dipasang ke nomor pilihan (foto lama di nomor itu dilepas, tetap tersimpan sebagai cadangan); foto merah belum diperiksa -> dipesan sebagai tahanan
+//                        (27 Okt 2026) foto yang DIBAGIKAN rekan, pernah diterima lalu tergeser (tag tim/luar_tim berstatus 'dilepas'), juga bisa dipasang ulang di sini
+//                        (GET: `cadangan_rekan`); aksi 'isi' (susun otomatis) TIDAK menyentuhnya, hanya ketukan manual petugas. Aturan: lib/sigapFotoRekan.ts.
 //        aksi 'pindah' : { dari, ke } pindah/tukar nomor foto yang sudah terpasang (fungsi DB sigap_foto_pindah_nomor)
 //        aksi 'urutkan': (23 Okt 2026) foto Kamera SIGAP pada nomor terisi diurutkan menurut jam (terawal ke terakhir) lewat rangkaian 'pindah'
 //                        yang sama; aturan di lib/sigapUrutanFoto.ts (sama dengan peringatan jam). Semua cek dilakukan SEBELUM menulis; bila satu
@@ -28,6 +30,7 @@ import { BATAS_HARI_SUSUN, nomorBerikutnya, nomorKosong, susunFoto, umurHari, ty
 import { kunciLangkah, rencanaUrutJam, type IsiNomor, type Langkah } from "@/lib/sigapUrutanFoto";
 import { jarakKeRumah, jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
+import { PERAN_TAG_REKAN, layakCadanganRekan } from "@/lib/sigapFotoRekan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +42,12 @@ type FotoBaris = { id: number; kode: string; kepercayaan: string; alasan: string
 type TagBaris = { id: number; foto_id: number; status: string; slot?: number | null; penugasan_id?: number | null };
 
 const KOLOM_FOTO = "id, kode, kepercayaan, alasan, diambil_at, status_periksa, lat, lng";
+
+// (27 Okt 2026) foto rekan (dibagikan ke saya) yang tergeser dari nomor: kolom tambahan untuk menilai kelayakan
+type FotoRekanBaris = FotoBaris & { kegiatan_id: number | null; tanggal: string | null; akun_pengambil: number | null; file_dihapus_at: string | null; hapus_disetujui_at: string | null };
+type TagRekanBaris = TagBaris & { akun_id: number; peran_tag: string };
+type CadanganRekan = FotoRekanBaris & { tag: TagRekanBaris; dari: string };
+const KOLOM_REKAN = `${KOLOM_FOTO}, kegiatan_id, tanggal, akun_pengambil, file_dihapus_at, hapus_disetujui_at`;
 
 /** Foto di luar wilayah tugas (> batas merah dari KK wilayah DAN rumah petugas) tidak boleh menempati nomor berlokasi. */
 async function diLuarWilayah(db: Db, akunId: number, f: { lat: number | null; lng: number | null }): Promise<boolean> {
@@ -98,7 +107,26 @@ async function keadaan(db: Db, akunId: number, pen: Pen, tanggal: string) {
     const t = tagFoto.get(f.id);
     return !!t && (t.status === "diajukan" || t.status === "dilepas") && merahBelumPeriksa(f) && f.status_periksa !== "dipertanyakan";
   });
-  return { jumlah, baris, semua, tagFoto, terisi, cadangan, tahanan, perluTahan };
+
+  // (27 Okt 2026) Foto yang DIBAGIKAN rekan kepada saya, sudah pernah diterima lalu tergeser foto lain (tag tim/luar_tim 'dilepas'): bisa dipasang ulang
+  // secara manual. Tidak dimasukkan ke `cadangan` supaya susun otomatis ('isi') tidak pernah memakainya.
+  const cadanganRekan: CadanganRekan[] = [];
+  const { data: tagRekanRaw } = await db.from("sigap_foto_tag").select("id, foto_id, akun_id, peran_tag, status, slot, penugasan_id").eq("akun_id", akunId).in("peran_tag", [...PERAN_TAG_REKAN]).eq("status", "dilepas");
+  const tagRekan = (tagRekanRaw ?? []) as TagRekanBaris[];
+  if (tagRekan.length) {
+    const { data: fRekan } = await db.from("sigap_foto").select(KOLOM_REKAN).in("id", tagRekan.map((t) => t.foto_id)).eq("kegiatan_id", pen.kegiatan.id).eq("tanggal", tanggal);
+    const fotoRekan = (fRekan ?? []) as FotoRekanBaris[];
+    const layak = fotoRekan.flatMap((f) => {
+      const tag = tagRekan.find((t) => t.foto_id === f.id);
+      return tag && layakCadanganRekan(f, tag, { penugasanId: pen.id, akunId, idDok }) ? [{ f, tag }] : [];
+    });
+    const idPemotret = [...new Set(layak.map((x) => x.f.akun_pengambil).filter((x): x is number => x !== null))];
+    const { data: nm } = idPemotret.length ? await db.from("sigap_akun").select("id, nama").in("id", idPemotret) : { data: [] as { id: number; nama: string | null }[] };
+    const namaDari = new Map(((nm ?? []) as { id: number; nama: string | null }[]).map((a) => [a.id, a.nama ?? ""]));
+    for (const { f, tag } of layak) cadanganRekan.push({ ...f, tag, dari: namaDari.get(f.akun_pengambil as number) ?? "" });
+    cadanganRekan.sort((a, b) => a.diambil_at.localeCompare(b.diambil_at));
+  }
+  return { jumlah, baris, semua, tagFoto, terisi, cadangan, tahanan, perluTahan, cadanganRekan };
 }
 
 export async function GET(req: NextRequest) {
@@ -142,6 +170,8 @@ export async function GET(req: NextRequest) {
     ditahan: [...k.tahanan.keys()].sort((a, b) => a - b),
     // foto merah belum diperiksa ikut ditampilkan (tahan: true): bisa diberi nomor, tetapi nomornya baru tertulis setelah diperiksa
     cadangan: [...k.cadangan.map((f) => ({ ...ringkas(f), tahan: false })), ...k.perluTahan.map((f) => ({ ...ringkas(f), tahan: true }))].sort((a, b) => a.diambil_at.localeCompare(b.diambil_at)),
+    // (27 Okt 2026) foto dari rekan yang tergeser: tampil di Foto cadangan ("dari <nama>"), dipasang ulang hanya lewat ketukan manual (tidak ikut susun otomatis)
+    cadangan_rekan: k.cadanganRekan.map((f) => ({ ...ringkas(f), dari: f.dari, tahan: false })),
     // (21 Okt 2026) tombol "Rapikan nomor foto" dari layar kamera: membuka kartu hari tanggal ini, bagian foto (tautan dalam halaman kerja)
     href_kerja: `/sigap/translok/${akun.token}?p=${pen.id}&tab=${tanggal === hariIniWib() ? "hari_ini" : "hari_kerja"}&tgl=${tanggal}&fokus=foto`,
   });
@@ -239,17 +269,22 @@ export async function POST(req: NextRequest) {
     const fotoId = Number(b.foto_id);
     const slot = Number(b.slot);
     if (!slotValid(slot) || slot > k.jumlah) return galat("Nomor foto tidak valid.");
-    const f = k.cadangan.find((x) => x.id === fotoId) ?? k.perluTahan.find((x) => x.id === fotoId);
+    const rk = k.cadanganRekan.find((x) => x.id === fotoId); // (27 Okt 2026) foto rekan yang tergeser
+    const f = k.cadangan.find((x) => x.id === fotoId) ?? k.perluTahan.find((x) => x.id === fotoId) ?? rk;
     if (!f) return galat("Foto tidak ada di daftar cadangan hari ini.", 404);
     const tahan = k.perluTahan.some((x) => x.id === fotoId); // merah belum diperiksa: nomor dipesan dulu (tahanan)
     if (harapAda(b, "harap_isi") && b.harap_isi !== isiNomor(k.baris, slot)) return galat(SUSUNAN_BERUBAH, 409);
     if (slotBerlokasi(slot) && (await diLuarWilayah(db, akunId, f))) return galat("Foto ini diambil jauh dari wilayah tugas, jadi tidak bisa dipakai untuk nomor " + slot + ".", 422);
-    const tag = k.tagFoto.get(f.id)!;
+    const tag = rk ? rk.tag : k.tagFoto.get(f.id)!;
     if (tag.status === "dilepas") await db.from("sigap_foto_tag").update({ status: "diajukan" }).eq("id", tag.id);
     const { data, error } = await db.rpc("sigap_foto_tempatkan", { p_tag_id: tag.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: slot, p_susulan: akses.susulan || akses.lampau, p_tahan: tahan });
-    if (error) return galat(error.message, 500);
-    const r = data as { ok?: boolean; error?: string };
-    if (!r?.ok) return galat(`Gagal memasang: ${r?.error ?? "tidak diketahui"}`, 409);
+    const r = data as { ok?: boolean; error?: string } | null;
+    if (error || !r?.ok) {
+      // foto rekan: bila gagal, kembalikan ke 'dilepas' supaya tidak pindah diam-diam ke "Menunggu diterima"
+      if (rk) await db.from("sigap_foto_tag").update({ status: "dilepas" }).eq("id", tag.id).eq("status", "diajukan");
+      return error ? galat(error.message, 500) : galat(`Gagal memasang: ${r?.error ?? "tidak diketahui"}`, 409);
+    }
+    if (rk) await db.from("sigap_audit").insert({ akun_id: akunId, aksi: "foto.pasang_rekan", detail: { penugasan_id: pen.id, tanggal, foto_id: f.id, tag_id: tag.id, slot, dari_akun: rk.akun_pengambil ?? null } });
     return NextResponse.json({ ok: true, ditahan: tahan });
   }
 
