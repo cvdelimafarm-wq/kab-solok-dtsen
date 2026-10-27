@@ -7,6 +7,7 @@
 // Gagal memuat = diam saja (jangan mengganggu halaman kerja).
 
 import { useCallback, useEffect, useState } from "react";
+import { bacaCache, muatData } from "@/app/portal/dataBersama";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { ModalPengumuman } from "@/app/sigap/pelatihan/pengumumanUi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
@@ -27,9 +28,19 @@ export default function PengumumanPetugas() {
   useEffect(() => {
     if (!bacaSesi()) return;
     let batal = false;
-    apiPortal<{ pengumuman?: PengumumanPeserta[] }>("/api/portal/siaran-petugas")
+    // (28 Okt 2026) lewat simpanan bersama: siaran langsung muncul dari simpanan/prefetch Beranda. Antrian hanya diganti bila isinya berbeda,
+    // supaya modal yang sedang dibaca tidak bergeser saat data segar tiba.
+    const PATH = "/api/portal/siaran-petugas";
+    type Jawab = { pengumuman?: PengumumanPeserta[] };
+    const terap = (d: Jawab) => {
+      const baru = (d.pengumuman ?? []).filter((p) => !sudahLokal(p));
+      setAntrian((lama) => (lama.length === baru.length && lama.every((x, i) => x.id === baru[i].id && x.versi === baru[i].versi) ? lama : baru));
+    };
+    const c = bacaCache<Jawab>(PATH);
+    if (c) terap(c.data);
+    muatData<Jawab>(PATH)
       .then((d) => {
-        if (!batal) setAntrian((d.pengumuman ?? []).filter((p) => !sudahLokal(p)));
+        if (!batal) terap(d);
       })
       .catch(() => undefined);
     return () => {

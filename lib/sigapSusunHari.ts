@@ -42,5 +42,23 @@ export function susunHari<T extends FotoHari>(daftar: T[]): SusunanHari<T> {
   };
 }
 
+// (27 Okt 2026) Foto yang DIBAGIKAN rekan kepada saya (tag tim/luar_tim) ikut tampil di kisi nomor hari itu: yang diterima/ditahan di nomornya, yang
+// dilepas (tergeser) di cadangan, tiap-tiapnya berlabel "dari <nama>". Tag yang masih menunggu (diajukan) dan yang ditolak tidak ikut.
+// Dibuat dengan membentuk ulang tag rekan sebagai tag "pemotret" sehingga aturan nomor yang sama (susunHari) berlaku.
+export type TagUntukSaya<F> = { peran_tag: string; status: string; slot: number | null; foto: F | null };
+export type FotoRekan<F> = F & { dari: string; tag: (TagFotoHari & { akun_id: number; nama: string })[] };
+const PERAN_REKAN = ["tim", "luar_tim"];
+const STATUS_REKAN = ["diterima", "ditahan", "dilepas"];
+
+export function rekanKeHari<F extends { id: number; pemotret?: string | null }>(untukSaya: TagUntukSaya<F>[]): FotoRekan<F>[] {
+  const hasil = new Map<number, FotoRekan<F>>();
+  for (const t of untukSaya) {
+    if (!t.foto || !PERAN_REKAN.includes(t.peran_tag) || !STATUS_REKAN.includes(t.status) || hasil.has(t.foto.id)) continue;
+    const dari = (t.foto.pemotret ?? "").trim() && t.foto.pemotret !== "-" ? (t.foto.pemotret as string) : "rekan";
+    hasil.set(t.foto.id, { ...t.foto, dari, tag: [{ akun_id: 0, nama: dari, peran_tag: "pemotret", status: t.status, slot: t.slot }] });
+  }
+  return Array.from(hasil.values());
+}
+
 /** Huruf cadangan A, B, C ... (urutan jam), sama dengan layar Hari Ini. */
 export const hurufCadangan = (i: number): string => (i < 26 ? String.fromCharCode(65 + i) : String(i + 1));

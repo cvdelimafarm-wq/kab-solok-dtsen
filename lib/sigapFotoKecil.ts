@@ -11,10 +11,12 @@ import { KUALITAS_FOTO_KECIL, LEBAR_FOTO_KECIL } from "@/lib/sigapVerifikasi";
 sharp.cache(false);
 sharp.concurrency(1);
 
-export async function buatFotoKecil(asli: Buffer): Promise<Buffer> {
+// (28 Okt 2026) `lebar`/`kualitas` opsional: layar foto petugas memakai ukuran 'mini' (kisi) dan 'kecil' (pratinjau), lihat lib/sigapCacheFoto.ts.
+// Tanpa argumen hasilnya sama dengan sebelumnya (halaman /verifikasi).
+export async function buatFotoKecil(asli: Buffer, lebar: number = LEBAR_FOTO_KECIL, kualitas: number = KUALITAS_FOTO_KECIL): Promise<Buffer> {
   return sharp(asli, { failOn: "none" })
     .rotate()
-    .resize({ width: LEBAR_FOTO_KECIL, height: LEBAR_FOTO_KECIL, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: KUALITAS_FOTO_KECIL, mozjpeg: true })
+    .resize({ width: lebar, height: lebar, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: kualitas, mozjpeg: true })
     .toBuffer();
 }

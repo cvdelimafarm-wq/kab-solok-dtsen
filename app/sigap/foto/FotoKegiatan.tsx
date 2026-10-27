@@ -7,9 +7,9 @@
 // Mode 'kamera' -> kartu tombol "Buka Kamera SIGAP"; mode 'unggah' (atau gagal membaca saklar) -> `fallback` = komponen unggah foto LAMA,
 // tidak diubah sama sekali. Mematikan saklar otomatis mengembalikan tampilan lama.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
-import { ambilJson } from "./klien";
+import { useData } from "@/app/portal/dataBersama";
 import SusunFoto from "./SusunFoto";
 import { kirimSemuaAntrean } from "./kirimAntrean";
 import { siapkanPaket } from "./paketOffline";
@@ -27,20 +27,15 @@ type Mode = { kegiatan: { kegiatan_id: number; mode: string }[] };
 // jarak dalam kecil, supaya kisi foto memakai hampir seluruh lebar layar. Di layar lebar (sm ke atas) tampilan kartu biasa.
 // (27 Okt 2026) `tepi` = pembungkus halaman bergaris sisi 16 px (tab Hari Ini): kartu ditarik ke kiri-kanan sampai tepi layar HP (-mx-4), di layar lebar (640px ke atas) kembali normal.
 export default function FotoKegiatan({ kegiatanId, fallback, susulan = false, lampau = false, penuh = false, tepi = false, tanggal, jenis = null, onBerubah }: { kegiatanId: number; fallback: ReactNode; susulan?: boolean; lampau?: boolean; penuh?: boolean; tepi?: boolean; tanggal?: string; jenis?: string | null; onBerubah?: () => void | Promise<void> }) {
-  const [mode, setMode] = useState<"kamera" | "unggah" | null>(null);
+  // (28 Okt 2026) Saklar kamera dari simpanan bersama (satu permintaan dipakai semua kartu hari; tampil seketika dari data terakhir). Dulu tiap kartu
+  // meminta ke server sendiri-sendiri dan menunggu. Gagal membaca tanpa data sama sekali -> metode lama, tidak pernah memaksa kamera.
+  const md = useData<Mode>("/api/sigap/foto/mode");
+  const mode: "kamera" | "unggah" | null = md.data ? (md.data.kegiatan.find((k) => k.kegiatan_id === kegiatanId)?.mode === "kamera" ? "kamera" : "unggah") : md.galat ? "unggah" : null;
   const bleed = tepi ? " -mx-4 min-[640px]:mx-0" : "";
   useEffect(() => {
     void kirimSemuaAntrean().then((n) => { if (n > 0) void Promise.resolve(onBerubah?.()).catch(() => undefined); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => {
-    let batal = false;
-    ambilJson<Mode>("/api/sigap/foto/mode")
-      .then((d) => !batal && setMode(d.kegiatan.find((k) => k.kegiatan_id === kegiatanId)?.mode === "kamera" ? "kamera" : "unggah"))
-      .catch(() => !batal && setMode("unggah")); // gagal membaca saklar -> metode lama, tidak pernah memaksa kamera
-    return () => { batal = true; };
-  }, [kegiatanId]);
-
   // (23 Okt 2026) Kegiatan bermode kamera: siapkan paket token selagi ada sinyal (untuk kerja di daerah tanpa sinyal). Best-effort, diam bila gagal.
   useEffect(() => {
     if (mode === "kamera") void siapkanPaket();

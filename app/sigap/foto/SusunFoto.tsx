@@ -24,7 +24,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ambilFotoUrl, ambilJson, type GalatFoto } from "./klien";
+import { ambilJson, type GalatFoto } from "./klien";
+import { ambilFotoUrlCache, siapkanFoto, sudahAdaFoto } from "./cacheFoto";
+import { pemilikSesi } from "@/app/portal/sesi";
+import { tetanggaFoto, type UkuranBerkas } from "@/lib/sigapCacheFoto";
 import BagikanWa from "./BagikanWa";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import type { Kepercayaan } from "@/lib/sigapFoto";
@@ -54,28 +57,42 @@ const hariIniWibKlien = () => new Date(Date.now() + 7 * 3_600_000).toISOString()
 const jamIso = (iso: string) => jamWib(Date.parse(iso));
 const harapNomor = (n: Nomor): Harap => (!n.terisi ? "kosong" : n.foto ? n.foto.id : "manual");
 
-function Gambar({ id, kelas, alt }: { id: number; kelas: string; alt: string }) {
+// (28 Okt 2026) Foto dari simpanan bersama (cacheFoto.ts): kotak kisi memakai 'mini' (±25 KB), penampil layar penuh memakai 'penuh' dengan versi
+// yang sudah ada (kecil/mini) tampil lebih dulu. Sebelumnya tiap kotak mengunduh foto asli ber-cap.
+function Gambar({ id, kelas, alt, ukuran = "mini" }: { id: number; kelas: string; alt: string; ukuran?: UkuranBerkas }) {
   const [url, setUrl] = useState<string | null>(null);
   const [gagal, setGagal] = useState(false);
   useEffect(() => {
     let batal = false;
-    let u: string | null = null;
+    const dipakai: string[] = [];
+    let tampil = false;
+    const pasang = (u: string) => {
+      if (batal) {
+        URL.revokeObjectURL(u);
+        return;
+      }
+      dipakai.push(u);
+      tampil = true;
+      setUrl(u);
+    };
     setUrl(null);
     setGagal(false);
-    ambilFotoUrl(id)
-      .then((x) => {
-        if (batal) URL.revokeObjectURL(x);
-        else {
-          u = x;
-          setUrl(x);
+    (async () => {
+      try {
+        if (ukuran === "penuh" && !sudahAdaFoto(id, "penuh")) {
+          const dulu: UkuranBerkas | null = sudahAdaFoto(id, "kecil") ? "kecil" : sudahAdaFoto(id, "mini") ? "mini" : null;
+          if (dulu) pasang(await ambilFotoUrlCache(id, dulu));
         }
-      })
-      .catch(() => !batal && setGagal(true));
+        pasang(await ambilFotoUrlCache(id, ukuran));
+      } catch {
+        if (!batal && !tampil) setGagal(true);
+      }
+    })();
     return () => {
       batal = true;
-      if (u) URL.revokeObjectURL(u);
+      dipakai.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [id]);
+  }, [id, ukuran]);
   if (gagal) return <div className={`flex items-center justify-center bg-[#EEF2F7] px-1 text-center text-[10.5px] font-semibold text-[#55657D] ${kelas}`}>Foto belum termuat</div>;
   if (!url) return <div className={`animate-pulse bg-[#EEF2F7] ${kelas}`} aria-label="Memuat foto" />;
   // eslint-disable-next-line @next/next/no-img-element
@@ -154,6 +171,11 @@ function pesanGalat(e: unknown): GalatModal {
   return { teks, muatUlang: g.status === 409 };
 }
 
+// (28 Okt 2026) Keadaan nomor foto terakhir disimpan di memori (per akun, kegiatan, tanggal): membuka kembali panel langsung tampil, lalu
+// diperbarui di belakang. Aman: setiap aksi tulis membawa `harap_*` dan server menjawab 409 bila layar sudah usang.
+const kacaKeadaan = new Map<string, Keadaan>();
+const kunciKeadaan = (kegiatanId: number, tanggal: string) => `${pemilikSesi() ?? 0}|${kegiatanId}|${tanggal}`;
+
 export default function SusunFoto({
   kegiatanId,
   tanggal,
@@ -173,7 +195,7 @@ export default function SusunFoto({
   rapat?: boolean;
   onBerubah?: () => void | Promise<void>;
 }) {
-  const [k, setK] = useState<Keadaan | null>(null);
+  const [k, setK] = useState<Keadaan | null>(() => kacaKeadaan.get(kunciKeadaan(kegiatanId, tanggal)) ?? null);
   const [galat, setGalat] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
   const [petunjuk, setPetunjuk] = useState<string | null>(null);
@@ -192,6 +214,7 @@ export default function SusunFoto({
   const muat = useCallback(async () => {
     try {
       const d = await ambilJson<Keadaan>(`/api/sigap/foto/susun?kegiatan=${kegiatanId}&tanggal=${tanggal}`);
+      kacaKeadaan.set(kunciKeadaan(kegiatanId, tanggal), d);
       setK(d);
       setGalat(null);
       return d;
@@ -334,6 +357,16 @@ export default function SusunFoto({
   useEffect(() => {
     if (lihat !== null && k && posLihat < 0) setLihat(null);
   }, [lihat, k, posLihat]);
+
+  // (28 Okt 2026) Prefetch: kotak kecil (mini) semua foto hari ini disiapkan di belakang layar; saat penampil terbuka, foto sebelum/sesudahnya
+  // (versi kecil) ikut disiapkan supaya geser kiri-kanan terasa seketika.
+  useEffect(() => {
+    siapkanFoto(galeri.flatMap((g) => (g.foto ? [g.foto.id] : [])), "mini", 12);
+  }, [galeri]);
+  useEffect(() => {
+    if (posLihat < 0) return;
+    siapkanFoto(tetanggaFoto(galeri, posLihat).flatMap((g) => (g.foto ? [g.foto.id] : [])), "kecil", 2);
+  }, [galeri, posLihat]);
 
   if (!k) return galat ? <div role="alert" className="rounded-xl bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galat}</div> : <div className="h-24 animate-pulse rounded-2xl bg-[#EEF2F7]" aria-label="Memuat nomor foto" />;
   if (k.nomor.every((n) => !n.terisi) && semuaCadangan(k).length === 0 && !k.boleh) return null;
@@ -571,7 +604,7 @@ export default function SusunFoto({
               if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.5) geserLihat(dx < 0 ? 1 : -1);
             }}
           >
-            {f ? <Gambar id={f.id} kelas="h-full w-full object-contain" alt={judul} /> : <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/80">Unggahan manual (tidak ada gambar dari kamera)</div>}
+            {f ? <Gambar id={f.id} kelas="h-full w-full object-contain" alt={judul} ukuran="penuh" /> : <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/80">Unggahan manual (tidak ada gambar dari kamera)</div>}
             <button type="button" onClick={() => geserLihat(-1)} disabled={!adaSebelum} aria-label="Foto sebelumnya" className={`${panah} left-2`}>‹</button>
             <button type="button" onClick={() => geserLihat(1)} disabled={!adaSesudah} aria-label="Foto berikutnya" className={`${panah} right-2`}>›</button>
           </div>

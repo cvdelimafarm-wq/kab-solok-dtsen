@@ -68,6 +68,17 @@ const PROFIL: [string, Profil][] = [
   // Daftar "Foto saya" tampil seketika; diminta ulang bila > 20 detik saat dibuka, dan ditandai basi setelah kirim foto (KameraSigap.tsx).
   ["/api/sigap/foto/mode", { ...dasar, segarMs: 2 * MENIT, interval: 0 }],
   ["/api/sigap/foto", { ...dasar, segarMs: 20 * 1000, interval: 0, umurMaksMs: 3 * HARI }],
+  // (28 Okt 2026) Halaman Transport lokal petugas: selalu diperbarui di belakang saat dibuka; `segarMs` hanya mengatur prefetch dari Beranda (jangan
+  // berulang tiap Beranda dibuka: jawabannya berat di server). Status "hari ini/terlewat" bergantung tanggal; tautan foto bertanda tangan berumur 1 jam
+  // (dibersihkan halaman: lib/sigapCacheKerja.ts).
+  ["/api/sigap/translok/", { ...dasar, segarMs: 2 * MENIT, interval: 0, hariBaru: true, umurMaksMs: 3 * HARI }],
+  // (28 Okt 2026) "Ringkas" admin (izin, peran, kegiatan) yang dimuat setiap halaman Kelola/Admin: menu dan judul tampil seketika dari simpanan.
+  ["/api/sigap/admin", { ...dasar, segarMs: 2 * MENIT, interval: 0, hariBaru: true }],
+  // (28 Okt 2026) Delego (bacaan fungsi keu_dlg_*, kunci "keu:<fungsi>|<args>" diisi lewat isiCache; app/sigap/delego/data.ts)
+  ["keu:", { ...dasar, segarMs: 1 * MENIT, interval: 0, hariBaru: true, umurMaksMs: 3 * HARI }],
+  // (28 Okt 2026) Pengumuman petugas & rekap identifikasi (Beranda tahap): jarang berubah, boleh tertunda beberapa menit
+  ["/api/portal/siaran-petugas", { ...dasar, segarMs: 3 * MENIT, interval: 0 }],
+  ["/api/portal/identifikasi/rekap", { ...dasar, segarMs: 2 * MENIT, interval: 0, hariBaru: true }],
 ];
 const PROFIL_BAWAAN: Profil = { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT };
 
@@ -86,6 +97,8 @@ const ATURAN_TULIS: [string, string[]][] = [
   // (27 Okt 2026) menyimpan Lembar Quality Check / mengunggah kuesioner (admin) -> hanya daftar lembar/kuesioner yang basi; Hasil QC Pemahaman dan Monitoring tidak terpengaruh
   ["/api/portal/qc/kuesioner", ["/api/portal/qc/kuesioner"]],
   ["/api/sigap/pelatihan", ["/api/sigap/pelatihan"]],
+  // (28 Okt 2026) "Saya mengerti" pada siaran hanya membuat daftar siaran basi (dulu: path tak dikenal -> semua simpanan ditandai basi)
+  ["/api/portal/siaran-petugas", ["/api/portal/siaran-petugas"]],
   ["/api/portal/sso", []],
 ];
 
@@ -223,6 +236,15 @@ export async function siapkanData<T>(path: string, segarMs?: number): Promise<T>
   const c = bacaCache<T>(path);
   if (c && !basi(path, segarMs)) return c.data;
   return muatData<T>(path);
+}
+
+/** Isi simpanan dengan data yang diambil lewat jalur lain (mis. fungsi basis data via POST); kunci bebas, profil dicocokkan menurut awalannya. */
+export function isiCache<T>(kunci: string, data: T, mulai: number = Date.now()): void {
+  pastikanPemilik();
+  if (!pemilikMemori) return;
+  memori.set(kunci, { data, at: mulai, tiba: Date.now(), sk: profilDari(kunci).skema });
+  jadwalkanSimpan();
+  beritahu(kunci);
 }
 
 /** Ubah data tersimpan di tempat (mis. hasil yang baru disimpan) tanpa menunggu server; tanda "segar" tidak berubah. */

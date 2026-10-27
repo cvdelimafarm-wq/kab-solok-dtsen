@@ -10,7 +10,9 @@
 // Sub SLS yang belum diidentifikasi ikut tampil (abu-abu) -- permintaan user; cakupannya SLS yang sudah dialokasikan ke PML. Data diambil saat lembar dibuka (selalu terbaru).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { bacaCache, muatData } from "@/app/portal/dataBersama";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
+import { hariWib } from "@/lib/sigapCacheKerja";
 import {
   LABEL_STATUS_REKAP,
   barisExcel,
@@ -88,11 +90,19 @@ export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boole
 
   const muat = useCallback(async () => {
     if (!bacaSesi()) return;
-    setMemuat(true);
-    try {
-      const d = await apiPortal<{ sekarang: string; baris: unknown; pml?: unknown }>("/api/portal/identifikasi/rekap");
+    // (28 Okt 2026) lewat simpanan bersama: pembukaan pertama langsung terisi dari simpanan/prefetch Beranda; tetap selalu diambil ulang di belakang
+    const PATH = "/api/portal/identifikasi/rekap";
+    type Jawab = { sekarang: string; baris: unknown; pml?: unknown };
+    const terap = (d: Jawab) => {
       setData({ sekarang: d.sekarang, baris: periksaBarisRekap(d.baris), pml: periksaBarisPmlJadi(d.pml) });
       setGalat(null);
+    };
+    const c = bacaCache<Jawab>(PATH);
+    const adaSimpanan = !!c && hariWib(c.tiba) === hariWib(Date.now());
+    if (c && adaSimpanan) terap(c.data);
+    else setMemuat(true);
+    try {
+      terap(await muatData<Jawab>(PATH));
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat rekap. Periksa sambungan lalu coba lagi.");
     } finally {

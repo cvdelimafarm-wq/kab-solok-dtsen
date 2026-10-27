@@ -37,6 +37,7 @@ import PetaOtomatis from "./PetaOtomatis";
 import PembaruanTersedia from "./PembaruanTersedia";
 import BannerAntrean from "./BannerAntrean";
 import { kirimAntrean } from "./antreanKirim";
+import { PATH_RINGKAS } from "@/app/sigap/admin/api";
 import { buatRencana, useSiapkan, type Rencana } from "./siapkan";
 
 type Data = { nama: string; jenis: string; peran: string[]; peran_tautan?: Record<string, string | null>; peran_chip?: { label: string; href: string | null }[]; admin_aplikasi: boolean; kartu: Kartu[]; pin_bawaan?: boolean; super_akun?: boolean };
@@ -265,7 +266,9 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const nama = data?.nama ?? dtsen?.nama ?? "";
   const menu = kartu.filter((k) => k.grup !== "kelola");
   const kelola = kartu.filter((k) => k.grup === "kelola");
-  const menuUrut = [...menu].sort((a, b) => {
+  // (28 Okt 2026) Menu cadangan tombol "Masukan" melayang: selalu ada di "Menu umum" bagi akun SIGAP yang masuk (bukan operator DTSEN).
+  const kartuMasukan: Kartu[] = data && !dtsen ? [{ kode: "masukan", grup: "referensi", judul: "Kirim masukan", uraian: "Laporkan galat, usul perbaikan, atau bertanya.", href: "/sigap/masukan" }] : [];
+  const menuUrut = [...menu, ...kartuMasukan].sort((a, b) => {
     const rank = (k: Kartu) => (k.grup === "tugas" ? 1 : k.grup === "referensi" ? 2 : 3);
     return rank(a) - rank(b);
   });
@@ -280,6 +283,35 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const PENGUJI_DELEGO = ["mailani putri", "nurafiza thamrin", "dina marizka"];
   const namaAkun = (data?.nama ?? "").trim().toLowerCase();
   const tampilDelego = !!data?.super_akun || (namaAkun !== "" && PENGUJI_DELEGO.some((n) => namaAkun.startsWith(n)));
+
+  // (28 Okt 2026) Prefetch tahap 2 (permintaan user: halaman lain bagi PPL/PML/korwil/admin): data halaman Transport lokal (bila akun punya kartunya) dan
+  // "ringkas" admin (bila punya menu pengelolaan) diambil di belakang, diurut terakhir (terberat); Delego disiapkan bila ubinnya tampil.
+  const punyaTranslok = !!data?.kartu.some((k) => k.kode.startsWith("translok-"));
+  const punyaKelola = kelola.length > 0;
+  const rencanaTambahan: Rencana = useMemo(() => {
+    const d: string[] = [];
+    if (punyaKelola) d.push(PATH_RINGKAS);
+    if (induk?.some((i) => i.identifikasi)) d.push("/api/portal/identifikasi/rekap"); // PML: Rekap Identifikasi
+    if (punyaTranslok) {
+      d.push("/api/portal/siaran-petugas"); // siaran untuk petugas pendataan (modal di halaman tahap)
+      try {
+        const tok = localStorage.getItem(KUNCI.tokenPetugas);
+        if (tok) d.push(`/api/sigap/translok/${tok}`);
+      } catch {
+        /* penyimpanan tidak tersedia */
+      }
+    }
+    return { rute: [], data: d };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [punyaKelola, punyaTranslok, induk]);
+  useSiapkan(rencanaTambahan, !dtsen);
+  useEffect(() => {
+    if (!tampilDelego || !data) return;
+    const t = setTimeout(() => {
+      import("@/app/sigap/delego/data").then((m) => m.siapkanDelego()).catch(() => {});
+    }, 2500); // setelah tujuan utama Beranda selesai disiapkan
+    return () => clearTimeout(t);
+  }, [tampilDelego, data]);
 
   return (
     <main className="min-h-screen bg-[#F5F8FE] pb-12 text-[#1B2B4B]">

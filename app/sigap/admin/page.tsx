@@ -19,7 +19,7 @@ import Link from "next/link";
 import TombolKembali from "@/app/components/TombolKembali";
 import { useDetak } from "../useDetak";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ambil, bacaSesi, bolehKlien, keluar, keMasuk, pesanGalat, rentangPendek, SesiBerakhir, tglPanjang, type Ringkas } from "./api";
+import { ambil, ambilRingkas, bacaSesi, bolehKlien, keluar, keMasuk, pesanGalat, rentangPendek, SesiBerakhir, tglPanjang, type Ringkas } from "./api";
 import { BarisTab, HeaderAdmin, LayarPenuh, Pesan, Putar, type ItemTab } from "./ui";
 import Shell, { MENU_ADMIN, type KodeTabAdmin } from "./Shell";
 import type { ItemPalet } from "./PaletPerintah";
@@ -56,7 +56,7 @@ export default function AdminTransportLokal() {
 
   const muat = useCallback(async (pilih?: number) => {
     try {
-      const d = await ambil<Ringkas>("ringkas");
+      const d = await ambilRingkas();
       setR(d);
       setGalat(null);
       setKegId((lama) => {

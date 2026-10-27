@@ -78,6 +78,8 @@ export type IzinMenuSidebar = {
   akses: boolean;
   aplikasi: boolean;
   delego: boolean;
+  /** (28 Okt 2026) "Usulan perbaikan": admin aplikasi (portal.kelola = kelola) membaca masukan pengguna. */
+  usulan: boolean;
 };
 
 function jika(syarat: boolean, ...item: ItemMenu[]): ItemMenu[] {
@@ -197,6 +199,9 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
           ketPalet: "kelola aplikasi, admin & periode",
         }),
         ...jika(i.delego, { id: "delego", ikon: "tautan", label: "Delego", href: "/sigap/kelola/delego", title: "Buka Delego", ketPalet: "aplikasi delegasi kerja" }),
+        // (28 Okt 2026) Menu cadangan tombol "Masukan" melayang: semua akun; "Usulan perbaikan" (baca & tangani usulan) hanya admin aplikasi.
+        { id: "kirim-masukan", ikon: "siaran", label: "Kirim masukan", href: "/sigap/masukan", aktifKode: "masukan", title: "Kirim masukan, laporkan galat, atau ajukan saran perbaikan aplikasi", ketPalet: "laporkan galat, saran, pertanyaan" },
+        ...jika(i.usulan, { id: "usulan-perbaikan", ikon: "lonceng", label: "Usulan perbaikan", href: "/sigap/kelola/masukan", aktifKode: "masukan_kelola", title: "Masukan dari pengguna: baca, tandai diproses/selesai, beri catatan", ketPalet: "masukan pengguna, galat, saran" }),
       ],
     },
   };

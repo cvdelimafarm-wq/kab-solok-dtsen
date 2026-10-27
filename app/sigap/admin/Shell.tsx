@@ -20,8 +20,8 @@ import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
 // (24 Okt 2026) + "anggaran" (halaman Anggaran: daftar RO, ruang kerja RO, jadwal revisi, realisasi -- /sigap/ro, /sigap/revisi, /sigap/realisasi)
 // (11 Okt 2026) + "perencanaan" (uji coba Perencanaan kegiatan: RO -> kegiatan utama -> tahap GSBPM; /sigap/kelola/perencanaan)
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei">;
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [
@@ -276,6 +276,7 @@ export default function Shell({
         akses: bolehAkses,
         aplikasi: bolehAplikasi,
         delego: bolehDelego,
+        usulan: bolehPerencanaan, // (28 Okt 2026) sama dengan admin aplikasi (portal.kelola = kelola)
       }),
     [tokenPetugas, subAdmin.length, bolehPerencanaan, bolehPelatihanKelola, bolehKontrak, bolehPediaKelola, bolehLapangan, bolehPendataanKelola, bolehAkses, bolehAplikasi, bolehDelego]
   );
@@ -471,6 +472,9 @@ export default function Shell({
                 <div className="mt-3 border-t border-[#EDF0F4] pt-2">
                   <Link href="/" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#14202E] hover:bg-[#F8FAFC]">
                     Portal utama
+                  </Link>
+                  <Link href="/sigap/masukan" role="menuitem" className="block rounded-md px-2 py-1.5 text-[12.5px] text-[#14202E] hover:bg-[#F8FAFC]">
+                    Kirim masukan
                   </Link>
                   <button type="button" role="menuitem" onClick={keluar} className="block w-full rounded-md px-2 py-1.5 text-left text-[12.5px] font-bold text-red-700 hover:bg-red-50">
                     Keluar

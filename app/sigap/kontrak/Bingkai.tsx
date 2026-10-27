@@ -6,14 +6,16 @@
 // Ctrl K) -- desain "SIGAP · Monitoring kegiatan" dari user diterapkan ke semua halaman SIGAP.
 // Layar lebar: sidebar + judul halaman (h1 22px + keterangan) + aksi kanan. HP: header navy + tab.
 
-import { useEffect, useState } from "react";
-import { ambil, keluar, SesiBerakhir, type Ringkas } from "../admin/api";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { ambilRingkas, keluar, ringkasTersimpan, SesiBerakhir, type Ringkas } from "../admin/api";
 import { BarisTab, HeaderAdmin, PitaGeser, type ItemTab } from "../admin/ui";
 import Shell, { type KodeMenu } from "../admin/Shell";
 import TombolKembali from "@/app/components/TombolKembali";
 
 /** (23 Okt 2026) Tombol Kembali seragam. Bawaan: tampil, tujuan = ?dari= atau induk logis halaman. `false` = tanpa tombol (mis. halaman yang disematkan). */
 export type OpsiKembali = false | { induk?: string; label?: string; onKlik?: () => void };
+
+const useTataLetak = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export default function Bingkai<K extends string>({
   aktif = "kontrak",
@@ -46,11 +48,16 @@ export default function Bingkai<K extends string>({
   children: React.ReactNode;
 }) {
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
+  // (28 Okt 2026) sidebar/judul tampil seketika dari simpanan (tanpa menunggu server), lalu diperbarui diam-diam; isi sama -> objek lama dipertahankan
+  useTataLetak(() => {
+    const c = ringkasTersimpan();
+    if (c) setRingkas((lama) => lama ?? c);
+  }, []);
   useEffect(() => {
-    ambil<Ringkas>("ringkas")
-      .then(setRingkas)
+    ambilRingkas()
+      .then((d) => setRingkas((lama) => (lama && JSON.stringify(lama) === JSON.stringify(d) ? lama : d)))
       .catch((e) => {
-        if (!(e instanceof SesiBerakhir)) setRingkas({ nama: "", peran: [], izin: {}, kegiatan: [], hari_ini: new Date().toISOString().slice(0, 10) });
+        if (!(e instanceof SesiBerakhir)) setRingkas((lama) => lama ?? { nama: "", peran: [], izin: {}, kegiatan: [], hari_ini: new Date().toISOString().slice(0, 10) });
       });
   }, []);
 

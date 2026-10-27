@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
-import { useData } from "@/app/portal/dataBersama";
+import { bacaCache, muatData, siapkanData, useData } from "@/app/portal/dataBersama";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import {
   LABEL_SKOR,
@@ -94,14 +94,20 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }
   const muatKk = useCallback(
     async (ppl: number) => {
       if (kelompokAktif == null) return;
-      try {
-        const r = await apiPortal<Data>(`/api/portal/qc/kuesioner?kelompok=${kelompokAktif}&ppl=${ppl}`);
+      // (28 Okt 2026) lewat simpanan bersama: daftar KK PPL yang pernah dibuka/disiapkan langsung tampil, lalu diperbarui di belakang
+      const path = `/api/portal/qc/kuesioner?kelompok=${kelompokAktif}&ppl=${ppl}`;
+      const terap = (r: Data) => {
         setKkDaftar(r.kk ?? []);
         if (kkTertunda.current != null) {
           setKkId(kkTertunda.current);
           kkTertunda.current = null;
         }
         setGalat(null);
+      };
+      const c = bacaCache<Data>(path);
+      if (c) terap(c.data);
+      try {
+        terap(await muatData<Data>(path));
       } catch (e) {
         if (e instanceof Error && e.message === "SESI_BERAKHIR") return;
         setGalat(pesanGalat(e));
@@ -131,6 +137,23 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }
   const ku = d?.kuesioner[objek] ?? null;
   const struktur = ku?.struktur ?? null;
   const calon = useMemo(() => (d ? d.anggota.filter((a) => (objek === "kk" ? a.peran === "ppl" : a.akun_id !== d.saya_akun_id)) : []), [d, objek]);
+  // (28 Okt 2026) Prefetch: saat memeriksa KK, daftar KK semua PPL di kelompok ini disiapkan di belakang (satu per satu), jadi berpindah PPL tidak menunggu server
+  useEffect(() => {
+    if (objek !== "kk" || kelompokAktif == null || calon.length === 0) return;
+    let batal = false;
+    (async () => {
+      await new Promise((ok) => setTimeout(ok, 800));
+      for (const a of calon.slice(0, 12)) {
+        const n = navigator as Navigator & { connection?: { saveData?: boolean } };
+        if (batal || document.visibilityState !== "visible" || n.onLine === false || n.connection?.saveData) return;
+        await siapkanData(`/api/portal/qc/kuesioner?kelompok=${kelompokAktif}&ppl=${a.akun_id}`, 2 * 60_000).catch(() => undefined);
+        await new Promise((ok) => setTimeout(ok, 200));
+      }
+    })();
+    return () => {
+      batal = true;
+    };
+  }, [objek, kelompokAktif, calon]);
   const ada = useMemo(() => {
     if (!d || !ku || !subjek || !tanggal) return null;
     return d.lembar.find((l) => l.objek === objek && l.versi === ku.versi && l.tanggal === tanggal && l.subjek_akun_id === subjek && (objek === "petugas" || l.kk_id === kkId) && l.pemeriksa_akun_id === d.saya_akun_id) ?? null;

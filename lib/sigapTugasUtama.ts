@@ -198,6 +198,7 @@ export function ikonKartu(kode: string, judul?: string): IkonKode {
   if (kode === "pelatihan-undangan") return "surat";
   if (kode === "pelatihan-instrumen") return "arsip";
   if (kode === "pelatihan-kelola") return "kelola";
+  if (kode === "masukan") return "surat"; // (28 Okt 2026) menu cadangan "Kirim masukan" di Beranda
   if (kode.startsWith("admin-")) return "kelola";
   return "arsip";
 }

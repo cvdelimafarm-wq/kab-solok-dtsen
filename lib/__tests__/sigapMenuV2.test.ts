@@ -15,6 +15,7 @@ const SEMUA: IzinMenuSidebar = {
   akses: true,
   aplikasi: true,
   delego: true,
+  usulan: true,
 };
 const KOSONG: IzinMenuSidebar = {
   tokenPetugas: null,
@@ -28,6 +29,7 @@ const KOSONG: IzinMenuSidebar = {
   akses: false,
   aplikasi: false,
   delego: false,
+  usulan: false,
 };
 
 const semuaItem = (i: IzinMenuSidebar): ItemMenu[] => susunMenu(i).flatMap((k) => k.item);
@@ -97,9 +99,9 @@ describe("susunMenu v2", () => {
     );
   });
 
-  it("tanpa izin apa pun: hanya Beranda, Identifikasi survei, Anggaran, SIGAP PEDIA, dan item segera/nonaktif", () => {
+  it("tanpa izin apa pun: hanya Beranda, Identifikasi survei, Anggaran, SIGAP PEDIA, Kirim masukan, dan item segera/nonaktif", () => {
     const hidup = semuaItem(KOSONG).filter((x) => !x.status);
-    expect(hidup.map((x) => x.id)).toEqual(["beranda", "identifikasi-survei", "anggaran", "pedia"]); // (25 Okt 2026) Identifikasi survei terbuka bagi semua akun organik
+    expect(hidup.map((x) => x.id)).toEqual(["beranda", "identifikasi-survei", "anggaran", "pedia", "kirim-masukan"]); // (25 Okt 2026) Identifikasi survei terbuka bagi semua akun organik
   });
 
   it("izin pelatihan: halaman peserta tampil untuk petugas, Kelola pelatihan hanya untuk pengelola", () => {
@@ -142,9 +144,9 @@ describe("susunMenu v2", () => {
 
   it("Pengelolaan memuat SDM & Mitra, Tata kelola, SIGAP PEDIA, Kantor, Diseminasi lalu item pengaturan sesuai izin", () => {
     const k = susunMenu(SEMUA).find((x) => x.kode === "pengelolaan")!;
-    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego"]);
+    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego", "kirim-masukan", "usulan-perbaikan"]);
     const kosong = susunMenu(KOSONG).find((x) => x.kode === "pengelolaan")!;
-    expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi"]);
+    expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "kirim-masukan"]);
   });
 
   it("Perencanaan: Perencanaan kegiatan (id alur-gsbpm) hanya untuk Admin Aplikasi; Identifikasi survei dan Anggaran terbuka untuk semua", () => {
@@ -165,5 +167,17 @@ describe("nama payung", () => {
   it("sama dengan nama portal dan tidak lagi memakai nama modul anggaran lama", () => {
     expect(NAMA_PORTAL).toContain(NAMA_PAYUNG);
     expect(NAMA_PAYUNG).not.toMatch(/Gerak Anggaran/i);
+  });
+});
+
+describe("menu masukan", () => {
+  it("Kirim masukan untuk semua akun; Usulan perbaikan hanya untuk admin aplikasi (28 Okt 2026)", () => {
+    expect(cari(KOSONG, "kirim-masukan")).toMatchObject({ href: "/sigap/masukan", aktifKode: "masukan" });
+    expect(cari(KOSONG, "usulan-perbaikan")).toBeUndefined();
+    expect(cari(SEMUA, "usulan-perbaikan")).toMatchObject({ href: "/sigap/kelola/masukan", aktifKode: "masukan_kelola" });
+    expect(cari({ ...KOSONG, usulan: true }, "usulan-perbaikan")).toBeDefined();
+    // keduanya ada di kelompok Pengelolaan
+    const peng = susunMenu(SEMUA).find((k) => k.kode === "pengelolaan")!;
+    expect(peng.item.map((x) => x.id)).toEqual(expect.arrayContaining(["kirim-masukan", "usulan-perbaikan"]));
   });
 });

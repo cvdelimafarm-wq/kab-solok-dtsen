@@ -7,6 +7,7 @@ import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
 import PingAplikasi from "@/app/components/PingAplikasi";
 import BannerLihatSebagai from "@/app/components/BannerLihatSebagai";
+import TombolMasukan from "@/app/components/TombolMasukan";
 import TutupSementara from "@/app/components/TutupSementara";
 import QcGerbang from "@/app/portal/qc/QcGerbang";
 
@@ -72,6 +73,8 @@ export default function RootLayout({
         <PingAplikasi />
         {/* (10 Okt 2026) spanduk mode "masuk sebagai" untuk akun super (uji tampilan PPL/PML) */}
         <BannerLihatSebagai />
+        {/* (28 Okt 2026) tombol "Masukan" melayang (bisa diseret) untuk akun yang masuk, di Beranda dan halaman SIGAP */}
+        <TombolMasukan />
         {/* (10 Okt 2026) SIGAP ditutup sementara s.d. 13.00 WIB untuk semua selain akun super ("menyiapkan lembar kerja identifikasi SLS") */}
         <TutupSementara />
         <QcGerbang />

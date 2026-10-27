@@ -4,9 +4,14 @@
 //
 // (19 Okt 2026) Pemeriksaan foto kuning/merah oleh PML (timnya) dan admin. Menandai "Diperiksa" melepas tag yang ditahan
 // ke nomor foto; "Dipertanyakan" hanya menandai (alasan wajib) dan TIDAK mencabut baris nomor foto yang sudah terisi.
+// (28 Okt 2026) Daftar tampil seketika dari simpanan bersama (dataBersama.ts) lalu diperbarui di belakang; foto dimuat hanya saat kartu mendekati layar
+// (versi kecil dulu, lalu foto asli), dan foto kartu-kartu berikutnya disiapkan lebih dulu. Dulu daftar selalu menunggu server dan SEMUA foto asli dimuat sekaligus.
 
-import { useCallback, useEffect, useState } from "react";
-import { ambilFotoUrl, ambilJson } from "./klien";
+import { useEffect, useRef, useState } from "react";
+import { ambilJson } from "./klien";
+import { ambilFotoUrlCache, siapkanFoto, sudahAdaFoto } from "./cacheFoto";
+import { useData } from "@/app/portal/dataBersama";
+import type { UkuranBerkas } from "@/lib/sigapCacheFoto";
 import { LABEL_ALASAN, LABEL_KEPERCAYAAN, labelFotoTanpaSinyal, WARNA_KEPERCAYAAN, type Kepercayaan } from "@/lib/sigapFoto";
 
 /** 850 -> "850 m", 3276 -> "3,3 km". */
@@ -14,17 +19,37 @@ const kmM = (m: number): string => (m < 1000 ? `${Math.round(m)} m` : `${(m / 10
 type Baris = { id: number; kode: string; pemotret: string; tanggal: string; diambil_at: string; diterima_at?: string | null; lokasi_teks: string | null; jarak_wilayah_m: number | null; jarak_rumah_m?: number | null; akurasi_m: number | null; kepercayaan: Kepercayaan; alasan: string[] };
 
 function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
+  const kotak = useRef<HTMLLIElement>(null);
+  const [lihat, setLihat] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [alasan, setAlasan] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
   const [terbalik, setTerbalik] = useState(false);
   useEffect(() => {
+    const el = kotak.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") { setLihat(true); return; }
+    const io = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting)) { setLihat(true); io.disconnect(); } }, { rootMargin: "700px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!lihat) return;
     let batal = false;
-    let u: string | null = null;
-    ambilFotoUrl(b.id).then((x) => { if (batal) URL.revokeObjectURL(x); else { u = x; setUrl(x); } }).catch(() => undefined);
-    return () => { batal = true; if (u) URL.revokeObjectURL(u); };
-  }, [b.id]);
+    const dipakai: string[] = [];
+    const pasang = (u: string) => { if (batal) URL.revokeObjectURL(u); else { dipakai.push(u); setUrl(u); } };
+    (async () => {
+      try {
+        if (!sudahAdaFoto(b.id, "penuh")) {
+          const dulu: UkuranBerkas | null = sudahAdaFoto(b.id, "kecil") ? "kecil" : null;
+          pasang(await ambilFotoUrlCache(b.id, dulu ?? "kecil"));
+        }
+        pasang(await ambilFotoUrlCache(b.id, "penuh"));
+      } catch { /* foto tidak termuat: kerangka tetap, kartu tetap bisa diputuskan */ }
+    })();
+    return () => { batal = true; dipakai.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [lihat, b.id]);
   async function tandai(hasil: "diperiksa" | "dipertanyakan") {
     setSibuk(true);
     setPesan(null);
@@ -38,7 +63,7 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
     }
   }
   return (
-    <li className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3">
+    <li ref={kotak} className="flex flex-col gap-2 rounded-2xl border border-[#C9D3E6] bg-white p-3">
       {url ? (
         <div className="relative overflow-hidden rounded-lg bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,14 +103,17 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
 }
 
 export default function PeriksaFoto() {
-  const [daftar, setDaftar] = useState<Baris[] | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
-  const muat = useCallback(() => {
-    ambilJson<{ foto: Baris[] }>("/api/sigap/foto/periksa").then((d) => { setDaftar(d.foto); setGalat(null); }).catch((e: Error) => setGalat(e.message));
-  }, []);
-  useEffect(muat, [muat]);
-  if (galat) return <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div>;
-  if (!daftar) return <div className="text-sm text-[#3C4C68]">Memuat…</div>;
+  const d = useData<{ foto: Baris[] }>("/api/sigap/foto/periksa");
+  const daftar = d.data?.foto ?? null;
+  const galat = d.galat && d.galat !== "SESI_BERAKHIR" ? d.galat : null;
+  // foto tiga kartu pertama (versi kecil) disiapkan di belakang layar sebelum digulir ke sana
+  useEffect(() => {
+    if (daftar) siapkanFoto(daftar.map((b) => b.id), "kecil", 3);
+  }, [daftar]);
+  if (!daftar) {
+    if (galat) return <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div>;
+    return <div className="text-sm text-[#3C4C68]">Memuat…</div>;
+  }
   if (!daftar.length) return <div className="rounded-lg bg-[#EEF2F7] px-3 py-2 text-xs text-[#3C4C68]">Tidak ada foto yang perlu diperiksa.</div>;
-  return <ul className="flex flex-col gap-3">{daftar.map((b) => <Kartu key={b.id} b={b} muat={muat} />)}</ul>;
+  return <ul className="flex flex-col gap-3">{daftar.map((b) => <Kartu key={b.id} b={b} muat={() => void d.muat()} />)}</ul>;
 }

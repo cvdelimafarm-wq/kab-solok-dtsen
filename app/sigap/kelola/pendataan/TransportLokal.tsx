@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
-import { ambil, bolehKlien, pesanGalat, SesiBerakhir, type Ringkas } from "../../admin/api";
+import { ambilRingkas, bolehKlien, pesanGalat, SesiBerakhir, type Ringkas } from "../../admin/api";
 import { Memuat, Pesan } from "../../admin/ui";
 import TabKegiatan from "../../admin/TabKegiatan";
 import TabMonitoring from "../../admin/TabMonitoring";
@@ -24,8 +24,8 @@ export default function TransportLokal({ bagian }: { bagian: BagianTranslok }) {
 
   useEffect(() => {
     let batal = false;
-    ambil<Ringkas>("ringkas")
-      .then((d) => !batal && setR(d))
+    ambilRingkas()
+      .then((d) => !batal && setR((lama) => (lama && JSON.stringify(lama) === JSON.stringify(d) ? lama : d)))
       .catch((e) => {
         if (!batal && !(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
       });

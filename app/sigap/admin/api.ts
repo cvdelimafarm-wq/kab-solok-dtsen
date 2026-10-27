@@ -4,6 +4,9 @@
 // -- permintaan user. Sesi dibaca dari localStorage (sigap_sesi + sigap_sesi_sampai), dikirim sebagai
 // header Authorization: Bearer <sesi>. Sesi tidak ada / kedaluwarsa / API 401 -> ke /sigap/masuk?lanjut=<path>.
 
+import { bacaCache, muatData } from "@/app/portal/dataBersama";
+import { simpananHariIni } from "@/lib/sigapCacheKerja";
+
 export const KUNCI_SESI = "sigap_sesi";
 export const KUNCI_SESI_SAMPAI = "sigap_sesi_sampai";
 
@@ -90,6 +93,31 @@ export async function aksi<T = { ok: boolean }>(nama: string, isi: Record<string
     body: JSON.stringify({ aksi: nama, ...isi }),
   });
   return olah<T>(res);
+}
+
+/**
+ * (28 Okt 2026) "Ringkas" admin (izin, peran, kegiatan) lewat simpanan bersama (dataBersama.ts): sidebar, judul, dan izin langsung tampil dari HP,
+ * lalu diperbarui di belakang. Dipakai Bingkai, TransportLokal, dan halaman Admin; Beranda menyiapkannya lebih dulu untuk akun pengelola.
+ */
+export const PATH_RINGKAS = "/api/sigap/admin?bagian=ringkas";
+
+/** Ringkas tersimpan milik akun yang masuk, hanya bila disusun hari ini (null bila tidak ada). */
+export function ringkasTersimpan(): Ringkas | null {
+  const c = bacaCache<Ringkas>(PATH_RINGKAS);
+  return c && simpananHariIni(c.data.hari_ini, Date.now()) ? c.data : null;
+}
+
+/** Ringkas segar dari server (permintaan sama dibagi, simpanan diperbarui). 401 diperlakukan sama seperti `ambil`: ke halaman masuk + SesiBerakhir. */
+export async function ambilRingkas(): Promise<Ringkas> {
+  try {
+    return await muatData<Ringkas>(PATH_RINGKAS);
+  } catch (e) {
+    if (e instanceof Error && e.message === "SESI_BERAKHIR") {
+      keMasuk();
+      throw new SesiBerakhir();
+    }
+    throw e;
+  }
 }
 
 /** Fetch bebas (mis. multipart / GET lain) dengan header Bearer + penanganan 401. */

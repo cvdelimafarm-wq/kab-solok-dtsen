@@ -1,12 +1,13 @@
 "use client";
 
-import { use as usePromise, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { use as usePromise, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import LogoSigap from "@/app/components/LogoSigap";
 import TombolKembali from "@/app/components/TombolKembali";
 import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
 import { bacaLihatSebagai, bacaSesi } from "@/app/portal/sesi";
 import FotoSaya from "@/app/sigap/foto/FotoSaya";
-import { siapkanData } from "@/app/portal/dataBersama";
+import { bacaCache, muatData, siapkanData } from "@/app/portal/dataBersama";
+import { buangUrlFotoLama, galatMuatKerja, simpananHariIni } from "@/lib/sigapCacheKerja";
 import { DATA_SUPERVISI_QC_DULU } from "@/app/portal/siapkan";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
@@ -163,6 +164,30 @@ async function kirimJson(token: string, body: Record<string, unknown>) {
   return json;
 }
 
+// (28 Okt 2026) Data halaman ini disimpan di HP (dataBersama.ts): dibuka kembali (juga setelah Kembali dari Kamera, atau aplikasi baru dibuka) langsung
+// tampil dari simpanan, lalu diperbarui diam-diam. Tanpa sesi portal (tautan token dari WhatsApp), tetap memuat langsung dari server seperti sebelumnya.
+const useTataLetak = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+type GalatHttp = Error & { status?: number };
+
+async function ambilDataKerja(token: string): Promise<Data> {
+  const path = `/api/sigap/translok/${token}`;
+  if (bacaSesi()) return muatData<Data>(path);
+  let res: Response;
+  try {
+    res = await fetch(path, { cache: "no-store" });
+  } catch (e) {
+    throw new Error(e instanceof Error ? e.message : "Tidak ada sambungan.") as GalatHttp; // tanpa status = jaringan
+  }
+  // jawaban 502/HTML tidak menjadi layar galat mentah: dibaca aman, lalu dibedakan menurut status
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const g: GalatHttp = new Error(json?.error ?? `Gagal (${res.status})`);
+    g.status = res.status;
+    throw g;
+  }
+  return json as Data;
+}
+
 // ======================================================================
 export default function SigapPetugas({ params }: { params: Promise<{ token: string }> }) {
   const { token } = usePromise(params);
@@ -184,16 +209,16 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   // (23 Okt 2026) panduan login pertama diputuskan SEKALI saat data pertama masuk (muat ulang sesudah menyimpan tidak boleh memunculkannya)
   const panduanDiputuskan = useRef(false);
 
+  // tampilkan simpanan SEBELUM digambar pertama kali (tanpa kerangka kosong bila data sudah ada); tautan foto yang sudah kedaluwarsa dibuang
+  useTataLetak(() => {
+    const c = bacaCache<Data>(`/api/sigap/translok/${token}`);
+    if (c && simpananHariIni(c.data.hari_ini, Date.now())) setData((lama) => lama ?? buangUrlFotoLama(c.data, Date.now() - c.tiba));
+  }, [token]);
+
   const muat = useCallback(async () => {
     try {
-      const res = await fetch(`/api/sigap/translok/${token}`, { cache: "no-store" });
-      // (14 Okt 2026) jawaban 502/HTML tidak lagi menjadi layar galat mentah: dibaca aman, lalu dibedakan menurut status
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        setSesiTidakSah(res.status === 404);
-        throw new Error(json?.error ?? (res.status >= 500 ? "Server sedang sibuk. Coba lagi sebentar lagi." : "Gagal memuat."));
-      }
-      setData(json as Data);
+      const json = await ambilDataKerja(token);
+      setData(json);
       setLoadError(null);
       setSesiTidakSah(false);
       // (23 Okt 2026) Panduan login pertama TIDAK menelan tautan dalam: bila alamat membawa ?tab=/?tgl=/?fokus= (mis. tombol "Rapikan nomor foto"
@@ -206,11 +231,12 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         } catch {
           /* abaikan */
         }
-        if (!adaTautan && !(json as Data).akun.onboarding_selesai) setLangkah((l) => (l === null ? 1 : l));
+        if (!adaTautan && !json.akun.onboarding_selesai) setLangkah((l) => (l === null ? 1 : l));
       }
     } catch (e) {
-      // gagal sambung (TypeError dari fetch) = jaringan, bukan sesi habis
-      setLoadError(e instanceof TypeError ? "Koneksi terputus. Periksa sinyal, lalu coba lagi." : e instanceof Error ? e.message : "Gagal memuat.");
+      const g = galatMuatKerja(e);
+      if (g.sesiTidakSah || (e as GalatHttp).status !== undefined) setSesiTidakSah(g.sesiTidakSah);
+      setLoadError(g.pesan);
     }
   }, [token]);
   useEffect(() => {
