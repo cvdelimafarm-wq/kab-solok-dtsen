@@ -7,6 +7,8 @@
 // Lembar Quality Check (kuesioner QC yang diunggah admin; diisi korwil untuk petugas atau KK) dan Hasil QC Pemahaman (jawaban salah petugas per tim / matriks).
 // Tab Administrasi dihapus dari halaman ini (KorwilAdministrasi.tsx tidak lagi dipakai). Monitoring dan Hasil QC HANYA-BACA; Lembar Quality Check menulis lewat
 // /api/portal/qc/kuesioner. Akun dengan izin bencana.admin (lihat) boleh memilih kelompok lain. Data monitoring: /api/portal/korwil/monitoring (lib/portal/korwilMonitor.ts).
+// (27 Okt 2026) Tiap tab memuat datanya sendiri lewat simpanan bersama (dataBersama.ts) sehingga tab QC tidak menunggu Monitoring; datanya juga diambil lebih dulu
+// (prefetch) dari Beranda / halaman tahap (app/portal/siapkan.ts) dan dari formulir laporan translok korwil.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -107,14 +109,18 @@ export default function MonitoringKorwil() {
       </header>
 
       <div className="mx-auto max-w-xl space-y-3 px-3 pt-3">
-        {galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
-        {!data && !galat && (
+        {/* (27 Okt 2026) Lembar Quality Check dan Hasil QC memuat datanya SENDIRI (lewat simpanan bersama) -- tidak lagi menunggu Monitoring Lapangan,
+            yang paling berat di server. Kelompok: pilihan di atas, atau kelompok bawaan akun bila belum memilih (sama dengan yang dipakai Monitoring). */}
+        {tab === "kuesioner" && <KorwilLembarQc kelompok={pilih} />}
+        {tab === "hasil" && <KorwilHasilQc kelompok={pilih} />}
+        {tab === "lapangan" && galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
+        {tab === "lapangan" && !data && !galat && (
           <div className="rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]" aria-busy="true">
             <div className="h-3 w-32 animate-pulse rounded bg-[#E6EDF8]" />
             <div className="mt-4 h-24 animate-pulse rounded bg-[#EEF2F7]" />
           </div>
         )}
-        {data && L && (
+        {tab === "lapangan" && data && L && (
           <>
             {tab === "lapangan" && (
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -143,8 +149,6 @@ export default function MonitoringKorwil() {
               </p>
             )}
             {tab === "lapangan" && <KorwilLapangan lap={data.lapangan} bahan={data.selesai && data.harian ? { hariIni: data.hari_ini, selesai: data.selesai, harian: data.harian } : null} />}
-            {tab === "kuesioner" && <KorwilLembarQc kelompok={data.kelompok} />}
-            {tab === "hasil" && <KorwilHasilQc kelompok={data.kelompok} />}
             {tab === "lapangan" && (
               <p className="px-1 text-[11.5px] text-[#6B7A90]">
                 Diperbarui {jamWib(data.sekarang)} WIB · {L.tim} tim PML · {L.ppl} PPL. Data disegarkan otomatis tiap menit.

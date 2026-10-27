@@ -57,6 +57,13 @@ const PROFIL: [string, Profil][] = [
   // (19 Okt 2026) Monitoring Korwil: berubah setiap ada KK ditandai; cukup disegarkan tiap menit, status "hari ini" bergantung tanggal
   ["/api/portal/korwil/monitoring", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000, hariBaru: true }],
   ["/api/portal/spdt-monitoring", { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT, hariBaru: true }],
+  // (27 Okt 2026) Lembar Supervisi: Lembar Quality Check dan Hasil QC Pemahaman kini lewat simpanan (sebelumnya langsung ke server tiap dibuka dan
+  // menunggu Monitoring). Tampil seketika dari simpanan, diminta ulang di belakang bila > 2 menit saat dibuka; tanpa muat ulang berkala
+  // supaya isian yang sedang diketik tidak terganggu. Lembar disimpan -> ditandai basi (ATURAN_TULIS).
+  // (27 Okt 2026) Monitoring Lapangan (admin): sebelumnya selalu menunggu server; kini tampil dari simpanan, disegarkan tiap 2 menit saat terlihat (sama dengan sebelumnya)
+  ["/api/portal/lapangan", { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT, hariBaru: true }],
+  ["/api/portal/qc/kuesioner", { ...dasar, segarMs: 2 * MENIT, interval: 0, hariBaru: true }],
+  ["/api/portal/qc/hasil", { ...dasar, segarMs: 2 * MENIT, interval: 0, hariBaru: true }],
   // (27 Okt 2026) Kamera SIGAP: mode kegiatan (saklar kamera) jarang berubah -> kamera langsung tampil dari simpanan, diperbarui diam-diam bila > 2 menit.
   // Daftar "Foto saya" tampil seketika; diminta ulang bila > 20 detik saat dibuka, dan ditandai basi setelah kirim foto (KameraSigap.tsx).
   ["/api/sigap/foto/mode", { ...dasar, segarMs: 2 * MENIT, interval: 0 }],
@@ -76,6 +83,8 @@ const ATURAN_TULIS: [string, string[]][] = [
   ["/api/portal/identifikasi", ["/api/portal/identifikasi", "/api/portal/induk", "/api/portal/wilayah-tim"]],
   ["/api/portal/pendataan", ["/api/portal/pendataan", "/api/portal/induk"]],
   ["/api/portal/spdt-kk", ["/api/portal/spdt-monitoring"]], // (16 Okt 2026) mencatat koordinat dibuka -> Monitoring ikut diperbarui
+  // (27 Okt 2026) menyimpan Lembar Quality Check / mengunggah kuesioner (admin) -> hanya daftar lembar/kuesioner yang basi; Hasil QC Pemahaman dan Monitoring tidak terpengaruh
+  ["/api/portal/qc/kuesioner", ["/api/portal/qc/kuesioner"]],
   ["/api/sigap/pelatihan", ["/api/sigap/pelatihan"]],
   ["/api/portal/sso", []],
 ];

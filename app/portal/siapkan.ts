@@ -15,12 +15,21 @@ import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
 
 export type Rencana = { rute: string[]; data: string[] };
 
+/**
+ * (27 Okt 2026) Data Lembar Supervisi (kortim/korwil), dalam urutan diambil: Monitoring Lapangan dulu (terberat di server), lalu Lembar Quality Check
+ * dan Hasil QC Pemahaman. Alamat TANPA ?kelompok= sengaja sama dengan yang dibuka halaman Supervisi untuk kelompok bawaan (kunci simpanan sama).
+ */
+export const DATA_SUPERVISI = ["/api/portal/korwil/monitoring", "/api/portal/qc/kuesioner", "/api/portal/qc/hasil"];
+/** Sama, tetapi Lembar Quality Check didahulukan: untuk korwil yang sedang di formulir laporan translok dan akan membuka lembar itu. */
+export const DATA_SUPERVISI_QC_DULU = ["/api/portal/qc/kuesioner", "/api/portal/korwil/monitoring", "/api/portal/qc/hasil"];
+
 /** modul tahap -> API yang dibaca halaman kerjanya */
-const DATA_MODUL: Record<string, string> = {
-  wilayah_tim: "/api/portal/wilayah-tim",
-  identifikasi: "/api/portal/identifikasi",
-  pendataan: "/api/portal/pendataan", // (11 Okt 2026) Lembar Pendataan KK
-  spdt_lembar: "/api/portal/spdt-kk", // (16 Okt 2026) Lembar Pendataan SPDT NTP
+const DATA_MODUL: Record<string, string[]> = {
+  wilayah_tim: ["/api/portal/wilayah-tim"],
+  identifikasi: ["/api/portal/identifikasi"],
+  pendataan: ["/api/portal/pendataan"], // (11 Okt 2026) Lembar Pendataan KK
+  spdt_lembar: ["/api/portal/spdt-kk"], // (16 Okt 2026) Lembar Pendataan SPDT NTP
+  monitoring_korwil: DATA_SUPERVISI, // (27 Okt 2026) Lembar Supervisi: modul hanya tampil bagi kortim, jadi akun lain tidak ikut mengambilnya
 };
 
 const internal = (x: string | null | undefined): x is string => !!x && x.startsWith("/") && !x.startsWith("//");
@@ -36,8 +45,7 @@ export function buatRencana(tahap: TahapHasil[], pml: boolean): Rencana {
     if (internal(t.rute)) rute.add(t.rute);
     for (const m of t.modul) {
       if (m.kode === "wilayah_tim" && pml) continue; // (10 Okt 2026) wilayah tugas tim disembunyikan untuk PML
-      const api = DATA_MODUL[m.kode];
-      if (api) data.add(api);
+      for (const api of DATA_MODUL[m.kode] ?? []) data.add(api);
       // (11 Okt 2026) URL LENGKAP termasuk ?dari=... -- temuan audit: prefetch dulu membuang query, padahal Next menyimpan hasil per URL lengkap,
       // sehingga tombol "Isi sekarang" (/sigap/identifikasi?dari=...) tetap menunggu server (±400 ms).
       if (internal(m.href)) rute.add(m.href);

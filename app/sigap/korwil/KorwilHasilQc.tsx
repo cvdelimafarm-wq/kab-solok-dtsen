@@ -9,7 +9,7 @@
 // Saringan: tim, petugas, tanggal, dan percobaan yang dihitung (pertama / terakhir). Data: /api/portal/qc/hasil; hitungan: lib/korwilHasilQc.ts.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiPortal } from "@/app/portal/sesi";
+import { useData } from "@/app/portal/dataBersama";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import {
   SARINGAN_AWAL,
@@ -31,7 +31,6 @@ type Tampilan = "tim" | "matriks";
 const KOTAK = "rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]";
 const SELECT = "h-[44px] w-full rounded-[12px] border border-[#CBD6E6] bg-white px-3 text-[14px] text-[#1B2B4B]";
 const tglPendek = (t: string) => `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)}`;
-const pesanGalat = (e: unknown) => (e instanceof Error ? e.message : "Terjadi kesalahan.");
 const pct = (x: number | null) => (x == null ? "—" : `${x}%`);
 const warnaPersen = (x: number | null) => (x == null ? "bg-[#EEF2F7] text-[#5B6B84]" : x >= 80 ? "bg-[#E3F6EC] text-[#13794B]" : x >= 60 ? "bg-[#FFF4D6] text-[#8A6200]" : "bg-[#FDE8E8] text-[#B42329]");
 
@@ -119,9 +118,13 @@ function RincianKartu({ r, nama, soalSemua, setSoalSemua, onTutup }: { r: Rincia
   );
 }
 
-export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
-  const [d, setD] = useState<Data | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+/** kelompok: pilihan di halaman Supervisi; null = kelompok bawaan akun (server yang menentukan, sama dengan Monitoring). */
+export default function KorwilHasilQc({ kelompok }: { kelompok: number | null }) {
+  // (27 Okt 2026) Data lewat simpanan bersama (dataBersama.ts): tampil seketika dari simpanan / hasil prefetch, diperbarui di belakang; tidak menunggu Monitoring.
+  const hd = useData<Data>(`/api/portal/qc/hasil${kelompok ? `?kelompok=${kelompok}` : ""}`);
+  const d = hd.data;
+  const kelompokAktif = d?.kelompok ?? null;
+  const galat = !d && hd.galat && hd.galat !== "SESI_BERAKHIR" ? hd.galat : null;
   const [sar, setSar] = useState<Saringan>(SARINGAN_AWAL);
   const [tampil, setTampil] = useState<Tampilan>("tim");
   const [hanyaSalah, setHanyaSalah] = useState(true);
@@ -130,27 +133,23 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
   const [lihat, setLihat] = useState<number | null>(null); // petugas yang rinciannya dibuka
   const [soalSemua, setSoalSemua] = useState(false);
 
+  // tombol "Muat ulang": paksa ambil dari server sekarang
+  const muatUlang = hd.muat;
   const muat = useCallback(async () => {
     setSibuk(true);
     try {
-      const r = await apiPortal<Data>(`/api/portal/qc/hasil?kelompok=${kelompok}`);
-      setD(r);
-      setGalat(null);
-    } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return;
-      setGalat(pesanGalat(e));
+      await muatUlang();
     } finally {
       setSibuk(false);
     }
-  }, [kelompok]);
+  }, [muatUlang]);
 
+  // ganti kelompok: saringan dan rincian mulai dari awal
   useEffect(() => {
-    setD(null);
     setSar(SARINGAN_AWAL);
     setSorot(null);
     setLihat(null);
-    void muat();
-  }, [kelompok, muat]);
+  }, [kelompokAktif]);
 
   const opsi = useMemo(() => (d ? opsiSaringan(d.anggota, d.percobaan) : null), [d]);
   const h = useMemo(() => (d ? susunHasil(d.anggota, d.percobaan, d.soal, sar) : null), [d, sar]);

@@ -6,6 +6,8 @@ import TombolKembali from "@/app/components/TombolKembali";
 import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
 import { bacaLihatSebagai, bacaSesi } from "@/app/portal/sesi";
 import FotoSaya from "@/app/sigap/foto/FotoSaya";
+import { siapkanData } from "@/app/portal/dataBersama";
+import { DATA_SUPERVISI_QC_DULU } from "@/app/portal/siapkan";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
@@ -1891,6 +1893,23 @@ function FormRealisasi({
   const [kec, setKec] = useState("");
   const [nag, setNag] = useState("");
   const [jor, setJor] = useState("");
+
+  // (27 Okt 2026) Korwil yang membuka formulir laporan besar kemungkinan segera menekan "Buka Lembar Quality Check": data Lembar Supervisi diambil di belakang
+  // (satu per satu, hanya bila masuk dengan akun portal dan data belum segar) sehingga lembar langsung terbuka. Gagal -> diam; halaman tujuan memuat sendiri.
+  useEffect(() => {
+    if (sumber !== "qc" || !boleh) return;
+    let batal = false;
+    (async () => {
+      await new Promise<void>((r) => setTimeout(r, 800));
+      for (const p of DATA_SUPERVISI_QC_DULU) {
+        if (batal || document.visibilityState !== "visible") return;
+        await siapkanData(p).catch(() => {});
+      }
+    })();
+    return () => {
+      batal = true;
+    };
+  }, [sumber, boleh]);
 
   const daftarKec = useMemo(() => Array.from(new Set(opsi.master.map((m) => m.kecamatan))), [opsi]);
   const daftarNag = useMemo(() => Array.from(new Set(opsi.master.filter((m) => m.kecamatan === kec).map((m) => m.nagari))), [opsi, kec]);

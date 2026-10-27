@@ -8,45 +8,47 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPortal, bacaSesi } from "@/app/portal/sesi";
+import { bacaSesi } from "@/app/portal/sesi";
+import { muatData, ubahCache, useData } from "@/app/portal/dataBersama";
 import { berhasil, persen, saringPpl, saringTim, type DataMonitoringPendataan, type Hitung3 } from "@/lib/pendataanMonitor";
 import { Kartu, Kpi, Persen, fmt, fmt1, jam, sel, td, tdAngka, th } from "./monUi";
 
+const PATH = "/api/portal/pendataan/monitoring";
 type Rekap = "ppl" | "pml" | "tim";
 type Urut = "bawaan" | "rendah" | "tinggi";
 const jumlah = (hs: Hitung3[]): Hitung3 => hs.reduce((a, h) => ({ terdampak: a.terdampak + h.terdampak, tidak_terdampak: a.tidak_terdampak + h.tidak_terdampak, tidak_ditemukan: a.tidak_ditemukan + h.tidak_ditemukan }), { terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 0 });
 
 export default function MonProgres() {
   const router = useRouter();
-  const [data, setData] = useState<DataMonitoringPendataan | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (27 Okt 2026) Data lewat simpanan bersama (dataBersama.ts): dibuka lagi = langsung tampil dari simpanan lalu diperbarui di belakang tiap menit (sebelumnya selalu menunggu server).
+  const dm = useData<DataMonitoringPendataan>(PATH);
+  const data = dm.data;
+  const [galatSegar, setGalatSegar] = useState<string | null>(null);
+  const galat = galatSegar ?? (!data && dm.galat && dm.galat !== "SESI_BERAKHIR" ? dm.galat : null);
   const [rekap, setRekap] = useState<Rekap>("ppl");
   const [pml, setPml] = useState<number | null>(null);
   const [cari, setCari] = useState("");
   const [urut, setUrut] = useState<Urut>("bawaan");
   const [memuat, setMemuat] = useState(false);
 
-  const muat = useCallback(
-    async (segar = false) => {
-      if (!bacaSesi()) return router.replace("/");
-      setMemuat(true);
-      try {
-        setData(await apiPortal<DataMonitoringPendataan>(`/api/portal/pendataan/monitoring${segar ? "?segar=1" : ""}`));
-        setGalat(null);
-      } catch (e) {
-        if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
-        setGalat(e instanceof Error ? e.message : "Gagal memuat.");
-      } finally {
-        setMemuat(false);
-      }
-    },
-    [router],
-  );
   useEffect(() => {
-    void muat();
-    const a = setInterval(() => document.visibilityState === "visible" && void muat(), 60_000);
-    return () => clearInterval(a);
-  }, [muat]);
+    if (!bacaSesi() || dm.galat === "SESI_BERAKHIR") router.replace("/");
+  }, [dm.galat, router]);
+
+  // tombol "Segarkan": lewati simpanan singkat di server (?segar=1), lalu tulis hasilnya ke simpanan bersama
+  const segarkan = useCallback(async () => {
+    setMemuat(true);
+    try {
+      const d = await muatData<DataMonitoringPendataan>(`${PATH}?segar=1`);
+      ubahCache<DataMonitoringPendataan>(PATH, () => d);
+      setGalatSegar(null);
+    } catch (e) {
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
+      setGalatSegar(e instanceof Error ? e.message : "Gagal memuat.");
+    } finally {
+      setMemuat(false);
+    }
+  }, [router]);
 
   // urutan capaian (terendah / tertinggi dulu) membantu memantau di layar kecil; "bawaan" = menurut tim lalu nama
   const rasio = (b: number, t: number) => (t > 0 ? b / t : 0);
@@ -130,7 +132,7 @@ export default function MonProgres() {
             <button type="button" onClick={() => void unduh()} disabled={!data} className="min-h-[44px] rounded-[10px] bg-[#E4ECFA] px-4 text-[13px] font-extrabold text-[#0F2A52] disabled:opacity-50 sm:min-h-[40px]">
             Unduh Excel
           </button>
-          <button type="button" onClick={() => void muat(true)} disabled={memuat} className="min-h-[44px] rounded-[10px] bg-[#E4ECFA] px-4 text-[13px] font-extrabold text-[#0F2A52] disabled:opacity-50 sm:min-h-[40px]">
+          <button type="button" onClick={() => void segarkan()} disabled={memuat} className="min-h-[44px] rounded-[10px] bg-[#E4ECFA] px-4 text-[13px] font-extrabold text-[#0F2A52] disabled:opacity-50 sm:min-h-[40px]">
             {memuat ? "Memuat…" : "Segarkan"}
           </button>
           </div>

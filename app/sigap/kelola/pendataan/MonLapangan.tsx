@@ -6,10 +6,11 @@
 // Satu baris = satu petugas (PML/PPL) pada satu tanggal; SEMUA petugas berwilayah tampil tiap tanggal, termasuk yang belum ada hasil.
 // Hanya jumlah yang ditampilkan (tanpa nama KK). Agregat = kumulatif orang itu sampai tanggal baris, tidak terpengaruh saringan tanggal.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TombolKembali from "@/app/components/TombolKembali";
 import { useRouter } from "next/navigation";
-import { apiPortal, bacaSesi } from "@/app/portal/sesi";
+import { bacaSesi } from "@/app/portal/sesi";
+import { useData } from "@/app/portal/dataBersama";
 import type { AturanIsian } from "@/lib/sigap";
 import {
   LABEL_PERAN,
@@ -54,37 +55,29 @@ const sel = "min-h-[40px] w-full rounded-[10px] border border-[#D9E3F2] bg-white
 
 export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }) {
   const router = useRouter();
-  const [data, setData] = useState<Data | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (27 Okt 2026) Data lewat simpanan bersama (dataBersama.ts): dibuka lagi = langsung tampil dari simpanan lalu diperbarui di belakang (sebelumnya selalu menunggu server).
+  const dl = useData<Data>("/api/portal/lapangan");
+  const data = dl.data;
+  const galat = !data && dl.galat && dl.galat !== "SESI_BERAKHIR" ? dl.galat : null;
   const [s, setS] = useState<SaringanLapangan>(SARINGAN_AWAL);
   const [cepat, setCepat] = useState<Cepat>("hari");
   const [urut, setUrut] = useState<{ kunci: KunciUrut; turun: boolean }>({ kunci: "tanggal", turun: true });
   const [halaman, setHalaman] = useState(1);
   const [mengekspor, setMengekspor] = useState(false);
-  const awal = useRef(true); // saringan tanggal bawaan hanya diterapkan pada muat pertama
-
-  const muat = useCallback(async () => {
-    if (!bacaSesi()) return router.replace("/");
-    try {
-      const d = await apiPortal<Data>("/api/portal/lapangan");
-      setData(d);
-      setGalat(null);
-      // saringan tanggal bawaan = hari ini (hanya sekali, supaya tidak menimpa pilihan user saat penyegaran otomatis)
-      if (awal.current) {
-        awal.current = false;
-        setS((x) => ({ ...x, dari: d.hari_ini, sampai: d.hari_ini }));
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message === "SESI_BERAKHIR") return router.replace("/");
-      setGalat(e instanceof Error ? e.message : "Gagal memuat.");
-    }
-  }, [router]);
+  const awal = useRef(true); // saringan tanggal bawaan hanya diterapkan sekali
 
   useEffect(() => {
-    muat();
-    const a = setInterval(() => document.visibilityState === "visible" && muat(), 120_000);
-    return () => clearInterval(a);
-  }, [muat]);
+    if (!bacaSesi() || dl.galat === "SESI_BERAKHIR") router.replace("/");
+  }, [dl.galat, router]);
+
+  // saringan tanggal bawaan = hari ini WIB (hanya sekali, supaya tidak menimpa pilihan user saat penyegaran otomatis). Dipakai tanggal HP, bukan hari_ini
+  // dari data: data simpanan bisa dari kemarin, dan saringan tidak boleh terkunci pada tanggal itu atau menampilkan semua hari sesaat.
+  useEffect(() => {
+    if (!data || !awal.current) return;
+    awal.current = false;
+    const kini = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    setS((x) => ({ ...x, dari: kini, sampai: kini }));
+  }, [data]);
 
   const aturan = data?.aturan;
   const semua = data?.baris ?? [];

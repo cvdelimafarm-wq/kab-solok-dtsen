@@ -154,30 +154,47 @@ async function lapanganTim(db: Db, pmlPetugas: number[], timKelompok: TimKorwilM
   );
   const subPml: SubPmlKorwil[] = alokasi.filter((x) => x.pml_id != null).map((x) => ({ idsubsls: x.idsubsls, pml_id: n(x.pml_id) }));
   const idsSub = Array.from(new Set(subPml.map((s) => s.idsubsls)));
-  const lain: { idsubsls: string; pml_id: number | null }[] = [];
-  for (let i = 0; i < idsSub.length; i += 200) {
-    const { data } = await db.from("bencana_alokasi_subsls").select("idsubsls, pml_id").in("idsubsls", idsSub.slice(i, i + 200)).not("pml_id", "is", null);
-    lain.push(...((data ?? []) as { idsubsls: string; pml_id: number | null }[]));
-  }
-  const pmlLuar = Array.from(new Set(lain.map((x) => n(x.pml_id)).filter((id) => id > 0 && !pmlPetugas.includes(id))));
-  const timLuar = await bangunTim(db, pmlLuar, false);
-  for (const x of lain) if (pmlLuar.includes(n(x.pml_id))) subPml.push({ idsubsls: x.idsubsls, pml_id: n(x.pml_id) });
-  const semuaTim = [...timKelompok, ...timLuar];
+  // (27 Okt 2026) Dua pekerjaan berikut tidak saling bergantung, jadi dijalankan bersamaan (urutan hasil per potongan tetap sama):
+  //  (a) pemegang lain Sub SLS yang sama -> tim luar;  (b) nama wilayah + Sub SLS non aktif.
+  const potongan: string[][] = [];
+  for (let i = 0; i < idsSub.length; i += 200) potongan.push(idsSub.slice(i, i + 200));
+
+  const muatTimLuar = async () => {
+    const hasilLain = await Promise.all(
+      potongan.map(async (potong) => {
+        const { data } = await db.from("bencana_alokasi_subsls").select("idsubsls, pml_id").in("idsubsls", potong).not("pml_id", "is", null);
+        return (data ?? []) as { idsubsls: string; pml_id: number | null }[];
+      }),
+    );
+    const lain = hasilLain.flat();
+    const pmlLuar = Array.from(new Set(lain.map((x) => n(x.pml_id)).filter((id) => id > 0 && !pmlPetugas.includes(id))));
+    const timLuar = await bangunTim(db, pmlLuar, false);
+    return { lain, pmlLuar, timLuar };
+  };
 
   // nama wilayah + Sub SLS non aktif (kolom `nonaktif` ada sejak migrasi 20261018a; bila belum ada, semua dianggap aktif)
-  const info = new Map<string, SubInfoKorwil>();
-  const nonaktif = new Set<string>();
-  for (let i = 0; i < idsSub.length; i += 200) {
-    const potong = idsSub.slice(i, i + 200);
+  const muatWilayah = async () => {
+    const info = new Map<string, SubInfoKorwil>();
+    const nonaktif = new Set<string>();
     type BarisWilayah = { idsubsls: string; nagari: string; sls: string; sub_sls: string; nonaktif?: boolean | null };
     type HasilWilayah = { data: BarisWilayah[] | null; error: unknown };
-    let res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls, nonaktif").in("idsubsls", potong)) as unknown as HasilWilayah;
-    if (res.error) res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls").in("idsubsls", potong)) as unknown as HasilWilayah;
-    for (const r of res.data ?? []) {
+    const hasilWil = await Promise.all(
+      potongan.map(async (potong) => {
+        let res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls, nonaktif").in("idsubsls", potong)) as unknown as HasilWilayah;
+        if (res.error) res = (await db.from("bencana_wilayah").select("idsubsls, nagari, sls, sub_sls").in("idsubsls", potong)) as unknown as HasilWilayah;
+        return res.data ?? [];
+      }),
+    );
+    for (const r of hasilWil.flat()) {
       info.set(r.idsubsls, { nagari: String(r.nagari ?? ""), sls: String(r.sls ?? ""), sub_sls: String(r.sub_sls ?? "") });
       if (r.nonaktif === true) nonaktif.add(r.idsubsls);
     }
-  }
+    return { info, nonaktif };
+  };
+
+  const [{ lain, pmlLuar, timLuar }, { info, nonaktif }] = await Promise.all([muatTimLuar(), muatWilayah()]);
+  for (const x of lain) if (pmlLuar.includes(n(x.pml_id))) subPml.push({ idsubsls: x.idsubsls, pml_id: n(x.pml_id) });
+  const semuaTim = [...timKelompok, ...timLuar];
 
   // ringkasan KK per tim (beberapa tim sekaligus)
   const baris: BarisKkMon[] = [];
@@ -246,15 +263,25 @@ async function harianTim(db: Db, tim: TimKorwilMasuk[], lapangan: LapanganKorwil
 async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, "pilihan"> | null> {
   const k = await pmlKelompok(db, kelompok);
   if (!k) return null;
-  const namaKorwil = await namaAkun(db, k.korwilAkun);
-  const timKelompok = await bangunTim(db, k.pmlPetugas, true);
+  const hariIni = hariIniWib();
 
+  // (27 Okt 2026) Pekerjaan yang tidak saling bergantung dimulai bersamaan: administrasi harian (fungsi database, ±0,15 dtk; satu muatan dipakai
+  // semua kelompok), tanggal selesai, dan nama korwil berjalan sambil tim & lapangan dimuat. Isi hasil tidak berubah.
+  const lapP = memoWaktu("korwil:lapangan", TTL_MS, () => monitoringLapangan(db, MULAI_KORWIL, hariIni));
+  lapP.catch(() => undefined); // bila langkah lain gagal lebih dulu, jangan sampai menjadi "unhandled rejection"
+  const selesaiP = tanggalSelesai(db);
+  const namaKorwilP = namaAkun(db, k.korwilAkun);
+
+  const timKelompok = await bangunTim(db, k.pmlPetugas, true);
   const lapangan = await lapanganTim(db, k.pmlPetugas, timKelompok);
 
-  // administrasi harian (sama dengan Monitoring Lapangan); satu muatan dipakai semua kelompok
-  const hariIni = hariIniWib();
-  const [selesai, harian] = await Promise.all([tanggalSelesai(db), harianTim(db, timKelompok, lapangan, hariIni).catch((): HarianTim[] => [])]);
-  const lap = await memoWaktu("korwil:lapangan", TTL_MS, () => monitoringLapangan(db, MULAI_KORWIL, hariIni));
+  // administrasi harian (sama dengan Monitoring Lapangan)
+  const [namaKorwil, selesai, harian, lap] = await Promise.all([
+    namaKorwilP,
+    selesaiP,
+    harianTim(db, timKelompok, lapangan, hariIni).catch((): HarianTim[] => []),
+    lapP,
+  ]);
   const akunKelompok = new Set(timKelompok.flatMap((t) => [t.pml, ...t.ppl].flatMap((p) => p.akun_ids)));
   const hari: BarisHariKorwil[] = lap.baris
     .filter((b) => akunKelompok.has(b.akun_id))

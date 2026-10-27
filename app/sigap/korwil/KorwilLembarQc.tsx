@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import { useData } from "@/app/portal/dataBersama";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import {
   LABEL_SKOR,
@@ -66,8 +67,13 @@ const WARNA_NILAI: Record<NilaiSoal, string> = { 1: "border-[#13794B] bg-[#13794
 const WARNA_SKOR: Record<NilaiSoal, string> = { 1: "bg-[#E3F6EC] text-[#13794B]", 2: "bg-[#FFF4D6] text-[#8A6200]", 3: "bg-[#FDE8E8] text-[#B42329]" };
 const WARNA_KATEGORI: Record<string, string> = { Baik: "bg-[#E3F6EC] text-[#13794B]", Cukup: "bg-[#FFF4D6] text-[#8A6200]", "Perlu pembinaan": "bg-[#FDE8E8] text-[#B42329]", "Belum dinilai": "bg-[#EEF2F7] text-[#5B6B84]" };
 
-export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
-  const [d, setD] = useState<Data | null>(null);
+/** kelompok: pilihan di halaman Supervisi; null = kelompok bawaan akun (server yang menentukan, sama dengan Monitoring). */
+export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }) {
+  // (27 Okt 2026) Data lewat simpanan bersama (dataBersama.ts): langsung tampil dari simpanan / hasil prefetch, diperbarui di belakang, dan TIDAK menunggu Monitoring.
+  const hd = useData<Data>(`/api/portal/qc/kuesioner${kelompok ? `?kelompok=${kelompok}` : ""}`);
+  const d = hd.data;
+  const kelompokAktif = d?.kelompok ?? null;
+  const galatMuat = !d && hd.galat && hd.galat !== "SESI_BERAKHIR" ? hd.galat : null;
   const [galat, setGalat] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [objek, setObjek] = useState<ObjekKuesioner>("petugas");
@@ -84,17 +90,16 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   const [sibuk, setSibuk] = useState(false);
   const kkTertunda = useRef<number | null>(null);
 
-  const muat = useCallback(
-    async (ppl?: number | null) => {
+  // daftar KK yang sudah didata satu PPL (hanya dibutuhkan saat memeriksa KK; tidak disimpan di simpanan bersama)
+  const muatKk = useCallback(
+    async (ppl: number) => {
+      if (kelompokAktif == null) return;
       try {
-        const r = await apiPortal<Data>(`/api/portal/qc/kuesioner?kelompok=${kelompok}${ppl ? `&ppl=${ppl}` : ""}`);
-        setD(r);
-        if (ppl) {
-          setKkDaftar(r.kk ?? []);
-          if (kkTertunda.current != null) {
-            setKkId(kkTertunda.current);
-            kkTertunda.current = null;
-          }
+        const r = await apiPortal<Data>(`/api/portal/qc/kuesioner?kelompok=${kelompokAktif}&ppl=${ppl}`);
+        setKkDaftar(r.kk ?? []);
+        if (kkTertunda.current != null) {
+          setKkId(kkTertunda.current);
+          kkTertunda.current = null;
         }
         setGalat(null);
       } catch (e) {
@@ -102,18 +107,16 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
         setGalat(pesanGalat(e));
       }
     },
-    [kelompok],
+    [kelompokAktif],
   );
 
   // ganti kelompok: mulai dari awal
   useEffect(() => {
-    setD(null);
     setSubjek(null);
     setKkId(null);
     setKkDaftar([]);
     setInfo(null);
-    void muat();
-  }, [kelompok, muat]);
+  }, [kelompokAktif]);
   useEffect(() => {
     if (d && !tanggal) setTanggal(d.hari_ini);
   }, [d, tanggal]);
@@ -122,8 +125,8 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   useEffect(() => {
     setKkId(null);
     setKkDaftar([]);
-    if (objek === "kk" && subjek) void muat(subjek);
-  }, [objek, subjek, muat]);
+    if (objek === "kk" && subjek) void muatKk(subjek);
+  }, [objek, subjek, muatKk]);
 
   const ku = d?.kuesioner[objek] ?? null;
   const struktur = ku?.struktur ?? null;
@@ -133,6 +136,8 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
     return d.lembar.find((l) => l.objek === objek && l.versi === ku.versi && l.tanggal === tanggal && l.subjek_akun_id === subjek && (objek === "petugas" || l.kk_id === kkId) && l.pemeriksa_akun_id === d.saya_akun_id) ?? null;
   }, [d, ku, objek, subjek, kkId, tanggal]);
   const kunciAda = ada ? `${ada.id}:${ada.diubah_at}` : "baru";
+  // (27 Okt 2026) kunci stabil: data kini diperbarui di belakang (objek baru tiap diambil), isian yang sedang diketik tidak boleh ter-reset karenanya
+  const kunciStruktur = ku ? `${ku.id}:${ku.versi}` : "";
 
   // isi formulir: dari lembar yang sudah ada, atau awal (27 Okt 2026: SEMUA aspek PML dan PPL digabung dan dicentang; peran hanya jadi keterangan "Untuk:")
   useEffect(() => {
@@ -152,7 +157,7 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
     }
     setGalatSoal({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objek, subjek, kkId, tanggal, kunciAda, struktur]);
+  }, [objek, subjek, kkId, tanggal, kunciAda, kunciStruktur]);
 
   const siap = !!d && !!ku && !!subjek && !!tanggal && (objek === "petugas" || !!kkId);
   const hasil = useMemo(() => (struktur ? periksaJawaban(struktur, { diperiksa, jawab }) : null), [struktur, diperiksa, jawab]);
@@ -171,10 +176,11 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
     try {
       await apiPortal(`/api/portal/qc/kuesioner`, {
         method: "POST",
-        body: JSON.stringify({ kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, catatan, tindak_lanjut: tindak, tenggat: tenggat || null }),
+        body: JSON.stringify({ kelompok: d.kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, catatan, tindak_lanjut: tindak, tenggat: tenggat || null }),
       });
       setInfo(ada ? "Lembar diperbarui." : "Lembar tersimpan.");
-      await muat(objek === "kk" ? subjek : null);
+      // simpanan daftar lembar sudah ditandai basi oleh penulisan (ATURAN_TULIS); ambil ulang sekarang agar daftar & status "sudah diisi" langsung benar
+      await Promise.all([hd.muat(), objek === "kk" && subjek ? muatKk(subjek) : Promise.resolve()]);
     } catch (e) {
       setGalat(pesanGalat(e));
     } finally {
@@ -195,8 +201,9 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
   }
 
   if (!d) {
-    return galat ? (
-      <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>
+    const g = galatMuat ?? galat;
+    return g ? (
+      <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{g}</p>
     ) : (
       <div className={KOTAK} aria-busy="true">
         <div className="h-3 w-32 animate-pulse rounded bg-[#E6EDF8]" />
@@ -342,7 +349,7 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
       )}
 
       <section className={KOTAK}>
-        <h3 className="mb-2 text-[14px] font-extrabold text-[#0F2A52]">Lembar kelompok {kelompok}</h3>
+        <h3 className="mb-2 text-[14px] font-extrabold text-[#0F2A52]">Lembar kelompok {d.kelompok}</h3>
         {d.lembar.length === 0 ? (
           <p className="text-[13px] text-[#6B7A90]">Belum ada lembar yang diisi.</p>
         ) : (

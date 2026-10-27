@@ -170,16 +170,19 @@ async function selesaikanJarak(tugas: Tugas[]): Promise<{ tertunda: Set<string>;
 
 async function muat(db: Db): Promise<DataKinerja> {
   const hariIni = hariIniWib();
-  const { data: pend, mentah } = await muatMonitoringPendataan(db);
-  const lap = await monitoringLapangan(db, MULAI_KEGIATAN, hariIni);
+  // KK terdampak / tidak terdampak / tidak ditemukan per akun per tanggal WIB
+  const awalUtc = new Date(`${MULAI_KEGIATAN}T00:00:00+07:00`).toISOString();
+  // (27 Okt 2026) Tiga pemuatan ini tidak saling bergantung -> dijalankan bersamaan (sebelumnya berurutan). Isi hasil tidak berubah.
+  const [{ data: pend, mentah }, lap, kk] = await Promise.all([
+    muatMonitoringPendataan(db),
+    monitoringLapangan(db, MULAI_KEGIATAN, hariIni),
+    halaman<{ idsubsls: string; hasil: string; status_at: string; ppl_akun_id: number }>((a, b) =>
+      db.from("bencana_pendataan_kk").select("idsubsls, hasil, status_at, ppl_akun_id").eq("aktif", true).in("hasil", ["terdampak", "tidak_terdampak", "tidak_ditemukan"]).not("ppl_akun_id", "is", null).gte("status_at", awalUtc).order("id").range(a, b),
+    ),
+  ]);
   const aturan = lap.aturan;
   const akunIds = [...new Set(lap.baris.map((b) => b.akun_id))];
 
-  // KK terdampak / tidak terdampak / tidak ditemukan per akun per tanggal WIB
-  const awalUtc = new Date(`${MULAI_KEGIATAN}T00:00:00+07:00`).toISOString();
-  const kk = await halaman<{ idsubsls: string; hasil: string; status_at: string; ppl_akun_id: number }>((a, b) =>
-    db.from("bencana_pendataan_kk").select("idsubsls, hasil, status_at, ppl_akun_id").eq("aktif", true).in("hasil", ["terdampak", "tidak_terdampak", "tidak_ditemukan"]).not("ppl_akun_id", "is", null).gte("status_at", awalUtc).order("id").range(a, b),
-  );
   const hitung = new Map<string, { t: number; n: number; d: number }>(); // `${akun}|${tanggal}`
   const tanda = new Map<string, { idsubsls: string; waktu: number }[]>(); // hanya hari >= mulai bobot
   for (const r of kk) {
@@ -202,10 +205,10 @@ async function muat(db: Db): Promise<DataKinerja> {
 
   // rumah petugas
   const rumah = new Map<number, Titik>();
-  for (let i = 0; i < akunIds.length; i += 200) {
-    const { data } = await db.from("sigap_akun").select("id, domisili_lat, domisili_lng").in("id", akunIds.slice(i, i + 200));
-    for (const r of data ?? []) if (typeof r.domisili_lat === "number" && typeof r.domisili_lng === "number") rumah.set(r.id as number, { lat: r.domisili_lat, lng: r.domisili_lng });
-  }
+  const potongAkun: number[][] = [];
+  for (let i = 0; i < akunIds.length; i += 200) potongAkun.push(akunIds.slice(i, i + 200));
+  const hasilRumah = await Promise.all(potongAkun.map((p) => db.from("sigap_akun").select("id, domisili_lat, domisili_lng").in("id", p)));
+  for (const { data } of hasilRumah) for (const r of data ?? []) if (typeof r.domisili_lat === "number" && typeof r.domisili_lng === "number") rumah.set(r.id as number, { lat: r.domisili_lat, lng: r.domisili_lng });
 
   // KK tersisa per Sub SLS (sisa target tim) -> pusat tersisa per tim
   const sisaSub = new Map<string, number>(); // `${pml}|${idsubsls}` -> KK belum didata
