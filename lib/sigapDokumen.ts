@@ -34,7 +34,7 @@ import { buatPdfLaporanSigap } from "@/lib/pdf/sigap/laporan";
 import { buatPdfDokumentasiSigap, type SigapFotoInput } from "@/lib/pdf/sigap/dokumentasi";
 import { buatZip } from "@/lib/pdf/sigap/zip";
 import { judulKecamatan } from "@/lib/pdf/sigap/format";
-import { satuanLaporan } from "@/lib/realisasiOtomatis";
+import { satuanLaporan, satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 
 // ----------------------------------------------------------------------------------------------
 export type JenisDok = "surat_tugas" | "kwitansi" | "visum" | "laporan" | "dokumentasi" | "surat_pernyataan";
@@ -380,7 +380,7 @@ export async function rakitUnit(
             labelJabatan: data.label_jabatan,
             tanggal: t,
             // (11 Okt 2026) PML Pendataan Pascabencana melaporkan Sub SLS (hasil identifikasi), bukan keluarga
-            satuan: satuanLaporan(data.kegiatan.kode, data.penugasan.peran, data.kegiatan.satuan_realisasi),
+            satuan: satuanLaporanTanggal(data.kegiatan.kode, data.penugasan.peran, data.kegiatan.satuan_realisasi, t), // (27 Okt 2026) korwil: KK sebelum 27 Okt, lembar QC sesudahnya
             lokasi: h.realisasi.lokasi.map((l) => ({ kecamatan: l.kecamatan ?? null, nagari: l.nagari ?? null, jorong: l.jorong ?? null })),
             jumlahRealisasi: h.realisasi.jumlah_realisasi,
             kendala: h.realisasi.kendala,

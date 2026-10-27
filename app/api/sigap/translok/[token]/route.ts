@@ -31,7 +31,7 @@ import {
 import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
 import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
 import { panduanSelesai } from "@/lib/sigapPanduan";
-import { laporanDianggap, satuanLaporan, sumberUntukPeran } from "@/lib/realisasiOtomatis";
+import { laporanDianggap, satuanLaporan, satuanLaporanTanggal, sumberUntukPeran } from "@/lib/realisasiOtomatis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         .slice(0, 10);
       if (lokasi.length === 0) return NextResponse.json({ error: "Pilih minimal 1 lokasi." }, { status: 400 });
       const jumlah = Number(body?.jumlah_realisasi);
-      if (!Number.isInteger(jumlah) || jumlah < 0 || jumlah > 500) return NextResponse.json({ error: `Jumlah ${akses.penugasan.kegiatan.satuan_realisasi} tidak valid.` }, { status: 400 });
+      if (!Number.isInteger(jumlah) || jumlah < 0 || jumlah > 500) return NextResponse.json({ error: `Jumlah ${satuanLaporanTanggal(akses.penugasan.kegiatan.kode, akses.penugasan.peran, akses.penugasan.kegiatan.satuan_realisasi, akses.tanggal)} tidak valid (0 sampai 500).` }, { status: 400 });
       const kendala = typeof body?.kendala === "string" ? body.kendala.trim().slice(0, 1000) : "";
       const { error } = await db.from("sigap_realisasi").upsert(
         {

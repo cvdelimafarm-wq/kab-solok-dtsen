@@ -42,6 +42,15 @@ export function satuanLaporan(kodeKegiatan: string, peran: string, satuanKegiata
   return satuanKegiatan;
 }
 
+/**
+ * Satuan angka laporan PADA TANGGAL tertentu. Sama dengan satuanLaporan, kecuali korwil sebelum BATAS_QC_KORWIL: hari itu angkanya KK (satuan kegiatan),
+ * bukan lembar QC. Dipakai di semua tempat yang menampilkan angka satu hari (kartu hari, detail admin, PDF laporan).
+ */
+export function satuanLaporanTanggal(kodeKegiatan: string, peran: string, satuanKegiatan: string, tanggal: string): string {
+  if (kodeKegiatan.startsWith("pascabencana") && peran === "korwil" && tanggal < BATAS_QC_KORWIL) return satuanKegiatan;
+  return satuanLaporan(kodeKegiatan, peran, satuanKegiatan);
+}
+
 /** Peran apa yang punya sumber otomatis (hanya Pendataan Pascabencana). */
 export function sumberUntukPeran(kodeKegiatan: string, peran: string): SumberOtomatis | null {
   if (!kodeKegiatan.startsWith("pascabencana")) return null;

@@ -8,7 +8,7 @@ import { bacaLihatSebagai } from "@/app/portal/sesi";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
-import { LABEL_SUMBER, bandingkanOtomatis, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
+import { LABEL_SUMBER, bandingkanOtomatis, satuanLaporanTanggal, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
@@ -1324,7 +1324,7 @@ function ArsipPerTanggal({ token, data, pen, onBerubah }: { token: string; data:
               {
                 nama: "Laporan",
                 ikon: "📝",
-                s: hari.realisasi ? `${hari.realisasi.jumlah_realisasi} ${pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi} · ${hari.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ") || "–"}` : n?.laporan === "dianggap" ? "Dianggap selesai dari hasil lembar" : "Belum diisi",
+                s: hari.realisasi ? `${hari.realisasi.jumlah_realisasi} ${satuanLaporanTanggal(pen.kegiatan.kode, pen.peran, pen.kegiatan.satuan_realisasi, hari.tanggal)} · ${hari.realisasi.lokasi.map((l) => judul(l.jorong)).join(", ") || "–"}` : n?.laporan === "dianggap" ? "Dianggap selesai dari hasil lembar" : "Belum diisi",
                 ok: n?.laporan === "ok" || n?.laporan === "dianggap",
                 chip: n?.laporan === "ok" ? "Terisi" : n?.laporan === "dianggap" ? "Dianggap" : "Kurang",
                 aksi: (bisaIsi ? { bagian: "laporan" } : null) as AksiBaris,
@@ -1851,7 +1851,7 @@ function FormRealisasi({
   // (11 Okt 2026) Belum ada laporan tersimpan -> terisi otomatis dari identifikasi (PML) / pendataan (PPL, korwil); petugas memeriksa lalu menyimpan.
   const oto = hari.otomatis ?? null;
   const sumber = pen.sumber_otomatis ?? null;
-  const sat = pen.satuan_laporan ?? pen.kegiatan.satuan_realisasi;
+  const sat = satuanLaporanTanggal(pen.kegiatan.kode, pen.peran, pen.kegiatan.satuan_realisasi, hari.tanggal); // (27 Okt 2026) satuan menurut peran DAN tanggal (korwil: KK s.d. 26 Okt, lembar QC sejak 27 Okt)
   const awalOto = !hari.realisasi && boleh ? oto : null;
   const [lokasi, setLokasi] = useState<Lokasi[]>(hari.realisasi?.lokasi ?? awalOto?.lokasi ?? []);
   const [jumlah, setJumlah] = useState<string>(hari.realisasi ? String(hari.realisasi.jumlah_realisasi) : awalOto ? String(awalOto.jumlah) : "");

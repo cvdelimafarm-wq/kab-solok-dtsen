@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LABEL_SUMBER, MAKS_LOKASI, SATUAN_QC, bandingkanOtomatis, catatanDianggap, laporanDianggap, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
+import { BATAS_QC_KORWIL, LABEL_SUMBER, MAKS_LOKASI, SATUAN_QC, satuanLaporanTanggal, bandingkanOtomatis, catatanDianggap, laporanDianggap, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
 
 // (11 Okt 2026) Uji isian otomatis Laporan realisasi PML (identifikasi) dan PPL (pendataan).
 const W: WilayahRingkas[] = [
@@ -25,6 +25,19 @@ describe("satuan & sumber menurut peran", () => {
     expect(sumberUntukPeran("pascabencana_2026", "korwil")).toBe("qc"); // 27 Okt 2026: korwil <- Lembar Quality Check, bukan pendataan
     expect(sumberUntukPeran("pascabencana_2026", "lainnya")).toBeNull();
     expect(sumberUntukPeran("spdt_ntp_2026", "ppl")).toBeNull();
+  });
+});
+
+describe("satuanLaporanTanggal (27 Okt 2026)", () => {
+  it("korwil: KK sebelum tanggal batas, lembar QC sejak tanggal batas", () => {
+    expect(satuanLaporanTanggal("pascabencana_2026", "korwil", "keluarga", "2026-10-26")).toBe("keluarga");
+    expect(satuanLaporanTanggal("pascabencana_2026", "korwil", "keluarga", BATAS_QC_KORWIL)).toBe(SATUAN_QC);
+    expect(satuanLaporanTanggal("pascabencana_2026", "korwil", "keluarga", "2026-11-02")).toBe(SATUAN_QC);
+  });
+  it("peran lain dan kegiatan lain tidak terpengaruh tanggal", () => {
+    expect(satuanLaporanTanggal("pascabencana_2026", "pml", "keluarga", "2026-10-26")).toBe("Sub SLS");
+    expect(satuanLaporanTanggal("pascabencana_2026", "ppl", "keluarga", "2026-10-30")).toBe("keluarga");
+    expect(satuanLaporanTanggal("spdt_ntp_2026", "korwil", "ruta", "2026-10-30")).toBe("ruta");
   });
 });
 

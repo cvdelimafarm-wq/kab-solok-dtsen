@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
+import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
 
 export const runtime = "nodejs";
@@ -230,7 +231,7 @@ export async function GET(req: NextRequest) {
       const { data: pen } = await db.from("sigap_penugasan").select("id, kegiatan_id, akun_id, peran").eq("id", penId).maybeSingle();
       if (!pen || Number(pen.kegiatan_id) !== kegiatanId) return galat("Penugasan tidak ditemukan pada kegiatan ini.", 404);
       const [{ data: keg }, { data: akun }, { data: lap }, { data: dok }, { data: hk }] = await Promise.all([
-        db.from("sigap_kegiatan").select("id, nama, jenis, satuan_realisasi, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
+        db.from("sigap_kegiatan").select("id, kode, nama, jenis, satuan_realisasi, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
         db.from("sigap_akun").select("nama").eq("id", pen.akun_id as number).maybeSingle(),
         db.from("sigap_realisasi").select("lokasi, jumlah_realisasi, kendala, diperbarui_at").eq("penugasan_id", penId).eq("tanggal", tanggal).maybeSingle(),
         db.from("sigap_dokumentasi").select("slot, file_path, foto_id, sumber, susulan, diunggah_at").eq("penugasan_id", penId).eq("tanggal", tanggal).order("slot"),
@@ -258,7 +259,8 @@ export async function GET(req: NextRequest) {
         kegiatan: {
           nama: (keg?.nama as string | undefined) ?? "",
           jenis: (keg?.jenis as string | null | undefined) ?? null,
-          satuan: (keg?.satuan_realisasi as string | null | undefined) ?? "",
+          // (27 Okt 2026) satuan menurut peran dan tanggal (PML = Sub SLS, korwil = lembar QC sejak 27 Okt), bukan satuan kegiatan untuk semua peran
+          satuan: satuanLaporanTanggal(String(keg?.kode ?? ""), String(pen.peran ?? ""), String(keg?.satuan_realisasi ?? ""), tanggal),
           wajib_laporan: keg?.wajib_laporan !== false,
           jumlah_foto: Number(keg?.jumlah_foto ?? 5) || 5,
         },
