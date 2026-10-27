@@ -14,6 +14,7 @@ import { BTN, BTN_G, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, KartuAngka, Memuat
 import { labelStatusPpl, menitKeJam, jamKeMenit, ringkasStatusQc, type QcPengaturan, type QcRekapTim } from "@/lib/sigapQc";
 import { SUB_QC } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
+import KuesionerQc from "./KuesionerQc";
 
 type Peng = QcPengaturan & { diubah_oleh: string | null; diubah_at: string };
 type Soal = { id: string; paket: number; judul_paket: string; nomor: number; pertanyaan: string; opsi: Record<string, string>; kunci: string; penjelasan: string; kata_kunci: string[]; aktif: boolean };
@@ -68,10 +69,18 @@ export default function QcPemahaman() {
     [muat]
   );
 
+  // (27 Okt 2026) cabang Kuesioner supervisi punya data dan pesan sendiri: tidak menunggu / menampilkan galat QC Pemahaman
+  if (sub === "kuesioner")
+    return (
+      <div className="space-y-3">
+        <SubPilih daftar={SUB_QC} aktif={sub} onPilih={pilih} label="Quality check" />
+        <KuesionerQc />
+      </div>
+    );
   if (!d && !galat) return <Memuat />;
   return (
     <div className="space-y-3">
-      <SubPilih daftar={SUB_QC} aktif={sub} onPilih={pilih} label="QC Pemahaman" />
+      <SubPilih daftar={SUB_QC} aktif={sub} onPilih={pilih} label="Quality check" />
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
       {d && !d.boleh_kelola && <Pesan jenis="info">Anda dapat melihat saja. Mengubah pengaturan memerlukan izin kelola pendataan.</Pesan>}

@@ -3,8 +3,10 @@
 // app/sigap/korwil/page.tsx
 //
 // (19 Okt 2026) Monitoring Korwil di HP (permintaan user, mockup disetujui): halaman kerja tahap Pendataan bagi kortim (korwil) kelompok.
-// Dua tampilan: Lapangan (progres tim PML: target, realisasi, wilayah, petugas) dan Administrasi (PPL/PML x tanggal).
-// HANYA-BACA. Akun dengan izin bencana.admin (lihat) boleh memilih kelompok lain. Data: /api/portal/korwil/monitoring (lib/portal/korwilMonitor.ts).
+// (27 Okt 2026) Diganti nama menjadi LEMBAR SUPERVISI dengan tiga tab: Monitoring Lapangan (progres tim PML: target, realisasi, wilayah, petugas),
+// Lembar Quality Check (kuesioner QC yang diunggah admin; diisi korwil untuk petugas atau KK) dan Administrasi (PPL/PML x tanggal; paling ujung).
+// Monitoring dan Administrasi HANYA-BACA; Lembar Quality Check menulis lewat /api/portal/qc/kuesioner. Akun dengan izin bencana.admin (lihat) boleh memilih
+// kelompok lain. Data monitoring: /api/portal/korwil/monitoring (lib/portal/korwilMonitor.ts).
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -16,8 +18,9 @@ import { namaSingkatTampil } from "@/lib/namaTampil";
 import { persenKorwil, type DataKorwil } from "@/lib/korwilMonitor";
 import KorwilLapangan from "./KorwilLapangan";
 import KorwilAdministrasi from "./KorwilAdministrasi";
+import KorwilLembarQc from "./KorwilLembarQc";
 
-type Tab = "lapangan" | "administrasi";
+type Tab = "lapangan" | "kuesioner" | "administrasi";
 
 function jamWib(iso: string): string {
   const w = new Date(Date.parse(iso) + 7 * 3_600_000);
@@ -48,7 +51,7 @@ export default function MonitoringKorwil() {
           <div className="flex items-center gap-2.5">
             <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Monitoring Korwil</h1>
+              <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Lembar Supervisi</h1>
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `Kelompok ${data.kelompok} · ${data.korwil.map((x) => namaSingkatTampil(x)).join(" & ")}` : "Pendataan Pascabencana"}</p>
             </div>
             {L && (
@@ -77,14 +80,15 @@ export default function MonitoringKorwil() {
             </div>
           )}
 
-          <div role="tablist" aria-label="Tampilan monitoring" className="grid grid-cols-2">
+          <div role="tablist" aria-label="Tampilan lembar supervisi" className="grid grid-cols-3">
             {(
               [
-                ["lapangan", "Lapangan"],
+                ["lapangan", "Monitoring Lapangan"],
+                ["kuesioner", "Lembar Quality Check"],
                 ["administrasi", "Administrasi"],
               ] as [Tab, string][]
             ).map(([k, t]) => (
-              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`h-[44px] border-b-[3px] text-[13.5px] font-extrabold ${tab === k ? "border-[#F4B400] text-white" : "border-transparent text-[#A9BCD8]"}`}>
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-[44px] border-b-[3px] px-1 text-[12px] font-extrabold leading-[1.15] ${tab === k ? "border-[#F4B400] text-white" : "border-transparent text-[#A9BCD8]"}`}>
                 {t}
               </button>
             ))}
@@ -128,10 +132,14 @@ export default function MonitoringKorwil() {
                 )}
               </p>
             )}
-            {tab === "lapangan" ? <KorwilLapangan lap={data.lapangan} /> : <KorwilAdministrasi adm={data.administrasi} />}
-            <p className="px-1 text-[11.5px] text-[#6B7A90]">
-              Diperbarui {jamWib(data.sekarang)} WIB · {L.tim} tim PML · {L.ppl} PPL. Data disegarkan otomatis tiap menit.
-            </p>
+            {tab === "lapangan" && <KorwilLapangan lap={data.lapangan} />}
+            {tab === "kuesioner" && <KorwilLembarQc kelompok={data.kelompok} />}
+            {tab === "administrasi" && <KorwilAdministrasi adm={data.administrasi} />}
+            {tab !== "kuesioner" && (
+              <p className="px-1 text-[11.5px] text-[#6B7A90]">
+                Diperbarui {jamWib(data.sekarang)} WIB · {L.tim} tim PML · {L.ppl} PPL. Data disegarkan otomatis tiap menit.
+              </p>
+            )}
           </>
         )}
       </div>

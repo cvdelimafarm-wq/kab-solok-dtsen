@@ -114,6 +114,20 @@ async function bangunTim(db: Db, pmlIds: number[], tampil: boolean): Promise<Tim
   return pmlRows.map((p) => ({ pml: anggota(p), ppl: pplRows.filter((x) => n(x.atasan_id) === n(p.id)).map(anggota), tampil }));
 }
 
+/** (27 Okt 2026) Anggota satu kelompok yang bisa diperiksa pada Lembar Supervisi: PML dan PPL aktif yang punya akun SIGAP. Satu baris per petugas (akun pertama). */
+export type AnggotaPeriksa = { akun_id: number; nama: string; peran: "pml" | "ppl"; pml_nama: string | null };
+export async function anggotaKelompok(db: Db, kelompok: number): Promise<AnggotaPeriksa[] | null> {
+  const k = await pmlKelompok(db, kelompok);
+  if (!k) return null;
+  const tim = await bangunTim(db, k.pmlPetugas, true);
+  const hasil: AnggotaPeriksa[] = [];
+  for (const t of tim) {
+    if (t.pml.akun_ids[0] != null) hasil.push({ akun_id: t.pml.akun_ids[0], nama: t.pml.nama, peran: "pml", pml_nama: null });
+    for (const p of t.ppl) if (p.akun_ids[0] != null) hasil.push({ akun_id: p.akun_ids[0], nama: p.nama, peran: "ppl", pml_nama: t.pml.nama });
+  }
+  return hasil;
+}
+
 async function halaman<T>(ambil: (dari: number, sampai: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   for (let dari = 0; dari < 60_000; dari += 1000) {

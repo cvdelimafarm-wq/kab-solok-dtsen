@@ -24,7 +24,7 @@ export const TAB_PENDATAAN: ItemTabPendataan[] = [
   { kode: "persiapan", label: "1 · Persiapan", ket: "Unggah daftar KK sasaran, permintaan daftar KK ke FASIH, dan Sub SLS yang belum diajukan." },
   { kode: "tim", label: "2 · Tim & Surat Tugas", ket: "Alokasi PML/PPL per Sub SLS, penugasan, Surat Tugas, dan pelatihan petugas." },
   { kode: "siaran", label: "3 · Siaran & Notifikasi", ket: "Siaran ke seluruh petugas dan notifikasi ke satu petugas." },
-  { kode: "qc", label: "4 · QC Pemahaman", ket: "Kuis harian wajib PML dan PPL: pantauan hari ini, pengaturan jadwal, dan bank soal." },
+  { kode: "qc", label: "4 · QC", ket: "Quality check: kuis pemahaman harian PML/PPL (hari ini, pengaturan, bank soal) dan kuesioner supervisi untuk Lembar Supervisi korwil." },
   { kode: "monitoring", label: "5 · Monitoring", ket: "Progres petugas, transport lokal, poin kinerja harian, dan perkiraan kebutuhan anggaran." },
   { kode: "pemeriksaan", label: "6 · Pemeriksaan", ket: "Hasil identifikasi, pemantauan lapangan per petugas, dan foto dokumentasi." },
   { kode: "administrasi", label: "7 · Administrasi & SPJ", ket: "Transport lokal (verifikasi, kunci, tarif), pengadaan, dan pertanggungjawaban." },
@@ -97,11 +97,12 @@ export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
   { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (honor, perjalanan dinas)." },
 ];
-/** (26 Okt 2026) Tab "4 · QC Pemahaman": pantauan hari ini, pengaturan jadwal, bank soal. */
+/** (26 Okt 2026) Tab "4 · QC": pantauan hari ini, pengaturan jadwal, bank soal (QC Pemahaman); (27 Okt 2026) cabang Kuesioner supervisi untuk Lembar Supervisi. */
 export const SUB_QC: SubItem[] = [
-  { kode: "hari", label: "Hari ini", ket: "Siapa sudah mengisi, nilai per tim, soal yang paling banyak salah, dan siapa yang belum mengaktifkan notifikasi." },
-  { kode: "pengaturan", label: "Pengaturan", ket: "Nyalakan QC, jam rilis dan batas, ulangan, pengingat, dan periode berlaku." },
-  { kode: "soal", label: "Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
+  { kode: "hari", label: "Pemahaman · Hari ini", ket: "Siapa sudah mengisi, nilai per tim, soal yang paling banyak salah, dan siapa yang belum mengaktifkan notifikasi." },
+  { kode: "pengaturan", label: "Pemahaman · Pengaturan", ket: "Nyalakan QC, jam rilis dan batas, ulangan, pengingat, dan periode berlaku." },
+  { kode: "soal", label: "Pemahaman · Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
+  { kode: "kuesioner", label: "Kuesioner supervisi", ket: "Kuesioner quality check untuk Lembar Supervisi (korwil): unggah dari Excel untuk petugas dan keluarga (KK), kelola versinya." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI, qc: SUB_QC };
 

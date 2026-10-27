@@ -13,7 +13,7 @@ describe("TAB_PENDATAAN", () => {
   });
   it("label ditemukan per kode", () => {
     expect(labelTabPendataan("monitoring")).toBe("5 · Monitoring");
-    expect(labelTabPendataan("qc")).toBe("4 · QC Pemahaman");
+    expect(labelTabPendataan("qc")).toBe("4 · QC");
   });
 });
 
@@ -100,7 +100,7 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
     expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
     expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "pengadaan", "anggaran"]);
     expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "qc", "tim"]);
-    expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal"]);
+    expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal", "kuesioner"]);
     expect(KEGIATAN_PENDATAAN).toBe(1);
   });
   it("bacaSubDari: dikenal -> itu; selain itu sub pertama", () => {
@@ -132,6 +132,8 @@ describe("tab QC Pemahaman (26 Okt 2026)", () => {
     expect(urlTabPendataan(P, "?tab=qc&sub=soal", "monitoring")).toBe(`${P}?tab=monitoring`);
     expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc&sub=soal", "hari")).toBe(`${P}?tab=qc`);
     expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc", "pengaturan")).toBe(`${P}?tab=qc&sub=pengaturan`);
+    expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc", "kuesioner")).toBe(`${P}?tab=qc&sub=kuesioner`);
+    expect(bacaSubDari(SUB_QC, "kuesioner")).toBe("kuesioner");
   });
   it("tidak punya pintu masuk (isinya tersemat)", () => {
     expect(PINTU_TAB.qc).toBeUndefined();
