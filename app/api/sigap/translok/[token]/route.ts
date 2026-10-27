@@ -32,6 +32,7 @@ import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realis
 import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
 import { panduanSelesai } from "@/lib/sigapPanduan";
 import { laporanDianggap, satuanLaporan, satuanLaporanTanggal, sumberUntukPeran } from "@/lib/realisasiOtomatis";
+import { galatLokasiLaporan } from "@/lib/sigapLaporanLokasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -297,7 +298,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         .filter((l) => typeof l?.kecamatan === "string" && typeof l?.nagari === "string" && typeof l?.jorong === "string")
         .map((l) => ({ kecamatan: String(l.kecamatan), nagari: String(l.nagari), jorong: String(l.jorong), idsubsls: typeof l.idsubsls === "string" ? l.idsubsls : null }))
         .slice(0, 10);
-      if (lokasi.length === 0) return NextResponse.json({ error: "Pilih minimal 1 lokasi." }, { status: 400 });
+      // (27 Okt 2026) Korwil boleh menyimpan laporan tanpa lokasi (keputusan user); peran lain tetap wajib minimal 1 lokasi. Aturan: lib/sigapLaporanLokasi.ts
+      const galatLokasi = galatLokasiLaporan(akses.penugasan.peran, lokasi.length);
+      if (galatLokasi) return NextResponse.json({ error: galatLokasi }, { status: 400 });
       const jumlah = Number(body?.jumlah_realisasi);
       if (!Number.isInteger(jumlah) || jumlah < 0 || jumlah > 500) return NextResponse.json({ error: `Jumlah ${satuanLaporanTanggal(akses.penugasan.kegiatan.kode, akses.penugasan.peran, akses.penugasan.kegiatan.satuan_realisasi, akses.tanggal)} tidak valid (0 sampai 500).` }, { status: 400 });
       const kendala = typeof body?.kendala === "string" ? body.kendala.trim().slice(0, 1000) : "";

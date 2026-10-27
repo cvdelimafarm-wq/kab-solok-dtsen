@@ -12,6 +12,7 @@ import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
 import { LABEL_SUMBER, bandingkanOtomatis, satuanLaporanTanggal, type RealisasiOtomatis, type SumberOtomatis } from "@/lib/realisasiOtomatis";
+import { bolehSimpanLaporan, petunjukSimpanLaporan, teksTanpaLokasi } from "@/lib/sigapLaporanLokasi";
 import { bagianKurang, ringkasKurang, tautanWaIzinSusulan } from "@/lib/sigapKekurangan";
 import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
@@ -1945,6 +1946,8 @@ function FormRealisasi({
   const banding = oto ? bandingkanOtomatis({ lokasi, jumlah: jumlah === "" ? null : Number(jumlah) }, oto) : null;
   // (14 Okt 2026) Isian yang BERBEDA dari hasil lembar (lokasi atau jumlah) wajib disertai alasan singkat di kolom Kendala -- supaya selisih dengan data lembar tercatat.
   const butuhAlasan = !!banding && !banding.semuaSama && kendala.trim().length < 5;
+  // (27 Okt 2026) Korwil boleh tanpa lokasi; peran lain wajib minimal 1. Tombol yang mati kini selalu disertai petunjuknya (lib/sigapLaporanLokasi.ts).
+  const petunjukSimpan = petunjukSimpanLaporan({ peran: pen.peran, jumlahLokasi: lokasi.length, jumlah });
   const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi SLS" : sumber === "qc" ? "Lembar Quality Check" : "Lembar Pendataan";
   const teksLokasi = (n: number) => (n > 0 ? ` di ${n} jorong` : " (lokasi isi sendiri)");
   function pakaiOtomatis() {
@@ -2024,7 +2027,7 @@ function FormRealisasi({
           ))}
         </div>
       ) : (
-        <p className="text-[12.5px] text-slate-500">Belum ada lokasi.</p>
+        <p className="text-[12.5px] text-slate-500">{teksTanpaLokasi(pen.peran)}</p>
       )}
 
       {boleh && (
@@ -2114,10 +2117,13 @@ function FormRealisasi({
           Isian berbeda dari {oto ? LABEL_SUMBER[oto.sumber] : "lembar"} ({oto?.jumlah} {sat}). Tuliskan alasan singkat di kolom Kendala (minimal 5 huruf), atau tekan Pakai data otomatis.
         </p>
       )}
+      {boleh && !butuhAlasan && petunjukSimpan && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] font-semibold text-amber-900">{petunjukSimpan}</p>
+      )}
       {boleh && (
         <button
           type="button"
-          disabled={busy || lokasi.length === 0 || jumlah === "" || butuhAlasan}
+          disabled={!bolehSimpanLaporan({ peran: pen.peran, jumlahLokasi: lokasi.length, jumlah, butuhAlasan, sibuk: busy })}
           onClick={simpan}
           className="mt-3 w-full rounded-xl bg-[#0F3D7A] py-3.5 text-[15px] font-extrabold text-white shadow disabled:opacity-50"
         >
