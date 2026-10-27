@@ -16,6 +16,7 @@ import { alamatMasukKembali } from "@/app/portal/sesi";
 import { angkaId } from "@/app/sigap/kegiatan/format";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import { persenKorwil, type DataKorwil } from "@/lib/korwilMonitor";
+import { tabDariAlamat } from "@/lib/sigapKorwilTab";
 import KorwilLapangan from "./KorwilLapangan";
 import KorwilLembarQc from "./KorwilLembarQc";
 import KorwilHasilQc from "./KorwilHasilQc";
@@ -32,6 +33,15 @@ export default function MonitoringKorwil() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("lapangan");
   const [pilih, setPilih] = useState<number | null>(null);
+  // (27 Okt 2026) ?tab=kuesioner membuka Lembar Quality Check langsung (dari tombol di formulir laporan translok korwil); nilai di luar daftar diabaikan.
+  useEffect(() => {
+    try {
+      const t = tabDariAlamat(new URLSearchParams(window.location.search).get("tab"));
+      if (t) setTab(t);
+    } catch {
+      /* alamat tak terbaca: tetap tab awal */
+    }
+  }, []);
 
   const d = useData<DataKorwil>(`/api/portal/korwil/monitoring${pilih ? `?kelompok=${pilih}` : ""}`);
   useEffect(() => {

@@ -14,6 +14,7 @@ import { JENIS_PER_HARI, pilihanTanggalUnduh } from "@/lib/sigapUnduh";
 import { adaTautanKerja, bacaTautanKerja, tanpaTautanKerja, type BagianKerja } from "@/lib/sigapTautanKerja";
 import { bacaTampilanKerja, kemasTampilan, kunciTampilanKerja } from "@/lib/sigapPanduan";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
+import { ALAMAT_LEMBAR_QC_KORWIL } from "@/lib/sigapKorwilTab";
 import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
 import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
 import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
@@ -1920,7 +1921,16 @@ function FormRealisasi({
         </p>
       )}
       {/* (15 Okt 2026) Laporan diambil dari pendataan: bila belum ada hasil, petugas diarahkan ke Lembar Pendataan (Sub SLS prioritas) dari dalam formulir */}
-      {sumber === "pendataan" && !oto && !tersimpan && boleh && (
+      {sumber === "pendataan" && !oto && !tersimpan && boleh && pen.peran === "korwil" && (
+        // (27 Okt 2026) Korwil tidak mendata KK: pekerjaannya di lapangan dicatat lewat Lembar Quality Check (kuesioner supervisi) di Lembar Supervisi, bukan Lembar Pendataan.
+        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] leading-snug text-amber-900">
+          <p>Sebagai korwil, kegiatan supervisi Anda dicatat di Lembar Quality Check (kuesioner). Lengkapi dulu kuesionernya, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
+          <a href={ALAMAT_LEMBAR_QC_KORWIL} className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#E0A526] px-4 text-[14px] font-extrabold text-[#1E2A47]">
+            Buka Lembar Quality Check
+          </a>
+        </div>
+      )}
+      {sumber === "pendataan" && !oto && !tersimpan && boleh && pen.peran !== "korwil" && (
         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] leading-snug text-amber-900">
           <p>Laporan ini diambil dari hasil pendataan. Lengkapi dulu status KK di Lembar Pendataan, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
           <a href={alamatLembarUtama("/sigap/pendataan")} className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#E0A526] px-4 text-[14px] font-extrabold text-[#1E2A47]">
