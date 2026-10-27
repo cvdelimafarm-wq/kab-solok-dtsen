@@ -8,6 +8,12 @@
 import type { Db } from "@/lib/sigap";
 import { susunRealisasiOtomatis, sumberUntukPeran, type BarisOtomatis, type RealisasiOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
 
+/** Satu baris hasil fungsi database -> BarisOtomatis. Sub SLS boleh kosong (lembar QC objek petugas tidak punya lokasi). */
+export function barisDari(tanggal: string, r: Record<string, unknown>): BarisOtomatis {
+  const sumber = r.sumber === "identifikasi" ? "identifikasi" : r.sumber === "qc" ? "qc" : "pendataan";
+  return { tanggal, idsubsls: typeof r.idsubsls === "string" && r.idsubsls ? r.idsubsls : null, n: Number(r.n) || 0, sumber };
+}
+
 export async function ambilRealisasiOtomatis(
   db: Db,
   akunId: number,
@@ -27,8 +33,8 @@ export async function ambilRealisasiOtomatis(
   const baris: BarisOtomatis[] = [];
   for (const r of (data ?? []) as Record<string, unknown>[]) {
     const t = String(r.tanggal ?? "").slice(0, 10);
-    if (!ada.has(t) || typeof r.idsubsls !== "string") continue;
-    baris.push({ tanggal: t, idsubsls: r.idsubsls, n: Number(r.n) || 0, sumber: r.sumber === "identifikasi" ? "identifikasi" : "pendataan" });
+    if (!ada.has(t)) continue;
+    baris.push(barisDari(t, r));
   }
   return susunRealisasiOtomatis(baris, wilayah, satuan);
 }
@@ -54,11 +60,11 @@ export async function ambilRealisasiOtomatisRingan(db: Db, akunId: number, peran
   const baris: BarisOtomatis[] = [];
   for (const r of (data ?? []) as Record<string, unknown>[]) {
     const t = String(r.tanggal ?? "").slice(0, 10);
-    if (!set.has(t) || typeof r.idsubsls !== "string") continue;
-    baris.push({ tanggal: t, idsubsls: r.idsubsls, n: Number(r.n) || 0, sumber: r.sumber === "identifikasi" ? "identifikasi" : "pendataan" });
+    if (!set.has(t)) continue;
+    baris.push(barisDari(t, r));
   }
   let wilayah: WilayahRingkas[] = [];
-  const ids = Array.from(new Set(baris.map((b) => b.idsubsls))).slice(0, 300);
+  const ids = Array.from(new Set(baris.map((b) => b.idsubsls).filter((x): x is string => !!x))).slice(0, 300);
   if (ids.length > 0) {
     const { data: w } = await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls").in("idsubsls", ids);
     wilayah = (w ?? []) as WilayahRingkas[];

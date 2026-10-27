@@ -1202,7 +1202,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
         <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
           <p className="text-[14px] font-extrabold">✓ Laporan dianggap sudah selesai</p>
           <p className="mt-0.5 text-[12.5px]">
-            Anda tidak mengisi laporan manual, tetapi ada {hari.otomatis.jumlah} {hari.otomatis.satuan} dari {LABEL_SUMBER[hari.otomatis.sumber]} Anda pada tanggal ini di {hari.otomatis.lokasi.length} jorong, sehingga laporan dihitung sudah dibuat. Tinggal pastikan dokumentasi foto lengkap.
+            Anda tidak mengisi laporan manual, tetapi ada {hari.otomatis.jumlah} {hari.otomatis.satuan} dari {LABEL_SUMBER[hari.otomatis.sumber]} Anda pada tanggal ini{hari.otomatis.lokasi.length > 0 ? ` di ${hari.otomatis.lokasi.length} jorong` : ""}, sehingga laporan dihitung sudah dibuat. Tinggal pastikan dokumentasi foto lengkap.
           </p>
         </div>
       )}
@@ -1896,7 +1896,8 @@ function FormRealisasi({
   const banding = oto ? bandingkanOtomatis({ lokasi, jumlah: jumlah === "" ? null : Number(jumlah) }, oto) : null;
   // (14 Okt 2026) Isian yang BERBEDA dari hasil lembar (lokasi atau jumlah) wajib disertai alasan singkat di kolom Kendala -- supaya selisih dengan data lembar tercatat.
   const butuhAlasan = !!banding && !banding.semuaSama && kendala.trim().length < 5;
-  const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi SLS" : "Lembar Pendataan";
+  const namaLembar = sumber === "identifikasi" ? "Lembar Identifikasi SLS" : sumber === "qc" ? "Lembar Quality Check" : "Lembar Pendataan";
+  const teksLokasi = (n: number) => (n > 0 ? ` di ${n} jorong` : " (lokasi isi sendiri)");
   function pakaiOtomatis() {
     if (!oto) return;
     setLokasi(oto.lokasi.map((l) => ({ ...l })));
@@ -1921,16 +1922,16 @@ function FormRealisasi({
         </p>
       )}
       {/* (15 Okt 2026) Laporan diambil dari pendataan: bila belum ada hasil, petugas diarahkan ke Lembar Pendataan (Sub SLS prioritas) dari dalam formulir */}
-      {sumber === "pendataan" && !oto && !tersimpan && boleh && pen.peran === "korwil" && (
+      {sumber === "qc" && !oto && !tersimpan && boleh && (
         // (27 Okt 2026) Korwil tidak mendata KK: pekerjaannya di lapangan dicatat lewat Lembar Quality Check (kuesioner supervisi) di Lembar Supervisi, bukan Lembar Pendataan.
         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] leading-snug text-amber-900">
-          <p>Sebagai korwil, kegiatan supervisi Anda dicatat di Lembar Quality Check (kuesioner). Lengkapi dulu kuesionernya, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
+          <p>Laporan korwil diambil dari Lembar Quality Check (kuesioner supervisi). Simpan dulu lembarnya, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
           <a href={ALAMAT_LEMBAR_QC_KORWIL} className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#E0A526] px-4 text-[14px] font-extrabold text-[#1E2A47]">
             Buka Lembar Quality Check
           </a>
         </div>
       )}
-      {sumber === "pendataan" && !oto && !tersimpan && boleh && pen.peran !== "korwil" && (
+      {sumber === "pendataan" && !oto && !tersimpan && boleh && (
         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] leading-snug text-amber-900">
           <p>Laporan ini diambil dari hasil pendataan. Lengkapi dulu status KK di Lembar Pendataan, lalu kembali ke sini untuk memeriksa dan menyimpan laporan.</p>
           <a href={alamatLembarUtama("/sigap/pendataan")} className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#E0A526] px-4 text-[14px] font-extrabold text-[#1E2A47]">
@@ -1942,11 +1943,11 @@ function FormRealisasi({
         <div className={`mt-2.5 rounded-xl px-3 py-2 text-[12.5px] leading-snug ${banding.semuaSama ? "bg-sky-50 text-sky-900" : "bg-amber-50 text-amber-900"}`}>
           {banding.semuaSama ? (
             <p>
-              <b>{tersimpan ? "✓ Sesuai" : "Terisi otomatis dari"} {LABEL_SUMBER[oto.sumber]}:</b> {oto.jumlah} {sat} di {oto.lokasi.length} jorong.{!tersimpan && " Periksa; bila sudah benar tekan Konfirmasi & simpan laporan, bila perlu ubah dulu lokasi atau jumlahnya."}
+              <b>{tersimpan ? "✓ Sesuai" : "Terisi otomatis dari"} {LABEL_SUMBER[oto.sumber]}:</b> {oto.jumlah} {sat}{teksLokasi(oto.lokasi.length)}.{!tersimpan && " Periksa; bila sudah benar tekan Konfirmasi & simpan laporan, bila perlu ubah dulu lokasi atau jumlahnya."}
             </p>
           ) : (
             <p>
-              <b>Isian berbeda dari {LABEL_SUMBER[oto.sumber]}</b> ({oto.jumlah} {sat} di {oto.lokasi.length} jorong).
+              <b>Isian berbeda dari {LABEL_SUMBER[oto.sumber]}</b> ({oto.jumlah} {sat}{teksLokasi(oto.lokasi.length)}).
               {boleh && (
                 <button type="button" onClick={pakaiOtomatis} className="ml-1.5 font-extrabold underline">
                   Pakai data otomatis

@@ -85,7 +85,7 @@ export type MasukanKekurangan = {
   /** "/sigap/translok/<token>?p=<id>" -- ke halaman kerja; parameter tab/tgl/fokus ditambahkan di sini */
   hrefDasar: string;
   /** sumber laporan otomatis menurut peran (PML = identifikasi, PPL/korwil = pendataan); null = tak ada lembar */
-  sumber?: "identifikasi" | "pendataan" | null;
+  sumber?: "identifikasi" | "pendataan" | "qc" | null;
   hrefLembar?: string | null;
   /** nomor WhatsApp admin anggaran berbentuk 62xxxxxxxxxx; null = tombol WhatsApp tidak ditampilkan */
   waAdmin?: string | null;
@@ -181,7 +181,7 @@ export function susunKekurangan(m: MasukanKekurangan, nowMs: number): Kekurangan
   const sisa = (akhirHari - nowMs) / 1000;
   const mendesak = sisa < AMBANG_MENDESAK_DETIK;
   const url = (q: string) => `${m.hrefDasar}${m.hrefDasar.includes("?") ? "&" : "?"}${q}`;
-  const lembar = m.sumber === "identifikasi" ? "Lembar Identifikasi SLS" : "Lembar Pendataan";
+  const lembar = m.sumber === "identifikasi" ? "Lembar Identifikasi SLS" : m.sumber === "qc" ? "Lembar Quality Check" : "Lembar Pendataan"; // (27 Okt 2026) korwil = Lembar Quality Check
   const izin = m.izin ?? {};
 
   // --- 1. Perbaikan administrasi: hari lampau yang masih punya izin susulan (jendela 24 jam) dan belum lengkap.

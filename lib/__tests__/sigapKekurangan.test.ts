@@ -120,6 +120,16 @@ describe("susunKekurangan: hari ini", () => {
     expect(l.sekunder).toBeUndefined();
     expect(l.uraian).not.toContain("Lembar Identifikasi");
   });
+  it("korwil (sumber qc, 27 Okt 2026): tombol kedua menuju Lembar Quality Check, bukan Lembar Pendataan", () => {
+    const k = susunKekurangan(dasar({ sumber: "qc", hrefLembar: "/sigap/korwil?tab=kuesioner", satuan: "lembar QC" }), at("07:00"));
+    const l = k.find((x) => x.jenis === "lembar")!;
+    expect(l.judul).toBe("Belum ada hasil di Lembar Quality Check hari ini");
+    expect(l.sekunder?.teks).toBe("Buka Lembar Quality Check");
+    expect(l.sekunder?.href).toBe("/sigap/korwil?tab=kuesioner");
+    expect(JSON.stringify(k)).not.toContain("Lembar Pendataan");
+    const sore = susunKekurangan(dasar({ sumber: "qc", hrefLembar: "/sigap/korwil?tab=kuesioner", satuan: "lembar QC" }), at("16:00"));
+    expect(sore.find((x) => x.jenis === "laporan")?.sekunder?.teks).toBe("Buka Lembar Quality Check");
+  });
   it("tanpa lembar (peran tanpa sumber otomatis): laporan manual", () => {
     const k = susunKekurangan(dasar({ sumber: null, hrefLembar: null }), at("07:00"));
     expect(k.find((x) => x.jenis === "laporan")?.aksi).toBe("Isi laporan");

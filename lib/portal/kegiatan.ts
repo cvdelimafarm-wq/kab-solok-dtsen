@@ -14,6 +14,7 @@ import { ambilRealisasiOtomatisRingan } from "@/lib/portal/realisasiOtomatis";
 import type { LangkahKegiatan, NadaKegiatan, RingkasKegiatan, StatusLangkah } from "@/lib/sigapKegiatan";
 import { hariLengkapDinilai, hitungTerlewat, susunKekurangan, type IsianHari, type MasukanKekurangan } from "@/lib/sigapKekurangan";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
+import { ALAMAT_LEMBAR_QC_KORWIL } from "@/lib/sigapKorwilTab";
 
 function tglPendek(iso: string): string {
   const b = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -315,7 +316,7 @@ export async function muatMasukanTranslok(
         namaPetugas: opsi.namaPetugas ?? null,
         satuan,
         sumber,
-        hrefLembar: sumber === "identifikasi" ? alamatLembarUtama("/sigap/identifikasi") : sumber === "pendataan" ? alamatLembarUtama("/sigap/pendataan") : null,
+        hrefLembar: sumber === "identifikasi" ? alamatLembarUtama("/sigap/identifikasi") : sumber === "pendataan" ? alamatLembarUtama("/sigap/pendataan") : sumber === "qc" ? ALAMAT_LEMBAR_QC_KORWIL : null, // (27 Okt 2026) korwil -> Lembar Quality Check
         waAdmin: opsi.waAdmin ?? null,
       };
       return masukan;
