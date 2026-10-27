@@ -183,6 +183,7 @@ async function muat(db: Db): Promise<DataKinerja> {
   const hitung = new Map<string, { t: number; n: number; d: number }>(); // `${akun}|${tanggal}`
   const tanda = new Map<string, { idsubsls: string; waktu: number }[]>(); // hanya hari >= mulai bobot
   for (const r of kk) {
+    if (mentah.nonaktif.has(r.idsubsls)) continue; // (27 Okt 2026) KK di Sub SLS non aktif tidak dihitung sebagai realisasi
     const waktu = Date.parse(r.status_at);
     if (!Number.isFinite(waktu)) continue;
     const tgl = tanggalWib(waktu);

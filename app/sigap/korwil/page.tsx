@@ -132,7 +132,7 @@ export default function MonitoringKorwil() {
                 )}
               </p>
             )}
-            {tab === "lapangan" && <KorwilLapangan lap={data.lapangan} />}
+            {tab === "lapangan" && <KorwilLapangan lap={data.lapangan} bahan={data.selesai && data.harian ? { hariIni: data.hari_ini, selesai: data.selesai, harian: data.harian } : null} />}
             {tab === "kuesioner" && <KorwilLembarQc kelompok={data.kelompok} />}
             {tab === "hasil" && <KorwilHasilQc kelompok={data.kelompok} />}
             {tab === "lapangan" && (

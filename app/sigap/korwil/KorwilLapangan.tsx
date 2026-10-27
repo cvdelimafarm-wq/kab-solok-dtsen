@@ -4,11 +4,56 @@
 //
 // (19 Okt 2026) Monitoring Korwil -- layar Progres Lapangan: satu kartu per tim PML (target, realisasi, sisa), wilayah (rekap per nagari atau
 // daftar Sub SLS, bisa diganti) dan daftar petugas (PML + PPL). Sub SLS yang dipegang lebih dari satu tim diberi tanda ⇄ (target diproporsikan).
+// (27 Okt 2026) Tiap kartu tim memuat PERINGATAN Aman / Waspada / Warning / Selesai: sisa target tim dibandingkan dengan target harian (sisa / hari tersisa
+// sampai batas kegiatan) dan kecepatan 7 hari terakhir. Aturan hitung: lib/korwilTempo.ts.
 
 import { useState } from "react";
 import { angkaId, namaSingkat } from "@/app/sigap/kegiatan/format";
 import { namaTampil } from "@/lib/namaTampil";
-import { persenKorwil, timCapaianTerendah, type LapanganKorwil, type TimProgres } from "@/lib/korwilMonitor";
+import { persenKorwil, timCapaianTerendah, type HarianTim, type LapanganKorwil, type TimProgres } from "@/lib/korwilMonitor";
+import { LABEL_TEMPO, hitungTempo, ringkasTempo, type StatusTempo, type Tempo } from "@/lib/korwilTempo";
+
+/** Bahan peringatan dari server; tanpa ini (data lama di simpanan HP) peringatan tidak tampil. */
+export type BahanTempo = { hariIni: string; selesai: string; harian: HarianTim[] };
+
+const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const tgl = (t: string) => `${Number(t.slice(8, 10))} ${BULAN[Number(t.slice(5, 7)) - 1] ?? ""}`;
+const GAYA_TEMPO: Record<StatusTempo, string> = {
+  selesai: "bg-[#E3ECFB] text-[#1F5FD1]",
+  aman: "bg-[#E3F6EC] text-[#13794B]",
+  waspada: "bg-[#FFF4D6] text-[#8A6200]",
+  warning: "bg-[#FDE8E8] text-[#B42329]",
+};
+const IKON_TEMPO: Record<StatusTempo, string> = { selesai: "✓", aman: "✓", waspada: "!", warning: "⚠" };
+const koma = (x: number) => String(x).replace(".", ",");
+
+function kalimatTempo(t: Tempo): string {
+  if (t.status === "selesai") return "Semua KK target tim sudah didata.";
+  if (t.hariSisa === 0) return `Batas pendataan (${tgl(t.selesai)}) sudah lewat dan masih sisa ${angkaId(t.sisa)} KK.`;
+  if (t.perkiraanSelesai === null) return `Belum ada KK didata dalam 7 hari terakhir. Agar selesai ${tgl(t.selesai)} perlu ${angkaId(t.targetHarian)} KK per hari.`;
+  if (t.status === "aman") return `Dengan kecepatan sekarang perkiraan selesai ${tgl(t.perkiraanSelesai)}, sebelum batas ${tgl(t.selesai)}.`;
+  const telat = t.terlambatHari ?? 0;
+  return `Dengan kecepatan sekarang baru selesai ${tgl(t.perkiraanSelesai)}${telat > 0 ? ` (terlambat ${telat} hari dari batas ${tgl(t.selesai)})` : ""}.`;
+}
+
+function PeringatanTim({ t }: { t: Tempo }) {
+  return (
+    <div className={`mt-2 rounded-[12px] px-3 py-2 ${GAYA_TEMPO[t.status]}`} role={t.status === "warning" ? "alert" : undefined}>
+      <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold">
+        <span aria-hidden>{IKON_TEMPO[t.status]}</span>
+        {LABEL_TEMPO[t.status]}
+      </p>
+      <p className="mt-0.5 text-[12px] leading-snug">{kalimatTempo(t)}</p>
+      {t.status !== "selesai" && t.hariSisa > 0 && (
+        <p className="mt-1 text-[11.5px] leading-snug opacity-90">
+          Target harian <b>{angkaId(t.targetHarian)} KK</b>
+          {t.targetPerPpl !== null && <> (±{angkaId(t.targetPerPpl)} per PPL)</>} · {t.hariSisa} hari lagi · kecepatan <b>{koma(t.kecepatan)} KK/hari</b>
+          {t.hariDinilai > 0 && <> ({t.hariDinilai} hari terakhir)</>}
+        </p>
+      )}
+    </div>
+  );
+}
 
 const pct = (a: number, b: number) => String(persenKorwil(a, b)).replace(".", ",");
 
@@ -43,7 +88,7 @@ function BarisWilayah({ judul, ket, target, realisasi, dibagi }: { judul: string
   );
 }
 
-function KartuTim({ t, no, terendah }: { t: TimProgres; no: number; terendah: boolean }) {
+function KartuTim({ t, no, terendah, tempo }: { t: TimProgres; no: number; terendah: boolean; tempo: Tempo | null }) {
   const [mode, setMode] = useState<"nagari" | "sub">("nagari");
   const [petugas, setPetugas] = useState(false);
   // (26 Okt 2026, C2) rincian wilayah dan petugas tertutup secara bawaan supaya halaman tidak sepanjang ±1700 px
@@ -79,7 +124,8 @@ function KartuTim({ t, no, terendah }: { t: TimProgres; no: number; terendah: bo
           Sisa <b className="text-[#0F2A52]">{angkaId(sisa)}</b>
         </span>
       </div>
-      {t.tidak_ditemukan > 0 && <p className="mt-1 text-[11.5px] text-[#6B7A90]">{angkaId(t.tidak_ditemukan)} KK tidak ditemukan (tidak masuk "berhasil didata").</p>}
+      {tempo && <PeringatanTim t={tempo} />}
+      {t.tidak_ditemukan > 0 && <p className="mt-1.5 text-[11.5px] text-[#6B7A90]">{angkaId(t.tidak_ditemukan)} KK tidak ditemukan (tidak masuk "berhasil didata").</p>}
 
       <button type="button" aria-expanded={rinci} onClick={() => setRinci((x) => !x)} className="mt-2 flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[12px] bg-[#F5F8FE] px-3 text-left text-[12.5px] font-extrabold text-[#1F5FD1]">
         <span>{rinci ? "Sembunyikan wilayah dan petugas" : "Lihat wilayah dan petugas"}</span>
@@ -149,14 +195,35 @@ function KartuTim({ t, no, terendah }: { t: TimProgres; no: number; terendah: bo
   );
 }
 
-export default function KorwilLapangan({ lap }: { lap: LapanganKorwil }) {
+export default function KorwilLapangan({ lap, bahan }: { lap: LapanganKorwil; bahan?: BahanTempo | null }) {
   if (lap.tim.length === 0) return <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">Kelompok ini belum punya tim PML.</p>;
   // (26 Okt 2026, C2) tim dengan capaian terendah ditandai; tidak ditandai bila hanya satu tim atau capaian semua tim sama
   const terendah = new Set(timCapaianTerendah(lap.tim));
+  // (27 Okt 2026) peringatan per tim; tim tanpa catatan harian dari server (gagal dimuat) tidak diberi peringatan agar tidak menyesatkan
+  const tempo = new Map<number, Tempo>();
+  if (bahan) {
+    for (const t of lap.tim) {
+      const h = bahan.harian.find((x) => x.pml_id === t.pml_id);
+      if (h && t.target > 0) tempo.set(t.pml_id, hitungTempo({ hariIni: bahan.hariIni, selesai: bahan.selesai, target: t.target, realisasi: t.realisasi, ppl: t.ppl.length, harian: h.per_hari }));
+    }
+  }
+  const r = ringkasTempo(Array.from(tempo.values()));
   return (
     <div className="space-y-3">
+      {tempo.size > 0 && (
+        <p className="px-1 text-[12px] leading-snug text-[#52627A]" aria-label="Ringkasan peringatan tim">
+          Batas pendataan <b>{tgl(bahan!.selesai)}</b>. Tim:{" "}
+          {(["warning", "waspada", "aman", "selesai"] as StatusTempo[]).filter((k) => r[k] > 0).map((k, i, a) => (
+            <span key={k}>
+              <b>{r[k]} {LABEL_TEMPO[k].toLowerCase()}</b>
+              {i < a.length - 1 ? ", " : ""}
+            </span>
+          ))}
+          .
+        </p>
+      )}
       {lap.tim.map((t, i) => (
-        <KartuTim key={t.pml_id} t={t} no={i + 1} terendah={terendah.has(t.pml_id)} />
+        <KartuTim key={t.pml_id} t={t} no={i + 1} terendah={terendah.has(t.pml_id)} tempo={tempo.get(t.pml_id) ?? null} />
       ))}
     </div>
   );

@@ -13,12 +13,14 @@ import { memoWaktu } from "@/lib/portal/memoSingkat";
 import type { AkunPortal } from "@/lib/portal/server";
 import type { BarisKkMon, HasilMon } from "@/lib/pendataanMonitor";
 import type { InfoKorwil } from "@/lib/sigapTahap";
+import { geserTanggal } from "@/lib/korwilTempo";
 import {
   susunAdministrasi,
   susunLapanganKorwil,
   type AnggotaKorwil,
   type BarisHariKorwil,
   type DataKorwil,
+  type HarianTim,
   type LapanganKorwil,
   type PilihanKelompok,
   type SubInfoKorwil,
@@ -196,6 +198,51 @@ async function lapanganTim(db: Db, pmlPetugas: number[], timKelompok: TimKorwilM
   return susunLapanganKorwil({ tim: semuaTim, sub: subPml, nonaktif, baris, info });
 }
 
+/** Cadangan bila kegiatan tidak terbaca: akhir periode Pendataan Pascabencana 2026. */
+const SELESAI_BAWAAN = "2026-11-10";
+
+async function tanggalSelesai(db: Db): Promise<string> {
+  const { data } = await db.from("sigap_kegiatan").select("tanggal_selesai").eq("id", KEGIATAN_PENDATAAN_ID).maybeSingle();
+  const t = (data as { tanggal_selesai?: string | null } | null)?.tanggal_selesai;
+  return typeof t === "string" && /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : SELESAI_BAWAAN;
+}
+
+/**
+ * (27 Okt 2026) KK berhasil didata (terdampak / tidak terdampak) per tanggal WIB untuk tiap tim kelompok, 8 hari terakhir termasuk hari ini.
+ * Hanya KK di Sub SLS AKTIF tim (yang dihitung dalam target) dan yang ditandai anggota tim itu. Dasar kecepatan di lib/korwilTempo.ts.
+ */
+async function harianTim(db: Db, tim: TimKorwilMasuk[], lapangan: LapanganKorwil, hariIni: string): Promise<HarianTim[]> {
+  const mulai = geserTanggal(hariIni, -8);
+  const akunKeTim = new Map<number, number>();
+  for (const t of tim) for (const p of [t.pml, ...t.ppl]) for (const a of p.akun_ids) if (!akunKeTim.has(a)) akunKeTim.set(a, t.pml.petugas_id);
+  const subAktif = new Map<number, Set<string>>();
+  for (const t of lapangan.tim) subAktif.set(t.pml_id, new Set(t.sub.map((x) => x.idsubsls)));
+  const hasil = new Map<number, Record<string, number>>(tim.map((t) => [t.pml.petugas_id, {}]));
+  const akunIds = Array.from(akunKeTim.keys());
+  if (akunIds.length > 0) {
+    const baris = await halaman<{ ppl_akun_id: number | null; idsubsls: string; status_at: string | null }>((a, b) =>
+      db
+        .from("bencana_pendataan_kk")
+        .select("ppl_akun_id, idsubsls, status_at")
+        .eq("aktif", true)
+        .in("hasil", ["terdampak", "tidak_terdampak"])
+        .in("ppl_akun_id", akunIds)
+        .gte("status_at", `${mulai}T00:00:00+07:00`)
+        .order("id")
+        .range(a, b),
+    );
+    for (const r of baris) {
+      if (r.ppl_akun_id == null || !r.status_at) continue;
+      const pml = akunKeTim.get(n(r.ppl_akun_id));
+      if (pml == null || !(subAktif.get(pml)?.has(r.idsubsls) ?? false)) continue;
+      const tgl = new Date(Date.parse(r.status_at) + 7 * 3_600_000).toISOString().slice(0, 10);
+      const per = hasil.get(pml)!;
+      per[tgl] = (per[tgl] ?? 0) + 1;
+    }
+  }
+  return lapangan.tim.map((t) => ({ pml_id: t.pml_id, per_hari: hasil.get(t.pml_id) ?? {} }));
+}
+
 async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, "pilihan"> | null> {
   const k = await pmlKelompok(db, kelompok);
   if (!k) return null;
@@ -206,6 +253,7 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
 
   // administrasi harian (sama dengan Monitoring Lapangan); satu muatan dipakai semua kelompok
   const hariIni = hariIniWib();
+  const [selesai, harian] = await Promise.all([tanggalSelesai(db), harianTim(db, timKelompok, lapangan, hariIni).catch((): HarianTim[] => [])]);
   const lap = await memoWaktu("korwil:lapangan", TTL_MS, () => monitoringLapangan(db, MULAI_KORWIL, hariIni));
   const akunKelompok = new Set(timKelompok.flatMap((t) => [t.pml, ...t.ppl].flatMap((p) => p.akun_ids)));
   const hari: BarisHariKorwil[] = lap.baris
@@ -224,6 +272,8 @@ async function muatKelompok(db: Db, kelompok: number): Promise<Omit<DataKorwil, 
     sekarang: new Date().toISOString(),
     hari_ini: hariIni,
     mulai: MULAI_KORWIL,
+    selesai,
+    harian,
     kelompok,
     korwil: k.korwilAkun.map((a) => namaKorwil.get(a) ?? `Akun ${a}`),
     lapangan,

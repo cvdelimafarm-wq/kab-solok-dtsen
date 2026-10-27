@@ -4,6 +4,7 @@
 //
 // (27 Okt 2026) Lembar Supervisi > Hasil QC Pemahaman. HANYA-BACA. Jawaban QC Pemahaman petugas (PML & PPL) satu kelompok, dua tampilan:
 //  * Per tim: skor tiap petugas + soal yang dijawab salah (siapa yang salah dan jawaban yang dipilih, kunci, penjelasan);
+//  * Ketuk nama petugas: rincian per soal berisi pilihan pertama, kedua, ketiga ... sampai benar (semua percobaan petugas itu);
 //  * Matriks: baris = soal, kolom = petugas (dikelompokkan per tim); sel ✓ benar, ✕ salah (huruf = jawaban yang dipilih), – belum.
 // Saringan: tim, petugas, tanggal, dan percobaan yang dihitung (pertama / terakhir). Data: /api/portal/qc/hasil; hitungan: lib/korwilHasilQc.ts.
 
@@ -13,6 +14,7 @@ import { namaSingkatTampil } from "@/lib/namaTampil";
 import {
   SARINGAN_AWAL,
   opsiSaringan,
+  rincianPetugas,
   susunHasil,
   teksJawaban,
   type AnggotaHasil,
@@ -20,6 +22,7 @@ import {
   type Saringan,
   type SoalMentah,
   type SoalSalah,
+  type RincianPetugas,
 } from "@/lib/korwilHasilQc";
 
 type Data = { kelompok: number; sekarang: string; anggota: AnggotaHasil[]; percobaan: PercobaanMentah[]; soal: SoalMentah[] };
@@ -77,6 +80,45 @@ function DetailSoal({ s, pilih }: { s: SoalSalah; pilih?: boolean }) {
   );
 }
 
+function RincianKartu({ r, nama, soalSemua, setSoalSemua, onTutup }: { r: RincianPetugas; nama: string; soalSemua: boolean; setSoalSemua: (v: boolean) => void; onTutup: () => void }) {
+  const daftar = soalSemua ? r.soal : r.soal.filter((s) => s.pernahSalah);
+  return (
+    <div className="space-y-2 rounded-[12px] bg-[#F5F8FD] p-3 text-[12.5px] leading-snug" aria-label={`Rincian jawaban ${nama}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-extrabold text-[#0F2A52]">
+          Rincian {nama} <span className="font-semibold text-[#6B7A90]">· {r.percobaan} percobaan · {r.pernahSalah} soal pernah salah{r.belumBenar > 0 ? ` · ${r.belumBenar} belum benar` : ""}</span>
+        </p>
+        <button type="button" onClick={onTutup} className="min-h-[44px] flex-none px-1 text-[12px] font-extrabold text-[#1F5FD1]">
+          Tutup
+        </button>
+      </div>
+      <label className="flex min-h-[44px] items-center gap-2 font-bold text-[#52627A]">
+        <input type="checkbox" className="h-5 w-5" checked={!soalSemua} onChange={(e) => setSoalSemua(!e.target.checked)} />
+        Hanya soal yang pernah salah
+      </label>
+      {daftar.length === 0 && <p className="font-bold text-[#13794B]">{r.soal.length === 0 ? "Belum ada jawaban." : "Semua soal langsung benar pada pilihan pertama."}</p>}
+      {daftar.map((s) => (
+        <div key={s.soal.id} className="rounded-[10px] border border-[#E1E8F3] bg-white px-3 py-2">
+          <p className="font-bold text-[#1B2B4B]">
+            <span className="mr-1 text-[11px] font-extrabold text-[#6B7A90]">{s.soal.id}</span>
+            {s.soal.pertanyaan}
+          </p>
+          <ol className="mt-1 space-y-0.5">
+            {s.upaya.map((u) => (
+              <li key={u.ke} className={u.benar ? "text-[#13794B]" : "text-[#7A1D22]"}>
+                <b>Pilihan {u.ke}:</b> {teksJawaban(s.soal, u.pilih)} {u.benar ? "✓ benar" : "✕ salah"}{" "}
+                <span className="text-[11px] text-[#6B7A90]">({tglPendek(u.tanggal)}, percobaan ke-{u.percobaanKe})</span>
+              </li>
+            ))}
+          </ol>
+          {!s.akhirBenar && <p className="mt-0.5 text-[11.5px] font-bold text-[#B42329]">Belum menjawab benar.</p>}
+          {!s.akhirBenar && s.soal.kunci && <p className="text-[11.5px] text-[#13794B]">Kunci: {teksJawaban(s.soal, s.soal.kunci)}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
   const [d, setD] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
@@ -85,6 +127,8 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
   const [hanyaSalah, setHanyaSalah] = useState(true);
   const [sorot, setSorot] = useState<{ soal: string; akun: number | null } | null>(null);
   const [sibuk, setSibuk] = useState(false);
+  const [lihat, setLihat] = useState<number | null>(null); // petugas yang rinciannya dibuka
+  const [soalSemua, setSoalSemua] = useState(false);
 
   const muat = useCallback(async () => {
     setSibuk(true);
@@ -104,11 +148,13 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
     setD(null);
     setSar(SARINGAN_AWAL);
     setSorot(null);
+    setLihat(null);
     void muat();
   }, [kelompok, muat]);
 
   const opsi = useMemo(() => (d ? opsiSaringan(d.anggota, d.percobaan) : null), [d]);
   const h = useMemo(() => (d ? susunHasil(d.anggota, d.percobaan, d.soal, sar) : null), [d, sar]);
+  const rincian = useMemo(() => (d && lihat != null ? rincianPetugas(lihat, d.percobaan, d.soal) : null), [d, lihat]);
   const petugasPilihan = useMemo(() => (opsi ? opsi.petugas.filter((p) => sar.tim == null || p.tim === sar.tim) : []), [opsi, sar.tim]);
 
   if (galat && !d) return <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>;
@@ -197,20 +243,30 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
             </div>
             <ul className="divide-y divide-[#EEF2F7]">
               {t.petugas.map((p) => (
-                <li key={p.akun_id} className="flex items-center gap-2 py-2 text-[13px]">
-                  <span className="min-w-0 flex-1 truncate font-bold text-[#1B2B4B]">
-                    {namaSingkatTampil(p.nama)} <span className="text-[11px] font-extrabold text-[#6B7A90]">{p.peran.toUpperCase()}</span>
-                  </span>
-                  {p.terjawab === 0 ? (
-                    <span className="flex-none rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[11.5px] font-bold text-[#5B6B84]">Belum mengisi</span>
-                  ) : (
-                    <>
-                      <span className="flex-none text-[11.5px] text-[#6B7A90]">
-                        {p.salah} salah / {p.terjawab}
-                      </span>
-                      <span className={`flex-none rounded-full px-2 py-0.5 text-[11.5px] font-extrabold ${warnaPersen(p.persen)}`}>{pct(p.persen)}</span>
-                    </>
-                  )}
+                <li key={p.akun_id} className="py-1">
+                  <button
+                    type="button"
+                    disabled={p.terjawab === 0}
+                    aria-expanded={lihat === p.akun_id}
+                    onClick={() => setLihat(lihat === p.akun_id ? null : p.akun_id)}
+                    className="flex min-h-[44px] w-full items-center gap-2 text-left text-[13px] disabled:cursor-default"
+                  >
+                    <span className={`min-w-0 flex-1 truncate font-bold ${p.terjawab > 0 ? "text-[#1F5FD1] underline decoration-dotted underline-offset-2" : "text-[#1B2B4B]"}`}>
+                      {namaSingkatTampil(p.nama)} <span className="text-[11px] font-extrabold text-[#6B7A90]">{p.peran.toUpperCase()}</span>
+                    </span>
+                    {p.terjawab === 0 ? (
+                      <span className="flex-none rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[11.5px] font-bold text-[#5B6B84]">Belum mengisi</span>
+                    ) : (
+                      <>
+                        <span className="flex-none text-[11.5px] text-[#6B7A90]">
+                          {p.salah} salah / {p.terjawab}
+                        </span>
+                        <span className={`flex-none rounded-full px-2 py-0.5 text-[11.5px] font-extrabold ${warnaPersen(p.persen)}`}>{pct(p.persen)}</span>
+                        <span aria-hidden className="flex-none text-[11px] text-[#6B7A90]">{lihat === p.akun_id ? "▲" : "▼"}</span>
+                      </>
+                    )}
+                  </button>
+                  {lihat === p.akun_id && rincian && <RincianKartu r={rincian} nama={namaSingkatTampil(p.nama)} soalSemua={soalSemua} setSoalSemua={setSoalSemua} onTutup={() => setLihat(null)} />}
                 </li>
               ))}
             </ul>
@@ -254,8 +310,10 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
                     <th className="sticky left-0 z-10 bg-white px-3 py-1 text-left text-[11px] font-extrabold text-[#6B7A90]">Soal</th>
                     {h.matriks.kolom.map((p) => (
                       <th key={p.akun_id} className="w-[52px] min-w-[52px] border-l border-[#E1E8F3] px-0.5 py-1 align-bottom text-[10.5px] font-bold leading-tight text-[#1B2B4B]">
-                        <span className="line-clamp-2 break-words">{namaSingkatTampil(p.nama)}</span>
-                        <span className="block text-[9.5px] font-extrabold text-[#6B7A90]">{p.peran.toUpperCase()}</span>
+                        <button type="button" disabled={p.terjawab === 0} onClick={() => setLihat(lihat === p.akun_id ? null : p.akun_id)} className={`block w-full text-center ${p.terjawab > 0 ? "text-[#1F5FD1] underline decoration-dotted" : ""}`}>
+                          <span className="line-clamp-2 break-words">{namaSingkatTampil(p.nama)}</span>
+                          <span className="block text-[9.5px] font-extrabold text-[#6B7A90]">{p.peran.toUpperCase()}</span>
+                        </button>
                       </th>
                     ))}
                   </tr>
@@ -325,7 +383,12 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number }) {
               </button>
             </div>
           )}
-          <p className="px-4 text-[11px] text-[#6B7A90]">✓ benar · ✕ salah (huruf = jawaban yang dipilih) · – belum dijawab. Ketuk sel atau soal untuk rincian.</p>
+          {rincian && lihat != null && (
+            <div className="mx-4">
+              <RincianKartu r={rincian} nama={namaSingkatTampil(h.matriks.kolom.find((p) => p.akun_id === lihat)?.nama ?? "petugas")} soalSemua={soalSemua} setSoalSemua={setSoalSemua} onTutup={() => setLihat(null)} />
+            </div>
+          )}
+          <p className="px-4 text-[11px] text-[#6B7A90]">✓ benar · ✕ salah (huruf = jawaban yang dipilih) · – belum dijawab. Ketuk sel, soal, atau nama petugas untuk rincian.</p>
         </section>
       )}
 

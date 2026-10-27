@@ -185,3 +185,37 @@ export function susunHasil(anggotaSemua: readonly AnggotaHasil[], percobaanSemua
     ringkas: { petugas: petugas.length, sudahMengisi: sudah, belumMengisi: petugas.length - sudah, terjawab, salah, persen: persen(terjawab - salah, terjawab) },
   };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// (27 Okt 2026) Rincian satu petugas: untuk tiap soal, pilihan jawabannya berurutan (pilihan pertama, kedua, ketiga, ...) dari SEMUA percobaannya
+// (urut tanggal lalu percobaan ke-), berhenti pada pilihan yang benar ("sampai benar"). Tidak terpengaruh saringan percobaan pertama/terakhir.
+
+export type Upaya = { ke: number; tanggal: string; percobaanKe: number; pilih: string | null; benar: boolean };
+export type SoalPetugas = { soal: SoalMentah; upaya: Upaya[]; akhirBenar: boolean; pernahSalah: boolean };
+export type RincianPetugas = { akun_id: number; percobaan: number; soal: SoalPetugas[]; pernahSalah: number; belumBenar: number };
+
+export function rincianPetugas(akun_id: number, percobaanSemua: readonly PercobaanMentah[], soalDaftar: readonly SoalMentah[]): RincianPetugas {
+  const peta = new Map(soalDaftar.map((s) => [s.id, s]));
+  const milik = percobaanSemua
+    .filter((p) => p.akun_id === akun_id)
+    .sort((a, b) => (a.tanggal < b.tanggal ? -1 : a.tanggal > b.tanggal ? 1 : a.ke - b.ke));
+  const per = new Map<string, SoalPetugas>();
+  for (const p of milik) {
+    const salahSet = new Set(p.salah ?? []);
+    const jaw = p.jawaban ?? {};
+    for (const id of new Set<string>([...Object.keys(jaw), ...salahSet])) {
+      let s = per.get(id);
+      if (!s) {
+        s = { soal: soalAda(peta, id), upaya: [], akhirBenar: false, pernahSalah: false };
+        per.set(id, s);
+      }
+      if (s.akhirBenar) continue; // sudah benar: percobaan berikutnya untuk soal ini tidak ditampilkan
+      const benar = !salahSet.has(id);
+      s.upaya.push({ ke: s.upaya.length + 1, tanggal: p.tanggal, percobaanKe: p.ke, pilih: jaw[id] ?? null, benar });
+      if (benar) s.akhirBenar = true;
+      else s.pernahSalah = true;
+    }
+  }
+  const soal = Array.from(per.values()).sort((a, b) => Number(b.pernahSalah) - Number(a.pernahSalah) || b.upaya.length - a.upaya.length || bandingId(a.soal.id, b.soal.id));
+  return { akun_id, percobaan: milik.length, soal, pernahSalah: soal.filter((s) => s.pernahSalah).length, belumBenar: soal.filter((s) => !s.akhirBenar).length };
+}

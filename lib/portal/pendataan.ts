@@ -9,7 +9,7 @@
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
-import { MAKS_BARIS_UNGGAH, kunciBaris, periksaBarisKk, type Anggota, type BarisKk, type BarisRingkas, type IsiCatat, type KkLembar, type SubTim } from "@/lib/pendataan";
+import { MAKS_BARIS_UNGGAH, hanyaSubAktif, kunciBaris, periksaBarisKk, ringkasAktif, type Anggota, type BarisKk, type BarisRingkas, type IsiCatat, type KkLembar, type SubTim } from "@/lib/pendataan";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
 
@@ -52,15 +52,31 @@ export async function ambilTim(db: Db, akun: AkunMin): Promise<Tim | null> {
     const w = baru.error ? (await db.from("bencana_wilayah").select("idsubsls, kecamatan, nagari, sls, sub_sls").in("idsubsls", potong)).data : baru.data;
     for (const r of w ?? []) sub.push(r as unknown as SubTim);
   }
+  // (27 Okt 2026) hanya Sub SLS terdampak (acuan Excel FASIH 26 Okt); yang non aktif tidak tampil di Lembar Pendataan maupun kartu Plotting tim
+  sub.splice(0, sub.length, ...hanyaSubAktif(sub));
   sub.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls) || a.sub_sls.localeCompare(b.sub_sls));
 
   return { pml: { id: pmlId, nama: pml.nama }, saya: { akun_id: akun.id, peran: saya.peran === "pml" ? "pml" : "ppl" }, anggota, sub };
 }
 
+/** Himpunan Sub SLS non aktif di antara `ids` (kolom `nonaktif` baru ada sejak migrasi 20261018a; bila belum ada, kosong = semua aktif). */
+export async function idSubNonaktif(db: Db, ids: string[]): Promise<Set<string>> {
+  const hasil = new Set<string>();
+  const unik = Array.from(new Set(ids));
+  for (let i = 0; i < unik.length; i += 200) {
+    const { data, error } = await db.from("bencana_wilayah").select("idsubsls").in("idsubsls", unik.slice(i, i + 200)).eq("nonaktif", true);
+    if (error) return hasil;
+    for (const r of data ?? []) hasil.add(r.idsubsls as string);
+  }
+  return hasil;
+}
+
 export async function ringkasTim(db: Db, pmlId: number): Promise<BarisRingkas[]> {
   const { data, error } = await db.rpc("bencana_pendataan_ringkas", { p_pml: pmlId });
   if (error) throw new Error(error.message);
-  return (data ?? []) as BarisRingkas[];
+  const baris = (data ?? []) as BarisRingkas[];
+  // (27 Okt 2026) angka tim hanya dari Sub SLS terdampak (non aktif tidak dihitung)
+  return ringkasAktif(baris, await idSubNonaktif(db, baris.map((b) => b.idsubsls)));
 }
 
 /** Semua KK aktif satu Sub SLS (paging 1000). Pemanggil sudah memastikan Sub SLS milik tim. */

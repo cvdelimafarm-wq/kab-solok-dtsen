@@ -421,6 +421,17 @@ export function pilihanNonaktif(sub: Pick<SubTim, "idsubsls" | "nonaktif">[], id
   const beku = new Set(sub.filter((s) => s.nonaktif).map((s) => s.idsubsls));
   return ids.filter((id) => beku.has(id));
 }
+/**
+ * (27 Okt 2026) Hasil identifikasi FASIH (Excel resmi 26 Okt) menjadi acuan: hanya Sub SLS TERDAMPAK yang dikerjakan. Sub SLS lain berstatus non aktif
+ * (migrasi 20261027c) dan DISEMBUNYIKAN dari Lembar Pendataan & kartu Plotting tim (sebelumnya non aktif masih tampil). Datanya tetap utuh di database.
+ */
+export function hanyaSubAktif<T extends { nonaktif?: boolean | null }>(sub: readonly T[]): T[] {
+  return sub.filter((s) => s.nonaktif !== true);
+}
+/** Buang baris ringkasan (bencana_pendataan_ringkas) milik Sub SLS non aktif supaya angka tim = hanya Sub SLS terdampak. */
+export function ringkasAktif<T extends { idsubsls: string }>(baris: readonly T[], nonaktif: ReadonlySet<string>): T[] {
+  return nonaktif.size === 0 ? [...baris] : baris.filter((b) => !nonaktif.has(b.idsubsls));
+}
 export type KkLembar = {
   id: number;
   no_urut: number | null;

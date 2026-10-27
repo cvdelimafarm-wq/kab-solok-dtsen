@@ -303,10 +303,15 @@ export function susunAdministrasi(m: { tim: TimKorwilMasuk[]; baris: BarisHariKo
 
 // ----------------------------------------------------------------------------------------------- gabungan
 export type PilihanKelompok = { kelompok: number; korwil: string[] };
+/** (27 Okt 2026) KK berhasil didata tim per tanggal WIB (Sub SLS aktif tim saja); dasar peringatan Aman/Waspada/Warning di lib/korwilTempo.ts. */
+export type HarianTim = { pml_id: number; per_hari: Record<string, number> };
 export type DataKorwil = {
   sekarang: string;
   hari_ini: string;
   mulai: string;
+  /** (27 Okt 2026) tanggal selesai kegiatan pendataan (sigap_kegiatan.tanggal_selesai); batas peringatan */
+  selesai: string;
+  harian: HarianTim[];
   kelompok: number;
   korwil: string[];
   /** untuk akun dengan izin bencana.admin (semua kelompok) atau kortim yang memegang lebih dari satu kelompok (kelompok miliknya) */

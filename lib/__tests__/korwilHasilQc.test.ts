@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SARINGAN_AWAL, bandingId, namaTim, opsiSaringan, pilihPercobaan, susunHasil, teksJawaban, type AnggotaHasil, type PercobaanMentah, type SoalMentah } from "../korwilHasilQc";
+import { SARINGAN_AWAL, bandingId, namaTim, opsiSaringan, pilihPercobaan, rincianPetugas, susunHasil, teksJawaban, type AnggotaHasil, type PercobaanMentah, type SoalMentah } from "../korwilHasilQc";
 
 const A: AnggotaHasil[] = [
   { akun_id: 1, nama: "Sari", peran: "pml", pml_nama: null },
@@ -101,5 +101,40 @@ describe("opsiSaringan & teksJawaban", () => {
     expect(teksJawaban(S[0], "B")).toBe("B. b");
     expect(teksJawaban(S[0], "Z")).toBe("Z");
     expect(teksJawaban(S[0], null)).toBe("—");
+  });
+});
+
+describe("rincianPetugas", () => {
+  const soalR: SoalMentah[] = [
+    { id: "LAT-1", pertanyaan: "Q1", opsi: { A: "a", B: "b", C: "c" }, kunci: "C", penjelasan: "" },
+    { id: "LAT-2", pertanyaan: "Q2", opsi: { A: "a", B: "b" }, kunci: "A", penjelasan: "" },
+  ];
+  const P = (akun_id: number, tanggal: string, ke: number, jawaban: Record<string, string>, salah: string[]): PercobaanMentah => ({ akun_id, tanggal, ke, jawaban, salah });
+  it("urut pilihan pertama, kedua, ketiga sampai benar, lintas hari", () => {
+    const r = rincianPetugas(
+      7,
+      [
+        P(7, "2026-10-28", 1, { "LAT-1": "C", "LAT-2": "A" }, []),
+        P(7, "2026-10-27", 2, { "LAT-1": "B", "LAT-2": "A" }, ["LAT-1"]),
+        P(7, "2026-10-27", 1, { "LAT-1": "A", "LAT-2": "B" }, ["LAT-1", "LAT-2"]),
+        P(8, "2026-10-27", 1, { "LAT-1": "C" }, []),
+      ],
+      soalR,
+    );
+    expect(r.percobaan).toBe(3);
+    const s1 = r.soal.find((s) => s.soal.id === "LAT-1")!;
+    expect(s1.upaya.map((u) => [u.ke, u.pilih, u.benar])).toEqual([[1, "A", false], [2, "B", false], [3, "C", true]]);
+    expect(s1.akhirBenar).toBe(true);
+    const s2 = r.soal.find((s) => s.soal.id === "LAT-2")!;
+    expect(s2.upaya.map((u) => [u.pilih, u.benar])).toEqual([["B", false], ["A", true]]);
+    expect(r.soal[0].soal.id).toBe("LAT-1"); // paling banyak upaya di atas
+    expect(r.pernahSalah).toBe(2);
+    expect(r.belumBenar).toBe(0);
+  });
+  it("berhenti setelah benar dan menandai soal yang belum benar", () => {
+    const r = rincianPetugas(7, [P(7, "2026-10-27", 1, { "LAT-1": "C", "LAT-2": "B" }, ["LAT-2"]), P(7, "2026-10-28", 1, { "LAT-1": "A" }, ["LAT-1"])], soalR);
+    expect(r.soal.find((s) => s.soal.id === "LAT-1")!.upaya).toHaveLength(1);
+    expect(r.belumBenar).toBe(1);
+    expect(rincianPetugas(99, [], soalR).soal).toEqual([]);
   });
 });

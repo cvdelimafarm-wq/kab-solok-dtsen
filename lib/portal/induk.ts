@@ -12,7 +12,7 @@ import type { BukaMode, InfoIdentifikasi, InfoKorwil, InfoPendataan, InfoPerenca
 import type { InfoSpdt } from "@/lib/spdtNtp";
 import { adalahSupervisorSpdt, ringkasModulSpdt } from "@/lib/portal/spdt";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
-import { ringkasModulPendataan } from "@/lib/portal/pendataan";
+import { idSubNonaktif, ringkasModulPendataan } from "@/lib/portal/pendataan";
 import { ringkasModulKorwil } from "@/lib/portal/korwilMonitor";
 import { ambilSkorSubsls } from "@/lib/portal/skorSubsls";
 import { memoWaktu } from "@/lib/portal/memoSingkat";
@@ -100,7 +100,10 @@ async function hitungWilayahTim(db: Db, petugasId: number): Promise<WilayahTim |
   const idAnggota = anggota.map((x) => x.id as number);
   const filter = idAnggota.length ? `pml_id.eq.${pmlId},ppl_id.in.(${idAnggota.join(",")})` : `pml_id.eq.${pmlId}`;
   const { data: alok } = await db.from("bencana_alokasi_subsls").select("idsubsls").or(filter);
-  const ids = Array.from(new Set((alok ?? []).map((a) => a.idsubsls as string)));
+  const idsAlokasi = Array.from(new Set((alok ?? []).map((a) => a.idsubsls as string)));
+  // (27 Okt 2026) Sub SLS non aktif (bukan terdampak menurut hasil identifikasi FASIH, atau dibekukan admin) tidak ikut kartu dan total KK tim.
+  const beku = await idSubNonaktif(db, idsAlokasi);
+  const ids = idsAlokasi.filter((x) => !beku.has(x));
   if (ids.length === 0) {
     return { pml: pml ? { id: pml.id as number, nama: pml.nama as string } : null, anggota: ringkasAnggota(anggota, petugasId), sub_sls: [], total_kk: 0, total_terdampak: 0, ada_laporan: 0 };
   }
