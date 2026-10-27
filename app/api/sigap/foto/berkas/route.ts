@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
   const { data, error } = await db.storage.from(BUCKET_SIGAP).download(foto.file_path as string);
   if (error || !data) return galat("Berkas tidak ditemukan di penyimpanan.", 404);
   return new NextResponse(Buffer.from(await data.arrayBuffer()), {
-    headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=300" },
+    // (27 Okt 2026) Berkas ber-cap tidak pernah berubah (nama berkas = kode acak), jadi boleh disimpan lama di HP; Vary: Authorization supaya simpanan
+    // tidak dipakai bersama antar-akun di HP yang sama. Dulu hanya 5 menit sehingga membuka foto yang sama berulang kali mengunduh ulang.
+    headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400, immutable", Vary: "Authorization" },
   });
 }

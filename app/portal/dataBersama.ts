@@ -57,6 +57,10 @@ const PROFIL: [string, Profil][] = [
   // (19 Okt 2026) Monitoring Korwil: berubah setiap ada KK ditandai; cukup disegarkan tiap menit, status "hari ini" bergantung tanggal
   ["/api/portal/korwil/monitoring", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000, hariBaru: true }],
   ["/api/portal/spdt-monitoring", { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT, hariBaru: true }],
+  // (27 Okt 2026) Kamera SIGAP: mode kegiatan (saklar kamera) jarang berubah -> kamera langsung tampil dari simpanan, diperbarui diam-diam bila > 2 menit.
+  // Daftar "Foto saya" tampil seketika; diminta ulang bila > 20 detik saat dibuka, dan ditandai basi setelah kirim foto (KameraSigap.tsx).
+  ["/api/sigap/foto/mode", { ...dasar, segarMs: 2 * MENIT, interval: 0 }],
+  ["/api/sigap/foto", { ...dasar, segarMs: 20 * 1000, interval: 0, umurMaksMs: 3 * HARI }],
 ];
 const PROFIL_BAWAAN: Profil = { ...dasar, segarMs: 1 * MENIT, interval: 2 * MENIT };
 

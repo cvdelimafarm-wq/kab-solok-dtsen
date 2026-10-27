@@ -11,8 +11,9 @@ import TombolKembali from "@/app/components/TombolKembali";
 import KameraSigap from "./KameraSigap";
 import FotoSaya from "./FotoSaya";
 import PeriksaFoto from "./PeriksaFoto";
-import { ambilJson } from "./klien";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
+import { siapkanData, useData } from "@/app/portal/dataBersama";
+import { galatSinyal, jalurFotoSaya } from "@/lib/sigapFotoCache";
 
 type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string }[] };
 type Tab = "kamera" | "saya" | "periksa";
@@ -43,32 +44,42 @@ function simpanMode(d: Mode) {
 function Isi() {
   const router = useRouter();
   const sp = useSearchParams();
-  const [mode, setMode] = useState<Mode | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
-  const [tanpaSinyal, setTanpaSinyal] = useState(false); // daftar kegiatan dari simpanan di HP karena tidak ada sambungan
+  // (27 Okt 2026) Mode kegiatan dari simpanan bersama (dataBersama.ts): kamera langsung tampil dari data terakhir, diperbarui diam-diam di belakang.
+  // Dulu halaman menunggu jawaban server setiap dibuka, sehingga di sinyal lemah kamera terasa macet.
+  const md = useData<Mode>("/api/sigap/foto/mode");
+  const [cadangan, setCadangan] = useState<Mode | null>(null); // simpanan lama (kunci sigap-foto-mode) bila belum ada simpanan bersama dan tanpa sinyal
   const [tab, setTab] = useState<Tab>("kamera");
   const [pilih, setPilih] = useState<number | null>(Number(sp.get("kegiatan")) || null);
   // (23 Okt 2026) ?nomor=N dari tombol "Ganti foto" pada panel nomor foto: jepretan berikutnya langsung menggantikan Foto N
   const nomorGanti = Number(sp.get("nomor")) || null;
 
   useEffect(() => {
-    if (!bacaSesi()) return router.replace("/");
-    ambilJson<Mode>("/api/sigap/foto/mode")
-      .then((d) => {
-        setMode(d);
-        simpanMode(d);
-      })
-      .catch((e: Error & { status?: number }) => {
-        if (e.message === "SESI_BERAKHIR") return router.replace("/");
-        const tersimpan = e.status === undefined ? bacaModeTersimpan() : null;
-        if (tersimpan) {
-          setMode(tersimpan);
-          setTanpaSinyal(true);
-          return;
-        }
-        setGalat(e.message);
-      });
+    if (!bacaSesi()) router.replace("/");
   }, [router]);
+  useEffect(() => {
+    if (md.galat === "SESI_BERAKHIR") router.replace("/");
+  }, [md.galat, router]);
+  useEffect(() => {
+    if (md.data) simpanMode(md.data); // tetap ditulis: cadangan untuk HP yang belum punya simpanan bersama
+  }, [md.data]);
+  const galatMode = md.galat && md.galat !== "SESI_BERAKHIR" ? md.galat : null;
+  const sinyalMati = !!galatMode && galatSinyal(galatMode, typeof navigator !== "undefined" ? navigator.onLine : undefined);
+  useEffect(() => {
+    if (!md.data && sinyalMati) setCadangan(bacaModeTersimpan());
+  }, [md.data, sinyalMati]);
+  const mode = md.data ?? cadangan;
+  const tanpaSinyal = sinyalMati && !!mode; // daftar kegiatan dari simpanan di HP karena tidak ada sambungan
+  const galat = !mode ? galatMode : null;
+
+  // Daftar "Foto saya" disiapkan di belakang sesudah kamera tampil, supaya tab itu langsung terbuka berisi.
+  useEffect(() => {
+    if (!md.data) return;
+    const t = setTimeout(() => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      void siapkanData(jalurFotoSaya(false)).catch(() => {});
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [md.data]);
 
   const kamera = (mode?.kegiatan ?? []).filter((k) => k.mode === "kamera");
   const aktif = kamera.find((k) => k.kegiatan_id === pilih) ?? kamera[0] ?? null;

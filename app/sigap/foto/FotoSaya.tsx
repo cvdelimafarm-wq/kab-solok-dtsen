@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ambilFotoUrl, ambilJson } from "./klien";
+import { useData } from "@/app/portal/dataBersama";
+import { jalurFotoSaya, umurTeks } from "@/lib/sigapFotoCache";
 import { LABEL_ALASAN, MAKS_TAG, WARNA_NADA_PERIKSA, jendelaBagiFoto, labelFotoTanpaSinyal, statusPemeriksaan, type Kepercayaan, type TampilPeriksa } from "@/lib/sigapFoto";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import BagikanWa from "./BagikanWa";
@@ -162,21 +164,33 @@ function KartuMenunggu({ t, mode, muat }: { t: TagSaya; mode: Mode["kegiatan"]; 
   );
 }
 
+type DataFoto = { diambil: Diambil[]; untuk_saya: TagSaya[]; ada_lagi?: boolean };
+
 export default function FotoSaya() {
-  const [data, setData] = useState<{ diambil: Diambil[]; untuk_saya: TagSaya[] } | null>(null);
-  const [mode, setMode] = useState<Mode["kegiatan"]>([]);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (27 Okt 2026) Daftar langsung tampil dari simpanan di HP (dataBersama.ts) lalu diperbarui diam-diam; dulu layar kosong sampai dua panggilan server selesai.
+  // Awalnya 30 foto terbaru; "Tampilkan foto lebih lama" memuat sampai 100 (daftar pendek tetap tampil selagi yang panjang dimuat).
+  const [semua, setSemua] = useState(false);
+  const pendek = useData<DataFoto>(jalurFotoSaya(false), { aktif: !semua });
+  const panjang = useData<DataFoto>(jalurFotoSaya(true), { aktif: semua });
+  const md = useData<Mode>("/api/sigap/foto/mode");
+  const aktifDaftar = semua && panjang.data ? panjang : pendek;
+  const data = aktifDaftar.data;
+  const galat = (semua ? panjang.galat ?? pendek.galat : pendek.galat);
+  const mode = md.data?.kegiatan ?? [];
   const [buka, setBuka] = useState<number | null>(null);
 
+  const mulaiPendek = pendek.muat;
+  const mulaiPanjang = panjang.muat;
+  const mulaiMode = md.muat;
   const muat = useCallback(() => {
-    Promise.all([ambilJson<{ diambil: Diambil[]; untuk_saya: TagSaya[] }>("/api/sigap/foto"), ambilJson<Mode>("/api/sigap/foto/mode")])
-      .then(([d, m]) => { setData(d); setMode(m.kegiatan); setGalat(null); })
-      .catch((e: Error) => setGalat(e.message));
-  }, []);
-  useEffect(muat, [muat]);
+    void (semua ? mulaiPanjang() : mulaiPendek());
+    void mulaiMode();
+  }, [semua, mulaiPendek, mulaiPanjang, mulaiMode]);
 
-  if (galat) return <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat}</div>;
-  if (!data) return <div className="text-sm text-[#3C4C68]">Memuat…</div>;
+  if (!data) {
+    if (galat) return <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-sm text-[#9B1C23]">{galat === "SESI_BERAKHIR" ? "Sesi berakhir. Masuk kembali." : galat}</div>;
+    return <div className="text-sm text-[#3C4C68]">Memuat…</div>;
+  }
   const menunggu = data.untuk_saya.filter((t) => t.status === "diajukan" && t.foto);
   const riwayat = data.untuk_saya.filter((t) => t.status !== "diajukan" && t.foto);
   const nama = (id: number) => mode.find((k) => k.kegiatan_id === id)?.nama ?? `Kegiatan ${id}`;
@@ -199,6 +213,13 @@ export default function FotoSaya() {
 
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-[#55657D]">
+        <span>
+          Diperbarui {umurTeks(aktifDaftar.tiba, Date.now())}
+          {galat && galat !== "SESI_BERAKHIR" ? " · belum bisa memperbarui (tanpa sinyal?)" : ""}
+        </span>
+        <button type="button" onClick={muat} className="min-h-[32px] rounded-lg border border-[#C9D3E6] bg-white px-2.5 text-[11px] font-bold text-[#0F2A52]">Muat ulang</button>
+      </div>
       <section aria-labelledby="h-menunggu" className="flex flex-col gap-2">
         <h2 id="h-menunggu" className="text-sm font-extrabold text-[#0F2A52]">Menunggu diterima ({menunggu.length})</h2>
         {menunggu.length === 0 && <div className="rounded-lg bg-[#EEF2F7] px-3 py-2 text-xs text-[#3C4C68]">Tidak ada ajakan foto yang menunggu.</div>}
@@ -260,6 +281,12 @@ export default function FotoSaya() {
           );
         })}
       </section>
+
+      {data.ada_lagi && !semua && (
+        <button type="button" onClick={() => setSemua(true)} className="min-h-[44px] rounded-xl border border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52]">Tampilkan foto lebih lama</button>
+      )}
+      {semua && !panjang.data && <div className="text-center text-xs text-[#55657D]">Memuat foto lebih lama…</div>}
+      {semua && panjang.data?.ada_lagi && <div className="text-center text-xs text-[#55657D]">Menampilkan 100 foto terbaru.</div>}
 
       {riwayat.length > 0 && (
         <section aria-labelledby="h-riwayat" className="flex flex-col gap-2">

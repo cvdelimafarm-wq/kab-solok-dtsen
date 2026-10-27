@@ -25,6 +25,7 @@ import Link from "next/link";
 import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import BagikanWa from "./BagikanWa";
 import { ambilJson, kirimMultipart, type GalatFoto } from "./klien";
+import { tandaBasi } from "@/app/portal/dataBersama";
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
@@ -244,6 +245,7 @@ export default function KameraSigap({
   const kirimAntrean = useCallback(
     async (paksa = false) => {
       await kirimSemuaAntrean({ paksa });
+      tandaBasi("/api/sigap/foto"); // (27 Okt 2026) antrean mungkin baru terkirim: daftar "Foto saya" diperbarui saat dibuka
       void hitungAntre();
       void muatTerisi();
     },
@@ -712,6 +714,7 @@ export default function KameraSigap({
         setPesan({ jenis: "info", teks: "Mode simulasi (masuk sebagai akun lain): foto TIDAK dikirim." });
       } else {
         await lepasDraf(); // sudah di server; draf di HP tidak diperlukan lagi
+        tandaBasi("/api/sigap/foto"); // (27 Okt 2026) foto baru: daftar "Foto saya" yang tersimpan diperbarui di belakang saat dibuka
         catatBelajar(jepretan);
         laporOrientasi(r.data.foto.id, jepretan);
         setHasil(r.data);

@@ -22,6 +22,7 @@ import {
   ambilPembanding, bacaTokenPotret, jarakKeRumah, jarakKeWilayah, kodeAcak, modeKegiatan, rekanTim, sha256Hex, teksLokasi,
 } from "@/lib/sigapFotoServer";
 import { angka, galat, masukFoto } from "@/lib/sigapFotoRoute";
+import { batasDaftar, potongDaftar } from "@/lib/sigapFotoCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,28 +92,29 @@ export async function POST(req: NextRequest) {
   if (tagMasukan.length > MAKS_TAG) return galat(`Maksimal ${MAKS_TAG} orang per foto.`);
 
   // 1) Saklar & penugasan
-  const mode = (await modeKegiatan(db, [kegiatanId]))[kegiatanId];
+  // (27 Okt 2026) dua pembacaan ini tidak saling bergantung -> bersamaan; urutan pemeriksaan galat tetap (saklar dulu, baru penugasan)
+  const [modePeta, daftarPen] = await Promise.all([modeKegiatan(db, [kegiatanId]), penugasanAkun(db, akunId)]);
+  const mode = modePeta[kegiatanId];
   if (mode !== "kamera") return galat("Kegiatan ini memakai unggah foto (metode lama).", 403, { mode: "unggah" });
-  const pen = (await penugasanAkun(db, akunId)).find((p) => p.kegiatan.id === kegiatanId);
+  const pen = daftarPen.find((p) => p.kegiatan.id === kegiatanId);
   if (!pen) return galat("Anda tidak terdaftar pada kegiatan ini.", 403);
 
   // 2) Berkas: idempoten bila HP mengulang kiriman yang sama
   const mentah = Buffer.from(await berkas.arrayBuffer());
   const shaAsli = sha256Hex(mentah);
-  {
-    const { data: ada } = await db.from("sigap_foto").select("*").eq("sha256_asli", shaAsli).maybeSingle();
-    if (ada) {
-      if (ada.akun_pengambil === akunId) return NextResponse.json({ ok: true, sudah: true, foto: ringkas(ada) });
-      return galat("Foto ini sudah pernah dikirim.", 409, { kode: "duplikat" });
-    }
+  // (27 Okt 2026) pemeriksaan duplikat dan token dijalankan bersamaan; hasilnya tetap dinilai berurutan (duplikat dulu, baru token)
+  const tok = bacaTokenPotret(form.get("token"), akunId);
+  const [{ data: ada }, pakaiToken] = await Promise.all([
+    db.from("sigap_foto").select("*").eq("sha256_asli", shaAsli).maybeSingle(),
+    tok ? db.from("sigap_foto").select("id").eq("token_nonce", tok.nonce).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  if (ada) {
+    if (ada.akun_pengambil === akunId) return NextResponse.json({ ok: true, sudah: true, foto: ringkas(ada) });
+    return galat("Foto ini sudah pernah dikirim.", 409, { kode: "duplikat" });
   }
 
   // 3) Waktu resmi
-  const tok = bacaTokenPotret(form.get("token"), akunId);
-  if (tok) {
-    const { data: pakai } = await db.from("sigap_foto").select("id").eq("token_nonce", tok.nonce).maybeSingle();
-    if (pakai) return galat("Token potret sudah dipakai.", 409, { kode: "token_terpakai" });
-  }
+  if (tok && pakaiToken.data) return galat("Token potret sudah dipakai.", 409, { kode: "token_terpakai" });
   const w = waktuResmi({
     tokenT: tok ? tok.t : null,
     elapsedMonoMs: tok ? angka(form.get("elapsed_mono_ms")) : null,
@@ -128,29 +130,47 @@ export async function POST(req: NextRequest) {
   const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {});
   if ("error" in akses) return galat(akses.error, akses.status);
 
-  // 5) Tag: rekan tim vs di luar tim
-  let tagBaru: { akun_id: number; peran_tag: PeranTag; slot_usulan: number | null }[] = [];
-  if (tagMasukan.length) {
-    const tim = new Set((await rekanTim(db, akunId, kegiatanId)).map((r) => r.akun_id));
-    const { data: ak } = await db.from("sigap_akun").select("id").eq("aktif", true).in("id", tagMasukan.map((t) => t.akun_id));
-    const aktif = new Set((ak ?? []).map((a) => a.id as number));
-    if (tagMasukan.some((t) => !aktif.has(t.akun_id))) return galat("Ada petugas yang dipilih tidak ditemukan atau tidak aktif.");
-    tagBaru = tagMasukan.map((t) => ({ akun_id: t.akun_id, peran_tag: tim.has(t.akun_id) ? ("tim" as const) : ("luar_tim" as const), slot_usulan: t.slot_usulan }));
-  }
-
-  // 6) Penilaian kepercayaan
+  // 5-7) (27 Okt 2026) Bagian yang tidak saling bergantung dijalankan BERSAMAAN (dulu satu per satu): pemeriksaan tag, bahan penilaian
+  // (jarak wilayah/rumah, pembanding), sidik gambar, teks lokasi, dan kode verifikasi. Galat tetap dinilai berurutan seperti semula (tag -> gambar -> kode).
   const cekLokasi = nomor !== null && slotBerlokasi(nomor);
-  const [jarakWilayah, jarakRumah, pembanding] = await Promise.all([
-    cekLokasi ? jarakKeWilayah(db, akunId, posisi.lat, posisi.lng) : Promise.resolve(null),
-    cekLokasi ? jarakKeRumah(db, akunId, posisi.lat, posisi.lng).catch(() => null) : Promise.resolve(null),
-    ambilPembanding(db, akunId, kegiatanId, posisi.lat, posisi.lng, tanggal, cekLokasi),
+  const siapTag = (async (): Promise<{ galat: string | null; tagBaru: { akun_id: number; peran_tag: PeranTag; slot_usulan: number | null }[] }> => {
+    if (!tagMasukan.length) return { galat: null, tagBaru: [] };
+    // Tag: rekan tim vs di luar tim
+    const [rekan, { data: ak }] = await Promise.all([
+      rekanTim(db, akunId, kegiatanId),
+      db.from("sigap_akun").select("id").eq("aktif", true).in("id", tagMasukan.map((t) => t.akun_id)),
+    ]);
+    const tim = new Set(rekan.map((r) => r.akun_id));
+    const aktif = new Set((ak ?? []).map((a) => a.id as number));
+    if (tagMasukan.some((t) => !aktif.has(t.akun_id))) return { galat: "Ada petugas yang dipilih tidak ditemukan atau tidak aktif.", tagBaru: [] };
+    return { galat: null, tagBaru: tagMasukan.map((t) => ({ akun_id: t.akun_id, peran_tag: tim.has(t.akun_id) ? ("tim" as const) : ("luar_tim" as const), slot_usulan: t.slot_usulan })) };
+  })();
+  const siapKode = (async () => {
+    for (let i = 0; i < 4; i++) {
+      const calon = kodeAcak(kodeDariByte);
+      const { data: bentrok } = await db.from("sigap_foto").select("id").eq("kode", calon).maybeSingle();
+      if (!bentrok) return calon;
+    }
+    return "";
+  })();
+  const [hasilTag, [jarakWilayah, jarakRumah, pembanding], hasilSidik, lokasi, kode] = await Promise.all([
+    siapTag,
+    Promise.all([
+      cekLokasi ? jarakKeWilayah(db, akunId, posisi.lat, posisi.lng) : Promise.resolve(null),
+      cekLokasi ? jarakKeRumah(db, akunId, posisi.lat, posisi.lng).catch(() => null) : Promise.resolve(null),
+      ambilPembanding(db, akunId, kegiatanId, posisi.lat, posisi.lng, tanggal, cekLokasi),
+    ]),
+    sidikGambar(mentah).then(
+      (v) => ({ ok: true as const, v: v as string | null }),
+      () => ({ ok: false as const, v: null as string | null })
+    ),
+    teksLokasi(db, akunId, posisi.lat, posisi.lng),
+    siapKode,
   ]);
-  let sidik: string | null = null;
-  try {
-    sidik = await sidikGambar(mentah);
-  } catch {
-    return galat("Berkas bukan gambar yang valid.");
-  }
+  if (hasilTag.galat) return galat(hasilTag.galat);
+  const tagBaru = hasilTag.tagBaru;
+  if (!hasilSidik.ok) return galat("Berkas bukan gambar yang valid.");
+  const sidik = hasilSidik.v;
   let hamMin: number | null = null;
   for (const s of pembanding.sidikLain) {
     const d = jarakHamming(sidik, s);
@@ -170,17 +190,10 @@ export async function POST(req: NextRequest) {
     hammingTerdekat: hamMin,
   });
 
+
   // 7) Cap & simpan berkas
-  const lokasi = await teksLokasi(db, akunId, posisi.lat, posisi.lng);
-  let kode = "";
   let stempel: { buf: Buffer } | null = null;
   const asal = process.env.NEXT_PUBLIC_SITE_URL || req.nextUrl.origin;
-  for (let i = 0; i < 4; i++) {
-    kode = kodeAcak(kodeDariByte);
-    const { data: bentrok } = await db.from("sigap_foto").select("id").eq("kode", kode).maybeSingle();
-    if (!bentrok) break;
-    kode = "";
-  }
   if (!kode) return galat("Gagal membuat kode verifikasi. Coba lagi.", 500);
   try {
     stempel = await bubuhiCap(mentah, {
@@ -224,14 +237,13 @@ export async function POST(req: NextRequest) {
     return galat(`Gagal mencatat foto: ${errFoto?.message ?? "tidak diketahui"}`, 500);
   }
 
-  const { data: tagPemotret } = await db
-    .from("sigap_foto_tag")
-    .insert({ foto_id: foto.id, akun_id: akunId, peran_tag: "pemotret", status: "diajukan", slot_usulan: nomor })
-    .select("id")
-    .single();
-  if (tagBaru.length) {
-    await db.from("sigap_foto_tag").insert(tagBaru.map((t) => ({ foto_id: foto.id, akun_id: t.akun_id, peran_tag: t.peran_tag, slot_usulan: t.slot_usulan })));
-  }
+  // (27 Okt 2026) tag pemotret dan tag rekan tidak saling bergantung -> disimpan bersamaan
+  const [{ data: tagPemotret }] = await Promise.all([
+    db.from("sigap_foto_tag").insert({ foto_id: foto.id, akun_id: akunId, peran_tag: "pemotret", status: "diajukan", slot_usulan: nomor }).select("id").single(),
+    tagBaru.length
+      ? db.from("sigap_foto_tag").insert(tagBaru.map((t) => ({ foto_id: foto.id, akun_id: t.akun_id, peran_tag: t.peran_tag, slot_usulan: t.slot_usulan })))
+      : Promise.resolve(null),
+  ]);
 
   let penempatan: unknown = null;
   if (nomor !== null && tagPemotret) {
@@ -255,27 +267,40 @@ export async function GET(req: NextRequest) {
   if (m instanceof NextResponse) return m;
   const { db, akunId } = m;
   const tanggal = req.nextUrl.searchParams.get("tanggal");
-  let q = db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, diterima_at, lokasi_teks, kepercayaan, alasan, status_periksa, ukuran_byte").eq("akun_pengambil", akunId).order("diambil_at", { ascending: false }).limit(100);
+  // (27 Okt 2026) ?batas=N (klien "Foto saya" meminta 30 dulu); tanpa ?batas tetap 100 seperti semula. Satu baris ekstra dibaca hanya untuk tahu "masih ada yang lebih lama".
+  const batas = batasDaftar(req.nextUrl.searchParams.get("batas"));
+  let q = db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, diterima_at, lokasi_teks, kepercayaan, alasan, status_periksa, ukuran_byte").eq("akun_pengambil", akunId).order("diambil_at", { ascending: false }).limit(batas + 1);
   if (tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal)) q = q.eq("tanggal", tanggal);
-  const [{ data: saya }, { data: tagSaya }] = await Promise.all([
+  const [{ data: sayaMentah }, { data: tagSaya }] = await Promise.all([
     q,
     db.from("sigap_foto_tag").select("id, foto_id, peran_tag, status, penugasan_id, slot, slot_usulan, diajukan_at").eq("akun_id", akunId).order("diajukan_at", { ascending: false }).limit(200),
   ]);
-  const fotoIds = Array.from(new Set([...(saya ?? []).map((f) => f.id as number), ...(tagSaya ?? []).map((t) => t.foto_id as number)]));
-  const { data: semua } = fotoIds.length
-    ? await db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, lokasi_teks, kepercayaan, status_periksa, akun_pengambil").in("id", fotoIds)
-    : { data: [] as Record<string, unknown>[] };
-  const peta = new Map((semua ?? []).map((f) => [f.id as number, f]));
-  const pemotretIds = Array.from(new Set((semua ?? []).map((f) => f.akun_pengambil as number)));
-  const { data: nama } = pemotretIds.length ? await db.from("sigap_akun").select("id, nama").in("id", pemotretIds) : { data: [] as Record<string, unknown>[] };
-  const namaPeta = new Map((nama ?? []).map((a) => [a.id as number, a.nama as string]));
-  const idSaya = (saya ?? []).map((f) => f.id as number);
-  const tagSemua = idSaya.length ? (await db.from("sigap_foto_tag").select("foto_id, akun_id, peran_tag, status, slot").in("foto_id", idSaya)).data ?? [] : [];
-  const idTag = Array.from(new Set(tagSemua.map((t) => t.akun_id as number)));
-  const { data: namaTag } = idTag.length ? await db.from("sigap_akun").select("id, nama").in("id", idTag) : { data: [] as Record<string, unknown>[] };
-  const petaTag = new Map((namaTag ?? []).map((a) => [a.id as number, a.nama as string]));
+  const { daftar: saya, adaLagi } = potongDaftar(sayaMentah, batas);
+  const fotoIds = Array.from(new Set([...saya.map((f) => f.id as number), ...(tagSaya ?? []).map((t) => t.foto_id as number)]));
+  const idSaya = saya.map((f) => f.id as number);
+  // (27 Okt 2026) dua rantai ini tidak saling bergantung -> bersamaan (dulu lima pembacaan berurutan, kini tiga tahap)
+  const [{ peta, namaPeta }, { tagSemua, petaTag }] = await Promise.all([
+    (async () => {
+      const { data: semua } = fotoIds.length
+        ? await db.from("sigap_foto").select("id, kode, kegiatan_id, tanggal, diambil_at, lokasi_teks, kepercayaan, status_periksa, akun_pengambil").in("id", fotoIds)
+        : { data: [] as Record<string, unknown>[] };
+      const pemotretIds = Array.from(new Set((semua ?? []).map((f) => f.akun_pengambil as number)));
+      const { data: nama } = pemotretIds.length ? await db.from("sigap_akun").select("id, nama").in("id", pemotretIds) : { data: [] as Record<string, unknown>[] };
+      return {
+        peta: new Map((semua ?? []).map((f) => [f.id as number, f])),
+        namaPeta: new Map((nama ?? []).map((a) => [a.id as number, a.nama as string])),
+      };
+    })(),
+    (async () => {
+      const tagSemua = idSaya.length ? (await db.from("sigap_foto_tag").select("foto_id, akun_id, peran_tag, status, slot").in("foto_id", idSaya)).data ?? [] : [];
+      const idTag = Array.from(new Set(tagSemua.map((t) => t.akun_id as number)));
+      const { data: namaTag } = idTag.length ? await db.from("sigap_akun").select("id, nama").in("id", idTag) : { data: [] as Record<string, unknown>[] };
+      return { tagSemua, petaTag: new Map((namaTag ?? []).map((a) => [a.id as number, a.nama as string])) };
+    })(),
+  ]);
   return NextResponse.json({
-    diambil: (saya ?? []).map((f) => ({ ...f, tag: tagSemua.filter((t) => t.foto_id === f.id).map((t) => ({ ...t, nama: petaTag.get(t.akun_id as number) ?? "-" })) })),
+    diambil: saya.map((f) => ({ ...f, tag: tagSemua.filter((t) => t.foto_id === f.id).map((t) => ({ ...t, nama: petaTag.get(t.akun_id as number) ?? "-" })) })),
+    ada_lagi: adaLagi,
     untuk_saya: (tagSaya ?? [])
       .filter((t) => t.peran_tag !== "pemotret")
       .map((t) => {
