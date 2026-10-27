@@ -5,13 +5,14 @@
 // GET ?soal=1    -> soal untuk percobaan berikutnya (tanpa kunci/pembahasan; urutan soal dan pilihan diacak per petugas dan percobaan)
 // POST {aksi:"jawab", jawaban:{"<id>":"A".."D"}}  -> tinjauan: skor, benar/salah per soal, kunci, pembahasan; wajib lengkap
 // POST {aksi:"rekap_baca", tanggal}               -> PML menandai rekap tim sudah dibaca
+// POST {aksi:"tunda"}                             -> (28 Okt 2026) menunda pengingat push 2 jam ("Ingatkan lagi 2 jam"); modal QC tetap wajib sampai 100
 // Sesi "masuk sebagai" (simulasi) tidak boleh menjawab: jawaban akan tercatat atas nama petugas sungguhan.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
-import { GalatQc, bersihkanJawaban, jawab, soalUntuk, statusDanRekap, tandaiRekapDibaca } from "@/lib/portal/qc";
+import { GalatQc, bersihkanJawaban, jawab, soalUntuk, statusDanRekap, tandaiRekapDibaca, tundaAkun } from "@/lib/portal/qc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       await tandaiRekapDibaca(db, akun.id, String(body.tanggal ?? ""));
       return NextResponse.json({ ok: true });
     }
+    if (body?.aksi === "tunda") return NextResponse.json(await tundaAkun(db, akun.id, "modal")); // (28 Okt 2026) tunda pengingat push 2 jam; modal tetap wajib
     return galat("Aksi tidak dikenal.");
   } catch (e) {
     return tangani("[api/portal/qc POST]", e);

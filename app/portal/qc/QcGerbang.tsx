@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { modeSimulasi } from "@/app/portal/simulasi";
 import { kalimatHasil, teksSisaWaktu, type QcButirTinjau, type QcRekapTim, type QcSetSoal, type QcTinjau } from "@/lib/sigapQc";
+import { teksTunda } from "@/lib/sigapQcTunda";
 import Sorot from "./Sorot";
 import RekapPml from "./RekapPml";
 
@@ -32,6 +33,8 @@ type Status = {
   skor_terbaik?: number;
   batas_at?: string;
   ppl_belum?: string[];
+  /** (28 Okt 2026) saat tunda pengingat berakhir (ditampilkan hanya bila masih di masa depan) */
+  tunda_sampai?: string | null;
 };
 type Rekap = { ada: boolean; tanggal?: string; tim?: QcRekapTim };
 type Jawaban = Record<string, "A" | "B" | "C" | "D">;
@@ -52,6 +55,7 @@ export default function QcGerbang() {
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [saring, setSaring] = useState<"salah" | "semua">("salah");
+  const [menunda, setMenunda] = useState(false);
   const [, setTik] = useState(0);
   const kotak = useRef<HTMLDivElement>(null);
   const sedangMuat = useRef(false);
@@ -158,6 +162,20 @@ export default function QcGerbang() {
     void muat();
   }, [muat]);
 
+  // (28 Okt 2026) "Ingatkan lagi 2 jam": hanya menunda notifikasi pengingat; modal ini tetap wajib sampai nilai 100.
+  const tunda = useCallback(async () => {
+    setMenunda(true);
+    setGalat(null);
+    try {
+      const d = await apiPortal<{ sampai?: string }>("/api/portal/qc", { method: "POST", body: JSON.stringify({ aksi: "tunda" }) });
+      if (d?.sampai) setStatus((s) => (s ? { ...s, tunda_sampai: d.sampai } : s));
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : "Gagal menunda pengingat. Coba lagi.");
+    } finally {
+      setMenunda(false);
+    }
+  }, []);
+
   const tutupRekap = useCallback(async () => {
     const tgl = rekap?.tanggal;
     if (!tgl) return;
@@ -196,7 +214,7 @@ export default function QcGerbang() {
         className="flex max-h-[100dvh] w-full max-w-lg flex-col overflow-y-auto bg-white shadow-2xl outline-none sm:max-h-[94dvh] sm:rounded-2xl"
       >
         {layar === "pengantar" && !hasil && (
-          <Pengantar status={status} info={info} susulan={susulan} lewat={!!status?.lewat_batas} sibuk={sibuk} galat={galat} onMulai={mulai} />
+          <Pengantar status={status} info={info} susulan={susulan} lewat={!!status?.lewat_batas} sibuk={sibuk} galat={galat} onMulai={mulai} menunda={menunda} onTunda={tunda} />
         )}
         {layar === "soal" && set && (
           <Soal set={set} jawaban={jawaban} no={no} sibuk={sibuk} galat={galat} onMuatUlang={mulai} onPilih={(id, k) => setJawaban((j) => ({ ...j, [id]: k }))} onNo={setNo} onKirim={kirim} />
@@ -210,10 +228,11 @@ export default function QcGerbang() {
 }
 
 // ====================================================================== pengantar
-function Pengantar({ status, info, susulan, lewat, sibuk, galat, onMulai }: { status: Status | null; info: string; susulan: boolean; lewat: boolean; sibuk: boolean; galat: string | null; onMulai: () => void }) {
+function Pengantar({ status, info, susulan, lewat, sibuk, galat, onMulai, menunda, onTunda }: { status: Status | null; info: string; susulan: boolean; lewat: boolean; sibuk: boolean; galat: string | null; onMulai: () => void; menunda: boolean; onTunda: () => void }) {
   const n = (status?.percobaan ?? 0) + 1;
   const maks = status?.maks_percobaan ?? 4;
   const mengulang = (status?.percobaan ?? 0) > 0;
+  const infoTunda = teksTunda(status?.tunda_sampai, Date.now());
   return (
     <>
       <div className={`${lewat || susulan ? "bg-[#B42329]" : "bg-[#1E2A47]"} px-5 pb-4 pt-5 text-white`}>
@@ -246,6 +265,10 @@ function Pengantar({ status, info, susulan, lewat, sibuk, galat, onMulai }: { st
         <button type="button" onClick={onMulai} disabled={sibuk} className="min-h-[50px] w-full rounded-xl bg-[#1F5FD1] px-4 text-[16px] font-extrabold text-white shadow-sm disabled:opacity-60">
           {sibuk ? "Memuat soal…" : mengulang ? "Mulai ulangan" : "Mulai"}
         </button>
+        <button type="button" onClick={onTunda} disabled={sibuk || menunda} className="min-h-[44px] w-full rounded-xl border border-[#C9D4E8] bg-white px-4 text-[14.5px] font-bold text-[#1B2B4B] disabled:opacity-60">
+          {menunda ? "Menyimpan…" : "Ingatkan lagi 2 jam"}
+        </button>
+        <p className="text-center text-[12.5px] leading-snug text-[#5B6B85]">{infoTunda ? `${infoTunda} ` : ""}Ini hanya menunda notifikasi pengingat; soal tetap wajib diisi.</p>
       </div>
     </>
   );

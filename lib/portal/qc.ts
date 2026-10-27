@@ -7,8 +7,21 @@
 
 import type { Db } from "@/lib/sigap";
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
+import { endpointAman } from "@/lib/sigapPushUtil";
+import {
+  MENIT_TUNDA,
+  akunBarusaja,
+  pesanTunda,
+  petaTundaBerlaku,
+  saringPenerima,
+  slotTunda,
+  tundaJatuhTempo,
+  tundaSudahDikirim,
+  type TundaAktif,
+} from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 import {
+  SLOT_TUNDA,
   hariBerlaku,
   jendelaQc,
   pushIngatPetugas,
@@ -66,13 +79,43 @@ export type StatusQc = {
   skor_terbaik?: number;
   lulus?: boolean;
   ppl_belum?: string[];
+  /** (28 Okt 2026) saat tunda pengingat terakhir berakhir (hari berlaku); klien menampilkannya hanya bila masih di masa depan */
+  tunda_sampai?: string | null;
 };
 export type RekapUntukPml = { ada: boolean; dibaca?: boolean; tanggal?: string; kegiatan_id?: number; tim?: QcRekapTim };
 
 /** Satu panggilan untuk gerbang di peramban: status hari ini + rekap tim kemarin (khusus PML). */
 export async function statusDanRekap(db: Db, akunId: number): Promise<{ status: StatusQc; rekap: RekapUntukPml; sekarang: string }> {
   const [status, rekap] = await Promise.all([rpc<StatusQc>(db, "sigap_qc_status", { p_akun: akunId }), rpc<RekapUntukPml>(db, "sigap_qc_rekap_untuk", { p_akun: akunId })]);
+  if (status.aktif && status.perlu && status.kegiatan_id && status.tanggal) {
+    // tunda terakhir petugas ini (hanya bila tabel tunda sudah ada: galat apa pun di sini tidak boleh mengganggu gerbang QC)
+    try {
+      const { data } = await db.from("sigap_qc_tunda").select("sampai").eq("kegiatan_id", status.kegiatan_id).eq("tanggal", status.tanggal).eq("akun_id", akunId).order("ke", { ascending: false }).limit(1).maybeSingle();
+      if (data?.sampai) status.tunda_sampai = data.sampai as string;
+    } catch {
+      /* abaikan */
+    }
+  }
   return { status, rekap, sekarang: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------- tunda pengingat (28 Okt 2026)
+export type HasilTunda = { sampai: string; ke: number; sampai_batas: boolean; ulang: boolean };
+
+/** Menunda pengingat push petugas (modal tetap memblokir). `via`: dari tombol notifikasi atau tombol di modal. */
+export const tundaAkun = (db: Db, akunId: number, via: "notifikasi" | "modal"): Promise<HasilTunda> => rpc<HasilTunda>(db, "sigap_qc_tunda", { p_akun: akunId, p_menit: MENIT_TUNDA, p_via: via });
+
+/**
+ * Tombol "Tunda 2 jam" pada notifikasi: service worker tidak punya sesi, jadi petugas dikenali dari alamat langganan perangkatnya (rahasia perangkat
+ * itu; siapa pun yang memilikinya memang sudah bisa mengirim push ke perangkat tersebut). Hanya langganan aktif yang diterima.
+ */
+export async function tundaDariEndpoint(db: Db, endpoint: unknown): Promise<HasilTunda & { pesan: string }> {
+  if (!endpointAman(endpoint)) throw new GalatQc("Perangkat tidak dikenal.", 400);
+  const { data, error } = await db.from("sigap_push_langganan").select("akun_id").eq("endpoint", endpoint).eq("aktif", true).limit(1).maybeSingle();
+  if (error) throw new Error(`tunda_endpoint: ${error.message}`);
+  if (!data?.akun_id) throw new GalatQc("Perangkat tidak dikenal.", 404);
+  const h = await tundaAkun(db, data.akun_id as number, "notifikasi");
+  return { ...h, pesan: pesanTunda(h.sampai, h.sampai_batas) };
 }
 
 export const soalUntuk = (db: Db, akunId: number) => rpc<Record<string, unknown>>(db, "sigap_qc_soal_untuk", { p_akun: akunId });
@@ -246,17 +289,69 @@ export async function jalankanJadwal(db: Db, nowMs: number, uji: boolean): Promi
     }
     const rencana = rencanaAksi(new Date(nowMs), p, { susulanAt });
     const keluar: HasilJadwal = { waktu: new Date(nowMs).toISOString(), uji, kegiatan: keg, aksi: [] };
-    for (const a of rencana) keluar.aksi.push(await jalankanAksi(db, keg, p, a, nowMs, uji, susulanAt !== null));
+    // (28 Okt 2026) tunda: siapa yang sedang menunda, siapa yang baru dikirimi push, dan tunda yang sudah berakhir (dikirim lebih dulu)
+    const konteks: KonteksTunda = { tunda: new Map(), barusaja: new Set() };
+    if (hari) {
+      const tundaHari = await bacaTundaAktif(db, keg, hari);
+      const { data: kirim } = await db.from("sigap_qc_kirim").select("akun_id, slot, dibuat_at").eq("kegiatan_id", keg).eq("tanggal", hari).in("jenis", ["rilis", "ingat_petugas"]).limit(10000);
+      const baris = (kirim ?? []) as { akun_id: number; slot: number; dibuat_at: string }[];
+      konteks.tunda = petaTundaBerlaku(tundaHari, nowMs);
+      konteks.barusaja = akunBarusaja(baris, nowMs);
+      const selesai = await jalankanTundaSelesai(db, keg, p, hari, tundaHari, tundaSudahDikirim(baris), nowMs, uji, susulanAt !== null, konteks.barusaja);
+      if (selesai) keluar.aksi.push(selesai);
+    }
+    for (const a of rencana) keluar.aksi.push(await jalankanAksi(db, keg, p, a, nowMs, uji, susulanAt !== null, konteks));
     hasil.push(keluar);
   }
   return hasil;
+}
+
+type KonteksTunda = { tunda: Map<number, number>; barusaja: Set<number> };
+
+/** Tunda terakhir tiap petugas pada hari itu. Tabel/fungsi tunda belum dipasang -> daftar kosong (jadwal lama tetap jalan). */
+async function bacaTundaAktif(db: Db, keg: number, tanggal: string): Promise<TundaAktif[]> {
+  const { data, error } = await db.rpc("sigap_qc_tunda_aktif", { p_kegiatan: keg, p_tanggal: tanggal });
+  if (error) {
+    if (error.code === "42883" || error.code === "PGRST202") return [];
+    throw new Error(`sigap_qc_tunda_aktif: ${error.message}`);
+  }
+  return (data ?? []) as TundaAktif[];
+}
+
+/**
+ * Pengingat "tunda selesai": satu push ke tiap petugas yang tundanya sudah berakhir dan masih wajib mengerjakan. Dikirim sebelum pengingat
+ * terjadwal lain pada putaran yang sama, sehingga penerima yang sama tidak menerima dua push berdekatan.
+ */
+async function jalankanTundaSelesai(db: Db, keg: number, p: QcPengaturan, hari: string, tunda: TundaAktif[], sudah: Set<string>, nowMs: number, uji: boolean, susulan: boolean, barusaja: Set<number>) {
+  const jatuh = tundaJatuhTempo(tunda, nowMs, sudah, susulan ? null : (jendelaQc(new Date(nowMs), p, false)?.batas.getTime() ?? null));
+  if (jatuh.length === 0) return null;
+  const out = { jenis: "ingat_petugas", tanggal: hari, slot: SLOT_TUNDA, penerima: 0, terkirim: 0, gagal: 0, dilewati: 0 };
+  const belum = new Map((await rpc<Belum[]>(db, "sigap_qc_belum", { p_kegiatan: keg, p_tanggal: hari })).map((x) => [x.akun_id, x]));
+  const sisaMenit = jendelaQc(new Date(nowMs), p, susulan)?.sisaMenit ?? 0;
+  const maks = 1 + (p.maks_ulang ?? 3);
+  for (const t of jatuh) {
+    const b = belum.get(t.akun_id);
+    if (!b) continue; // sudah 100 atau percobaan habis
+    if (!uji && !(await klaim(db, keg, hari, "ingat_petugas", t.akun_id, slotTunda(t.ke)))) {
+      out.dilewati++;
+      continue;
+    }
+    out.penerima++;
+    barusaja.add(t.akun_id);
+    if (uji) continue;
+    const pesan = pushIngatPetugas(hari, sisaMenit, p, b.percobaan === 0 ? { belumMengisi: true } : { belumMengisi: false, skorTerbaik: b.skor_terbaik, sisaUlang: Math.max(maks - b.percobaan, 0) }, susulan);
+    const h = await kirimKeAkun(db, [t.akun_id], { judul: pesan.judul, isi: pesan.isi, url: pesan.url, tag: pesan.tag, tunda: pesan.tunda });
+    out.terkirim += h.terkirim;
+    out.gagal += h.gagal;
+  }
+  return out;
 }
 
 async function klaim(db: Db, keg: number, tanggal: string, jenis: string, akun: number, slot: number): Promise<boolean> {
   return rpc<boolean>(db, "sigap_qc_kirim_catat", { p_kegiatan: keg, p_tanggal: tanggal, p_jenis: jenis, p_akun: akun, p_slot: slot });
 }
 
-async function jalankanAksi(db: Db, keg: number, p: QcPengaturan, a: AksiQc, nowMs: number, uji: boolean, susulan: boolean) {
+async function jalankanAksi(db: Db, keg: number, p: QcPengaturan, a: AksiQc, nowMs: number, uji: boolean, susulan: boolean, konteks: KonteksTunda) {
   const out = { jenis: a.jenis, tanggal: a.tanggal, slot: a.slot, penerima: 0, terkirim: 0, gagal: 0, dilewati: 0 };
   const sisaMenit = jendelaQc(new Date(nowMs), p, susulan)?.sisaMenit ?? 0;
 
@@ -273,7 +368,7 @@ async function jalankanAksi(db: Db, keg: number, p: QcPengaturan, a: AksiQc, now
     }
     out.penerima += siap.length;
     if (uji || siap.length === 0) return;
-    const h = await kirimKeAkun(db, siap, { judul: pesan.judul, isi: pesan.isi, url: pesan.url, tag: pesan.tag });
+    const h = await kirimKeAkun(db, siap, { judul: pesan.judul, isi: pesan.isi, url: pesan.url, tag: pesan.tag, tunda: pesan.tunda });
     out.terkirim += h.terkirim;
     out.gagal += h.gagal;
   };
@@ -291,7 +386,10 @@ async function jalankanAksi(db: Db, keg: number, p: QcPengaturan, a: AksiQc, now
 
   if (a.jenis === "ingat_petugas") {
     // dua kelompok dengan pesan berbeda: yang belum mengisi sama sekali, dan yang sudah mengisi tetapi belum 100 (masih ada sisa ulangan)
-    const belum = await rpc<Belum[]>(db, "sigap_qc_belum", { p_kegiatan: keg, p_tanggal: a.tanggal });
+    const belumSemua = await rpc<Belum[]>(db, "sigap_qc_belum", { p_kegiatan: keg, p_tanggal: a.tanggal });
+    // (28 Okt 2026) yang sedang menunda atau baru dikirimi push dilewati, kecuali pengingat TENGGAT (selalu dikirim)
+    const boleh = new Set(saringPenerima(belumSemua.map((x) => x.akun_id), a.slot, konteks.tunda, konteks.barusaja, nowMs));
+    const belum = belumSemua.filter((x) => boleh.has(x.akun_id));
     await kirimKelompok(
       belum.filter((x) => x.percobaan === 0).map((x) => x.akun_id),
       pushIngatPetugas(a.tanggal, sisaMenit, p, { belumMengisi: true }, susulan)

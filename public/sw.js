@@ -173,12 +173,44 @@ self.addEventListener("push", (e) => {
     vibrate: [120, 60, 120],
     data: { url: (d && d.url) || "/" },
   };
+  // (28 Okt 2026) pengingat QC Pemahaman: tombol "Tunda 2 jam" (Android/komputer; iPhone tidak menampilkan tombol, di sana tersedia di modal QC)
+  if (d && d.tunda) opsi.actions = [{ action: "tunda", title: "Tunda 2 jam" }];
   // Browser mewajibkan setiap push menampilkan notifikasi (userVisibleOnly)
   e.waitUntil(self.registration.showNotification(judul, opsi));
 });
 
+// (28 Okt 2026) Tombol "Tunda 2 jam": service worker tidak punya sesi, jadi petugas dikenali dari alamat langganan push perangkat ini.
+// Hanya menunda notifikasi pengingat; modal QC di aplikasi tetap wajib sampai nilai 100.
+async function tundaQc() {
+  let isi = "Pengingat ditunda 2 jam. Soal tetap wajib diisi.";
+  try {
+    const sub = await self.registration.pushManager.getSubscription();
+    if (!sub) throw new Error("tanpa langganan");
+    const res = await fetch("/api/sigap/qc/tunda", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j && j.pesan) isi = j.pesan;
+    else if (j && j.error) isi = j.error;
+    else if (!res.ok) throw new Error("gagal");
+  } catch (_) {
+    isi = "Gagal menunda (periksa sinyal). Buka SIGAP untuk mengerjakan QC.";
+  }
+  return self.registration.showNotification("QC Pemahaman Petugas", {
+    body: isi,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "qc-tunda",
+    lang: "id",
+    silent: true,
+    data: { url: "/" },
+  });
+}
+
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  if (e.action === "tunda") {
+    e.waitUntil(tundaQc());
+    return;
+  }
   let tujuan = new URL("/", self.location.origin).href;
   try {
     const u = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin);

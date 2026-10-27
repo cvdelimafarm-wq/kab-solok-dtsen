@@ -243,6 +243,10 @@ export const SENYAP_MULAI_MENIT = 23 * 60;
 export const SENYAP_SAMPAI_MENIT = 6 * 60;
 /** Slot pengingat berkala = SLOT_BERKALA + urutan interval (slot 1..9 dipakai pengingat +N menit). */
 export const SLOT_BERKALA = 100;
+/** (28 Okt 2026) Pengingat TENGGAT: tepat saat jam batas; selalu dikirim ke yang masih wajib, walau sedang menunda (lib/sigapQcTunda.ts). */
+export const SLOT_TENGGAT = 99;
+/** (28 Okt 2026) Pengingat "tunda selesai" = SLOT_TUNDA + urutan tunda (ke) petugas itu pada hari tersebut (slot >= 200, per petugas). */
+export const SLOT_TUNDA = 200;
 /** Push rilis hanya dicoba selama jendela ini sejak jam rilis (atau sejak hari ditandai susulan); sesudahnya modal tetap memblokir. */
 export const JENDELA_RILIS_MENIT = 45;
 
@@ -288,6 +292,13 @@ export function rencanaAksi(now: Date, p: QcPengaturan, opsi: OpsiRencana = {}):
       });
     }
 
+    // (28 Okt 2026) pengingat TENGGAT: tepat saat batas (dalam toleransi cron), hari biasa saja (hari susulan tidak punya batas).
+    const sejakBatas = (now.getTime() - batasAt.getTime()) / 60000;
+    if (!susulan && !senyap && sejakBatas >= 0 && sejakBatas < TOLERANSI_PENGINGAT_MENIT) {
+      hasil.push({ jenis: "ingat_petugas", tanggal: hari, slot: SLOT_TENGGAT });
+      hasil.push({ jenis: "ingat_pml", tanggal: hari, slot: SLOT_TENGGAT });
+    }
+
     // pengingat BERKALA: sesudah batas (atau pada hari susulan) untuk yang belum mengisi / belum 100, tiap `ingat_berkala_menit`
     // dihitung dari batas (atau dari saat ditandai susulan). Penerima ditentukan database (sigap_qc_belum): hanya yang masih wajib.
     const selang = Number(p.ingat_berkala_menit) || 0;
@@ -310,7 +321,8 @@ export function rencanaAksi(now: Date, p: QcPengaturan, opsi: OpsiRencana = {}):
 // ---------------------------------------------------------------------------
 // Isi push
 // ---------------------------------------------------------------------------
-export type IsiPush = { judul: string; isi: string; url: string; tag: string };
+/** `tunda` = notifikasi diberi tombol "Tunda 2 jam" (hanya untuk pesan yang dikirim ke petugas yang masih wajib mengerjakan). */
+export type IsiPush = { judul: string; isi: string; url: string; tag: string; tunda?: boolean };
 
 const URL_QC = "/";
 const potong = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
@@ -323,6 +335,7 @@ export function pushRilis(tanggal: string, p: Pick<QcPengaturan, "soal_per_hari"
       : `${p.soal_per_hari} soal sudah dirilis. Wajib diisi sebelum pukul ${menitKeJam(jamKeMenit(p.batas_jam) ?? 0)} WIB. Buka SIGAP sekarang.`,
     url: URL_QC,
     tag: `qc-rilis-${tanggal}`,
+    tunda: true,
   };
 }
 
@@ -339,7 +352,7 @@ export function pushIngatPetugas(tanggal: string, sisaMenit: number, p: Pick<QcP
   } else {
     isi = `Anda belum selesai mengisi. Sisa ${sisaMenit} menit sampai pukul ${jam} WIB.`;
   }
-  return { judul: k.belumMengisi ? "Segera isi QC Pemahaman" : "Ulangi QC Pemahaman sampai 100", isi, url: URL_QC, tag: `qc-ingat-${tanggal}` };
+  return { judul: k.belumMengisi ? "Segera isi QC Pemahaman" : "Ulangi QC Pemahaman sampai 100", isi, url: URL_QC, tag: `qc-ingat-${tanggal}`, tunda: true };
 }
 
 export function pushIngatPml(tanggal: string, namaBelum: readonly string[], p: Pick<QcPengaturan, "batas_jam">): IsiPush {

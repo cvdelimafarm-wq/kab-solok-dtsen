@@ -26,7 +26,7 @@ const GAGAL_MAKS = 5;
 const PARALEL = 10;
 
 /** Kirim ke semua perangkat aktif milik `akunIds`. Langganan yang sudah dicabut browser (404/410) dinonaktifkan. */
-export async function kirimKeAkun(db: Db, akunIds: number[], pesan: PesanPush & { tag?: string }): Promise<HasilKirim> {
+export async function kirimKeAkun(db: Db, akunIds: number[], pesan: PesanPush & { tag?: string; tunda?: boolean }): Promise<HasilKirim> {
   const kosong: HasilKirim = { akun_berlangganan: [], perangkat: 0, terkirim: 0, gagal: 0 };
   const ids = [...new Set(akunIds)].filter((x) => Number.isInteger(x) && x > 0);
   if (!ids.length || !pushSiap()) return kosong;
@@ -39,7 +39,7 @@ export async function kirimKeAkun(db: Db, akunIds: number[], pesan: PesanPush & 
     publicKey: process.env.VAPID_PUBLIC_KEY as string,
     privateKey: process.env.VAPID_PRIVATE_KEY as string,
   };
-  const muatan = JSON.stringify({ judul: pesan.judul, isi: pesan.isi, url: pesan.url, tag: pesan.tag ?? "sigap" });
+  const muatan = JSON.stringify({ judul: pesan.judul, isi: pesan.isi, url: pesan.url, tag: pesan.tag ?? "sigap", ...(pesan.tunda ? { tunda: 1 } : {}) });
   const ok: number[] = [];
   const mati: number[] = [];
   const gagalLain: Baris[] = [];

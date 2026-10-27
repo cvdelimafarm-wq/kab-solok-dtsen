@@ -133,9 +133,29 @@ describe("rencanaAksi (cron tiap 5 menit)", () => {
   it("pengingat basi dilewati (cron terlambat > toleransi)", () => {
     expect(jenis(wib("2026-10-26", "19:46"))).toEqual([]);
   });
-  it("sesudah batas: tidak ada rilis baru; pengingat berkala belum mulai pada selang pertama", () => {
-    expect(jenis(wib("2026-10-26", "20:00"))).toEqual([]);
+  it("sesudah batas: tidak ada rilis baru; pengingat berkala belum mulai pada selang pertama (kecuali pengingat TENGGAT tepat di batas)", () => {
+    expect(jenis(wib("2026-10-26", "20:00"))).toEqual(["ingat_petugas:2026-10-26:99", "ingat_pml:2026-10-26:99"]);
+    expect(jenis(wib("2026-10-26", "20:14"))).toEqual(["ingat_petugas:2026-10-26:99", "ingat_pml:2026-10-26:99"]);
+    expect(jenis(wib("2026-10-26", "20:15"))).toEqual([]);
     expect(jenis(wib("2026-10-26", "20:59"))).toEqual([]);
+  });
+  it("(28 Okt) pengingat TENGGAT: tidak pada hari susulan dan tidak di jam senyap", () => {
+    const susulanAt = wib("2026-10-26", "19:10");
+    expect(rencanaAksi(wib("2026-10-26", "20:00"), P, { susulanAt }).filter((a) => a.slot === 99)).toEqual([]);
+    // batas di jam senyap (23.30) tidak mengirim apa pun
+    const malam = { ...P, rilis_jam: "19:00", batas_jam: "23:30", ingat_menit: [] };
+    expect(rencanaAksi(wib("2026-10-26", "23:30"), malam).filter((a) => a.slot === 99)).toEqual([]);
+  });
+  it("(28 Okt) jadwal pengguna: rilis 05.30, pengingat 09.00 dan tiap 2 jam, tenggat 20.00, berkala 120 menit", () => {
+    const q: QcPengaturan = { ...P, rilis_jam: "05:30", batas_jam: "20:00", ingat_menit: [210, 330, 450, 570, 690], ingat_berkala_menit: 120, rekap_jam: "05:00" };
+    // 05.30 senyap -> push rilis baru keluar saat senyap berakhir (06.00) selama jendela 45 menit sejak rilis
+    expect(jenis(wib("2026-10-28", "05:35"), q)).toEqual([]);
+    expect(jenis(wib("2026-10-28", "06:00"), q)).toEqual(["rilis:2026-10-28:0"]);
+    expect(jenis(wib("2026-10-28", "06:20"), q)).toEqual([]);
+    const jam = ["09:00", "11:00", "13:00", "15:00", "17:00"];
+    jam.forEach((j, i) => expect(jenis(wib("2026-10-28", j), q)).toEqual([`ingat_petugas:2026-10-28:${i + 1}`, `ingat_pml:2026-10-28:${i + 1}`]));
+    expect(jenis(wib("2026-10-28", "20:00"), q)).toEqual(["ingat_petugas:2026-10-28:99", "ingat_pml:2026-10-28:99"]);
+    expect(jenis(wib("2026-10-28", "22:00"), q)).toEqual(["ingat_petugas:2026-10-28:101", "ingat_pml:2026-10-28:101"]);
   });
   it("pengingat berkala tiap selang sesudah batas, bukan di jam senyap", () => {
     expect(jenis(wib("2026-10-26", "21:00"))).toEqual(["ingat_petugas:2026-10-26:101", "ingat_pml:2026-10-26:101"]);
@@ -217,6 +237,14 @@ describe("isi push", () => {
     expect(u.judul).toBe("Ulangi QC Pemahaman sampai 100");
     expect(u.isi).toContain("Nilai terbaik Anda 80");
     expect(u.isi).toContain("sisa 2 kali");
+  });
+  it("(28 Okt) push ke petugas membawa tombol tunda; push ke PML (pengingat PPL, rekap) tidak", () => {
+    expect(pushRilis("2026-10-26", P).tunda).toBe(true);
+    expect(pushRilis("2026-10-26", P, true).tunda).toBe(true);
+    expect(pushIngatPetugas("2026-10-26", 20, P).tunda).toBe(true);
+    expect(pushIngatPetugas("2026-10-26", 0, P, { belumMengisi: false, skorTerbaik: 80, sisaUlang: 2 }).tunda).toBe(true);
+    expect(pushIngatPml("2026-10-26", ["Ani"], P).tunda).toBeUndefined();
+    expect(pushRekapPml("2026-10-26", { jumlah_ppl: 6, sudah: 6, belum_mengisi: 0, lulus: 6, rata_awal: 100, salah: [] }).tunda).toBeUndefined();
   });
   it("rilis susulan tidak menyebut batas jam", () => {
     expect(pushRilis("2026-10-26", P, true).isi).toContain("terlambat dirilis");
