@@ -4,7 +4,8 @@ import { use as usePromise, createContext, useCallback, useContext, useEffect, u
 import LogoSigap from "@/app/components/LogoSigap";
 import TombolKembali from "@/app/components/TombolKembali";
 import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
-import { bacaLihatSebagai } from "@/app/portal/sesi";
+import { bacaLihatSebagai, bacaSesi } from "@/app/portal/sesi";
+import FotoSaya from "@/app/sigap/foto/FotoSaya";
 import { useDetak } from "../../useDetak";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import FotoKegiatan from "@/app/sigap/foto/FotoKegiatan";
@@ -84,7 +85,7 @@ type Data = {
   /** (14 Okt 2026) nomor WhatsApp admin anggaran (62...) untuk tombol "Minta izin susulan"; null = tombol tidak tampil */
   wa_admin?: string | null;
 };
-type Tab = "hari_ini" | "hari_kerja" | "arsip";
+type Tab = "hari_ini" | "hari_kerja" | "arsip" | "foto"; // (27 Okt 2026) "foto" = Foto Saya (daftar foto yang saya ambil), tab ke-4 di bar bawah
 
 // (14 Okt 2026) Tautan dalam dari pengingat/kartu Beranda: ?tab=&tgl=&fokus= membuka tab, hari, dan bagian (laporan/foto) yang kurang, lalu menyorotnya
 // sebentar. Konteks ini dibaca kartu hari (sorot, tombol WhatsApp izin susulan) dan daftar hari kerja (hari yang dibuka otomatis).
@@ -454,8 +455,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     <FokusCtx.Provider value={ctxFokus}>
     <main className="min-h-screen bg-[#EEF2F8] pb-28 text-[#13213A]">
       <Header
-        kecil={tab === "hari_ini" ? "SIGAP · Transport Lokal" : tab === "hari_kerja" ? "Hari Kerja" : "Arsip Dokumen"}
-        judulBesar={tab === "hari_ini" ? `Halo, ${namaDepan}` : tab === "hari_kerja" ? "Rencana hari kerja" : "SPJ Transport Lokal"}
+        kecil={tab === "hari_ini" ? "SIGAP · Transport Lokal" : tab === "hari_kerja" ? "Hari Kerja" : tab === "foto" ? "Foto Saya" : "Arsip Dokumen"}
+        judulBesar={tab === "hari_ini" ? `Halo, ${namaDepan}` : tab === "hari_kerja" ? "Rencana hari kerja" : tab === "foto" ? "Foto yang saya ambil" : "SPJ Transport Lokal"}
         sub={tglPanjang(data.hari_ini)}
         onKeluar={keluar}
       >
@@ -513,9 +514,12 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           </>
         )}
         {tab === "arsip" && <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} />}
-        <button type="button" onClick={() => setLangkah(1)} className="block w-full pt-1 text-center text-[12px] font-semibold text-[#55657D] underline">
-          Lihat panduan lagi
-        </button>
+        {tab === "foto" && <TabFotoSaya />}
+        {tab !== "foto" && (
+          <button type="button" onClick={() => setLangkah(1)} className="block w-full pt-1 text-center text-[12px] font-semibold text-[#55657D] underline">
+            Lihat panduan lagi
+          </button>
+        )}
       </div>
 
       {/* ===== NAVIGASI BAWAH ===== */}
@@ -526,6 +530,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               ["hari_ini", "rumah", "Hari Ini"],
               ["hari_kerja", "periode", "Hari Kerja"],
               ["arsip", "arsip", "Arsip"],
+              ["foto", "kamera", "Foto Saya"],
             ] as [Tab, NamaIkon, string][]
           ).map(([k, ikon, label]) => (
             <button
@@ -546,6 +551,31 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     </main>
     </FokusCtx.Provider>
   );
+}
+
+// ======================================================================
+// (27 Okt 2026) Tab Foto Saya: daftar foto Kamera SIGAP milik petugas (kisi bernomor per tanggal). Memakai sesi masuk portal (bukan token halaman ini),
+// jadi bila HP belum masuk, tampilkan ajakan masuk -- bukan pesan galat mentah.
+function TabFotoSaya() {
+  const [ada, setAda] = useState<boolean | null>(null);
+  useEffect(() => {
+    try {
+      setAda(!!bacaSesi());
+    } catch {
+      setAda(false);
+    }
+  }, []);
+  if (ada === null) return null;
+  if (!ada) {
+    return (
+      <div className="rounded-2xl bg-white p-4 text-center shadow-sm">
+        <p className="text-[14px] font-bold text-[#13213A]">Masuk dulu untuk melihat foto Anda</p>
+        <p className="mt-1 text-[12.5px] text-[#55657D]">Foto Saya memakai akun SIGAP Anda. Masuk lewat halaman awal, lalu buka tab ini lagi.</p>
+        <a href="/" className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#0F3D7A] px-5 text-[13.5px] font-extrabold text-white">Ke halaman masuk</a>
+      </div>
+    );
+  }
+  return <FotoSaya />;
 }
 
 // ======================================================================

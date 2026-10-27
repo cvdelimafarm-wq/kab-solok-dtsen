@@ -11,10 +11,10 @@ export function panduanSelesai(selesaiAt: string | null | undefined, jumlahHariK
   return !!selesaiAt || (Number.isFinite(jumlahHariKerja) && jumlahHariKerja > 0);
 }
 
-export type TabKerja = "hari_ini" | "hari_kerja" | "arsip";
+export type TabKerja = "hari_ini" | "hari_kerja" | "arsip" | "foto"; // (27 Okt 2026) + "foto" (tab Foto Saya)
 export type TampilanKerja = { tab: TabKerja; langkah: number | null; pen: number | null };
 
-const TAB: readonly string[] = ["hari_ini", "hari_kerja", "arsip"];
+const TAB: readonly string[] = ["hari_ini", "hari_kerja", "arsip", "foto"];
 /** Tampilan lebih tua dari ini dianggap kedaluwarsa (kunjungan baru, bukan kembali dari Kamera). */
 export const UMUR_TAMPILAN_MS = 60 * 60_000;
 export const JUMLAH_LANGKAH = 5;

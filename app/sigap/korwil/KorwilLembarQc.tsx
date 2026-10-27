@@ -329,9 +329,12 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number }) {
               </label>
               {!nonaktif && (
                 <button type="button" disabled={sibuk} onClick={() => void simpan()} className="h-[48px] w-full rounded-[14px] bg-[#1F5FD1] text-[14.5px] font-extrabold text-white active:bg-[#1A4FB8] disabled:opacity-50">
-                  {sibuk ? "Menyimpan…" : ada ? "Perbarui lembar" : "Simpan lembar"}
+                  {sibuk ? "Menyimpan…" : ada ? "Simpan perubahan" : "Simpan lembar"}
                 </button>
               )}
+              {/* (27 Okt 2026) hasil simpan/galat ditampilkan TEPAT di bawah tombol: pesan di bagian atas halaman tidak terlihat dari bawah formulir yang panjang */}
+              {galat && <p className="rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] font-semibold text-[#7A1D22]">{galat}</p>}
+              {info && <p className="rounded-[12px] border-l-4 border-[#13794B] bg-[#E3F6EC] px-3 py-2 text-[13px] font-semibold text-[#0F6340]">{info}</p>}
               {ada && <p className="text-[11.5px] text-[#1F5FD1]">Lembar ini sudah Anda isi ({tglPendek(ada.diubah_at.slice(0, 10))}). Menyimpan akan memperbaruinya.</p>}
             </div>
           </section>
