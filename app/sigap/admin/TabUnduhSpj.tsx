@@ -32,11 +32,21 @@ import {
   type UrutCetak,
 } from "@/lib/sigapSpjCetak";
 import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
+import KepalaKolom from "./KepalaKolom";
+import { adaSaring, nilaiBeda, terapkanTabel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 
 type Baris = PetugasCetak & { dikunci_at: string | null };
 type Data = { kegiatan: { kode: string } | null; rows: Baris[]; hari_min: string | null; hari_maks: string | null };
 
 const LABEL_PERAN: Record<string, string> = { korwil: "Korwil", pml: "PML", ppl: "PPL", supervisor: "Supervisor" };
+type KolomTabel = "nama" | "peran" | "tim" | "hari" | "nilai";
+const KOLOM_TABEL: { id: KolomTabel; label: string; angka: boolean }[] = [
+  { id: "nama", label: "Petugas", angka: false },
+  { id: "peran", label: "Peran", angka: false },
+  { id: "tim", label: "Tim (PML)", angka: false },
+  { id: "hari", label: "Hari di rentang", angka: true },
+  { id: "nilai", label: "Nilai kwitansi", angka: true },
+];
 
 function simpanBlob(blob: Blob, nama: string) {
   const url = URL.createObjectURL(blob);
@@ -61,6 +71,8 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
   const [jenis, setJenis] = useState<Set<JenisDok>>(new Set(URUTAN_JENIS));
   const [keluar, setKeluar] = useState<Set<number>>(new Set()); // penugasan yang dicentang keluar
   const [cari, setCari] = useState("");
+  const [saring, setSaring] = useState<Saring<KolomTabel>>({}); // (28 Okt 2026) cari / filter per kolom (tampilan tabel saja)
+  const [urutTabel, setUrutTabel] = useState<Urut<KolomTabel>>(null);
   const [proses, setProses] = useState<{ selesai: number; total: number; nama: string } | null>(null);
   const [konfirmasi, setKonfirmasi] = useState(false); // (28 Okt 2026) modal konfirmasi menggantikan window.confirm
   const batal = useRef(false);
@@ -89,10 +101,22 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
   const sampaiHitung = rentangOk ? sampai || null : null;
 
   const daftar = useMemo(() => urutkanPetugas(saringPeran(data?.rows ?? [], peran), urut), [data, peran, urut]);
+  // nilai sel tiap kolom (rentang dan nilai kwitansi mengikuti rentang cetak)
+  const nilaiSel = useCallback(
+    (p: Baris, k: KolomTabel): string | number => {
+      if (k === "nama") return p.nama;
+      if (k === "peran") return LABEL_PERAN[p.peran] ?? p.peran;
+      if (k === "tim") return p.peran === "pml" ? "" : p.tim_nama ?? "";
+      const n = dibayarDalamRentang(p.dibayar, dariHitung, sampaiHitung).length;
+      return k === "hari" ? n : n * p.tarif;
+    },
+    [dariHitung, sampaiHitung]
+  );
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
-    return q ? daftar.filter((p) => p.nama.toLowerCase().includes(q)) : daftar;
-  }, [daftar, cari]);
+    const dasar = q ? daftar.filter((p) => p.nama.toLowerCase().includes(q)) : daftar;
+    return terapkanTabel(dasar, saring, urutTabel, nilaiSel);
+  }, [daftar, cari, saring, urutTabel, nilaiSel]);
   const terpilih = useMemo(() => daftar.filter((p) => !keluar.has(p.penugasan_id)), [daftar, keluar]);
   const siap = useMemo(() => terpilih.filter((p) => dibayarDalamRentang(p.dibayar, dariHitung, sampaiHitung).length > 0), [terpilih, dariHitung, sampaiHitung]);
   const ringkas = useMemo(() => ringkasCetak(terpilih, dariHitung, sampaiHitung), [terpilih, dariHitung, sampaiHitung]);
@@ -108,6 +132,19 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
       const baru = new Set(lama);
       if (baru.has(j)) baru.delete(j);
       else baru.add(j);
+      return baru;
+    });
+  }
+  // (28 Okt 2026) centang / kosongkan semua petugas yang tampil (mengikuti pencarian)
+  const semuaTercentang = tampil.length > 0 && tampil.every((p) => !keluar.has(p.penugasan_id));
+  const adaTercentang = tampil.some((p) => !keluar.has(p.penugasan_id));
+  function aturSemua(centangSemua: boolean) {
+    setKeluar((lama) => {
+      const baru = new Set(lama);
+      for (const p of tampil) {
+        if (centangSemua) baru.delete(p.penugasan_id);
+        else baru.add(p.penugasan_id);
+      }
       return baru;
     });
   }
@@ -328,11 +365,17 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
 
       <Kartu
         judul="Urutan cetak"
-        ket="Hilangkan centang untuk melewatkan petugas."
+        ket="Hilangkan centang untuk melewatkan petugas. Cari, urut, dan filter kolom hanya mengubah tampilan; nomor No tetap urutan cetak."
         kanan={
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={BTN_O} onClick={() => setKeluar(new Set())} disabled={keluar.size === 0}>
+            <button type="button" className={BTN_O} onClick={() => (setSaring({}), setUrutTabel(null))} disabled={!adaSaring(saring) && urutTabel === null}>
+              Hapus filter kolom
+            </button>
+            <button type="button" className={BTN_O} onClick={() => aturSemua(true)} disabled={semuaTercentang}>
               Centang semua
+            </button>
+            <button type="button" className={BTN_O} onClick={() => aturSemua(false)} disabled={!adaTercentang}>
+              Kosongkan semua
             </button>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} w-40`} />
           </div>
@@ -341,9 +384,22 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
       <TabelKartu>
         <thead>
           <tr>
-            {["", "No", "Petugas", "Peran", "Tim (PML)", "Hari di rentang", "Nilai kwitansi"].map((h, i) => (
-              <th key={i} className={TH}>
-                {h}
+            <th className={TH}>
+              <input
+                type="checkbox"
+                checked={semuaTercentang}
+                ref={(el) => {
+                  if (el) el.indeterminate = adaTercentang && !semuaTercentang;
+                }}
+                onChange={() => aturSemua(!semuaTercentang)}
+                aria-label="Centang atau kosongkan semua petugas yang tampil"
+                title="Centang / kosongkan semua yang tampil"
+              />
+            </th>
+            <th className={TH} title="Nomor urut cetak">No</th>
+            {KOLOM_TABEL.map((k) => (
+              <th key={k.id} className={TH}>
+                <KepalaKolom id={k.id} label={k.label} saring={saring} setSaring={setSaring} urut={urutTabel} setUrut={setUrutTabel} opsi={() => nilaiBeda(daftar, k.id, nilaiSel, k.angka)} />
               </th>
             ))}
           </tr>
