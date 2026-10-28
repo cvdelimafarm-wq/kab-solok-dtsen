@@ -25,6 +25,7 @@ import Ringkasan from "./Ringkasan";
 import Siaran from "./Siaran";
 import Tim from "./Tim";
 import PengaturanLembar from "./PengaturanLembar";
+import IsiLaporanSpj from "./IsiLaporanSpj";
 import UnggahKk from "./UnggahKk";
 
 export default function KelolaPendataan() {
@@ -62,6 +63,7 @@ export default function KelolaPendataan() {
         <>
           <UnggahKk />
           <PengaturanLembar />
+          <IsiLaporanSpj />
         </>
       )}
       {tab === "tim" && <Tim />}

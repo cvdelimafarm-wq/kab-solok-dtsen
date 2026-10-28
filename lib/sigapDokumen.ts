@@ -31,6 +31,8 @@ import { buatPdfKwitansiSigap } from "@/lib/pdf/sigap/kwitansi";
 import { buatPdfVisumSigap } from "@/lib/pdf/sigap/visum";
 import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
 import { buatPdfLaporanSigap } from "@/lib/pdf/sigap/laporan";
+import { ambilIsiLaporan, type IsiLaporanSpj } from "@/lib/sigapLaporanData";
+import { peranLaporan, susunIsiLaporan } from "@/lib/sigapLaporanIsi";
 import { buatPdfDokumentasiSigap, type SigapFotoInput } from "@/lib/pdf/sigap/dokumentasi";
 import { buatZip } from "@/lib/pdf/sigap/zip";
 import { kelompokRentang, rentangValid, URUTAN_JENIS, LABEL_JENIS, type JenisDok } from "@/lib/sigapSpjCetak";
@@ -100,7 +102,23 @@ export type DataSpj = {
   kelompok: KelompokSpj[];
   totalNominal: number;
   final: { jenis: string; file_path: string; tanggal_mulai: string | null; tanggal_selesai: string | null; nominal: number | null; difinalkan_at: string }[];
+  /** (28 Okt 2026) pengaturan "Isi laporan SPJ" + data harian untuk lampiran laporan; diisi oleh sertakanIsiLaporan() hanya saat PDF dirakit */
+  isiLaporan?: IsiLaporanSpj | null;
 };
+
+/**
+ * (28 Okt 2026) Tambahkan pengaturan & data lampiran Laporan (hasil pendataan, QC, jarak, dst.) pada `data`. Hanya bila jenis "laporan" dibuat dan kegiatan mewajibkan laporan.
+ * Gagal membaca = laporan tetap terbit seperti biasa (tanpa lampiran).
+ */
+export async function sertakanIsiLaporan(db: Db, data: DataSpj, jenis: JenisDok[], tanggal: string[]): Promise<DataSpj> {
+  if (!jenis.includes("laporan") || !data.kegiatan.wajib_laporan || tanggal.length === 0) return data;
+  try {
+    return { ...data, isiLaporan: await ambilIsiLaporan(db, { kegiatanId: data.kegiatan.id, akunId: data.penugasan.akun_id, peran: data.penugasan.peran, tanggal }) };
+  } catch (e) {
+    console.error("[sigapDokumen] isi laporan dilewati:", e instanceof Error ? e.message : e);
+    return data;
+  }
+}
 
 /** Kumpulkan semua data SPJ satu penugasan (akun, kegiatan, tarif, ST, hari kerja, realisasi, foto, izin, kelompok dibayar). */
 export async function dataSpj(db: Db, penugasanId: number): Promise<DataSpj> {
@@ -373,6 +391,10 @@ export async function rakitUnit(
       const h = data.hari.find((x) => x.tanggal === t);
       if (pilih.has("laporan") && data.kegiatan.wajib_laporan) {
         if (h?.realisasi) {
+          // (28 Okt 2026) lampiran data sesuai pengaturan "Isi laporan SPJ" dan konteks hari itu (hanya yang ada datanya)
+          const ip = data.isiLaporan;
+          const lp = peranLaporan(data.penugasan.peran);
+          const isi = ip ? susunIsiLaporan(data.penugasan.peran, ip.konfig, ip.lembar, ip.harian.get(t) ?? {}) : null;
           const bytes = await buatPdfLaporanSigap({
             kegiatanNama: data.kegiatan.nama,
             kegiatanKode: data.kegiatan.kode,
@@ -387,6 +409,7 @@ export async function rakitUnit(
             kendala: h.realisasi.kendala,
             jumlahFoto: h.foto.length,
             peran: data.penugasan.peran, // (28 Okt 2026) templat laporan beda per peran (PPL / PML / korwil)
+            ...(isi && ip ? { isi: { ...isi, ...(lp ? { ganti: { judul: ip.konfig.peran[lp].judul, uraian: ip.konfig.peran[lp].uraian } } : {}) } } : {}),
           });
           unit.push({ jenis: "laporan", nama: `Laporan_${t}.pdf`, bytes, contentType: pdf, kelompok: kel.mulai });
         } else dilewati.push(`Laporan ${t} -- isian laporan belum diisi.`);
@@ -485,10 +508,12 @@ export async function buatSpjPdf(
   if (jenis.length === 0) throw new GalatSpj("Pilih minimal 1 jenis dokumen.", 400);
   // (28 Okt 2026) rentang cetak: hanya hari dibayar dalam [dari, sampai]; kelompok & nilai kwitansi ikut rentang. Tidak memakai berkas beku.
   const adaRentang = !!(opsi.dari || opsi.sampai);
-  const data = batasiRentang(await dataSpj(db, penugasanId), opsi.dari, opsi.sampai);
+  const dasarData = batasiRentang(await dataSpj(db, penugasanId), opsi.dari, opsi.sampai);
   const muat = pemuatStorage(db);
 
-  const kelTerpilih = opsi.kelompokMulai ? data.kelompok.find((k) => k.mulai === opsi.kelompokMulai) : undefined;
+  const kelTerpilih = opsi.kelompokMulai ? dasarData.kelompok.find((k) => k.mulai === opsi.kelompokMulai) : undefined;
+  const tanggalLaporan = opsi.tanggal ? [opsi.tanggal] : (kelTerpilih ? [kelTerpilih] : dasarData.kelompok).flatMap((k) => k.tanggal);
+  const data = await sertakanIsiLaporan(db, dasarData, jenis, tanggalLaporan);
   const dasarNama = `SPJ_${amanNama(data.kegiatan.kode || "SIGAP")}_${amanNama(data.akun.nama)}_${opsi.tanggal ? opsi.tanggal : adaRentang ? `${opsi.dari}_sd_${opsi.sampai}` : kelTerpilih ? rentangNama(kelTerpilih) : "semua"}`;
   const keluaran = async (unit: { nama: string; bytes: Uint8Array }[], dilewati: string[]) => {
     if (unit.length === 0) {
@@ -536,7 +561,8 @@ export async function buatSpjPdf(
  * lalu ganti baris sigap_dokumen_final milik penugasan itu.
  */
 export async function bekukanSpj(db: Db, penugasanId: number, oleh: string) {
-  const data = await dataSpj(db, penugasanId);
+  const dasarData = await dataSpj(db, penugasanId);
+  const data = await sertakanIsiLaporan(db, dasarData, [...URUTAN_JENIS], dasarData.kelompok.flatMap((k) => k.tanggal));
   const { unit, dilewati } = await rakitUnit(data, { jenis: [...URUTAN_JENIS] }, pemuatStorage(db));
   if (unit.length === 0) return { ok: false, pesan: "Tidak ada dokumen untuk dibekukan.", dilewati };
 

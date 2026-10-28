@@ -15,6 +15,7 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
 import { formatTanggalIndoDenganHari, judulKecamatan, teksAman } from "./format";
 import { jenisTemplate, teksLaporan } from "@/lib/sigapLaporanPeran";
+import type { Aktivitas, BlokIsi } from "@/lib/sigapLaporanIsi";
 
 export interface SigapLokasi {
   kecamatan: string | null;
@@ -36,6 +37,12 @@ export interface SigapLaporanData {
   jumlahFoto: number;
   /** (28 Okt 2026) peran petugas (ppl/pml/korwil): pada Pendataan Pascabencana memilih templat uraian per peran; kosong = templat umum */
   peran?: string;
+  /**
+   * (28 Okt 2026) Isi laporan hasil pengaturan "Isi laporan SPJ" (lib/sigapLaporanIsi.ts): blok lampiran data (hasil pendataan, QC, dst.) yang dirender
+   * setelah uraian, kegiatan hari itu menurut data (menentukan kalimat uraian), centang tabel lokasi/kendala, serta judul/uraian pengganti.
+   * Kosong = laporan seperti sebelumnya.
+   */
+  isi?: { blok: BlokIsi[]; aktivitas: Aktivitas; tampilLokasi: boolean; tampilKendala: boolean; ganti?: { judul?: string; uraian?: string } };
 }
 
 const MM = 2.834645669;
@@ -128,7 +135,12 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
     jumlahRealisasi: data.jumlahRealisasi,
     jumlahLokasi: data.lokasi.length,
     wilayah: wilayahTeks(data.lokasi),
+    aktivitas: data.isi?.aktivitas,
+    ganti: data.isi?.ganti,
+    adaLampiran: (data.isi?.blok.length ?? 0) > 0,
   });
+  const tampilLokasi = data.isi?.tampilLokasi ?? true;
+  const tampilKendala = data.isi?.tampilKendala ?? true;
   const halaman: PDFPage[] = [];
   let page!: PDFPage;
   let y = BUDGET_TOP;
@@ -240,44 +252,112 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   });
   y += 14;
 
-  // ---------- Tabel lokasi ----------
-  judulSeksi(T.seksiLokasi);
-  const kepalaTabel = () => {
-    kotak(CONTENT_L, y, CONTENT_W, TABEL_HEADER_H, { fill: SOFT_BG });
-    ["NO", "KECAMATAN", "NAGARI", "JORONG"].forEach((h, i) => teks(h, KOL_X[i] + PAD_X, y + 6, 7.5, { bold: true, color: TEXT_SEC }));
-    garisH(CONTENT_L, CONTENT_R, y);
-    garisH(CONTENT_L, CONTENT_R, y + TABEL_HEADER_H);
-    y += TABEL_HEADER_H;
-  };
-  let tabelTop = y;
-  kepalaTabel();
-  const tutupSisi = (dari: number, sampai: number) => {
-    garisV(CONTENT_L, dari, sampai);
-    garisV(CONTENT_R, dari, sampai);
-    for (let i = 1; i < KOL_X.length; i++) garisV(KOL_X[i], dari, sampai);
-  };
-  if (data.lokasi.length === 0) {
-    teks("(Lokasi tidak dicatat pada isian tanggal ini.)", CONTENT_L + PAD_X, y + 6.4, 8.5, { italic: true, color: TEXT_SEC });
-    y += BARIS_MIN_H;
-    garisH(CONTENT_L, CONTENT_R, y);
-    garisV(CONTENT_L, tabelTop, y);
-    garisV(CONTENT_R, tabelTop, y);
-  } else {
-    data.lokasi.forEach((l, idx) => {
-      const isi = [String(idx + 1), judulKecamatan(l.kecamatan) || "-", judulKecamatan(l.nagari) || "-", judulKecamatan(l.jorong) || "-"];
-      const bar = isi.map((v, i) => bungkusTeks(font, teksAman(v), FONT_TABEL, KOL_W[i] - PAD_X * 2));
+  // ---------- Blok lampiran data (hasil pendataan, QC, jarak, dst.; diatur di "Isi laporan SPJ") ----------
+  /** Tabel umum: kepala opsional, kolom pertama kiri, lainnya rata kanan; berlanjut ke halaman berikutnya bila perlu. */
+  function tabelUmum(kepala: string[] | null, baris: string[][], lebar: number[], tebalPertama = false) {
+    const xs = [CONTENT_L];
+    lebar.forEach((w, i) => xs.push(xs[i] + w));
+    const sisi = (dari: number, sampai: number) => {
+      garisV(CONTENT_L, dari, sampai);
+      garisV(CONTENT_R, dari, sampai);
+      for (let i = 1; i < lebar.length; i++) garisV(xs[i], dari, sampai);
+    };
+    const tulisKepala = () => {
+      kotak(CONTENT_L, y, CONTENT_W, TABEL_HEADER_H, { fill: SOFT_BG });
+      (kepala ?? []).forEach((h, i) => {
+        const bar = bungkusTeks(fontBold, teksAman(h), 7.5, lebar[i] - PAD_X * 2)[0];
+        teks(bar, xs[i] + PAD_X, y + 6, 7.5, i === 0 ? { bold: true, color: TEXT_SEC } : { bold: true, color: TEXT_SEC, align: "right", width: lebar[i] - PAD_X * 2 });
+      });
+      garisH(CONTENT_L, CONTENT_R, y);
+      garisH(CONTENT_L, CONTENT_R, y + TABEL_HEADER_H);
+      y += TABEL_HEADER_H;
+    };
+    ruang((kepala ? TABEL_HEADER_H : 0) + BARIS_MIN_H);
+    let atas = y;
+    if (kepala) tulisKepala();
+    else garisH(CONTENT_L, CONTENT_R, y, NAVY, 1);
+    for (const r of baris) {
+      const bar = r.map((v, i) => bungkusTeks(i === 0 && !tebalPertama ? font : fontBold, teksAman(v), FONT_TABEL, lebar[i] - PAD_X * 2));
       const h = BARIS_MIN_H + (Math.max(...bar.map((b) => b.length)) - 1) * LEADING_TABEL;
       if (y + h > BUDGET_BOTTOM) {
-        tutupSisi(tabelTop, y);
+        sisi(atas, y);
         halamanBaru();
-        tabelTop = y;
-        kepalaTabel();
+        atas = y;
+        if (kepala) tulisKepala();
       }
-      bar.forEach((b, i) => b.forEach((t, k) => teks(t, KOL_X[i] + PAD_X, y + 6.4 + k * LEADING_TABEL, FONT_TABEL, { bold: i === 0 })));
+      bar.forEach((b, i) =>
+        b.forEach((t, k) =>
+          teks(t, xs[i] + PAD_X, y + 6.4 + k * LEADING_TABEL, FONT_TABEL, i === 0 ? { bold: tebalPertama } : { bold: true, align: "right", width: lebar[i] - PAD_X * 2 })
+        )
+      );
       y += h;
       garisH(CONTENT_L, CONTENT_R, y);
-    });
-    tutupSisi(tabelTop, y);
+    }
+    sisi(atas, y);
+  }
+  for (const blok of data.isi?.blok ?? []) {
+    // blok baris kecil dijaga utuh dalam satu halaman
+    const perkiraan = SECTION_BOX_H + 8 + (blok.baris?.length ?? 0) * BARIS_MIN_H;
+    if (blok.baris?.length && perkiraan < 300) ruang(perkiraan);
+    judulSeksi(blok.judul);
+    if (blok.baris?.length) tabelUmum(null, blok.baris, [CONTENT_W * 0.64, CONTENT_W * 0.36]);
+    if (blok.tabel?.baris.length) {
+      const k = blok.tabel.kepala.length;
+      const pertama = k <= 2 ? CONTENT_W * 0.64 : Math.min(CONTENT_W * 0.36, Math.max(CONTENT_W * 0.24, CONTENT_W - (k - 1) * 70));
+      const sisa = (CONTENT_W - pertama) / Math.max(1, k - 1);
+      tabelUmum(blok.tabel.kepala, blok.tabel.baris, [pertama, ...Array.from({ length: k - 1 }, () => sisa)], true);
+    }
+    if (blok.catatan) {
+      y += 4;
+      for (const b of bungkusTeks(fontItalic, teksAman(blok.catatan), 8.5, CONTENT_W)) {
+        ruang(11);
+        teks(b, CONTENT_L, y, 8.5, { italic: true, color: TEXT_SEC });
+        y += 11;
+      }
+    }
+    y += 14;
+  }
+
+  // ---------- Tabel lokasi ----------
+  judulSeksi(tampilLokasi ? T.seksiLokasi : "RINGKASAN ISIAN HARIAN");
+  if (tampilLokasi) {
+    const kepalaTabel = () => {
+      kotak(CONTENT_L, y, CONTENT_W, TABEL_HEADER_H, { fill: SOFT_BG });
+      ["NO", "KECAMATAN", "NAGARI", "JORONG"].forEach((h, i) => teks(h, KOL_X[i] + PAD_X, y + 6, 7.5, { bold: true, color: TEXT_SEC }));
+      garisH(CONTENT_L, CONTENT_R, y);
+      garisH(CONTENT_L, CONTENT_R, y + TABEL_HEADER_H);
+      y += TABEL_HEADER_H;
+    };
+    let tabelTop = y;
+    kepalaTabel();
+    const tutupSisi = (dari: number, sampai: number) => {
+      garisV(CONTENT_L, dari, sampai);
+      garisV(CONTENT_R, dari, sampai);
+      for (let i = 1; i < KOL_X.length; i++) garisV(KOL_X[i], dari, sampai);
+    };
+    if (data.lokasi.length === 0) {
+      teks("(Lokasi tidak dicatat pada isian tanggal ini.)", CONTENT_L + PAD_X, y + 6.4, 8.5, { italic: true, color: TEXT_SEC });
+      y += BARIS_MIN_H;
+      garisH(CONTENT_L, CONTENT_R, y);
+      garisV(CONTENT_L, tabelTop, y);
+      garisV(CONTENT_R, tabelTop, y);
+    } else {
+      data.lokasi.forEach((l, idx) => {
+        const isi = [String(idx + 1), judulKecamatan(l.kecamatan) || "-", judulKecamatan(l.nagari) || "-", judulKecamatan(l.jorong) || "-"];
+        const bar = isi.map((v, i) => bungkusTeks(font, teksAman(v), FONT_TABEL, KOL_W[i] - PAD_X * 2));
+        const h = BARIS_MIN_H + (Math.max(...bar.map((b) => b.length)) - 1) * LEADING_TABEL;
+        if (y + h > BUDGET_BOTTOM) {
+          tutupSisi(tabelTop, y);
+          halamanBaru();
+          tabelTop = y;
+          kepalaTabel();
+        }
+        bar.forEach((b, i) => b.forEach((t, k) => teks(t, KOL_X[i] + PAD_X, y + 6.4 + k * LEADING_TABEL, FONT_TABEL, { bold: i === 0 })));
+        y += h;
+        garisH(CONTENT_L, CONTENT_R, y);
+      });
+      tutupSisi(tabelTop, y);
+    }
   }
   // Baris penutup: jumlah realisasi & foto (selebar tabel).
   for (const [label, nilai] of [
@@ -296,15 +376,18 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   garisH(CONTENT_L, CONTENT_R, y);
   y += 14;
 
-  // ---------- Kendala ----------
-  judulSeksi(T.seksiKendala);
-  const kendala = (data.kendala ?? "").trim();
-  for (const b of bungkusTeks(kendala ? font : fontItalic, teksAman(kendala || "Tidak ada kendala yang dicatat petugas pada isian tanggal ini."), FONT_ISI, CONTENT_W)) {
-    ruang(LEADING_ISI);
-    teks(b, CONTENT_L, y, FONT_ISI, kendala ? {} : { italic: true, color: TEXT_SEC });
-    y += LEADING_ISI;
+  if (tampilKendala) {
+    // ---------- Kendala ----------
+    judulSeksi(T.seksiKendala);
+    const kendala = (data.kendala ?? "").trim();
+    for (const b of bungkusTeks(kendala ? font : fontItalic, teksAman(kendala || "Tidak ada kendala yang dicatat petugas pada isian tanggal ini."), FONT_ISI, CONTENT_W)) {
+      ruang(LEADING_ISI);
+      teks(b, CONTENT_L, y, FONT_ISI, kendala ? {} : { italic: true, color: TEXT_SEC });
+      y += LEADING_ISI;
+    }
+    y += 10;
+
   }
-  y += 10;
 
   // ---------- Catatan ----------
   const prefiks = "Catatan: ";
