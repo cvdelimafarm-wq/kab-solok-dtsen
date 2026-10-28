@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isiRec, mingguKe, modeRec, rapikanRec, recPerk, ringkasRec, ubahRec } from "../waktu";
+import { isiRec, mingguDariTanggal, mingguKe, modeRec, namaHari, polaDariTanggal, rapikanRec, recPerk, ringkasRec, ubahRec } from "../waktu";
 
 describe("mingguKe", () => {
   it("minggu ke-2 November 2026 = Senin 9 s.d. Jumat 13", () => {
@@ -81,5 +81,35 @@ describe("modeRec", () => {
   });
   it("menyentuh data lama (Fix, rentang) tidak meratakan selesai", () => {
     expect(isiRec({ mulai: "2026-03-02", selesai: "2026-03-04" }, 2026)).toMatchObject({ perk: false, mode: "rentang", selesai: "2026-03-04" });
+  });
+});
+
+describe("konversi tanggal dan minggu", () => {
+  it("2 Nov 2026 (Senin) = minggu ke-1 November; kebalikannya konsisten", () => {
+    expect(mingguDariTanggal("2026-11-02")).toEqual({ bulan: 10, minggu: 1 });
+    expect(mingguDariTanggal("2026-11-06")).toEqual({ bulan: 10, minggu: 1 });
+    expect(mingguDariTanggal("2026-11-09")).toEqual({ bulan: 10, minggu: 2 });
+    for (const [b, n] of [[0, 1], [2, 3], [10, 5], [11, 4]] as const) {
+      const w = mingguKe(2026, b, n);
+      expect(mingguDariTanggal(w.mulai)).toEqual({ bulan: b, minggu: n });
+      expect(mingguDariTanggal(w.selesai)).toEqual({ bulan: b, minggu: n });
+    }
+  });
+  it("akhir pekan ikut minggu sebelumnya; 1 Nov 2026 (Minggu) = minggu ke-4 Oktober", () => {
+    expect(mingguDariTanggal("2026-11-01")).toEqual({ bulan: 9, minggu: 4 });
+    expect(mingguDariTanggal("2026-11-08")).toEqual({ bulan: 10, minggu: 1 });
+  });
+  it("tanggal tidak sah", () => {
+    expect(mingguDariTanggal("")).toBeNull();
+    expect(mingguDariTanggal("2026-02-31")).toBeNull();
+    expect(namaHari("2026-11-02")).toBe("Senin");
+    expect(namaHari("x")).toBe("");
+  });
+  it("polaDariTanggal: bulan ke-n sejak awal periode dan hari", () => {
+    expect(polaDariTanggal("2026-11-02", 9, 2026)).toEqual({ bulanKe: 1, hari: 2 }); // periode mulai Oktober
+    expect(polaDariTanggal("2027-01-05", 9, 2026)).toEqual({ bulanKe: 3, hari: 5 });
+    expect(polaDariTanggal("2026-08-30", 9, 2026)).toBeNull(); // sebelum awal periode
+    expect(polaDariTanggal("2028-12-01", 0, 2026)).toBeNull(); // > 24 bulan
+    expect(polaDariTanggal("2026-11-02", -1, 2026)).toBeNull();
   });
 });

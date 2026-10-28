@@ -87,3 +87,38 @@ export function ringkasRec(r: WaktuRec | null | undefined): string {
   return !r.selesai || r.selesai === r.mulai ? tgl(r.mulai) : `${tgl(r.mulai)} s.d. ${tgl(r.selesai)}`;
 }
 
+
+const NAMA_HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const tglOk = (d: string): Date | null => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const t = new Date(`${d}T00:00:00Z`);
+  return Number.isNaN(t.getTime()) || ymd(t) !== d ? null : t;
+};
+/** Nama hari untuk "YYYY-MM-DD" (kosong bila tanggal tidak sah). */
+export function namaHari(d: string): string {
+  const t = tglOk(d);
+  return t ? NAMA_HARI[t.getUTCDay()] : "";
+}
+
+/**
+ * Minggu (Senin sampai Jumat) yang memuat tanggal d, dinyatakan sebagai bulan dan minggu ke-n menurut bulan tempat Senin minggu itu berada
+ * (kebalikan `mingguKe`). Sabtu dan Minggu dianggap bagian dari minggu sebelumnya. Contoh: 2 Nov 2026 -> { bulan: 10, minggu: 1 }.
+ */
+export function mingguDariTanggal(d: string): { bulan: number; minggu: number } | null {
+  const t = tglOk(d);
+  if (!t) return null;
+  const mundur = (t.getUTCDay() + 6) % 7; // Senin = 0
+  const senin = new Date(t.getTime() - mundur * 86400000);
+  return { bulan: senin.getUTCMonth(), minggu: Math.min(5, Math.floor((senin.getUTCDate() - 1) / 7) + 1) };
+}
+
+/**
+ * Tanggal kalender -> pola jendela (bulan ke-n sejak awal periode acuan, dimulai 0, dan hari). Null bila di luar 0..24 bulan sejak awal periode
+ * atau bukan tanggal sah. `awalBulan0` = bulan awal periode acuan (0 = Januari).
+ */
+export function polaDariTanggal(d: string, awalBulan0: number, tahun: number): { bulanKe: number; hari: number } | null {
+  const t = tglOk(d);
+  if (!t || awalBulan0 < 0) return null;
+  const bulanKe = (t.getUTCFullYear() - tahun) * 12 + (t.getUTCMonth() - awalBulan0);
+  return bulanKe < 0 || bulanKe > 24 ? null : { bulanKe, hari: t.getUTCDate() };
+}

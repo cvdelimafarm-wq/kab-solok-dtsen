@@ -5,17 +5,17 @@
 // (25 Okt 2026) Formulir Identifikasi survei, bagian A-E (dari mockup Version 7; 28 Okt 2026 Instrumen pendataan digabung ke A). Murni tampilan terkendali: seluruh perhitungan memakai
 // lib/keu/identifikasi.ts. `mati` = formulir terkunci (menunggu persetujuan, sudah sah, atau akun tanpa hak menyusun).
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
   JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
   hitungMitra, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
   type Form, type Instrumen, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
-import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, TglRentang, YaTidak } from "./Kontrol";
+import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
 import { WaktuIsian } from "./Waktu";
-import { recPerk } from "@/lib/keu/waktu";
+import { mingguDariTanggal, mingguKe, namaBulan, namaHari, polaDariTanggal, recPerk } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -91,6 +91,8 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const first = lst[0];
   const banyak = lst.length > 1;
   const J = f.jend;
+  const [modeIsi, setModeIsi] = useState<{ mulai: "Tanggal" | "Minggu"; selesai: "Tanggal" | "Minggu" }>({ mulai: "Tanggal", selesai: "Tanggal" });
+  const [salahTgl, setSalahTgl] = useState<{ mulai: string; selesai: string }>({ mulai: "", selesai: "" });
   const jp = useMemo(() => hitungJadwal(f, pa, tahun), [f, pa, tahun]);
 
   const setJend = (patch: Partial<Form["jend"]>) => ubah((g) => { Object.assign(g.jend, patch); });
@@ -128,24 +130,59 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const wPola = jendelaPola(f, pa, tahun);
   const barisPola = (sisi: "mulai" | "selesai") => {
     const m = sisi === "mulai";
-    const jenis = m ? J.mj : J.sj;
+    const akhir = (m ? J.mj : J.sj) === "akhir";
     const bln = m ? J.mb : J.sb;
     const n = m ? J.mn : J.sn;
-    const ubahCara = (v: string) => setJend(m ? (v === "tgl" ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (v === "tgl" ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }));
+    const awal = first ? NAMA_PERIODE[f.periode].indexOf(first) * LEN : -1;
+    const ac = first ? jendelaPola(f, first, tahun) : null;
+    const tglAcuan = ac ? (m ? ac.mulai : ac.selesai) : "";
+    const mg = mingguDariTanggal(tglAcuan);
+    const mode = modeIsi[sisi];
+    // Tanggal kalender pada periode acuan diterjemahkan menjadi pola (bulan ke-n periode + hari) yang berlaku untuk semua periode.
+    const pasang = (d: string) => {
+      const p = polaDariTanggal(d, awal, tahun);
+      setSalahTgl((x) => ({ ...x, [sisi]: p ? "" : `Tanggal harus pada atau setelah awal periode ${first} dan paling lama 25 bulan sesudahnya.` }));
+      if (p) setJend(m ? { mb: p.bulanKe, mj: "tgl", mn: p.hari } : { sb: p.bulanKe, sj: "tgl", sn: p.hari });
+    };
+    const pasangMinggu = (b: number, k: number) => { const w = mingguKe(tahun, b, k); pasang(m ? w.mulai : w.selesai); };
+    const namaBln = (off: number) => { const t = awal + off; return `${NAMA_BULAN[t % 12]}${t >= 12 ? ` ${tahun + Math.floor(t / 12)}` : ""}`; };
     return (
-      <div className="flex flex-col gap-0.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="flex flex-col gap-1.5 rounded-lg border border-[#E3E9F2] bg-[#FAFBFD] p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="w-14 shrink-0 text-[13px] font-bold text-[#0F2A52]">{m ? "Mulai" : "Selesai"}</span>
-          <select aria-label={`Cara hari ${sisi}`} className={pilihSel} value={jenis} disabled={mati} onChange={(e) => ubahCara(e.target.value)}>
-            <option value="tgl">tanggal tertentu</option>
-            <option value="akhir">{m ? "N hari terakhir bulan" : "akhir bulan"}</option>
-          </select>
-          {(jenis === "tgl" || m) && <div className="w-[84px]"><Angka nama={`Hari ${sisi}`} nilai={n} min={1} maks={31} mati={mati} onUbah={(v) => setJend(m ? { mn: v } : { sn: v })} /></div>}
-          <span className="text-[13px] text-[#44546F]">di bulan ke-</span>
-          <div className="w-[84px]"><Angka nama={`Bulan ${sisi}`} nilai={bln + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend(m ? { mb: v - 1 } : { sb: v - 1 })} /></div>
-          <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tglIndo(m ? wPola.mulai : wPola.selesai)}{banyak ? ` (${pa})` : ""}</span>
+          {!akhir && <Pilihan nama={`Cara mengisi ${sisi}`} nilai={mode} opsi={["Tanggal", "Minggu"] as const} mati={mati} onPilih={(v) => setModeIsi((x) => ({ ...x, [sisi]: v }))} />}
+          <Centang aktif={akhir} mati={mati} onUbah={() => setJend(m ? (akhir ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (akhir ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }))}>{m ? "Hitung dari akhir bulan" : "Akhir bulan"}</Centang>
         </div>
-        <span className="pl-16 text-[12px] text-[#5B6B84]">{bulanTeks(bln)}</span>
+        {akhir ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {m && <><div className="w-[84px]"><Angka nama="Jumlah hari terakhir" nilai={n} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ mn: v })} /></div><span className="text-[13px] text-[#44546F]">hari terakhir</span></>}
+            <span className="text-[13px] text-[#44546F]">bulan</span>
+            <select aria-label={`Bulan ${sisi}`} className={pilihSel} value={bln} disabled={mati} onChange={(e) => setJend(m ? { mb: Number(e.target.value) } : { sb: Number(e.target.value) })}>
+              {Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{awal >= 0 ? namaBln(i) : `bulan ke-${i + 1}`}</option>)}
+            </select>
+          </div>
+        ) : mode === "Tanggal" ? (
+          <div className="w-[200px]"><Tgl nama={`Tanggal ${sisi} (periode acuan ${first})`} nilai={tglAcuan} mati={mati} onUbah={(v) => { if (v) pasang(v); }} /></div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <select aria-label={`Bulan ${sisi}`} className={pilihSel} value={mg ? mg.bulan : ""} disabled={mati} onChange={(e) => pasangMinggu(Number(e.target.value), mg?.minggu ?? 1)}>
+              {!mg && <option value="">Pilih bulan…</option>}
+              {Array.from({ length: 12 }, (_, i) => <option key={i} value={i}>{namaBulan(i)}</option>)}
+            </select>
+            <select aria-label={`Minggu ke- ${sisi}`} className={pilihSel} value={mg ? mg.minggu : 1} disabled={mati || !mg} onChange={(e) => mg && pasangMinggu(mg.bulan, Number(e.target.value))}>
+              {[1, 2, 3, 4, 5].map((k) => <option key={k} value={k}>Minggu ke-{k}</option>)}
+            </select>
+          </div>
+        )}
+        {salahTgl[sisi] && <span role="alert" className="text-[12px] font-semibold text-[#B42318]">{salahTgl[sisi]}</span>}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tglIndo(m ? wPola.mulai : wPola.selesai)}{banyak ? ` (${pa})` : ""}</span>
+          <span className="text-[12px] text-[#5B6B84]">
+            {akhir ? bulanTeks(bln)
+              : mode === "Tanggal" ? (mg ? `${namaHari(tglAcuan)}, setara minggu ke-${mg.minggu} ${namaBulan(mg.bulan)}` : "")
+              : `${m ? "Senin" : "Jumat"}, ${tglIndo(tglAcuan)}`}
+          </span>
+        </div>
       </div>
     );
   };
@@ -162,6 +199,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
           </div>
         </div>
       )}
+      {banyak && <span className="text-[12.5px] text-[#44546F]">Isi tanggal untuk periode acuan <b>{first}</b>. Periode lain memakai pola yang sama (bulan ke-n sejak awal periode, tanggal yang sama).</span>}
       {barisPola("mulai")}
       {barisPola("selesai")}
       <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Hasil pola tiap periode">
