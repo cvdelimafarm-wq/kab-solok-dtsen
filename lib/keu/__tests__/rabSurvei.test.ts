@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BarisRincian } from "../lanjutan";
 import type { ItemAnggaran } from "../ro";
-import { hariJadwal, jumlahSurvei, kataKunci, rincianSurvei, ringkasTautan, saranNamaItem, tautkan, type PeriodeJadwal } from "../rabSurvei";
+import { hariJadwal, jumlahSurvei, kataKunci, kunciHari, periksaHariBayar, rincianSurvei, ringkasTautan, saranNamaItem, tautkan, type PeriodeJadwal } from "../rabSurvei";
 
 const dasar = { jumlah: null, catatan: "", perk: false, tarif: 170000 } as const;
 const trPpl: BarisRincian = { ...dasar, kelompok: "Translok dan penginapan", uraian: "Translok PPL (kurang dari 8 jam)", akun: "524113", volume: 3, satuan: "orang (jumlah hari menyusul)" };
@@ -21,8 +21,9 @@ describe("hariJadwal", () => {
 });
 
 describe("rincianSurvei", () => {
-  it("per periode: translok orang x hari, satu rincian per peran per periode", () => {
-    const r = rincianSurvei([trPpl, trPml], jad, "periode");
+  const hb = { [kunciHari(trPpl, "Maret")]: 5, [kunciHari(trPpl, "September")]: 3, [kunciHari(trPml, "Maret")]: 5, [kunciHari(trPml, "September")]: 3 };
+  it("per periode: translok = orang x hari DIBAYAR (isian manual)", () => {
+    const r = rincianSurvei([trPpl, trPml], jad, "periode", hb);
     expect(r.map((x) => [x.uraian, x.volume, x.satuan])).toEqual([
       ["Translok PPL (kurang dari 8 jam) Maret", 15, "orang-hari"],
       ["Translok PPL (kurang dari 8 jam) September", 9, "orang-hari"],
@@ -30,24 +31,42 @@ describe("rincianSurvei", () => {
       ["Translok PML (kurang dari 8 jam) September", 6, "orang-hari"],
     ]);
     expect(r[0].jumlah).toBe(15 * 170000);
-    expect(r[0].periode).toBe("Maret");
+    expect(r[0]).toMatchObject({ periode: "Maret", hari: 5, hariMaks: 5 });
   });
-  it("gabung: satu rincian per peran, volume dijumlahkan", () => {
-    const r = rincianSurvei([trPpl, trPml], jad, "gabung");
+  it("hari dibayar boleh kurang dari hari pendataan (mendata 5 hari, dibayar 3)", () => {
+    const r = rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 3 });
+    expect(r[0]).toMatchObject({ volume: 9, hari: 3, hariMaks: 5 });
+  });
+  it("hari belum diisi: volume menyusul dengan petunjuk batas", () => {
+    const r = rincianSurvei([trPpl], jad, "periode");
+    expect(r[0].volume).toBeNull();
+    expect(r[0].catatan).toContain("maksimal 5");
+    expect(jumlahSurvei(r).belum).toBe(2);
+  });
+  it("hari dibayar melebihi hari pendataan ditolak (volume null + pesan)", () => {
+    const r = rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 6 });
+    expect(r[0].volume).toBeNull(); expect(r[0].catatan).toContain("Melebihi");
+  });
+  it("gabung: satu rincian per peran, volume dijumlahkan; null bila ada periode belum diisi", () => {
+    const r = rincianSurvei([trPpl, trPml], jad, "gabung", hb);
     expect(r.map((x) => [x.uraian, x.volume])).toEqual([["Translok PPL (kurang dari 8 jam)", 24], ["Translok PML (kurang dari 8 jam)", 16]]);
     expect(jumlahSurvei(r).total).toBe(40 * 170000);
+    const sebagian = rincianSurvei([trPpl], jad, "gabung", { [kunciHari(trPpl, "Maret")]: 5 });
+    expect(sebagian[0].volume).toBeNull(); expect(sebagian[0].jumlah).toBeNull();
   });
-  it("jadwal belum lengkap: volume null dengan catatan; gabung ikut null", () => {
-    const j2 = [{ periode: "Maret", mulai: "2026-03-01", selesai: "2026-03-05" }, { periode: "September", mulai: "", selesai: "" }];
-    const p = rincianSurvei([trPpl], j2, "periode");
-    expect(p[1].volume).toBeNull(); expect(p[1].catatan).toContain("September");
-    const g = rincianSurvei([trPpl], j2, "gabung");
-    expect(g[0].volume).toBeNull(); expect(g[0].jumlah).toBeNull();
-  });
-  it("penginapan = orang x (hari - 1) malam", () => {
+  it("penginapan = orang x malam dibayar (maks hari - 1)", () => {
     const pen: BarisRincian = { ...trPpl, uraian: "Penginapan PPL", akun: "524111", tarif: null };
-    const r = rincianSurvei([pen], jad, "periode");
+    const r = rincianSurvei([pen], jad, "periode", { [kunciHari(pen, "Maret")]: 4, [kunciHari(pen, "September")]: 2 });
     expect(r.map((x) => [x.volume, x.satuan])).toEqual([[12, "orang-malam"], [6, "orang-malam"]]);
+    expect(periksaHariBayar(5, 5, true)).toContain("maksimal 4");
+  });
+  it("periksaHariBayar", () => {
+    expect(periksaHariBayar(3, 5)).toBeNull();
+    expect(periksaHariBayar(5, 5)).toBeNull();
+    expect(periksaHariBayar(6, 5)).toContain("maksimal 5");
+    expect(periksaHariBayar(-1, 5)).toContain("bulat");
+    expect(periksaHariBayar(2.5, 5)).toContain("bulat");
+    expect(periksaHariBayar(9, 0)).toBeNull(); // jadwal belum ada: tidak ada batas yang dapat diperiksa
   });
   it("rapat dikembangkan per periode, atau satu bila gabung", () => {
     expect(rincianSurvei([rapat], jad, "periode").map((x) => x.uraian)).toEqual(["Konsumsi rapat evaluasi tatap muka Maret", "Konsumsi rapat evaluasi tatap muka September"]);
@@ -60,9 +79,9 @@ describe("rincianSurvei", () => {
     expect(g[0]).toMatchObject({ uraian: "Pelatihan: konsumsi tanpa paket", volume: 24, jumlah: 24 * 40000 });
   });
   it("tanpa periode: nama periode tidak ditempel", () => {
-    const r = rincianSurvei([trPpl], [{ periode: "Kegiatan", mulai: "2026-03-01", selesai: "2026-03-05" }], "periode");
+    const r = rincianSurvei([trPpl], [{ periode: "Kegiatan", mulai: "2026-03-01", selesai: "2026-03-05" }], "periode", { [kunciHari(trPpl, "Kegiatan")]: 4 });
     expect(r[0].uraian).toBe("Translok PPL (kurang dari 8 jam)");
-    expect(r[0].volume).toBe(15);
+    expect(r[0].volume).toBe(12);
   });
   it("kunci unik", () => {
     const r = rincianSurvei([trPpl, trPpl], [jad[0]], "periode");

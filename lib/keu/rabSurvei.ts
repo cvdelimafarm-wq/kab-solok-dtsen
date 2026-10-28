@@ -3,8 +3,9 @@
 // (28 Okt 2026) RAB per survei, tahap 1 (logika murni, tanpa React/DB). Dari rincian biaya identifikasi (lanjutan.ts: rincianBiaya) dibentuk RINCIAN RAB per survei:
 //  - mode "periode": satu rincian per periode (mis. translok Susenas Maret dan Susenas September terpisah);
 //  - mode "gabung": satu rincian untuk seluruh periode (volume dijumlahkan).
-// Volume translok = orang x hari pendataan periode itu; penginapan = orang x malam (hari - 1). Hari dihitung kalender inklusif dari jadwal pendataan
-// (hari kerja atau kalender: cek aturan). Beberapa rincian (mis. translok PPL dan PML) boleh ditautkan ke SATU item POK: tautan dibuat per akun,
+// Volume translok = orang x HARI DIBAYAR yang diisi manual (keputusan pengguna 28 Okt 2026: petugas bisa mendata 10 hari tetapi transloknya hanya dibayar 3 hari);
+// hari dibayar tidak boleh melebihi hari pendataan periode itu (batas atas, hari kalender: cek aturan). Penginapan = orang x malam yang diisi sama (batas hari - 1).
+// Hari belum diisi = volume menyusul. Beberapa rincian (mis. translok PPL dan PML) boleh ditautkan ke SATU item POK: tautan dibuat per akun,
 // dan hasil penautan memberi tahu bila item POK untuk akun itu belum ada atau namanya perlu diperbaiki (saran, bukan paksaan).
 
 import type { BarisRincian } from "./lanjutan";
@@ -13,7 +14,7 @@ import { NAMA_AKUN, selisihHari } from "./identifikasi";
 
 export type ModePecah = "periode" | "gabung";
 export type PeriodeJadwal = { periode: string; mulai: string; selesai: string };
-export type RincianSurvei = BarisRincian & { kunci: string; periode: string | null; hari: number | null };
+export type RincianSurvei = BarisRincian & { kunci: string; periode: string | null; hari: number | null; hariMaks?: number };
 
 const akun6 = (a: string): string => a.slice(0, 6);
 const TGL = /^\d{4}-\d{2}-\d{2}$/;
@@ -28,13 +29,27 @@ const adaPeriodeNama = (u: string, p: string[]): string | null => p.find((x) => 
 const lapangan = (b: BarisRincian) => b.kelompok === "Translok dan penginapan";
 const jenisLap = (b: BarisRincian): "translok" | "penginapan" => (b.uraian.startsWith("Penginapan") ? "penginapan" : "translok");
 
-function volLapangan(b: BarisRincian, p: PeriodeJadwal): { volume: number | null; hari: number; catatan: string } {
-  const hari = hariJadwal(p.mulai, p.selesai);
-  const orang = b.volume;
-  if (hari === 0) return { volume: null, hari, catatan: `Jadwal pendataan ${p.periode} belum lengkap; volume menyusul.` };
-  if (orang === null) return { volume: null, hari, catatan: "Jumlah petugas belum diidentifikasi." };
-  const n = jenisLap(b) === "penginapan" ? Math.max(hari - 1, 0) : hari;
-  return { volume: orang * n, hari, catatan: "" };
+/** Kunci isian hari dibayar: rincian asli (akun + uraian) dan periode. */
+export const kunciHari = (b: Pick<BarisRincian, "akun" | "uraian">, periode: string): string => `${b.akun}|${b.uraian}|${periode}`;
+export type HariBayar = Record<string, number>;
+
+/** Pesan bila hari dibayar tidak sah (bukan bulat >= 0) atau melebihi batas hari pendataan; null bila sah. */
+export function periksaHariBayar(hari: number, maks: number, penginapan = false): string | null {
+  if (!Number.isInteger(hari) || hari < 0) return "Jumlah hari harus bilangan bulat, nol atau lebih.";
+  const batas = penginapan ? Math.max(maks - 1, 0) : maks;
+  if (maks > 0 && hari > batas) return `Melebihi ${penginapan ? "malam" : "hari"} pendataan periode ini (maksimal ${batas}).`;
+  return null;
+}
+
+function volLapangan(b: BarisRincian, p: PeriodeJadwal, hb: HariBayar): { volume: number | null; hari: number | null; maks: number; catatan: string } {
+  const maks = hariJadwal(p.mulai, p.selesai);
+  const isi = hb[kunciHari(b, p.periode)];
+  const pen = jenisLap(b) === "penginapan";
+  if (typeof isi !== "number") return { volume: null, hari: null, maks, catatan: `Isi jumlah ${pen ? "malam" : "hari"} dibayar ${p.periode}${maks ? ` (maksimal ${pen ? Math.max(maks - 1, 0) : maks})` : ""}.` };
+  const salah = periksaHariBayar(isi, maks, pen);
+  if (salah) return { volume: null, hari: isi, maks, catatan: salah };
+  if (b.volume === null) return { volume: null, hari: isi, maks, catatan: "Jumlah petugas belum diidentifikasi." };
+  return { volume: b.volume * isi, hari: isi, maks, catatan: "" };
 }
 
 const beri = (b: BarisRincian, p: Partial<RincianSurvei> & { volume: number | null; uraian: string; satuan: string; catatan: string }): Omit<RincianSurvei, "kunci"> => {
@@ -46,21 +61,21 @@ const beri = (b: BarisRincian, p: Partial<RincianSurvei> & { volume: number | nu
  * Rincian per survei. `periode` = jadwal pendataan tiap periode (jadwalPendataan di lanjutan.ts). Baris pelatihan, pulsa, dan honor sudah per kelas
  * (nama kelas memuat nama periode); baris translok, penginapan, dan rapat dikembangkan per periode.
  */
-export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah): RincianSurvei[] {
+export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah, hariBayar: HariBayar = {}): RincianSurvei[] {
   const nama = periode.map((x) => x.periode);
   const tanpa = nama.length === 1 && nama[0] === "Kegiatan";
   const sufiks = (p: string) => (tanpa ? "" : ` ${p}`);
   const mentah: Omit<RincianSurvei, "kunci">[] = [];
   for (const b of rincian) {
     if (lapangan(b)) {
-      const per = periode.map((p) => ({ p, v: volLapangan(b, p) }));
+      const per = periode.map((p) => ({ p, v: volLapangan(b, p, hariBayar) }));
       const satuan = jenisLap(b) === "penginapan" ? "orang-malam" : "orang-hari";
       if (mode === "periode") {
-        for (const { p, v } of per) mentah.push(beri(b, { uraian: b.uraian + sufiks(p.periode), satuan, periode: p.periode, hari: v.hari || null, volume: v.volume, catatan: v.catatan }));
+        for (const { p, v } of per) mentah.push(beri(b, { uraian: b.uraian + sufiks(p.periode), satuan, periode: p.periode, hari: v.hari, hariMaks: v.maks, volume: v.volume, catatan: v.catatan }));
       } else {
         const lengkap = per.length > 0 && per.every((x) => x.v.volume !== null);
         const vol = lengkap ? per.reduce((s, x) => s + (x.v.volume ?? 0), 0) : null;
-        mentah.push(beri(b, { uraian: b.uraian, satuan, volume: vol, hari: per.reduce((s, x) => s + x.v.hari, 0) || null, catatan: lengkap ? "" : "Sebagian jadwal pendataan atau jumlah petugas belum lengkap; volume menyusul." }));
+        mentah.push(beri(b, { uraian: b.uraian, satuan, volume: vol, hari: per.every((x) => x.v.hari !== null) ? per.reduce((s, x) => s + (x.v.hari ?? 0), 0) : null, hariMaks: per.reduce((s, x) => s + x.v.maks, 0), catatan: lengkap ? "" : per.find((x) => x.v.catatan)?.v.catatan ?? "Sebagian hari dibayar atau jumlah petugas belum lengkap; volume menyusul." }));
       }
     } else if (b.kelompok === "Rapat") {
       if (mode === "periode") for (const p of periode) mentah.push(beri(b, { uraian: b.uraian + sufiks(p.periode), satuan: b.satuan, periode: p.periode, volume: b.volume, catatan: b.catatan }));
