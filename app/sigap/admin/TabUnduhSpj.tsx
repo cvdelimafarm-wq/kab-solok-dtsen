@@ -62,6 +62,7 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
   const [keluar, setKeluar] = useState<Set<number>>(new Set()); // penugasan yang dicentang keluar
   const [cari, setCari] = useState("");
   const [proses, setProses] = useState<{ selesai: number; total: number; nama: string } | null>(null);
+  const [konfirmasi, setKonfirmasi] = useState(false); // (28 Okt 2026) modal konfirmasi menggantikan window.confirm
   const batal = useRef(false);
 
   const muat = useCallback(async () => {
@@ -96,6 +97,9 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
   const siap = useMemo(() => terpilih.filter((p) => dibayarDalamRentang(p.dibayar, dariHitung, sampaiHitung).length > 0), [terpilih, dariHitung, sampaiHitung]);
   const ringkas = useMemo(() => ringkasCetak(terpilih, dariHitung, sampaiHitung), [terpilih, dariHitung, sampaiHitung]);
 
+  const maksBerkas = format === "zip" ? MAKS_PER_ZIP : MAKS_PER_PDF;
+  const berkas = Math.ceil(siap.length / maksBerkas);
+  const belumKunci = siap.filter((p) => !p.dikunci_at).length;
   const jenisParam = jenis.size === URUTAN_JENIS.length ? "semua" : URUTAN_JENIS.filter((j) => jenis.has(j)).join(",");
   const kode = data?.kegiatan?.kode || `kegiatan-${kegiatanId}`;
 
@@ -125,20 +129,19 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
     return `/api/sigap/admin/dokumen?${q.toString()}`;
   };
 
-  async function unduh() {
+  /** Validasi lalu buka modal konfirmasi (bukan window.confirm). */
+  function bukaKonfirmasi() {
     if (!rentangOk) return setGalat("Rentang tanggal tidak valid: isi tanggal awal dan akhir, awal tidak boleh setelah akhir.");
     if (jenis.size === 0) return setGalat("Pilih minimal satu jenis dokumen.");
     if (siap.length === 0) return setGalat("Tidak ada petugas terpilih yang punya hari dibayar pada rentang ini.");
+    setGalat(null);
+    setKonfirmasi(true);
+  }
+
+  async function unduh() {
+    setKonfirmasi(false);
     const maks = format === "zip" ? MAKS_PER_ZIP : MAKS_PER_PDF;
     const batch = bagiBatch(siap, maks);
-    const jenisTeks = jenis.size === URUTAN_JENIS.length ? "semua dokumen" : URUTAN_JENIS.filter((j) => jenis.has(j)).map((j) => LABEL_JENIS[j]).join(", ");
-    const info = batch.length > 1 ? `\n\nDibagi menjadi ${batch.length} berkas (maksimal ${maks} petugas per berkas); browser bisa meminta izin mengunduh beberapa berkas.` : "";
-    if (
-      !window.confirm(
-        `Unduh SPJ ${siap.length} petugas (${format === "zip" ? "ZIP berisi PDF per petugas" : "PDF gabungan terurut"})?\n\nRentang: ${teksRentang(dariKirim, sampaiKirim)}\nDokumen: ${jenisTeks}\nNominal kwitansi mengikuti rentang: ${rupiah(ringkas.nominal)}.\n\nProses berjalan satu per satu dan bisa memakan beberapa menit; jangan tutup halaman ini.${info}`
-      )
-    )
-      return;
     setGalat(null);
     setOk(null);
     batal.current = false;
@@ -216,6 +219,35 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
         </div>
       )}
 
+      {konfirmasi && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Konfirmasi unduh SPJ" onKeyDown={(e) => e.key === "Escape" && setKonfirmasi(false)}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-[16px] font-extrabold text-[#0F2A52]">Unduh SPJ {siap.length} petugas?</h3>
+            <dl className="mt-3 space-y-1.5 text-[13px] text-[#1B2B4B]">
+              <div className="flex gap-2"><dt className="w-28 shrink-0 text-[#6B7A90]">Rentang</dt><dd className="font-semibold">{teksRentang(dariKirim, sampaiKirim)}</dd></div>
+              <div className="flex gap-2"><dt className="w-28 shrink-0 text-[#6B7A90]">Dokumen</dt><dd className="font-semibold">{jenis.size === URUTAN_JENIS.length ? "Semua dokumen" : URUTAN_JENIS.filter((j) => jenis.has(j)).map((j) => LABEL_JENIS[j]).join(", ")}</dd></div>
+              <div className="flex gap-2"><dt className="w-28 shrink-0 text-[#6B7A90]">Keluaran</dt><dd className="font-semibold">{format === "zip" ? "ZIP berisi PDF per petugas" : "PDF gabungan terurut"}{berkas > 1 ? ` · ${berkas} berkas (maks. ${maksBerkas} petugas per berkas)` : ""}</dd></div>
+              <div className="flex gap-2"><dt className="w-28 shrink-0 text-[#6B7A90]">Urutan</dt><dd className="font-semibold">{teksUrutan(urut, peran)}</dd></div>
+              <div className="flex gap-2"><dt className="w-28 shrink-0 text-[#6B7A90]">Nilai kwitansi</dt><dd className="font-semibold text-[#047857]">{rupiah(ringkas.nominal)} <span className="font-normal text-[#6B7A90]">({ringkas.hari} hari-orang)</span></dd></div>
+            </dl>
+            {belumKunci > 0 && (
+              <p className="mt-3 rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#8A6200]">
+                {belumKunci} dari {siap.length} petugas belum dikunci: dokumen dirakit dari data saat ini, jadi nilai bisa berubah bila isian berubah. Tidak wajib dikunci untuk mengunduh.
+              </p>
+            )}
+            <p className="mt-3 text-[12.5px] text-[#6B7A90]">Proses berjalan satu per satu dan bisa memakan beberapa menit; jangan tutup halaman ini.{berkas > 1 ? " Browser bisa meminta izin mengunduh beberapa berkas." : ""}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className={BTN_O} onClick={() => setKonfirmasi(false)} autoFocus>
+                Batal
+              </button>
+              <button type="button" className={BTN} onClick={unduh}>
+                ⬇ Unduh sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Kartu judul="Unduh SPJ" ket="Untuk pembayaran bertahap: pilih rentang tanggal, peran, urutan, dan dokumen yang dicetak." />
       <Kartu>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -288,7 +320,7 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
         <KartuAngka label="Hari dibayar" nilai={ringkas.hari} ket="hari-orang dalam rentang" />
         <KartuAngka label="Nilai kwitansi" nilai={rupiah(ringkas.nominal)} ket="mengikuti rentang" warna="#047857" />
         <div className="flex items-center">
-          <button type="button" className={`${BTN} w-full py-3 text-[14px]`} onClick={unduh} disabled={!!proses || siap.length === 0 || !rentangOk || jenis.size === 0}>
+          <button type="button" className={`${BTN} w-full py-3 text-[14px]`} onClick={bukaKonfirmasi} disabled={!!proses || siap.length === 0 || !rentangOk || jenis.size === 0}>
             {proses ? "Menyusun…" : `⬇ Unduh SPJ · ${siap.length}`}
           </button>
         </div>
