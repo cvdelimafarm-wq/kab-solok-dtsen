@@ -78,6 +78,7 @@ function Isi() {
               <Chip warna={tersimpan ? (tersimpan.status === "final" ? "hijau" : "kuning") : "abu"}>{tersimpan ? `Lanjutan ${tersimpan.status === "final" ? "Final" : "Draf"} v${tersimpan.ver}` : "Lanjutan belum disimpan"}</Chip>
               <Chip warna={lj.lembar ? "biru" : "abu"}>{lj.lembar ? `Lembar kebijakan versi ${lj.lembar.ver}` : "Belum ada lembar kebijakan berlaku"}</Chip>
               <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/lanjutan`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Identifikasi lanjutan →</Link>
+              <Link href={`/sigap/kelola/perencanaan/identifikasi/${row.id}/keluaran`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Keluaran RAB →</Link>
             </div>
             {tersimpan && tersimpan.status !== "final" && <Catatan>Lanjutan masih Draf: ada isian Perkiraan atau nama petugas yang menyusul, jadi daftar di bawah dapat berubah.</Catatan>}
             {dariAwal && <Catatan>Identifikasi lanjutan belum disimpan. Daftar di bawah diturunkan dari identifikasi awal (semua kelas Perkiraan dan nama petugas menyusul); susun lanjutan agar menjadi data Fix.</Catatan>}
