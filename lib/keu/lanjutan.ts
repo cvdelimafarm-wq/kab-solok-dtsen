@@ -479,6 +479,17 @@ const angkaKeb = (l: IsiKebijakan | null, k: string): number | null => {
   return x && typeof x.kebijakan === "number" ? x.kebijakan : null;
 };
 
+/** Tarif honor instruktur bawaan (Rp per JP), dipakai bila lembar kebijakan tidak memuat parameter honor_innas atau honor_inda. (cek aturan) */
+export const TARIF_HONOR_BAWAAN = 111000;
+
+/** Tarif honor instruktur per JP menurut level. Level belum dipilih: tanpa tarif. Nilai KEBIJAKAN lembar dipakai; tanpa parameter pada lembar: bawaan. */
+export function tarifHonor(lembar: IsiKebijakan | null, level: LevelInstruktur): { tarif: number | null; catatan: string } {
+  if (level !== "Innas" && level !== "Inda") return { tarif: null, catatan: "Level instruktur belum dipilih, tarif belum dapat ditentukan." };
+  const dari = angkaKeb(lembar, level === "Innas" ? "honor_innas" : "honor_inda");
+  if (dari !== null) return { tarif: dari, catatan: `Tarif Rp ${dari.toLocaleString("id-ID")} per JP (lembar kebijakan).` };
+  return { tarif: TARIF_HONOR_BAWAAN, catatan: `Tarif Rp ${TARIF_HONOR_BAWAAN.toLocaleString("id-ID")} per JP (bawaan, cek aturan).` };
+}
+
 /**
  * Rincian kebutuhan dan biaya. Jumlah rupiah hanya dihitung bila volume dan tarif keduanya sudah diketahui dari identifikasi dan lembar kebijakan;
  * selain itu baris tetap tampil dengan catatan. Angka belum sah sampai identifikasi dan lembar kebijakan disahkan.
@@ -515,17 +526,20 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
     }
     const ins = k.instruktur ?? [];
     if (ins.length > 0) {
-      // (28 Okt 2026) honor instruktur per kelas, level, dan asal; volume = jumlah jam seluruh instruktur kelompok itu; tarif belum ada pada lembar kebijakan.
+      // (28 Okt 2026) honor instruktur per kelas, level, dan asal; volume = jumlah JP seluruh instruktur kelompok itu.
+      // (29 Okt 2026) tarif per JP: parameter honor_innas atau honor_inda pada lembar kebijakan; tanpa parameter itu (lembar lama) dipakai bawaan Rp 111.000 (cek aturan).
       // Pada RAB baris kelas digabung menjadi (jumlah kelas x jam kelas) x tarif; pada POK hanya total jam x tarif (rumus ada pada rabSurvei.ts).
       const kelompok = new Map<string, Instruktur[]>();
       for (const i of ins) { const kunci = `${i.level}|${i.asal}`; kelompok.set(kunci, [...(kelompok.get(kunci) ?? []), i]); }
       for (const [, daftar] of kelompok) {
         const { level, asal } = daftar[0];
         const jam = daftar.reduce((t, i) => t + i.jam, 0);
+        const th = tarifHonor(lembar, level);
+        const vol = jam >= 1 ? jam : null;
         out.push({
           kelompok: "Honor", uraian: `${nama}: honor instruktur ${level || "(level belum dipilih)"}${asal ? `, ${asal}` : ""}`, akun: "522151",
-          volume: jam >= 1 ? jam : null, satuan: "jam", tarif: null, jumlah: null, perk: !k.fix || daftar.some((i) => !instrukturLengkap(i)),
-          catatan: `${daftar.length} instruktur, ${jam} jam. Tarif honor instruktur mengikuti ketentuan yang berlaku (belum ada pada lembar kebijakan); honor instruktur internal BPS memakai akun yang sama sementara (cek aturan).`,
+          volume: vol, satuan: "JP", tarif: th.tarif, jumlah: vol !== null && th.tarif !== null ? vol * th.tarif : null, perk: !k.fix || daftar.some((i) => !instrukturLengkap(i)),
+          catatan: `${daftar.length} instruktur, ${jam} JP. ${th.catatan} Honor instruktur internal BPS memakai akun yang sama sementara (cek aturan).`,
         });
       }
     } else if (sesiForm?.pengajar) out.push({ kelompok: "Honor", uraian: `${nama}: honor pengajar atau narasumber eksternal`, akun: "522151", volume: null, satuan: "jam", tarif: null, jumlah: null, perk: !k.fix, catatan: "Jumlah jam dan tarif mengikuti ketentuan honor yang berlaku." });
@@ -545,6 +559,17 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
       if (trLebih !== null) out.push({ kelompok: "Translok dan penginapan", uraian: `Translok ${NAMA_PERAN[kode]} (lebih dari 8 jam)`, akun: "524113", volume: orang || null, satuan: "orang (jumlah hari menyusul)", tarif: null, jumlah: null, perk: !x.fix, catatan: "Persen dari uang harian ditambah biaya riil (at cost); jumlah hari menyusul." });
     }
     if (x.penginapan) out.push({ kelompok: "Translok dan penginapan", uraian: `Penginapan ${NAMA_PERAN[kode]}`, akun: "524111", volume: orang || null, satuan: "orang (jumlah malam menyusul)", tarif: null, jumlah: null, perk: !x.fix, catatan: "Tarif mengacu SBM penginapan; tabel rujukan belum diunggah." });
+    // (29 Okt 2026) honor petugas lapangan (identifikasi awal: peran bertanda honor). Hanya jumlah petugas; tarif mengikuti SPKL sehingga harga satuan diisi sendiri pada RAB.
+    if (f?.peran[kode]?.honor) {
+      const bagian: [string, number][] = [["mitra", x.nMit], ["organik", x.nOrg]];
+      const ada = bagian.filter(([, n]) => n > 0);
+      for (const [jenis, n] of ada.length > 0 ? ada : [bagian[0]]) {
+        out.push({
+          kelompok: "Honor", uraian: `Honor ${NAMA_PERAN[kode]} (${jenis})`, akun: "521213", volume: n || null, satuan: "orang", tarif: null, jumlah: null, perk: !x.fix,
+          catatan: "Volume = jumlah petugas; tarif honor mengikuti SPKL atau ketentuan yang berlaku, isi harga satuan sendiri. (cek aturan)",
+        });
+      }
+    }
   }
 
   if (f) {

@@ -60,22 +60,23 @@ describe("rincianSurvei", () => {
     expect(r.map((x) => [x.volume, x.satuan])).toEqual([[12, "orang-malam"], [6, "orang-malam"]]);
     expect(periksaHariBayar(5, 5, true)).toContain("maksimal 4");
   });
-  it("batas = HARI KERJA pendataan: akhir pekan dan libur tidak dihitung", () => {
-    // 1-5 Maret 2026: Minggu s.d. Kamis = 4 hari kerja
+  it("batas = HARI KALENDER pendataan (29 Okt 2026): akhir pekan dan libur tetap dihitung", () => {
+    // 1-5 Maret 2026 (Minggu s.d. Kamis) = 5 hari kalender
     const akhirPekan = [{ periode: "Maret", mulai: "2026-03-01", selesai: "2026-03-05" }];
-    const a = rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 5 });
-    expect(a[0].volume).toBeNull(); expect(a[0].catatan).toContain("maksimal 4");
-    expect(rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 4 })[0].volume).toBe(12);
-    // satu hari libur pada 2-6 Maret: batas menjadi 4
+    const a = rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 6 });
+    expect(a[0].volume).toBeNull(); expect(a[0].catatan).toContain("maksimal 5"); expect(a[0].catatan).toContain("hari kalender");
+    expect(rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 5 })[0].volume).toBe(15);
+    // hari libur pada 2-6 Maret tidak mengurangi batas
     const libur = new Set(["2026-03-04"]);
     const b = rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 5 }, libur);
-    expect(b[0].volume).toBeNull(); expect(b[0].hariMaks).toBe(4);
-    expect(rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 4 }, libur)[0].volume).toBe(12);
+    expect(b[0].volume).toBe(15); expect(b[0].hariMaks).toBe(5);
+    expect(rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 6 }, libur)[0].volume).toBeNull();
   });
   it("periksaHariBayar", () => {
     expect(periksaHariBayar(3, 5)).toBeNull();
     expect(periksaHariBayar(5, 5)).toBeNull();
     expect(periksaHariBayar(6, 5)).toContain("maksimal 5");
+    expect(periksaHariBayar(6, 5)).toContain("hari kalender");
     expect(periksaHariBayar(-1, 5)).toContain("bulat");
     expect(periksaHariBayar(2.5, 5)).toContain("bulat");
     expect(periksaHariBayar(9, 0)).toBeNull(); // jadwal belum ada: tidak ada batas yang dapat diperiksa
@@ -132,7 +133,7 @@ describe("tautkan", () => {
   });
   it("kata kunci dan ringkasan", () => {
     expect(kataKunci(trPpl)).toContain("transport");
-    expect(saranNamaItem({ kelompok: "Rapat", uraian: "Konsumsi rapat", akun: "521211" }, "S")).toBe("Belanja bahan S");
+    expect(saranNamaItem({ kelompok: "Rapat", uraian: "Konsumsi rapat", akun: "521211" }, "S")).toBe("Konsumsi rapat S");
     const r = ringkasTautan([tautkan(trPpl, [], "S"), tautkan(trPpl, [item(1, "524113", "Transport lokal")], "S")]);
     expect(r).toEqual({ cocok: 1, perlu_nama: 0, belum_ada: 1, belumDipilih: 1 });
   });
@@ -155,5 +156,21 @@ describe("honor instruktur: RAB = jumlah kelas x jam, POK = total jam (28 Okt 20
   });
   it("satu kelas saja: tanpa rumus", () => {
     expect(rincianSurvei([honor("Maret", 8)], jad, "gabung")[0].catatan).toBe("");
+  });
+
+  it("saranNamaItem kontekstual (29 Okt 2026)", () => {
+    const sv = "Pencacahan Usaha/Perusahaan Survei Industri Mikro dan Kecil 2026 Tahunan";
+    const n = (kelompok: "Pelatihan" | "Honor" | "Rapat" | "Lain-lain" | "Translok dan penginapan", uraian: string, akun: string) => saranNamaItem({ kelompok, uraian, akun }, sv);
+    expect(n("Pelatihan", "Pelatihan PPL: konsumsi tanpa paket", "521211")).toBe(`Konsumsi rapat pelatihan ${sv}`);
+    expect(n("Pelatihan", "Briefing: konsumsi tanpa paket", "521211")).toBe(`Konsumsi rapat briefing ${sv}`);
+    expect(n("Pelatihan", "Pelatihan: paket fullday atau fullboard di hotel dalam kota", "524114")).toBe(`Paket fullday dan fullboard pelatihan ${sv}`);
+    expect(n("Pelatihan", "Pelatihan: paket fullboard di hotel luar kota", "524119")).toBe(`Paket fullboard pelatihan ${sv}`);
+    expect(n("Lain-lain", "Pelatihan: pulsa peserta (mitra)", "521211")).toBe(`Pulsa peserta pelatihan ${sv}`);
+    expect(n("Honor", "Pelatihan: honor instruktur Innas, BPS Kab/Kota", "522151")).toBe(`Honor instruktur pelatihan ${sv}`);
+    expect(n("Honor", "Pelatihan: honor pengajar atau narasumber eksternal", "522151")).toBe(`Honor narasumber pelatihan ${sv}`);
+    expect(n("Honor", "Honor PPL (mitra)", "521213")).toBe(`Honor PPL mitra ${sv}`);
+    expect(n("Rapat", "Konsumsi rapat persiapan tatap muka Maret", "521211")).toBe(`Konsumsi rapat persiapan ${sv}`);
+    expect(n("Translok dan penginapan", "Penginapan PPL", "524111")).toBe(`Penginapan petugas pendataan ${sv}`);
+    expect(n("Translok dan penginapan", "Translok PPL (kurang dari 8 jam)", "524113")).toBe(`Transport lokal petugas pendataan ${sv}`);
   });
 });

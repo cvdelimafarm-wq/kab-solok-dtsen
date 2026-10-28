@@ -148,13 +148,15 @@ const PARAM_PREDEFINED: Param[] = [
   p({ k: "konsumsi_rapat", nama: "Konsumsi rapat", grup: "Lain-lain", jenis: "angka", satuan: "Rp", aturan: 40000, kebijakan: 40000, dasar: "", ket: "" }),
   p({ k: "batas_spj", nama: "Batas waktu SPJ", grup: "Lain-lain", jenis: "angka", satuan: "hari kerja", aturan: 5, kebijakan: 5, dasar: "", ket: "" }),
   p({ k: "hari_bayar_maks", nama: "Batas pembayaran setelah kegiatan", grup: "Lain-lain", jenis: "angka", satuan: "hari kerja", aturan: 10, kebijakan: 10, dasar: "", ket: "Pembayaran paling lambat sekian hari kerja sesudah hari terakhir pelaksanaan kegiatan (SPJ masuk paling lambat batas_spj hari kerja). Dipakai untuk saran jadwal cair di RAB. Angka awal 10 (cek aturan)." }),
+  p({ k: "honor_innas", nama: "Tarif honor instruktur Innas", grup: "Honor", jenis: "angka", satuan: "Rp per JP", aturan: 111000, kebijakan: 111000, dasar: "", ket: "Honor instruktur level Innas per jam pelajaran (JP); dipakai menghitung baris honor instruktur pada rincian biaya. Angka awal 111.000 (cek aturan)." }),
+  p({ k: "honor_inda", nama: "Tarif honor instruktur Inda", grup: "Honor", jenis: "angka", satuan: "Rp per JP", aturan: 111000, kebijakan: 111000, dasar: "", ket: "Honor instruktur level Inda per jam pelajaran (JP); dipakai menghitung baris honor instruktur pada rincian biaya. Angka awal 111.000 (cek aturan)." }),
 ];
 
 /**
  * Parameter OPSIONAL: tidak wajib ada (lembar yang sudah disahkan sebelum parameter ini dibuat tetap sah), tetapi bila ada diperiksa sama seperti yang lain.
  * Pemakai hilir memakai nilai bawaan bila tidak ada.
  */
-export const KODE_PARAM_OPSIONAL: readonly string[] = ["hari_bayar_maks"];
+export const KODE_PARAM_OPSIONAL: readonly string[] = ["hari_bayar_maks", "honor_innas", "honor_inda"];
 
 /**
  * Parameter LAMA yang masih diterima pada lembar yang sudah dibuat (28 Okt 2026): hari_cair_maks (hari kalender, H+N) digantikan hari_bayar_maks (hari kerja).

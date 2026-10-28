@@ -6,7 +6,7 @@
 // susunan di sini bersifat konsep yang dapat disesuaikan; dokumen baru berstatus "terbit" setelah lanjutan Final dan nomor, tanggal, dan penandatangan diisi.
 
 import type { Form } from "./identifikasi";
-import { jadwalPendataan, namaPetugas, NAMA_PERAN, NAMA_SUMBER, pesertaKelas, ringkasTanggalKelas, type IsiLanjutan, type JenisDokumen, type Kelas, type Petugas, type StatusLanjutan } from "./lanjutan";
+import { jadwalPendataan, namaPetugas, NAMA_PERAN, NAMA_SUMBER, pesertaKelas, ringkasTanggalKelas, type IsiLanjutan, type JenisDokumen, type Kelas, type KodePeran, type Petugas, type StatusLanjutan } from "./lanjutan";
 import { namaJabatan } from "./kebijakan";
 
 const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -86,6 +86,14 @@ export function pesertaBernama(isi: IsiLanjutan, c: Kelas): Petugas[] {
   return isi.petugas.filter((p) => p.peran !== "" && c.untuk.includes(p.peran) && p.nama.trim() !== "");
 }
 
+/** Instruktur kelas yang sudah bernama: "Nama (Innas, Internal BPS, 3 jam)". Kosong bila belum ada. */
+export function teksInstruktur(c: Kelas): string[] {
+  return (c.instruktur ?? []).filter((i) => i.nama.trim() !== "").map((i) => {
+    const ket = [i.level, i.asal, i.jam > 0 ? `${i.jam} jam` : ""].filter(Boolean).join(", ");
+    return ket ? `${i.nama.trim()} (${ket})` : i.nama.trim();
+  });
+}
+
 export function bangunUndangan(k: KonteksDokumen, c: Kelas, m: MetaSurat): Dokumen {
   const nama = c.nama.trim() || (c.sesi === "briefing" ? "Briefing" : "Pelatihan");
   const d = dasar("undangan", k, m, "UNDANGAN", `Undangan ${nama} ${k.namaSurvei}`);
@@ -99,6 +107,8 @@ export function bangunUndangan(k: KonteksDokumen, c: Kelas, m: MetaSurat): Dokum
     ["Jumlah OH", c.oh > 0 ? `${c.oh} hari` : "(belum diisi)"],
     ["Peserta", `${peserta} orang (daftar terlampir)`],
   ];
+  const pengajar = teksInstruktur(c);
+  if (pengajar.length > 0) d.rincian.push(["Pengajar", pengajar.join("; ")]);
   d.penutup = "Demikian undangan ini disampaikan. Atas perhatian dan kehadiran Bapak/Ibu/Saudara, kami ucapkan terima kasih.";
   const baris = pesertaBernama(k.isi, c);
   d.lampiran = baris.length > 0 ? "1 (satu) lembar daftar peserta" : "";
@@ -149,6 +159,13 @@ export function bangunTugas(k: KonteksDokumen, p: Petugas, urut: number, m: Meta
     ["Kegiatan", `${k.namaSurvei} Tahun ${k.tahun}`],
     ["Jadwal pendataan", jadwal.length > 0 ? jadwal.map((j) => `${k.form.periode === "Tanpa periode" ? "" : `${j.periode}: `}${rentangHariTanggal(j.mulai, j.selesai)}`).join("; ") : "(jadwal belum lengkap)"],
   ];
+  const ikut = p.peran === "" ? [] : k.isi.kelas.filter((c) => c.untuk.includes(p.peran as KodePeran));
+  if (ikut.length > 0) {
+    d.rincian.push(["Pelatihan yang diikuti", ikut.map((c) => {
+      const pengajar = teksInstruktur(c);
+      return `${c.nama.trim() || (c.sesi === "briefing" ? "Briefing" : "Pelatihan")}: ${rentangHariTanggal(c.mulai, c.selesai)}, ${tempatKelas(c)}${pengajar.length ? `, pengajar ${pengajar.join("; ")}` : ""}`;
+    }).join(" | ")]);
+  }
   d.isi = mitra
     ? ["Pihak Kedua berkewajiban melaksanakan pekerjaan sesuai peran dan jadwal di atas dengan penuh tanggung jawab dan mengikuti pedoman kegiatan.", "Honorarium dibayarkan sesuai tarif honor mitra yang berlaku di BPS Kabupaten Solok setelah pekerjaan diselesaikan dan dinyatakan baik, dengan batas honor sesuai ketentuan yang berlaku."]
     : ["Penugasan ini dilaksanakan sesuai peran dan jadwal di atas dengan penuh tanggung jawab dan mengikuti pedoman kegiatan."];

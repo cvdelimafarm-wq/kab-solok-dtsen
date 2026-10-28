@@ -4,12 +4,13 @@
 
 import { describe, expect, it } from "vitest";
 import type { BarisRincian, IsiLanjutan } from "../lanjutan";
+import vektorLj from "./lanjutan.vektor.json";
 import type { BarisRabRow, ItemRabRow, PemetaanItem } from "../rab";
 import type { ItemAnggaran } from "../ro";
 import { kunciHari, type PeriodeJadwal } from "../rabSurvei";
 import {
-  bacaHari, bacaTujuan, barisTanpaPasangan, batangPerItem, berbedaDariSaran, dataItemBaru, dataPerbarui, hariDariTeks, keadaanRincian, kodeTujuanBaru, kodeTujuanPok,
-  kolomHari, komponenUntukAkun, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, pilihanTujuan, rencanaDari, rincianCampuran, ringkasSurvei, selisihSaran,
+  bacaHari, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, keadaanRincian, kodeTujuanBaru, kodeTujuanPok,
+  kolomHari, komponenUntukAkun, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
   terpasangPer, TUJUAN_TAMBAH, type ItemBaruRow,
 } from "../rabPerSurvei";
 
@@ -47,12 +48,12 @@ describe("mode per jenis belanja", () => {
 });
 
 describe("hari dibayar", () => {
-  it("kolomHari: tiap rincian lapangan x periode; batas = hari kerja (penginapan: -1)", () => {
+  it("kolomHari: tiap rincian lapangan x periode; batas = hari KALENDER, libur tidak mengurangi (penginapan: -1)", () => {
     const k = kolomHari(semua, jad, new Set(["2026-03-04"]));
     expect(k.map((x) => [x.uraian, x.periode, x.maks, x.batas, x.penginapan])).toEqual([
-      ["Translok PPL (kurang dari 8 jam)", "Maret", 4, 4, false],
+      ["Translok PPL (kurang dari 8 jam)", "Maret", 5, 5, false],
       ["Translok PPL (kurang dari 8 jam)", "September", 3, 3, false],
-      ["Penginapan PPL", "Maret", 4, 3, true],
+      ["Penginapan PPL", "Maret", 5, 4, true],
       ["Penginapan PPL", "September", 3, 2, true],
     ]);
     expect(k[0].kunci).toBe(kunciHari(trPpl, "Maret"));
@@ -212,7 +213,8 @@ describe("keadaan dan ringkasan", () => {
   });
   it("ringkasSurvei", () => {
     expect(ringkasSurvei([{ k: "sudah", jumlah: 100 }, { k: "siap", jumlah: 50 }, { k: "siap", jumlah: null }, { k: "isi_hari", jumlah: null }, { k: "belum_angka", jumlah: null }]))
-      .toEqual({ jumlah: 5, sudah: 1, siap: 2, isiHari: 1, belumAngka: 1, totalSiap: 50, totalSudah: 100 });
+      .toEqual({ jumlah: 5, sudah: 1, siap: 2, isiHari: 1, belumAngka: 1, butuh: 0, totalSiap: 50, totalSudah: 100 });
+    expect(ringkasSurvei([{ k: "butuh_item", jumlah: 10 }, { k: "cek_dobel", jumlah: 10 }, { k: "siap", jumlah: 5 }])).toMatchObject({ jumlah: 3, siap: 1, butuh: 2, totalSiap: 5 });
   });
 });
 
@@ -239,5 +241,123 @@ describe("batangPerItem", () => {
   it("nama survei tidak dikenal diberi nama cadangan", () => {
     const b = batangPerItem([p], [], [], new Map(), []);
     expect(b[0].sumbangan[0].nama).toBe("Survei #7");
+  });
+});
+
+describe("keadaan baru: butuh item dan cek dobel", () => {
+  const rs = rincianCampuran([rapat], jad, modeSemua("gabung"));
+  const rc = rencanaDari(rs, { v: 1, wilayah: "", kelas: [], peran: {}, petugas: [] } as unknown as IsiLanjutan, jad, 3, 10, new Set(), "S")[0];
+  const isian = { ...rc.saran, volume: "8", harga: "50000" };
+  it("urutan penilaian", () => {
+    expect(keadaanRincian(rc, false, isian)).toBe("siap");
+    expect(keadaanRincian(rc, false, isian, { tujuan: "pok:1", dobel: false })).toBe("siap");
+    expect(keadaanRincian(rc, false, isian, { tujuan: "", dobel: false })).toBe("butuh_item");
+    expect(keadaanRincian(rc, false, isian, { tujuan: "pok:1", dobel: true })).toBe("cek_dobel");
+    expect(keadaanRincian(rc, false, { ...isian, harga: "" }, { tujuan: "", dobel: true })).toBe("belum_angka"); // angka dulu
+    expect(keadaanRincian(rc, true, isian, { tujuan: "", dobel: true })).toBe("sudah");
+  });
+});
+
+describe("periksaSiapLengkap", () => {
+  const r = (o: Partial<Parameters<typeof periksaSiapLengkap>[1]> = {}) => ({ siap: 0, butuh: 0, isiHari: 0, belumAngka: 0, ...o });
+  it("belum ada rincian di RAB -> ditolak", () => {
+    expect(periksaSiapLengkap(0, r()).galat).toContain("sedikitnya satu rincian");
+  });
+  it("masih ada rincian ber-angka yang belum masuk RAB -> ditolak", () => {
+    const x = periksaSiapLengkap(3, r({ siap: 2, butuh: 1 }));
+    expect(x.galat).toContain("3 rincian");
+    expect(x.galat).toContain("2 siap disusun");
+    expect(x.galat).toContain("1 butuh keputusan");
+  });
+  it("rincian tanpa angka hanya peringatan", () => {
+    const x = periksaSiapLengkap(3, r({ isiHari: 1, belumAngka: 2 }));
+    expect(x.galat).toBeNull();
+    expect(x.peringatan).toContain("3 rincian belum punya angka");
+  });
+  it("lengkap -> boleh tanpa peringatan", () => {
+    expect(periksaSiapLengkap(4, r())).toEqual({ galat: null, peringatan: null });
+  });
+});
+
+describe("ringkasHari", () => {
+  it("petugas x hari = orang-hari", () => {
+    expect(ringkasHari(18, 24)).toBe("18 petugas × 24 hari = 432 orang-hari");
+    expect(ringkasHari(18, 23, true)).toBe("18 petugas × 23 malam = 414 orang-malam");
+    expect(ringkasHari(null, 5)).toContain("5 hari dibayar per petugas");
+    expect(ringkasHari(0, 5)).toContain("belum diidentifikasi");
+  });
+});
+
+describe("jelaskanVolume", () => {
+  const isiLj = vektorLj.base as unknown as IsiLanjutan; // kelas "Pelatihan Triwulan I": pml 1 organik + 1 mitra, ppl 2 mitra; 2 hari
+  const kls = (uraian: string, extra: Partial<BarisRincian> = {}): ReturnType<typeof rincianCampuran>[number] => ({ ...dasar, kelompok: "Pelatihan", uraian, akun: "521211", volume: 8, satuan: "orang-hari", tarif: null, kunci: "k", periode: null, hari: null, ...extra });
+  it("kelas: rincian peserta per peran x hari kelas", () => {
+    const t = jelaskanVolume(kls("Pelatihan Triwulan I: konsumsi tanpa paket"), isiLj).join("\n");
+    expect(t).toContain("PML: 1 organik + 1 mitra = 2 orang");
+    expect(t).toContain("PPL: 0 organik + 2 mitra = 2 orang");
+    expect(t).toContain("Volume = 4 × 2 = 8 orang-hari");
+  });
+  it("kelas pada mode gabung (nama periode dilepas) tetap ditemukan", () => {
+    const k0 = (isiLj as unknown as { kelas: Record<string, unknown>[] }).kelas[0];
+    const dua = { ...isiLj, kelas: [k0, { ...k0, id: "k2", nama: "Pelatihan Triwulan III", periode: "Triwulan III", oh: 1 }] } as unknown as IsiLanjutan;
+    const t = jelaskanVolume(kls("Pelatihan: konsumsi tanpa paket", { volume: 12 }), dua).join("\n");
+    expect(t).toContain("Pelatihan Triwulan I: 4 peserta × 2 hari = 8 orang-hari");
+    expect(t).toContain("Pelatihan Triwulan III: 4 peserta × 1 hari = 4 orang-hari");
+    expect(t).toContain("Volume gabungan = 12 orang-hari");
+  });
+  it("translok: petugas x hari kalender; hari belum diisi -> petunjuk", () => {
+    const tr = (hari: number | null, volume: number | null, periode: string | null) => ({ ...kls("Translok PPL (kurang dari 8 jam)"), kelompok: "Translok dan penginapan" as const, hari, volume, periode });
+    expect(jelaskanVolume(tr(24, 72, "Maret"), isiLj).join(" ")).toContain("3 petugas × 24 hari = 72 orang-hari");
+    expect(jelaskanVolume(tr(24, 72, "Maret"), isiLj).join(" ")).toContain("HARI KALENDER");
+    expect(jelaskanVolume(tr(null, null, "Maret"), isiLj).join(" ")).toContain("Isi jatah hari dibayar");
+    expect(jelaskanVolume(tr(30, 90, null), isiLj).join(" ")).toContain("Dijumlahkan dari tiap periode");
+  });
+  it("honor petugas, rapat, dan cadangan", () => {
+    expect(jelaskanVolume(kls("Honor PPL (mitra)", { kelompok: "Honor" }), isiLj)[0]).toContain("harga satuan diisi sendiri");
+    expect(jelaskanVolume(kls("Konsumsi rapat evaluasi", { kelompok: "Rapat", catatan: "x" }), isiLj)[0]).toContain("isi volume sendiri");
+    expect(jelaskanVolume(kls("Lain", { kelompok: "Lain-lain", catatan: "Catatan ini" }), isiLj)).toEqual(["Catatan ini"]);
+  });
+});
+
+describe("baris yang sudah ada pada item tujuan (cegah dobel)", () => {
+  const p = pok(1, "521211", "Konsumsi", "rinci");
+  p.baris = [brs({ baris_id: 1, item_id: 10, volume: 5, jumlah: 100 }), brs({ baris_id: 2, item_id: 10, ident_id: 7, ident_kunci: "A", volume: 2, jumlah: 40 })];
+  it("hanya baris tanpa penanda identifikasi", () => {
+    expect(barisSudahAda(kodeTujuanPok(1), [p], []).map((b) => b.baris_id)).toEqual([1]);
+    expect(barisSudahAda(kodeTujuanPok(99), [p], [])).toEqual([]);
+    expect(barisSudahAda("tambah", [p], [])).toEqual([]);
+    expect(barisSudahAda("", [p], [])).toEqual([]);
+  });
+  it("item baru di RAB", () => {
+    const b = [brs({ baris_id: 5, item_id: 9, volume: 1, jumlah: 1 }), brs({ baris_id: 6, item_id: 9, ident_id: 7, ident_kunci: "B", volume: 1, jumlah: 1 }), brs({ baris_id: 7, item_id: 3, volume: 1, jumlah: 1 })];
+    expect(barisSudahAda(kodeTujuanBaru(9), [], b).map((x) => x.baris_id)).toEqual([5]);
+  });
+  it("dataAmbilAlih: isian + penanda, melepas kunci jumlah, tanpa item/urut", () => {
+    const d = dataAmbilAlih({ ket: "k", volume: "8", satuan: "orang", harga: "50000", periode: "sekali", bulan_mulai: 3, bulan_sampai: 3, minggu: 2 }, { ident_id: 7, ident_ver: 2, ident_kunci: "K", ident_vol: 8, ident_harga: 50000 });
+    expect(d).toMatchObject({ volume: 8, harga_satuan: 50000, ident_id: 7, ident_kunci: "K", jumlah_tetap: null, sama_dengan_item: false });
+    expect(d).not.toHaveProperty("item_id");
+    expect(d).not.toHaveProperty("urut");
+  });
+});
+
+describe("langkahAlur", () => {
+  const dasarA = { lanjutanAda: false, lanjutanVer: null, lanjutanStatus: null, jumlah: 5, sudah: 0, siap: false, berubah: 0 };
+  it("empat langkah berurutan; lanjutan belum ada -> menunggu", () => {
+    const a = langkahAlur(dasarA);
+    expect(a.map((x) => x.no)).toEqual([1, 2, 3, 4]);
+    expect(a.map((x) => x.keadaan)).toEqual(["selesai", "berjalan", "menunggu", "menunggu"]);
+    expect(a[2].ket).toContain("Belum dibuat");
+    expect(a[0].tautan).toBe("identifikasi"); expect(a[2].tautan).toBe("lanjutan");
+  });
+  it("RAB lengkap dan lanjutan ada -> semua selesai; ada selisih -> langkah 4 berjalan", () => {
+    const ok = langkahAlur({ ...dasarA, lanjutanAda: true, lanjutanVer: 2, lanjutanStatus: "final", sudah: 5, siap: true });
+    expect(ok.map((x) => x.keadaan)).toEqual(["selesai", "selesai", "selesai", "selesai"]);
+    expect(ok[2].ket).toContain("versi 2, final");
+    expect(ok[1].ket).toContain("5 dari 5");
+    const beda = langkahAlur({ ...dasarA, lanjutanAda: true, lanjutanVer: 2, lanjutanStatus: "draf", sudah: 5, berubah: 2 });
+    expect(beda[3].keadaan).toBe("berjalan"); expect(beda[3].ket).toContain("2 rincian berbeda");
+  });
+  it("tanpa rincian sama sekali: RAB belum dianggap selesai", () => {
+    expect(langkahAlur({ ...dasarA, jumlah: 0 })[1].keadaan).toBe("berjalan");
   });
 });

@@ -9,7 +9,7 @@ import { awalForm, normalisasi, type Form } from "../identifikasi";
 import { isiPredefined } from "../kebijakan";
 import {
   ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, alasanDraf, awalLanjutan, hariKelas, idBaru, jadwalPendataan, jumlahPetugas, jumlahRincian, normalisasiLanjutan, periksaLanjutan,
-  pesertaKelas, peringatanLanjutan, instrukturLengkap, rincianBiaya, statusLanjutan, tglValid, tujuanLanjutan, type IsiLanjutan,
+  pesertaKelas, peringatanLanjutan, instrukturLengkap, rincianBiaya, statusLanjutan, tglValid, tujuanLanjutan, tarifHonor, TARIF_HONOR_BAWAAN, type IsiLanjutan,
 } from "../lanjutan";
 
 type Op = { op: "set" | "del" | "tambah" | "ganti"; path?: (string | number)[]; value?: unknown };
@@ -307,7 +307,7 @@ describe("instruktur kelas (28 Okt 2026)", () => {
     expect(instrukturLengkap({ nama: "Budi", level: "Inda", asal: "", jam: 1 })).toBe(false);
     expect(instrukturLengkap({ nama: "Budi", level: "Inda", asal: "Eksternal", jam: 0 })).toBe(false);
   });
-  it("rincian biaya: honor per level dan asal; jam dijumlahkan; tarif belum ada", () => {
+  it("rincian biaya: honor per level dan asal; JP dijumlahkan; tarif Rp 111.000 per JP (bawaan bila lembar tanpa parameter)", () => {
     const i = salin(vektor.base) as IsiLanjutan;
     i.kelas[0].instruktur = [
       { nama: "Budi", level: "Inda", asal: "Eksternal", jam: 8 }, { nama: "Sari", level: "Inda", asal: "Eksternal", jam: 4 },
@@ -316,19 +316,55 @@ describe("instruktur kelas (28 Okt 2026)", () => {
     const honor = rincianBiaya(i, null, isiPredefined()).filter((b) => b.kelompok === "Honor");
     expect(honor).toHaveLength(2);
     const inda = honor.find((b) => b.uraian.includes("Inda"))!;
-    expect(inda).toMatchObject({ volume: 12, satuan: "jam", akun: "522151", tarif: null, jumlah: null, perk: false });
+    expect(inda).toMatchObject({ volume: 12, satuan: "JP", akun: "522151", tarif: 111000, jumlah: 1332000, perk: false });
     expect(inda.uraian).toBe("Pelatihan Triwulan I: honor instruktur Inda, Eksternal");
-    expect(inda.catatan).toContain("2 instruktur, 12 jam");
-    expect(honor.find((b) => b.uraian.includes("Innas"))).toMatchObject({ volume: 6, perk: false });
+    expect(inda.catatan).toContain("2 instruktur, 12 JP");
+    expect(inda.catatan).toContain("(lembar kebijakan)");
+    const tanpaLembar = rincianBiaya(i, null, null).find((b) => b.uraian.includes("Inda"))!;
+    expect(tanpaLembar).toMatchObject({ tarif: 111000, jumlah: 1332000 });
+    expect(tanpaLembar.catatan).toContain("bawaan, cek aturan");
+    expect(honor.find((b) => b.uraian.includes("Innas"))).toMatchObject({ volume: 6, tarif: 111000, jumlah: 666000, perk: false });
     i.kelas[0].instruktur![2].nama = "";
     expect(rincianBiaya(i, null, isiPredefined()).find((b) => b.uraian.includes("Innas"))!.perk).toBe(true);
+  });
+  it("tarif honor: dari lembar kebijakan (nilai kebijakan), bawaan bila tidak ada, kosong bila level belum dipilih", () => {
+    const lembar = isiPredefined();
+    expect(tarifHonor(lembar, "Innas").tarif).toBe(111000);
+    expect(tarifHonor(lembar, "Inda").catatan).toContain("lembar kebijakan");
+    lembar.param.find((x) => x.k === "honor_inda")!.kebijakan = 100000;
+    expect(tarifHonor(lembar, "Inda").tarif).toBe(100000);
+    expect(tarifHonor(lembar, "Innas").tarif).toBe(111000);
+    lembar.param = lembar.param.filter((x) => x.k !== "honor_innas" && x.k !== "honor_inda");
+    expect(tarifHonor(lembar, "Innas")).toMatchObject({ tarif: TARIF_HONOR_BAWAAN });
+    expect(tarifHonor(null, "Inda").tarif).toBe(111000);
+    expect(tarifHonor(lembar, "").tarif).toBeNull();
+  });
+  it("rincian biaya: tarif honor mengikuti lembar kebijakan; level belum dipilih tanpa jumlah", () => {
+    const i = salin(vektor.base) as IsiLanjutan;
+    i.kelas[0].instruktur = [{ nama: "Budi", level: "Inda", asal: "Eksternal", jam: 5 }, { nama: "Sari", level: "", asal: "Eksternal", jam: 3 }];
+    const lembar = isiPredefined(); lembar.param.find((x) => x.k === "honor_inda")!.kebijakan = 100000;
+    const honor = rincianBiaya(i, null, lembar).filter((b) => b.kelompok === "Honor");
+    expect(honor.find((b) => b.uraian.includes("Inda"))).toMatchObject({ volume: 5, tarif: 100000, jumlah: 500000 });
+    expect(honor.find((b) => b.uraian.includes("belum dipilih"))).toMatchObject({ volume: 3, tarif: null, jumlah: null, perk: true });
   });
   it("rincian biaya: tanpa daftar instruktur tetap memakai baris honor umum bila identifikasi memuat pengajar", () => {
     const i = salin(vektor.base) as IsiLanjutan; i.kelas[0].instruktur = [];
     const f = formIns();
-    const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.kelompok === "Honor");
+    const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.kelompok === "Honor" && b.akun === "522151");
     expect(honor).toHaveLength(1);
     expect(honor[0].uraian).toContain("honor pengajar atau narasumber eksternal");
+  });
+  it("rincian biaya: honor petugas (29 Okt 2026) per peran berhonor, mitra dan organik terpisah, tarif kosong", () => {
+    const f = formIns(); f.peran.pml.honor = true; f.peran.ppl.honor = true;
+    const i = salin(vektor.base) as IsiLanjutan; // pml 1 organik + 1 mitra, ppl 2 mitra
+    const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213");
+    expect(honor.map((b) => [b.uraian, b.volume, b.satuan, b.tarif, b.jumlah])).toEqual([
+      ["Honor PML (mitra)", 1, "orang", null, null], ["Honor PML (organik)", 1, "orang", null, null], ["Honor PPL (mitra)", 2, "orang", null, null],
+    ]);
+    expect(honor.every((b) => b.kelompok === "Honor")).toBe(true);
+    f.peran.pml.honor = false; f.peran.ppl.honor = false;
+    expect(rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213")).toEqual([]);
+    expect(rincianBiaya(i, null, null).filter((b) => b.akun === "521213")).toEqual([]);
   });
   it("peringatan: belum diisi pada kelas, dan instruktur belum lengkap", () => {
     const f = formIns();

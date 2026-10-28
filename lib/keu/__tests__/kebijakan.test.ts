@@ -33,16 +33,20 @@ describe("angka predefined", () => {
     expect(isiPredefined()).toEqual(vektor.base);
     expect(periksaIsi(isiPredefined()).galat).toEqual([]);
   });
-  it("memuat 9 strata, 10 jabatan, 21 parameter wajib, dan 1 parameter opsional", () => {
+  it("memuat 9 strata, 10 jabatan, 21 parameter wajib, dan 3 parameter opsional", () => {
     const i = isiPredefined();
     expect(i.strata.map((s) => s.k)).toEqual([...KODE_STRATA]);
     expect(JABATAN).toHaveLength(10);
     expect(KODE_PARAM).toHaveLength(21);
-    expect(KODE_PARAM_OPSIONAL).toEqual(["hari_bayar_maks"]);
+    expect(KODE_PARAM_OPSIONAL).toEqual(["hari_bayar_maks", "honor_innas", "honor_inda"]);
     expect(KODE_PARAM_LAMA).toEqual(["hari_cair_maks"]);
     expect(i.param.map((x) => x.k)).toEqual([...KODE_PARAM, ...KODE_PARAM_OPSIONAL]);
     const hb = i.param.find((x) => x.k === "hari_bayar_maks")!;
     expect(hb.jenis === "angka" && hb.aturan === 10 && hb.kebijakan === 10).toBe(true);
+    for (const kode of ["honor_innas", "honor_inda"]) {
+      const h = i.param.find((x) => x.k === kode)!;
+      expect(h.jenis === "angka" && h.aturan === 111000 && h.kebijakan === 111000 && h.satuan === "Rp per JP" && h.grup === "Honor").toBe(true);
+    }
     const sp = i.param.find((x) => x.k === "batas_spj")!;
     expect(sp.jenis === "angka" && sp.aturan === 5 && sp.kebijakan === 5 && sp.satuan === "hari kerja").toBe(true);
   });

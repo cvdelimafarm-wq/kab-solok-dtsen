@@ -10,11 +10,12 @@
 // Basis data tetap yang memutuskan (penjaga tabel RAB); fungsi ini hanya menyiapkan data dan pesan.
 
 import { bacaRupiah } from "./kekurangan";
-import { hariKerjaAntara, type Libur } from "./hariKerja";
-import type { BarisRincian, IsiLanjutan } from "./lanjutan";
+import type { Libur } from "./hariKerja";
+import { NAMA_PERAN, pesertaKelas, type BarisRincian, type IsiLanjutan, type Kelas } from "./lanjutan";
 import { sumbanganDariBaris, type KapasitasItem, type Sumbangan } from "./batangItem";
-import { jumlahBaris, bacaVolume, barisKosong, diubahDariIdent, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem, type PenandaIdent } from "./rab";
-import { rincianSurvei, saranNamaItem, tautkan, type HariBayar, type HasilTautan, type ModePecah, type PeriodeJadwal, type RincianSurvei } from "./rabSurvei";
+import { jumlahBaris, bacaVolume, barisKosong, dariIdent, dataBarisIdent, diubahDariIdent, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem, type PenandaIdent } from "./rab";
+import { hariJadwal, rincianSurvei, saranNamaItem, tautkan, type HariBayar, type HasilTautan, type ModePecah, type PeriodeJadwal, type RincianSurvei } from "./rabSurvei";
+import { periksaSiap } from "./rabStatus";
 import { rupiah } from "./ro";
 import { acuanSelesai, keteranganSalinan, namaItem, saranCair, satuanRab, teksHarga, teksVolume } from "./usulanRab";
 
@@ -49,14 +50,17 @@ export function rincianCampuran(rincian: BarisRincian[], periode: PeriodeJadwal[
 // ---------------------------------------------------------------------------------------------------------------------
 export type KolomHari = { kunci: string; uraian: string; akun: string; periode: string; penginapan: boolean; maks: number; batas: number; orang: number | null; mulai: string; selesai: string };
 
-/** Satu kolom isian untuk tiap rincian translok/penginapan x periode; `maks` = hari kerja pendataan (Senin-Jumat tanpa libur), `batas` = batas isian (penginapan: maks - 1). */
-export function kolomHari(rincian: BarisRincian[], periode: PeriodeJadwal[], libur: Libur = new Set()): KolomHari[] {
+/**
+ * Satu kolom isian untuk tiap rincian translok/penginapan x periode; `maks` = jumlah hari KALENDER pendataan (29 Okt 2026: translok dibayar per hari kalender,
+ * bukan hari kerja), `batas` = batas isian (penginapan: maks - 1). Parameter `libur` tidak dipakai (dipertahankan agar pemanggil tidak berubah).
+ */
+export function kolomHari(rincian: BarisRincian[], periode: PeriodeJadwal[], _libur: Libur = new Set()): KolomHari[] {
   const hasil: KolomHari[] = [];
   for (const b of rincian) {
     if (b.kelompok !== "Translok dan penginapan") continue;
     const penginapan = b.uraian.startsWith("Penginapan");
     for (const p of periode) {
-      const maks = hariKerjaAntara(p.mulai, p.selesai, libur);
+      const maks = hariJadwal(p.mulai, p.selesai);
       hasil.push({ kunci: `${b.akun}|${b.uraian}|${p.periode}`, uraian: b.uraian, akun: b.akun, periode: p.periode, penginapan, maks, batas: penginapan ? Math.max(maks - 1, 0) : maks, orang: b.volume, mulai: p.mulai, selesai: p.selesai });
     }
   }
@@ -241,24 +245,47 @@ export function dataPerbarui(saran: Pick<IsianBaris, "volume" | "harga">, identV
 // ---------------------------------------------------------------------------------------------------------------------
 // Ringkasan keadaan
 // ---------------------------------------------------------------------------------------------------------------------
-export type KeadaanRincian = "sudah" | "siap" | "isi_hari" | "belum_angka";
-/** `sudah` = sudah ada di RAB; `isi_hari` = volume menunggu isian hari dibayar; `belum_angka` = volume atau harga belum ada; `siap` = bisa disalin. */
-export function keadaanRincian(rc: RencanaRincian, sudah: boolean, isian: IsianBaris): KeadaanRincian {
+export type KeadaanRincian = "sudah" | "siap" | "isi_hari" | "belum_angka" | "butuh_item" | "cek_dobel";
+/** Pilihan tujuan dan keputusan dobel satu rincian (opsional; tanpa ini keadaan hanya dinilai dari angka). */
+export type TujuanRincian = { tujuan: string; dobel: boolean };
+/**
+ * `sudah` = sudah ada di RAB; `isi_hari` = volume menunggu isian hari dibayar; `belum_angka` = volume atau harga belum ada;
+ * `butuh_item` = angka lengkap tetapi item tujuan belum dipilih; `cek_dobel` = item tujuan sudah berisi baris RAB buatan sendiri (tanpa penanda) dan belum ada keputusan;
+ * `siap` = bisa disusun ke RAB.
+ */
+export function keadaanRincian(rc: RencanaRincian, sudah: boolean, isian: IsianBaris, tj?: TujuanRincian): KeadaanRincian {
   if (sudah) return "sudah";
   if (rc.r.volume === null && rc.r.kelompok === "Translok dan penginapan" && rc.r.hari === null && bacaVolume(isian.volume) === null) return "isi_hari";
-  return bacaVolume(isian.volume) === null || bacaRupiah(isian.harga) === null ? "belum_angka" : "siap";
+  if (bacaVolume(isian.volume) === null || bacaRupiah(isian.harga) === null) return "belum_angka";
+  if (tj && tj.tujuan === "") return "butuh_item";
+  if (tj && tj.dobel) return "cek_dobel";
+  return "siap";
 }
 
-export type RingkasSurvei = { jumlah: number; sudah: number; siap: number; isiHari: number; belumAngka: number; totalSiap: number; totalSudah: number };
+export type RingkasSurvei = { jumlah: number; sudah: number; siap: number; isiHari: number; belumAngka: number; butuh: number; totalSiap: number; totalSudah: number };
 export function ringkasSurvei(keadaan: { k: KeadaanRincian; jumlah: number | null }[]): RingkasSurvei {
-  const r: RingkasSurvei = { jumlah: keadaan.length, sudah: 0, siap: 0, isiHari: 0, belumAngka: 0, totalSiap: 0, totalSudah: 0 };
+  const r: RingkasSurvei = { jumlah: keadaan.length, sudah: 0, siap: 0, isiHari: 0, belumAngka: 0, butuh: 0, totalSiap: 0, totalSudah: 0 };
   for (const x of keadaan) {
     if (x.k === "sudah") { r.sudah++; r.totalSudah += x.jumlah ?? 0; }
     else if (x.k === "siap") { r.siap++; r.totalSiap += x.jumlah ?? 0; }
     else if (x.k === "isi_hari") r.isiHari++;
+    else if (x.k === "butuh_item" || x.k === "cek_dobel") r.butuh++;
     else r.belumAngka++;
   }
   return r;
+}
+
+/**
+ * Syarat menyatakan survei "Siap diajukan" (keputusan pengguna 29 Okt 2026: RAB harus lengkap). `galat` menolak: belum ada rincian di RAB, atau masih ada rincian
+ * ber-angka yang belum masuk RAB (siap disalin atau butuh keputusan). `peringatan` hanya memberi tahu: rincian yang belum punya angka (hari dibayar, volume, harga) tidak ikut
+ * RAB dan tidak menghalangi, supaya status tidak buntu bila baris itu memang tidak diperlukan.
+ */
+export function periksaSiapLengkap(nTerpasang: number, r: Pick<RingkasSurvei, "siap" | "butuh" | "isiHari" | "belumAngka">): { galat: string | null; peringatan: string | null } {
+  const dasar = periksaSiap(nTerpasang);
+  const belumMasuk = r.siap + r.butuh;
+  const galat = dasar ?? (belumMasuk > 0 ? `Masih ${belumMasuk} rincian yang belum masuk RAB (${r.siap} siap disusun, ${r.butuh} butuh keputusan). Tekan Susun RAB atau selesaikan keputusannya dulu.` : null);
+  const menunggu = r.isiHari + r.belumAngka;
+  return { galat, peringatan: menunggu > 0 ? `${menunggu} rincian belum punya angka lengkap (hari dibayar, volume, atau harga) dan tidak ikut RAB.` : null };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -297,3 +324,99 @@ export function batangPerItem(peta: PemetaanItem[], itemBaru: ItemBaruRow[], bar
 
 /** Jumlah rupiah satu isian untuk batang; null bila volume atau harga belum sah. */
 export const jumlahIsian = (i: IsianBaris): number | null => jumlahBaris(i);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Penjelasan angka (tombol "?") dan ringkasan hari dibayar
+// ---------------------------------------------------------------------------------------------------------------------
+const namaKelas = (k: Kelas): string => k.nama || (k.sesi === "briefing" ? "Briefing" : "Pelatihan");
+const rincianPeran = (isi: IsiLanjutan, k: Kelas): string[] =>
+  k.untuk.map((kode) => {
+    const x = isi.peran[kode];
+    if (x?.on) return `${NAMA_PERAN[kode]}: ${x.nOrg} organik + ${x.nMit} mitra = ${x.nOrg + x.nMit} orang`;
+    const n = isi.petugas.filter((p) => p.peran === kode).length;
+    return `${NAMA_PERAN[kode]}: ${n} orang (dari daftar petugas tercatat)`;
+  });
+/** Kelas yang menjadi sumber satu rincian pelatihan/honor/pulsa (nama kelas, atau nama tanpa periode pada mode gabung). */
+function kelasDari(uraian: string, isi: IsiLanjutan): Kelas[] {
+  const nama = uraian.split(":")[0];
+  const sama = isi.kelas.filter((k) => namaKelas(k) === nama);
+  return sama.length > 0 ? sama : isi.kelas.filter((k) => k.periode !== "" && namaKelas(k).replace(` ${k.periode}`, "") === nama);
+}
+
+/** "N petugas × H hari = V orang-hari" (atau malam); tanpa jumlah petugas hanya menyebut jatah hari. */
+export function ringkasHari(orang: number | null, hari: number, penginapan = false): string {
+  const satuan = penginapan ? "malam" : "hari";
+  if (orang === null || orang <= 0) return `${hari} ${satuan} dibayar per petugas (jumlah petugas belum diidentifikasi)`;
+  return `${orang} petugas × ${hari} ${satuan} = ${orang * hari} orang-${satuan}`;
+}
+
+/** Baris-baris penjelasan "dari mana volume ini" untuk satu rincian (tombol «?»). Selalu mengembalikan sedikitnya satu baris. */
+export function jelaskanVolume(r: RincianSurvei, isi: IsiLanjutan): string[] {
+  const vol = r.volume;
+  if (r.kelompok === "Translok dan penginapan") {
+    const pen = r.uraian.startsWith("Penginapan");
+    if (r.hari === null) return [`Volume = jumlah petugas × jumlah ${pen ? "malam" : "hari"} dibayar per petugas. Isi jatah ${pen ? "malam" : "hari"} dibayar pada bagian «Hari dibayar» di atas; volume baru muncul setelah itu.`];
+    if (r.periode !== null && r.hari > 0 && vol !== null) return [ringkasHari(vol / r.hari, r.hari, pen), `Dihitung per HARI KALENDER, bukan hari kerja${pen ? " (penginapan = malam)" : ""}.`];
+    return [`Dijumlahkan dari tiap periode: petugas × ${pen ? "malam" : "hari"} dibayar di periode itu${vol !== null ? ` = ${vol} orang-${pen ? "malam" : "hari"}` : ""}.`];
+  }
+  if (r.kelompok === "Pelatihan") {
+    const ks = kelasDari(r.uraian, isi);
+    if (ks.length === 1) {
+      const k = ks[0]; const n = pesertaKelas(isi, k);
+      const tgl = k.mulai ? ` (${k.mulai}${k.selesai && k.selesai !== k.mulai ? ` s.d. ${k.selesai}` : ""})` : "";
+      return [`Peserta kelas «${namaKelas(k)}»:`, ...rincianPeran(isi, k), `Jumlah peserta ${n} orang; hari kelas ${k.oh}${tgl}.`, `Volume = ${n} × ${k.oh} = ${n * k.oh} orang-hari.`];
+    }
+    if (ks.length > 1) return [...ks.map((k) => `${namaKelas(k)}: ${pesertaKelas(isi, k)} peserta × ${k.oh} hari = ${pesertaKelas(isi, k) * k.oh} orang-hari`), `Volume gabungan = ${ks.reduce((t, k) => t + pesertaKelas(isi, k) * k.oh, 0)} orang-hari.`];
+  }
+  if (r.kelompok === "Lain-lain" && /pulsa/i.test(r.uraian)) {
+    const ks = kelasDari(r.uraian, isi);
+    if (ks.length > 0) return [`Peserta mitra kelas «${namaKelas(ks[0])}»:`, ...ks[0].untuk.map((kode) => `${NAMA_PERAN[kode]}: ${isi.peran[kode]?.on ? isi.peran[kode].nMit : 0} mitra`), "Volume = jumlah peserta mitra (organik tidak mendapat pulsa)."];
+  }
+  if (r.kelompok === "Honor" && /honor instruktur|honor pengajar/.test(r.uraian)) {
+    const ks = kelasDari(r.uraian, isi);
+    const ins = ks.flatMap((k) => k.instruktur ?? []);
+    if (ins.length > 0) return [...ins.map((i) => `${i.nama.trim() || "Instruktur"} (${i.level || "level ?"}${i.asal ? `, ${i.asal}` : ""}): ${i.jam} JP`), "Volume = jumlah JP instruktur kelompok ini; harga = tarif per JP."];
+    return ["Jumlah jam (JP) dan tarif mengikuti ketentuan honor yang berlaku; isi sendiri."];
+  }
+  if (r.kelompok === "Honor") return ["Volume = jumlah petugas pada identifikasi awal. Tarif honor mengikuti SPKL, jadi harga satuan diisi sendiri."];
+  if (r.kelompok === "Rapat") return ["Jumlah peserta rapat belum diidentifikasi; isi volume sendiri sesuai perkiraan peserta."];
+  return [r.catatan || (vol !== null ? `Volume ${vol} ${r.satuan} dari identifikasi.` : "Volume belum ada pada identifikasi.")];
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Deteksi baris RAB yang sudah ada pada item tujuan (cegah dobel)
+// ---------------------------------------------------------------------------------------------------------------------
+/** Baris RAB yang sudah ada pada item tujuan dan BUKAN dari identifikasi (dibuat sendiri di RAB standar). Baris bertanda identifikasi (survei ini atau lain) sengaja dibagi, jadi tidak dihitung. */
+export function barisSudahAda(tujuan: string, peta: PemetaanItem[], barisRab: BarisRabRow[]): BarisRabRow[] {
+  const t = bacaTujuan(tujuan);
+  if (!t || t.jenis === "tambah") return [];
+  const daftar = t.jenis === "pok" ? (peta.find((p) => p.pok.detail_id === t.id)?.baris ?? []) : barisRab.filter((b) => b.item_id === t.id);
+  return daftar.filter((b) => !dariIdent(b));
+}
+
+/** Data pembaruan "Pakai baris ini": baris buatan sendiri diambil alih identifikasi (isian terbaru + penanda). Tidak mengubah item/urut; melepas kunci jumlah. */
+export function dataAmbilAlih(isian: IsianBaris, penanda: PenandaIdent): Record<string, unknown> {
+  return { ...dataBarisIdent(isian, penanda), jumlah_tetap: null, sama_dengan_item: false };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Penunjuk alur penyusunan RAB survei
+// ---------------------------------------------------------------------------------------------------------------------
+export type LangkahAlur = { no: number; judul: string; keadaan: "selesai" | "berjalan" | "menunggu"; ket: string; tautan: "identifikasi" | "lanjutan" | null };
+
+/**
+ * Alur resmi satu survei (keputusan pengguna 29 Okt 2026): 1 identifikasi awal (sah) > 2 RAB awal > 3 identifikasi lanjutan > 4 perbarui RAB.
+ * Fungsi ini hanya menyusun teks dan keadaan penunjuk; tidak menulis apa pun.
+ */
+export function langkahAlur(o: { lanjutanAda: boolean; lanjutanVer: number | null; lanjutanStatus: string | null; jumlah: number; sudah: number; siap: boolean; berubah: number }): LangkahAlur[] {
+  const rabSelesai = o.jumlah > 0 && o.sudah >= o.jumlah;
+  const lanj = o.lanjutanAda
+    ? `Sudah ada${o.lanjutanVer ? ` (versi ${o.lanjutanVer}` : ""}${o.lanjutanVer ? (o.lanjutanStatus ? `, ${o.lanjutanStatus})` : ")") : o.lanjutanStatus ? ` (${o.lanjutanStatus})` : ""}. Angka RAB mengikuti versi terbaru.`
+    : "Belum dibuat. Isi bila petugas, kelas, dan tanggal sudah pasti; angka RAB lalu ikut diperbarui.";
+  return [
+    { no: 1, judul: "Identifikasi awal", keadaan: "selesai", ket: "Sudah sah. Dasar kebutuhan biaya (jenis belanja dan perkiraan jumlah).", tautan: "identifikasi" },
+    { no: 2, judul: "RAB awal", keadaan: rabSelesai ? "selesai" : "berjalan", ket: `${o.sudah} dari ${o.jumlah} rincian sudah di RAB${o.siap ? "; ditandai Siap diajukan" : "; masih Draf"}.`, tautan: null },
+    { no: 3, judul: "Identifikasi lanjutan", keadaan: o.lanjutanAda ? "selesai" : "menunggu", ket: lanj, tautan: "lanjutan" },
+    { no: 4, judul: "Perbarui RAB", keadaan: o.berubah > 0 ? "berjalan" : o.lanjutanAda && rabSelesai ? "selesai" : "menunggu", ket: o.berubah > 0 ? `${o.berubah} rincian berbeda dari identifikasi terbaru; perbarui di bagian Susun RAB.` : "Tidak ada rincian yang berbeda dari identifikasi terbaru.", tautan: null },
+  ];
+}

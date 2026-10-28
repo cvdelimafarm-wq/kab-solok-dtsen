@@ -4,15 +4,16 @@
 //  - mode "periode": satu rincian per periode (mis. translok Susenas Maret dan Susenas September terpisah);
 //  - mode "gabung": satu rincian untuk seluruh periode (volume dijumlahkan).
 // Volume translok = orang x HARI DIBAYAR yang diisi manual (keputusan pengguna 28 Okt 2026: petugas bisa mendata 10 hari tetapi transloknya hanya dibayar 3 hari);
-// hari dibayar tidak boleh melebihi HARI KERJA pendataan periode itu (Senin sampai Jumat tanpa hari libur; kalender libur dioper pemanggil, lib/keu/hariKerja.ts).
-// Penginapan = orang x malam yang diisi sama (batas hari kerja - 1, cek aturan).
+// hari dibayar tidak boleh melebihi jumlah HARI KALENDER pendataan periode itu (keputusan pengguna 29 Okt 2026: translok dibayar per hari kalender, bukan hari kerja;
+// hari kerja hanya dipakai untuk tenggat SPJ dan pembayaran, lib/keu/hariKerja.ts). Parameter `libur` dipertahankan agar pemanggil tidak berubah, tetapi tidak dipakai.
+// Penginapan = orang x malam yang diisi sama (batas hari kalender - 1, cek aturan).
 // Hari belum diisi = volume menyusul. Beberapa rincian (mis. translok PPL dan PML) boleh ditautkan ke SATU item POK: tautan dibuat per akun,
 // dan hasil penautan memberi tahu bila item POK untuk akun itu belum ada atau namanya perlu diperbaiki (saran, bukan paksaan).
 
 import type { BarisRincian } from "./lanjutan";
 import type { ItemAnggaran } from "./ro";
 import { NAMA_AKUN, selisihHari } from "./identifikasi";
-import { hariKerjaAntara, type Libur } from "./hariKerja";
+import type { Libur } from "./hariKerja";
 
 export type ModePecah = "periode" | "gabung";
 export type PeriodeJadwal = { periode: string; mulai: string; selesai: string };
@@ -39,15 +40,15 @@ export type HariBayar = Record<string, number>;
 export function periksaHariBayar(hari: number, maks: number, penginapan = false): string | null {
   if (!Number.isInteger(hari) || hari < 0) return "Jumlah hari harus bilangan bulat, nol atau lebih.";
   const batas = penginapan ? Math.max(maks - 1, 0) : maks;
-  if (maks > 0 && hari > batas) return `Melebihi ${penginapan ? "malam" : "hari kerja"} pendataan periode ini (maksimal ${batas}).`;
+  if (maks > 0 && hari > batas) return `Melebihi ${penginapan ? "jumlah malam" : "jumlah hari kalender"} pendataan periode ini (maksimal ${batas}).`;
   return null;
 }
 
-function volLapangan(b: BarisRincian, p: PeriodeJadwal, hb: HariBayar, libur: Libur): { volume: number | null; hari: number | null; maks: number; catatan: string } {
-  const maks = hariKerjaAntara(p.mulai, p.selesai, libur);
+function volLapangan(b: BarisRincian, p: PeriodeJadwal, hb: HariBayar): { volume: number | null; hari: number | null; maks: number; catatan: string } {
+  const maks = hariJadwal(p.mulai, p.selesai);
   const isi = hb[kunciHari(b, p.periode)];
   const pen = jenisLap(b) === "penginapan";
-  if (typeof isi !== "number") return { volume: null, hari: null, maks, catatan: `Isi jumlah ${pen ? "malam" : "hari"} dibayar ${p.periode}${maks ? ` (maksimal ${pen ? Math.max(maks - 1, 0) : maks} hari kerja)` : ""}.` };
+  if (typeof isi !== "number") return { volume: null, hari: null, maks, catatan: `Isi jumlah ${pen ? "malam" : "hari"} dibayar ${p.periode}${maks ? ` (maksimal ${pen ? Math.max(maks - 1, 0) : maks}, hari kalender pendataan ${maks})` : ""}.` };
   const salah = periksaHariBayar(isi, maks, pen);
   if (salah) return { volume: null, hari: isi, maks, catatan: salah };
   if (b.volume === null) return { volume: null, hari: isi, maks, catatan: "Jumlah petugas belum diidentifikasi." };
@@ -63,14 +64,14 @@ const beri = (b: BarisRincian, p: Partial<RincianSurvei> & { volume: number | nu
  * Rincian per survei. `periode` = jadwal pendataan tiap periode (jadwalPendataan di lanjutan.ts). Baris pelatihan, pulsa, dan honor sudah per kelas
  * (nama kelas memuat nama periode); baris translok, penginapan, dan rapat dikembangkan per periode.
  */
-export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah, hariBayar: HariBayar = {}, libur: Libur = new Set()): RincianSurvei[] {
+export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah, hariBayar: HariBayar = {}, _libur: Libur = new Set()): RincianSurvei[] {
   const nama = periode.map((x) => x.periode);
   const tanpa = nama.length === 1 && nama[0] === "Kegiatan";
   const sufiks = (p: string) => (tanpa ? "" : ` ${p}`);
   const mentah: Omit<RincianSurvei, "kunci">[] = [];
   for (const b of rincian) {
     if (lapangan(b)) {
-      const per = periode.map((p) => ({ p, v: volLapangan(b, p, hariBayar, libur) }));
+      const per = periode.map((p) => ({ p, v: volLapangan(b, p, hariBayar) }));
       const satuan = jenisLap(b) === "penginapan" ? "orang-malam" : "orang-hari";
       if (mode === "periode") {
         for (const { p, v } of per) mentah.push(beri(b, { uraian: b.uraian + sufiks(p.periode), satuan, periode: p.periode, hari: v.hari, hariMaks: v.maks, volume: v.volume, catatan: v.catatan }));
@@ -140,11 +141,25 @@ export function kataKunci(r: Pick<RincianSurvei, "uraian" | "akun" | "kelompok">
   return [];
 }
 
-/** Saran nama item POK: nama baku jenis belanja + nama survei. Hanya saran; pengguna boleh mengubahnya. */
+/**
+ * Saran nama item POK: nama baku jenis belanja + nama survei, disesuaikan dengan rincian (29 Okt 2026). Contoh: konsumsi pelatihan tanpa paket menjadi
+ * «Konsumsi rapat pelatihan {survei}», honor PPL mitra menjadi «Honor PPL mitra {survei}». Hanya saran; pengguna boleh mengubahnya.
+ * Nama survei dipakai apa adanya (sudah memuat tahun), tidak ditambah tahun lagi.
+ */
 export function saranNamaItem(r: Pick<RincianSurvei, "uraian" | "akun" | "kelompok">, survei: string): string {
-  const dasar = r.kelompok === "Translok dan penginapan"
-    ? (r.uraian.startsWith("Penginapan") ? "Penginapan petugas pendataan" : "Transport lokal petugas pendataan")
-    : (NAMA_AKUN[akun6(r.akun)] ?? r.uraian.split(":")[0]);
+  const u = r.uraian;
+  const kegiatan = /briefing/i.test(u.split(":")[0]) ? "briefing" : "pelatihan";
+  const s6 = akun6(r.akun);
+  let dasar: string;
+  if (r.kelompok === "Translok dan penginapan") dasar = u.startsWith("Penginapan") ? "Penginapan petugas pendataan" : "Transport lokal petugas pendataan";
+  else if (r.kelompok === "Rapat") dasar = `Konsumsi rapat ${/^Konsumsi rapat (\S+)/.exec(u)?.[1] ?? ""}`.trim();
+  else if (r.kelompok === "Pelatihan" && /: konsumsi/.test(u)) dasar = `Konsumsi rapat ${kegiatan}`;
+  else if (r.kelompok === "Pelatihan" && /: paket /.test(u)) dasar = `Paket ${(/: paket (.+?) di /.exec(u)?.[1] ?? "fullday dan fullboard").replace(/ atau /g, " dan ")} ${kegiatan}`;
+  else if (/pulsa/i.test(u)) dasar = `Pulsa peserta ${kegiatan}`;
+  else if (r.kelompok === "Honor" && /honor instruktur/.test(u)) dasar = `Honor instruktur ${kegiatan}`;
+  else if (r.kelompok === "Honor" && /honor pengajar/.test(u)) dasar = `Honor narasumber ${kegiatan}`;
+  else if (r.kelompok === "Honor" && s6 === "521213" && /^Honor [^:]+\((mitra|organik)\)/.test(u)) dasar = u.replace(/\s*\((mitra|organik)\)/, " $1").replace(/\s+/g, " ").trim();
+  else dasar = NAMA_AKUN[s6] ?? u.split(":")[0];
   return `${dasar} ${survei}`.trim();
 }
 

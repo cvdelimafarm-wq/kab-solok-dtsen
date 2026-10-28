@@ -123,7 +123,7 @@ function Isi() {
           <section className={`${kartu} flex flex-col gap-3`} aria-labelledby="h-kosong">
             <h2 id="h-kosong" className={`${judulKartu} m-0`}>Belum ada lembar kebijakan tahun ini</h2>
             <Poin butir={[
-              "Mulai dari angka predefined (Excel pematangan): 9 strata, 10 jabatan, matriks rangkap, syarat kompetensi, dan 22 parameter anggaran.",
+              "Mulai dari angka predefined (Excel pematangan): 9 strata, 10 jabatan, matriks rangkap, syarat kompetensi, dan 24 parameter anggaran.",
               "Angka itu belum sah; bahas pada rapat awal tahun, ubah bila perlu, lalu ajukan untuk disahkan.",
             ]} />
             {siap && hak.susun

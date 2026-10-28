@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import vektor from "./lanjutan.vektor.json";
 import { awalForm, normalisasi } from "../identifikasi";
 import type { IsiLanjutan } from "../lanjutan";
-import { bangunDokumen, bangunPengantar, bangunTugas, bangunUndangan, daftarKunci, hariTanggal, rentangHariTanggal, tanggalPanjang, tempatKelas, type KonteksDokumen } from "../lanjutanDokumen";
+import { bangunDokumen, bangunPengantar, bangunTugas, bangunUndangan, daftarKunci, hariTanggal, rentangHariTanggal, tanggalPanjang, tempatKelas, teksInstruktur, type KonteksDokumen } from "../lanjutanDokumen";
 
 const salin = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 function ktx(ubah?: (i: IsiLanjutan) => void, status: "draf" | "final" = "final"): KonteksDokumen {
@@ -100,5 +100,29 @@ describe("daftar kunci dan penyusunan menurut jenis", () => {
     expect(bangunDokumen("tugas", "px", k, meta)).toBeNull();
     expect(bangunDokumen("pengantar", "lain", k, meta)).toBeNull();
     expect(bangunDokumen("pengantar", "semua", k, meta)?.jenis).toBe("pengantar");
+  });
+});
+
+describe("nama instruktur pada undangan dan surat tugas", () => {
+  const ubahIns = (i: IsiLanjutan) => { i.kelas[0].instruktur = [{ nama: "Budi Santoso", level: "Innas", asal: "Internal BPS", jam: 6 }, { nama: "  ", level: "", asal: "", jam: 0 }, { nama: "Sari", level: "", asal: "Eksternal", jam: 0 }]; };
+  it("teksInstruktur: hanya yang bernama, dengan level, asal, dan jam bila ada", () => {
+    const k = ktx(ubahIns);
+    expect(teksInstruktur(k.isi.kelas[0])).toEqual(["Budi Santoso (Innas, Internal BPS, 6 jam)", "Sari (Eksternal)"]);
+    expect(teksInstruktur(ktx().isi.kelas[0])).toEqual([]);
+  });
+  it("undangan memuat baris Pengajar hanya bila ada instruktur bernama", () => {
+    const k = ktx(ubahIns);
+    expect(bangunUndangan(k, k.isi.kelas[0], meta).rincian).toContainEqual(["Pengajar", "Budi Santoso (Innas, Internal BPS, 6 jam); Sari (Eksternal)"]);
+    const k0 = ktx();
+    expect(bangunUndangan(k0, k0.isi.kelas[0], meta).rincian.some((r) => r[0] === "Pengajar")).toBe(false);
+  });
+  it("surat tugas petugas memuat pelatihan yang diikuti beserta pengajar; tanpa peran atau tanpa kelas tidak ada barisnya", () => {
+    const k = ktx(ubahIns);
+    const d = bangunTugas(k, k.isi.petugas[0], 1, meta);
+    const baris = d.rincian.find((r) => r[0] === "Pelatihan yang diikuti")![1];
+    expect(baris).toContain("pengajar Budi Santoso");
+    expect(baris).toContain("Senin, 2 Maret 2026");
+    const k2 = ktx((i) => { i.kelas = []; });
+    expect(bangunTugas(k2, k2.isi.petugas[0], 1, meta).rincian.some((r) => r[0] === "Pelatihan yang diikuti")).toBe(false);
   });
 });

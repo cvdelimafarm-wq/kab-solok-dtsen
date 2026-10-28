@@ -68,8 +68,7 @@ export function useKeluaran(b: BahanKeluaran, pilih: number | "pratinjau" | null
     const baris = barisKeluaran(rabRo.barisRab, rabRo.itemRab, ident.id);
     const periode = b.periode.filter((p) => p.mulai && p.selesai);
     const meta = petaKunci(b.rincian, periode, b.isi, libur);
-    const hariBayar = jendela.dariLembar ? jendela.hari : undefined;
-    const bayar = hariBayar === undefined ? susunBayar(baris, meta, libur) : susunBayar(baris, meta, libur, undefined, hariBayar);
+    const bayar = susunBayar(baris, meta, libur, jendela.spj, jendela.hari);
     const pengadaan = susunButir(b.butirDasar, baris, meta, b.periode.map((p) => p.periode), spekPeta);
     return susunKeluaran(
       { identNama: ident.nama, roKode: ident.ro_kode, tahun: ident.tahun, identVer: ident.ver, rabNomor: String(rabRo.rab.nomor ?? ""), rabStatus: rabRo.rab.status },
