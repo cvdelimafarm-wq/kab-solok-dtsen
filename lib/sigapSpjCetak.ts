@@ -167,3 +167,9 @@ export function petaTim(
   }
   return hasil;
 }
+
+/** Persen selesai (bulat, 0..100); total 0 = 0. */
+export function persenSelesai(selesai: number, total: number): number {
+  if (!(total > 0)) return 0;
+  return Math.max(0, Math.min(100, Math.round((selesai / total) * 100)));
+}

@@ -36,7 +36,7 @@ export default function KepalaKolom<K extends string>({ id, label, saring, setSa
   };
   const daftar = buka?.jenis === "f" ? opsi().slice(0, 80) : [];
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="flex w-full min-w-[9rem] items-center justify-between gap-3">
       <span>
         {label}
         {aktifU ? (urut?.arah === "naik" ? " ▲" : " ▼") : ""}

@@ -17,6 +17,7 @@ import {
   URUTAN_JENIS,
   type JenisDok,
   MAKS_PER_PDF,
+  persenSelesai,
   PILIHAN_PERAN,
   dibayarDalamRentang,
   namaBerkasCetak,
@@ -247,8 +248,8 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
       {proses && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#C9D9F0] bg-[#F2F7FE] px-3 py-2.5">
           <span className="min-w-0 flex-1 text-[13px] text-[#1F4E8C]">
-            Menyusun SPJ {Math.min(proses.selesai + 1, proses.total)}/{proses.total}
-            {proses.nama ? ` · ${proses.nama}` : ""}… jangan tutup halaman ini.
+            Menyusun SPJ {proses.selesai}/{proses.total} ({persenSelesai(proses.selesai, proses.total)}%)
+            {proses.nama ? ` · sedang ${proses.nama}` : ""}… jangan tutup halaman ini.
           </span>
           <button type="button" className={BTN_O} onClick={() => (batal.current = true)}>
             Batalkan
@@ -358,7 +359,7 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
         <KartuAngka label="Nilai kwitansi" nilai={rupiah(ringkas.nominal)} ket="mengikuti rentang" warna="#047857" />
         <div className="flex items-center">
           <button type="button" className={`${BTN} w-full py-3 text-[14px]`} onClick={bukaKonfirmasi} disabled={!!proses || siap.length === 0 || !rentangOk || jenis.size === 0}>
-            {proses ? "Menyusun…" : `⬇ Unduh SPJ · ${siap.length}`}
+            {proses ? `Menyusun ${proses.selesai}/${proses.total} (${persenSelesai(proses.selesai, proses.total)}%)` : `⬇ Unduh SPJ · ${siap.length}`}
           </button>
         </div>
       </div>

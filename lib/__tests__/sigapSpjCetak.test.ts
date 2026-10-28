@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dibayarDalamRentang, kelompokRentang, namaBerkasCetak, petaTim, rentangValid, ringkasCetak, saringPeran, teksUrutan, urutkanPetugas, type PetugasCetak } from "../sigapSpjCetak";
+import { persenSelesai, dibayarDalamRentang, kelompokRentang, namaBerkasCetak, petaTim, rentangValid, ringkasCetak, saringPeran, teksUrutan, urutkanPetugas, type PetugasCetak } from "../sigapSpjCetak";
 import { jenisTemplate, teksLaporan } from "../sigapLaporanPeran";
 
 const hari = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => `2026-10-${String(a + i).padStart(2, "0")}`);
@@ -157,5 +157,17 @@ describe("petaTim", () => {
     expect(m.has(4)).toBe(false);
     expect(m.has(5)).toBe(false);
     expect(m.has(6)).toBe(false);
+  });
+});
+
+describe("persenSelesai", () => {
+  it("pembulatan, batas, dan total 0", () => {
+    expect(persenSelesai(0, 83)).toBe(0);
+    expect(persenSelesai(1, 83)).toBe(1);
+    expect(persenSelesai(41, 83)).toBe(49);
+    expect(persenSelesai(83, 83)).toBe(100);
+    expect(persenSelesai(90, 83)).toBe(100);
+    expect(persenSelesai(-1, 83)).toBe(0);
+    expect(persenSelesai(5, 0)).toBe(0);
   });
 });
