@@ -92,13 +92,23 @@ export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[],
   const hasil: Omit<RincianSurvei, "kunci">[] = [];
   if (mode === "gabung") {
     const peta = new Map<string, number>();
+    const volumeAsal = new Map<number, (number | null)[]>();
     for (const r of mentah) {
       const k = `${r.akun}|${r.kelompok}|${r.uraian}|${r.satuan}`;
       const i = peta.get(k);
-      if (i === undefined) { peta.set(k, hasil.length); hasil.push(r); continue; }
+      if (i === undefined) { peta.set(k, hasil.length); volumeAsal.set(hasil.length, [r.volume]); hasil.push(r); continue; }
+      volumeAsal.get(i)?.push(r.volume);
       const a = hasil[i];
       const vol = a.volume !== null && r.volume !== null ? a.volume + r.volume : null;
       hasil[i] = { ...a, volume: vol, jumlah: vol !== null && a.tarif !== null ? vol * a.tarif : null, perk: a.perk || r.perk, catatan: vol === null ? a.catatan || r.catatan : "" };
+    }
+    // honor instruktur: tampilkan rumus RAB (jumlah kelas x jam); di POK hanya total jam
+    for (const [i, vols] of volumeAsal) {
+      const h = hasil[i];
+      if (h.kelompok === "Honor" && h.satuan === "jam" && vols.length > 1 && vols.every((v): v is number => v !== null)) {
+        const sama = vols.every((v) => v === vols[0]);
+        hasil[i] = { ...h, catatan: sama ? `${vols.length} kelas × ${vols[0]} jam = ${h.volume} jam` : `${vols.length} kelas, total ${h.volume} jam (jam tiap kelas: ${vols.join(", ")})` };
+      }
     }
   } else hasil.push(...mentah);
   const dipakai = new Map<string, number>();

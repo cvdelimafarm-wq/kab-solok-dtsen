@@ -386,7 +386,7 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                         <strong className="text-[13px] text-[#0F2A52]">Instruktur {nama.toLowerCase()}</strong>
                         <div className={kisi}>
                           <Isian judul="Jumlah instruktur"><Angka nama={`${nama} jumlah instruktur`} nilai={ins.jumlah} min={0} maks={50} mati={mati} onUbah={(v) => setI({ jumlah: v })} /></Isian>
-                          <Isian judul="Perkiraan jam mengajar" ket="Total jam semua instruktur."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
+                          <Isian judul="Perkiraan jam mengajar" ket="Total jam pelatihan per kelas (jumlah jam semua instruktur). Di RAB menjadi jumlah kelas x jam; di POK total jam."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
                         </div>
                         <Isian judul="Level instruktur" ket="Innas = instruktur nasional, Inda = instruktur daerah (menentukan tarif honor pada lembar kebijakan).">
                           <Pilihan<LevelInstruktur> nama={`${nama} level instruktur`} nilai={ins.level} opsi={["Innas", "Inda"]} mati={mati} onPilih={(v) => setI({ level: v })} />

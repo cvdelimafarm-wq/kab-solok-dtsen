@@ -19,7 +19,8 @@
      "pml",
      "ppl"
     ],
-    "fix": true
+    "fix": true,
+    "instruktur": []
    }
   ],
   "peran": {
@@ -2504,6 +2505,704 @@
      "op": "del",
      "path": [
       "petugas"
+     ]
+    }
+   ],
+   "galat": [],
+   "status": "draf"
+  },
+  {
+   "nama": "instruktur kosong sah",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": []
+    }
+   ],
+   "galat": [],
+   "status": "final"
+  },
+  {
+   "nama": "instruktur lengkap sah",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [],
+   "status": "final"
+  },
+  {
+   "nama": "instruktur tanpa kunci sah (isi lama)",
+   "ops": [
+    {
+     "op": "del",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ]
+    }
+   ],
+   "galat": [],
+   "status": "final"
+  },
+  {
+   "nama": "instruktur bukan daftar",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": "x"
+    }
+   ],
+   "galat": [
+    "Kelas 1: daftar instruktur harus berupa daftar maksimal 20 instruktur"
+   ]
+  },
+  {
+   "nama": "instruktur null",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": null
+    }
+   ],
+   "galat": [
+    "Kelas 1: daftar instruktur harus berupa daftar maksimal 20 instruktur"
+   ]
+  },
+  {
+   "nama": "instruktur 21",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: daftar instruktur harus berupa daftar maksimal 20 instruktur"
+   ]
+  },
+  {
+   "nama": "instruktur 20 sah",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [],
+   "status": "final"
+  },
+  {
+   "nama": "instruktur bukan objek",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      5
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1 tidak valid",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur nama angka",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": 5,
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: nama harus berupa teks maksimal 120 huruf",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur nama 121",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: nama harus berupa teks maksimal 120 huruf",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur level asing",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Nasional",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: level tidak dikenal",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur asal asing",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      },
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Swasta",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 2: asal tidak dikenal",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur jam pecahan",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 2.5
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: jam harus bilangan bulat 0 sampai 500",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur jam 501",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 501
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: jam harus bilangan bulat 0 sampai 500",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur jam teks",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": "8"
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: instruktur 1: jam harus bilangan bulat 0 sampai 500",
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur Fix jam nol",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 0
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur Fix nama kosong",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": " ",
+       "level": "Inda",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur Fix level kosong",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "",
+       "asal": "Eksternal",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur Fix asal kosong",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "Budi Santoso",
+       "level": "Inda",
+       "asal": "",
+       "jam": 8
+      }
+     ]
+    }
+   ],
+   "galat": [
+    "Kelas 1: ditandai Fix tetapi instruktur belum lengkap"
+   ]
+  },
+  {
+   "nama": "instruktur Perkiraan boleh belum lengkap",
+   "ops": [
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "fix"
+     ],
+     "value": false
+    },
+    {
+     "op": "set",
+     "path": [
+      "kelas",
+      0,
+      "instruktur"
+     ],
+     "value": [
+      {
+       "nama": "",
+       "level": "",
+       "asal": "",
+       "jam": 0
+      }
      ]
     }
    ],

@@ -10,8 +10,8 @@
 
 import { JABATAN, KODE_JABATAN, namaJabatan, strataUntuk, type IsiKebijakan, type KodeJabatan, type Param } from "./kebijakan";
 import {
-  daftarPeriode, jendelaPeriode, peranTerpakai, tanggalSesi, tempatHotel, tambahHari, selisihHari,
-  type Form, type PeranForm, type TempatSesi,
+  ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, daftarPeriode, instrDari, jendelaPeriode, peranTerpakai, tanggalSesi, tempatHotel, tambahHari, selisihHari,
+  type AsalInstruktur, type Form, type LevelInstruktur, type PeranForm, type TempatSesi,
 } from "./identifikasi";
 
 export const KODE_PERAN = ["supervisor", "kortim", "pml", "ppl", "entri"] as const;
@@ -42,7 +42,15 @@ export type Kelas = {
   selesai: string;
   untuk: KodePeran[];
   fix: boolean;
+  /** (28 Okt 2026) Instruktur (pengajar atau narasumber) kelas ini. Boleh tidak ada pada isi lama; normalisasiLanjutan selalu mengisinya (daftar kosong). */
+  instruktur?: Instruktur[];
 };
+/** Satu instruktur pada satu kelas: nama, level pasti (Innas atau Inda), asal, dan jam mengajar PER INSTRUKTUR pada kelas itu (cek aturan untuk tarif). */
+export type Instruktur = { nama: string; level: LevelInstruktur; asal: AsalInstruktur; jam: number };
+export const MAKS_INSTRUKTUR = 20;
+export const instrukturKosongLj = (): Instruktur => ({ nama: "", level: "", asal: "", jam: 0 });
+/** Lengkap = nama, level, asal terisi dan jam minimal 1. */
+export const instrukturLengkap = (i: Instruktur): boolean => pangkas(i.nama) !== "" && i.level !== "" && i.asal !== "" && i.jam >= 1;
 export type PeranLanjutan = { on: boolean; nOrg: number; nMit: number; translok: boolean; penginapan: boolean; fix: boolean };
 export type Petugas = {
   id: string;
@@ -128,6 +136,27 @@ export function periksaLanjutan(isi: unknown): string[] {
         if ((metode === "Luring" || metode === "Hybrid") && tempat === "") g.push(`Kelas ${n}: ditandai Fix tetapi tempat belum dipilih`);
         if ((tempat === "Hotel dalam kota" || tempat === "Hotel luar kota") && paket === "") g.push(`Kelas ${n}: ditandai Fix tetapi paket belum dipilih`);
         if (Array.isArray(u) && u.length === 0) g.push(`Kelas ${n}: ditandai Fix tetapi peserta belum dipilih`);
+      }
+      if ("instruktur" in e) {
+        const ins = e.instruktur;
+        if (!Array.isArray(ins) || ins.length > MAKS_INSTRUKTUR) g.push(`Kelas ${n}: daftar instruktur harus berupa daftar maksimal 20 instruktur`);
+        else {
+          let lengkap = true;
+          ins.forEach((y, j) => {
+            const m = j + 1;
+            if (!adalahObjek(y)) { g.push(`Kelas ${n}: instruktur ${m} tidak valid`); lengkap = false; return; }
+            let nm = adalahTeks(y.nama) ? y.nama : null;
+            if (nm === null || panjang(nm) > 120) { g.push(`Kelas ${n}: instruktur ${m}: nama harus berupa teks maksimal 120 huruf`); nm = ""; }
+            const lv = y.level; const asl = y.asal;
+            const lvSah = adalahTeks(lv) && (LEVEL_INSTRUKTUR as readonly string[]).includes(lv);
+            const aslSah = adalahTeks(asl) && (ASAL_INSTRUKTUR as readonly string[]).includes(asl);
+            if (!lvSah) g.push(`Kelas ${n}: instruktur ${m}: level tidak dikenal`);
+            if (!aslSah) g.push(`Kelas ${n}: instruktur ${m}: asal tidak dikenal`);
+            if (!bulat(y.jam, 0, 500)) g.push(`Kelas ${n}: instruktur ${m}: jam harus bilangan bulat 0 sampai 500`);
+            if (pangkas(nm) === "" || !lvSah || lv === "" || !aslSah || asl === "" || !bulat(y.jam, 1, 500)) lengkap = false;
+          });
+          if (e.fix === true && ins.length > 0 && !lengkap) g.push(`Kelas ${n}: ditandai Fix tetapi instruktur belum lengkap`);
+        }
       }
     });
   }
@@ -258,9 +287,17 @@ export function awalLanjutan(f: Form, tahun: number): IsiLanjutan {
       for (const P of daftarPeriode(f)) {
         const t = tanggalSesi(f, id, P, tahun);
         const mulai = tglValid(t.mulai) ? t.mulai : ""; const selesai = tglValid(t.selesai) ? t.selesai : "";
+        const ins = s.pengajar ? instrDari(s) : null;
+        const instruktur: Instruktur[] = ins && ins.jumlah >= 1
+          ? Array.from({ length: Math.min(ins.jumlah, MAKS_INSTRUKTUR) }, (_, n) => {
+            // jam pada identifikasi awal = TOTAL jam mengajar per kelas (semua instruktur); dibagi rata, sisanya ke instruktur pertama
+            const total = Math.min(500, Math.max(0, Math.floor(ins.jam))); const banyak = Math.min(ins.jumlah, MAKS_INSTRUKTUR);
+            return { nama: "", level: ins.level, asal: ins.asal, jam: Math.floor(total / banyak) + (n < total % banyak ? 1 : 0) };
+          })
+          : [];
         kelas.push({
           id: `k${kelas.length + 1}`, nama: daftarPeriode(f).length > 1 || f.periode !== "Tanpa periode" ? `${nama} ${P}` : nama, sesi: id, periode: P,
-          metode: s.bentuk as MetodeKelas, tempat: s.tempat, lokasi: "", paket: "", oh: Math.min(60, hariKelas(mulai, selesai)), mulai, selesai, untuk: [...aktif], fix: false,
+          metode: s.bentuk as MetodeKelas, tempat: s.tempat, lokasi: "", paket: "", oh: Math.min(60, hariKelas(mulai, selesai)), mulai, selesai, untuk: [...aktif], fix: false, instruktur,
         });
       }
     }
@@ -272,6 +309,17 @@ export function awalLanjutan(f: Form, tahun: number): IsiLanjutan {
     for (let i = 0; i < x.nMit; i++) petugas.push({ id: `p${petugas.length + 1}`, nama: "", menyusul: true, peran: k, status: "Mitra", sumber: "kepka", baru: false, jabatan: [] });
   }
   return { v: 1, wilayah: "", kelas, peran, petugas };
+}
+
+/** Daftar instruktur dari isi mentah: bukan daftar -> kosong; maksimal 20; nilai tak dikenal diganti kosong atau nol. */
+function normalisasiInstruktur(masuk: unknown): Instruktur[] {
+  if (!Array.isArray(masuk)) return [];
+  return masuk.filter(adalahObjek).slice(0, MAKS_INSTRUKTUR).map((y) => ({
+    nama: adalahTeks(y.nama) ? Array.from(y.nama).slice(0, 120).join("") : "",
+    level: (LEVEL_INSTRUKTUR as readonly string[]).includes(String(y.level)) ? (y.level as LevelInstruktur) : "",
+    asal: (ASAL_INSTRUKTUR as readonly string[]).includes(String(y.asal)) ? (y.asal as AsalInstruktur) : "",
+    jam: Math.min(500, tanpaNol(y.jam)),
+  }));
 }
 
 /** Normalisasi isi dari basis data menjadi bentuk lengkap (nilai hilang diisi bawaan). */
@@ -289,6 +337,7 @@ export function normalisasiLanjutan(masuk: unknown): IsiLanjutan {
     lokasi: adalahTeks(e.lokasi) ? e.lokasi : "", paket: (PAKET_KELAS as readonly string[]).includes(String(e.paket)) ? (e.paket as PaketKelas) : "", oh: tanpaNol(e.oh),
     mulai: adalahTeks(e.mulai) ? e.mulai : "", selesai: adalahTeks(e.selesai) ? e.selesai : "",
     untuk: Array.isArray(e.untuk) ? (e.untuk.filter((x) => (KODE_PERAN as readonly string[]).includes(String(x))) as KodePeran[]) : [], fix: e.fix === true,
+    instruktur: normalisasiInstruktur(e.instruktur),
   }));
   const petugas: Petugas[] = (Array.isArray(a.petugas) ? a.petugas : []).filter(adalahObjek).map((e, i) => ({
     id: adalahTeks(e.id) ? e.id : `p${i + 1}`, nama: adalahTeks(e.nama) ? e.nama : "", menyusul: e.menyusul === true,
@@ -349,6 +398,13 @@ export function peringatanLanjutan(isi: IsiLanjutan, ktx: KonteksPeringatan): st
     }
   }
   if (isi.wilayah.trim() === "") w.push("Wilayah tugas belum diisi (dibutuhkan surat pengantar ke nagari).");
+  for (const k of isi.kelas) {
+    const ins = k.instruktur ?? [];
+    const sesiForm = ktx.form?.sesi[k.sesi];
+    if (ins.length === 0 && sesiForm?.on && sesiForm.pengajar) w.push(`${k.nama || "Kelas"}: identifikasi awal memuat instruktur, tetapi belum diisi pada kelas ini.`);
+    const kurang = ins.filter((i) => !instrukturLengkap(i)).length;
+    if (kurang > 0) w.push(`${k.nama || "Kelas"}: ${kurang} instruktur belum lengkap (nama, level, asal, dan jam).`);
+  }
   const l = ktx.lembar;
   if (!l) {
     w.push("Belum ada lembar kebijakan yang berlaku; susunan tim dan batas anggaran belum dapat diperiksa.");
@@ -457,7 +513,22 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
       const tarif = angkaKeb(lembar, "pulsa_peserta"); const vol = mitraPeserta(k) || null;
       tambah({ kelompok: "Lain-lain", uraian: `${nama}: pulsa peserta (mitra)`, akun: "521211", volume: vol, satuan: "orang", tarif, perk: !k.fix, catatan: tarif === null ? "Tarif pulsa peserta belum ada pada lembar kebijakan." : vol === null ? "Jumlah peserta mitra belum diketahui." : "" });
     }
-    if (sesiForm?.pengajar) out.push({ kelompok: "Honor", uraian: `${nama}: honor pengajar atau narasumber eksternal`, akun: "522151", volume: null, satuan: "jam", tarif: null, jumlah: null, perk: !k.fix, catatan: "Jumlah jam dan tarif mengikuti ketentuan honor yang berlaku." });
+    const ins = k.instruktur ?? [];
+    if (ins.length > 0) {
+      // (28 Okt 2026) honor instruktur per kelas, level, dan asal; volume = jumlah jam seluruh instruktur kelompok itu; tarif belum ada pada lembar kebijakan.
+      // Pada RAB baris kelas digabung menjadi (jumlah kelas x jam kelas) x tarif; pada POK hanya total jam x tarif (rumus ada pada rabSurvei.ts).
+      const kelompok = new Map<string, Instruktur[]>();
+      for (const i of ins) { const kunci = `${i.level}|${i.asal}`; kelompok.set(kunci, [...(kelompok.get(kunci) ?? []), i]); }
+      for (const [, daftar] of kelompok) {
+        const { level, asal } = daftar[0];
+        const jam = daftar.reduce((t, i) => t + i.jam, 0);
+        out.push({
+          kelompok: "Honor", uraian: `${nama}: honor instruktur ${level || "(level belum dipilih)"}${asal ? `, ${asal}` : ""}`, akun: "522151",
+          volume: jam >= 1 ? jam : null, satuan: "jam", tarif: null, jumlah: null, perk: !k.fix || daftar.some((i) => !instrukturLengkap(i)),
+          catatan: `${daftar.length} instruktur, ${jam} jam. Tarif honor instruktur mengikuti ketentuan yang berlaku (belum ada pada lembar kebijakan); honor instruktur internal BPS memakai akun yang sama sementara (cek aturan).`,
+        });
+      }
+    } else if (sesiForm?.pengajar) out.push({ kelompok: "Honor", uraian: `${nama}: honor pengajar atau narasumber eksternal`, akun: "522151", volume: null, satuan: "jam", tarif: null, jumlah: null, perk: !k.fix, catatan: "Jumlah jam dan tarif mengikuti ketentuan honor yang berlaku." });
   }
 
   const trLebih = angkaKeb(lembar, "uang_harian");

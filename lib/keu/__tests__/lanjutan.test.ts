@@ -8,8 +8,8 @@ import vektor from "./lanjutan.vektor.json";
 import { awalForm, normalisasi, type Form } from "../identifikasi";
 import { isiPredefined } from "../kebijakan";
 import {
-  ID_LJ, KODE_PERAN, alasanDraf, awalLanjutan, hariKelas, idBaru, jadwalPendataan, jumlahPetugas, jumlahRincian, normalisasiLanjutan, periksaLanjutan,
-  pesertaKelas, peringatanLanjutan, rincianBiaya, statusLanjutan, tglValid, tujuanLanjutan, type IsiLanjutan,
+  ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, alasanDraf, awalLanjutan, hariKelas, idBaru, jadwalPendataan, jumlahPetugas, jumlahRincian, normalisasiLanjutan, periksaLanjutan,
+  pesertaKelas, peringatanLanjutan, instrukturLengkap, rincianBiaya, statusLanjutan, tglValid, tujuanLanjutan, type IsiLanjutan,
 } from "../lanjutan";
 
 type Op = { op: "set" | "del" | "tambah" | "ganti"; path?: (string | number)[]; value?: unknown };
@@ -267,5 +267,76 @@ describe("jadwal pendataan untuk surat", () => {
     expect(j[0]).toEqual({ periode: "Triwulan I", mulai: "2026-03-10", selesai: "2026-03-20" });
     expect(j[1].periode).toBe("Triwulan II");
     expect(j[1].mulai).toMatch(/^2026-06-/);
+  });
+});
+
+describe("instruktur kelas (28 Okt 2026)", () => {
+  const formIns = (): Form => { const f = formUji(); f.sesi.pelatihan.pengajar = true; f.sesi.pelatihan.instr = { jumlah: 2, level: "Inda", asal: "Eksternal", jam: 8, perk: true }; return f; };
+  it("isi awal: kelas pelatihan membawa instruktur dari identifikasi (nama kosong), briefing tidak", () => {
+    const a = awalLanjutan(formIns(), 2026);
+    const pel = a.kelas.filter((k) => k.sesi === "pelatihan");
+    expect(pel.length).toBeGreaterThan(0);
+    for (const k of pel) expect(k.instruktur).toEqual([{ nama: "", level: "Inda", asal: "Eksternal", jam: 4 }, { nama: "", level: "Inda", asal: "Eksternal", jam: 4 }]);
+    for (const k of a.kelas.filter((x) => x.sesi === "briefing")) expect(k.instruktur).toEqual([]);
+    expect(periksaLanjutan(a)).toEqual([]);
+    expect(statusLanjutan(a)).toBe("draf");
+  });
+  it("isi awal: jam total kelas dibagi rata antar instruktur, sisa ke yang pertama", () => {
+    const f = formIns(); f.sesi.pelatihan.instr = { jumlah: 3, level: "Innas", asal: "Internal BPS", jam: 8, perk: true };
+    const k = awalLanjutan(f, 2026).kelas.find((x) => x.sesi === "pelatihan")!;
+    expect(k.instruktur!.map((y) => y.jam)).toEqual([3, 3, 2]);
+    expect(k.instruktur!.reduce((t, y) => t + y.jam, 0)).toBe(8);
+  });
+  it("tanpa pengajar atau jumlah 0: daftar kosong; jumlah dibatasi 20", () => {
+    expect(awalLanjutan(formUji(), 2026).kelas.every((k) => (k.instruktur ?? []).length === 0)).toBe(true);
+    const f = formIns(); f.sesi.pelatihan.instr.jumlah = 50;
+    expect(awalLanjutan(f, 2026).kelas.find((k) => k.sesi === "pelatihan")!.instruktur).toHaveLength(MAKS_INSTRUKTUR);
+  });
+  it("normalisasi: isi lama tanpa kunci menjadi daftar kosong; nilai tak dikenal dibersihkan", () => {
+    const lama = salin(vektor.base) as unknown as Record<string, unknown>;
+    delete (lama.kelas as Record<string, unknown>[])[0].instruktur;
+    expect(normalisasiLanjutan(lama).kelas[0].instruktur).toEqual([]);
+    const kotor = salin(vektor.base) as unknown as { kelas: Record<string, unknown>[] };
+    kotor.kelas[0].instruktur = [{ nama: "Ani", level: "Nasional", asal: "Swasta", jam: 9999 }, 7, { nama: 3, level: "Innas", asal: "Internal BPS", jam: 2.5 }];
+    expect(normalisasiLanjutan(kotor).kelas[0].instruktur).toEqual([{ nama: "Ani", level: "", asal: "", jam: 500 }, { nama: "", level: "Innas", asal: "Internal BPS", jam: 2 }]);
+  });
+  it("instrukturLengkap", () => {
+    expect(instrukturLengkap({ nama: "Budi", level: "Inda", asal: "Eksternal", jam: 1 })).toBe(true);
+    expect(instrukturLengkap({ nama: " ", level: "Inda", asal: "Eksternal", jam: 1 })).toBe(false);
+    expect(instrukturLengkap({ nama: "Budi", level: "", asal: "Eksternal", jam: 1 })).toBe(false);
+    expect(instrukturLengkap({ nama: "Budi", level: "Inda", asal: "", jam: 1 })).toBe(false);
+    expect(instrukturLengkap({ nama: "Budi", level: "Inda", asal: "Eksternal", jam: 0 })).toBe(false);
+  });
+  it("rincian biaya: honor per level dan asal; jam dijumlahkan; tarif belum ada", () => {
+    const i = salin(vektor.base) as IsiLanjutan;
+    i.kelas[0].instruktur = [
+      { nama: "Budi", level: "Inda", asal: "Eksternal", jam: 8 }, { nama: "Sari", level: "Inda", asal: "Eksternal", jam: 4 },
+      { nama: "Eko", level: "Innas", asal: "Internal BPS", jam: 6 },
+    ];
+    const honor = rincianBiaya(i, null, isiPredefined()).filter((b) => b.kelompok === "Honor");
+    expect(honor).toHaveLength(2);
+    const inda = honor.find((b) => b.uraian.includes("Inda"))!;
+    expect(inda).toMatchObject({ volume: 12, satuan: "jam", akun: "522151", tarif: null, jumlah: null, perk: false });
+    expect(inda.uraian).toBe("Pelatihan Triwulan I: honor instruktur Inda, Eksternal");
+    expect(inda.catatan).toContain("2 instruktur, 12 jam");
+    expect(honor.find((b) => b.uraian.includes("Innas"))).toMatchObject({ volume: 6, perk: false });
+    i.kelas[0].instruktur![2].nama = "";
+    expect(rincianBiaya(i, null, isiPredefined()).find((b) => b.uraian.includes("Innas"))!.perk).toBe(true);
+  });
+  it("rincian biaya: tanpa daftar instruktur tetap memakai baris honor umum bila identifikasi memuat pengajar", () => {
+    const i = salin(vektor.base) as IsiLanjutan; i.kelas[0].instruktur = [];
+    const f = formIns();
+    const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.kelompok === "Honor");
+    expect(honor).toHaveLength(1);
+    expect(honor[0].uraian).toContain("honor pengajar atau narasumber eksternal");
+  });
+  it("peringatan: belum diisi pada kelas, dan instruktur belum lengkap", () => {
+    const f = formIns();
+    const i = salin(vektor.base) as IsiLanjutan; i.kelas[0].instruktur = [];
+    expect(peringatanLanjutan(i, { lembar: null, dasarUsang: false, form: f }).some((w) => w.includes("identifikasi awal memuat instruktur"))).toBe(true);
+    i.kelas[0].instruktur = [{ nama: "", level: "Inda", asal: "Eksternal", jam: 8 }, { nama: "Sari", level: "Inda", asal: "Eksternal", jam: 4 }];
+    const w = peringatanLanjutan(i, { lembar: null, dasarUsang: false, form: f });
+    expect(w.some((x) => x.includes("1 instruktur belum lengkap"))).toBe(true);
+    expect(w.some((x) => x.includes("identifikasi awal memuat instruktur"))).toBe(false);
   });
 });

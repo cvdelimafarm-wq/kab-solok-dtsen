@@ -137,3 +137,23 @@ describe("tautkan", () => {
     expect(r).toEqual({ cocok: 1, perlu_nama: 0, belum_ada: 1, belumDipilih: 1 });
   });
 });
+
+describe("honor instruktur: RAB = jumlah kelas x jam, POK = total jam (28 Okt 2026)", () => {
+  const honor = (periode: string, vol: number): BarisRincian => ({ ...dasar, tarif: null, kelompok: "Honor", uraian: `Pelatihan ${periode}: honor instruktur Inda, Eksternal`, akun: "522151", volume: vol, satuan: "jam" });
+  it("gabung: baris kelas dijumlahkan menjadi satu baris dengan rumus kelas x jam", () => {
+    const r = rincianSurvei([honor("Maret", 8), honor("September", 8)], jad, "gabung");
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ uraian: "Pelatihan: honor instruktur Inda, Eksternal", volume: 16, satuan: "jam", catatan: "2 kelas × 8 jam = 16 jam" });
+  });
+  it("gabung dengan jam tiap kelas berbeda: total dan rincian jam", () => {
+    const r = rincianSurvei([honor("Maret", 8), honor("September", 6)], jad, "gabung");
+    expect(r[0]).toMatchObject({ volume: 14, catatan: "2 kelas, total 14 jam (jam tiap kelas: 8, 6)" });
+  });
+  it("per periode: tetap satu baris per kelas", () => {
+    const r = rincianSurvei([honor("Maret", 8), honor("September", 8)], jad, "periode");
+    expect(r.map((x) => x.volume)).toEqual([8, 8]);
+  });
+  it("satu kelas saja: tanpa rumus", () => {
+    expect(rincianSurvei([honor("Maret", 8)], jad, "gabung")[0].catatan).toBe("");
+  });
+});
