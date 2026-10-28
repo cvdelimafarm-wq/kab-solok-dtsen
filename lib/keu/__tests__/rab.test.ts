@@ -113,3 +113,24 @@ describe("periksaAlasanVersi", () => {
     expect(periksaAlasanVersi("x".repeat(501))).toContain("terlalu panjang");
   });
 });
+
+import { dariIdent, dataBarisIdent, diubahDariIdent, type PenandaIdent } from "../rab";
+describe("penanda RAB per survei", () => {
+  const f = { ...barisKosong("orang", 3), ket: "Translok PPL Maret", volume: "6", harga: "170000" };
+  const p: PenandaIdent = { ident_id: 6, ident_ver: 2, ident_kunci: "524113|Translok PPL (kurang dari 8 jam)", ident_vol: 6, ident_harga: 170000 };
+  it("dataBarisIdent = dataBaris + penanda", () => {
+    expect(dataBarisIdent(f, p)).toEqual({ ...dataBaris(f), ...p });
+    expect(dataBaris(f)).not.toHaveProperty("ident_id");
+  });
+  it("dariIdent dan diubahDariIdent", () => {
+    const sama = { volume: "6", harga_satuan: 170000, ident_kunci: p.ident_kunci, ident_vol: 6, ident_harga: 170000 };
+    expect(dariIdent(sama)).toBe(true);
+    expect(diubahDariIdent(sama)).toBe(false);
+    expect(diubahDariIdent({ ...sama, volume: 5 })).toBe(true);
+    expect(diubahDariIdent({ ...sama, harga_satuan: "160000" })).toBe(true);
+    expect(diubahDariIdent({ ...sama, volume: "6.00" })).toBe(false);
+    expect(dariIdent({ ident_kunci: null })).toBe(false);
+    expect(diubahDariIdent({ volume: 1, harga_satuan: 2, ident_kunci: null, ident_vol: null, ident_harga: null })).toBe(false);
+    expect(diubahDariIdent({ volume: 1, harga_satuan: 2, ident_kunci: "x", ident_vol: null, ident_harga: null })).toBe(false);
+  });
+});

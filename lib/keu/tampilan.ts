@@ -91,7 +91,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_pok_banding_rinci: ["unggah_id", "status", "baris_id", "detail_id", "ro_kode", "komp_kode", "akun_kode", "uraian_lama", "uraian_baru", "vol_lama", "vol_baru", "harga_lama", "harga_baru", "jumlah_lama", "jumlah_baru", "selisih", "di_luar_usulan", "jadwal_id", "kunci", "kunci_padan", "jumlah_usulan", "sesuai_usulan", "tanda", "tanda_catatan", "otomatis"],
   keu_v_pok_unggah_keputusan: ["unggah_id", "n_otomatis", "n_menunggu", "n_pakai", "n_ditanyakan", "n_di_luar_usulan"],
   keu_v_pok_unggah_ringkas: ["unggah_id", "tahun", "nomor_revisi", "status", "n_baris", "total_unggah", "total_berlaku", "n_sama", "n_berubah", "n_dipadankan", "n_baru", "n_hilang", "n_di_luar_usulan", "n_ro_tak_terdaftar"],
-  keu_v_rab_baris: ["baris_id", "item_id", "rab_id", "pok_kunci", "urut", "ket", "volume", "satuan", "harga_satuan", "jumlah", "jumlah_dikunci", "sama_dengan_item", "catatan", "tautan", "periode", "bulan_mulai", "bulan_sampai", "minggu", "manual"],
+  keu_v_rab_baris: ["baris_id", "item_id", "rab_id", "pok_kunci", "urut", "ket", "volume", "satuan", "harga_satuan", "jumlah", "jumlah_dikunci", "sama_dengan_item", "catatan", "tautan", "periode", "bulan_mulai", "bulan_sampai", "minggu", "manual", "ident_id", "ident_ver", "ident_kunci", "ident_vol", "ident_harga"],
   keu_v_rab_jejak: ["id", "rab_id", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"],
   keu_v_usulan_jejak: ["id", "usulan_id", "jadwal_id", "ro_kode", "aksi", "dari", "ke", "oleh_nama", "catatan", "waktu"],
   keu_v_rab_item: ["item_id", "rab_id", "pok_kunci", "baru", "komponen_kode", "akun_kode", "akun_menjadi", "uraian", "prioritas_kode", "selesai", "jumlah_rincian", "volume_total", "jumlah_rab", "status"],

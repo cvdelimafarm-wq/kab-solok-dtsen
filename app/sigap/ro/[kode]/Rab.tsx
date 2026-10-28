@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import {
-  aksiTersedia, AKSI_BUTUH_CATATAN, barisKosong, bisaDiubah, bolehSusunBaru, dataBaris, dataItemRab, dataSamaDenganItem, itemRabYatim, jumlahBaris,
+  aksiTersedia, AKSI_BUTUH_CATATAN, barisKosong, bisaDiubah, bolehSusunBaru, dariIdent, dataBaris, dataItemRab, dataSamaDenganItem, diubahDariIdent, itemRabYatim, jumlahBaris,
   LABEL_AKSI, LABEL_PERIODE, LABEL_STATUS_RAB, NAMA_BULAN, periksaBaris, periksaCatatanAksi, petakanRab, type AksiRab, type BarisRabRow, type HakRab,
   type IsianBaris, type PemetaanItem, type Periode,
 } from "@/lib/keu/rab";
@@ -18,6 +18,7 @@ import { angka, rupiah } from "@/lib/keu/ro";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, tombol } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useAnggaranRo, useBoleh, useKirim, useRabRo } from "../useKeu";
+import { RabPerSurvei } from "./RabPerSurvei";
 import { UsulanIdentifikasi } from "./UsulanIdentifikasi";
 
 const WARNA_STATUS: Record<string, WarnaChip> = { draf: "abu", dikembalikan: "merah", menunggu_ketua: "kuning", menunggu_ppk: "kuning", disetujui: "hijau" };
@@ -196,6 +197,7 @@ function KartuItem({ p, ctx }: { p: PemetaanItem; ctx: Ctx }) {
               ) : (
                 <>
                   <p className="break-words font-bold text-[#0F2A52]">{b.ket || "Rincian"} · {rupiah(b.jumlah)}</p>
+                  {dariIdent(b) && <p className="text-[11.5px] font-semibold text-[#1F4EA8]">Dari identifikasi{diubahDariIdent(b) ? " · diubah dari identifikasi" : ""}</p>}
                   <p>{angka(Number(b.volume))} {b.satuan}{b.sama_dengan_item ? "" : ` × ${angka(Number(b.harga_satuan))}`} · {ringkasJadwal(b)}</p>
                   {bisa && mode === null && hapusId === b.baris_id && (
                     <div className="mt-1.5 space-y-1.5 rounded-md bg-[#FDE8E8] px-2.5 py-2">
@@ -292,6 +294,7 @@ export function TabRab({ kode }: { kode: string }) {
   const sahTerbaru = useMemo(() => rab.riwayatRab.filter((r) => r.status === "disetujui").sort((a, b) => Number(b.nomor) - Number(a.nomor))[0] ?? null, [rab.riwayatRab]);
   const susun = useKirim(rab.muatSemua);
   const [alasanVersi, setAlasanVersi] = useState("");
+  const [tampil, setTampil] = useState<"standar" | "survei">("standar");
 
   const galat = rab.galat ?? ang.galat;
   if (galat) return <Galat pesan={galat} />;
@@ -344,8 +347,18 @@ export function TabRab({ kode }: { kode: string }) {
       {rab.rab && (
         <>
           {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
-          <UsulanIdentifikasi kode={kode} rabId={ctx.rabId} peta={peta} muat={rab.muatSemua} editable={editable} />
-          <ul className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
+          <div role="group" aria-label="Tampilan RAB" className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={tampil === "standar"} onClick={() => setTampil("standar")} className={`${tombol} ${tampil === "standar" ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>RAB standar</button>
+            <button type="button" aria-pressed={tampil === "survei"} onClick={() => setTampil("survei")} className={`${tombol} ${tampil === "survei" ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>RAB per survei</button>
+          </div>
+          {tampil === "survei" ? (
+            <RabPerSurvei kode={kode} rabId={ctx.rabId} editable={editable} peta={peta} itemRab={rab.itemRab} barisRab={rab.barisRab} muat={rab.muatSemua} />
+          ) : (
+            <>
+              <UsulanIdentifikasi kode={kode} rabId={ctx.rabId} peta={peta} muat={rab.muatSemua} editable={editable} />
+              <ul className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">{peta.map((p) => <KartuItem key={p.pok.detail_id} p={p} ctx={ctx} />)}</ul>
+            </>
+          )}
           {rab.jejak.length > 0 && (
             <details className={kartu}>
               <summary className="min-h-[40px] cursor-pointer list-none text-[13px] font-semibold text-[#0F2A52]">Jejak RAB ({rab.jejak.length})</summary>

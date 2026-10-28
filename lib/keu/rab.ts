@@ -87,6 +87,24 @@ export function dataBaris(f: IsianBaris): Record<string, unknown> {
   };
 }
 
+// ---------------------------------------------------------------- Penanda RAB per survei (28 Okt 2026)
+/** Penanda yang ditulis bersama baris RAB yang berasal dari rincian identifikasi. `ident_vol` dan `ident_harga` = SARAN identifikasi saat disalin (null bila identifikasi belum punya angka). */
+export type PenandaIdent = { ident_id: number; ident_ver: number; ident_kunci: string; ident_vol: number | null; ident_harga: number | null };
+
+/** Data keu_tulis untuk baris RAB dari rincian identifikasi: isian biasa ditambah penanda. */
+export function dataBarisIdent(f: IsianBaris, p: PenandaIdent): Record<string, unknown> {
+  return { ...dataBaris(f), ident_id: p.ident_id, ident_ver: p.ident_ver, ident_kunci: p.ident_kunci, ident_vol: p.ident_vol, ident_harga: p.ident_harga };
+}
+
+type BarisIdent = Pick<BarisRabRow, "volume" | "harga_satuan" | "ident_kunci" | "ident_vol" | "ident_harga">;
+/** Baris berasal dari identifikasi (bertanda). */
+export const dariIdent = (b: Pick<BarisRabRow, "ident_kunci">): boolean => typeof b.ident_kunci === "string" && b.ident_kunci !== "";
+/** Penanda "diubah dari identifikasi": baris bertanda yang volume atau harganya kini berbeda dari saran saat disalin. */
+export function diubahDariIdent(b: BarisIdent): boolean {
+  if (!dariIdent(b) || b.ident_vol === null || b.ident_vol === undefined || b.ident_harga === null || b.ident_harga === undefined) return false;
+  return Math.abs(Number(b.volume) - Number(b.ident_vol)) > 0.004 || Math.abs(Number(b.harga_satuan) - Number(b.ident_harga)) > 0.004;
+}
+
 /** "RAB = item": satu rincian yang menyamai pagu POK (jumlah dikunci ke jumlah POK, bukan volume x harga yang dibulatkan). */
 export function dataSamaDenganItem(itemId: number, item: Pick<ItemAnggaran, "volume" | "satuan" | "pok">, bulan: number, minggu: number): Record<string, unknown> {
   const vol = item.volume > 0 ? item.volume : 1;
@@ -102,7 +120,9 @@ export function dataItemRab(rabId: number, item: Pick<ItemAnggaran, "kunci" | "k
 
 // ---------------------------------------------------------------- Pemetaan POK <-> RAB
 export type ItemRabRow = { id: number; pok_kunci: string | null; selesai: boolean; prioritas_kode: string | null; akun_tujuan?: string | null };
-export type BarisRabRow = { baris_id: number; item_id: number; urut: number; ket: string; volume: number | string; satuan: string; harga_satuan: number | string; jumlah: number | string; jumlah_dikunci: boolean; sama_dengan_item: boolean; periode: Periode; bulan_mulai: number; bulan_sampai: number; minggu: number };
+export type BarisRabRow = { baris_id: number; item_id: number; urut: number; ket: string; volume: number | string; satuan: string; harga_satuan: number | string; jumlah: number | string; jumlah_dikunci: boolean; sama_dengan_item: boolean; periode: Periode; bulan_mulai: number; bulan_sampai: number; minggu: number;
+  /** Penanda RAB per survei (20261028f); kosong pada baris RAB biasa. */
+  ident_id?: number | null; ident_ver?: number | null; ident_kunci?: string | null; ident_vol?: number | string | null; ident_harga?: number | string | null };
 
 export type PemetaanItem = { pok: ItemAnggaran; rab: ItemRabRow | null; baris: BarisRabRow[]; jumlahRab: number; selisih: number | null; status: "belum" | "sama" | "rinci" | "selesai" };
 
