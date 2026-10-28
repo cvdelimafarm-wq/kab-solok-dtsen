@@ -6,6 +6,21 @@
 //  - ringkasan (petugas, hari, nominal) dan nama berkas keluaran.
 import { kelompokTanggal } from "@/lib/sigap";
 
+// Jenis dokumen SPJ (definisi di sini supaya layar admin tidak menarik lib/sigapDokumen.ts yang memuat modul server seperti sharp; sigapDokumen mengekspor ulang).
+export type JenisDok = "surat_tugas" | "kwitansi" | "visum" | "laporan" | "dokumentasi" | "surat_pernyataan";
+
+/** Urutan baku di PDF gabungan (per kelompok: kwitansi, visum, surat pernyataan, lalu laporan & dokumentasi per hari). */
+export const URUTAN_JENIS: JenisDok[] = ["surat_tugas", "kwitansi", "visum", "surat_pernyataan", "laporan", "dokumentasi"];
+
+export const LABEL_JENIS: Record<JenisDok, string> = {
+  surat_tugas: "Surat Tugas",
+  kwitansi: "Kwitansi",
+  visum: "Visum",
+  surat_pernyataan: "Surat Pernyataan Kendaraan Dinas",
+  laporan: "Laporan",
+  dokumentasi: "Dokumentasi",
+};
+
 export type FilterPeran = "semua" | "korwil" | "pml" | "ppl";
 export type UrutCetak = "tim" | "abjad";
 export type FormatCetak = "pdf" | "zip";

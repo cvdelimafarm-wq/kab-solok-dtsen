@@ -33,24 +33,13 @@ import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
 import { buatPdfLaporanSigap } from "@/lib/pdf/sigap/laporan";
 import { buatPdfDokumentasiSigap, type SigapFotoInput } from "@/lib/pdf/sigap/dokumentasi";
 import { buatZip } from "@/lib/pdf/sigap/zip";
-import { kelompokRentang, rentangValid } from "@/lib/sigapSpjCetak";
+import { kelompokRentang, rentangValid, URUTAN_JENIS, LABEL_JENIS, type JenisDok } from "@/lib/sigapSpjCetak";
 import { judulKecamatan } from "@/lib/pdf/sigap/format";
 import { satuanLaporan, satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 
 // ----------------------------------------------------------------------------------------------
-export type JenisDok = "surat_tugas" | "kwitansi" | "visum" | "laporan" | "dokumentasi" | "surat_pernyataan";
-
-/** Urutan baku di PDF gabungan (per kelompok: kwitansi, visum, surat pernyataan, lalu laporan & dokumentasi per hari). */
-export const URUTAN_JENIS: JenisDok[] = ["surat_tugas", "kwitansi", "visum", "surat_pernyataan", "laporan", "dokumentasi"];
-
-export const LABEL_JENIS: Record<JenisDok, string> = {
-  surat_tugas: "Surat Tugas",
-  kwitansi: "Kwitansi",
-  visum: "Visum",
-  surat_pernyataan: "Surat Pernyataan Kendaraan Dinas",
-  laporan: "Laporan",
-  dokumentasi: "Dokumentasi",
-};
+export { URUTAN_JENIS, LABEL_JENIS };
+export type { JenisDok };
 
 /** Jenis yg dibekukan ke sigap_dokumen_final (Surat Tugas tidak: itu file unggahan admin). */
 const JENIS_BEKU: Exclude<JenisDok, "surat_tugas">[] = ["kwitansi", "visum", "surat_pernyataan", "laporan", "dokumentasi"];

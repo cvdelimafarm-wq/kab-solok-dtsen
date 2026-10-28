@@ -13,6 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ambil, ambilBlob, pesanGalat, rupiah, SesiBerakhir } from "./api";
 import { bagiBatch, ringkasanMassal, unikanNama, MAKS_PER_ZIP, type HasilMassal } from "@/lib/sigapUnduhMassal";
 import {
+  LABEL_JENIS,
+  URUTAN_JENIS,
+  type JenisDok,
   MAKS_PER_PDF,
   PILIHAN_PERAN,
   dibayarDalamRentang,
@@ -28,7 +31,6 @@ import {
   type PetugasCetak,
   type UrutCetak,
 } from "@/lib/sigapSpjCetak";
-import { LABEL_JENIS, URUTAN_JENIS, type JenisDok } from "@/lib/sigapDokumen";
 import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 
 type Baris = PetugasCetak & { dikunci_at: string | null };
