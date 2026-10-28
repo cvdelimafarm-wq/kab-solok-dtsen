@@ -22,6 +22,7 @@
 
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
 import sharp from "sharp";
+import { tataFotoDokumentasi, type FotoUkur } from "../sigapTataFoto";
 import { formatTanggalIndoDenganHari } from "../spjFormat";
 import { KEGIATAN_NAMA } from "../spjPejabat";
 import { SLOT_LABELS } from "../spjDokumentasi";
@@ -95,14 +96,14 @@ export interface DokumentasiPdfData {
 const MM = 2.834645669;
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
-const MARGIN_X = 20 * MM; // 56.69
-const CONTENT_W = PAGE_W - MARGIN_X * 2; // 481.89
+const MARGIN_X = 10 * MM; // 28.35 (28 Okt 2026: margin 1 cm, memperbesar foto)
+const CONTENT_W = PAGE_W - MARGIN_X * 2; // 538.58
 const CONTENT_L = MARGIN_X;
 const CONTENT_R = PAGE_W - MARGIN_X;
 const CONTENT_MID = MARGIN_X + CONTENT_W / 2;
 
-const BUDGET_TOP = 19 * MM; // 53.86
-const BUDGET_BOTTOM = PAGE_H - 19 * MM; // 788.03
+const BUDGET_TOP = 14 * MM; // 39.69 (sebelumnya 19 mm)
+const BUDGET_BOTTOM = PAGE_H - 38.27 - 6; // 797.62: 6 pt di atas garis footer (sebelumnya 19 mm dari bawah)
 
 function warna(hex: string): RGB {
   const n = parseInt(hex.slice(1), 16);
@@ -118,21 +119,22 @@ const SOFT_BG = warna("#F4F7FA");
 const HEADER_BAR_H = 7 * MM;
 const HEADER_STRIP_H = 1.2 * MM;
 const GAP_SUBTITLE_TO_GRID = 10.25;
-const GRID_ROW_H = 39.5;
-const GRID_LABEL_OFFSET = 9.0;
-const GRID_VALUE_OFFSET = 21.5;
+const GRID_ROW_H = 35.0;
+const GRID_LABEL_OFFSET = 8.0;
+const GRID_VALUE_OFFSET = 20.0;
 const GRID_VALUE_LEADING = 13.0;
 const GRID_PAD_X = 12.0; // padding kiri-kanan sel identitas (sesuai spesifikasi user: 12pt)
-const GAP_GRID_TO_SECTION = 14.0;
+const GAP_GRID_TO_SECTION = 10.0;
 const SECTION_BOX_W = 3 * MM;
 const SECTION_BOX_H = 16.0;
 const SECTION_TITLE_GAP_X = 7.0;
 const SECTION_TITLE_TEXT_OFFSET = 4.0;
-const GAP_SECTIONTITLE_TO_GRIDFOTO = 8.0;
+const GAP_SECTIONTITLE_TO_GRIDFOTO = 6.0;
 
-const CARD_GAP = 5 * MM;
-const CARD_HEADER_H = 23.0;
-const PAD_FOTO = 3 * MM;
+const CARD_GAP = 3.0; // jarak antarkartu (sebelumnya 5 mm)
+const LEBAR_FOTO_MIN = 70; // lebar foto minimum (pt) supaya keterangan kartu masih terbaca
+const CARD_HEADER_H = 18.0;
+const PAD_FOTO = 3.0;
 
 const FOOTER_LINE_DARI_BAWAH = 38.27;
 const FOOTER_TEXT_DARI_BAWAH = 31.9;
@@ -153,13 +155,6 @@ function bungkusTeks(f: PDFFont, txt: string, size: number, maxWidth: number): s
   }
   if (sekarang) baris.push(sekarang);
   return baris.length > 0 ? baris : [""];
-}
-
-/** 1-2 foto -> 2 kolom, 3-6 -> 3 kolom, >6 -> 4 kolom (sesuai spesifikasi user). */
-function jumlahKolom(n: number): number {
-  if (n <= 2) return 2;
-  if (n <= 6) return 3;
-  return 4;
 }
 
 export async function buatPdfDokumentasi(data: DokumentasiPdfData): Promise<Uint8Array> {
@@ -277,129 +272,93 @@ export async function buatPdfDokumentasi(data: DokumentasiPdfData): Promise<Uint
     return doc.save();
   }
 
-  const numKolom = jumlahKolom(urut.length);
-  const numBaris = Math.ceil(urut.length / numKolom);
-  const cardW = (CONTENT_W - (numKolom - 1) * CARD_GAP) / numKolom;
-  const availableH = BUDGET_BOTTOM - y;
-  // rowHMaks = ANGGARAN MAKSIMUM per baris (dipakai sbg batas atas skala
-  // foto sesuai spesifikasi user), BUKAN tinggi kartu final. Tinggi kartu
-  // sebenarnya menyesuaikan tinggi foto (setelah discaling) TERTINGGI pd
-  // baris itu -- kalau kartu diregangkan penuh ke rowHMaks, kasus baris
-  // tunggal (mis. 1-2 foto) menghasilkan kartu raksasa nyaris kosong krn
-  // skala foto biasanya dibatasi LEBAR (potret), bukan tinggi. Pendekatan
-  // ini jg cocok dgn PDF acuan: tinggi kartu terukur di sana (232,42pt)
-  // LEBIH KECIL drpd anggaran penuh, dgn sisa ruang dibiarkan kosong sblm
-  // footer (grid rata-atas, tidak diregangkan/dipusatkan vertikal).
-  const rowHMaks = (availableH - (numBaris - 1) * CARD_GAP) / numBaris;
-  const photoAreaW = cardW - PAD_FOTO * 2;
-  const photoAreaHNetMaks = rowHMaks - CARD_HEADER_H - PAD_FOTO * 2;
-
-  interface KartuSiap {
-    item: DokumentasiFotoInput;
-    img: PDFImage | null;
-    w: number;
-    h: number;
-  }
-
-  // Tahap 1: embed semua gambar dulu (perlu dimensi asli utk menghitung
-  // skala & tinggi AKTUAL tiap baris) sebelum menggambar apa pun.
-  const semuaBaris: KartuSiap[][] = [];
-  for (let b = 0; b < numBaris; b++) {
-    const dariIdx = b * numKolom;
-    const kartuBaris = urut.slice(dariIdx, dariIdx + numKolom);
-    const siap: KartuSiap[] = [];
-    for (const item of kartuBaris) {
-      let img: PDFImage | null;
-      try {
-        const bytesTegak = await perbaikiOrientasiFoto(item.bytes, item.contentType);
-        img = item.contentType === "image/png" ? await doc.embedPng(bytesTegak) : await doc.embedJpg(bytesTegak);
-      } catch {
-        // Gagal embed (file korup/format tak terduga) -- lewati fotonya,
-        // biarkan kartu & keterangannya tetap tampil kosong drpd seluruh
-        // PDF gagal dibuat.
-        img = null;
-      }
-      if (img) {
-        // Rasio asli DIPERTAHANKAN (tidak dipotong/di-stretch) -- ambil
-        // skala terkecil dari batas lebar & batas tinggi maksimum (spek user).
-        const skala = Math.min(photoAreaW / img.width, photoAreaHNetMaks / img.height);
-        siap.push({ item, img, w: img.width * skala, h: img.height * skala });
-      } else {
-        siap.push({ item, img: null, w: 0, h: 0 });
-      }
+  // (28 Okt 2026) Susunan foto 2-1-2 (lib/sigapTataFoto.ts): baris 1 = foto 1|2, baris 2 = foto 3 (pusat perhatian),
+  // baris 3 = foto 4|5. Foto 3 terbesar, foto 2 dan 4 tidak dikecilkan di bawah ambang, rasio asli dipertahankan
+  // (tidak dipotong -- cap tanggal dan QR di tepi bawah foto tetap utuh). Margin 1 cm, jarak antarkartu 3 pt.
+  // Nomor di kartu = nomor slot. Satu foto per slot (unik di DB); slot di luar 1..5 diabaikan.
+  const siap = new Map<number, { item: DokumentasiFotoInput; img: PDFImage | null }>();
+  for (const item of urut) {
+    if (siap.has(item.slot) || item.slot < 1 || item.slot > 5) continue;
+    let img: PDFImage | null;
+    try {
+      const bytesTegak = await perbaikiOrientasiFoto(item.bytes, item.contentType);
+      img = item.contentType === "image/png" ? await doc.embedPng(bytesTegak) : await doc.embedJpg(bytesTegak);
+    } catch {
+      // Gagal embed (file korup/format tak terduga) -- kartu & keterangannya tetap tampil kosong drpd seluruh PDF gagal.
+      img = null;
     }
-    semuaBaris.push(siap);
+    siap.set(item.slot, { item, img });
   }
-
-  // Tahap 2: gambar tiap baris dgn tinggi kartu = tinggi konten (foto
-  // tertinggi pd baris itu), bukan anggaran maksimum.
-  let cardTop = y;
-  semuaBaris.forEach((baris, b) => {
-    const tinggiFotoBaris = Math.max(...baris.map((k) => k.h), 0);
-    const rowH = CARD_HEADER_H + PAD_FOTO * 2 + tinggiFotoBaris;
-    const kIni = baris.length;
-    // baris terakhir yg tak penuh dirata-tengah sbg satu kelompok, LEBAR
-    // kartu tetap sama dgn baris lain (bukan diregangkan mengisi lebar).
-    const lebarKelompok = kIni * cardW + (kIni - 1) * CARD_GAP;
-    const offsetX = CONTENT_L + (CONTENT_W - lebarKelompok) / 2;
-    const dariIdx = b * numKolom;
-
-    baris.forEach((k, idx) => {
-      const x = offsetX + idx * (cardW + CARD_GAP);
-      const nomorTampil = dariIdx + idx + 1;
-      const labelTxt = SLOT_LABELS[k.item.slot] ?? `Foto ${k.item.slot}`;
-
-      // Outline kartu penuh + header berlatar lembut.
-      kotak(x, cardTop, cardW, rowH, { border: LINE, borderWidth: 0.6 });
-      kotak(x, cardTop, cardW, CARD_HEADER_H, { fill: SOFT_BG, border: LINE, borderWidth: 0.6 });
-      garisH(x, x + cardW, cardTop, NAVY, 2); // aksen garis atas navy 2pt
-
-      // Ukuran font keterangan MENGECIL OTOMATIS kalau "N  Label" tidak
-      // muat dlm 1 baris pd lebar kartu (jaga-jaga utk keterangan yg lebih
-      // panjang drpd 5 label baku saat ini, spy tak pernah tumpah ke
-      // kartu sebelah) -- label baku saat ini selalu muat pd 9,5pt.
-      const nomorTxt = `${nomorTampil}`;
-      const lebarMaksHeader = cardW - 10;
-      let ukuranHeader = 9.5;
-      while (
-        ukuranHeader > 6.5 &&
-        fontBold.widthOfTextAtSize(`${nomorTxt}  ${labelTxt}`, ukuranHeader) > lebarMaksHeader
-      ) {
-        ukuranHeader -= 0.5;
-      }
-      // Kalau pd batas bawah 6,5pt teks MASIH tidak muat (keterangan sangat
-      // panjang, jauh melebihi 5 label baku saat ini), potong dgn elipsis
-      // supaya tidak PERNAH tumpah ke kartu sebelah -- pengaman terakhir
-      // stlh pengecilan font gagal mencukupi.
-      let labelTampil = labelTxt;
-      const spasiW0 = fontBold.widthOfTextAtSize("  ", ukuranHeader);
-      const nomorW0 = fontBold.widthOfTextAtSize(nomorTxt, ukuranHeader);
-      const lebarLabelMaks = lebarMaksHeader - nomorW0 - spasiW0;
-      if (fontBold.widthOfTextAtSize(labelTampil, ukuranHeader) > lebarLabelMaks) {
-        while (labelTampil.length > 1 && fontBold.widthOfTextAtSize(`${labelTampil}...`, ukuranHeader) > lebarLabelMaks) {
-          labelTampil = labelTampil.slice(0, -1);
-        }
-        labelTampil = `${labelTampil.trimEnd()}...`;
-      }
-      const spasiW = fontBold.widthOfTextAtSize("  ", ukuranHeader);
-      const nomorW = fontBold.widthOfTextAtSize(nomorTxt, ukuranHeader);
-      const labelW = fontBold.widthOfTextAtSize(labelTampil, ukuranHeader);
-      const totalW = nomorW + spasiW + labelW;
-      const startX = x + (cardW - totalW) / 2;
-      const headerTextYAtas = cardTop + (CARD_HEADER_H - ukuranHeader) / 2 + 1.5;
-      teks(nomorTxt, startX, headerTextYAtas, ukuranHeader, { bold: true, color: ORANGE });
-      teks(labelTampil, startX + nomorW + spasiW, headerTextYAtas, ukuranHeader, { bold: true, color: NAVY });
-
-      if (k.img) {
-        const areaTopAtas = cardTop + CARD_HEADER_H + PAD_FOTO;
-        const ix = x + (cardW - k.w) / 2;
-        const iy = PAGE_H - (areaTopAtas + (tinggiFotoBaris - k.h) / 2) - k.h;
-        page.drawImage(k.img, { x: ix, y: iy, width: k.w, height: k.h });
-      }
-    });
-
-    cardTop += rowH + CARD_GAP;
+  const ukur: FotoUkur[] = [];
+  const lebarMin: Record<number, number> = {};
+  siap.forEach((v, slot) => {
+    ukur.push({ slot, aspek: v.img ? v.img.width / v.img.height : 16 / 9 });
+    lebarMin[slot] = LEBAR_FOTO_MIN;
   });
+  const { penempatan } = tataFotoDokumentasi(ukur, {
+    lebar: CONTENT_W - PAD_FOTO * 2,
+    tinggi: BUDGET_BOTTOM - y,
+    gap: CARD_GAP + PAD_FOTO * 2,
+    gapV: CARD_GAP,
+    cap: CARD_HEADER_H + PAD_FOTO,
+    capBawah: PAD_FOTO,
+    lebarMin,
+  });
+  const areaTop = y;
+
+  for (const p of penempatan) {
+    const k = siap.get(p.slot)!;
+    const labelTxt = SLOT_LABELS[p.slot] ?? `Foto ${p.slot}`;
+    const cardX = CONTENT_L + p.x;
+    const cardW = p.w + PAD_FOTO * 2;
+    const cardTop = areaTop + p.yKet;
+
+    // Outline kartu penuh + header berlatar lembut.
+    kotak(cardX, cardTop, cardW, p.tinggiKartu, { border: LINE, borderWidth: 0.6 });
+    kotak(cardX, cardTop, cardW, CARD_HEADER_H, { fill: SOFT_BG, border: LINE, borderWidth: 0.6 });
+    garisH(cardX, cardX + cardW, cardTop, NAVY, 2); // aksen garis atas navy 2pt
+
+    // Keterangan: satu baris (font mengecil sampai 7pt) bila muat; bila kartu sempit, label dibungkus 2 baris
+    // (baris pertama berbagi dengan nomor), baris terakhir dipotong "..." bila masih terlalu panjang.
+    const nomorTxt = `${p.slot}`;
+    const lebarMaksHeader = cardW - 8;
+    const lebarTeks = (t: string, u: number) => fontBold.widthOfTextAtSize(t, u);
+    let ukuranHeader = 9.5;
+    while (ukuranHeader > 7 && lebarTeks(`${nomorTxt}  ${labelTxt}`, ukuranHeader) > lebarMaksHeader) ukuranHeader -= 0.5;
+    const spasiW = lebarTeks("  ", ukuranHeader);
+    const nomorW = lebarTeks(nomorTxt, ukuranHeader);
+    if (lebarTeks(`${nomorTxt}  ${labelTxt}`, ukuranHeader) <= lebarMaksHeader) {
+      const totalW = nomorW + spasiW + lebarTeks(labelTxt, ukuranHeader);
+      const startX = cardX + (cardW - totalW) / 2;
+      const yAtas = cardTop + (CARD_HEADER_H - ukuranHeader) / 2 + 1.5;
+      teks(nomorTxt, startX, yAtas, ukuranHeader, { bold: true, color: ORANGE });
+      teks(labelTxt, startX + nomorW + spasiW, yAtas, ukuranHeader, { bold: true, color: NAVY });
+    } else {
+      const kata = labelTxt.split(/\s+/).filter(Boolean);
+      let l1 = "";
+      let i = 0;
+      const lim1 = lebarMaksHeader - nomorW - spasiW;
+      while (i < kata.length && lebarTeks(l1 ? `${l1} ${kata[i]}` : kata[i], ukuranHeader) <= lim1) {
+        l1 = l1 ? `${l1} ${kata[i]}` : kata[i];
+        i++;
+      }
+      let l2 = kata.slice(i).join(" ");
+      if (lebarTeks(l2, ukuranHeader) > lebarMaksHeader) {
+        while (l2.length > 1 && lebarTeks(`${l2}...`, ukuranHeader) > lebarMaksHeader) l2 = l2.slice(0, -1);
+        l2 = `${l2.trimEnd()}...`;
+      }
+      const tot1 = nomorW + (l1 ? spasiW + lebarTeks(l1, ukuranHeader) : 0);
+      const x1 = cardX + (cardW - tot1) / 2;
+      const y1 = cardTop + 2.5;
+      teks(nomorTxt, x1, y1, ukuranHeader, { bold: true, color: ORANGE });
+      if (l1) teks(l1, x1 + nomorW + spasiW, y1, ukuranHeader, { bold: true, color: NAVY });
+      if (l2) teks(l2, cardX + (cardW - lebarTeks(l2, ukuranHeader)) / 2, y1 + ukuranHeader + 1.2, ukuranHeader, { bold: true, color: NAVY });
+    }
+
+    if (k.img) {
+      page.drawImage(k.img, { x: cardX + PAD_FOTO, y: PAGE_H - (areaTop + p.y) - p.h, width: p.w, height: p.h });
+    }
+  }
 
   return doc.save();
 }

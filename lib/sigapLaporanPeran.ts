@@ -41,6 +41,8 @@ export type MasukanTeksLaporan = {
   ganti?: { judul?: string; uraian?: string };
   /** ada blok lampiran data (hasil pendataan, QC, dst.) pada laporan ini: catatan kaki menyebut catatan lapangan SIGAP */
   adaLampiran?: boolean;
+  /** rincian hasil pendataan hari itu (dari susunIsiLaporan); ditambahkan ke kalimat jumlah pada PPL dan PML pengawas */
+  rincianHasil?: string;
 };
 
 export function teksLaporan(m: MasukanTeksLaporan): TeksLaporan {
@@ -56,6 +58,7 @@ export function teksLaporan(m: MasukanTeksLaporan): TeksLaporan {
     satuan: m.satuan,
     jumlah: m.jumlahRealisasi,
     lokasi: m.jumlahLokasi,
+    rincian: m.rincianHasil || "-",
     aktivitas: m.aktivitas ? teksAktivitas(m.jenis === "umum" ? null : m.jenis, m.aktivitas) || "melaksanakan tugas" : "melaksanakan tugas",
   };
   const paragraf = g.uraian ? g.uraian.split(/\r?\n/).map((b) => isiTemplat(b.trim(), v)).filter(Boolean) : t.paragraf;
@@ -81,7 +84,7 @@ function teksDasar(m: MasukanTeksLaporan): TeksLaporan {
       labelAngka: `JUMLAH ${m.satuan.toUpperCase()} DIDATA`,
       paragraf: [
         `Pada hari ${m.tanggalTeks}, ${nama} melaksanakan pendataan lapangan ${keg} sebagai ${jab}${di}, yaitu mendatangi dan mendata ${m.satuan} yang menjadi sasaran pendataan.`,
-        `${m.satuan[0]?.toUpperCase() ?? ""}${m.satuan.slice(1)} yang berhasil didata pada tanggal ini sebanyak ${m.jumlahRealisasi}${lokasiKal}.`,
+        `${m.satuan[0]?.toUpperCase() ?? ""}${m.satuan.slice(1)} yang berhasil didata pada tanggal ini sebanyak ${m.jumlahRealisasi}${lokasiKal}${m.rincianHasil ? `, dengan rincian hasil pendataan: ${m.rincianHasil}` : ""}.`,
       ],
       catatan: umumCatatan,
     };
@@ -101,7 +104,7 @@ function teksDasar(m: MasukanTeksLaporan): TeksLaporan {
       labelAngka: hanyaIdent ? `JUMLAH ${SAT} DIIDENTIFIKASI` : `JUMLAH ${SAT} DILAPORKAN`,
       paragraf: [
         `Pada hari ${m.tanggalTeks}, ${nama} melaksanakan ${keg} sebagai ${jab}${di}, yaitu ${kerja}.`,
-        `${Sat} yang ${hanyaIdent ? "diidentifikasi" : "dilaporkan"} pada tanggal ini sebanyak ${m.jumlahRealisasi}${lokasiKal}.`,
+        `${Sat} yang ${hanyaIdent ? "diidentifikasi" : "dilaporkan"} pada tanggal ini sebanyak ${m.jumlahRealisasi}${lokasiKal}${!hanyaIdent && m.rincianHasil ? `, dengan rincian hasil pendataan tim: ${m.rincianHasil}` : ""}.`,
       ],
       catatan: umumCatatan,
     };

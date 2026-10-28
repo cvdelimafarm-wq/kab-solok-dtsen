@@ -42,7 +42,7 @@ export interface SigapLaporanData {
    * setelah uraian, kegiatan hari itu menurut data (menentukan kalimat uraian), centang tabel lokasi/kendala, serta judul/uraian pengganti.
    * Kosong = laporan seperti sebelumnya.
    */
-  isi?: { blok: BlokIsi[]; aktivitas: Aktivitas; tampilLokasi: boolean; tampilKendala: boolean; ganti?: { judul?: string; uraian?: string } };
+  isi?: { blok: BlokIsi[]; aktivitas: Aktivitas; tampilLokasi: boolean; tampilKendala: boolean; rincianHasil?: string; ganti?: { judul?: string; uraian?: string } };
 }
 
 const MM = 2.834645669;
@@ -136,6 +136,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
     jumlahLokasi: data.lokasi.length,
     wilayah: wilayahTeks(data.lokasi),
     aktivitas: data.isi?.aktivitas,
+    rincianHasil: data.isi?.rincianHasil,
     ganti: data.isi?.ganti,
     adaLampiran: (data.isi?.blok.length ?? 0) > 0,
   });

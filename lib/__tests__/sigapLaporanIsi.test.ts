@@ -190,3 +190,26 @@ describe("teksLaporan kontekstual", () => {
     expect(k.catatan).not.toContain("catatan lapangan");
   });
 });
+
+describe("rincian hasil pendataan pada uraian", () => {
+  const dasar = { kegiatanNama: "PSP", namaPetugas: "Andi", labelJabatan: "PPL", tanggalTeks: "Senin, 12 Oktober 2026", satuan: "KK", jumlahRealisasi: 12, jumlahLokasi: 0, wilayah: "" };
+  it("PPL: kalimat jumlah memuat rincian bila ada", () => {
+    const t = teksLaporan({ ...dasar, jenis: "ppl", rincianHasil: "5 KK didata terdampak, 4 KK didata tidak terdampak, dan 3 KK tidak ditemukan" });
+    expect(t.paragraf[1]).toContain("sebanyak 12");
+    expect(t.paragraf[1]).toContain("dengan rincian hasil pendataan: 5 KK didata terdampak, 4 KK didata tidak terdampak, dan 3 KK tidak ditemukan.");
+    expect(teksLaporan({ ...dasar, jenis: "ppl" }).paragraf[1]).not.toContain("rincian");
+  });
+  it("PML: rincian hanya bila mengawasi; penanda {rincian} tersedia di templat", () => {
+    const aw = teksLaporan({ ...dasar, jenis: "pml", aktivitas: { identifikasi: false, pengawasan: true, qc: false }, rincianHasil: "5 KK terdampak" });
+    expect(aw.paragraf[1]).toContain("rincian hasil pendataan tim: 5 KK terdampak");
+    const id = teksLaporan({ ...dasar, jenis: "pml", aktivitas: { identifikasi: true, pengawasan: false, qc: false }, rincianHasil: "5 KK terdampak" });
+    expect(id.paragraf[1]).not.toContain("rincian");
+    const g = teksLaporan({ ...dasar, jenis: "ppl", rincianHasil: "5 KK terdampak", ganti: { judul: "", uraian: "Hasil: {rincian}." } });
+    expect(g.paragraf).toEqual(["Hasil: 5 KK terdampak."]);
+  });
+  it("susunIsiLaporan menghasilkan rincianHasil sesuai kategori aktif", () => {
+    const r = susunIsiLaporan("ppl", salinLaporanBawaan(), salinBawaan(), { pendataan: { hasil: { terdampak: 5, tidak_terdampak: 4, tidak_ditemukan: 3 }, alasan: [], petugas: [] } });
+    expect(r.rincianHasil).toMatch(/^5 KK .+, 4 KK .+, dan 3 KK .+$/);
+    expect(susunIsiLaporan("ppl", salinLaporanBawaan(), salinBawaan(), {}).rincianHasil).toBeUndefined();
+  });
+});

@@ -105,7 +105,7 @@ export type KonfigLaporan = { versi: 1; peran: Record<PeranLaporan, KonfigPeranL
 export const BATAS_LAPORAN = { judul: 60, uraian: 700, labelVariabel: 40 } as const;
 
 /** Penanda yang boleh dipakai pada judul dan uraian. */
-export const PENANDA = ["nama", "kegiatan", "jabatan", "tanggal", "wilayah", "satuan", "jumlah", "lokasi", "aktivitas"] as const;
+export const PENANDA = ["nama", "kegiatan", "jabatan", "tanggal", "wilayah", "satuan", "jumlah", "lokasi", "aktivitas", "rincian"] as const;
 export const KET_PENANDA: Record<(typeof PENANDA)[number], string> = {
   nama: "nama petugas",
   kegiatan: "nama kegiatan",
@@ -116,6 +116,7 @@ export const KET_PENANDA: Record<(typeof PENANDA)[number], string> = {
   jumlah: "jumlah isian harian",
   lokasi: "jumlah lokasi dicatat",
   aktivitas: "kegiatan hari itu menurut data (identifikasi / pengawasan / QC)",
+  rincian: "rincian hasil pendataan hari itu (mis. 5 KK didata terdampak, 3 KK tidak ditemukan)",
 };
 
 function bawaanPeran(p: PeranLaporan): KonfigPeranLaporan {
@@ -254,7 +255,8 @@ export type BlokIsi = { judul: string; baris?: [string, string][]; tabel?: { kep
 
 export type Aktivitas = { identifikasi: boolean; pengawasan: boolean; qc: boolean };
 
-export type HasilIsi = { blok: BlokIsi[]; aktivitas: Aktivitas; tampilLokasi: boolean; tampilKendala: boolean };
+/** `rincianHasil`: kalimat rincian hasil pendataan ("5 KK didata terdampak, 4 KK ..., dan 3 KK ...") untuk uraian; kosong bila tak ada data. */
+export type HasilIsi = { blok: BlokIsi[]; aktivitas: Aktivitas; tampilLokasi: boolean; tampilKendala: boolean; rincianHasil?: string };
 
 export const bilangan = (n: number, desimal = 0): string => {
   const t = (Number.isFinite(n) ? n : 0).toFixed(desimal);
@@ -289,6 +291,7 @@ export function susunIsiLaporan(peran: string | null | undefined, konfig: Konfig
   const blok: BlokIsi[] = [];
   const kategori = HASIL_KK.filter((h) => lembar.hasil[h].aktif);
   const nama = (h: HasilKk) => lembar.hasil[h].label_pendek || lembar.hasil[h].label;
+  let rincianHasil: string | undefined;
 
   if (on.identifikasi && p === "pml" && data.identifikasi && data.identifikasi.subsls > 0) {
     const baris: [string, string][] = [["Sub SLS diidentifikasi", bilangan(data.identifikasi.subsls)]];
@@ -300,6 +303,8 @@ export function susunIsiLaporan(peran: string | null | undefined, konfig: Konfig
   const total = pd ? jumlahHasil(pd.hasil) : 0;
   if (pd && total > 0) {
     if (on.pendataan) {
+      const potong = kategori.map((h) => `${bilangan(pd.hasil[h])} KK ${nama(h).toLowerCase()}`);
+      rincianHasil = potong.length > 1 ? `${potong.slice(0, -1).join(", ")}, dan ${potong[potong.length - 1]}` : potong[0];
       const baris: [string, string][] = [["Jumlah KK dikunjungi", bilangan(total)]];
       for (const h of kategori) baris.push([nama(h), `${bilangan(pd.hasil[h])}${persen(pd.hasil[h], total)}`]);
       blok.push({ judul: JUDUL_PENDATAAN[p], baris });
@@ -334,7 +339,7 @@ export function susunIsiLaporan(peran: string | null | undefined, konfig: Konfig
     blok.push({ judul: "JARAK RUMAH PETUGAS KE SUB SLS", baris, catatan: "Jarak menurut data alokasi Sub SLS, bukan jarak tempuh sebenarnya." });
   }
 
-  return { blok, aktivitas, tampilLokasi: on.lokasi, tampilKendala: on.kendala };
+  return { blok, aktivitas, tampilLokasi: on.lokasi, tampilKendala: on.kendala, rincianHasil };
 }
 
 /** Ringkasan kegiatan hari itu untuk kalimat uraian: "mengidentifikasi wilayah kerja dan mengawasi pendataan oleh PPL". */
