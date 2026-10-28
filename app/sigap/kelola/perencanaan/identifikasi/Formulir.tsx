@@ -2,7 +2,7 @@
 
 // app/sigap/kelola/perencanaan/identifikasi/Formulir.tsx
 //
-// (25 Okt 2026) Formulir Identifikasi survei, bagian A-H (dari mockup Version 7). Murni tampilan terkendali: seluruh perhitungan memakai
+// (25 Okt 2026) Formulir Identifikasi survei, bagian A-E (dari mockup Version 7; 28 Okt 2026 Instrumen pendataan digabung ke A). Murni tampilan terkendali: seluruh perhitungan memakai
 // lib/keu/identifikasi.ts. `mati` = formulir terkunci (menunggu persetujuan, sudah sah, atau akun tanpa hak menyusun).
 
 import { useMemo } from "react";
@@ -12,7 +12,8 @@ import {
   jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tahapAktif, tanggalSesi, tglIndo,
   type Form, type Instrumen, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
-import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, YaTidak } from "./Kontrol";
+import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, TglRentang, YaTidak } from "./Kontrol";
+import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
 export type PropsFormulir = {
@@ -41,7 +42,6 @@ export default function Formulir(p: PropsFormulir) {
       <BagianA f={f} ubah={ubah} tahun={tahun} mati={mati} pa={paSah} setPa={setPa} lst={lst} />
       <BagianB f={f} ubah={ubah} tahun={tahun} mati={mati} pa={paSah} rujukan={rujukan} />
       <BagianC f={f} ubah={ubah} mati={mati} />
-      <BagianD f={f} ubah={ubah} mati={mati} />
       <BagianE f={f} ubah={ubah} mati={mati} />
       <BagianFGH f={f} ubah={ubah} mati={mati} />
     </div>
@@ -133,17 +133,17 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
             </div>
           )}
           <div className={kisi}>
-            <Isian judul="Mulai: bulan ke-" ket={bulanTeks(J.mb)}><Angka nama="Bulan mulai" nilai={J.mb} maks={24} mati={mati} onUbah={(v) => setJend({ mb: v })} /></Isian>
+            <Isian judul="Mulai: bulan ke-" ket={bulanTeks(J.mb)}><Angka nama="Bulan mulai" nilai={J.mb + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend({ mb: v - 1 })} /></Isian>
             <Isian judul="Mulai: cara hari"><Pilihan nama="Cara hari mulai" nilai={J.mj === "tgl" ? "Tanggal" : "N hari terakhir bulan"} opsi={["Tanggal", "N hari terakhir bulan"] as const} mati={mati} onPilih={(v) => setJend(v === "Tanggal" ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 })} /></Isian>
             <Isian judul={J.mj === "tgl" ? "Tanggal mulai" : "Jumlah hari terakhir bulan"}><Angka nama="Hari mulai" nilai={J.mn} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ mn: v })} /></Isian>
           </div>
           <div className={kisi}>
-            <Isian judul="Selesai: bulan ke-" ket={bulanTeks(J.sb)}><Angka nama="Bulan selesai" nilai={J.sb} maks={24} mati={mati} onUbah={(v) => setJend({ sb: v })} /></Isian>
+            <Isian judul="Selesai: bulan ke-" ket={bulanTeks(J.sb)}><Angka nama="Bulan selesai" nilai={J.sb + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend({ sb: v - 1 })} /></Isian>
             <Isian judul="Selesai: cara hari"><Pilihan nama="Cara hari selesai" nilai={J.sj === "tgl" ? "Tanggal" : "Akhir bulan"} opsi={["Tanggal", "Akhir bulan"] as const} mati={mati} onPilih={(v) => setJend(v === "Tanggal" ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 })} /></Isian>
             {J.sj === "tgl" && <Isian judul="Tanggal selesai"><Angka nama="Hari selesai" nilai={J.sn} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ sn: v })} /></Isian>}
           </div>
           <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Contoh hasil pola">
-            {lst.slice(0, 4).map((P) => { const w = jendelaPola(f, P, tahun); return <li key={P}>{P}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}</li>; })}
+            {lst.slice(0, 4).map((P) => { const w = jendelaPola(f, P, tahun); return <li key={P}>{P}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
             {lst.length > 4 && <li>… dan {lst.length - 4} periode lain</li>}
           </ul>
         </div>
@@ -153,12 +153,13 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
         <div className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
           <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Jadwal {pend ? "pendataan lapangan" : "pengolahan"}</h3>
           <div className={kisi}>
-            <Isian judul="Mulai"><Tgl nama="Tanggal mulai" nilai={f.tunggal.mulai} mati={mati} onUbah={(v) => ubah((g) => { g.tunggal.mulai = v; })} /></Isian>
-            <Isian judul="Selesai"><Tgl nama="Tanggal selesai" nilai={f.tunggal.selesai} min={f.tunggal.mulai} mati={mati} onUbah={(v) => ubah((g) => { g.tunggal.selesai = v; })} /></Isian>
+            <TglRentang nama="Jadwal" judulMulai="Mulai" judulSelesai="Selesai" mulai={f.tunggal.mulai} selesai={f.tunggal.selesai} mati={mati} onUbah={(r) => ubah((g) => { g.tunggal.mulai = r.mulai; g.tunggal.selesai = r.selesai; })} />
           </div>
           <FixPerk nama="Jadwal kegiatan" perk={f.tunggal.perk} mati={mati} onPilih={(v) => ubah((g) => { g.tunggal.perk = v; })} />
         </div>
       )}
+
+      <KartuInstrumen f={f} ubah={ubah} mati={mati} />
 
       {banyak && (
         <div role="tablist" aria-label="Periode yang dipratinjau" className="flex flex-wrap gap-1.5">
@@ -186,8 +187,8 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
                 {x && x.mulai && <span className={`rounded-full px-2 py-[1px] text-[11.5px] font-bold ${perk ? "bg-[#FFF4D6] text-[#8A6200]" : "bg-[#E6F6EC] text-[#14653A]"}`}>{perk ? "≈ Perkiraan" : "Fix"}</span>}
                 {toggle && <Centang aktif={toggle.on} mati={mati} onUbah={toggle.fn}>{toggle.label}</Centang>}
               </div>
-              {k === "pendataan" && <p className="mt-1.5 text-[12.5px] text-[#44546F]">{adaKe ? (kecualiAktif(f, pa) ? "Pengecualian periode ini. " : "Mengikuti pola jendela pendataan. ") : ""}{x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}` : ""}</p>}
-              {k === "pengolahan" && !pend && adaKe && <p className="mt-1.5 text-[12.5px] text-[#44546F]">Mengikuti jendela jadwal: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}` : ""}</p>}
+              {k === "pendataan" && <p className="mt-1.5 text-[12.5px] text-[#44546F]">{adaKe ? (kecualiAktif(f, pa) ? "Pengecualian periode ini. " : "Mengikuti pola jendela pendataan. ") : ""}{x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : ""}</p>}
+              {k === "pengolahan" && !pend && adaKe && <p className="mt-1.5 text-[12.5px] text-[#44546F]">Mengikuti jendela jadwal: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : ""}</p>}
               {r && relOn && !(k === "pengolahan" && !pend) && (
                 <div className="mt-2 flex flex-col gap-2">
                   <div className={kisi}>
@@ -196,7 +197,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
                     <Isian judul="Selesai, acuan"><Pilihan nama={`${nama} acuan selesai`} nilai={r.aS} opsi={["mulai", "selesai"] as const} mati={mati} onPilih={(v) => setRel(k as "updating", { aS: v })} /></Isian>
                     <Isian judul="Selisih hari selesai"><input type="number" aria-label={`${nama} selesai, selisih hari`} className={kolom} value={r.dS} disabled={mati} onChange={(e) => setRel(k as "updating", { dS: bilS(e.target.value) })} /></Isian>
                   </div>
-                  <p className="m-0 text-[12.5px] text-[#44546F]">Relatif terhadap {k === "pasca" ? "pengolahan" : k === "diseminasi" ? "pasca pengolahan" : "pendataan"}. Hasil{banyak ? ` ${pa}` : ""}: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}` : "belum dapat dihitung"}</p>
+                  <p className="m-0 text-[12.5px] text-[#44546F]">Relatif terhadap {k === "pasca" ? "pengolahan" : k === "diseminasi" ? "pasca pengolahan" : "pendataan"}. Hasil{banyak ? ` ${pa}` : ""}: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : "belum dapat dihitung"}</p>
                   <FixPerk nama={`Jadwal ${nama}`} perk={r.perk} mati={mati} onPilih={(v) => setRel(k as "updating", { perk: v })} />
                 </div>
               )}
@@ -232,8 +233,7 @@ function PengecualianPeriode({ f, ubah, tahun, mati, lst }: Pick<PropsFormulir, 
             {e && (
               <div className="mt-2 flex flex-col gap-2">
                 <div className={kisi}>
-                  <Isian judul={`${P} mulai`}><Tgl nama={`${P} mulai`} nilai={e.mulai} mati={mati} onUbah={(v) => setE({ mulai: v })} /></Isian>
-                  <Isian judul={`${P} selesai`}><Tgl nama={`${P} selesai`} nilai={e.selesai} min={e.mulai} mati={mati} onUbah={(v) => setE({ selesai: v })} /></Isian>
+                  <TglRentang nama={P} judulMulai={`${P} mulai`} judulSelesai={`${P} selesai`} mulai={e.mulai} selesai={e.selesai} mati={mati} onUbah={(r) => setE({ mulai: r.mulai, selesai: r.selesai })} />
                 </div>
                 <Isian judul="Alasan pengecualian" ket={`Bergeser ${geser > 0 ? "+" : ""}${geser} hari pada tanggal mulai dibanding pola.`}>
                   <input className={kolom} value={e.alasan} maxLength={200} disabled={mati} onChange={(ev) => setE({ alasan: ev.target.value })} aria-label={`Alasan pengecualian ${P}`} />
@@ -294,8 +294,7 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                     <Cat>Tanggal {nama.toLowerCase()} {pa}: {tglIndo(t.mulai)} s.d. {tglIndo(t.selesai)}. Diturunkan dari periode acuan {first}, digeser mengikuti tanggal mulai pendataan {pa}.</Cat>
                   ) : (
                     <div className={kisi}>
-                      <Isian judul={`Tanggal mulai${daftarPeriode(f).length > 1 ? ` · ${pa}` : ""}`}><Tgl nama={`${nama} mulai`} nilai={t.mulai} mati={mati} onUbah={(v) => setT({ mulai: v })} /></Isian>
-                      <Isian judul="Tanggal selesai"><Tgl nama={`${nama} selesai`} nilai={t.selesai} min={t.mulai} mati={mati} onUbah={(v) => setT({ selesai: v })} /></Isian>
+                      <TglRentang nama={nama} judulMulai={`Tanggal mulai${daftarPeriode(f).length > 1 ? ` · ${pa}` : ""}`} judulSelesai="Tanggal selesai" mulai={t.mulai} selesai={t.selesai} mati={mati} onUbah={(r) => setT({ mulai: r.mulai, selesai: r.selesai })} />
                     </div>
                   )}
                   {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
@@ -316,7 +315,7 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// C. Rapat, D. Instrumen
+// C. Rapat (Instrumen pendataan kini di bagian A: KartuInstrumen)
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianC({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
   return (
@@ -350,25 +349,30 @@ function BagianC({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) 
   );
 }
 
-function BagianD({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
+/**
+ * Instrumen pendataan (dulu bagian D). (28 Okt 2026) Dipindah ke bagian A, tepat sesudah jadwal pendataan lapangan, supaya jawabannya
+ * menjadi dasar pertanyaan sesudahnya (tahap, petugas, pulsa). Anchor "bagian-instrumen" menggantikan "bagian-d" lama.
+ */
+function KartuInstrumen({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
   const anyPulsa = !f.berbagi && (["briefing", "pelatihan"] as const).some((id) => f.sesi[id].on && (f.sesi[id].bentuk === "Daring" || f.sesi[id].bentuk === "Hybrid") && f.sesi[id].pulsa);
   const kunciPulsa = f.instrumen === "FASIH" && anyPulsa;
   return (
-    <Bagian huruf="D" judul="Instrumen pendataan" gsbpm="GSBPM 4.3" id="bagian-d">
+    <div id="bagian-instrumen" className="scroll-mt-20 flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
+      <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Instrumen pendataan <span className="text-[12px] font-normal text-[#5B6B84]">· GSBPM 4.3</span></h3>
       <Pilihan nama="Instrumen" nilai={f.instrumen} opsi={["Tanpa pendataan", "FASIH", "PAPI"] as readonly Instrumen[]} mati={mati} onPilih={(v) => ubah((g) => { g.instrumen = v; if (v !== "PAPI") g.peran.entri.on = false; })} />
-      {f.instrumen === "Tanpa pendataan" && <Cat>Tanpa pendataan: bagian E tidak ditanya dan tahap Pendataan tidak aktif.</Cat>}
+      {f.instrumen === "Tanpa pendataan" && <Cat>Tanpa pendataan: bagian D (organisasi pendataan lapangan) tidak ditanya dan tahap Pendataan tidak aktif.</Cat>}
       {f.instrumen === "PAPI" && <Isian judul="Dokumen PAPI dicetak di kabupaten?"><YaTidak nama="Cetak PAPI" nilai={f.cetakPapi} mati={mati} onPilih={(v) => ubah((g) => { g.cetakPapi = v; })} /></Isian>}
       {f.instrumen === "FASIH" && (
         <Isian judul="Pulsa untuk petugas lapangan?" ket={kunciPulsa ? "Pulsa sudah dibiayai lewat sesi pelatihan atau briefing, jadi tidak diminta lagi di sini." : undefined}>
           <YaTidak nama="Pulsa petugas lapangan" nilai={kunciPulsa ? false : f.pulsaLap} mati={mati || kunciPulsa} onPilih={(v) => ubah((g) => { g.pulsaLap = v; })} />
         </Isian>
       )}
-    </Bagian>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// E. Organisasi pendataan lapangan (+ honor tim bila Ad-hoc)
+// D. Organisasi pendataan lapangan (+ honor tim bila Ad-hoc); dulu bagian E
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianE({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
   const pend = adaPendataan(f);
@@ -376,11 +380,11 @@ function BagianE({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) 
   const rp = ringkasPetugas(f);
   const adhoc = adalahAdhoc(f);
   if (!pend && !adhoc) return (
-    <Bagian huruf="E" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-e"><Cat>Tanpa pendataan: bagian ini tidak ditanya.</Cat></Bagian>
+    <Bagian huruf="D" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-d"><Cat>Tanpa pendataan: bagian ini tidak ditanya.</Cat></Bagian>
   );
   const setP = (id: PeranId, patch: Partial<Form["peran"]["ppl"]>) => ubah((g) => { Object.assign(g.peran[id], patch); });
   return (
-    <Bagian huruf="E" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-e">
+    <Bagian huruf="D" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-d">
       {pend && PERAN_DEF.map((d) => {
         const p = f.peran[d.id];
         const terkunci = d.id === "entri" && !papi;
@@ -436,11 +440,11 @@ function BagianE({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// F. Konsultasi teknis, G. Rekonsiliasi, H. Diseminasi
+// E. Konsultasi teknis, rekonsiliasi, diseminasi (dulu bagian F)
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianFGH({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
   return (
-    <Bagian huruf="F" judul="Konsultasi teknis, rekonsiliasi data, dan diseminasi" gsbpm="GSBPM 6 dan 7" id="bagian-f">
+    <Bagian huruf="E" judul="Konsultasi teknis, rekonsiliasi data, dan diseminasi" gsbpm="GSBPM 6 dan 7" id="bagian-e">
       <Isian judul="Ada konsultasi teknis?"><YaTidak nama="Konsultasi teknis" nilai={f.konsultasi} mati={mati} onPilih={(v) => ubah((g) => { g.konsultasi = v; })} /></Isian>
       {f.konsultasi && <Isian judul="Cara konsultasi"><Pilihan nama="Cara konsultasi" nilai={f.cara as string} opsi={["Tatap muka (perjalanan dinas)", "Daring"] as readonly string[]} mati={mati} onPilih={(v) => ubah((g) => { g.cara = v as Form["cara"]; })} /></Isian>}
       <Isian judul="Ada rekonsiliasi data?"><YaTidak nama="Rekonsiliasi data" nilai={f.rekon} mati={mati} onPilih={(v) => ubah((g) => { g.rekon = v; })} /></Isian>

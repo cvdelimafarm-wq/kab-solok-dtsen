@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   akunDipicu, awalForm, bedaForm, dampakRevisi, hariBulan, hitungJadwal, hitungMitra, jabatanHonorTim, jadwalValid, jendelaPeriode, kebutuhan, kematangan,
-  mulaiPendataanAwal, normalisasi, periksa, periodeTurunan, ringkasPetugas, sesudahH15, tambahHari, tanggalH15, tanggalSesi, tglBulan, type Form, tujuanPesan } from "../identifikasi";
+  mulaiPendataanAwal, normalisasi, periksa, periodeTurunan, ringkasPetugas, sesudahH15, tambahHari, tanggalH15, tanggalSesi, tglBulan, type Form, tujuanPesan, hurufBagianDariSumber } from "../identifikasi";
 import {
   HAK_KOSONG, aksiTersedia, agendaPeriode, barisH15, cocokkanPok, evaluasiDari, labelStatus, langkahTampil, namaVersi, paketUntukAkun, periksaGeser, rekrutmenDari, siapaMenunggu, statusH15,
   type BarisPok,
@@ -478,20 +478,28 @@ describe("tujuanPesan: kalimat menuju kartu terkait", () => {
     expect(tujuanPesan("Pendataan dimulai sebelum updating selesai (tidak boleh beririsan).")).toBe("tahap-pendataan");
     expect(tujuanPesan("Pola jendela pendataan")).toBe("tahap-pendataan");
   });
-  it("petugas, rapat, pelatihan, instrumen, dan bagian F", () => {
-    expect(tujuanPesan("Jumlah petugas masih perkiraan: PML, PPL.")).toBe("bagian-e");
-    expect(tujuanPesan("Penugasan Supervisor (organik; organik 1, fix): translok ya, honor tidak")).toBe("bagian-e");
+  it("petugas, rapat, pelatihan, instrumen, dan bagian E (dulu F)", () => {
+    expect(tujuanPesan("Jumlah petugas masih perkiraan: PML, PPL.")).toBe("bagian-d");
+    expect(tujuanPesan("Penugasan Supervisor (organik; organik 1, fix): translok ya, honor tidak")).toBe("bagian-d");
     expect(tujuanPesan("Rapat evaluasi (wajib): tatap muka")).toBe("bagian-c");
     expect(tujuanPesan("Rapat persiapan menghadirkan mitra, tetapi tidak ada petugas mitra pada peran lapangan.")).toBe("bagian-c");
     expect(tujuanPesan("Survei yang dirujuk belum disahkan; pelatihannya belum dapat dipastikan.")).toBe("bagian-b");
-    expect(tujuanPesan("Pendataan lapangan (FASIH)")).toBe("bagian-d");
-    expect(tujuanPesan("Cetak buku publikasi")).toBe("bagian-f");
+    expect(tujuanPesan("Pendataan lapangan (FASIH)")).toBe("bagian-instrumen");
+    expect(tujuanPesan("Cetak buku publikasi")).toBe("bagian-e");
     expect(tujuanPesan("Nama survei wajib diisi.")).toBe("bagian-a");
   });
   it("huruf bagian di ujung kalimat dan penegasan H-15", () => {
-    expect(tujuanPesan("Translok Supervisor (E)")).toBe("bagian-e");
+    expect(tujuanPesan("Translok Supervisor (D)")).toBe("bagian-d"); // huruf tampil baru: Organisasi pendataan lapangan = D
     expect(tujuanPesan("Konsumsi rapat evaluasi tatap muka (C)")).toBe("bagian-c");
+    expect(tujuanPesan("Konsultasi teknis tatap muka (E)")).toBe("bagian-e");
     expect(tujuanPesan("Penegasan tanggal periode H-15 (Triwulan I): 14/02/2026, oleh ketua tim atau operator")).toBe("h-h15");
+  });
+  it("huruf tampil sumber kebutuhan mengikuti susunan formulir baru (kode sumber internal tidak berubah)", () => {
+    const peta = ["B", "C", "D", "E", "E2", "F2", "H2"].map(hurufBagianDariSumber);
+    expect(peta).toEqual(["B", "C", "A", "D", "D", "E", "E"]);
+    expect(hurufBagianDariSumber("X")).toBe("X");
+    // setiap huruf tampil menuju kartu yang ada
+    for (const h of ["A", "B", "C", "D", "E"]) expect(tujuanPesan(`Contoh (${h})`)).toBe(`bagian-${h.toLowerCase()}`);
   });
   it("kalimat tanpa tujuan pasti tidak dipaksa", () => {
     expect(tujuanPesan("Rencana perbaikan (selalu)")).toBeNull();

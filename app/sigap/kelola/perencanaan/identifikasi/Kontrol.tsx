@@ -5,8 +5,9 @@
 // (25 Okt 2026) Kontrol isian kecil untuk formulir Identifikasi survei: pilihan tunggal, Ya/Tidak, penanda Fix/Perkiraan,
 // tanggal, angka, dan kartu bagian bernomor huruf. Hanya tampilan; aturan ada di lib/keu/identifikasi.ts dan basis data.
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { kartu, kolom, label as kelasLabel } from "@/app/sigap/keu-ui";
+import { HARI_MAKS, gantiJumlahHari, gantiMulai, gantiSelesai, jumlahHariAntara, type Rentang } from "@/lib/keu/tanggalDurasi";
 
 const pil = "min-h-[40px] rounded-md border px-3 text-[13px] font-semibold disabled:opacity-60";
 const pilMati = `${pil} border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]`;
@@ -60,12 +61,55 @@ export function Tgl({ nilai, onUbah, mati, nama, min }: { nilai: string; onUbah:
   return <input type="date" aria-label={nama} className={kolom} value={nilai} min={min} disabled={mati} onChange={(e) => onUbah(e.target.value)} />;
 }
 
+/**
+ * (28 Okt 2026) Isian angka yang boleh dikosongkan saat mengetik. Dulu kolom langsung melompat ke nilai minimum begitu dikosongkan
+ * (mis. tanggal "12" menjadi "112" lalu 31). Kini ketikan dipegang sebagai teks; nilai sah langsung diteruskan, dan saat kolom
+ * ditinggalkan (blur) nilai dibulatkan ke rentang min..maks.
+ */
 export function Angka({ nilai, onUbah, mati, nama, min = 0, maks = 100000 }: { nilai: number; onUbah: (v: number) => void; mati?: boolean; nama: string; min?: number; maks?: number }) {
+  const aman = Number.isFinite(nilai) ? nilai : 0;
+  const [teks, setTeks] = useState<string>(String(aman));
+  useEffect(() => { setTeks((t) => (parseInt(t, 10) === aman ? t : String(aman))); }, [aman]);
+  const jepit = (n: number) => Math.min(maks, Math.max(min, n));
   return (
     <input
-      type="number" inputMode="numeric" aria-label={nama} className={kolom} value={Number.isFinite(nilai) ? nilai : 0} min={min} max={maks} disabled={mati}
-      onChange={(e) => { const n = parseInt(e.target.value, 10); onUbah(Number.isNaN(n) ? min : Math.min(maks, Math.max(min, n))); }}
+      type="number" inputMode="numeric" aria-label={nama} className={kolom} value={teks} min={min} max={maks} disabled={mati}
+      onChange={(e) => { const t = e.target.value; setTeks(t); const n = parseInt(t, 10); if (!Number.isNaN(n)) onUbah(jepit(n)); }}
+      onBlur={() => { const n = parseInt(teks, 10); const v = Number.isNaN(n) ? jepit(aman) : jepit(n); setTeks(String(v)); if (v !== aman) onUbah(v); }}
     />
+  );
+}
+
+/** Isian jumlah hari (>= 1): kosong boleh sementara mengetik; hanya angka sah yang diteruskan. */
+function JumlahHari({ nilai, onUbah, mati, nama }: { nilai: number | null; onUbah: (n: number) => void; mati?: boolean; nama: string }) {
+  const [teks, setTeks] = useState<string>(nilai === null ? "" : String(nilai));
+  useEffect(() => { setTeks(nilai === null ? "" : String(nilai)); }, [nilai]);
+  return (
+    <input
+      type="number" inputMode="numeric" aria-label={nama} className={kolom} value={teks} min={1} max={HARI_MAKS} disabled={mati}
+      onChange={(e) => { const t = e.target.value; setTeks(t); const n = parseInt(t, 10); if (!Number.isNaN(n) && n >= 1) onUbah(Math.min(HARI_MAKS, n)); }}
+      onBlur={() => setTeks(nilai === null ? "" : String(nilai))}
+    />
+  );
+}
+
+/**
+ * (28 Okt 2026) Tiga isian berurutan untuk satu rentang tanggal (letakkan di dalam kotak `kisi`): tanggal mulai, jumlah hari, tanggal selesai.
+ * Mulai + jumlah hari mengisi selesai; mulai + selesai mengisi jumlah hari (lib/keu/tanggalDurasi). Jumlah hari tidak disimpan.
+ */
+export function TglRentang({ mulai, selesai, onUbah, mati, nama, judulMulai = "Tanggal mulai", judulSelesai = "Tanggal selesai" }: {
+  mulai: string; selesai: string; onUbah: (r: Rentang) => void; mati?: boolean; nama: string; judulMulai?: string; judulSelesai?: string;
+}) {
+  const r: Rentang = { mulai, selesai };
+  const n = jumlahHariAntara(mulai, selesai);
+  const terbalik = !!mulai && !!selesai && n === null;
+  const ket = terbalik ? "Tanggal selesai mendahului tanggal mulai." : !mulai && !selesai ? "Isi tanggal mulai (atau selesai) dahulu." : undefined;
+  return (
+    <>
+      <Isian judul={judulMulai}><Tgl nama={`${nama} mulai`} nilai={mulai} mati={mati} onUbah={(v) => onUbah(gantiMulai(r, v))} /></Isian>
+      <Isian judul="Jumlah hari" ket={ket}><JumlahHari nama={`${nama} jumlah hari`} nilai={n} mati={mati} onUbah={(h) => onUbah(gantiJumlahHari(r, h))} /></Isian>
+      <Isian judul={judulSelesai}><Tgl nama={`${nama} selesai`} nilai={selesai} min={mulai} mati={mati} onUbah={(v) => onUbah(gantiSelesai(r, v))} /></Isian>
+    </>
   );
 }
 

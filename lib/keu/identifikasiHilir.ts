@@ -6,7 +6,7 @@
 // Tahap 27a: PPK dan Tata Usaha menyetujui PARALEL, KPA terakhir; revisi yang dikirim sesudah H-15 hanya perlu KPA.
 
 import {
-  HARI_H15, NAMA_AKUN, NAMA_PAKET, NAMA_TAHAP, TAHAP, adaPendataan, adaPeriode, daftarPeriode, hitungJadwal, jabatanHonorTim, jadwalValid, kebutuhan, peranTerpakai,
+  HARI_H15, NAMA_AKUN, NAMA_PAKET, NAMA_TAHAP, TAHAP, adaPendataan, adaPeriode, daftarPeriode, hitungJadwal, hurufBagianDariSumber, jabatanHonorTim, jadwalValid, kebutuhan, peranTerpakai,
   ringkasPetugas, selisihHari, tambahHari, tanggalSesi, tglIndo,
   type Form, type Jadwal, type Kebutuhan, type PembaruanH15,
 } from "@/lib/keu/identifikasi";
@@ -302,13 +302,13 @@ export function cocokkanPok(need: Kebutuhan[], pok: BarisPok[]): AnggaranAkun[] 
     }
     return {
       akun: k, nama: NAMA_AKUN[k] ?? "",
-      alasan: a.items.map((n) => `${n.teks} (${n.sumber})`).join("; "),
+      alasan: a.items.map((n) => `${n.teks} (${hurufBagianDariSumber(n.sumber)})`).join("; "),
       paket: a.paket.map((p) => p + (NAMA_PAKET[p] ? ` ${NAMA_PAKET[p]}` : "")).join(", "),
       jalur: a.jalur.join(" dan "),
       status, label, ket,
       baris: baris.map((r) => `"${r.uraian}"${r.paket.length ? ` → ${r.paket.join(", ")}` : " (belum dipetakan)"}`).join("; "),
       saran, aksi, perlu: status !== "ada",
-      butirAlasan: a.items.map((n) => ({ teks: n.teks, bagian: n.sumber })),
+      butirAlasan: a.items.map((n) => ({ teks: n.teks, bagian: hurufBagianDariSumber(n.sumber) })),
       barisList: baris.map((r) => `${r.uraian}${r.paket.length ? ` → ${r.paket.join(", ")}` : " (belum dipetakan)"}`),
     };
   });

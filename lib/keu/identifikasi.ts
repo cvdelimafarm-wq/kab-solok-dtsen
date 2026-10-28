@@ -575,7 +575,7 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
 
 /** Kata kunci -> id elemen pada halaman identifikasi. Kata yang paling awal muncul dalam kalimat menentukan tujuan. */
 const PETA_TUJUAN: [RegExp, string][] = [
-  [/fasih|papi|instrumen|pulsa/i, "bagian-d"],
+  [/fasih|papi|instrumen|pulsa/i, "bagian-instrumen"],
   [/pasca pengolahan|pasca/i, "tahap-pasca"],
   [/updating/i, "tahap-updating"],
   [/pengolahan/i, "tahap-pengolahan"],
@@ -584,23 +584,30 @@ const PETA_TUJUAN: [RegExp, string][] = [
   [/nama survei|periode/i, "bagian-a"],
   [/briefing|pelatihan|dirujuk|rujukan/i, "bagian-b"],
   [/rapat/i, "bagian-c"],
-  [/petugas|supervisor|kortim|\bpml\b|\bppl\b|peran lapangan|honor|translok|organik|mitra/i, "bagian-e"],
-  [/konsultasi|rekonsiliasi|cetak|buku/i, "bagian-f"],
+  [/petugas|supervisor|kortim|\bpml\b|\bppl\b|peran lapangan|honor|translok|organik|mitra/i, "bagian-d"],
+  [/konsultasi|rekonsiliasi|cetak|buku/i, "bagian-e"],
 ];
+
+/**
+ * (28 Okt 2026) Kode sumber kebutuhan (`Kebutuhan.sumber`: B, C, D, E, E2, F2, H2) tetap seperti semula karena tersimpan dan diuji.
+ * Huruf yang DITAMPILKAN kepada pengguna mengikuti susunan formulir baru: Instrumen (dulu D) kini di A; Organisasi (dulu E) menjadi D;
+ * Konsultasi/rekonsiliasi/diseminasi (dulu F dan H) menjadi E.
+ */
+export const hurufBagianDariSumber = (sumber: string): string => ({ D: "A", E: "D", E2: "D", F2: "E", H2: "E" } as Record<string, string>)[sumber] ?? sumber;
 
 /** Penegasan H-15 dan kartu lain di sisi kanan (id kartu). */
 const KARTU_TUJUAN: [RegExp, string][] = [
   [/penegasan tanggal/i, "h-h15"],
-  [/\((fasih|papi)\)/i, "bagian-d"],
+  [/\((fasih|papi)\)/i, "bagian-instrumen"],
 ];
 
 /**
  * Id elemen tujuan untuk sebuah kalimat hasil/peringatan/kematangan/agenda, atau null bila tidak ada tujuan yang pasti.
- * Kalimat berakhiran "(X)" dengan X = huruf bagian formulir (A-F) langsung menuju bagian itu.
+ * Kalimat berakhiran "(X)" dengan X = huruf bagian formulir (A-E; Instrumen kini bagian dari A) langsung menuju bagian itu.
  */
 export function tujuanPesan(teks: string): string | null {
   const t = String(teks || "");
-  const h = /\(([A-F])\)\s*$/.exec(t);
+  const h = /\(([A-E])\)\s*$/.exec(t);
   if (h) return `bagian-${h[1].toLowerCase()}`;
   for (const [re, id] of KARTU_TUJUAN) if (re.test(t)) return id;
   let terbaik: { i: number; id: string } | null = null;
