@@ -111,7 +111,7 @@ function Isi() {
               />
               <KartuLaporan kegiatan={pl.bahan?.kegiatan ?? []} jadwal={jadwal} hariIni={hariIni} />
             </div>
-            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px]">
+            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
               <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]">
                 <Chip warna={tersimpan?.status === "final" ? "hijau" : "kuning"}>{tersimpan ? `Lanjutan ${tersimpan.status === "final" ? "Final" : "Draf"} v${tersimpan.ver}` : "Lanjutan belum ada"}</Chip>
                 <Chip warna="biru">{pl.tertaut.length} kegiatan tertaut</Chip>

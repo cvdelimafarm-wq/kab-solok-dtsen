@@ -150,7 +150,7 @@ function Isi() {
             />
             <div className="grid min-w-0 items-start gap-3.5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
               <Formulir f={f} ubah={ubah} tahun={tahun} mati={!bolehSusun || kirim.mengirim} pa={pa} setPa={setPa} rujukan={rujukan} />
-              <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px]">
+              <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
                 <KartuHasil masalah={hasil.masalah} peringatan={hasil.peringatan} />
                 <KartuKematangan butir={kem.butir} nFix={kem.nFix} nPerk={kem.nPerk} />
                 {formSah && (

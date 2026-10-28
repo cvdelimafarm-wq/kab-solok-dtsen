@@ -111,15 +111,15 @@ export function awalForm(): Form {
     keList: ["Triwulan I"],
     adaUpdating: false,
     adaDiseminasi: true,
-    jend: { mb: 2, mj: "tgl", mn: 1, sb: 2, sj: "akhir", sn: 0, perk: false },
+    jend: { mb: 2, mj: "tgl", mn: 1, sb: 2, sj: "akhir", sn: 0, perk: true }, // (28 Okt 2026) semua tanggal bawaannya Perkiraan
     rel: {
-      updating: { aM: "mulai", dM: -10, aS: "mulai", dS: -1, perk: false },
-      pengolahan: { aM: "mulai", dM: 14, aS: "selesai", dS: 15, perk: false },
+      updating: { aM: "mulai", dM: -10, aS: "mulai", dS: -1, perk: true },
+      pengolahan: { aM: "mulai", dM: 0, aS: "selesai", dS: 0, perk: true }, // bawaan sama dengan jadwal pendataan (hanya membantu; dapat diubah)
       pasca: { aM: "selesai", dM: 1, aS: "selesai", dS: 15, perk: true },
       diseminasi: { aM: "selesai", dM: 1, aS: "selesai", dS: 15, perk: true },
     },
     kecuali: {},
-    tunggal: { mulai: "", selesai: "", perk: false },
+    tunggal: { mulai: "", selesai: "", perk: true },
     berbagi: false,
     rujukan: "",
     sesi: { briefing: sesiKosong(), pelatihan: sesiKosong() },
@@ -383,9 +383,8 @@ export function kebutuhan(f: Form): Kebutuhan[] {
   for (const [id, nama] of [["persiapan", "persiapan"], ["pelaksanaan", "pelaksanaan"], ["evaluasi", "evaluasi"]] as const) {
     const r = f.rapat[id];
     const on = id === "evaluasi" ? true : r.on;
-    // rapat persiapan tanpa belanja kecuali mitra dihadirkan (konsumsi dibayar)
-    const dibayar = id === "persiapan" ? r.mitra && adaMitra : true;
-    if (on && dibayar && r.media.includes("Tatap muka")) add("521211", `Konsumsi rapat ${nama} tatap muka`, "C", ["521211-A"], "Pengadaan");
+    // (28 Okt 2026) konsumsi rapat persiapan, pelaksanaan, dan evaluasi: syaratnya luring (tatap muka) + ada petugas mitra; keduanya harus terpenuhi
+    if (on && adaMitra && r.media.includes("Tatap muka")) add("521211", `Konsumsi rapat ${nama} tatap muka (luring + ada mitra)`, "C", ["521211-A"], "Pengadaan");
   }
   if (papi && f.cetakPapi) add("521211", "Penggandaan dokumen PAPI di kabupaten", "D", ["521211-B"], "Pengadaan");
   if (fasih && !anyPulsa && f.pulsaLap) add("521211", "Pulsa petugas lapangan (FASIH)", "D", ["521211-D"], "Pengadaan");
@@ -545,7 +544,7 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
     const r = f.rapat[id];
     const on = id === "evaluasi" ? true : r.on;
     if (on && r.media.length === 0) masalah.push(`Rapat ${nama}: pilih minimal satu media.`);
-    if (id === "persiapan" && on && r.mitra && pend && hitungMitra(f) === 0) peringatan.push("Rapat persiapan menghadirkan mitra, tetapi tidak ada petugas mitra pada peran lapangan.");
+    if (on && r.media.includes("Tatap muka") && hitungMitra(f) === 0) peringatan.push(`Rapat ${nama} tatap muka: tidak ada petugas mitra, konsumsi tidak dihitung.`);
   }
 
   // honor tim (Ad-hoc)

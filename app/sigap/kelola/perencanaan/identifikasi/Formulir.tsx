@@ -5,14 +5,15 @@
 // (25 Okt 2026) Formulir Identifikasi survei, bagian A-E (dari mockup Version 7; 28 Okt 2026 Instrumen pendataan digabung ke A). Murni tampilan terkendali: seluruh perhitungan memakai
 // lib/keu/identifikasi.ts. `mati` = formulir terkunci (menunggu persetujuan, sudah sah, atau akun tanpa hak menyusun).
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
-  JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, NAMA_TAHAP, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
-  jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tahapAktif, tanggalSesi, tglIndo,
+  JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
+  jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalSesi, tglIndo,
   type Form, type Instrumen, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, TglRentang, YaTidak } from "./Kontrol";
+import { BarisRelatif } from "./Relatif";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -31,7 +32,6 @@ const MEDIA = ["Apel pagi", "Tatap muka", "Zoom"] as const;
 const TEMPAT_PILIH = ["Kantor", "Hotel dalam kota", "Hotel luar kota", "Lokasi lain"] as const;
 const STATUS = ["Organik", "Mitra", "Organik dan mitra"] as const;
 const STATUS_SUP = ["Organik", "Organik dan mitra"] as const;
-const bilS = (v: string) => { const n = parseInt(v, 10); return Number.isNaN(n) ? 0 : Math.max(-60, Math.min(365, n)); };
 
 export default function Formulir(p: PropsFormulir) {
   const { f, ubah, tahun, mati, pa, setPa, rujukan } = p;
@@ -51,6 +51,36 @@ export default function Formulir(p: PropsFormulir) {
 // ---------------------------------------------------------------------------------------------------------------------
 // A. Survei dan jadwal
 // ---------------------------------------------------------------------------------------------------------------------
+const pilihSel = "box-border min-h-[40px] rounded-md border border-[#C5D0E2] bg-white px-2 text-[13.5px] font-semibold text-[#0F2A52] focus:outline-2 focus:outline-[#1F5FD1] disabled:opacity-60";
+const ringkasHasil = (x: { mulai: string; selesai: string } | undefined): string => (x && x.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : "Belum dapat dihitung");
+
+/** Kartu satu tahap pada jadwal: nomor, nama, hasil tanggal, penanda Perkiraan/Fix (radio), dan isian di dalamnya. */
+function KartuTahap({ id, no, nama, hasil, aktif = true, perkEfektif, perkSendiri, onPerk, mati, toggle, catatan, children }: {
+  id: string; no: number; nama: string; hasil: string; aktif?: boolean; perkEfektif: boolean; perkSendiri: boolean; onPerk: (perk: boolean) => void; mati: boolean;
+  toggle?: ReactNode; catatan?: string; children?: ReactNode;
+}) {
+  const ikut = aktif && perkEfektif && !perkSendiri;
+  const warna = !aktif ? "border-l-[#C5D0E2] bg-white" : perkEfektif ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63] bg-[#F5FBF7]";
+  return (
+    <div id={id} className={`scroll-mt-20 flex flex-col gap-2.5 rounded-lg border border-l-4 border-[#DCE3EE] p-3 ${warna}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0F2A52] text-[12px] font-extrabold text-white" aria-hidden="true">{no}</span>
+        <strong className="text-[14.5px] text-[#0F2A52]">{nama}</strong>
+        {toggle}
+        {aktif && <div className="ml-auto"><FixPerk nama={`Jadwal ${nama}`} perk={perkSendiri} mati={mati} onPilih={onPerk} /></div>}
+      </div>
+      {aktif && (
+        <>
+          <p className="m-0 text-[14px] font-bold text-[#0F2A52]">{hasil}</p>
+          {ikut && <p className="m-0 text-[12px] font-semibold text-[#8A6200]">Masih perkiraan karena tahap sebelumnya masih perkiraan.</p>}
+          {catatan && <p className="m-0 text-[12.5px] text-[#44546F]">{catatan}</p>}
+          {children}
+        </>
+      )}
+    </div>
+  );
+}
+
 function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { pa: string; setPa: (p: string) => void; lst: string[] }) {
   const pend = adaPendataan(f);
   const adaKe = adaPeriode(f);
@@ -58,7 +88,6 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const LEN = PANJANG_PERIODE[f.periode];
   const first = lst[0];
   const banyak = lst.length > 1;
-  const aktif = tahapAktif(f);
   const J = f.jend;
   const jp = useMemo(() => hitungJadwal(f, pa, tahun), [f, pa, tahun]);
 
@@ -93,11 +122,56 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   });
   const setRel = (k: "updating" | "pengolahan" | "pasca" | "diseminasi", patch: Partial<Form["rel"]["updating"]>) => ubah((g) => { Object.assign(g.rel[k], patch); });
 
-  const barisTahap = (["updating", "pendataan", "pengolahan", "pasca", "diseminasi"] as const).filter((k) => {
-    if (k === "updating") return pend; // dapat dinyalakan
-    if (k === "pendataan") return pend;
-    return true;
-  });
+  // Jadwal dasar (pola jendela bila ada periode, atau jadwal tunggal): dipakai Pendataan, atau Pengolahan bila tanpa pendataan.
+  const wPola = jendelaPola(f, pa, tahun);
+  const barisPola = (sisi: "mulai" | "selesai") => {
+    const m = sisi === "mulai";
+    const jenis = m ? J.mj : J.sj;
+    const bln = m ? J.mb : J.sb;
+    const n = m ? J.mn : J.sn;
+    const ubahCara = (v: string) => setJend(m ? (v === "tgl" ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (v === "tgl" ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }));
+    return (
+      <div className="flex flex-col gap-0.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <span className="w-14 shrink-0 text-[13px] font-bold text-[#0F2A52]">{m ? "Mulai" : "Selesai"}</span>
+          <select aria-label={`Cara hari ${sisi}`} className={pilihSel} value={jenis} disabled={mati} onChange={(e) => ubahCara(e.target.value)}>
+            <option value="tgl">tanggal tertentu</option>
+            <option value="akhir">{m ? "N hari terakhir bulan" : "akhir bulan"}</option>
+          </select>
+          {(jenis === "tgl" || m) && <div className="w-[84px]"><Angka nama={`Hari ${sisi}`} nilai={n} min={1} maks={31} mati={mati} onUbah={(v) => setJend(m ? { mn: v } : { sn: v })} /></div>}
+          <span className="text-[13px] text-[#44546F]">di bulan ke-</span>
+          <div className="w-[84px]"><Angka nama={`Bulan ${sisi}`} nilai={bln + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend(m ? { mb: v - 1 } : { sb: v - 1 })} /></div>
+          <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tglIndo(m ? wPola.mulai : wPola.selesai)}{banyak ? ` (${pa})` : ""}</span>
+        </div>
+        <span className="pl-16 text-[12px] text-[#5B6B84]">{bulanTeks(bln)}</span>
+      </div>
+    );
+  };
+  const dasar = adaKe ? (
+    <div className="flex flex-col gap-3">
+      {PRESET.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] font-semibold text-[#44546F]">Pola umum (ketuk untuk mengisi otomatis):</span>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pola umum">
+            {PRESET.map(([l, q]) => (
+              <button key={l} type="button" disabled={mati} aria-pressed={samaPola(q)} onClick={() => setJend(q)}
+                className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${samaPola(q) ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {barisPola("mulai")}
+      {barisPola("selesai")}
+      <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Hasil pola tiap periode">
+        {lst.slice(0, 4).map((P) => { const w = jendelaPola(f, P, tahun); return <li key={P}>{P}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
+        {lst.length > 4 && <li>… dan {lst.length - 4} periode lain</li>}
+      </ul>
+    </div>
+  ) : (
+    <div className={kisi}>
+      <TglRentang nama="Jadwal" judulMulai="Mulai" judulSelesai="Selesai" mulai={f.tunggal.mulai} selesai={f.tunggal.selesai} mati={mati} onUbah={(r) => ubah((g) => { g.tunggal.mulai = r.mulai; g.tunggal.selesai = r.selesai; })} />
+    </div>
+  );
 
   return (
     <Bagian huruf="A" judul="Survei dan jadwal" gsbpm="GSBPM Manajemen" id="bagian-a">
@@ -118,93 +192,57 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
         </Isian>
       )}
 
-      {adaKe && pend && (
-        <div className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Jadwal pendataan lapangan (pola jendela)</h3>
-            <FixPerk nama="Pola jendela pendataan" perk={J.perk} mati={mati} onPilih={(v) => setJend({ perk: v })} />
-          </div>
-          {PRESET.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pola umum">
-              {PRESET.map(([l, q]) => (
-                <button key={l} type="button" disabled={mati} aria-pressed={samaPola(q)} onClick={() => setJend(q)}
-                  className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${samaPola(q) ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{l}</button>
-              ))}
-            </div>
-          )}
-          <div className={kisi}>
-            <Isian judul="Mulai: bulan ke-" ket={bulanTeks(J.mb)}><Angka nama="Bulan mulai" nilai={J.mb + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend({ mb: v - 1 })} /></Isian>
-            <Isian judul="Mulai: cara hari"><Pilihan nama="Cara hari mulai" nilai={J.mj === "tgl" ? "Tanggal" : "N hari terakhir bulan"} opsi={["Tanggal", "N hari terakhir bulan"] as const} mati={mati} onPilih={(v) => setJend(v === "Tanggal" ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 })} /></Isian>
-            <Isian judul={J.mj === "tgl" ? "Tanggal mulai" : "Jumlah hari terakhir bulan"}><Angka nama="Hari mulai" nilai={J.mn} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ mn: v })} /></Isian>
-          </div>
-          <div className={kisi}>
-            <Isian judul="Selesai: bulan ke-" ket={bulanTeks(J.sb)}><Angka nama="Bulan selesai" nilai={J.sb + 1} min={1} maks={25} mati={mati} onUbah={(v) => setJend({ sb: v - 1 })} /></Isian>
-            <Isian judul="Selesai: cara hari"><Pilihan nama="Cara hari selesai" nilai={J.sj === "tgl" ? "Tanggal" : "Akhir bulan"} opsi={["Tanggal", "Akhir bulan"] as const} mati={mati} onPilih={(v) => setJend(v === "Tanggal" ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 })} /></Isian>
-            {J.sj === "tgl" && <Isian judul="Tanggal selesai"><Angka nama="Hari selesai" nilai={J.sn} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ sn: v })} /></Isian>}
-          </div>
-          <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Contoh hasil pola">
-            {lst.slice(0, 4).map((P) => { const w = jendelaPola(f, P, tahun); return <li key={P}>{P}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
-            {lst.length > 4 && <li>… dan {lst.length - 4} periode lain</li>}
-          </ul>
-        </div>
-      )}
-
-      {!adaKe && (
-        <div className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-          <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Jadwal {pend ? "pendataan lapangan" : "pengolahan"}</h3>
-          <div className={kisi}>
-            <TglRentang nama="Jadwal" judulMulai="Mulai" judulSelesai="Selesai" mulai={f.tunggal.mulai} selesai={f.tunggal.selesai} mati={mati} onUbah={(r) => ubah((g) => { g.tunggal.mulai = r.mulai; g.tunggal.selesai = r.selesai; })} />
-          </div>
-          <FixPerk nama="Jadwal kegiatan" perk={f.tunggal.perk} mati={mati} onPilih={(v) => ubah((g) => { g.tunggal.perk = v; })} />
-        </div>
-      )}
-
       <KartuInstrumen f={f} ubah={ubah} mati={mati} />
 
-      {banyak && (
-        <div role="tablist" aria-label="Periode yang dipratinjau" className="flex flex-wrap gap-1.5">
-          {lst.map((P) => (
-            <button key={P} type="button" role="tab" aria-selected={P === pa} onClick={() => setPa(P)}
-              className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${P === pa ? "border-[#1F5FD1] bg-[#1F5FD1] text-white" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{P}</button>
-          ))}
+      <div id="jadwal-tahap" className="scroll-mt-20 flex flex-col gap-3 rounded-xl border border-[#C5D0E2] bg-white p-3">
+        <div>
+          <h3 className="m-0 text-[15px] font-extrabold text-[#0F2A52]">Jadwal tahap kegiatan{banyak ? ` · ${pa}` : ""}</h3>
+          <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-[#44546F]">Isi dari atas ke bawah. Tahap sesudah pendataan dihitung dari tahap sebelumnya, jadi cukup atur selisih harinya. Semua tanggal bawaannya <b>Perkiraan</b>; pilih <b>Fix</b> bila sudah pasti.</p>
         </div>
-      )}
 
-      <div className="flex flex-col gap-2">
-        <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Tahap kegiatan{banyak ? ` · ${pa}` : ""}</h3>
-        {barisTahap.map((k) => {
-          const x = jp[k];
-          const nama = NAMA_TAHAP[k];
-          const relOn = k === "updating" ? f.adaUpdating : k === "pendataan" ? false : k === "diseminasi" ? f.adaDiseminasi : true;
-          const toggle = k === "updating" ? { on: f.adaUpdating, label: "Ada updating", fn: () => ubah((g) => { g.adaUpdating = !g.adaUpdating; }) }
-            : k === "diseminasi" ? { on: f.adaDiseminasi, label: "Ada diseminasi", fn: () => ubah((g) => { g.adaDiseminasi = !g.adaDiseminasi; }) } : null;
-          const r = k === "pendataan" ? null : f.rel[k];
-          const perk = x ? x.perk : false;
-          return (
-            <div key={k} id={`tahap-${k}`} className={`scroll-mt-20 rounded-lg border-l-4 border border-[#DCE3EE] p-3 ${x && x.mulai ? (perk ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63] bg-[#F5FBF7]") : "border-l-[#C5D0E2] bg-white"}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <strong className="text-[14px] text-[#0F2A52]">{nama}</strong>
-                {x && x.mulai && <span className={`rounded-full px-2 py-[1px] text-[11.5px] font-bold ${perk ? "bg-[#FFF4D6] text-[#8A6200]" : "bg-[#E6F6EC] text-[#14653A]"}`}>{perk ? "≈ Perkiraan" : "Fix"}</span>}
-                {toggle && <Centang aktif={toggle.on} mati={mati} onUbah={toggle.fn}>{toggle.label}</Centang>}
-              </div>
-              {k === "pendataan" && <p className="mt-1.5 text-[12.5px] text-[#44546F]">{adaKe ? (kecualiAktif(f, pa) ? "Pengecualian periode ini. " : "Mengikuti pola jendela pendataan. ") : ""}{x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : ""}</p>}
-              {k === "pengolahan" && !pend && adaKe && <p className="mt-1.5 text-[12.5px] text-[#44546F]">Mengikuti jendela jadwal: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : ""}</p>}
-              {r && relOn && !(k === "pengolahan" && !pend) && (
-                <div className="mt-2 flex flex-col gap-2">
-                  <div className={kisi}>
-                    <Isian judul="Mulai, acuan"><Pilihan nama={`${nama} acuan mulai`} nilai={r.aM} opsi={["mulai", "selesai"] as const} mati={mati} onPilih={(v) => setRel(k as "updating", { aM: v })} /></Isian>
-                    <Isian judul="Selisih hari mulai"><input type="number" aria-label={`${nama} mulai, selisih hari`} className={kolom} value={r.dM} disabled={mati} onChange={(e) => setRel(k as "updating", { dM: bilS(e.target.value) })} /></Isian>
-                    <Isian judul="Selesai, acuan"><Pilihan nama={`${nama} acuan selesai`} nilai={r.aS} opsi={["mulai", "selesai"] as const} mati={mati} onPilih={(v) => setRel(k as "updating", { aS: v })} /></Isian>
-                    <Isian judul="Selisih hari selesai"><input type="number" aria-label={`${nama} selesai, selisih hari`} className={kolom} value={r.dS} disabled={mati} onChange={(e) => setRel(k as "updating", { dS: bilS(e.target.value) })} /></Isian>
-                  </div>
-                  <p className="m-0 text-[12.5px] text-[#44546F]">Relatif terhadap {k === "pasca" ? "pengolahan" : k === "diseminasi" ? "pasca pengolahan" : "pendataan"}. Hasil{banyak ? ` ${pa}` : ""}: {x?.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : "belum dapat dihitung"}</p>
-                  <FixPerk nama={`Jadwal ${nama}`} perk={r.perk} mati={mati} onPilih={(v) => setRel(k as "updating", { perk: v })} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {!pend && aktif.pengolahan && <Cat>Tanpa pendataan: tahap Pendataan tidak aktif.</Cat>}
+        {banyak && (
+          <div role="tablist" aria-label="Periode yang dipratinjau" className="flex flex-wrap gap-1.5">
+            {lst.map((P) => (
+              <button key={P} type="button" role="tab" aria-selected={P === pa} onClick={() => setPa(P)}
+                className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${P === pa ? "border-[#1F5FD1] bg-[#1F5FD1] text-white" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{P}</button>
+            ))}
+          </div>
+        )}
+
+        {pend && (
+          <KartuTahap id="tahap-updating" no={1} nama="Updating" mati={mati} hasil={ringkasHasil(jp.updating)} aktif={f.adaUpdating} perkEfektif={!!jp.updating?.perk} perkSendiri={f.rel.updating.perk} onPerk={(v) => setRel("updating", { perk: v })}
+            toggle={<Centang aktif={f.adaUpdating} mati={mati} onUbah={() => ubah((g) => { g.adaUpdating = !g.adaUpdating; })}>Ada updating</Centang>}>
+            <BarisRelatif tahap="Updating" acuan="pendataan" rel={f.rel.updating} mulai={jp.updating?.mulai} selesai={jp.updating?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("updating", p)} />
+          </KartuTahap>
+        )}
+
+        {pend && (
+          <KartuTahap id="tahap-pendataan" no={2} nama="Pendataan lapangan" mati={mati} hasil={ringkasHasil(jp.pendataan)} perkEfektif={!!jp.pendataan?.perk} perkSendiri={adaKe ? !!J.perk : !!f.tunggal.perk}
+            onPerk={(v) => (adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; }))}
+            catatan={adaKe ? (kecualiAktif(f, pa) ? "Periode ini memakai pengecualian (lihat bagian Pengecualian di bawah)." : "Mengikuti pola jendela di bawah, berlaku untuk semua periode yang dicentang.") : undefined}>
+            {dasar}
+          </KartuTahap>
+        )}
+
+        <KartuTahap id="tahap-pengolahan" no={pend ? 3 : 1} nama="Pengolahan" mati={mati} hasil={ringkasHasil(jp.pengolahan)} perkEfektif={!!jp.pengolahan?.perk} perkSendiri={pend ? f.rel.pengolahan.perk : adaKe ? !!J.perk : !!f.tunggal.perk}
+          onPerk={(v) => (pend ? setRel("pengolahan", { perk: v }) : adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; }))}
+          catatan={pend ? "Bawaannya sama dengan jadwal pendataan (0 hari dari mulai dan selesai pendataan). Ubah selisihnya bila pengolahan berbeda." : "Tanpa pendataan: pengolahan memakai jadwal dasar di bawah."}>
+          {pend ? (
+            <>
+              <BarisRelatif tahap="Pengolahan" acuan="pendataan" rel={f.rel.pengolahan} mulai={jp.pengolahan?.mulai} selesai={jp.pengolahan?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pengolahan", p)} />
+              <div><button type="button" className={tombolKecil} disabled={mati} onClick={() => setRel("pengolahan", { aM: "mulai", dM: 0, aS: "selesai", dS: 0 })}>Samakan dengan jadwal pendataan</button></div>
+            </>
+          ) : dasar}
+        </KartuTahap>
+
+        <KartuTahap id="tahap-pasca" no={pend ? 4 : 2} nama="Pasca pengolahan" mati={mati} hasil={ringkasHasil(jp.pasca)} perkEfektif={!!jp.pasca?.perk} perkSendiri={f.rel.pasca.perk} onPerk={(v) => setRel("pasca", { perk: v })}>
+          <BarisRelatif tahap="Pasca pengolahan" acuan="pengolahan" rel={f.rel.pasca} mulai={jp.pasca?.mulai} selesai={jp.pasca?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pasca", p)} />
+        </KartuTahap>
+
+        <KartuTahap id="tahap-diseminasi" no={pend ? 5 : 3} nama="Diseminasi" mati={mati} hasil={ringkasHasil(jp.diseminasi)} aktif={f.adaDiseminasi} perkEfektif={!!jp.diseminasi?.perk} perkSendiri={f.rel.diseminasi.perk} onPerk={(v) => setRel("diseminasi", { perk: v })}
+          toggle={<Centang aktif={f.adaDiseminasi} mati={mati} onUbah={() => ubah((g) => { g.adaDiseminasi = !g.adaDiseminasi; })}>Ada diseminasi</Centang>}>
+          <BarisRelatif tahap="Diseminasi" acuan="pasca pengolahan" rel={f.rel.diseminasi} mulai={jp.diseminasi?.mulai} selesai={jp.diseminasi?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("diseminasi", p)} />
+        </KartuTahap>
       </div>
 
       {adaKe && banyak && <PengecualianPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} />}
@@ -336,12 +374,7 @@ function BagianC({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) 
                 {MEDIA.map((m) => <Centang key={m} aktif={r.media.includes(m)} mati={mati} onUbah={() => ubah((g) => { const a = g.rapat[id].media; g.rapat[id].media = a.includes(m) ? a.filter((x) => x !== m) : [...a, m]; })}>{m}</Centang>)}
               </div>
             )}
-            {on && id === "persiapan" && r.media.includes("Tatap muka") && (
-              <>
-                <Centang aktif={r.mitra} mati={mati} onUbah={() => ubah((g) => { g.rapat.persiapan.mitra = !g.rapat.persiapan.mitra; })}>Mitra dihadirkan (konsumsi dibayar)</Centang>
-                <Cat>Rapat persiapan tanpa belanja bahan, kecuali mitra dihadirkan dan konsumsinya dibayar.</Cat>
-              </>
-            )}
+            {on && r.media.includes("Tatap muka") && <Cat>Konsumsi rapat {id} dihitung bila rapat luring (tatap muka) dan ada petugas mitra pada peran lapangan.</Cat>}
           </div>
         );
       })}

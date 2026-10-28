@@ -142,7 +142,7 @@ function Isi() {
               <KartuPeran isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
               <KartuPetugas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
             </div>
-            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px]">
+            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
               <KartuStatusLj
                 status={status} ada={!!tersimpan} ver={tersimpan?.ver ?? null} pascaH15={!!tersimpan?.pasca_h15} dirty={dirty}
                 alasanDraf={sebabDraf} peringatan={peringatan} alasan={alasan} setAlasan={(s) => { setAlasan(s); }} wajibAlasan={wajibAlasan}

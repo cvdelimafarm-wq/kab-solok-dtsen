@@ -14,6 +14,14 @@ function contoh(ubah: (f: Form) => void = () => {}): Form {
     nama: "Susenas Maret terintegrasi Seruti Triwulan I 2026",
     periode: "Triwulanan", keList: ["Triwulan I"], adaUpdating: false, adaDiseminasi: true,
     jend: { mb: 2, mj: "tgl", mn: 1, sb: 2, sj: "akhir", sn: 0, perk: false },
+    // (28 Okt 2026) bawaan awalForm kini serba Perkiraan dan pengolahan sama dengan pendataan; contoh mockup tetap memakai isian lama
+    rel: {
+      updating: { aM: "mulai", dM: -10, aS: "mulai", dS: -1, perk: false },
+      pengolahan: { aM: "mulai", dM: 14, aS: "selesai", dS: 15, perk: false },
+      pasca: { aM: "selesai", dM: 1, aS: "selesai", dS: 15, perk: true },
+      diseminasi: { aM: "selesai", dM: 1, aS: "selesai", dS: 15, perk: true },
+    },
+    tunggal: { mulai: "", selesai: "", perk: false },
     sesi: {
       briefing: { on: false },
       pelatihan: { on: true, bentuk: "Luring", tempat: "Kantor", tgl: { "Triwulan I": { mulai: "2026-02-23", selesai: "2026-02-25" } }, pulsa: false, perl: true, pengajar: true },
@@ -131,14 +139,22 @@ describe("kebutuhan belanja", () => {
     const tanpa = contoh((g) => { g.sesi.pelatihan.bentuk = "Daring"; g.sesi.pelatihan.pulsa = true; g.peran.pml.status = "Organik"; g.peran.ppl.status = "Organik"; g.peran.ppl.nOrg = 1; });
     expect(kebutuhan(tanpa).some((n) => n.paket[0] === "521211-D" && n.teks.includes("peserta"))).toBe(false);
   });
-  it("rapat persiapan: konsumsi hanya bila mitra dihadirkan", () => {
-    const f = contoh((g) => { g.rapat.persiapan = { on: true, media: ["Tatap muka"], mitra: false }; });
-    expect(kebutuhan(f).some((n) => n.teks.includes("rapat persiapan"))).toBe(false);
-    f.rapat.persiapan.mitra = true;
-    expect(kebutuhan(f).some((n) => n.teks.includes("rapat persiapan"))).toBe(true);
-    const tanpaMitra = contoh((g) => { g.rapat.persiapan = { on: true, media: ["Tatap muka"], mitra: true }; g.peran.pml.status = "Organik"; g.peran.ppl.status = "Organik"; g.peran.ppl.nOrg = 1; });
-    expect(kebutuhan(tanpaMitra).some((n) => n.teks.includes("rapat persiapan"))).toBe(false);
-    expect(periksa(tanpaMitra, 2026).peringatan).toContain("Rapat persiapan menghadirkan mitra, tetapi tidak ada petugas mitra pada peran lapangan.");
+  it("rapat persiapan, pelaksanaan, evaluasi: konsumsi bila luring (tatap muka) + ada mitra; keduanya harus terpenuhi", () => {
+    for (const id of ["persiapan", "pelaksanaan", "evaluasi"] as const) {
+      const ada = (f: Form) => kebutuhan(f).some((n) => n.teks.includes(`rapat ${id}`));
+      expect(ada(contoh((g) => { g.rapat[id] = { on: true, media: ["Tatap muka"], mitra: false }; }))).toBe(true); // luring + ada mitra (penanda mitra lama diabaikan)
+      expect(ada(contoh((g) => { g.rapat[id] = { on: true, media: ["Zoom"], mitra: true }; }))).toBe(false); // bukan luring
+      const tanpaMitra = contoh((g) => { g.rapat[id] = { on: true, media: ["Tatap muka"], mitra: true }; g.peran.pml.status = "Organik"; g.peran.ppl.status = "Organik"; g.peran.ppl.nOrg = 1; });
+      expect(ada(tanpaMitra)).toBe(false); // luring tetapi tanpa mitra
+      expect(periksa(tanpaMitra, 2026).peringatan).toContain(`Rapat ${id} tatap muka: tidak ada petugas mitra, konsumsi tidak dihitung.`);
+    }
+  });
+  it("awalForm: semua tanggal bawaannya Perkiraan dan pengolahan sama dengan pendataan", () => {
+    const f = awalForm();
+    expect(f.jend.perk).toBe(true);
+    expect(f.tunggal.perk).toBe(true);
+    for (const k of ["updating", "pengolahan", "pasca", "diseminasi"] as const) expect(f.rel[k].perk).toBe(true);
+    expect(f.rel.pengolahan).toMatchObject({ aM: "mulai", dM: 0, aS: "selesai", dS: 0 });
   });
   it("translok ditanyakan pada semua peran; cetak buku = persediaan 521811; rilis dan spanduk dihapus", () => {
     const f = contoh((g) => { g.peran.ppl.translok = true; g.peran.supervisor.translok = false; });

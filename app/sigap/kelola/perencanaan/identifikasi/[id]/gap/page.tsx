@@ -114,7 +114,7 @@ function Isi() {
               <KartuTemuanSaatIni identId={row.id} temuan={temuan} />
               <KartuVersiGap versi={gap.versi} tanggapan={gap.tanggapan} bisa={bisa} mengirim={kirim.mengirim} galat={null} onTanggapi={tanggapi} />
             </div>
-            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px]">
+            <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
               <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]">
                 <Chip warna="biru">{pl.tertaut.length} kegiatan tertaut</Chip>
                 {terbaru ? <Chip warna={terbaru.n_keras > 0 ? "merah" : "hijau"}>Terakhir disimpan: v{terbaru.ver}</Chip> : <Chip warna="abu">Belum ada versi tersimpan</Chip>}

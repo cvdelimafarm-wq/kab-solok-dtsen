@@ -5,15 +5,13 @@
 // (25 Okt 2026) Kontrol isian kecil untuk formulir Identifikasi survei: pilihan tunggal, Ya/Tidak, penanda Fix/Perkiraan,
 // tanggal, angka, dan kartu bagian bernomor huruf. Hanya tampilan; aturan ada di lib/keu/identifikasi.ts dan basis data.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { kartu, kolom, label as kelasLabel } from "@/app/sigap/keu-ui";
 import { HARI_MAKS, gantiJumlahHari, gantiMulai, gantiSelesai, jumlahHariAntara, type Rentang } from "@/lib/keu/tanggalDurasi";
 
 const pil = "min-h-[40px] rounded-md border px-3 text-[13px] font-semibold disabled:opacity-60";
 const pilMati = `${pil} border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]`;
 const pilAktif = `${pil} border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]`;
-const pilFix = `${pil} border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]`;
-const pilPerk = `${pil} border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]`;
 
 /** Pilihan tunggal berupa deretan tombol. */
 export function Pilihan<T extends string>({ nilai, opsi, onPilih, mati, nama }: { nilai: T; opsi: readonly T[]; onPilih: (v: T) => void; mati?: boolean; nama: string }) {
@@ -37,12 +35,23 @@ export function YaTidak({ nilai, onPilih, mati, nama }: { nilai: boolean; onPili
   );
 }
 
-/** Penanda kematangan data: Fix (hijau) atau Perkiraan (kuning). */
+/**
+ * Penanda kematangan data: radio button "Perkiraan" (kuning, bawaan) atau "Fix" (hijau).
+ * (28 Okt 2026) Dari tombol bergaya radio menjadi radio button sungguhan, Perkiraan di kiri karena menjadi bawaan semua tanggal.
+ */
 export function FixPerk({ perk, onPilih, mati, nama }: { perk: boolean; onPilih: (perk: boolean) => void; mati?: boolean; nama: string }) {
+  const grup = useId();
+  const dasar = `${mati ? "cursor-not-allowed opacity-60" : "cursor-pointer"} inline-flex min-h-[36px] items-center gap-2 rounded-md border px-3 text-[13px] font-semibold`;
   return (
-    <div role="radiogroup" aria-label={`${nama}: Fix atau Perkiraan`} className="flex gap-1.5">
-      <button type="button" role="radio" aria-checked={!perk} disabled={mati} className={!perk ? pilFix : pilMati} onClick={() => onPilih(false)}>Fix</button>
-      <button type="button" role="radio" aria-checked={perk} disabled={mati} className={perk ? pilPerk : pilMati} onClick={() => onPilih(true)}>≈ Perkiraan</button>
+    <div role="radiogroup" aria-label={`${nama}: Perkiraan atau Fix`} className="flex flex-wrap gap-1.5">
+      <label className={`${dasar} ${perk ? "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]" : "border-[#C5D0E2] bg-white text-[#1B2B4B]"}`}>
+        <input type="radio" name={grup} checked={perk} disabled={mati} onChange={() => onPilih(true)} className="h-4 w-4 accent-[#C98A00]" />
+        ≈ Perkiraan
+      </label>
+      <label className={`${dasar} ${!perk ? "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]" : "border-[#C5D0E2] bg-white text-[#1B2B4B]"}`}>
+        <input type="radio" name={grup} checked={!perk} disabled={mati} onChange={() => onPilih(false)} className="h-4 w-4 accent-[#2E9E63]" />
+        Fix
+      </label>
     </div>
   );
 }
