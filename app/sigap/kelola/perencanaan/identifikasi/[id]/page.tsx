@@ -13,9 +13,10 @@ import { useParams } from "next/navigation";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
 import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
-import { bedaForm, dampakRevisi, kematangan, normalisasi, periksa, sesudahH15, tanggalH15, tglIndo, type Form } from "@/lib/keu/identifikasi";
+import { bedaForm, dampakRevisi, daftarPeriode, kematangan, normalisasi, periksa, sesudahH15, tanggalH15, tglIndo, type Form } from "@/lib/keu/identifikasi";
 import { aksiTersedia, labelStatus, namaVersi, type AksiIdent, type UpdTercatat } from "@/lib/keu/identifikasiHilir";
 import Formulir, { type OpsiRujukan } from "../Formulir";
+import PetaJadwal from "../PetaJadwal";
 import { KartuAnggaran, KartuH15, KartuHasil, KartuHilir, KartuKematangan, KartuPengesahan, KartuRiwayat } from "../Panel";
 import { hariIniWib, useDaftarIdent, useIdent, usePokRo } from "../useIdent";
 
@@ -106,6 +107,8 @@ function Isi() {
   const sumber = !row ? "" : row.ver === 0 ? "Pratinjau dari draf. Belum dipakai modul lain." : (row.status === "revisi" || row.status === "draf")
     ? `Pratinjau revisi. Modul lain tetap memakai ${namaVersi(row.ver).toLowerCase()}.` : `Bersumber dari ${namaVersi(row.ver).toLowerCase()}.`;
   const bolehPetakan = hak.susun || hak.ppk;
+  const daftarP = f ? daftarPeriode(f) : [];
+  const paAktif = daftarP.includes(pa) ? pa : daftarP[0] ?? "";
 
   return (
     <Bingkai
@@ -152,6 +155,7 @@ function Isi() {
               <Formulir f={f} ubah={ubah} tahun={tahun} mati={!bolehSusun || kirim.mengirim} pa={pa} setPa={setPa} rujukan={rujukan} />
               <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
                 <KartuHasil masalah={hasil.masalah} peringatan={hasil.peringatan} />
+                <PetaJadwal f={f} P={paAktif} tahun={tahun} daftarP={daftarP} onPilihP={setPa} hariIni={hariIniWib()} />
                 <KartuKematangan butir={kem.butir} nFix={kem.nFix} nPerk={kem.nPerk} />
                 {formSah && (
                   <KartuH15

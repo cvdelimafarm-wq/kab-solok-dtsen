@@ -9,11 +9,13 @@ import { useMemo, type ReactNode } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
   JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
-  jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalSesi, tglIndo,
+  hitungMitra, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
   type Form, type Instrumen, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
+import { WaktuIsian } from "./Waktu";
+import { recPerk } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -41,7 +43,7 @@ export default function Formulir(p: PropsFormulir) {
     <div className="flex min-w-0 flex-col gap-3.5">
       <BagianA f={f} ubah={ubah} tahun={tahun} mati={mati} pa={paSah} setPa={setPa} lst={lst} />
       <BagianB f={f} ubah={ubah} tahun={tahun} mati={mati} pa={paSah} rujukan={rujukan} />
-      <BagianC f={f} ubah={ubah} mati={mati} />
+      <BagianC f={f} ubah={ubah} tahun={tahun} mati={mati} pa={paSah} />
       <BagianE f={f} ubah={ubah} mati={mati} />
       <BagianFGH f={f} ubah={ubah} mati={mati} />
     </div>
@@ -315,7 +317,6 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
           const nama = id === "briefing" ? "Briefing" : "Pelatihan";
           const t = tanggalSesi(f, id, pa, tahun);
           const luring = s.bentuk === "Luring"; const daring = s.bentuk === "Daring"; const hybrid = s.bentuk === "Hybrid";
-          const setT = (patch: Partial<{ mulai: string; selesai: string }>) => ubah((g) => { const lama = g.sesi[id].tgl[pa]; g.sesi[id].tgl[pa] = { mulai: lama?.mulai ?? "", selesai: lama?.selesai ?? "", ...patch }; });
           return (
             <div key={id} className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -329,11 +330,12 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                     <Pilihan nama={`Tempat ${nama}`} nilai={s.tempat as string} opsi={TEMPAT_PILIH as readonly string[]} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].tempat = v as TempatSesi; })} />
                   </Isian>}
                   {turunan ? (
-                    <Cat>Tanggal {nama.toLowerCase()} {pa}: {tglIndo(t.mulai)} s.d. {tglIndo(t.selesai)}. Diturunkan dari periode acuan {first}, digeser mengikuti tanggal mulai pendataan {pa}.</Cat>
+                    <Cat>Jadwal {nama.toLowerCase()} {pa}: {tglIndo(t.mulai)} s.d. {tglIndo(t.selesai)} ({recPerk(s.tgl[first]) ? "perkiraan" : "fix"}). Diturunkan dari periode acuan {first}, digeser mengikuti tanggal mulai pendataan {pa}. Ubah jadwalnya pada tab {first}.</Cat>
                   ) : (
-                    <div className={kisi}>
-                      <TglRentang nama={nama} judulMulai={`Tanggal mulai${daftarPeriode(f).length > 1 ? ` · ${pa}` : ""}`} judulSelesai="Tanggal selesai" mulai={t.mulai} selesai={t.selesai} mati={mati} onUbah={(r) => setT({ mulai: r.mulai, selesai: r.selesai })} />
-                    </div>
+                    <>
+                      {daftarPeriode(f).length > 1 && <span className="text-[12px] font-semibold text-[#44546F]">Periode: {pa}</span>}
+                      <WaktuIsian nama={`${nama} ${pa}`} rec={s.tgl[pa]} tahun={tahun} mati={mati} onUbah={(r) => ubah((g) => { g.sesi[id].tgl[pa] = r; })} />
+                    </>
                   )}
                   {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
                   {id === "pelatihan" && (luring || hybrid) && <Isian judul="Perlengkapan pelatihan?"><YaTidak nama={`${nama} perlengkapan`} nilai={s.perl} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].perl = v; })} /></Isian>}
@@ -355,7 +357,10 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
 // ---------------------------------------------------------------------------------------------------------------------
 // C. Rapat (Instrumen pendataan kini di bagian A: KartuInstrumen)
 // ---------------------------------------------------------------------------------------------------------------------
-function BagianC({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
+function BagianC({ f, ubah, tahun, mati, pa }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { pa: string }) {
+  const adaMitra = hitungMitra(f) > 0;
+  const turunan = periodeTurunan(f, pa, tahun);
+  const first = daftarPeriode(f)[0];
   return (
     <Bagian huruf="C" judul="Rapat" gsbpm="Manajemen dan GSBPM 8" id="bagian-c">
       {(["persiapan", "pelaksanaan", "evaluasi"] as const).map((id) => {
@@ -374,7 +379,16 @@ function BagianC({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) 
                 {MEDIA.map((m) => <Centang key={m} aktif={r.media.includes(m)} mati={mati} onUbah={() => ubah((g) => { const a = g.rapat[id].media; g.rapat[id].media = a.includes(m) ? a.filter((x) => x !== m) : [...a, m]; })}>{m}</Centang>)}
               </div>
             )}
-            {on && r.media.includes("Tatap muka") && <Cat>Konsumsi rapat {id} dihitung bila rapat luring (tatap muka) dan ada petugas mitra pada peran lapangan.</Cat>}
+            {on && (turunan ? (
+              <Cat>Jadwal rapat {id} {pa}: {tglIndo(tanggalRapat(f, id, pa, tahun).mulai)} s.d. {tglIndo(tanggalRapat(f, id, pa, tahun).selesai)} ({recPerk(r.tgl?.[first]) ? "perkiraan" : "fix"}). Diturunkan dari periode acuan {first}. Ubah jadwalnya pada tab {first}.</Cat>
+            ) : (
+              <>
+                {daftarPeriode(f).length > 1 && <span className="text-[12px] font-semibold text-[#44546F]">Periode: {pa}</span>}
+                <WaktuIsian nama={`Rapat ${id} ${pa}`} rec={r.tgl?.[pa]} tahun={tahun} mati={mati} onUbah={(x) => ubah((g) => { g.rapat[id].tgl = { ...(g.rapat[id].tgl ?? {}), [pa]: x }; })} />
+              </>
+            ))}
+            {on && r.media.includes("Tatap muka") && <Cat>Konsumsi rapat {id}: dihitung bila rapat luring (tatap muka) dan ada petugas mitra, keduanya harus terpenuhi. Saat ini {adaMitra ? "keduanya terpenuhi, konsumsi dihitung." : "belum ada petugas mitra, konsumsi belum dihitung."}</Cat>}
+            {on && r.media.length > 0 && !r.media.includes("Tatap muka") && <Cat>Rapat {id} tidak tatap muka (luring), sehingga konsumsi tidak dihitung.</Cat>}
           </div>
         );
       })}

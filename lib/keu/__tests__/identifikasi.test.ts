@@ -7,6 +7,8 @@ import {
   type BarisPok,
 } from "../identifikasiHilir";
 import vektor from "./identifikasi.vektor.json";
+import { selisihHari, tanggalRapat } from "../identifikasi";
+import { ubahRec } from "../waktu";
 
 /** Contoh dari mockup: Susenas Maret terintegrasi Seruti Triwulan I 2026. */
 function contoh(ubah: (f: Form) => void = () => {}): Form {
@@ -269,12 +271,71 @@ describe("pemeriksaan", () => {
 });
 
 describe("kematangan", () => {
-  it("contoh mockup: 7 butir, 4 perkiraan", () => {
+  it("contoh mockup: 8 butir (termasuk jadwal pelatihan Fix), 4 perkiraan", () => {
     const k = kematangan(contoh());
-    expect(k.butir).toHaveLength(7);
+    expect(k.butir).toHaveLength(8);
+    expect(k.butir).toContainEqual({ t: "Jadwal pelatihan", perk: false });
     expect(k.nPerk).toBe(4);
-    expect(k.nFix).toBe(3);
+    expect(k.nFix).toBe(4);
     expect(k.butir.filter((b) => b.perk).map((b) => b.t)).toEqual(["Jadwal Pasca pengolahan (relatif)", "Jadwal Diseminasi (relatif)", "Jumlah petugas PML", "Jumlah petugas PPL"]);
+  });
+});
+
+describe("jadwal sesi dan rapat: Perkiraan atau Fix", () => {
+  const TW1 = "Triwulan I";
+  it("rapat evaluasi dan pelatihan Perkiraan (bulan + minggu) masuk kematangan dan peringatan", () => {
+    const f = contoh((g) => {
+      g.rapat.evaluasi.tgl = { [TW1]: ubahRec(undefined, { bulan: 3, minggu: 2 }, 2026) };
+      g.sesi.pelatihan.tgl[TW1] = ubahRec(undefined, { bulan: 1, minggu: 3 }, 2026);
+    });
+    expect(tanggalRapat(f, "evaluasi", TW1, 2026)).toEqual({ mulai: "2026-04-13", selesai: "2026-04-17" });
+    expect(f.sesi.pelatihan.tgl[TW1]).toMatchObject({ mulai: "2026-02-16", selesai: "2026-02-20" });
+    const k = kematangan(f);
+    expect(k.butir).toContainEqual({ t: "Jadwal rapat evaluasi", perk: true });
+    expect(k.butir).toContainEqual({ t: "Jadwal pelatihan", perk: true });
+    const r = periksa(f, 2026);
+    expect(r.peringatan).toContain("Jadwal rapat evaluasi masih perkiraan.");
+    expect(r.peringatan).toContain("Jadwal pelatihan masih perkiraan.");
+  });
+  it("rapat tanpa jadwal tidak dihitung sebagai butir maupun peringatan", () => {
+    const f = contoh();
+    expect(kematangan(f).butir.some((b) => b.t.startsWith("Jadwal rapat"))).toBe(false);
+    expect(periksa(f, 2026).peringatan.some((p) => p.includes("rapat"))).toBe(false);
+  });
+  it("pelatihan Perkiraan yang beririsan dengan pendataan hanya jadi peringatan; yang Fix tetap masalah", () => {
+    const psn = "Pendataan dimulai sebelum pelatihan selesai (tidak boleh beririsan).";
+    const perk = periksa(contoh((g) => { g.sesi.pelatihan.tgl[TW1] = ubahRec(undefined, { bulan: 2, minggu: 1 }, 2026); }), 2026);
+    expect(perk.masalah).not.toContain(psn);
+    expect(perk.peringatan).toContain("Pendataan dimulai sebelum pelatihan selesai (jadwal pelatihan masih perkiraan).");
+    const fix = periksa(contoh((g) => { g.sesi.pelatihan.tgl[TW1] = ubahRec(undefined, { perk: false, mode: "rentang", mulai: "2026-02-27", selesai: "2026-03-02" }, 2026); }), 2026);
+    expect(fix.masalah).toContain(psn);
+  });
+  it("rapat Fix dengan tanggal selesai sebelum mulai = masalah", () => {
+    const f = contoh((g) => { g.rapat.evaluasi.tgl = { [TW1]: ubahRec(undefined, { perk: false, mode: "rentang", mulai: "2026-04-17", selesai: "2026-04-13" }, 2026) }; });
+    expect(periksa(f, 2026).masalah).toContain("Rapat evaluasi: tanggal selesai sebelum tanggal mulai.");
+  });
+  it("periode turunan: tanggal rapat digeser sebesar selisih mulai pendataan", () => {
+    const f = contoh((g) => {
+      g.keList = [TW1, "Triwulan II"];
+      g.rapat.evaluasi.tgl = { [TW1]: ubahRec(undefined, { bulan: 3, minggu: 2 }, 2026) };
+    });
+    const a = tanggalRapat(f, "evaluasi", TW1, 2026);
+    const b = tanggalRapat(f, "evaluasi", "Triwulan II", 2026);
+    const d = selisihHari(hitungJadwal(f, "Triwulan II", 2026).pendataan!.mulai, hitungJadwal(f, TW1, 2026).pendataan!.mulai);
+    expect(selisihHari(b.mulai, a.mulai)).toBe(d);
+    expect(selisihHari(b.selesai, a.selesai)).toBe(d);
+  });
+  it("normalisasi memulihkan rekaman jadwal yang ngawur dan mempertahankan data lama", () => {
+    const f = normalisasi({ rapat: { evaluasi: { tgl: { [TW1]: { mulai: "2026-04-13", selesai: "2026-04-17", bulan: 99, minggu: 0, perk: "ya" } } } }, sesi: { pelatihan: { tgl: { [TW1]: { mulai: "2026-02-23", selesai: "2026-02-25" } } } } });
+    expect(f.rapat.evaluasi.tgl?.[TW1]).toEqual({ mulai: "2026-04-13", selesai: "2026-04-17", bulan: 11, minggu: 1 });
+    expect(f.sesi.pelatihan.tgl[TW1]).toEqual({ mulai: "2026-02-23", selesai: "2026-02-25" });
+  });
+  it("bedaForm memberi label yang terbaca untuk jadwal rapat", () => {
+    const a = contoh();
+    const b = contoh((g) => { g.rapat.evaluasi.tgl = { [TW1]: ubahRec(undefined, { bulan: 3, minggu: 2 }, 2026) }; });
+    const t = bedaForm(a, b).map((x) => x.t);
+    expect(t).toContain("Rapat evaluasi (Triwulan I): bulan: (kosong) → April");
+    expect(t).toContain("Rapat evaluasi (Triwulan I): penanda Fix atau Perkiraan: Fix → Perkiraan");
   });
 });
 

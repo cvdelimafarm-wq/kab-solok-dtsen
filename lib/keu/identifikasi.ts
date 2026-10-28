@@ -8,6 +8,8 @@
 // kebutuhan belanja, pemeriksaan (masalah/peringatan), kematangan (Fix/Perkiraan), beda dua salinan, dampak revisi.
 // Bagian hilir (pembaruan H-15, agenda, rekrutmen, evaluasi, pencocokan POK) ada di identifikasiHilir.ts.
 
+import { namaBulan, rapikanRec, recPerk, type WaktuRec } from "./waktu";
+
 export const JENIS_PERIODE = ["Bulanan", "Triwulanan", "Kuartalan (4 bulanan)", "Semesteran", "Tahunan", "Ad-hoc", "Tanpa periode"] as const;
 export type JenisPeriode = (typeof JENIS_PERIODE)[number];
 export const INSTRUMEN = ["Tanpa pendataan", "FASIH", "PAPI"] as const;
@@ -31,15 +33,17 @@ export type BentukSesi = "" | "Daring" | "Luring" | "Hybrid";
 export type TempatSesi = "" | "Kantor" | "Hotel dalam kota" | "Hotel luar kota" | "Lokasi lain";
 export const TEMPAT_SESI: readonly TempatSesi[] = ["", "Kantor", "Hotel dalam kota", "Hotel luar kota", "Lokasi lain"];
 export const tempatHotel = (t: TempatSesi): boolean => t === "Hotel dalam kota" || t === "Hotel luar kota";
-export type SesiForm = { on: boolean; bentuk: BentukSesi; tempat: TempatSesi; tgl: Record<string, { mulai: string; selesai: string }>; pulsa: boolean; perl: boolean; pengajar: boolean };
+export type SesiForm = { on: boolean; bentuk: BentukSesi; tempat: TempatSesi; tgl: Record<string, WaktuRec>; pulsa: boolean; perl: boolean; pengajar: boolean };
 export type StatusPetugas = "Organik" | "Mitra" | "Organik dan mitra";
 export type PeranId = "supervisor" | "kortim" | "pml" | "ppl" | "entri";
 export type PeranForm = { on: boolean; translok: boolean; honor: boolean; status: StatusPetugas; nOrg: number; nMit: number; perk: boolean; dasar: string };
 export type TimHonor = { honor: boolean; ketua: boolean; wakil: boolean; anggota: boolean };
 export const JABATAN_TIM: readonly { id: "ketua" | "wakil" | "anggota"; nama: string }[] = [{ id: "ketua", nama: "Ketua tim" }, { id: "wakil", nama: "Wakil" }, { id: "anggota", nama: "Anggota" }];
 export type Media = "Apel pagi" | "Tatap muka" | "Zoom";
-/** `mitra` (dipakai rapat persiapan): mitra dihadirkan, sehingga konsumsi dibayar. */
-export type RapatForm = { on: boolean; media: Media[]; mitra: boolean };
+/**
+ * `mitra`: penanda lama (tidak lagi dipakai; konsumsi rapat kini luring + ada mitra). `tgl` (28 Okt 2026): jadwal rapat per periode, Perkiraan (bulan + minggu) atau Fix.
+ */
+export type RapatForm = { on: boolean; media: Media[]; mitra: boolean; tgl?: Record<string, WaktuRec> };
 export type CaraKonsultasi = "Tatap muka (perjalanan dinas)" | "Daring";
 
 export type Form = {
@@ -123,7 +127,7 @@ export function awalForm(): Form {
     berbagi: false,
     rujukan: "",
     sesi: { briefing: sesiKosong(), pelatihan: sesiKosong() },
-    rapat: { persiapan: { on: false, media: [], mitra: false }, pelaksanaan: { on: false, media: [], mitra: false }, evaluasi: { on: true, media: ["Tatap muka"], mitra: false } },
+    rapat: { persiapan: { on: false, media: [], mitra: false, tgl: {} }, pelaksanaan: { on: false, media: [], mitra: false, tgl: {} }, evaluasi: { on: true, media: ["Tatap muka"], mitra: false, tgl: {} } },
     instrumen: "FASIH",
     cetakPapi: false,
     pulsaLap: false,
@@ -197,6 +201,15 @@ export function normalisasi(masuk: unknown): Form {
     if (!TEMPAT_SESI.includes(f.sesi[id].tempat)) f.sesi[id].tempat = "";
   }
   f.sesi.briefing.perl = false; // perlengkapan hanya untuk pelatihan, bukan briefing
+  // rekaman jadwal sesi dan rapat (Perkiraan/Fix) dipulihkan agar berbatas wajar
+  for (const id of ["briefing", "pelatihan"] as const) {
+    const tg = adalahObjek(f.sesi[id].tgl) ? f.sesi[id].tgl : {};
+    f.sesi[id].tgl = Object.fromEntries(Object.entries(tg).map(([P, r]) => [P, rapikanRec(r)]));
+  }
+  for (const d of ["persiapan", "pelaksanaan", "evaluasi"] as const) {
+    const tg = adalahObjek(f.rapat[d].tgl) ? f.rapat[d].tgl : {};
+    f.rapat[d].tgl = Object.fromEntries(Object.entries(tg).map(([P, r]) => [P, rapikanRec(r)]));
+  }
   if (!["Tatap muka (perjalanan dinas)", "Daring"].includes(f.cara)) f.cara = "Daring";
   return f;
 }
@@ -314,16 +327,26 @@ export function periodeTurunan(f: Form, P: string, tahun: number): boolean {
 }
 
 /** Tanggal sesi (briefing/pelatihan) periode P; periode turunan = tanggal periode acuan digeser sebesar selisih mulai pendataan. */
-export function tanggalSesi(f: Form, id: "briefing" | "pelatihan", P: string, tahun: number): { mulai: string; selesai: string } {
-  const mentah = (Q: string) => f.sesi[id].tgl?.[Q] ?? { mulai: "", selesai: "" };
-  const lst = daftarPeriode(f);
-  const first = lst[0];
+/** Tanggal satu rekaman jadwal untuk periode P; periode turunan = tanggal periode acuan digeser sebesar selisih mulai pendataan. */
+function tanggalRekaman(f: Form, tgl: Record<string, WaktuRec> | undefined, P: string, tahun: number): { mulai: string; selesai: string } {
+  const mentah = (Q: string) => tgl?.[Q] ?? { mulai: "", selesai: "" };
+  const first = daftarPeriode(f)[0];
   if (periodeTurunan(f, P, tahun)) {
     const r = mentah(first);
     const d = selisihHari(hitungJadwal(f, P, tahun).pendataan!.mulai, hitungJadwal(f, first, tahun).pendataan!.mulai);
     return { mulai: tambahHari(r.mulai, d), selesai: tambahHari(r.selesai, d) };
   }
-  return mentah(P);
+  const r = mentah(P);
+  return { mulai: r.mulai, selesai: r.selesai };
+}
+
+export function tanggalSesi(f: Form, id: "briefing" | "pelatihan", P: string, tahun: number): { mulai: string; selesai: string } {
+  return tanggalRekaman(f, f.sesi[id].tgl, P, tahun);
+}
+
+/** (28 Okt 2026) Tanggal rapat persiapan, pelaksanaan, atau evaluasi untuk periode P (kosong bila belum dijadwalkan). */
+export function tanggalRapat(f: Form, id: "persiapan" | "pelaksanaan" | "evaluasi", P: string, tahun: number): { mulai: string; selesai: string } {
+  return tanggalRekaman(f, f.rapat[id].tgl, P, tahun);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -530,7 +553,10 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
       const v = jadwalValid(f, P, tahun).valid;
       if (!t.mulai || !t.selesai || t.selesai < t.mulai) continue;
       const nx = v.updating ?? v.pendataan;
-      if (nx && nx.mulai < t.selesai) masalah.push(`${pre(P)}${v.updating ? "Updating" : "Pendataan"} dimulai sebelum pelatihan selesai (tidak boleh beririsan).`);
+      if (nx && nx.mulai < t.selesai) {
+        const psn = `${pre(P)}${v.updating ? "Updating" : "Pendataan"} dimulai sebelum pelatihan selesai (tidak boleh beririsan).`;
+        if (recPerk(f.sesi.pelatihan.tgl?.[P])) peringatan.push(psn.replace("(tidak boleh beririsan)", "(jadwal pelatihan masih perkiraan)")); else masalah.push(psn);
+      }
     }
   }
   if (f.berbagi) {
@@ -539,11 +565,26 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
     else if (ktx.rujukan && !ktx.rujukan.sah) peringatan.push("Survei yang dirujuk belum disahkan; pelatihannya belum dapat dipastikan.");
   }
 
+  // jadwal sesi yang masih perkiraan
+  for (const [id, nama] of [["briefing", "briefing"], ["pelatihan", "pelatihan"]] as const) {
+    const rec = f.sesi[id].tgl?.[lst[0]];
+    if (sesiOn(id) && rec?.mulai && recPerk(rec)) peringatan.push(`Jadwal ${nama} masih perkiraan.`);
+  }
+
   // rapat
   for (const [id, nama] of [["persiapan", "persiapan"], ["pelaksanaan", "pelaksanaan"], ["evaluasi", "evaluasi"]] as const) {
     const r = f.rapat[id];
     const on = id === "evaluasi" ? true : r.on;
     if (on && r.media.length === 0) masalah.push(`Rapat ${nama}: pilih minimal satu media.`);
+    if (on) {
+      for (const P of lst) {
+        if (periodeTurunan(f, P, tahun)) continue;
+        const w = tanggalRapat(f, id, P, tahun);
+        if (w.mulai && w.selesai && w.selesai < w.mulai) masalah.push(`${pre(P)}Rapat ${nama}: tanggal selesai sebelum tanggal mulai.`);
+      }
+      const rec = r.tgl?.[lst[0]];
+      if (rec?.mulai && recPerk(rec)) peringatan.push(`Jadwal rapat ${nama} masih perkiraan.`);
+    }
     if (on && r.media.includes("Tatap muka") && hitungMitra(f) === 0) peringatan.push(`Rapat ${nama} tatap muka: tidak ada petugas mitra, konsumsi tidak dihitung.`);
   }
 
@@ -639,6 +680,18 @@ export function kematangan(f: Form): { butir: Butir[]; nFix: number; nPerk: numb
     if (!aktif[k] || (k === "pengolahan" && !pend)) continue;
     butir.push({ t: `Jadwal ${NAMA_TAHAP[k]} (relatif)`, perk: !!f.rel[k].perk });
   }
+  // jadwal briefing, pelatihan, dan rapat (hanya yang sudah terisi tanggalnya; periode acuan)
+  const P0 = daftarPeriode(f)[0];
+  if (!f.berbagi) {
+    for (const [id, nama] of [["briefing", "briefing"], ["pelatihan", "pelatihan"]] as const) {
+      const rec = f.sesi[id].tgl?.[P0];
+      if (f.sesi[id].on && rec?.mulai) butir.push({ t: `Jadwal ${nama}`, perk: recPerk(rec) });
+    }
+  }
+  for (const id of ["persiapan", "pelaksanaan", "evaluasi"] as const) {
+    const rec = f.rapat[id].tgl?.[P0];
+    if ((id === "evaluasi" || f.rapat[id].on) && rec?.mulai) butir.push({ t: `Jadwal rapat ${id}`, perk: recPerk(rec) });
+  }
   for (const t of peranTerpakai(f)) butir.push({ t: `Jumlah petugas ${t.nama}`, perk: !!t.p.perk });
   const nPerk = butir.filter((b) => b.perk).length;
   return { butir, nPerk, nFix: butir.length - nPerk };
@@ -663,6 +716,8 @@ function ratakan(o: unknown, pre: string, out: Record<string, unknown>): Record<
   return out;
 }
 
+const LAB_WAKTU: Record<string, string> = { mulai: "tanggal mulai", selesai: "tanggal selesai", perk: "penanda Fix atau Perkiraan", mode: "bentuk tanggal Fix", bulan: "bulan", minggu: "minggu ke-" };
+
 /** Nama isian yang mudah dibaca dari jalur "peran.ppl.nMit" dst. */
 export function labelJalur(p: string): string {
   const s = p.split(".");
@@ -672,17 +727,18 @@ export function labelJalur(p: string): string {
   if (s[0] === "kecuali") return `Pengecualian jadwal ${s[1]}: ${dari({ on: "aktif", mulai: "tanggal mulai", selesai: "tanggal selesai", alasan: "alasan", perk: "penanda Fix atau Perkiraan" }, s[2])}`;
   if (s[0] === "tunggal") return `Jadwal kegiatan: ${dari({ mulai: "tanggal mulai", selesai: "tanggal selesai", perk: "penanda Fix atau Perkiraan" }, s[1])}`;
   if (s[0] === "sesi") {
-    if (s[2] === "tgl") return `Sesi ${dari(HURUF.ss, s[1])} (${s[3]}): tanggal ${s[4]}`;
+    if (s[2] === "tgl") return `Sesi ${dari(HURUF.ss, s[1])} (${s[3]}): ${dari(LAB_WAKTU, s[4])}`;
     return `Sesi ${dari(HURUF.ss, s[1])}: ${dari({ on: "dilaksanakan", bentuk: "bentuk", tempat: "tempat", pulsa: "biaya pulsa", perl: "perlengkapan pelatihan", pengajar: "pengajar eksternal" }, s[2])}`;
   }
   if (s[0] === "tim") return `Honor tim pelaksana: ${dari({ honor: "ada honor", ketua: "ketua tim", wakil: "wakil", anggota: "anggota" }, s[1])}`;
-  if (s[0] === "rapat") return `Rapat ${s[1]}: ${s[2] === "on" ? "ada" : s[2] === "mitra" ? "mitra dihadirkan" : "media"}`;
+  if (s[0] === "rapat") return s[2] === "tgl" ? `Rapat ${s[1]} (${s[3]}): ${dari(LAB_WAKTU, s[4])}` : `Rapat ${s[1]}: ${s[2] === "on" ? "ada" : s[2] === "mitra" ? "mitra dihadirkan" : "media"}`;
   if (s[0] === "peran") return `${dari(HURUF.pr, s[1])}: ${dari({ on: "dipakai", translok: "translok", honor: "honorarium", status: "status", nOrg: "jumlah organik", nMit: "jumlah mitra", perk: "penanda jumlah Fix atau Perkiraan", dasar: "berkas dasar atau juknis" }, s[2])}`;
   return TOP[p] ?? p;
 }
 
 function nilaiTeks(path: string, v: unknown): string {
   if (path.split(".").pop() === "perk") return v ? "Perkiraan" : "Fix";
+  if (path.split(".").pop() === "bulan" && typeof v === "number") return namaBulan(v);
   if (v === true) return "Ya";
   if (v === false) return "Tidak";
   if (v === undefined || v === "") return "(kosong)";
