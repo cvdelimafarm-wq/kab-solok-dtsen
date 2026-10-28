@@ -9,6 +9,7 @@ import { KODE_PERAN, NAMA_PERAN, type BarisRincian, type IsiLanjutan, type KodeP
 import { type BahanPelaksanaan, type KegiatanBahan, agendaEvaluasi, kesiapanBiaya, ringkasLaporan, selarasJadwal } from "./pelaksanaan";
 import type { Form } from "./identifikasi";
 import type { Nada } from "./identifikasiHilir";
+import { rincianUntukGap, temuanRabSurvei, type RabSurveiGap } from "./gapRab";
 
 export type Tingkat = "info" | "sedang" | "keras";
 export const TINGKAT: readonly Tingkat[] = ["keras", "sedang", "info"];
@@ -77,6 +78,8 @@ export type MasukanGap = {
   pascaH15: boolean;
   bahan: BahanPelaksanaan | null;
   rincian: BarisRincian[];
+  /** RAB per survei (28 Okt 2026); kosong/null = tidak dibaca (Gap memakai kebutuhan dari identifikasi seperti sebelumnya). */
+  rabSurvei?: RabSurveiGap | null;
   jadwal: { periode: string; mulai: string; selesai: string }[];
   hariIni: string;
 };
@@ -113,7 +116,7 @@ export function ringkasGap(m: MasukanGap): RingkasGap {
     if (rencana === 0 && aktual === 0) continue;
     peran.push({ peran: kode, nama: NAMA_PERAN[kode], rencana, aktual });
   }
-  const biaya = m.bahan ? kesiapanBiaya(m.rincian, m.bahan.realisasi, m.bahan.realisasi_sampai) : null;
+  const biaya = m.bahan ? kesiapanBiaya(rincianUntukGap(m.rincian, m.rabSurvei).rincian, m.bahan.realisasi, m.bahan.realisasi_sampai) : null;
   return {
     peran, petugasRencana: peran.reduce((s, p) => s + p.rencana, 0), petugasAktual: peran.reduce((s, p) => s + p.aktual, 0), hariKerja, laporan,
     kebutuhan: biaya ? biaya.baris.reduce((s, b) => s + b.kebutuhan, 0) : 0,
@@ -176,7 +179,8 @@ export function hitungGap(m: MasukanGap): Temuan[] {
 
   // biaya
   if (bahan) {
-    const b = kesiapanBiaya(m.rincian, bahan.realisasi, bahan.realisasi_sampai);
+    const b = kesiapanBiaya(rincianUntukGap(m.rincian, m.rabSurvei).rincian, bahan.realisasi, bahan.realisasi_sampai);
+    for (const x of temuanRabSurvei(m.rabSurvei, m.rincian)) tambah(x.kunci, "biaya", x.tingkat, x.pesan, null);
     if (!b.adaLaporan && m.rincian.length > 0) tambah("biaya:laporan", "biaya", "info", "Belum ada laporan realisasi RO ini, sehingga kebutuhan biaya belum dapat dibandingkan dengan pagu.", "pl-bendahara");
     for (const x of b.baris) {
       if (x.status === "kurang") tambah(`biaya:${x.akun}`, "biaya", "keras", `Akun ${x.akun} (${x.nama}): ${x.catatan}`, "pl-bendahara");

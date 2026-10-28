@@ -31,6 +31,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_rab_baris: ["id", "item_id", "urut", "ket", "volume", "satuan", "harga_satuan", "jumlah_tetap", "jumlah", "sama_dengan_item", "catatan", "tautan", "periode", "bulan_mulai", "bulan_sampai", "minggu", "manual", "dibuat_at"],
   keu_rab_item: ["id", "rab_id", "pok_kunci", "komponen_kode", "akun_kode", "akun_tujuan", "uraian", "satuan", "prioritas_kode", "selesai", "catatan", "dibuat_at", "baru"],
   keu_rab_jadwal: ["baris_id", "bulan", "nilai", "minggu"],
+  keu_rab_survei: ["rab_id", "ident_id", "status", "catatan", "diubah_oleh", "dibuat_at", "diubah_at"],
   keu_realisasi_unggah: ["id", "tahun", "sampai_tanggal", "bulan", "nama_berkas", "hash_berkas", "pok_versi_id", "n_item", "total_pagu", "total_lock", "total_sd", "status", "alasan_batal", "diunggah_oleh", "dibuat_at", "diubah_at"],
   keu_revisi_jadwal: ["id", "tahun", "jenis", "judul", "buka", "tutup", "ulang", "status", "catatan", "dibuat_oleh", "dibuat_at", "diubah_at"],
   keu_revisi_sah: ["id", "jadwal_id", "versi_sistem", "nomor_dokumen", "tanggal_dokumen", "pok_versi_dasar_id", "pok_versi_hasil_id", "dicatat_oleh", "dicatat_at"],

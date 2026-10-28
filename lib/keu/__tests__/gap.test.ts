@@ -120,6 +120,18 @@ describe("biaya dan evaluasi", () => {
     expect(cari(sedang, "biaya:524111")[0].tingkat).toBe("sedang");
     expect(cari(hitungGap(masukan((m) => { m.rincian = [baris("521213", 100)]; })), "biaya:laporan")[0].tingkat).toBe("info");
   });
+  it("RAB per survei siap dipakai untuk kebutuhan biaya; draf hanya memberi tahu", () => {
+    const real = [{ akun: "521213", pagu: 800, real_sd: 300, sisa: 500 }];
+    const rab = (status: "draf" | "siap") => ({ status, baris: [{ akun: "521213", ket: "r", volume: 1, satuan: "x", harga: 400, jumlah: 400 }], berubah: 0 });
+    const siap = hitungGap(masukan((m) => { m.rincian = [baris("521213", 1000)]; m.bahan = bahan([keg()], real); m.rabSurvei = rab("siap"); }));
+    expect(cari(siap, "biaya:521213")).toHaveLength(0);
+    expect(cari(siap, "biaya:rab_selisih")[0].tingkat).toBe("info");
+    const draf = hitungGap(masukan((m) => { m.rincian = [baris("521213", 1000)]; m.bahan = bahan([keg()], real); m.rabSurvei = rab("draf"); }));
+    expect(cari(draf, "biaya:521213")[0].tingkat).toBe("keras");
+    expect(cari(draf, "biaya:rab_draf")).toHaveLength(1);
+    const tanpa = hitungGap(masukan((m) => { m.rincian = [baris("521213", 1000)]; m.bahan = bahan([keg()], real); }));
+    expect(cari(tanpa, "biaya:rab")).toHaveLength(0);
+  });
   it("kegiatan berakhir tanpa rapat evaluasi: perlu perhatian; dengan rapat: tidak ada temuan", () => {
     expect(cari(hitungGap(masukan((m) => { m.hariIni = "2026-03-20"; })), "evaluasi")[0].tingkat).toBe("sedang");
     expect(cari(hitungGap(masukan((m) => { m.hariIni = "2026-03-20"; (m.bahan as BahanPelaksanaan).kegiatan[0].rapat_evaluasi = 1; })), "evaluasi")).toHaveLength(0);

@@ -147,7 +147,7 @@ export function useRabRo(kode: string) {
   const pilih = useMemo(() => (ringkas.baris ? pilihRab(ringkas.baris, kode) : null), [ringkas.baris, kode]);
   const id = pilih?.rab_id ?? null;
   const detail = useBacaKeu<RabDetail>(id ? urlBaca("keu_rab", { id }, { batas: 1, kolom: ["id", "catatan", "nomor", "status", "alasan_versi"] }) : null);
-  const item = useBacaKeu<ItemRabRow>(id ? urlBaca("keu_rab_item", { rab_id: id }, { batas: 5000, kolom: ["id", "pok_kunci", "selesai", "prioritas_kode", "akun_tujuan"] }) : null);
+  const item = useBacaKeu<ItemRabRow>(id ? urlBaca("keu_rab_item", { rab_id: id }, { batas: 5000, kolom: ["id", "pok_kunci", "selesai", "prioritas_kode", "akun_tujuan", "akun_kode", "uraian", "satuan", "komponen_kode"] }) : null);
   const baris = useBacaKeu<BarisRabRow>(id ? urlBaca("keu_v_rab_baris", { rab_id: id }, { batas: 20000 }) : null);
   const jejak = useBacaKeu<Jejak>(id ? urlBaca("keu_v_rab_jejak", { rab_id: id }, { urut: "-id", batas: 200 }) : null);
   const muatSemua = useCallback(async () => {

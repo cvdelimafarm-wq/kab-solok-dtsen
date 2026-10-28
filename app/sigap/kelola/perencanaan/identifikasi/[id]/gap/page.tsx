@@ -5,6 +5,7 @@
 // (25 Okt 2026, tahap 32) Peringatan pelaksanaan dan laporan Gap: rencana pada identifikasi lanjutan dibanding kenyataan di SIGAP (penugasan, laporan harian, jadwal,
 // pagu, evaluasi). Temuan dihitung di sini (lib/keu/gap.ts) dari bahan yang dibaca lewat keu_pelaksanaan_bahan, disimpan berversi lewat keu_gap_simpan, dan
 // ditanggapi lewat keu_gap_tanggapi. Tidak memblokir apa pun; temuan keras baru diberitahukan ke PPK.
+// (28 Okt 2026) Biaya memakai RAB per survei yang berstatus Siap (useRabGap, lib/keu/gapRab.ts); selain itu tetap kebutuhan dari identifikasi.
 // (26 Okt 2026) Kartu C "Delegasi pada survei ini" (KartuDelego.tsx): kenyataan pembagian tugas dari Delego, hanya tampilan.
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -24,6 +25,7 @@ import { usePelaksanaan } from "../pelaksanaan/usePelaksanaan";
 import { KartuBanding, KartuSimpanGap, KartuTemuanSaatIni, KartuVersiGap } from "./Kartu";
 import { KartuDelego } from "./KartuDelego";
 import { useGap, type StatusTanggapan } from "./useGap";
+import { useRabGap } from "./useRabGap";
 
 function Isi() {
   const { id: idParam } = useParams<{ id: string }>();
@@ -33,6 +35,7 @@ function Isi() {
   const lj = useLanjutan(id, row?.tahun ?? null, row?.ro_kode ?? null);
   const pl = usePelaksanaan(id);
   const gap = useGap(id);
+  const rabGap = useRabGap(row?.ro_kode ?? null, row?.id ?? null, row?.ver ?? null);
   const muatSemua = useCallback(async () => { await Promise.all([ident.muatSemua(), lj.muatSemua(), pl.muatSemua(), gap.muatSemua()]); }, [ident, lj, pl, gap]);
   const kirim = useKirim(muatSemua);
   const [pesan, setPesan] = useState<string | null>(null);
@@ -53,11 +56,11 @@ function Isi() {
     if (!row || !formSah) return null;
     const jadwal = jadwalPendataan(formSah, row.tahun, (row.upd ?? null) as Record<string, { mulai: string; selesai: string }> | null);
     return {
-      form: formSah, isi, pascaH15: !!tersimpan?.pasca_h15, bahan: pl.bahan, jadwal, hariIni,
+      form: formSah, isi, pascaH15: !!tersimpan?.pasca_h15, bahan: pl.bahan, jadwal, hariIni, rabSurvei: rabGap.rabSurvei,
       rincian: isi ? rincianBiaya(isi, formSah, lj.lembar?.isi ?? null) : [],
     };
-  }, [row, formSah, isi, tersimpan, pl.bahan, lj.lembar, hariIni]);
-  const siap = !!masukan && !!pl.bahan && !pl.memuat && !lj.memuat;
+  }, [row, formSah, isi, tersimpan, pl.bahan, lj.lembar, hariIni, rabGap.rabSurvei]);
+  const siap = !!masukan && !!pl.bahan && !pl.memuat && !lj.memuat && !rabGap.memuat;
   const temuan = useMemo(() => (masukan && siap ? hitungGap(masukan) : []), [masukan, siap]);
   const ringkas = useMemo(() => (masukan ? ringkasGap(masukan) : null), [masukan]);
   const layakAkhir = useMemo(() => layakLaporanAkhir(pl.bahan, hariIni), [pl.bahan, hariIni]);

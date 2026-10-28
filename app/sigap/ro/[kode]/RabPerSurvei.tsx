@@ -9,6 +9,7 @@
 // ditandai "diubah dari identifikasi", dan diperbarui bila identifikasi direvisi. Tidak ada yang tertulis sebelum pengguna menekan tombol salin.
 // Logika murni: lib/keu/rabPerSurvei.ts, rabSurvei.ts, rab.ts, batangItem.ts.
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import BatangItem from "@/app/sigap/kelola/perencanaan/identifikasi/BatangItem";
 import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
@@ -21,6 +22,7 @@ import {
   kunciItemBaru, modeAman, penandaDari, periksaNamaItem, pilihanTujuan, rencanaDari, rincianCampuran, ringkasSurvei, selisihSaran, terpasangPer, TUJUAN_TAMBAH,
   type ItemBaruRow, type KeadaanRincian, type KelompokRincian, type Mendatang, type ModeKelompok, type PilihanTujuan, type RencanaRincian, type Terpasang,
 } from "@/lib/keu/rabPerSurvei";
+import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, periksaSiap, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
 import { periksaHariBayar, type PeriodeJadwal } from "@/lib/keu/rabSurvei";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { jendelaCair, labelSumber, periksaCair, periksaHarga, teksJendela, type JendelaCair } from "@/lib/keu/usulanRab";
@@ -206,8 +208,9 @@ function bahanDari(b: BarisAcuan): BahanIdent | null {
   }
 }
 
-function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, namaIdent }: {
+function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, namaIdent, statusRows, muatStatus }: {
   b: BarisAcuan; bahan: BahanIdent; lembar: IsiKebijakan | null; libur: Libur; props: PropsRabSurvei; itemBaru: ItemBaruRow[]; muatItemBaru: () => Promise<void>; namaIdent: ReadonlyMap<number, string>;
+  statusRows: BarisStatusSurvei[]; muatStatus: () => Promise<void>;
 }) {
   const kunciSimpan = simpanKunci(props.kode, b.ident_id);
   const [awal] = useState(() => bacaSimpanan(kunciSimpan));
@@ -215,7 +218,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const [mode, setMode] = useState<ModeKelompok>(awal.mode);
   const [ubahPer, setUbahPer] = useState<Record<string, Ubah>>({});
   const [pesan, setPesan] = useState<string[]>([]);
-  const muatSemua = async () => { await props.muat(); await muatItemBaru(); };
+  const muatSemua = async () => { await props.muat(); await muatItemBaru(); await muatStatus(); };
   const { jalankan, mengirim, galat } = useKirim(muatSemua);
 
   useEffect(() => {
@@ -340,6 +343,44 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
     await jalankan(() => tulisKeuKlien("keu_rab_baris", "update", data, { id: x.ada!.baris.baris_id }));
   };
 
+  // ---- status tersimpan per survei
+  const status = statusDari(statusRows, b.ident_id);
+  const nTerpasang = terpasang.size;
+  const ubahStatus = async (baru: "draf" | "siap") => {
+    if (baru === "siap") {
+      const m = periksaSiap(nTerpasang);
+      if (m) { setPesan([m]); return; }
+    }
+    setPesan([]);
+    await jalankan(() => adaBarisStatus(statusRows, b.ident_id)
+      ? tulisKeuKlien("keu_rab_survei", "update", dataStatusUbah(baru), { rab_id: props.rabId, ident_id: b.ident_id })
+      : tulisKeuKlien("keu_rab_survei", "insert", dataStatusBaru(props.rabId, b.ident_id, baru)));
+  };
+
+  // ---- pemicu revisi (hanya menandai; jenis revisi ditetapkan PPK)
+  const itemLengkap = useMemo<ItemRabLengkap[]>(() => props.itemRab.flatMap((i) =>
+    i.uraian === undefined || i.akun_kode === undefined || i.komponen_kode === undefined
+      ? []
+      : [{ id: i.id, pok_kunci: i.pok_kunci, akun_kode: i.akun_kode, uraian: i.uraian, satuan: i.satuan ?? "", komponen_kode: i.komponen_kode, selesai: i.selesai }]), [props.itemRab]);
+  const pemicu = useMemo(() => analisisRevisi(props.peta, itemLengkap, props.barisRab, b.ident_id), [props.peta, itemLengkap, props.barisRab, b.ident_id]);
+  const ringkasP = ringkasPemicu(pemicu);
+
+  // ---- perbarui semua yang berubah
+  const berubahSemua = baris.filter((x) => x.ada !== undefined && selisihSaran(x.rc.r, x.ada).berubah);
+  const perbaruiSemua = async () => {
+    setPesan([]);
+    await jalankan(async (): Promise<HasilAksi<unknown>> => {
+      for (const x of berubahSemua) {
+        if (!x.ada) continue;
+        const data = dataPerbarui(x.rc.saran, b.ident_ver, selisihSaran(x.rc.r, x.ada));
+        if (!data) continue;
+        const r = await tulisKeuKlien("keu_rab_baris", "update", data, { id: x.ada.baris.baris_id });
+        if (!r.ok) return r;
+      }
+      return { ok: true, data: null };
+    });
+  };
+
   const siapSemua = baris.filter((x) => x.keadaan === "siap");
   const kelompokAda = KELOMPOK_RINCIAN.filter((k) => rincian.some((r) => r.kelompok === k));
 
@@ -353,6 +394,28 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
         Rincian di sini langsung masuk RAB standar (tab sebelah). Tarif kebijakan adalah batas tertinggi: harga lebih rendah boleh. Tidak ada yang tertulis sebelum Anda menekan Salin ke RAB.
       </p>
       {rs.length === 0 && <p className="text-[13px] text-[#6B7A93]">Identifikasi ini belum menghasilkan kebutuhan biaya.</p>}
+
+      <section className="flex flex-wrap items-center gap-2 rounded-lg border border-[#DCE3EE] p-3">
+        <p className={label}>Status RAB survei ini</p>
+        <Chip warna={status === "siap" ? "hijau" : "abu"}>{LABEL_STATUS_SURVEI[status]}</Chip>
+        <p className="min-w-0 flex-1 basis-[220px] text-[12px] text-[#5B6B84]">
+          {status === "siap"
+            ? "Gap memakai rincian RAB survei ini untuk kebutuhan biaya. Menambah, mengubah, atau menghapus rincian mengembalikan status ke Draf."
+            : "Selama Draf, Gap tetap memakai kebutuhan dari identifikasi. Nyatakan Siap bila rincian survei ini sudah lengkap."}
+          {!props.editable && " RAB sedang tidak dapat diubah (sudah diajukan atau disahkan), jadi status tidak dapat diganti."}
+        </p>
+        {props.editable && (status === "siap"
+          ? <button type="button" disabled={mengirim} onClick={() => void ubahStatus("draf")} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`}>Kembalikan ke Draf</button>
+          : <button type="button" disabled={mengirim || nTerpasang === 0} onClick={() => void ubahStatus("siap")} className={`${tombol} bg-[#0F2A52] text-white`}>Tandai Siap diajukan</button>)}
+      </section>
+
+      {props.editable && berubahSemua.length > 0 && (
+        <div role="status" className="space-y-1.5 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
+          <p className="font-semibold">{berubahSemua.length} rincian berbeda dari saran identifikasi terbaru.</p>
+          <p>Memperbarui menimpa volume atau harga yang berubah pada rincian tersebut (termasuk yang pernah Anda ubah) dan mengembalikan status ke Draf.</p>
+          <button type="button" disabled={mengirim} onClick={() => void perbaruiSemua()} className={`${tombol} bg-[#1F5FD1] text-white`}>{mengirim ? "Memperbarui…" : `Perbarui semua yang berubah (${berubahSemua.length})`}</button>
+        </div>
+      )}
 
       {kolHari.length > 0 && (
         <section className="space-y-2 rounded-lg border border-[#DCE3EE] p-3">
@@ -451,6 +514,21 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
         </section>
       )}
 
+      {pemicu.length > 0 && (
+        <section className="space-y-1.5 rounded-lg border border-[#DCE3EE] p-3 text-[12.5px] text-[#44546F]">
+          <p className={label}>Pemicu revisi dari survei ini ({ringkasP.total})</p>
+          <ul className="space-y-1.5">
+            {pemicu.map((x, i) => (
+              <li key={`${x.kode}-${x.itemId}-${i}`} className="break-words">
+                <span className="font-semibold text-[#0F2A52]">{x.kode} · {NAMA_PEMICU[x.kode]}</span>: {x.pesan}
+              </li>
+            ))}
+          </ul>
+          <p>{CATATAN_JENIS_REVISI}</p>
+          <Link href={`/sigap/ro/${encodeURIComponent(props.kode)}?tab=revisi`} className="inline-block font-semibold text-[#1F5FD1] underline">Buka tab Revisi →</Link>
+        </section>
+      )}
+
       {yatim.length > 0 && (
         <section role="status" className="space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
           <p className="font-semibold">{yatim.length} baris RAB berasal dari identifikasi ini tetapi tidak cocok lagi dengan rincian yang ditawarkan sekarang.</p>
@@ -471,7 +549,8 @@ export function RabPerSurvei(props: PropsRabSurvei) {
   const lembar = useBacaKeu<LembarBerlaku>(b ? urlBaca("keu_v_kebijakan_berlaku", { tahun: b.tahun }, { batas: 1 }) : null);
   const hariLibur = useBacaKeu<{ tanggal: string; aktif: boolean }>(b ? urlBaca("keu_v_libur", {}, { urut: "tanggal", batas: 2000 }) : null);
   const itemBaru = useBacaKeu<ItemBaruRow>(urlBaca("keu_rab_item", { rab_id: props.rabId, pok_kunci: null }, { batas: 500, kolom: ["id", "akun_kode", "uraian", "satuan", "komponen_kode", "selesai"] }));
-  const siap = b !== null && (lembar.baris !== null || lembar.galat !== null) && (hariLibur.baris !== null || hariLibur.galat !== null) && itemBaru.baris !== null;
+  const statusSurvei = useBacaKeu<BarisStatusSurvei>(urlBaca("keu_rab_survei", { rab_id: props.rabId }, { batas: 500, kolom: ["rab_id", "ident_id", "status", "catatan", "diubah_oleh", "diubah_at"] }));
+  const siap = b !== null && (statusSurvei.baris !== null || statusSurvei.galat !== null) && (lembar.baris !== null || lembar.galat !== null) && (hariLibur.baris !== null || hariLibur.galat !== null) && itemBaru.baris !== null;
   const bahan = useMemo(() => (b ? bahanDari(b) : null), [b]);
   const libur = useMemo(() => bangunLibur(hariLibur.baris), [hariLibur.baris]);
   const namaIdent = useMemo(() => new Map(daftarIdent.map((x) => [x.ident_id, x.nama] as const)), [daftarIdent]);
@@ -492,13 +571,13 @@ export function RabPerSurvei(props: PropsRabSurvei) {
         </div>
       )}
       {daftarIdent.length === 1 && <p className="text-[13px] font-semibold text-[#0F2A52]">{b.nama} ({b.tahun})</p>}
-      {itemBaru.galat && <Galat pesan={itemBaru.galat} />}
+      {(itemBaru.galat ?? statusSurvei.galat) && <Galat pesan={(itemBaru.galat ?? statusSurvei.galat) as string} />}
       {!siap || !bahan ? (
         bahan === null && siap ? <Galat pesan="Isi identifikasi tidak dapat dibaca untuk RAB per survei." /> : <Memuat tinggi="h-24" />
       ) : (
         <IsiSurvei
           key={b.ident_id} b={b} bahan={bahan} lembar={lembar.baris?.[0]?.isi ?? null} libur={libur} props={props}
-          itemBaru={itemBaru.baris ?? []} muatItemBaru={itemBaru.muat} namaIdent={namaIdent}
+          itemBaru={itemBaru.baris ?? []} muatItemBaru={itemBaru.muat} namaIdent={namaIdent} statusRows={statusSurvei.baris ?? []} muatStatus={statusSurvei.muat}
         />
       )}
     </section>

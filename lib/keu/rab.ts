@@ -119,7 +119,11 @@ export function dataItemRab(rabId: number, item: Pick<ItemAnggaran, "kunci" | "k
 }
 
 // ---------------------------------------------------------------- Pemetaan POK <-> RAB
-export type ItemRabRow = { id: number; pok_kunci: string | null; selesai: boolean; prioritas_kode: string | null; akun_tujuan?: string | null };
+export type ItemRabRow = {
+  id: number; pok_kunci: string | null; selesai: boolean; prioritas_kode: string | null; akun_tujuan?: string | null;
+  /** Dibaca bersama sejak RAB per survei (20261028): akun, redaksi, satuan, dan komponen item RAB (item baru tidak punya padanan di POK). */
+  akun_kode?: string; uraian?: string; satuan?: string; komponen_kode?: string;
+};
 export type BarisRabRow = { baris_id: number; item_id: number; urut: number; ket: string; volume: number | string; satuan: string; harga_satuan: number | string; jumlah: number | string; jumlah_dikunci: boolean; sama_dengan_item: boolean; periode: Periode; bulan_mulai: number; bulan_sampai: number; minggu: number;
   /** Penanda RAB per survei (20261028f); kosong pada baris RAB biasa. */
   ident_id?: number | null; ident_ver?: number | null; ident_kunci?: string | null; ident_vol?: number | string | null; ident_harga?: number | string | null };
