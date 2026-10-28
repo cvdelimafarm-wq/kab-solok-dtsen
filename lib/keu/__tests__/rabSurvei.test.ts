@@ -9,7 +9,7 @@ const trPml: BarisRincian = { ...dasar, kelompok: "Translok dan penginapan", ura
 const rapat: BarisRincian = { ...dasar, kelompok: "Rapat", uraian: "Konsumsi rapat evaluasi tatap muka", akun: "521211", volume: null, satuan: "orang", tarif: 50000 };
 const klsMar: BarisRincian = { ...dasar, kelompok: "Pelatihan", uraian: "Pelatihan Maret: konsumsi tanpa paket", akun: "521211", volume: 10, satuan: "orang-hari", tarif: 40000 };
 const klsSep: BarisRincian = { ...klsMar, uraian: "Pelatihan September: konsumsi tanpa paket", volume: 14 };
-const jad: PeriodeJadwal[] = [{ periode: "Maret", mulai: "2026-03-01", selesai: "2026-03-05" }, { periode: "September", mulai: "2026-09-01", selesai: "2026-09-03" }];
+const jad: PeriodeJadwal[] = [{ periode: "Maret", mulai: "2026-03-02", selesai: "2026-03-06" }, { periode: "September", mulai: "2026-09-01", selesai: "2026-09-03" }];
 
 describe("hariJadwal", () => {
   it("inklusif; 0 bila belum lengkap atau terbalik", () => {
@@ -60,6 +60,18 @@ describe("rincianSurvei", () => {
     expect(r.map((x) => [x.volume, x.satuan])).toEqual([[12, "orang-malam"], [6, "orang-malam"]]);
     expect(periksaHariBayar(5, 5, true)).toContain("maksimal 4");
   });
+  it("batas = HARI KERJA pendataan: akhir pekan dan libur tidak dihitung", () => {
+    // 1-5 Maret 2026: Minggu s.d. Kamis = 4 hari kerja
+    const akhirPekan = [{ periode: "Maret", mulai: "2026-03-01", selesai: "2026-03-05" }];
+    const a = rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 5 });
+    expect(a[0].volume).toBeNull(); expect(a[0].catatan).toContain("maksimal 4");
+    expect(rincianSurvei([trPpl], akhirPekan, "periode", { [kunciHari(trPpl, "Maret")]: 4 })[0].volume).toBe(12);
+    // satu hari libur pada 2-6 Maret: batas menjadi 4
+    const libur = new Set(["2026-03-04"]);
+    const b = rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 5 }, libur);
+    expect(b[0].volume).toBeNull(); expect(b[0].hariMaks).toBe(4);
+    expect(rincianSurvei([trPpl], [jad[0]], "periode", { [kunciHari(trPpl, "Maret")]: 4 }, libur)[0].volume).toBe(12);
+  });
   it("periksaHariBayar", () => {
     expect(periksaHariBayar(3, 5)).toBeNull();
     expect(periksaHariBayar(5, 5)).toBeNull();
@@ -79,7 +91,7 @@ describe("rincianSurvei", () => {
     expect(g[0]).toMatchObject({ uraian: "Pelatihan: konsumsi tanpa paket", volume: 24, jumlah: 24 * 40000 });
   });
   it("tanpa periode: nama periode tidak ditempel", () => {
-    const r = rincianSurvei([trPpl], [{ periode: "Kegiatan", mulai: "2026-03-01", selesai: "2026-03-05" }], "periode", { [kunciHari(trPpl, "Kegiatan")]: 4 });
+    const r = rincianSurvei([trPpl], [{ periode: "Kegiatan", mulai: "2026-03-02", selesai: "2026-03-06" }], "periode", { [kunciHari(trPpl, "Kegiatan")]: 4 });
     expect(r[0].uraian).toBe("Translok PPL (kurang dari 8 jam)");
     expect(r[0].volume).toBe(12);
   });

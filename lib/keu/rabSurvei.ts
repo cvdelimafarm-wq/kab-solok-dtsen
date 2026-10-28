@@ -4,13 +4,15 @@
 //  - mode "periode": satu rincian per periode (mis. translok Susenas Maret dan Susenas September terpisah);
 //  - mode "gabung": satu rincian untuk seluruh periode (volume dijumlahkan).
 // Volume translok = orang x HARI DIBAYAR yang diisi manual (keputusan pengguna 28 Okt 2026: petugas bisa mendata 10 hari tetapi transloknya hanya dibayar 3 hari);
-// hari dibayar tidak boleh melebihi hari pendataan periode itu (batas atas, hari kalender: cek aturan). Penginapan = orang x malam yang diisi sama (batas hari - 1).
+// hari dibayar tidak boleh melebihi HARI KERJA pendataan periode itu (Senin sampai Jumat tanpa hari libur; kalender libur dioper pemanggil, lib/keu/hariKerja.ts).
+// Penginapan = orang x malam yang diisi sama (batas hari kerja - 1, cek aturan).
 // Hari belum diisi = volume menyusul. Beberapa rincian (mis. translok PPL dan PML) boleh ditautkan ke SATU item POK: tautan dibuat per akun,
 // dan hasil penautan memberi tahu bila item POK untuk akun itu belum ada atau namanya perlu diperbaiki (saran, bukan paksaan).
 
 import type { BarisRincian } from "./lanjutan";
 import type { ItemAnggaran } from "./ro";
 import { NAMA_AKUN, selisihHari } from "./identifikasi";
+import { hariKerjaAntara, type Libur } from "./hariKerja";
 
 export type ModePecah = "periode" | "gabung";
 export type PeriodeJadwal = { periode: string; mulai: string; selesai: string };
@@ -37,15 +39,15 @@ export type HariBayar = Record<string, number>;
 export function periksaHariBayar(hari: number, maks: number, penginapan = false): string | null {
   if (!Number.isInteger(hari) || hari < 0) return "Jumlah hari harus bilangan bulat, nol atau lebih.";
   const batas = penginapan ? Math.max(maks - 1, 0) : maks;
-  if (maks > 0 && hari > batas) return `Melebihi ${penginapan ? "malam" : "hari"} pendataan periode ini (maksimal ${batas}).`;
+  if (maks > 0 && hari > batas) return `Melebihi ${penginapan ? "malam" : "hari kerja"} pendataan periode ini (maksimal ${batas}).`;
   return null;
 }
 
-function volLapangan(b: BarisRincian, p: PeriodeJadwal, hb: HariBayar): { volume: number | null; hari: number | null; maks: number; catatan: string } {
-  const maks = hariJadwal(p.mulai, p.selesai);
+function volLapangan(b: BarisRincian, p: PeriodeJadwal, hb: HariBayar, libur: Libur): { volume: number | null; hari: number | null; maks: number; catatan: string } {
+  const maks = hariKerjaAntara(p.mulai, p.selesai, libur);
   const isi = hb[kunciHari(b, p.periode)];
   const pen = jenisLap(b) === "penginapan";
-  if (typeof isi !== "number") return { volume: null, hari: null, maks, catatan: `Isi jumlah ${pen ? "malam" : "hari"} dibayar ${p.periode}${maks ? ` (maksimal ${pen ? Math.max(maks - 1, 0) : maks})` : ""}.` };
+  if (typeof isi !== "number") return { volume: null, hari: null, maks, catatan: `Isi jumlah ${pen ? "malam" : "hari"} dibayar ${p.periode}${maks ? ` (maksimal ${pen ? Math.max(maks - 1, 0) : maks} hari kerja)` : ""}.` };
   const salah = periksaHariBayar(isi, maks, pen);
   if (salah) return { volume: null, hari: isi, maks, catatan: salah };
   if (b.volume === null) return { volume: null, hari: isi, maks, catatan: "Jumlah petugas belum diidentifikasi." };
@@ -61,14 +63,14 @@ const beri = (b: BarisRincian, p: Partial<RincianSurvei> & { volume: number | nu
  * Rincian per survei. `periode` = jadwal pendataan tiap periode (jadwalPendataan di lanjutan.ts). Baris pelatihan, pulsa, dan honor sudah per kelas
  * (nama kelas memuat nama periode); baris translok, penginapan, dan rapat dikembangkan per periode.
  */
-export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah, hariBayar: HariBayar = {}): RincianSurvei[] {
+export function rincianSurvei(rincian: BarisRincian[], periode: PeriodeJadwal[], mode: ModePecah, hariBayar: HariBayar = {}, libur: Libur = new Set()): RincianSurvei[] {
   const nama = periode.map((x) => x.periode);
   const tanpa = nama.length === 1 && nama[0] === "Kegiatan";
   const sufiks = (p: string) => (tanpa ? "" : ` ${p}`);
   const mentah: Omit<RincianSurvei, "kunci">[] = [];
   for (const b of rincian) {
     if (lapangan(b)) {
-      const per = periode.map((p) => ({ p, v: volLapangan(b, p, hariBayar) }));
+      const per = periode.map((p) => ({ p, v: volLapangan(b, p, hariBayar, libur) }));
       const satuan = jenisLap(b) === "penginapan" ? "orang-malam" : "orang-hari";
       if (mode === "periode") {
         for (const { p, v } of per) mentah.push(beri(b, { uraian: b.uraian + sufiks(p.periode), satuan, periode: p.periode, hari: v.hari, hariMaks: v.maks, volume: v.volume, catatan: v.catatan }));

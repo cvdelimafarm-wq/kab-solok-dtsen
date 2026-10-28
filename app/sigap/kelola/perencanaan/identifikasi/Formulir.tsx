@@ -9,8 +9,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
   JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
-  hitungMitra, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
-  type Form, type Instrumen, type PeranId, type StatusPetugas, type TempatSesi,
+  hitungMitra, instrDari, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
+  type AsalInstruktur, type Form, type Instrumen, type LevelInstruktur, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
@@ -377,7 +377,28 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                   )}
                   {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
                   {id === "pelatihan" && (luring || hybrid) && <Isian judul="Perlengkapan pelatihan?"><YaTidak nama={`${nama} perlengkapan`} nilai={s.perl} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].perl = v; })} /></Isian>}
-                  <Isian judul="Pengajar atau narasumber eksternal?"><YaTidak nama={`${nama} pengajar`} nilai={s.pengajar} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pengajar = v; })} /></Isian>
+                  <Isian judul="Ada instruktur (pengajar atau narasumber)?"><YaTidak nama={`${nama} pengajar`} nilai={s.pengajar} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pengajar = v; })} /></Isian>
+                  {s.pengajar && (() => {
+                    const ins = instrDari(s);
+                    const setI = (p: Partial<typeof ins>) => ubah((g) => { g.sesi[id].instr = { ...instrDari(g.sesi[id]), ...p }; });
+                    return (
+                      <div className="flex flex-col gap-2.5 rounded-lg border border-[#E3E9F2] bg-white p-2.5">
+                        <strong className="text-[13px] text-[#0F2A52]">Instruktur {nama.toLowerCase()}</strong>
+                        <div className={kisi}>
+                          <Isian judul="Jumlah instruktur"><Angka nama={`${nama} jumlah instruktur`} nilai={ins.jumlah} min={0} maks={50} mati={mati} onUbah={(v) => setI({ jumlah: v })} /></Isian>
+                          <Isian judul="Perkiraan jam mengajar" ket="Total jam semua instruktur."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
+                        </div>
+                        <Isian judul="Level instruktur" ket="Innas = instruktur nasional, Inda = instruktur daerah (menentukan tarif honor pada lembar kebijakan).">
+                          <Pilihan<LevelInstruktur> nama={`${nama} level instruktur`} nilai={ins.level} opsi={["Innas", "Inda"]} mati={mati} onPilih={(v) => setI({ level: v })} />
+                        </Isian>
+                        <Isian judul="Asal instruktur">
+                          <Pilihan<AsalInstruktur> nama={`${nama} asal instruktur`} nilai={ins.asal} opsi={["Internal BPS", "Eksternal"]} mati={mati} onPilih={(v) => setI({ asal: v })} />
+                        </Isian>
+                        <Isian judul="Data instruktur"><FixPerk nama={`Instruktur ${nama}`} perk={ins.perk} mati={mati} onPilih={(v) => setI({ perk: v })} /></Isian>
+                        <Cat>Nama instruktur dan level pasti diisi pada identifikasi lanjutan. Honor pengajar dihitung dari jumlah jam dan tarif sesuai level.</Cat>
+                      </div>
+                    );
+                  })()}
                   {luring && <Cat>Bentuk Luring: pulsa tidak ditanya (bernilai Tidak).</Cat>}
                   {daring && <Cat>Bentuk Daring: tempat dan perlengkapan tidak ditanya.</Cat>}
                   {(luring || hybrid) && <Cat>Konsumsi atau paket hanya dihitung bila ada petugas mitra. Perlengkapan hanya untuk pelatihan (bukan briefing), baik ada maupun tanpa mitra.</Cat>}

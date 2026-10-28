@@ -7,7 +7,7 @@ import {
   type BarisPok,
 } from "../identifikasiHilir";
 import vektor from "./identifikasi.vektor.json";
-import { selisihHari, tanggalRapat } from "../identifikasi";
+import { instrDari, instrLengkap, labelJalur, selisihHari, tanggalRapat } from "../identifikasi";
 import { ubahRec } from "../waktu";
 
 /** Contoh dari mockup: Susenas Maret terintegrasi Seruti Triwulan I 2026. */
@@ -26,7 +26,7 @@ function contoh(ubah: (f: Form) => void = () => {}): Form {
     tunggal: { mulai: "", selesai: "", perk: false },
     sesi: {
       briefing: { on: false },
-      pelatihan: { on: true, bentuk: "Luring", tempat: "Kantor", tgl: { "Triwulan I": { mulai: "2026-02-23", selesai: "2026-02-25" } }, pulsa: false, perl: true, pengajar: true },
+      pelatihan: { on: true, bentuk: "Luring", tempat: "Kantor", tgl: { "Triwulan I": { mulai: "2026-02-23", selesai: "2026-02-25" } }, pulsa: false, perl: true, pengajar: true, instr: { jumlah: 2, level: "Inda", asal: "Eksternal", jam: 8, perk: false } },
     },
     rapat: { persiapan: { on: true, media: ["Apel pagi"] }, pelaksanaan: { on: true, media: ["Zoom"] }, evaluasi: { on: true, media: ["Tatap muka"] } },
     instrumen: "FASIH",
@@ -271,12 +271,13 @@ describe("pemeriksaan", () => {
 });
 
 describe("kematangan", () => {
-  it("contoh mockup: 8 butir (termasuk jadwal pelatihan Fix), 4 perkiraan", () => {
+  it("contoh mockup: 9 butir (termasuk jadwal pelatihan dan instruktur Fix), 4 perkiraan", () => {
     const k = kematangan(contoh());
-    expect(k.butir).toHaveLength(8);
+    expect(k.butir).toHaveLength(9);
+    expect(k.butir).toContainEqual({ t: "Instruktur pelatihan", perk: false });
     expect(k.butir).toContainEqual({ t: "Jadwal pelatihan", perk: false });
     expect(k.nPerk).toBe(4);
-    expect(k.nFix).toBe(4);
+    expect(k.nFix).toBe(5);
     expect(k.butir.filter((b) => b.perk).map((b) => b.t)).toEqual(["Jadwal Pasca pengolahan (relatif)", "Jadwal Diseminasi (relatif)", "Jumlah petugas PML", "Jumlah petugas PPL"]);
   });
 });
@@ -581,5 +582,40 @@ describe("tujuanPesan: kalimat menuju kartu terkait", () => {
   it("kalimat tanpa tujuan pasti tidak dipaksa", () => {
     expect(tujuanPesan("Rencana perbaikan (selalu)")).toBeNull();
     expect(tujuanPesan("")).toBeNull();
+  });
+});
+
+describe("instruktur pelatihan dan briefing (identifikasi awal)", () => {
+  it("bawaan: kosong dan Perkiraan; salinan lama tanpa instr dilengkapi", () => {
+    const f = normalisasi({ sesi: { pelatihan: { on: true, pengajar: true } } });
+    expect(f.sesi.pelatihan.instr).toEqual({ jumlah: 0, level: "", asal: "", jam: 0, perk: true });
+    expect(instrLengkap(f.sesi.pelatihan.instr)).toBe(false);
+    expect(instrDari({})).toEqual({ jumlah: 0, level: "", asal: "", jam: 0, perk: true });
+  });
+  it("normalisasi membatasi jumlah, jam, level, dan asal", () => {
+    const f = normalisasi({ sesi: { pelatihan: { on: true, pengajar: true, instr: { jumlah: 999, jam: -5, level: "Pusat", asal: "X", perk: "ya" } } } });
+    expect(f.sesi.pelatihan.instr).toEqual({ jumlah: 50, level: "", asal: "", jam: 0, perk: true });
+    const g = normalisasi({ sesi: { pelatihan: { on: true, pengajar: true, instr: { jumlah: 2, jam: 12, level: "Innas", asal: "Internal BPS", perk: false } } } });
+    expect(g.sesi.pelatihan.instr).toEqual({ jumlah: 2, level: "Innas", asal: "Internal BPS", jam: 12, perk: false });
+    expect(instrLengkap(g.sesi.pelatihan.instr)).toBe(true);
+  });
+  it("peringatan bila pengajar Ya tetapi instruktur belum lengkap; hilang bila lengkap atau pengajar Tidak", () => {
+    const tidakLengkap = contoh((g) => { g.sesi.pelatihan.instr = { jumlah: 0, level: "", asal: "", jam: 0, perk: true }; });
+    expect(periksa(tidakLengkap, 2026).peringatan).toContain("Pelatihan: instruktur belum lengkap (jumlah, level Innas atau Inda, dan perkiraan jam).");
+    expect(periksa(tidakLengkap, 2026).masalah).toEqual([]);
+    expect(periksa(contoh(), 2026).peringatan.some((x) => x.includes("instruktur"))).toBe(false);
+    const tanpa = contoh((g) => { g.sesi.pelatihan.pengajar = false; g.sesi.pelatihan.instr = { jumlah: 0, level: "", asal: "", jam: 0, perk: true }; });
+    expect(periksa(tanpa, 2026).peringatan.some((x) => x.includes("instruktur"))).toBe(false);
+  });
+  it("kebutuhan honor pengajar memuat rincian instruktur bila terisi", () => {
+    const k = kebutuhan(contoh()).find((x) => x.akun === "522151")!;
+    expect(k.teks).toContain("2 instruktur, Inda, sekitar 8 jam");
+    const kosong = contoh((g) => { g.sesi.pelatihan.instr = { jumlah: 0, level: "", asal: "", jam: 0, perk: true }; });
+    expect(kebutuhan(kosong).find((x) => x.akun === "522151")!.teks).toBe("Pelatihan: honor pengajar atau narasumber eksternal");
+  });
+  it("kematangan: instruktur Perkiraan dihitung perkiraan; label beda revisi terbaca", () => {
+    const f = contoh((g) => { g.sesi.pelatihan.instr.perk = true; });
+    expect(kematangan(f).butir).toContainEqual({ t: "Instruktur pelatihan", perk: true });
+    expect(labelJalur("sesi.pelatihan.instr.level")).toBe("Sesi Pelatihan: instruktur level (Innas atau Inda)");
   });
 });

@@ -33,7 +33,22 @@ export type BentukSesi = "" | "Daring" | "Luring" | "Hybrid";
 export type TempatSesi = "" | "Kantor" | "Hotel dalam kota" | "Hotel luar kota" | "Lokasi lain";
 export const TEMPAT_SESI: readonly TempatSesi[] = ["", "Kantor", "Hotel dalam kota", "Hotel luar kota", "Lokasi lain"];
 export const tempatHotel = (t: TempatSesi): boolean => t === "Hotel dalam kota" || t === "Hotel luar kota";
-export type SesiForm = { on: boolean; bentuk: BentukSesi; tempat: TempatSesi; tgl: Record<string, WaktuRec>; pulsa: boolean; perl: boolean; pengajar: boolean };
+export const LEVEL_INSTRUKTUR = ["", "Innas", "Inda"] as const;
+export type LevelInstruktur = (typeof LEVEL_INSTRUKTUR)[number];
+export const NAMA_LEVEL: Record<LevelInstruktur, string> = { "": "belum dipilih", Innas: "instruktur nasional", Inda: "instruktur daerah" };
+export const ASAL_INSTRUKTUR = ["", "Internal BPS", "Eksternal"] as const;
+export type AsalInstruktur = (typeof ASAL_INSTRUKTUR)[number];
+/**
+ * (28 Okt 2026) Identifikasi instruktur pelatihan atau briefing: jumlah, level (Innas atau Inda, sesuai kategori lembar kebijakan), asal, dan perkiraan jam.
+ * Hanya bermakna bila `pengajar` bernilai Ya (memicu honor pengajar). Bawaan Perkiraan; nama instruktur dan level pasti diisi pada identifikasi lanjutan.
+ */
+export type InstrukturForm = { jumlah: number; level: LevelInstruktur; asal: AsalInstruktur; jam: number; perk: boolean };
+export const instrukturKosong = (): InstrukturForm => ({ jumlah: 0, level: "", asal: "", jam: 0, perk: true });
+/** Instruktur sesi dengan nilai bawaan bila belum ada (salinan lama). */
+export const instrDari = (s: { instr?: Partial<InstrukturForm> | null }): InstrukturForm => ({ ...instrukturKosong(), ...(s.instr ?? {}) });
+/** Instruktur sudah lengkap: jumlah, level, dan jam terisi. */
+export const instrLengkap = (i: InstrukturForm): boolean => i.jumlah >= 1 && i.level !== "" && i.jam >= 1;
+export type SesiForm = { on: boolean; bentuk: BentukSesi; tempat: TempatSesi; tgl: Record<string, WaktuRec>; pulsa: boolean; perl: boolean; pengajar: boolean; instr: InstrukturForm };
 export type StatusPetugas = "Organik" | "Mitra" | "Organik dan mitra";
 export type PeranId = "supervisor" | "kortim" | "pml" | "ppl" | "entri";
 export type PeranForm = { on: boolean; translok: boolean; honor: boolean; status: StatusPetugas; nOrg: number; nMit: number; perk: boolean; dasar: string };
@@ -104,7 +119,7 @@ export const HARI_H15 = 15;
 // Bentuk awal dan normalisasi
 // ---------------------------------------------------------------------------------------------------------------------
 
-const sesiKosong = (): SesiForm => ({ on: false, bentuk: "", tempat: "", tgl: {}, pulsa: false, perl: false, pengajar: false });
+const sesiKosong = (): SesiForm => ({ on: false, bentuk: "", tempat: "", tgl: {}, pulsa: false, perl: false, pengajar: false, instr: instrukturKosong() });
 const peranAwal = (on: boolean, o: Partial<PeranForm> = {}): PeranForm => ({ on, translok: false, honor: false, status: "Mitra", nOrg: 0, nMit: 0, perk: false, dasar: "", ...o });
 
 /** Formulir kosong untuk survei baru (isian bawaan yang paling lazim; semuanya dapat diubah). */
@@ -201,6 +216,15 @@ export function normalisasi(masuk: unknown): Form {
     if (!TEMPAT_SESI.includes(f.sesi[id].tempat)) f.sesi[id].tempat = "";
   }
   f.sesi.briefing.perl = false; // perlengkapan hanya untuk pelatihan, bukan briefing
+  for (const id of ["briefing", "pelatihan"] as const) {
+    const i = instrDari(f.sesi[id]);
+    f.sesi[id].instr = {
+      jumlah: bil(i.jumlah, 0, 50), jam: bil(i.jam, 0, 500),
+      level: (LEVEL_INSTRUKTUR as readonly string[]).includes(i.level) ? i.level : "",
+      asal: (ASAL_INSTRUKTUR as readonly string[]).includes(i.asal) ? i.asal : "",
+      perk: typeof i.perk === "boolean" ? i.perk : true,
+    };
+  }
   // rekaman jadwal sesi dan rapat (Perkiraan/Fix) dipulihkan agar berbatas wajar
   for (const id of ["briefing", "pelatihan"] as const) {
     const tg = adalahObjek(f.sesi[id].tgl) ? f.sesi[id].tgl : {};
@@ -400,7 +424,11 @@ export function kebutuhan(f: Form): Kebutuhan[] {
       }
       if (id === "pelatihan" && (luring || hybrid) && s.perl) add("521211", `${nama}: perlengkapan pelatihan`, "B", ["521211-B"], "Pengadaan");
       if ((daring || hybrid) && s.pulsa && adaMitra) { add("521211", `${nama}: pulsa peserta (mitra)`, "B", ["521211-D"], "Pengadaan"); anyPulsa = true; }
-      if (s.pengajar) add("522151", `${nama}: honor pengajar atau narasumber eksternal`, "B", ["522151"], "Non-pengadaan");
+      if (s.pengajar) {
+        const i = instrDari(s);
+        const rinci = i.jumlah >= 1 || i.level !== "" || i.jam >= 1 ? ` (${[i.jumlah >= 1 ? `${i.jumlah} instruktur` : "", i.level, i.jam >= 1 ? `sekitar ${i.jam} jam` : ""].filter(Boolean).join(", ")})` : "";
+        add("522151", `${nama}: honor pengajar atau narasumber eksternal${rinci}`, "B", ["522151"], "Non-pengadaan");
+      }
     }
   }
   for (const [id, nama] of [["persiapan", "persiapan"], ["pelaksanaan", "pelaksanaan"], ["evaluasi", "evaluasi"]] as const) {
@@ -571,6 +599,11 @@ export function periksa(f: Form, tahun: number, ktx: KonteksPeriksa = {}): Hasil
     if (sesiOn(id) && rec?.mulai && recPerk(rec)) peringatan.push(`Jadwal ${nama} masih perkiraan.`);
   }
 
+  // instruktur: hanya peringatan (data Perkiraan boleh; nama dan level pasti diisi pada identifikasi lanjutan)
+  for (const [id, nama] of [["briefing", "Briefing"], ["pelatihan", "Pelatihan"]] as const) {
+    if (sesiOn(id) && f.sesi[id].pengajar && !instrLengkap(instrDari(f.sesi[id]))) peringatan.push(`${nama}: instruktur belum lengkap (jumlah, level Innas atau Inda, dan perkiraan jam).`);
+  }
+
   // rapat
   for (const [id, nama] of [["persiapan", "persiapan"], ["pelaksanaan", "pelaksanaan"], ["evaluasi", "evaluasi"]] as const) {
     const r = f.rapat[id];
@@ -688,6 +721,11 @@ export function kematangan(f: Form): { butir: Butir[]; nFix: number; nPerk: numb
       if (f.sesi[id].on && rec?.mulai) butir.push({ t: `Jadwal ${nama}`, perk: recPerk(rec) });
     }
   }
+  if (!f.berbagi) {
+    for (const [id, nama] of [["briefing", "briefing"], ["pelatihan", "pelatihan"]] as const) {
+      if (f.sesi[id].on && f.sesi[id].pengajar) butir.push({ t: `Instruktur ${nama}`, perk: instrDari(f.sesi[id]).perk });
+    }
+  }
   for (const id of ["persiapan", "pelaksanaan", "evaluasi"] as const) {
     const rec = f.rapat[id].tgl?.[P0];
     if ((id === "evaluasi" || f.rapat[id].on) && rec?.mulai) butir.push({ t: `Jadwal rapat ${id}`, perk: recPerk(rec) });
@@ -728,6 +766,7 @@ export function labelJalur(p: string): string {
   if (s[0] === "tunggal") return `Jadwal kegiatan: ${dari({ mulai: "tanggal mulai", selesai: "tanggal selesai", perk: "penanda Fix atau Perkiraan" }, s[1])}`;
   if (s[0] === "sesi") {
     if (s[2] === "tgl") return `Sesi ${dari(HURUF.ss, s[1])} (${s[3]}): ${dari(LAB_WAKTU, s[4])}`;
+    if (s[2] === "instr") return `Sesi ${dari(HURUF.ss, s[1])}: instruktur ${dari({ jumlah: "jumlah", level: "level (Innas atau Inda)", asal: "asal", jam: "perkiraan jam", perk: "penanda Fix atau Perkiraan" }, s[3])}`;
     return `Sesi ${dari(HURUF.ss, s[1])}: ${dari({ on: "dilaksanakan", bentuk: "bentuk", tempat: "tempat", pulsa: "biaya pulsa", perl: "perlengkapan pelatihan", pengajar: "pengajar eksternal" }, s[2])}`;
   }
   if (s[0] === "tim") return `Honor tim pelaksana: ${dari({ honor: "ada honor", ketua: "ketua tim", wakil: "wakil", anggota: "anggota" }, s[1])}`;
