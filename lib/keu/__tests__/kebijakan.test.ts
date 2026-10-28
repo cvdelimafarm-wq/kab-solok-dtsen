@@ -1,12 +1,12 @@
 // lib/keu/__tests__/kebijakan.test.ts
 //
-// (25 Okt 2026, tahap 28; 26 Okt: parameter opsional hari_cair_maks) Uji lembar kebijakan manajemen tim: angka predefined, pemeriksa isi, keterangan yang dibangkitkan, dan penentu tombol.
+// (25 Okt 2026, tahap 28; 28 Okt: parameter opsional hari_bayar_maks menggantikan hari_cair_maks) Uji lembar kebijakan manajemen tim: angka predefined, pemeriksa isi, keterangan yang dibangkitkan, dan penentu tombol.
 // Vektor kasus (kebijakan.vektor.json) dipakai SAMA PERSIS oleh 50_uji_kebijakan.sql sehingga pemeriksa TypeScript dan SQL terbukti sepaham.
 
 import { describe, expect, it } from "vitest";
 import vektor from "./kebijakan.vektor.json";
 import {
-  HAK_KOSONG, JABATAN, KODE_JABATAN, KODE_PARAM, KODE_PARAM_OPSIONAL, KODE_STRATA, aksiTersedia, isiPredefined, ketMinimal, ketStrata, labelNilai, labelStatus,
+  HAK_KOSONG, JABATAN, KODE_JABATAN, KODE_PARAM, KODE_PARAM_LAMA, KODE_PARAM_OPSIONAL, KODE_STRATA, aksiTersedia, isiPredefined, ketMinimal, ketStrata, labelNilai, labelStatus,
   kalimatMenunggu, kanonik, nilaiPersen, pilihLembar, periksaIsi, tujuanGalat, ID_BAGIAN, rentangStrata, ringkasPengesahan, strataUntuk, totalMinimal,
   type BarisPengesah, type HakKebijakan, type IsiKebijakan,
 } from "../kebijakan";
@@ -38,10 +38,13 @@ describe("angka predefined", () => {
     expect(i.strata.map((s) => s.k)).toEqual([...KODE_STRATA]);
     expect(JABATAN).toHaveLength(10);
     expect(KODE_PARAM).toHaveLength(21);
-    expect(KODE_PARAM_OPSIONAL).toEqual(["hari_cair_maks"]);
+    expect(KODE_PARAM_OPSIONAL).toEqual(["hari_bayar_maks"]);
+    expect(KODE_PARAM_LAMA).toEqual(["hari_cair_maks"]);
     expect(i.param.map((x) => x.k)).toEqual([...KODE_PARAM, ...KODE_PARAM_OPSIONAL]);
-    const hc = i.param.find((x) => x.k === "hari_cair_maks")!;
-    expect(hc.jenis === "angka" && hc.aturan === 5 && hc.kebijakan === 5).toBe(true);
+    const hb = i.param.find((x) => x.k === "hari_bayar_maks")!;
+    expect(hb.jenis === "angka" && hb.aturan === 10 && hb.kebijakan === 10).toBe(true);
+    const sp = i.param.find((x) => x.k === "batas_spj")!;
+    expect(sp.jenis === "angka" && sp.aturan === 5 && sp.kebijakan === 5 && sp.satuan === "hari kerja").toBe(true);
   });
   it("menyalin angka tabel V1 bagian 6.1 (jumlah minimal per jabatan)", () => {
     const i = isiPredefined();

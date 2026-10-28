@@ -81,6 +81,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_kebijakan_berlaku: ["lembar_id", "tahun", "ver", "isi", "predefined", "tanggal_rapat", "nomor_notulen", "tujuan", "berlaku_at"],
   keu_v_kebijakan_pengesah: ["lembar_id", "peran_kode", "akun_id", "akun_nama", "aktif", "setuju_at", "catatan"],
   keu_v_kebijakan_riwayat: ["id", "lembar_id", "aksi", "dari", "ke", "ver", "oleh_nama", "catatan", "waktu"],
+  keu_v_libur: ["tanggal", "nama", "jenis", "aktif"],
   keu_v_jadwal_riwayat: ["id", "jadwal_id", "waktu", "aksi", "status_ke", "nomor", "tanggal", "catatan", "oleh_nama"],
   keu_v_pok_banding: ["unggah_id", "status", "baris_id", "detail_id", "ro_kode", "komp_kode", "akun_kode", "uraian_lama", "uraian_baru", "vol_lama", "vol_baru", "harga_lama", "harga_baru", "jumlah_lama", "jumlah_baru", "selisih", "di_luar_usulan"],
   keu_v_pok_jalur_node: ["node_id", "versi_id", "tingkat", "kode", "nama", "jalur"],

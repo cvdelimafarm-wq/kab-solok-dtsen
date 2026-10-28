@@ -4,12 +4,13 @@
 //
 // (26 Okt 2026, tahap 33) Kartu "Usulan dari identifikasi" pada tab RAB: kebutuhan biaya dari identifikasi survei (lanjutan bila ada, kalau tidak identifikasi
 // awal yang sah) ditawarkan sebagai usulan baris RAB. Tidak ada yang tertulis kecuali pengguna menekan "Salin ke RAB" pada satu usulan; baris RAB yang sudah
-// ada tidak ditimpa. Tarif lembar kebijakan = batas tertinggi (harga lebih rendah boleh); jadwal cair disarankan dari tanggal selesai kegiatan (paling lambat H+N; N dari parameter hari_cair_maks pada lembar kebijakan, bawaan 5).
+// ada tidak ditimpa. Tarif lembar kebijakan = batas tertinggi (harga lebih rendah boleh); jadwal cair disarankan dari tanggal selesai kegiatan (paling lambat N hari kerja sesudahnya; N dari parameter hari_bayar_maks pada lembar kebijakan, bawaan 10; hari libur dari kalender libur).
 // Kartu kedua "Rencana realisasi dari identifikasi" (hanya baca): perkiraan pencairan menurut bulan dan minggu saran, dan penjagaan sederhana: anggaran akun
 // yang dibutuhkan ADA atau BELUM ADA pada POK RO (berapa pun nilainya; nominal tidak dibandingkan dengan pagu).
 // Logika murni: lib/keu/usulanRab.ts. Data dibaca lewat pintu baca hilir keu_v_ident_acuan (tahap 30); menulis memakai tabel RAB yang sama dengan tab ini.
 
 import { useMemo, useState } from "react";
+import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
 import { awalLanjutan, jadwalPendataan, normalisasiLanjutan, rincianBiaya, type StatusLanjutan } from "@/lib/keu/lanjutan";
@@ -127,14 +128,14 @@ function BarisUsulan({ u, sumber, props, tersedia, jendela }: { u: UsulanBaris; 
 // ------------------------------------------------------------ bahan usulan untuk satu identifikasi
 type Bahan = { daftar: UsulanBaris[]; galat: string | null; jendela: JendelaCair };
 
-function hitungBahan(b: BarisAcuan, lembar: IsiKebijakan | null): Bahan {
+function hitungBahan(b: BarisAcuan, lembar: IsiKebijakan | null, libur: Libur): Bahan {
   const jendela = jendelaCair(lembar);
   if (b.form_sah === null) return { daftar: [], galat: null, jendela };
   try {
     const f = normalisasi(b.form_sah);
     const isi = b.lanjutan_ada && b.lanjutan_isi ? normalisasiLanjutan(b.lanjutan_isi) : awalLanjutan(f, b.tahun);
     const pendataan = jadwalPendataan(f, b.tahun, b.upd).filter((j) => j.mulai && j.selesai);
-    return { daftar: usulanDari(rincianBiaya(isi, f, lembar), isi, pendataan, new Date().getMonth() + 1, jendela.hari), galat: null, jendela };
+    return { daftar: usulanDari(rincianBiaya(isi, f, lembar), isi, pendataan, new Date().getMonth() + 1, jendela.hari, libur), galat: null, jendela };
   } catch {
     return { daftar: [], galat: "Isi identifikasi tidak dapat dibaca untuk usulan RAB.", jendela };
   }
@@ -268,9 +269,10 @@ export function UsulanIdentifikasi(props: PropsUsulan & { editable: boolean }) {
   const daftarIdent = useMemo(() => (acuan.baris ?? []).filter((x) => x.form_sah !== null), [acuan.baris]);
   const b = daftarIdent.find((x) => x.ident_id === pilih) ?? daftarIdent[0] ?? null;
   const lembar = useBacaKeu<LembarBerlaku>(b ? urlBaca("keu_v_kebijakan_berlaku", { tahun: b.tahun }, { batas: 1 }) : null);
-  const siap = b !== null && (lembar.baris !== null || lembar.galat !== null);
+  const hariLibur = useBacaKeu<{ tanggal: string; aktif: boolean }>(b ? urlBaca("keu_v_libur", {}, { urut: "tanggal", batas: 2000 }) : null);
+  const siap = b !== null && (lembar.baris !== null || lembar.galat !== null) && (hariLibur.baris !== null || hariLibur.galat !== null);
   const lembarVer = lembar.baris?.[0]?.ver ?? null;
-  const bahan = useMemo(() => (b && siap ? hitungBahan(b, lembar.baris?.[0]?.isi ?? null) : null), [b, siap, lembar.baris]);
+  const bahan = useMemo(() => (b && siap ? hitungBahan(b, lembar.baris?.[0]?.isi ?? null, bangunLibur(hariLibur.baris)) : null), [b, siap, lembar.baris, hariLibur.baris]);
 
   if (acuan.galat || acuan.baris === null || b === null) return null;
   const ringkasan = `${b.nama} (${sumberDari(b).pendek})`;

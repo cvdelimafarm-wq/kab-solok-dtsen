@@ -1,6 +1,6 @@
 // lib/keu/__tests__/usulanRab.test.ts
 //
-// (26 Okt 2026, tahap 33) Uji sambungan identifikasi -> RAB: jadwal cair (H+5), tarif kebijakan sebagai batas tertinggi, kandidat item POK, penanda sudah disalin.
+// (26 Okt 2026, tahap 33) Uji sambungan identifikasi -> RAB: jadwal cair (28 Okt 2026: 10 hari kerja; sebelumnya H+5), tarif kebijakan sebagai batas tertinggi, kandidat item POK, penanda sudah disalin.
 
 import { describe, expect, it } from "vitest";
 import vektor from "./lanjutan.vektor.json";
@@ -29,11 +29,11 @@ describe("tanggal dan jadwal cair", () => {
     expect(awalMinggu(2026, 3, 1)).toBe("2026-03-01");
     expect(awalMinggu(2026, 3, 3)).toBe("2026-03-15");
   });
-  it("saran: bulan dan minggu yang memuat hari terakhir; batas lambat H+5", () => {
-    expect(saranCair("2026-03-10", { bulan: 9 })).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-15" });
+  it("saran: bulan dan minggu yang memuat hari terakhir; batas lambat 10 hari kerja (bawaan)", () => {
+    expect(saranCair("2026-03-10", { bulan: 9 })).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-24" });
     expect(saranCair(null, { bulan: 9 })).toEqual({ bulan: 9, minggu: 3, lambat: null });
   });
-  it("peringatan hanya untuk minggu yang pasti sesudah H+5 (contoh pengguna: selesai tgl 10, cair 8-15)", () => {
+  it("peringatan hanya untuk minggu yang pasti sesudah batas hari kerja", () => {
     expect(periksaCair("2026-03-15", 3, 2)).toBeNull();
     expect(periksaCair("2026-03-15", 3, 3)).toBeNull();
     expect(periksaCair("2026-03-15", 3, 4)).toContain("2026-03-15");
@@ -81,33 +81,43 @@ describe("bentuk isian", () => {
   });
 });
 
-describe("jendela pencairan dari lembar kebijakan (hari_cair_maks)", () => {
-  const ubah = (f: (hc: Record<string, unknown>) => void): IsiKebijakan => { const i = salin(isiPredefined()); f(i.param.find((x) => x.k === "hari_cair_maks") as unknown as Record<string, unknown>); return i; };
-  it("tanpa lembar, atau lembar lama tanpa parameter: bawaan H+5 (bukan dari lembar)", () => {
-    expect(jendelaCair(null)).toEqual({ hari: 5, dariLembar: false });
-    expect(jendelaCair(undefined)).toEqual({ hari: 5, dariLembar: false });
-    const lama = salin(isiPredefined()); lama.param = lama.param.filter((x) => x.k !== "hari_cair_maks");
-    expect(jendelaCair(lama)).toEqual({ hari: 5, dariLembar: false });
+describe("jendela pembayaran dari lembar kebijakan (hari_bayar_maks, hari kerja)", () => {
+  const ubah = (f: (hc: Record<string, unknown>) => void): IsiKebijakan => { const i = salin(isiPredefined()); f(i.param.find((x) => x.k === "hari_bayar_maks") as unknown as Record<string, unknown>); return i; };
+  it("tanpa lembar, atau lembar lama tanpa parameter: bawaan 10 hari kerja (bukan dari lembar)", () => {
+    expect(jendelaCair(null)).toEqual({ hari: 10, dariLembar: false, spj: 5 });
+    expect(jendelaCair(undefined)).toEqual({ hari: 10, dariLembar: false, spj: 5 });
+    const lama = salin(isiPredefined()); lama.param = lama.param.filter((x) => x.k !== "hari_bayar_maks");
+    expect(jendelaCair(lama)).toEqual({ hari: 10, dariLembar: false, spj: 5 });
   });
   it("memakai nilai KEBIJAKAN, bukan aturan; kosong = tanpa batas; nilai tak sah = bawaan", () => {
-    expect(jendelaCair(isiPredefined())).toEqual({ hari: 5, dariLembar: true });
-    expect(jendelaCair(ubah((h) => { h.kebijakan = 3; }))).toEqual({ hari: 3, dariLembar: true });
-    expect(jendelaCair(ubah((h) => { h.kebijakan = 0; }))).toEqual({ hari: 0, dariLembar: true });
-    expect(jendelaCair(ubah((h) => { h.aturan = null; h.kebijakan = null; }))).toEqual({ hari: null, dariLembar: true });
-    expect(jendelaCair(ubah((h) => { h.kebijakan = 2.5; }))).toEqual({ hari: 5, dariLembar: false });
-    expect(jendelaCair(ubah((h) => { h.kebijakan = 99; }))).toEqual({ hari: 5, dariLembar: false });
-    expect(jendelaCair(ubah((h) => { h.jenis = "rujukan"; }))).toEqual({ hari: 5, dariLembar: false });
+    expect(jendelaCair(isiPredefined())).toEqual({ hari: 10, dariLembar: true, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.kebijakan = 3; }))).toEqual({ hari: 3, dariLembar: true, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.kebijakan = 0; }))).toEqual({ hari: 0, dariLembar: true, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.aturan = null; h.kebijakan = null; }))).toEqual({ hari: null, dariLembar: true, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.kebijakan = 2.5; }))).toEqual({ hari: 10, dariLembar: false, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.kebijakan = 99; }))).toEqual({ hari: 10, dariLembar: false, spj: 5 });
+    expect(jendelaCair(ubah((h) => { h.jenis = "rujukan"; }))).toEqual({ hari: 10, dariLembar: false, spj: 5 });
+  });
+  it("SPJ dari batas_spj; parameter lama hari_cair_maks diabaikan (hari kalender, artinya berbeda)", () => {
+    const i = salin(isiPredefined());
+    (i.param.find((x) => x.k === "batas_spj") as unknown as Record<string, unknown>).kebijakan = 3;
+    expect(jendelaCair(i)).toEqual({ hari: 10, dariLembar: true, spj: 3 });
+    const lama = salin(isiPredefined()); lama.param = lama.param.filter((x) => x.k !== "hari_bayar_maks");
+    (lama.param as unknown as Record<string, unknown>[]).push({ k: "hari_cair_maks", jenis: "angka", aturan: 5, kebijakan: 2 });
+    expect(jendelaCair(lama)).toEqual({ hari: 10, dariLembar: false, spj: 5 });
   });
   it("teks jendela", () => {
-    expect(teksJendela({ hari: 5, dariLembar: false })).toBe("paling lambat H+5 (bawaan, cek aturan)");
-    expect(teksJendela({ hari: 3, dariLembar: true })).toBe("paling lambat H+3 (lembar kebijakan)");
-    expect(teksJendela({ hari: null, dariLembar: true })).toBe("tanpa batas hari (lembar kebijakan)");
+    expect(teksJendela({ hari: 10, dariLembar: false, spj: 5 })).toBe("paling lambat 10 hari kerja sesudah hari terakhir kegiatan (bawaan, cek aturan)");
+    expect(teksJendela({ hari: 3, dariLembar: true, spj: 5 })).toBe("paling lambat 3 hari kerja sesudah hari terakhir kegiatan (lembar kebijakan)");
+    expect(teksJendela({ hari: null, dariLembar: true, spj: 5 })).toBe("tanpa batas hari (lembar kebijakan)");
   });
   it("saranCair dan periksaCair mengikuti jendela; tanpa batas tidak pernah memperingatkan", () => {
     expect(saranCair("2026-03-10", { bulan: 9 }, 3)).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-13" });
+    expect(saranCair("2026-03-13", { bulan: 9 }, 2)).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-17" }); // melewati akhir pekan
+    expect(saranCair("2026-03-13", { bulan: 9 }, 2, new Set(["2026-03-16"]))).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-18" }); // libur dilewati
     expect(saranCair("2026-03-10", { bulan: 9 }, 0)).toEqual({ bulan: 3, minggu: 2, lambat: "2026-03-10" });
     expect(saranCair("2026-03-10", { bulan: 9 }, null)).toEqual({ bulan: 3, minggu: 2, lambat: null });
-    expect(periksaCair("2026-03-13", 3, 3, 3)).toContain("H+3");
+    expect(periksaCair("2026-03-13", 3, 3, 3)).toContain("3 hari kerja");
     expect(periksaCair("2026-03-13", 3, 2, 3)).toBeNull();
     expect(periksaCair(null, 3, 4, null)).toBeNull();
   });
@@ -121,7 +131,7 @@ describe("jendela pencairan dari lembar kebijakan (hari_cair_maks)", () => {
     const [b] = usulanDari([r], isi, pend, 1, null);
     expect(b).toMatchObject({ hariCair: null, lambat: null, selesai: "2026-03-10" });
     const [c] = usulanDari([r], isi, pend, 1);
-    expect(c).toMatchObject({ hariCair: 5, lambat: "2026-03-15" });
+    expect(c).toMatchObject({ hariCair: 10, lambat: "2026-03-24" });
     expect(f).toBeDefined();
   });
 });
@@ -147,7 +157,7 @@ describe("usulanDari dari isi lanjutan nyata", () => {
     const r: BarisRincian = { kelompok: "Translok dan penginapan", uraian: "Translok PML (kurang dari 8 jam)", akun: "524113", volume: 4, satuan: "orang (jumlah hari menyusul)", tarif: 170000, jumlah: null, catatan: "", perk: false };
     const [u] = usulanDari([r], isi, pendataan, 1);
     expect(u.selesai).toBe("2026-03-27");
-    expect([u.bulan, u.minggu, u.lambat]).toEqual([3, 4, "2026-04-01"]);
+    expect([u.bulan, u.minggu, u.lambat]).toEqual([3, 4, "2026-04-10"]);
     expect(u.harga).toBe("170000"); expect(u.batasHarga).toBe(170000); expect(u.asalHarga).toBe("kebijakan");
     expect(u.satuan).toBe("orang");
   });

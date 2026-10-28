@@ -147,14 +147,20 @@ const PARAM_PREDEFINED: Param[] = [
   p({ k: "pulsa_fasih", nama: "Pulsa FASIH", grup: "Lain-lain", jenis: "angka", satuan: "Rp per orang per bulan", aturan: 100000, kebijakan: 100000, dasar: "", ket: "" }),
   p({ k: "konsumsi_rapat", nama: "Konsumsi rapat", grup: "Lain-lain", jenis: "angka", satuan: "Rp", aturan: 40000, kebijakan: 40000, dasar: "", ket: "" }),
   p({ k: "batas_spj", nama: "Batas waktu SPJ", grup: "Lain-lain", jenis: "angka", satuan: "hari kerja", aturan: 5, kebijakan: 5, dasar: "", ket: "" }),
-  p({ k: "hari_cair_maks", nama: "Batas hari pencairan setelah kegiatan", grup: "Lain-lain", jenis: "angka", satuan: "hari (H+)", aturan: 5, kebijakan: 5, dasar: "", ket: "Pencairan dijadwalkan paling lambat H+ sekian dari hari terakhir pelaksanaan kegiatan; dipakai untuk saran jadwal cair di RAB. Tanpa batas awal." }),
+  p({ k: "hari_bayar_maks", nama: "Batas pembayaran setelah kegiatan", grup: "Lain-lain", jenis: "angka", satuan: "hari kerja", aturan: 10, kebijakan: 10, dasar: "", ket: "Pembayaran paling lambat sekian hari kerja sesudah hari terakhir pelaksanaan kegiatan (SPJ masuk paling lambat batas_spj hari kerja). Dipakai untuk saran jadwal cair di RAB. Angka awal 10 (cek aturan)." }),
 ];
 
 /**
  * Parameter OPSIONAL: tidak wajib ada (lembar yang sudah disahkan sebelum parameter ini dibuat tetap sah), tetapi bila ada diperiksa sama seperti yang lain.
  * Pemakai hilir memakai nilai bawaan bila tidak ada.
  */
-export const KODE_PARAM_OPSIONAL: readonly string[] = ["hari_cair_maks"];
+export const KODE_PARAM_OPSIONAL: readonly string[] = ["hari_bayar_maks"];
+
+/**
+ * Parameter LAMA yang masih diterima pada lembar yang sudah dibuat (28 Okt 2026): hari_cair_maks (hari kalender, H+N) digantikan hari_bayar_maks (hari kerja).
+ * Tidak lagi ada pada angka predefined dan tidak dibaca pemakai hilir; hanya tetap diperiksa agar lembar lama tidak menjadi tidak sah.
+ */
+export const KODE_PARAM_LAMA: readonly string[] = ["hari_cair_maks"];
 
 /** Kode parameter yang wajib ada pada setiap lembar (urutan = urutan tampil). */
 export const KODE_PARAM: readonly string[] = PARAM_PREDEFINED.map((x) => x.k).filter((k) => !KODE_PARAM_OPSIONAL.includes(k));
@@ -240,7 +246,7 @@ export function periksaIsi(isi: unknown): HasilPeriksa {
   }
   for (const k of KODE_PARAM) if (!lihat.has(k)) galat.push(`Parameter ${k} belum ada`);
   for (const [k, x] of lihat) {
-    if (!KODE_PARAM.includes(k) && !KODE_PARAM_OPSIONAL.includes(k)) continue;
+    if (!KODE_PARAM.includes(k) && !KODE_PARAM_OPSIONAL.includes(k) && !KODE_PARAM_LAMA.includes(k)) continue;
     const jenis = x.jenis;
     if (jenis === "angka" || jenis === "persen") {
       const n = x.aturan, b = x.kebijakan;
@@ -266,9 +272,11 @@ export function periksaIsi(isi: unknown): HasilPeriksa {
     } else galat.push(`Parameter ${k}: jenis tidak dikenal`);
   }
 
-  const hc = lihat.get("hari_cair_maks");
-  if (hc && hc.jenis === "angka") {
-    for (const v of [hc.aturan, hc.kebijakan]) if (adalahAngka(v) && !bulat(v, 0, 60)) { galat.push("Parameter hari_cair_maks: harus bilangan bulat 0 sampai 60"); break; }
+  for (const kode of ["hari_cair_maks", "hari_bayar_maks"]) {
+    const hc = lihat.get(kode);
+    if (hc && hc.jenis === "angka") {
+      for (const v of [hc.aturan, hc.kebijakan]) if (adalahAngka(v) && !bulat(v, 0, 60)) { galat.push(`Parameter ${kode}: harus bilangan bulat 0 sampai 60`); break; }
+    }
   }
 
   // peringatan (tidak memblokir; hanya TS, untuk layar)

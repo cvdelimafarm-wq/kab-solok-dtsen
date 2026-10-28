@@ -8,15 +8,17 @@
 //   - Volume dan satuan datang dari identifikasi. Tarif lembar kebijakan adalah BATAS TERTINGGI, bukan aturan tunggal: harga satuan yang lebih rendah
 //     boleh (mis. batas translok 170, survei memakai 160), yang lebih tinggi diberi peringatan (tidak memblokir). Bila tarif belum ada, pengguna
 //     mengisi sendiri (baris RAB wajib volume dan harga lebih dari nol, jadi baris tanpa harga tidak dapat disalin).
-//   - Jadwal cair: paling lambat H+5 sesudah hari terakhir pelaksanaan (mis. selesai tgl 10 -> dijadwalkan sekitar tgl 8-15). Saran awal: bulan dan
-//     minggu yang memuat hari terakhir pelaksanaan (kelas bagi baris pelatihan, pendataan bagi lainnya); dapat diubah, dan minggu yang pasti jatuh
-//     sesudah H+5 diberi peringatan. Aturan jendela ini dari penjelasan pengguna, belum dari lembar kebijakan (cek aturan).
+//   - Jadwal cair (diubah 28 Okt 2026): pembayaran paling lambat 10 HARI KERJA sesudah hari terakhir pelaksanaan (SPJ masuk paling lambat 5 hari kerja,
+//     parameter batas_spj); hari libur dari kalender libur Delego. Saran awal: bulan dan minggu yang memuat hari terakhir pelaksanaan (kelas bagi baris
+//     pelatihan, pendataan bagi lainnya); dapat diubah, dan minggu yang pasti jatuh sesudah batas diberi peringatan. Angka dari parameter
+//     hari_bayar_maks pada lembar kebijakan; tanpa lembar memakai bawaan 10 (cek aturan).
 //   - Baris RAB yang sudah ada TIDAK ditimpa; usulan yang sudah pernah disalin ditandai dan tidak ditawarkan lagi.
 //   - Usulan dipasangkan ke item POK RO yang akunnya sama (enam angka). Bila ada lebih dari satu kandidat, pengguna memilih.
 
 import { NAMA_AKUN } from "./identifikasi";
 import type { ItemAnggaran } from "./ro";
 import { bacaRupiah } from "./kekurangan";
+import { HARI_BAYAR_BAWAAN, HARI_SPJ_BAWAAN, tambahHariKerja, type Libur } from "./hariKerja";
 import { barisKosong, bacaVolume, type BarisRabRow, type IsianBaris, type PemetaanItem } from "./rab";
 import type { BarisRincian, IsiLanjutan } from "./lanjutan";
 import type { IsiKebijakan } from "./kebijakan";
@@ -36,7 +38,7 @@ export type UsulanBaris = {
   harga: string;
   bulan: number;
   minggu: number;
-  /** Hari terakhir pelaksanaan yang menjadi acuan jadwal cair, dan batas paling lambat pencairan (H+hariCair); null bila tanggal belum ada atau tanpa batas. */
+  /** Hari terakhir pelaksanaan yang menjadi acuan jadwal cair, dan batas paling lambat pencairan (hariCair hari kerja sesudahnya); null bila tanggal belum ada atau tanpa batas. */
   selesai: string | null;
   lambat: string | null;
   /** Jendela pencairan yang dipakai (hari setelah hari terakhir pelaksanaan); null = tanpa batas. */
@@ -69,32 +71,35 @@ export function tambahHariTgl(tgl: string, n: number): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-/** Batas hari bawaan antara pelaksanaan terakhir dan pencairan bila lembar kebijakan belum memuatnya (penjelasan pengguna: paling lambat H+5; cek aturan). */
-export const HARI_CAIR_BAWAAN = 5;
-export const HARI_CAIR_MAKS = HARI_CAIR_BAWAAN;
+/** Batas bawaan antara pelaksanaan terakhir dan pembayaran bila lembar kebijakan belum memuatnya: 10 HARI KERJA (keputusan pengguna 28 Okt 2026; cek aturan). */
+export const HARI_CAIR_BAWAAN = HARI_BAYAR_BAWAAN;
 
-export type JendelaCair = { hari: number | null; dariLembar: boolean };
+/** `hari` = batas pembayaran (hari kerja; null = tanpa batas). `spj` = batas SPJ masuk (hari kerja), dari batas_spj. `dariLembar` = hari_bayar_maks ada pada lembar. */
+export type JendelaCair = { hari: number | null; dariLembar: boolean; spj: number };
 
 /**
- * Jendela pencairan dari lembar kebijakan berlaku (parameter hari_cair_maks, nilai KEBIJAKAN). Tanpa lembar atau tanpa parameter (lembar lama) -> bawaan H+5.
- * Nilai kosong pada lembar = tanpa batas (hari null). Nilai yang bukan bilangan bulat 0..60 diabaikan (bawaan).
+ * Jendela pembayaran dari lembar kebijakan berlaku (parameter hari_bayar_maks, nilai KEBIJAKAN; SPJ dari batas_spj). Tanpa lembar atau tanpa parameter
+ * (lembar lama) -> bawaan 10 hari kerja. Nilai kosong = tanpa batas (hari null). Nilai yang bukan bilangan bulat 0..60 diabaikan (bawaan).
+ * Parameter lama hari_cair_maks (hari kalender) TIDAK dibaca: artinya berbeda.
  */
 export function jendelaCair(lembar: Pick<IsiKebijakan, "param"> | null | undefined): JendelaCair {
-  const bawaan: JendelaCair = { hari: HARI_CAIR_BAWAAN, dariLembar: false };
   const daftar: unknown = lembar?.param;
-  if (!Array.isArray(daftar)) return bawaan;
-  const x = (daftar as Record<string, unknown>[]).find((p) => p && p.k === "hari_cair_maks");
+  const cari = (kode: string): Record<string, unknown> | undefined => (Array.isArray(daftar) ? (daftar as Record<string, unknown>[]).find((p) => p && p.k === kode) : undefined);
+  const bulatSah = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 60;
+  const sp = cari("batas_spj");
+  const spj = sp && sp.jenis === "angka" && bulatSah(sp.kebijakan) ? sp.kebijakan : HARI_SPJ_BAWAAN;
+  const bawaan: JendelaCair = { hari: HARI_CAIR_BAWAAN, dariLembar: false, spj };
+  const x = cari("hari_bayar_maks");
   if (!x || x.jenis !== "angka") return bawaan;
-  if (x.kebijakan === null) return { hari: null, dariLembar: true };
-  const n = x.kebijakan;
-  if (typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 60) return { hari: n, dariLembar: true };
+  if (x.kebijakan === null) return { hari: null, dariLembar: true, spj };
+  if (bulatSah(x.kebijakan)) return { hari: x.kebijakan, dariLembar: true, spj };
   return bawaan;
 }
 
 /** Kalimat jendela untuk layar; "(cek aturan)" hanya bila angkanya bawaan, bukan dari lembar kebijakan. */
 export function teksJendela(j: JendelaCair): string {
   if (j.hari === null) return "tanpa batas hari (lembar kebijakan)";
-  return `paling lambat H+${j.hari}${j.dariLembar ? " (lembar kebijakan)" : " (bawaan, cek aturan)"}`;
+  return `paling lambat ${j.hari} hari kerja sesudah hari terakhir kegiatan${j.dariLembar ? " (lembar kebijakan)" : " (bawaan, cek aturan)"}`;
 }
 
 /** Minggu pencairan menurut tanggal: 1-7 -> 1, 8-14 -> 2, 15-21 -> 3, 22 dan seterusnya -> 4. */
@@ -123,21 +128,21 @@ export function acuanSelesai(b: Pick<BarisRincian, "kelompok" | "uraian">, isi: 
   return terakhir(pendataan.map((p) => sah(p.selesai))) ?? terakhir(isi.kelas.map((k) => sah(k.selesai)));
 }
 
-/** Saran jadwal cair dari hari terakhir pelaksanaan: bulan dan minggu yang memuat hari itu, serta batas paling lambat (H+hari; null hari = tanpa batas). */
-export function saranCair(selesai: string | null, cadangan: { bulan: number }, hari: number | null = HARI_CAIR_BAWAAN): { bulan: number; minggu: number; lambat: string | null } {
+/** Saran jadwal cair dari hari terakhir pelaksanaan: bulan dan minggu yang memuat hari itu, serta batas paling lambat (`hari` hari kerja sesudahnya menurut `libur`; null hari = tanpa batas). */
+export function saranCair(selesai: string | null, cadangan: { bulan: number }, hari: number | null = HARI_CAIR_BAWAAN, libur: Libur = new Set()): { bulan: number; minggu: number; lambat: string | null } {
   if (!selesai) return { bulan: cadangan.bulan, minggu: MINGGU_BAWAAN, lambat: null };
-  return { bulan: bulanDari(selesai) ?? cadangan.bulan, minggu: mingguDari(selesai) ?? MINGGU_BAWAAN, lambat: hari === null ? null : tambahHariTgl(selesai, hari) };
+  return { bulan: bulanDari(selesai) ?? cadangan.bulan, minggu: mingguDari(selesai) ?? MINGGU_BAWAAN, lambat: hari === null ? null : tambahHariKerja(selesai, hari, libur) || null };
 }
 
 /**
- * Peringatan jadwal cair (tidak memblokir). Hanya menandai yang pasti terlambat: minggu yang hari pertamanya sudah sesudah batas H+5.
+ * Peringatan jadwal cair (tidak memblokir). Hanya menandai yang pasti terlambat: minggu yang hari pertamanya sudah sesudah batas hari kerja.
  * `tahun` = tahun batas lambat bila diketahui; bulan lebih awal dari bulan pelaksanaan tidak diperiksa (pencairan di muka diperbolehkan).
  */
 export function periksaCair(lambat: string | null, bulan: number, minggu: number, hari: number | null = HARI_CAIR_BAWAAN): string | null {
   const m = lambat ? TGL.exec(lambat) : null;
   if (!lambat || !m) return null;
   const awal = awalMinggu(Number(m[1]), bulan, minggu);
-  if (awal > lambat) return `Jadwal cair sesudah batas H+${hari ?? HARI_CAIR_BAWAAN} dari hari terakhir pelaksanaan (paling lambat ${lambat}). Pilih minggu yang lebih awal.`;
+  if (awal > lambat) return `Jadwal cair sesudah batas ${hari ?? HARI_CAIR_BAWAAN} hari kerja dari hari terakhir pelaksanaan (paling lambat ${lambat}). Pilih minggu yang lebih awal.`;
   return null;
 }
 
@@ -169,7 +174,7 @@ export function teksHarga(t: number | null): string {
 }
 
 /** Rincian identifikasi -> usulan baris RAB. Urutan sama dengan rincian. `pendataan` = jadwal efektif per periode (sudah memuat pembaruan H-15). */
-export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan: { mulai: string; selesai: string }[], bulanCadangan: number, hariCair: number | null = HARI_CAIR_BAWAAN): UsulanBaris[] {
+export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan: { mulai: string; selesai: string }[], bulanCadangan: number, hariCair: number | null = HARI_CAIR_BAWAAN, libur: Libur = new Set()): UsulanBaris[] {
   const dipakai = new Map<string, number>();
   return rincian.map((b) => {
     const dasar = `${b.akun}|${b.uraian}`;
@@ -177,7 +182,7 @@ export function usulanDari(rincian: BarisRincian[], isi: IsiLanjutan, pendataan:
     dipakai.set(dasar, n);
     const harga = teksHarga(b.tarif);
     const selesai = acuanSelesai(b, isi, pendataan);
-    const cair = saranCair(selesai, { bulan: bulanCadangan }, hariCair);
+    const cair = saranCair(selesai, { bulan: bulanCadangan }, hariCair, libur);
     return {
       kunci: n === 1 ? dasar : `${dasar}#${n}`,
       kelompok: b.kelompok, akun: b.akun, uraian: b.uraian,
