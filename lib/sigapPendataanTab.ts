@@ -93,6 +93,7 @@ export const SUB_TIM: SubItem[] = [
 export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "monitoring", label: "Kelengkapan SPJ", ket: "Kelengkapan SPJ transport lokal per petugas." },
   { kode: "verifikasi", label: "Verifikasi & Kunci", ket: "Periksa kelengkapan, pratinjau SPJ per petugas, unduh paket SPJ semua petugas (ZIP), lalu kunci." },
+  { kode: "unduh", label: "Unduh SPJ", ket: "Cetak SPJ semua petugas: pilih rentang tanggal (pembayaran bertahap), peran, urutan tim atau abjad, dan dokumen yang dicetak." },
   { kode: "tarif", label: "Kegiatan & Tarif", ket: "Tarif dan pengaturan kegiatan transport lokal." },
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
   { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (honor, perjalanan dinas)." },

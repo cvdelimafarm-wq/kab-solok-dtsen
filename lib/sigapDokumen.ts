@@ -33,6 +33,7 @@ import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
 import { buatPdfLaporanSigap } from "@/lib/pdf/sigap/laporan";
 import { buatPdfDokumentasiSigap, type SigapFotoInput } from "@/lib/pdf/sigap/dokumentasi";
 import { buatZip } from "@/lib/pdf/sigap/zip";
+import { kelompokRentang, rentangValid } from "@/lib/sigapSpjCetak";
 import { judulKecamatan } from "@/lib/pdf/sigap/format";
 import { satuanLaporan, satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 
@@ -61,6 +62,17 @@ export class GalatSpj extends Error {
     super(pesan);
     this.status = status;
   }
+}
+
+/**
+ * (28 Okt 2026) Batasi data SPJ ke rentang cetak [dari, sampai] (inklusif): hari dibayar di luar rentang tidak ikut, kelompok tanggal
+ * (kwitansi, visum, surat pernyataan) dan nominalnya dihitung ulang dari rentang (jumlah hari x tarif). Tanpa rentang = data apa adanya.
+ */
+export function batasiRentang(data: DataSpj, dari?: string | null, sampai?: string | null): DataSpj {
+  if (!dari && !sampai) return data;
+  if (!rentangValid(dari, sampai)) throw new GalatSpj("Rentang tanggal tidak valid (isi dua-duanya, awal tidak boleh setelah akhir).", 400);
+  const kelompok = kelompokRentang(data.kelompok.flatMap((k) => k.tanggal), data.tarif, dari, sampai);
+  return { ...data, kelompok, totalNominal: kelompok.reduce((j, k) => j + k.nominal, 0) };
 }
 
 /** Ubah daftar mentah (mis. dari query string) jadi daftar jenis valid berurutan baku. */
@@ -385,6 +397,7 @@ export async function rakitUnit(
             jumlahRealisasi: h.realisasi.jumlah_realisasi,
             kendala: h.realisasi.kendala,
             jumlahFoto: h.foto.length,
+            peran: data.penugasan.peran, // (28 Okt 2026) templat laporan beda per peran (PPL / PML / korwil)
           });
           unit.push({ jenis: "laporan", nama: `Laporan_${t}.pdf`, bytes, contentType: pdf, kelompok: kel.mulai });
         } else dilewati.push(`Laporan ${t} -- isian laporan belum diisi.`);
@@ -477,15 +490,17 @@ function pemuatStorage(db: Db): PemuatBerkas {
 export async function buatSpjPdf(
   db: Db,
   penugasanId: number,
-  opsi: { jenis: JenisDok[]; kelompokMulai?: string; tanggal?: string; format: "gabungan" | "zip" }
+  opsi: { jenis: JenisDok[]; kelompokMulai?: string; tanggal?: string; dari?: string; sampai?: string; format: "gabungan" | "zip" }
 ): Promise<{ bytes: Uint8Array; namaFile: string; contentType: string; dilewati: string[] }> {
   const jenis = URUTAN_JENIS.filter((j) => opsi.jenis.includes(j));
   if (jenis.length === 0) throw new GalatSpj("Pilih minimal 1 jenis dokumen.", 400);
-  const data = await dataSpj(db, penugasanId);
+  // (28 Okt 2026) rentang cetak: hanya hari dibayar dalam [dari, sampai]; kelompok & nilai kwitansi ikut rentang. Tidak memakai berkas beku.
+  const adaRentang = !!(opsi.dari || opsi.sampai);
+  const data = batasiRentang(await dataSpj(db, penugasanId), opsi.dari, opsi.sampai);
   const muat = pemuatStorage(db);
 
   const kelTerpilih = opsi.kelompokMulai ? data.kelompok.find((k) => k.mulai === opsi.kelompokMulai) : undefined;
-  const dasarNama = `SPJ_${amanNama(data.kegiatan.kode || "SIGAP")}_${amanNama(data.akun.nama)}_${opsi.tanggal ? opsi.tanggal : kelTerpilih ? rentangNama(kelTerpilih) : "semua"}`;
+  const dasarNama = `SPJ_${amanNama(data.kegiatan.kode || "SIGAP")}_${amanNama(data.akun.nama)}_${opsi.tanggal ? opsi.tanggal : adaRentang ? `${opsi.dari}_sd_${opsi.sampai}` : kelTerpilih ? rentangNama(kelTerpilih) : "semua"}`;
   const keluaran = async (unit: { nama: string; bytes: Uint8Array }[], dilewati: string[]) => {
     if (unit.length === 0) {
       throw new GalatSpj(`Belum ada dokumen yang bisa dibuat. ${dilewati.slice(0, 3).join(" ")}`.trim(), 404);
@@ -495,7 +510,7 @@ export async function buatSpjPdf(
   };
 
   // ---- Sudah dikunci: pakai berkas beku bila ada ----
-  if (data.penugasan.dikunci_at && !opsi.kelompokMulai && !opsi.tanggal && data.final.length > 0) {
+  if (data.penugasan.dikunci_at && !opsi.kelompokMulai && !opsi.tanggal && !adaRentang && data.final.length > 0) {
     const gab = data.final.find((f) => f.jenis === "gabungan");
     if (opsi.format === "gabungan" && jenis.length === URUTAN_JENIS.length && gab) {
       const berkas = await muat(gab.file_path);

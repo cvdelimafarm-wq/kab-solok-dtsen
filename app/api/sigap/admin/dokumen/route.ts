@@ -1,7 +1,7 @@
 // app/api/sigap/admin/dokumen/route.ts
 //
 // (5 Okt 2026) Pratinjau / unduh SPJ SIGAP Transport Lokal oleh admin -- permintaan user.
-// GET ?penugasan_id=&jenis=(default semua)&kelompok=<tanggal_mulai>|semua&format=gabungan|zip&unduh=1
+// GET ?penugasan_id=&jenis=(default semua)&kelompok=<tanggal_mulai>|semua&dari=&sampai=(rentang cetak, 28 Okt 2026)&format=gabungan|zip&unduh=1
 // Header wajib: Authorization: Bearer <sesi> (lib/sigapAkses). Izin: translok.verifikasi level
 // "lihat" pada kegiatan penugasan tsb. Default: semua jenis, PDF gabungan, ditampilkan inline
 // (pratinjau); unduh=1 -> attachment.
@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { tanggalValid } from "@/lib/sigap";
+import { rentangValid } from "@/lib/sigapSpjCetak";
 import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { GalatSpj, buatSpjPdf, headerBerkas, parseJenis } from "@/lib/sigapDokumen";
 
@@ -44,8 +45,12 @@ export async function GET(req: NextRequest) {
     const kel = sp.get("kelompok");
     if (kel && kel !== "semua" && !tanggalValid(kel)) return NextResponse.json({ error: "Kelompok tanggal tidak valid." }, { status: 400 });
     const format = sp.get("format") === "zip" ? "zip" : "gabungan";
+    // (28 Okt 2026) rentang cetak untuk Unduh SPJ tim administrasi; kosong = semua hari dibayar
+    const dari = sp.get("dari") || undefined;
+    const sampai = sp.get("sampai") || undefined;
+    if (!rentangValid(dari, sampai)) return NextResponse.json({ error: "Rentang tanggal tidak valid (isi dua-duanya, awal tidak boleh setelah akhir)." }, { status: 400 });
 
-    const hasil = await buatSpjPdf(db, penugasanId, { jenis, kelompokMulai: kel && kel !== "semua" ? kel : undefined, format });
+    const hasil = await buatSpjPdf(db, penugasanId, { jenis, kelompokMulai: kel && kel !== "semua" ? kel : undefined, dari, sampai, format });
     const disposisi = sp.get("unduh") === "1" || format === "zip" ? "attachment" : "inline";
     return new NextResponse(Buffer.from(hasil.bytes), { status: 200, headers: headerBerkas(hasil, disposisi) });
   } catch (err) {

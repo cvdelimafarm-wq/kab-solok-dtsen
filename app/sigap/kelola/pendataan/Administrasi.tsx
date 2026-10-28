@@ -18,6 +18,7 @@ export default function Administrasi() {
       <SubPilih daftar={SUB_ADMINISTRASI} aktif={sub} onPilih={pilih} label="Administrasi dan SPJ" />
       {sub === "monitoring" && <TransportLokal bagian="monitoring" />}
       {sub === "verifikasi" && <TransportLokal bagian="verifikasi" />}
+      {sub === "unduh" && <TransportLokal bagian="unduh" />}
       {sub === "tarif" && <TransportLokal bagian="kegiatan" />}
       {sub === "pengadaan" && <Pengadaan tertanam />}
       {sub === "anggaran" && <PintuMasuk tab="administrasi" />}

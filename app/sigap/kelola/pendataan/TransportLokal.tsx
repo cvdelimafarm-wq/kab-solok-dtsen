@@ -14,9 +14,10 @@ import TabKegiatan from "../../admin/TabKegiatan";
 import TabMonitoring from "../../admin/TabMonitoring";
 import TabPenugasan from "../../admin/TabPenugasan";
 import TabVerifikasi from "../../admin/TabVerifikasi";
+import TabUnduhSpj from "../../admin/TabUnduhSpj";
 
-export type BagianTranslok = "monitoring" | "penugasan" | "kegiatan" | "verifikasi";
-const MENU: Record<BagianTranslok, string> = { monitoring: "translok.monitoring", penugasan: "translok.penugasan", kegiatan: "translok.kegiatan", verifikasi: "translok.verifikasi" };
+export type BagianTranslok = "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "unduh";
+const MENU: Record<BagianTranslok, string> = { monitoring: "translok.monitoring", penugasan: "translok.penugasan", kegiatan: "translok.kegiatan", verifikasi: "translok.verifikasi", unduh: "translok.verifikasi" }; // (28 Okt 2026) Unduh SPJ memakai izin Verifikasi (lihat)
 
 export default function TransportLokal({ bagian }: { bagian: BagianTranslok }) {
   const [r, setR] = useState<Ringkas | null>(null);
@@ -44,6 +45,8 @@ export default function TransportLokal({ bagian }: { bagian: BagianTranslok }) {
     <TabMonitoring key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} kegiatan={keg} hariIni={r.hari_ini} />
   ) : bagian === "penugasan" ? (
     <TabPenugasan key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
+  ) : bagian === "unduh" ? (
+    <TabUnduhSpj key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
   ) : bagian === "verifikasi" ? (
     <TabVerifikasi key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
   ) : (

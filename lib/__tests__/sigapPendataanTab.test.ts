@@ -98,7 +98,7 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
   const P = "/sigap/kelola/pendataan";
   it("daftar, urutan, dan peta per tab", () => {
     expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
-    expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "tarif", "pengadaan", "anggaran"]);
+    expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "unduh", "tarif", "pengadaan", "anggaran"]);
     expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "qc", "tim"]);
     expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal", "kuesioner"]);
     expect(KEGIATAN_PENDATAAN).toBe(1);

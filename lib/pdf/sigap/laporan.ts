@@ -14,6 +14,7 @@
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
 import { formatTanggalIndoDenganHari, judulKecamatan, teksAman } from "./format";
+import { jenisTemplate, teksLaporan } from "@/lib/sigapLaporanPeran";
 
 export interface SigapLokasi {
   kecamatan: string | null;
@@ -33,6 +34,8 @@ export interface SigapLaporanData {
   jumlahRealisasi: number;
   kendala: string | null;
   jumlahFoto: number;
+  /** (28 Okt 2026) peran petugas (ppl/pml/korwil): pada Pendataan Pascabencana memilih templat uraian per peran; kosong = templat umum */
+  peran?: string;
 }
 
 const MM = 2.834645669;
@@ -113,6 +116,19 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const fontItalic = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const satuan = (data.satuan || "unit").trim();
+  // (28 Okt 2026) teks per peran (PPL / PML / korwil); peran lain & kegiatan lain = templat umum yang lama
+  const T = teksLaporan({
+    jenis: jenisTemplate(data.kegiatanKode || "", data.peran),
+    kegiatanNama: data.kegiatanNama,
+    namaPetugas: data.namaPetugas,
+    labelJabatan: data.labelJabatan,
+    tanggalTeks: formatTanggalIndoDenganHari(data.tanggal),
+    satuan,
+    jumlahRealisasi: data.jumlahRealisasi,
+    jumlahLokasi: data.lokasi.length,
+    wilayah: wilayahTeks(data.lokasi),
+  });
   const halaman: PDFPage[] = [];
   let page!: PDFPage;
   let y = BUDGET_TOP;
@@ -140,7 +156,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
     kotak(0, 0, PAGE_W, HEADER_BAR_H, { fill: NAVY });
     kotak(0, HEADER_BAR_H, PAGE_W, HEADER_STRIP_H, { fill: ORANGE });
     garisH(CONTENT_L, CONTENT_R, PAGE_H - FOOTER_LINE_DARI_BAWAH);
-    teks(`${data.kegiatanKode || "SIGAP"} • Laporan Perjalanan Dinas`, CONTENT_L, PAGE_H - FOOTER_TEXT_DARI_BAWAH, FOOTER_SIZE, { color: TEXT_SEC });
+    teks(`${data.kegiatanKode || "SIGAP"} • ${T.judul}`, CONTENT_L, PAGE_H - FOOTER_TEXT_DARI_BAWAH, FOOTER_SIZE, { color: TEXT_SEC });
     y = BUDGET_TOP;
   }
   /** Pindah halaman bila elemen setinggi h tidak muat lagi. */
@@ -159,7 +175,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   halamanBaru();
 
   // ---------- Judul ----------
-  teks("LAPORAN PERJALANAN DINAS", CONTENT_L, y, 20, { bold: true, color: NAVY });
+  teks(T.judul.toUpperCase(), CONTENT_L, y, 20, { bold: true, color: NAVY });
   y += 24;
   for (const b of bungkusTeks(font, teksAman(data.kegiatanNama || "-"), 11, CONTENT_W)) {
     teks(b, CONTENT_L, y, 11, { color: TEXT_SEC });
@@ -198,9 +214,8 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   y = gridTop + gridH + 9;
 
   // ---------- 3 kartu angka (semuanya data isian, bukan estimasi) ----------
-  const satuan = (data.satuan || "unit").trim();
   const kartu: [string, string][] = [
-    [String(data.jumlahRealisasi), `JUMLAH ${satuan.toUpperCase()}`],
+    [String(data.jumlahRealisasi), T.labelAngka],
     [String(data.lokasi.length), "LOKASI DICATAT"],
     [String(data.jumlahFoto), "FOTO DOKUMENTASI"],
   ];
@@ -213,14 +228,8 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   y += CARD_H + 14;
 
   // ---------- Uraian ----------
-  judulSeksi("URAIAN PELAKSANAAN TUGAS");
-  const wilayah = wilayahTeks(data.lokasi);
-  const paragraf = [
-    `Pada hari ${formatTanggalIndoDenganHari(data.tanggal)}, ${data.namaPetugas || "-"} melaksanakan tugas ${data.kegiatanNama || "-"} ` +
-      `sebagai ${data.labelJabatan || "-"}${wilayah ? ` di ${wilayah}` : ""}.`,
-    `Jumlah ${satuan} yang dicatat petugas pada tanggal ini sebanyak ${data.jumlahRealisasi} ${satuan}` +
-      `${data.lokasi.length ? `, pada ${data.lokasi.length} lokasi sebagaimana tercantum di bawah` : ""}.`,
-  ];
+  judulSeksi(T.seksiUraian);
+  const paragraf = T.paragraf;
   paragraf.forEach((p, i) => {
     for (const b of bungkusTeks(font, teksAman(p), FONT_ISI, CONTENT_W)) {
       ruang(LEADING_ISI);
@@ -232,7 +241,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   y += 14;
 
   // ---------- Tabel lokasi ----------
-  judulSeksi("LOKASI PELAKSANAAN");
+  judulSeksi(T.seksiLokasi);
   const kepalaTabel = () => {
     kotak(CONTENT_L, y, CONTENT_W, TABEL_HEADER_H, { fill: SOFT_BG });
     ["NO", "KECAMATAN", "NAGARI", "JORONG"].forEach((h, i) => teks(h, KOL_X[i] + PAD_X, y + 6, 7.5, { bold: true, color: TEXT_SEC }));
@@ -288,7 +297,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   y += 14;
 
   // ---------- Kendala ----------
-  judulSeksi("KENDALA DI LAPANGAN");
+  judulSeksi(T.seksiKendala);
   const kendala = (data.kendala ?? "").trim();
   for (const b of bungkusTeks(kendala ? font : fontItalic, teksAman(kendala || "Tidak ada kendala yang dicatat petugas pada isian tanggal ini."), FONT_ISI, CONTENT_W)) {
     ruang(LEADING_ISI);
@@ -300,9 +309,7 @@ export async function buatPdfLaporanSigap(data: SigapLaporanData): Promise<Uint8
   // ---------- Catatan ----------
   const prefiks = "Catatan: ";
   const lebarPrefiks = fontBold.widthOfTextAtSize(prefiks, 9);
-  const catatan =
-    `Laporan ini dirakit otomatis dari isian harian petugas pada aplikasi SIGAP (lokasi, jumlah ${satuan}, kendala, dan foto ` +
-    `dokumentasi) untuk tanggal ${formatTanggalIndoDenganHari(data.tanggal)}, tanpa tambahan data lain.`;
+  const catatan = T.catatan;
   const barisCat = bungkusTeks(fontItalic, teksAman(catatan), 9, CONTENT_W - lebarPrefiks);
   ruang(barisCat.length * 12);
   teks(prefiks, CONTENT_L, y, 9, { bold: true, color: TEXT_SEC });

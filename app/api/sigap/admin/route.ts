@@ -21,6 +21,7 @@ import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hari
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
+import { petaTim } from "@/lib/sigapSpjCetak";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -376,6 +377,18 @@ export async function GET(req: NextRequest) {
       }
 
       // verifikasi
+      // (28 Okt 2026) Unduh SPJ (tim administrasi): ?tim=1 menambah tim (PML & PPL-nya lewat bencana_petugas.atasan_id); baris selalu memuat
+      // akun_id, tarif, dan tanggal dibayar supaya rentang cetak & nilai kwitansi bisa dihitung di layar.
+      let timAkun = new Map<number, { id: number; nama: string }>();
+      if (sp.get("tim") === "1") {
+        const ids = Array.from(new Set(aktif.map((b) => b.akun_id)));
+        const ak = ids.length ? await semuaBaris<{ id: number; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, petugas_bencana_id").in("id", ids).range(a, z)) : [];
+        const pIds = ak.map((x) => x.petugas_bencana_id).filter((x): x is number => !!x);
+        const bp = pIds.length ? await semuaBaris<{ id: number; atasan_id: number | null }>((a, z) => db.from("bencana_petugas").select("id, atasan_id").in("id", pIds).range(a, z)) : [];
+        const atIds = Array.from(new Set(bp.map((x) => x.atasan_id).filter((x): x is number => !!x)));
+        const atAkun = atIds.length ? await semuaBaris<{ id: number; nama: string; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, nama, petugas_bencana_id").in("petugas_bencana_id", atIds).range(a, z)) : [];
+        timAkun = petaTim(aktif.map((b) => ({ akun_id: b.akun_id, peran: b.peran, nama: b.nama })), ak, bp, atAkun);
+      }
       const rows = aktif.map((b) => {
         const hk = st.hk.filter((h) => h.penugasan_id === b.id).map((h) => h.tanggal);
         const izinSet = new Set(st.izin.filter((i) => i.penugasan_id === b.id).map((i) => i.tanggal));
@@ -388,8 +401,13 @@ export async function GET(req: NextRequest) {
         const nDok = hk.filter((t) => (st.foto.get(`${b.id}|${t}`) ?? 0) >= aturan.jumlah_foto).length;
         return {
           penugasan_id: b.id,
+          akun_id: b.akun_id,
           nama: b.nama,
           peran: b.peran,
+          tarif: b.tarif,
+          dibayar: [...dibayar].sort(),
+          tim_akun_id: timAkun.get(b.akun_id)?.id ?? null,
+          tim_nama: timAkun.get(b.akun_id)?.nama ?? null,
           hari_kerja: hk.length,
           hari_dibayar: dibayar.length,
           kelompok: kelompok.map((k) => ({ mulai: k.mulai, selesai: k.selesai, jumlah_hari: k.jumlah_hari })),
@@ -402,7 +420,8 @@ export async function GET(req: NextRequest) {
           dikunci_oleh: b.dikunci_oleh,
         };
       });
-      return NextResponse.json({ kegiatan, rows, boleh_kelola: perlu("translok.verifikasi", "kelola"), boleh_buka: boleh(s.izin, "translok.buka_kunci", "kelola", kegiatanId) });
+      const semuaHk = st.hk.map((h) => h.tanggal).sort();
+      return NextResponse.json({ kegiatan, rows, hari_min: semuaHk[0] ?? null, hari_maks: semuaHk[semuaHk.length - 1] ?? null, boleh_kelola: perlu("translok.verifikasi", "kelola"), boleh_buka: boleh(s.izin, "translok.buka_kunci", "kelola", kegiatanId) });
     }
 
     // (6 Okt 2026) Log login & durasi pemakaian -- permintaan user (izin Kelola Peran & Akses: lihat).
