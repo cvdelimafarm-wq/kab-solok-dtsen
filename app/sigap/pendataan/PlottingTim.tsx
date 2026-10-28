@@ -183,7 +183,13 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
 
           {d.galat && !data && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">Status permintaan belum termuat. {d.galat === "SESI_BERAKHIR" ? "" : d.galat}</p>}
 
-          <ul className="mt-3 space-y-2">
+          <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-[11.5px] leading-snug text-[#52627A]">
+            <span><b className="text-[#13794B]">✓</b> sudah keluar di FASIH</span>
+            <span><b className="text-[#C98A00]">…</b> menunggu admin</span>
+            <span><b className="text-[#1F5FD1]">☐</b> belum diajukan</span>
+          </p>
+
+          <ul className="mt-2 space-y-2">
             {baris.map((s) => {
               const p = aktifPer.get(s.idsubsls);
               const n = totalKk(s.idsubsls);
@@ -213,6 +219,12 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                         Nagari {rapikanNama(s.nagari)} · Kec. {rapikanNama(s.kecamatan)} · {n > 0 ? <b className="text-[#0F2A52]">{n} KK</b> : "daftar KK belum diunggah"}
                       </small>
                       {p && chip(p, true)}
+                      {/* (28 Okt 2026) Sub SLS yang belum pernah diajukan diberi label sendiri supaya kotak kosong tidak disangka "belum selesai/bermasalah". */}
+                      {!p && !beku && n > 0 && (
+                        <span className={`mt-1.5 inline-block rounded-full px-2 py-[2px] text-[10.5px] font-extrabold ${dipilih ? "bg-[#DCE8FB] text-[#1F5FD1]" : "bg-[#EEF1F6] text-[#4A5568]"}`}>
+                          {dipilih ? "Dipilih · belum dikirim" : "Belum diajukan"}
+                        </span>
+                      )}
                       {beku && <span className="mt-1.5 inline-block rounded-full bg-[#E3E7EE] px-2 py-[2px] text-[10.5px] font-extrabold text-[#4A5568] sm:hidden">Non aktif</span>}
                     </span>
                     {p && chip(p)}

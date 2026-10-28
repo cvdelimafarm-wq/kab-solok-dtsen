@@ -8,6 +8,7 @@
 //  - DTSEN      : operator Wali Nagari tetap akun Supabase (nomor HP + PIN 6 digit), diketik di form yg sama.
 // Kartu dihitung DI SERVER dari peran (sigap_akun_peran -> sigap_peran_izin) + periode kegiatan.
 
+import { buatCacheTtl } from "@/lib/cacheTtl";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
@@ -22,15 +23,29 @@ export function dbPortal(): Db | null {
 
 export type AkunPortal = { id: number; nama: string; jenis: string; token: string; petugas_bencana_id: number | null; aktif: boolean };
 
+// (28 Okt 2026) Pengecekan akun terjadi di SETIAP permintaan API (±34 permintaan/dtk ke Supabase untuk ±90 pengguna -> database jenuh, respons
+// belasan detik). Hasil akun AKTIF kini disimpan 30 dtk di memori server dan pembacaan bersamaan digabung. Akibat: akun yang baru dinonaktifkan
+// atau token/PIN-nya diganti bisa masih lolos paling lama 30 dtk. Akun nonaktif/tidak ada (null) dan galat tidak pernah disimpan.
+const TTL_AKUN_MS = 30_000;
+const cacheAkun = buatCacheTtl<number, AkunPortal>({ ttlMs: TTL_AKUN_MS, maks: 2000 });
+
+/** Buang akun dari simpanan (panggil setelah menonaktifkan akun atau mengganti PIN/token supaya berlaku seketika). */
+export function lupakanAkunSesi(id: number): void {
+  cacheAkun.lupakan(id);
+}
+
 export async function akunDariSesi(db: Db, h: Headers): Promise<AkunPortal | null> {
   const id = sesiDariHeader(h);
   if (!id) return null;
-  const { data, error } = await db.from("sigap_akun").select("id, nama, jenis, token, petugas_bencana_id, aktif").eq("id", id).maybeSingle();
-  // (17 Okt 2026) Galat database (waktu habis, sambungan putus) BUKAN "sesi tidak sah": dulu ikut menjadi null -> 401 -> HP menghapus sesi
-  // dan petugas terlempar ke halaman masuk. Kini dilempar sebagai galat 500 sehingga klien hanya menampilkan "gagal memuat" dan sesi tetap aman.
-  if (error) throw new Error(`Gagal memeriksa sesi (database): ${error.message}`);
-  if (!data || !data.aktif) return null;
-  return data as AkunPortal;
+  const data = await cacheAkun.ambil(id, async () => {
+    const { data: baris, error } = await db.from("sigap_akun").select("id, nama, jenis, token, petugas_bencana_id, aktif").eq("id", id).maybeSingle();
+    // (17 Okt 2026) Galat database (waktu habis, sambungan putus) BUKAN "sesi tidak sah": dulu ikut menjadi null -> 401 -> HP menghapus sesi
+    // dan petugas terlempar ke halaman masuk. Kini dilempar sebagai galat 500 sehingga klien hanya menampilkan "gagal memuat" dan sesi tetap aman.
+    if (error) throw new Error(`Gagal memeriksa sesi (database): ${error.message}`);
+    if (!baris || !baris.aktif) return null;
+    return baris as AkunPortal;
+  });
+  return data ? { ...data } : null;
 }
 
 /** Nama ternormalisasi gaya penyisiran (huruf besar, spasi tunggal), dgn & tanpa gelar sesudah koma. */
