@@ -32,6 +32,7 @@ import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, MAKS_TAG, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
+import { fotoWajibLandscape, perluMiringkanHp, fotoTertahanTegak, TEKS_LANDSCAPE } from "@/lib/sigapFotoLandscape";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
 import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartalDasarKamera, kunciKondisi, matriksKuartal, type ArahHp, type BelajarPeta } from "@/lib/sigapFotoPutar";
 import { jamWib } from "@/lib/sigapUrutanFoto";
@@ -50,7 +51,9 @@ const tglWib = (ms = Date.now()) => new Date(ms + 7 * 3_600_000).toISOString().s
 
 type Jepretan = { blob: Blob; url: string; pos: Pos; token: string | null; mono: number | null; wall: number | null; waktuHp: number; umurPosisi: number; dibuatMs: number;
   /** (26 Okt 2026) kondisi saat memotret (kunci belajar, mis. "s1" = HP miring kiri), keadaan sensor/layar untuk diagnosa, dan total putar manual petugas (searah jarum jam, kelipatan 90 derajat) */
-  kunci: string; diag: Record<string, unknown>; kuartal: number };
+  kunci: string; diag: Record<string, unknown>; kuartal: number;
+  /** (28 Okt 2026) ukuran akhir foto (piksel), untuk memeriksa foto yang wajib landscape */
+  lebar: number; tinggi: number };
 
 /** Berkas satu foto yang dikirim di latar belakang (kartu di layar hanya memegang status; berkasnya di sini dan di antrean HP). */
 type BerkasLatar = { item: ItemAntrean; drafId: number | null; j: Jepretan; tag: TagPilihan[]; thumb: string };
@@ -201,6 +204,7 @@ export default function KameraSigap({
   // (27 Okt 2026) Kamera tegak layar penuh (tanpa scroll: tombol Potret selalu terlihat). true = petugas menutupnya untuk melihat panduan GPS, kabar, dan tab lain.
   const [penuhTutup, setPenuhTutup] = useState(false);
   const [layarLebar, setLayarLebar] = useState(false); // layar sendiri sudah landscape (peramban biasa dengan putar otomatis): tidak perlu diputar manual
+  const [sensorAda, setSensorAda] = useState(false); // (28 Okt 2026) sensor arah HP sudah memberi kabar (tanpa sensor, foto 3 diperiksa sesudah dipotret)
   const izinGerakRef = useRef(false);
   const gerakAdaRef = useRef(false);
   const diagRef = useRef<{ sumber: string; n: number; x: number; y: number }>({ sumber: "-", n: 0, x: 0, y: 0 });
@@ -283,6 +287,7 @@ export default function KameraSigap({
         sy = sy * 0.8 + gy * 0.2;
       }
       diagRef.current = { sumber, n: diagRef.current.n + 1, x: sx, y: sy };
+      setSensorAda(true);
       setMiring((p) => arahDariGravitasi(sx, sy, p)); // empat arah, dengan histeresis (lib/sigapFotoPutar.ts)
     };
     const onGerak = (e: DeviceMotionEvent) => {
@@ -461,6 +466,12 @@ export default function KameraSigap({
   // nomor yang sudah dipesan foto kuning/merah (menunggu diperiksa) juga dilewati saat memilih nomor otomatis: foto tetap bernomor tahapannya
   const dipesanSemua = useMemo(() => new Set([...terisiSemuaNomor, ...ditahanServer]), [terisiSemuaNomor, ditahanServer]);
   const saran = nomorBerikutnya(dipesanSemua, jumlahNomor); // null = semua nomor hari ini sudah terisi/dipesan
+  // (28 Okt 2026) Foto 3 (Saat mendata) wajib landscape (lib/sigapFotoLandscape.ts): HP masih tegak -> modal "miringkan HP" dan tombol Potret nonaktif;
+  // hasil foto yang tetap tegak (mis. HP tanpa sensor gerak) tertahan di pratinjau sampai diambil ulang.
+  const nomorKamera = ganti ?? nomorAwal ?? saran;
+  const wajibLand = fotoWajibLandscape(nomorKamera, jenis);
+  const perluMiring = awalSiap && !jepretan && !galatKamera && perluMiringkanHp({ nomor: nomorKamera, jenis, sensorAda, layarLebar, arah: miring });
+  const tertahanTegak = !!jepretan && fotoTertahanTegak({ nomor, jenis, lebar: jepretan.lebar, tinggi: jepretan.tinggi });
   // Foto minimal punya nomor sendiri atau dibagikan ke rekan. Bila semua nomor hari ini sudah terisi, foto boleh dikirim tanpa nomor sebagai CADANGAN.
   const adaTujuan = nomor !== null || tag.length > 0 || saran === null;
   // (22 Okt 2026) Foto dibagikan ke rekan SAJA padahal masih ada nomor kosong milik sendiri: foto tidak mengisi nomor petugas (tag miliknya "menunggu"),
@@ -469,7 +480,7 @@ export default function KameraSigap({
 
   async function potret() {
     const v = videoRef.current;
-    if (!v || !posisi || !v.videoWidth || !siapPotret) return;
+    if (!v || !posisi || !v.videoWidth || !siapPotret || perluMiring) return;
     const mono = performance.now();
     const wall = Date.now();
     const kanvas = document.createElement("canvas");
@@ -520,6 +531,8 @@ export default function KameraSigap({
       dibuatMs: wall,
       kunci,
       kuartal: 0,
+      lebar: kanvas.width,
+      tinggi: kanvas.height,
       diag: {
         kunci, miring, layar_lebar: layarLebar, sudut_layar: sudutLayar, tipe_layar: typeof screen !== "undefined" ? screen.orientation?.type ?? null : null,
         bingkai: [v.videoWidth, v.videoHeight], hadap, sensor: [Number(diagRef.current.x.toFixed(1)), Number(diagRef.current.y.toFixed(1))], sumber: diagRef.current.sumber,
@@ -566,7 +579,7 @@ export default function KameraSigap({
       const blob = await new Promise<Blob | null>((ok) => kv.toBlob(ok, "image/jpeg", 0.9));
       if (!blob) throw new Error("blob");
       const url = URL.createObjectURL(blob);
-      setJepretan((p) => (p ? { ...p, blob, url, kuartal: (p.kuartal + k) % 4 } : p)); // url lama dilepas oleh efek pada jepretan
+      setJepretan((p) => (p ? { ...p, blob, url, lebar: r.lebar, tinggi: r.tinggi, kuartal: (p.kuartal + k) % 4 } : p)); // url lama dilepas oleh efek pada jepretan
       if (nomorOtomatis && nomor !== null) setHitung(DETIK_KIRIM_OTOMATIS); // sudah memeriksa arah: hitungan jaga-jaga mulai lagi dari awal
     } catch {
       setPesan({ jenis: "galat", teks: "Foto tidak dapat diputar. Coba lagi, atau pakai Buang & ulangi." });
@@ -678,7 +691,7 @@ export default function KameraSigap({
     if (hitung === null || !jepretan) return;
     if (hitung <= 0) {
       setHitung(null);
-      if (adaTujuan) {
+      if (adaTujuan && !tertahanTegak) {
         setArahOk(true); // bila gagal, layar cadangan (nomor + Kirim) yang tampil
         void kirim();
       }
@@ -716,6 +729,10 @@ export default function KameraSigap({
    */
   function kirim() {
     if (!jepretan) return;
+    if (tertahanTegak) {
+      setPesan({ jenis: "galat", teks: TEKS_LANDSCAPE.galatTegak(nomor as number) });
+      return;
+    }
     const j = jepretan;
     const kid = ++kidRef.current;
     const item: ItemAntrean = itemDari(j, kegiatanId, nomor, tag);
@@ -993,6 +1010,7 @@ export default function KameraSigap({
                   <span className="min-w-0 flex-1">
                     <span className={`block text-sm font-bold ${terisi && !aktifPilih ? "text-[#7A879C]" : "text-[#0F2A52]"}`}>{etiket[n - 1] ?? `Foto ${n}`}</span>
                     {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
+                    {fotoWajibLandscape(n, jenis) && <span className="block text-[11px] font-semibold text-[#8A6200]">{TEKS_LANDSCAPE.catatan}</span>}
                     {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
                     {terisi && !aktifPilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengambil ulang</span>}
                     {terisi && aktifPilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto {n} sudah terisi. Foto baru MENGGANTIKAN Foto {n} saja; foto lamanya tidak dihapus, hanya menjadi cadangan.</span>}
@@ -1063,6 +1081,7 @@ export default function KameraSigap({
                   </button>
                   <div className="min-w-0 flex-1 pt-0.5">
                     <div className={`inline-block max-w-full truncate rounded-full px-3 py-1 text-[13px] font-extrabold ${ganti !== null ? "bg-[#B7791F]" : "bg-[#0F2A52]/90"}`}>{labelTarget}</div>
+                    {wajibLand && <div className="mt-1 text-[11.5px] font-semibold text-[#F2B632]">{TEKS_LANDSCAPE.catatan}</div>}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${akurasiOk ? "bg-[#1E8E4E]" : "bg-[#B7791F]"}`} role="status">
                         {posisi ? `GPS ±${Math.round(posisi.akurasi)} m${akurasiOk ? "" : " (kasar)"}` : galatGps ?? "Mencari lokasi…"}
@@ -1120,7 +1139,7 @@ export default function KameraSigap({
                   <button
                     type="button"
                     onClick={() => void potret()}
-                    disabled={!siapPotret || !!galatKamera}
+                    disabled={!siapPotret || !!galatKamera || perluMiring}
                     aria-label="Potret"
                     className="flex h-[78px] w-[78px] items-center justify-center rounded-full border-4 border-white bg-white/25 active:scale-95 disabled:opacity-40"
                   >
@@ -1179,7 +1198,7 @@ export default function KameraSigap({
               )}
             </div>
           )}
-          <button type="button" onClick={() => void potret()} disabled={!siapPotret || !!galatKamera} className="min-h-[56px] rounded-2xl bg-[#0F2A52] text-base font-extrabold text-white disabled:opacity-40">
+          <button type="button" onClick={() => void potret()} disabled={!siapPotret || !!galatKamera || perluMiring} className="min-h-[56px] rounded-2xl bg-[#0F2A52] text-base font-extrabold text-white disabled:opacity-40">
             {akurasiKasar && sisaTunggu > 0 ? `Menunggu GPS lebih akurat… ${sisaTunggu} dtk` : akurasiKasar ? "Potret (akurasi kasar, akan diperiksa)" : "Potret"}
           </button>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Waktu dan lokasi diambil otomatis dari sistem dan dicetak di foto bersama logo SIGAP, kode, dan QR. Tidak bisa diketik atau dipilih dari galeri.</p>
@@ -1190,6 +1209,7 @@ export default function KameraSigap({
       {jepretan && (
         <>
           <PratinjauCap url={jepretan.url} waktuMs={jepretan.waktuHp} pos={jepretan.pos} nama={namaSaya} peran={peran.toUpperCase()} kegiatan={namaKegiatan} />
+          {tertahanTegak && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs font-semibold leading-snug text-[#9B1C23]">{TEKS_LANDSCAPE.galatTegak(nomor as number)}</div>}
           {!arahOk && (
             <div className="flex flex-col gap-2 rounded-xl border-2 border-[#0F2A52] bg-[#F4F7FC] p-3" role="group" aria-label="Langkah 1: periksa arah foto">
               <div className="text-sm font-extrabold text-[#0F2A52]">Langkah 1 · Periksa arah foto</div>
@@ -1202,6 +1222,7 @@ export default function KameraSigap({
               <button
                 type="button"
                 onClick={() => { setArahOk(true); void kirim(); }}
+                disabled={tertahanTegak}
                
                 className="min-h-[52px] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50"
               >
@@ -1273,6 +1294,7 @@ export default function KameraSigap({
                     <span className="min-w-0 flex-1">
                       <span className={`block text-sm font-bold ${terisi && !pilih ? "text-[#7A879C]" : "text-[#0F2A52]"}`}>{etiket[n - 1] ?? `Foto ${n}`}</span>
                       {lokasi && !terisi && <span className="block text-[11px] text-[#5B6B84]">Diambil di wilayah tugas</span>}
+                    {fotoWajibLandscape(n, jenis) && <span className="block text-[11px] font-semibold text-[#8A6200]">{TEKS_LANDSCAPE.catatan}</span>}
                       {dipesan && <span className="block text-[11px] font-semibold text-[#8A6200]">Sudah dipesan foto yang menunggu diperiksa PML/admin</span>}
                       {terisi && !pilih && <span className="block text-[11px] font-semibold text-[#1E8E4E]">Sudah terisi · ketuk bila ingin mengambil ulang</span>}
                       {terisi && pilih && <span className="block text-[11px] font-semibold text-[#8A6200]">Foto {n} sudah terisi. Bila dikirim, foto ini MENGGANTIKAN Foto {n} saja; foto lamanya tidak dihapus, hanya menjadi cadangan · ketuk lagi untuk batal</span>}
@@ -1369,7 +1391,7 @@ export default function KameraSigap({
 
             <div className="flex gap-2">
               <button type="button" onClick={ulang} className="min-h-[52px] flex-1 rounded-2xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52] disabled:opacity-50">Buang &amp; ulangi</button>
-              <button type="button" onClick={() => (tanpaNomorSendiri ? setKonfirmasiTanpaNomor(true) : void kirim())} disabled={!adaTujuan} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
+              <button type="button" onClick={() => (tanpaNomorSendiri ? setKonfirmasiTanpaNomor(true) : void kirim())} disabled={!adaTujuan || tertahanTegak} className="min-h-[52px] flex-[2] rounded-2xl bg-[#0F2A52] text-sm font-extrabold text-white disabled:opacity-50">
                 {nomor !== null ? `Kirim sebagai Foto ${nomor}` : tag.length === 0 && saran === null ? "Kirim sebagai cadangan" : "Kirim"}
               </button>
             </div>
@@ -1393,6 +1415,35 @@ export default function KameraSigap({
           />
         );
       })()}
+
+      {perluMiring &&
+        createPortal(
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 p-5" role="alertdialog" aria-modal="true" aria-labelledby="judul-miringkan" data-modal-landscape="1">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-xl">
+              <svg viewBox="0 0 64 64" width="64" height="64" className="mx-auto text-[#0F2A52]" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="22" y="8" width="20" height="36" rx="4" />
+                <path d="M30 38h4" />
+                <path d="M14 54a24 24 0 0 0 36 0" />
+                <path d="M50 54l1-8M50 54l-8-1" />
+              </svg>
+              <h2 id="judul-miringkan" className="mt-2 text-base font-extrabold text-[#0F2A52]">{TEKS_LANDSCAPE.judulModal}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[#3C4C68]">{TEKS_LANDSCAPE.isiModal(nomorKamera as number, etiket[(nomorKamera as number) - 1])}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setGanti(null);
+                  setNomorAwal(null);
+                  setPilihAwal(null);
+                  setAwalSiap(false);
+                }}
+                className="mt-4 min-h-[48px] w-full rounded-xl border-2 border-[#C9D3E6] text-sm font-bold text-[#0F2A52]"
+              >
+                {TEKS_LANDSCAPE.tombolUbahNomor}
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
