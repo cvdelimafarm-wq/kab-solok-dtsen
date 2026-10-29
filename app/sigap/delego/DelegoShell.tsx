@@ -15,8 +15,9 @@ import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang";
+type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang";
 const JALUR: Record<Ikon, string> = {
+  ringkas: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
   papan: "M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v12h-4z",
   laporan: "M6 3h9l4 4v14H6zM9 12h7M9 16h7",
@@ -63,6 +64,7 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
 ];
+const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };
 const BUTIR_SAYA: Butir[] = [
   { href: "/sigap/delego/saya", label: "Delegasi saya", ikon: "tugas" },
@@ -104,7 +106,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
   }, [hak, jam, h.muat]);
 
   const aktif = (b: Butir) => (b.persis ? path === b.href : path === b.href || path.startsWith(`${b.href}/`));
-  const tim = konteks?.manajer ? [...BUTIR_TIM, ...(konteks.pemberi ? [BUTIR_BUAT] : [])] : [];
+  const tim = konteks?.manajer ? [...BUTIR_TIM, ...(konteks.pemberi ? [BUTIR_BUAT] : []), ...(hak?.semua ? [BUTIR_RINGKAS] : [])] : [];
   const peran = !hak ? "" : hak.akun.jenis === "mitra" ? "Mitra statistik" : konteks?.pemberi ? "Ketua Tim" : "Pegawai";
 
   const tautan = (b: Butir) => (
@@ -122,7 +124,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-screen bg-[#F3F5F7] text-[#14212B] lg:flex" style={{ fontFamily: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
       {/* ------------------------------------------------ Sidebar (layar lebar) */}
-      <aside className="sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col self-start overflow-y-auto bg-[#0B3B38] px-3 py-4 lg:flex">
+      <aside className="sticky top-0 hidden print:!hidden h-screen w-[236px] shrink-0 flex-col self-start overflow-y-auto bg-[#0B3B38] px-3 py-4 lg:flex">
         <Link href="/sigap/delego" className="mb-4 flex items-center gap-2.5 px-1.5" aria-label="Delego, beranda">
           <TandaDelego ukuran={34} />
           <span className="leading-tight">
@@ -162,7 +164,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
 
       <div className="min-w-0 flex-1">
         {/* ------------------------------------------------ Header HP */}
-        <header className="bg-[#0B3B38] px-4 pb-3 pt-3 text-white lg:hidden">
+        <header className="bg-[#0B3B38] px-4 pb-3 pt-3 text-white lg:hidden print:hidden">
           <div className="flex items-center justify-between gap-3">
             <Link href={konteks?.manajer ? "/sigap/delego" : "/sigap/delego/saya"} className="flex items-center gap-2" aria-label="Delego">
               <TandaDelego ukuran={30} />
@@ -182,7 +184,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
           )}
         </header>
         {tim.length > 0 && (
-          <nav aria-label="Menu tim" className="flex gap-2 overflow-x-auto border-b border-[#D5DCE2] bg-white px-3 py-2 lg:hidden">
+          <nav aria-label="Menu tim" className="flex gap-2 overflow-x-auto border-b border-[#D5DCE2] bg-white px-3 py-2 lg:hidden print:hidden">
             {tim.map((b) => (
               <Link
                 key={b.href}
@@ -197,7 +199,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
         )}
 
         {/* ------------------------------------------------ Bilah atas (layar lebar) */}
-        <div className="hidden items-center justify-end gap-3 px-6 pt-4 lg:flex">
+        <div className="hidden items-center justify-end gap-3 px-6 pt-4 lg:flex print:!hidden">
           {hak && <span className="text-[13px] text-[#3B4A57]">{tglPendek(hak.hari_ini)}</span>}
           <Lonceng />
         </div>
@@ -209,7 +211,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
         </div>
 
         {/* ------------------------------------------------ Tab bawah (HP) */}
-        <nav aria-label="Menu saya" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[#D5DCE2] bg-white lg:hidden">
+        <nav aria-label="Menu saya" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[#D5DCE2] bg-white lg:hidden print:hidden">
           {BUTIR_SAYA.map((b) => (
             <Link
               key={b.href}

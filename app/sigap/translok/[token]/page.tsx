@@ -1,6 +1,7 @@
 "use client";
 
 import { use as usePromise, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import LogoSigap from "@/app/components/LogoSigap";
 import TombolKembali from "@/app/components/TombolKembali";
 import IkonMenu, { type NamaIkon } from "@/app/portal/IkonMenu";
@@ -1683,7 +1684,10 @@ function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal, jenisAwal, rentangAwa
   const [jenis, setJenis] = useState<Set<string>>(new Set(jenisAwalOk.length ? jenisAwalOk : awal && !rentangAwalOk ? jenisPerHari : JENIS_DOK.map((j) => j.k)));
   const [format, setFormat] = useState<"gabungan" | "zip">("gabungan");
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => ref.current?.focus(), []);
+  // (29 Okt 2026) Lembar dipasang langsung di <body> (portal) supaya tidak terjebak di bawah menu bawah (tombol Unduh terhimpit).
+  const [terpasang, setTerpasang] = useState(false);
+  useEffect(() => setTerpasang(true), []);
+  useEffect(() => { if (terpasang) ref.current?.focus(); }, [terpasang]);
   // (23 Okt 2026) Petugas boleh mengunduh SEMUA jenis SPJ. Surat Tugas, Kwitansi, Visum & Surat Pernyataan dibuat per kelompok tanggal, jadi
   // mencentangnya saat mode "Satu hari" memindahkan pilihan ke kelompok tanggal yang memuat hari itu (bukan lagi dinonaktifkan).
   const [pindahRentang, setPindahRentang] = useState<string | null>(null); // teks pemberitahuan setelah otomatis pindah ke rentang
@@ -1768,9 +1772,10 @@ function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal, jenisAwal, rentangAwa
     });
   };
   const CHIP = (on: boolean) => `rounded-full px-3 py-1.5 text-[12.5px] font-bold ${on ? "bg-[#0F3D7A] text-white" : "bg-[#EEF1F5] text-[#55657D]"}`;
-  return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={onTutup}>
-      <div ref={ref} tabIndex={-1} className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#EEF2F8] p-4 pb-8 outline-none" onClick={(e) => e.stopPropagation()}>
+  if (!terpasang) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={onTutup}>
+      <div ref={ref} tabIndex={-1} className="max-h-[88dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-3xl bg-[#EEF2F8] p-4 outline-none" style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-[#C9D3E2]" />
         <div className="flex items-center justify-between">
           <p className="text-[17px] font-extrabold">Unduh SPJ</p>
@@ -1887,7 +1892,8 @@ function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal, jenisAwal, rentangAwa
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
