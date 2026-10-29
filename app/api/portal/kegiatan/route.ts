@@ -4,7 +4,7 @@
 // GET (Authorization: Bearer <sesi>) [?id=translok-12] -> { sekarang, kegiatan: RingkasKegiatan[] }
 
 import { NextRequest, NextResponse } from "next/server";
-import { penugasanAkun } from "@/lib/sigap";
+import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { kegiatanTranslok } from "@/lib/portal/kegiatan";
 import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const now = Date.now();
-    const semua = await penugasanAkun(db, akun.id);
+    const semua = await penugasanAkunMemo(db, akun.id);
     const id = req.nextUrl.searchParams.get("id");
     // (14 Okt 2026) bila hanya satu kegiatan diminta (tahapan kegiatan, polling 45 dtk), hanya itu yang dihitung (hasil lembar per penugasan tidak murah)
     const pen = id ? semua.filter((p) => `translok-${p.id}` === id) : semua;

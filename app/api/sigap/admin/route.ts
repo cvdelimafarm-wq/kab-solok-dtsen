@@ -21,6 +21,9 @@ import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hari
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
+import { buangMemo } from "@/lib/portal/memoSingkat";
+import { AWALAN_MEMO_PENUGASAN } from "@/lib/portal/penugasanMemo";
+import { AWALAN_MEMO_TIM } from "@/lib/portal/pendataan";
 import { petaTim } from "@/lib/sigapSpjCetak";
 
 export const runtime = "nodejs";
@@ -498,7 +501,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ======================================================================
-export async function POST(req: NextRequest) {
+async function proses(req: NextRequest) {
   const db = supabaseAdmin();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const body = await req.json().catch(() => null);
@@ -782,5 +785,15 @@ export async function POST(req: NextRequest) {
     return galat("Aksi tidak dikenal.");
   } catch (err) {
     return galat(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga", 500);
+  }
+}
+
+/** (29 Okt 2026) Setelah ada penulisan, buang simpanan sementara supaya GET berikutnya langsung segar. */
+export async function POST(req: NextRequest) {
+  try {
+    return await proses(req);
+  } finally {
+    buangMemo(AWALAN_MEMO_PENUGASAN);
+    buangMemo(AWALAN_MEMO_TIM);
   }
 }

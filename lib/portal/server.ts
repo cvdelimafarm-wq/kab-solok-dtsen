@@ -11,7 +11,7 @@
 import { buatCacheTtl } from "@/lib/cacheTtl";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
-import { penugasanAkun } from "@/lib/sigap";
+import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin } from "@/lib/sigapAkses";
 import { tentukanTujuan } from "@/lib/undangan";
 
@@ -70,7 +70,7 @@ export async function cocokPenyisiran(db: Db, nama: string): Promise<AkunPenyisi
 /** Boleh masuk portal: punya penugasan, peran, pegawai organik, petugas bencana, atau petugas penyisiran. */
 export async function bolehMasukPortal(db: Db, akun: { id: number; nama: string; jenis?: string | null; petugas_bencana_id?: number | null }): Promise<boolean> {
   if (akun.jenis === "organik" || akun.petugas_bencana_id) return true;
-  if ((await penugasanAkun(db, akun.id)).length > 0) return true;
+  if ((await penugasanAkunMemo(db, akun.id)).length > 0) return true;
   if ((await izinAkun(db, akun.id)).peran.length > 0) return true;
   return !!(await cocokPenyisiran(db, akun.nama));
 }
@@ -98,7 +98,7 @@ function tglIndo(iso: string | null | undefined): string {
 
 export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: PeranAkun[]; izin: PetaIzin; kartu: Kartu[]; admin_aplikasi: boolean }> {
   const [pen, { peran, izin }, { data: apl }] = await Promise.all([
-    penugasanAkun(db, akun.id),
+    penugasanAkunMemo(db, akun.id),
     izinAkun(db, akun.id),
     db.from("portal_aplikasi").select("kode, nama, uraian, href, menu_admin, urutan, aktif").eq("aktif", true).order("urutan"),
   ]);

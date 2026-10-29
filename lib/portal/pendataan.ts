@@ -9,11 +9,23 @@
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
+import { memoWaktu } from "@/lib/portal/memoSingkat";
 import { MAKS_BARIS_UNGGAH, hanyaSubAktif, kunciBaris, periksaBarisKk, ringkasAktif, type Anggota, type BarisKk, type BarisRingkas, type IsiCatat, type KkLembar, type SubTim } from "@/lib/pendataan";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
 
 export type Tim = { pml: { id: number; nama: string }; saya: { akun_id: number; peran: "pml" | "ppl" }; anggota: Anggota[]; sub: SubTim[] };
+
+export const AWALAN_MEMO_TIM = "tim-lembar:";
+
+/**
+ * (29 Okt 2026) Versi tersimpan 60 detik untuk jalur BACA (polling Lembar Pendataan, Kolam, Plotting): susunan tim hampir tidak pernah
+ * berubah, tetapi tiap pemanggilan menembakkan 5 permintaan ke database. Jalur simpan memakai ambilTim() (selalu segar), dan simpanan
+ * dibuang setelah PML memilih dari kolam / mengirim plotting / admin mengubah data.
+ */
+export function ambilTimMemo(db: Db, akun: AkunMin): Promise<Tim | null> {
+  return memoWaktu(`${AWALAN_MEMO_TIM}${akun.id}:${akun.petugas_bencana_id ?? 0}`, 60_000, () => ambilTim(db, akun));
+}
 
 /** Susun tim akun ini. null = bukan anggota tim pendataan (bukan PML/PPL aktif). */
 export async function ambilTim(db: Db, akun: AkunMin): Promise<Tim | null> {

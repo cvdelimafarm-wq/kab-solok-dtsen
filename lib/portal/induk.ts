@@ -5,7 +5,7 @@
 // Skema pendataan tetap KEROYOKAN: wilayah ditampilkan sebagai tim (PML + semua PPL) beserta Sub SLS yang didata bersama, bukan per orang.
 
 import type { Db } from "@/lib/sigap";
-import { penugasanAkun } from "@/lib/sigap";
+import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
 import type { BukaMode, InfoIdentifikasi, InfoKorwil, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
@@ -184,7 +184,7 @@ async function subSlsBerlaporan(db: Db, petugasIds: number[]): Promise<Set<strin
 export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | null): Promise<Induk[]> {
   // (10 Okt 2026) Dipercepat -- permintaan user (pindah layer terlalu lama): definisi induk & penugasan dibaca BERSAMAAN, lalu perencanaan,
   // wilayah tim dan lembar identifikasi (yang dibutuhkan saja) juga BERSAMAAN. Tadinya semuanya berurutan, satu bolak-balik jaringan per query.
-  const [{ induk, tahap }, pen] = await Promise.all([bacaDefinisi(db), penugasanAkun(db, akun.id)]);
+  const [{ induk, tahap }, pen] = await Promise.all([bacaDefinisi(db), penugasanAkunMemo(db, akun.id)]);
   if (induk.length === 0) return [];
 
   type Terpilih = { i: BarisInduk; t: TahapDef[]; isi: Set<string>; penInduk: typeof pen };

@@ -9,7 +9,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { ambilTim } from "@/lib/portal/pendataan";
+import { AWALAN_MEMO_TIM, ambilTim, ambilTimMemo } from "@/lib/portal/pendataan";
+import { buangMemo } from "@/lib/portal/memoSingkat";
 import { dataKolam, pilihKolam } from "@/lib/portal/kolamWilayah";
 import { aktorDariHeader } from "@/lib/sigapAkses";
 import { periksaPilihan } from "@/lib/permintaanDaftar";
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
   const akun = await akunDariSesi(db, req.headers);
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
   try {
-    const tim = await ambilTim(db, akun);
+    const tim = await ambilTimMemo(db, akun);
     if (!tim) return galat("Kolam wilayah khusus anggota tim PML dan PPL.", 403);
     const { progres, item } = await dataKolam(db, tim.pml.id);
     return NextResponse.json({
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function proses(req: NextRequest) {
   const db = dbPortal();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const akun = await akunDariSesi(db, req.headers);
@@ -60,5 +61,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...h });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
+  }
+}
+
+/** (29 Okt 2026) Setelah ada penulisan, buang simpanan sementara supaya GET berikutnya langsung segar. */
+export async function POST(req: NextRequest) {
+  try {
+    return await proses(req);
+  } finally {
+    buangMemo(AWALAN_MEMO_TIM);
   }
 }

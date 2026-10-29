@@ -17,7 +17,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { ambilTim } from "@/lib/portal/pendataan";
+import { AWALAN_MEMO_TIM, ambilTim, ambilTimMemo } from "@/lib/portal/pendataan";
+import { buangMemo } from "@/lib/portal/memoSingkat";
 import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan, tolakPermintaan } from "@/lib/portal/permintaanDaftar";
 import { daftarBelumDiajukan, tugaskanSubsls } from "@/lib/portal/belumDiajukan";
 import { periksaTugas } from "@/lib/belumDiajukan";
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
       if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
       return NextResponse.json({ boleh_kelola: boleh(izin, "bencana.admin", "kelola"), ...(await daftarBelumDiajukan(db)) });
     }
-    const tim = await ambilTim(db, akun);
+    const tim = await ambilTimMemo(db, akun);
     if (!tim) return galat("Kartu plotting khusus anggota tim PML dan PPL.", 403);
     return NextResponse.json({
       sekarang: new Date().toISOString(),
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function proses(req: NextRequest) {
   const db = dbPortal();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const akun = await akunDariSesi(db, req.headers);
@@ -146,5 +147,14 @@ export async function POST(req: NextRequest) {
     return galat("Aksi tidak dikenal.");
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
+  }
+}
+
+/** (29 Okt 2026) Setelah ada penulisan, buang simpanan sementara supaya GET berikutnya langsung segar. */
+export async function POST(req: NextRequest) {
+  try {
+    return await proses(req);
+  } finally {
+    buangMemo(AWALAN_MEMO_TIM);
   }
 }

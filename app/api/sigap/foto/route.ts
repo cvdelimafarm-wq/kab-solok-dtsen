@@ -11,7 +11,8 @@
 // Kegagalan membaca saklar tidak pernah memaksa kamera. Tidak ada penghapusan di sini.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cekAksesIsian, penugasanAkun, BUCKET_SIGAP } from "@/lib/sigap";
+import { cekAksesIsian, BUCKET_SIGAP } from "@/lib/sigap";
+import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
   MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   // 1) Saklar & penugasan
   // (27 Okt 2026) dua pembacaan ini tidak saling bergantung -> bersamaan; urutan pemeriksaan galat tetap (saklar dulu, baru penugasan)
-  const [modePeta, daftarPen] = await Promise.all([modeKegiatan(db, [kegiatanId]), penugasanAkun(db, akunId)]);
+  const [modePeta, daftarPen] = await Promise.all([modeKegiatan(db, [kegiatanId]), penugasanAkunMemo(db, akunId)]);
   const mode = modePeta[kegiatanId];
   if (mode !== "kamera") return galat("Kegiatan ini memakai unggah foto (metode lama).", 403, { mode: "unggah" });
   const pen = daftarPen.find((p) => p.kegiatan.id === kegiatanId);

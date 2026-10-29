@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
-import { ambilTim, batalkanKkBaru, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
+import { ambilTimMemo, batalkanKkBaru, catatHasil, daftarKk, periksaTambahKk, ringkasTim, tambahKk } from "@/lib/portal/pendataan";
 import { periksaBatalKkBaru, periksaCatat } from "@/lib/pendataan";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 import { kegiatanSub, konfigKegiatan } from "@/lib/portal/lembarKonfig";
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const akun = await akunDariSesi(db, req.headers);
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
-    const tim = await ambilTim(db, akun);
+    const tim = await ambilTimMemo(db, akun);
     if (!tim) return NextResponse.json({ error: TOLAK_BUKAN_TIM }, { status: 403 });
 
     const idsubsls = req.nextUrl.searchParams.get("sub");

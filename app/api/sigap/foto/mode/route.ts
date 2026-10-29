@@ -5,7 +5,7 @@
 // Tabel pengaturan kosong/belum dimigrasi -> semua 'unggah' (perilaku lama).
 
 import { NextRequest, NextResponse } from "next/server";
-import { penugasanAkun } from "@/lib/sigap";
+import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { modeBawaan, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (m instanceof NextResponse) return m;
   const { db, akunId } = m;
   try {
-    const pen = await penugasanAkun(db, akunId);
+    const pen = await penugasanAkunMemo(db, akunId);
     const ids = Array.from(new Set(pen.map((p) => p.kegiatan.id)));
     const [bawaan, mode] = await Promise.all([modeBawaan(db), modeKegiatan(db, ids)]);
     return NextResponse.json({
