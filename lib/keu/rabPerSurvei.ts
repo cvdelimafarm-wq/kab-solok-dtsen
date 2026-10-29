@@ -3,7 +3,7 @@
 // (28 Okt 2026) RAB per survei, tahap 2 (logika murni untuk layar "RAB per survei"; tanpa React/DB). Dari rincian biaya identifikasi (rabSurvei.ts) disusun:
 //  - mode pecah atau gabung PER JENIS BELANJA (kelompok rincian);
 //  - kolom isian hari dibayar translok/penginapan per periode (batas = hari kerja pendataan);
-//  - rencana baris RAB (isian awal = saran identifikasi, boleh diubah) dan jadwal cair sarannya;
+//  - rencana baris RAB (isian awal = saran identifikasi, boleh diubah) dan jadwal cair otomatis (hari terakhir kegiatan + 1 minggu);
 //  - pilihan item tujuan: item POK yang cocok, item baru di RAB yang sudah ada, atau "Item belum ada, tambahkan" (item baru di RAB untuk revisi POK);
 //  - pencocokan baris RAB yang sudah ditulis dari identifikasi (penanda ident_id + ident_kunci) dan deteksi saran yang berubah;
 //  - data batang "satu item POK diisi beberapa survei" (batangItem.ts), dihitung dengan dasar rupiah supaya satuan yang berbeda tidak membingungkan.
@@ -17,7 +17,7 @@ import { jumlahBaris, bacaVolume, barisKosong, dariIdent, dataBarisIdent, diubah
 import { hariJadwal, rincianSurvei, saranNamaItem, tautkan, type HariBayar, type HasilTautan, type ModePecah, type PeriodeJadwal, type RincianSurvei } from "./rabSurvei";
 import { periksaSiap } from "./rabStatus";
 import { rupiah } from "./ro";
-import { acuanSelesai, keteranganSalinan, namaItem, saranCair, satuanRab, teksHarga, teksVolume } from "./usulanRab";
+import { acuanSelesai, GESER_CAIR_HARI, keteranganSalinan, namaItem, saranCair, satuanRab, teksHarga, teksVolume } from "./usulanRab";
 
 const akun6 = (a: string): string => a.slice(0, 6);
 const MAKS_URAIAN_ITEM = 200;
@@ -90,7 +90,7 @@ export function hariDariTeks(teks: Record<string, string>): HariBayar {
 // ---------------------------------------------------------------------------------------------------------------------
 export type RencanaRincian = {
   r: RincianSurvei;
-  /** Isian awal dari identifikasi (volume dan harga = saran; jadwal cair = saran dari hari terakhir kegiatan). */
+  /** Isian awal dari identifikasi (volume dan harga = saran; jadwal cair = hari terakhir kegiatan + 1 minggu). */
   saran: IsianBaris;
   selesai: string | null;
   lambat: string | null;
@@ -111,7 +111,7 @@ export function selesaiRincian(r: Pick<RincianSurvei, "kelompok" | "uraian" | "p
 export function rencanaDari(rs: RincianSurvei[], isi: IsiLanjutan, periode: PeriodeJadwal[], bulanCadangan: number, hariCair: number | null, libur: Libur, sumber: string): RencanaRincian[] {
   return rs.map((r) => {
     const selesai = selesaiRincian(r, isi, periode);
-    const cair = saranCair(selesai, { bulan: bulanCadangan }, hariCair, libur);
+    const cair = saranCair(selesai, { bulan: bulanCadangan }, hariCair, libur, GESER_CAIR_HARI);
     const harga = teksHarga(r.tarif);
     return {
       r, selesai, lambat: cair.lambat, batasHarga: harga ? r.tarif : null,
@@ -343,7 +343,7 @@ function kelasDari(uraian: string, isi: IsiLanjutan): Kelas[] {
   return sama.length > 0 ? sama : isi.kelas.filter((k) => k.periode !== "" && namaKelas(k).replace(` ${k.periode}`, "") === nama);
 }
 
-/** "N petugas × H hari = V orang-hari" (atau malam); tanpa jumlah petugas hanya menyebut jatah hari. */
+/** "N petugas × H hari = V orang-hari" (atau malam); tanpa jumlah petugas hanya menyebut alokasi hari. */
 export function ringkasHari(orang: number | null, hari: number, penginapan = false): string {
   const satuan = penginapan ? "malam" : "hari";
   if (orang === null || orang <= 0) return `${hari} ${satuan} dibayar per petugas (jumlah petugas belum diidentifikasi)`;
@@ -355,7 +355,7 @@ export function jelaskanVolume(r: RincianSurvei, isi: IsiLanjutan): string[] {
   const vol = r.volume;
   if (r.kelompok === "Translok dan penginapan") {
     const pen = r.uraian.startsWith("Penginapan");
-    if (r.hari === null) return [`Volume = jumlah petugas × jumlah ${pen ? "malam" : "hari"} dibayar per petugas. Isi jatah ${pen ? "malam" : "hari"} dibayar pada bagian «Hari dibayar» di atas; volume baru muncul setelah itu.`];
+    if (r.hari === null) return [`Volume = jumlah petugas × jumlah ${pen ? "malam" : "hari"} dibayar per petugas. Isi alokasi ${pen ? "malam" : "hari"} dibayar pada bagian A di atas; volume baru muncul setelah alokasi lebih dari 0.`];
     if (r.periode !== null && r.hari > 0 && vol !== null) return [ringkasHari(vol / r.hari, r.hari, pen), `Dihitung per HARI KALENDER, bukan hari kerja${pen ? " (penginapan = malam)" : ""}.`];
     return [`Dijumlahkan dari tiap periode: petugas × ${pen ? "malam" : "hari"} dibayar di periode itu${vol !== null ? ` = ${vol} orang-${pen ? "malam" : "hari"}` : ""}.`];
   }

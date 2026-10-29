@@ -32,7 +32,7 @@ import {
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
 import { periksaHariBayar, type PeriodeJadwal } from "@/lib/keu/rabSurvei";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
-import { jendelaCair, labelSumber, periksaCair, periksaHarga, teksJendela, type JendelaCair } from "@/lib/keu/usulanRab";
+import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair } from "@/lib/keu/usulanRab";
 import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol } from "../../keu-ui";
 import { tulisKeuKlien, useBacaKeu, useKirim, type HasilAksi } from "../useKeu";
 
@@ -144,6 +144,37 @@ function PanelJelas({ id, baris }: { id: string; baris: string[] }) {
   );
 }
 
+/** Strip panduan di atas halaman: empat langkah di layar ini, langkah pertama yang belum selesai ditandai "sekarang". */
+function PanduanLangkah({ langkah }: { langkah: { judul: string; ket: string; selesai: boolean }[] }) {
+  const sekarang = langkah.findIndex((l) => !l.selesai);
+  return (
+    <ol aria-label="Langkah di halaman ini" className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr))]">
+      {langkah.map((l, i) => {
+        const warna = l.selesai ? "#0E8A6D" : i === sekarang ? "#1F5FD1" : "#8A97AD";
+        return (
+          <li key={l.judul} className="flex items-start gap-2 rounded-lg border bg-white px-2.5 py-2" style={{ borderColor: i === sekarang ? "#1F5FD1" : "#DCE3EE" }} aria-current={i === sekarang ? "step" : undefined}>
+            <span aria-hidden className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white" style={{ background: warna }}>{l.selesai ? "✓" : i + 1}</span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold leading-snug text-[#0F2A52]">{l.judul}{i === sekarang && <span className="ml-1.5 text-[11px] font-semibold text-[#1F5FD1]">sekarang</span>}</p>
+              <p className="text-[12px] leading-snug text-[#5B6B84]">{l.ket}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Petunjuk satu kalimat di tiap rincian: apa yang perlu dilakukan berikutnya. */
+const BERIKUTNYA: Record<KeadaanRincian, string | null> = {
+  sudah: null,
+  siap: "Siap. Tekan Susun RAB di bagian C.",
+  isi_hari: "Berikutnya: isi alokasi hari di bagian A.",
+  belum_angka: "Berikutnya: isi volume dan harga satuan.",
+  butuh_item: "Berikutnya: pilih item tujuan.",
+  cek_dobel: "Berikutnya: pilih «Pakai baris ini» atau «Tetap tambah baris baru».",
+};
+
 // ------------------------------------------------------------ satu rincian
 type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
@@ -154,6 +185,7 @@ type PropsBaris = {
 function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
   const [tanya, setTanya] = useState(false);
+  const [ubahJadwal, setUbahJadwal] = useState(false);
   const jml = jumlahBaris(isian);
   const tujuan = ubah.tujuan ?? pilihan.awal;
   const t = bacaTujuan(tujuan);
@@ -172,6 +204,9 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
   const g = keadaan === "sudah" ? null : periksaBaris(isian);
   const pesanDobel = sudahAda.length > 0 && keadaan !== "sudah";
   const jenisHari = rc.r.uraian.startsWith("Penginapan") ? "malam" : "hari";
+  // (29 Okt 2026) Jadwal cair otomatis = hari terakhir kegiatan + 1 minggu; pilihan manual hanya bila pengguna menekan Ubah, atau tanggal kegiatan belum lengkap.
+  const jadwalManual = rc.selesai === null || ubahJadwal || ubah.bulan_mulai !== undefined || ubah.minggu !== undefined;
+  const berikut = BERIKUTNYA[keadaan];
 
   return (
     <li className="space-y-2.5 rounded-lg border border-[#DCE3EE] bg-white p-3">
@@ -186,10 +221,9 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
       </div>
       {rc.r.catatan && <p className="text-[12px] text-[#6B7A93]">{rc.r.catatan}</p>}
       {rc.r.hari !== null && rc.r.kelompok === "Translok dan penginapan" && (
-        <p className="text-[12px] text-[#44546F]">
-          Jatah {rc.r.hari} {jenisHari} dibayar per petugas{rc.r.hariMaks ? ` (maksimal ${jenisHari === "malam" ? Math.max(rc.r.hariMaks - 1, 0) : rc.r.hariMaks}; hari kalender pendataan ${rc.r.hariMaks})` : ""}.
-        </p>
+        <p className="text-[12px] text-[#44546F]">Alokasi {rc.r.hari} {jenisHari} per petugas{rc.r.hari === 0 ? " (volume diisi sendiri, atau ubah alokasi di bagian A)" : ""}.</p>
       )}
+      {berikut && keadaan !== "siap" && <p className="text-[12.5px] font-semibold text-[#1F5FD1]">{berikut}</p>}
 
       {terpasang ? (
         <div className="space-y-1.5 text-[12.5px] text-[#44546F]">
@@ -224,9 +258,8 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
         </div>
       ) : (
         <>
-          <div className="space-y-2 border-t border-[#E6ECF5] pt-2">
-            <p className={subJudul}>Angka</p>
-            <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
               <div>
                 <div className="mb-1 flex items-center gap-1.5">
                   <label className="block text-[11.5px] font-semibold text-[#5B6B84]" htmlFor={id("v")}>Volume</label>
@@ -235,47 +268,53 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
                 <input id={id("v")} className={kolom} inputMode="decimal" value={isian.volume} onChange={(e) => setUbah({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
               </div>
               <div>
-                <label className={label} htmlFor={id("s")}>Satuan</label>
+                <label className={`${label} mt-[2px]`} htmlFor={id("s")}>Satuan</label>
                 <input id={id("s")} className={kolom} maxLength={20} value={isian.satuan} onChange={(e) => setUbah({ satuan: e.target.value })} />
               </div>
               <div>
-                <label className={label} htmlFor={id("h")}>Harga satuan</label>
+                <label className={`${label} mt-[2px]`} htmlFor={id("h")}>Harga satuan (Rp)</label>
                 <input id={id("h")} className={kolom} inputMode="numeric" value={isian.harga} onChange={(e) => setUbah({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
+              </div>
+              <div>
+                <p className={`${label} mt-[2px]`}>Jumlah</p>
+                <p className="flex min-h-[40px] items-center rounded-md bg-[#F1F4F9] px-2.5 text-[14px] font-bold text-[#0F2A52]" aria-live="polite">{jml === null ? "–" : rupiah(jml)}</p>
               </div>
             </div>
             {tanya && <PanelJelas id={id("jelas")} baris={penjelasan} />}
-            <p className="text-[12px] text-[#5B6B84]">
-              {rc.batasHarga !== null ? `Harga awal = batas tertinggi kebijakan (${rupiah(rc.batasHarga)}); harga lebih rendah boleh.` : "Tarif belum ada pada lembar kebijakan: isi harga satuan sendiri."}
-              {" "}Volume dan harga boleh diubah; rincian yang berbeda dari saran ditandai «diubah dari identifikasi».
-            </p>
-            <p className="text-[13px] font-bold text-[#0F2A52]">Jumlah rincian: {jml === null ? "-" : rupiah(jml)}</p>
+            <p className="text-[12px] text-[#5B6B84]">{rc.batasHarga !== null ? `Harga maksimal ${rupiah(rc.batasHarga)} (kebijakan); harga lebih rendah boleh.` : "Tarif belum ada di lembar kebijakan: isi harga satuan sendiri."}</p>
           </div>
 
-          <div className="space-y-2 border-t border-[#E6ECF5] pt-2">
-            <p className={subJudul}>Jadwal cair</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={label} htmlFor={id("b")}>Bulan cair</label>
-                <select id={id("b")} className={kolom} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
-                  {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={label} htmlFor={id("m")}>Minggu cair</label>
-                <select id={id("m")} className={kolom} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
-                  {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-                </select>
-              </div>
-            </div>
-            <p className="text-[12px] text-[#5B6B84]">
-              {rc.selesai ? `Kegiatan berakhir ${rc.selesai}; pencairan ${teksJendela(jendela)}${rc.lambat ? `: ${rc.lambat}` : ""}.` : "Tanggal kegiatan belum lengkap pada identifikasi: bulan dan minggu cair perlu dipilih sendiri."}
-            </p>
+          <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+            {jadwalManual ? (
+              <>
+                <div className="w-[150px]">
+                  <label className={label} htmlFor={id("b")}>Bulan cair</label>
+                  <select id={id("b")} className={kolom} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
+                    {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
+                  </select>
+                </div>
+                <div className="w-[120px]">
+                  <label className={label} htmlFor={id("m")}>Minggu cair</label>
+                  <select id={id("m")} className={kolom} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
+                    {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
+                  </select>
+                </div>
+                {rc.selesai !== null
+                  ? <button type="button" className={`${tombol} bg-white text-[#1F5FD1] ring-1 ring-[#C5D0E2]`} onClick={() => { setUbah({ bulan_mulai: undefined, minggu: undefined }); setUbahJadwal(false); }}>Kembali otomatis</button>
+                  : <p className="basis-full text-[12px] text-[#5B6B84]">Tanggal kegiatan belum lengkap pada identifikasi: pilih bulan dan minggu cair sendiri.</p>}
+              </>
+            ) : (
+              <p className="text-[13px] text-[#0F2A52]">
+                <span className="font-semibold">Cair: {NAMA_BULAN[isian.bulan_mulai - 1]}, minggu {isian.minggu}</span>
+                <span className="text-[#5B6B84]"> · otomatis dari akhir kegiatan {rc.selesai} + 1 minggu </span>
+                <button type="button" className="font-semibold text-[#1F5FD1] underline" onClick={() => setUbahJadwal(true)}>Ubah</button>
+              </p>
+            )}
           </div>
 
-          <div className="space-y-2 border-t border-[#E6ECF5] pt-2">
-            <p className={subJudul}>Item tujuan</p>
+          <div className="space-y-1.5">
             <div>
-              <label className={label} htmlFor={id("i")}>Masuk ke item mana? (sangat disarankan ditautkan ke item POK)</label>
+              <label className={label} htmlFor={id("i")}>Masuk ke item mana? (disarankan item POK)</label>
               <select id={id("i")} className={kolom} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
                 <option value="">Pilih item…</option>
                 {pilihan.opsi.map((o) => <option key={o.nilai} value={o.nilai}>{o.label}</option>)}
@@ -376,7 +415,9 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const periodeSah = useMemo(() => bahan.periode.filter((p) => p.mulai && p.selesai), [bahan.periode]);
   const rincian = useMemo(() => rincianBiaya(bahan.isi, bahan.f, lembar), [bahan, lembar]);
   const kolHari = useMemo(() => kolomHari(rincian, periodeSah, libur), [rincian, periodeSah, libur]);
-  const hariBayar = useMemo(() => hariDariTeks(hariTeks), [hariTeks]);
+  // (29 Okt 2026) Alokasi hari yang belum diisi tampil dan dihitung sebagai 0 (volume baru terhitung setelah alokasi lebih dari 0).
+  const hariEfektif = useMemo(() => Object.fromEntries(kolHari.map((k) => [k.kunci, hariTeks[k.kunci] || "0"])), [kolHari, hariTeks]);
+  const hariBayar = useMemo(() => hariDariTeks(hariEfektif), [hariEfektif]);
   const rs = useMemo(() => rincianCampuran(rincian, periodeSah, mode, hariBayar, libur), [rincian, periodeSah, mode, hariBayar, libur]);
   const rencana = useMemo(() => rencanaDari(rs, bahan.isi, periodeSah, new Date().getMonth() + 1, jendela.hari, libur, sumber.pendek), [rs, bahan.isi, periodeSah, jendela.hari, libur, sumber.pendek]);
   const terpasang = useMemo(() => terpasangPer(b.ident_id, props.barisRab, props.itemRab), [b.ident_id, props.barisRab, props.itemRab]);
@@ -562,38 +603,46 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
 
       <PenunjukAlur langkah={alur} kode={props.kode} identId={b.ident_id} />
 
-      <p className="rounded-lg bg-[#EAF1FC] px-3 py-2 text-[12.5px] leading-relaxed text-[#1B2B4B]">
-        Rincian di sini langsung masuk RAB standar (tab sebelah). Tarif kebijakan adalah batas tertinggi: harga lebih rendah boleh. Tidak ada yang tertulis sebelum Anda menekan <span className="font-semibold">Susun RAB</span> (bagian C),
-        supaya Anda bisa memeriksa angka lebih dulu. Sekali tekan, semua rincian yang sudah lengkap ikut disusun.
-      </p>
+      <PanduanLangkah langkah={[
+        { judul: "Isi alokasi hari", ket: "Bagian A: berapa hari tiap petugas dibayar.", selesai: kolHari.length === 0 || kolHari.some((k) => (bacaHari(hariEfektif[k.kunci]) ?? 0) > 0) },
+        { judul: "Periksa rincian", ket: "Bagian B: angka, jadwal cair, item tujuan.", selesai: baris.length > 0 && baris.every((x) => x.keadaan === "sudah" || x.keadaan === "siap") },
+        { judul: "Susun RAB", ket: "Bagian C: satu tombol untuk semua rincian lengkap.", selesai: ringkas.jumlah > 0 && ringkas.sudah === ringkas.jumlah },
+        { judul: "Tandai Siap", ket: "Bagian C: nyatakan survei ini siap diajukan.", selesai: status === "siap" },
+      ]} />
+      <p className="text-[12px] text-[#5B6B84]">Tidak ada yang tertulis ke RAB RO (tab sebelah) sebelum Anda menekan <span className="font-semibold">Susun RAB</span>. Tarif kebijakan adalah batas tertinggi; harga lebih rendah boleh.</p>
       {rs.length === 0 && <p className="text-[13px] text-[#6B7A93]">Identifikasi ini belum menghasilkan kebutuhan biaya.</p>}
 
       {adaPengaturan && (
-        <Bagian huruf="A" judul="Pengaturan hari dan pecah/gabung" ket="Isi dulu bagian ini; volume translok dan penginapan baru muncul setelah jatah hari diisi." garis="#1F5FD1">
+        <Bagian huruf="A" judul="Pengaturan hari dan pecah/gabung" ket="Isi dulu bagian ini; volume translok dan penginapan baru terhitung setelah alokasi hari lebih dari 0." garis="#1F5FD1">
           {kolHari.length > 0 && (
             <div className="space-y-2">
-              <p className={subJudul}>Jatah hari dibayar per petugas</p>
+              <p className={subJudul}>Alokasi hari dibayar per petugas</p>
               <p className="text-[12.5px] leading-relaxed text-[#44546F]">
-                Isi berapa hari (atau malam) <span className="font-semibold">setiap petugas</span> dibayar, bukan lamanya pendataan. Petugas boleh mendata lebih lama dari hari yang dibayar.
-                Dihitung dalam <span className="font-semibold">hari kalender</span> (akhir pekan dan hari libur ikut dihitung), bukan hari kerja; penginapan maksimal hari kalender dikurangi satu (cek aturan).
+                Berapa hari (atau malam) <span className="font-semibold">setiap petugas</span> dibayar, bukan lamanya pendataan. Dihitung <span className="font-semibold">hari kalender</span> (akhir pekan dan libur ikut); penginapan maksimal hari kalender dikurangi satu (cek aturan).
+                Isian <span className="font-semibold text-[#0E8A6D]">hijau</span> = ada alokasi, <span className="font-semibold text-[#9B1C23]">merah</span> = melebihi hari pendataan.
               </p>
               <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))]">
                 {kolHari.map((k) => {
-                  const n = bacaHari(hariTeks[k.kunci] ?? "");
+                  const teks = hariTeks[k.kunci] ?? "0";
+                  const n = bacaHari(teks === "" ? "0" : teks);
                   const salah = n === null ? null : periksaHariBayar(n, k.maks, k.penginapan);
+                  const ada = n !== null && n > 0;
+                  const warna = salah ? { garis: "#C62828", latar: "#FDECEC", teks: "#9B1C23" } : ada ? { garis: "#0E8A6D", latar: "#EAF8F4", teks: "#0B6B53" } : { garis: "#DCE3EE", latar: "#F8FAFD", teks: "#0F2A52" };
                   const idIsi = `rps-h-${k.kunci}`.replace(/[^\w-]/g, "_");
+                  const satuanHari = k.penginapan ? "malam" : "hari";
                   return (
-                    <div key={k.kunci} className="rounded-lg border border-[#DCE3EE] bg-[#F8FAFD] p-2.5">
-                      <label className={label} htmlFor={idIsi}>{k.uraian} · {k.periode}</label>
+                    <div key={k.kunci} className="space-y-1.5 rounded-lg border p-2.5" style={{ borderColor: warna.garis, background: warna.latar }}>
+                      <label className="block text-[13px] font-bold leading-snug text-[#0F2A52]" htmlFor={idIsi}>{k.uraian} · {k.periode}</label>
                       <div className="flex items-center gap-2">
                         <input
-                          id={idIsi} className={kolom} inputMode="numeric" aria-describedby={`${idIsi}-info`} value={hariTeks[k.kunci] ?? ""}
+                          id={idIsi} className={`${kolom} !w-20 text-center font-bold`} style={{ borderColor: warna.garis, color: warna.teks, background: "#fff" }} inputMode="numeric" aria-invalid={salah ? true : undefined} aria-describedby={`${idIsi}-info`} value={teks}
+                          onFocus={(e) => e.currentTarget.select()}
                           onChange={(e) => setHariTeks((a) => ({ ...a, [k.kunci]: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
                         />
-                        <span className="whitespace-nowrap text-[12.5px] text-[#44546F]">{k.penginapan ? "malam" : "hari"} per petugas (maks {k.batas})</span>
+                        <span className="text-[12.5px] text-[#44546F]">{satuanHari} per petugas (maks {k.batas})</span>
                       </div>
-                      <p id={`${idIsi}-info`} className={`mt-1 text-[12px] ${salah ? "font-semibold text-[#9B1C23]" : "text-[#44546F]"}`}>
-                        {salah ?? (n !== null ? ringkasHari(k.orang, n, k.penginapan) : `${k.orang ?? "?"} petugas · belum diisi`)}
+                      <p id={`${idIsi}-info`} className={`text-[12.5px] ${salah ? "font-semibold text-[#9B1C23]" : "text-[#44546F]"}`}>
+                        {salah ?? (n !== null ? ringkasHari(k.orang, n, k.penginapan) : "")}
                       </p>
                       <p className="text-[12px] text-[#6B7A93]">Pendataan {k.mulai} s.d. {k.selesai} = {k.maks} hari kalender.</p>
                     </div>
@@ -744,7 +793,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
           {yatim.length > 0 && (
             <div role="status" className="space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
               <p className="font-semibold">{yatim.length} baris RAB berasal dari identifikasi ini tetapi tidak cocok lagi dengan rincian yang ditawarkan sekarang.</p>
-              <p>Penyebabnya identifikasi diubah atau pilihan pecah/gabung berbeda dari saat disusun. Baris tidak dihapus otomatis; ubah atau hapus lewat tampilan RAB standar bila perlu.</p>
+              <p>Penyebabnya identifikasi diubah atau pilihan pecah/gabung berbeda dari saat disusun. Baris tidak dihapus otomatis; ubah atau hapus lewat tampilan RAB RO bila perlu.</p>
               <ul className="list-disc pl-5">{yatim.map((y) => <li key={y.baris_id} className="break-words">{y.ket || y.ident_kunci}</li>)}</ul>
             </div>
           )}

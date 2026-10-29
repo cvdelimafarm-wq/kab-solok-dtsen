@@ -8,6 +8,7 @@ import vektorLj from "./lanjutan.vektor.json";
 import type { BarisRabRow, ItemRabRow, PemetaanItem } from "../rab";
 import type { ItemAnggaran } from "../ro";
 import { kunciHari, type PeriodeJadwal } from "../rabSurvei";
+import { GESER_CAIR_HARI, saranCair } from "../usulanRab";
 import {
   bacaHari, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, keadaanRincian, kodeTujuanBaru, kodeTujuanPok,
   kolomHari, komponenUntukAkun, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
@@ -76,6 +77,7 @@ describe("rencana baris", () => {
     expect(rc[0].selesai).toBe("2026-03-06");
     expect(rc[0].lambat).toBe("2026-03-20");
     expect(rc[0].saran.bulan_mulai).toBe(3);
+    expect(rc[0].saran.minggu).toBe(2); // 6 Mar + 7 hari = 13 Mar -> minggu 2
     expect(rc[0].saran.ket.endsWith("· Identifikasi IMK v1")).toBe(true);
     expect(rc[0].batasHarga).toBe(170000);
     expect(rc[1].saran.volume).toBe(""); // hari September belum diisi
@@ -86,6 +88,13 @@ describe("rencana baris", () => {
     const rc = rencanaDari(rs, isi, [jad[0]], 3, 10, new Set(), "S");
     expect(rc[0].saran.harga).toBe("");
     expect(rc[0].batasHarga).toBeNull();
+  });
+  it("jadwal cair otomatis = hari terakhir kegiatan + 1 minggu; batas lambat tetap dari hari terakhir; lintas tahun tetap di Desember", () => {
+    expect(saranCair("2026-11-25", { bulan: 9 }, 10, new Set(), GESER_CAIR_HARI)).toEqual({ bulan: 12, minggu: 1, lambat: "2026-12-09" });
+    expect(saranCair("2026-11-25", { bulan: 9 }, 10)).toEqual({ bulan: 11, minggu: 4, lambat: "2026-12-09" }); // tanpa geser: perilaku lama
+    expect(saranCair("2026-03-10", { bulan: 9 }, 10, new Set(), 7)).toMatchObject({ bulan: 3, minggu: 3 });
+    expect(saranCair("2026-12-28", { bulan: 9 }, 10, new Set(), 7)).toMatchObject({ bulan: 12, minggu: 4 });
+    expect(saranCair(null, { bulan: 9 }, 10, new Set(), 7)).toEqual({ bulan: 9, minggu: 3, lambat: null });
   });
   it("penandaDari dan berbedaDariSaran", () => {
     const p = penandaDari(7, 2, { kunci: "524113|X" }, { volume: "15", harga: "170000" });
@@ -309,7 +318,7 @@ describe("jelaskanVolume", () => {
     const tr = (hari: number | null, volume: number | null, periode: string | null) => ({ ...kls("Translok PPL (kurang dari 8 jam)"), kelompok: "Translok dan penginapan" as const, hari, volume, periode });
     expect(jelaskanVolume(tr(24, 72, "Maret"), isiLj).join(" ")).toContain("3 petugas × 24 hari = 72 orang-hari");
     expect(jelaskanVolume(tr(24, 72, "Maret"), isiLj).join(" ")).toContain("HARI KALENDER");
-    expect(jelaskanVolume(tr(null, null, "Maret"), isiLj).join(" ")).toContain("Isi jatah hari dibayar");
+    expect(jelaskanVolume(tr(null, null, "Maret"), isiLj).join(" ")).toContain("Isi alokasi hari dibayar");
     expect(jelaskanVolume(tr(30, 90, null), isiLj).join(" ")).toContain("Dijumlahkan dari tiap periode");
   });
   it("honor petugas, rapat, dan cadangan", () => {

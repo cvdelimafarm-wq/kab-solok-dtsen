@@ -129,10 +129,17 @@ export function acuanSelesai(b: Pick<BarisRincian, "kelompok" | "uraian">, isi: 
 }
 
 /** Saran jadwal cair dari hari terakhir pelaksanaan: bulan dan minggu yang memuat hari itu, serta batas paling lambat (`hari` hari kerja sesudahnya menurut `libur`; null hari = tanpa batas). */
-export function saranCair(selesai: string | null, cadangan: { bulan: number }, hari: number | null = HARI_CAIR_BAWAAN, libur: Libur = new Set()): { bulan: number; minggu: number; lambat: string | null } {
+export function saranCair(selesai: string | null, cadangan: { bulan: number }, hari: number | null = HARI_CAIR_BAWAAN, libur: Libur = new Set(), geserHari = 0): { bulan: number; minggu: number; lambat: string | null } {
   if (!selesai) return { bulan: cadangan.bulan, minggu: MINGGU_BAWAAN, lambat: null };
-  return { bulan: bulanDari(selesai) ?? cadangan.bulan, minggu: mingguDari(selesai) ?? MINGGU_BAWAAN, lambat: hari === null ? null : tambahHariKerja(selesai, hari, libur) || null };
+  // (29 Okt 2026) `geserHari` menggeser acuan bulan dan minggu (mis. +7 = satu minggu sesudah hari terakhir kegiatan); batas lambat tetap dihitung dari hari terakhir kegiatan.
+  // RAB hanya setahun: bila hasil geser melewati akhir tahun, jadwal tetap di Desember minggu 4.
+  const geser = geserHari ? tambahHariTgl(selesai, geserHari) : selesai;
+  const acuan = geser && geser.slice(0, 4) === selesai.slice(0, 4) ? geser : `${selesai.slice(0, 4)}-12-28`;
+  return { bulan: bulanDari(acuan) ?? cadangan.bulan, minggu: mingguDari(acuan) ?? MINGGU_BAWAAN, lambat: hari === null ? null : tambahHariKerja(selesai, hari, libur) || null };
 }
+
+/** Jadwal cair otomatis pada RAB per survei: satu minggu (7 hari) sesudah hari terakhir kegiatan (permintaan pengguna 29 Okt 2026; cek aturan). */
+export const GESER_CAIR_HARI = 7;
 
 /**
  * Peringatan jadwal cair (tidak memblokir). Hanya menandai yang pasti terlambat: minggu yang hari pertamanya sudah sesudah batas hari kerja.
