@@ -11,7 +11,7 @@ import { kunciHari, type PeriodeJadwal } from "../rabSurvei";
 import { GESER_CAIR_HARI, saranCair } from "../usulanRab";
 import {
   bacaHari, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, keadaanRincian, kodeTujuanBaru, kodeTujuanPok,
-  kolomHari, komponenUntukAkun, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
+  kolomHari, komponenUntukAkun, SUB_HONOR, subHonor, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
   terpasangPer, TUJUAN_TAMBAH, type ItemBaruRow,
 } from "../rabPerSurvei";
 
@@ -62,6 +62,24 @@ describe("hari dibayar", () => {
   it("bacaHari dan hariDariTeks", () => {
     expect([bacaHari("5"), bacaHari(" 12 "), bacaHari(""), bacaHari("-1"), bacaHari("2,5"), bacaHari("999"), bacaHari("0")]).toEqual([5, 12, null, null, null, null, 0]);
     expect(hariDariTeks({ a: "3", b: "", c: "x", d: "0" })).toEqual({ a: 3, d: 0 });
+  });
+});
+
+describe("kelompok honor dipecah", () => {
+  it("subHonor mengenali instruktur nasional/daerah, narasumber, PML, PPL, dan lainnya", () => {
+    const k = (u: string) => subHonor(u);
+    expect(k("Pelatihan Maret: honor instruktur Innas, internal")).toBe("instruktur_nasional");
+    expect(k("Briefing: honor instruktur Inda")).toBe("instruktur_daerah");
+    expect(k("Pelatihan: honor instruktur (level belum dipilih)")).toBe("instruktur_belum");
+    expect(k("Pelatihan: honor pengajar atau narasumber eksternal")).toBe("narasumber");
+    expect(k("Honor PML (organik)")).toBe("pml");
+    expect(k("Honor PPL (mitra)")).toBe("ppl");
+    expect(k("Honor Kortim (mitra)")).toBe("lain");
+    expect(k("Honor Petugas entri (mitra)")).toBe("lain");
+  });
+  it("hanya PML dan PPL yang selalu tampil", () => {
+    expect(SUB_HONOR.filter((x) => x.selalu).map((x) => x.kode)).toEqual(["pml", "ppl"]);
+    expect(SUB_HONOR.map((x) => x.kode)).toEqual(["instruktur_nasional", "instruktur_daerah", "instruktur_belum", "narasumber", "pml", "ppl", "lain"]);
   });
 });
 

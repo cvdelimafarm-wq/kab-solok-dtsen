@@ -26,7 +26,7 @@ import { bacaVolume, dataBarisIdent, dataItemRab, jumlahBaris, NAMA_BULAN, perik
 import {
   bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, bacaHari, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, KELOMPOK_RINCIAN, keadaanRincian,
   kolomHari, komponenUntukAkun, kunciItemBaru, langkahAlur, modeAman, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei,
-  selisihSaran, terpasangPer, TUJUAN_TAMBAH,
+  selisihSaran, SUB_HONOR, subHonor, terpasangPer, TUJUAN_TAMBAH,
   type ItemBaruRow, type KeadaanRincian, type KelompokRincian, type Mendatang, type ModeKelompok, type PilihanTujuan, type RencanaRincian, type Terpasang,
 } from "@/lib/keu/rabPerSurvei";
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
@@ -456,6 +456,13 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const batang = batangPerItem(petaBatang, itemBaru, barisBatang, namaIdent, mendatang);
   const akanDibuat = baris.filter((x) => x.keadaan !== "sudah" && x.tujuan === TUJUAN_TAMBAH);
 
+  const barisSurvei = (x: typeof baris[number]) => (
+    <BarisSurvei
+      key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
+      editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia}
+      perbarui={() => void perbaruiBaris(x)}
+    />
+  );
   const ubahBaris = (kunci: string, u: Ubah) => setUbahPer((a) => ({ ...a, [kunci]: { ...a[kunci], ...u } }));
 
   // ---- tulis
@@ -685,15 +692,22 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                   <p className="text-[12px] text-[#44546F]">{w.ket}</p>
                 </div>
               </div>
-              <ul className="space-y-2.5">
-                {isi.map((x) => (
-                  <BarisSurvei
-                    key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
-                    editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia}
-                    perbarui={() => void perbaruiBaris(x)}
-                  />
-                ))}
-              </ul>
+              {k === "Honor" ? (
+                <div className="space-y-3">
+                  {SUB_HONOR.map((sg) => {
+                    const rs2 = isi.filter((x) => subHonor(x.rc.r.uraian) === sg.kode);
+                    if (rs2.length === 0 && !sg.selalu) return null;
+                    return (
+                      <div key={sg.kode} className="space-y-2 rounded-lg border border-[#DCCFF0] bg-white/60 p-2">
+                        <p className="text-[13px] font-bold text-[#4B2E83]">{sg.nama} <span className="font-normal text-[#5B6B84]">({rs2.length} rincian)</span></p>
+                        {rs2.length > 0 ? <ul className="space-y-2.5">{rs2.map(barisSurvei)}</ul> : <p className="text-[12px] text-[#6B7A93]">{sg.kosong}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="space-y-2.5">{isi.map(barisSurvei)}</ul>
+              )}
             </div>
           );
         })}

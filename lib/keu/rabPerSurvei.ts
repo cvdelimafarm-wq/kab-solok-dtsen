@@ -28,6 +28,31 @@ const MAKS_URAIAN_ITEM = 200;
 export type KelompokRincian = BarisRincian["kelompok"];
 export const KELOMPOK_RINCIAN: readonly KelompokRincian[] = ["Pelatihan", "Translok dan penginapan", "Honor", "Rapat", "Lain-lain"];
 export type ModeKelompok = Record<KelompokRincian, ModePecah>;
+
+/**
+ * (29 Okt 2026) Kelompok Honor dipecah di layar: instruktur nasional, instruktur daerah, narasumber eksternal, PML, PPL, dan petugas lain
+ * (Supervisor, Kortim, entri). Hanya pengelompokan tampilan; rincian dan angkanya tidak berubah. `selalu` = tampil walau kosong (dengan petunjuk).
+ */
+export type SubHonor = "instruktur_nasional" | "instruktur_daerah" | "instruktur_belum" | "narasumber" | "pml" | "ppl" | "lain";
+export const SUB_HONOR: { kode: SubHonor; nama: string; selalu: boolean; kosong: string }[] = [
+  { kode: "instruktur_nasional", nama: "Instruktur nasional (Innas)", selalu: false, kosong: "" },
+  { kode: "instruktur_daerah", nama: "Instruktur daerah (Inda)", selalu: false, kosong: "" },
+  { kode: "instruktur_belum", nama: "Instruktur (level belum dipilih)", selalu: false, kosong: "" },
+  { kode: "narasumber", nama: "Pengajar atau narasumber eksternal", selalu: false, kosong: "" },
+  { kode: "pml", nama: "PML", selalu: true, kosong: "Tidak ada honor PML. Bila PML dibayar honor, tandai honor untuk PML pada identifikasi awal (cek aturan)." },
+  { kode: "ppl", nama: "PPL", selalu: true, kosong: "Tidak ada honor PPL. Bila PPL dibayar honor, tandai honor untuk PPL pada identifikasi awal (cek aturan)." },
+  { kode: "lain", nama: "Petugas lain (Supervisor, Kortim, entri)", selalu: false, kosong: "" },
+];
+export function subHonor(uraian: string): SubHonor {
+  if (/honor instruktur Innas/i.test(uraian)) return "instruktur_nasional";
+  if (/honor instruktur Inda/i.test(uraian)) return "instruktur_daerah";
+  if (/honor instruktur/i.test(uraian)) return "instruktur_belum";
+  if (/honor pengajar|narasumber/i.test(uraian)) return "narasumber";
+  if (/^Honor PML\b/.test(uraian)) return "pml";
+  if (/^Honor PPL\b/.test(uraian)) return "ppl";
+  return "lain";
+}
+
 export const modeSemua = (m: ModePecah): ModeKelompok => ({ Pelatihan: m, "Translok dan penginapan": m, Honor: m, Rapat: m, "Lain-lain": m });
 
 /** Mode tersimpan yang tidak sah (mis. dari simpanan peramban) diganti `bawaan` per kelompok. */
