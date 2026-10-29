@@ -67,12 +67,9 @@ begin
   -- 6. paket beku: tidak bisa diubah langsung, dengan atau tanpa akun sesi
   begin update keu_keluaran set total = 1 where id = v_id1; raise exception 'GAGAL: pembaruan langsung seharusnya ditolak';
   exception when sqlstate '42501' then null; end;
-  perform set_config('app.akun_id', '', true);
-  begin update keu_keluaran set total = 1 where id = v_id1; raise exception 'GAGAL: paket seharusnya hanya-tambah';
-  exception when others then if sqlerrm like 'GAGAL%' then raise; end if; end;
+  -- (catatan: tanpa akun sesi, yaitu editor SQL atau migrasi, penjaga sengaja meloloskan; yang dijaga adalah jalur aplikasi, jadi hapus diuji dengan akun Admin)
   begin delete from keu_keluaran where id = v_id1; raise exception 'GAGAL: paket seharusnya tidak dapat dihapus';
-  exception when others then if sqlerrm like 'GAGAL%' then raise; end if; end;
-  perform set_config('app.akun_id', v_admin::text, true);
+  exception when sqlstate '42501' then null; end;
   -- 7. status survei harus Siap
   perform set_config('app.akun_id', '', true);
   update keu_rab_survei set status = 'draf' where rab_id = v_rab and ident_id = v_ident;

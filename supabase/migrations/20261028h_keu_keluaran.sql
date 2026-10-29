@@ -2,6 +2,7 @@
 -- 20261028h_keu_keluaran.sql
 -- SIGAP - Keluaran RAB per survei: paket beku berversi (kebutuhan dana untuk Bendahara, rencana pembayaran untuk PPK dan TU, permintaan pengadaan untuk PBJ),
 -- spesifikasi butir pengadaan, dan tanda terima/pertanyaan penerima.
+-- (29 Okt 2026) Bagian 2 membaca daftar jenis notifikasi dari bentuk ANY ('{...}'::text[]) sesuai tampilan produksi.
 -- Bergantung pada za (identifikasi), 20261028g (status RAB per survei), zh (notifikasi). Aman diulang. Tanpa DELETE/DROP TABLE.
 --
 -- Isi:
@@ -83,7 +84,12 @@ begin
   select c.conname, pg_get_constraintdef(c.oid) into v_nama, v_def from pg_constraint c
    where c.conrelid = 'public.keu_notifikasi'::regclass and c.contype = 'c' and pg_get_constraintdef(c.oid) like '%ident_fix%' limit 1;
   if v_nama is not null and v_def not like '%keluaran_diajukan%' then
-    select string_agg(quote_literal(m[1]), ',') into v_daftar from regexp_matches(v_def, '''([a-z0-9_]+)''::text', 'g') as m;
+    -- PostgreSQL menampilkan CHECK daftar sebagai ANY ('{a,b,c}'::text[]); bentuk lama IN ('a'::text, 'b'::text) juga didukung
+    if v_def like '%{%}%' then
+      select string_agg(quote_literal(btrim(x)), ',') into v_daftar from unnest(string_to_array((regexp_match(v_def, '\{([^}]*)\}'))[1], ',')) as x;
+    else
+      select string_agg(quote_literal(m[1]), ',') into v_daftar from regexp_matches(v_def, '''([a-z0-9_]+)''::text', 'g') as m;
+    end if;
     if v_daftar is null then raise exception 'Daftar jenis notifikasi tidak terbaca dari %', v_def; end if;
     execute format('alter table keu_notifikasi drop constraint %I', v_nama);
     execute format('alter table keu_notifikasi add constraint keu_notifikasi_jenis_check check (jenis in (%s,%L,%L))', v_daftar, 'keluaran_diajukan', 'keluaran_ditanya');
