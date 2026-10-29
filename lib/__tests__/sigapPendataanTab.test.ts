@@ -100,7 +100,7 @@ describe("sub-pilihan umum (tim, administrasi)", () => {
     expect(SUB_TIM.map((x) => x.kode)).toEqual(["alokasi", "penugasan"]);
     expect(SUB_ADMINISTRASI.map((x) => x.kode)).toEqual(["monitoring", "verifikasi", "unduh", "tarif", "pengadaan", "anggaran"]);
     expect(Object.keys(SUB_PER_TAB).sort()).toEqual(["administrasi", "qc", "tim"]);
-    expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal", "kuesioner"]);
+    expect(SUB_QC.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal", "dokumen", "kuesioner"]);
     expect(KEGIATAN_PENDATAAN).toBe(1);
   });
   it("bacaSubDari: dikenal -> itu; selain itu sub pertama", () => {
@@ -171,7 +171,12 @@ describe("pemilih survei Kelola Pendataan (29 Okt 2026)", () => {
     expect(urlTabPendataan(P, "?k=2", "qc")).toBe(`${P}?k=2&tab=qc`);
     expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc&k=2", "soal")).toBe(`${P}?tab=qc&k=2&sub=soal`);
   });
+  it("SUB_QC memuat Dokumen pemeriksaan (khusus Pascabencana)", () => {
+    expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc", "dokumen")).toBe(`${P}?tab=qc&sub=dokumen`);
+    expect(bacaSubDari(SUB_QC, "dokumen")).toBe("dokumen");
+  });
   it("SUB_QC_PEMAHAMAN tidak memuat Kuesioner supervisi (khusus Pascabencana)", () => {
     expect(SUB_QC_PEMAHAMAN.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal"]);
+    expect(SUB_QC_PEMAHAMAN.some((x) => x.kode === "dokumen")).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import PlottingTim from "./PlottingTim";
+import DokumenPeriksa from "./DokumenPeriksa";
 import { WARNA_BELUM_BILAH, bentukPeta, hasilAktif, lencanaHasil, normalisasiKonfig, type BentukHasil } from "@/lib/lembarKonfig";
 import PetaWilayah from "./PetaWilayah";
 import { KolamPanel, KolamTombol } from "./KolamWilayah";
@@ -726,6 +727,12 @@ export default function LembarPendataan() {
               <KolamPanel anggota={data.anggota} sayaAkun={sayaAkun} onTutup={() => setKolamBuka(false)} onBuka={bukaSub} />
             ) : (
               <PlottingTim anggota={data.anggota} sub={data.sub} totalKk={(id) => perSub[id]?.total ?? 0} sayaAkun={sayaAkun} onBuka={bukaSub} />
+            )}
+            {/* (29 Okt 2026) Khusus PML: unggah PDF scan hasil pemeriksaan; admin mengunduhnya di Kelola Pendataan > QC > Dokumen pemeriksaan */}
+            {data.saya.peran === "pml" && !kolamBuka && (
+              <div className="mt-3">
+                <DokumenPeriksa sub={data.sub} />
+              </div>
             )}
           </div>
         )}
