@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import vektor from "./lanjutan.vektor.json";
-import { awalForm, type Form } from "../identifikasi";
+import { awalForm, instrukturKosong, type Form } from "../identifikasi";
 import { isiPredefined } from "../kebijakan";
 import { jadwalPendataan, rincianBiaya, type IsiLanjutan } from "../lanjutan";
 import { ringkasPengadaan, sisaHariButuh, susunPengadaan, teksDraf, urutkanPengadaan } from "../pengadaan";
@@ -17,7 +17,7 @@ function formDasar(ubah: (f: Form) => void = () => {}): Form {
   const f = awalForm();
   f.periode = "Triwulanan"; f.keList = ["Triwulan I"];
   f.rapat.evaluasi = { on: true, media: [], mitra: false }; // tanpa rapat tatap muka kecuali diminta
-  f.sesi.pelatihan = { on: true, bentuk: "Luring", tempat: "Hotel dalam kota", tgl: {}, pulsa: false, perl: false, pengajar: false };
+  f.sesi.pelatihan = { on: true, bentuk: "Luring", tempat: "Hotel dalam kota", tgl: {}, pulsa: false, perl: false, pengajar: false, instr: instrukturKosong() };
   f.adaDiseminasi = false;
   ubah(f);
   return f;

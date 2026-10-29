@@ -7,7 +7,7 @@ import {
   type BarisPok,
 } from "../identifikasiHilir";
 import vektor from "./identifikasi.vektor.json";
-import { instrDari, instrLengkap, labelJalur, selisihHari, tanggalRapat } from "../identifikasi";
+import { instrDari, instrLengkap, instrukturKosong, labelJalur, selisihHari, tanggalRapat } from "../identifikasi";
 import { ubahRec } from "../waktu";
 
 /** Contoh dari mockup: Susenas Maret terintegrasi Seruti Triwulan I 2026. */
@@ -133,7 +133,7 @@ describe("kebutuhan belanja", () => {
     }
   });
   it("perlengkapan hanya pelatihan; pulsa peserta hanya bila ada mitra", () => {
-    const f = contoh((g) => { g.sesi.briefing = { on: true, bentuk: "Luring", tempat: "Kantor", tgl: {}, pulsa: false, perl: true, pengajar: false }; });
+    const f = contoh((g) => { g.sesi.briefing = { on: true, bentuk: "Luring", tempat: "Kantor", tgl: {}, pulsa: false, perl: true, pengajar: false, instr: instrukturKosong() }; });
     expect(kebutuhan(f).filter((n) => n.paket[0] === "521211-B" && n.teks.startsWith("Briefing"))).toHaveLength(0);
     expect(normalisasi({ sesi: { briefing: { on: true, bentuk: "Luring", perl: true } } }).sesi.briefing.perl).toBe(false);
     const pulsa = contoh((g) => { g.sesi.pelatihan.bentuk = "Daring"; g.sesi.pelatihan.pulsa = true; });

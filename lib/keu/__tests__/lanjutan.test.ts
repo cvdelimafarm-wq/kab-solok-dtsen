@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import vektor from "./lanjutan.vektor.json";
-import { awalForm, normalisasi, type Form } from "../identifikasi";
+import { awalForm, instrukturKosong, normalisasi, type Form } from "../identifikasi";
 import { isiPredefined } from "../kebijakan";
 import {
   ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, alasanDraf, awalLanjutan, hariKelas, idBaru, jadwalPendataan, jumlahPetugas, jumlahRincian, normalisasiLanjutan, periksaLanjutan,
@@ -65,8 +65,8 @@ function formUji(): Form {
   const f = awalForm();
   f.nama = "UJI Survei"; f.periode = "Triwulanan"; f.keList = ["Triwulan I", "Triwulan II"];
   f.instrumen = "FASIH";
-  f.sesi.pelatihan = { on: true, bentuk: "Luring", tempat: "Hotel dalam kota", tgl: { "Triwulan I": { mulai: "2026-03-02", selesai: "2026-03-03" }, "Triwulan II": { mulai: "2026-06-01", selesai: "2026-06-02" } }, pulsa: false, perl: false, pengajar: false };
-  f.sesi.briefing = { on: true, bentuk: "Daring", tempat: "", tgl: { "Triwulan I": { mulai: "2026-03-04", selesai: "2026-03-04" } }, pulsa: true, perl: false, pengajar: false };
+  f.sesi.pelatihan = { on: true, bentuk: "Luring", tempat: "Hotel dalam kota", tgl: { "Triwulan I": { mulai: "2026-03-02", selesai: "2026-03-03" }, "Triwulan II": { mulai: "2026-06-01", selesai: "2026-06-02" } }, pulsa: false, perl: false, pengajar: false, instr: instrukturKosong() };
+  f.sesi.briefing = { on: true, bentuk: "Daring", tempat: "", tgl: { "Triwulan I": { mulai: "2026-03-04", selesai: "2026-03-04" } }, pulsa: true, perl: false, pengajar: false, instr: instrukturKosong() };
   f.peran.pml = { ...f.peran.pml, on: true, status: "Organik dan mitra", nOrg: 2, nMit: 3, perk: false, translok: true };
   f.peran.ppl = { ...f.peran.ppl, on: true, status: "Mitra", nOrg: 5, nMit: 4, perk: true, translok: false };
   return normalisasi(f);
