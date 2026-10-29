@@ -296,4 +296,12 @@ export type HasilQcSpdt = {
   jumlah_soal: number;
   peserta: { pml: number; ppl: number; ppl_tanpa_pml: number };
   rekap: import("@/lib/sigapQc").QcRekapTim[];
+  /** hari QC yang berlaku sekarang menurut pengaturan (null = di luar periode) dan apakah barisnya sudah terbentuk */
+  hari_berlaku: string | null;
+  hari_berlaku_terbentuk: boolean;
+  /** saat soal hari yang ditampilkan dirilis (ISO) */
+  rilis_at: string | null;
+  /** daftar petugas (PML + PPL peserta) dengan percobaan, nilai, status push dan modal */
+  petugas: import("@/lib/sigapQcMonitor").PetugasQc[];
+  monitoring: import("@/lib/sigapQcMonitor").MonitoringQc;
 };

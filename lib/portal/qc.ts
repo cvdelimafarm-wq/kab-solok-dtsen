@@ -21,9 +21,11 @@ import {
 } from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 import type { HasilQcSpdt } from "@/lib/spdtNtp";
+import { susunPetugasQc, type PesertaMentah } from "@/lib/sigapQcMonitor";
 import {
   SLOT_TUNDA,
   hariBerlaku,
+  jamKeMenit,
   jendelaQc,
   maksPercobaanDari,
   pushIngatPetugas,
@@ -231,17 +233,54 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
   let hari: string | null = tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal) ? tanggal : null;
   if (!hari) {
     const berlaku = peng ? hariBerlaku(new Date(), peng) : null;
-    hari = berlaku && daftar.includes(berlaku) ? berlaku : (daftar[0] ?? null);
+    // hari berlaku walau barisnya belum terbentuk (belum ada yang membuka soal / penjadwal belum jalan): pemantauan tetap berguna
+    hari = berlaku ?? (daftar[0] ?? null);
   }
-  const peserta = await rpc<{ akun_id: number; peran: string; pml_akun_id: number | null }[]>(db, "sigap_qc_peserta", { p_kegiatan: keg });
+  const peserta = await rpc<PesertaMentah[]>(db, "sigap_qc_peserta", { p_kegiatan: keg });
   const soalHari = hari ? (hariAda.find((h) => h.tanggal === hari)?.soal_ids ?? []) : [];
   const rekap = hari && soalHari.length > 0 ? await rpc<QcRekapTim[]>(db, "sigap_qc_rekap", { p_kegiatan: keg, p_tanggal: hari, p_pml: null }) : [];
+
+  // Daftar petugas + pemantauan modal/push untuk hari yang ditampilkan
+  const nilaiLulus = peng?.nilai_lulus && peng.nilai_lulus >= 1 && peng.nilai_lulus <= 100 ? peng.nilai_lulus : 100;
+  const ids = peserta.map((x) => x.akun_id);
+  const potong = <T,>(a: T[]): T[][] => {
+    const r: T[][] = [];
+    for (let i = 0; i < a.length; i += 200) r.push(a.slice(i, i + 200));
+    return r;
+  };
+  const rilisAt = hari ? await rilisHari(db, keg, hari, peng) : null;
+  const percobaan: { akun_id: number; ke: number; skor: number; benar: number; jumlah: number; terlambat: boolean; selesai_at: string }[] = [];
+  const kirim: { akun_id: number; jenis: string; dibuat_at: string }[] = [];
+  const tundaAkun: number[] = [];
+  if (hari) {
+    const [pc, kr, tn] = await Promise.all([
+      db.from("sigap_qc_percobaan").select("akun_id, ke, skor, benar, jumlah, terlambat, selesai_at").eq("kegiatan_id", keg).eq("tanggal", hari).limit(5000),
+      db.from("sigap_qc_kirim").select("akun_id, jenis, dibuat_at").eq("kegiatan_id", keg).eq("tanggal", hari).limit(10000),
+      db.from("sigap_qc_tunda").select("akun_id").eq("kegiatan_id", keg).eq("tanggal", hari).limit(5000),
+    ]);
+    percobaan.push(...((pc.data ?? []) as typeof percobaan));
+    kirim.push(...((kr.data ?? []) as typeof kirim));
+    for (const t of tn.data ?? []) tundaAkun.push(t.akun_id as number);
+  }
+  const langganan: { akun_id: number; gagal: number; terakhir_ok_at: string | null }[] = [];
+  const sesi: { akun_id: number; terakhir_aktif_at: string }[] = [];
+  for (const bagian of potong(ids)) {
+    const { data: l } = await db.from("sigap_push_langganan").select("akun_id, gagal, terakhir_ok_at").eq("aktif", true).in("akun_id", bagian);
+    langganan.push(...((l ?? []) as typeof langganan));
+    if (rilisAt) {
+      const { data: s2 } = await db.from("sigap_log_sesi").select("akun_id, terakhir_aktif_at").gte("terakhir_aktif_at", rilisAt).in("akun_id", bagian).limit(5000);
+      sesi.push(...((s2 ?? []) as typeof sesi));
+    }
+  }
+  const { petugas, monitoring } = susunPetugasQc({ peserta, percobaan, langganan, kirim, sesi, tundaAkun, nilaiLulus, rilisAt, now: new Date() });
+  const berlaku = peng ? hariBerlaku(new Date(), peng) : null;
+
   return {
     kegiatan_id: keg,
     kegiatan_nama: (kg.nama as string | null) ?? `Kegiatan ${keg}`,
     sekarang: new Date().toISOString(),
     aktif: !!peng?.aktif,
-    nilai_lulus: peng?.nilai_lulus && peng.nilai_lulus >= 1 && peng.nilai_lulus <= 100 ? peng.nilai_lulus : 100,
+    nilai_lulus: nilaiLulus,
     maks_percobaan: peng ? maksPercobaanDari(peng) : 4,
     hari,
     hari_ada: daftar,
@@ -252,7 +291,24 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
       ppl_tanpa_pml: peserta.filter((x) => x.peran === "ppl" && x.pml_akun_id == null).length,
     },
     rekap,
+    hari_berlaku: berlaku,
+    hari_berlaku_terbentuk: !!berlaku && daftar.includes(berlaku),
+    rilis_at: rilisAt,
+    petugas,
+    monitoring,
   };
+}
+
+/** Saat soal hari itu dirilis: dirilis_at pada baris hari bila ada, selain itu jam rilis pada tanggal itu (WIB = UTC+7). */
+async function rilisHari(db: Db, keg: number, tanggal: string, p: QcPengaturan | null): Promise<string | null> {
+  const { data } = await db.from("sigap_qc_hari").select("dirilis_at").eq("kegiatan_id", keg).eq("tanggal", tanggal).maybeSingle();
+  const jam = jamKeMenit(p?.rilis_jam);
+  if (jam != null) {
+    const [y, m, d] = tanggal.split("-").map(Number);
+    const jadwal = new Date(Date.UTC(y, m - 1, d, 0, 0) + jam * 60_000 - 7 * 3600_000).toISOString();
+    return jadwal;
+  }
+  return (data?.dirilis_at as string | null) ?? null;
 }
 
 export async function simpanPengaturan(db: Db, keg: number, data: unknown, oleh: string): Promise<unknown> {
