@@ -9,6 +9,7 @@ export const KEGIATAN_SPDT_ID = 2;
 export const MENU_SUPERVISOR_SPDT = "spdt.supervisor";
 export const API_SPDT_KK = "/api/portal/spdt-kk";
 export const API_SPDT_MONITORING = "/api/portal/spdt-monitoring";
+export const API_SPDT_QC = "/api/portal/spdt-qc";
 /** Periode pendataan SPDT NTP 2026 (jawaban user: berakhir 12 Nov). */
 export const PERIODE_SPDT = { mulai: "2026-10-12", selesai: "2026-11-12" } as const;
 /** Akurasi geotag di atas ini (meter) ditandai "kurang akurat" -- patokan awal 50 m. */
@@ -279,3 +280,20 @@ export function periksaBuka(body: unknown): { ok: true; kk_id: number; navigasi:
   if (!Number.isInteger(id) || id <= 0) return { ok: false, pesan: "kk_id tidak sah." };
   return { ok: true, kk_id: id, navigasi: b.navigasi === true };
 }
+
+// (29 Okt 2026) Hasil QC Pemahaman untuk Supervisor (tab "QC", baca saja). Rekap per PML sama dengan yang dilihat admin di Kelola Pendataan.
+export type HasilQcSpdt = {
+  kegiatan_id: number;
+  kegiatan_nama: string;
+  sekarang: string;
+  aktif: boolean;
+  nilai_lulus: number;
+  maks_percobaan: number;
+  /** tanggal yang ditampilkan (null = QC belum pernah berjalan) */
+  hari: string | null;
+  /** tanggal yang punya soal, terbaru dulu */
+  hari_ada: string[];
+  jumlah_soal: number;
+  peserta: { pml: number; ppl: number; ppl_tanpa_pml: number };
+  rekap: import("@/lib/sigapQc").QcRekapTim[];
+};

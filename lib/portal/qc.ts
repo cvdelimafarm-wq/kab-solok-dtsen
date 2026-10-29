@@ -20,6 +20,7 @@ import {
   type TundaAktif,
 } from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
+import type { HasilQcSpdt } from "@/lib/spdtNtp";
 import {
   SLOT_TUNDA,
   hariBerlaku,
@@ -211,6 +212,45 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
     hari,
     soal_hari: soalHari,
     susulan_at: susulanAt,
+    rekap,
+  };
+}
+
+/**
+ * (29 Okt 2026) Hasil QC Pemahaman untuk Supervisor SPDT NTP (baca saja): rekap per PML pada satu hari + daftar hari yang punya soal.
+ * Tanggal tidak diberikan = hari berlaku sekarang menurut pengaturan, atau hari terakhir yang punya soal.
+ */
+export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | null): Promise<HasilQcSpdt> {
+  const { data: kg } = await db.from("sigap_kegiatan").select("id, nama").eq("id", keg).maybeSingle();
+  if (!kg) throw new GalatQc("Kegiatan tidak ditemukan.", 404);
+  const { data: p } = await db.from("sigap_qc_pengaturan").select("*").eq("kegiatan_id", keg).maybeSingle();
+  const peng = (p ?? null) as QcPengaturan | null;
+  const { data: hariRows } = await db.from("sigap_qc_hari").select("tanggal, soal_ids").eq("kegiatan_id", keg).order("tanggal", { ascending: false }).limit(45);
+  const hariAda = ((hariRows ?? []) as { tanggal: string; soal_ids: string[] | null }[]).filter((h) => (h.soal_ids ?? []).length > 0);
+  const daftar = hariAda.map((h) => h.tanggal);
+  let hari: string | null = tanggal && /^\d{4}-\d{2}-\d{2}$/.test(tanggal) ? tanggal : null;
+  if (!hari) {
+    const berlaku = peng ? hariBerlaku(new Date(), peng) : null;
+    hari = berlaku && daftar.includes(berlaku) ? berlaku : (daftar[0] ?? null);
+  }
+  const peserta = await rpc<{ akun_id: number; peran: string; pml_akun_id: number | null }[]>(db, "sigap_qc_peserta", { p_kegiatan: keg });
+  const soalHari = hari ? (hariAda.find((h) => h.tanggal === hari)?.soal_ids ?? []) : [];
+  const rekap = hari && soalHari.length > 0 ? await rpc<QcRekapTim[]>(db, "sigap_qc_rekap", { p_kegiatan: keg, p_tanggal: hari, p_pml: null }) : [];
+  return {
+    kegiatan_id: keg,
+    kegiatan_nama: (kg.nama as string | null) ?? `Kegiatan ${keg}`,
+    sekarang: new Date().toISOString(),
+    aktif: !!peng?.aktif,
+    nilai_lulus: peng?.nilai_lulus && peng.nilai_lulus >= 1 && peng.nilai_lulus <= 100 ? peng.nilai_lulus : 100,
+    maks_percobaan: peng ? maksPercobaanDari(peng) : 4,
+    hari,
+    hari_ada: daftar,
+    jumlah_soal: soalHari.length,
+    peserta: {
+      pml: peserta.filter((x) => x.peran === "pml").length,
+      ppl: peserta.filter((x) => x.peran === "ppl").length,
+      ppl_tanpa_pml: peserta.filter((x) => x.peran === "ppl" && x.pml_akun_id == null).length,
+    },
     rekap,
   };
 }

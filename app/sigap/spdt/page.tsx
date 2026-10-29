@@ -4,7 +4,7 @@
 //
 // (16 Okt 2026) Lembar Pendataan SPDT NTP 2026 (mockup disetujui user). LEMBAR BANTU: nama KK, koordinat, navigasi -- tanpa status pendataan dan
 // tanpa umpan balik petugas. Tab: PPL = Peta | Daftar KK (hanya KK wilayah tugasnya); PML = Monitoring | Peta | Daftar KK (KK semua PPL-nya);
-// Supervisor = Monitoring (terbuka lebih dulu) | Peta | Daftar KK (seluruh wilayah). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
+// Supervisor = Monitoring (terbuka lebih dulu) | QC (hasil QC Pemahaman, baca saja) | Peta | Daftar KK (seluruh wilayah). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
@@ -20,13 +20,14 @@ import Ik from "./Ik";
 import PetaSpdt, { PANDANG_AWAL, type Pandang } from "./PetaSpdt";
 import DaftarSpdt from "./DaftarSpdt";
 import MonitoringSpdt from "./MonitoringSpdt";
+import QcSpdt from "./QcSpdt";
 import KartuKkSpdt from "./KartuKkSpdt";
 
 // (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
 const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
 
-type Tab = "mon" | "peta" | "daftar";
-const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", peta: "Peta", daftar: "Daftar KK" };
+type Tab = "mon" | "qc" | "peta" | "daftar";
+const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", qc: "QC", peta: "Peta", daftar: "Daftar KK" };
 const SELECT = "h-11 min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-white px-2.5 text-[13px] font-semibold text-[#0F2A52] outline-none";
 
 export default function HalamanSpdt() {
@@ -45,7 +46,8 @@ export default function HalamanSpdt() {
 
 
   const peran = data?.peran ?? null;
-  const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : ["mon", "peta", "daftar"];
+  // (29 Okt 2026) tab QC (hasil QC Pemahaman, baca saja) hanya untuk Supervisor
+  const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : peran === "supervisor" ? ["mon", "qc", "peta", "daftar"] : ["mon", "peta", "daftar"];
   const tabAktif: Tab = tab && tabs.includes(tab) ? tab : tabs[0];
   const semuaKk: KkSpdt[] = useMemo(() => data?.kk ?? [], [data]);
 
@@ -107,7 +109,8 @@ export default function HalamanSpdt() {
     } else setUrut("nama");
   }
 
-  const adaFilter = !!data && tabAktif !== "mon";
+  const tabKhusus = tabAktif === "mon" || tabAktif === "qc"; // tab tanpa penyaring/peta KK
+  const adaFilter = !!data && !tabKhusus;
   const tampilPpl = peran !== "ppl";
 
   return (
@@ -148,7 +151,7 @@ export default function HalamanSpdt() {
           </div>
         )}
 
-        {data && semuaKk.length === 0 && tabAktif !== "mon" && (
+        {data && semuaKk.length === 0 && !tabKhusus && (
           <p className="m-2.5 rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] leading-snug text-[#55657D]">Belum ada KK yang ditugaskan kepada Anda di SPDT NTP. Hubungi Supervisor bila ini keliru.</p>
         )}
 
@@ -186,6 +189,7 @@ export default function HalamanSpdt() {
         {adaFilter && infoLokasi && <p className="mx-2.5 mt-1.5 rounded-[10px] bg-[#EAF1FC] px-3 py-1.5 text-[12px] text-[#1A4590]">{infoLokasi}</p>}
 
         {data && tabAktif === "mon" && peran !== "ppl" && <MonitoringSpdt aktif />}
+        {data && tabAktif === "qc" && peran === "supervisor" && <QcSpdt aktif />}
 
         {data && tabAktif === "peta" && semuaKk.length > 0 && (
           <section className="relative m-2.5 min-h-[360px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">
@@ -232,7 +236,7 @@ export default function HalamanSpdt() {
         )}
       </div>
 
-      {kkTerpilih && tabAktif !== "mon" && <KartuKkSpdt kk={kkTerpilih} jarak={jarak?.get(kkTerpilih.id) ?? null} tampilPpl={tampilPpl} onTutup={() => setTerpilihId(null)} />}
+      {kkTerpilih && !tabKhusus && <KartuKkSpdt kk={kkTerpilih} jarak={jarak?.get(kkTerpilih.id) ?? null} tampilPpl={tampilPpl} onTutup={() => setTerpilihId(null)} />}
     </main>
   );
 }
