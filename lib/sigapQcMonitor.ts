@@ -41,7 +41,12 @@ export type PetugasQc = {
   modal_sampai: boolean;
 };
 
+/** Hitungan per kelompok peran (PML / PPL), supaya angka tidak tercampur. */
+export type HitunganPeran = { peserta: number; push_aktif: number; push_rilis_dikirim: number; push_ingat_dikirim: number; modal_sampai: number; belum_buka: number; sudah_mengisi: number; lulus: number };
+
 export type MonitoringQc = {
+  /** rincian per peran: pml + ppl = keseluruhan */
+  per_peran: { pml: HitunganPeran; ppl: HitunganPeran };
   peserta: number;
   /** punya perangkat dengan push aktif */
   push_aktif: number;
@@ -122,10 +127,21 @@ export function susunPetugasQc(a: {
     })
     .sort((x, y) => x.nama.localeCompare(y.nama, "id"));
 
+  const hitung = (daftar: PetugasQc[]): HitunganPeran => ({
+    peserta: daftar.length,
+    push_aktif: daftar.filter((p) => p.perangkat > 0).length,
+    push_rilis_dikirim: daftar.filter((p) => p.push_rilis_at).length,
+    push_ingat_dikirim: daftar.filter((p) => p.push_ingat > 0).length,
+    modal_sampai: daftar.filter((p) => p.modal_sampai).length,
+    belum_buka: daftar.filter((p) => !p.modal_sampai).length,
+    sudah_mengisi: daftar.filter((p) => p.percobaan > 0).length,
+    lulus: daftar.filter((p) => p.lulus).length,
+  });
   const adaKirim = a.kirim.length > 0;
   const lewat = Number.isFinite(dari) && a.now.getTime() - dari > 15 * 60_000;
   const rilisDikirim = petugas.filter((p) => p.push_rilis_at).length;
   const monitoring: MonitoringQc = {
+    per_peran: { pml: hitung(petugas.filter((p) => p.peran === "pml")), ppl: hitung(petugas.filter((p) => p.peran === "ppl")) },
     peserta: petugas.length,
     push_aktif: petugas.filter((p) => p.perangkat > 0).length,
     push_rilis_dikirim: rilisDikirim,

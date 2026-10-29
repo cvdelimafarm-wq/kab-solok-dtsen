@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { labelStatusPpl, type QcRekapTim } from "@/lib/sigapQc";
-import { saringPetugas, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
+import { saringPetugas, type HitunganPeran, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
 import { API_SPDT_QC, jamWib, judulKata, type HasilQcSpdt } from "@/lib/spdtNtp";
 import Ik from "./Ik";
 
@@ -38,6 +38,15 @@ const STATUS_OPSI: [SaringPetugas["status"], string][] = [
   ["tanpa_push", "Tanpa push aktif"],
   ["push_belum_dikirim", "Push rilis belum tercatat"],
 ];
+
+/** "PML 2/15 · PPL 0/40": angka dipisah per peran supaya tidak tercampur. */
+function Rinci({ pml, ppl, ambil }: { pml: HitunganPeran; ppl: HitunganPeran; ambil: (h: HitunganPeran) => number }) {
+  return (
+    <span className="tabular-nums">
+      PML {ambil(pml)}/{pml.peserta} · PPL {ambil(ppl)}/{ppl.peserta}
+    </span>
+  );
+}
 
 function Bilah({ n, dari, warna = "#1F5FD1" }: { n: number; dari: number; warna?: string }) {
   const p = dari > 0 ? Math.min(1, n / dari) : 0;
@@ -101,10 +110,12 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
   const hariPilih = d.hari_berlaku && !d.hari_ada.includes(d.hari_berlaku) ? [d.hari_berlaku, ...d.hari_ada] : d.hari_ada;
   const m = d.monitoring;
   const belum = m.peserta - m.sudah_mengisi;
+  const pm = m.per_peran.pml;
+  const pp = m.per_peran.ppl;
   const KPI = [
-    { n: `${m.sudah_mengisi}/${m.peserta}`, t: "sudah mengisi", k: "" },
-    { n: String(m.lulus), t: d.nilai_lulus >= 100 ? "lulus (nilai 100)" : `lulus (≥ ${d.nilai_lulus})`, k: "" },
-    { n: String(belum), t: "belum mengisi", k: belum > 0 ? "warn" : "" },
+    { n: `${m.sudah_mengisi}/${m.peserta}`, t: "sudah mengisi", k: "", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.sudah_mengisi} /> },
+    { n: String(m.lulus), t: d.nilai_lulus >= 100 ? "lulus (nilai 100)" : `lulus (≥ ${d.nilai_lulus})`, k: "", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.lulus} /> },
+    { n: String(belum), t: "belum mengisi", k: belum > 0 ? "warn" : "", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.peserta - h.sudah_mengisi} /> },
   ];
 
   return (
@@ -127,6 +138,7 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
               <div key={x.t} className={`flex-1 rounded-[14px] border px-3 py-2 ${x.k === "warn" ? "border-[#E3A33B] bg-[#FFF9ED]" : "border-[#D9E2F1] bg-white"}`}>
                 <b className={`block text-[21px] font-extrabold leading-tight tabular-nums ${x.k === "warn" ? "text-[#8A4B08]" : "text-[#0F2A52]"}`}>{x.n}</b>
                 <span className="text-[11.5px] font-semibold text-[#55657D]">{x.t}</span>
+                <span className="mt-0.5 block text-[10.5px] leading-tight text-[#6B7A90]">{x.sub}</span>
               </div>
             ))}
           </div>
@@ -277,6 +289,9 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </b>
                   </div>
                   <Bilah n={m.modal_sampai} dari={m.peserta} />
+                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
+                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.modal_sampai} />
+                  </p>
                   <div className="mt-2 flex justify-between">
                     <span>Sudah mengisi</span>
                     <b className="tabular-nums">
@@ -284,8 +299,11 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </b>
                   </div>
                   <Bilah n={m.sudah_mengisi} dari={m.peserta} warna="#13794B" />
+                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
+                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.sudah_mengisi} />
+                  </p>
                   <p className="mt-2 text-[12px] text-[#55657D]">
-                    Belum membuka SIGAP sejak rilis: <b className={m.belum_buka > 0 ? "text-[#B42329]" : "text-[#13794B]"}>{m.belum_buka} petugas</b>. Yang menekan &ldquo;ingatkan lagi&rdquo;: {m.tunda}.
+                    Belum membuka SIGAP sejak rilis: <b className={m.belum_buka > 0 ? "text-[#B42329]" : "text-[#13794B]"}>{m.belum_buka} petugas</b> (PML {pm.belum_buka} · PPL {pp.belum_buka}). Yang menekan &ldquo;ingatkan lagi&rdquo;: {m.tunda}.
                   </p>
                 </div>
               </div>
@@ -300,6 +318,9 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </b>
                   </div>
                   <Bilah n={m.push_aktif} dari={m.peserta} />
+                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
+                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_aktif} />
+                  </p>
                   <div className="mt-2 flex justify-between">
                     <span>Push rilis tercatat dikirim</span>
                     <b className={`tabular-nums ${m.push_rilis_dikirim === 0 ? "text-[#B42329]" : ""}`}>
@@ -307,6 +328,9 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </b>
                   </div>
                   <Bilah n={m.push_rilis_dikirim} dari={m.peserta} warna={m.push_rilis_dikirim === 0 ? "#B42329" : "#1F5FD1"} />
+                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
+                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_rilis_dikirim} />
+                  </p>
                   <div className="mt-2 flex justify-between">
                     <span>Pernah dikirimi pengingat</span>
                     <b className="tabular-nums">
@@ -314,6 +338,9 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </b>
                   </div>
                   <Bilah n={m.push_ingat_dikirim} dari={m.peserta} />
+                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
+                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_ingat_dikirim} />
+                  </p>
                   <p className="mt-2 text-[12px] text-[#55657D]">
                     Penjadwal: <b className={m.penjadwal_terdeteksi ? "text-[#13794B]" : "text-[#B42329]"}>{m.penjadwal_terdeteksi ? "terdeteksi berjalan hari ini" : "belum ada catatan pengiriman hari ini"}</b>.
                   </p>

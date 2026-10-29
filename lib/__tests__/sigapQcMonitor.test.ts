@@ -12,6 +12,20 @@ const SEKARANG = new Date("2026-10-29T07:30:00Z");
 const dasar = { peserta: P, percobaan: [], langganan: [], kirim: [], sesi: [], tundaAkun: [], nilaiLulus: 100, rilisAt: RILIS, now: SEKARANG };
 
 describe("susunPetugasQc", () => {
+  it("per_peran memisahkan PML dan PPL (PML mengisi tidak menaikkan hitungan PPL)", () => {
+    const r = susunPetugasQc({
+      ...dasar,
+      percobaan: [
+        { akun_id: 1, ke: 1, skor: 100, benar: 15, jumlah: 15, terlambat: false, selesai_at: "2026-10-29T07:10:00Z" },
+        { akun_id: 2, ke: 1, skor: 60, benar: 9, jumlah: 15, terlambat: false, selesai_at: "2026-10-29T07:12:00Z" },
+      ],
+      kirim: [{ akun_id: 1, jenis: "rilis", dibuat_at: "2026-10-29T07:00:30Z" }],
+    });
+    expect(r.monitoring.per_peran.pml).toMatchObject({ peserta: 1, sudah_mengisi: 1, lulus: 1, push_rilis_dikirim: 1 });
+    expect(r.monitoring.per_peran.ppl).toMatchObject({ peserta: 3, sudah_mengisi: 1, lulus: 0, push_rilis_dikirim: 0 });
+    expect(r.monitoring.sudah_mengisi).toBe(r.monitoring.per_peran.pml.sudah_mengisi + r.monitoring.per_peran.ppl.sudah_mengisi);
+  });
+
   it("nilai: skor awal, terbaik, lulus menurut nilai_lulus", () => {
     const r = susunPetugasQc({
       ...dasar,

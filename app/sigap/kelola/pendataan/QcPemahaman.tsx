@@ -44,6 +44,8 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
   const [d, setD] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [memuat, setMemuat] = useState(false);
+  const [diperbarui, setDiperbarui] = useState<Date | null>(null);
   const daftarSub = kegiatanId === KEGIATAN_PENDATAAN ? SUB_QC : SUB_QC_PEMAHAMAN;
   const { sub, pilih } = useSubTab("qc", daftarSub);
   const terkini = useRef(kegiatanId);
@@ -51,13 +53,17 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
 
   const muat = useCallback(async () => {
     const k = kegiatanId;
+    setMemuat(true);
     try {
       const hasil = await apiPortal<Data>(`${API}?k=${k}`);
       if (terkini.current !== k) return; // survei sudah berganti selagi memuat
       setD(hasil);
+      setDiperbarui(new Date());
       setGalat(null);
     } catch (e) {
       if (terkini.current === k) setGalat(pesanGalat(e));
+    } finally {
+      setMemuat(false);
     }
   }, [kegiatanId]);
   useEffect(() => {
@@ -66,6 +72,15 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
     setGalat(null);
     void muat();
   }, [muat]);
+
+  // (29 Okt 2026) pantauan hari ini disegarkan sendiri tiap 60 detik selama layarnya terbuka, supaya angka tidak basi ketika petugas sedang mengisi
+  useEffect(() => {
+    if (sub !== "hari") return;
+    const b = setInterval(() => {
+      if (document.visibilityState === "visible") void muat();
+    }, 60_000);
+    return () => clearInterval(b);
+  }, [sub, muat]);
 
   const kirim = useCallback(
     async (isi: Record<string, unknown>, ok: string | ((r: Record<string, unknown>) => string)) => {
@@ -100,7 +115,7 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
       {d && !d.boleh_kelola && <Pesan jenis="info">Anda dapat melihat saja. Mengubah pengaturan memerlukan izin kelola pendataan.</Pesan>}
-      {d && sub === "hari" && <HariIni d={d} kirim={kirim} />}
+      {d && sub === "hari" && <HariIni d={d} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} />}
       {d && sub === "pengaturan" && <Pengaturan d={d} kirim={kirim} />}
       {d && sub === "soal" && <BankSoal d={d} kirim={kirim} />}
     </div>
@@ -110,11 +125,16 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
 type Kirim = (isi: Record<string, unknown>, ok: string | ((r: Record<string, unknown>) => string)) => Promise<Record<string, unknown> | null>;
 
 // ====================================================================== Hari ini
-function HariIni({ d, kirim }: { d: Data; kirim: Kirim }) {
+function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim; muat: () => Promise<void>; memuat: boolean; diperbarui: Date | null }) {
   const p = d.pengaturan;
   const sudah = d.rekap.reduce((a, t) => a + t.sudah, 0);
   const total = d.rekap.reduce((a, t) => a + t.jumlah_ppl, 0);
   const lulus = d.rekap.reduce((a, t) => a + t.lulus, 0);
+  // PML dihitung terpisah dari PPL (hasil PML sendiri ada di tiap baris rekap)
+  const pmlTotal = d.peserta.pml;
+  const pmlSendiri = (t: (typeof d.rekap)[number]) => t.pml_sendiri as { percobaan?: number; lulus?: boolean } | null | undefined;
+  const pmlSudah = d.rekap.filter((t) => (pmlSendiri(t)?.percobaan ?? 0) > 0).length;
+  const pmlLulus = d.rekap.filter((t) => pmlSendiri(t)?.lulus).length;
   const [sibuk, setSibuk] = useState(false);
   const ke = async (isi: Record<string, unknown>, ok: string) => {
     setSibuk(true);
@@ -126,7 +146,15 @@ function HariIni({ d, kirim }: { d: Data; kirim: Kirim }) {
       <Kartu
         judul="Pantauan hari ini"
         ket={d.hari ? tglPanjang(d.hari) : "QC belum berjalan"}
-        kanan={p?.aktif ? <Chip w="ok">Aktif</Chip> : <Chip w="mut">Nonaktif</Chip>}
+        kanan={
+          <span className="flex items-center gap-2">
+            {diperbarui && <span className="text-[11.5px] text-[#6B7A90]">diperbarui {diperbarui.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB</span>}
+            <button type="button" className={BTN_O} disabled={memuat} onClick={() => void muat()}>
+              {memuat ? "Memuat…" : "Segarkan"}
+            </button>
+            {p?.aktif ? <Chip w="ok">Aktif</Chip> : <Chip w="mut">Nonaktif</Chip>}
+          </span>
+        }
       >
         {!p?.aktif && <p className="text-[13px] text-[#55657D]">QC Pemahaman {d.kegiatan_nama} belum diaktifkan. Siapkan bank soal, atur jadwal di sub Pengaturan, lalu nyalakan.</p>}
         {p?.aktif && (
@@ -139,8 +167,8 @@ function HariIni({ d, kirim }: { d: Data; kirim: Kirim }) {
       </Kartu>
       <div className="grid gap-3 sm:grid-cols-4">
         <KartuAngka label="PML / PPL peserta" nilai={`${d.peserta.pml} / ${d.peserta.ppl}`} ket={d.peserta.ppl_tanpa_pml ? `${d.peserta.ppl_tanpa_pml} PPL belum punya PML` : "tiap PPL punya PML"} warna={d.peserta.ppl_tanpa_pml ? "#8A6200" : undefined} />
-        <KartuAngka label="PPL sudah mengisi" nilai={total ? `${sudah}/${total}` : "-"} ket="hari yang dipantau" />
-        <KartuAngka label="PPL lulus" nilai={total ? String(lulus) : "-"} ket={nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`} warna="#13794B" />
+        <KartuAngka label="PPL sudah mengisi" nilai={total ? `${sudah}/${total}` : "-"} ket={`PML: ${pmlSudah}/${pmlTotal} sudah mengisi`} />
+        <KartuAngka label="PPL lulus" nilai={total ? String(lulus) : "-"} ket={`PML lulus: ${pmlLulus}/${pmlTotal} · ${nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`}`} warna="#13794B" />
         <KartuAngka label="Tanpa notifikasi" nilai={String(d.peserta.tanpa_notifikasi.length)} ket="belum mengaktifkan push" warna={d.peserta.tanpa_notifikasi.length ? "#B42329" : undefined} />
       </div>
       {d.peserta.tanpa_notifikasi.length > 0 && (
