@@ -18,6 +18,7 @@ import { modeSimulasi } from "@/app/portal/simulasi";
 import { kalimatHasil, teksSisaWaktu, type QcButirTinjau, type QcRekapTim, type QcSetSoal, type QcTinjau } from "@/lib/sigapQc";
 import { teksTunda } from "@/lib/sigapQcTunda";
 import Sorot from "./Sorot";
+import { jedaPolaQc } from "@/lib/sigapQcPola";
 import RekapPml from "./RekapPml";
 
 type Status = {
@@ -64,6 +65,9 @@ export default function QcGerbang() {
   const [, setTik] = useState(0);
   const kotak = useRef<HTMLDivElement>(null);
   const sedangMuat = useRef(false);
+  const statusRef = useRef<Status | null>(null);
+  const terakhirMuat = useRef(0);
+  statusRef.current = status;
 
   const muat = useCallback(async () => {
     if (sedangMuat.current) return;
@@ -73,6 +77,7 @@ export default function QcGerbang() {
       return;
     }
     sedangMuat.current = true;
+    terakhirMuat.current = Date.now();
     try {
       const d = await apiPortal<{ status: Status; rekap: Rekap }>("/api/portal/qc");
       setStatus(d.status);
@@ -87,7 +92,12 @@ export default function QcGerbang() {
   useEffect(() => {
     void muat();
     const b = setInterval(() => {
-      if (document.visibilityState === "visible") void muat();
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - terakhirMuat.current >= jedaPolaQc(statusRef.current) - 5_000
+      ) {
+        void muat();
+      }
       setTik((x) => x + 1); // segarkan hitung mundur
     }, POLA_MS);
     const lihat = () => document.visibilityState === "visible" && void muat();
