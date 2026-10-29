@@ -11,7 +11,7 @@ import { kunciHari, type PeriodeJadwal } from "../rabSurvei";
 import { GESER_CAIR_HARI, saranCair } from "../usulanRab";
 import {
   bacaHari, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, keadaanRincian, kodeTujuanBaru, kodeTujuanPok,
-  kolomHari, komponenUntukAkun, SUB_HONOR, subHonor, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
+  dataUbahTerpasang, kolomHari, komponenUntukAkun, SUB_HONOR, subHonor, langkahAlur, kunciItemBaru, modeAman, modeSemua, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei, selisihSaran,
   terpasangPer, TUJUAN_TAMBAH, type ItemBaruRow,
 } from "../rabPerSurvei";
 
@@ -62,6 +62,20 @@ describe("hari dibayar", () => {
   it("bacaHari dan hariDariTeks", () => {
     expect([bacaHari("5"), bacaHari(" 12 "), bacaHari(""), bacaHari("-1"), bacaHari("2,5"), bacaHari("999"), bacaHari("0")]).toEqual([5, 12, null, null, null, null, 0]);
     expect(hariDariTeks({ a: "3", b: "", c: "x", d: "0" })).toEqual({ a: 3, d: 0 });
+  });
+});
+
+describe("ubah baris yang sudah di RAB", () => {
+  const b = { baris_id: 5, item_id: 2, urut: 1, ket: "Konsumsi · Identifikasi", volume: 21, satuan: "orang-hari", harga_satuan: 35000, jumlah: 735000, jumlah_dikunci: true, sama_dengan_item: true, periode: "sekali", bulan_mulai: 11, bulan_sampai: 11, minggu: 2, ident_id: 7, ident_kunci: "K", ident_vol: 21, ident_harga: 35000 } as unknown as BarisRabRow;
+  it("angka sah: hanya volume, satuan, harga yang ditulis; kunci jumlah dilepas", () => {
+    const r = dataUbahTerpasang(b, { volume: "18,5", satuan: " orang-hari ", harga: "30000" });
+    expect(r.galat).toEqual([]);
+    expect(r.data).toEqual({ volume: 18.5, satuan: "orang-hari", harga_satuan: 30000, jumlah_tetap: null, sama_dengan_item: false });
+  });
+  it("angka tidak sah ditolak dengan pesan", () => {
+    expect(dataUbahTerpasang(b, { volume: "", satuan: "x", harga: "100" }).data).toBeNull();
+    expect(dataUbahTerpasang(b, { volume: "0", satuan: "x", harga: "100" }).galat.join(" ")).toContain("Volume");
+    expect(dataUbahTerpasang(b, { volume: "3", satuan: "", harga: "abc" }).galat.length).toBe(2);
   });
 });
 

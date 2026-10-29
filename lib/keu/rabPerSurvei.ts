@@ -13,7 +13,7 @@ import { bacaRupiah } from "./kekurangan";
 import type { Libur } from "./hariKerja";
 import { NAMA_PERAN, pesertaKelas, type BarisRincian, type IsiLanjutan, type Kelas } from "./lanjutan";
 import { sumbanganDariBaris, type KapasitasItem, type Sumbangan } from "./batangItem";
-import { jumlahBaris, bacaVolume, barisKosong, dariIdent, dataBarisIdent, diubahDariIdent, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem, type PenandaIdent } from "./rab";
+import { jumlahBaris, bacaVolume, barisKosong, dariIdent, dataBaris, dataBarisIdent, periksaBaris, diubahDariIdent, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem, type PenandaIdent } from "./rab";
 import { hariJadwal, rincianSurvei, saranNamaItem, tautkan, type HariBayar, type HasilTautan, type ModePecah, type PeriodeJadwal, type RincianSurvei } from "./rabSurvei";
 import { periksaSiap } from "./rabStatus";
 import { rupiah } from "./ro";
@@ -265,6 +265,19 @@ export function dataPerbarui(saran: Pick<IsianBaris, "volume" | "harga">, identV
   if (ubah.harga && h !== null) { d.harga_satuan = h; d.ident_harga = h; }
   if (Object.keys(d).length === 0) return null;
   return { ...d, ident_ver: identVer, jumlah_tetap: null, sama_dengan_item: false };
+}
+
+/**
+ * (29 Okt 2026) Mengubah volume, satuan, dan harga baris yang SUDAH ada di RAB (dari kartu rincian). Bagian lain baris (keterangan, jadwal, item) tidak berubah.
+ * Penanda identifikasi tidak disentuh, jadi bila angkanya berbeda dari saran, baris otomatis ditandai «diubah dari identifikasi».
+ * Baris «RAB = item» (jumlah dikunci) dilepas dari kunci itu karena jumlahnya kini volume x harga.
+ */
+export function dataUbahTerpasang(b: BarisRabRow, f: { volume: string; satuan: string; harga: string }): { galat: string[]; data: Record<string, unknown> | null } {
+  const isian: IsianBaris = { ket: b.ket ?? "", volume: f.volume, satuan: f.satuan, harga: f.harga, periode: b.periode, bulan_mulai: b.bulan_mulai, bulan_sampai: b.bulan_sampai, minggu: b.minggu };
+  const galat = periksaBaris(isian);
+  if (galat.length > 0) return { galat, data: null };
+  const d = dataBaris(isian);
+  return { galat: [], data: { volume: d.volume, satuan: d.satuan, harga_satuan: d.harga_satuan, jumlah_tetap: null, sama_dengan_item: false } };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

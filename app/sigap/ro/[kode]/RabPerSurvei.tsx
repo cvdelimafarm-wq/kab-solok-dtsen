@@ -22,9 +22,9 @@ import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
 import { awalLanjutan, jadwalPendataan, normalisasiLanjutan, rincianBiaya, type IsiLanjutan, type StatusLanjutan } from "@/lib/keu/lanjutan";
-import { bacaVolume, dataBarisIdent, dataItemRab, jumlahBaris, NAMA_BULAN, periksaBaris, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem } from "@/lib/keu/rab";
+import { bacaVolume, barisKosong, dataBarisIdent, dataItemRab, jumlahBaris, NAMA_BULAN, periksaBaris, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem } from "@/lib/keu/rab";
 import {
-  bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, bacaHari, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, KELOMPOK_RINCIAN, keadaanRincian,
+  dataUbahTerpasang, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, bacaHari, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, KELOMPOK_RINCIAN, keadaanRincian,
   kolomHari, komponenUntukAkun, kunciItemBaru, langkahAlur, modeAman, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei,
   selisihSaran, SUB_HONOR, subHonor, terpasangPer, TUJUAN_TAMBAH,
   type ItemBaruRow, type KeadaanRincian, type KelompokRincian, type Mendatang, type ModeKelompok, type PilihanTujuan, type RencanaRincian, type Terpasang,
@@ -179,13 +179,16 @@ const BERIKUTNYA: Record<KeadaanRincian, string | null> = {
 type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
   editable: boolean; peta: PemetaanItem[]; itemBaru: ItemBaruRow[]; jendela: JendelaCair; sibuk: boolean; penjelasan: string[]; sudahAda: BarisRabRow[];
-  perbarui: () => void;
+  perbarui: () => void; simpanTerpasang: (barisId: number, data: Record<string, unknown>) => Promise<boolean>;
 };
 
-function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui }: PropsBaris) {
+function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
   const [tanya, setTanya] = useState(false);
   const [ubahJadwal, setUbahJadwal] = useState(false);
+  // (29 Okt 2026) ubah volume dan harga baris yang sudah di RAB langsung dari kartu
+  const [edit, setEdit] = useState<{ volume: string; satuan: string; harga: string } | null>(null);
+  const [galatEdit, setGalatEdit] = useState<string[]>([]);
   const jml = jumlahBaris(isian);
   const tujuan = ubah.tujuan ?? pilihan.awal;
   const t = bacaTujuan(tujuan);
@@ -238,6 +241,49 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
           {tanya && <PanelJelas id={id("jelas")} baris={penjelasan} />}
           {terpasang.diubah && (
             <p className="text-[#5B3A8C]">Saran identifikasi saat disalin: {terpasang.baris.ident_vol ?? "-"} × {terpasang.baris.ident_harga !== null && terpasang.baris.ident_harga !== undefined ? rupiah(terpasang.baris.ident_harga) : "-"}.</p>
+          )}
+          {editable ? (
+            edit === null ? (
+              <button type="button" disabled={sibuk} className={`${tombol} bg-white text-[#1F5FD1] ring-1 ring-[#C5D0E2]`}
+                onClick={() => { setGalatEdit([]); setEdit({ volume: String(Number(terpasang.baris.volume)).replace(".", ","), satuan: terpasang.baris.satuan, harga: String(Math.round(Number(terpasang.baris.harga_satuan))) }); }}>
+                Ubah volume dan harga
+              </button>
+            ) : (
+              <div className="space-y-2 rounded-lg border border-[#C5D0E2] bg-white p-2.5">
+                <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
+                  <div>
+                    <label className={label} htmlFor={id("ev")}>Volume</label>
+                    <input id={id("ev")} className={kolom} inputMode="decimal" value={edit.volume} onChange={(e) => setEdit({ ...edit, volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
+                  </div>
+                  <div>
+                    <label className={label} htmlFor={id("es")}>Satuan</label>
+                    <input id={id("es")} className={kolom} maxLength={20} value={edit.satuan} onChange={(e) => setEdit({ ...edit, satuan: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={label} htmlFor={id("eh")}>Harga satuan (Rp)</label>
+                    <input id={id("eh")} className={kolom} inputMode="numeric" value={edit.harga} onChange={(e) => setEdit({ ...edit, harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
+                  </div>
+                  <div>
+                    <p className={label}>Jumlah</p>
+                    <p className="flex min-h-[40px] items-center rounded-md bg-[#F1F4F9] px-2.5 text-[14px] font-bold text-[#0F2A52]" aria-live="polite">{(() => { const j = jumlahBaris({ ...barisKosong(edit.satuan), volume: edit.volume, harga: edit.harga }); return j === null ? "–" : rupiah(j); })()}</p>
+                  </div>
+                </div>
+                {galatEdit.length > 0 && <ul role="alert" className="list-disc pl-5 text-[12.5px] font-semibold text-[#9B1C23]">{galatEdit.map((t) => <li key={t}>{t}</li>)}</ul>}
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={sibuk} className={`${tombol} bg-[#0F2A52] text-white`}
+                    onClick={async () => {
+                      const r = dataUbahTerpasang(terpasang.baris, edit);
+                      setGalatEdit(r.galat);
+                      if (!r.data) return;
+                      if (await simpanTerpasang(terpasang.baris.baris_id, r.data)) setEdit(null);
+                    }}>{sibuk ? "Menyimpan…" : "Simpan perubahan"}</button>
+                  <button type="button" disabled={sibuk} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`} onClick={() => { setEdit(null); setGalatEdit([]); }}>Batal</button>
+                </div>
+                <p className="text-[12px] text-[#5B6B84]">Menyimpan mengubah baris di RAB RO dan mengembalikan status survei ke Draf.</p>
+              </div>
+            )
+          ) : (
+            <p className="text-[12px] text-[#6B7A93]">Volume tidak dapat diubah: RAB sedang diajukan atau sudah disahkan, atau Anda bukan ketua tim/admin RO.</p>
           )}
           {sink?.berubah && (
             <div role="status" className="space-y-1.5 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
@@ -460,7 +506,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
     <BarisSurvei
       key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
       editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia}
-      perbarui={() => void perbaruiBaris(x)}
+      perbarui={() => void perbaruiBaris(x)} simpanTerpasang={simpanTerpasang}
     />
   );
   const ubahBaris = (kunci: string, u: Ubah) => setUbahPer((a) => ({ ...a, [kunci]: { ...a[kunci], ...u } }));
@@ -549,6 +595,11 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
       setPesan([]);
       setUbahPer((a) => { const n = { ...a }; for (const x of daftar) delete n[x.rc.r.kunci]; return n; });
     }
+  };
+
+  const simpanTerpasang = async (barisId: number, data: Record<string, unknown>): Promise<boolean> => {
+    setPesan([]);
+    return jalankan(() => tulisKeuKlien("keu_rab_baris", "update", data, { id: barisId }));
   };
 
   const perbaruiBaris = async (x: Rencana) => {
