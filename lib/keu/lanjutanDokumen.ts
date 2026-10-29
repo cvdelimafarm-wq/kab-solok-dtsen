@@ -1,12 +1,13 @@
 // lib/keu/lanjutanDokumen.ts
 //
 // (25 Okt 2026, tahap 29) Dokumen turunan identifikasi lanjutan: undangan pelatihan (per kelas), surat pengantar kegiatan ke nagari (satu surat),
-// dan surat tugas atau SPK (per petugas). Berkas ini MURNI: menyusun isi surat sebagai data terstruktur; tampilan dan cetak ada di layar dokumen.
+// dan surat tugas atau SPK (per petugas). (29 Okt 2026) Surat tugas instruktur: jenis dokumen tetap "tugas" (tabel keu_ident_dokumen sudah menerimanya) dengan kunci berawalan "ins:"
+// (per instruktur bernama pada kelas), sehingga tidak perlu SQL baru. Berkas ini MURNI: menyusun isi surat sebagai data terstruktur; tampilan dan cetak ada di layar dokumen.
 // Penandatangan dipilih per dokumen dan nomor surat diisi manual (keputusan 25 Okt 2026). Format baku surat kantor belum ditetapkan, sehingga
 // susunan di sini bersifat konsep yang dapat disesuaikan; dokumen baru berstatus "terbit" setelah lanjutan Final dan nomor, tanggal, dan penandatangan diisi.
 
 import type { Form } from "./identifikasi";
-import { jadwalPendataan, namaPetugas, NAMA_PERAN, NAMA_SUMBER, pesertaKelas, ringkasTanggalKelas, type IsiLanjutan, type JenisDokumen, type Kelas, type KodePeran, type Petugas, type StatusLanjutan } from "./lanjutan";
+import { jadwalPendataan, namaPetugas, NAMA_PERAN, NAMA_SUMBER, pesertaKelas, ringkasTanggalKelas, type IsiLanjutan, type JenisDokumen, type Instruktur, type Kelas, type KodePeran, type Petugas, type StatusLanjutan } from "./lanjutan";
 import { namaJabatan } from "./kebijakan";
 
 const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -175,17 +176,84 @@ export function bangunTugas(k: KonteksDokumen, p: Petugas, urut: number, m: Meta
   return d;
 }
 
-/** Kunci dokumen yang tersedia: undangan per kelas, satu surat pengantar, surat tugas per petugas. */
+// ---------------------------------------------------------------------------------------------------------------------
+// Surat tugas instruktur (29 Okt 2026)
+// ---------------------------------------------------------------------------------------------------------------------
+export const AWALAN_KUNCI_INSTRUKTUR = "ins:";
+/** Kunci dokumen (1..40 huruf, batas basis data) untuk surat tugas seorang instruktur pada satu kelas: "ins:<id kelas>:<nama>". Tidak bergantung urutan daftar instruktur. */
+export function kunciInstruktur(kelasId: string, nama: string): string {
+  const slug = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `${AWALAN_KUNCI_INSTRUKTUR}${slug(kelasId).slice(0, 12)}:${slug(nama)}`.slice(0, 40).replace(/-+$/, "");
+}
+/** Apakah kunci ini milik surat tugas instruktur (bukan petugas). */
+export const kunciInstrukturDokumen = (kunci: string): boolean => kunci.startsWith(AWALAN_KUNCI_INSTRUKTUR);
+
+export type EntriInstruktur = { kunci: string; label: string; kelas: Kelas; nama: string; entri: Instruktur[] };
+/** Instruktur bernama per kelas; nama sama pada kelas yang sama digabung (jam dijumlahkan di surat). */
+export function daftarInstruktur(isi: IsiLanjutan): EntriInstruktur[] {
+  const peta = new Map<string, EntriInstruktur>();
+  for (const c of isi.kelas) {
+    for (const i of c.instruktur ?? []) {
+      const nama = i.nama.trim().replace(/\s+/g, " ");
+      if (nama === "") continue;
+      const kunci = kunciInstruktur(c.id, nama);
+      const ada = peta.get(kunci);
+      if (ada) { ada.entri.push(i); continue; }
+      peta.set(kunci, { kunci, label: "", kelas: c, nama, entri: [i] });
+    }
+  }
+  return [...peta.values()].map((e) => {
+    const jam = e.entri.reduce((t, i) => t + (i.jam > 0 ? i.jam : 0), 0);
+    return { ...e, label: `Instruktur: ${e.nama} · ${e.kelas.nama.trim() || "Kelas"}${jam > 0 ? ` · ${jam} JP` : ""}` };
+  });
+}
+
+/** Surat tugas untuk satu instruktur pada satu kelas: kelas, jadwal, tempat, dan alokasi JP. */
+export function bangunTugasInstruktur(k: KonteksDokumen, e: EntriInstruktur, m: MetaSurat): Dokumen {
+  const c = e.kelas;
+  const kelasNama = c.nama.trim() || (c.sesi === "briefing" ? "Briefing" : "Pelatihan");
+  const d = dasar("tugas", k, m, "SURAT TUGAS", `Penugasan instruktur ${kelasNama} ${k.namaSurvei}`);
+  const jam = e.entri.reduce((t, i) => t + (i.jam > 0 ? i.jam : 0), 0);
+  const level = [...new Set(e.entri.map((i) => i.level).filter(Boolean))];
+  const asal = [...new Set(e.entri.map((i) => i.asal).filter(Boolean))];
+  d.kepada = [e.nama];
+  d.pembuka = "Yang bertanda tangan di bawah ini menugaskan:";
+  d.rincian = [
+    ["Nama", e.nama],
+    ["Tugas", `Instruktur ${kelasNama}`],
+    ["Level instruktur", level.length > 0 ? level.join(", ") : "(level belum dipilih)"],
+    ["Asal instruktur", asal.length > 0 ? asal.join(", ") : "(asal belum dipilih)"],
+    ["Kegiatan", `${k.namaSurvei} Tahun ${k.tahun}`],
+    ["Hari/tanggal", rentangHariTanggal(c.mulai, c.selesai)],
+    ["Tempat", tempatKelas(c)],
+    ["Metode", c.metode || "(metode belum dipilih)"],
+    ["Alokasi mengajar", jam > 0 ? `${jam} JP` : "(JP belum diisi)"],
+  ];
+  d.isi = ["Penugasan ini dilaksanakan dengan menyampaikan materi sesuai alokasi JP, jadwal, dan tempat di atas dengan penuh tanggung jawab serta mengikuti pedoman kegiatan.", "Honorarium instruktur dibayarkan sesuai ketentuan honor yang berlaku di BPS Kabupaten Solok setelah penugasan dilaksanakan."];
+  d.penutup = "Demikian surat tugas ini dibuat untuk dilaksanakan sebagaimana mestinya.";
+  if (!c.fix) d.hambatan.push(`${kelasNama} masih Perkiraan`);
+  if (!valid(c.mulai) || !valid(c.selesai)) d.hambatan.push("Tanggal kelas belum lengkap");
+  if (jam <= 0) d.hambatan.push(`${e.nama}: JP belum diisi`);
+  if (level.length === 0) d.hambatan.push(`${e.nama}: level instruktur belum dipilih`);
+  if (asal.length === 0) d.hambatan.push(`${e.nama}: asal instruktur belum dipilih`);
+  return d;
+}
+
+/** Kunci dokumen yang tersedia: undangan per kelas, satu surat pengantar, surat tugas per petugas (dan per instruktur bernama). */
 export function daftarKunci(jenis: JenisDokumen, isi: IsiLanjutan): { kunci: string; label: string }[] {
   if (jenis === "undangan") return isi.kelas.map((c) => ({ kunci: c.id, label: `${c.nama.trim() || "Kelas"} · ${ringkasTanggalKelas(c)}` }));
   if (jenis === "pengantar") return [{ kunci: "semua", label: "Surat pengantar untuk semua nagari" }];
-  return isi.petugas.map((p, i) => ({ kunci: p.id, label: `${namaPetugas(p, i + 1)} · ${p.status}${p.peran ? ` · ${NAMA_PERAN[p.peran]}` : ""}` }));
+  return [
+    ...isi.petugas.map((p, i) => ({ kunci: p.id, label: `${namaPetugas(p, i + 1)} · ${p.status}${p.peran ? ` · ${NAMA_PERAN[p.peran]}` : ""}` })),
+    ...daftarInstruktur(isi).map((e) => ({ kunci: e.kunci, label: e.label })),
+  ];
 }
 
 /** Menyusun dokumen menurut jenis dan kunci; null bila kunci tidak ada. */
 export function bangunDokumen(jenis: JenisDokumen, kunci: string, k: KonteksDokumen, m: MetaSurat): Dokumen | null {
   if (jenis === "undangan") { const c = k.isi.kelas.find((x) => x.id === kunci); return c ? bangunUndangan(k, c, m) : null; }
   if (jenis === "pengantar") return kunci === "semua" ? bangunPengantar(k, m) : null;
+  if (kunciInstrukturDokumen(kunci)) { const e = daftarInstruktur(k.isi).find((x) => x.kunci === kunci); return e ? bangunTugasInstruktur(k, e, m) : null; }
   const i = k.isi.petugas.findIndex((x) => x.id === kunci);
   return i >= 0 ? bangunTugas(k, k.isi.petugas[i], i + 1, m) : null;
 }

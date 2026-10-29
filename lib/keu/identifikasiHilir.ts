@@ -7,9 +7,10 @@
 
 import {
   HARI_H15, NAMA_AKUN, NAMA_PAKET, NAMA_TAHAP, TAHAP, adaPendataan, adaPeriode, daftarPeriode, hitungJadwal, hurufBagianDariSumber, jabatanHonorTim, jadwalValid, kebutuhan, peranTerpakai,
-  ringkasPetugas, selisihHari, tambahHari, tanggalSesi, tglIndo,
+  ringkasPetugas, selisihHari, tambahHari, tanggalRapat, tanggalSesi, tglIndo,
   type Form, type Jadwal, type Kebutuhan, type PembaruanH15,
 } from "@/lib/keu/identifikasi";
+import { recPerk } from "@/lib/keu/waktu";
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Status persetujuan
@@ -191,7 +192,14 @@ export function agendaPeriode(f: Form, tahun: number, P: string, upd?: UpdTercat
   for (const [id, nama] of [["persiapan", "persiapan"], ["pelaksanaan", "pelaksanaan"], ["evaluasi", "evaluasi"]] as const) {
     const r = f.rapat[id];
     const on = id === "evaluasi" ? true : r.on;
-    if (on && r.media.length > 0) add(`Rapat ${nama} (${r.media.map((m) => m.toLowerCase()).join(", ")})`);
+    if (on && r.media.length > 0) {
+      // (29 Okt 2026) tanggal rapat ikut agenda bila sudah dijadwalkan (Perkiraan atau Fix menurut isian)
+      const w = tanggalRapat(f, id, P, tahun);
+      const ada = w.mulai !== "" && w.selesai !== "";
+      const rec = f.rapat[id].tgl?.[P] ?? f.rapat[id].tgl?.[daftarPeriode(f)[0]];
+      const tgl = ada ? `: ${w.mulai === w.selesai ? tglIndo(w.mulai) : `${tglIndo(w.mulai)} s.d. ${tglIndo(w.selesai)}`}${recPerk(rec) ? " (perkiraan)" : ""}` : "";
+      add(`Rapat ${nama} (${r.media.map((m) => m.toLowerCase()).join(", ")})${tgl}`, ada ? (recPerk(rec) ? "perk" : "fix") : "");
+    }
   }
   for (const t of peranTerpakai(f)) {
     const adaOrg = t.p.status === "Organik" || t.p.status === "Organik dan mitra";

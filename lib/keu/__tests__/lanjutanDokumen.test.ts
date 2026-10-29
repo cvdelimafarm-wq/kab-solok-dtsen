@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import vektor from "./lanjutan.vektor.json";
 import { awalForm, normalisasi } from "../identifikasi";
 import type { IsiLanjutan } from "../lanjutan";
-import { bangunDokumen, bangunPengantar, bangunTugas, bangunUndangan, daftarKunci, hariTanggal, rentangHariTanggal, tanggalPanjang, tempatKelas, teksInstruktur, type KonteksDokumen } from "../lanjutanDokumen";
+import { bangunDokumen, bangunPengantar, bangunTugasInstruktur, daftarInstruktur, kunciInstruktur, kunciInstrukturDokumen, bangunTugas, bangunUndangan, daftarKunci, hariTanggal, rentangHariTanggal, tanggalPanjang, tempatKelas, teksInstruktur, type KonteksDokumen } from "../lanjutanDokumen";
 
 const salin = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 function ktx(ubah?: (i: IsiLanjutan) => void, status: "draf" | "final" = "final"): KonteksDokumen {
@@ -124,5 +124,59 @@ describe("nama instruktur pada undangan dan surat tugas", () => {
     expect(baris).toContain("Senin, 2 Maret 2026");
     const k2 = ktx((i) => { i.kelas = []; });
     expect(bangunTugas(k2, k2.isi.petugas[0], 1, meta).rincian.some((r) => r[0] === "Pelatihan yang diikuti")).toBe(false);
+  });
+});
+
+describe("surat tugas instruktur (29 Okt 2026)", () => {
+  const ubahIns = (i: IsiLanjutan) => { i.kelas[0].instruktur = [
+    { nama: "Budi Santoso", level: "Innas", asal: "Internal BPS", jam: 6 }, { nama: "  ", level: "", asal: "", jam: 0 },
+    { nama: "Sari", level: "Inda", asal: "Eksternal", jam: 4 }, { nama: "Sari", level: "Inda", asal: "Eksternal", jam: 2 },
+  ]; };
+  it("kunci: berawalan ins:, maksimal 40 huruf, tidak bergantung urutan, dan beda nama beda kunci", () => {
+    const a = kunciInstruktur("k1", "Budi Santoso");
+    expect(a).toBe("ins:k1:budi-santoso");
+    expect(kunciInstruktur("k1", "Budi  SANTOSO")).toBe(a);
+    expect(kunciInstruktur("k1", "Sari")).not.toBe(a);
+    const panjang = kunciInstruktur("kelas-dengan-id-sangat-panjang-sekali", "Nama Instruktur Yang Sangat Panjang Sekali Sampai Melebihi Batas");
+    expect(panjang.length).toBeLessThanOrEqual(40);
+    expect(panjang.endsWith("-")).toBe(false);
+    expect(kunciInstrukturDokumen(a)).toBe(true);
+    expect(kunciInstrukturDokumen("p1")).toBe(false);
+  });
+  it("daftar: hanya instruktur bernama, nama sama pada kelas sama digabung (JP dijumlahkan)", () => {
+    const k = ktx(ubahIns);
+    const d = daftarInstruktur(k.isi);
+    expect(d.map((x) => x.kunci)).toEqual(["ins:k1:budi-santoso", "ins:k1:sari"]);
+    expect(d[1].label).toContain("6 JP");
+    expect(daftarInstruktur(ktx().isi)).toEqual([]);
+  });
+  it("daftarKunci tugas: petugas dulu, lalu instruktur; bangunDokumen menemukan keduanya", () => {
+    const k = ktx(ubahIns);
+    expect(daftarKunci("tugas", k.isi).map((x) => x.kunci)).toEqual(["p1", "p2", "p3", "p4", "ins:k1:budi-santoso", "ins:k1:sari"]);
+    const dok = bangunDokumen("tugas", "ins:k1:budi-santoso", k, meta);
+    expect(dok?.jenis).toBe("tugas");
+    expect(dok?.judul).toBe("SURAT TUGAS");
+    expect(dok?.kepada).toEqual(["Budi Santoso"]);
+    expect(bangunDokumen("tugas", "ins:k1:tidak-ada", k, meta)).toBeNull();
+  });
+  it("isi surat: kelas, jadwal, tempat, level, asal, dan JP; lengkap = tanpa hambatan", () => {
+    const k = ktx(ubahIns);
+    const d = bangunTugasInstruktur(k, daftarInstruktur(k.isi)[1], meta);
+    expect(d.rincian).toContainEqual(["Alokasi mengajar", "6 JP"]);
+    expect(d.rincian).toContainEqual(["Level instruktur", "Inda"]);
+    expect(d.rincian).toContainEqual(["Asal instruktur", "Eksternal"]);
+    expect(d.rincian).toContainEqual(["Hari/tanggal", "Senin, 2 Maret 2026 s.d. Selasa, 3 Maret 2026"]);
+    expect(d.rincian).toContainEqual(["Tempat", "Hotel dalam kota: Hotel Contoh, Arosuka"]);
+    expect(d.perihal).toContain("Penugasan instruktur");
+    expect(d.hambatan).toEqual([]);
+  });
+  it("hambatan: JP, level, asal belum diisi, kelas Perkiraan, tanggal kosong, lanjutan Draf", () => {
+    const k = ktx((i) => { i.kelas[0].instruktur = [{ nama: "Wawan", level: "", asal: "", jam: 0 }]; i.kelas[0].fix = false; i.kelas[0].mulai = ""; }, "draf");
+    const d = bangunTugasInstruktur(k, daftarInstruktur(k.isi)[0], { ...meta, terbit: false });
+    expect(d.konsep).toBe(true);
+    expect(d.hambatan).toEqual(expect.arrayContaining([
+      expect.stringContaining("Draf"), expect.stringContaining("masih Perkiraan"), "Tanggal kelas belum lengkap",
+      "Wawan: JP belum diisi", "Wawan: level instruktur belum dipilih", "Wawan: asal instruktur belum dipilih",
+    ]));
   });
 });

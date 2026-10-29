@@ -14,6 +14,7 @@ import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { jadwalPendataan, normalisasiLanjutan, rincianBiaya } from "@/lib/keu/lanjutan";
+import { kunciInstrukturDokumen } from "@/lib/keu/lanjutanDokumen";
 import { kesiapanBiaya, kesiapanPencairan, normalisasiHasilTerap, type FungsiKegiatan, type HasilTerap } from "@/lib/keu/pelaksanaan";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { hariIniWib, useIdent } from "../../useIdent";
@@ -50,7 +51,7 @@ function Isi() {
   const syarat = useMemo(() => kesiapanPencairan({
     isi, status: tersimpan?.status ?? null, kebijakanVer: tersimpan?.kebijakan_ver ?? lj.lembar?.ver ?? null, kegiatanTertaut: pl.tertaut.length,
     penugasanSigap: (pl.bahan?.kegiatan ?? []).reduce((s, k) => s + k.petugas.filter((t) => t.aktif).length, 0),
-    suratTerbit: lj.dokumen.filter((d) => d.jenis === "tugas" && d.status === "terbit").length,
+    suratTerbit: lj.dokumen.filter((d) => d.jenis === "tugas" && d.status === "terbit" && !kunciInstrukturDokumen(d.kunci)).length,
     biaya: biaya ? { adaLaporan: biaya.adaLaporan, kurang: biaya.kurang } : null,
   }), [isi, tersimpan, lj.lembar, lj.dokumen, pl.tertaut, pl.bahan, biaya]);
 

@@ -292,7 +292,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
             {tawarNama && (
               <label className="flex items-start gap-2 text-[12.5px] text-[#44546F]">
                 <input type="checkbox" className="mt-1" checked={ubah.ubahNama ?? false} onChange={(e) => setUbah({ ubahNama: e.target.checked })} />
-                <span>Saran perbaiki penamaan: ubah nama item pada RAB menjadi «{saranNama}» (usulan semula-menjadi untuk revisi POK; item POK tidak berubah).</span>
+                <span>Saran perbaiki penamaan: ubah nama item pada RAB menjadi «{saranNama}». Item POK tidak berubah; perubahan nama ini tampil sebagai pemicu P-02 (redaksi berubah) di bagian Pemantauan, dan usulan semula-menjadinya disusun di tab Revisi (cek aturan).</span>
               </label>
             )}
             {pesanDobel && (

@@ -496,6 +496,15 @@ describe("turunan hilir", () => {
     expect(t).toContain("Pelatihan luring: 23/02/2026 s.d. 25/02/2026");
     expect(t).toContain("Penugasan pengajar atau narasumber eksternal untuk pelatihan");
     expect(t).toContain("Rapat pelaksanaan (zoom)");
+    // (29 Okt 2026) tanggal rapat ikut agenda bila sudah dijadwalkan
+    const g = contoh((x) => {
+      x.rapat.pelaksanaan.tgl = { "Triwulan I": { mulai: "2026-03-10", selesai: "2026-03-10", perk: false } as never };
+      x.rapat.evaluasi.tgl = { "Triwulan I": { mulai: "2026-04-13", selesai: "2026-04-17", perk: true } as never };
+    });
+    const ag = agendaPeriode(g, 2026, "Triwulan I");
+    expect(ag.find((x) => x.t.startsWith("Rapat pelaksanaan"))).toEqual({ t: "Rapat pelaksanaan (zoom): 10/03/2026", kelas: "fix" });
+    expect(ag.find((x) => x.t.startsWith("Rapat evaluasi"))).toEqual({ t: "Rapat evaluasi (tatap muka): 13/04/2026 s.d. 17/04/2026 (perkiraan)", kelas: "perk" });
+    expect(ag.find((x) => x.t.startsWith("Rapat persiapan"))?.t).toBe("Rapat persiapan (apel pagi)");
     expect(t).toContain("Penegasan tanggal periode H-15 (Triwulan I): 14/02/2026, oleh ketua tim atau operator");
     expect(t).toContain("Konsultasi teknis: tatap muka (perjalanan dinas)");
   });

@@ -597,7 +597,7 @@ export const labelStatusLanjutan = (s: StatusLanjutan): { teks: string; nada: "k
   s === "final" ? { teks: "Final", nada: "hijau" } : { teks: "Draf (ada Perkiraan)", nada: "kuning" };
 
 export type JenisDokumen = "undangan" | "pengantar" | "tugas";
-export const NAMA_DOKUMEN: Record<JenisDokumen, string> = { undangan: "Undangan pelatihan", pengantar: "Surat pengantar kegiatan ke nagari", tugas: "Surat tugas atau SPK" };
+export const NAMA_DOKUMEN: Record<JenisDokumen, string> = { undangan: "Undangan pelatihan", pengantar: "Surat pengantar kegiatan ke nagari", tugas: "Surat tugas atau SPK (petugas dan instruktur)" };
 
 /** Rentang tanggal kelas bila lengkap; kosong bila belum. */
 export function ringkasTanggalKelas(k: Pick<Kelas, "mulai" | "selesai">): string {
