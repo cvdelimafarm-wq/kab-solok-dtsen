@@ -2,6 +2,8 @@
 
 // app/sigap/kelola/pendataan/page.tsx
 //
+// (29 Okt 2026) PEMILIH SURVEI di atas isi (PemilihSurvei.tsx, alamat ?k=): seluruh tab menyesuaikan survei terpilih. Tab 4 (QC) sudah penuh per survei; tab lain
+// untuk survei selain Pendataan Pascabencana menampilkan keterangan "belum tersedia" (BelumUntukSurvei) dan akan disesuaikan bertahap.
 // (27 Okt 2026) Tab 1 Persiapan ditambah "Pengaturan Lembar Pendataan" per kegiatan (PengaturanLembar.tsx): istilah/warna/bentuk/alasan tombol hasil + variabel radar.
 // (23 Okt 2026) Kelola Pendataan dibingkai Shell SIGAP (sidebar + topbar + tab) seperti Kelola Pelatihan -- permintaan user: halaman tanpa sidebar,
 // tombol "Beranda" salah arah, dan kelengkapan pendataan belum terpadu. Tab disusun RUNUT mengikuti alur kerja (lib/sigapPendataanTab.ts):
@@ -13,9 +15,10 @@
 // Judul sidebar: item "Pendataan" di lib/sigapMenuV2.ts kini bertanda aktif (aktifKode "pendataan_kelola"); "Beranda" di sidebar = Beranda admin SIGAP.
 
 import { useCallback, useEffect, useState } from "react";
-import { bacaSesi, keMasuk } from "../../admin/api";
+import { ambilRingkas, bacaSesi, keMasuk, type KegiatanRingkas } from "../../admin/api";
 import Bingkai from "../../kontrak/Bingkai";
-import { TAB_PENDATAAN, bacaTabPendataan, labelTabPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
+import { KEGIATAN_PENDATAAN, TAB_PENDATAAN, bacaKegiatanPendataan, bacaTabPendataan, labelTabPendataan, urlKegiatanPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
+import PemilihSurvei, { BelumUntukSurvei, namaSurvei } from "./PemilihSurvei";
 import KirimSatu from "./KirimSatu";
 import Monitoring from "./Monitoring";
 import Administrasi from "./Administrasi";
@@ -30,16 +33,33 @@ import UnggahKk from "./UnggahKk";
 
 export default function KelolaPendataan() {
   const [tab, setTab] = useState<KodeTabPendataan>("ringkasan");
+  const [kegId, setKegId] = useState<number>(KEGIATAN_PENDATAAN);
+  const [daftar, setDaftar] = useState<KegiatanRingkas[]>([]);
 
   useEffect(() => {
     if (!bacaSesi()) {
       keMasuk();
       return;
     }
-    const sinkron = () => setTab(bacaTabPendataan(new URLSearchParams(window.location.search).get("tab")));
+    const sinkron = () => {
+      const q = new URLSearchParams(window.location.search);
+      setTab(bacaTabPendataan(q.get("tab")));
+      setKegId(bacaKegiatanPendataan(q.get("k")));
+    };
     sinkron();
     window.addEventListener("popstate", sinkron);
     return () => window.removeEventListener("popstate", sinkron);
+  }, []);
+
+  // daftar survei untuk pemilih; gagal memuat = pemilih hanya menampilkan survei yang sedang dipilih (halaman tetap bisa dipakai)
+  useEffect(() => {
+    let batal = false;
+    ambilRingkas()
+      .then((r) => !batal && setDaftar(r.kegiatan))
+      .catch(() => undefined);
+    return () => {
+      batal = true;
+    };
   }, []);
 
   const pilihTab = useCallback((t: KodeTabPendataan) => {
@@ -47,36 +67,50 @@ export default function KelolaPendataan() {
     window.history.replaceState(null, "", urlTabPendataan(window.location.pathname, window.location.search, t));
   }, []);
 
+  const pilihKegiatan = useCallback((id: number) => {
+    setKegId(id);
+    window.history.replaceState(null, "", urlKegiatanPendataan(window.location.pathname, window.location.search, id));
+  }, []);
+
+  const pasca = kegId === KEGIATAN_PENDATAAN;
+  const nama = namaSurvei(daftar, kegId);
+  /** Tab yang belum mengikuti survei terpilih. */
+  const belum = (
+    <BelumUntukSurvei nama={nama} tab={labelTabPendataan(tab)} onKePascabencana={() => pilihKegiatan(KEGIATAN_PENDATAAN)} onKeQc={() => pilihTab("qc")} />
+  );
+
   return (
     <Bingkai<KodeTabPendataan>
       aktif="pendataan_kelola"
       kecil="SIGAP · Kelola Pendataan"
       jejak={["Pelaksanaan", "Pendataan", labelTabPendataan(tab)]}
       judul="Kelola Pendataan"
-      sub="Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban"
+      sub={pasca ? "Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban" : `${nama} · QC Pemahaman Petugas`}
       tab={TAB_PENDATAAN.map(({ kode, label }) => ({ kode, label }))}
       aktifTab={tab}
       onTab={pilihTab}
     >
-      {tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
-      {tab === "persiapan" && (
+      <PemilihSurvei daftar={daftar} aktif={kegId} onPilih={pilihKegiatan} />
+      {tab === "qc" && <QcPemahaman key={kegId} kegiatanId={kegId} />}
+      {tab !== "qc" && !pasca && belum}
+      {pasca && tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
+      {pasca && tab === "persiapan" && (
         <>
           <UnggahKk />
           <PengaturanLembar />
           <IsiLaporanSpj />
         </>
       )}
-      {tab === "tim" && <Tim />}
-      {tab === "siaran" && (
+      {pasca && tab === "tim" && <Tim />}
+      {pasca && tab === "siaran" && (
         <>
           <Siaran />
           <KirimSatu />
         </>
       )}
-      {tab === "qc" && <QcPemahaman />}
-      {tab === "monitoring" && <Monitoring />}
-      {tab === "pemeriksaan" && <Pemeriksaan />}
-      {tab === "administrasi" && <Administrasi />}
+      {pasca && tab === "monitoring" && <Monitoring />}
+      {pasca && tab === "pemeriksaan" && <Pemeriksaan />}
+      {pasca && tab === "administrasi" && <Administrasi />}
     </Bingkai>
   );
 }

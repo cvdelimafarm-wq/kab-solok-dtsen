@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_QC, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
+import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_QC_PEMAHAMAN, bacaKegiatanPendataan, urlKegiatanPendataan, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_QC, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
 
 describe("TAB_PENDATAAN", () => {
   it("urutan runut mengikuti alur kerja; kode unik; Ringkasan paling depan", () => {
@@ -145,5 +145,33 @@ describe("nama tidak bentrok dengan menu Monitoring (23 Okt 2026)", () => {
     const sub = SUB_ADMINISTRASI.find((x) => x.kode === "monitoring")!;
     expect(sub.label).toBe("Kelengkapan SPJ");
     expect(sub.label).not.toMatch(/^Monitoring/);
+  });
+});
+
+describe("pemilih survei Kelola Pendataan (29 Okt 2026)", () => {
+  const P = "/sigap/kelola/pendataan";
+  it("bacaKegiatanPendataan: kosong/tidak sah = Pascabencana; angka positif = survei itu", () => {
+    expect(bacaKegiatanPendataan(null)).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("")).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("abc")).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("0")).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("-2")).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("2.5")).toBe(KEGIATAN_PENDATAAN);
+    expect(bacaKegiatanPendataan("2")).toBe(2);
+    expect(bacaKegiatanPendataan(" 12 ")).toBe(12);
+  });
+  it("urlKegiatanPendataan: ?k diisi, Pascabencana = tanpa ?k, parameter lain dibiarkan, ?v dibuang", () => {
+    expect(urlKegiatanPendataan(P, "", 2)).toBe(`${P}?k=2`);
+    expect(urlKegiatanPendataan(P, "?tab=qc&sub=soal", 2)).toBe(`${P}?tab=qc&sub=soal&k=2`);
+    expect(urlKegiatanPendataan(P, "?tab=qc&k=2", KEGIATAN_PENDATAAN)).toBe(`${P}?tab=qc`);
+    expect(urlKegiatanPendataan(P, "?k=2", KEGIATAN_PENDATAAN)).toBe(P);
+    expect(urlKegiatanPendataan(P, "?tab=monitoring&v=x", 3)).toBe(`${P}?tab=monitoring&k=3`);
+  });
+  it("urlTabPendataan dan urlSubDari mempertahankan ?k", () => {
+    expect(urlTabPendataan(P, "?k=2", "qc")).toBe(`${P}?k=2&tab=qc`);
+    expect(urlSubDari(SUB_QC, "qc", P, "?tab=qc&k=2", "soal")).toBe(`${P}?tab=qc&k=2&sub=soal`);
+  });
+  it("SUB_QC_PEMAHAMAN tidak memuat Kuesioner supervisi (khusus Pascabencana)", () => {
+    expect(SUB_QC_PEMAHAMAN.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal"]);
   });
 });

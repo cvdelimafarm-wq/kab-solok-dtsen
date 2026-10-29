@@ -20,7 +20,63 @@ export type QcPengaturan = {
   ingat_berkala_menit: number;
   mulai: string | null; // "YYYY-MM-DD"
   akhir: string | null;
+  // (29 Okt 2026) Opsi per kegiatan (migrasi 20261029c). Semua opsional: bila tidak ada dipakai bawaan = perilaku QC Pascabencana.
+  /** true (bawaan): petugas wajib mengulang sampai lulus; false: satu percobaan saja */
+  wajib_ulang?: boolean;
+  /** nilai minimal agar lulus, 1-100 (bawaan 100 = semua benar) */
+  nilai_lulus?: number;
+  /** true (bawaan): soal hari itu diundi acak; false: berurutan menurut (paket, nomor) */
+  undi_acak?: boolean;
+  /** true (bawaan): urutan soal dan pilihan diacak per petugas; false: urutan tetap */
+  acak_tampil?: boolean;
+  /** hari rilis, ISO 1=Senin .. 7=Minggu (bawaan: setiap hari) */
+  hari_rilis?: number[];
+  /** peran peserta: "pml", "ppl" (bawaan keduanya) */
+  peran_peserta?: ("pml" | "ppl")[];
+  /** true (bawaan): PML menerima rekap tim keesokan harinya */
+  rekap_pml?: boolean;
 };
+
+export const SEMUA_HARI: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
+const NAMA_HARI = ["", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+
+/** Hari rilis yang berlaku (urut, tanpa duplikat); kosong/tidak sah = setiap hari. */
+export function hariRilisDari(p: Pick<QcPengaturan, "hari_rilis"> | null | undefined): number[] {
+  const x = Array.from(new Set((p?.hari_rilis ?? []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7))).sort((a, b) => a - b);
+  return x.length > 0 ? x : [...SEMUA_HARI];
+}
+export const nilaiLulusDari = (p: Pick<QcPengaturan, "nilai_lulus"> | null | undefined): number => {
+  const n = Number(p?.nilai_lulus);
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 100;
+};
+export const wajibUlangDari = (p: Pick<QcPengaturan, "wajib_ulang"> | null | undefined): boolean => p?.wajib_ulang !== false;
+/** Jumlah percobaan maksimal: 1 bila tidak wajib ulang, selain itu 1 + maks_ulang (sama dengan sigap_qc_status_k). */
+export const maksPercobaanDari = (p: Pick<QcPengaturan, "wajib_ulang" | "maks_ulang">): number => (wajibUlangDari(p) ? 1 + (p.maks_ulang ?? 3) : 1);
+/** "benar x 100 >= nilai_lulus x jumlah" (sama dengan sigap_qc_lulus). */
+export const lulusMenurut = (benar: number, jumlah: number, nilaiLulus = 100): boolean => jumlah > 0 && benar * 100 >= nilaiLulus * jumlah;
+
+/** Hari dalam seminggu ISO (1 = Senin .. 7 = Minggu) dari "YYYY-MM-DD". */
+export function hariIso(tanggal: string): number {
+  const [y, m, d] = tanggal.split("-").map(Number);
+  const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return w === 0 ? 7 : w;
+}
+/** "Setiap hari", "Senin, Kamis", "Senin sampai Jumat". */
+export function teksHariRilis(hari: readonly number[] | null | undefined): string {
+  const h = hariRilisDari({ hari_rilis: hari ? [...hari] : [] });
+  if (h.length === 7) return "Setiap hari";
+  if (h.length >= 3 && h.every((x, i) => i === 0 || x === h[i - 1] + 1)) return `${NAMA_HARI[h[0]]} sampai ${NAMA_HARI[h[h.length - 1]]}`;
+  return h.map((x) => NAMA_HARI[x]).join(", ");
+}
+/** Tanggal rilis berikutnya sesudah `tanggal` (hari rilis berikut), atau null bila melewati `akhir`. */
+export function rilisBerikut(tanggal: string, p: Pick<QcPengaturan, "hari_rilis" | "akhir">): string | null {
+  const h = hariRilisDari(p);
+  for (let i = 1; i <= 7; i++) {
+    const t = geserHari(tanggal, i);
+    if (h.includes(hariIso(t))) return p.akhir && t > p.akhir ? null : t;
+  }
+  return null;
+}
 
 export type QcJenisKirim = "rilis" | "ingat_petugas" | "ingat_pml" | "rekap_pml";
 
@@ -94,11 +150,14 @@ export function instanWib(tanggal: string, menit: number): Date {
  * Tanggal "hari QC" yang berlaku sekarang: sebelum jam rilis masih hari kemarin (sama dengan sigap_qc_status).
  * Mengembalikan null bila pengaturan tidak sah atau di luar periode mulai..akhir.
  */
-export function hariBerlaku(now: Date, p: Pick<QcPengaturan, "rilis_jam" | "mulai" | "akhir">): string | null {
+export function hariBerlaku(now: Date, p: Pick<QcPengaturan, "rilis_jam" | "mulai" | "akhir" | "hari_rilis">): string | null {
   const rilis = jamKeMenit(p.rilis_jam);
   if (rilis === null) return null;
   const w = bagianWib(now);
-  const tgl = w.menit >= rilis ? w.tanggal : geserHari(w.tanggal, -1);
+  let tgl = w.menit >= rilis ? w.tanggal : geserHari(w.tanggal, -1);
+  // (29 Okt 2026) bukan hari rilis -> hari rilis terakhir sebelumnya (sama dengan sigap_qc_hari_berlaku)
+  const hr = hariRilisDari(p);
+  for (let i = 0; i < 7 && !hr.includes(hariIso(tgl)); i++) tgl = geserHari(tgl, -1);
   if (p.mulai && tgl < p.mulai) return null;
   if (p.akhir && tgl > p.akhir) return null;
   return tgl;
@@ -107,7 +166,7 @@ export function hariBerlaku(now: Date, p: Pick<QcPengaturan, "rilis_jam" | "mula
 export type JendelaQc = { tanggal: string; rilis: Date; batas: Date; lewatBatas: boolean; sisaMenit: number };
 
 /** `susulan` = hari ditandai susulan: batas tidak berlaku, jadi tidak pernah "lewat batas" (sama dengan sigap_qc_status). */
-export function jendelaQc(now: Date, p: Pick<QcPengaturan, "rilis_jam" | "batas_jam" | "mulai" | "akhir">, susulan = false): JendelaQc | null {
+export function jendelaQc(now: Date, p: Pick<QcPengaturan, "rilis_jam" | "batas_jam" | "mulai" | "akhir" | "hari_rilis">, susulan = false): JendelaQc | null {
   const tgl = hariBerlaku(now, p);
   const b = jamKeMenit(p.batas_jam);
   const r = jamKeMenit(p.rilis_jam);
@@ -144,7 +203,7 @@ export function tanggalPendekQc(t: string): string {
  * Keadaan QC menurut pengaturan yang TERSIMPAN (bukan isi formulir yang belum disimpan), dihitung dari jam sekarang.
  * Aturan sama dengan sigap_qc_status / hariBerlaku / jendelaQc, jadi apa yang tertulis di sini = apa yang dialami petugas.
  */
-export function ringkasStatusQc(now: Date, p: Pick<QcPengaturan, "aktif" | "rilis_jam" | "batas_jam" | "mulai" | "akhir">, susulan = false): StatusQc {
+export function ringkasStatusQc(now: Date, p: Pick<QcPengaturan, "aktif" | "rilis_jam" | "batas_jam" | "mulai" | "akhir" | "hari_rilis" | "nilai_lulus" | "wajib_ulang">, susulan = false): StatusQc {
   const rilis = jamKeMenit(p.rilis_jam);
   const batas = jamKeMenit(p.batas_jam);
   if (rilis === null || batas === null) return { status: "tidak_sah", judul: "Pengaturan jam belum sah", baris: ["Periksa jam rilis dan jam batas, lalu simpan."] };
@@ -155,7 +214,8 @@ export function ringkasStatusQc(now: Date, p: Pick<QcPengaturan, "aktif" | "rili
   const hari = hariBerlaku(now, p);
   if (!hari) {
     if (p.mulai && instanWib(p.mulai, rilis).getTime() > now.getTime()) {
-      return { status: "belum_mulai", judul: "Aktif, belum mulai", baris: [`Soal pertama dirilis ${tanggalPendekQc(p.mulai)} pukul ${jamRilis} WIB.`, "Sebelum itu petugas belum melihat modal QC."] };
+      const awal = hariRilisDari(p).includes(hariIso(p.mulai)) ? p.mulai : (rilisBerikut(p.mulai, p) ?? p.mulai);
+      return { status: "belum_mulai", judul: "Aktif, belum mulai", baris: [`Soal pertama dirilis ${tanggalPendekQc(awal)} pukul ${jamRilis} WIB.`, "Sebelum itu petugas belum melihat modal QC."] };
     }
     return { status: "selesai", judul: "Periode sudah selesai", baris: [p.akhir ? `Periode berakhir ${tanggalPendekQc(p.akhir)}. Petugas tidak lagi melihat modal QC.` : "Petugas tidak melihat modal QC."] };
   }
@@ -174,9 +234,11 @@ export function ringkasStatusQc(now: Date, p: Pick<QcPengaturan, "aktif" | "rili
     const sisa = m === null ? "" : m < 60 ? `, sisa ${m} menit` : `, sisa ${Math.floor(m / 60)} jam${m % 60 ? ` ${m % 60} menit` : ""}`;
     baris.push(`Soal ${tanggalPendekQc(hari)} sudah dirilis pukul ${jamRilis}. Batas pengisian pukul ${jamBatas}${sisa}.`);
   }
-  const besok = geserHari(hari, 1);
-  if (!p.akhir || besok <= p.akhir) baris.push(`Soal berikutnya dirilis ${tanggalPendekQc(besok)} pukul ${jamRilis} WIB.`);
-  else baris.push(`Hari ini hari terakhir periode (${tanggalPendekQc(p.akhir)}).`);
+  const besok = rilisBerikut(hari, p);
+  if (besok) baris.push(`Soal berikutnya dirilis ${tanggalPendekQc(besok)} pukul ${jamRilis} WIB.`);
+  else if (p.akhir) baris.push(`Hari ini hari terakhir periode (${tanggalPendekQc(p.akhir)}).`);
+  const lulus = nilaiLulusDari(p);
+  baris.push(`Lulus bila nilai ${lulus >= 100 ? "100 (semua benar)" : `${lulus} ke atas`}; ${wajibUlangDari(p) ? "petugas yang belum lulus wajib mengulang." : "satu percobaan saja, tanpa ulangan wajib."}`);
   return { status, judul, baris };
 }
 
@@ -223,11 +285,11 @@ export function labelPercobaan(ke: number, maks: number): string {
   return ke <= 1 ? `Percobaan awal (1 dari ${maks})` : `Ulangan ${ke - 1} dari ${maks - 1}`;
 }
 
-export function labelStatusPpl(p: Pick<QcRekapPpl, "percobaan" | "lulus" | "skor_terbaik">, maks: number): string {
+export function labelStatusPpl(p: Pick<QcRekapPpl, "percobaan" | "lulus" | "skor_terbaik">, maks: number, nilaiLulus = 100): string {
   if (p.percobaan === 0) return "Belum mengisi";
-  if (p.lulus) return "Lulus 100";
-  if (p.percobaan >= maks) return `Habis percobaan (${p.skor_terbaik ?? 0})`;
-  return `Belum 100 (${p.skor_terbaik ?? 0}), masih mengulang`;
+  if (p.lulus) return nilaiLulus >= 100 ? "Lulus 100" : `Lulus (${p.skor_terbaik ?? 0})`;
+  if (p.percobaan >= maks) return `${maks <= 1 ? "Tidak lulus" : "Habis percobaan"} (${p.skor_terbaik ?? 0})`;
+  return `${nilaiLulus >= 100 ? "Belum 100" : "Belum lulus"} (${p.skor_terbaik ?? 0}), masih mengulang`;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +328,7 @@ export function rencanaAksi(now: Date, p: QcPengaturan, opsi: OpsiRencana = {}):
   const w = bagianWib(now);
   const hasil: AksiQc[] = [];
   const dalamPeriode = (tgl: string) => !((p.mulai && tgl < p.mulai) || (p.akhir && tgl > p.akhir));
+  const hariRilis = hariRilisDari(p);
   const susulan = !!opsi.susulanAt;
   const senyap = adalahJamSenyap(w.menit);
 
@@ -314,7 +377,8 @@ export function rencanaAksi(now: Date, p: QcPengaturan, opsi: OpsiRencana = {}):
 
   // rekap hari kemarin untuk PML: mulai rekap_jam sampai sebelum soal berikutnya dirilis.
   const kemarin = geserHari(w.tanggal, -1);
-  if (dalamPeriode(kemarin) && w.menit >= rekap && w.menit < rilis) hasil.push({ jenis: "rekap_pml", tanggal: kemarin, slot: 0 });
+  // (29 Okt 2026) hanya bila rekap PML menyala untuk kegiatan ini dan kemarin memang hari rilis (ada soal yang direkap).
+  if (p.rekap_pml !== false && hariRilis.includes(hariIso(kemarin)) && dalamPeriode(kemarin) && w.menit >= rekap && w.menit < rilis) hasil.push({ jenis: "rekap_pml", tanggal: kemarin, slot: 0 });
   return hasil;
 }
 
@@ -325,49 +389,58 @@ export function rencanaAksi(now: Date, p: QcPengaturan, opsi: OpsiRencana = {}):
 export type IsiPush = { judul: string; isi: string; url: string; tag: string; tunda?: boolean };
 
 const URL_QC = "/";
+/** (29 Okt 2026) `nama` dipakai bila lebih dari satu kegiatan memiliki QC aktif, agar petugas tahu QC yang mana; `kegiatanId` membuat tag berbeda per kegiatan. */
+export type OpsiPush = { nama?: string; kegiatanId?: number };
+const akhiranTag = (o?: OpsiPush) => (o?.kegiatanId ? `-k${o.kegiatanId}` : "");
+const dengan = (judul: string, o?: OpsiPush) => (o?.nama ? `${judul} (${o.nama})` : judul);
+/** "nilai 100" atau "nilai 80 ke atas" */
+const targetNilai = (n: number) => (n >= 100 ? "nilai 100" : `nilai ${n} ke atas`);
 const potong = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
 
-export function pushRilis(tanggal: string, p: Pick<QcPengaturan, "soal_per_hari" | "batas_jam">, susulan = false): IsiPush {
+export function pushRilis(tanggal: string, p: Pick<QcPengaturan, "soal_per_hari" | "batas_jam" | "nilai_lulus" | "wajib_ulang">, susulan = false, o?: OpsiPush): IsiPush {
+  const ulang = wajibUlangDari(p) ? `, ulangi sampai ${targetNilai(nilaiLulusDari(p))}` : "";
   return {
-    judul: "QC Pemahaman Petugas hari ini",
+    judul: dengan("QC Pemahaman Petugas hari ini", o),
     isi: susulan
-      ? `${p.soal_per_hari} soal QC Pemahaman terlambat dirilis (tidak dihitung terlambat). Isi sekarang, ulangi sampai nilai 100. Buka SIGAP.`
+      ? `${p.soal_per_hari} soal QC Pemahaman terlambat dirilis (tidak dihitung terlambat). Isi sekarang${ulang}. Buka SIGAP.`
       : `${p.soal_per_hari} soal sudah dirilis. Wajib diisi sebelum pukul ${menitKeJam(jamKeMenit(p.batas_jam) ?? 0)} WIB. Buka SIGAP sekarang.`,
     url: URL_QC,
-    tag: `qc-rilis-${tanggal}`,
+    tag: `qc-rilis-${tanggal}${akhiranTag(o)}`,
     tunda: true,
   };
 }
 
 export type KeadaanPengingat = { belumMengisi: boolean; skorTerbaik?: number; sisaUlang?: number };
 
-export function pushIngatPetugas(tanggal: string, sisaMenit: number, p: Pick<QcPengaturan, "batas_jam">, k: KeadaanPengingat = { belumMengisi: true }, susulan = false): IsiPush {
+export function pushIngatPetugas(tanggal: string, sisaMenit: number, p: Pick<QcPengaturan, "batas_jam" | "nilai_lulus" | "wajib_ulang">, k: KeadaanPengingat = { belumMengisi: true }, susulan = false, o?: OpsiPush): IsiPush {
   const jam = menitKeJam(jamKeMenit(p.batas_jam) ?? 0);
+  const nilai = nilaiLulusDari(p);
+  const ulang = wajibUlangDari(p) ? `, lalu ulangi sampai ${targetNilai(nilai)}` : "";
   let isi: string;
   if (!k.belumMengisi) {
     const sisa = k.sisaUlang !== undefined ? ` (sisa ${k.sisaUlang} kali)` : "";
-    isi = `Nilai terbaik Anda ${k.skorTerbaik ?? 0}. Ulangi QC Pemahaman sampai nilai 100${sisa}.`;
+    isi = `Nilai terbaik Anda ${k.skorTerbaik ?? 0}. Ulangi QC Pemahaman sampai ${targetNilai(nilai)}${sisa}.`;
   } else if (susulan || sisaMenit <= 0) {
-    isi = "Anda belum mengisi QC Pemahaman hari ini. Isi sekarang, lalu ulangi sampai nilai 100.";
+    isi = `Anda belum mengisi QC Pemahaman hari ini. Isi sekarang${ulang}.`;
   } else {
     isi = `Anda belum selesai mengisi. Sisa ${sisaMenit} menit sampai pukul ${jam} WIB.`;
   }
-  return { judul: k.belumMengisi ? "Segera isi QC Pemahaman" : "Ulangi QC Pemahaman sampai 100", isi, url: URL_QC, tag: `qc-ingat-${tanggal}`, tunda: true };
+  return { judul: dengan(k.belumMengisi ? "Segera isi QC Pemahaman" : nilai >= 100 ? "Ulangi QC Pemahaman sampai 100" : "Ulangi QC Pemahaman sampai lulus", o), isi, url: URL_QC, tag: `qc-ingat-${tanggal}${akhiranTag(o)}`, tunda: true };
 }
 
-export function pushIngatPml(tanggal: string, namaBelum: readonly string[], p: Pick<QcPengaturan, "batas_jam">): IsiPush {
+export function pushIngatPml(tanggal: string, namaBelum: readonly string[], p: Pick<QcPengaturan, "batas_jam">, o?: OpsiPush): IsiPush {
   const n = namaBelum.length;
   const contoh = namaBelum.slice(0, 3).join(", ");
   const lebih = n > 3 ? ` dan ${n - 3} lainnya` : "";
   return {
-    judul: `${n} petugas Anda belum mengisi QC`,
+    judul: dengan(`${n} petugas Anda belum mengisi QC`, o),
     isi: `${contoh}${lebih} belum mengisi. Ingatkan mereka segera (batas pukul ${menitKeJam(jamKeMenit(p.batas_jam) ?? 0)} WIB).`,
     url: URL_QC,
-    tag: `qc-ingat-pml-${tanggal}`,
+    tag: `qc-ingat-pml-${tanggal}${akhiranTag(o)}`,
   };
 }
 
-export function pushRekapPml(tanggal: string, t: Pick<QcRekapTim, "jumlah_ppl" | "sudah" | "belum_mengisi" | "lulus" | "rata_awal" | "salah">): IsiPush {
+export function pushRekapPml(tanggal: string, t: Pick<QcRekapTim, "jumlah_ppl" | "sudah" | "belum_mengisi" | "lulus" | "rata_awal" | "salah">, o?: OpsiPush): IsiPush {
   const teratas = [...t.salah].sort((a, b) => b.jumlah - a.jumlah)[0];
   const baris: string[] = [`${t.sudah} dari ${t.jumlah_ppl} petugas sudah mengisi`];
   if (t.belum_mengisi > 0) baris.push(`${t.belum_mengisi} belum mengisi`);
@@ -375,10 +448,10 @@ export function pushRekapPml(tanggal: string, t: Pick<QcRekapTim, "jumlah_ppl" |
   if (t.salah.length > 0) baris.push(`${t.salah.length} soal dijawab salah${teratas ? ` (terbanyak: ${potong(teratas.pertanyaan, 50)})` : ""}`);
   const butuhBriefing = t.salah.length > 0 || t.belum_mengisi > 0;
   return {
-    judul: butuhBriefing ? "Rekap QC kemarin: briefing ulang tim Anda" : "Rekap QC kemarin: tim Anda aman",
+    judul: dengan(butuhBriefing ? "Rekap QC kemarin: briefing ulang tim Anda" : "Rekap QC kemarin: tim Anda aman", o),
     isi: potong(`${baris.join("; ")}.${butuhBriefing ? " Segera briefing kembali petugas." : ""}`, 180),
     url: URL_QC,
-    tag: `qc-rekap-${tanggal}`,
+    tag: `qc-rekap-${tanggal}${akhiranTag(o)}`,
   };
 }
 
@@ -442,6 +515,28 @@ export function validasiPengaturan(masuk: unknown): HasilValidasi {
   }
   bulat("soal_per_hari", "Soal per hari", 1, 30);
   bulat("maks_ulang", "Maksimal ulangan", 0, 10);
+
+  // (29 Okt 2026) opsi per kegiatan
+  for (const [k, label] of [["wajib_ulang", "Wajib ulang"], ["undi_acak", "Undian acak"], ["acak_tampil", "Urutan acak"], ["rekap_pml", "Rekap PML"]] as const) {
+    if (!(k in m)) continue;
+    if (typeof m[k] !== "boolean") galat.push(`${label} harus ya/tidak`);
+    else data[k] = m[k];
+  }
+  if ("nilai_lulus" in m) {
+    const v = Number(m.nilai_lulus);
+    if (!Number.isInteger(v) || v < 1 || v > 100) galat.push("Nilai lulus harus bilangan bulat 1-100");
+    else data.nilai_lulus = v;
+  }
+  if ("hari_rilis" in m) {
+    const daftar = Array.isArray(m.hari_rilis) ? m.hari_rilis.map(Number) : [];
+    if (daftar.length < 1 || daftar.length > 7 || daftar.some((x) => !Number.isInteger(x) || x < 1 || x > 7)) galat.push("Hari rilis harus berisi minimal satu hari (1 Senin sampai 7 Minggu)");
+    else data.hari_rilis = Array.from(new Set(daftar)).sort((a, b) => a - b);
+  }
+  if ("peran_peserta" in m) {
+    const daftar = Array.isArray(m.peran_peserta) ? m.peran_peserta.map((x) => String(x)) : [];
+    if (daftar.length < 1 || daftar.some((x) => x !== "pml" && x !== "ppl")) galat.push("Peserta harus berisi PML, PPL, atau keduanya");
+    else data.peran_peserta = Array.from(new Set(daftar)).sort();
+  }
 
   for (const k of ["mulai", "akhir"] as const) {
     if (!(k in m)) continue;
@@ -520,7 +615,20 @@ export function validasiSoal(masuk: unknown): { ok: true; data: SoalMasuk } | { 
 // ---------------------------------------------------------------------------
 export type QcOpsiKlien = { kode: "A" | "B" | "C" | "D"; teks: string };
 export type QcSoalKlien = { id: string; paket: number; judul_paket: string; pertanyaan: string; kata_kunci: string[]; opsi: QcOpsiKlien[] };
-export type QcSetSoal = { tanggal: string; ke: number; maks_percobaan: number; batas_at: string; lewat_batas: boolean; susulan?: boolean; soal: QcSoalKlien[] };
+export type QcSetSoal = {
+  tanggal: string;
+  ke: number;
+  maks_percobaan: number;
+  batas_at: string;
+  lewat_batas: boolean;
+  susulan?: boolean;
+  /** (29 Okt 2026) kegiatan yang sedang dikerjakan petugas (bisa mengikuti lebih dari satu) */
+  kegiatan_id?: number;
+  kegiatan_nama?: string;
+  nilai_lulus?: number;
+  wajib_ulang?: boolean;
+  soal: QcSoalKlien[];
+};
 export type QcButirTinjau = {
   id: string;
   paket: number;
@@ -543,12 +651,15 @@ export type QcTinjau = {
   terlambat: boolean;
   sisa_ulang: number;
   perlu_ulang: boolean;
+  kegiatan_id?: number;
+  nilai_lulus?: number;
   tinjau: QcButirTinjau[];
 };
 
 /** Kalimat hasil setelah menjawab (judul modal hasil). */
-export function kalimatHasil(t: Pick<QcTinjau, "skor" | "lulus" | "perlu_ulang" | "sisa_ulang">): string {
-  if (t.lulus) return "Nilai 100. Semua jawaban benar.";
-  if (t.perlu_ulang) return `Nilai ${t.skor}. Anda wajib mengulang sampai nilai 100 (sisa ${t.sisa_ulang} kali).`;
-  return `Nilai ${t.skor}. Kesempatan mengulang sudah habis; pelajari pembahasan di bawah.`;
+export function kalimatHasil(t: Pick<QcTinjau, "skor" | "lulus" | "perlu_ulang" | "sisa_ulang"> & { nilai_lulus?: number }): string {
+  const n = nilaiLulusDari(t);
+  if (t.lulus) return n >= 100 ? "Nilai 100. Semua jawaban benar." : `Nilai ${t.skor}. Lulus (batas lulus ${n}).`;
+  if (t.perlu_ulang) return `Nilai ${t.skor}. Anda wajib mengulang sampai ${targetNilai(n)} (sisa ${t.sisa_ulang} kali).`;
+  return n >= 100 ? `Nilai ${t.skor}. Kesempatan mengulang sudah habis; pelajari pembahasan di bawah.` : `Nilai ${t.skor} (batas lulus ${n}). Tidak ada ulangan lagi; pelajari pembahasan di bawah.`;
 }

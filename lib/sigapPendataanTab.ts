@@ -126,6 +126,30 @@ export function urlSubDari(daftar: SubItem[], tab: KodeTabPendataan, pathname: s
 /** Kegiatan induk Pendataan di sigap_kegiatan (sama dengan KEGIATAN_PENDATAAN_ID di lib/pendataan.ts). */
 export const KEGIATAN_PENDATAAN = 1;
 
+/** (29 Okt 2026) Sub-pilihan QC untuk kegiatan selain Pascabencana: Kuesioner supervisi (Lembar Supervisi korwil) khusus Pascabencana. */
+export const SUB_QC_PEMAHAMAN: SubItem[] = SUB_QC.filter((x) => x.kode !== "kuesioner");
+
+/**
+ * (29 Okt 2026) Survei yang dipilih di Kelola Pendataan: ?k=<id sigap_kegiatan>. Kosong / tidak sah = Pendataan Pascabencana (alamat lama tetap berlaku).
+ * Semua tab menyesuaikan survei terpilih; tab yang belum siap per survei memberi keterangan (lihat page.tsx).
+ */
+export function bacaKegiatanPendataan(param: string | null | undefined): number {
+  const t = (param ?? "").trim();
+  if (!/^\d{1,7}$/.test(t)) return KEGIATAN_PENDATAAN;
+  const n = Number(t);
+  return n >= 1 ? n : KEGIATAN_PENDATAAN;
+}
+
+/** Alamat setelah memilih survei: ?k= diisi (Pascabencana = tanpa ?k), ?v= dibuang, parameter lain (?tab, ?sub) dibiarkan. */
+export function urlKegiatanPendataan(pathname: string, search: string, id: number): string {
+  const q = new URLSearchParams(search);
+  if (id === KEGIATAN_PENDATAAN) q.delete("k");
+  else q.set("k", String(id));
+  q.delete("v");
+  const s = q.toString();
+  return s ? `${pathname}?${s}` : pathname;
+}
+
 export type PintuMasuk = {
   id: string;
   judul: string;

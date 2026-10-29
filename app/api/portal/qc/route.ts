@@ -4,7 +4,7 @@
 // GET            -> { status, rekap, sekarang }   status hari ini (perlu mengisi?) + rekap tim kemarin khusus PML. Dipanggil gerbang tiap menit.
 // GET ?soal=1    -> soal untuk percobaan berikutnya (tanpa kunci/pembahasan; urutan soal dan pilihan diacak per petugas dan percobaan)
 // POST {aksi:"jawab", jawaban:{"<id>":"A".."D"}}  -> tinjauan: skor, benar/salah per soal, kunci, pembahasan; wajib lengkap
-// POST {aksi:"rekap_baca", tanggal}               -> PML menandai rekap tim sudah dibaca
+// POST {aksi:"rekap_baca", tanggal, kegiatan_id?}  -> PML menandai rekap tim sudah dibaca (kegiatan_id: QC per kegiatan, 29 Okt 2026)
 // POST {aksi:"tunda"}                             -> (28 Okt 2026) menunda pengingat push 2 jam ("Ingatkan lagi 2 jam"); modal QC tetap wajib sampai 100
 // Sesi "masuk sebagai" (simulasi) tidak boleh menjawab: jawaban akan tercatat atas nama petugas sungguhan.
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(await jawab(db, akun.id, jaw));
     }
     if (body?.aksi === "rekap_baca") {
-      await tandaiRekapDibaca(db, akun.id, String(body.tanggal ?? ""));
+      await tandaiRekapDibaca(db, akun.id, String(body.tanggal ?? ""), body.kegiatan_id);
       return NextResponse.json({ ok: true });
     }
     if (body?.aksi === "tunda") return NextResponse.json(await tundaAkun(db, akun.id, "modal")); // (28 Okt 2026) tunda pengingat push 2 jam; modal tetap wajib

@@ -22,6 +22,11 @@ import RekapPml from "./RekapPml";
 
 type Status = {
   aktif: boolean;
+  /** (29 Okt 2026) QC per kegiatan: kegiatan yang sedang diminta dan aturannya */
+  kegiatan_id?: number;
+  kegiatan_nama?: string;
+  nilai_lulus?: number;
+  wajib_ulang?: boolean;
   peran?: "pml" | "ppl";
   tanggal?: string;
   lewat_batas?: boolean;
@@ -36,7 +41,7 @@ type Status = {
   /** (28 Okt 2026) saat tunda pengingat berakhir (ditampilkan hanya bila masih di masa depan) */
   tunda_sampai?: string | null;
 };
-type Rekap = { ada: boolean; tanggal?: string; tim?: QcRekapTim };
+type Rekap = { ada: boolean; tanggal?: string; kegiatan_id?: number; tim?: QcRekapTim };
 type Jawaban = Record<string, "A" | "B" | "C" | "D">;
 type Layar = "pengantar" | "soal" | "hasil";
 
@@ -182,7 +187,7 @@ export default function QcGerbang() {
     setMenutupRekap(true);
     setGalat(null);
     try {
-      await apiPortal("/api/portal/qc", { method: "POST", body: JSON.stringify({ aksi: "rekap_baca", tanggal: tgl }) });
+      await apiPortal("/api/portal/qc", { method: "POST", body: JSON.stringify({ aksi: "rekap_baca", tanggal: tgl, kegiatan_id: rekap?.kegiatan_id }) });
       setRekapTutup(tgl);
       void muat();
     } catch (e) {
@@ -233,12 +238,16 @@ function Pengantar({ status, info, susulan, lewat, sibuk, galat, onMulai, menund
   const maks = status?.maks_percobaan ?? 4;
   const mengulang = (status?.percobaan ?? 0) > 0;
   const infoTunda = teksTunda(status?.tunda_sampai, Date.now());
+  const nilai = status?.nilai_lulus ?? 100;
+  const wajibUlang = status?.wajib_ulang !== false;
   return (
     <>
       <div className={`${lewat || susulan ? "bg-[#B42329]" : "bg-[#1E2A47]"} px-5 pb-4 pt-5 text-white`}>
-        <p className="text-[11.5px] font-extrabold tracking-wide text-white/85">QC PEMAHAMAN PETUGAS · WAJIB DIISI</p>
+        <p className="text-[11.5px] font-extrabold tracking-wide text-white/85">
+          QC PEMAHAMAN PETUGAS{status?.kegiatan_nama ? ` · ${status.kegiatan_nama.toUpperCase()}` : ""} · WAJIB DIISI
+        </p>
         <h2 id="judul-qc" className="mt-1.5 text-[19px] font-extrabold leading-snug">
-          {mengulang ? `Ulangi sampai nilai 100` : "Isi dulu sebelum melanjutkan pekerjaan"}
+          {mengulang ? `Ulangi sampai ${nilai >= 100 ? "nilai 100" : `nilai ${nilai} ke atas`}` : "Isi dulu sebelum melanjutkan pekerjaan"}
         </h2>
       </div>
       <div className="space-y-3 px-5 py-4">
@@ -253,7 +262,13 @@ function Pengantar({ status, info, susulan, lewat, sibuk, galat, onMulai, menund
             {(status?.sisa_ulang ?? 0) > 0 ? ` · sisa ${status?.sisa_ulang} kesempatan` : ""}
           </li>
           <li className={`rounded-lg px-3 py-2 ${lewat ? "bg-[#FDE8E8] text-[#9B1C23]" : "bg-[#FFF4D6] text-[#6F5000]"}`}>{info}</li>
-          <li className="rounded-lg bg-[#EEF3FB] px-3 py-2">Nilai harus 100. Bila belum, Anda wajib mengulang selama masih ada kesempatan.</li>
+          <li className="rounded-lg bg-[#EEF3FB] px-3 py-2">
+            {!wajibUlang
+              ? `Satu kali kesempatan. Nilai ${nilai >= 100 ? "100" : `${nilai} ke atas`} dinyatakan lulus.`
+              : nilai >= 100
+                ? "Nilai harus 100. Bila belum, Anda wajib mengulang selama masih ada kesempatan."
+                : `Nilai harus ${nilai} ke atas. Bila belum, Anda wajib mengulang selama masih ada kesempatan.`}
+          </li>
         </ul>
         {status?.peran === "pml" && (status.ppl_belum?.length ?? 0) > 0 && (
           <div className="rounded-xl border border-[#F0C4BF] bg-[#FFF8F7] p-3">

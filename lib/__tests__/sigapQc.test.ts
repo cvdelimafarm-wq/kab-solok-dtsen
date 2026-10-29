@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   bagianWib, jamKeMenit, menitKeJam, geserHari, instanWib, hariBerlaku, jendelaQc, teksSisaWaktu, sorotKata, hitungSkor, labelPercobaan, labelStatusPpl,
   rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, type QcPengaturan, type QcRekapTim,
+  hariIso, hariRilisDari, teksHariRilis, rilisBerikut, nilaiLulusDari, wajibUlangDari, maksPercobaanDari, lulusMenurut, kalimatHasil,
 } from "../sigapQc";
 
 const P: QcPengaturan = { aktif: true, rilis_jam: "19:00", batas_jam: "20:00", soal_per_hari: 10, maks_ulang: 3, rekap_jam: "07:00", ingat_menit: [30, 50], ingat_berkala_menit: 60, mulai: null, akhir: null };
@@ -378,5 +379,152 @@ describe("ringkasStatusQc (apa yang berlaku sekarang menurut pengaturan tersimpa
   });
   it("jam tidak sah", () => {
     expect(ringkasStatusQc(new Date(), { ...Q, rilis_jam: "x" }).status).toBe("tidak_sah");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// (29 Okt 2026) QC per kegiatan: opsi hari rilis, nilai lulus, wajib ulang, peserta, rekap PML, nama kegiatan di notifikasi
+// ---------------------------------------------------------------------------------------------
+describe("hari rilis (QC per kegiatan)", () => {
+  it("hariIso: 26 Okt 2026 Senin, 1 Nov 2026 Minggu", () => {
+    expect(hariIso("2026-10-26")).toBe(1);
+    expect(hariIso("2026-10-31")).toBe(6);
+    expect(hariIso("2026-11-01")).toBe(7);
+  });
+  it("hariRilisDari: kosong atau tidak sah = setiap hari; diurut dan tanpa duplikat", () => {
+    expect(hariRilisDari({})).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(hariRilisDari({ hari_rilis: [] })).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(hariRilisDari({ hari_rilis: [9, 0] })).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(hariRilisDari({ hari_rilis: [5, 1, 5] })).toEqual([1, 5]);
+  });
+  it("teksHariRilis", () => {
+    expect(teksHariRilis(undefined)).toBe("Setiap hari");
+    expect(teksHariRilis([1, 2, 3, 4, 5])).toBe("Senin sampai Jumat");
+    expect(teksHariRilis([1, 4])).toBe("Senin, Kamis");
+    expect(teksHariRilis([1, 2])).toBe("Senin, Selasa");
+  });
+  it("hariBerlaku mundur ke hari rilis terakhir (sama dengan sigap_qc_hari_berlaku di SQL)", () => {
+    const q = { ...P, hari_rilis: [1, 5] };
+    expect(hariBerlaku(wib("2026-10-28", "07:00"), q)).toBe("2026-10-26"); // Rabu pagi -> Senin
+    expect(hariBerlaku(wib("2026-10-31", "20:00"), q)).toBe("2026-10-30"); // Sabtu malam -> Jumat
+    expect(hariBerlaku(wib("2026-10-26", "10:00"), q)).toBe("2026-10-23"); // Senin sebelum rilis -> Jumat lalu
+    expect(hariBerlaku(wib("2026-10-26", "19:00"), q)).toBe("2026-10-26"); // Senin sesudah rilis
+  });
+  it("hariBerlaku: hari rilis terakhir di luar periode = tidak ada hari berlaku", () => {
+    const q = { ...P, hari_rilis: [1], mulai: "2026-10-26", akhir: "2026-10-26" };
+    expect(hariBerlaku(wib("2026-10-27", "20:00"), q)).toBe("2026-10-26"); // Selasa masih Senin kemarin
+    expect(hariBerlaku(wib("2026-11-02", "20:00"), q)).toBeNull();
+  });
+  it("rilisBerikut", () => {
+    expect(rilisBerikut("2026-10-26", { hari_rilis: [1, 5] })).toBe("2026-10-30");
+    expect(rilisBerikut("2026-10-30", { hari_rilis: [1, 5] })).toBe("2026-11-02");
+    expect(rilisBerikut("2026-10-30", { hari_rilis: [1, 5], akhir: "2026-10-31" })).toBeNull();
+    expect(rilisBerikut("2026-10-26", { hari_rilis: undefined, akhir: null })).toBe("2026-10-27");
+  });
+  it("rencanaAksi: rilis hanya pada hari rilis; di luar hari rilis tidak ada rilis baru", () => {
+    const q = { ...P, hari_rilis: [1, 5] };
+    expect(rencanaAksi(wib("2026-10-26", "19:05"), q).some((a) => a.jenis === "rilis" && a.tanggal === "2026-10-26")).toBe(true);
+    expect(rencanaAksi(wib("2026-10-27", "19:05"), q).some((a) => a.jenis === "rilis")).toBe(false);
+  });
+});
+
+describe("nilai lulus dan wajib ulang", () => {
+  it("bawaan: lulus 100, wajib ulang, 1 + maks_ulang percobaan", () => {
+    expect(nilaiLulusDari(P)).toBe(100);
+    expect(wajibUlangDari(P)).toBe(true);
+    expect(maksPercobaanDari(P)).toBe(4);
+  });
+  it("tanpa wajib ulang = satu percobaan", () => {
+    expect(wajibUlangDari({ wajib_ulang: false })).toBe(false);
+    expect(maksPercobaanDari({ ...P, wajib_ulang: false })).toBe(1);
+  });
+  it("nilaiLulusDari mengabaikan nilai tidak sah", () => {
+    expect(nilaiLulusDari({ nilai_lulus: 0 })).toBe(100);
+    expect(nilaiLulusDari({ nilai_lulus: 101 })).toBe(100);
+    expect(nilaiLulusDari({ nilai_lulus: 80 })).toBe(80);
+  });
+  it("lulusMenurut (sama dengan sigap_qc_lulus)", () => {
+    expect(lulusMenurut(10, 10)).toBe(true);
+    expect(lulusMenurut(9, 10)).toBe(false);
+    expect(lulusMenurut(4, 5, 80)).toBe(true);
+    expect(lulusMenurut(3, 5, 80)).toBe(false);
+    expect(lulusMenurut(0, 0, 1)).toBe(false);
+  });
+  it("labelStatusPpl dengan nilai lulus", () => {
+    expect(labelStatusPpl({ percobaan: 1, lulus: true, skor_terbaik: 80 }, 1, 80)).toBe("Lulus (80)");
+    expect(labelStatusPpl({ percobaan: 1, lulus: false, skor_terbaik: 60 }, 1, 80)).toBe("Tidak lulus (60)");
+    expect(labelStatusPpl({ percobaan: 1, lulus: false, skor_terbaik: 60 }, 4, 80)).toBe("Belum lulus (60), masih mengulang");
+    expect(labelStatusPpl({ percobaan: 1, lulus: false, skor_terbaik: 60 }, 4)).toBe("Belum 100 (60), masih mengulang");
+  });
+  it("kalimatHasil dengan nilai lulus", () => {
+    expect(kalimatHasil({ skor: 100, lulus: true, perlu_ulang: false, sisa_ulang: 3 })).toBe("Nilai 100. Semua jawaban benar.");
+    expect(kalimatHasil({ skor: 80, lulus: true, perlu_ulang: false, sisa_ulang: 0, nilai_lulus: 80 })).toBe("Nilai 80. Lulus (batas lulus 80).");
+    expect(kalimatHasil({ skor: 60, lulus: false, perlu_ulang: true, sisa_ulang: 2, nilai_lulus: 80 })).toContain("nilai 80 ke atas");
+    expect(kalimatHasil({ skor: 60, lulus: false, perlu_ulang: false, sisa_ulang: 0, nilai_lulus: 80 })).toContain("batas lulus 80");
+    expect(kalimatHasil({ skor: 60, lulus: false, perlu_ulang: false, sisa_ulang: 0 })).toContain("Kesempatan mengulang sudah habis");
+  });
+});
+
+describe("push per kegiatan", () => {
+  it("tanpa opsi: judul dan tag sama dengan sebelumnya", () => {
+    expect(pushRilis("2026-10-26", P).judul).toBe("QC Pemahaman Petugas hari ini");
+    expect(pushRilis("2026-10-26", P).tag).toBe("qc-rilis-2026-10-26");
+    expect(pushIngatPetugas("2026-10-26", 20, P).tag).toBe("qc-ingat-2026-10-26");
+  });
+  it("dengan opsi: nama kegiatan di judul dan tag berbeda per kegiatan", () => {
+    const o = { nama: "SPDT NTP", kegiatanId: 2 };
+    expect(pushRilis("2026-10-26", P, false, o).judul).toBe("QC Pemahaman Petugas hari ini (SPDT NTP)");
+    expect(pushRilis("2026-10-26", P, false, o).tag).toBe("qc-rilis-2026-10-26-k2");
+    expect(pushIngatPetugas("2026-10-26", 20, P, { belumMengisi: true }, false, o).tag).toBe("qc-ingat-2026-10-26-k2");
+    expect(pushIngatPml("2026-10-26", ["Ani"], P, o).tag).toBe("qc-ingat-pml-2026-10-26-k2");
+    expect(pushRekapPml("2026-10-26", { jumlah_ppl: 2, sudah: 2, belum_mengisi: 0, lulus: 2, rata_awal: 100, salah: [] }, o).tag).toBe("qc-rekap-2026-10-26-k2");
+  });
+  it("nilai lulus < 100 dan tanpa wajib ulang mengubah kalimat", () => {
+    const q = { ...P, nilai_lulus: 80 };
+    expect(pushIngatPetugas("2026-10-26", 0, q).isi).toContain("nilai 80 ke atas");
+    expect(pushIngatPetugas("2026-10-26", 0, q, { belumMengisi: false, skorTerbaik: 60, sisaUlang: 2 }).judul).toBe("Ulangi QC Pemahaman sampai lulus");
+    const tanpa = { ...P, wajib_ulang: false };
+    expect(pushIngatPetugas("2026-10-26", 0, tanpa).isi).not.toContain("ulangi");
+    expect(pushRilis("2026-10-26", tanpa, true).isi).not.toContain("ulangi");
+  });
+});
+
+describe("rekap PML per kegiatan", () => {
+  it("rekap_pml=false: tidak ada aksi rekap", () => {
+    expect(rencanaAksi(wib("2026-10-27", "07:05"), P).some((a) => a.jenis === "rekap_pml")).toBe(true);
+    expect(rencanaAksi(wib("2026-10-27", "07:05"), { ...P, rekap_pml: false }).some((a) => a.jenis === "rekap_pml")).toBe(false);
+  });
+  it("rekap hanya bila kemarin hari rilis", () => {
+    const q = { ...P, hari_rilis: [1, 5] };
+    expect(rencanaAksi(wib("2026-10-27", "07:05"), q).some((a) => a.jenis === "rekap_pml" && a.tanggal === "2026-10-26")).toBe(true);
+    expect(rencanaAksi(wib("2026-10-28", "07:05"), q).some((a) => a.jenis === "rekap_pml")).toBe(false);
+  });
+});
+
+describe("validasiPengaturan opsi baru", () => {
+  it("menerima opsi sah dan merapikan daftar", () => {
+    const v = validasiPengaturan({ wajib_ulang: false, nilai_lulus: 80, undi_acak: false, acak_tampil: false, rekap_pml: false, hari_rilis: [5, 1, 5], peran_peserta: ["ppl", "pml", "ppl"] });
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.data).toEqual({ wajib_ulang: false, nilai_lulus: 80, undi_acak: false, acak_tampil: false, rekap_pml: false, hari_rilis: [1, 5], peran_peserta: ["pml", "ppl"] });
+  });
+  it("menolak opsi tidak sah", () => {
+    for (const bad of [{ nilai_lulus: 0 }, { nilai_lulus: 101 }, { nilai_lulus: 80.5 }, { wajib_ulang: "ya" }, { hari_rilis: [] }, { hari_rilis: [8] }, { hari_rilis: "1" }, { peran_peserta: [] }, { peran_peserta: ["supervisor"] }, { rekap_pml: 1 }]) {
+      expect(validasiPengaturan(bad).ok).toBe(false);
+    }
+  });
+});
+
+describe("ringkasStatusQc dengan opsi baru", () => {
+  const Q2 = { aktif: true, rilis_jam: "19:00", batas_jam: "20:00", mulai: "2026-10-26", akhir: null, hari_rilis: [1, 5], nilai_lulus: 80, wajib_ulang: false };
+  it("menyebut hari rilis berikutnya, nilai lulus, dan tanpa ulangan", () => {
+    const r = ringkasStatusQc(wib("2026-10-28", "10:00"), Q2);
+    expect(r.baris.join(" ")).toContain("30 Okt 2026");
+    expect(r.baris.join(" ")).toContain("80 ke atas");
+    expect(r.baris.join(" ")).toContain("tanpa ulangan wajib");
+  });
+  it("belum mulai: soal pertama pada hari rilis pertama sesudah mulai", () => {
+    const r = ringkasStatusQc(wib("2026-10-20", "10:00"), { ...Q2, mulai: "2026-10-27" });
+    expect(r.status).toBe("belum_mulai");
+    expect(r.baris[0]).toContain("30 Okt 2026");
   });
 });
