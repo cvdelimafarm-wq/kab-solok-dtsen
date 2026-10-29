@@ -63,6 +63,9 @@ describe("poinHari", () => {
   it("aturan baru mulai 20 Okt: poin jarak tetap, target 60", () => {
     expect(poinHari({ tanggal: "2026-10-20", terdampak: 6, tidak_terdampak: 4, km: 8.5 })).toMatchObject({ poin_kk: 34, poin_jarak: 8.5, total: 42.5, persen: 71 });
     expect(poinHari({ tanggal: "2026-10-20", terdampak: 1, tidak_terdampak: 0, km: 100 }).poin_jarak).toBe(15);
+    // mulai 29 Okt 2026: km di atas 15 bernilai 0,7 poin per km
+    expect(poinHari({ tanggal: "2026-10-29", terdampak: 1, tidak_terdampak: 0, km: 20 }).poin_jarak).toBe(18.5);
+    expect(poinHari({ tanggal: "2026-10-28", terdampak: 1, tidak_terdampak: 0, km: 20 }).poin_jarak).toBe(15);
     expect(poinHari({ tanggal: "2026-10-20", terdampak: 0, tidak_terdampak: 0, tidak_ditemukan: 3, km: 12.345 })).toMatchObject({ poin_jarak: 12.35 });
   });
   it("tanpa tanggal = aturan yang berlaku sekarang", () => {

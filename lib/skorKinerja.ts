@@ -1,8 +1,9 @@
 // lib/skorKinerja.ts  (murni: tanpa database, tanpa jaringan)
 //
 // (15 Okt 2026) Skor kinerja harian Transport Lokal PPL -- keputusan M. Iqbal Hadi (lihat Project: rancangan-skor-kinerja-harian-target-harian).
-// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak. Target minimal 60 poin/hari = 1 O-K (mulai 20 Okt 2026; sebelumnya 45).
+// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak. Target minimal 75 poin/hari = 1 O-K (mulai 29 Okt 2026; 20-28 Okt 60; 15-19 Okt 45).
 // (20 Okt 2026, keputusan user) Mulai 20 Okt 2026: target 45 -> 60 poin (poin jarak tetap 1 per km; sempat diusulkan 1 per 5 km tetapi dibatalkan user).
+// (29 Okt 2026, keputusan user) Mulai 29 Okt 2026: target 60 -> 75 poin (poin jarak tetap). Hari 15-19 Okt tetap 45 poin, 20-28 Okt tetap 60 poin.
 // TIDAK berlaku mundur: hari sebelum 20 Okt tetap memakai target lama (45 poin). Aturan dipilih per tanggal lewat RIWAYAT_ATURAN / aturanUntukTanggal; hutang dibawa dalam satuan O-K
 // (pecahan hari) supaya bisa dibawa melewati pergantian aturan.
 //
@@ -16,15 +17,17 @@
 //  - Pecahan O-K dibulatkan KE BAWAH. Tidak ada rupiah di sini.
 //
 // Nilai yang BELUM diputuskan user dipasang sebagai asumsi eksplisit di ATURAN_POIN (mudah diganti satu tempat):
-//  - poin KK "tidak ditemukan" = 0; - batas poin jarak = 15 poin/hari (usul; 0 = tanpa batas tidak didukung, isi angka besar; = 15 km pada 1 poin/km).
+//  - poin KK "tidak ditemukan" = 0; - tarif penuh poin jarak sampai 15 poin/hari (= 15 km pada 1 poin/km); (29 Okt 2026, keputusan user) km di atas 15 bernilai 0,7 poin per km.
 
 export type AturanPoin = {
   poinTerdampak: number;
   poinTidakTerdampak: number;
   poinTidakDitemukan: number;
   poinPerKm: number;
-  /** Batas poin jarak per hari (asumsi usul; belum diputuskan user). */
+  /** Batas poin jarak per hari pada tarif penuh (poinPerKm). Tanpa poinPerKmLebih, poin jarak berhenti di batas ini. */
   maksPoinJarak: number;
+  /** (29 Okt 2026) Poin per km untuk jarak di atas batas tarif penuh (maksPoinJarak / poinPerKm km). Kosong = di atas batas tidak diberi poin tambahan. */
+  poinPerKmLebih?: number;
   /** Target minimal poin per hari = 1 O-K. */
   targetHarian: number;
   /** Tanggal mulai aturan bobot (WIB). Sebelumnya: hari lengkap = 1 O-K penuh. */
@@ -42,8 +45,8 @@ export const ATURAN_POIN_V1: AturanPoin = {
   mulaiBobot: "2026-10-15",
 };
 
-/** Aturan berlaku sekarang: mulai 20 Okt 2026 (target 60 poin, 1 poin per km tetap). */
-export const ATURAN_POIN: AturanPoin = {
+/** Aturan kedua: berlaku 20-28 Okt 2026 (target 60 poin, 1 poin per km tetap). Dipertahankan untuk hari-hari yang sudah berlalu. */
+export const ATURAN_POIN_V2: AturanPoin = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
   poinTidakDitemukan: 0,
@@ -53,8 +56,20 @@ export const ATURAN_POIN: AturanPoin = {
   mulaiBobot: "2026-10-20",
 };
 
+/** Aturan berlaku sekarang: mulai 29 Okt 2026 (target 75 poin, 1 poin per km tetap). */
+export const ATURAN_POIN: AturanPoin = {
+  poinTerdampak: 5,
+  poinTidakTerdampak: 1,
+  poinTidakDitemukan: 0,
+  poinPerKm: 1, // tetap 1 poin per km
+  maksPoinJarak: 15,
+  targetHarian: 75,
+  mulaiBobot: "2026-10-29",
+  poinPerKmLebih: 0.7, // 15 km pertama 1 poin per km; km selebihnya 0,7 poin per km (tidak ada batas atas)
+};
+
 /** Daftar aturan menurut tanggal mulai (naik). Tanggal sebelum aturan pertama = aturan "lama" (hari lengkap = 1 O-K penuh). */
-export const RIWAYAT_ATURAN: AturanPoin[] = [ATURAN_POIN_V1, ATURAN_POIN];
+export const RIWAYAT_ATURAN: AturanPoin[] = [ATURAN_POIN_V1, ATURAN_POIN_V2, ATURAN_POIN];
 
 /** Tanggal pertama penilaian bobot poin (15 Okt 2026); sebelumnya hari lengkap dihitung penuh. */
 export const MULAI_BOBOT_AWAL = RIWAYAT_ATURAN[0].mulaiBobot;
@@ -64,6 +79,19 @@ export function aturanUntukTanggal(tanggal: string, riwayat: AturanPoin[] = RIWA
   let hasil: AturanPoin | null = null;
   for (const a of riwayat) if (tanggal >= a.mulaiBobot) hasil = a;
   return hasil;
+}
+
+/**
+ * Poin jarak sehari dari jarak rute (km), menurut aturan. Tarif penuh (poinPerKm) sampai batas maksPoinJarak (15 poin = 15 km pada 1 poin/km);
+ * bila aturan punya poinPerKmLebih, km di atas batas itu dihitung dengan tarif tersebut (mulai 29 Okt 2026: 0,7 poin per km). Dibulatkan 2 desimal.
+ */
+export function poinJarakKm(km: number, a: Pick<AturanPoin, "poinPerKm" | "maksPoinJarak" | "poinPerKmLebih">): number {
+  const jarak = Math.max(0, Number.isFinite(km) ? km : 0);
+  const penuh = jarak * a.poinPerKm;
+  if (penuh <= a.maksPoinJarak) return Math.round(penuh * 100) / 100;
+  if (a.poinPerKmLebih === undefined) return a.maksPoinJarak;
+  const batasKm = a.maksPoinJarak / a.poinPerKm;
+  return Math.round((a.maksPoinJarak + (jarak - batasKm) * a.poinPerKmLebih) * 100) / 100;
 }
 
 export type MasukanHari = { terdampak: number; tidak_terdampak: number; tidak_ditemukan: number; km: number };
@@ -94,7 +122,7 @@ export function hitungPoinHari(m: MasukanHari, a: AturanPoin = ATURAN_POIN): Poi
   const poinT = t * a.poinTerdampak;
   const poinN = n * a.poinTidakTerdampak;
   const poinD = d * a.poinTidakDitemukan;
-  const poinJ = adaKk ? Math.min(bulat2(km * a.poinPerKm), a.maksPoinJarak) : 0;
+  const poinJ = adaKk ? poinJarakKm(km, a) : 0;
   const total = bulat2(poinT + poinN + poinD + poinJ);
   return {
     poin_terdampak: poinT,
@@ -252,5 +280,5 @@ export type DataCapaian =
       hutang_sebelumnya: number;
       /** Aturan bobot sudah berlaku pada hari ini? (mulai 15 Okt 2026) */
       bobot_berlaku: boolean;
-      aturan: Pick<AturanPoin, "poinTerdampak" | "poinTidakTerdampak" | "poinPerKm" | "maksPoinJarak" | "targetHarian" | "mulaiBobot">;
+      aturan: Pick<AturanPoin, "poinTerdampak" | "poinTidakTerdampak" | "poinPerKm" | "maksPoinJarak" | "poinPerKmLebih" | "targetHarian" | "mulaiBobot">;
     };

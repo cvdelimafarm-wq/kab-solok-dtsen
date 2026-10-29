@@ -3,7 +3,7 @@
 // (26 Okt 2026) Delego -- hitungan murni (tanpa jaringan, tanpa React): hari kerja, target dan hutang poin kumulatif, status laporan harian,
 // beban kerja mingguan, usulan pemerataan, tangga pembinaan, dan skor kinerja. Sistem hanya MENYARANKAN; manusia yang memutuskan.
 // Semua tanggal berbentuk "YYYY-MM-DD" (zona WIB sudah diselesaikan basis data pada `hari_ini`).
-// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas 70 poin per orang per hari (26 Okt 2026: naik dari 60, berlaku mulai hari ini; bobot poin per keluarga tidak berubah), hari kerja Senin-Jumat.
+// Angka asumsi di bawah dapat diubah di satu tempat (cek aturan): kapasitas per orang per hari menurut tanggal (RIWAYAT_KAPASITAS: 60 sebelum 26 Okt 2026, 70 pada 26-28 Okt, 75 mulai 29 Okt; tidak berlaku mundur; bobot poin per keluarga tidak berubah), hari kerja Senin-Jumat.
 //
 // (26 Okt 2026, lanjutan) Tiga tambahan:
 //  * KALENDER LIBUR: tanggal libur aktif (keu_dlg_libur) tidak dihitung hari kerja. Daftar dipasang sekali dari keu_dlg_hak lewat `aturLibur()` (keadaan modul,
@@ -14,7 +14,20 @@
 
 import type { Delegasi, Laporan, PeranDelegasi, Penilaian } from "./tipe";
 
-export const KAPASITAS_HARIAN = 70;
+/** Riwayat kapasitas harian (poin per orang per hari kerja) menurut tanggal mulai. Tidak berlaku mundur: tanggal lama tetap memakai kapasitas yang berlaku saat itu. */
+export const RIWAYAT_KAPASITAS: readonly { mulai: string; poin: number }[] = [
+  { mulai: "0000-01-01", poin: 60 }, // sebelum 26 Okt 2026
+  { mulai: "2026-10-26", poin: 70 }, // 26-28 Okt 2026
+  { mulai: "2026-10-29", poin: 75 }, // mulai 29 Okt 2026
+];
+/** Kapasitas harian yang berlaku pada suatu tanggal (YYYY-MM-DD). */
+export function kapasitasPada(tanggal: string): number {
+  let poin = RIWAYAT_KAPASITAS[0].poin;
+  for (const r of RIWAYAT_KAPASITAS) if (tanggal >= r.mulai) poin = r.poin;
+  return poin;
+}
+/** Kapasitas harian yang berlaku sekarang (aturan terbaru). Untuk tanggal tertentu pakai kapasitasPada. */
+export const KAPASITAS_HARIAN = RIWAYAT_KAPASITAS[RIWAYAT_KAPASITAS.length - 1].poin;
 export const HARI_KERJA_MINGGU = 5;
 export const JAM_PENGINGAT = 18;
 export const HUTANG_CATATAN_LISAN = 20;
@@ -228,8 +241,21 @@ export type OrangBeban = {
   jumlahDelegasi: number;
 };
 
+/** Kapasitas satu minggu (Senin-Jumat) yang memuat `hari`: jumlah kapasitas harian tiap hari kerja menurut tanggalnya. */
+export function kapasitasMinggu(hari: string): number {
+  const awal = awalMinggu(hari);
+  let total = 0;
+  for (let i = 0; i < HARI_KERJA_MINGGU; i++) total += kapasitasPada(tambahHari(awal, i));
+  return total;
+}
+/** Nilai kapasitas harian yang berbeda pada minggu yang memuat `hari` (untuk keterangan layar). */
+export function kapasitasHariMinggu(hari: string): number[] {
+  const awal = awalMinggu(hari);
+  return [...new Set(Array.from({ length: HARI_KERJA_MINGGU }, (_, i) => kapasitasPada(tambahHari(awal, i))))];
+}
+
 export function bebanPerOrang(delegasi: Delegasi[], hari: string, tambahan: { id: number; nama: string; jenis: "organik" | "mitra" }[] = []): OrangBeban[] {
-  const kapasitas = KAPASITAS_HARIAN * HARI_KERJA_MINGGU;
+  const kapasitas = kapasitasMinggu(hari);
   const peta = new Map<number, OrangBeban>();
   for (const t of tambahan) peta.set(t.id, { akun: t.id, nama: t.nama, jenis: t.jenis, beban: 0, kapasitas, persen: 0, kategori: "ringan", jumlahDelegasi: 0 });
   for (const d of delegasi) {
@@ -251,7 +277,7 @@ export function bebanPerOrang(delegasi: Delegasi[], hari: string, tambahan: { id
 export type SelHarian = { tanggal: string; hk: number; poin: number; persen: number; kategori: KategoriBeban | "kosong"; libur?: string | null };
 export type BarisHarian = { akun: number; nama: string; jenis: "organik" | "mitra"; sel: SelHarian[] };
 
-/** Tabel beban per orang per hari untuk minggu (Senin-Minggu) yang memuat `hari`. Persen terhadap KAPASITAS_HARIAN. `libur` terisi bila tanggal itu libur kalender. */
+/** Tabel beban per orang per hari untuk minggu (Senin-Minggu) yang memuat `hari`. Persen terhadap kapasitas hari itu (kapasitasPada). `libur` terisi bila tanggal itu libur kalender. */
 export function matriksBebanHarian(orang: OrangBeban[], delegasi: Delegasi[], hari: string): { tanggal: string[]; baris: BarisHarian[]; adaAkhirPekan: boolean } {
   const awal = awalMinggu(hari);
   const tanggal = Array.from({ length: 7 }, (_, i) => tambahHari(awal, i));
@@ -261,7 +287,7 @@ export function matriksBebanHarian(orang: OrangBeban[], delegasi: Delegasi[], ha
     jenis: o.jenis,
     sel: tanggal.map((t) => {
       const poin = delegasi.filter((d) => d.penerima_akun === o.akun).reduce((s, d) => s + bebanDelegasiHari(d, t), 0);
-      const persen = Math.round((poin / KAPASITAS_HARIAN) * 100);
+      const persen = Math.round((poin / kapasitasPada(t)) * 100);
       return { tanggal: t, hk: hariKe(t), poin, persen, kategori: poin === 0 ? ("kosong" as const) : kategoriBeban(persen), libur: namaLibur(t) };
     }),
   }));
@@ -288,7 +314,7 @@ export type UsulanPemerataan = {
 /** Saran memindahkan delegasi dari yang berlebih (>100%) ke yang masih longgar. Hanya saran; pemberi memutuskan dan membuat delegasi baru bila setuju. */
 export function usulPemerataan(orang: OrangBeban[], delegasi: Delegasi[], hari: string): UsulanPemerataan[] {
   const sisa = new Map(orang.map((o) => [o.akun, o.beban]));
-  const kap = orang[0]?.kapasitas ?? KAPASITAS_HARIAN * HARI_KERJA_MINGGU;
+  const kap = orang[0]?.kapasitas ?? kapasitasMinggu(hari);
   const hasil: UsulanPemerataan[] = [];
   const dipakai = new Set<number>();
   for (const sumber of orang.filter((o) => o.persen > SASARAN_BEBAN.max)) {

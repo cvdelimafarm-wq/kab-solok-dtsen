@@ -27,12 +27,12 @@ describe("poin dan satuan", () => {
     expect(teksJumlah({ poin_per_satuan: 9, satuan: "dokumen" }, 27)).toBe("3 dokumen (27 poin)");
     expect(teksJumlah({ poin_per_satuan: null, satuan: "ruta" }, 12)).toBe("12 ruta");
   });
-  it("perkiraan durasi dari poin (70 poin = 7,5 jam)", () => {
-    expect(menitDariPoin(70)).toBe(450);
-    expect(menitDariPoin(9)).toBe(58);
-    expect(teksDurasi(5)).toBe("32 menit");
-    expect(teksDurasi(28)).toBe("3 jam");
-    expect(teksDurasi(70)).toBe("1 hari kerja");
+  it("perkiraan durasi dari poin (kapasitas 75 poin = 7,5 jam = 1 hari kerja; 1 poin = 6 menit)", () => {
+    expect(menitDariPoin(75)).toBe(450);
+    expect(menitDariPoin(9)).toBe(54);
+    expect(teksDurasi(5)).toBe("30 menit");
+    expect(teksDurasi(30)).toBe("3 jam");
+    expect(teksDurasi(75)).toBe("1 hari kerja");
   });
 });
 

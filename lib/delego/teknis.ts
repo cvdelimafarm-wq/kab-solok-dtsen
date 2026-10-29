@@ -29,7 +29,7 @@ export function teksJumlah(d: Pick<Delegasi, "poin_per_satuan" | "satuan">, poin
   return `${fmt(jumlahDariPoin(angka(d.poin_per_satuan), poin))} ${d.satuan} (${fmt(poin)} poin)`;
 }
 
-/** Perkiraan lama pengerjaan dari poin, dalam menit (70 poin = 450 menit). */
+/** Perkiraan lama pengerjaan dari poin, dalam menit (sebesar kapasitas harian: 75 poin = 450 menit, jadi 1 poin = 6 menit). */
 export const menitDariPoin = (poin: number): number => Math.round((poin / KAPASITAS_HARIAN) * MENIT_KERJA_HARIAN);
 
 /** "1,5 jam", "45 menit", "1 hari kerja" untuk membantu Ketua Tim menimbang poin. */

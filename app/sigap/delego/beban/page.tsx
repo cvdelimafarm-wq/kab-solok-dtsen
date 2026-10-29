@@ -3,13 +3,13 @@
 // app/sigap/delego/beban/page.tsx
 //
 // (26 Okt 2026) Beban kerja mingguan per orang (sasaran 80-100%) dan saran pemerataan. Hanya saran: pemberi yang memutuskan dan memindahkan tugas
-// dengan mengubah/menambah delegasi. Kapasitas 70 poin per hari kerja (berlaku 26 Okt 2026), 5 hari per minggu (cek aturan).
+// dengan mengubah/menambah delegasi. Kapasitas per hari menurut tanggal: 60 sebelum 26 Okt 2026, 70 pada 26-28 Okt, 75 mulai 29 Okt (tidak berlaku mundur), 5 hari per minggu (cek aturan).
 // (26 Okt 2026) Tabel beban per hari (Senin-Jumat; Sabtu/Minggu bila ada) dan tombol "Terapkan usulan": memindahkan delegasi lewat keu_dlg_pindah
 // (delegasi lama ditutup selesai dengan tenggat kemarin, delegasi baru untuk penampung mulai hari ini). Tanpa dialog konfirmasi (keputusan pengguna).
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { bebanDelegasiMinggu, bebanPerOrang, HARI_KERJA_MINGGU, KAPASITAS_HARIAN, matriksBebanHarian, SASARAN_BEBAN, tglPendek, usulPemerataan, type UsulanPemerataan } from "@/lib/delego/hitung";
+import { bebanDelegasiMinggu, bebanPerOrang, HARI_KERJA_MINGGU, kapasitasHariMinggu, kapasitasMinggu, matriksBebanHarian, SASARAN_BEBAN, tglPendek, usulPemerataan, type UsulanPemerataan } from "@/lib/delego/hitung";
 import { NAMA_PERAN } from "@/lib/delego/tipe";
 import { gradienLegenda, warnaBeban } from "@/lib/delego/warna";
 import { useBahan, useCalon, useKirim } from "../data";
@@ -45,7 +45,7 @@ export default function Beban() {
   }
 
   return (
-    <Halaman judul="Beban kerja" sub={`Minggu ini · kapasitas ${KAPASITAS_HARIAN} poin × ${HARI_KERJA_MINGGU} hari kerja = ${KAPASITAS_HARIAN * HARI_KERJA_MINGGU} poin per orang`} kanan={<PilihRo {...f} />}>
+    <Halaman judul="Beban kerja" sub={`Minggu ini · kapasitas ${kapasitasHariMinggu(hari).join(" dan ")} poin per hari × ${HARI_KERJA_MINGGU} hari kerja = ${kapasitasMinggu(hari)} poin per orang`} kanan={<PilihRo {...f} />}>
       <Info>Sasaran beban {SASARAN_BEBAN.min}–{SASARAN_BEBAN.max}% per orang per minggu. Angka ini bahan pertimbangan; keputusan memindahkan tugas ada pada pemberi delegasi.</Info>
       {b.memuat && !b.data && <Memuat />}
       {b.galat && !b.data && <Galat>{b.galat}</Galat>}
@@ -53,7 +53,7 @@ export default function Beban() {
       {selesai && <Info>{selesai}</Info>}
       {kirim.galat && <Galat>{kirim.galat}</Galat>}
       {b.data && orang.length > 0 && (
-        <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari {KAPASITAS_HARIAN} poin/hari</span>}>
+        <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari kapasitas hari itu ({kapasitasHariMinggu(hari).join(" / ")} poin)</span>}>
           <div className="overflow-x-auto" role="table" aria-label="Beban per orang per hari minggu ini">
             <div className="grid min-w-[250px] items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(72px,1fr) repeat(${kolom}, minmax(30px,46px))` }} role="row">
               <div className="text-left text-[12px] font-semibold text-[#3B4A57]" role="columnheader">Nama</div>

@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { angka, bebanDelegasiMinggu, bebanPerOrang, KAPASITAS_HARIAN, SASARAN_BEBAN, tambahHari } from "@/lib/delego/hitung";
+import { angka, bebanDelegasiMinggu, bebanPerOrang, KAPASITAS_HARIAN, kapasitasMinggu, SASARAN_BEBAN, tambahHari } from "@/lib/delego/hitung";
 import { bacaBarisLangkah, hitungTargetJenis, teksDurasi } from "@/lib/delego/teknis";
 import type { Delegasi } from "@/lib/delego/tipe";
 import { useBahan, useKirim } from "../data";
@@ -46,7 +46,7 @@ export default function Buat() {
   const [jumlah, setJumlah] = useState("");
   const [judul, setJudul] = useState("");
   const [uraian, setUraian] = useState("");
-  const [harian, setHarian] = useState("60");
+  const [harian, setHarian] = useState(String(KAPASITAS_HARIAN));
   const [total, setTotal] = useState("");
   const [satuan, setSatuan] = useState("poin");
   const [bobot, setBobot] = useState("1");
@@ -300,7 +300,7 @@ export default function Buat() {
                 if (!bahan.data) return null;
                 const o = beban.get(akun);
                 const sebelum = o?.persen ?? 0;
-                const sesudah = Math.round(((o?.beban ?? 0) + tambah) / (KAPASITAS_HARIAN * 5) * 100);
+                const sesudah = Math.round(((o?.beban ?? 0) + tambah) / kapasitasMinggu(hari) * 100);
                 return (
                   <p className={`m-0 mt-1.5 text-[12.5px] ${sesudah > SASARAN_BEBAN.max ? "font-semibold text-[#9B2C2C]" : "text-[#3B4A57]"}`}>
                     Beban minggu ini {sebelum}% → {fmt(sesudah)}%{sesudah > SASARAN_BEBAN.max ? " (melebihi sasaran)" : ""}

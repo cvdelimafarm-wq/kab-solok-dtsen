@@ -1,28 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { ATURAN_POIN, ATURAN_POIN_V1, MULAI_BOBOT_AWAL, aturanUntukTanggal, formatAngka, hitungPoinHari, hitungRealisasi, teksPersen, teksXY, type HariSkor } from "../skorKinerja";
+import { ATURAN_POIN, ATURAN_POIN_V1, ATURAN_POIN_V2, MULAI_BOBOT_AWAL, aturanUntukTanggal, formatAngka, poinJarakKm, hitungPoinHari, hitungPoinHari as hitungPoinHariAsli, hitungRealisasi, teksPersen, teksXY, type HariSkor } from "../skorKinerja";
 
 const kk = (terdampak: number, tidak_terdampak: number, km: number, tidak_ditemukan = 0) => ({ terdampak, tidak_terdampak, tidak_ditemukan, km });
 const hari = (tanggal: string, m: ReturnType<typeof kk>, lengkap = true): HariSkor => ({ tanggal, lengkap, ...m });
 
 describe("aturan menurut tanggal (tidak berlaku mundur)", () => {
-  it("sebelum 15 Okt = belum ada bobot; 15-19 Okt = aturan lama; mulai 20 Okt = aturan baru", () => {
+  it("sebelum 15 Okt = belum ada bobot; 15-19 Okt = 45; 20-28 Okt = 60; mulai 29 Okt = 75", () => {
     expect(MULAI_BOBOT_AWAL).toBe("2026-10-15");
     expect(aturanUntukTanggal("2026-10-14")).toBeNull();
     expect(aturanUntukTanggal("2026-10-15")).toBe(ATURAN_POIN_V1);
     expect(aturanUntukTanggal("2026-10-19")).toBe(ATURAN_POIN_V1);
-    expect(aturanUntukTanggal("2026-10-20")).toBe(ATURAN_POIN);
+    expect(aturanUntukTanggal("2026-10-20")).toBe(ATURAN_POIN_V2);
+    expect(aturanUntukTanggal("2026-10-28")).toBe(ATURAN_POIN_V2);
+    expect(aturanUntukTanggal("2026-10-29")).toBe(ATURAN_POIN);
     expect(aturanUntukTanggal("2026-11-01")).toBe(ATURAN_POIN);
   });
 
   it("angka aturan lama dan baru", () => {
     expect(ATURAN_POIN_V1.targetHarian).toBe(45);
     expect(ATURAN_POIN_V1.poinPerKm).toBe(1);
-    expect(ATURAN_POIN.targetHarian).toBe(60);
+    expect(ATURAN_POIN_V2.targetHarian).toBe(60);
+    expect(ATURAN_POIN.targetHarian).toBe(75);
     expect(ATURAN_POIN.poinPerKm).toBe(1); // poin jarak tidak berubah
   });
 });
 
-describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, poin jarak tetap 1 per km)", () => {
+describe("hitungPoinHari - aturan 20-28 Okt 2026 (target 60, poin jarak tetap 1 per km)", () => {
+  const hitungPoinHari = (m: ReturnType<typeof kk>) => hitungPoinHariAsli(m, ATURAN_POIN_V2);
   it("contoh: 6 terdampak, 10 tidak terdampak, 2 km = 42 poin (70%)", () => {
     const p = hitungPoinHari(kk(6, 10, 2));
     expect(p.poin_terdampak).toBe(30);
@@ -65,9 +69,62 @@ describe("hitungPoinHari - aturan baru (mulai 20 Okt 2026: target 60, poin jarak
   });
 
   it("poin KK dan jarak sama dengan aturan lama; hanya target yang berbeda", () => {
-    expect(hitungPoinHari(kk(5, 3, 10)).total).toBe(hitungPoinHari(kk(5, 3, 10), ATURAN_POIN_V1).total);
+    expect(hitungPoinHari(kk(5, 3, 10)).total).toBe(hitungPoinHariAsli(kk(5, 3, 10), ATURAN_POIN_V1).total);
     expect(hitungPoinHari(kk(5, 3, 10)).target).toBe(60);
-    expect(hitungPoinHari(kk(5, 3, 10), ATURAN_POIN_V1).target).toBe(45);
+    expect(hitungPoinHariAsli(kk(5, 3, 10), ATURAN_POIN_V1).target).toBe(45);
+  });
+});
+
+describe("hitungPoinHari - aturan berlaku sekarang (mulai 29 Okt 2026: target 75, poin jarak tetap 1 per km)", () => {
+  it("contoh: 6 terdampak, 10 tidak terdampak, 2 km = 42 poin (56%)", () => {
+    const p = hitungPoinHariAsli(kk(6, 10, 2));
+    expect(p.total).toBe(42);
+    expect(p.target).toBe(75);
+    expect(p.persen).toBe(56);
+    expect(p.kurang).toBe(33);
+  });
+  it("tepat target = 100% tanpa kekurangan; di atas target tampil > 100%", () => {
+    const a = hitungPoinHariAsli(kk(12, 5, 10)); // 60 + 5 + 10
+    expect(a.total).toBe(75);
+    expect(a.persen).toBe(100);
+    expect(a.kurang).toBe(0);
+    expect(hitungPoinHariAsli(kk(14, 12, 0)).persen).toBe(109); // 82 poin
+  });
+  it("poin KK dan jarak sama dengan aturan sebelumnya; hanya target yang berbeda", () => {
+    expect(hitungPoinHariAsli(kk(5, 3, 10)).total).toBe(hitungPoinHariAsli(kk(5, 3, 10), ATURAN_POIN_V2).total);
+    expect(hitungPoinHariAsli(kk(5, 3, 10)).target).toBe(75);
+  });
+  it("jarak di atas 15 km: 15 km pertama 1 poin per km, km selebihnya 0,7 poin per km (mulai 29 Okt 2026)", () => {
+    expect(ATURAN_POIN.poinPerKmLebih).toBe(0.7);
+    expect(poinJarakKm(0, ATURAN_POIN)).toBe(0);
+    expect(poinJarakKm(10, ATURAN_POIN)).toBe(10);
+    expect(poinJarakKm(15, ATURAN_POIN)).toBe(15);
+    expect(poinJarakKm(16, ATURAN_POIN)).toBe(15.7);
+    expect(poinJarakKm(20, ATURAN_POIN)).toBe(18.5);
+    expect(poinJarakKm(100, ATURAN_POIN)).toBe(74.5);
+    expect(poinJarakKm(-3, ATURAN_POIN)).toBe(0);
+    expect(poinJarakKm(Number.NaN, ATURAN_POIN)).toBe(0);
+    // aturan sebelumnya tetap berhenti di 15 poin
+    expect(poinJarakKm(20, ATURAN_POIN_V2)).toBe(15);
+    expect(poinJarakKm(20, ATURAN_POIN_V1)).toBe(15);
+  });
+  it("hitungPoinHari: jarak 20 km = 18,5 poin hanya bila ada KK didata; hari 28 Okt tetap berhenti di 15", () => {
+    const p = hitungPoinHariAsli(kk(2, 0, 20));
+    expect(p.poin_jarak).toBe(18.5);
+    expect(p.total).toBe(28.5);
+    expect(hitungPoinHariAsli(kk(0, 0, 20)).poin_jarak).toBe(0);
+    expect(hitungPoinHariAsli(kk(2, 0, 20), ATURAN_POIN_V2).poin_jarak).toBe(15);
+    const h = hitungRealisasi([hari("2026-10-28", kk(2, 0, 20)), hari("2026-10-29", kk(2, 0, 20))]);
+    expect(h.rincian[0].poin).toBe(25); // 10 + 15 (aturan 28 Okt)
+    expect(h.rincian[1].poin).toBe(28.5); // 10 + 18,5 (aturan 29 Okt)
+  });
+  it("hitungRealisasi: 28 Okt memakai target 60, 29 Okt memakai target 75 (tidak berlaku mundur)", () => {
+    const h28 = hitungRealisasi([hari("2026-10-28", kk(10, 5, 5))]); // 60 poin = 1 O-K penuh pada aturan 60
+    expect(h28.rincian[0].kredit_hari).toBe(60);
+    expect(h28.hutang_poin).toBe(0);
+    const h29 = hitungRealisasi([hari("2026-10-29", kk(10, 5, 5))]); // 60 poin dari target 75 -> kurang 15
+    expect(h29.rincian[0].kredit_hari).toBe(60);
+    expect(h29.hutang_poin).toBe(15);
   });
 });
 

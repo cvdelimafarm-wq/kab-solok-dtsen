@@ -5,7 +5,7 @@
 //
 // Aturan (keputusan user 18 Okt 2026 + rancangan-skor-kinerja-harian-target-harian):
 //  - Poin harian PPL = 5 x KK terdampak + 1 x KK tidak terdampak + poin jarak (maks 15 poin jarak, hanya bila ada KK didata hari itu). Target = 1 O-K.
-//    (20 Okt 2026) Aturan MENURUT TANGGAL, tidak berlaku mundur (lib/skorKinerja.ts: RIWAYAT_ATURAN): 15-19 Okt target 45 poin & 1 poin/km; mulai 20 Okt target 60 poin (poin jarak tetap 1 poin/km).
+//    (20 Okt 2026) Aturan MENURUT TANGGAL, tidak berlaku mundur (lib/skorKinerja.ts: RIWAYAT_ATURAN): 15-19 Okt target 45 poin & 1 poin/km; 20-28 Okt target 60 poin; mulai 29 Okt target 75 poin (poin jarak tetap 1 poin/km).
 //    ATURAN di bawah = aturan yang berlaku SEKARANG (dipakai untuk perkiraan ke depan); hari yang sudah berlalu memakai aturan tanggalnya.
 //  - Realisasi O-K: hari kerja LENGKAP (laporan + foto) saja; sebelum 15 Okt tiap hari lengkap dihitung penuh (1 O-K); mulai 15 Okt sesuai poin dengan HUTANG
 //    kumulatif (poin hari berikutnya menutup hutang lebih dulu; kelebihan di atas target tidak menambah), pecahan O-K dibulatkan ke bawah.
@@ -13,7 +13,7 @@
 //  - Jarak realisasi = jarak jalan (OSRM); perkiraan sisa = 1,3 x garis lurus.
 //  - Rangkuman ini adalah PERKIRAAN pemantauan, bukan angka pembayaran.
 
-import { ATURAN_POIN, ATURAN_POIN_V1, aturanUntukTanggal, hitungRealisasi } from "@/lib/skorKinerja";
+import { ATURAN_POIN, ATURAN_POIN_V1, aturanUntukTanggal, hitungRealisasi, poinJarakKm } from "@/lib/skorKinerja";
 
 export type PeranKinerja = "ppl" | "pml" | "korwil";
 export type MetodeJarak = "jalan" | "perkiraan" | "tanpa_rumah" | "tanpa_titik" | "tidak_ada";
@@ -23,7 +23,8 @@ export const ATURAN = {
   poinTidakTerdampak: 1,
   poinPerKm: ATURAN_POIN.poinPerKm, // tetap 1 poin per km
   maksPoinJarak: ATURAN_POIN.maksPoinJarak,
-  targetHarian: ATURAN_POIN.targetHarian, // 60 poin mulai 20 Okt 2026
+  poinPerKmLebih: ATURAN_POIN.poinPerKmLebih, // 0,7 poin per km di atas 15 km (mulai 29 Okt 2026)
+  targetHarian: ATURAN_POIN.targetHarian, // 75 poin mulai 29 Okt 2026 (60 pada 20-28 Okt, 45 pada 15-19 Okt)
   mulaiBobot: "2026-10-15", // awal penilaian bobot (aturan lama 15-19 Okt)
   faktorJalan: 1.3,
 } as const;
@@ -210,7 +211,7 @@ export function poinHari(h: Pick<HariOrang, "terdampak" | "tidak_terdampak" | "k
   const a = aturanTanggal(h.tanggal);
   const poinKk = h.terdampak * a.poinTerdampak + h.tidak_terdampak * a.poinTidakTerdampak;
   const adaKk = h.terdampak + h.tidak_terdampak + (h.tidak_ditemukan ?? 0) > 0;
-  const poinJarak = adaKk ? Math.min(a.maksPoinJarak, Math.round(Math.max(0, h.km) * a.poinPerKm * 100) / 100) : 0;
+  const poinJarak = adaKk ? poinJarakKm(h.km, a) : 0;
   const total = Math.round((poinKk + poinJarak) * 100) / 100;
   return { poin_kk: poinKk, poin_jarak: poinJarak, total, persen: Math.round((total / a.targetHarian) * 100) };
 }
@@ -366,7 +367,7 @@ export function perkiraanAnggaran(d: DataKinerja, p: ParamAnggaran): RingkasAngg
   for (const o of ppl)
     for (const h of o.hari)
       if (h.terdampak + h.tidak_terdampak + h.tidak_ditemukan > 0 && h.tanggal >= ATURAN.mulaiBobot) {
-        jarakTeramati += Math.min(ATURAN.maksPoinJarak, Math.max(0, h.km) * ATURAN.poinPerKm); // dinyatakan dengan aturan sekarang (km sama, poin per km berbeda antar-aturan)
+        jarakTeramati += poinJarakKm(h.km, ATURAN); // dinyatakan dengan aturan sekarang (km sama, poin per km berbeda antar-aturan)
         hariTeramati++;
       }
   const jarakRata = hariTeramati > 0 ? jarakTeramati / hariTeramati : 0;
@@ -377,7 +378,7 @@ export function perkiraanAnggaran(d: DataKinerja, p: ParamAnggaran): RingkasAngg
     let laju: number | null = null;
     if (p.laju === "periode") laju = lalu.length > 0 ? jumlah(lalu.map((t) => per.get(t) ?? 0)) / lalu.length : null;
     else if (p.laju === "tiga_hari") laju = tigaTerakhir.length > 0 ? jumlah(tigaTerakhir.map((t) => per.get(t) ?? 0)) / tigaTerakhir.length : null;
-    const jarakPoin = o.rumah_ke_sisa_km != null ? Math.min(ATURAN.maksPoinJarak, 2 * ATURAN.faktorJalan * o.rumah_ke_sisa_km * ATURAN.poinPerKm) : jarakRata;
+    const jarakPoin = o.rumah_ke_sisa_km != null ? poinJarakKm(2 * ATURAN.faktorJalan * o.rumah_ke_sisa_km, ATURAN) : jarakRata;
     if (p.laju === "target") laju = Math.max(1, T - jarakPoin);
     return { o, laju, jarakPoin, sisaPoinKk: Math.max(0, o.sisa_kk) * poinPerKk };
   });
