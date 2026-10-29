@@ -11,6 +11,7 @@ import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import BagikanWa from "./BagikanWa";
 import { ambilJson, type GalatFoto } from "./klien";
 import { LABEL_ALASAN, LABEL_KEPERCAYAAN, MAKS_TAG, labelFotoTanpaSinyal, type Kepercayaan } from "@/lib/sigapFoto";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 export type DataHasil = {
   ok: true;
@@ -40,6 +41,7 @@ export default function HasilFoto({
   const [sibukBagi, setSibukBagi] = useState(false);
   const [pesanBagi, setPesanBagi] = useState<string | null>(null);
   const [bagiN, setBagiN] = useState<number | null>(null); // jumlah rekan yang sudah diajak (null = belum membagikan)
+  useTutupDenganBack(true, onTutup); // (29 Okt 2026) Back HP = "Tutup, lanjut memotret"
 
   /** Foto sudah terkirim: ajak rekan yang dipilih (foto tidak dikirim ulang; rekan memilih nomor fotonya sendiri). */
   async function bagiKeRekan() {

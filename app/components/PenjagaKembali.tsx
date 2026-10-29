@@ -15,6 +15,7 @@ import { leluhur, perbaruiJejak } from "@/lib/sigapNavigasi";
 import { modeAplikasi } from "@/lib/sigapGerbangApp";
 import { bacaSesi } from "@/app/portal/sesi";
 import { bacaJejak, simpanJejak } from "@/app/portal/navigasi";
+import { pasangPenjagaLapisan, popDariLapisan } from "@/app/portal/lapisan";
 
 function sebagaiAplikasi(): boolean {
   try {
@@ -39,6 +40,11 @@ export default function PenjagaKembali() {
   const siap = useRef(false);
   const armed = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // (29 Okt 2026) Back HP menutup modal/layar penuh (app/portal/lapisan.ts): pendengar dipasang sekali untuk seluruh aplikasi
+  useEffect(() => {
+    pasangPenjagaLapisan();
+  }, []);
 
   // 1 + 2. Jejak halaman & penyisipan induk
   useEffect(() => {
@@ -71,6 +77,7 @@ export default function PenjagaKembali() {
     const st = window.history.state as StateJaga;
     if (!st?.sigapJaga) window.history.pushState({ ...(st ?? {}), sigapJaga: 1 }, "", window.location.href);
     const onPop = (e: PopStateEvent) => {
+      if (popDariLapisan()) return; // modal ditutup dengan Back: bukan Back dari Beranda
       if ((e.state as StateJaga)?.sigapJaga) return; // mendarat di penjaga lama
       if (window.location.pathname !== "/") return;
       if (armed.current) {

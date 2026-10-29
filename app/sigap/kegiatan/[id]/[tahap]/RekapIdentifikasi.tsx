@@ -43,6 +43,7 @@ import {
 } from "@/lib/rekapIdentifikasi";
 import { buatGambarPml, buatGambarRekap } from "./gambarRekap";
 import { namaTampil } from "@/lib/namaTampil";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Data = { sekarang: string; baris: BarisRekap[]; pml: BarisPml[] };
 type Mode = TingkatRekap | "pml" | "sanggah";
@@ -61,6 +62,7 @@ const tglKode = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "A
 /** sebaris = tombol ikut alur halaman (PPL, 19 Okt 2026: tidak lagi melayang menutupi tugas); default = melayang di kanan bawah (PML). */
 export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boolean } = {}) {
   const [buka, setBuka] = useState(false);
+  useTutupDenganBack(buka, () => setBuka(false)); // (29 Okt 2026) Back HP menutup rekap
   const [data, setData] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
@@ -153,6 +155,7 @@ export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boole
   );
   const jumlahTerbuka = useMemo(() => baris.reduce((a, b) => a + sanggahTerbuka(b), 0), [baris]);
   const bukaDetail = baris.find((b) => b.idsubsls === detail) ?? null;
+  useTutupDenganBack(buka && bukaDetail !== null, tutupDetail); // (29 Okt 2026) Back HP menutup rincian dulu, baru rekap
 
   function tutupDetail() {
     setDetail(null);

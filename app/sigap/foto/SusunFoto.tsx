@@ -33,6 +33,7 @@ import { labelFoto } from "@/lib/sigapLabelFoto";
 import type { Kepercayaan } from "@/lib/sigapFoto";
 import { labelDariRekan } from "@/lib/sigapFotoRekan";
 import { alasanBentrok, jamWib, kalimatJam, nilaiJam, pasangIsi, peranRingkas, rencanaUrutJam, slotBermasalah, tukarIsi, type IsiNomor } from "@/lib/sigapUrutanFoto";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type FotoRingkas = { id: number; kode: string; kepercayaan: Kepercayaan; diambil_at: string; lat?: number | null; lng?: number | null; tahan?: boolean; dari?: string };
 type Nomor = { slot: number; terisi: boolean; sumber: string | null; susulan: boolean; foto: FotoRingkas | null; ditahan?: FotoRingkas | null };
@@ -114,7 +115,9 @@ function IkonPeringatan({ kelas = "h-4 w-4" }: { kelas?: string }) {
  * terjebak di konteks susunan induknya dan tampil DI BAWAH bilah navigasi bawah (Hari Ini / Hari Kerja / Arsip, z-30), sehingga tombol "Batal"
  * tertutup dan tidak bisa diketuk. z-[100] memastikan di atas bilah navigasi mana pun; ruang bawah mengikuti area aman HP (gestur/tombol sistem).
  */
-function Lapisan({ children, kelas, onKlik }: { children: ReactNode; kelas: string; onKlik?: () => void }) {
+function Lapisan({ children, kelas, onKlik, tutup }: { children: ReactNode; kelas: string; onKlik?: () => void; tutup: () => void }) {
+  // (29 Okt 2026) tombol Back HP = tutup lapisan (sama dengan ketuk ✕ / Batal); lihat app/portal/lapisan.ts
+  useTutupDenganBack(true, tutup);
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className={`fixed inset-0 z-[100] flex justify-center bg-black/50 ${kelas}`} role="presentation" onClick={onKlik} style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))", paddingTop: "max(12px, env(safe-area-inset-top))" }}>
@@ -138,7 +141,7 @@ function Modal({ judul, idJudul, sibuk, onBatal, children }: { judul: string; id
     return () => window.removeEventListener("keydown", tekan);
   }, [sibuk, onBatal]);
   return (
-    <Lapisan kelas="items-center px-3">
+    <Lapisan kelas="items-center px-3" tutup={() => { if (!sibuk) onBatal(); }}>
       <div ref={kotak} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={idJudul} className="max-h-full w-full max-w-sm self-center overflow-y-auto rounded-2xl bg-white p-4 shadow-xl outline-none">
         <h2 id={idJudul} className="text-base font-extrabold leading-snug text-[#0F2A52]">{judul}</h2>
         {children}
@@ -575,7 +578,7 @@ export default function SusunFoto({
     const adaSesudah = posLihat < galeri.length - 1;
     const panah = "absolute top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-[26px] font-bold leading-none text-white disabled:hidden";
     return (
-      <Lapisan kelas="flex-col !bg-black !p-0 !pb-0 !pt-0">
+      <Lapisan kelas="flex-col !bg-black !p-0 !pb-0 !pt-0" tutup={() => setLihat(null)}>
         <div role="dialog" aria-modal="true" aria-label={judul} className="flex h-full w-full flex-col" style={{ paddingTop: "max(8px, env(safe-area-inset-top))" }}>
           <div className="flex items-center gap-2 px-2 pb-2 text-white">
             <button type="button" onClick={() => setLihat(null)} aria-label="Tutup foto" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-[20px] font-bold">

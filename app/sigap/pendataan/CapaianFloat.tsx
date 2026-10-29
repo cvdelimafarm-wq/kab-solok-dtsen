@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useData } from "@/app/portal/dataBersama";
 import { formatAngka, teksPersen, teksXY, type CapaianHari, type DataCapaian } from "@/lib/skorKinerja";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const PATH_CAPAIAN = "/api/portal/pendataan/capaian";
 type Aktif = Extract<DataCapaian, { ada: true }>;
@@ -140,6 +141,7 @@ function TabRealisasi({ d }: { d: Aktif }) {
 export default function CapaianFloat() {
   const { data } = useData<DataCapaian>(PATH_CAPAIAN);
   const [buka, setBuka] = useState(false);
+  useTutupDenganBack(buka, () => setBuka(false)); // (29 Okt 2026) Back HP menutup lembar Capaian
   const [tab, setTab] = useState<"hari" | "realisasi">("hari");
 
   useEffect(() => {

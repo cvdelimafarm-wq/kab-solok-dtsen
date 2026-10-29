@@ -20,8 +20,9 @@ import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendata
 import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
 import DokumenPeriksaAdminPanel from "./DokumenPeriksaAdmin";
-import RincianQcPetugas from "@/app/portal/qc/RincianQc";
+import TabelQc from "./TabelQc";
 import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Peng = QcPengaturan & { diubah_oleh: string | null; diubah_at: string };
 type Soal = { id: string; paket: number; judul_paket: string; nomor: number; pertanyaan: string; opsi: Record<string, string>; kunci: string; penjelasan: string; kata_kunci: string[]; aktif: boolean };
@@ -195,55 +196,7 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
           <p className="text-[13px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
         </Kartu>
       ) : (
-        d.rekap.map((t) => (
-          <Kartu
-            key={t.pml_akun_id}
-            judul={t.pml_nama || "PPL tanpa PML"}
-            ket={`${t.sudah}/${t.jumlah_ppl} sudah mengisi · rata-rata awal ${t.rata_awal ?? "-"} · ${t.lulus} lulus`}
-          >
-            <ul className="divide-y divide-[#E3E8EE]">
-              {t.pml_akun_id != null && (
-                <li className="py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[13.5px] font-bold text-[#0F2A52]">PML · {t.pml_nama}</span>
-                    {(() => {
-                      const ps = bacaPmlSendiri(t.pml_sendiri);
-                      const sudah = !!ps && ps.percobaan > 0;
-                      return <Chip w={!sudah ? "bad" : ps.lulus ? "ok" : "wait"}>{sudah ? labelStatusPpl(ps, p ? maksPercobaanDari(p) : 4, nilaiLulusDari(p)) : "Belum mengisi"}</Chip>;
-                    })()}
-                  </div>
-                  <RincianQcPetugas akunId={t.pml_akun_id} rincian={d.rincian} className="mt-1.5" />
-                </li>
-              )}
-              {t.ppl.map((x) => (
-                <li key={x.akun_id} className="py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[13.5px] text-[#1B2B4B]">{x.nama}</span>
-                    <span className="flex flex-none items-center gap-1.5">
-                      {x.terlambat && <Chip w="wait">Terlambat</Chip>}
-                      <Chip w={x.percobaan === 0 ? "bad" : x.lulus ? "ok" : "wait"}>{labelStatusPpl(x, p ? maksPercobaanDari(p) : 4, nilaiLulusDari(p))}</Chip>
-                    </span>
-                  </div>
-                  <RincianQcPetugas akunId={x.akun_id} rincian={d.rincian} className="mt-1.5" />
-                </li>
-              ))}
-            </ul>
-            {t.salah.length > 0 && (
-              <div className="mt-2 rounded-lg bg-[#FFF8F7] px-3 py-2">
-                <p className="text-[12.5px] font-bold text-[#B42329]">Soal yang dijawab salah (percobaan pertama)</p>
-                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12.5px] text-[#1B2B4B]">
-                  {[...t.salah]
-                    .sort((a, b) => b.jumlah - a.jumlah)
-                    .map((s) => (
-                      <li key={s.soal_id}>
-                        {s.pertanyaan} <b>({s.jumlah})</b>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
-          </Kartu>
-        ))
+        <TabelQc rekap={d.rekap} rincian={d.rincian} maks={p ? maksPercobaanDari(p) : 4} nilaiLulus={nilaiLulusDari(p)} />
       )}
 
       {d.boleh_kelola && p && d.hari && (
@@ -587,6 +540,7 @@ function BankSoal({ d, kirim }: { d: Data; kirim: Kirim }) {
 }
 
 function Lapis({ judul, onTutup, children }: { judul: string; onTutup: () => void; children: React.ReactNode }) {
+  useTutupDenganBack(true, onTutup); // (29 Okt 2026) Back HP menutup lapisan
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-[#0B1530]/60 p-0 sm:items-center sm:p-4" onClick={onTutup} role="presentation">
       <div role="dialog" aria-modal="true" aria-label={judul} onClick={(e) => e.stopPropagation()} className="max-h-[96dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl">

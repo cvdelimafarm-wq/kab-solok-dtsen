@@ -38,6 +38,7 @@ import { arahDariGravitasi, bacaBelajarPeta, catatKoreksi, kuartalAkhir, kuartal
 import { jamWib } from "@/lib/sigapUrutanFoto";
 import { useTombolKembali } from "./useTombolKembali";
 import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Pos = { lat: number; lng: number; akurasi: number; mono: number };
 type Hasil = DataHasil;
@@ -155,6 +156,8 @@ export default function KameraSigap({
   const [ditahanServer, setDitahanServer] = useState<number[]>([]); // nomor hari ini yang dipesan foto kuning/merah yang menunggu diperiksa (tag 'ditahan')
   const [konfirmasiTanpaNomor, setKonfirmasiTanpaNomor] = useState(false); // (22 Okt 2026) foto hanya dibagikan ke rekan, nomor sendiri kosong -> minta konfirmasi
   const [konfirmasiGanti, setKonfirmasiGanti] = useState<number | null>(null); // nomor terisi yang hendak diganti (menunggu modal "Yakin?")
+  useTutupDenganBack(konfirmasiTanpaNomor, () => setKonfirmasiTanpaNomor(false)); // (29 Okt 2026) Back HP = Batal
+  useTutupDenganBack(konfirmasiGanti !== null, () => setKonfirmasiGanti(null));
   const [rapi, setRapi] = useState<{ cadangan: number; kosong: number[]; href: string } | null>(null); // foto terkirim yang belum bernomor + tautan ke kartu hari
   const drafIdRef = useRef<number | null>(null);
   const [tag, setTag] = useState<TagPilihan[]>([]);

@@ -16,6 +16,7 @@ import { modeSimulasi } from "./simulasi";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { tglPendekKek, type Kekurangan } from "@/lib/sigapKekurangan";
 import { catatTampil, masihKurang, pilihPengingat, segarkanKeadaan, type KeadaanPengingat } from "@/lib/sigapPengingat";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const KUNCI = "sigap_pengingat_v1";
 const ID_MODAL = "modal-pengingat-dinamis";
@@ -51,6 +52,7 @@ export default function ModalPengingat({ akunKey }: { akunKey: string }) {
   const dKeg = useData<{ kegiatan: RingkasKegiatan[] }>("/api/portal/kegiatan");
   const { menunggu } = useAntrean();
   const [tampil, setTampil] = useState<Kekurangan | null>(null);
+  useTutupDenganBack(tampil !== null, () => setTampil(null)); // (29 Okt 2026) Back HP menutup modal (sama dengan ketuk di luar)
   const kunci = `${KUNCI}:${akunKey || "anon"}`;
   const daftarRef = useRef<Kekurangan[]>([]);
   const tertahanLuar = menunggu.length > 0;

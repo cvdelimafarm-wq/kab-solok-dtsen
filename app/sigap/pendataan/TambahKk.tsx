@@ -13,6 +13,7 @@ import { muatData } from "@/app/portal/dataBersama";
 import { API_PENDATAAN, dalamKotak, pathKkSub, type SubTim } from "@/lib/pendataan";
 import { KONFIG_BAWAAN, type KonfigLembar } from "@/lib/lembarKonfig";
 import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi } from "@/lib/lokasiGalat";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Hasil = "terdampak" | "tidak_terdampak";
 
@@ -30,6 +31,7 @@ function uuid(): string {
 
 export default function TambahKk({ sub, namaSub, onSelesai, konfig = KONFIG_BAWAAN }: { sub: SubTim; namaSub: string; onSelesai: (pesan: string) => void; konfig?: KonfigLembar }) {
   const [buka, setBuka] = useState(false);
+  useTutupDenganBack(buka, tutup); // (29 Okt 2026) Back HP menutup formulir (tidak saat sedang mengirim)
   const [nama, setNama] = useState("");
   const [patokan, setPatokan] = useState("");
   const [hasil, setHasil] = useState<Hasil | null>(null);

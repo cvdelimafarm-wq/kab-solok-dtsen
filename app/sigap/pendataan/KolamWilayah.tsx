@@ -32,6 +32,7 @@ import {
   type ItemKolam,
   type PesanAturan,
 } from "@/lib/kolamWilayah";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const UNGU = "#7A2BA8";
 const GRADIEN = "linear-gradient(135deg,#A33CD0,#6B1F96)";
@@ -70,6 +71,7 @@ function Bar({ nilai, syarat, lolos }: { nilai: number; syarat: number; lolos: b
 }
 
 function Modal({ pesan, onTutup }: { pesan: PesanAturan | { judul: string; isi: string; angka?: undefined }; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (29 Okt 2026) Back HP = Tutup
   const a = pesan.angka;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(15,42,82,.55)] px-5" role="dialog" aria-modal="true" aria-label={pesan.judul} onClick={onTutup}>
@@ -105,7 +107,13 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
   const [sukses, setSukses] = useState<string | null>(null);
 
   const ppls = useMemo(() => anggota.filter((a) => a.peran === "ppl"), [anggota]);
-  const grup = useMemo(() => kelompokKolam(data?.item ?? []), [data]);
+  // (29 Okt 2026) Lencana tombol = jumlah Sub SLS yang BEBAS, tetapi daftar dulu memuat seluruh isi kolam (termasuk yang sudah diambil tim) sehingga
+  // angkanya tampak tidak cocok. Sekarang daftar bawaan hanya menampilkan yang bebas; "Tampilkan semua" membuka seluruh isi kolam.
+  const [semua, setSemua] = useState(false);
+  const grup = useMemo(() => {
+    const item = data?.item ?? [];
+    return kelompokKolam(semua ? item : item.filter((x) => !x.diambil_pml_id));
+  }, [data, semua]);
   const progres = data?.progres;
   const bisaPilih = !!data?.bisa_pilih;
   const terpilih = Object.keys(pilih);
@@ -115,7 +123,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
   const pctT = progres ? persen(progres.tambahan_didata, progres.tambahan_total) : 0;
 
   const kunci = (kec: string, nag: string) => `${kec}|${nag}`;
-  const nagariBuka = (kec: string, nag: string, punyaPilihan: boolean) => terbuka[kunci(kec, nag)] ?? punyaPilihan;
+  const nagariBuka = (kec: string, nag: string, punyaPilihan: boolean) => terbuka[kunci(kec, nag)] ?? (punyaPilihan || !semua);
 
   function tutupModal() {
     setModal(null);
@@ -213,6 +221,18 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
             </div>
           </div>
         )}
+
+        {data && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-[12px] border border-[#E3D3F0] px-3 py-2">
+            <span className="text-[12.5px] leading-snug text-[#3B1A55]">
+              {semua ? `Menampilkan semua ${data.item.length} Sub SLS di kolam` : `Menampilkan ${jumlahBebas(data.item)} Sub SLS yang masih bebas`}
+            </span>
+            <button type="button" onClick={() => setSemua((v) => !v)} aria-pressed={semua} className="min-h-[40px] flex-none rounded-full bg-[#F1E4FA] px-3 text-[12px] font-extrabold text-[#6B1F96] active:bg-[#E6D0F4]">
+              {semua ? "Hanya yang bebas" : "Tampilkan semua"}
+            </button>
+          </div>
+        )}
+        {data && !semua && grup.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F7FA] px-3 py-3 text-center text-[12.5px] text-[#52627A]">Tidak ada Sub SLS bebas di kolam saat ini.</p>}
 
         <div className="mt-3 space-y-3">
           {grup.map((k) => (

@@ -55,6 +55,8 @@ import {
   type KkLembar,
   type SubTim,
 } from "@/lib/pendataan";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { popDariLapisan } from "@/app/portal/lapisan";
 
 type Tab = "peta" | "daftar" | "mon" | "wilayah"; // tab "wilayah" tampil sebagai "Batas" (diganti 17 Okt) -- (17 Okt 2026) "wilayah" = peta Sub SLS & peta nagari (berkas peta jadi BPS)
 type FStatus = "semua" | "belum" | HasilKk;
@@ -167,6 +169,7 @@ function BilahTumpuk({ bagian, total, tinggi = 8, label }: { bagian: { n: number
 
 /** Lembar bawah (bottom sheet): latar gelap menutup, panel putih menempel di bawah. */
 function LembarBawah({ judulLembar, kanan, onTutup, children }: { judulLembar: string; kanan?: string; onTutup: () => void; children: React.ReactNode }) {
+  useTutupDenganBack(true, onTutup); // (29 Okt 2026) Back HP menutup lembar bawah
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={judulLembar}>
       <button type="button" aria-label="Tutup" onClick={onTutup} className="absolute inset-0 bg-[rgba(10,24,46,.45)]" />
@@ -216,6 +219,7 @@ export default function LembarPendataan() {
   const [tampung, setTampung] = useState<Record<number, { hasil: HasilKk; alasan: string | null; kunci: string }>>({});
   const [infoPerbaikan, setInfoPerbaikan] = useState(false);
   const [konfirmKirim, setKonfirmKirim] = useState(false);
+  useTutupDenganBack(konfirmKirim, () => { if (!kirimProses) setKonfirmKirim(false); }); // (29 Okt 2026) Back HP = Batal (tidak saat mengirim)
   const [kirimProses, setKirimProses] = useState(false);
   const [kirimPesan, setKirimPesan] = useState<string | null>(null);
 
@@ -240,6 +244,7 @@ export default function LembarPendataan() {
       /* abaikan */
     }
     const kembali = () => {
+      if (popDariLapisan()) return; // (29 Okt 2026) popstate karena modal ditutup dengan Back HP: jangan ikut menutup Sub SLS/lembar
       dariKartu.current = false;
       setSubPilih(new URLSearchParams(window.location.search).get("sub"));
       setTerpilihId(null);

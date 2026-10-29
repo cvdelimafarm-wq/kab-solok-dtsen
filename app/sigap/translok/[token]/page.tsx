@@ -24,6 +24,7 @@ import { ALAMAT_LEMBAR_QC_KORWIL } from "@/lib/sigapKorwilTab";
 import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
 import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
 import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -1772,6 +1773,7 @@ function LembarUnduh({ pen, hariIni, onTutup, tanggalAwal, jenisAwal, rentangAwa
     });
   };
   const CHIP = (on: boolean) => `rounded-full px-3 py-1.5 text-[12.5px] font-bold ${on ? "bg-[#0F3D7A] text-white" : "bg-[#EEF1F5] text-[#55657D]"}`;
+  useTutupDenganBack(true, onTutup); // (29 Okt 2026) Back HP menutup lembar Unduh
   if (!terpasang) return null;
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={onTutup}>
@@ -2171,6 +2173,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
   const [progres, setProgres] = useState<Record<number, number>>({});
   const [galat, setGalat] = useState<string | null>(null);
   const [lihat, setLihat] = useState<string | null>(null);
+  useTutupDenganBack(lihat !== null, () => setLihat(null)); // (29 Okt 2026) Back HP menutup pratinjau foto
   const inputRef = useRef<Record<number, HTMLInputElement | null>>({});
   // (6 Okt 2026) Unggah beberapa foto sekaligus lalu tandai jenisnya (slot) -- permintaan user.
   const [antre, setAntre] = useState<{ id: number; file: File; url: string; slot: number }[]>([]);

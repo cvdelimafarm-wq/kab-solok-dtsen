@@ -14,6 +14,54 @@ function jamWib(iso: string): string {
   return new Date(t).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta", hour12: false }).replace(".", ":");
 }
 
+/** Isi rincian (selalu terbuka): tiap percobaan beserta soal yang salah. Dipakai langsung oleh jendela rincian pada tabel QC. */
+export function IsiRincianQc({ akunId, rincian }: { akunId: number; rincian: RincianQc | undefined }) {
+  const daftar = rincian?.percobaan[akunId];
+  if (!rincian || !daftar || daftar.length === 0) return null;
+  return (
+    <ol className="space-y-2.5">
+      {daftar.map((x) => (
+        <li key={x.ke} className="rounded-lg border border-[#DDE6F3] bg-white px-3 py-2">
+          <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-[#1B2B4B]">
+            <b>Percobaan ke-{x.ke}</b>
+            <span className="tabular-nums">
+              nilai <b className={x.salah.length === 0 ? "text-[#13794B]" : "text-[#8A4B08]"}>{x.skor}</b> ({x.benar}/{x.jumlah} benar)
+            </span>
+            {x.selesai_at && <span className="text-[#6B7A90]">{jamWib(x.selesai_at)} WIB</span>}
+            {x.terlambat && <span className="rounded-full bg-[#FFF4D6] px-2 py-0.5 text-[11px] font-bold text-[#6F5000]">Terlambat</span>}
+          </p>
+          {x.salah.length === 0 ? (
+            <p className="mt-1 text-[12px] font-semibold text-[#13794B]">Semua soal benar.</p>
+          ) : (
+            <ul className="mt-1.5 space-y-1.5">
+              {x.salah.map((s) => {
+                const soal = rincian.soal[s.soal_id];
+                const teksDipilih = s.dipilih && soal ? soal.opsi[s.dipilih] : undefined;
+                const teksKunci = soal ? soal.opsi[soal.kunci] : undefined;
+                return (
+                  <li key={s.soal_id} className="rounded-md bg-[#FFF8F7] px-2.5 py-1.5 text-[12.5px] leading-snug text-[#1B2B4B]">
+                    <span className="block font-semibold">{soal?.pertanyaan ?? s.soal_id}</span>
+                    <span className="mt-0.5 block text-[#9B1C23]">
+                      Dipilih: {s.dipilih ? <b>{s.dipilih}</b> : "tidak terjawab"}
+                      {teksDipilih ? ` · ${teksDipilih}` : ""}
+                    </span>
+                    {soal && (
+                      <span className="block text-[#13794B]">
+                        Benar: <b>{soal.kunci}</b>
+                        {teksKunci ? ` · ${teksKunci}` : ""}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export default function RincianQcPetugas({ akunId, rincian, className = "" }: { akunId: number; rincian: RincianQc | undefined; className?: string }) {
   const daftar = rincian?.percobaan[akunId];
   if (!rincian || !daftar || daftar.length === 0) return null;
@@ -23,46 +71,9 @@ export default function RincianQcPetugas({ akunId, rincian, className = "" }: { 
       <summary className="cursor-pointer text-[12.5px] font-bold text-[#1F4FA8]">
         Rincian {daftar.length} percobaan{adaSalah ? " dan soal yang salah" : ""}
       </summary>
-      <ol className="mt-2 space-y-2.5">
-        {daftar.map((x) => (
-          <li key={x.ke} className="rounded-lg border border-[#DDE6F3] bg-white px-3 py-2">
-            <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-[#1B2B4B]">
-              <b>Percobaan ke-{x.ke}</b>
-              <span className="tabular-nums">
-                nilai <b className={x.salah.length === 0 ? "text-[#13794B]" : "text-[#8A4B08]"}>{x.skor}</b> ({x.benar}/{x.jumlah} benar)
-              </span>
-              {x.selesai_at && <span className="text-[#6B7A90]">{jamWib(x.selesai_at)} WIB</span>}
-              {x.terlambat && <span className="rounded-full bg-[#FFF4D6] px-2 py-0.5 text-[11px] font-bold text-[#6F5000]">Terlambat</span>}
-            </p>
-            {x.salah.length === 0 ? (
-              <p className="mt-1 text-[12px] font-semibold text-[#13794B]">Semua soal benar.</p>
-            ) : (
-              <ul className="mt-1.5 space-y-1.5">
-                {x.salah.map((s) => {
-                  const soal = rincian.soal[s.soal_id];
-                  const teksDipilih = s.dipilih && soal ? soal.opsi[s.dipilih] : undefined;
-                  const teksKunci = soal ? soal.opsi[soal.kunci] : undefined;
-                  return (
-                    <li key={s.soal_id} className="rounded-md bg-[#FFF8F7] px-2.5 py-1.5 text-[12.5px] leading-snug text-[#1B2B4B]">
-                      <span className="block font-semibold">{soal?.pertanyaan ?? s.soal_id}</span>
-                      <span className="mt-0.5 block text-[#9B1C23]">
-                        Dipilih: {s.dipilih ? <b>{s.dipilih}</b> : "tidak terjawab"}
-                        {teksDipilih ? ` · ${teksDipilih}` : ""}
-                      </span>
-                      {soal && (
-                        <span className="block text-[#13794B]">
-                          Benar: <b>{soal.kunci}</b>
-                          {teksKunci ? ` · ${teksKunci}` : ""}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ol>
+      <div className="mt-2">
+        <IsiRincianQc akunId={akunId} rincian={rincian} />
+      </div>
     </details>
   );
 }

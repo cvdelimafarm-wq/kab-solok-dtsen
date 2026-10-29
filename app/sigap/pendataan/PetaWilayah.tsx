@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { bacaPetaTersimpan, berkasDariManifest, catatManifestKode, tanyaPetaSatu, unduhSimpanPeta, type BerkasM } from "@/app/portal/petaOffline";
 import { jagaBatas, ketukDua, kodePeta, zoomDi, type JenisPeta, type Transform } from "@/lib/petaTampil";
 import type { SubTim } from "@/lib/pendataan";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const T0: Transform = { x: 0, y: 0, k: 1 };
 
@@ -121,6 +122,7 @@ export default function PetaWilayah({ sub, judulSub, judulNagari, onKePeta, onSu
   const [galat, setGalat] = useState<string | null>(null);
   const [ulang, setUlang] = useState(0);
   const [penuh, setPenuh] = useState(false);
+  useTutupDenganBack(penuh, () => setPenuh(false)); // (29 Okt 2026) Back HP menutup layar penuh
   const urlSegar = useRef(new Map<string, string>());
   const kode = kodePeta(jenis, sub.idsubsls);
 
