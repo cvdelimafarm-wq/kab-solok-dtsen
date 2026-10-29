@@ -125,3 +125,67 @@ describe("gabungSoalSalah", () => {
     ]);
   });
 });
+
+import { FILTER_KOLOM_KOSONG, daftarJumlahPercobaan, daftarPmlBaris, kolomAdaFilter, namaTakCocok, saringKolom, terapkanFokus, urutkanBaris } from "@/lib/sigapQcTabel";
+
+describe("urut dan filter per kolom", () => {
+  const baris = susunBarisQc(REKAP, RINCIAN, 4);
+  const nama = (b: typeof baris) => b.map((x) => x.nama);
+  it("urut nama naik / turun", () => {
+    expect(nama(urutkanBaris(baris, "nama", "asc"))).toEqual(["Aprila", "Ayu", "Budi", "Ega Andini", "Mirvan", "Norlizah"]);
+    expect(nama(urutkanBaris(baris, "nama", "desc"))[0]).toBe("Norlizah");
+  });
+  it("urut jumlah percobaan dan stabil untuk nilai sama", () => {
+    expect(nama(urutkanBaris(baris, "percobaan", "desc"))[0]).toBe("Ega Andini");
+    expect(nama(urutkanBaris(baris, "percobaan", "asc")).slice(0, 3)).toEqual(["Mirvan", "Ayu", "Budi"]);
+  });
+  it("urut nilai P1: kosong selalu di bawah, apa pun arahnya", () => {
+    const naik = urutkanBaris(baris, "p1", "asc");
+    expect(nama(naik).slice(0, 3)).toEqual(["Ega Andini", "Norlizah", "Aprila"]);
+    expect(naik.slice(3).every((b) => b.nilai[0] == null)).toBe(true);
+    const turun = urutkanBaris(baris, "p1", "desc");
+    expect(nama(turun).slice(0, 3)).toEqual(["Aprila", "Norlizah", "Ega Andini"]);
+    expect(turun.slice(3).every((b) => b.nilai[0] == null)).toBe(true);
+  });
+  it("urut pml: baris tanpa PML di bawah", () => {
+    const u = urutkanBaris(baris, "pml", "asc");
+    expect(u.slice(-2).every((b) => b.pml == null)).toBe(true);
+  });
+  it("tanpa kolom: urutan asli", () => {
+    expect(urutkanBaris(baris, null, "asc")).toBe(baris);
+  });
+  it("filter peran, pml, percobaan, nilai", () => {
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, peran: "PML" }, 100))).toEqual(["Aprila", "Ayu"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, pml: "Aprila" }, 100))).toEqual(["Ega Andini", "Norlizah", "Mirvan"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, pml: "-" }, 100))).toEqual(["Aprila", "Ayu"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, percobaan: "0" }, 100))).toEqual(["Mirvan", "Ayu", "Budi"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nilai: { 1: "terisi" } }, 100))).toEqual(["Ega Andini"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nilai: { 0: "lulus" } }, 80))).toEqual(["Aprila", "Norlizah"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nilai: { 0: "belum_lulus" } }, 80))).toEqual(["Ega Andini"]);
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nilai: { 0: "kosong" } }, 80))).toEqual(["Mirvan", "Ayu", "Budi"]);
+  });
+  it("filter nama = cari teks tanpa peduli huruf besar/kecil; kombinasi bersifat DAN", () => {
+    expect(nama(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nama: "  EGA " }, 100))).toEqual(["Ega Andini"]);
+    expect(saringKolom(baris, { ...FILTER_KOLOM_KOSONG, nama: "ega", peran: "PML" }, 100)).toEqual([]);
+  });
+  it("kolomAdaFilter, daftarPmlBaris, daftarJumlahPercobaan", () => {
+    expect(kolomAdaFilter(FILTER_KOLOM_KOSONG)).toBe(false);
+    expect(kolomAdaFilter({ ...FILTER_KOLOM_KOSONG, nilai: { 0: "semua" } })).toBe(false);
+    expect(kolomAdaFilter({ ...FILTER_KOLOM_KOSONG, nilai: { 0: "terisi" } })).toBe(true);
+    expect(daftarPmlBaris(baris)).toEqual(["Aprila", "Ayu"]);
+    expect(daftarJumlahPercobaan(baris)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("fokus dari infografis / kartu", () => {
+  const baris = susunBarisQc(REKAP, RINCIAN, 4);
+  it("memilih menurut akun_id atau nama (tanpa peduli huruf / spasi)", () => {
+    expect(terapkanFokus(baris, null)).toBe(baris);
+    expect(terapkanFokus(baris, { judul: "x", akun: [1, 4] }).map((b) => b.nama)).toEqual(["Ega Andini", "Budi"]);
+    expect(terapkanFokus(baris, { judul: "x", nama: ["  norlizah ", "mirvan"] }).map((b) => b.nama)).toEqual(["Norlizah", "Mirvan"]);
+  });
+  it("nama yang tidak ada di tabel dilaporkan", () => {
+    expect(namaTakCocok(baris, { judul: "x", nama: ["Ega Andini", "Orang Asing"] })).toEqual(["Orang Asing"]);
+    expect(namaTakCocok(baris, null)).toEqual([]);
+  });
+});

@@ -416,8 +416,8 @@ describe("hari rilis (QC per kegiatan)", () => {
     expect(hariBerlaku(wib("2026-11-02", "20:00"), q)).toBeNull();
   });
   it("rilisBerikut", () => {
-    expect(rilisBerikut("2026-10-26", { hari_rilis: [1, 5] })).toBe("2026-10-30");
-    expect(rilisBerikut("2026-10-30", { hari_rilis: [1, 5] })).toBe("2026-11-02");
+    expect(rilisBerikut("2026-10-26", { hari_rilis: [1, 5], akhir: null })).toBe("2026-10-30");
+    expect(rilisBerikut("2026-10-30", { hari_rilis: [1, 5], akhir: null })).toBe("2026-11-02");
     expect(rilisBerikut("2026-10-30", { hari_rilis: [1, 5], akhir: "2026-10-31" })).toBeNull();
     expect(rilisBerikut("2026-10-26", { hari_rilis: undefined, akhir: null })).toBe("2026-10-27");
   });

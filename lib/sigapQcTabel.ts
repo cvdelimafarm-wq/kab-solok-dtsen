@@ -99,3 +99,102 @@ export function gabungSoalSalah(rekap: QcRekapTim[]): { soal_id: string; pertany
   }
   return Array.from(peta.values()).sort((a, b) => b.jumlah - a.jumlah);
 }
+
+// ====================================================================== Urut, filter per kolom, fokus dari infografis / kartu
+// (29 Okt 2026) Tabel mengikuti standar kolom: tiap kolom bisa diurut (klik judul) dan difilter (baris filter di bawah judul).
+// "Fokus" = penyaring dari luar tabel (klik batang infografis, kartu "Tanpa notifikasi"): daftar akun / nama yang ditampilkan.
+
+export type KolomUrut = "nama" | "peran" | "pml" | "percobaan" | `p${number}`;
+export type ArahUrut = "asc" | "desc";
+export type FilterNilai = "semua" | "terisi" | "kosong" | "lulus" | "belum_lulus";
+export type FilterKolom = {
+  nama: string;
+  peran: "" | "PML" | "PPL";
+  /** "" = semua; "-" = baris tanpa PML (yaitu baris PML); selain itu nama PML persis. */
+  pml: string;
+  /** "" = semua; selain itu jumlah percobaan persis (angka sebagai teks). */
+  percobaan: string;
+  /** Indeks 0 = P1. Yang tidak ada = "semua". */
+  nilai: Record<number, FilterNilai>;
+};
+
+export const FILTER_KOLOM_KOSONG: FilterKolom = { nama: "", peran: "", pml: "", percobaan: "", nilai: {} };
+
+export const kolomAdaFilter = (f: FilterKolom): boolean =>
+  !!f.nama.trim() || !!f.peran || !!f.pml || !!f.percobaan || Object.values(f.nilai).some((v) => v && v !== "semua");
+
+/** Urut stabil. Nilai kosong selalu di bawah, apa pun arahnya. */
+export function urutkanBaris(baris: BarisQc[], kolom: KolomUrut | null, arah: ArahUrut): BarisQc[] {
+  if (!kolom) return baris;
+  const kali = arah === "asc" ? 1 : -1;
+  const idx = kolom.startsWith("p") && kolom !== "peran" && kolom !== "percobaan" && kolom !== "pml" ? Number(kolom.slice(1)) - 1 : -1;
+  const d = baris.map((b, i) => ({ b, i }));
+  d.sort((x, y) => {
+    let r = 0;
+    if (kolom === "nama") r = x.b.nama.localeCompare(y.b.nama, "id", { sensitivity: "base" }) * kali;
+    else if (kolom === "peran") r = x.b.peran.localeCompare(y.b.peran) * kali;
+    else if (kolom === "pml") {
+      const a = x.b.pml;
+      const c = y.b.pml;
+      if (a == null || c == null) r = a == null && c == null ? 0 : a == null ? 1 : -1;
+      else r = a.localeCompare(c, "id", { sensitivity: "base" }) * kali;
+    } else if (kolom === "percobaan") r = (x.b.percobaan - y.b.percobaan) * kali;
+    else if (idx >= 0) {
+      const a = x.b.nilai[idx] ?? null;
+      const c = y.b.nilai[idx] ?? null;
+      if (a == null || c == null) r = a == null && c == null ? 0 : a == null ? 1 : -1;
+      else r = (a - c) * kali;
+    }
+    return r !== 0 ? r : x.i - y.i;
+  });
+  return d.map((x) => x.b);
+}
+
+export function saringKolom(baris: BarisQc[], f: FilterKolom, nilaiLulus: number): BarisQc[] {
+  const kata = f.nama.trim().toLowerCase();
+  return baris.filter((b) => {
+    if (kata && !b.nama.toLowerCase().includes(kata)) return false;
+    if (f.peran && b.peran !== f.peran) return false;
+    if (f.pml) {
+      if (f.pml === "-" ? b.pml != null : b.pml !== f.pml) return false;
+    }
+    if (f.percobaan && String(b.percobaan) !== f.percobaan) return false;
+    for (const [k, v] of Object.entries(f.nilai)) {
+      if (!v || v === "semua") continue;
+      const n = b.nilai[Number(k)] ?? null;
+      if (v === "terisi" && n == null) return false;
+      if (v === "kosong" && n != null) return false;
+      if (v === "lulus" && !(n != null && n >= nilaiLulus)) return false;
+      if (v === "belum_lulus" && !(n != null && n < nilaiLulus)) return false;
+    }
+    return true;
+  });
+}
+
+/** Nama PML yang ada di tabel (untuk pilihan filter), urut abjad. */
+export function daftarPmlBaris(baris: BarisQc[]): string[] {
+  return Array.from(new Set(baris.map((b) => b.pml).filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "id", { sensitivity: "base" }));
+}
+
+/** Nilai percobaan yang ada (untuk pilihan filter "Jumlah percobaan"), naik. */
+export function daftarJumlahPercobaan(baris: BarisQc[]): number[] {
+  return Array.from(new Set(baris.map((b) => b.percobaan))).sort((a, b) => a - b);
+}
+
+export type FokusQc = { judul: string; akun?: number[]; nama?: string[]; catatan?: string };
+
+const rapat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+export function terapkanFokus(baris: BarisQc[], fokus: FokusQc | null): BarisQc[] {
+  if (!fokus) return baris;
+  const akun = new Set(fokus.akun ?? []);
+  const nama = new Set((fokus.nama ?? []).map(rapat));
+  return baris.filter((b) => akun.has(b.akun_id) || nama.has(rapat(b.nama)));
+}
+
+/** Nama pada fokus yang tidak ditemukan di tabel (mis. beda penulisan / bukan peserta tim mana pun). */
+export function namaTakCocok(baris: BarisQc[], fokus: FokusQc | null): string[] {
+  if (!fokus?.nama) return [];
+  const ada = new Set(baris.map((b) => rapat(b.nama)));
+  return fokus.nama.filter((n) => !ada.has(rapat(n)));
+}

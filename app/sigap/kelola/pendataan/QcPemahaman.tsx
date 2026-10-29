@@ -21,6 +21,8 @@ import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
 import DokumenPeriksaAdminPanel from "./DokumenPeriksaAdmin";
 import TabelQc from "./TabelQc";
+import InfografisQc from "./InfografisQc";
+import { jumlahKolomNilai, susunBarisQc, type FokusQc } from "@/lib/sigapQcTabel";
 import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
@@ -149,6 +151,16 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
   const pmlSudah = d.rekap.filter((t) => (bacaPmlSendiri(t.pml_sendiri)?.percobaan ?? 0) > 0).length;
   const pmlLulus = d.rekap.filter((t) => bacaPmlSendiri(t.pml_sendiri)?.lulus).length;
   const [sibuk, setSibuk] = useState(false);
+  // (29 Okt 2026) Fokus tabel dari infografis / kartu "Tanpa notifikasi"; data baris dipakai bersama infografis dan tabel.
+  const [fokus, setFokusState] = useState<FokusQc | null>(null);
+  const maksP = p ? maksPercobaanDari(p) : 4;
+  const nilaiLulusP = nilaiLulusDari(p);
+  const kolomQc = useMemo(() => jumlahKolomNilai(maksP, d.rincian), [maksP, d.rincian]);
+  const barisQc = useMemo(() => susunBarisQc(d.rekap, d.rincian, kolomQc), [d.rekap, d.rincian, kolomQc]);
+  const setFokus = (f: FokusQc | null) => {
+    setFokusState(f);
+    if (f) setTimeout(() => document.getElementById("tabel-qc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
   const ke = async (isi: Record<string, unknown>, ok: string) => {
     setSibuk(true);
     await kirim(isi, ok);
@@ -182,21 +194,35 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
         <KartuAngka label="PML / PPL peserta" nilai={`${d.peserta.pml} / ${d.peserta.ppl}`} ket={d.peserta.ppl_tanpa_pml ? `${d.peserta.ppl_tanpa_pml} PPL belum punya PML` : "tiap PPL punya PML"} warna={d.peserta.ppl_tanpa_pml ? "#8A6200" : undefined} />
         <KartuAngka label="PPL sudah mengisi" nilai={total ? `${sudah}/${total}` : "-"} ket={`PML: ${pmlSudah}/${pmlTotal} sudah mengisi`} />
         <KartuAngka label="PPL lulus" nilai={total ? String(lulus) : "-"} ket={`PML lulus: ${pmlLulus}/${pmlTotal} · ${nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`}`} warna="#13794B" />
-        <KartuAngka label="Tanpa notifikasi" nilai={String(d.peserta.tanpa_notifikasi.length)} ket="belum mengaktifkan push" warna={d.peserta.tanpa_notifikasi.length ? "#B42329" : undefined} />
+        {d.peserta.tanpa_notifikasi.length > 0 ? (
+          <button
+            type="button"
+            className="block w-full rounded-[18px] text-left active:opacity-80"
+            aria-label={`Tanpa notifikasi: ${d.peserta.tanpa_notifikasi.length} petugas. Ketuk untuk melihat namanya di tabel`}
+            onClick={() =>
+              setFokus({
+                judul: `Belum mengaktifkan notifikasi (${d.peserta.tanpa_notifikasi.length})`,
+                nama: d.peserta.tanpa_notifikasi,
+                catatan: "Mereka tetap terkunci modal, tetapi tidak menerima push. Di iPhone: Tambahkan ke Layar Utama lalu izinkan notifikasi.",
+              })
+            }
+          >
+            <KartuAngka label="Tanpa notifikasi" nilai={String(d.peserta.tanpa_notifikasi.length)} ket="belum mengaktifkan push · ketuk untuk lihat nama" warna="#B42329" />
+          </button>
+        ) : (
+          <KartuAngka label="Tanpa notifikasi" nilai="0" ket="semua sudah mengaktifkan push" />
+        )}
       </div>
-      {d.peserta.tanpa_notifikasi.length > 0 && (
-        <details className="rounded-lg border border-[#DDE6F3] bg-white px-3.5 py-2.5 text-[13px]">
-          <summary className="cursor-pointer font-bold text-[#0F2A52]">Siapa yang belum mengaktifkan notifikasi ({d.peserta.tanpa_notifikasi.length})</summary>
-          <p className="mt-1.5 text-[#55657D]">{d.peserta.tanpa_notifikasi.join(", ")}. Mereka tetap terkunci modal, tetapi tidak menerima push. Di iPhone: Tambahkan ke Layar Utama lalu izinkan notifikasi.</p>
-        </details>
-      )}
-
       {d.rekap.length === 0 ? (
         <Kartu judul="Rekap per tim">
           <p className="text-[13px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
+          {d.peserta.tanpa_notifikasi.length > 0 && <p className="mt-1.5 text-[12.5px] text-[#55657D]">Belum mengaktifkan notifikasi: {d.peserta.tanpa_notifikasi.join(", ")}.</p>}
         </Kartu>
       ) : (
-        <TabelQc rekap={d.rekap} rincian={d.rincian} maks={p ? maksPercobaanDari(p) : 4} nilaiLulus={nilaiLulusDari(p)} />
+        <>
+          <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={nilaiLulusP} kolom={kolomQc} onFokus={setFokus} />
+          <TabelQc baris={barisQc} kolom={kolomQc} rincian={d.rincian} nilaiLulus={nilaiLulusP} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
+        </>
       )}
 
       {d.boleh_kelola && p && d.hari && (
