@@ -4,6 +4,7 @@
 //
 // (13 Okt 2026) Siaran ke petugas pendataan (PML/PPL/korwil): kirim notifikasi push dan/atau tampilkan modal yang cukup dikonfirmasi satu kali.
 // Pengiriman dua langkah (Kirim -> Ya, kirim) agar tidak terkirim tak sengaja. Modal otomatis berhenti tampil 14 hari sesudah dikirim.
+// (29 Okt 2026) Per SURVEI: prop `kegiatanId` (dari pemilih survei). Pascabencana (1) memakai templat bawaan di bawah; survei lain mulai dari siaran kosong.
 
 import { useCallback, useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
@@ -96,25 +97,32 @@ const TEMPLAT: Templat[] = [
 const AWAL = TEMPLAT[0];
 // (21 Okt 2026) Siaran baru: semua isian kosong, siap diketik dari nol (tombol "Tambah siaran")
 const KOSONG: Templat = { nama: "Siaran baru (kosong)", judul: "", isi: "", mJudul: "", mIsi: "", tLabel: "", tUrl: "", url: "/sigap/pendataan", jenis: "info" };
+/** Survei selain Pascabencana: notifikasi membuka Beranda secara bawaan (tujuan bisa diubah per siaran). */
+const KOSONG_LAIN: Templat = { ...KOSONG, url: "/" };
 const SIARAN_BARU = -1; // nilai pemilih templat untuk siaran kosong
 
 const waktuTeks = (iso: string) => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(".", ":") + " WIB";
 
-export default function Siaran() {
+export default function Siaran({ kegiatanId = 1, namaKegiatan = "Pendataan Pascabencana" }: { kegiatanId?: number; namaKegiatan?: string }) {
+  const pasca = kegiatanId === 1;
+  const kosong = pasca ? KOSONG : KOSONG_LAIN;
+  const daftarTemplat = pasca ? TEMPLAT : [];
+  const kunciK = pasca ? "" : `&k=${kegiatanId}`;
   const [r, setR] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [push, setPush] = useState(true);
   const [modal, setModal] = useState(true);
-  const [judul, setJudul] = useState(AWAL.judul);
-  const [isi, setIsi] = useState(AWAL.isi);
-  const [mJudul, setMJudul] = useState(AWAL.mJudul);
-  const [mIsi, setMIsi] = useState(AWAL.mIsi);
-  const [tLabel, setTLabel] = useState(AWAL.tLabel);
-  const [tUrl, setTUrl] = useState(AWAL.tUrl);
-  const [jenis, setJenis] = useState<JenisPengumuman>(AWAL.jenis);
-  const [templat, setTemplat] = useState(0);
+  const awal = pasca ? AWAL : KOSONG_LAIN;
+  const [judul, setJudul] = useState(awal.judul);
+  const [isi, setIsi] = useState(awal.isi);
+  const [mJudul, setMJudul] = useState(awal.mJudul);
+  const [mIsi, setMIsi] = useState(awal.mIsi);
+  const [tLabel, setTLabel] = useState(awal.tLabel);
+  const [tUrl, setTUrl] = useState(awal.tUrl);
+  const [jenis, setJenis] = useState<JenisPengumuman>(awal.jenis);
+  const [templat, setTemplat] = useState(pasca ? 0 : SIARAN_BARU);
   const [tanyaBaru, setTanyaBaru] = useState(false);
-  const [urlPush, setUrlPush] = useState(AWAL.url);
+  const [urlPush, setUrlPush] = useState(awal.url);
   const [uji, setUji] = useState(false);
   const [hasilUji, setHasilUji] = useState<string | null>(null);
   const [yakin, setYakin] = useState(false);
@@ -123,12 +131,12 @@ export default function Siaran() {
 
   const muat = useCallback(async () => {
     try {
-      setR(await apiPortal<Ringkas>("/api/portal/siaran-petugas?ringkas=1"));
+      setR(await apiPortal<Ringkas>(`/api/portal/siaran-petugas?ringkas=1${kunciK}`));
       setGalat(null);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat ringkasan siaran.");
     }
-  }, []);
+  }, [kunciK]);
   useEffect(() => {
     void muat();
   }, [muat]);
@@ -141,7 +149,7 @@ export default function Siaran() {
     try {
       const h = await apiPortal<Hasil & { ok: boolean }>("/api/portal/siaran-petugas", {
         method: "POST",
-        body: JSON.stringify({ aksi: "siarkan", kirim_push: push, judul, isi, url: urlPush, modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
+        body: JSON.stringify({ aksi: "siarkan", k: kegiatanId, kirim_push: push, judul, isi, url: urlPush, modal: { aktif: modal, judul: mJudul, isi: mIsi, jenis, tombol_label: tLabel, tombol_url: tUrl } }),
       });
       setHasil(h);
       setYakin(false);
@@ -190,13 +198,13 @@ export default function Siaran() {
   }
 
   function pakaiTemplat(i: number) {
-    if (i === SIARAN_BARU) return isikan(KOSONG, SIARAN_BARU);
-    isikan(TEMPLAT[i] ?? TEMPLAT[0], i);
+    if (i === SIARAN_BARU || daftarTemplat.length === 0) return isikan(kosong, SIARAN_BARU);
+    isikan(daftarTemplat[i] ?? daftarTemplat[0], i);
   }
 
   /** Isian sudah diubah dari templat/kosong yang sedang dipilih? (agar tombol Tambah siaran tidak menghapus ketikan tanpa bertanya) */
   function sudahDiubah(): boolean {
-    const t = templat === SIARAN_BARU ? KOSONG : TEMPLAT[templat] ?? TEMPLAT[0];
+    const t = templat === SIARAN_BARU ? kosong : daftarTemplat[templat] ?? daftarTemplat[0] ?? kosong;
     return judul !== t.judul || isi !== t.isi || mJudul !== t.mJudul || mIsi !== bakukanMarkup(t.mIsi) || tLabel !== t.tLabel || tUrl !== t.tUrl || urlPush !== t.url || jenis !== t.jenis;
   }
 
@@ -205,7 +213,7 @@ export default function Siaran() {
       setTanyaBaru(true);
       return;
     }
-    isikan(KOSONG, SIARAN_BARU);
+    isikan(kosong, SIARAN_BARU);
     setPush(true);
     setModal(true);
   }
@@ -216,9 +224,9 @@ export default function Siaran() {
 
   return (
     <section className="mt-5 rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
-      <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Siaran ke petugas pendataan</h2>
+      <h2 className="text-[15px] font-extrabold text-[#0F2A52]">{pasca ? "Siaran ke petugas pendataan" : `Siaran ke petugas ${namaKegiatan}`}</h2>
       <p className="mt-1 text-[12.5px] leading-snug text-[#55657D]">
-        Kirim notifikasi ke HP seluruh petugas yang ditugaskan di Pendataan Pascabencana (korwil, PML, PPL) dan/atau munculkan modal di halaman tahap Pendataan. Modal cukup dikonfirmasi satu kali (&quot;Saya mengerti&quot;) lalu hilang, dan berhenti tampil otomatis {HARI_MODAL_SIARAN} hari kemudian.
+        Kirim notifikasi ke HP seluruh petugas yang ditugaskan di {namaKegiatan} (korwil, PML, PPL) dan/atau munculkan modal di halaman tahap Pendataan. Modal cukup dikonfirmasi satu kali (&quot;Saya mengerti&quot;) lalu hilang, dan berhenti tampil otomatis {HARI_MODAL_SIARAN} hari kemudian.
       </p>
       {r && (
         <p className="mt-2 rounded-[12px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] text-[#55657D]">
@@ -230,8 +238,8 @@ export default function Siaran() {
         <label className="block min-w-0 flex-1 text-[12px] font-bold text-[#55657D]">
           Templat siaran
           <select value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
-            {templat === SIARAN_BARU && <option value={SIARAN_BARU}>{KOSONG.nama}</option>}
-            {TEMPLAT.map((t, i) => (
+            {templat === SIARAN_BARU && <option value={SIARAN_BARU}>{kosong.nama}</option>}
+            {daftarTemplat.map((t, i) => (
               <option key={t.nama} value={i}>
                 {t.nama}
               </option>

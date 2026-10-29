@@ -7,13 +7,15 @@
 // POST { aksi:"siarkan", kirim_push, judul, isi, url?, modal:{aktif,judul,isi,jenis} }  -> admin bencana.admin level kelola
 // GET  ?petugas=1                 -> { petugas: [{akun_id,nama,peran,perangkat}] }  (admin bencana.admin) daftar penerima untuk "kirim ke satu petugas"
 // POST { aksi:"kirim_satu", akun_id, judul, isi, url? }  -> notifikasi ke SATU petugas bertugas (admin bencana.admin level kelola; (17 Okt 2026))
+// (29 Okt 2026) SIARAN PER SURVEI: ?k=<id kegiatan> (GET) / body.k (POST) memilih survei; kosong = Pascabencana (perilaku lama). Survei selain Pascabencana
+// memeriksa izin bencana.admin UNTUK kegiatan itu. GET tanpa ?ringkas/?petugas = modal untuk pemanggil dari SEMUA survei tempat ia bertugas.
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aksesRekap } from "@/lib/portal/rekapIdentifikasi";
 import { catatBaca, daftarPenerimaSatu, kirimKeSatu, modalUntukAkun, ringkasSiaran, siarkan } from "@/lib/portal/siaranPetugas";
 import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
-import { validasiKirimSatu, validasiSiaran } from "@/lib/siaranPetugas";
+import { bacaKegiatanSiaran, validasiKirimSatu, validasiSiaran } from "@/lib/siaranPetugas";
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { urlInternalAman, validasiPesanPush } from "@/lib/sigapPushUtil";
 
@@ -22,25 +24,31 @@ export const dynamic = "force-dynamic";
 
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
 
+/** Survei tujuan: undefined = Pascabencana. Izin dicek untuk kegiatan itu bila bukan Pascabencana (kegiatan 1 tetap seperti semula). */
+function tujuan(v: unknown): { k: number | undefined; izinKeg: number | null } | null {
+  const k = bacaKegiatanSiaran(v);
+  if (k === null) return null;
+  return { k, izinKeg: k === undefined || k === 1 ? null : k };
+}
+
 export async function GET(req: NextRequest) {
   const db = dbPortal();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const akun = await akunDariSesi(db, req.headers);
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
   try {
-    if (new URL(req.url).searchParams.get("ringkas") === "1") {
+    const q = new URL(req.url).searchParams;
+    if (q.get("ringkas") === "1" || q.get("petugas") === "1") {
+      const t = tujuan(q.get("k"));
+      if (!t) return galat("Survei tidak sah.");
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
-      return NextResponse.json({ ...(await ringkasSiaran(db)), boleh_kirim: boleh(izin, "bencana.admin", "kelola") });
+      if (!boleh(izin, "bencana.admin", "lihat", t.izinKeg)) return galat("Khusus admin pendataan.", 403);
+      if (q.get("ringkas") === "1") return NextResponse.json({ ...(await ringkasSiaran(db, t.k)), boleh_kirim: boleh(izin, "bencana.admin", "kelola", t.izinKeg) });
+      return NextResponse.json({ petugas: await daftarPenerimaSatu(db, t.k) });
     }
-    if (new URL(req.url).searchParams.get("petugas") === "1") {
-      const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
-      return NextResponse.json({ petugas: await daftarPenerimaSatu(db) });
-    }
+    // modal: Pascabencana hanya bila akun boleh (admin/petugas pendataan, seperti semula); survei lain bila akun ditugaskan di sana
     const akses = await aksesRekap(db, akun);
-    if (!akses.boleh) return NextResponse.json({ pengumuman: [] });
-    return NextResponse.json({ pengumuman: await modalUntukAkun(db, akun.id) });
+    return NextResponse.json({ pengumuman: await modalUntukAkun(db, akun.id, akses.boleh) });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }
@@ -74,21 +82,25 @@ export async function POST(req: NextRequest) {
     }
     if (body?.aksi === "kirim_satu") {
       if (aktorDariHeader(req.headers)) return galat('Notifikasi tidak dapat dikirim saat mode "masuk sebagai".', 403);
+      const t = tujuan(body.k);
+      if (!t) return galat("Survei tidak sah.");
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengirim notifikasi pendataan.", 403);
+      if (!boleh(izin, "bencana.admin", "kelola", t.izinKeg)) return galat("Tidak punya izin mengirim notifikasi pendataan.", 403);
       const v = validasiKirimSatu(body);
       if (!v.ok) return galat(v.pesan, 422);
-      const h = await kirimKeSatu(db, { id: akun.id }, v.nilai.akun, v.nilai.pesan);
+      const h = await kirimKeSatu(db, { id: akun.id }, v.nilai.akun, v.nilai.pesan, t.k);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }
     if (body?.aksi === "siarkan") {
       if (aktorDariHeader(req.headers)) return galat("Siaran tidak dapat dikirim saat mode \"masuk sebagai\".", 403);
+      const t = tujuan(body.k);
+      if (!t) return galat("Survei tidak sah.");
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengirim siaran pendataan.", 403);
+      if (!boleh(izin, "bencana.admin", "kelola", t.izinKeg)) return galat("Tidak punya izin mengirim siaran pendataan.", 403);
       const v = validasiSiaran(body);
       if (!v.ok) return galat(v.pesan, 422);
-      const h = await siarkan(db, { id: akun.id }, v.nilai);
+      const h = await siarkan(db, { id: akun.id }, v.nilai, t.k);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
     }

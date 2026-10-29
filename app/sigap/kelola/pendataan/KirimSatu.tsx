@@ -12,19 +12,25 @@ import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
 type Petugas = { akun_id: number; nama: string; peran: string; perangkat: number };
 type Hasil = { ok: boolean; nama: string; perangkat: number; terkirim: number; gagal: number };
 
-const AWAL = {
+// (29 Okt 2026) Per SURVEI: prop `kegiatanId`. Contoh isian di bawah khusus Pascabencana; survei lain mulai dari isian kosong.
+const AWAL_PASCA = {
   judul: "Silakan coba menu Kolam wilayah",
   isi: "Menu Kolam wilayah sudah dibuka untuk Anda. Buka Lembar Pendataan, ketuk tombol ungu Kolam wilayah, lalu pilih Sub SLS tambahan (maksimal 2 sekali kirim). Mohon dicoba dan kabari hasilnya.",
   url: "/sigap/pendataan",
 };
 
+const AWAL_LAIN = { judul: "", isi: "", url: "/" };
+
 const labelPeran = (p: string) => (p === "pml" ? "PML" : p === "ppl" ? "PPL" : p === "korwil" ? "Korwil" : p);
 
-export default function KirimSatu() {
+export default function KirimSatu({ kegiatanId = 1 }: { kegiatanId?: number }) {
+  const pasca = kegiatanId === 1;
+  const kunciK = pasca ? "" : `k=${kegiatanId}`;
   const [daftar, setDaftar] = useState<Petugas[] | null>(null);
   const [boleh, setBoleh] = useState(true);
   const [galat, setGalat] = useState<string | null>(null);
   const [akunId, setAkunId] = useState<number | null>(null);
+  const AWAL = pasca ? AWAL_PASCA : AWAL_LAIN;
   const [judul, setJudul] = useState(AWAL.judul);
   const [isi, setIsi] = useState(AWAL.isi);
   const [url, setUrl] = useState(AWAL.url);
@@ -34,21 +40,21 @@ export default function KirimSatu() {
 
   const muat = useCallback(async () => {
     try {
-      const r = await apiPortal<{ petugas: Petugas[] }>("/api/portal/siaran-petugas?petugas=1");
+      const r = await apiPortal<{ petugas: Petugas[] }>(`/api/portal/siaran-petugas?petugas=1${kunciK ? `&${kunciK}` : ""}`);
       setDaftar(r.petugas);
-      setAkunId((a) => a ?? r.petugas.find((p) => p.peran === "pml" && /hariston/i.test(p.nama))?.akun_id ?? null);
+      setAkunId((a) => a ?? (pasca ? r.petugas.find((p) => p.peran === "pml" && /hariston/i.test(p.nama))?.akun_id ?? null : null));
       setGalat(null);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal memuat daftar petugas.");
     }
-  }, []);
+  }, [kunciK, pasca]);
   useEffect(() => {
     void muat();
     // hak kirim ditentukan server (403 saat mengirim); ringkasan siaran memberi tahu bila hanya boleh melihat
-    apiPortal<{ boleh_kirim: boolean }>("/api/portal/siaran-petugas?ringkas=1")
+    apiPortal<{ boleh_kirim: boolean }>(`/api/portal/siaran-petugas?ringkas=1${kunciK ? `&${kunciK}` : ""}`)
       .then((r) => setBoleh(!!r.boleh_kirim))
       .catch(() => undefined);
-  }, [muat]);
+  }, [muat, kunciK, pasca]);
 
   const dipilih = daftar?.find((p) => p.akun_id === akunId) ?? null;
   const sah = akunId !== null && judul.trim().length > 0 && isi.trim().length > 0;
@@ -59,7 +65,7 @@ export default function KirimSatu() {
     setGalat(null);
     setHasil(null);
     try {
-      const h = await apiPortal<Hasil>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "kirim_satu", akun_id: akunId, judul, isi, url }) });
+      const h = await apiPortal<Hasil>("/api/portal/siaran-petugas", { method: "POST", body: JSON.stringify({ aksi: "kirim_satu", k: kegiatanId, akun_id: akunId, judul, isi, url }) });
       setHasil(h);
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal mengirim. Periksa sambungan lalu coba lagi.");

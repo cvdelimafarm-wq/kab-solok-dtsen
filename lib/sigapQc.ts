@@ -575,7 +575,10 @@ export function validasiPengaturan(masuk: unknown): HasilValidasi {
 // ---------------------------------------------------------------------------
 // Validasi soal (menu bank soal)
 // ---------------------------------------------------------------------------
-export type SoalMasuk = { id: string; paket: number; judul_paket?: string; nomor?: number; pertanyaan: string; opsi: Record<"A" | "B" | "C" | "D", string>; kunci: "A" | "B" | "C" | "D"; penjelasan?: string; kata_kunci?: string[]; aktif?: boolean };
+/** (29 Okt 2026) Soal 4 pilihan (A-D) ATAU 2 pilihan (A-B, mis. Benar/Salah): C dan D diisi bersama atau dikosongkan bersama. */
+export type OpsiSoal = { A: string; B: string; C?: string; D?: string };
+export const OPSI_BENAR_SALAH: Readonly<{ A: string; B: string }> = { A: "Benar", B: "Salah" };
+export type SoalMasuk = { id: string; paket: number; judul_paket?: string; nomor?: number; pertanyaan: string; opsi: OpsiSoal; kunci: "A" | "B" | "C" | "D"; penjelasan?: string; kata_kunci?: string[]; aktif?: boolean };
 
 export function validasiSoal(masuk: unknown): { ok: true; data: SoalMasuk } | { ok: false; galat: string[] } {
   const galat: string[] = [];
@@ -590,14 +593,22 @@ export function validasiSoal(masuk: unknown): { ok: true; data: SoalMasuk } | { 
   const kunci = String(m.kunci ?? "").trim().toUpperCase();
   if (!["A", "B", "C", "D"].includes(kunci)) galat.push("Kunci harus A, B, C, atau D");
   const o = (m.opsi ?? {}) as Record<string, unknown>;
-  const opsi = {} as Record<"A" | "B" | "C" | "D", string>;
-  for (const k of ["A", "B", "C", "D"] as const) {
+  const opsi: OpsiSoal = { A: "", B: "" };
+  for (const k of ["A", "B"] as const) {
     const t = String(o[k] ?? "").trim();
     if (!t) galat.push(`Pilihan ${k} wajib diisi`);
     opsi[k] = t;
   }
+  // (29 Okt 2026) C dan D opsional sebagai pasangan: keduanya kosong = soal 2 pilihan (Benar/Salah)
+  const c = String(o.C ?? "").trim();
+  const d = String(o.D ?? "").trim();
+  if (c && d) {
+    opsi.C = c;
+    opsi.D = d;
+  } else if (c || d) galat.push("Pilihan C dan D harus diisi bersama, atau dikosongkan keduanya (soal 2 pilihan, mis. Benar/Salah)");
   const tekstual = Object.values(opsi).filter(Boolean);
   if (new Set(tekstual.map((t) => t.toLowerCase())).size !== tekstual.length) galat.push("Pilihan jawaban tidak boleh sama persis");
+  if (["A", "B", "C", "D"].includes(kunci) && opsi[kunci as "A" | "B" | "C" | "D"] === undefined) galat.push(`Kunci ${kunci} tidak ada di pilihan jawaban (soal ini hanya punya pilihan A dan B)`);
   const kata = Array.isArray(m.kata_kunci) ? Array.from(new Set((m.kata_kunci as unknown[]).map((x) => String(x ?? "").trim()).filter(Boolean))) : [];
   if (kata.length > 20) galat.push("Kata kunci maksimal 20");
   if (galat.length) return { ok: false, galat };

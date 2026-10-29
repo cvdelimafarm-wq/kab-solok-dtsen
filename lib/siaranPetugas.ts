@@ -102,3 +102,27 @@ export function validasiKirimSatu(x: unknown): { ok: true; nilai: { akun: number
   if (!v.ok) return v;
   return { ok: true, nilai: { akun, pesan: v.nilai } };
 }
+
+// ---------------------------------------------------------------- (29 Okt 2026) siaran per SURVEI
+/**
+ * Survei tujuan siaran dari ?k= / body.k. Kosong = Pascabencana (alamat dan aplikasi lama tetap berlaku) -> undefined.
+ * Bukan bilangan bulat positif -> null (server menolak, jangan diam-diam jatuh ke Pascabencana).
+ */
+export function bacaKegiatanSiaran(v: unknown): number | undefined | null {
+  if (v === undefined || v === null || v === "") return undefined;
+  const t = typeof v === "string" ? v.trim() : v;
+  if (typeof t === "string" && !/^\d{1,7}$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
+/** Survei sebuah baris audit siaran: detail.kegiatan; baris lama (sebelum 29 Okt 2026) tidak memuatnya = Pascabencana. */
+export function kegiatanDariAudit(detail: unknown, idPascabencana: number): number {
+  const n = Number((detail as Record<string, unknown> | null)?.kegiatan);
+  return Number.isInteger(n) && n >= 1 ? n : idPascabencana;
+}
+
+/** Tag notifikasi: Pascabencana tetap tag lama; survei lain diberi akhiran agar notifikasi antar-survei tidak saling menimpa. */
+export function tagSiaran(dasar: string, kegiatanId: number, idPascabencana: number): string {
+  return kegiatanId === idPascabencana ? dasar : `${dasar}-k${kegiatanId}`;
+}

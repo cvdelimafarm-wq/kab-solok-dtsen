@@ -2,6 +2,7 @@
 
 // app/sigap/kelola/pendataan/page.tsx
 //
+// (29 Okt 2026, lanjutan) Tab 2 (Penugasan & ST), 3 (Siaran + kirim satu petugas) dan 7 (Administrasi: transport lokal) kini juga mengikuti survei terpilih.
 // (29 Okt 2026) PEMILIH SURVEI di atas isi (PemilihSurvei.tsx, alamat ?k=): seluruh tab menyesuaikan survei terpilih. Tab 4 (QC) sudah penuh per survei; tab lain
 // untuk survei selain Pendataan Pascabencana menampilkan keterangan "belum tersedia" (BelumUntukSurvei) dan akan disesuaikan bertahap.
 // (27 Okt 2026) Tab 1 Persiapan ditambah "Pengaturan Lembar Pendataan" per kegiatan (PengaturanLembar.tsx): istilah/warna/bentuk/alasan tombol hasil + variabel radar.
@@ -85,14 +86,14 @@ export default function KelolaPendataan() {
       kecil="SIGAP · Kelola Pendataan"
       jejak={["Pelaksanaan", "Pendataan", labelTabPendataan(tab)]}
       judul="Kelola Pendataan"
-      sub={pasca ? "Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban" : `${nama} · QC Pemahaman Petugas`}
+      sub={pasca ? "Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban" : `${nama} · penugasan, siaran, QC Pemahaman, dan administrasi`}
       tab={TAB_PENDATAAN.map(({ kode, label }) => ({ kode, label }))}
       aktifTab={tab}
       onTab={pilihTab}
     >
       <PemilihSurvei daftar={daftar} aktif={kegId} onPilih={pilihKegiatan} />
       {tab === "qc" && <QcPemahaman key={kegId} kegiatanId={kegId} />}
-      {tab !== "qc" && !pasca && belum}
+      {!pasca && !["qc", "tim", "siaran", "administrasi"].includes(tab) && belum}
       {pasca && tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
       {pasca && tab === "persiapan" && (
         <>
@@ -101,16 +102,16 @@ export default function KelolaPendataan() {
           <IsiLaporanSpj />
         </>
       )}
-      {pasca && tab === "tim" && <Tim />}
-      {pasca && tab === "siaran" && (
+      {tab === "tim" && <Tim key={kegId} kegiatanId={kegId} />}
+      {tab === "siaran" && (
         <>
-          <Siaran />
-          <KirimSatu />
+          <Siaran key={kegId} kegiatanId={kegId} namaKegiatan={nama} />
+          <KirimSatu key={`k${kegId}`} kegiatanId={kegId} />
         </>
       )}
       {pasca && tab === "monitoring" && <Monitoring />}
       {pasca && tab === "pemeriksaan" && <Pemeriksaan />}
-      {pasca && tab === "administrasi" && <Administrasi />}
+      {tab === "administrasi" && <Administrasi key={kegId} kegiatanId={kegId} />}
     </Bingkai>
   );
 }

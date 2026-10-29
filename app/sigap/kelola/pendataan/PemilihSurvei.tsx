@@ -42,7 +42,7 @@ export function BelumUntukSurvei({ nama, tab, onKePascabencana, onKeQc }: { nama
     <Kartu judul={`${tab}: belum tersedia untuk ${nama}`} ket="tab ini belum mengikuti survei terpilih">
       <p className="text-[13px] leading-relaxed text-[#33455F]">
         Isi tab ini saat ini hanya untuk <b>Pendataan Pascabencana</b>, jadi tidak ditampilkan agar tidak tertukar dengan data {nama}. Penyesuaian tab ini per survei dikerjakan bertahap.
-        Yang sudah mengikuti survei terpilih: tab <b>4 · QC</b> (QC Pemahaman Petugas).
+        Yang sudah mengikuti survei terpilih: tab <b>2 · Tim</b> (Penugasan &amp; ST), <b>3 · Siaran</b>, <b>4 · QC</b> (QC Pemahaman), dan <b>7 · Administrasi &amp; SPJ</b>.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" onClick={onKeQc} className="min-h-[42px] rounded-lg bg-[#0F2A52] px-4 text-[13.5px] font-bold text-white">

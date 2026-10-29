@@ -5,6 +5,7 @@
 // (23 Okt 2026, tahap 3) Menyematkan komponen tab Admin Transport Lokal (app/sigap/admin/Tab*.tsx) untuk kegiatan Pendataan (id 1) di dalam
 // Kelola Pendataan. Komponen yang sama dipakai halaman /sigap/admin (alamat lama /sigap/kelola/translok tetap hidup). Hak akses tidak berubah:
 // tab hanya digambar bila izin menu translok.* untuk kegiatan itu ada (server tetap memeriksa tiap panggilan).
+// (29 Okt 2026) Prop `kegiatanId` (pemilih survei di Kelola Pendataan): bawaan tetap Pendataan (id 1).
 
 import { useEffect, useState } from "react";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
@@ -19,7 +20,7 @@ import TabUnduhSpj from "../../admin/TabUnduhSpj";
 export type BagianTranslok = "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "unduh";
 const MENU: Record<BagianTranslok, string> = { monitoring: "translok.monitoring", penugasan: "translok.penugasan", kegiatan: "translok.kegiatan", verifikasi: "translok.verifikasi", unduh: "translok.verifikasi" }; // (28 Okt 2026) Unduh SPJ memakai izin Verifikasi (lihat)
 
-export default function TransportLokal({ bagian }: { bagian: BagianTranslok }) {
+export default function TransportLokal({ bagian, kegiatanId = KEGIATAN_PENDATAAN }: { bagian: BagianTranslok; kegiatanId?: number }) {
   const [r, setR] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
 
@@ -37,19 +38,19 @@ export default function TransportLokal({ bagian }: { bagian: BagianTranslok }) {
 
   if (galat) return <Pesan>{galat}</Pesan>;
   if (!r) return <Memuat />;
-  const keg = r.kegiatan.find((k) => k.id === KEGIATAN_PENDATAAN) ?? null;
-  if (!keg || !bolehKlien(r.izin, MENU[bagian], "lihat", KEGIATAN_PENDATAAN))
-    return <Pesan jenis="info">Akun Anda belum punya izin untuk menu ini pada kegiatan Pendataan. Minta admin anggaran menambahkannya lewat Kelola Peran &amp; Akses.</Pesan>;
+  const keg = r.kegiatan.find((k) => k.id === kegiatanId) ?? null;
+  if (!keg || !bolehKlien(r.izin, MENU[bagian], "lihat", kegiatanId))
+    return <Pesan jenis="info">Akun Anda belum punya izin untuk menu ini pada kegiatan {keg ? keg.nama : "ini"}. Minta admin anggaran menambahkannya lewat Kelola Peran &amp; Akses.</Pesan>;
 
   return bagian === "monitoring" ? (
-    <TabMonitoring key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} kegiatan={keg} hariIni={r.hari_ini} />
+    <TabMonitoring key={kegiatanId} kegiatanId={kegiatanId} kegiatan={keg} hariIni={r.hari_ini} />
   ) : bagian === "penugasan" ? (
-    <TabPenugasan key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
+    <TabPenugasan key={kegiatanId} kegiatanId={kegiatanId} />
   ) : bagian === "unduh" ? (
-    <TabUnduhSpj key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
+    <TabUnduhSpj key={kegiatanId} kegiatanId={kegiatanId} />
   ) : bagian === "verifikasi" ? (
-    <TabVerifikasi key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} />
+    <TabVerifikasi key={kegiatanId} kegiatanId={kegiatanId} />
   ) : (
-    <TabKegiatan key={KEGIATAN_PENDATAAN} kegiatanId={KEGIATAN_PENDATAAN} bolehBuat={false} onTersimpan={() => undefined} />
+    <TabKegiatan key={kegiatanId} kegiatanId={kegiatanId} bolehBuat={false} onTersimpan={() => undefined} />
   );
 }

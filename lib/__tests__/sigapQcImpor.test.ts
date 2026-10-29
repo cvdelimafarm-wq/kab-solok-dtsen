@@ -45,8 +45,8 @@ describe("petaSoalDariBaris", () => {
   it("kolom wajib tidak ada -> satu galat yang menyebut kolomnya", () => {
     const h = petaSoalDariBaris([{ Pertanyaan: "Apa kabar semuanya?", A: "a", B: "b", C: "c" }], { kegiatanId: 2 });
     expect(h.soal).toEqual([]);
-    expect(h.galat[0].pesan).toContain("D");
     expect(h.galat[0].pesan).toContain("Kunci");
+    expect(h.galat[0].pesan).not.toContain("D,"); // C dan D tidak lagi wajib ada (soal Benar/Salah)
   });
   it("berkas kosong", () => {
     expect(petaSoalDariBaris([], { kegiatanId: 2 }).galat[0].pesan).toContain("tidak berisi");
@@ -65,6 +65,42 @@ describe("templatSoal", () => {
     const objek = t.slice(1).map((r) => Object.fromEntries(t[0].map((j, i) => [j, r[i]])));
     const h = petaSoalDariBaris(objek, { kegiatanId: 2 });
     expect(h.galat).toEqual([]);
-    expect(h.soal).toHaveLength(2);
+    expect(h.soal).toHaveLength(3);
+  });
+});
+
+describe("soal Benar/Salah", () => {
+  const bs = (o: Record<string, unknown> = {}) => baris({ A: "", B: "", C: "", D: "", Kunci: "Salah", ...o });
+  it("kunci Benar/Salah dengan A-D kosong -> A=Benar, B=Salah", () => {
+    const h = petaSoalDariBaris([bs(), bs({ Nomor: 2, Kunci: "BENAR", Pertanyaan: "Pernyataan kedua benar?" })], { kegiatanId: 2 });
+    expect(h.galat).toEqual([]);
+    expect(h.soal[0].opsi).toEqual({ A: "Benar", B: "Salah" });
+    expect(h.soal[0].kunci).toBe("B");
+    expect(h.soal[1].kunci).toBe("A");
+  });
+  it("pilihan A/B diisi sendiri, kunci huruf atau kata", () => {
+    const h = petaSoalDariBaris([bs({ A: "Benar", B: "Salah", Kunci: "A" }), bs({ Nomor: 2, A: "Ya", B: "Tidak", Kunci: "B", Pertanyaan: "Apakah ini tepat sekali?" }), bs({ Nomor: 3, A: "Salah", B: "Benar", Kunci: "Benar", Pertanyaan: "Urutan dibalik pada soal ini?" })], { kegiatanId: 2 });
+    expect(h.galat).toEqual([]);
+    expect(h.soal.map((s) => s.kunci)).toEqual(["A", "B", "B"]);
+  });
+  it("kunci C pada soal 2 pilihan dan C tanpa D ditolak per baris", () => {
+    const h = petaSoalDariBaris([bs({ A: "Benar", B: "Salah", Kunci: "C" }), bs({ Nomor: 2, A: "Benar", B: "Salah", C: "Mungkin", Kunci: "A", Pertanyaan: "Soal dengan C tanpa D?" })], { kegiatanId: 2 });
+    expect(h.soal).toHaveLength(0);
+    expect(h.galat.map((g) => g.baris)).toEqual([2, 3]);
+  });
+  it("kolom C dan D tidak lagi wajib ada di berkas", () => {
+    const tanpa = { Pertanyaan: "Apakah ini soal dua pilihan?", A: "Benar", B: "Salah", Kunci: "A" };
+    const h = petaSoalDariBaris([tanpa], { kegiatanId: 2 });
+    expect(h.galat).toEqual([]);
+    expect(h.soal).toHaveLength(1);
+  });
+  it("templat memuat contoh Benar/Salah yang lolos pemetaan", () => {
+    const t = templatSoal();
+    const judul = t[0];
+    const rows = t.slice(1).map((r) => Object.fromEntries(judul.map((j, i) => [j, r[i]])));
+    const h = petaSoalDariBaris(rows, { kegiatanId: 2 });
+    expect(h.galat).toEqual([]);
+    expect(h.soal).toHaveLength(3);
+    expect(h.soal[2].opsi).toMatchObject({ A: "Benar", B: "Salah" });
   });
 });

@@ -528,3 +528,27 @@ describe("ringkasStatusQc dengan opsi baru", () => {
     expect(r.baris[0]).toContain("30 Okt 2026");
   });
 });
+
+describe("validasiSoal: soal 2 pilihan (Benar/Salah)", () => {
+  const bs = { id: "BS-1", paket: 1, pertanyaan: "PPL boleh mengisi tanpa izin?", opsi: { A: "Benar", B: "Salah" }, kunci: "b" };
+  it("menerima soal tanpa C dan D (kosong atau tidak ada)", () => {
+    for (const opsi of [{ A: "Benar", B: "Salah" }, { A: "Benar", B: "Salah", C: "", D: "  " }]) {
+      const h = validasiSoal({ ...bs, opsi });
+      expect(h.ok).toBe(true);
+      if (h.ok) {
+        expect(h.data.kunci).toBe("B");
+        expect(Object.keys(h.data.opsi)).toEqual(["A", "B"]);
+      }
+    }
+  });
+  it("menolak C tanpa D (atau sebaliknya) dan kunci C/D pada soal 2 pilihan", () => {
+    expect(validasiSoal({ ...bs, opsi: { A: "Benar", B: "Salah", C: "Mungkin" } })).toMatchObject({ ok: false });
+    expect(validasiSoal({ ...bs, opsi: { A: "Benar", B: "Salah", D: "Mungkin" } })).toMatchObject({ ok: false });
+    expect(validasiSoal({ ...bs, kunci: "C" })).toMatchObject({ ok: false });
+    expect(validasiSoal({ ...bs, kunci: "D" })).toMatchObject({ ok: false });
+  });
+  it("tetap menolak A atau B kosong dan pilihan kembar", () => {
+    expect(validasiSoal({ ...bs, opsi: { A: "Benar", B: "" } })).toMatchObject({ ok: false });
+    expect(validasiSoal({ ...bs, opsi: { A: "Benar", B: "benar" } })).toMatchObject({ ok: false });
+  });
+});

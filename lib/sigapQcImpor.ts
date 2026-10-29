@@ -6,8 +6,10 @@
 //
 // Format kolom (judul kolom tidak membedakan huruf besar/kecil, spasi/tanda baca diabaikan, beberapa nama lain diterima):
 //   Kode (boleh kosong: dibuat otomatis) · Paket · Judul Paket · Nomor · Pertanyaan · A · B · C · D · Kunci (A/B/C/D) · Pembahasan · Kata Kunci (dipisah ; atau | atau baris baru)
+// (29 Okt 2026) SOAL BENAR/SALAH: kosongkan C dan D. Pilihan A dan B juga boleh dikosongkan bila Kunci diisi "Benar" atau "Salah" (otomatis A=Benar, B=Salah).
+// Kolom A/B/C/D pada berkas hanya wajib ADA; isinya wajib untuk A dan B (kecuali kunci Benar/Salah) sedangkan C dan D harus berpasangan.
 
-import { validasiSoal, type SoalMasuk } from "@/lib/sigapQc";
+import { OPSI_BENAR_SALAH, validasiSoal, type SoalMasuk } from "@/lib/sigapQc";
 
 export const KOLOM_TEMPLAT = ["Kode", "Paket", "Judul Paket", "Nomor", "Pertanyaan", "A", "B", "C", "D", "Kunci", "Pembahasan", "Kata Kunci"] as const;
 
@@ -27,7 +29,7 @@ const ALIAS: Record<Medan, string[]> = {
   penjelasan: ["pembahasan", "penjelasan", "alasan"],
   kata_kunci: ["katakunci", "kata", "sorotan", "katasorot"],
 };
-const WAJIB: Medan[] = ["pertanyaan", "A", "B", "C", "D", "kunci"];
+const WAJIB: Medan[] = ["pertanyaan", "A", "B", "kunci"]; // C dan D opsional (soal Benar/Salah)
 const LABEL: Record<Medan, string> = { id: "Kode", paket: "Paket", judul_paket: "Judul Paket", nomor: "Nomor", pertanyaan: "Pertanyaan", A: "A", B: "B", C: "C", D: "D", kunci: "Kunci", penjelasan: "Pembahasan", kata_kunci: "Kata Kunci" };
 
 const rapat = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -89,14 +91,21 @@ export function petaSoalDariBaris(baris: readonly Record<string, unknown>[], ops
     let id = ambil(b, "id");
     if (!id) id = `K${opsi.kegiatanId}-P${Number.isInteger(paket) ? String(paket).padStart(2, "0") : "XX"}-${String(nomor).padStart(2, "0")}`;
     const kunciTeks = ambil(b, "kunci").toUpperCase();
-    const kunci = /^[A-D]/.test(kunciTeks) ? kunciTeks[0] : kunciTeks;
+    let kunci = /^[A-D]/.test(kunciTeks) ? kunciTeks[0] : kunciTeks;
+    let pilihan = { A: ambil(b, "A"), B: ambil(b, "B"), C: ambil(b, "C"), D: ambil(b, "D") };
+    // Benar/Salah: kunci berupa kata; pilihan A/B bawaan "Benar"/"Salah" bila dikosongkan, dan kunci dipetakan ke huruf pilihan yang bertuliskan itu
+    if (kunciTeks === "BENAR" || kunciTeks === "SALAH") {
+      if (!pilihan.A && !pilihan.B && !pilihan.C && !pilihan.D) pilihan = { ...pilihan, ...OPSI_BENAR_SALAH };
+      const huruf = (["A", "B", "C", "D"] as const).find((k) => pilihan[k].trim().toUpperCase() === kunciTeks);
+      if (huruf) kunci = huruf;
+    }
     const v = validasiSoal({
       id,
       paket,
       judul_paket: ambil(b, "judul_paket") || undefined,
       nomor,
       pertanyaan: ambil(b, "pertanyaan"),
-      opsi: { A: ambil(b, "A"), B: ambil(b, "B"), C: ambil(b, "C"), D: ambil(b, "D") },
+      opsi: pilihan,
       kunci,
       penjelasan: ambil(b, "penjelasan"),
       kata_kunci: pecahKataKunci(ambil(b, "kata_kunci")),
@@ -121,5 +130,7 @@ export function templatSoal(): string[][] {
     [...KOLOM_TEMPLAT],
     ["", "1", "Dasar Pendataan", "1", "Contoh pertanyaan: siapa yang mengisi kuesioner ini?", "PML", "PPL", "Admin kabupaten", "Wali nagari", "B", "Pembahasan singkat mengapa jawaban B benar.", "PPL; kuesioner"],
     ["", "1", "Dasar Pendataan", "2", "Contoh pertanyaan kedua ...", "Pilihan A", "Pilihan B", "Pilihan C", "Pilihan D", "C", "", ""],
+    // Soal Benar/Salah: C dan D dikosongkan; Kunci diisi Benar atau Salah (A dan B boleh dikosongkan, otomatis Benar dan Salah)
+    ["", "1", "Dasar Pendataan", "3", "Contoh Benar/Salah: PPL boleh mengisi kuesioner petani lain tanpa izin.", "", "", "", "", "Salah", "Pembahasan singkat.", ""],
   ];
 }

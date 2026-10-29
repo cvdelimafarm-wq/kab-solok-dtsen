@@ -501,7 +501,8 @@ function BankSoal({ d, kirim }: { d: Data; kirim: Kirim }) {
                     <Sorot teks={s.pertanyaan} kata={s.kata_kunci} />
                   </p>
                   <p className="mt-0.5 text-[12px] text-[#6B7A90]">
-                    {s.id} · kunci {s.kunci} · {s.kata_kunci.length} kata kunci
+                    {s.id} · {s.opsi.C ? "4 pilihan" : "2 pilihan"} · kunci {s.kunci}
+                    {s.opsi.C ? "" : ` (${s.opsi[s.kunci] ?? ""})`} · {s.kata_kunci.length} kata kunci
                   </p>
                 </div>
                 <div className="flex flex-none items-center gap-1">
@@ -549,10 +550,22 @@ function EditSoal({ awal, baru, kirim, onTutup }: { awal: Soal; baru: boolean; k
   const [s, setS] = useState<Soal>(awal);
   const [kata, setKata] = useState(awal.kata_kunci.join("\n"));
   const [sibuk, setSibuk] = useState(false);
+  // (29 Okt 2026) soal 2 pilihan (Benar/Salah): hanya pilihan A dan B; C dan D tidak dikirim
+  const [dua, setDua] = useState(!baru && !awal.opsi.C && !awal.opsi.D);
+  const kodePilihan = dua ? (["A", "B"] as const) : (["A", "B", "C", "D"] as const);
+  const ubahJenis = (benarSalah: boolean) => {
+    setDua(benarSalah);
+    setS((x) => {
+      const opsi: Record<string, string> = benarSalah
+        ? { A: x.opsi.A?.trim() ? x.opsi.A : "Benar", B: x.opsi.B?.trim() ? x.opsi.B : "Salah" }
+        : { A: x.opsi.A ?? "", B: x.opsi.B ?? "", C: x.opsi.C ?? "", D: x.opsi.D ?? "" };
+      return { ...x, opsi, kunci: benarSalah && x.kunci !== "A" && x.kunci !== "B" ? "A" : x.kunci };
+    });
+  };
   const kataDaftar = kata.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
   const simpan = async () => {
     setSibuk(true);
-    const r = await kirim({ aksi: "soal", data: { ...s, paket: Number(s.paket), nomor: Number(s.nomor), judul_paket: s.judul_paket || `Paket ${s.paket}`, kata_kunci: kataDaftar } }, baru ? "Soal ditambahkan." : "Soal disimpan.");
+    const r = await kirim({ aksi: "soal", data: { ...s, opsi: dua ? { A: s.opsi.A ?? "", B: s.opsi.B ?? "" } : s.opsi, paket: Number(s.paket), nomor: Number(s.nomor), judul_paket: s.judul_paket || `Paket ${s.paket}`, kata_kunci: kataDaftar } }, baru ? "Soal ditambahkan." : "Soal disimpan.");
     setSibuk(false);
     if (r) onTutup();
   };
@@ -582,7 +595,15 @@ function EditSoal({ awal, baru, kirim, onTutup }: { awal: Soal; baru: boolean; k
           <span className="text-[12.5px] font-bold text-[#1B2B4B]">Pertanyaan</span>
           <textarea rows={3} className={INPUT} value={s.pertanyaan} onChange={(e) => setS({ ...s, pertanyaan: e.target.value })} />
         </label>
-        {(["A", "B", "C", "D"] as const).map((k) => (
+        <div role="group" aria-label="Jenis soal" className="flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] font-bold text-[#1B2B4B]">Jenis soal</span>
+          {([[false, "4 pilihan (A-D)"], [true, "Benar / Salah (2 pilihan)"]] as const).map(([v, l]) => (
+            <button key={l} type="button" aria-pressed={dua === v} onClick={() => ubahJenis(v)} className={`min-h-[36px] rounded-full px-3.5 text-[12.5px] font-bold ${dua === v ? "bg-[#0F2A52] text-white" : "border border-[#DDE6F3] bg-white text-[#55657D]"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {kodePilihan.map((k) => (
           <label key={k} className="flex items-start gap-2">
             <input type="radio" name="kunci" className="mt-2.5 h-4 w-4 accent-[#13794B]" checked={s.kunci === k} onChange={() => setS({ ...s, kunci: k })} aria-label={`Jadikan ${k} jawaban benar`} />
             <span className="grid flex-1 gap-1">
@@ -624,8 +645,6 @@ function EditSoal({ awal, baru, kirim, onTutup }: { awal: Soal; baru: boolean; k
 }
 
 function ImporSoal({ kirim, kegiatanId, onTutup }: { kirim: Kirim; kegiatanId: number; onTutup: () => void }) {
-  const [mode, setMode] = useState<"excel" | "json">("excel");
-  const [teks, setTeks] = useState("");
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [berkas, setBerkas] = useState<string | null>(null);
@@ -665,33 +684,11 @@ function ImporSoal({ kirim, kegiatanId, onTutup }: { kirim: Kirim; kegiatanId: n
     setSibuk(false);
     if (r) onTutup();
   };
-  const jalanJson = async () => {
-    setGalat(null);
-    let arr: unknown;
-    try {
-      arr = JSON.parse(teks);
-    } catch {
-      setGalat("Teks bukan JSON yang sah.");
-      return;
-    }
-    setSibuk(true);
-    const r = await kirim({ aksi: "impor", soal: arr }, "Soal diimpor.");
-    setSibuk(false);
-    if (r) onTutup();
-  };
   return (
     <Lapis judul="Impor banyak soal" onTutup={onTutup}>
-      <div role="tablist" aria-label="Cara impor" className="mb-3 flex gap-2">
-        {([["excel", "Dari Excel"], ["json", "Tempel JSON"]] as const).map(([k, l]) => (
-          <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={`min-h-[38px] rounded-full px-4 text-[13px] font-bold ${mode === k ? "bg-[#0F2A52] text-white" : "border border-[#DDE6F3] bg-white text-[#55657D]"}`}>
-            {l}
-          </button>
-        ))}
-      </div>
-      {mode === "excel" ? (
-        <div className="space-y-3">
+      <div className="space-y-3">
           <p className="text-[12.5px] leading-snug text-[#55657D]">
-            Siapkan berkas Excel (lembar pertama): kolom <b>Kode</b> (boleh kosong, dibuat otomatis), <b>Paket</b>, <b>Judul Paket</b>, <b>Nomor</b>, <b>Pertanyaan</b>, <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>, <b>Kunci</b> (A-D), <b>Pembahasan</b>, <b>Kata Kunci</b> (pisahkan dengan titik koma). Soal dengan kode yang sama diperbarui; tidak ada yang dihapus. Maksimal 300 soal per impor.
+            Siapkan berkas Excel (lembar pertama): kolom <b>Kode</b> (boleh kosong, dibuat otomatis), <b>Paket</b>, <b>Judul Paket</b>, <b>Nomor</b>, <b>Pertanyaan</b>, <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>, <b>Kunci</b> (A-D), <b>Pembahasan</b>, <b>Kata Kunci</b> (pisahkan dengan titik koma). Soal Benar/Salah: kosongkan C dan D lalu isi Kunci dengan <b>Benar</b> atau <b>Salah</b> (A dan B boleh dikosongkan, otomatis Benar dan Salah). Soal dengan kode yang sama diperbarui; tidak ada yang dihapus. Maksimal 300 soal per impor.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={BTN_O} onClick={() => void unduhTemplat()}>
@@ -729,24 +726,7 @@ function ImporSoal({ kirim, kegiatanId, onTutup }: { kirim: Kirim; kegiatanId: n
               {sibuk ? "Mengimpor…" : peta && peta.soal.length > 0 ? `Impor ${peta.soal.length} soal` : "Impor"}
             </button>
           </div>
-        </div>
-      ) : (
-        <>
-          <p className="text-[12.5px] leading-snug text-[#55657D]">
-            Tempel daftar JSON. Tiap butir: <code>{`{"id":"LAT-01","paket":1,"judul_paket":"…","pertanyaan":"…","opsi":{"A":"…","B":"…","C":"…","D":"…"},"kunci":"B","penjelasan":"…","kata_kunci":["…"]}`}</code>. Soal dengan kode yang sama akan diperbarui; tidak ada yang dihapus.
-          </p>
-          <textarea rows={12} className={`${INPUT} mt-2 w-full font-mono text-[12px]`} value={teks} onChange={(e) => setTeks(e.target.value)} aria-label="Daftar soal JSON" />
-          {galat && <p className="mt-2 text-[13px] font-bold text-[#B42329]">{galat}</p>}
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className={BTN_O} onClick={onTutup}>
-              Batal
-            </button>
-            <button type="button" className={BTN_G} disabled={sibuk || !teks.trim()} onClick={jalanJson}>
-              {sibuk ? "Mengimpor…" : "Impor"}
-            </button>
-          </div>
-        </>
-      )}
+      </div>
     </Lapis>
   );
 }
