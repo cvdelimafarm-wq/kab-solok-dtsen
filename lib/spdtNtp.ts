@@ -304,4 +304,6 @@ export type HasilQcSpdt = {
   /** daftar petugas (PML + PPL peserta) dengan percobaan, nilai, status push dan modal */
   petugas: import("@/lib/sigapQcMonitor").PetugasQc[];
   monitoring: import("@/lib/sigapQcMonitor").MonitoringQc;
+  /** tiap percobaan petugas + soal yang salah */
+  rincian: import("@/lib/sigapQcMonitor").RincianQc;
 };

@@ -21,7 +21,7 @@ import {
 } from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 import type { HasilQcSpdt } from "@/lib/spdtNtp";
-import { susunPetugasQc, type PesertaMentah } from "@/lib/sigapQcMonitor";
+import { susunPetugasQc, susunRincianQc, type PercobaanRinci, type PesertaMentah, type RincianQc, type SoalRinci } from "@/lib/sigapQcMonitor";
 import {
   SLOT_TUNDA,
   hariBerlaku,
@@ -174,6 +174,30 @@ export type SoalAdmin = {
 
 const KOLOM_SOAL = "id, paket, judul_paket, nomor, pertanyaan, opsi, kunci, penjelasan, kata_kunci, aktif";
 
+/**
+ * (29 Okt 2026) Rincian per petugas pada satu hari: tiap percobaan (nilai, waktu) + soal yang salah dan jawaban yang dipilih.
+ * Hanya soal yang pernah salah yang ikut dimuat (teks soal, opsi, kunci).
+ */
+async function rincianHari(db: Db, keg: number, hari: string | null): Promise<RincianQc> {
+  if (!hari) return { percobaan: {}, soal: {} };
+  const { data: pc } = await db
+    .from("sigap_qc_percobaan")
+    .select("akun_id, ke, skor, benar, jumlah, terlambat, selesai_at, salah, jawaban")
+    .eq("kegiatan_id", keg)
+    .eq("tanggal", hari)
+    .order("akun_id")
+    .order("ke")
+    .limit(5000);
+  const baris = (pc ?? []) as PercobaanRinci[];
+  const ids = [...new Set(baris.flatMap((b) => b.salah ?? []))];
+  const soal: SoalRinci[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await db.from("sigap_qc_soal").select("id, pertanyaan, kunci, opsi").eq("kegiatan_id", keg).in("id", ids.slice(i, i + 100));
+    soal.push(...((data ?? []) as SoalRinci[]));
+  }
+  return susunRincianQc(baris, soal);
+}
+
 export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
   const { data: kg } = await db.from("sigap_kegiatan").select("id, nama").eq("id", keg).maybeSingle();
   if (!kg) throw new GalatQc("Kegiatan tidak ditemukan.", 404);
@@ -215,6 +239,7 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
     soal_hari: soalHari,
     susulan_at: susulanAt,
     rekap,
+    rincian: await rincianHari(db, keg, hari),
   };
 }
 
@@ -296,6 +321,7 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
     rilis_at: rilisAt,
     petugas,
     monitoring,
+    rincian: await rincianHari(db, keg, hari),
   };
 }
 

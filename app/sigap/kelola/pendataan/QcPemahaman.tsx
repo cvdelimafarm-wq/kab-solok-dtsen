@@ -19,6 +19,8 @@ import { petaSoalDariBaris, templatSoal, type HasilPeta } from "@/lib/sigapQcImp
 import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
+import RincianQcPetugas from "@/app/portal/qc/RincianQc";
+import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
 
 type Peng = QcPengaturan & { diubah_oleh: string | null; diubah_at: string };
 type Soal = { id: string; paket: number; judul_paket: string; nomor: number; pertanyaan: string; opsi: Record<string, string>; kunci: string; penjelasan: string; kata_kunci: string[]; aktif: boolean };
@@ -34,6 +36,8 @@ type Data = {
   soal_hari: string[];
   susulan_at: string | null;
   rekap: QcRekapTim[];
+  /** tiap percobaan petugas + soal yang salah (29 Okt 2026) */
+  rincian?: RincianQc;
 };
 
 const API = "/api/portal/qc/admin";
@@ -132,9 +136,8 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
   const lulus = d.rekap.reduce((a, t) => a + t.lulus, 0);
   // PML dihitung terpisah dari PPL (hasil PML sendiri ada di tiap baris rekap)
   const pmlTotal = d.peserta.pml;
-  const pmlSendiri = (t: (typeof d.rekap)[number]) => t.pml_sendiri as { percobaan?: number; lulus?: boolean } | null | undefined;
-  const pmlSudah = d.rekap.filter((t) => (pmlSendiri(t)?.percobaan ?? 0) > 0).length;
-  const pmlLulus = d.rekap.filter((t) => pmlSendiri(t)?.lulus).length;
+  const pmlSudah = d.rekap.filter((t) => (bacaPmlSendiri(t.pml_sendiri)?.percobaan ?? 0) > 0).length;
+  const pmlLulus = d.rekap.filter((t) => bacaPmlSendiri(t.pml_sendiri)?.lulus).length;
   const [sibuk, setSibuk] = useState(false);
   const ke = async (isi: Record<string, unknown>, ok: string) => {
     setSibuk(true);
@@ -190,13 +193,29 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
             ket={`${t.sudah}/${t.jumlah_ppl} sudah mengisi · rata-rata awal ${t.rata_awal ?? "-"} · ${t.lulus} lulus`}
           >
             <ul className="divide-y divide-[#E3E8EE]">
+              {t.pml_akun_id != null && (
+                <li className="py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[13.5px] font-bold text-[#0F2A52]">PML · {t.pml_nama}</span>
+                    {(() => {
+                      const ps = bacaPmlSendiri(t.pml_sendiri);
+                      const sudah = !!ps && ps.percobaan > 0;
+                      return <Chip w={!sudah ? "bad" : ps.lulus ? "ok" : "wait"}>{sudah ? labelStatusPpl(ps, p ? maksPercobaanDari(p) : 4, nilaiLulusDari(p)) : "Belum mengisi"}</Chip>;
+                    })()}
+                  </div>
+                  <RincianQcPetugas akunId={t.pml_akun_id} rincian={d.rincian} className="mt-1.5" />
+                </li>
+              )}
               {t.ppl.map((x) => (
-                <li key={x.akun_id} className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="min-w-0 truncate text-[13.5px] text-[#1B2B4B]">{x.nama}</span>
-                  <span className="flex flex-none items-center gap-1.5">
-                    {x.terlambat && <Chip w="wait">Terlambat</Chip>}
-                    <Chip w={x.percobaan === 0 ? "bad" : x.lulus ? "ok" : "wait"}>{labelStatusPpl(x, p ? maksPercobaanDari(p) : 4, nilaiLulusDari(p))}</Chip>
-                  </span>
+                <li key={x.akun_id} className="py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[13.5px] text-[#1B2B4B]">{x.nama}</span>
+                    <span className="flex flex-none items-center gap-1.5">
+                      {x.terlambat && <Chip w="wait">Terlambat</Chip>}
+                      <Chip w={x.percobaan === 0 ? "bad" : x.lulus ? "ok" : "wait"}>{labelStatusPpl(x, p ? maksPercobaanDari(p) : 4, nilaiLulusDari(p))}</Chip>
+                    </span>
+                  </div>
+                  <RincianQcPetugas akunId={x.akun_id} rincian={d.rincian} className="mt-1.5" />
                 </li>
               ))}
             </ul>

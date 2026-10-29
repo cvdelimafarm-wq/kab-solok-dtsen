@@ -189,3 +189,53 @@ export function saringPetugas(daftar: PetugasQc[], f: SaringPetugas): PetugasQc[
     }
   });
 }
+
+// ====================================================================== rincian per percobaan (soal yang salah)
+// (29 Okt 2026) Untuk tiap petugas: setiap percobaan (nilai, waktu) dan soal apa yang dijawab salah pada percobaan itu, lengkap dengan jawaban yang dipilih
+// dan kuncinya. Dipakai tab QC admin (Kelola Pendataan) dan tab QC supervisor.
+
+export type SoalRingkas = { id: string; pertanyaan: string; kunci: string; opsi: Record<string, string> };
+export type SalahPercobaan = { soal_id: string; dipilih: string | null };
+export type RincianPercobaan = { ke: number; skor: number; benar: number; jumlah: number; terlambat: boolean; selesai_at: string; salah: SalahPercobaan[] };
+export type RincianQc = { percobaan: Record<number, RincianPercobaan[]>; soal: Record<string, SoalRingkas> };
+
+export type PercobaanRinci = {
+  akun_id: number;
+  ke: number;
+  skor: number;
+  benar: number;
+  jumlah: number;
+  terlambat: boolean;
+  selesai_at: string;
+  salah: string[] | null;
+  jawaban: Record<string, string> | null;
+};
+export type SoalRinci = { id: string; pertanyaan: string; kunci: string; opsi: Record<string, string> | null };
+
+/** Menyusun rincian per petugas (percobaan urut ke-1, ke-2, ...). Hanya soal yang pernah salah yang ikut dimuat agar ukuran kecil. */
+export function susunRincianQc(percobaan: PercobaanRinci[], soal: SoalRinci[]): RincianQc {
+  const peta: Record<number, RincianPercobaan[]> = {};
+  const dipakai = new Set<string>();
+  for (const p of percobaan) {
+    const salah = (p.salah ?? []).map((id) => {
+      dipakai.add(id);
+      return { soal_id: id, dipilih: p.jawaban?.[id] ?? null };
+    });
+    (peta[p.akun_id] ??= []).push({ ke: p.ke, skor: p.skor, benar: p.benar, jumlah: p.jumlah, terlambat: !!p.terlambat, selesai_at: p.selesai_at, salah });
+  }
+  for (const k of Object.keys(peta)) peta[Number(k)].sort((a, b) => a.ke - b.ke);
+  const ringkas: Record<string, SoalRingkas> = {};
+  for (const x of soal) if (dipakai.has(x.id)) ringkas[x.id] = { id: x.id, pertanyaan: x.pertanyaan, kunci: x.kunci, opsi: x.opsi ?? {} };
+  return { percobaan: peta, soal: ringkas };
+}
+
+export type PmlSendiri = { percobaan: number; lulus: boolean; skor_terbaik: number | null };
+
+/** `pml_sendiri` dari sigap_qc_rekap bertipe tak pasti (null bila PML belum mengisi). */
+export function bacaPmlSendiri(x: unknown): PmlSendiri | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  const percobaan = typeof o.percobaan === "number" ? o.percobaan : 0;
+  const skor = typeof o.skor_terbaik === "number" ? o.skor_terbaik : null;
+  return { percobaan, lulus: o.lulus === true, skor_terbaik: skor };
+}

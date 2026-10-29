@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { saringPetugas, susunPetugasQc, type PesertaMentah } from "../sigapQcMonitor";
+import { bacaPmlSendiri, saringPetugas, susunPetugasQc, susunRincianQc, type PesertaMentah, type SoalRinci } from "../sigapQcMonitor";
 
 const P: PesertaMentah[] = [
   { akun_id: 1, nama: "Ayu", peran: "pml", pml_akun_id: null, pml_nama: null },
@@ -113,5 +113,36 @@ describe("saringPetugas", () => {
     expect(nama({ status: "push_belum_dikirim" })).toEqual(["Ayu", "Ega", "Fitri"]);
     expect(nama({ pml: 1 })).toEqual(["Ayu", "Dana", "Ega", "Fitri"]);
     expect(nama({ cari: " eg " })).toEqual(["Ega"]);
+  });
+});
+
+describe("susunRincianQc", () => {
+  const pc = (akun_id: number, ke: number, skor: number, salah: string[] | null, jawaban: Record<string, string> | null) => ({ akun_id, ke, skor, benar: 15 - (salah?.length ?? 0), jumlah: 15, terlambat: false, selesai_at: `2026-10-29T07:${10 + ke}:00Z`, salah, jawaban });
+  const soal: SoalRinci[] = [
+    { id: "S1", pertanyaan: "Soal satu", kunci: "A", opsi: { A: "a", B: "b" } },
+    { id: "S2", pertanyaan: "Soal dua", kunci: "B", opsi: null },
+    { id: "S3", pertanyaan: "Tak pernah salah", kunci: "C", opsi: { C: "c" } },
+  ];
+  it("urut per percobaan, memuat jawaban yang dipilih, dan hanya soal yang pernah salah", () => {
+    const r = susunRincianQc([pc(7, 2, 93, ["S1"], { S1: "B" }), pc(7, 1, 80, ["S1", "S2"], { S1: "C", S2: "A" }), pc(8, 1, 100, [], null)], soal);
+    expect(r.percobaan[7].map((x) => x.ke)).toEqual([1, 2]);
+    expect(r.percobaan[7][0].salah).toEqual([{ soal_id: "S1", dipilih: "C" }, { soal_id: "S2", dipilih: "A" }]);
+    expect(r.percobaan[7][1].salah).toEqual([{ soal_id: "S1", dipilih: "B" }]);
+    expect(r.percobaan[8][0].salah).toEqual([]);
+    expect(Object.keys(r.soal).sort()).toEqual(["S1", "S2"]);
+    expect(r.soal.S2.opsi).toEqual({});
+  });
+  it("salah/jawaban null tidak membuat galat", () => {
+    const r = susunRincianQc([pc(9, 1, 100, null, null)], soal);
+    expect(r.percobaan[9][0].salah).toEqual([]);
+  });
+});
+
+describe("bacaPmlSendiri", () => {
+  it("null/aneh -> null; objek hasil rekap dibaca", () => {
+    expect(bacaPmlSendiri(null)).toBeNull();
+    expect(bacaPmlSendiri("x")).toBeNull();
+    expect(bacaPmlSendiri({ lulus: true, percobaan: 3, skor_terbaik: 100 })).toEqual({ percobaan: 3, lulus: true, skor_terbaik: 100 });
+    expect(bacaPmlSendiri({ percobaan: "3" })).toEqual({ percobaan: 0, lulus: false, skor_terbaik: null });
   });
 });

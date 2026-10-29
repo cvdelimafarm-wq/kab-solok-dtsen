@@ -11,9 +11,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { labelStatusPpl, type QcRekapTim } from "@/lib/sigapQc";
-import { saringPetugas, type HitunganPeran, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
+import { bacaPmlSendiri, saringPetugas, type HitunganPeran, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
 import { API_SPDT_QC, jamWib, judulKata, type HasilQcSpdt } from "@/lib/spdtNtp";
 import Ik from "./Ik";
+import RincianQcPetugas from "@/app/portal/qc/RincianQc";
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -185,13 +186,33 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                     </span>
                   </div>
                   <ul className="space-y-1.5">
+                    {t.pml_akun_id != null && (
+                      <li className="rounded-[14px] border border-[#C9D6EC] bg-[#F5F8FE] px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="min-w-0 truncate text-[14px] text-[#0F2A52]">PML · {judulKata(t.pml_nama)}</b>
+                          {(() => {
+                            const ps = bacaPmlSendiri(t.pml_sendiri);
+                            const sudah = !!ps && ps.percobaan > 0;
+                            return (
+                              <span className={`flex-none text-right text-[12px] font-semibold ${!sudah ? "text-[#B42329]" : ps.lulus ? "text-[#13794B]" : "text-[#8A4B08]"}`}>
+                                {sudah ? labelStatusPpl(ps, d.maks_percobaan, d.nilai_lulus) : "Belum mengisi"}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <RincianQcPetugas akunId={t.pml_akun_id} rincian={d.rincian} className="mt-1.5" />
+                      </li>
+                    )}
                     {t.ppl.map((x) => (
-                      <li key={`${t.pml_akun_id}-${x.akun_id}`} className="flex items-center justify-between gap-2 rounded-[14px] border border-[#D9E2F1] bg-white px-3 py-2.5">
-                        <b className="min-w-0 truncate text-[14px] text-[#0F2A52]">{judulKata(x.nama)}</b>
-                        <span className={`flex-none text-right text-[12px] font-semibold ${x.percobaan === 0 ? "text-[#B42329]" : x.lulus ? "text-[#13794B]" : "text-[#8A4B08]"}`}>
-                          {x.terlambat ? "Terlambat · " : ""}
-                          {labelStatusPpl(x, d.maks_percobaan, d.nilai_lulus)}
-                        </span>
+                      <li key={`${t.pml_akun_id}-${x.akun_id}`} className="rounded-[14px] border border-[#D9E2F1] bg-white px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="min-w-0 truncate text-[14px] text-[#0F2A52]">{judulKata(x.nama)}</b>
+                          <span className={`flex-none text-right text-[12px] font-semibold ${x.percobaan === 0 ? "text-[#B42329]" : x.lulus ? "text-[#13794B]" : "text-[#8A4B08]"}`}>
+                            {x.terlambat ? "Terlambat · " : ""}
+                            {labelStatusPpl(x, d.maks_percobaan, d.nilai_lulus)}
+                          </span>
+                        </div>
+                        <RincianQcPetugas akunId={x.akun_id} rincian={d.rincian} className="mt-1.5" />
                       </li>
                     ))}
                   </ul>
@@ -388,6 +409,7 @@ function BarisPetugas({ p, d }: { p: PetugasQc; d: HasilQcSpdt }) {
         <span className={p.push_rilis_at ? "text-[#13794B]" : "text-[#8A4B08]"}>{p.push_rilis_at ? `Rilis terkirim ${jamWib(p.push_rilis_at)}` : "Rilis belum tercatat"}</span>
         {p.push_ingat > 0 && <span className="text-[#55657D]">{p.push_ingat}× pengingat</span>}
       </div>
+      <RincianQcPetugas akunId={p.akun_id} rincian={d.rincian} className="mt-2" />
     </li>
   );
 }
