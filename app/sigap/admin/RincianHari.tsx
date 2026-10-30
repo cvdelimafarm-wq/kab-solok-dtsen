@@ -11,6 +11,7 @@
 //  - Data dari GET /api/sigap/admin?bagian=hari (hanya baca). Perhitungan murni: lib/sigapRincianHari.ts (ber-tes).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createPortal } from "react-dom";
 import { ambil, pesanGalat, SesiBerakhir, tglPanjang, waktuWib } from "./api";
 import { BTN, BTN_O, Chip } from "./ui";
@@ -116,6 +117,7 @@ const IKON = {
 type ItemFoto = { slot: number; label: string; url: string; jam: string; f: FotoHari };
 
 function PenampilFoto({ daftar, awal, judulBawah, onTutup }: { daftar: ItemFoto[]; awal: number; judulBawah: string; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup penampil foto dulu (tumpuk di atas lembar rincian)
   const [i, setI] = useState(Math.min(Math.max(0, awal), daftar.length - 1));
   const [skala, setSkala] = useState(1);
   const [geser, setGeser] = useState<Titik>({ x: 0, y: 0 });
@@ -507,6 +509,7 @@ export default function RincianHari({
     setTampil(false);
     setTimeout(onTutup, 170);
   }, [onTutup]);
+  useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup lembar rincian hari
 
   const tetangga = useMemo(() => hariTetangga(daftarTanggal, tanggal), [daftarTanggal, tanggal]);
 

@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { angka, bulat, identBerubah, namaLibur, ringkasHariIni, targetPenuh, tglPendek } from "@/lib/delego/hitung";
 import { berjenis, halanganSelesai, hasilDelegasi, jamTenggat, jumlahDariPoin, satuanAngka } from "@/lib/delego/teknis";
 import { NAMA_PERAN, NAMA_STATUS, type BahanTim, type Delegasi, type StatusDelegasi } from "@/lib/delego/tipe";
@@ -19,6 +20,7 @@ import { Batang, Galat, Info, Kartu, Lencana, Medan, NADA_STATUS, Peringatan, fm
 const STATUS: StatusDelegasi[] = ["baru", "berjalan", "ditunda", "selesai", "batal"];
 
 export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Delegasi; b: BahanTim; bolehUbah: boolean; hari: string; tutup: () => void; muat: () => Promise<void> }) {
+  useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup rincian (bukan keluar dari Papan)
   const r = ringkasHariIni(d, b.laporan, hari);
   const penuh = targetPenuh(d);
   const laporan = b.laporan.filter((l) => l.delegasi_id === d.id);

@@ -10,6 +10,7 @@
 // (11 Okt 2026) "Ganti" dulu diam bila sesi asli sudah habis; kini menampilkan pesan dan tombol masuk lagi.
 
 import { useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import PilihSebagai, { type HasilSebagai } from "@/app/portal/PilihSebagai";
 import { bacaLihatSebagai, bacaSesiAsli, kembaliKeAkunSaya, mulaiLihatSebagai, type LihatSebagai } from "@/app/portal/sesi";
 import { EVENT_SIMULASI } from "@/app/portal/simulasi"; // memasang penahan penulisan sejak modul dimuat
@@ -19,6 +20,7 @@ const TINGGI = 30; // (14 Okt 2026) pita tipis 30 px -- permintaan user (desain 
 export default function BannerLihatSebagai() {
   const [info, setInfo] = useState<LihatSebagai | null>(null);
   const [ganti, setGanti] = useState(false);
+  useTutupDenganBack(ganti, () => setGanti(false)); // (31 Okt 2026) Back HP menutup pemilih akun
   const [catatan, setCatatan] = useState<string | null>(null);
 
   useEffect(() => {

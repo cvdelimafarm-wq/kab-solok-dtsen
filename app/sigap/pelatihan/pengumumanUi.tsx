@@ -9,6 +9,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { urlInternalSigap } from "@/lib/siaranPetugas";
 import { IKON_PENGUMUMAN, JUDUL_BAWAAN_PENGUMUMAN, uraiIsi, urlAman, type JenisPengumuman, type Sebaris } from "@/lib/sigapPengumuman";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const GAYA: Record<JenisPengumuman, { ikon: string; judul: string }> = {
   info: { ikon: "bg-[#E6EEFC]", judul: "text-[#0F2A52]" },
@@ -134,6 +135,7 @@ export type DataModal = { jenis: JenisPengumuman; judul: string; isi: string; to
  */
 export function ModalPengumuman({ d, posisi, jumlah, lanjut, sebagaiPratinjau = false }: { d: DataModal; posisi: number; jumlah: number; lanjut: () => void; sebagaiPratinjau?: boolean }) {
   const tombol = useRef<HTMLButtonElement>(null);
+  useTutupDenganBack(!sebagaiPratinjau, lanjut); // (31 Okt 2026) Back HP = Lanjut/Tutup (sama dengan ketuk di luar kartu)
   useEffect(() => {
     if (sebagaiPratinjau) return;
     tombol.current?.focus();

@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
@@ -124,6 +125,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const [gantiPin, setGantiPin] = useState(false);
   // (21 Okt 2026) Akun super: ketuk bubble inisial = "Lihat sebagai" akun lain (sama dengan "Ganti" di spanduk oranye; mode tetap simulasi, tidak ada data dikirim).
   const [lihatSebagai, setLihatSebagai] = useState(false);
+  useTutupDenganBack(lihatSebagai, () => setLihatSebagai(false)); // (31 Okt 2026) Back HP = Batal pada pemilih "Lihat sebagai"
+  useTutupDenganBack(gantiPin, () => setGantiPin(false)); // (31 Okt 2026) Back HP = Nanti pada ganti PIN
   const sesiHabis = [dBeranda.galat, dHub.galat, dKeg.galat, dInduk.galat].includes("SESI_BERAKHIR");
   useEffect(() => {
     if (sesiHabis) onKeluar();

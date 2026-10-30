@@ -10,6 +10,7 @@
 // Gagal satu petugas tidak menghentikan yang lain. Logika murni di lib/sigapSpjCetak.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { ambil, ambilBlob, pesanGalat, rupiah, SesiBerakhir } from "./api";
 import { bagiBatch, ringkasanMassal, unikanNama, MAKS_PER_ZIP, type HasilMassal } from "@/lib/sigapUnduhMassal";
 import {
@@ -75,7 +76,8 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
   const [saring, setSaring] = useState<Saring<KolomTabel>>({}); // (28 Okt 2026) cari / filter per kolom (tampilan tabel saja)
   const [urutTabel, setUrutTabel] = useState<Urut<KolomTabel>>(null);
   const [proses, setProses] = useState<{ selesai: number; total: number; nama: string } | null>(null);
-  const [konfirmasi, setKonfirmasi] = useState(false); // (28 Okt 2026) modal konfirmasi menggantikan window.confirm
+  const [konfirmasi, setKonfirmasi] = useState(false);
+  useTutupDenganBack(konfirmasi, () => setKonfirmasi(false)); // (31 Okt 2026) Back HP = Batal // (28 Okt 2026) modal konfirmasi menggantikan window.confirm
   const batal = useRef(false);
 
   const muat = useCallback(async () => {
