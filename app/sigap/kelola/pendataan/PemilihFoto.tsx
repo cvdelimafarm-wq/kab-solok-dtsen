@@ -140,7 +140,9 @@ export default function PemilihFoto({ kegiatanId, status, onUbah }: { kegiatanId
   const terapkan = useCallback(
     (dasar: FotoItem[], baru: FotoItem[], pilih: boolean) => {
       const h = ubahPilihan(dasar, baru, pilih);
-      onUbah({ ...statusRef.current, pilihan: h.pilihan });
+      // ref diperbarui seketika: beberapa perubahan beruntun sebelum render berikutnya (seret cepat) tidak boleh saling menimpa
+      statusRef.current = { ...statusRef.current, pilihan: h.pilihan };
+      onUbah(statusRef.current);
       setInfo(h.terpotong > 0 ? `Batas ${MAKS_FOTO_LAPORAN} foto per laporan: ${h.terpotong} foto tidak ikut dipilih.` : "");
     },
     [onUbah],
