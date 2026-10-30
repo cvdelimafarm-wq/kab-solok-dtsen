@@ -31,6 +31,7 @@ import {
   type StatusSaring,
 } from "@/lib/sigapQcTabel";
 import { Chip, INPUT } from "../../admin/ui";
+import { Pergerakan, SelNilai } from "./BatangQc";
 
 const SARING: { id: StatusSaring; label: string }[] = [
   { id: "semua", label: "Semua" },
@@ -180,7 +181,7 @@ export default function TabelQc({
       </div>
 
       <div className="mt-3 overflow-x-auto rounded-lg border border-[#E3E8EE]">
-        <table className="w-full min-w-[720px] border-collapse text-left text-[13px]">
+        <table className="w-full min-w-[820px] border-collapse text-left text-[13px]">
           <thead className="bg-[#F2F5FA] text-[11.5px]">
             <tr>
               <th rowSpan={2} aria-sort={ariaSort("nama")} className="min-w-[150px] px-3 pb-1 pt-2 align-bottom">
@@ -197,6 +198,9 @@ export default function TabelQc({
               </th>
               <th colSpan={kolom} className="border-l border-[#E3E8EE] px-2 py-1.5 text-center font-extrabold uppercase tracking-wide text-[#55657D]">
                 Nilai
+              </th>
+              <th rowSpan={3} className="border-l border-[#E3E8EE] px-3 pb-1 pt-2 text-center align-top font-extrabold uppercase tracking-wide text-[#55657D]">
+                Pergerakan
               </th>
             </tr>
             <tr>
@@ -257,7 +261,7 @@ export default function TabelQc({
           <tbody className="divide-y divide-[#E3E8EE]">
             {tampil.length === 0 && (
               <tr>
-                <td colSpan={4 + kolom} className="px-3 py-5 text-center text-[13px] text-[#55657D]">
+                <td colSpan={5 + kolom} className="px-3 py-5 text-center text-[13px] text-[#55657D]">
                   Tidak ada petugas yang cocok dengan filter.
                 </td>
               </tr>
@@ -281,16 +285,19 @@ export default function TabelQc({
                 <td className="px-2 py-1.5 text-center font-bold tabular-nums">{b.percobaan}</td>
                 {b.nilai.map((n, i) => (
                   <td key={i} className={`px-2 py-1.5 text-center tabular-nums ${i === 0 ? "border-l border-[#E3E8EE]" : ""}`}>
-                    {n == null ? <span className="text-[#9AA7BA]">-</span> : <b className={n >= nilaiLulus ? "text-[#13794B]" : "text-[#8A4B08]"}>{n}</b>}
+                    {n == null ? <span className="text-[#9AA7BA]">-</span> : <SelNilai nilai={n} nilaiLulus={nilaiLulus} />}
                   </td>
                 ))}
+                <td className="border-l border-[#E3E8EE] px-3 py-1.5 text-center">
+                  <Pergerakan nilai={b.nilai} nilaiLulus={nilaiLulus} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="mt-1.5 text-[11.5px] text-[#6B7A90]">
-        Hijau = nilai {nilaiLulus >= 100 ? "100" : `${nilaiLulus} ke atas`} (lulus), oranye = di bawahnya, - = percobaan itu belum ada. Menampilkan {tampil.length} dari {baris.length} orang.
+        Hijau = nilai {nilaiLulus >= 100 ? "100" : `${nilaiLulus} ke atas`} (lulus), oranye = di bawahnya, - = percobaan itu belum ada. Batang di bawah angka = besar nilai; kolom Pergerakan = batang P1 sampai terakhir, ▲ naik / ▼ turun dibanding P1. Menampilkan {tampil.length} dari {baris.length} orang.
       </p>
 
       {pilih && <JendelaRincian baris={pilih} rincian={rincian} onTutup={() => setPilih(null)} />}

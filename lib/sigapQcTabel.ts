@@ -198,3 +198,10 @@ export function namaTakCocok(baris: BarisQc[], fokus: FokusQc | null): string[] 
   const ada = new Set(baris.map((b) => rapat(b.nama)));
   return fokus.nama.filter((n) => !ada.has(rapat(n)));
 }
+
+// ====================================================================== Pergerakan nilai (30 Okt 2026)
+/** Selisih nilai percobaan terakhir terhadap yang pertama (positif = membaik); null bila kurang dari dua percobaan terisi. */
+export function selisihNilai(nilai: readonly (number | null)[]): number | null {
+  const isi = nilai.filter((n): n is number => n != null);
+  return isi.length >= 2 ? isi[isi.length - 1] - isi[0] : null;
+}

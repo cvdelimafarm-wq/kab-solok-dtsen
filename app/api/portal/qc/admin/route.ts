@@ -7,6 +7,7 @@
 // GET [?k=<kegiatan>][&tanggal=YYYY-MM-DD]           -> { boleh_kelola, kegiatan_id, kegiatan_nama, pengaturan, soal[], peserta, hari, hari_ada[], hari_berlaku, soal_hari, rekap[] }
 // GET ?k=<kegiatan>&dari=YYYY-MM-DD&sampai=YYYY-MM-DD -> { rentang: DataRentang } matriks petugas x hari (maks 62 hari); ringan, tanpa bank soal
 //   (30 Okt 2026) filter tanggal: ?tanggal= memilih satu hari, ?dari=&sampai= memilih rentang.
+// GET ?k=<kegiatan>&semua=1                           -> { semua: DataSemua } rekap SEMUA hari ber-soal: rata-rata nilai per percobaan (P1..Pn) tiap petugas
 // POST {aksi:"pengaturan", data:{...}}               -> simpan pengaturan
 // POST {aksi:"soal", data:{id,paket,...}}            -> simpan (baru/ubah) satu soal
 // POST {aksi:"soal_aktif", id, aktif}                -> hidup/matikan satu soal
@@ -19,7 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
-import { GalatQc, bacaKegiatan, dataAdmin, imporSoal, kirimContoh, rentangAdmin, simpanPengaturan, simpanSoal, tandaiSusulan, ubahAktifSoal, undiUlang } from "@/lib/portal/qc";
+import { GalatQc, bacaKegiatan, dataAdmin, imporSoal, kirimContoh, rentangAdmin, semuaAdmin, simpanPengaturan, simpanSoal, tandaiSusulan, ubahAktifSoal, undiUlang } from "@/lib/portal/qc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     const keg = bacaKegiatan(req.nextUrl.searchParams.get("k"));
     const dari = req.nextUrl.searchParams.get("dari");
     const sampai = req.nextUrl.searchParams.get("sampai");
+    if (req.nextUrl.searchParams.get("semua") === "1") return NextResponse.json({ semua: await semuaAdmin(p.db, keg) });
     if (dari || sampai) return NextResponse.json({ rentang: await rentangAdmin(p.db, keg, dari, sampai) });
     return NextResponse.json({ boleh_kelola: p.bisaKelola, ...(await dataAdmin(p.db, keg, tanggal)) });
   } catch (e) {

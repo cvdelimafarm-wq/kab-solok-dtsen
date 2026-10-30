@@ -4,13 +4,14 @@
 //
 // (30 Okt 2026) Filter tanggal QC Pemahaman (Kelola Pendataan > QC > Pemahaman · Hari ini). Dua mode:
 //  - "Per tanggal": pilih satu hari (kolom tanggal, ‹ sebelumnya / berikutnya › di antara hari yang punya soal, tombol "Hari ini", dan deretan hari ber-soal);
-//  - "Rentang tanggal": dari-sampai + pilihan cepat; hasilnya matriks petugas x hari (RekapRentangQc.tsx).
+//  - "Rentang tanggal": dari-sampai + pilihan cepat; hasilnya matriks petugas x hari (RekapRentangQc.tsx);
+//  - "Semua periode" (30 Okt 2026): seluruh hari ber-soal tanpa batas, nilai direkap per petugas (RekapSemuaQc.tsx).
 // Logika murni ada di lib/sigapQcRentang.ts (diuji).
 
 import { Kartu } from "../../admin/ui";
 import { geserTanggal, hariTetangga, periksaRentang, rentangTerakhir, MAKS_HARI_RENTANG } from "@/lib/sigapQcRentang";
 
-export type ModePeriode = "hari" | "rentang";
+export type ModePeriode = "hari" | "rentang" | "semua";
 export type Rentang = { dari: string; sampai: string };
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -68,10 +69,18 @@ export default function PeriodeQc({
   return (
     <Kartu
       judul="Periode"
-      ket={mode === "hari" ? "Pilih tanggal yang ingin dilihat." : `Rekap beberapa hari sekaligus (maksimal ${MAKS_HARI_RENTANG} hari).`}
+      ket={
+        mode === "hari"
+          ? "Pilih tanggal yang ingin dilihat."
+          : mode === "rentang"
+            ? `Rekap beberapa hari sekaligus (maksimal ${MAKS_HARI_RENTANG} hari).`
+            : semuaHari
+              ? `Rekap seluruh hari ber-soal: ${terurut.length} hari, ${tglPendekQc(semuaHari.dari)} – ${tglPendekQc(semuaHari.sampai)}.`
+              : "Belum ada hari yang punya soal QC."
+      }
       kanan={
-        <div role="tablist" aria-label="Mode periode" className="flex gap-[3px] rounded-[10px] bg-[#EEF2F8] p-[3px]">
-          {(["hari", "rentang"] as const).map((m) => (
+        <div role="tablist" aria-label="Mode periode" className="flex flex-wrap gap-[3px] rounded-[10px] bg-[#EEF2F8] p-[3px]">
+          {(["hari", "rentang", "semua"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -80,7 +89,7 @@ export default function PeriodeQc({
               onClick={() => onMode(m)}
               className={`min-h-[34px] rounded-[8px] px-3 text-[12.5px] font-bold ${mode === m ? "bg-white text-[#0F2A52] shadow-sm" : "text-[#55657D]"}`}
             >
-              {m === "hari" ? "Per tanggal" : "Rentang tanggal"}
+              {m === "hari" ? "Per tanggal" : m === "rentang" ? "Rentang tanggal" : "Semua periode"}
             </button>
           ))}
         </div>
@@ -128,6 +137,10 @@ export default function PeriodeQc({
           )}
           {hariAda.length === 0 && <p className="text-[12.5px] text-[#6B7A90]">Belum ada hari yang punya soal QC.</p>}
         </div>
+      ) : mode === "semua" ? (
+        <p className="text-[12.5px] leading-snug text-[#55657D]">
+          Menampilkan rekap SEMUA hari ber-soal sejak awal, tanpa batas rentang. Nilai tiap petugas dirata-rata per percobaan (P1, P2, …) supaya terlihat apakah ulangan membuat nilainya naik.
+        </p>
       ) : (
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-end gap-2.5">

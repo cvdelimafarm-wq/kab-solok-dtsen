@@ -24,6 +24,7 @@ import TabelQc from "./TabelQc";
 import InfografisQc from "./InfografisQc";
 import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "./PeriodeQc";
 import RekapRentangQc from "./RekapRentangQc";
+import RekapSemuaQc from "./RekapSemuaQc";
 import { rentangTerakhir } from "@/lib/sigapQcRentang";
 import { jumlahKolomNilai, susunBarisQc, type FokusQc } from "@/lib/sigapQcTabel";
 import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
@@ -169,7 +170,7 @@ function HariIni({
   diperbarui: Date | null;
   pilihTanggal: (t: string | null) => void;
 }) {
-  // (30 Okt 2026) filter tanggal: "Per tanggal" (satu hari) atau "Rentang tanggal" (matriks petugas x hari)
+  // (30 Okt 2026) filter tanggal: "Per tanggal" (satu hari), "Rentang tanggal" (matriks petugas x hari), atau "Semua periode" (rekap seluruh hari)
   const [mode, setMode] = useState<ModePeriode>("hari");
   const hariIni = d.hari_berlaku ?? hariIniWib(d.sekarang);
   const [rentang, setRentang] = useState<Rentang>(() => rentangTerakhir(hariIni, 7));
@@ -187,7 +188,15 @@ function HariIni({
         rentang={rentang}
         onRentang={setRentang}
       />
-      {mode === "rentang" ? (
+      {mode === "semua" ? (
+        <RekapSemuaQc
+          kegiatanId={kegiatanId}
+          onBukaHari={(t) => {
+            pilihTanggal(t);
+            setMode("hari");
+          }}
+        />
+      ) : mode === "rentang" ? (
         <RekapRentangQc
           kegiatanId={kegiatanId}
           rentang={rentang}
