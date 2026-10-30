@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   bagianWib, jamKeMenit, menitKeJam, geserHari, instanWib, hariBerlaku, jendelaQc, teksSisaWaktu, sorotKata, hitungSkor, labelPercobaan, labelStatusPpl,
-  rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, sumberSoalDari, kolamSoal, type QcPengaturan, type QcRekapTim,
+  rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, sumberSoalDari, kolamSoal, cekHariTanggal, namaHariDari, type QcPengaturan, type QcRekapTim,
   hariIso, hariRilisDari, teksHariRilis, rilisBerikut, nilaiLulusDari, wajibUlangDari, maksPercobaanDari, lulusMenurut, kalimatHasil,
 } from "../sigapQc";
 
@@ -546,6 +546,67 @@ describe("sumber soal harian", () => {
     for (const bad of [{ sumber_soal: "acak" }, { sumber_soal: 1 }, { paket_pilihan: [0] }, { paket_pilihan: "1" }, { paket_pilihan: [1.5] }, { soal_pilihan: [""] }, { soal_pilihan: [1] }, { sumber_soal: "paket", paket_pilihan: [] }, { sumber_soal: "pilihan", soal_pilihan: [] }]) {
       expect(validasiPengaturan(bad).ok).toBe(false);
     }
+  });
+});
+
+describe("cekHariTanggal: kecocokan hari rilis vs tanggal periode", () => {
+  const SENIN_JUMAT = [1, 2, 3, 4, 5];
+  it("namaHariDari", () => {
+    expect(namaHariDari("2026-10-30")).toBe("Jumat");
+    expect(namaHariDari("2026-10-31")).toBe("Sabtu");
+    expect(namaHariDari("2026-11-02")).toBe("Senin");
+  });
+  it("periode akhir pekan tanpa hari rilis akhir pekan = galat", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-31", akhir: "2026-11-01", hari_rilis: SENIN_JUMAT });
+    expect(c.galat).toHaveLength(1);
+    expect(c.galat[0]).toContain("Sabtu");
+    expect(c.galat[0]).toContain("tidak memuat satu pun hari rilis");
+    expect(c.jumlahRilis).toBe(0);
+    expect(c.pertama).toBeNull();
+  });
+  it("periode memuat hari rilis: tanpa galat, jumlah dan tanggal pertama/terakhir benar", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-31", akhir: "2026-11-13", hari_rilis: SENIN_JUMAT }); // Sabtu .. Jumat 2 pekan berikutnya
+    expect(c.galat).toEqual([]);
+    expect(c.jumlahRilis).toBe(10);
+    expect(c.pertama).toBe("2026-11-02");
+    expect(c.terakhir).toBe("2026-11-13");
+    expect(c.peringatan.join(" ")).toContain("Tanggal mulai Sabtu, 31 Okt 2026 bukan hari rilis");
+    expect(c.peringatan.join(" ")).not.toContain("Tanggal akhir");
+  });
+  it("mulai dan akhir tepat hari rilis: tanpa peringatan", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-26", akhir: "2026-10-30", hari_rilis: SENIN_JUMAT });
+    expect(c).toMatchObject({ galat: [], peringatan: [], jumlahRilis: 5, pertama: "2026-10-26", terakhir: "2026-10-30" });
+  });
+  it("tanggal akhir bukan hari rilis: peringatan menyebut rilis terakhir", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-26", akhir: "2026-11-01", hari_rilis: SENIN_JUMAT });
+    expect(c.terakhir).toBe("2026-10-30");
+    expect(c.peringatan.join(" ")).toContain("Soal terakhir dirilis Jumat, 30 Okt 2026");
+  });
+  it("hitungan sama dengan penelusuran tanggal demi tanggal pada periode panjang", () => {
+    for (const hr of [[1], [2, 4], [6, 7], [1, 3, 5], [1, 2, 3, 4, 5, 6, 7]]) {
+      const c = cekHariTanggal({ mulai: "2026-09-03", akhir: "2026-12-20", hari_rilis: hr });
+      let n = 0;
+      for (let d = "2026-09-03"; d <= "2026-12-20"; d = new Date(Date.parse(`${d}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) if (hr.includes(((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7) + 1)) n++;
+      expect(c.jumlahRilis).toBe(n);
+    }
+  });
+  it("periode terbuka: tanpa jumlah, tetap memberi tahu rilis pertama", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-31", akhir: null, hari_rilis: SENIN_JUMAT });
+    expect(c.jumlahRilis).toBeNull();
+    expect(c.pertama).toBe("2026-11-02");
+    expect(c.galat).toEqual([]);
+    expect(cekHariTanggal({ mulai: null, akhir: null, hari_rilis: SENIN_JUMAT })).toMatchObject({ galat: [], peringatan: [], jumlahRilis: null });
+  });
+  it("periode yang sudah lewat memberi peringatan (bukan galat)", () => {
+    const c = cekHariTanggal({ mulai: "2026-10-26", akhir: "2026-10-29", hari_rilis: [1, 2, 3, 4, 5, 6, 7] }, "2026-10-30");
+    expect(c.galat).toEqual([]);
+    expect(c.peringatan.join(" ")).toContain("sudah lewat");
+    expect(cekHariTanggal({ mulai: "2026-10-26", akhir: "2026-10-29", hari_rilis: [1, 2, 3, 4, 5, 6, 7] }, "2026-10-28").peringatan).toEqual([]);
+  });
+  it("validasiPengaturan menolak periode tanpa hari rilis hanya bila ketiganya dikirim", () => {
+    expect(validasiPengaturan({ mulai: "2026-10-31", akhir: "2026-11-01", hari_rilis: SENIN_JUMAT }).ok).toBe(false);
+    expect(validasiPengaturan({ mulai: "2026-10-31", akhir: "2026-11-02", hari_rilis: SENIN_JUMAT }).ok).toBe(true);
+    expect(validasiPengaturan({ mulai: "2026-10-31", akhir: "2026-11-01" }).ok).toBe(true); // hari rilis tidak dikirim: diperiksa SQL terhadap nilai tersimpan
   });
 });
 

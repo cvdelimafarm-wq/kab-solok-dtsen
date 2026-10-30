@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { daftarKelompok, daftarKelompokKortim, monitoringKorwil } from "@/lib/portal/korwilMonitor";
 import { pilihanKelompokUntuk, tentukanKelompok } from "@/lib/korwilMonitor";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const [saya, { izin }] = await Promise.all([daftarKelompokKortim(db, akun.id), izinAkun(db, akun.id)]);
-    const admin = boleh(izin, "bencana.admin", "lihat");
+    const admin = bolehPsp(izin, "lihat");
     if (saya.length === 0 && !admin) return NextResponse.json({ error: "Halaman ini untuk korwil (kortim) kelompok pendataan." }, { status: 403 });
 
     const semua = admin || saya.length > 1 ? await daftarKelompok(db) : [];

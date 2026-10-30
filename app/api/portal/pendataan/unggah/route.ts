@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
+import { aktorDariHeader, izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { batalkanUnggah, batchAktif, daftarUnggahan, kegiatanAda, mulaiUnggah, selesaiUnggah, terimaBaris, type TolakBaris } from "@/lib/portal/pendataan";
 import { KEGIATAN_PENDATAAN_ID, MAKS_BARIS_UNGGAH } from "@/lib/pendataan";
 
@@ -27,7 +27,7 @@ async function pastikanAdmin(req: NextRequest, tulis: boolean) {
     return { err: NextResponse.json({ error: "Mode \"masuk sebagai\" hanya untuk melihat tampilan. Kembali ke akun Anda untuk mengunggah." }, { status: 403 }) } as const;
   }
   const { izin } = await izinAkun(db, akun.id);
-  if (!boleh(izin, "bencana.admin", tulis ? "kelola" : "lihat")) {
+  if (!bolehPsp(izin, tulis ? "kelola" : "lihat")) {
     return { err: NextResponse.json({ error: "Tidak punya akses admin pendataan." }, { status: 403 }) } as const;
   }
   return { db, akun } as const;

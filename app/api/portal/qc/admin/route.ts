@@ -32,24 +32,25 @@ function tangani(tag: string, e: unknown): NextResponse {
   return galatServer(tag, e);
 }
 
-async function siapkan(req: NextRequest, tulis: boolean) {
+// (30 Okt 2026) izin bencana.admin diperiksa menurut LINGKUP KEGIATAN yang diminta: pemegang peran dengan lingkup SPDT NTP tidak bisa membuka QC survei lain.
+async function siapkan(req: NextRequest, tulis: boolean, keg: number) {
   const db = dbPortal();
   if (!db) return { err: galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500) } as const;
   const akun = await akunDariSesi(db, req.headers);
   if (!akun) return { err: galat("Sesi berakhir. Silakan masuk kembali.", 401) } as const;
   if (tulis && aktorDariHeader(req.headers)) return { err: galat('Mode "masuk sebagai" hanya untuk melihat tampilan. Kembali ke akun Anda untuk mengubah pengaturan.', 403) } as const;
   const { izin } = await izinAkun(db, akun.id);
-  if (!boleh(izin, "bencana.admin", tulis ? "kelola" : "lihat")) return { err: galat("Tidak punya akses admin pendataan.", 403) } as const;
-  return { db, akun, bisaKelola: boleh(izin, "bencana.admin", "kelola") } as const;
+  if (!boleh(izin, "bencana.admin", tulis ? "kelola" : "lihat", keg)) return { err: galat("Tidak punya akses admin pendataan untuk survei ini.", 403) } as const;
+  return { db, akun, bisaKelola: boleh(izin, "bencana.admin", "kelola", keg) } as const;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const p = await siapkan(req, false);
+    const keg = bacaKegiatan(req.nextUrl.searchParams.get("k"));
+    const p = await siapkan(req, false, keg);
     if ("err" in p) return p.err;
     const tgl = req.nextUrl.searchParams.get("tanggal");
     const tanggal = tgl && /^\d{4}-\d{2}-\d{2}$/.test(tgl) ? tgl : null;
-    const keg = bacaKegiatan(req.nextUrl.searchParams.get("k"));
     const dari = req.nextUrl.searchParams.get("dari");
     const sampai = req.nextUrl.searchParams.get("sampai");
     if (req.nextUrl.searchParams.get("semua") === "1") return NextResponse.json({ semua: await semuaAdmin(p.db, keg) });
@@ -62,12 +63,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const p = await siapkan(req, true);
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const keg = bacaKegiatan(body?.k);
+    const p = await siapkan(req, true, keg);
     if ("err" in p) return p.err;
     const { db, akun } = p;
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const aksi = String(body?.aksi ?? "");
-    const keg = bacaKegiatan(body?.k);
 
     if (aksi === "pengaturan") {
       const hasil = await simpanPengaturan(db, keg, body?.data, akun.nama);

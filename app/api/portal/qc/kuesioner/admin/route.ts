@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { aktorDariHeader, catatAudit, izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
 import { GalatQc } from "@/lib/portal/qc";
 import { aktifkanVersiKuesioner, dataAdminKuesioner, rekapLembarAdmin, unggahKuesioner } from "@/lib/portal/qcKuesioner";
@@ -32,8 +32,8 @@ async function siapkan(req: NextRequest, tulis: boolean) {
   if (!akun) return { err: galat("Sesi berakhir. Silakan masuk kembali.", 401) } as const;
   if (tulis && aktorDariHeader(req.headers)) return { err: galat('Mode "masuk sebagai" hanya untuk melihat tampilan. Kembali ke akun Anda untuk mengubah kuesioner.', 403) } as const;
   const { izin } = await izinAkun(db, akun.id);
-  if (!boleh(izin, "bencana.admin", tulis ? "kelola" : "lihat")) return { err: galat("Tidak punya akses admin pendataan.", 403) } as const;
-  return { db, akun, bisaKelola: boleh(izin, "bencana.admin", "kelola") } as const;
+  if (!bolehPsp(izin, tulis ? "kelola" : "lihat")) return { err: galat("Tidak punya akses admin pendataan.", 403) } as const;
+  return { db, akun, bisaKelola: bolehPsp(izin, "kelola") } as const;
 }
 
 export async function GET(req: NextRequest) {

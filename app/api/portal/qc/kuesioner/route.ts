@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { aktorDariHeader, catatAudit, izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
 import { GalatQc } from "@/lib/portal/qc";
 import { daftarKelompok, daftarKelompokKortim } from "@/lib/portal/korwilMonitor";
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
   try {
     const [saya, { izin }] = await Promise.all([daftarKelompokKortim(db, akun.id), izinAkun(db, akun.id)]);
-    const admin = boleh(izin, "bencana.admin", "lihat");
+    const admin = bolehPsp(izin, "lihat");
     if (saya.length === 0 && !admin) return galat(TOLAK, 403);
     const semua = admin || saya.length > 1 ? await daftarKelompok(db) : [];
     const pilihan = pilihanKelompokUntuk({ admin, saya, semua });
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     if (kelompok == null) return galat(TOLAK, 403);
     const d = await dataLembar(db, kelompok);
     if (!d) return galat(`Kelompok ${kelompok} tidak ditemukan.`, 404);
-    const bisaIsi = saya.includes(kelompok) || boleh(izin, "bencana.admin", "kelola");
+    const bisaIsi = saya.includes(kelompok) || bolehPsp(izin, "kelola");
 
     const ppl = Number(req.nextUrl.searchParams.get("ppl"));
     let kk: Awaited<ReturnType<typeof daftarKkPpl>> | undefined;
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (objek === "kk" && (kkId == null || !Number.isInteger(kkId) || kkId <= 0)) return galat("Pilih KK yang diperiksa.");
 
     const [saya, { izin }] = await Promise.all([daftarKelompokKortim(db, akun.id), izinAkun(db, akun.id)]);
-    if (!saya.includes(kelompok) && !boleh(izin, "bencana.admin", "kelola")) return galat("Anda tidak punya akses mengisi lembar untuk kelompok ini.", 403);
+    if (!saya.includes(kelompok) && !bolehPsp(izin, "kelola")) return galat("Anda tidak punya akses mengisi lembar untuk kelompok ini.", 403);
 
     const r = await simpanLembar(db, akun.id, { kelompok, objek, tanggal: body?.tanggal, subjekAkunId: subjek, kkId, jawaban: body?.jawaban, catatan: body?.catatan, tindakLanjut: body?.tindak_lanjut, tenggat: body?.tenggat });
     await catatAudit(db, akun.id, "qc_lembar_simpan", { id: r.id, kelompok, objek, subjek, kk: kkId, tanggal: body?.tanggal });

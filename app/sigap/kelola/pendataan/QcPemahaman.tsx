@@ -6,7 +6,7 @@
 // semuanya milik survei itu; opsi yang bisa berbeda antar survei: jam/hari rilis, soal per hari, wajib ulang, nilai lulus, undian acak/berurutan, urutan tampil,
 // peserta (PML/PPL), dan rekap PML. Soal dapat diimpor dari Excel (templat tersedia). Cabang Kuesioner supervisi hanya untuk Pendataan Pascabencana.
 // (26 Okt 2026) Isi tab "4 · QC Pemahaman" Kelola Pendataan: pengaturan QC Pemahaman Petugas (kuis harian wajib PML/PPL), bank soal, dan pantauan hari ini.
-// Sub-pilihan (?sub=): Hari ini · Pengaturan · Bank soal. Semua data lewat /api/portal/qc/admin (izin bencana.admin: lihat / kelola).
+// Sub-pilihan (?sub=): Hasil QC (kode "hari") · Pengaturan · Bank soal · Dokumen pemeriksaan PML. Semua data lewat /api/portal/qc/admin (izin bencana.admin: lihat / kelola).
 // Tidak ada penghapusan permanen: soal dimatikan lewat saklar aktif; perubahan dicatat di sigap_audit oleh API.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +14,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import Sorot from "@/app/portal/qc/Sorot";
 import { tglPanjang } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan } from "../../admin/ui";
-import { hariRilisDari, kolamSoal, labelStatusPpl, maksPercobaanDari, menitKeJam, jamKeMenit, nilaiLulusDari, ringkasStatusQc, sumberSoalDari, teksHariRilis, wajibUlangDari, type QcPengaturan, type QcRekapTim, type SumberSoal } from "@/lib/sigapQc";
+import { cekHariTanggal, hariRilisDari, kolamSoal, labelStatusPpl, maksPercobaanDari, menitKeJam, jamKeMenit, nilaiLulusDari, namaHariDari, ringkasStatusQc, sumberSoalDari, teksHariRilis, wajibUlangDari, type QcPengaturan, type QcRekapTim, type SumberSoal } from "@/lib/sigapQc";
 import { petaSoalDariBaris, templatSoal, type HasilPeta } from "@/lib/sigapQcImpor";
 import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
@@ -403,8 +403,11 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
     return q ? d.soal.filter((sl) => sl.id.toLowerCase().includes(q) || sl.pertanyaan.toLowerCase().includes(q) || sl.judul_paket.toLowerCase().includes(q)) : d.soal;
   }, [d.soal, cariSoal]);
   const gantiHari = (n: number) => setF((x) => ({ ...x, hari_rilis: x.hari_rilis.includes(n) ? x.hari_rilis.filter((h) => h !== n) : [...x.hari_rilis, n].sort((a, b) => a - b) }));
+  // (30 Okt 2026) kecocokan hari rilis vs tanggal periode (menurut isi FORMULIR); galat = simpan ditahan, peringatan = boleh disimpan
+  const cekPeriode = cekHariTanggal({ mulai: f.mulai || null, akhir: f.akhir || null, hari_rilis: f.hari_rilis }, hariIniWib(d.sekarang));
   const peranTeks = f.peran_pml && f.peran_ppl ? "PML dan PPL" : f.peran_pml ? "PML" : f.peran_ppl ? "PPL" : "(belum ada peserta)";
   const simpan = async () => {
+    if (cekPeriode.galat.length > 0) return;
     setSibuk(true);
     await kirim(
       {
@@ -677,21 +680,42 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
             <input type="date" className={INPUT} disabled={!bisa} value={f.mulai} onChange={(e) => ubah("mulai", e.target.value)} />
             <span className="text-[12.5px] text-[#6B7A90]">s.d.</span>
             <input type="date" className={INPUT} disabled={!bisa} value={f.akhir} onChange={(e) => ubah("akhir", e.target.value)} />
+            {(f.mulai || f.akhir) && (
+              <span className="text-[12.5px] text-[#6B7A90]">
+                {f.mulai ? namaHariDari(f.mulai) : "…"} s.d. {f.akhir ? namaHariDari(f.akhir) : "…"}
+              </span>
+            )}
           </span>
         </div>
+        {(cekPeriode.galat.length > 0 || cekPeriode.peringatan.length > 0 || (f.mulai && f.akhir && cekPeriode.jumlahRilis != null && cekPeriode.jumlahRilis > 0)) && (
+          <div className="space-y-1.5" aria-live="polite">
+            {cekPeriode.galat.map((g) => (
+              <Pesan key={g} jenis="galat">{g}</Pesan>
+            ))}
+            {cekPeriode.peringatan.map((g) => (
+              <Pesan key={g} jenis="peringatan">{g}</Pesan>
+            ))}
+            {cekPeriode.galat.length === 0 && f.mulai && f.akhir && cekPeriode.jumlahRilis != null && cekPeriode.jumlahRilis > 0 && cekPeriode.pertama && cekPeriode.terakhir && (
+              <p className="text-[12.5px] text-[#55657D]">
+                Dalam periode ini ada <b>{cekPeriode.jumlahRilis}</b> hari rilis ({teksHariRilis(f.hari_rilis).toLowerCase()}): pertama {tglPanjang(cekPeriode.pertama)}; terakhir {tglPanjang(cekPeriode.terakhir)}.
+              </p>
+            )}
+          </div>
+        )}
         <p className="text-[12.5px] text-[#6B7A90]">
           Bank soal {d.kegiatan_nama}: <b>{soalAktif}</b> butir aktif dari {new Set(d.soal.filter((s) => s.aktif).map((s) => s.paket)).size} paket. Tiap hari diundi {f.soal_per_hari || "…"} soal dari kolam di atas, soal yang sama untuk semua petugas, setiap paket dalam kolam terwakili.
         </p>
         {bisa && (
           <div className="space-y-2">
             {belumDisimpan && <Pesan jenis="peringatan">Ada perubahan yang belum disimpan, jadi belum berlaku bagi petugas.</Pesan>}
-            <button type="button" className={BTN_G} disabled={sibuk} onClick={simpan}>
+            {cekPeriode.galat.length > 0 && <Pesan jenis="galat">Belum bisa disimpan: perbaiki kecocokan hari rilis dan tanggal periode di atas.</Pesan>}
+            <button type="button" className={BTN_G} disabled={sibuk || cekPeriode.galat.length > 0} onClick={simpan}>
               {sibuk ? "Menyimpan…" : "Simpan dan terapkan sekarang"}
             </button>
             <ul className="list-disc space-y-0.5 pl-5 text-[12px] leading-snug text-[#6B7A90]">
               <li>Menyimpan langsung berlaku. Tidak ada tahap draf. Modal petugas mengikuti pengaturan terbaru saat dibuka, termasuk untuk hari yang sedang berjalan.</li>
               <li>Notifikasi dikirim oleh Railway Cron yang berjalan tiap 5 menit, jadi jam baru dipakai mulai putaran berikutnya.</li>
-              <li>Soal hari ini yang sudah diundi tidak berubah walau jumlah soal atau sumber soal diganti. Undi ulang bisa di sub Hari ini selama belum ada yang menjawab.</li>
+              <li>Soal hari ini yang sudah diundi tidak berubah walau jumlah soal atau sumber soal diganti. Undi ulang bisa di sub Hasil QC selama belum ada yang menjawab.</li>
             </ul>
           </div>
         )}

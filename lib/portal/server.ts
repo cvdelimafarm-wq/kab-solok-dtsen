@@ -12,7 +12,7 @@ import { buatCacheTtl } from "@/lib/cacheTtl";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
-import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin } from "@/lib/sigapAkses";
+import { boleh, izinAkun, sesiDariHeader, type PeranAkun, type PetaIzin, bolehPsp } from "@/lib/sigapAkses";
 import { tentukanTujuan } from "@/lib/undangan";
 
 export function dbPortal(): Db | null {
@@ -181,7 +181,7 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
     });
   }
   // (10 Okt 2026) Monitoring Lembar Identifikasi SLS: admin bencana (izin bencana.admin)
-  if (boleh(izin, "bencana.admin", "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
+  if (bolehPsp(izin, "lihat")) kartu.push({ kode: "admin-identifikasi", grup: "kelola", judul: "Monitoring Identifikasi", uraian: "Progres PML mengisi Lembar Identifikasi SLS: Sub SLS terisi, KK terdampak awal vs hasil.", href: "/sigap/kelola/identifikasi" });
   // (11 Okt 2026) Unggah daftar KK sasaran TIDAK dibuat kartu di Beranda HP: unggah CSV dilakukan dari laptop lewat menu sidebar desktop (Shell.tsx) -- permintaan user.
   if (boleh(izin, "akses.kelola", "kelola")) kartu.push({ kode: "akses", grup: "kelola", judul: "Kelola Peran & Akses", uraian: "Peran, izin per menu, akun & lingkup kegiatan.", href: "/sigap/kelola/akses" });
   const adminAplikasi = boleh(izin, "portal.kelola", "kelola");

@@ -9,6 +9,7 @@
 --   soal_pilihan   text[]    kode soal yang dipakai bila sumber_soal = 'pilihan'
 -- Undian harian (sigap_qc_undi) kini hanya menarik dari KOLAM itu; "undi acak / berurutan" dan "soal per hari" tetap berlaku di dalam kolam.
 -- Hari yang sudah diundi tidak berubah (sigap_qc_hari menyimpan soal_ids); pengaturan baru berlaku untuk hari berikutnya atau lewat Undi ulang (selama belum ada jawaban).
+-- (30 Okt 2026) Ditambah pemeriksaan kecocokan HARI rilis vs TANGGAL periode: periode yang tidak memuat satu pun hari rilis ditolak.
 -- Tidak ada data dihapus; kegiatan yang sudah ada tetap 'semua'.
 --
 -- Aman diulang (add column if not exists / create or replace). Jalankan oleh user (DDL produksi), SESUDAH 20261029c; lalu supabase/tests/78_uji_qc_sumber_soal.sql.
@@ -109,6 +110,13 @@ begin
     r.ingat_menit := v_menit;
   end if;
   if r.rilis_jam >= r.batas_jam then raise exception 'Jam batas harus sesudah jam rilis' using errcode = 'P0001'; end if;
+  -- hari rilis harus cocok dengan tanggal periode: minimal satu hari rilis jatuh di dalam periode (30 Okt 2026)
+  if r.mulai is not null and r.akhir is not null then
+    if r.akhir < r.mulai then raise exception 'Tanggal akhir tidak boleh sebelum tanggal mulai' using errcode = 'P0001'; end if;
+    if not exists (select 1 from generate_series(r.mulai::timestamp, least(r.akhir, r.mulai + 6)::timestamp, interval '1 day') g where extract(isodow from g)::smallint = any (r.hari_rilis)) then
+      raise exception 'Periode tidak memuat satu pun hari rilis (hari rilis: %), jadi soal tidak akan pernah dirilis', array_to_string(r.hari_rilis, ',') using errcode = 'P0001';
+    end if;
+  end if;
   if r.nilai_lulus < 1 or r.nilai_lulus > 100 then raise exception 'Nilai lulus harus 1-100' using errcode = 'P0001'; end if;
   v_sel := (extract(epoch from (r.batas_jam - r.rilis_jam)) / 60)::integer;
   if exists (select 1 from unnest(r.ingat_menit) m where m < 1 or m >= v_sel) then

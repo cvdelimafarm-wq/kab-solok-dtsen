@@ -118,6 +118,18 @@ export function boleh(izin: PetaIzin, menu: string, level: Level, kegiatanId?: n
   return x.semua || x.kegiatan.includes(kegiatanId);
 }
 
+/** Kegiatan induk Pendataan Pascabencana (sama dengan KEGIATAN_PENDATAAN di lib/sigapPendataanTab.ts). */
+export const KEGIATAN_PSP = 1;
+
+/**
+ * (30 Okt 2026) Izin `bencana.admin` KHUSUS survei PSP Pascabencana (lingkup kegiatan 1 atau semua kegiatan). Nama izinnya warisan: halaman Kelola Pendataan
+ * dipakai bersama beberapa survei, tetapi data PSP (identifikasi, permintaan FASIH, daftar KK, monitoring lapangan, kuesioner supervisi) hanya boleh dibuka
+ * pemegang izin yang lingkupnya mencakup PSP. Pemegang peran lain (mis. Pengelola SPDT NTP, lingkup kegiatan 2) tidak melihat data PSP.
+ */
+export function bolehPsp(izin: PetaIzin, level: Level): boolean {
+  return boleh(izin, "bencana.admin", level, KEGIATAN_PSP);
+}
+
 /** Kegiatan yg boleh dilihat lewat menu tsb: "semua" atau daftar id. */
 export function lingkup(izin: PetaIzin, menu: string): "semua" | number[] {
   const x = izin[menu];

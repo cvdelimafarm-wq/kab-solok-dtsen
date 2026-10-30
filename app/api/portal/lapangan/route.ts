@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { hariIniWib } from "@/lib/sigap";
 import { periksaRentang } from "@/lib/lapangan";
 import { monitoringLapangan } from "@/lib/portal/lapangan";
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const { izin } = await izinAkun(db, akun.id);
-    if (!boleh(izin, "bencana.admin", "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
+    if (!bolehPsp(izin, "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
     const r = periksaRentang(req.nextUrl.searchParams.get("dari"), req.nextUrl.searchParams.get("sampai"));
     if (!r.ok) return NextResponse.json({ error: r.pesan }, { status: 400 });
     const d = await monitoringLapangan(db, r.dari, r.sampai);

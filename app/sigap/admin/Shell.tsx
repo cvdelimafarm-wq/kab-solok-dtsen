@@ -16,6 +16,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api";
 import { NAMA_PAYUNG, susunMenu, type NamaIkon } from "@/lib/sigapMenuV2";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
+import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
 // (24 Okt 2026) + "anggaran" (halaman Anggaran: daftar RO, ruang kerja RO, jadwal revisi, realisasi -- /sigap/ro, /sigap/revisi, /sigap/realisasi)
@@ -254,7 +255,8 @@ export default function Shell({
   // (11 Okt 2026) Pendataan keroyokan PPL/PML -- permintaan user (lembar petugas lewat tahap Pendataan di Beranda; sidebar desktop hanya memuat menu admin unggah, karena unggah CSV dari laptop)
   const bolehPendataanKelola = ringkas.izin["bencana.admin"]?.level === "kelola";
   // (11 Okt 2026) Monitoring Lapangan (translok + identifikasi/pendataan per petugas per tanggal) -- permintaan user; cukup izin bencana.admin level lihat
-  const bolehLapangan = !!ringkas.izin["bencana.admin"];
+  // Monitoring Lapangan khusus survei PSP (kegiatan 1): lingkup SPDT NTP saja tidak ikut melihatnya
+  const bolehLapangan = bolehKlien(ringkas.izin, "bencana.admin", "lihat", KEGIATAN_PENDATAAN);
   const bolehAplikasi = ringkas.izin["portal.kelola"]?.level === "kelola" || ringkas.izin["translok.kegiatan"]?.level === "kelola";
   // (11 Okt 2026) Uji coba Perencanaan kegiatan (GSBPM per RO) -- hanya Admin Aplikasi, keputusan user
   const bolehPerencanaan = ringkas.izin["portal.kelola"]?.level === "kelola";

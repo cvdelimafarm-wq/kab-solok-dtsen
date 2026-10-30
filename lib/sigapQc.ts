@@ -109,6 +109,72 @@ export function rilisBerikut(tanggal: string, p: Pick<QcPengaturan, "hari_rilis"
   return null;
 }
 
+/** Nama hari ("Senin".."Minggu") dari "YYYY-MM-DD". */
+export const namaHariDari = (tanggal: string): string => NAMA_HARI[hariIso(tanggal)] ?? "";
+/** "Sabtu, 31 Okt 2026" */
+const hariTanggal = (t: string): string => `${namaHariDari(t)}, ${tanggalPendekQc(t)}`;
+
+export type CekHariTanggal = {
+  /** Pelanggaran: pengaturan tidak boleh disimpan. */
+  galat: string[];
+  /** Catatan: boleh disimpan, tetapi perlu diketahui admin. */
+  peringatan: string[];
+  /** Banyak hari rilis di dalam periode (null bila periode tidak punya batas akhir). */
+  jumlahRilis: number | null;
+  /** Tanggal rilis pertama dan terakhir yang sebenarnya di dalam periode. */
+  pertama: string | null;
+  terakhir: string | null;
+};
+
+/**
+ * (30 Okt 2026) Kecocokan HARI rilis dengan TANGGAL periode. Contoh: hari rilis Senin-Jumat tetapi periode 31 Okt (Sabtu) - 1 Nov (Minggu) =
+ * tidak ada soal yang pernah dirilis (galat); periode mulai pada Sabtu = soal pertama baru Senin (peringatan). `hariIni` (YYYY-MM-DD, WIB)
+ * opsional: dipakai untuk memberi tahu bila periode sudah lewat. Cermin pemeriksaan di sigap_qc_pengaturan_simpan (hanya galat "tanpa hari rilis").
+ */
+export function cekHariTanggal(p: { mulai?: string | null; akhir?: string | null; hari_rilis?: readonly number[] | null }, hariIni?: string | null): CekHariTanggal {
+  const galat: string[] = [];
+  const peringatan: string[] = [];
+  const hr = hariRilisDari({ hari_rilis: p.hari_rilis ? [...p.hari_rilis] : [] });
+  const mulai = p.mulai && TGL.test(p.mulai) ? p.mulai : null;
+  const akhir = p.akhir && TGL.test(p.akhir) ? p.akhir : null;
+  const cocok = (t: string) => hr.includes(hariIso(t));
+  const teksHr = teksHariRilis(hr).toLowerCase();
+
+  // rilis pertama/terakhir sungguhan di dalam periode (periode terbuka: hanya pertama; lompatan maksimal 7 hari karena hari rilis minimal satu per pekan)
+  let pertama: string | null = null;
+  let terakhir: string | null = null;
+  let jumlah: number | null = null;
+  if (mulai) {
+    pertama = cocok(mulai) ? mulai : rilisBerikut(mulai, { hari_rilis: hr, akhir: null });
+    if (pertama && akhir && pertama > akhir) pertama = null;
+  }
+  if (akhir) {
+    let t = akhir;
+    for (let i = 0; i < 7 && !cocok(t); i++) t = geserHari(t, -1);
+    terakhir = cocok(t) && (!mulai || t >= mulai) ? t : null;
+  }
+  if (mulai && akhir && akhir >= mulai) {
+    if (!pertama || !terakhir) {
+      jumlah = 0;
+    } else {
+      // banyak hari rilis: hitung per pekan penuh + sisa, tanpa menelusuri tiap tanggal pada periode panjang
+      jumlah = 0;
+      const hari = Math.round((Date.parse(`${akhir}T00:00:00Z`) - Date.parse(`${mulai}T00:00:00Z`)) / 86_400_000) + 1;
+      const pekan = Math.floor(hari / 7);
+      jumlah = pekan * hr.length;
+      for (let i = 0; i < hari - pekan * 7; i++) if (cocok(geserHari(mulai, pekan * 7 + i))) jumlah++;
+    }
+    if (jumlah === 0) {
+      galat.push(`Periode ${hariTanggal(mulai)} sampai ${hariTanggal(akhir)} tidak memuat satu pun hari rilis (${teksHr}), jadi soal tidak akan pernah dirilis. Ubah tanggal periode atau hari rilis.`);
+    }
+  }
+  if (mulai && jumlah !== 0 && !cocok(mulai) && pertama) peringatan.push(`Tanggal mulai ${hariTanggal(mulai)} bukan hari rilis (${teksHr}). Soal pertama baru dirilis ${hariTanggal(pertama)}.`);
+  if (akhir && jumlah !== 0 && !cocok(akhir) && terakhir) peringatan.push(`Tanggal akhir ${hariTanggal(akhir)} bukan hari rilis (${teksHr}). Soal terakhir dirilis ${hariTanggal(terakhir)}.`);
+  if (mulai && akhir && akhir < mulai) peringatan.push("Tanggal akhir sebelum tanggal mulai.");
+  if (akhir && hariIni && TGL.test(hariIni) && akhir < hariIni) peringatan.push(`Periode berakhir ${hariTanggal(akhir)}, sudah lewat: petugas tidak lagi melihat modal QC. Ubah tanggal akhir bila QC masih ingin dijalankan.`);
+  return { galat, peringatan, jumlahRilis: jumlah, pertama, terakhir };
+}
+
 export type QcJenisKirim = "rilis" | "ingat_petugas" | "ingat_pml" | "rekap_pml";
 
 export type QcRekapPpl = {
@@ -595,6 +661,10 @@ export function validasiPengaturan(masuk: unknown): HasilValidasi {
     else galat.push(`Tanggal ${k} bukan YYYY-MM-DD`);
   }
   if ("mulai" in data && "akhir" in data && data.mulai && data.akhir && (data.akhir as string) < (data.mulai as string)) galat.push("Tanggal akhir tidak boleh sebelum tanggal mulai");
+  // (30 Okt 2026) hari rilis harus cocok dengan tanggal periode: minimal satu hari rilis jatuh di dalam periode (cermin sigap_qc_pengaturan_simpan)
+  if ("mulai" in data && "akhir" in data && "hari_rilis" in data && data.mulai && data.akhir && (data.akhir as string) >= (data.mulai as string)) {
+    galat.push(...cekHariTanggal({ mulai: data.mulai as string, akhir: data.akhir as string, hari_rilis: data.hari_rilis as number[] }).galat);
+  }
 
   let menitIngat: number[] | null = null;
   if ("ingat_menit" in m) {

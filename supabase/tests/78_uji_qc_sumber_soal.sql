@@ -72,6 +72,14 @@ begin
   begin update sigap_qc_pengaturan set sumber_soal = 'xyz' where kegiatan_id = k2; h := h || jsonb_build_object('tolak_tabel_sumber_asing', false);
   exception when check_violation then h := h || jsonb_build_object('tolak_tabel_sumber_asing', 'check_violation'); end;
 
+  -- 7b. kecocokan hari rilis vs tanggal periode (31 Okt 2026 = Sabtu, 1 Nov = Minggu, 2 Nov = Senin)
+  begin perform sigap_qc_pengaturan_simpan(k2, dasar || jsonb_build_object('hari_rilis', '[1,2,3,4,5]'::jsonb, 'mulai', '2026-10-31', 'akhir', '2026-11-01'), 'uji'); h := h || jsonb_build_object('tolak_periode_tanpa_hari_rilis', false);
+  exception when others then h := h || jsonb_build_object('tolak_periode_tanpa_hari_rilis', sqlerrm); end;
+  perform sigap_qc_pengaturan_simpan(k2, dasar || jsonb_build_object('hari_rilis', '[1,2,3,4,5]'::jsonb, 'mulai', '2026-10-31', 'akhir', '2026-11-02'), 'uji');
+  h := h || jsonb_build_object('ok_periode_memuat_senin', (select mulai = date '2026-10-31' and akhir = date '2026-11-02' from sigap_qc_pengaturan where kegiatan_id = k2));
+  begin perform sigap_qc_pengaturan_simpan(k2, dasar || jsonb_build_object('mulai', '2026-11-05', 'akhir', '2026-11-01'), 'uji'); h := h || jsonb_build_object('tolak_akhir_sebelum_mulai', false);
+  exception when others then h := h || jsonb_build_object('tolak_akhir_sebelum_mulai', sqlerrm); end;
+
   -- 8. kegiatan lain tidak terpengaruh; hak eksekusi
   h := h || jsonb_build_object('k1_sumber', (select sumber_soal from sigap_qc_pengaturan where kegiatan_id = k1),
         'anon_boleh_simpan', has_function_privilege('anon', 'public.sigap_qc_pengaturan_simpan(bigint,jsonb,text)', 'execute'),

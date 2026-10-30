@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
 import { GalatQc } from "@/lib/portal/qc";
 import { daftarKelompok, daftarKelompokKortim } from "@/lib/portal/korwilMonitor";
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
   try {
     const [saya, { izin }] = await Promise.all([daftarKelompokKortim(db, akun.id), izinAkun(db, akun.id)]);
-    const admin = boleh(izin, "bencana.admin", "lihat");
+    const admin = bolehPsp(izin, "lihat");
     if (saya.length === 0 && !admin) return galat(TOLAK, 403);
     const semua = admin || saya.length > 1 ? await daftarKelompok(db) : [];
     const pilihan = pilihanKelompokUntuk({ admin, saya, semua });

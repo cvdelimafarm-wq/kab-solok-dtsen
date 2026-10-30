@@ -4,7 +4,7 @@
 // Pemanggil harus anggota lapangan (PML/PPL/korwil aktif) atau admin (izin bencana.admin, lihat): diperiksa di sini, fungsi database hanya untuk service_role.
 
 import type { Db } from "@/lib/sigap";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { periksaBarisPml, periksaBarisRekap, type BarisPml, type BarisRekap } from "@/lib/rekapIdentifikasi";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
@@ -12,7 +12,7 @@ type AkunMin = { id: number; petugas_bencana_id: number | null };
 /** (13 Okt 2026) Hak akses rekap: lapangan = PML/PPL/korwil/organik aktif; admin = izin bencana.admin (lihat). Admin juga boleh menanggapi sanggahan. */
 export async function aksesRekap(db: Db, akun: AkunMin): Promise<{ boleh: boolean; admin: boolean }> {
   const { izin } = await izinAkun(db, akun.id);
-  const admin = boleh(izin, "bencana.admin", "lihat");
+  const admin = bolehPsp(izin, "lihat");
   if (admin) return { boleh: true, admin: true };
   if (akun.petugas_bencana_id) {
     const { data } = await db.from("bencana_petugas").select("aktif, peran, status_kepegawaian").eq("id", akun.petugas_bencana_id).maybeSingle();

@@ -43,10 +43,11 @@ export async function GET(req: NextRequest) {
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
   try {
     const { izin } = await izinAkun(db, akun.id);
-    if (!boleh(izin, "bencana.admin", "lihat")) return galat("Tidak punya akses admin pendataan.", 403);
     const sp = req.nextUrl.searchParams;
     const keg = Number(sp.get("k"));
     if (!Number.isInteger(keg) || keg < 1 || keg > 1_000_000) return galat("Kegiatan tidak sah.");
+    // (30 Okt 2026) izin diperiksa menurut lingkup kegiatan yang diminta
+    if (!boleh(izin, "bencana.admin", "lihat", keg)) return galat("Tidak punya akses admin pendataan untuk survei ini.", 403);
     const tabel = tabelDokumenKegiatan(keg);
     if (!tabel) return NextResponse.json({ dokumen: [] });
 

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { kinerjaPendataan } from "@/lib/portal/pendataanKinerja";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const { izin } = await izinAkun(db, akun.id);
-    if (!boleh(izin, "bencana.admin", "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
+    if (!bolehPsp(izin, "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
     return NextResponse.json(await kinerjaPendataan(db, req.nextUrl.searchParams.get("segar") === "1"));
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Gagal memuat monitoring kinerja." }, { status: 500 });

@@ -23,7 +23,7 @@ import { buangMemo } from "@/lib/portal/memoSingkat";
 import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan, tolakPermintaan } from "@/lib/portal/permintaanDaftar";
 import { daftarBelumDiajukan, tandaiKeluarLangsung, tugaskanSubsls } from "@/lib/portal/belumDiajukan";
 import { periksaTugas } from "@/lib/belumDiajukan";
-import { aktorDariHeader, boleh, izinAkun } from "@/lib/sigapAkses";
+import { aktorDariHeader, izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { batasPengajuan, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
 export const runtime = "nodejs";
@@ -39,13 +39,13 @@ export async function GET(req: NextRequest) {
   try {
     if (req.nextUrl.searchParams.get("admin") === "1") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
-      return NextResponse.json({ sekarang: new Date().toISOString(), boleh_kelola: boleh(izin, "bencana.admin", "kelola"), permintaan: await permintaanSemua(db) });
+      if (!bolehPsp(izin, "lihat")) return galat("Khusus admin pendataan.", 403);
+      return NextResponse.json({ sekarang: new Date().toISOString(), boleh_kelola: bolehPsp(izin, "kelola"), permintaan: await permintaanSemua(db) });
     }
     if (req.nextUrl.searchParams.get("belum") === "1") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "lihat")) return galat("Khusus admin pendataan.", 403);
-      return NextResponse.json({ boleh_kelola: boleh(izin, "bencana.admin", "kelola"), ...(await daftarBelumDiajukan(db)) });
+      if (!bolehPsp(izin, "lihat")) return galat("Khusus admin pendataan.", 403);
+      return NextResponse.json({ boleh_kelola: bolehPsp(izin, "kelola"), ...(await daftarBelumDiajukan(db)) });
     }
     const tim = await ambilTimMemo(db, akun);
     if (!tim) return galat("Kartu plotting khusus anggota tim PML dan PPL.", 403);
@@ -93,7 +93,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "selesai") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menandai permintaan pendataan.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menandai permintaan pendataan.", 403);
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await selesaikanPermintaan(db, { id: akun.id }, ids);
@@ -102,7 +102,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "batal_diproses") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menandai pembatalan.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menandai pembatalan.", 403);
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu pembatalan.");
       const h = await prosesPembatalan(db, { id: akun.id }, ids);
@@ -111,7 +111,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "tolak") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menolak permintaan pendataan.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menolak permintaan pendataan.", 403);
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await tolakPermintaan(db, { id: akun.id }, ids, b.alasan);
@@ -120,7 +120,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "tarik") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menarik tanda sudah keluar.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menarik tanda sudah keluar.", 403);
       const ids = periksaIds(b.ids);
       if (!ids) return galat("Pilih minimal satu permintaan.");
       const h = await tarikPermintaan(db, { id: akun.id }, ids);
@@ -129,7 +129,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "tugaskan") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menugaskan Sub SLS.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menugaskan Sub SLS.", 403);
       const cek = periksaTugas(b.pilihan);
       if (!cek.ok) return galat(cek.pesan, 400);
       const h = await tugaskanSubsls(db, { id: akun.id }, cek.pilihan);
@@ -138,7 +138,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "tandai_keluar") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin menandai Sub SLS sudah keluar.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin menandai Sub SLS sudah keluar.", 403);
       const cek = periksaTugas(b.pilihan);
       if (!cek.ok) return galat(cek.pesan, 400);
       const h = await tandaiKeluarLangsung(db, { id: akun.id }, cek.pilihan);
@@ -147,7 +147,7 @@ async function proses(req: NextRequest) {
     }
     if (b.aksi === "email") {
       const { izin } = await izinAkun(db, akun.id);
-      if (!boleh(izin, "bencana.admin", "kelola")) return galat("Tidak punya izin mengisi email petugas.", 403);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin mengisi email petugas.", 403);
       const id = Number(b.id);
       if (!Number.isInteger(id) || id <= 0 || (b.sebagai !== "pengawas" && b.sebagai !== "pencacah")) return galat("Permintaan tidak sah.");
       const h = await simpanEmailFasih(db, { id: akun.id }, id, b.sebagai, b.email);

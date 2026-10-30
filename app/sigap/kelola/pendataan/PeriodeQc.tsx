@@ -2,7 +2,7 @@
 
 // app/sigap/kelola/pendataan/PeriodeQc.tsx
 //
-// (30 Okt 2026) Filter tanggal QC Pemahaman (Kelola Pendataan > QC > Pemahaman · Hari ini). Dua mode:
+// (30 Okt 2026) Filter tanggal QC Pemahaman (Kelola Pendataan > QC > Hasil QC). Tiga mode:
 //  - "Per tanggal": pilih satu hari (kolom tanggal, ‹ sebelumnya / berikutnya › di antara hari yang punya soal, tombol "Hari ini", dan deretan hari ber-soal);
 //  - "Rentang tanggal": dari-sampai + pilihan cepat; hasilnya matriks petugas x hari (RekapRentangQc.tsx);
 //  - "Semua periode" (30 Okt 2026): seluruh hari ber-soal tanpa batas, nilai direkap per petugas (RekapSemuaQc.tsx).

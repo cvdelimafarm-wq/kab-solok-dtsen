@@ -121,8 +121,9 @@ function statusHari(adaReal: boolean, nFoto: number, tanggal: string, hariIni: s
   return "terlewat";
 }
 
-function kegiatanTerlihat(izin: PetaIzin): "semua" | number[] {
-  const menu = Object.keys(izin).filter((k) => k.startsWith("translok."));
+function kegiatanTerlihat(izin: PetaIzin, termasukPendataan = false): "semua" | number[] {
+  // (30 Okt 2026) `termasukPendataan`: daftar survei di Kelola Pendataan juga mengikuti lingkup izin bencana.admin (mis. Pengelola SPDT NTP tanpa izin translok)
+  const menu = Object.keys(izin).filter((k) => k.startsWith("translok.") || (termasukPendataan && k === "bencana.admin"));
   if (menu.some((m) => lingkup(izin, m) === "semua")) return "semua";
   return Array.from(new Set(menu.flatMap((m) => lingkup(izin, m) as number[])));
 }
@@ -144,7 +145,7 @@ export async function GET(req: NextRequest) {
     const perlu = (menu: string, level: "lihat" | "kelola" = "lihat") => boleh(s.izin, menu, level, kegiatanId);
 
     if (bagian === "ringkas") {
-      const lihat = kegiatanTerlihat(s.izin);
+      const lihat = kegiatanTerlihat(s.izin, true);
       let q = db.from("sigap_kegiatan").select("id, kode, nama, tanggal_mulai, tanggal_selesai, aktif").order("id");
       if (lihat !== "semua") q = q.in("id", lihat.length ? lihat : [-1]);
       const { data: keg } = await q;
