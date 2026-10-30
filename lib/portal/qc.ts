@@ -21,6 +21,7 @@ import {
 } from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 import type { HasilQcSpdt } from "@/lib/spdtNtp";
+import { periksaRentang, susunRentang, type DataRentang, type PercobaanRentang } from "@/lib/sigapQcRentang";
 import { susunPetugasQc, susunRincianQc, type PercobaanRinci, type PesertaMentah, type RincianQc, type SoalRinci } from "@/lib/sigapQcMonitor";
 import {
   SLOT_TUNDA,
@@ -214,6 +215,9 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
   // hari yang dilihat: parameter, atau hari berlaku sekarang menurut pengaturan
   let hari: string | null = tanggal;
   if (!hari && pengaturan) hari = hariBerlaku(new Date(), pengaturan);
+  // (30 Okt 2026) daftar hari yang punya soal (untuk pemilih tanggal): 120 hari terbaru, terbaru dulu
+  const { data: hariRows } = await db.from("sigap_qc_hari").select("tanggal, soal_ids").eq("kegiatan_id", keg).order("tanggal", { ascending: false }).limit(120);
+  const hariAda = ((hariRows ?? []) as { tanggal: string; soal_ids: string[] | null }[]).filter((h) => (h.soal_ids ?? []).length > 0).map((h) => h.tanggal);
   let rekap: QcRekapTim[] = [];
   let soalHari: string[] = [];
   let susulanAt: string | null = null;
@@ -236,11 +240,51 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
       tanpa_notifikasi: peserta.filter((x) => !langgan.has(x.akun_id)).map((x) => x.nama),
     },
     hari,
+    hari_ada: hariAda,
+    hari_berlaku: pengaturan ? hariBerlaku(new Date(), pengaturan) : null,
     soal_hari: soalHari,
     susulan_at: susulanAt,
     rekap,
     rincian: await rincianHari(db, keg, hari),
   };
+}
+
+/**
+ * (30 Okt 2026) Rekap RENTANG tanggal untuk admin: matriks petugas x hari (nilai terbaik per hari) pada hari-hari yang punya soal di [dari, sampai].
+ * Percobaan dibaca berhalaman 1000 baris (batas satu permintaan) supaya rentang panjang tidak terpotong diam-diam.
+ */
+export async function rentangAdmin(db: Db, keg: number, dari: unknown, sampai: unknown): Promise<DataRentang> {
+  const sah = periksaRentang(dari, sampai);
+  if (!sah.ok) throw new GalatQc(sah.pesan, 400);
+  const { data: kg } = await db.from("sigap_kegiatan").select("id").eq("id", keg).maybeSingle();
+  if (!kg) throw new GalatQc("Kegiatan tidak ditemukan.", 404);
+  const { data: p } = await db.from("sigap_qc_pengaturan").select("nilai_lulus").eq("kegiatan_id", keg).maybeSingle();
+  const nl = Number((p as { nilai_lulus?: number } | null)?.nilai_lulus);
+  const nilaiLulus = Number.isFinite(nl) && nl >= 1 && nl <= 100 ? nl : 100;
+  const { data: hariRows, error: eHari } = await db.from("sigap_qc_hari").select("tanggal, soal_ids").eq("kegiatan_id", keg).gte("tanggal", sah.dari).lte("tanggal", sah.sampai).order("tanggal").limit(200);
+  if (eHari) throw new Error(eHari.message);
+  const hari = ((hariRows ?? []) as { tanggal: string; soal_ids: string[] | null }[]).filter((h) => (h.soal_ids ?? []).length > 0).map((h) => h.tanggal);
+  const peserta = await rpc<PesertaMentah[]>(db, "sigap_qc_peserta", { p_kegiatan: keg });
+  const percobaan: PercobaanRentang[] = [];
+  if (hari.length > 0) {
+    for (let dari1 = 0; ; dari1 += 1000) {
+      const { data, error } = await db
+        .from("sigap_qc_percobaan")
+        .select("akun_id, tanggal, ke, skor, terlambat")
+        .eq("kegiatan_id", keg)
+        .gte("tanggal", sah.dari)
+        .lte("tanggal", sah.sampai)
+        .order("tanggal")
+        .order("akun_id")
+        .order("ke")
+        .range(dari1, dari1 + 999);
+      if (error) throw new Error(error.message);
+      const bagian = (data ?? []) as PercobaanRentang[];
+      percobaan.push(...bagian);
+      if (bagian.length < 1000 || percobaan.length >= 50_000) break;
+    }
+  }
+  return susunRentang({ dari: sah.dari, sampai: sah.sampai, hari, peserta, percobaan, nilaiLulus });
 }
 
 /**

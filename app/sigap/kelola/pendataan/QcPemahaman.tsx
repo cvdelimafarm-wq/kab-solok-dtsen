@@ -21,6 +21,9 @@ import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
 import TabelQc from "./TabelQc";
 import InfografisQc from "./InfografisQc";
+import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "./PeriodeQc";
+import RekapRentangQc from "./RekapRentangQc";
+import { rentangTerakhir } from "@/lib/sigapQcRentang";
 import { jumlahKolomNilai, susunBarisQc, type FokusQc } from "@/lib/sigapQcTabel";
 import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
@@ -36,6 +39,9 @@ type Data = {
   soal: Soal[];
   peserta: { pml: number; ppl: number; ppl_tanpa_pml: number; tanpa_notifikasi: string[] };
   hari: string | null;
+  /** (30 Okt 2026) hari yang punya soal (terbaru dulu) dan hari berlaku menurut pengaturan; untuk filter tanggal */
+  hari_ada?: string[];
+  hari_berlaku?: string | null;
   soal_hari: string[];
   susulan_at: string | null;
   rekap: QcRekapTim[];
@@ -57,13 +63,16 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
   const { sub, pilih } = useSubTab("qc", daftarSub);
   const terkini = useRef(kegiatanId);
   terkini.current = kegiatanId;
+  // (30 Okt 2026) tanggal yang sedang dilihat (null = hari berlaku); disimpan di ref supaya muat() ikut membawanya tanpa mengosongkan layar
+  const tanggalRef = useRef<string | null>(null);
 
   const muat = useCallback(async () => {
     const k = kegiatanId;
     setMemuat(true);
     try {
-      const hasil = await apiPortal<Data>(`${API}?k=${k}`);
-      if (terkini.current !== k) return; // survei sudah berganti selagi memuat
+      const t = tanggalRef.current;
+      const hasil = await apiPortal<Data>(`${API}?k=${k}${t ? `&tanggal=${t}` : ""}`);
+      if (terkini.current !== k || tanggalRef.current !== t) return; // survei atau tanggal sudah berganti selagi memuat
       setD(hasil);
       setDiperbarui(new Date());
       setGalat(null);
@@ -74,11 +83,19 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
     }
   }, [kegiatanId]);
   useEffect(() => {
+    tanggalRef.current = null; // ganti survei = kembali ke hari berlaku
     setD(null);
     setInfo(null);
     setGalat(null);
     void muat();
   }, [muat]);
+  const pilihTanggal = useCallback(
+    (t: string | null) => {
+      tanggalRef.current = t;
+      void muat();
+    },
+    [muat]
+  );
 
   // (29 Okt 2026) pantauan hari ini disegarkan sendiri tiap 60 detik selama layarnya terbuka, supaya angka tidak basi ketika petugas sedang mengisi
   useEffect(() => {
@@ -122,7 +139,7 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
       {d && !d.boleh_kelola && <Pesan jenis="info">Anda dapat melihat saja. Mengubah pengaturan memerlukan izin kelola pendataan.</Pesan>}
-      {d && sub === "hari" && <HariIni d={d} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} />}
+      {d && sub === "hari" && <HariIni d={d} kegiatanId={kegiatanId} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} pilihTanggal={pilihTanggal} />}
       {d && sub === "pengaturan" && <Pengaturan d={d} kirim={kirim} />}
       {d && sub === "soal" && <BankSoal d={d} kirim={kirim} />}
     </div>
@@ -132,8 +149,60 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
 type Kirim = (isi: Record<string, unknown>, ok: string | ((r: Record<string, unknown>) => string)) => Promise<Record<string, unknown> | null>;
 
 // ====================================================================== Hari ini
-function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim; muat: () => Promise<void>; memuat: boolean; diperbarui: Date | null }) {
+function HariIni({
+  d,
+  kegiatanId,
+  kirim,
+  muat,
+  memuat,
+  diperbarui,
+  pilihTanggal,
+}: {
+  d: Data;
+  kegiatanId: number;
+  kirim: Kirim;
+  muat: () => Promise<void>;
+  memuat: boolean;
+  diperbarui: Date | null;
+  pilihTanggal: (t: string | null) => void;
+}) {
+  // (30 Okt 2026) filter tanggal: "Per tanggal" (satu hari) atau "Rentang tanggal" (matriks petugas x hari)
+  const [mode, setMode] = useState<ModePeriode>("hari");
+  const hariIni = d.hari_berlaku ?? hariIniWib(d.sekarang);
+  const [rentang, setRentang] = useState<Rentang>(() => rentangTerakhir(hariIni, 7));
+  return (
+    <>
+      <PeriodeQc
+        mode={mode}
+        onMode={setMode}
+        hari={d.hari}
+        hariAda={d.hari_ada ?? []}
+        hariBerlaku={d.hari_berlaku ?? null}
+        sekarang={d.sekarang}
+        sibuk={memuat}
+        onHari={pilihTanggal}
+        rentang={rentang}
+        onRentang={setRentang}
+      />
+      {mode === "rentang" ? (
+        <RekapRentangQc
+          kegiatanId={kegiatanId}
+          rentang={rentang}
+          onBukaHari={(t) => {
+            pilihTanggal(t);
+            setMode("hari");
+          }}
+        />
+      ) : (
+        <HariAktif d={d} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} />
+      )}
+    </>
+  );
+}
+
+function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim; muat: () => Promise<void>; memuat: boolean; diperbarui: Date | null }) {
   const p = d.pengaturan;
+  const hariBerlaku = !d.hari_berlaku || d.hari === d.hari_berlaku; // melihat hari ini (bukan tanggal lain)
   const sudah = d.rekap.reduce((a, t) => a + t.sudah, 0);
   const total = d.rekap.reduce((a, t) => a + t.jumlah_ppl, 0);
   const lulus = d.rekap.reduce((a, t) => a + t.lulus, 0);
@@ -160,7 +229,7 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
   return (
     <>
       <Kartu
-        judul="Pantauan hari ini"
+        judul={hariBerlaku ? "Pantauan hari ini" : "Pantauan tanggal terpilih"}
         ket={d.hari ? tglPanjang(d.hari) : "QC belum berjalan"}
         kanan={
           <span className="flex items-center gap-2">
@@ -177,7 +246,7 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
           <p className="text-[13px] text-[#55657D]">
             Soal dirilis pukul <b>{jam(p.rilis_jam)}</b> ({teksHariRilis(hariRilisDari(p)).toLowerCase()}), batas pukul <b>{jam(p.batas_jam)}</b> WIB. Petugas yang belum selesai terkunci modal sampai mengisi
             {wajibUlangDari(p) ? ` (dan mengulang sampai ${nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`}, maksimal ${maksPercobaanDari(p)} percobaan)` : ` (satu percobaan; lulus bila nilai ${nilaiLulusDari(p)} ke atas)`}.
-            {d.susulan_at && <> Hari ini ditandai <b>susulan</b>: tidak dihitung terlambat.</>}
+            {d.susulan_at && <> {hariBerlaku ? "Hari ini" : "Tanggal ini"} ditandai <b>susulan</b>: tidak dihitung terlambat.</>}
           </p>
         )}
       </Kartu>
@@ -206,7 +275,7 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
       </div>
       {d.rekap.length === 0 ? (
         <Kartu judul="Rekap per tim">
-          <p className="text-[13px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
+          <p className="text-[13px] text-[#55657D]">{hariBerlaku ? "Belum ada soal yang dirilis pada hari ini." : "Tidak ada soal QC pada tanggal ini."}</p>
           {d.peserta.tanpa_notifikasi.length > 0 && <p className="mt-1.5 text-[12.5px] text-[#55657D]">Belum mengaktifkan notifikasi: {d.peserta.tanpa_notifikasi.join(", ")}.</p>}
         </Kartu>
       ) : (
@@ -216,7 +285,7 @@ function HariIni({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim
         </>
       )}
 
-      {d.boleh_kelola && p && d.hari && (
+      {d.boleh_kelola && p && d.hari && hariBerlaku && (
         <Kartu judul="Tindakan hari ini" ket="hati-hati: berlaku untuk semua petugas">
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={sibuk} className={BTN_O} onClick={() => ke({ aksi: "susulan", tanggal: d.hari, susulan: !d.susulan_at }, d.susulan_at ? "Tanda susulan dicabut." : "Hari ini ditandai susulan.")}>

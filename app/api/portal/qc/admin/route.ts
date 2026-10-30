@@ -4,7 +4,9 @@
 // "lihat" = melihat pengaturan, bank soal, rekap; "kelola" = mengubah. Semua perubahan dicatat di sigap_audit. Tidak ada penghapusan permanen
 // (soal dimatikan lewat `aktif`; undian ulang hanya bila belum ada satu pun jawaban pada hari itu).
 // (29 Okt 2026) QC berjalan PER KEGIATAN: semua aksi menerima `k` (id kegiatan; GET lewat ?k=, POST lewat body.k). Tanpa `k` = Pendataan Pascabencana (id 1).
-// GET [?k=<kegiatan>][&tanggal=YYYY-MM-DD]           -> { boleh_kelola, kegiatan_id, kegiatan_nama, pengaturan, soal[], peserta, hari, soal_hari, rekap[] }
+// GET [?k=<kegiatan>][&tanggal=YYYY-MM-DD]           -> { boleh_kelola, kegiatan_id, kegiatan_nama, pengaturan, soal[], peserta, hari, hari_ada[], hari_berlaku, soal_hari, rekap[] }
+// GET ?k=<kegiatan>&dari=YYYY-MM-DD&sampai=YYYY-MM-DD -> { rentang: DataRentang } matriks petugas x hari (maks 62 hari); ringan, tanpa bank soal
+//   (30 Okt 2026) filter tanggal: ?tanggal= memilih satu hari, ?dari=&sampai= memilih rentang.
 // POST {aksi:"pengaturan", data:{...}}               -> simpan pengaturan
 // POST {aksi:"soal", data:{id,paket,...}}            -> simpan (baru/ubah) satu soal
 // POST {aksi:"soal_aktif", id, aktif}                -> hidup/matikan satu soal
@@ -17,7 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
-import { GalatQc, bacaKegiatan, dataAdmin, imporSoal, kirimContoh, simpanPengaturan, simpanSoal, tandaiSusulan, ubahAktifSoal, undiUlang } from "@/lib/portal/qc";
+import { GalatQc, bacaKegiatan, dataAdmin, imporSoal, kirimContoh, rentangAdmin, simpanPengaturan, simpanSoal, tandaiSusulan, ubahAktifSoal, undiUlang } from "@/lib/portal/qc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +49,9 @@ export async function GET(req: NextRequest) {
     const tgl = req.nextUrl.searchParams.get("tanggal");
     const tanggal = tgl && /^\d{4}-\d{2}-\d{2}$/.test(tgl) ? tgl : null;
     const keg = bacaKegiatan(req.nextUrl.searchParams.get("k"));
+    const dari = req.nextUrl.searchParams.get("dari");
+    const sampai = req.nextUrl.searchParams.get("sampai");
+    if (dari || sampai) return NextResponse.json({ rentang: await rentangAdmin(p.db, keg, dari, sampai) });
     return NextResponse.json({ boleh_kelola: p.bisaKelola, ...(await dataAdmin(p.db, keg, tanggal)) });
   } catch (e) {
     return tangani("[api/portal/qc/admin GET]", e);
