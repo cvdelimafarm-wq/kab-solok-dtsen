@@ -5,10 +5,13 @@
 // (16 Okt 2026) Lembar Pendataan SPDT NTP 2026 (mockup disetujui user). LEMBAR BANTU: nama KK, koordinat, navigasi -- tanpa status pendataan dan
 // tanpa umpan balik petugas. Tab: PPL = Peta | Daftar KK (hanya KK wilayah tugasnya); PML = Monitoring | Peta | Daftar KK (KK semua PPL-nya);
 // Supervisor = Monitoring (terbuka lebih dulu) | QC (hasil QC Pemahaman, baca saja) | Peta | Daftar KK (seluruh wilayah) | Dokumen.
+// (31 Okt 2026) Dipecah mengikuti bar bawah kegiatan (lib/sigapMenuKegiatan.ts, app/sigap/BarKegiatan.tsx): ?tab=sampel (Peta | Daftar KK, semua peran) dan
+// ?tab=pengawasan (PML: Monitoring | Lembar Pengawasan; Supervisor: Monitoring | QC | Lembar Supervisi). PPL tidak punya tab pengawasan.
 // (30 Okt 2026) Tab Dokumen: PML mengunggah PDF scan hasil pemeriksaan; Supervisor mengunduhnya (PPL tidak punya tab ini). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
 import TombolKembali from "@/app/components/TombolKembali";
 import { buatProyeksi, warnaIndeks } from "@/lib/pendataan";
 import { LABEL_PERAN, daftarPpl, jarakM, judulKata, saringKk, type KkSpdt } from "@/lib/spdtNtp";
@@ -25,15 +28,29 @@ import QcSpdt from "./QcSpdt";
 import DokumenPml from "./DokumenPml";
 import DokumenSupervisor from "./DokumenSupervisor";
 import KartuKkSpdt from "./KartuKkSpdt";
+import BarKegiatan, { useBarKegiatan } from "../BarKegiatan";
 
 // (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
 const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
 
 type Tab = "mon" | "qc" | "peta" | "daftar" | "dokumen";
-const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", qc: "QC", peta: "Peta", daftar: "Daftar KK", dokumen: "Dokumen" };
+type Bagian = "sampel" | "pengawasan";
+const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", qc: "QC", peta: "Peta", daftar: "Daftar KK", dokumen: "Lembar" };
 const SELECT = "h-11 min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-white px-2.5 text-[13px] font-semibold text-[#0F2A52] outline-none";
 
 export default function HalamanSpdt() {
+  return (
+    <Suspense fallback={null}>
+      <Isi />
+    </Suspense>
+  );
+}
+
+function Isi() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const kodeUrl = sp.get("k");
+  const bar = useBarKegiatan(kodeUrl && /^[a-z0-9_]{2,30}$/.test(kodeUrl) ? kodeUrl : null, "spdt_lembar");
   const { data, galat, memuat } = useKkSpdt();
   const [tab, setTab] = useState<Tab | null>(null);
   const [pplF, setPplF] = useState<number | null>(null);
@@ -49,9 +66,14 @@ export default function HalamanSpdt() {
 
 
   const peran = data?.peran ?? null;
+  // (31 Okt 2026) bagian halaman menurut bar bawah; PPL hanya punya Sampel
+  const bagian: Bagian = sp.get("tab") === "pengawasan" && peran !== "ppl" ? "pengawasan" : "sampel";
+  const namaPengawasan = peran === "supervisor" ? "Supervisi" : "Pengawasan";
   // (29 Okt 2026) tab QC (hasil QC Pemahaman, baca saja) hanya untuk Supervisor
-  const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : peran === "supervisor" ? ["mon", "qc", "peta", "daftar", "dokumen"] : ["mon", "peta", "daftar", "dokumen"];
+  const tabs: Tab[] = bagian === "sampel" ? ["peta", "daftar"] : peran === "supervisor" ? ["mon", "qc", "dokumen"] : ["mon", "dokumen"];
   const tabAktif: Tab = tab && tabs.includes(tab) ? tab : tabs[0];
+  const labelTab = (k: Tab) => (k === "dokumen" ? `Lembar ${namaPengawasan}` : LABEL_TAB[k]);
+  const judulBagian = bar.items?.find((i) => i.kunci === bagian)?.label ?? (bagian === "sampel" ? "Sampel" : namaPengawasan);
   const semuaKk: KkSpdt[] = useMemo(() => data?.kk ?? [], [data]);
 
   const ppl = useMemo(() => daftarPpl(semuaKk), [semuaKk]);
@@ -123,7 +145,7 @@ export default function HalamanSpdt() {
           <div className="flex items-center gap-2.5">
             <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Lembar Pendataan</h1>
+              <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">{judulBagian}</h1>
               <p className="truncate text-[11.5px] text-[#A9BCD8]">{peran ? `SPDT NTP 2026 · ${LABEL_PERAN[peran]}` : "SPDT NTP 2026"}</p>
             </div>
             {data && (
@@ -133,11 +155,21 @@ export default function HalamanSpdt() {
               </div>
             )}
           </div>
-          {data && (
+          {data && bar.siap && !bar.items && peran !== "ppl" && (
+            // cadangan bila bar tidak tersedia (kegiatan tidak memakai template): pindah bagian lewat sini
+            <div role="tablist" aria-label="Bagian" className="flex gap-[3px] rounded-[12px] bg-white/10 p-[3px]">
+              {(["sampel", "pengawasan"] as Bagian[]).map((b) => (
+                <button key={b} type="button" role="tab" aria-selected={bagian === b} onClick={() => router.replace(`/sigap/spdt?tab=${b}`)} className={`grid h-11 flex-1 place-items-center rounded-[9px] text-[13.5px] font-bold ${bagian === b ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                  {b === "sampel" ? "Sampel" : namaPengawasan}
+                </button>
+              ))}
+            </div>
+          )}
+          {data && tabs.length > 1 && (
             <div role="tablist" aria-label="Tampilan" className="flex gap-[3px] rounded-[12px] bg-white/10 p-[3px]">
               {tabs.map((k) => (
-                <button key={k} type="button" role="tab" aria-selected={tabAktif === k} onClick={() => setTab(k)} className={`grid h-11 flex-1 place-items-center rounded-[9px] font-bold ${tabs.length > 4 ? "px-0.5 text-[12px]" : "text-[13.5px]"} ${tabAktif === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
-                  {LABEL_TAB[k]}
+                <button key={k} type="button" role="tab" aria-selected={tabAktif === k} onClick={() => setTab(k)} className={`grid h-11 flex-1 place-items-center rounded-[9px] px-0.5 font-bold ${tabs.length > 2 ? "text-[12px]" : "text-[13.5px]"} ${tabAktif === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                  {labelTab(k)}
                 </button>
               ))}
             </div>
@@ -145,7 +177,7 @@ export default function HalamanSpdt() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[76px]">
         {galat && <p className="m-2.5 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
         {!data && !galat && memuat && (
           <div className="m-2.5 rounded-[18px] bg-white p-4" aria-busy="true">
@@ -241,6 +273,7 @@ export default function HalamanSpdt() {
         )}
       </div>
 
+      {bar.items && bar.kode && <BarKegiatan kode={bar.kode} items={bar.items} aktif={bagian} />}
       {kkTerpilih && !tabKhusus && <KartuKkSpdt kk={kkTerpilih} jarak={jarak?.get(kkTerpilih.id) ?? null} tampilPpl={tampilPpl} onTutup={() => setTerpilihId(null)} />}
     </main>
   );

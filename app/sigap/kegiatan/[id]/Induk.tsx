@@ -5,9 +5,13 @@
 // (9 Okt 2026) Layer 2 kegiatan INDUK (mockup disetujui user): garis waktu vertikal tahap proses bisnis (Perencanaan, Pelatihan, Pendataan,
 // Evaluasi, dst. -- diatur admin per kegiatan di /portal/admin/tahap). Tahap yang sedang dikerjakan ditandai "Kerjakan sekarang".
 // Mengetuk tahap membuka halaman tahapnya (Layer 3): Pelatihan -> /sigap/pelatihan, lainnya -> /sigap/kegiatan/<kegiatan>/<tahap>.
+// (31 Okt 2026) Kegiatan bermenu rutin (lib/sigapMenuKegiatan.ts: pakaiTemplateMenu) tidak lagi memakai garis waktu: mengetuk ikonnya di Beranda mendarat di
+// "Hari Ini" dengan bar bawah (Hari Ini | Sampel | Pengawasan/Supervisi | Kamera | Translok). Bila petugas punya penugasan Transport Lokal, Hari Ini = halaman
+// Hari Ini milik Translok (replace, supaya Kembali pulang ke Beranda); bila tidak, halaman ini menampilkan Hari Ini sederhana berisi pintasan menu.
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
 import TombolKembali from "@/app/components/TombolKembali";
@@ -16,6 +20,7 @@ import { adalahTugas } from "@/lib/sigapPrioritas";
 import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
 import type { StatusLangkah } from "@/lib/sigapKegiatan";
 import { useInduk } from "../useInduk";
+import BarKegiatan, { useBarKegiatan } from "../../BarKegiatan";
 
 const NODE: Record<StatusLangkah, string> = {
   selesai: "bg-[#19A463] text-white",
@@ -102,6 +107,72 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
 }
 
 export default function HalamanInduk({ kode }: { kode: string }) {
+  const router = useRouter();
+  const bar = useBarKegiatan(kode);
+  const hariIni = bar.items?.find((i) => i.kunci === "hari_ini") ?? null;
+  const alihKeTranslok = !!hariIni && hariIni.href !== `/sigap/kegiatan/${kode}`;
+  useEffect(() => {
+    if (alihKeTranslok && hariIni) router.replace(hariIni.href);
+  }, [alihKeTranslok, hariIni, router]);
+  if (bar.items && bar.kode) {
+    return alihKeTranslok ? <KerangkaMuat /> : <HariIniSederhana kode={bar.kode} items={bar.items} />;
+  }
+  // belum diketahui kegiatan ini bermenu rutin atau tidak: jangan kedip-kedip menampilkan garis waktu lalu berganti (galat -> halaman lama yang menampilkannya)
+  if (!bar.siap && !bar.galat) return <KerangkaMuat />;
+  return <HalamanTahap kode={kode} />;
+}
+
+function KerangkaMuat() {
+  return (
+    <main className="min-h-screen bg-[#F5F8FE] px-3.5 pt-24 text-[#1B2B4B]" aria-busy="true">
+      <div className="mx-auto max-w-xl rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
+        <div className="h-3 w-32 animate-pulse rounded bg-[#E6EDF8]" />
+        <div className="mt-4 h-10 animate-pulse rounded bg-[#EEF2F7]" />
+      </div>
+    </main>
+  );
+}
+
+/** Hari Ini untuk petugas tanpa penugasan Transport Lokal (mis. Supervisor SPDT): pintasan ke menu yang ada di bar bawah. */
+function HariIniSederhana({ kode, items }: { kode: string; items: NonNullable<ReturnType<typeof useBarKegiatan>["items"]> }) {
+  const { induk } = useInduk(kode);
+  const pintasan = items.filter((i) => i.kunci !== "hari_ini" && i.kunci !== "kamera");
+  const kamera = items.find((i) => i.kunci === "kamera");
+  return (
+    <main className="min-h-screen bg-[#F5F8FE] pb-28 text-[#1B2B4B]">
+      <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[62px] pt-5 text-white">
+        <div aria-hidden className="absolute -right-24 -top-28 h-60 w-60 rounded-full bg-white/[0.06]" />
+        <div className="relative mx-auto flex max-w-xl items-center gap-2">
+          <TombolKembali tema="gelap" />
+        </div>
+        <div className="relative mx-auto mt-3 max-w-xl">
+          <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.3px]">{induk?.nama ?? "Kegiatan"}</h1>
+          <p className="mt-1.5 text-[12px] text-[#A9BCD8]">Hari Ini</p>
+        </div>
+      </header>
+      <div className="relative z-10 mx-auto -mt-[44px] max-w-xl space-y-3 px-3.5">
+        <section aria-label="Menu kegiatan" className="space-y-2.5 rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
+          <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Menu kegiatan</h2>
+          {pintasan.map((i) => (
+            <Link key={i.kunci} href={i.href} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] border border-[#DCE5F2] bg-[#F8FAFE] px-4 text-[14px] font-extrabold text-[#0F2A52] active:bg-[#EAF1FC]">
+              {i.label}
+              <IkonMenu n="panah" className="h-4 w-4" />
+            </Link>
+          ))}
+          {kamera && (
+            <Link href={kamera.href} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] bg-[#0F2A52] px-4 text-[14px] font-extrabold text-white">
+              Buka Kamera SIGAP
+              <IkonMenu n="panah" className="h-4 w-4" />
+            </Link>
+          )}
+        </section>
+      </div>
+      <BarKegiatan kode={kode} items={items} aktif="hari_ini" />
+    </main>
+  );
+}
+
+function HalamanTahap({ kode }: { kode: string }) {
   const { induk, tahap, siap, galat } = useInduk(kode);
   // (10 Okt 2026) Selagi petugas membaca tahapan, data & kode halaman TUJUAN (semua tahap yang sudah terbuka; tahap prioritas lebih dulu) diambil di belakang
   // supaya saat tahap ditekan langsung tampil -- permintaan user (lihat app/portal/siapkan.ts)

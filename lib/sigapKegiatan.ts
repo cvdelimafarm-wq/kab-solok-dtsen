@@ -49,6 +49,8 @@ export type RingkasKegiatan = {
   langkah?: LangkahKegiatan[];
   /** (9 Okt 2026) sigap_kegiatan.id untuk Transport Lokal, dipakai tahap kegiatan induk (lib/sigapTahap.ts) */
   kegiatan_id?: number;
+  /** (31 Okt 2026) alamat halaman kerja Transport Lokal (`/sigap/translok/<token>?p=<penugasan>`), dipakai bar bawah kegiatan (lib/sigapMenuKegiatan.ts) */
+  hrefKerja?: string;
   /**
    * (14 Okt 2026) Daftar "yang belum dilengkapi" terurut (lib/sigapKekurangan.ts). Ada (mungkin kosong) = adapter sudah menghitungnya:
    * kosong berarti tidak ada yang perlu diingatkan. Tidak ada (undefined) = adapter lama / kegiatan tanpa hitungan -> pakai langkah.

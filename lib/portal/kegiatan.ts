@@ -219,6 +219,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     href: `/sigap/kegiatan/translok-${p.id}`,
     langkah,
     kegiatan_id: k.id,
+    hrefKerja,
     kekurangan: kek,
   };
 }

@@ -20,7 +20,8 @@ import {
   type TundaAktif,
 } from "@/lib/sigapQcTunda";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
-import type { HasilQcSpdt } from "@/lib/spdtNtp";
+import type { HasilQcSpdt, MentahQc } from "@/lib/spdtNtp";
+import type { AnggotaHasil, PercobaanMentah as PercobaanMentahQc, SoalMentah as SoalMentahQc } from "@/lib/korwilHasilQc";
 import { periksaRentang, susunRentang, type DataRentang, type PercobaanRentang } from "@/lib/sigapQcRentang";
 import { susunSemua, type DataSemua } from "@/lib/sigapQcSemua";
 import { susunPetugasQc, susunRincianQc, type PercobaanRinci, type PesertaMentah, type RincianQc, type SoalRinci } from "@/lib/sigapQcMonitor";
@@ -200,6 +201,37 @@ async function rincianHari(db: Db, keg: number, hari: string | null): Promise<Ri
   return susunRincianQc(baris, soal);
 }
 
+/**
+ * (31 Okt 2026) Bahan matriks soal x petugas di tab QC supervisor SPDT NTP: jawaban mentah semua peserta pada hari itu (pilihan tiap soal) + teks soal hari itu.
+ * Bentuknya sama dengan /api/portal/qc/hasil (Pasca Bencana) supaya penyusunnya sama: lib/korwilHasilQc.ts `susunHasil`.
+ */
+async function mentahHari(db: Db, keg: number, hari: string | null, peserta: PesertaMentah[], soalHari: string[]): Promise<MentahQc> {
+  const anggota: AnggotaHasil[] = peserta.map((x) => ({ akun_id: x.akun_id, nama: x.nama, peran: x.peran === "pml" ? "pml" : "ppl", pml_nama: x.pml_nama ?? null }));
+  if (!hari) return { anggota, percobaan: [], soal: [] };
+  const { data: pc } = await db.from("sigap_qc_percobaan").select("akun_id, tanggal, ke, jawaban, salah").eq("kegiatan_id", keg).eq("tanggal", hari).order("akun_id").order("ke").limit(5000);
+  const teks = (v: unknown): Record<string, string> => {
+    const out: Record<string, string> = {};
+    if (v && typeof v === "object" && !Array.isArray(v)) for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (typeof x === "string") out[k] = x;
+    return out;
+  };
+  const percobaan: PercobaanMentahQc[] = ((pc ?? []) as { akun_id: number; tanggal: string; ke: number; jawaban: unknown; salah: unknown }[]).map((r) => ({
+    akun_id: Number(r.akun_id),
+    tanggal: String(r.tanggal),
+    ke: Number(r.ke),
+    jawaban: teks(r.jawaban),
+    salah: Array.isArray(r.salah) ? r.salah.map(String) : [],
+  }));
+  const ids = [...new Set([...soalHari, ...percobaan.flatMap((p) => [...Object.keys(p.jawaban ?? {}), ...(p.salah ?? [])])])];
+  const soal: SoalMentahQc[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await db.from("sigap_qc_soal").select("id, pertanyaan, opsi, kunci, penjelasan").eq("kegiatan_id", keg).in("id", ids.slice(i, i + 100));
+    for (const r of (data ?? []) as { id: string; pertanyaan: string; opsi: unknown; kunci: string; penjelasan: string | null }[]) {
+      soal.push({ id: String(r.id), pertanyaan: String(r.pertanyaan ?? ""), opsi: teks(r.opsi), kunci: String(r.kunci ?? ""), penjelasan: String(r.penjelasan ?? "") });
+    }
+  }
+  return { anggota, percobaan, soal };
+}
+
 export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
   const { data: kg } = await db.from("sigap_kegiatan").select("id, nama").eq("id", keg).maybeSingle();
   if (!kg) throw new GalatQc("Kegiatan tidak ditemukan.", 404);
@@ -366,6 +398,7 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
   }
   const { petugas, monitoring } = susunPetugasQc({ peserta, percobaan, langganan, kirim, sesi, tundaAkun, nilaiLulus, rilisAt, now: new Date() });
   const berlaku = peng ? hariBerlaku(new Date(), peng) : null;
+  const [rincian, mentah] = await Promise.all([rincianHari(db, keg, hari), mentahHari(db, keg, hari, peserta, soalHari)]);
 
   return {
     kegiatan_id: keg,
@@ -388,7 +421,8 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
     rilis_at: rilisAt,
     petugas,
     monitoring,
-    rincian: await rincianHari(db, keg, hari),
+    rincian,
+    mentah,
   };
 }
 

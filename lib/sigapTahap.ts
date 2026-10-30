@@ -13,6 +13,7 @@ import { ketModulSpdt, type InfoSpdt } from "@/lib/spdtNtp";
 import { ketModulSampel, type InfoSampel } from "@/lib/sampelSls";
 import { alamatLembarPendataan } from "@/lib/sigapPendataanSaring";
 import { alamatSupervisi } from "@/lib/sigapKorwilTab";
+import { pakaiTemplateMenu } from "@/lib/sigapMenuKegiatan";
 
 export type BukaMode = "langsung" | "setelah_sebelumnya" | "tanggal";
 
@@ -432,7 +433,8 @@ export function ringkasInduk(k: KonteksTahap): RingkasKegiatan | null {
     pecahan: t.reduce((a, x) => a + x.pecahan, 0) / t.length,
     selesai,
     total: t.length,
-    sub: `${selesai}/${t.length} tahap · ${pesan}`,
+    // (31 Okt 2026) kegiatan bermenu rutin (bar bawah) bukan rangkaian tahap: tanpa "x/y tahap", cukup pesan keadaannya
+    sub: pakaiTemplateMenu(k.induk.tahap) ? pesan : `${selesai}/${t.length} tahap · ${pesan}`,
     peringatan: nada === "merah" || nada === "emas",
     href: `/sigap/kegiatan/${k.induk.kode}`,
   };

@@ -258,6 +258,11 @@ describe("modul spdt_lembar", () => {
     expect(r?.nada).toBe("biru");
     expect(r?.href).toBe("/sigap/kegiatan/spdt_ntp");
   });
+
+  it("ringkasan Layer 1 kegiatan bermenu rutin tanpa \"x/y tahap\"", () => {
+    const r = ringkasInduk(K(induk({ peran: "pml", total: 45, ppl: 2, pml: 1 })));
+    expect(r?.sub).not.toContain("tahap");
+  });
 });
 
 // (30 Okt 2026) Modul "sampel:<kegiatan_id>" (Sampel per SLS: Sakernas, Seruti, IMK) -- lembar bantu, tampil hanya bagi akun yang punya alokasi sampel.

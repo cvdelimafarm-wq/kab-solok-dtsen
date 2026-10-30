@@ -308,4 +308,12 @@ export type HasilQcSpdt = {
   monitoring: import("@/lib/sigapQcMonitor").MonitoringQc;
   /** tiap percobaan petugas + soal yang salah */
   rincian: import("@/lib/sigapQcMonitor").RincianQc;
+  /** (31 Okt 2026) jawaban mentah pada hari itu + teks soal, untuk matriks soal x petugas (sama bentuknya dengan Hasil QC Pasca Bencana) */
+  mentah?: MentahQc;
+};
+
+export type MentahQc = {
+  anggota: import("@/lib/korwilHasilQc").AnggotaHasil[];
+  percobaan: import("@/lib/korwilHasilQc").PercobaanMentah[];
+  soal: import("@/lib/korwilHasilQc").SoalMentah[];
 };

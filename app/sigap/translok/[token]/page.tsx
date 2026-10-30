@@ -25,6 +25,9 @@ import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
 import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
 import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
+import { popDariLapisan } from "@/app/portal/lapisan";
+import { tabBarDariTranslok, type ItemBar } from "@/lib/sigapMenuKegiatan";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -208,6 +211,19 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   const [fokus, setFokus] = useState<FokusKerja | null>(null);
   const [bukaTgl, setBukaTgl] = useState<string | null>(null);
   const tautanDiterapkan = useRef(false);
+  // (31 Okt 2026) Kegiatan bertemplate menu (lib/sigapMenuKegiatan.ts): tautan dari bar membawa ?k=<kode induk>. Dengan itu bar bawah seragam
+  // (Hari Ini | Sampel | Pengawasan | Kamera | Translok) menggantikan bar lama; tanpa ?k= (Pasca Bencana dll.) bar lama tetap.
+  const [kodeBar, setKodeBar] = useState<string | null>(null);
+  const subTerakhir = useRef<Tab>("hari_kerja");
+  const bar = useBarKegiatan(kodeBar);
+  useEffect(() => {
+    try {
+      const k = new URLSearchParams(window.location.search).get("k");
+      if (k && /^[a-z0-9_]{2,30}$/.test(k)) setKodeBar(k);
+    } catch {
+      /* abaikan */
+    }
+  }, []);
   // (23 Okt 2026) panduan login pertama diputuskan SEKALI saat data pertama masuk (muat ulang sesudah menyimpan tidak boleh memunculkannya)
   const panduanDiputuskan = useRef(false);
 
@@ -305,6 +321,44 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       /* abaikan */
     }
   }, [tampilanPulih, token, tab, langkah, pen?.id, penId]);
+
+  // (31 Okt 2026) Riwayat tab untuk bar bawah: entri riwayat saat ini selalu membawa tab yang tampil (tabKerja); Back/mundur dari bar mengembalikannya.
+  useEffect(() => {
+    if (!kodeBar) return;
+    if (tab !== "hari_ini") subTerakhir.current = tab;
+    try {
+      const st = window.history.state;
+      if ((st as { tabKerja?: unknown } | null)?.tabKerja !== tab) window.history.replaceState({ ...(st && typeof st === "object" ? (st as Record<string, unknown>) : {}), tabKerja: tab }, "", window.location.href);
+    } catch {
+      /* abaikan */
+    }
+  }, [kodeBar, tab]);
+  useEffect(() => {
+    if (!kodeBar) return;
+    const saatPop = (e: PopStateEvent) => {
+      if (popDariLapisan()) return; // modal ditutup dengan Back: bukan pindah tab
+      const t = (e.state as { tabKerja?: unknown } | null)?.tabKerja;
+      if (t === "hari_ini" || t === "hari_kerja" || t === "arsip" || t === "foto") setTab(t);
+    };
+    window.addEventListener("popstate", saatPop);
+    return () => window.removeEventListener("popstate", saatPop);
+  }, [kodeBar]);
+  // Hari Ini <-> Translok ditangani di halaman ini (satu entri riwayat per perpindahan); tab lain berpindah halaman
+  const ketukBar = useCallback(
+    (it: ItemBar): boolean => {
+      if (it.kunci !== "hari_ini" && it.kunci !== "translok") return false;
+      const tujuan: Tab = it.kunci === "hari_ini" ? "hari_ini" : subTerakhir.current;
+      try {
+        window.history.pushState({ ...(window.history.state && typeof window.history.state === "object" ? (window.history.state as Record<string, unknown>) : {}), tabKerja: tujuan }, "", window.location.href);
+      } catch {
+        return false;
+      }
+      setTab(tujuan);
+      window.scrollTo({ top: 0 });
+      return true;
+    },
+    [],
+  );
 
   // (14 Okt 2026) Terapkan tautan dalam sekali, setelah data siap dan panduan login pertama tidak sedang tampil:
   // buka tab/hari yang dituju, sorot bagian yang kurang, lalu bersihkan alamat (muat ulang halaman = tampilan biasa).
@@ -539,6 +593,21 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
+        {kodeBar && bar.items && tab !== "hari_ini" && (
+          <div role="group" aria-label="Isi Translok" className="grid grid-cols-3 gap-[3px] rounded-[12px] bg-white p-[3px] shadow-sm">
+            {(
+              [
+                ["hari_kerja", "Hari Kerja"],
+                ["arsip", "Arsip"],
+                ["foto", "Foto Saya"],
+              ] as [Tab, string][]
+            ).map(([k, t]) => (
+              <button key={k} type="button" aria-pressed={tab === k} onClick={() => { setTab(k); window.scrollTo({ top: 0 }); }} className={`min-h-[40px] rounded-[9px] text-[13px] font-extrabold ${tab === k ? "bg-[#0F3D7A] text-white" : "text-[#55657D]"}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
         {tab === "hari_kerja" && (
           <>
             <KalenderHariKerja key={pen.id} token={token} pen={pen} hariIni={data.hari_ini} onTersimpan={muat} />
@@ -554,6 +623,9 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </div>
 
       {/* ===== NAVIGASI BAWAH ===== */}
+      {kodeBar && bar.items && bar.kode ? (
+        <BarKegiatan kode={bar.kode} items={bar.items} aktif={tabBarDariTranslok(tab)} onKetuk={ketukBar} />
+      ) : kodeBar && !bar.siap ? null : (
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="mx-auto flex max-w-lg">
           {(
@@ -579,6 +651,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
           ))}
         </div>
       </nav>
+      )}
     </main>
     </FokusCtx.Provider>
   );
