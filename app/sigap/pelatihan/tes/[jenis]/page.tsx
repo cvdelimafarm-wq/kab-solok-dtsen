@@ -8,6 +8,7 @@
 // Navigasi soal (permintaan user): MERAH = belum terisi, HIJAU = sudah diisi, kotak bergaris = soal yang dibuka.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { useParams } from "next/navigation";
 import { LABEL_JENIS_TES, jenisTesValid, type JenisTes } from "@/lib/sigapTes";
 import type { KeadaanTes } from "@/lib/sigapTesDb";
@@ -41,6 +42,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const [simpan, setSimpan] = useState<"tersimpan" | "menyimpan" | "gagal">("tersimpan");
   const [konfirmasi, setKonfirmasi] = useState(false);
   const [konfirmasiUlang, setKonfirmasiUlang] = useState(false);
+  useTutupDenganBack(konfirmasi, () => setKonfirmasi(false)); // (31 Okt 2026) Back HP = Batal pada konfirmasi kirim
+  useTutupDenganBack(konfirmasiUlang, () => setKonfirmasiUlang(false)); // (31 Okt 2026) Back HP = Batal pada konfirmasi ulangi
 
   // ------------------------------------------------ muat keadaan
   const terapkan = useCallback(

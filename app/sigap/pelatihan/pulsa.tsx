@@ -7,6 +7,7 @@
 // Dipasang di Kerangka (komponen.tsx) sehingga muncul di semua halaman peserta pelatihan sampai dikonfirmasi.
 
 import { useCallback, useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { fetchJson, pesanGalat } from "../admin/api";
 import { tampilHp } from "@/lib/sigapPulsa";
 
@@ -31,6 +32,7 @@ export function PulsaPeserta() {
     muat();
   }, [muat]);
 
+  useTutupDenganBack(buka && Boolean(st?.pulsa), () => setBuka(false)); // (31 Okt 2026) pop-up Ubah nomor (bukan yang wajib saat belum mengisi)
   if (!st || !st.peserta) return null;
   const sudah = Boolean(st.pulsa);
   const tampil = !sudah || buka;

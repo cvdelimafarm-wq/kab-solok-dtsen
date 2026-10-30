@@ -9,6 +9,7 @@
 //   * PDF/gambar: signed URL pendek.
 
 import { useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import DOMPurify from "dompurify";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN_O, Memuat, Pesan } from "../../admin/ui";
@@ -98,6 +99,7 @@ export async function muatIsi(fileId: number): Promise<IsiLihat> {
 
 /** Modal viewer satu file atau thread email (beberapa .eml diurutkan menurut tanggal). */
 export default function Penampil({ fileIds, judul, onTutup }: { fileIds: number[]; judul: string; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [isi, setIsi] = useState<(IsiLihat & { id: number })[] | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   useEffect(() => {

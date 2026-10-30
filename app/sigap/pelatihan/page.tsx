@@ -12,6 +12,7 @@
 //         berikutnya (biru; langkah pertama yang belum selesai) / menyusul (abu) / terlewat (merah).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
@@ -484,6 +485,7 @@ function IsiPresensi({ pres, nowMs, tempat, segarkan }: { pres: NonNullable<Hub[
 /** (7 Okt 2026) Modal "Yeay": muncul sekali untuk tiap langkah yang baru selesai, lalu menunjuk langkah berikutnya. */
 type Rayakan = { selesai: { no: number; judul: string }[]; berikut: { kode: string; no: number; judul: string } | null; semua: boolean };
 function ModalSelesai({ r, tutup, lanjut }: { r: Rayakan; tutup: () => void; lanjut: (kode: string) => void }) {
+  useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const tombol = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     tombol.current?.focus();

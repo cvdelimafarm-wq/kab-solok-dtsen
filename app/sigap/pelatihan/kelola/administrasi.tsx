@@ -10,6 +10,7 @@
 // API: /api/sigap/pelatihan/administrasi (lihat app/api/sigap/pelatihan/administrasi/route.ts).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi, bukaBlob, fetchJson, pesanGalat, SesiBerakhir, rupiah } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 
@@ -690,6 +691,7 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
 // Tambah peserta manual
 // ======================================================================
 function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => void; setelah: (nama: string) => void }) {
+  useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [q, setQ] = useState("");
   const [hasil, setHasil] = useState<Kandidat[] | null>(null);
   const [sudah, setSudah] = useState<{ akun_id: number; nama: string; kelas: number | null }[]>([]);

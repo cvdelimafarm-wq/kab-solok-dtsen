@@ -7,6 +7,7 @@
 // Dipakai di Kelola Pelatihan > Monitoring > Akses Pelatihan dan di Kelola Peran & Akses > Log Login.
 
 import { useEffect, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "./api";
 
 type Hasil = { pin: string; nama: string; sampai: string; hp: string | null };
@@ -19,6 +20,7 @@ function tautanWa(hp: string, teks: string) {
 }
 
 export default function ResetPin({ url, akunId, nama, hp, tutup, sesudah }: { url: string; akunId: number; nama: string; hp?: string | null; tutup: () => void; sesudah?: () => void }) {
+  useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [hasil, setHasil] = useState<Hasil | null>(null);

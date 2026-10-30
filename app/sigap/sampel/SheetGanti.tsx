@@ -5,6 +5,7 @@
 // (30 Okt 2026) Lembar bawah untuk menandai sampel utama diganti cadangan: pilih cadangan (satu SLS, belum terpakai) dan isi alasan singkat.
 
 import { useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { MAKS_ALASAN, MIN_ALASAN, cadanganTersedia, type SampelRow } from "@/lib/sampelSls";
 
 const ALASAN_CEPAT = ["Responden pindah", "Menolak diwawancarai", "Rumah kosong / tidak ada penghuni", "Tidak ditemukan", "Bukan sasaran"];
@@ -20,6 +21,7 @@ export default function SheetGanti({
   onTutup: () => void;
   onSimpan: (cadanganId: number, alasan: string) => Promise<void>;
 }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup sheet
   const pilihan = cadanganTersedia(utama, semua);
   const [cadangan, setCadangan] = useState<number | null>(pilihan.length === 1 ? pilihan[0].id : null);
   const [alasan, setAlasan] = useState("");

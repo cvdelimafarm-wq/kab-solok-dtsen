@@ -7,6 +7,7 @@
 // diingat di peramban ini (per identifikasi). Penyusun: lib/keu/dokumenLanjutan.ts. Cetak: window.print (Simpan sebagai PDF).
 
 import { useEffect, useMemo, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createPortal } from "react-dom";
 import { Catatan, Chip, judulKartu, kartu, kolom, label, tombol } from "@/app/sigap/keu-ui";
 import {
@@ -32,6 +33,7 @@ function TabelCetak({ t }: { t: Tabel }) {
 }
 
 export function KertasDokumen({ d, tanggal, onTutup }: { d: Dokumen; tanggal: string; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   useEffect(() => {
     const judul = document.title;
     document.title = `${d.judul} - ${d.subjudul}`.slice(0, 90);

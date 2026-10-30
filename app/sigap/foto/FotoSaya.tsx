@@ -7,6 +7,7 @@
 // Setelah Terima, nomor tidak dapat diubah dari sini (mengubah berarti mencabut baris = hapus; sengaja tidak ada).
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createPortal } from "react-dom";
 import { ambilJson } from "./klien";
 import { ambilFotoUrlCache, siapkanFoto, sudahAdaFoto } from "./cacheFoto";
@@ -78,6 +79,7 @@ function Gambar({ id, alt, ukuran = "kecil", tinggi = "max-h-72" }: { id: number
 // (28 Okt 2026) Modal detail foto: ✕ di atas, ketuk latar / Esc / tombol Kembali HP menutup, isi bisa digulir, latar tidak ikut bergulir.
 // Sebelumnya kartu melebar di bawah kisi sehingga petugas harus menggulir untuk melihatnya.
 function LembarFoto({ judul, posisi, tetangga, onTutup, onSebelum, onSesudah, children }: { judul: string; posisi: string; tetangga: number[]; onTutup: () => void; onSebelum: (() => void) | null; onSesudah: (() => void) | null; children: ReactNode }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   useTombolKembali(true, () => { onTutup(); });
   const kunciTetangga = tetangga.join(",");
   useEffect(() => { siapkanFoto(tetangga, "kecil", 2); // eslint-disable-next-line react-hooks/exhaustive-deps

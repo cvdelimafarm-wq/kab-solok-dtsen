@@ -8,6 +8,7 @@
 // "Nanti" menutup modal selama sesi browser untuk status itu; saat status berubah (mis. presensi dibuka) modal muncul lagi.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { apiPortal } from "./sesi";
 
 type StatusR = "belum" | "buka" | "sudah" | "tutup" | "nonaktif";
@@ -85,6 +86,18 @@ export default function ModalRapat() {
     if (r) setTutup(sudahDitutup(r.id, r.status));
   }, [r?.id, r?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // (31 Okt 2026) Back HP menutup modal rapat (sama dengan tombol Tutup: ingat di sesi ini)
+  const rapatTampil = !!r && r.status !== "nonaktif" && !(r.status === "sudah" && !baruHadir) && !(tutup && !baruHadir);
+  useTutupDenganBack(rapatTampil, () => {
+    if (!r) return;
+    try {
+      sessionStorage.setItem(kunciTutup(r.id, r.status), "1");
+    } catch {
+      /* abaikan */
+    }
+    setTutup(true);
+    setBaruHadir(false);
+  });
   if (!r) return null;
   if (r.status === "nonaktif") return null;
   if (r.status === "sudah" && !baruHadir) return null; // sudah hadir sebelumnya: jangan ganggu lagi

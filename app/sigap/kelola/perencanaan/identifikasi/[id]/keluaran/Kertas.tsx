@@ -6,6 +6,7 @@
 // perkiraan menurut RAB (metode dan nilai pengadaan ditetapkan PPK atau pejabat pengadaan; cek aturan).
 
 import { useEffect } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createPortal } from "react-dom";
 import { KOLOM_SPEK, type ButirKeluaran, type IdentitasKeluaran } from "@/lib/keu/keluaran";
 import { rupiah } from "@/lib/keu/ro";
@@ -14,6 +15,7 @@ import { tombol } from "@/app/sigap/keu-ui";
 const tgl = (t: string | null): string => (t && /^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)}` : "-");
 
 export function Kertas({ butir, survei, ver, onTutup }: { butir: ButirKeluaran; survei: IdentitasKeluaran; ver: number | null; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   useEffect(() => {
     const judul = document.title;
     document.title = `Permintaan pengadaan - ${butir.uraian}`.slice(0, 80);

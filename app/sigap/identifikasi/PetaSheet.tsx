@@ -11,6 +11,7 @@
 // Server dipanggil di belakang hanya bila ada yang belum lengkap; tanda "di HP" ikut diperbarui saat unduhan latar berjalan; unduhan latar ditahan selama lembar terbuka.
 
 import { useEffect, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { apiPortal } from "@/app/portal/sesi";
 import { bacaManifest, berkasDiperlukan, daftarPetaDari, jalurPeta, manifestLengkap, pantauPeta, petaTersimpanBanyak, swAktif, tahanUnduh } from "@/app/portal/petaOffline";
 
@@ -59,6 +60,7 @@ function Lembar({ berkas, folder, lokal, memuat }: { berkas: Berkas[] | undefine
 }
 
 export default function PetaSheet({ buka, onTutup, judul, desa, subs }: { buka: boolean; onTutup: () => void; judul: string; desa: string | null; subs: SubPeta[] }) {
+  useTutupDenganBack(buka, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const [lokal, setLokal] = useState<Set<string>>(new Set());
   const [memuat, setMemuat] = useState(false);

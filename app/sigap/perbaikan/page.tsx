@@ -9,6 +9,7 @@
 // Sumber data = daftar kekurangan yang sama dengan kartu Beranda (/api/portal/kegiatan, jenis "perbaikan"); status kelengkapan ikut berubah otomatis.
 
 import { useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { useRouter } from "next/navigation";
 import { keAtas } from "@/app/portal/navigasi";
 import TombolKembali from "@/app/components/TombolKembali";
@@ -44,6 +45,7 @@ export default function PerbaikanAdministrasi() {
   const [tidak, setTidak] = useState<{ pen: number; tanggal: string } | null>(null);
   const [proses, setProses] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
+  useTutupDenganBack(tidak !== null, () => { if (!proses) setTidak(null); }); // (31 Okt 2026) Back HP = Batal
 
   useEffect(() => {
     try {

@@ -6,11 +6,13 @@
 // Hanya informasi -- tidak ada tombol hasil pendataan. Membuka kartu = "koordinat dipilih/dibuka hari ini" (dicatat untuk Monitoring).
 
 import { useEffect, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import Ik from "./Ik";
 import { catatBukaKk } from "./useSpdt";
 import { BATAS_AKURASI_M, akurasiRendah, judulKata, tautanLihat, tautanNavigasi, teksJarak, teksKoordinat, type KkSpdt } from "@/lib/spdtNtp";
 
 export default function KartuKkSpdt({ kk, jarak, tampilPpl, onTutup }: { kk: KkSpdt; jarak: number | null; tampilPpl: boolean; onTutup: () => void }) {
+  useTutupDenganBack(true, onTutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [tersalin, setTersalin] = useState(false);
 
   useEffect(() => {

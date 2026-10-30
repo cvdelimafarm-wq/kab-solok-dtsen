@@ -10,6 +10,7 @@
 // Dipasang di Beranda (/) dan Kelola Pelatihan.
 
 import { useEffect, useRef, useState } from "react";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi } from "@/app/sigap/admin/api";
 
 type Ringkas = { boleh_kelola: boolean; maks: number; kelas: { kelas: number; jumlah: number }[] };
@@ -54,6 +55,7 @@ export default function ModalFotoPanitia({ sembunyi = false }: { sembunyi?: bool
     setTutup(true);
   }
 
+  useTutupDenganBack(tampil && !!d, nanti); // (31 Okt 2026) Back HP = Nanti
   if (!tampil || !d) return null;
   const tujuan = `/sigap/kelola/pelatihan?tab=administrasi&kelas=${kurang[0].kelas}&fokus=foto`;
   const totalMaks = d.kelas.length * d.maks;
