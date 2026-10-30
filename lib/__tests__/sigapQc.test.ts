@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   bagianWib, jamKeMenit, menitKeJam, geserHari, instanWib, hariBerlaku, jendelaQc, teksSisaWaktu, sorotKata, hitungSkor, labelPercobaan, labelStatusPpl,
-  rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, type QcPengaturan, type QcRekapTim,
+  rencanaAksi, ringkasStatusQc, tanggalPendekQc, pushRilis, pushIngatPetugas, pushIngatPml, pushRekapPml, daftarBriefing, kalimatBriefing, validasiPengaturan, validasiSoal, sumberSoalDari, kolamSoal, type QcPengaturan, type QcRekapTim,
   hariIso, hariRilisDari, teksHariRilis, rilisBerikut, nilaiLulusDari, wajibUlangDari, maksPercobaanDari, lulusMenurut, kalimatHasil,
 } from "../sigapQc";
 
@@ -509,6 +509,41 @@ describe("validasiPengaturan opsi baru", () => {
   });
   it("menolak opsi tidak sah", () => {
     for (const bad of [{ nilai_lulus: 0 }, { nilai_lulus: 101 }, { nilai_lulus: 80.5 }, { wajib_ulang: "ya" }, { hari_rilis: [] }, { hari_rilis: [8] }, { hari_rilis: "1" }, { peran_peserta: [] }, { peran_peserta: ["supervisor"] }, { rekap_pml: 1 }]) {
+      expect(validasiPengaturan(bad).ok).toBe(false);
+    }
+  });
+});
+
+describe("sumber soal harian", () => {
+  const bank = [
+    { id: "a1", paket: 1, aktif: true },
+    { id: "a2", paket: 1, aktif: false },
+    { id: "b1", paket: 2, aktif: true },
+    { id: "c1", paket: 3 },
+  ];
+  it("sumberSoalDari: bawaan semua, nilai asing jadi semua", () => {
+    expect(sumberSoalDari(undefined)).toBe("semua");
+    expect(sumberSoalDari({ sumber_soal: "paket" })).toBe("paket");
+    expect(sumberSoalDari({ sumber_soal: "pilihan" })).toBe("pilihan");
+    expect(sumberSoalDari({ sumber_soal: "xyz" as never })).toBe("semua");
+  });
+  it("kolamSoal: semua = semua soal aktif", () => {
+    expect(kolamSoal(bank, {}).map((s) => s.id)).toEqual(["a1", "b1", "c1"]);
+  });
+  it("kolamSoal: paket terpilih saja, soal nonaktif tidak ikut", () => {
+    expect(kolamSoal(bank, { sumber_soal: "paket", paket_pilihan: [1, 3] }).map((s) => s.id)).toEqual(["a1", "c1"]);
+    expect(kolamSoal(bank, { sumber_soal: "paket", paket_pilihan: [] })).toEqual([]);
+  });
+  it("kolamSoal: hanya soal yang dicentang dan aktif", () => {
+    expect(kolamSoal(bank, { sumber_soal: "pilihan", soal_pilihan: ["a1", "a2", "c1", "zz"] }).map((s) => s.id)).toEqual(["a1", "c1"]);
+  });
+  it("validasiPengaturan menerima dan merapikan sumber soal", () => {
+    const v = validasiPengaturan({ sumber_soal: "paket", paket_pilihan: [3, 1, 3], soal_pilihan: [" b ", "a", "b"] });
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(v.data).toEqual({ sumber_soal: "paket", paket_pilihan: [1, 3], soal_pilihan: ["a", "b"] });
+  });
+  it("validasiPengaturan menolak sumber soal tidak sah", () => {
+    for (const bad of [{ sumber_soal: "acak" }, { sumber_soal: 1 }, { paket_pilihan: [0] }, { paket_pilihan: "1" }, { paket_pilihan: [1.5] }, { soal_pilihan: [""] }, { soal_pilihan: [1] }, { sumber_soal: "paket", paket_pilihan: [] }, { sumber_soal: "pilihan", soal_pilihan: [] }]) {
       expect(validasiPengaturan(bad).ok).toBe(false);
     }
   });

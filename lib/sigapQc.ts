@@ -35,7 +35,38 @@ export type QcPengaturan = {
   peran_peserta?: ("pml" | "ppl")[];
   /** true (bawaan): PML menerima rekap tim keesokan harinya */
   rekap_pml?: boolean;
+  // (30 Okt 2026) Sumber soal harian (migrasi 20261030b). Bawaan 'semua' = undi dari seluruh bank soal aktif (perilaku lama).
+  /** "semua": seluruh soal aktif; "paket": hanya paket di `paket_pilihan`; "pilihan": hanya soal di `soal_pilihan` (dicentang) */
+  sumber_soal?: SumberSoal;
+  paket_pilihan?: number[];
+  soal_pilihan?: string[];
 };
+
+export type SumberSoal = "semua" | "paket" | "pilihan";
+export const DAFTAR_SUMBER_SOAL: readonly SumberSoal[] = ["semua", "paket", "pilihan"];
+export const sumberSoalDari = (p: Pick<QcPengaturan, "sumber_soal"> | null | undefined): SumberSoal =>
+  p?.sumber_soal === "paket" || p?.sumber_soal === "pilihan" ? p.sumber_soal : "semua";
+
+/**
+ * Kolam soal yang boleh diundi hari ini (cermin klausa WHERE di sigap_qc_undi): hanya soal AKTIF, lalu disaring menurut sumber_soal.
+ * Dipakai tampilan untuk menghitung "kolam berisi N soal" sebelum disimpan.
+ */
+export function kolamSoal<T extends { id: string; paket: number; aktif?: boolean }>(
+  bank: readonly T[],
+  p: Pick<QcPengaturan, "sumber_soal" | "paket_pilihan" | "soal_pilihan"> | null | undefined,
+): T[] {
+  const aktif = bank.filter((s) => s.aktif !== false);
+  const sumber = sumberSoalDari(p);
+  if (sumber === "paket") {
+    const paket = new Set((p?.paket_pilihan ?? []).map(Number));
+    return aktif.filter((s) => paket.has(s.paket));
+  }
+  if (sumber === "pilihan") {
+    const id = new Set(p?.soal_pilihan ?? []);
+    return aktif.filter((s) => id.has(s.id));
+  }
+  return aktif;
+}
 
 export const SEMUA_HARI: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
 const NAMA_HARI = ["", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -527,6 +558,24 @@ export function validasiPengaturan(masuk: unknown): HasilValidasi {
     if (!Number.isInteger(v) || v < 1 || v > 100) galat.push("Nilai lulus harus bilangan bulat 1-100");
     else data.nilai_lulus = v;
   }
+  // (30 Okt 2026) sumber soal harian
+  if ("sumber_soal" in m) {
+    if (typeof m.sumber_soal !== "string" || !(DAFTAR_SUMBER_SOAL as readonly string[]).includes(m.sumber_soal)) galat.push("Sumber soal harus semua, paket, atau pilihan");
+    else data.sumber_soal = m.sumber_soal;
+  }
+  if ("paket_pilihan" in m) {
+    const daftar = Array.isArray(m.paket_pilihan) ? m.paket_pilihan.map(Number) : null;
+    if (!daftar || daftar.length > 200 || daftar.some((x) => !Number.isInteger(x) || x < 1 || x > 32767)) galat.push("Paket pilihan harus berupa daftar nomor paket (bilangan bulat positif)");
+    else data.paket_pilihan = Array.from(new Set(daftar)).sort((a, b) => a - b);
+  }
+  if ("soal_pilihan" in m) {
+    const daftar = Array.isArray(m.soal_pilihan) ? m.soal_pilihan.map((x) => (typeof x === "string" ? x.trim() : null)) : null;
+    if (!daftar || daftar.length > 2000 || daftar.some((x) => !x || x.length > 40)) galat.push("Soal pilihan harus berupa daftar kode soal");
+    else data.soal_pilihan = Array.from(new Set(daftar as string[])).sort();
+  }
+  const sumberBaru = data.sumber_soal;
+  if (sumberBaru === "paket" && "paket_pilihan" in data && (data.paket_pilihan as number[]).length < 1) galat.push("Pilih minimal satu paket soal");
+  if (sumberBaru === "pilihan" && "soal_pilihan" in data && (data.soal_pilihan as string[]).length < 1) galat.push("Centang minimal satu soal");
   if ("hari_rilis" in m) {
     const daftar = Array.isArray(m.hari_rilis) ? m.hari_rilis.map(Number) : [];
     if (daftar.length < 1 || daftar.length > 7 || daftar.some((x) => !Number.isInteger(x) || x < 1 || x > 7)) galat.push("Hari rilis harus berisi minimal satu hari (1 Senin sampai 7 Minggu)");

@@ -11,6 +11,14 @@ export const MAKS_JUDUL = 120;
 export const MAKS_KETERANGAN = 500;
 export const KEGIATAN_DOKUMEN_SPDT = 2; // = KEGIATAN_SPDT_ID
 
+// (30 Okt 2026) Tab QC Kelola Pendataan menampilkan daftar unduh dokumen untuk kegiatan APA PUN yang punya unggahan; bila belum ada data masuk, kartunya tersembunyi.
+// Saat ini hanya SPDT NTP yang punya fitur unggah (tabel sigap_spdt_dokumen). Kegiatan lain belum punya tabel: daftarnya kosong dan kartu tidak tampil.
+// Menambah kegiatan baru cukup menambah barisnya di sini (tabel wajib berkolom sama dengan sigap_spdt_dokumen).
+export const API_QC_DOKUMEN = "/api/portal/qc/dokumen";
+export const TABEL_DOKUMEN_KEGIATAN: Readonly<Record<number, string>> = { [KEGIATAN_DOKUMEN_SPDT]: "sigap_spdt_dokumen" };
+/** Nama tabel dokumen pemeriksaan milik kegiatan, atau null bila kegiatan itu belum punya fitur unggah dokumen. */
+export const tabelDokumenKegiatan = (kegiatanId: number): string | null => TABEL_DOKUMEN_KEGIATAN[kegiatanId] ?? null;
+
 export type DokumenPeriksa = {
   id: number;
   kegiatan_id: number;

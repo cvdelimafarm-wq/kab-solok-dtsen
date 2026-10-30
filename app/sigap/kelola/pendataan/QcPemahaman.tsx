@@ -14,11 +14,12 @@ import { apiPortal } from "@/app/portal/sesi";
 import Sorot from "@/app/portal/qc/Sorot";
 import { tglPanjang } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan } from "../../admin/ui";
-import { hariRilisDari, labelStatusPpl, maksPercobaanDari, menitKeJam, jamKeMenit, nilaiLulusDari, ringkasStatusQc, teksHariRilis, wajibUlangDari, type QcPengaturan, type QcRekapTim } from "@/lib/sigapQc";
+import { hariRilisDari, kolamSoal, labelStatusPpl, maksPercobaanDari, menitKeJam, jamKeMenit, nilaiLulusDari, ringkasStatusQc, sumberSoalDari, teksHariRilis, wajibUlangDari, type QcPengaturan, type QcRekapTim, type SumberSoal } from "@/lib/sigapQc";
 import { petaSoalDariBaris, templatSoal, type HasilPeta } from "@/lib/sigapQcImpor";
 import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
+import DokumenQc from "./DokumenQc";
 import TabelQc from "./TabelQc";
 import InfografisQc from "./InfografisQc";
 import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "./PeriodeQc";
@@ -140,6 +141,8 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
       {d && !d.boleh_kelola && <Pesan jenis="info">Anda dapat melihat saja. Mengubah pengaturan memerlukan izin kelola pendataan.</Pesan>}
       {d && sub === "hari" && <HariIni d={d} kegiatanId={kegiatanId} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} pilihTanggal={pilihTanggal} />}
+      {/* (30 Okt 2026) daftar unduh dokumen pemeriksaan PML; tampil hanya bila kegiatan ini punya dokumen yang masuk */}
+      {d && sub === "hari" && <DokumenQc kegiatanId={kegiatanId} />}
       {d && sub === "pengaturan" && <Pengaturan d={d} kirim={kirim} />}
       {d && sub === "soal" && <BankSoal d={d} kirim={kirim} />}
     </div>
@@ -347,6 +350,10 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
     acak_tampil: x?.acak_tampil ?? true,
     rekap_pml: x?.rekap_pml ?? true,
     hari_rilis: hariRilisDari(x),
+    // (30 Okt 2026) sumber soal harian: semua / paket / centang soal
+    sumber_soal: sumberSoalDari(x) as SumberSoal,
+    paket_pilihan: [...(x?.paket_pilihan ?? [])].map(Number).sort((a, b) => a - b),
+    soal_pilihan: [...(x?.soal_pilihan ?? [])].sort(),
     peran_pml: (x?.peran_peserta ?? ["pml", "ppl"]).includes("pml"),
     peran_ppl: (x?.peran_peserta ?? ["pml", "ppl"]).includes("ppl"),
   });
@@ -357,6 +364,35 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
   const status = p ? ringkasStatusQc(new Date(d.sekarang), p, !!d.susulan_at) : null;
   const [sibuk, setSibuk] = useState(false);
   const ubah = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
+  const [cariSoal, setCariSoal] = useState("");
+  const gantiPaket = (n: number) => setF((x) => ({ ...x, paket_pilihan: x.paket_pilihan.includes(n) ? x.paket_pilihan.filter((h) => h !== n) : [...x.paket_pilihan, n].sort((a, b) => a - b) }));
+  const gantiSoal = (ids: string[], nyala: boolean) =>
+    setF((x) => {
+      const set = new Set(x.soal_pilihan);
+      for (const id of ids) {
+        if (nyala) set.add(id);
+        else set.delete(id);
+      }
+      return { ...x, soal_pilihan: Array.from(set).sort() };
+    });
+  // paket yang ada di bank (menurut soal aktif) dan kolam hasil pilihan pada FORMULIR (belum tentu tersimpan)
+  const paketBank = useMemo(() => {
+    const m = new Map<number, { judul: string; aktif: number; total: number }>();
+    for (const sl of d.soal) {
+      const e = m.get(sl.paket) ?? { judul: "", aktif: 0, total: 0 };
+      e.total += 1;
+      if (sl.aktif) e.aktif += 1;
+      if (!e.judul && sl.judul_paket) e.judul = sl.judul_paket;
+      m.set(sl.paket, e);
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
+  }, [d.soal]);
+  const kolam = useMemo(() => kolamSoal(d.soal, { sumber_soal: f.sumber_soal, paket_pilihan: f.paket_pilihan, soal_pilihan: f.soal_pilihan }), [d.soal, f.sumber_soal, f.paket_pilihan, f.soal_pilihan]);
+  const perHari = Number(f.soal_per_hari) || 0;
+  const soalTampil = useMemo(() => {
+    const q = cariSoal.trim().toLowerCase();
+    return q ? d.soal.filter((sl) => sl.id.toLowerCase().includes(q) || sl.pertanyaan.toLowerCase().includes(q) || sl.judul_paket.toLowerCase().includes(q)) : d.soal;
+  }, [d.soal, cariSoal]);
   const gantiHari = (n: number) => setF((x) => ({ ...x, hari_rilis: x.hari_rilis.includes(n) ? x.hari_rilis.filter((h) => h !== n) : [...x.hari_rilis, n].sort((a, b) => a - b) }));
   const peranTeks = f.peran_pml && f.peran_ppl ? "PML dan PPL" : f.peran_pml ? "PML" : f.peran_ppl ? "PPL" : "(belum ada peserta)";
   const simpan = async () => {
@@ -384,6 +420,9 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
           acak_tampil: f.acak_tampil,
           rekap_pml: f.rekap_pml,
           hari_rilis: f.hari_rilis,
+          sumber_soal: f.sumber_soal,
+          paket_pilihan: f.paket_pilihan,
+          soal_pilihan: f.soal_pilihan,
           peran_peserta: [f.peran_pml ? "pml" : null, f.peran_ppl ? "ppl" : null].filter(Boolean),
         },
       },
@@ -503,6 +542,113 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
           </span>
         </div>
         <div className={baris}>
+          <span className="text-[13px] font-bold text-[#1B2B4B]">Sumber soal harian</span>
+          <span className="flex flex-col gap-1.5" role="radiogroup" aria-label="Sumber soal harian">
+            {(
+              [
+                ["semua", "Semua soal aktif", "diundi dari seluruh bank soal (bawaan)"],
+                ["paket", "Pilih paket", "hanya dari paket yang dipilih"],
+                ["pilihan", "Centang soal", "hanya dari soal yang dicentang satu per satu"],
+              ] as const
+            ).map(([nilai, judul, ket]) => (
+              <label key={nilai} className="flex items-start gap-2 text-[13px] text-[#1B2B4B]">
+                <input type="radio" name="sumber_soal" className="mt-0.5 h-5 w-5 accent-[#1F5FD1]" disabled={!bisa} checked={f.sumber_soal === nilai} onChange={() => setF((x) => ({ ...x, sumber_soal: nilai }))} />
+                <span>
+                  <b>{judul}</b> <span className="text-[12.5px] text-[#6B7A90]">· {ket}</span>
+                </span>
+              </label>
+            ))}
+          </span>
+        </div>
+        {f.sumber_soal === "paket" && (
+          <div className="rounded-lg border border-[#DDE6F3] bg-[#F8FAFC] p-3">
+            <p className="mb-2 text-[12.5px] font-bold text-[#1B2B4B]">Paket yang dipakai</p>
+            {paketBank.length === 0 ? (
+              <p className="text-[12.5px] text-[#6B7A90]">Bank soal masih kosong. Tambah atau impor soal dulu di sub Bank soal.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Paket yang dipakai">
+                {paketBank.map(([n, e]) => {
+                  const on = f.paket_pilihan.includes(n);
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={!bisa}
+                      aria-pressed={on}
+                      onClick={() => gantiPaket(n)}
+                      className={`min-h-[44px] rounded-lg px-3 py-1.5 text-left text-[12.5px] ${on ? "bg-[#0F2A52] text-white" : "border border-[#DDE6F3] bg-white text-[#33455F]"}`}
+                    >
+                      <span className="block font-extrabold">Paket {n}</span>
+                      <span className={`block ${on ? "text-white/80" : "text-[#6B7A90]"}`}>
+                        {e.judul ? `${e.judul} · ` : ""}
+                        {e.aktif} soal aktif
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {f.sumber_soal === "pilihan" && (
+          <div className="rounded-lg border border-[#DDE6F3] bg-[#F8FAFC] p-3">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-[12.5px] font-bold text-[#1B2B4B]">Soal yang dicentang: {f.soal_pilihan.length}</p>
+              <input className={`${INPUT} w-56`} value={cariSoal} onChange={(e) => setCariSoal(e.target.value)} placeholder="Cari kode, pertanyaan, atau paket" aria-label="Cari soal" />
+              {bisa && (
+                <>
+                  <button type="button" className={BTN_O} onClick={() => gantiSoal(soalTampil.filter((sl) => sl.aktif).map((sl) => sl.id), true)}>
+                    Centang semua yang tampil
+                  </button>
+                  <button type="button" className={BTN_O} onClick={() => gantiSoal(soalTampil.map((sl) => sl.id), false)}>
+                    Kosongkan yang tampil
+                  </button>
+                </>
+              )}
+            </div>
+            {d.soal.length === 0 ? (
+              <p className="text-[12.5px] text-[#6B7A90]">Bank soal masih kosong. Tambah atau impor soal dulu di sub Bank soal.</p>
+            ) : (
+              <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                {paketBank.map(([n, e]) => {
+                  const daftar = soalTampil.filter((sl) => sl.paket === n);
+                  if (daftar.length === 0) return null;
+                  const aktifIds = daftar.filter((sl) => sl.aktif).map((sl) => sl.id);
+                  const semuaOn = aktifIds.length > 0 && aktifIds.every((id) => f.soal_pilihan.includes(id));
+                  return (
+                    <div key={n}>
+                      <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-[#0F2A52]">
+                        <input type="checkbox" className="h-5 w-5 accent-[#1F5FD1]" disabled={!bisa || aktifIds.length === 0} checked={semuaOn} onChange={(ev) => gantiSoal(aktifIds, ev.target.checked)} />
+                        Paket {n}
+                        {e.judul ? ` · ${e.judul}` : ""}
+                      </label>
+                      <ul className="mt-1 space-y-1 pl-7">
+                        {daftar.map((sl) => (
+                          <li key={sl.id}>
+                            <label className={`flex items-start gap-2 text-[12.5px] ${sl.aktif ? "text-[#1B2B4B]" : "text-[#9AA7BA]"}`}>
+                              <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F5FD1]" disabled={!bisa} checked={f.soal_pilihan.includes(sl.id)} onChange={(ev) => gantiSoal([sl.id], ev.target.checked)} />
+                              <span>
+                                <b>{sl.id}</b> · {sl.pertanyaan.length > 140 ? `${sl.pertanyaan.slice(0, 140)}…` : sl.pertanyaan}
+                                {!sl.aktif && <i> (nonaktif: tidak ikut diundi)</i>}
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        <p className={`text-[12.5px] ${f.sumber_soal !== "semua" && kolam.length < Math.max(perHari, 1) ? "font-bold text-[#B45309]" : "text-[#6B7A90]"}`}>
+          Kolam undian: <b>{kolam.length}</b> soal aktif
+          {f.sumber_soal === "paket" ? ` dari ${f.paket_pilihan.length} paket terpilih` : f.sumber_soal === "pilihan" ? ` dari ${f.soal_pilihan.length} soal dicentang` : ""}.
+          {f.sumber_soal !== "semua" && kolam.length < Math.max(perHari, 1) && kolam.length > 0 ? ` Kurang dari soal per hari (${perHari}): tiap hari hanya ${kolam.length} soal, yang sama berulang.` : ""}
+          {f.sumber_soal !== "semua" && kolam.length === 0 ? " Kolam kosong: simpan akan ditolak." : ""}
+        </p>
+        <div className={baris}>
           <span className="text-[13px] font-bold text-[#1B2B4B]">Pengingat setelah rilis (menit)</span>
           <span className="flex items-center gap-2">
             <input className={`${INPUT} w-40`} disabled={!bisa} value={f.ingat_menit} onChange={(e) => ubah("ingat_menit", e.target.value)} placeholder="30, 50" />
@@ -525,7 +671,7 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
           </span>
         </div>
         <p className="text-[12.5px] text-[#6B7A90]">
-          Bank soal {d.kegiatan_nama}: <b>{soalAktif}</b> butir aktif dari {new Set(d.soal.filter((s) => s.aktif).map((s) => s.paket)).size} paket. Tiap hari diundi {f.soal_per_hari || "…"} soal yang sama untuk semua petugas, setiap paket terwakili.
+          Bank soal {d.kegiatan_nama}: <b>{soalAktif}</b> butir aktif dari {new Set(d.soal.filter((s) => s.aktif).map((s) => s.paket)).size} paket. Tiap hari diundi {f.soal_per_hari || "…"} soal dari kolam di atas, soal yang sama untuk semua petugas, setiap paket dalam kolam terwakili.
         </p>
         {bisa && (
           <div className="space-y-2">
@@ -536,7 +682,7 @@ function Pengaturan({ d, kirim }: { d: Data; kirim: Kirim }) {
             <ul className="list-disc space-y-0.5 pl-5 text-[12px] leading-snug text-[#6B7A90]">
               <li>Menyimpan langsung berlaku. Tidak ada tahap draf. Modal petugas mengikuti pengaturan terbaru saat dibuka, termasuk untuk hari yang sedang berjalan.</li>
               <li>Notifikasi dikirim oleh Railway Cron yang berjalan tiap 5 menit, jadi jam baru dipakai mulai putaran berikutnya.</li>
-              <li>Soal hari ini yang sudah diundi tidak berubah walau jumlah soal diganti. Undi ulang bisa di sub Hari ini selama belum ada yang menjawab.</li>
+              <li>Soal hari ini yang sudah diundi tidak berubah walau jumlah soal atau sumber soal diganti. Undi ulang bisa di sub Hari ini selama belum ada yang menjawab.</li>
             </ul>
           </div>
         )}

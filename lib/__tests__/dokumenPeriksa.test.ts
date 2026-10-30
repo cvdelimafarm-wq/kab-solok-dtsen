@@ -8,6 +8,8 @@ import {
   labelUkuran,
   labelWilayah,
   namaUnduhan,
+  tabelDokumenKegiatan,
+  KEGIATAN_DOKUMEN_SPDT,
   periksaIsianDokumen,
   periksaUkuranDokumen,
   type DokumenPeriksaAdmin,
@@ -111,5 +113,12 @@ describe("kelompokkanPerPml dan cocokCari", () => {
     expect(cocokCari(d, "kayu aro")).toBe(true);
     expect(cocokCari(d, "bukik")).toBe(true);
     expect(cocokCari(d, "tidak ada")).toBe(false);
+  });
+});
+
+describe("tabelDokumenKegiatan (kartu dokumen di tab QC)", () => {
+  it("SPDT NTP punya tabel dokumen; kegiatan lain belum (kartu tersembunyi)", () => {
+    expect(tabelDokumenKegiatan(KEGIATAN_DOKUMEN_SPDT)).toBe("sigap_spdt_dokumen");
+    for (const k of [1, 3, 4, 99]) expect(tabelDokumenKegiatan(k)).toBeNull();
   });
 });
