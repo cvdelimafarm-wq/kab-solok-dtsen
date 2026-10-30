@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dariAman, denganDari, indukDari, labelTujuan, tujuanKembali } from "../sigapNavigasi";
+import { cariSebelumnya, dariAman, denganDari, indukDari, labelTujuan, sebelumnyaDariJejak, tujuanKembali } from "../sigapNavigasi";
 
 describe("dariAman (?dari=) -- hanya jalur internal", () => {
   it("menerima path internal, dengan query", () => {
@@ -81,5 +81,43 @@ describe("denganDari", () => {
   });
   it("asal tidak aman -> alamat apa adanya", () => {
     expect(denganDari("/bencana", "//evil.com")).toBe("/bencana");
+  });
+});
+
+describe("cariSebelumnya -- Kembali = entri riwayat tepat di bawah", () => {
+  const O = "https://x.id";
+  it("halaman sebelumnya yang sebenarnya, bukan induk logis (Beranda -> Supervisi)", () => {
+    expect(cariSebelumnya([`${O}/`, `${O}/sigap/korwil`], 1, O)).toBe("/");
+    expect(cariSebelumnya([`${O}/`, `${O}/sigap/kegiatan/pascabencana/pendataan`, `${O}/sigap/korwil`], 2, O)).toBe("/sigap/kegiatan/pascabencana/pendataan");
+  });
+  it("membawa query halaman sebelumnya", () => {
+    expect(cariSebelumnya([`${O}/sigap/kelola/pendataan?tab=tim`, `${O}/sigap/kelola/foto`], 1, O)).toBe("/sigap/kelola/pendataan?tab=tim");
+  });
+  it("melewati entri beralamat sama (penanda modal / penjaga Beranda), hash diabaikan", () => {
+    expect(cariSebelumnya([`${O}/`, `${O}/`, `${O}/sigap/pedia`, `${O}/sigap/pedia#a`], 3, O)).toBe("/");
+    expect(cariSebelumnya([`${O}/sigap/pedia`, `${O}/sigap/pedia`], 1, O)).toBeNull();
+  });
+  it("null bila tak ada halaman sebelumnya, dari situs lain, atau halaman masuk", () => {
+    expect(cariSebelumnya([`${O}/sigap/korwil`], 0, O)).toBeNull();
+    expect(cariSebelumnya(["https://lain.com/", `${O}/sigap/korwil`], 1, O)).toBeNull();
+    expect(cariSebelumnya([`${O}/sigap/masuk`, `${O}/`], 1, O)).toBeNull();
+    expect(cariSebelumnya([`${O}/`], 5, O)).toBeNull();
+  });
+});
+
+describe("sebelumnyaDariJejak (cadangan tanpa Navigation API)", () => {
+  it("halaman kedua dari akhir; null bila belum ada / halaman masuk", () => {
+    expect(sebelumnyaDariJejak(["/", "/sigap/korwil"])).toBe("/");
+    expect(sebelumnyaDariJejak(["/sigap/korwil"])).toBeNull();
+    expect(sebelumnyaDariJejak(["/sigap/masuk", "/"])).toBeNull();
+  });
+});
+
+describe("labelTujuan -- halaman baru", () => {
+  it("Transport Lokal, Delego, PEDIA, Masukan", () => {
+    expect(labelTujuan("/sigap/translok/abc123")).toBe("Transport Lokal");
+    expect(labelTujuan("/sigap/delego/saya")).toBe("Delego");
+    expect(labelTujuan("/sigap/pedia")).toBe("SIGAP PEDIA");
+    expect(labelTujuan("/sigap/masukan")).toBe("Kirim masukan");
   });
 });

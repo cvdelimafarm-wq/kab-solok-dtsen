@@ -11,8 +11,20 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { keAtas } from "@/app/portal/navigasi";
-import { bersihkanPath, dariAman, indukDari, labelTujuan } from "@/lib/sigapNavigasi";
+import { bacaJejak, keAtas } from "@/app/portal/navigasi";
+import { bersihkanPath, cariSebelumnya, dariAman, indukDari, labelTujuan, sebelumnyaDariJejak } from "@/lib/sigapNavigasi";
+
+// (30 Okt 2026) Halaman sebelumnya yang SEBENARNYA (riwayat peramban), lihat lib/sigapNavigasi.ts cariSebelumnya.
+type NavApi = { currentEntry?: { index: number } | null; entries?: () => { url?: string }[] };
+function sebelumnyaNyata(): string | null {
+  try {
+    const nav = (window as unknown as { navigation?: NavApi }).navigation;
+    if (nav && typeof nav.entries === "function" && nav.currentEntry) return cariSebelumnya(nav.entries().map((e) => e.url ?? ""), nav.currentEntry.index, window.location.origin);
+  } catch {
+    /* lanjut ke jejak */
+  }
+  return sebelumnyaDariJejak(bacaJejak());
+}
 
 type Props = {
   tema?: "gelap" | "terang";
@@ -29,19 +41,22 @@ export default function TombolKembali({ tema = "gelap", induk, label, onKlik, cl
   const router = useRouter();
   const path = usePathname() || "/";
   const [dari, setDari] = useState<string | null>(null);
+  const [sebelum, setSebelum] = useState<string | null>(null);
   useEffect(() => {
     try {
       setDari(new URLSearchParams(window.location.search).get("dari"));
     } catch {
       setDari(null);
     }
-  }, []);
+    setSebelum(sebelumnyaNyata());
+  }, [path]);
 
   // ?dari= valid (bukan halaman ini sendiri) > `induk` halaman > induk logis > Beranda
   const d = dariAman(dari);
   const dariSah = d !== null && bersihkanPath(d) !== bersihkanPath(path);
   const href = dariSah && d ? d : induk ?? indukDari(path) ?? "/";
-  const teks = label ?? labelTujuan(href);
+  // (30 Okt 2026) bila ada halaman sebelumnya di aplikasi, itulah tujuannya (satu langkah persis, sama dengan Back HP); ?dari= / induk hanya cadangan
+  const teks = label ?? labelTujuan(sebelum ?? href);
 
   const warna =
     tema === "gelap"
@@ -51,7 +66,11 @@ export default function TombolKembali({ tema = "gelap", induk, label, onKlik, cl
   return (
     <button
       type="button"
-      onClick={() => (onKlik ? onKlik() : keAtas(router, href))}
+      onClick={() => {
+        if (onKlik) return onKlik();
+        if (sebelumnyaNyata()) window.history.back();
+        else keAtas(router, href);
+      }}
       aria-label={`Kembali ke ${teks}`}
       className={`inline-flex min-h-[44px] max-w-full items-center gap-1 rounded-full pl-2.5 pr-3.5 text-[13px] font-bold ${warna} ${className}`}
     >

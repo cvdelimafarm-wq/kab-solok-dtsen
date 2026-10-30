@@ -7,6 +7,7 @@
 // Layar lebar: sidebar hijau tua + bilah atas. HP: header hijau, (pemberi) deretan pil menu tim, dan tab bawah (Delegasi, Lapor, Riwayat, Penilaian).
 
 import Link from "next/link";
+import TombolKembali from "@/app/components/TombolKembali";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { aturLibur, jamWib, tglPendek } from "@/lib/delego/hitung";
@@ -171,9 +172,8 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
               <span className="text-[18px] font-bold tracking-wide">Delego</span>
             </Link>
             <div className="flex items-center gap-2">
-              <Link href="/sigap/admin" className="rounded-lg border border-white/30 px-2.5 py-2 text-[12.5px] font-semibold text-white hover:bg-white/10">
-                SIGAP
-              </Link>
+              {/* (30 Okt 2026) tombol Kembali seragam (satu langkah ke halaman sebelumnya); dulu tautan "SIGAP" ke /sigap/admin, bukan Beranda */}
+              <TombolKembali tema="gelap" induk="/" className="max-w-[46vw]" />
               <Lonceng />
             </div>
           </div>

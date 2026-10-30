@@ -80,7 +80,14 @@ export default function KartuTranslok({ d }: { d: KartuTranslokBeranda }) {
               </Link>
             </li>
           ))}
-          {lebih > 0 && <li className="px-1 text-[11.5px] text-[#6B7A90]">+{lebih} lagi yang belum lengkap</li>}
+          {lebih > 0 && (
+            <li>
+              {/* (30 Okt 2026) "+n lagi" kini bisa diketuk: membuka bagian berikutnya yang belum lengkap */}
+              <Link href={k.kekurangan?.[kek.length]?.href ?? href} className="flex min-h-[44px] items-center gap-1 rounded-[10px] px-1 text-[12px] font-semibold text-[#1F5FD1] active:bg-[#F5F8FE]">
+                +{lebih} lagi yang belum lengkap <span aria-hidden>›</span>
+              </Link>
+            </li>
+          )}
         </ul>
       ) : (
         aktif && <p className="mt-3 rounded-[10px] bg-[#F5F8FE] px-3 py-2 text-[12.5px] leading-snug text-[#55657D]">{terkunci ? aktif.pesanKunci : aktif.ket}</p>

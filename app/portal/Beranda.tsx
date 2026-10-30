@@ -14,7 +14,10 @@ import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
 import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { chipPeranTim, ringkasInduk, susunTahap, type Induk } from "@/lib/sigapTahap";
+import { chipPeranTim, susunTahap, type Induk } from "@/lib/sigapTahap";
+import { aktivitasDariInduk, pisahAktif } from "@/lib/sigapAktivitas"; // (30 Okt 2026) ikon kegiatan aktif per jenis (Pelatihan / Pendataan)
+import { KUNCI_PINTASAN, bacaPintasan, kodeTampil, susunPintasan } from "@/lib/sigapPintasan"; // (30 Okt 2026) pintasan pilihan petugas
+import AturPintasan from "./AturPintasan";
 import { peringatanDariInduk, translokDariInduk, tugasDariInduk, type KartuTranslokBeranda, type PeringatanBeranda } from "@/lib/sigapPrioritas";
 import { ketModulSpdt } from "@/lib/spdtNtp";
 import KartuTranslok from "./KartuTranslok"; // (19 Okt 2026) kartu Transport Lokal sendiri di bawah kartu utama
@@ -30,7 +33,7 @@ import { namaDepanTampil, namaTanpaGelar } from "@/lib/namaTampil";
 import IkonMenu from "./IkonMenu";
 import { matikanPush } from "./pushKlien";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
-import { apiPortal, bacaSesi, hapusLihatSebagai, hapusSemuaSesi, KUNCI, mulaiLihatSebagai, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
+import { apiPortal, bacaSesi, hapusLihatSebagai, hapusSemuaSesi, KUNCI, mulaiLihatSebagai, pemilikSesi, simpanPenyisiran, type SsoPenyisiran } from "./sesi";
 import PilihSebagai, { type HasilSebagai } from "./PilihSebagai";
 import { useData } from "./dataBersama";
 import PetaOtomatis from "./PetaOtomatis";
@@ -94,6 +97,28 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   const offset = hub ? Date.parse(hub.sekarang) - dHub.tiba : 0; // selisih jam server - jam HP
   const [tik, setTik] = useState(0);
   const [errorAksi, setError] = useState<string | null>(null);
+  // (30 Okt 2026) pintasan pilihan petugas (null = belum memilih -> bawaan) dan daftar kegiatan selesai yang diringkas
+  const [pilihPintasan, setPilihPintasan] = useState<string[] | null>(null);
+  const [aturMenu, setAturMenu] = useState(false);
+  const [selesaiBuka, setSelesaiBuka] = useState(false);
+  const kunciPintasan = `${KUNCI_PINTASAN}_${pemilikSesi() ?? 0}`;
+  useEffect(() => {
+    try {
+      setPilihPintasan(bacaPintasan(localStorage.getItem(kunciPintasan)));
+    } catch {
+      setPilihPintasan(null);
+    }
+  }, [kunciPintasan]);
+  function simpanPintasan(kode: string[] | null) {
+    setPilihPintasan(kode);
+    setAturMenu(false);
+    try {
+      if (kode === null) localStorage.removeItem(kunciPintasan);
+      else localStorage.setItem(kunciPintasan, JSON.stringify(kode));
+    } catch {
+      /* penyimpanan tidak tersedia: pilihan hanya berlaku selama halaman terbuka */
+    }
+  }
   const [sibuk, setSibuk] = useState<string | null>(null);
   // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
   const [gantiPin, setGantiPin] = useState(false);
@@ -211,9 +236,10 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const tahapInduk: ReturnType<typeof susunTahap>[] = [];
     if (induk && keg && hubMuat !== "memuat") {
       for (const i of induk) {
-        const r = ringkasInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
-        if (!r) continue;
-        indukRingkas.push(r);
+        // (30 Okt 2026) satu kegiatan induk -> ikon per jenis: Pelatihan dan Pendataan (lib/sigapAktivitas.ts); dulu satu ikon gabungan
+        const akt = aktivitasDariInduk({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
+        if (akt.length === 0) continue;
+        indukRingkas.push(...akt);
         i.menyerap.forEach((x) => serap.add(x));
         // (10 Okt 2026) Kartu "Tugas aktif" kegiatan induk memakai aturan prioritas umum (lib/sigapPrioritas.ts): mendesak > perlu > berikutnya;
         // tombol langsung ke langkah yang diprioritaskan -- permintaan user (tangkapan layar akun Valina: tombol salah ke halaman undangan).
@@ -272,6 +298,11 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const rank = (k: Kartu) => (k.grup === "tugas" ? 1 : k.grup === "referensi" ? 2 : 3);
     return rank(a) - rank(b);
   });
+  // (30 Okt 2026) Menu saya = pintasan pilihan petugas dari SEMUA menu yang boleh diakses (menu umum lalu pengelolaan); bawaan: beberapa yang pertama
+  const semuaMenu: Kartu[] = [...menuUrut, ...kelola];
+  const kodePintasan = kodeTampil(semuaMenu, pilihPintasan);
+  const aktifSelesai = useMemo(() => pisahAktif(kegiatan), [kegiatan]);
+  const menuSaya = susunPintasan(semuaMenu, pilihPintasan);
   // tombol "Kegiatan saya": kartu SSO (penyisiran) butuh aksi khusus -> cari kartunya
   const bukaSsoKegiatan = (idKeg: string) => {
     const kt = (data?.kartu ?? []).find((x) => x.kode === idKeg);
@@ -444,15 +475,39 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           </p>
         )}
 
+        {/* (30 Okt 2026) BAGIAN ATAS: menu pilihan petugas (Atur menu saya) */}
+        {semuaMenu.length > 0 && (
+          <section aria-label="Menu saya">
+            <div className="mb-2.5 flex items-center gap-2 px-1">
+              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Menu saya</h2>
+              <button type="button" onClick={() => setAturMenu(true)} className="ml-auto min-h-[44px] rounded-[10px] px-2.5 text-[12.5px] font-bold text-[#1F5FD1] active:bg-[#EAF1FC]">
+                Atur
+              </button>
+            </div>
+            {menuSaya.length > 0 ? (
+              <ul className="grid grid-cols-4 gap-x-1.5 gap-y-4 sm:grid-cols-5">
+                {menuSaya.map((k) => (
+                  <li key={k.kode}>
+                    <TileMenu k={k} sibuk={sibuk === k.kode} onSso={() => bukaSso(k)} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-[14px] bg-white px-4 py-4 text-center text-[12.5px] text-[#5B6B84]">Belum ada pintasan. Ketuk Atur untuk memilih menu.</p>
+            )}
+          </section>
+        )}
+
+        {/* BAGIAN BAWAH: kegiatan survei yang aktif, per jenis (Pelatihan / Pendataan) + Delego */}
         {(kegiatan.length > 0 || tampilDelego) && (
-          <section aria-label="Kegiatan saya">
+          <section aria-label="Kegiatan aktif">
             <div className="mb-2.5 flex items-baseline gap-2 px-1">
-              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kegiatan saya</h2>
-              <span className="text-[11.5px] text-[#6B7A90]">{kegiatan.length + (tampilDelego ? 1 : 0)} kegiatan</span>
-              {kegiatan.length > 1 && <span className="ml-auto text-[11.5px] text-[#6B7A90]">mendesak di depan</span>}
+              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kegiatan aktif</h2>
+              <span className="text-[11.5px] text-[#6B7A90]">{aktifSelesai.aktif.length + (tampilDelego ? 1 : 0)} kegiatan</span>
+              {aktifSelesai.aktif.length > 1 && <span className="ml-auto text-[11.5px] text-[#6B7A90]">mendesak di depan</span>}
             </div>
             <ul className="grid grid-cols-3 gap-x-1.5 gap-y-4">
-              {kegiatan.map((k) => (
+              {aktifSelesai.aktif.map((k) => (
                 <li key={k.id}>
                   <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
                 </li>
@@ -463,16 +518,40 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
                 </li>
               )}
             </ul>
+            {aktifSelesai.selesai.length > 0 && (
+              <div className="mt-3">
+                <button type="button" onClick={() => setSelesaiBuka((b) => !b)} aria-expanded={selesaiBuka} className="flex min-h-[44px] w-full items-center justify-between rounded-[12px] bg-white px-3.5 text-[12.5px] font-bold text-[#55657D] shadow-[0_3px_10px_rgba(15,42,82,.05)] active:bg-[#F1F5FC]">
+                  <span>Kegiatan selesai ({aktifSelesai.selesai.length})</span>
+                  <span aria-hidden>{selesaiBuka ? "▴" : "▾"}</span>
+                </button>
+                {selesaiBuka && (
+                  <ul className="mt-3 grid grid-cols-3 gap-x-1.5 gap-y-4">
+                    {aktifSelesai.selesai.map((k) => (
+                      <li key={k.id}>
+                        <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
         )}
-        {menuUrut.length > 0 && <GrupIkon judul="Menu umum" isi={menuUrut} sibuk={sibuk} onSso={bukaSso} />}
-        {kelola.length > 0 && <GrupIkon judul="Pengelolaan" isi={kelola} sibuk={sibuk} onSso={bukaSso} />}
 
         {data && <PetaOtomatis induk={induk} />}
         {data && <AktifkanNotifikasi />}
         {data && TAMPILKAN_MODAL_FOTO_PANITIA && <ModalFotoPanitia />}
         {data && <ModalRapat />}
         {data && <ModalPengingat akunKey={data.nama} />}
+        {aturMenu && (
+          <AturPintasan
+            semua={semuaMenu.map((k) => ({ kode: k.kode, judul: k.judul, href: k.href ?? null, sso: !!k.sso }))}
+            tampil={kodePintasan}
+            onSimpan={(kode) => simpanPintasan(kode)}
+            onPulihkan={() => simpanPintasan(null)}
+            onTutup={() => setAturMenu(false)}
+          />
+        )}
         {lihatSebagai && bacaSesi() && (
           <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50 p-4">
             <PilihSebagai sesi={bacaSesi() as string} namaSaya={nama || "Akun saya"} onPilih={pilihSebagai} onBatal={() => setLihatSebagai(false)} />
@@ -544,21 +623,6 @@ function KartuUtama({ u }: { u: TugasUtama | null }) {
       <Link href={u.href} className="mt-3.5 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]">
         {u.aksi}
       </Link>
-    </section>
-  );
-}
-
-function GrupIkon({ judul, isi, sibuk, onSso }: { judul: string; isi: Kartu[]; sibuk: string | null; onSso: (k: Kartu) => void }) {
-  return (
-    <section aria-label={judul}>
-      <h2 className="mb-2.5 px-1 text-[15px] font-extrabold text-[#0F2A52]">{judul}</h2>
-      <ul className="grid grid-cols-4 gap-x-1.5 gap-y-4 sm:grid-cols-5">
-        {isi.map((k) => (
-          <li key={k.kode}>
-            <TileMenu k={k} sibuk={sibuk === k.kode} onSso={() => onSso(k)} />
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

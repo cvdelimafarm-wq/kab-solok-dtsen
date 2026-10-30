@@ -6,6 +6,7 @@
 // merah = mendesak (isi emas, tanda seru merah), emas = perlu dilengkapi, biru = berjalan, abu = belum mulai, hijau = selesai.
 // Cincin berisi bagian selesai; progres tak terukur memakai cincin putus-putus.
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import IkonMenu from "./IkonMenu";
 import type { NadaKegiatan, RingkasKegiatan } from "@/lib/sigapKegiatan";
@@ -64,28 +65,35 @@ export function Cincin({ k, ukuran = 64, gelap = false }: { k: Pick<RingkasKegia
   );
 }
 
-export function IkonKegiatan({ k, sibuk, onSso }: { k: RingkasKegiatan; sibuk?: boolean; onSso?: () => void }) {
+/**
+ * (30 Okt 2026) `info` = keterangan yang bisa diketuk: membuka halaman/bagian yang sesuai dengan informasi itu (mis. "Foto belum lengkap" -> lembar foto),
+ * bukan sekadar status. Ikon+nama dan keterangan adalah dua tautan terpisah (tautan tidak boleh bersarang).
+ */
+export function IkonKegiatan({ k, sibuk, onSso }: { k: RingkasKegiatan & { info?: { teks: string; href: string } | null }; sibuk?: boolean; onSso?: () => void }) {
   const w = WARNA[k.nada];
+  const info = k.info ?? null;
   const isi = (
     <span className={`flex flex-col items-center gap-[5px] ${sibuk ? "animate-pulse" : ""}`}>
       <Cincin k={k} />
       <span className="line-clamp-2 min-h-[2.4em] text-center text-[11.5px] font-bold leading-[1.2] text-[#0F2A52]">{sibuk ? "Membuka…" : k.pendek}</span>
-      <span className="line-clamp-2 text-center text-[10.5px] font-bold leading-[1.15]" style={{ color: w.sub }}>
-        {k.sub}
-      </span>
+      {!info && (
+        <span className="line-clamp-2 text-center text-[10.5px] font-bold leading-[1.15]" style={{ color: w.sub }}>
+          {k.sub}
+        </span>
+      )}
       {k.peringatan && <span className="sr-only">perlu perhatian</span>}
     </span>
   );
   const kelas = "block w-full rounded-[14px] px-0.5 py-1 outline-none transition active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#1F5FD1]/50";
+  let utama: ReactNode;
   if (k.sso) {
-    return (
+    utama = (
       <button type="button" onClick={onSso} disabled={sibuk} className={kelas}>
         {isi}
       </button>
     );
-  }
-  if (k.href) {
-    return k.href.startsWith("http") ? (
+  } else if (k.href) {
+    utama = k.href.startsWith("http") ? (
       <a href={k.href} target="_blank" rel="noopener noreferrer" className={kelas}>
         {isi}
       </a>
@@ -94,6 +102,22 @@ export function IkonKegiatan({ k, sibuk, onSso }: { k: RingkasKegiatan; sibuk?: 
         {isi}
       </Link>
     );
+  } else {
+    utama = <span className="block cursor-default">{isi}</span>;
   }
-  return <span className="block cursor-default">{isi}</span>;
+  if (!info) return utama;
+  return (
+    <div className="flex flex-col items-stretch">
+      {utama}
+      <Link
+        href={info.href}
+        aria-label={`${info.teks}. Ketuk untuk membuka.`}
+        className="mx-auto mt-0.5 flex min-h-[36px] w-full items-start justify-center gap-0.5 rounded-[10px] px-0.5 py-1 text-center text-[10.5px] font-bold leading-[1.15] active:bg-[#F1F5FC]"
+        style={{ color: w.sub }}
+      >
+        <span className="line-clamp-2">{info.teks}</span>
+        <span aria-hidden>›</span>
+      </Link>
+    </div>
+  );
 }

@@ -314,8 +314,9 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         judul: x.judul,
         ket: ketTranslok(x),
         status: NADA_KE_STATUS[x.nada],
-        href: x.href ? `${x.href}?dari=${encodeURIComponent(ruteTahap(induk, tahap))}` : null,
-        aksi: "Buka",
+        // (30 Okt 2026) bila ada yang belum lengkap, ketukan membuka BAGIAN itu (mis. lembar foto), sama dengan baris di kartu Transport Lokal Beranda
+        href: x.kekurangan?.[0]?.href ?? (x.href ? `${x.href}?dari=${encodeURIComponent(ruteTahap(induk, tahap))}` : null),
+        aksi: x.kekurangan?.[0]?.aksi ?? "Buka",
         pecahan: x.pecahan ?? (x.nada === "hijau" ? 1 : 0),
       }));
   }

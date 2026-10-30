@@ -118,12 +118,58 @@ export function labelTujuan(path: string): string {
     "/sigap/sampel": "Sampel per SLS",
     "/sigap/foto": "Kamera SIGAP",
     "/bencana": "Pendataan Bencana",
+    "/sigap/pedia": "SIGAP PEDIA",
+    "/sigap/masukan": "Kirim masukan",
+    "/sigap/delego": "Delego",
   };
   if (tetap[p]) return tetap[p];
+  if (/^\/sigap\/translok(\/|$)/.test(p)) return "Transport Lokal";
+  if (/^\/sigap\/delego(\/|$)/.test(p)) return "Delego";
   if (/^\/sigap\/kegiatan\/[^/]+\/[^/]+$/.test(p)) return "Tahap kegiatan";
   if (/^\/sigap\/kegiatan\/translok-[^/]+$/.test(p)) return "Kegiatan";
   if (/^\/sigap\/kegiatan\/[^/]+$/.test(p)) return "Tahapan";
   return "Halaman sebelumnya";
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// (30 Okt 2026) "Kembali" = SATU langkah persis ke tampilan sebelumnya (permintaan user), baik tombol di layar maupun tombol Back HP.
+// Dulu tombol layar menuju "induk logis" halaman (tebakan) sehingga bisa berbeda dari halaman asal (mis. Beranda -> Supervisi, tombol layar
+// membawa ke "Tahap kegiatan"). Kini tujuan = entri riwayat peramban tepat di bawah halaman ini (Navigation API; cadangan: jejak halaman), dan
+// induk logis / ?dari= hanya dipakai bila tidak ada halaman sebelumnya di aplikasi (dibuka langsung dari notifikasi/tautan).
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+/** Halaman masuk/login tidak pernah jadi tujuan "Kembali". */
+const HALAMAN_MASUK = /^\/(sigap\/masuk|masuk|login)(\/|$)/;
+
+/**
+ * Alamat (path+query) halaman sebelumnya dari daftar alamat entri riwayat. `indeks` = entri sekarang. Entri tepat di bawah yang beralamat sama
+ * (penanda modal / penjaga Beranda) dilewati. Null bila tidak ada, berasal dari situs lain, atau halaman masuk.
+ */
+export function cariSebelumnya(urls: readonly string[], indeks: number, asal: string): string | null {
+  const kunci = (u: string | undefined): string | null | undefined => {
+    if (!u) return undefined;
+    try {
+      const x = new URL(u);
+      return x.origin === asal ? x.pathname + x.search : null;
+    } catch {
+      return undefined;
+    }
+  };
+  const kini = kunci(urls[indeks]);
+  if (kini == null) return null;
+  for (let i = indeks - 1; i >= 0; i--) {
+    const k = kunci(urls[i]);
+    if (k == null) return null;
+    if (k === kini) continue;
+    return HALAMAN_MASUK.test(bersihkanPath(k)) ? null : k;
+  }
+  return null;
+}
+
+/** Cadangan bila Navigation API tidak ada (Safari/Firefox): halaman sebelumnya menurut jejak halaman (sessionStorage). */
+export function sebelumnyaDariJejak(jejak: readonly string[]): string | null {
+  const p = jejak.length >= 2 ? jejak[jejak.length - 2] : null;
+  return p && !HALAMAN_MASUK.test(p) ? p : null;
 }
 
 /** Tujuan Kembali untuk halaman `pathSaatIni`: ?dari= (aman, bukan halaman ini sendiri) > induk logis > Beranda. */
