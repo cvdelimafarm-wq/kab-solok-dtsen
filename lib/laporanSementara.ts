@@ -662,7 +662,7 @@ export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: 
           { id: "lampiranFoto.foto", label: "Foto terpilih", jenis: "foto", foto: foto.daftar, perBaris: foto.perBaris },
         ]
       : [
-          par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word. Foto bisa dipilih lewat panel “Foto dokumentasi untuk Lampiran B” di bawah panel susunan."),
+          par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word. Atau pilih langsung dari data foto yang masuk di SIGAP lewat tombol “Pilih foto dokumentasi”, maka foto dan keterangannya terisi otomatis."),
           tab("lampiranFoto.tabel", "Kerangka tabel foto", {
             kepala: ["Foto", "Keterangan"],
             baris: [1, 2, 3, 4, 5, 6].map((i) => [`[Tempel foto ${i}]`, `Keterangan foto ${i}: kegiatan, lokasi, tanggal.`]),

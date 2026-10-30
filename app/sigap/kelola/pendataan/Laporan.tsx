@@ -155,6 +155,12 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
   const fotoSiap = fotoUntuk === kegiatanId;
   const [fotoBuka, setFotoBuka] = useState(false);
   const [kemajuan, setKemajuan] = useState("");
+  const panelFoto = useRef<HTMLDetailsElement>(null);
+  // dipanggil dari tombol di bab Lampiran B: membuka panel pemilih foto dan menggulirkan layar ke sana
+  const bukaPemilihFoto = () => {
+    setFotoBuka(true);
+    setTimeout(() => panelFoto.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  };
 
   // pilihan tersimpan di peramban (boleh gagal: mode privat / penyimpanan diblokir)
   useEffect(() => {
@@ -449,9 +455,9 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
       )}
 
       {laporan && (
-        <details className="rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]" open={fotoBuka} onToggle={(e) => setFotoBuka((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary className="cursor-pointer select-none px-4 py-3 text-[14px] font-bold text-[#0F2A52]">
-            Foto dokumentasi untuk Lampiran B
+        <details ref={panelFoto} className="rounded-[18px] border-2 border-[#1F5FD1]/30 bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]" open={fotoBuka} onToggle={(e) => setFotoBuka((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary className="cursor-pointer select-none px-4 py-3 text-[14px] font-bold text-[#1F5FD1]">
+            📷 Foto dokumentasi untuk Lampiran B
             <span className="ml-2 text-[12.5px] font-normal text-[#6B7A90]">{foto.pilihan.length > 0 ? `${foto.pilihan.length} foto terpilih` : "belum ada foto dipilih"}</span>
           </summary>
           <div className="border-t border-[#E3E8EE] px-4 pb-4 pt-3">
@@ -478,6 +484,16 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
             ) : (
               <ElemenLayar key={i} e={k.elemen} kegiatanId={kegiatanId} />
             ),
+          )}
+          {b.kode === "lampiranFoto" && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-[#EEF4FE] px-3 py-2.5">
+              <button type="button" onClick={bukaPemilihFoto} className={BTN}>
+                {foto.pilihan.length > 0 ? "Ubah pilihan foto" : "Pilih foto dokumentasi"}
+              </button>
+              <span className="text-[12.5px] text-[#334155]">
+                {foto.pilihan.length > 0 ? `${foto.pilihan.length} foto terpilih dari data foto yang masuk.` : "Pilih dari seluruh foto nomor 1-5 yang sudah masuk, dengan saringan PPL / PML / Korwil-Supervisor."}
+              </span>
+            </div>
           )}
           {b.sumber && <p className="mt-3 text-[11.5px] italic text-[#6B7A90]">Sumber: {b.sumber}</p>}
         </Kartu>
