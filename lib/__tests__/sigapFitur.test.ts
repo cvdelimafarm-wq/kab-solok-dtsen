@@ -39,7 +39,8 @@ describe("fiturEfektif", () => {
   });
   it("SPDT NTP (lembar bantu, kegiatan 2) hanya fitur umum = tab yang kini tersedia", () => {
     const f = fiturEfektif("lembar_bantu", {}, 2);
-    expect(tabTampilKelola(f)).toEqual(["persiapan", "tim", "siaran", "qc", "administrasi"]);
+    expect(tabTampilKelola(f)).toEqual(["persiapan", "tim", "siaran", "qc", "administrasi", "laporan"]);
+    expect(f.laporan).toBe(true);
     expect(f.tim_alokasi).toBe(false);
     expect(f.qc_kuesioner).toBe(false);
     expect(f.qc_dokumen).toBe(true);
@@ -47,7 +48,9 @@ describe("fiturEfektif", () => {
   it("fitur terikat data Pascabencana tetap mati untuk kegiatan lain walau strategi status atau centang menyalakannya", () => {
     const f = fiturEfektif("status_per_sasaran", { monitoring: true, laporan: true }, 7);
     expect(f.monitoring).toBe(false);
-    expect(f.laporan).toBe(false);
+    // Laporan sudah umum (30 Okt, laporan umum): tersedia untuk kegiatan lain dan mengikuti centang
+    expect(f.laporan).toBe(true);
+    expect(fiturEfektif("lembar_bantu", { laporan: false }, 2).laporan).toBe(false);
     const g = fiturEfektif("lembar_bantu", { monitoring: true }, 2);
     expect(g.monitoring).toBe(false);
   });
@@ -65,7 +68,7 @@ describe("fiturEfektif", () => {
   });
   it("Sakernas dan Seruti (sampel per SLS) memakai fitur umum", () => {
     const f = fiturEfektif("sampel_sls", {}, 11);
-    expect(tabTampilKelola(f)).toEqual(["persiapan", "tim", "siaran", "qc", "administrasi"]);
+    expect(tabTampilKelola(f)).toEqual(["persiapan", "tim", "siaran", "qc", "administrasi", "laporan"]);
   });
 });
 

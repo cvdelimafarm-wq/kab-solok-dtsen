@@ -78,7 +78,7 @@ export const FITUR: DefFitur[] = [
   { kode: "pemeriksaan_lapangan", kelompok: "6 · Pemeriksaan", label: "Lapangan per petugas", ket: "Hasil identifikasi, pendataan, dan status transport lokal per petugas per tanggal.", bergantung: "status" },
   { kode: "pemeriksaan_foto", kelompok: "6 · Pemeriksaan", label: "Foto dan dokumentasi", ket: "Saklar Kamera SIGAP, foto yang perlu diperiksa, masa simpan, usulan hapus.", bergantung: "status" },
   { kode: "administrasi", kelompok: "7 · Administrasi & SPJ", label: "Administrasi dan SPJ", ket: "Transport lokal (verifikasi, kunci, tarif), pengadaan, pertanggungjawaban.", bergantung: "umum" },
-  { kode: "laporan", kelompok: "8 · Laporan", label: "Laporan Sementara", ket: "Laporan otomatis dari database SIGAP, unduh Word atau cetak.", bergantung: "status" },
+  { kode: "laporan", kelompok: "8 · Laporan", label: "Laporan Sementara", ket: "Laporan otomatis dari database SIGAP (Pascabencana: laporan PSP; kegiatan lain: laporan umum), unduh Word atau cetak, dengan foto dokumentasi pilihan.", bergantung: "umum" },
 ];
 
 export const KODE_FITUR: KodeFitur[] = FITUR.map((f) => f.kode);
@@ -93,7 +93,7 @@ export function fiturTersedia(strategi: StrategiKegiatan, kode: KodeFitur, kegia
   return defFitur(kode).bergantung === "umum" || (strategi === "status_per_sasaran" && kegiatanId === KEGIATAN_DATA_STATUS);
 }
 
-const BAWAAN_UMUM: KodeFitur[] = ["tim_penugasan", "siaran", "qc_pemahaman", "qc_dokumen", "administrasi"];
+const BAWAAN_UMUM: KodeFitur[] = ["tim_penugasan", "siaran", "qc_pemahaman", "qc_dokumen", "administrasi", "laporan"];
 /** Paket bawaan tiap strategi (kode fitur yang menyala). status_per_sasaran = seluruh fitur (perilaku Pendataan Pascabencana). */
 export const BAWAAN_STRATEGI: Record<StrategiKegiatan, KodeFitur[]> = {
   status_per_sasaran: KODE_FITUR,

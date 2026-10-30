@@ -385,12 +385,12 @@ export function temuanPerhatian(d: DataLaporan): string[] {
 // Lampiran nilai per petugas
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-const nilaiTeks = (v: number | null): string => (v == null ? "-" : fmtDesimal(v));
-const rataRata = (xs: (number | null)[]): number | null => {
+export const nilaiTeks = (v: number | null): string => (v == null ? "-" : fmtDesimal(v));
+export const rataRata = (xs: (number | null)[]): number | null => {
   const ada = xs.filter((x): x is number => x != null);
   return ada.length ? ada.reduce((a, b) => a + b, 0) / ada.length : null;
 };
-const banding = (a: string, b: string): number => a.localeCompare(b, "id", { sensitivity: "base" });
+export const banding = (a: string, b: string): number => a.localeCompare(b, "id", { sensitivity: "base" });
 
 /** Urutan baris lampiran. "peran": PML dulu lalu PPL, abjad; "nama": abjad; "posttest"/"qc": nilai tertinggi dulu (kosong di bawah), seri menurut nama. */
 export function urutkanPetugas(daftar: PetugasNilai[], urut: UrutNilai): PetugasNilai[] {
@@ -438,9 +438,32 @@ export function tabelNilaiPetugas(d: DataLaporan, o: OpsiLaporan): TabelLaporan 
 // Penyusunan
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-const par = (id: string, label: string, teks: string, ikutBab?: string): Elemen => ({ id, label, jenis: "paragraf", teks, ikutBab });
-const but = (id: string, label: string, butir: string[], ikutBab?: string): Elemen => ({ id, label, jenis: "butir", butir, ikutBab });
-const tab = (id: string, label: string, tabel: TabelLaporan): Elemen => ({ id, label, jenis: "tabel", tabel });
+export const par = (id: string, label: string, teks: string, ikutBab?: string): Elemen => ({ id, label, jenis: "paragraf", teks, ikutBab });
+export const but = (id: string, label: string, butir: string[], ikutBab?: string): Elemen => ({ id, label, jenis: "butir", butir, ikutBab });
+export const tab = (id: string, label: string, tabel: TabelLaporan): Elemen => ({ id, label, jenis: "tabel", tabel });
+
+/** Lampiran B (dipakai laporan PSP dan laporan umum). Ada foto pilihan -> foto ditampilkan; tidak ada -> kerangka tabel untuk ditempel di Word. */
+export function bagianLampiranFoto(foto?: OpsiFotoLaporan): BagianLaporan {
+  const adaFoto = !!foto && foto.daftar.length > 0;
+  return {
+    kode: "lampiranFoto",
+    judul: "Dokumentasi foto",
+    jenis: "lampiran",
+    elemen: adaFoto
+      ? [
+          par("lampiranFoto.pengantar", "Keterangan foto", `Foto dokumentasi pilihan penyusun (${fmtAngka(foto.daftar.length)} foto). Keterangan di bawah foto memuat nomor foto, petugas, dan tanggal menurut data SIGAP.`),
+          { id: "lampiranFoto.foto", label: "Foto terpilih", jenis: "foto", foto: foto.daftar, perBaris: foto.perBaris },
+        ]
+      : [
+          par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word. Atau pilih langsung dari data foto yang masuk di SIGAP lewat tombol “Pilih foto dokumentasi”, maka foto dan keterangannya terisi otomatis."),
+          tab("lampiranFoto.tabel", "Kerangka tabel foto", {
+            kepala: ["Foto", "Keterangan"],
+            baris: [1, 2, 3, 4, 5, 6].map((i) => [`[Tempel foto ${i}]`, `Keterangan foto ${i}: kegiatan, lokasi, tanggal.`]),
+            rata: ["k", "k"],
+          }),
+        ],
+  };
+}
 
 /** Seluruh bab dan elemen laporan (tanpa saringan opsi, kecuali kolom/urutan/peran lampiran nilai). */
 export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: OpsiFotoLaporan): BagianLaporan[] {
@@ -650,26 +673,8 @@ export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: 
     sumber: "Penugasan, presensi, sesi tes pelatihan, dan percobaan QC Pemahaman pada database SIGAP.",
   });
 
-  // ---- Lampiran B: foto dokumentasi (bawaan mati). Ada foto pilihan -> foto ditampilkan; tidak ada -> kerangka tabel untuk ditempel di Word.
-  const adaFoto = !!foto && foto.daftar.length > 0;
-  out.push({
-    kode: "lampiranFoto",
-    judul: "Dokumentasi foto",
-    jenis: "lampiran",
-    elemen: adaFoto
-      ? [
-          par("lampiranFoto.pengantar", "Keterangan foto", `Foto dokumentasi pilihan penyusun (${fmtAngka(foto.daftar.length)} foto). Keterangan di bawah foto memuat nomor foto, petugas, dan tanggal menurut data SIGAP.`),
-          { id: "lampiranFoto.foto", label: "Foto terpilih", jenis: "foto", foto: foto.daftar, perBaris: foto.perBaris },
-        ]
-      : [
-          par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word. Atau pilih langsung dari data foto yang masuk di SIGAP lewat tombol “Pilih foto dokumentasi”, maka foto dan keterangannya terisi otomatis."),
-          tab("lampiranFoto.tabel", "Kerangka tabel foto", {
-            kepala: ["Foto", "Keterangan"],
-            baris: [1, 2, 3, 4, 5, 6].map((i) => [`[Tempel foto ${i}]`, `Keterangan foto ${i}: kegiatan, lokasi, tanggal.`]),
-            rata: ["k", "k"],
-          }),
-        ],
-  });
+  // ---- Lampiran B: foto dokumentasi (bawaan mati)
+  out.push(bagianLampiranFoto(foto));
   return out;
 }
 
@@ -685,10 +690,16 @@ export function selesaikanRujukan(teks: string, nomor: Record<string, string>): 
  * nomor tabel dan gambar berurutan, rujukan antar-bab diselesaikan, catatan penyusun disisipkan, judul/penyusun diterapkan.
  */
 export function susunLaporan(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: OpsiFotoLaporan): Laporan {
-  const tgl = tanggalWib(d.dibuat_at);
+  return rakitLaporan(bangunBagian(d, o, foto), o, d.dibuat_at, d.kegiatan?.nama ?? "Pendataan Pascabencana");
+}
+
+/**
+ * Merakit laporan dari seluruh bab (apa pun jenis kegiatannya): saringan centang, penomoran, rujukan, catatan, judul. Dipakai laporan PSP
+ * (susunLaporan) dan laporan umum (lib/laporanUmum.ts).
+ */
+export function rakitLaporan(semua: BagianLaporan[], o: OpsiLaporan, dibuatAt: string, nama: string): Laporan {
+  const tgl = tanggalWib(dibuatAt);
   const tanggal = tanggalIndo(tgl);
-  const nama = d.kegiatan?.nama ?? "Pendataan Pascabencana";
-  const semua = bangunBagian(d, o, foto);
   const babAda = (kode: string) => babTampil(o, kode);
 
   // 1) saring bab dan elemen
@@ -725,7 +736,7 @@ export function susunLaporan(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: 
   });
 
   const judul = o.judul.trim() || `Laporan Sementara Pelaksanaan ${nama}`;
-  const jam = jamWib(d.dibuat_at);
+  const jam = jamWib(dibuatAt);
   const subjudul = `BPS Kabupaten Solok · data per ${tanggal}${jam ? `, ${jam} WIB` : ""}${o.penyusun.trim() ? ` · Disusun oleh ${o.penyusun.trim()}` : ""}`;
   return { judul, subjudul, nama, tanggal, bagian, semua };
 }

@@ -15,6 +15,7 @@ import {
   type BatangLaporan, type DataLaporan, type Elemen, type KolomNilai, type OpsiLaporan, type PeranNilai, type TabelLaporan, type UrutNilai,
 } from "@/lib/laporanSementara";
 import { buatDocx, daftarFotoDocx } from "@/lib/laporanDocx";
+import { adalahLaporanUmum, bacaDataLaporanUmum, susunLaporanUmum, type DataLaporanUmum } from "@/lib/laporanUmum";
 import { STATUS_FOTO_AWAL, bacaStatusFoto, fotoUntukLaporan, kunciStatusFoto, type StatusFoto } from "@/lib/laporanFoto";
 import PemilihFoto, { GambarFoto } from "./PemilihFoto";
 import { siapkanGambar } from "./fotoKlien";
@@ -143,7 +144,8 @@ function Cek({ nilai, onUbah, children, redup }: { nilai: boolean; onUbah: (v: b
 }
 
 export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
-  const [data, setData] = useState<DataLaporan | null>(null);
+  // Pascabencana (kegiatan PSP) memakai laporan PSP; kegiatan lain memakai laporan umum (lib/laporanUmum.ts). Penentunya jawaban API.
+  const [data, setData] = useState<{ ragam: "psp"; d: DataLaporan } | { ragam: "umum"; d: DataLaporanUmum } | null>(null);
   const [galat, setGalat] = useState("");
   const [memuat, setMemuat] = useState(true);
   const [menyusun, setMenyusun] = useState(false);
@@ -234,20 +236,20 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
     setMemuat(true);
     setGalat("");
     try {
-      const mentah = await apiPortal<unknown>(`${API_LAPORAN}${segar ? "?segar=1" : ""}`);
-      setData(bacaDataLaporan(mentah));
+      const mentah = await apiPortal<unknown>(`${API_LAPORAN}?k=${kegiatanId}${segar ? "&segar=1" : ""}`);
+      setData(adalahLaporanUmum(mentah) ? { ragam: "umum", d: bacaDataLaporanUmum(mentah) } : { ragam: "psp", d: bacaDataLaporan(mentah) });
     } catch (e) {
       setGalat(e instanceof Error ? e.message : "Laporan belum bisa dimuat.");
     } finally {
       setMemuat(false);
     }
-  }, []);
+  }, [kegiatanId]);
   useEffect(() => {
     void muat(false);
   }, [muat]);
 
   const fotoLaporan = useMemo(() => fotoUntukLaporan(foto), [foto]);
-  const laporan = useMemo(() => (data ? susunLaporan(data, opsi, fotoLaporan) : null), [data, opsi, fotoLaporan]);
+  const laporan = useMemo(() => (data ? (data.ragam === "umum" ? susunLaporanUmum(data.d, opsi, fotoLaporan) : susunLaporan(data.d, opsi, fotoLaporan)) : null), [data, opsi, fotoLaporan]);
 
   const ubah = (patch: Partial<OpsiLaporan>) => setOpsi((o) => ({ ...o, ...patch }));
   const setBab = (kode: string, v: boolean) => setOpsi((o) => ({ ...o, bab: { ...o.bab, [kode]: v } }));
@@ -267,7 +269,7 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = namaBerkasLaporan(laporan, tanggalWib(data.dibuat_at));
+      a.download = namaBerkasLaporan(laporan, tanggalWib(data.d.dibuat_at));
       document.body.appendChild(a);
       a.click();
       a.remove();
