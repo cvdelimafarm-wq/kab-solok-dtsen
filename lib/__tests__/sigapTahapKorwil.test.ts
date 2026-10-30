@@ -19,7 +19,7 @@ describe("modul monitoring_korwil", () => {
     expect(t).toHaveLength(1);
     const m = t[0].modul[0];
     expect(m).toMatchObject({ kode: "monitoring_korwil", status: "berjalan", judul: "Supervisi", ket: "Kelompok 1 · 3 tim PML · 8 PPL" });
-    expect(m.href).toBe("/sigap/korwil?dari=%2Fsigap%2Fkegiatan%2Fpascabencana%2Fpendataan");
+    expect(m.href).toBe("/sigap/korwil?tab=lapangan&kelompok=1&dari=%2Fsigap%2Fkegiatan%2Fpascabencana%2Fpendataan"); // (31 Okt 2026) kartu "Kelompok 1" membuka kelompok 1
   });
   it("tidak tampil bagi akun lain (tahap ikut disembunyikan bila tak ada modul lain yang berlaku)", () => {
     expect(susunTahap(ctx(induk({ korwil: null })))).toHaveLength(0);

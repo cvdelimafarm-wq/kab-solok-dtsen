@@ -215,6 +215,11 @@ describe("modul pendataan", () => {
 
   it("tautan memuat ?dari= ke halaman tahap supaya Back pulang ke tahap Pendataan", () => {
     const h = susunModulHref(induk({ total: 10, didata: 1, terdampak: 0 }));
+    expect(h).toBe("/sigap/pendataan?utama=1&saring=belum&dari=" + encodeURIComponent("/sigap/kegiatan/pascabencana/pendataan"));
+  });
+
+  it("(31 Okt 2026) semua KK sudah punya hasil: lembar biasa tanpa saringan", () => {
+    const h = susunModulHref(induk({ total: 10, didata: 10, terdampak: 4 }));
     expect(h).toBe("/sigap/pendataan?dari=" + encodeURIComponent("/sigap/kegiatan/pascabencana/pendataan"));
   });
 });

@@ -11,6 +11,8 @@ import { ringkasPelatihan, type NadaKegiatan, type RingkasKegiatan, type StatusL
 import type { HubTugas, IkonKode } from "@/lib/sigapTugasUtama";
 import { ketModulSpdt, type InfoSpdt } from "@/lib/spdtNtp";
 import { ketModulSampel, type InfoSampel } from "@/lib/sampelSls";
+import { alamatLembarPendataan } from "@/lib/sigapPendataanSaring";
+import { alamatSupervisi } from "@/lib/sigapKorwilTab";
 
 export type BukaMode = "langsung" | "setelah_sebelumnya" | "tanggal";
 
@@ -248,7 +250,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         judul: "Lembar Pendataan KK",
         ket,
         status,
-        href: `/sigap/pendataan?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        href: alamatLembarPendataan(f, ruteTahap(induk, tahap)),
         aksi: f.didata >= f.total ? "Lihat" : "Buka lembar",
         pecahan: Math.min(1, f.didata / f.total),
       },
@@ -264,7 +266,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
         judul: "Supervisi",
         ket: `Kelompok ${f.kelompok} · ${f.tim} tim PML · ${f.ppl} PPL`,
         status: "berjalan",
-        href: `/sigap/korwil?dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        href: alamatSupervisi(f.kelompok, ruteTahap(induk, tahap)),
         aksi: "Buka supervisi",
         pecahan: 0,
       },

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import TombolKembali from "@/app/components/TombolKembali";
 import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
+import { saringDariAlamat } from "@/lib/sigapPendataanSaring";
 import BannerAntrean from "@/app/portal/BannerAntrean";
 import { useAntrean } from "@/app/portal/antreanKirim";
 import PlottingTim from "./PlottingTim";
@@ -348,6 +349,24 @@ export default function LembarPendataan() {
           u.searchParams.set("sub", id);
         }
       }
+      window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
+    } catch {
+      /* abaikan */
+    }
+  }, [data, perSub]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // (31 Okt 2026) ?saring=belum|terdampak|... (dari kartu "Lembar Pendataan KK": "12 dari 40 KK sudah punya hasil" -> daftar yang belum): pasang chip saringan sekali setelah
+  // data siap. Dipasang SETELAH efek ?utama=1 di atas (pilihSub mengembalikan saringan ke "semua"). Alamat dirapikan (saring dihapus) supaya Kembali tak mengulang.
+  const saringDipakai = useRef(false);
+  useEffect(() => {
+    if (saringDipakai.current || !data) return;
+    try {
+      const u = new URL(window.location.href);
+      const sg = saringDariAlamat(u.searchParams.get("saring"));
+      saringDipakai.current = true;
+      if (!sg) return;
+      setFStatus(sg);
+      u.searchParams.delete("saring");
       window.history.replaceState(window.history.state, "", `${u.pathname}${u.search}${u.hash}`);
     } catch {
       /* abaikan */

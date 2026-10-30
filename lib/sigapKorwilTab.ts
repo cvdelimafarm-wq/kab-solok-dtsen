@@ -15,3 +15,18 @@ export function tabDariAlamat(nilai: string | null | undefined): TabKorwil | nul
   if (!nilai) return null;
   return (TAB_SAH as readonly string[]).includes(nilai) ? (nilai as TabKorwil) : null;
 }
+
+/**
+ * (31 Okt 2026) Nilai ?kelompok= -> nomor kelompok (bilangan bulat positif), atau null. Kartu Supervisi di Beranda/tahap ("Kelompok 2 · 3 tim PML") membuka
+ * halaman Supervisi tepat pada kelompok itu. Kelompok yang tak boleh dilihat akun ini ditolak server (tentukanKelompok), jadi nilai ini hanya permintaan.
+ */
+export function kelompokDariAlamat(nilai: string | null | undefined): number | null {
+  if (!nilai || !/^\d{1,4}$/.test(nilai)) return null;
+  const n = Number(nilai);
+  return n >= 1 ? n : null;
+}
+
+/** Alamat Supervisi untuk kartu yang menyebut sebuah kelompok; `dari` (opsional) = halaman induk untuk tombol Kembali. */
+export function alamatSupervisi(kelompok: number, dari?: string): string {
+  return `/sigap/korwil?tab=lapangan&kelompok=${kelompok}${dari ? `&dari=${encodeURIComponent(dari)}` : ""}`;
+}
