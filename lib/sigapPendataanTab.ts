@@ -98,11 +98,13 @@ export const SUB_ADMINISTRASI: SubItem[] = [
   { kode: "pengadaan", label: "Pengadaan & kontrak", ket: "Paket pengadaan, master tahun anggaran, dan penyedia; dokumen kontrak terisi otomatis." },
   { kode: "anggaran", label: "Anggaran & lainnya", ket: "Perencanaan anggaran (POK/RAB) dan item yang segera hadir (honor, perjalanan dinas)." },
 ];
-/** (26 Okt 2026) Tab "4 · QC": pantauan hari ini, pengaturan jadwal, bank soal (QC Pemahaman); (27 Okt 2026) cabang Kuesioner supervisi untuk Lembar Supervisi. */
+/** (26 Okt 2026) Tab "4 · QC": pantauan hari ini, pengaturan jadwal, bank soal (QC Pemahaman); (27 Okt 2026) cabang Kuesioner supervisi untuk Lembar Supervisi;
+ * (30 Okt 2026) cabang Dokumen pemeriksaan PML: daftar unduh PDF yang diunggah PML (ada untuk semua kegiatan; isinya tampil bila ada dokumen masuk). */
 export const SUB_QC: SubItem[] = [
   { kode: "hari", label: "Pemahaman · Hari ini", ket: "Siapa sudah mengisi, nilai per tim, soal yang paling banyak salah, dan siapa yang belum mengaktifkan notifikasi." },
   { kode: "pengaturan", label: "Pemahaman · Pengaturan", ket: "Nyalakan QC, jam rilis dan batas, ulangan, pengingat, dan periode berlaku." },
   { kode: "soal", label: "Pemahaman · Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
+  { kode: "dokumen", label: "Dokumen pemeriksaan PML", ket: "Unduh PDF hasil pemeriksaan yang diunggah PML, dikelompokkan per PML. Daftar terisi setelah ada dokumen yang masuk." },
   { kode: "kuesioner", label: "Kuesioner supervisi", ket: "Kuesioner quality check untuk Lembar Supervisi (korwil): unggah dari Excel untuk petugas dan keluarga (KK), kelola versinya." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI, qc: SUB_QC };

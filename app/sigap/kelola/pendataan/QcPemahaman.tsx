@@ -143,9 +143,9 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
       {d && !d.boleh_kelola && <Pesan jenis="info">Anda dapat melihat saja. Mengubah pengaturan memerlukan izin kelola pendataan.</Pesan>}
       {d && sub === "hari" && <HariIni d={d} kegiatanId={kegiatanId} kirim={kirim} muat={muat} memuat={memuat} diperbarui={diperbarui} pilihTanggal={pilihTanggal} />}
       {/* (30 Okt 2026) daftar unduh dokumen pemeriksaan PML; tampil hanya bila kegiatan ini punya dokumen yang masuk */}
-      {d && sub === "hari" && <DokumenQc kegiatanId={kegiatanId} />}
       {d && sub === "pengaturan" && <Pengaturan d={d} kirim={kirim} />}
       {d && sub === "soal" && <BankSoal d={d} kirim={kirim} />}
+      {d && sub === "dokumen" && <DokumenQc kegiatanId={kegiatanId} kegiatanNama={d.kegiatan_nama} />}
     </div>
   );
 }
