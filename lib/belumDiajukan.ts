@@ -208,3 +208,13 @@ export function susunPushTugas(untuk: "pml" | "ppl" | "lama", items: ItemTugas[]
   }
   return susunDaftar("Sub SLS dialihkan admin", "Dialihkan ke tim lain: ", " Anda tidak perlu mendata Sub SLS ini lagi.", items.map((i) => i.jorong));
 }
+
+/**
+ * (30 Okt 2026) Kalimat hasil "Tandai sudah keluar di FASIH" pada tab Belum diajukan: berapa Sub SLS yang pindah ke tab Sudah keluar dan yang ditolak
+ * (beserta alasannya, satu baris per Sub SLS).
+ */
+export function pesanTandaKeluar(berhasil: number, ditolak: { label: string; alasan: string }[]): string {
+  const awal = berhasil > 0 ? `${berhasil} Sub SLS ditandai sudah keluar di FASIH dan pindah ke tab Sudah keluar.` : "Tidak ada Sub SLS yang berhasil ditandai.";
+  if (!ditolak.length) return awal;
+  return `${awal} ${ditolak.length} dilewati: ${ditolak.map((d) => pesanTugas(d.alasan, d.label)).join(" ")}`;
+}

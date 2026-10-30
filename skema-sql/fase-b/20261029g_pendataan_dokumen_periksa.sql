@@ -1,5 +1,7 @@
 -- =====================================================================
 -- 20261029g_pendataan_dokumen_periksa.sql
+-- !! TIDAK DIPAKAI LAGI (30 Okt 2026): fitur ini salah tempat di Pendataan Pascabencana. Pengganti: 20261030a_spdt_dokumen_periksa.sql (SPDT NTP).
+-- !! Tabel bencana_dokumen_periksa di produksi kosong (0 baris, 0 berkas); boleh dibiarkan atau di-drop.
 -- SIGAP - Dokumen hasil pemeriksaan (PDF scan) dari PML (29 Okt 2026)
 --
 -- PML mengunggah PDF scan hasil pemeriksaan dari Lembar Pendataan; admin/supervisor mengunduhnya di Kelola Pendataan > QC > Dokumen pemeriksaan.

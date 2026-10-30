@@ -10,6 +10,8 @@ export const MENU_SUPERVISOR_SPDT = "spdt.supervisor";
 export const API_SPDT_KK = "/api/portal/spdt-kk";
 export const API_SPDT_MONITORING = "/api/portal/spdt-monitoring";
 export const API_SPDT_QC = "/api/portal/spdt-qc";
+/** (30 Okt 2026) Dokumen hasil pemeriksaan (PDF scan) PML -> Supervisor; logika murni di lib/dokumenPeriksa.ts. */
+export const API_SPDT_DOKUMEN = "/api/portal/spdt-dokumen";
 /** Periode pendataan SPDT NTP 2026 (jawaban user: berakhir 12 Nov). */
 export const PERIODE_SPDT = { mulai: "2026-10-12", selesai: "2026-11-12" } as const;
 /** Akurasi geotag di atas ini (meter) ditandai "kurang akurat" -- patokan awal 50 m. */

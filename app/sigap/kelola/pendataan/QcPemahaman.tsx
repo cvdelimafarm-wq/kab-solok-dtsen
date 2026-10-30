@@ -19,7 +19,6 @@ import { petaSoalDariBaris, templatSoal, type HasilPeta } from "@/lib/sigapQcImp
 import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendataanTab";
 import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
-import DokumenPeriksaAdminPanel from "./DokumenPeriksaAdmin";
 import TabelQc from "./TabelQc";
 import InfografisQc from "./InfografisQc";
 import { jumlahKolomNilai, susunBarisQc, type FokusQc } from "@/lib/sigapQcTabel";
@@ -113,14 +112,6 @@ export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegia
       <div className="space-y-3">
         <SubPilih daftar={daftarSub} aktif={sub} onPilih={pilih} label="Quality check" />
         <KuesionerQc />
-      </div>
-    );
-  // (29 Okt 2026) Dokumen pemeriksaan: PDF scan unggahan PML (data dan pesan sendiri, tidak bergantung pada data QC Pemahaman)
-  if (sub === "dokumen" && kegiatanId === KEGIATAN_PENDATAAN)
-    return (
-      <div className="space-y-3">
-        <SubPilih daftar={daftarSub} aktif={sub} onPilih={pilih} label="Quality check" />
-        <DokumenPeriksaAdminPanel kegiatanId={kegiatanId} />
       </div>
     );
   if (!d && !galat) return <Memuat />;

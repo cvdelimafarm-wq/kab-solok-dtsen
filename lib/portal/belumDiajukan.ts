@@ -119,3 +119,51 @@ export async function tugaskanSubsls(
   }
   return { ids, dikirim, dipindah: diganti.length };
 }
+
+/**
+ * (30 Okt 2026) Admin menandai Sub SLS yang SUDAH di-assign di FASIH (di luar alur permintaan SIGAP: assign langsung ke FASIH) sebagai "sudah keluar".
+ * Sub SLS itu langsung masuk tab Sudah keluar (permintaan dari_admin berstatus sudah_keluar) dan keluar dari tab Belum diajukan. TANPA notifikasi
+ * (petugasnya sudah bekerja di FASIH) dan tidak memakai kuota PML. Tiap Sub SLS diproses sendiri-sendiri lewat fungsi bencana_admin_tugaskan supaya satu
+ * Sub SLS yang ditolak (mis. daftar KK belum diunggah) tidak menggagalkan yang lain; yang ditolak dilaporkan beserta alasannya.
+ */
+export async function tandaiKeluarLangsung(
+  db: Db,
+  akun: { id: number },
+  pilihan: TugasPilihan[],
+): Promise<{ ids: number[]; ditolak: { idsubsls: string; label: string; alasan: string }[] } | Galat> {
+  const wil = await petaWilayah(db, pilihan.map((p) => p.idsubsls));
+  const labelDari = (id: string) => {
+    const w = wil.get(id);
+    return w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : id;
+  };
+  const ids: number[] = [];
+  const ditolak: { idsubsls: string; label: string; alasan: string }[] = [];
+  const tanggal = tanggalWib(Date.now());
+  for (const p of pilihan) {
+    const { data, error } = await db.rpc("bencana_admin_tugaskan", { p_akun: akun.id, p_tanggal: tanggal, p_pilihan: [p] });
+    if (error) {
+      const alasan = /SUB_NONAKTIF/.test(error.message) ? "nonaktif" : /check_violation|bukan peserta/i.test(error.message) ? "bukan_peserta" : "gagal";
+      ditolak.push({ idsubsls: p.idsubsls, label: labelDari(p.idsubsls), alasan });
+      continue;
+    }
+    const r = data as HasilRpc;
+    if (r.status !== "ok") {
+      ditolak.push({ idsubsls: p.idsubsls, label: labelDari(p.idsubsls), alasan: r.alasan ?? "gagal" });
+      continue;
+    }
+    ids.push(...(r.ids ?? []));
+  }
+  if (ids.length) {
+    const { data, error } = await db
+      .from("bencana_pendataan_permintaan")
+      .update({ status: "sudah_keluar", selesai_oleh: akun.id, selesai_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("status", "menunggu")
+      .select("id");
+    if (error) return { galat: "Penugasan tercatat tetapi gagal ditandai sudah keluar. Buka tab Menunggu admin lalu tandai sudah keluar di sana.", status: 500 };
+    const ok = new Set(((data ?? []) as { id: number }[]).map((x) => x.id));
+    await catatAudit(db, akun.id, "pendataan_admin_tandai_keluar", { permintaan: [...ok], pilihan: pilihan.map((p) => p.idsubsls), ditolak }).catch(() => undefined);
+    return { ids: [...ok], ditolak };
+  }
+  return { ids: [], ditolak };
+}

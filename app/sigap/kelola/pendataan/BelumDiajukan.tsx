@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, tanggalWib, tanpaEmail } from "@/lib/permintaanDaftar";
-import { SARINGAN_AWAL, adaPlotting, bawaanTugas, daftarKecamatan, emailPilihanTugas, labelSub, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, type BelumItem, type DataBelum, type SaringanBelum, type TugasPilihan } from "@/lib/belumDiajukan";
+import { SARINGAN_AWAL, adaPlotting, pesanTandaKeluar, bawaanTugas, daftarKecamatan, emailPilihanTugas, labelSub, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, type BelumItem, type DataBelum, type SaringanBelum, type TugasPilihan } from "@/lib/belumDiajukan";
 
 type Mode = "plotting" | "lain";
 
@@ -21,6 +21,7 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
   const [pmlLain, setPmlLain] = useState<number | null>(null);
   const [pplLain, setPplLain] = useState<number | null>(null);
   const [yakin, setYakin] = useState(false);
+  const [yakinKeluar, setYakinKeluar] = useState(false);
   const [sibuk, setSibuk] = useState(false);
   const [unduh, setUnduh] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
 
   function ubah(f: () => void) {
     setYakin(false);
+    setYakinKeluar(false);
     setPesan(null);
     setGalat(null);
     f();
@@ -94,6 +96,26 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
     } catch (e) {
       setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menugaskan. Coba lagi.");
       setYakin(false);
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  // (30 Okt 2026) Sub SLS yang sudah di-assign di FASIH di luar alur SIGAP: tandai langsung "sudah keluar" (pindah ke tab Sudah keluar; tanpa notifikasi dan kuota).
+  async function tandaiKeluar() {
+    if (!rencana.ok.length || sibuk) return;
+    setSibuk(true);
+    setGalat(null);
+    setPesan(null);
+    try {
+      const h = await apiPortal<{ ids: number[]; ditolak: { idsubsls: string; label: string; alasan: string }[] }>(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "tandai_keluar", pilihan: rencana.ok }) });
+      setPesan(pesanTandaKeluar(h.ids.length, h.ditolak));
+      setPilih(new Set());
+      setYakinKeluar(false);
+      await onSelesai();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menandai. Coba lagi.");
+      setYakinKeluar(false);
     } finally {
       setSibuk(false);
     }
@@ -253,6 +275,28 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
               {rencana.pindah > 0 && <p className="text-[12px] font-bold text-[#B42329]">{rencana.pindah} Sub SLS akan DIPINDAH dari plotting PML sebelumnya ke PML tujuan.</p>}
 
               {tombolUnduh}
+
+              {!yakinKeluar ? (
+                <button type="button" disabled={sibuk || rencana.ok.length === 0} onClick={() => ubah(() => setYakinKeluar(true))} className="min-h-[46px] w-full rounded-[14px] border-2 border-[#13794B] bg-white px-4 text-[14px] font-extrabold text-[#13794B] disabled:border-[#9FCDB5] disabled:text-[#9FCDB5]">
+                  Tandai sudah keluar di FASIH ({rencana.ok.length})…
+                </button>
+              ) : (
+                <div className="rounded-[14px] border border-[#F2D58A] bg-[#FFF6E0] p-3">
+                  <p className="text-[13px] font-bold text-[#6B4A0E]">
+                    Tandai {rencana.ok.length} Sub SLS sebagai SUDAH KELUAR di FASIH? Pakai ini untuk Sub SLS yang <u>sudah Anda assign di FASIH</u> (di luar pengajuan SIGAP). Langsung pindah ke tab Sudah keluar. PML dan PPL tidak dikirimi notifikasi dan kuota pengajuan PML tidak terpakai.
+                    {rencana.pindah > 0 ? ` ${rencana.pindah} di antaranya dipindah dari PML plotting sebelumnya.` : ""}
+                  </p>
+                  <p className="mt-1 text-[12px] text-[#6B4A0E]">Sub SLS tanpa daftar KK akan dilewati dan disebutkan setelahnya.</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setYakinKeluar(false)} className="min-h-[46px] rounded-[12px] bg-white text-[13.5px] font-extrabold text-[#0F2A52] shadow-sm">
+                      Batal
+                    </button>
+                    <button type="button" disabled={sibuk} onClick={() => void tandaiKeluar()} className="min-h-[46px] rounded-[12px] bg-[#13794B] text-[13.5px] font-extrabold text-white disabled:bg-[#9FCDB5]">
+                      {sibuk ? "Menandai…" : "Ya, sudah keluar"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {!yakin ? (
                 <button type="button" disabled={sibuk || rencana.ok.length === 0} onClick={() => setYakin(true)} className="min-h-[50px] w-full rounded-[14px] bg-[#13794B] px-4 text-[14px] font-extrabold text-white disabled:bg-[#9FCDB5]">

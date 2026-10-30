@@ -4,7 +4,8 @@
 //
 // (16 Okt 2026) Lembar Pendataan SPDT NTP 2026 (mockup disetujui user). LEMBAR BANTU: nama KK, koordinat, navigasi -- tanpa status pendataan dan
 // tanpa umpan balik petugas. Tab: PPL = Peta | Daftar KK (hanya KK wilayah tugasnya); PML = Monitoring | Peta | Daftar KK (KK semua PPL-nya);
-// Supervisor = Monitoring (terbuka lebih dulu) | QC (hasil QC Pemahaman, baca saja) | Peta | Daftar KK (seluruh wilayah). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
+// Supervisor = Monitoring (terbuka lebih dulu) | QC (hasil QC Pemahaman, baca saja) | Peta | Daftar KK (seluruh wilayah) | Dokumen.
+// (30 Okt 2026) Tab Dokumen: PML mengunggah PDF scan hasil pemeriksaan; Supervisor mengunduhnya (PPL tidak punya tab ini). Tampilan mengikuti Lembar Pendataan bencana (header navy + tab bersegmen).
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
@@ -21,13 +22,15 @@ import PetaSpdt, { PANDANG_AWAL, type Pandang } from "./PetaSpdt";
 import DaftarSpdt from "./DaftarSpdt";
 import MonitoringSpdt from "./MonitoringSpdt";
 import QcSpdt from "./QcSpdt";
+import DokumenPml from "./DokumenPml";
+import DokumenSupervisor from "./DokumenSupervisor";
 import KartuKkSpdt from "./KartuKkSpdt";
 
 // (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
 const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
 
-type Tab = "mon" | "qc" | "peta" | "daftar";
-const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", qc: "QC", peta: "Peta", daftar: "Daftar KK" };
+type Tab = "mon" | "qc" | "peta" | "daftar" | "dokumen";
+const LABEL_TAB: Record<Tab, string> = { mon: "Monitoring", qc: "QC", peta: "Peta", daftar: "Daftar KK", dokumen: "Dokumen" };
 const SELECT = "h-11 min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-white px-2.5 text-[13px] font-semibold text-[#0F2A52] outline-none";
 
 export default function HalamanSpdt() {
@@ -47,7 +50,7 @@ export default function HalamanSpdt() {
 
   const peran = data?.peran ?? null;
   // (29 Okt 2026) tab QC (hasil QC Pemahaman, baca saja) hanya untuk Supervisor
-  const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : peran === "supervisor" ? ["mon", "qc", "peta", "daftar"] : ["mon", "peta", "daftar"];
+  const tabs: Tab[] = peran === "ppl" ? ["peta", "daftar"] : peran === "supervisor" ? ["mon", "qc", "peta", "daftar", "dokumen"] : ["mon", "peta", "daftar", "dokumen"];
   const tabAktif: Tab = tab && tabs.includes(tab) ? tab : tabs[0];
   const semuaKk: KkSpdt[] = useMemo(() => data?.kk ?? [], [data]);
 
@@ -109,7 +112,7 @@ export default function HalamanSpdt() {
     } else setUrut("nama");
   }
 
-  const tabKhusus = tabAktif === "mon" || tabAktif === "qc"; // tab tanpa penyaring/peta KK
+  const tabKhusus = tabAktif === "mon" || tabAktif === "qc" || tabAktif === "dokumen"; // tab tanpa penyaring/peta KK
   const adaFilter = !!data && !tabKhusus;
   const tampilPpl = peran !== "ppl";
 
@@ -133,7 +136,7 @@ export default function HalamanSpdt() {
           {data && (
             <div role="tablist" aria-label="Tampilan" className="flex gap-[3px] rounded-[12px] bg-white/10 p-[3px]">
               {tabs.map((k) => (
-                <button key={k} type="button" role="tab" aria-selected={tabAktif === k} onClick={() => setTab(k)} className={`grid h-11 flex-1 place-items-center rounded-[9px] text-[13.5px] font-bold ${tabAktif === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
+                <button key={k} type="button" role="tab" aria-selected={tabAktif === k} onClick={() => setTab(k)} className={`grid h-11 flex-1 place-items-center rounded-[9px] font-bold ${tabs.length > 4 ? "px-0.5 text-[12px]" : "text-[13.5px]"} ${tabAktif === k ? "bg-white text-[#0F2A52]" : "text-[#D3E0F5]"}`}>
                   {LABEL_TAB[k]}
                 </button>
               ))}
@@ -190,6 +193,8 @@ export default function HalamanSpdt() {
 
         {data && tabAktif === "mon" && peran !== "ppl" && <MonitoringSpdt aktif />}
         {data && tabAktif === "qc" && peran === "supervisor" && <QcSpdt aktif />}
+        {data && tabAktif === "dokumen" && peran === "pml" && <DokumenPml />}
+        {data && tabAktif === "dokumen" && peran === "supervisor" && <DokumenSupervisor />}
 
         {data && tabAktif === "peta" && semuaKk.length > 0 && (
           <section className="relative m-2.5 min-h-[360px] flex-1 overflow-hidden rounded-[18px] border border-[#DDE3D6] bg-[#EEF2F7]">

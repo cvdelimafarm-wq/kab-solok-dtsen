@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAKS_ISI_PUSH } from "@/lib/sigapPushUtil";
 import { barisTemplatFasih } from "@/lib/permintaanDaftar";
-import { adaPlotting, bawaanTugas, daftarKecamatan, emailPilihanTugas, periksaTugas, pesanTugas, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, SARINGAN_AWAL, susunPushTugas, urutBelum, type BelumItem, type TimTugas } from "@/lib/belumDiajukan";
+import { adaPlotting, pesanTandaKeluar, bawaanTugas, daftarKecamatan, emailPilihanTugas, periksaTugas, pesanTugas, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, SARINGAN_AWAL, susunPushTugas, urutBelum, type BelumItem, type TimTugas } from "@/lib/belumDiajukan";
 
 const sub = (o: Partial<BelumItem>): BelumItem => ({ idsubsls: "1303080001000502", kecamatan: "GUNUNG TALANG", nagari: "CUPAK", sls: "JORONG BALAI TANGAH", sub_sls: "02", kk: 75, didata: 0, kolam: false, plotting: [], terakhir: null, ...o });
 const TIM: TimTugas[] = [
@@ -142,5 +142,20 @@ describe("emailPilihanTugas (templat FASIH tab Belum diajukan, 24 Okt 2026)", ()
     expect(b[0]["SLS/SUBSLS"]).toBe("000502");
     expect(b[0]["Email Pengawas"]).toBe("yeni@bps.go.id");
     expect(b[0]["Email Pencacah"]).toBe("puspita@gmail.com");
+  });
+});
+
+describe("pesanTandaKeluar", () => {
+  it("semua berhasil", () => {
+    expect(pesanTandaKeluar(3, [])).toBe("3 Sub SLS ditandai sudah keluar di FASIH dan pindah ke tab Sudah keluar.");
+  });
+  it("sebagian ditolak: alasan per Sub SLS ikut disebut", () => {
+    const t = pesanTandaKeluar(2, [{ label: "Jorong Pasa Sub 06", alasan: "tanpa_kk" }]);
+    expect(t).toContain("2 Sub SLS ditandai");
+    expect(t).toContain("1 dilewati");
+    expect(t).toContain("Jorong Pasa Sub 06: daftar KK belum diunggah admin.");
+  });
+  it("tidak ada yang berhasil", () => {
+    expect(pesanTandaKeluar(0, [{ label: "X", alasan: "sudah_diminta" }])).toMatch(/^Tidak ada Sub SLS yang berhasil ditandai\. 1 dilewati: X: sudah diminta/);
   });
 });

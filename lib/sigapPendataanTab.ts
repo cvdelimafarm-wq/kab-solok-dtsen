@@ -103,7 +103,6 @@ export const SUB_QC: SubItem[] = [
   { kode: "hari", label: "Pemahaman · Hari ini", ket: "Siapa sudah mengisi, nilai per tim, soal yang paling banyak salah, dan siapa yang belum mengaktifkan notifikasi." },
   { kode: "pengaturan", label: "Pemahaman · Pengaturan", ket: "Nyalakan QC, jam rilis dan batas, ulangan, pengingat, dan periode berlaku." },
   { kode: "soal", label: "Pemahaman · Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
-  { kode: "dokumen", label: "Dokumen pemeriksaan", ket: "PDF scan hasil pemeriksaan yang diunggah PML dari Lembar Pendataan: dikelompokkan per PML, bisa dicari dan diunduh." },
   { kode: "kuesioner", label: "Kuesioner supervisi", ket: "Kuesioner quality check untuk Lembar Supervisi (korwil): unggah dari Excel untuk petugas dan keluarga (KK), kelola versinya." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI, qc: SUB_QC };
@@ -127,8 +126,8 @@ export function urlSubDari(daftar: SubItem[], tab: KodeTabPendataan, pathname: s
 /** Kegiatan induk Pendataan di sigap_kegiatan (sama dengan KEGIATAN_PENDATAAN_ID di lib/pendataan.ts). */
 export const KEGIATAN_PENDATAAN = 1;
 
-/** (29 Okt 2026) Sub-pilihan QC untuk kegiatan selain Pascabencana: Kuesioner supervisi (Lembar Supervisi korwil) dan Dokumen pemeriksaan (unggahan PML dari Lembar Pendataan KK) khusus Pascabencana. */
-export const SUB_QC_PEMAHAMAN: SubItem[] = SUB_QC.filter((x) => x.kode !== "kuesioner" && x.kode !== "dokumen");
+/** (29 Okt 2026) Sub-pilihan QC untuk kegiatan selain Pascabencana: Kuesioner supervisi (Lembar Supervisi korwil) khusus Pascabencana. */
+export const SUB_QC_PEMAHAMAN: SubItem[] = SUB_QC.filter((x) => x.kode !== "kuesioner");
 
 /**
  * (29 Okt 2026) Survei yang dipilih di Kelola Pendataan: ?k=<id sigap_kegiatan>. Kosong / tidak sah = Pendataan Pascabencana (alamat lama tetap berlaku).

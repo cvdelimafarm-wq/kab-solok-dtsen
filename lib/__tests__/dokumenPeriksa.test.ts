@@ -6,6 +6,7 @@ import {
   jalurDokumen,
   kelompokkanPerPml,
   labelUkuran,
+  labelWilayah,
   namaUnduhan,
   periksaIsianDokumen,
   periksaUkuranDokumen,
@@ -15,7 +16,7 @@ import {
 const enc = (s: string) => new TextEncoder().encode(s);
 
 const dok = (id: number, pml_id: number, pml_nama: string, at: string, judul = `Dok ${id}`): DokumenPeriksaAdmin => ({
-  id, kegiatan_id: 1, pml_id, pml_nama, judul, keterangan: null, idsubsls: null, sub_nama: null, tanggal_periksa: null, nama_asli: null, ukuran_byte: 1000, diunggah_at: at, diunggah_oleh: pml_nama,
+  id, kegiatan_id: 2, pml_id, pml_nama, judul, keterangan: null, wilayah: null, tanggal_periksa: null, nama_asli: null, ukuran_byte: 1000, diunggah_at: at, diunggah_oleh: pml_nama,
 });
 
 describe("adalahPdf", () => {
@@ -41,7 +42,7 @@ describe("periksaUkuranDokumen", () => {
 });
 
 describe("periksaIsianDokumen", () => {
-  const sub = ["1371010001", "1371010002"];
+  const sub = ["BUKIK SILEH|JORONG A", "BUKIK SILEH|JORONG B"];
   it("judul kosong memakai nama berkas tanpa .pdf", () => {
     const r = periksaIsianDokumen({}, sub, "Hasil_Periksa_SLS_01.pdf");
     expect(r.ok && r.isi.judul).toBe("Hasil Periksa SLS 01");
@@ -56,10 +57,10 @@ describe("periksaIsianDokumen", () => {
       expect(r.isi.keterangan).toBe("catatan");
     }
   });
-  it("Sub SLS harus milik tim", () => {
-    expect(periksaIsianDokumen({ judul: "a", idsubsls: "9999" }, sub, null)).toEqual({ ok: false, pesan: "Sub SLS yang dipilih bukan wilayah tim Anda." });
-    const r = periksaIsianDokumen({ judul: "a", idsubsls: "1371010002" }, sub, null);
-    expect(r.ok && r.isi.idsubsls).toBe("1371010002");
+  it("Jorong harus dari KK milik PML", () => {
+    expect(periksaIsianDokumen({ judul: "a", wilayah: "LAIN|JORONG Z" }, sub, null)).toEqual({ ok: false, pesan: "Jorong yang dipilih bukan wilayah tugas Anda." });
+    const r = periksaIsianDokumen({ judul: "a", wilayah: "BUKIK SILEH|JORONG B" }, sub, null);
+    expect(r.ok && r.isi.wilayah).toBe("BUKIK SILEH|JORONG B");
   });
   it("tanggal harus sah", () => {
     expect(periksaIsianDokumen({ judul: "a", tanggal_periksa: "2026-02-30" }, sub, null).ok).toBe(false);
@@ -68,13 +69,21 @@ describe("periksaIsianDokumen", () => {
     expect(r.ok && r.isi.tanggal_periksa).toBe("2026-10-29");
   });
   it("kolom opsional kosong menjadi null", () => {
-    const r = periksaIsianDokumen({ judul: "a", keterangan: "", idsubsls: "", tanggal_periksa: "" }, sub, null);
-    expect(r.ok && r.isi).toEqual({ judul: "a", keterangan: null, idsubsls: null, tanggal_periksa: null });
+    const r = periksaIsianDokumen({ judul: "a", keterangan: "", wilayah: "", tanggal_periksa: "" }, sub, null);
+    expect(r.ok && r.isi).toEqual({ judul: "a", keterangan: null, wilayah: null, tanggal_periksa: null });
+  });
+});
+
+describe("labelWilayah", () => {
+  it("memberi judul huruf: jorong dulu, lalu nagari", () => expect(labelWilayah("BUKIK SILEH|KAYU ARO")).toBe("Kayu Aro · Bukik Sileh"));
+  it("kosong atau bentuk tak dikenal tidak error", () => {
+    expect(labelWilayah(null)).toBe("");
+    expect(labelWilayah("tanpa-pemisah")).toBe("tanpa-pemisah");
   });
 });
 
 describe("jalur dan nama unduhan", () => {
-  it("jalur memakai 24 hex pertama", () => expect(jalurDokumen(1, 96, "a".repeat(64))).toBe(`pemeriksaan/1/96/${"a".repeat(24)}.pdf`));
+  it("jalur memakai 24 hex pertama", () => expect(jalurDokumen(2, 96, "a".repeat(64))).toBe(`pemeriksaan/2/96/${"a".repeat(24)}.pdf`));
   it("nama unduhan aman dan tanpa karakter terlarang", () => {
     expect(namaUnduhan("Mega S.", 'Hasil: SLS 01/02 "final"')).toBe("Mega S. - Hasil SLS 01 02 final.pdf");
     expect(namaUnduhan("", "")).toBe("dokumen pemeriksaan.pdf");
@@ -96,5 +105,11 @@ describe("kelompokkanPerPml dan cocokCari", () => {
     expect(cocokCari(daftar[0], "MEGA")).toBe(true);
     expect(cocokCari(daftar[0], "widya")).toBe(false);
     expect(cocokCari(daftar[0], "")).toBe(true);
+  });
+  it("pencarian juga mencari di jorong dan nagari", () => {
+    const d = { ...daftar[0], wilayah: "BUKIK SILEH|KAYU ARO" };
+    expect(cocokCari(d, "kayu aro")).toBe(true);
+    expect(cocokCari(d, "bukik")).toBe(true);
+    expect(cocokCari(d, "tidak ada")).toBe(false);
   });
 });

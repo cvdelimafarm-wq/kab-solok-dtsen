@@ -1,22 +1,25 @@
 // lib/dokumenPeriksa.ts  (murni; dipakai server DAN klien)
 //
-// (29 Okt 2026) Dokumen hasil pemeriksaan: PML mengunggah PDF scan dari Lembar Pendataan; admin/supervisor mengunduhnya di Kelola Pendataan > QC >
-// Dokumen pemeriksaan. Berkas disimpan di penyimpanan sigap-files (pemeriksaan/<kegiatan>/<pml>/<hash>.pdf), catatannya di bencana_dokumen_periksa.
-// Jenis berkas ditentukan dari byte awal (%PDF-), bukan dari nama atau tipe kiriman klien. Tidak ada penghapusan permanen: PML hanya "menarik" dokumen
-// (dihapus_at), berkasnya tetap tersimpan.
+// (30 Okt 2026) Dokumen hasil pemeriksaan KHUSUS SPDT NTP: PML mengunggah PDF scan dari tab "Dokumen" di Lembar Pendataan SPDT NTP; Supervisor SPDT NTP
+// mengunduhnya di tab yang sama. Berkas disimpan di penyimpanan sigap-files (pemeriksaan/<kegiatan>/<akun PML>/<hash>.pdf), catatannya di sigap_spdt_dokumen.
+// (Pendataan Pascabencana TIDAK memakai fitur ini.) Jenis berkas ditentukan dari byte awal (%PDF-), bukan dari nama atau tipe kiriman klien.
+// Tidak ada penghapusan permanen: PML hanya "menarik" dokumen (dihapus_at), berkasnya tetap tersimpan.
+import { judulKata } from "@/lib/spdtNtp";
 
 export const MAKS_BYTE_DOKUMEN = 15 * 1024 * 1024;
 export const MAKS_JUDUL = 120;
 export const MAKS_KETERANGAN = 500;
-export const KEGIATAN_DOKUMEN_BAWAAN = 1;
+export const KEGIATAN_DOKUMEN_SPDT = 2; // = KEGIATAN_SPDT_ID
 
 export type DokumenPeriksa = {
   id: number;
   kegiatan_id: number;
+  /** id akun SIGAP PML pengunggah (sigap_akun.id; sama dengan pml_akun_id di sigap_spdt_kk) */
   pml_id: number;
   judul: string;
   keterangan: string | null;
-  idsubsls: string | null;
+  /** kunci wilayah "NAGARI|JORONG" (sama dengan penyaring Jorong di Lembar Pendataan), atau null = tidak spesifik */
+  wilayah: string | null;
   tanggal_periksa: string | null;
   nama_asli: string | null;
   ukuran_byte: number;
@@ -24,8 +27,8 @@ export type DokumenPeriksa = {
   diunggah_oleh: string | null;
 };
 
-/** Baris untuk admin: dokumen + nama PML dan nama Sub SLS (bila ada). */
-export type DokumenPeriksaAdmin = DokumenPeriksa & { pml_nama: string; sub_nama: string | null };
+/** Baris untuk Supervisor: dokumen + nama PML. */
+export type DokumenPeriksaAdmin = DokumenPeriksa & { pml_nama: string };
 
 export type KelompokPml = { pml_id: number; pml_nama: string; dokumen: DokumenPeriksaAdmin[]; terakhir_at: string };
 
@@ -55,7 +58,7 @@ export function labelUkuran(byte: number): string {
 
 const rapikan = (s: unknown, maks: number): string => String(s ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maks);
 
-export type IsianDokumen = { judul: string; keterangan: string | null; idsubsls: string | null; tanggal_periksa: string | null };
+export type IsianDokumen = { judul: string; keterangan: string | null; wilayah: string | null; tanggal_periksa: string | null };
 
 const TGL = /^\d{4}-\d{2}-\d{2}$/;
 function tanggalSah(t: string): boolean {
@@ -64,24 +67,32 @@ function tanggalSah(t: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === t;
 }
 
-/** Memeriksa isian formulir unggah. `subSah` = idsubsls milik tim PML; `namaBerkas` dipakai sebagai judul bila judul kosong. */
+/** "NAGARI|JORONG" -> "Jorong Kayu Aro · Nagari X" (judul huruf); kunci tak sesuai bentuk dikembalikan apa adanya. */
+export function labelWilayah(kunci: string | null | undefined): string {
+  if (!kunci) return "";
+  const [nagari, jorong] = kunci.split("|");
+  if (!nagari || !jorong) return kunci;
+  return `${judulKata(jorong)} · ${judulKata(nagari)}`;
+}
+
+/** Memeriksa isian formulir unggah. `wilayahSah` = kunci "NAGARI|JORONG" dari KK milik PML; `namaBerkas` dipakai sebagai judul bila judul kosong. */
 export function periksaIsianDokumen(
-  mentah: { judul?: unknown; keterangan?: unknown; idsubsls?: unknown; tanggal_periksa?: unknown },
-  subSah: string[],
+  mentah: { judul?: unknown; keterangan?: unknown; wilayah?: unknown; tanggal_periksa?: unknown },
+  wilayahSah: string[],
   namaBerkas: string | null
 ): { ok: true; isi: IsianDokumen } | { ok: false; pesan: string } {
   let judul = rapikan(mentah.judul, MAKS_JUDUL);
   if (!judul && namaBerkas) judul = rapikan(namaBerkas.replace(/\.pdf$/i, "").replace(/[_]+/g, " "), MAKS_JUDUL);
   if (!judul) return { ok: false, pesan: "Judul dokumen wajib diisi." };
   const ket = rapikan(mentah.keterangan, MAKS_KETERANGAN);
-  const sub = rapikan(mentah.idsubsls, 40);
-  if (sub && !subSah.includes(sub)) return { ok: false, pesan: "Sub SLS yang dipilih bukan wilayah tim Anda." };
+  const wil = rapikan(mentah.wilayah, 120);
+  if (wil && !wilayahSah.includes(wil)) return { ok: false, pesan: "Jorong yang dipilih bukan wilayah tugas Anda." };
   const tgl = rapikan(mentah.tanggal_periksa, 10);
   if (tgl && !tanggalSah(tgl)) return { ok: false, pesan: "Tanggal pemeriksaan tidak sah." };
-  return { ok: true, isi: { judul, keterangan: ket || null, idsubsls: sub || null, tanggal_periksa: tgl || null } };
+  return { ok: true, isi: { judul, keterangan: ket || null, wilayah: wil || null, tanggal_periksa: tgl || null } };
 }
 
-/** Jalur penyimpanan: pemeriksaan/<kegiatan>/<pml>/<24 hex pertama sha256>.pdf (isi sama = jalur sama). */
+/** Jalur penyimpanan: pemeriksaan/<kegiatan>/<akun PML>/<24 hex pertama sha256>.pdf (isi sama = jalur sama). */
 export function jalurDokumen(kegiatanId: number, pmlId: number, sha256: string): string {
   return `pemeriksaan/${kegiatanId}/${pmlId}/${sha256.slice(0, 24)}.pdf`;
 }
@@ -107,9 +118,9 @@ export function kelompokkanPerPml(daftar: DokumenPeriksaAdmin[]): KelompokPml[] 
   return hasil.sort((a, b) => (a.terakhir_at < b.terakhir_at ? 1 : a.terakhir_at > b.terakhir_at ? -1 : a.pml_nama.localeCompare(b.pml_nama)));
 }
 
-/** Penyaring pencarian bebas pada judul, keterangan, nama PML, dan nama Sub SLS. */
+/** Penyaring pencarian bebas pada judul, keterangan, nama PML, jorong/nagari, dan nama berkas asli. */
 export function cocokCari(d: DokumenPeriksaAdmin, kata: string): boolean {
   const q = kata.trim().toLowerCase();
   if (!q) return true;
-  return [d.judul, d.keterangan, d.pml_nama, d.sub_nama, d.nama_asli].some((x) => (x ?? "").toLowerCase().includes(q));
+  return [d.judul, d.keterangan, d.pml_nama, labelWilayah(d.wilayah), d.nama_asli].some((x) => (x ?? "").toLowerCase().includes(q));
 }
