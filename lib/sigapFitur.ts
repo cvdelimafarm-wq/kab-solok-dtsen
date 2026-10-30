@@ -29,7 +29,7 @@ export const STRATEGI: { kode: StrategiKegiatan; label: string; ket: string }[] 
   {
     kode: "sampel_sls",
     label: "Sampel per SLS (beban perorangan)",
-    ket: "Tiap PPL mendapat 1-2 SLS, tiap SLS 10 sampel, sampel pengganti opsional. Contoh: Sakernas dan Seruti triwulan IV. Alokasi sampel menyusul; sementara memakai fitur umum.",
+    ket: "Tiap PPL mendapat 1-2 SLS, tiap SLS 10 sampel, sampel cadangan opsional. Alokasi diunggah lewat templat Excel di tab 1 · Persiapan dan dilihat petugas di HP. Contoh: Sakernas, Seruti triwulan IV, IMK.",
   },
   { kode: "pelatihan", label: "Pelatihan", ket: "Kegiatan pelatihan atau rapat: peserta, presensi, tes, dan administrasi." },
   { kode: "umum", label: "Umum", ket: "Kegiatan lain; hanya fitur umum (penugasan, siaran, QC Pemahaman, administrasi)." },
@@ -46,6 +46,7 @@ export type KodeFitur =
   | "persiapan_sasaran"
   | "persiapan_lembar"
   | "persiapan_laporan_spj"
+  | "persiapan_sampel"
   | "tim_alokasi"
   | "tim_penugasan"
   | "siaran"
@@ -66,6 +67,7 @@ export const FITUR: DefFitur[] = [
   { kode: "ringkasan", kelompok: "Ringkasan", label: "Ringkasan pendataan", ket: "Angka utama dan alur kerja dalam satu layar.", bergantung: "status" },
   { kode: "persiapan_sasaran", kelompok: "1 · Persiapan", label: "Unggah daftar sasaran dan permintaan FASIH", ket: "Daftar KK sasaran, permintaan daftar ke FASIH, Sub SLS yang belum diajukan.", bergantung: "status" },
   { kode: "persiapan_lembar", kelompok: "1 · Persiapan", label: "Pengaturan lembar pendataan", ket: "Istilah, warna, bentuk, dan alasan tombol hasil; variabel radar.", bergantung: "status" },
+  { kode: "persiapan_sampel", kelompok: "1 · Persiapan", label: "Alokasi sampel per SLS (unggah Excel)", ket: "Unggah templat sampel utama/cadangan per SLS, pantau alokasi, dan atur penggantian sampel oleh PPL.", bergantung: "umum" },
   { kode: "persiapan_laporan_spj", kelompok: "1 · Persiapan", label: "Isi laporan SPJ", ket: "Pengaturan isi laporan harian untuk SPJ transport lokal.", bergantung: "status" },
   { kode: "tim_alokasi", kelompok: "2 · Tim & Surat Tugas", label: "Alokasi PML/PPL per Sub SLS", ket: "Alokasi wilayah tim pada peta Sub SLS dan pelatihan petugas.", bergantung: "status" },
   { kode: "tim_penugasan", kelompok: "2 · Tim & Surat Tugas", label: "Penugasan dan Surat Tugas", ket: "Tautkan petugas ke kegiatan, unggah Surat Tugas, daftar ST.", bergantung: "umum" },
@@ -94,11 +96,11 @@ export function fiturTersedia(strategi: StrategiKegiatan, kode: KodeFitur, kegia
 }
 
 const BAWAAN_UMUM: KodeFitur[] = ["tim_penugasan", "siaran", "qc_pemahaman", "qc_dokumen", "administrasi", "laporan"];
-/** Paket bawaan tiap strategi (kode fitur yang menyala). status_per_sasaran = seluruh fitur (perilaku Pendataan Pascabencana). */
+/** Paket bawaan tiap strategi (kode fitur yang menyala). status_per_sasaran = seluruh fitur kecuali alokasi sampel (perilaku Pendataan Pascabencana). */
 export const BAWAAN_STRATEGI: Record<StrategiKegiatan, KodeFitur[]> = {
-  status_per_sasaran: KODE_FITUR,
+  status_per_sasaran: KODE_FITUR.filter((k) => k !== "persiapan_sampel"), // Pascabencana tidak memakai alokasi sampel (daftar sasarannya KK, bukan sampel SLS)
   lembar_bantu: BAWAAN_UMUM,
-  sampel_sls: BAWAAN_UMUM,
+  sampel_sls: [...BAWAAN_UMUM, "persiapan_sampel"],
   pelatihan: ["tim_penugasan", "siaran", "administrasi"],
   umum: BAWAAN_UMUM,
 };

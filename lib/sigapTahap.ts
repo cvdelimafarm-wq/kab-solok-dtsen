@@ -10,6 +10,7 @@
 import { ringkasPelatihan, type NadaKegiatan, type RingkasKegiatan, type StatusLangkah } from "@/lib/sigapKegiatan";
 import type { HubTugas, IkonKode } from "@/lib/sigapTugasUtama";
 import { ketModulSpdt, type InfoSpdt } from "@/lib/spdtNtp";
+import { ketModulSampel, type InfoSampel } from "@/lib/sampelSls";
 
 export type BukaMode = "langsung" | "setelah_sebelumnya" | "tanggal";
 
@@ -18,7 +19,7 @@ export type TahapDef = {
   urutan: number;
   nama: string;
   uraian: string | null;
-  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | pendataan | monitoring_korwil | spdt_lembar | translok:<kegiatan_id> */
+  /** kode modul halaman kerja: konfirmasi | pelatihan | wilayah_tim | identifikasi | pendataan | monitoring_korwil | spdt_lembar | translok:<kegiatan_id> | sampel:<kegiatan_id> */
   isi: string[];
   buka_mode: BukaMode;
   buka_tanggal: string | null;
@@ -68,6 +69,8 @@ export type Induk = {
   pendataan?: InfoPendataan | null;
   /** (16 Okt 2026) Lembar Pendataan SPDT NTP (PPL, PML, Supervisor); null = modul tidak berlaku */
   spdt?: InfoSpdt | null;
+  /** (30 Okt 2026) Sampel per SLS (Sakernas, Seruti, IMK) menurut id kegiatan; kegiatan tanpa sampel untuk akun ini tidak ada di sini */
+  sampel?: Record<number, InfoSampel>;
   /** (19 Okt 2026) kortim/korwil pada kelompok pendataan; null = modul tidak berlaku */
   korwil?: InfoKorwil | null;
 };
@@ -116,6 +119,7 @@ export const KATALOG_MODUL: { kode: string; label: string; ket: string }[] = [
   { kode: "pendataan", label: "Lembar Pendataan KK (PML & PPL)", ket: "Daftar KK sasaran tim: tandai hasil (terdampak / tidak terdampak / tidak ditemukan), peta sebaran, pantau progres. Tampil bila tim sudah punya daftar KK." },
   { kode: "monitoring_korwil", label: "Supervisi (kortim)", ket: "Supervisi kelompok pendataan: monitoring lapangan tiap tim PML (target, realisasi, wilayah), lembar quality check, dan hasil QC Pemahaman petugas. Hanya tampil bagi kortim (korwil) kelompok." },
   { kode: "spdt_lembar", label: "Lembar Pendataan SPDT NTP", ket: "Lembar bantu SPDT NTP: peta, daftar nama KK, dan navigasi ke koordinat (PPL: wilayahnya; PML: semua PPL-nya; Supervisor: semua + Monitoring)." },
+  { kode: "sampel:", label: "Sampel per SLS", ket: "Sampel utama & cadangan tiap SLS untuk satu kegiatan (PPL: SLS-nya dan tandai diganti cadangan; PML: semua PPL-nya, baca saja). Isi alokasi lewat Kelola Pendataan > Persiapan." },
   { kode: "translok:", label: "Transport Lokal", ket: "Hari kerja, laporan & foto harian, SPJ untuk satu kegiatan anggaran." },
 ];
 
@@ -127,13 +131,14 @@ export const NAMA_MODUL = (kode: string, namaKegiatan?: string): string => {
   if (kode === "pendataan") return "Lembar Pendataan KK";
   if (kode === "monitoring_korwil") return "Supervisi";
   if (kode === "spdt_lembar") return "Lembar Pendataan SPDT NTP";
+  if (kode.startsWith("sampel:")) return `Sampel per SLS${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(7)})`}`;
   if (kode.startsWith("translok:")) return `Transport Lokal${namaKegiatan ? ` (${namaKegiatan})` : ` (kegiatan ${kode.slice(9)})`}`;
   return kode;
 };
 
 /** Modul sah: salah satu dari katalog. */
 export function modulSah(kode: string): boolean {
-  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || kode === "pendataan" || kode === "monitoring_korwil" || kode === "spdt_lembar" || /^translok:\d+$/.test(kode);
+  return kode === "konfirmasi" || kode === "pelatihan" || kode === "wilayah_tim" || kode === "identifikasi" || kode === "pendataan" || kode === "monitoring_korwil" || kode === "spdt_lembar" || /^translok:\d+$/.test(kode) || /^sampel:\d+$/.test(kode);
 }
 
 const NADA_KE_STATUS: Record<NadaKegiatan, StatusLangkah> = { merah: "mendesak", emas: "perlu", biru: "berjalan", abu: "menunggu", hijau: "selesai" };
@@ -281,6 +286,24 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
       },
     ];
   }
+  const ms = /^sampel:(\d+)$/.exec(kode);
+  if (ms) {
+    // (30 Okt 2026) Sampel per SLS: lembar bantu (tanpa isian yang diselesaikan) -> selalu "berjalan"; akun tanpa alokasi sampel tidak melihat modul ini
+    const id = Number(ms[1]);
+    const f = induk.sampel?.[id];
+    if (!f || f.utama + f.cadangan <= 0) return [];
+    return [
+      {
+        kode,
+        judul: "Sampel per SLS",
+        ket: ketModulSampel(f),
+        status: "berjalan",
+        href: `/sigap/sampel?k=${id}&dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,
+        aksi: f.peran === "pml" ? "Lihat sampel" : "Buka sampel",
+        pecahan: 0,
+      },
+    ];
+  }
   const m = /^translok:(\d+)$/.exec(kode);
   if (m) {
     const id = Number(m[1]);
@@ -422,6 +445,8 @@ export function periksaTahapAdmin(t: { kode: string; nama: string; isi: string[]
     if (!modulSah(m)) return `Modul "${m}" pada tahap "${t.nama}" tidak dikenal.`;
     const tm = /^translok:(\d+)$/.exec(m);
     if (tm && !kegiatanIds.includes(Number(tm[1]))) return `Transport Lokal kegiatan ${tm[1]} bukan bagian dari kegiatan induk ini.`;
+    const sm = /^sampel:(\d+)$/.exec(m);
+    if (sm && !kegiatanIds.includes(Number(sm[1]))) return `Sampel per SLS kegiatan ${sm[1]} bukan bagian dari kegiatan induk ini.`;
   }
   if (new Set(t.isi).size !== t.isi.length) return `Tahap "${t.nama}" memuat modul yang sama dua kali.`;
   return null;

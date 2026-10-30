@@ -164,3 +164,13 @@ describe("cetak dan Word memakai mesin yang sama", () => {
     expect(Object.keys(zip.files)).toContain("word/document.xml");
   });
 });
+
+describe("jumlah KK dibuka pada capaian per petugas", () => {
+  it("memakai keluarga unik (sasaran.dibuka), bukan jumlah kolom; per peran memakai tanda minus", () => {
+    const semua = tabelCapaianPetugas(d)!;
+    const idx = semua.kepala.indexOf("KK dibuka");
+    expect(semua.jumlah![idx]).toBe("412");
+    const ppl = tabelCapaianPetugas(d, "ppl")!;
+    expect(ppl.jumlah![ppl.kepala.indexOf("KK dibuka")]).toBe("-");
+  });
+});

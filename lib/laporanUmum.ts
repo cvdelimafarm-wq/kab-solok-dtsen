@@ -149,7 +149,7 @@ export function tabelCapaianPetugas(d: DataLaporanUmum, peran: "semua" | "pml" |
     judul: "Capaian per petugas",
     kepala,
     baris,
-    jumlah: ["", `Jumlah (${fmtAngka(daftar.length)} petugas)`, "", fmtAngka(jumlah((p) => p.hari_kerja)), fmtAngka(jumlah((p) => p.realisasi)), ...(adaSasaran ? [fmtAngka(jumlah((p) => p.dibuka))] : []), fmtAngka(jumlah((p) => p.foto)), nilaiTeks(rataRata(daftar.map((p) => p.qc_rata))), fmtAngka(jumlah((p) => p.qc_percobaan))],
+    jumlah: ["", `Jumlah (${fmtAngka(daftar.length)} petugas)`, "", fmtAngka(jumlah((p) => p.hari_kerja)), fmtAngka(jumlah((p) => p.realisasi)), ...(adaSasaran ? [peran === "semua" ? fmtAngka(d.sasaran.dibuka) : "-"] : []), fmtAngka(jumlah((p) => p.foto)), nilaiTeks(rataRata(daftar.map((p) => p.qc_rata))), fmtAngka(jumlah((p) => p.qc_percobaan))],
     rata,
   };
 }
@@ -312,7 +312,7 @@ export function bangunBagianUmum(d: DataLaporanUmum, o: { peranNilai?: "semua" |
     judul: "Capaian per petugas",
     jenis: "lampiran",
     elemen: [
-      par("lampiranPetugas.pengantar", "Keterangan capaian", `Hari kerja adalah hari yang dipilih petugas di SIGAP; realisasi dalam ${satuan}${adaSasaran ? "; KK dibuka adalah keluarga sasaran yang koordinatnya dibuka petugas" : ""}. QC adalah rata-rata nilai percobaan pertama tiap hari QC Pemahaman. Tanda minus berarti belum ada nilai.`),
+      par("lampiranPetugas.pengantar", "Keterangan capaian", `Hari kerja adalah hari yang dipilih petugas di SIGAP; realisasi dalam ${satuan}${adaSasaran ? "; KK dibuka adalah keluarga sasaran yang koordinatnya dibuka petugas; baris jumlah memakai keluarga unik, sehingga bisa lebih kecil dari jumlah kolom bila satu keluarga dibuka lebih dari satu petugas" : ""}. QC adalah rata-rata nilai percobaan pertama tiap hari QC Pemahaman. Tanda minus berarti belum ada nilai.`),
       ...(tabelPetugas ? [tab("lampiranPetugas.tabel", "Tabel capaian per petugas", tabelPetugas)] : [par("lampiranPetugas.kosong", "Keterangan data kosong", "Belum ada data petugas.")]),
     ],
     sumber: "Penugasan, hari kerja, realisasi, foto dokumentasi, pembukaan koordinat, dan percobaan QC Pemahaman pada database SIGAP.",

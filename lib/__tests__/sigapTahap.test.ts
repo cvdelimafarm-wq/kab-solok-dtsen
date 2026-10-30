@@ -255,6 +255,39 @@ describe("modul spdt_lembar", () => {
   });
 });
 
+// (30 Okt 2026) Modul "sampel:<kegiatan_id>" (Sampel per SLS: Sakernas, Seruti, IMK) -- lembar bantu, tampil hanya bagi akun yang punya alokasi sampel.
+describe("modul sampel:<id>", () => {
+  const induk = (sampel: Induk["sampel"], isi = ["sampel:5"]) =>
+    INDUK([T("pendataan", 1, isi)], { kode: "sakernas", nama: "Sakernas TW IV", pendek: "Sakernas", ikon: "grafik", perencanaan: null, wilayah: null, sampel });
+  const ppl = { kegiatan_id: 5, peran: "ppl" as const, sls: 2, utama: 20, cadangan: 4, diganti: 1, ppl: 1 };
+
+  it("sah dipilih admin hanya untuk kegiatan induk itu", () => {
+    const sah = { kode: "pendataan", nama: "Pendataan", isi: ["sampel:5"], buka_mode: "langsung", buka_tanggal: null };
+    expect(periksaTahapAdmin(sah, [5])).toBeNull();
+    expect(periksaTahapAdmin(sah, [6])).toMatch(/bukan bagian/);
+    expect(periksaTahapAdmin({ ...sah, isi: ["sampel:abc"] }, [5])).toMatch(/tidak dikenal/);
+  });
+
+  it("tidak tampil bagi akun tanpa alokasi sampel (tahap ikut disembunyikan)", () => {
+    expect(susunTahap(K(induk(undefined)))).toEqual([]);
+    expect(susunTahap(K(induk({})))).toEqual([]);
+    expect(susunTahap(K(induk({ 7: ppl })))).toEqual([]); // sampel kegiatan lain
+  });
+
+  it("PPL: berjalan, tautan ke /sigap/sampel?k=<id> dengan ?dari= ke tahap", () => {
+    const m = susunTahap(K(induk({ 5: ppl })))[0].modul[0];
+    expect(m).toMatchObject({ kode: "sampel:5", status: "berjalan", aksi: "Buka sampel", pecahan: 0 });
+    expect(m.ket).toContain("2 SLS");
+    expect(m.href).toBe("/sigap/sampel?k=5&dari=" + encodeURIComponent("/sigap/kegiatan/sakernas/pendataan"));
+  });
+
+  it("PML: tombol Lihat sampel", () => {
+    const m = susunTahap(K(induk({ 5: { ...ppl, peran: "pml", ppl: 3 } })))[0].modul[0];
+    expect(m.aksi).toBe("Lihat sampel");
+    expect(m.ket).toContain("3 PPL");
+  });
+});
+
 describe("chipPeranTim (Beranda PML/PPL)", () => {
   const depan = (n: string | null | undefined) => (n ?? "").split(" ")[0];
   const w = { total: 3, ada_laporan: 1, kk: 10, kk_terdampak: 4 };

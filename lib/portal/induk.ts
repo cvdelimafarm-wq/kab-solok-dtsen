@@ -10,6 +10,8 @@ import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
 import type { BukaMode, InfoIdentifikasi, InfoKorwil, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
 import type { InfoSpdt } from "@/lib/spdtNtp";
+import type { InfoSampel } from "@/lib/sampelSls";
+import { ringkasModulSampel } from "@/lib/portal/sampel";
 import { adalahSupervisorSpdt, ringkasModulSpdt } from "@/lib/portal/spdt";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import { idSubNonaktif, ringkasModulPendataan } from "@/lib/portal/pendataan";
@@ -207,7 +209,9 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
   const perlu = (k: string) => terpilih.some((x) => x.isi.has(k));
 
   // Tim dimuat sekali (wilayahTim memanggil fungsi skor DB yang berat); Lembar Identifikasi memakai pembagian sendiri (bencana_identifikasi_alokasi)
-  const [perencanaan, wilayah, identifikasi, pendataan, spdt, korwil] = await Promise.all([
+  // (30 Okt 2026) Sampel per SLS: satu ringkasan per kegiatan yang modulnya dipasang (gagal membaca = modul tidak tampil, Beranda tetap jalan)
+  const idSampel = Array.from(new Set(terpilih.flatMap((x) => Array.from(x.isi).flatMap((m) => { const h = /^sampel:(\d+)$/.exec(m); return h ? [Number(h[1])] : []; }))));
+  const [perencanaan, wilayah, identifikasi, pendataan, spdt, korwil, sampelList] = await Promise.all([
     perlu("konfirmasi") ? perencanaanAkun(db, akun) : Promise.resolve<InfoPerencanaan | null>(null),
     perlu("wilayah_tim")
       ? (async (): Promise<InfoWilayah | null> => {
@@ -239,7 +243,10 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     perlu("spdt_lembar") ? ringkasModulSpdt(db, akun) : Promise.resolve<InfoSpdt | null>(null),
     // (19 Okt 2026) Monitoring Korwil: hanya kortim kelompok pendataan (null = modul tidak tampil); gagal membaca tidak boleh merusak Beranda
     perlu("monitoring_korwil") ? ringkasModulKorwil(db, akun).catch((): InfoKorwil | null => null) : Promise.resolve<InfoKorwil | null>(null),
+    Promise.all(idSampel.map((id) => ringkasModulSampel(db, akun, id).catch((): InfoSampel | null => null))),
   ]);
+  const sampelPerKegiatan = new Map<number, InfoSampel>();
+  for (const s of sampelList) if (s) sampelPerKegiatan.set(s.kegiatan_id, s);
 
   const hasil: Induk[] = [];
   for (const { i, t, isi, penInduk } of terpilih) {
@@ -262,6 +269,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       pendataan: isi.has("pendataan") ? pendataan : null,
       spdt: isi.has("spdt_lembar") ? spdt : null,
       korwil: isi.has("monitoring_korwil") ? korwil : null,
+      sampel: Object.fromEntries(Array.from(isi).flatMap((m) => { const h = /^sampel:(\d+)$/.exec(m); const s = h ? sampelPerKegiatan.get(Number(h[1])) : undefined; return h && s ? [[Number(h[1]), s] as const] : []; })),
     });
   }
   return hasil;

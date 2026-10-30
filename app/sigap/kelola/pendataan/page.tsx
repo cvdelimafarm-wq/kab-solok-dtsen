@@ -37,6 +37,7 @@ import Tim from "./Tim";
 import PengaturanLembar from "./PengaturanLembar";
 import IsiLaporanSpj from "./IsiLaporanSpj";
 import UnggahKk from "./UnggahKk";
+import AlokasiSampel from "./AlokasiSampel";
 
 export default function KelolaPendataan() {
   const [tab, setTab] = useState<KodeTabPendataan>("ringkasan");
@@ -105,6 +106,7 @@ export default function KelolaPendataan() {
         <>
           {f.persiapan_sasaran && <UnggahKk />}
           {f.persiapan_lembar && <PengaturanLembar />}
+          {f.persiapan_sampel && <AlokasiSampel key={kegId} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_laporan_spj && <IsiLaporanSpj />}
           <FiturKegiatan
             kegiatanId={kegId}

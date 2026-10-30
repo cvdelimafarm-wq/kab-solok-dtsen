@@ -99,6 +99,8 @@ const ATURAN_TULIS: [string, string[]][] = [
   ["/api/sigap/pelatihan", ["/api/sigap/pelatihan"]],
   // (28 Okt 2026) "Saya mengerti" pada siaran hanya membuat daftar siaran basi (dulu: path tak dikenal -> semua simpanan ditandai basi)
   ["/api/portal/siaran-petugas", ["/api/portal/siaran-petugas"]],
+  // (30 Okt 2026) Sampel per SLS: menandai sampel diganti hanya mengubah ringkasan modul di Beranda/tahap (induk)
+  ["/api/portal/sampel", ["/api/portal/induk"]],
   ["/api/portal/sso", []],
 ];
 

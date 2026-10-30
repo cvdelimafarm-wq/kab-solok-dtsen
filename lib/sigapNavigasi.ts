@@ -115,6 +115,7 @@ export function labelTujuan(path: string): string {
     "/sigap/pendataan": "Lembar Pendataan",
     "/sigap/identifikasi": "Lembar Identifikasi SLS",
     "/sigap/spdt": "Lembar SPDT NTP",
+    "/sigap/sampel": "Sampel per SLS",
     "/sigap/foto": "Kamera SIGAP",
     "/bencana": "Pendataan Bencana",
   };

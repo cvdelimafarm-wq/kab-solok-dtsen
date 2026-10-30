@@ -83,7 +83,7 @@ export default function AturTahapPage() {
   const namaKeg = useMemo(() => new Map((data?.kegiatan ?? []).map((k) => [k.id, k.nama])), [data]);
   const modulTersedia = useMemo(() => {
     const dasar = ["konfirmasi", "pelatihan", "wilayah_tim"];
-    return [...dasar, ...(induk?.kegiatan_ids ?? []).map((id) => `translok:${id}`)];
+    return [...dasar, ...(induk?.kegiatan_ids ?? []).map((id) => `translok:${id}`), ...(induk?.kegiatan_ids ?? []).map((id) => `sampel:${id}`)];
   }, [induk]);
 
   const ubah = (i: number, p: Partial<Edit>) => {
@@ -208,7 +208,7 @@ export default function AturTahapPage() {
                       {modulTersedia.map((m) => (
                         <label key={m} className="flex items-center gap-2 rounded-lg border border-[#E3E8EE] px-3 py-2 text-[13.5px]">
                           <input type="checkbox" checked={x.isi.includes(m)} onChange={(e) => centang(i, m, e.target.checked)} className="h-4 w-4" />
-                          {NAMA_MODUL(m, m.startsWith("translok:") ? namaKeg.get(Number(m.slice(9))) : undefined)}
+                          {NAMA_MODUL(m, m.startsWith("translok:") ? namaKeg.get(Number(m.slice(9))) : m.startsWith("sampel:") ? namaKeg.get(Number(m.slice(7))) : undefined)}
                         </label>
                       ))}
                     </div>
