@@ -5,7 +5,7 @@ import {
   kelompokkanElemen, namaBerkasLaporan, paragrafDariTeks, panjangBatang, selesaikanRujukan, susunLaporan, tabelNilaiPetugas, tambahHari, tanggalIndo, tanggalPendek, tanggalWib,
   temuanPerhatian, urutkanPetugas, type DataLaporan, type Elemen, type Laporan, type OpsiLaporan,
 } from "../laporanSementara";
-import { bangunBerkasDocx, buatDocx, lebarKolom, xml } from "../laporanDocx";
+import { bangunBerkasDocx, buatDocx, daftarFotoDocx, dokumenXml, lebarKolom, mediaDocx, xml } from "../laporanDocx";
 
 /** Data contoh bermodel keluaran fungsi SQL (30 Okt 2026, 16.27 WIB). */
 const mentah = {
@@ -461,5 +461,89 @@ describe("berkas Word (.docx)", () => {
     expect(nama.some((n) => n.endsWith("/"))).toBe(false);
     expect(nama).toEqual(expect.arrayContaining(["word/document.xml", "word/styles.xml", "word/numbering.xml", "word/footer1.xml", "word/settings.xml", "docProps/core.xml", "_rels/.rels"]));
     expect(await zip.file("word/document.xml")!.async("string")).toContain("Laporan Sementara Pelaksanaan");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Lampiran B dengan foto (30 Okt 2026)
+// ---------------------------------------------------------------------------------------------------------------------------------
+const JPEG_UJI = Uint8Array.from(Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAeACgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDPooorhPqAooooAKKKKACiiigAooooAKKKKAP/2Q==", "base64"));
+const fotoUji = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 100 + i, ket: `Foto ${i + 1} · Ayu & <Budi> · 21 Okt 2026` }));
+const oLamp = opsi({ bab: { lampiranFoto: true } });
+
+describe("Lampiran B dengan foto", () => {
+  it("tanpa foto pilihan: kerangka tabel lama; dengan foto: elemen foto menggantikan kerangka", () => {
+    const tanpa = susunLaporan(d, oLamp).bagian.find((b) => b.kode === "lampiranFoto")!;
+    expect(tanpa.elemen.some((e) => e.jenis === "tabel")).toBe(true);
+    expect(tanpa.elemen.some((e) => e.jenis === "foto")).toBe(false);
+    const dengan = susunLaporan(d, oLamp, { daftar: fotoUji(5), perBaris: 3 }).bagian.find((b) => b.kode === "lampiranFoto")!;
+    const e = dengan.elemen.find((x) => x.jenis === "foto");
+    expect(e).toMatchObject({ jenis: "foto", perBaris: 3 });
+    expect((e as Extract<Elemen, { jenis: "foto" }>).foto.length).toBe(5);
+    expect(dengan.elemen.some((x) => x.jenis === "tabel")).toBe(false);
+  });
+  it("foto kosong dianggap tanpa foto; bab tetap mati bila tidak dicentang", () => {
+    const l = susunLaporan(d, OPSI_AWAL, { daftar: [], perBaris: 2 });
+    expect(l.bagian.some((b) => b.kode === "lampiranFoto")).toBe(false);
+    expect(susunLaporan(d, OPSI_AWAL, { daftar: fotoUji(2), perBaris: 2 }).bagian.some((b) => b.kode === "lampiranFoto")).toBe(false);
+  });
+  it("cetak: gambar masuk sebagai data URI, keterangan di-escape, foto tanpa gambar diberi tulisan", () => {
+    const l = susunLaporan(d, oLamp, { daftar: fotoUji(3), perBaris: 2 });
+    const h = htmlLaporan(l, oLamp, { 100: "data:image/jpeg;base64,AAAA", 101: "data:image/jpeg;base64,BBBB" });
+    expect(h).toContain('src="data:image/jpeg;base64,AAAA"');
+    expect(h).toContain('src="data:image/jpeg;base64,BBBB"');
+    expect((h.match(/\[Foto tidak tersedia\]/g) ?? []).length).toBe(1);
+    expect(h).toContain("Ayu &amp; &lt;Budi&gt;");
+    expect(h).not.toContain("<Budi>");
+  });
+  it("daftarFotoDocx: urutan kemunculan tanpa duplikat; mediaDocx hanya yang gambarnya ada", () => {
+    const l = susunLaporan(d, oLamp, { daftar: [...fotoUji(3), { id: 100, ket: "ganda" }], perBaris: 2 });
+    expect(daftarFotoDocx(l).map((f) => f.id)).toEqual([100, 101, 102]);
+    const m = mediaDocx(l, { 100: { jpeg: JPEG_UJI, lebar: 40, tinggi: 30 }, 102: { jpeg: JPEG_UJI, lebar: 40, tinggi: 30 } });
+    expect(m.map((x) => x.jalur)).toEqual(["word/media/foto1.jpg", "word/media/foto3.jpg"]);
+  });
+  it("Word: gambar tertanam (relasi, tipe isi jpg, ukuran EMU proporsional), XML seimbang, keterangan di-escape", () => {
+    const l = susunLaporan(d, oLamp, { daftar: fotoUji(5), perBaris: 2 });
+    const gambar = Object.fromEntries(fotoUji(5).slice(0, 4).map((f) => [f.id, { jpeg: JPEG_UJI, lebar: 4000, tinggi: 3000 }]));
+    const b = bangunBerkasDocx(l, oLamp, undefined, gambar);
+    const doc = b["word/document.xml"];
+    expect((doc.match(/<wp:inline /g) ?? []).length).toBe(4);
+    expect((doc.match(/r:embed="rIdFoto\d+"/g) ?? []).length).toBe(4);
+    expect(doc).toContain("[Foto tidak tersedia]");
+    expect(doc).toContain("Ayu &amp; &lt;Budi&gt;");
+    expect(doc).toContain('xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"');
+    expect(b["word/_rels/document.xml.rels"]).toContain('Id="rIdFoto1"');
+    expect(b["word/_rels/document.xml.rels"]).toContain('Target="media/foto1.jpg"');
+    expect(b["word/_rels/document.xml.rels"]).not.toContain("rIdFoto5");
+    expect(b["[Content_Types].xml"]).toContain('Extension="jpg" ContentType="image/jpeg"');
+    expect(b["word/styles.xml"]).toContain('w:styleId="Keterangan"');
+    // 4:3 dan tidak melebihi kotak (lebar sel 9638/2 - 200 twip = 4619 twip; tinggi 8 cm)
+    for (const m of doc.matchAll(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/g)) {
+      const cx = Number(m[1]);
+      const cy = Number(m[2]);
+      expect(Math.abs(cx / cy - 4 / 3)).toBeLessThan(0.01);
+      expect(cx).toBeLessThanOrEqual(4619 * 635);
+      expect(cy).toBeLessThanOrEqual(8 * 360000);
+    }
+    const seimbang = (s: string, tag: string) => (s.match(new RegExp(`<${tag}[ >/]`, "g")) ?? []).length - (s.match(new RegExp(`<${tag}/>`, "g")) ?? []).length === (s.match(new RegExp(`</${tag}>`, "g")) ?? []).length;
+    for (const tag of ["w:p", "w:tbl", "w:tr", "w:tc", "w:r", "w:drawing", "wp:inline"]) expect(seimbang(doc, tag)).toBe(true);
+    const ids = Array.from(doc.matchAll(/<wp:docPr id="(\d+)"/g)).map((m) => m[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it("Word tanpa gambar sama sekali: tidak ada tipe isi jpg dan tidak ada relasi foto", () => {
+    const b = bangunBerkasDocx(susunLaporan(d, oLamp, { daftar: fotoUji(2), perBaris: 2 }), oLamp);
+    expect(b["[Content_Types].xml"]).not.toContain('Extension="jpg"');
+    expect(b["word/_rels/document.xml.rels"]).not.toContain("rIdFoto");
+    expect((b["word/document.xml"].match(/\[Foto tidak tersedia\]/g) ?? []).length).toBe(2);
+  });
+  it("zip .docx memuat berkas media jpeg utuh", async () => {
+    const l = susunLaporan(d, oLamp, { daftar: fotoUji(3), perBaris: 3 });
+    const byte = (await buatDocx(l, oLamp, "uint8array", { 100: { jpeg: JPEG_UJI, lebar: 40, tinggi: 30 }, 101: { jpeg: JPEG_UJI, lebar: 30, tinggi: 40 } })) as Uint8Array;
+    const zip = await JSZip.loadAsync(byte);
+    expect(Object.keys(zip.files)).toEqual(expect.arrayContaining(["word/media/foto1.jpg", "word/media/foto2.jpg"]));
+    expect(Object.keys(zip.files)).not.toContain("word/media/foto3.jpg");
+    const isi = await zip.file("word/media/foto1.jpg")!.async("uint8array");
+    expect(Array.from(isi)).toEqual(Array.from(JPEG_UJI));
+    expect(dokumenXml(l, oLamp, {})).toContain("[Foto tidak tersedia]");
   });
 });

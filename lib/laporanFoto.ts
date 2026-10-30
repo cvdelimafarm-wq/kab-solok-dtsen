@@ -3,6 +3,8 @@
 // (30 Okt 2026) Pemilih foto untuk Lampiran B "Dokumentasi foto" pada Laporan Sementara PSP: saringan (peran, nomor foto 1-5, tanggal, nama),
 // pilihan banyak (centang, rentang shift, seret), keterangan foto, dan ukuran gambar pada halaman Word.
 
+import type { FotoLaporan } from "@/lib/laporanSementara";
+
 /** Foto dokumentasi yang bisa dipilih berasal dari sigap_dokumentasi (nomor foto 1-5 per petugas per hari kerja). */
 export const JUMLAH_NOMOR = 5;
 /** Batas foto dalam satu laporan: menjaga ukuran berkas Word (sekitar 100 KB per foto setelah diperkecil) dan waktu menyusun. */
@@ -186,3 +188,40 @@ export function ukuranMuat(lebar: number, tinggi: number, lebarMaks: number, tin
 /** Sisi terpanjang gambar yang disematkan ke Word (piksel); cukup tajam untuk cetak A4 setengah halaman. */
 export const SISI_GAMBAR_WORD = 1000;
 export const SISI_GAMBAR_KECIL = 320;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Status pemilih foto (disimpan di peramban, SATU per kegiatan)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+export type UrutFoto = "pilih" | "tanggal" | "petugas";
+export type StatusFoto = { pilihan: FotoItem[]; opsi: OpsiFoto; urut: UrutFoto };
+export const STATUS_FOTO_AWAL: StatusFoto = { pilihan: [], opsi: OPSI_FOTO_AWAL, urut: "pilih" };
+
+/** Kunci penyimpanan di peramban; berbeda untuk tiap kegiatan agar pilihan foto kegiatan lain tidak ikut. */
+export const kunciStatusFoto = (kegiatanId: number): string => `sigap.laporan.foto.v1.k${kegiatanId}`;
+
+/** Status dari penyimpanan (tak tepercaya): bentuk yang rusak diganti bawaan, foto ganda dibuang, jumlah dibatasi. */
+export function bacaStatusFoto(mentah: unknown): StatusFoto {
+  if (typeof mentah !== "object" || mentah === null) return STATUS_FOTO_AWAL;
+  const r = mentah as Record<string, unknown>;
+  const lihat = new Set<number>();
+  const pilihan: FotoItem[] = [];
+  for (const x of Array.isArray(r.pilihan) ? r.pilihan : []) {
+    const f = bacaFotoItem(x);
+    if (f && !lihat.has(f.id) && pilihan.length < MAKS_FOTO_LAPORAN) (lihat.add(f.id), pilihan.push(f));
+  }
+  const o = (typeof r.opsi === "object" && r.opsi !== null ? r.opsi : {}) as Record<string, unknown>;
+  const k = (typeof o.ket === "object" && o.ket !== null ? o.ket : {}) as Record<string, unknown>;
+  const b = (kunci: keyof KetFoto): boolean => (typeof k[kunci] === "boolean" ? (k[kunci] as boolean) : KET_FOTO_AWAL[kunci]);
+  const urut: UrutFoto = r.urut === "tanggal" || r.urut === "petugas" ? r.urut : "pilih";
+  return {
+    pilihan,
+    opsi: { perBaris: o.perBaris === 3 ? 3 : 2, ket: { nomor: b("nomor"), nama: b("nama"), peran: b("peran"), tanggal: b("tanggal"), lokasi: b("lokasi") } },
+    urut,
+  };
+}
+
+/** Foto untuk disisipkan ke laporan (sudah berurutan dan berketerangan). */
+export function fotoUntukLaporan(st: StatusFoto): { daftar: FotoLaporan[]; perBaris: 2 | 3 } {
+  return { daftar: urutkanFoto(st.pilihan, st.urut).map((f) => ({ id: f.id, ket: keteranganFoto(f, st.opsi.ket) })), perBaris: st.opsi.perBaris };
+}

@@ -7,10 +7,14 @@
 // Catatan Word: daftar isi baru terisi nomor halamannya setelah diperbarui. Berkas diberi penanda "perbarui field saat dibuka", sehingga Word menanyakan
 // "Perbarui field?" satu kali -- jawab Ya. (Di Word: klik kanan daftar isi > Perbarui Field > Perbarui seluruh daftar, atau tekan F9.)
 
-import { fmtAngka, kelompokkanElemen, paragrafDariTeks, panjangBatang, type BatangLaporan, type Elemen, type Laporan, type OpsiLaporan, type TabelLaporan } from "@/lib/laporanSementara";
+import { fmtAngka, kelompokkanElemen, paragrafDariTeks, panjangBatang, type BatangLaporan, type Elemen, type FotoLaporan, type Laporan, type OpsiLaporan, type TabelLaporan } from "@/lib/laporanSementara";
+import { ukuranMuat } from "@/lib/laporanFoto";
 
 const NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const NS_WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+const NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const NS_PIC = "http://schemas.openxmlformats.org/drawingml/2006/picture";
 const ISI_TWIP = 9638; // lebar isi: A4 (11906) dikurangi margin 2 x 1134
 const WARNA_TUA = "0F2A52";
 const WARNA_BIRU = "1F5FD1";
@@ -102,11 +106,81 @@ function batangXml(b: BatangLaporan): string {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// Foto (Lampiran B)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/** Gambar yang disematkan: JPEG yang sudah diperkecil beserta ukuran pikselnya. Kunci = FotoLaporan.id. */
+export type GambarDocx = { jpeg: Uint8Array; lebar: number; tinggi: number };
+export type PetaGambarDocx = Record<number, GambarDocx>;
+
+/** Foto dalam laporan menurut urutan kemunculan (tanpa duplikat); urutan ini menentukan nomor berkas media dan relasi. */
+export function daftarFotoDocx(l: Laporan): FotoLaporan[] {
+  const lihat = new Set<number>();
+  const out: FotoLaporan[] = [];
+  for (const b of l.bagian) for (const e of b.elemen) if (e.jenis === "foto") for (const f of e.foto) if (!lihat.has(f.id)) (lihat.add(f.id), out.push(f));
+  return out;
+}
+const jalurMedia = (i: number): string => `media/foto${i + 1}.jpg`;
+const idRelFoto = (i: number): string => `rIdFoto${i + 1}`;
+
+/** Berkas gambar untuk dimasukkan ke zip (hanya foto yang gambarnya tersedia). */
+export function mediaDocx(l: Laporan, gambar: PetaGambarDocx): { jalur: string; bytes: Uint8Array }[] {
+  const out: { jalur: string; bytes: Uint8Array }[] = [];
+  daftarFotoDocx(l).forEach((f, i) => {
+    const g = gambar[f.id];
+    if (g) out.push({ jalur: `word/${jalurMedia(i)}`, bytes: g.jpeg });
+  });
+  return out;
+}
+
+function gambarXml(rid: string, nomor: number, ket: string, cx: number, cy: number): string {
+  return (
+    `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${nomor}" name="Foto ${nomor}" descr="${xml(ket)}"/>` +
+    `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${NS_A}" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+    `<a:graphic xmlns:a="${NS_A}"><a:graphicData uri="${NS_PIC}"><pic:pic xmlns:pic="${NS_PIC}"><pic:nvPicPr><pic:cNvPr id="${nomor}" name="foto${nomor}.jpg"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
+  );
+}
+
+const TWIP_KE_EMU = 635;
+/** Foto dalam tabel tanpa garis, `perBaris` kolom; tiap sel: gambar di tengah lalu keterangan. Foto tanpa gambar diberi tulisan, keterangan tetap ada. */
+function fotoXml(e: Extract<Elemen, { jenis: "foto" }>, indeks: Map<number, number>, gambar: PetaGambarDocx): string {
+  const lebarSel = Math.floor(ISI_TWIP / e.perBaris);
+  const maksCx = (lebarSel - 200) * TWIP_KE_EMU;
+  const maksCy = (e.perBaris === 2 ? 8 : 6) * 360000;
+  const grid = Array.from({ length: e.perBaris }, () => `<w:gridCol w:w="${lebarSel}"/>`).join("");
+  const baris: string[] = [];
+  for (let i = 0; i < e.foto.length; i += e.perBaris) {
+    const sel: string[] = [];
+    for (let j = 0; j < e.perBaris; j++) {
+      const f = e.foto[i + j];
+      if (!f) {
+        sel.push(`<w:tc><w:tcPr><w:tcW w:w="${lebarSel}" w:type="dxa"/></w:tcPr>${para("", { gaya: "Keterangan" })}</w:tc>`);
+        continue;
+      }
+      const g = gambar[f.id];
+      const k = indeks.get(f.id);
+      const ukuran = g ? ukuranMuat(g.lebar, g.tinggi, maksCx, maksCy) : null;
+      const isi =
+        g && k !== undefined && ukuran
+          ? para(gambarXml(idRelFoto(k), k + 1, f.ket, ukuran.cx, ukuran.cy), { rata: "center", jagaDepan: true })
+          : para(run("[Foto tidak tersedia]", { miring: true, warna: "888888" }), { rata: "center", jagaDepan: true });
+      sel.push(`<w:tc><w:tcPr><w:tcW w:w="${lebarSel}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>${isi}${para(run(f.ket), { gaya: "Keterangan" })}</w:tc>`);
+    }
+    baris.push(`<w:tr><w:trPr><w:cantSplit/></w:trPr>${sel.join("")}</w:tr>`);
+  }
+  return `<w:tbl><w:tblPr><w:tblW w:w="${ISI_TWIP}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${baris.join("")}</w:tbl>` + spacer();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // Isi dokumen
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-function elemenXml(e: Exclude<Elemen, { jenis: "butir" }>): string {
-  if (e.jenis === "paragraf") return para(run(e.teks));
+function elemenXml(e: Exclude<Elemen, { jenis: "butir" }>, indeks: Map<number, number>, gambar: PetaGambarDocx): string {
+  if (e.jenis === "foto") return fotoXml(e, indeks, gambar);
+  // uraian pengantar foto ikut halaman yang sama dengan baris foto pertama (judul bab tidak tertinggal sendirian di dasar halaman)
+  if (e.jenis === "paragraf") return para(run(e.teks), e.id === "lampiranFoto.pengantar" ? { jagaDepan: true } : {});
   if (e.jenis === "tabel") return tabelLaporanXml(e.tabel);
   if (e.jenis === "batang") return batangXml(e.batang);
   return para(run("Catatan penyusun", { tebal: true }), { gaya: "Catatan", jagaDepan: true }) + paragrafDariTeks(e.teks).map((p) => para(run(p), { gaya: "Catatan" })).join("");
@@ -122,7 +196,8 @@ function daftarIsiXml(l: Laporan): string {
   return judul + baris;
 }
 
-export function dokumenXml(l: Laporan, o: OpsiLaporan): string {
+export function dokumenXml(l: Laporan, o: OpsiLaporan, gambar: PetaGambarDocx = {}): string {
+  const indeks = new Map(daftarFotoDocx(l).map((f, i) => [f.id, i] as const));
   const isi: string[] = [];
   isi.push(para(run(l.judul), { gaya: "Title" }));
   isi.push(para(run(l.subjudul), { gaya: "Subtitle" }));
@@ -134,13 +209,13 @@ export function dokumenXml(l: Laporan, o: OpsiLaporan): string {
     isi.push(para(run(b.judulTampil ?? b.judul), { gaya: "Heading1" }));
     for (const k of kelompokkanElemen(b.elemen)) {
       if (k.jenis === "butir") isi.push(k.butir.map((x) => para(run(x), { gaya: "ListBullet" })).join(""));
-      else isi.push(elemenXml(k.elemen));
+      else isi.push(elemenXml(k.elemen, indeks, gambar));
     }
     if (b.sumber) isi.push(para(run(`Sumber: ${b.sumber}`), { gaya: "Sumber" }));
   }
   const footer = o.nomorHalaman ? `<w:footerReference w:type="default" r:id="rIdFooter"/>` : "";
   const sect = `<w:sectPr>${footer}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}"><w:body>${isi.join("")}${sect}</w:body></w:document>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}" xmlns:wp="${NS_WP}"><w:body>${isi.join("")}${sect}</w:body></w:document>`;
 }
 
 function footerXml(): string {
@@ -170,6 +245,7 @@ function stylesXml(): string {
     gp("Spacer", "Spasi Tabel", `<w:pPr><w:spacing w:before="0" w:after="0" w:line="160" w:lineRule="exact"/></w:pPr><w:rPr><w:sz w:val="8"/><w:szCs w:val="8"/></w:rPr>`, { dasar: "Normal" }) +
     gp("Sumber", "Sumber", `<w:pPr><w:spacing w:before="40" w:after="120"/><w:jc w:val="left"/></w:pPr><w:rPr><w:i/><w:color w:val="555555"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>`, { dasar: "Normal" }) +
     gp("Catatan", "Catatan Penyusun", `<w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="6" w:color="${WARNA_BIRU}"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="F3F6FA"/><w:spacing w:before="40" w:after="40"/><w:ind w:left="170"/></w:pPr>`, { dasar: "Normal" }) +
+    gp("Keterangan", "Keterangan Foto", `<w:pPr><w:spacing w:before="40" w:after="160" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="17"/><w:szCs w:val="17"/><w:color w:val="333333"/></w:rPr>`, { dasar: "Normal" }) +
     gp("Footer", "footer", `<w:pPr><w:spacing w:after="0"/><w:jc w:val="center"/></w:pPr><w:rPr><w:color w:val="666666"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>`, { dasar: "Normal" }) +
     `<w:style w:type="table" w:styleId="LaporanTabel"><w:name w:val="Tabel Laporan"/><w:basedOn w:val="TableNormal"/><w:uiPriority w:val="59"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="BFC8D6"/><w:left w:val="single" w:sz="4" w:space="0" w:color="BFC8D6"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="BFC8D6"/><w:right w:val="single" w:sz="4" w:space="0" w:color="BFC8D6"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="D5DCE6"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="D5DCE6"/></w:tblBorders><w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>` +
     `</w:styles>`
@@ -184,12 +260,16 @@ function settingsXml(o: OpsiLaporan): string {
 }
 
 /** Seluruh bagian berkas .docx sebagai teks: jalur di dalam zip -> isi. */
-export function bangunBerkasDocx(l: Laporan, o: OpsiLaporan, waktuIso = new Date().toISOString()): Record<string, string> {
+export function bangunBerkasDocx(l: Laporan, o: OpsiLaporan, waktuIso = new Date().toISOString(), gambar: PetaGambarDocx = {}): Record<string, string> {
+  const foto = daftarFotoDocx(l);
+  const relFoto = foto.map((f, i) => (gambar[f.id] ? `<Relationship Id="${idRelFoto(i)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${jalurMedia(i)}"/>` : "")).join("");
+  const adaMedia = relFoto.length > 0;
   const rel = (id: string, tipe: string, target: string) => `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${tipe}" Target="${target}"/>`;
   const berkas: Record<string, string> = {
     "[Content_Types].xml":
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
       `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
+      (adaMedia ? `<Default Extension="jpg" ContentType="image/jpeg"/>` : "") +
       `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
       `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>` +
       `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>` +
@@ -209,8 +289,9 @@ export function bangunBerkasDocx(l: Laporan, o: OpsiLaporan, waktuIso = new Date
       rel("rIdSettings", "settings", "settings.xml") +
       rel("rIdNumbering", "numbering", "numbering.xml") +
       (o.nomorHalaman ? rel("rIdFooter", "footer", "footer1.xml") : "") +
+      relFoto +
       `</Relationships>`,
-    "word/document.xml": dokumenXml(l, o),
+    "word/document.xml": dokumenXml(l, o, gambar),
     "word/styles.xml": stylesXml(),
     "word/settings.xml": settingsXml(o),
     "word/numbering.xml": numberingXml(),
@@ -225,12 +306,13 @@ export function bangunBerkasDocx(l: Laporan, o: OpsiLaporan, waktuIso = new Date
 }
 
 /** Kemas menjadi .docx. `format` "blob" untuk unduhan di peramban, "uint8array" untuk uji. */
-export async function buatDocx(l: Laporan, o: OpsiLaporan, format: "blob" | "uint8array" = "blob"): Promise<Blob | Uint8Array> {
+export async function buatDocx(l: Laporan, o: OpsiLaporan, format: "blob" | "uint8array" = "blob", gambar: PetaGambarDocx = {}): Promise<Blob | Uint8Array> {
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
-  const berkas = bangunBerkasDocx(l, o);
+  const berkas = bangunBerkasDocx(l, o, undefined, gambar);
   // [Content_Types].xml harus berkas pertama
   for (const jalur of ["[Content_Types].xml", ...Object.keys(berkas).filter((j) => j !== "[Content_Types].xml")]) zip.file(jalur, berkas[jalur], { createFolders: false });
+  for (const m of mediaDocx(l, gambar)) zip.file(m.jalur, m.bytes, { createFolders: false, binary: true });
   const mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   return format === "blob" ? zip.generateAsync({ type: "blob", mimeType, compression: "DEFLATE" }) : zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }

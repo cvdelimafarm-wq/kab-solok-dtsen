@@ -227,6 +227,10 @@ export type TabelLaporan = {
 };
 export type BatangLaporan = { judul: string; satuan: string; data: { label: string; nilai: number }[] };
 
+/** Foto pilihan penyusun untuk Lampiran B: `id` = sigap_dokumentasi.id, `ket` = keterangan di bawah foto (disusun lib/laporanFoto.ts). */
+export type FotoLaporan = { id: number; ket: string };
+export type OpsiFotoLaporan = { daftar: FotoLaporan[]; perBaris: 2 | 3 };
+
 type ElemenDasar = {
   /** Kode unik "bab.elemen", dipakai kunci centang. */
   id: string;
@@ -240,6 +244,7 @@ export type Elemen =
   | (ElemenDasar & { jenis: "butir"; butir: string[] })
   | (ElemenDasar & { jenis: "tabel"; tabel: TabelLaporan })
   | (ElemenDasar & { jenis: "batang"; batang: BatangLaporan })
+  | (ElemenDasar & { jenis: "foto"; foto: FotoLaporan[]; perBaris: 2 | 3 })
   | (ElemenDasar & { jenis: "catatan"; teks: string });
 
 export type BagianLaporan = {
@@ -438,7 +443,7 @@ const but = (id: string, label: string, butir: string[], ikutBab?: string): Elem
 const tab = (id: string, label: string, tabel: TabelLaporan): Elemen => ({ id, label, jenis: "tabel", tabel });
 
 /** Seluruh bab dan elemen laporan (tanpa saringan opsi, kecuali kolom/urutan/peran lampiran nilai). */
-export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL): BagianLaporan[] {
+export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: OpsiFotoLaporan): BagianLaporan[] {
   const tanggal = tanggalIndo(tanggalWib(d.dibuat_at));
   const nama = d.kegiatan?.nama ?? "Pendataan Pascabencana";
   const pen = d.pendataan;
@@ -645,19 +650,25 @@ export function bangunBagian(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL): Bagian
     sumber: "Penugasan, presensi, sesi tes pelatihan, dan percobaan QC Pemahaman pada database SIGAP.",
   });
 
-  // ---- Lampiran B: kerangka foto (bawaan mati)
+  // ---- Lampiran B: foto dokumentasi (bawaan mati). Ada foto pilihan -> foto ditampilkan; tidak ada -> kerangka tabel untuk ditempel di Word.
+  const adaFoto = !!foto && foto.daftar.length > 0;
   out.push({
     kode: "lampiranFoto",
     judul: "Dokumentasi foto",
     jenis: "lampiran",
-    elemen: [
-      par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word."),
-      tab("lampiranFoto.tabel", "Kerangka tabel foto", {
-        kepala: ["Foto", "Keterangan"],
-        baris: [1, 2, 3, 4, 5, 6].map((i) => [`[Tempel foto ${i}]`, `Keterangan foto ${i}: kegiatan, lokasi, tanggal.`]),
-        rata: ["k", "k"],
-      }),
-    ],
+    elemen: adaFoto
+      ? [
+          par("lampiranFoto.pengantar", "Keterangan foto", `Foto dokumentasi pilihan penyusun (${fmtAngka(foto.daftar.length)} foto). Keterangan di bawah foto memuat nomor foto, petugas, dan tanggal menurut data SIGAP.`),
+          { id: "lampiranFoto.foto", label: "Foto terpilih", jenis: "foto", foto: foto.daftar, perBaris: foto.perBaris },
+        ]
+      : [
+          par("lampiranFoto.pengantar", "Keterangan kerangka foto", "Tempelkan foto dokumentasi pilihan pada kolom di bawah, lalu ubah keterangannya di Word. Foto bisa dipilih lewat panel “Foto dokumentasi untuk Lampiran B” di bawah panel susunan."),
+          tab("lampiranFoto.tabel", "Kerangka tabel foto", {
+            kepala: ["Foto", "Keterangan"],
+            baris: [1, 2, 3, 4, 5, 6].map((i) => [`[Tempel foto ${i}]`, `Keterangan foto ${i}: kegiatan, lokasi, tanggal.`]),
+            rata: ["k", "k"],
+          }),
+        ],
   });
   return out;
 }
@@ -673,11 +684,11 @@ export function selesaikanRujukan(teks: string, nomor: Record<string, string>): 
  * Laporan lengkap sesuai opsi: bab dan elemen yang dicentang, penomoran bab (angka) dan lampiran (huruf) mengikuti bab yang tampil,
  * nomor tabel dan gambar berurutan, rujukan antar-bab diselesaikan, catatan penyusun disisipkan, judul/penyusun diterapkan.
  */
-export function susunLaporan(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL): Laporan {
+export function susunLaporan(d: DataLaporan, o: OpsiLaporan = OPSI_AWAL, foto?: OpsiFotoLaporan): Laporan {
   const tgl = tanggalWib(d.dibuat_at);
   const tanggal = tanggalIndo(tgl);
   const nama = d.kegiatan?.nama ?? "Pendataan Pascabencana";
-  const semua = bangunBagian(d, o);
+  const semua = bangunBagian(d, o, foto);
   const babAda = (kode: string) => babTampil(o, kode);
 
   // 1) saring bab dan elemen
@@ -766,6 +777,23 @@ function htmlTabel(t: TabelLaporan): string {
   );
 }
 
+/** Foto dalam tabel `perBaris` kolom; gambar = id -> data URI. Foto yang gambarnya tidak ada diberi tulisan, keterangan tetap tercetak. */
+function htmlFoto(foto: FotoLaporan[], perBaris: number, gambar: Record<number, string>): string {
+  const baris: string[] = [];
+  for (let i = 0; i < foto.length; i += perBaris) {
+    const sel = foto
+      .slice(i, i + perBaris)
+      .map((f) => {
+        const src = gambar[f.id];
+        const isi = src ? `<img src="${src}" alt="" style="max-width:100%;max-height:${perBaris === 2 ? 8 : 6}cm">` : `<div style="color:#888;padding:20pt 0">[Foto tidak tersedia]</div>`;
+        return `<td style="width:${Math.floor(100 / perBaris)}%;padding:4pt;vertical-align:top;text-align:center;page-break-inside:avoid">${isi}<div style="font-size:9pt;margin-top:2pt">${esc(f.ket)}</div></td>`;
+      });
+    while (sel.length < perBaris) sel.push(`<td style="width:${Math.floor(100 / perBaris)}%"></td>`);
+    baris.push(`<tr style="page-break-inside:avoid">${sel.join("")}</tr>`);
+  }
+  return `<table style="border-collapse:collapse;width:100%;margin:4pt 0"><tbody>${baris.join("")}</tbody></table>`;
+}
+
 function htmlBatang(b: BatangLaporan): string {
   const maks = Math.max(1, ...b.data.map((x) => x.nilai));
   return (
@@ -779,7 +807,7 @@ function htmlBatang(b: BatangLaporan): string {
 }
 
 /** Isi laporan sebagai HTML mandiri untuk cetak / simpan PDF. Memuat daftar isi (tanpa nomor halaman; nomor halaman diberi peramban) bila dipilih. */
-export function htmlLaporan(l: Laporan, o: OpsiLaporan = OPSI_AWAL): string {
+export function htmlLaporan(l: Laporan, o: OpsiLaporan = OPSI_AWAL, gambar: Record<number, string> = {}): string {
   const isi = l.bagian
     .map((b) => {
       const blok = kelompokkanElemen(b.elemen)
@@ -789,6 +817,7 @@ export function htmlLaporan(l: Laporan, o: OpsiLaporan = OPSI_AWAL): string {
           if (e.jenis === "paragraf") return `<p style="margin:0 0 6pt;text-align:justify">${esc(e.teks)}</p>`;
           if (e.jenis === "tabel") return htmlTabel(e.tabel);
           if (e.jenis === "batang") return htmlBatang(e.batang);
+          if (e.jenis === "foto") return htmlFoto(e.foto, e.perBaris, gambar);
           return `<div style="margin:6pt 0;padding:4pt 8pt;background:#F6F8FB;border-left:3pt solid #1F5FD1"><p style="margin:0;font-weight:bold;font-size:10pt">Catatan penyusun</p>${paragrafDariTeks(e.teks).map((p) => `<p style="margin:2pt 0">${esc(p)}</p>`).join("")}</div>`;
         })
         .join("");
