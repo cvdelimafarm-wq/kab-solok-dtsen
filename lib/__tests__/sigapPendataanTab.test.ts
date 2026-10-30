@@ -3,13 +3,13 @@ import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_QC_PEMAHAMAN, bacaKegiatanPendataan,
 
 describe("TAB_PENDATAAN", () => {
   it("urutan runut mengikuti alur kerja; kode unik; Ringkasan paling depan", () => {
-    expect(TAB_PENDATAAN.map((t) => t.kode)).toEqual(["ringkasan", "persiapan", "tim", "siaran", "qc", "monitoring", "pemeriksaan", "administrasi"]);
+    expect(TAB_PENDATAAN.map((t) => t.kode)).toEqual(["ringkasan", "persiapan", "tim", "siaran", "qc", "monitoring", "pemeriksaan", "administrasi", "laporan"]);
     expect(new Set(TAB_PENDATAAN.map((t) => t.kode)).size).toBe(TAB_PENDATAAN.length);
     expect(TAB_AWAL).toBe("ringkasan");
   });
-  it("tab bernomor 1-7 berurutan", () => {
+  it("tab bernomor 1-8 berurutan", () => {
     const nomor = TAB_PENDATAAN.map((t) => /^(\d) ·/.exec(t.label)?.[1]).filter(Boolean);
-    expect(nomor).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+    expect(nomor).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
   });
   it("label ditemukan per kode", () => {
     expect(labelTabPendataan("monitoring")).toBe("5 · Monitoring");
@@ -178,5 +178,20 @@ describe("pemilih survei Kelola Pendataan (29 Okt 2026)", () => {
   });
   it("SUB_QC_PEMAHAMAN tidak memuat Kuesioner supervisi (khusus Pascabencana)", () => {
     expect(SUB_QC_PEMAHAMAN.map((x) => x.kode)).toEqual(["hari", "pengaturan", "soal", "dokumen"]);
+  });
+});
+
+describe("tab Laporan (30 Okt 2026)", () => {
+  const P = "/sigap/kelola/pendataan";
+  it("tab terakhir; alamat ?tab=laporan dikenal; tanpa sub dan tanpa pintu masuk", () => {
+    expect(TAB_PENDATAAN[TAB_PENDATAAN.length - 1].kode).toBe("laporan");
+    expect(bacaTabPendataan("Laporan")).toBe("laporan");
+    expect(labelTabPendataan("laporan")).toBe("8 · Laporan");
+    expect(SUB_PER_TAB.laporan).toBeUndefined();
+    expect(PINTU_TAB.laporan).toBeUndefined();
+  });
+  it("urlTabPendataan: pindah ke Laporan membuang ?sub dan ?v, mempertahankan ?k", () => {
+    expect(urlTabPendataan(P, "?tab=qc&sub=soal&k=2", "laporan")).toBe(`${P}?tab=laporan&k=2`);
+    expect(urlTabPendataan(P, "?tab=laporan", "ringkasan")).toBe(P);
   });
 });

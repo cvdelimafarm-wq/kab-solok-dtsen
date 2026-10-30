@@ -9,7 +9,9 @@ declare
   k1 bigint; k2 bigint := 2; h jsonb := '{}'::jsonb; ids text[]; id_k1 text; ids_hari text[];
   dasar jsonb := jsonb_build_object('aktif', false, 'rilis_jam', '00:00', 'batas_jam', '23:59', 'rekap_jam', '00:00', 'ingat_menit', '[]'::jsonb,
                   'soal_per_hari', 4, 'maks_ulang', 3, 'wajib_ulang', true, 'nilai_lulus', 100, 'undi_acak', true, 'acak_tampil', true,
-                  'peran_peserta', '["ppl"]'::jsonb, 'hari_rilis', '[1,2,3,4,5,6,7]'::jsonb, 'rekap_pml', false, 'mulai', null, 'akhir', null);
+                  'peran_peserta', '["ppl"]'::jsonb, 'hari_rilis', '[1,2,3,4,5,6,7]'::jsonb, 'rekap_pml', false, 'mulai', null, 'akhir', null,
+                  -- (30 Okt) eksplisit: pengaturan nyata kegiatan 2 bisa sudah 'paket'/'pilihan', dan simpan tidak mengubah kolom yang tidak dikirim
+                  'sumber_soal', 'semua', 'paket_pilihan', '[]'::jsonb, 'soal_pilihan', '[]'::jsonb);
   i integer; p integer;
 begin
   select id into k1 from sigap_kegiatan where kode = 'pascabencana_2026';

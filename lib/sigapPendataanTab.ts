@@ -14,7 +14,7 @@
 //    menyematkan komponen tab Admin Transport Lokal (TabPenugasan, TabMonitoring, TabVerifikasi, TabKegiatan) untuk kegiatan Pendataan (id 1).
 //  - tidak ada alamat baru selain parameter ?tab= pada /sigap/kelola/pendataan.
 
-export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "qc" | "monitoring" | "pemeriksaan" | "administrasi";
+export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "qc" | "monitoring" | "pemeriksaan" | "administrasi" | "laporan";
 
 export type ItemTabPendataan = { kode: KodeTabPendataan; label: string; ket: string };
 
@@ -28,6 +28,8 @@ export const TAB_PENDATAAN: ItemTabPendataan[] = [
   { kode: "monitoring", label: "5 · Monitoring", ket: "Progres petugas, transport lokal, poin kinerja harian, dan perkiraan kebutuhan anggaran." },
   { kode: "pemeriksaan", label: "6 · Pemeriksaan", ket: "Hasil identifikasi, pemantauan lapangan per petugas, dan foto dokumentasi." },
   { kode: "administrasi", label: "7 · Administrasi & SPJ", ket: "Transport lokal (verifikasi, kunci, tarif), pengadaan, dan pertanggungjawaban." },
+  // (30 Okt 2026) Laporan Sementara PSP yang angkanya diambil otomatis dari database; unduh Word atau cetak.
+  { kode: "laporan", label: "8 · Laporan", ket: "Laporan Sementara PSP yang disusun otomatis dari data SIGAP: ringkasan, perencanaan, pelatihan, pendataan per kecamatan. Unduh Word atau cetak." },
 ];
 
 export const TAB_AWAL: KodeTabPendataan = "ringkasan";

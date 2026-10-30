@@ -8,7 +8,7 @@
 // (27 Okt 2026) Tab 1 Persiapan ditambah "Pengaturan Lembar Pendataan" per kegiatan (PengaturanLembar.tsx): istilah/warna/bentuk/alasan tombol hasil + variabel radar.
 // (23 Okt 2026) Kelola Pendataan dibingkai Shell SIGAP (sidebar + topbar + tab) seperti Kelola Pelatihan -- permintaan user: halaman tanpa sidebar,
 // tombol "Beranda" salah arah, dan kelengkapan pendataan belum terpadu. Tab disusun RUNUT mengikuti alur kerja (lib/sigapPendataanTab.ts):
-//   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 QC Pemahaman (26 Okt) · 5 Monitoring · 6 Pemeriksaan · 7 Administrasi & SPJ.
+//   Ringkasan · 1 Persiapan · 2 Tim & Surat Tugas · 3 Siaran & Notifikasi · 4 QC Pemahaman (26 Okt) · 5 Monitoring · 6 Pemeriksaan · 7 Administrasi & SPJ · 8 Laporan (30 Okt: Laporan Sementara otomatis, Laporan.tsx).
 // Isi lama dipindah APA ADANYA: Unggah daftar KK + Permintaan FASIH -> UnggahKk.tsx (tab 1), Siaran + KirimSatu (tab 3), Monitoring (tab 4).
 // Pilihan tab ikut di alamat (?tab=...); alamat lama ?tab=monitoring tetap berlaku, ?tab=unggah -> Persiapan.
 // Tab 5 (Pemeriksaan) MENYEMATKAN Identifikasi SLS, Lapangan, Foto (tahap 2); tab 2 (Tim.tsx) dan tab 6 (Administrasi.tsx) menyematkan komponen Admin Transport
@@ -25,6 +25,7 @@ import Monitoring from "./Monitoring";
 import Administrasi from "./Administrasi";
 import Pemeriksaan from "./Pemeriksaan";
 import QcPemahaman from "./QcPemahaman";
+import Laporan from "./Laporan";
 import Ringkasan from "./Ringkasan";
 import Siaran from "./Siaran";
 import Tim from "./Tim";
@@ -112,6 +113,7 @@ export default function KelolaPendataan() {
       {pasca && tab === "monitoring" && <Monitoring />}
       {pasca && tab === "pemeriksaan" && <Pemeriksaan />}
       {tab === "administrasi" && <Administrasi key={kegId} kegiatanId={kegId} />}
+      {pasca && tab === "laporan" && <Laporan />}
     </Bingkai>
   );
 }
