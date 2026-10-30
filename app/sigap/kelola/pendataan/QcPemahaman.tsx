@@ -17,6 +17,7 @@ import { BTN, BTN_G, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, KartuAngka, Memuat
 import { cekHariTanggal, hariRilisDari, kolamSoal, labelStatusPpl, maksPercobaanDari, menitKeJam, jamKeMenit, nilaiLulusDari, namaHariDari, ringkasStatusQc, sumberSoalDari, teksHariRilis, wajibUlangDari, type QcPengaturan, type QcRekapTim, type SumberSoal } from "@/lib/sigapQc";
 import { petaSoalDariBaris, templatSoal, type HasilPeta } from "@/lib/sigapQcImpor";
 import { KEGIATAN_PENDATAAN, SUB_QC, SUB_QC_PEMAHAMAN } from "@/lib/sigapPendataanTab";
+import { subQcTampil, type PetaFitur } from "@/lib/sigapFitur";
 import { SubPilih, useSubTab } from "./useSubTab";
 import KuesionerQc from "./KuesionerQc";
 import DokumenQc from "./DokumenQc";
@@ -55,13 +56,20 @@ const API = "/api/portal/qc/admin";
 const jam = (s: string | undefined) => menitKeJam(jamKeMenit(s) ?? 0);
 const pesanGalat = (e: unknown) => (e instanceof Error ? e.message : "Terjadi kesalahan.");
 
-export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN }: { kegiatanId?: number }) {
+// (30 Okt 2026) Prop `fitur` (profil fitur kegiatan): sub yang fiturnya mati tidak ditampilkan (Kuesioner supervisi, Dokumen pemeriksaan, atau QC Pemahaman).
+export default function QcPemahaman({ kegiatanId = KEGIATAN_PENDATAAN, fitur }: { kegiatanId?: number; fitur?: PetaFitur }) {
   const [d, setD] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
   const [diperbarui, setDiperbarui] = useState<Date | null>(null);
-  const daftarSub = kegiatanId === KEGIATAN_PENDATAAN ? SUB_QC : SUB_QC_PEMAHAMAN;
+  const daftarSub = useMemo(() => {
+    const dasar = kegiatanId === KEGIATAN_PENDATAAN ? SUB_QC : SUB_QC_PEMAHAMAN;
+    if (!fitur) return dasar;
+    const t = subQcTampil(fitur);
+    const hidup = dasar.filter((x) => t[x.kode as keyof typeof t] !== false);
+    return hidup.length > 0 ? hidup : dasar;
+  }, [kegiatanId, fitur]);
   const { sub, pilih } = useSubTab("qc", daftarSub);
   const terkini = useRef(kegiatanId);
   terkini.current = kegiatanId;

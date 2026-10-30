@@ -2,6 +2,8 @@
 
 // app/sigap/kelola/pendataan/page.tsx
 //
+// (30 Okt 2026) PROFIL FITUR KEGIATAN: tab, sub-tab, dan isi Persiapan mengikuti strategi + centang fitur survei terpilih (lib/sigapFitur.ts, useFitur.ts, layar
+// Fitur kegiatan di tab 1 · Persiapan). Menggantikan penanda "belum tersedia" per tab; fitur yang layarnya masih terikat data Pascabencana otomatis mati untuk survei lain.
 // (29 Okt 2026, lanjutan) Tab 2 (Penugasan & ST), 3 (Siaran + kirim satu petugas) dan 7 (Administrasi: transport lokal) kini juga mengikuti survei terpilih.
 // (29 Okt 2026) PEMILIH SURVEI di atas isi (PemilihSurvei.tsx, alamat ?k=): seluruh tab menyesuaikan survei terpilih. Tab 4 (QC) sudah penuh per survei; tab lain
 // untuk survei selain Pendataan Pascabencana menampilkan keterangan "belum tersedia" (BelumUntukSurvei) dan akan disesuaikan bertahap.
@@ -19,7 +21,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ambilRingkas, bacaSesi, keMasuk, type KegiatanRingkas } from "../../admin/api";
 import Bingkai from "../../kontrak/Bingkai";
 import { KEGIATAN_PENDATAAN, TAB_PENDATAAN, bacaKegiatanPendataan, bacaTabPendataan, labelTabPendataan, urlKegiatanPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
-import PemilihSurvei, { BelumUntukSurvei, namaSurvei } from "./PemilihSurvei";
+import PemilihSurvei, { namaSurvei } from "./PemilihSurvei";
+import FiturKegiatan from "./FiturKegiatan";
+import { useFitur } from "./useFitur";
+import { tabAktifKelola, tabTampilKelola } from "@/lib/sigapFitur";
 import KirimSatu from "./KirimSatu";
 import Monitoring from "./Monitoring";
 import Administrasi from "./Administrasi";
@@ -76,44 +81,54 @@ export default function KelolaPendataan() {
 
   const pasca = kegId === KEGIATAN_PENDATAAN;
   const nama = namaSurvei(daftar, kegId);
-  /** Tab yang belum mengikuti survei terpilih. */
-  const belum = (
-    <BelumUntukSurvei nama={nama} tab={labelTabPendataan(tab)} onKePascabencana={() => pilihKegiatan(KEGIATAN_PENDATAAN)} onKeQc={() => pilihTab("qc")} />
-  );
+  const profil = useFitur(kegId);
+  const f = profil.fitur;
+  const tampil = tabTampilKelola(f);
+  /** Tab yang dipakai: pilihan bila fiturnya menyala, selain itu tab tampil pertama (alamat lama ke tab yang dimatikan). */
+  const tabIni = tabAktifKelola(tab, tampil) as KodeTabPendataan;
 
   return (
     <Bingkai<KodeTabPendataan>
       aktif="pendataan_kelola"
       kecil="SIGAP · Kelola Pendataan"
-      jejak={["Pelaksanaan", "Pendataan", labelTabPendataan(tab)]}
+      jejak={["Pelaksanaan", "Pendataan", labelTabPendataan(tabIni)]}
       judul="Kelola Pendataan"
       sub={pasca ? "Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban" : `${nama} · penugasan, siaran, QC Pemahaman, dan administrasi`}
-      tab={TAB_PENDATAAN.map(({ kode, label }) => ({ kode, label }))}
-      aktifTab={tab}
+      tab={TAB_PENDATAAN.filter((t) => (tampil as string[]).includes(t.kode)).map(({ kode, label }) => ({ kode, label }))}
+      aktifTab={tabIni}
       onTab={pilihTab}
     >
       <PemilihSurvei daftar={daftar} aktif={kegId} onPilih={pilihKegiatan} />
-      {tab === "qc" && <QcPemahaman key={kegId} kegiatanId={kegId} />}
-      {!pasca && !["qc", "tim", "siaran", "administrasi"].includes(tab) && belum}
-      {pasca && tab === "ringkasan" && <Ringkasan onBuka={pilihTab} />}
-      {pasca && tab === "persiapan" && (
+      {tabIni === "qc" && <QcPemahaman key={kegId} kegiatanId={kegId} fitur={f} />}
+      {tabIni === "ringkasan" && f.ringkasan && <Ringkasan onBuka={pilihTab} />}
+      {tabIni === "persiapan" && (
         <>
-          <UnggahKk />
-          <PengaturanLembar />
-          <IsiLaporanSpj />
+          {f.persiapan_sasaran && <UnggahKk />}
+          {f.persiapan_lembar && <PengaturanLembar />}
+          {f.persiapan_laporan_spj && <IsiLaporanSpj />}
+          <FiturKegiatan
+            kegiatanId={kegId}
+            nama={nama}
+            strategi={profil.strategi}
+            fitur={f}
+            siap={profil.siap}
+            dimuat={profil.dimuat}
+            galatMuat={profil.galat}
+            onSimpan={profil.simpan}
+          />
         </>
       )}
-      {tab === "tim" && <Tim key={kegId} kegiatanId={kegId} />}
-      {tab === "siaran" && (
+      {tabIni === "tim" && <Tim key={kegId} kegiatanId={kegId} fitur={f} />}
+      {tabIni === "siaran" && (
         <>
           <Siaran key={kegId} kegiatanId={kegId} namaKegiatan={nama} />
           <KirimSatu key={`k${kegId}`} kegiatanId={kegId} />
         </>
       )}
-      {pasca && tab === "monitoring" && <Monitoring />}
-      {pasca && tab === "pemeriksaan" && <Pemeriksaan />}
-      {tab === "administrasi" && <Administrasi key={kegId} kegiatanId={kegId} />}
-      {pasca && tab === "laporan" && <Laporan />}
+      {tabIni === "monitoring" && f.monitoring && <Monitoring />}
+      {tabIni === "pemeriksaan" && <Pemeriksaan fitur={f} />}
+      {tabIni === "administrasi" && <Administrasi key={kegId} kegiatanId={kegId} />}
+      {tabIni === "laporan" && f.laporan && <Laporan />}
     </Bingkai>
   );
 }
