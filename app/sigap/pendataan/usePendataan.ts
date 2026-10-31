@@ -72,10 +72,11 @@ export function uuid(): string {
 }
 
 /** Tandai hasil satu KK (atau 'belum' = Urungkan). Tampil seketika; dikirim di belakang oleh antrean. */
-export function tandaiKk(idsubsls: string, kk: Pick<KkLembar, "id">, hasil: HasilCatat, alasan?: string | null): { ok: true } | { ok: false; pesan: string } {
+export function tandaiKk(idsubsls: string, kk: Pick<KkLembar, "id">, hasil: HasilCatat, alasan?: string | null, revisit?: boolean): { ok: true } | { ok: false; pesan: string } {
   return kirimAtauAntre(
     API_PENDATAAN,
-    { kk_id: kk.id, hasil, alasan: alasan ?? null, waktu: new Date().toISOString(), kunci: uuid(), idsubsls },
+    // (31 Okt 2026) revisit:true hanya dikirim untuk hasil 'terdampak' ("tidak terdampak, revisit menjadi terdampak")
+    { kk_id: kk.id, hasil, alasan: alasan ?? null, waktu: new Date().toISOString(), kunci: uuid(), idsubsls, ...(revisit && hasil === "terdampak" ? { revisit: true } : {}) },
     `kk:${kk.id}`
   );
 }

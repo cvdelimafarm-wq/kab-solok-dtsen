@@ -33,6 +33,7 @@ import KontrolPetaDasar from "./KontrolPetaDasar";
 import { useDasarTim } from "./useDasar";
 import type { StatusDasar } from "./PetaDasar";
 import { namaTampil } from "@/lib/namaTampil";
+import { KETERANGAN_REVISIT, LABEL_REVISIT, LABEL_REVISIT_PENDEK, tampilkanRevisit } from "@/lib/revisit";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
 import { muatData, tandaBasi, useData } from "@/app/portal/dataBersama";
@@ -287,6 +288,8 @@ export default function LembarPendataan() {
 
   const anggota = useMemo(() => new Map((data?.anggota ?? []).map((a) => [a.akun_id, a])), [data]);
   const kkAsli = useMemo(() => kkQ.data?.kk ?? [], [kkQ.data]);
+  // (31 Okt 2026) Sub SLS ditandai revisit oleh admin -> kartu KK menambah pilihan "Tidak terdampak, revisit menjadi terdampak" (tidak di mode perbaikan laporan)
+  const adaRevisit = tampilkanRevisit(kkQ.data?.revisit, !!perbaikan);
   // (27 Okt 2026) pengaturan tampilan kegiatan Sub SLS ini; tanpa pengaturan = tampilan lama (Pascabencana)
   const konfig = useMemo(() => normalisasiKonfig(kkQ.data?.konfig), [kkQ.data]);
   const peta = useMemo(() => bentukPeta(konfig), [konfig]);
@@ -523,21 +526,21 @@ export default function LembarPendataan() {
     }
   }
 
-  function tandai(k: KkLembar, hasil: HasilKk, alasan?: string) {
+  function tandai(k: KkLembar, hasil: HasilKk, alasan?: string, revisit = false) {
     if (!subId) return;
     if (perbaikan) {
       if (sudahAdaHasil(k)) return setToast({ pesan: "KK ini sudah punya hasil, tidak bisa diubah lewat perbaikan." });
       simpanTampung({ ...tampung, [k.id]: { hasil, alasan: alasan ?? null, kunci: tampung[k.id]?.kunci ?? uuid() } });
       return setToast({ pesan: `Ditandai: ${konfig.hasil[hasil].label} (belum dikirim)` });
     }
-    const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
-    const r = tandaiKk(subId, k, hasil, alasan);
+    const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan, revisit: k.revisit === true };
+    const r = tandaiKk(subId, k, hasil, alasan, revisit);
     if (!r.ok) return setToast({ pesan: r.pesan });
     // Urungkan hanya bila tidak menggeser atribusi rekan: KK sebelumnya belum didata, atau hasil milik saya sendiri
     const bisaUrung = sebelum.hasil === null || sebelum.ppl === sayaAkun;
     setToast({
-      pesan: `Tersimpan: ${konfig.hasil[hasil].label}`,
-      urungkan: bisaUrung ? () => void tandaiKk(subId, k, sebelum.hasil ?? "belum", sebelum.hasil ? sebelum.alasan : null) : undefined,
+      pesan: `Tersimpan: ${revisit ? LABEL_REVISIT : konfig.hasil[hasil].label}`,
+      urungkan: bisaUrung ? () => void tandaiKk(subId, k, sebelum.hasil ?? "belum", sebelum.hasil ? sebelum.alasan : null, sebelum.revisit) : undefined,
     });
   }
   function kembalikan(k: KkLembar) {
@@ -548,10 +551,10 @@ export default function LembarPendataan() {
       simpanTampung(sisa);
       return setToast({ pesan: "Dikembalikan ke belum ada hasil" });
     }
-    const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan };
+    const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan, revisit: k.revisit === true };
     const r = tandaiKk(subId, k, "belum");
     if (!r.ok) return setToast({ pesan: r.pesan });
-    setToast({ pesan: "Dikembalikan ke belum ada hasil", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan) : undefined });
+    setToast({ pesan: "Dikembalikan ke belum ada hasil", urungkan: sebelum.hasil && sebelum.ppl === sayaAkun ? () => void tandaiKk(subId, k, sebelum.hasil as HasilKk, sebelum.alasan, sebelum.revisit) : undefined });
   }
 
   /**
@@ -1178,7 +1181,7 @@ export default function LembarPendataan() {
 
           <div className="mt-3 space-y-2" role="group" aria-label="Hasil pendataan">
             {hasilAktif(konfig).map((h) => {
-              const aktif = terpilih.hasil === h && terpilih.ppl_akun_id === sayaAkun;
+              const aktif = terpilih.hasil === h && terpilih.ppl_akun_id === sayaAkun && !(h === "terdampak" && terpilih.revisit === true);
               return (
                 <button key={h} type="button" aria-pressed={aktif} onClick={() => tandai(terpilih, h)} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${aktif ? "border-[#1F5FD1] bg-[#E3ECFB]" : "border-[#D9E3F2] bg-white active:bg-[#F1F6FE]"}`}>
                   <IkonHasil hasil={h} warna={warnaPelaku(anggota.get(sayaAkun))} ukuran={26} peta={peta} />
@@ -1189,14 +1192,32 @@ export default function LembarPendataan() {
                 </button>
               );
             })}
+            {adaRevisit && (
+              <button
+                type="button"
+                aria-pressed={terpilih.hasil === "terdampak" && terpilih.revisit === true && terpilih.ppl_akun_id === sayaAkun}
+                onClick={() => tandai(terpilih, "terdampak", undefined, true)}
+                className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${terpilih.hasil === "terdampak" && terpilih.revisit === true && terpilih.ppl_akun_id === sayaAkun ? "border-[#6B1F96] bg-[#F1E4FA]" : "border-[#D9C2EA] bg-white active:bg-[#F8F0FD]"}`}
+              >
+                <IkonHasil hasil="terdampak" warna="#6B1F96" ukuran={26} peta={peta} />
+                <span className="text-[14px] font-extrabold text-[#0F2A52]">
+                  {LABEL_REVISIT}
+                  <small className="block text-[11.5px] font-medium text-[#6B7A90]">{KETERANGAN_REVISIT}</small>
+                </span>
+              </button>
+            )}
           </div>
+
+          {terpilih.hasil === "terdampak" && terpilih.revisit === true && (
+            <p className="mt-2 rounded-[12px] bg-[#F1E4FA] px-3 py-2 text-[12.5px] font-bold text-[#4A1568]">{LABEL_REVISIT_PENDEK}. Dihitung sebagai terdampak.</p>
+          )}
 
           {terpilih.hasil && konfig.hasil[terpilih.hasil].alasan.length > 0 && terpilih.ppl_akun_id === sayaAkun && (
             <div className="mt-3">
               <span className="text-[11.5px] font-bold text-[#52627A]">Alasan (boleh dikosongkan)</span>
               <div className="mt-1.5 flex flex-wrap gap-2">
                 {konfig.hasil[terpilih.hasil].alasan.map((a) => (
-                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} onClick={() => tandai(terpilih, terpilih.hasil as HasilKk, a)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
+                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} onClick={() => tandai(terpilih, terpilih.hasil as HasilKk, a, terpilih.revisit === true)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
                     {a}
                   </button>
                 ))}

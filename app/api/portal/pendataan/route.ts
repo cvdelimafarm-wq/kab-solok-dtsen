@@ -5,7 +5,8 @@
 //  GET ?sub=<idsubsls>  -> { idsubsls, kk[], konfig }                                                              (hanya Sub SLS milik tim)
 //  POST { aksi:"tambah", idsubsls, nama, patokan?, lat?, lng?, hasil, waktu, kunci, paksa? }  (14 Okt 2026) tambah keluarga baru
 //  POST { aksi:"batalkan_baru", kk_id, alasan? }  (21 Okt 2026) batalkan keluarga baru yang dobel/salah (PML tim atau PPL penambah)
-//  POST { kk_id, hasil, alasan?, waktu, kunci, pos? }  catat hasil satu KK. Idempoten lewat `kunci` (uuid dari HP); `waktu` = waktu kejadian di HP.
+//  GET ?sub=<idsubsls> juga memuat `revisit` (true = Sub SLS ditandai revisit; 31 Okt 2026)
+//  POST { kk_id, hasil, alasan?, waktu, kunci, pos?, revisit? }  catat hasil satu KK (revisit:true hanya bermakna untuk hasil 'terdampak'). Idempoten lewat `kunci` (uuid dari HP); `waktu` = waktu kejadian di HP.
 // "Masuk sebagai" (akun super) hanya boleh MELIHAT: mencatat ditolak supaya data lapangan tidak terisi tanpa sengaja.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +16,7 @@ import { ambilTimMemo, batalkanKkBaru, catatHasil, daftarKk, periksaTambahKk, ri
 import { periksaBatalKkBaru, periksaCatat } from "@/lib/pendataan";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 import { kegiatanSub, konfigKegiatan } from "@/lib/portal/lembarKonfig";
+import { subBertandaRevisit } from "@/lib/portal/revisit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +38,9 @@ export async function GET(req: NextRequest) {
       const kk = await daftarKk(db, idsubsls);
       // (27 Okt 2026) pengaturan tampilan kegiatan Sub SLS ini (nama/warna/bentuk tombol hasil, radar); tanpa pengaturan = tampilan bawaan
       const konfig = await konfigKegiatan(db, await kegiatanSub(db, idsubsls));
-      return NextResponse.json({ sekarang: new Date().toISOString(), idsubsls, kk, konfig });
+      // (31 Okt 2026) Sub SLS ditandai revisit oleh admin -> kartu KK menampilkan pilihan revisit (false bila SQL 20261031c belum dijalankan)
+      const revisit = await subBertandaRevisit(db, idsubsls);
+      return NextResponse.json({ sekarang: new Date().toISOString(), idsubsls, kk, konfig, revisit });
     }
 
     const [ringkas, prop] = await Promise.all([ringkasTim(db, tim.pml.id), kkProporsionalTim(db, tim.pml.id)]);

@@ -65,7 +65,13 @@ export type DataPermintaanTim = {
   bisa_kirim: boolean;
   permintaan: Permintaan[];
 };
-export type DataPermintaanAdmin = { sekarang: string; boleh_kelola: boolean; permintaan: PermintaanAdmin[] };
+export type DataPermintaanAdmin = {
+  sekarang: string;
+  boleh_kelola: boolean;
+  permintaan: PermintaanAdmin[];
+  /** (31 Okt 2026) tanda revisit per Sub SLS; tersedia=false bila SQL 20261031c belum dijalankan */
+  revisit?: { tersedia: boolean; aktif: string[] };
+};
 
 /** Tanggal WIB (yyyy-mm-dd) dari waktu apa pun. Dasar hitung "hari ini". */
 export const tanggalWib = (t: Date | number | string): string => new Date(new Date(t).getTime() + 7 * 3_600_000).toISOString().slice(0, 10);

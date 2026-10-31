@@ -91,20 +91,32 @@ export async function ringkasTim(db: Db, pmlId: number): Promise<BarisRingkas[]>
   return ringkasAktif(baris, await idSubNonaktif(db, baris.map((b) => b.idsubsls)));
 }
 
+const KOLOM_KK = "id, no_urut, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at, ditambah_oleh_akun";
+// (31 Okt 2026) kolom `revisit` baru ada setelah SQL 20261031c; sebelum itu daftar KK dimuat tanpa kolom itu (Lembar Pendataan tidak boleh rusak).
+let tanpaKolomRevisitSampai = 0;
+
 /** Semua KK aktif satu Sub SLS (paging 1000). Pemanggil sudah memastikan Sub SLS milik tim. */
 export async function daftarKk(db: Db, idsubsls: string): Promise<KkLembar[]> {
   const out: KkLembar[] = [];
   for (let dari = 0; ; dari += 1000) {
-    const { data, error } = await db
-      .from("bencana_pendataan_kk")
-      .select("id, no_urut, nama_kk, anggota_lain, patokan, lat, lng, hasil, alasan, ppl_akun_id, status_at, ditambah_oleh_akun")
-      .eq("idsubsls", idsubsls)
-      .eq("aktif", true)
-      .order("nama_kk", { ascending: true })
-      .order("id", { ascending: true })
-      .range(dari, dari + 999);
+    const bukaRevisit = Date.now() >= tanpaKolomRevisitSampai;
+    const ambil = (kolom: string) =>
+      db
+        .from("bencana_pendataan_kk")
+        .select(kolom)
+        .eq("idsubsls", idsubsls)
+        .eq("aktif", true)
+        .order("nama_kk", { ascending: true })
+        .order("id", { ascending: true })
+        .range(dari, dari + 999);
+    let res = await ambil(bukaRevisit ? `${KOLOM_KK}, revisit` : KOLOM_KK);
+    if (res.error && bukaRevisit) {
+      tanpaKolomRevisitSampai = Date.now() + 60_000;
+      res = await ambil(KOLOM_KK);
+    }
+    const { data, error } = res as unknown as { data: KkLembar[] | null; error: { message: string } | null };
     if (error) throw new Error(error.message);
-    out.push(...((data ?? []) as KkLembar[]));
+    out.push(...(data ?? []));
     if (!data || data.length < 1000) break;
   }
   return out;
@@ -128,6 +140,8 @@ export async function catatHasil(db: Db, akunId: number, c: IsiCatat): Promise<{
     p_pos_lat: c.pos?.lat ?? null,
     p_pos_lng: c.pos?.lng ?? null,
     p_pos_akurasi: c.pos?.akurasi ?? null,
+    // (31 Okt 2026) hanya dikirim bila revisit, supaya fungsi database versi lama (sebelum SQL 20261031c) tetap bisa dipanggil
+    ...(c.revisit ? { p_revisit: true } : {}),
   });
   if (error) throw new Error(error.message);
   const r = data as HasilCatatDb;

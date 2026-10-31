@@ -10,6 +10,7 @@
 //  GET ?belum=1      -> { boleh_kelola, items[], tim[] }                      admin bencana.admin (lihat): Sub SLS yang BELUM diajukan + plotting awal + daftar tim tujuan (21 Okt 2026)
 //  POST { aksi:"tugaskan", pilihan:[{idsubsls,pml_id,ppl_akun_id}] }  admin level kelola: tugaskan ke PML plotting / tim lain; jadi permintaan "menunggu" (dari_admin), tidak memakai kuota PML
 //  POST { aksi:"tandai_keluar", pilihan:[{idsubsls,pml_id,ppl_akun_id}] }  admin level kelola: Sub SLS yang SUDAH di-assign di FASIH di luar alur SIGAP -> langsung "sudah keluar" (tanpa notifikasi, tanpa kuota) (30 Okt 2026)
+//  POST { aksi:"revisit", ids:[idsubsls], aktif:boolean }          admin level kelola: pasang/cabut tanda REVISIT per Sub SLS (31 Okt 2026; GET ?admin=1 memuat `revisit` {tersedia, aktif[]})
 //  POST { aksi:"email", id, sebagai:"pengawas"|"pencacah", email }  admin level kelola: isi email FASIH yang belum ada (bencana_petugas.email_fasih)
 //  POST { aksi:"selesai", ids:[...] }                        admin bencana.admin level kelola: tandai sudah keluar di FASIH; PML & PPL diberi push
 //  POST { aksi:"tolak", ids:[...], alasan? }                 admin level kelola: TOLAK permintaan yang masih menunggu (lunak: jadi dibatalkan, kuota PML kembali, PML dikabari + alasan)
@@ -23,6 +24,8 @@ import { buangMemo } from "@/lib/portal/memoSingkat";
 import { ajukanPembatalan, batalkanPermintaan, buatPermintaan, permintaanSemua, permintaanTim, prosesPembatalan, selesaikanPermintaan, simpanEmailFasih, tarikPermintaan, tolakPermintaan } from "@/lib/portal/permintaanDaftar";
 import { daftarBelumDiajukan, tandaiKeluarLangsung, tugaskanSubsls } from "@/lib/portal/belumDiajukan";
 import { periksaTugas } from "@/lib/belumDiajukan";
+import { aturRevisit, daftarRevisit } from "@/lib/portal/revisit";
+import { periksaAturRevisit } from "@/lib/revisit";
 import { aktorDariHeader, izinAkun, bolehPsp } from "@/lib/sigapAkses";
 import { batasPengajuan, periksaIds, periksaPilihan, tanggalWib } from "@/lib/permintaanDaftar";
 
@@ -40,7 +43,8 @@ export async function GET(req: NextRequest) {
     if (req.nextUrl.searchParams.get("admin") === "1") {
       const { izin } = await izinAkun(db, akun.id);
       if (!bolehPsp(izin, "lihat")) return galat("Khusus admin pendataan.", 403);
-      return NextResponse.json({ sekarang: new Date().toISOString(), boleh_kelola: bolehPsp(izin, "kelola"), permintaan: await permintaanSemua(db) });
+      const [permintaan, revisit] = await Promise.all([permintaanSemua(db), daftarRevisit(db)]);
+      return NextResponse.json({ sekarang: new Date().toISOString(), boleh_kelola: bolehPsp(izin, "kelola"), permintaan, revisit });
     }
     if (req.nextUrl.searchParams.get("belum") === "1") {
       const { izin } = await izinAkun(db, akun.id);
@@ -144,6 +148,15 @@ async function proses(req: NextRequest) {
       const h = await tandaiKeluarLangsung(db, { id: akun.id }, cek.pilihan);
       if ("galat" in h) return galat(h.galat, h.status);
       return NextResponse.json({ ok: true, ...h });
+    }
+    if (b.aksi === "revisit") {
+      const { izin } = await izinAkun(db, akun.id);
+      if (!bolehPsp(izin, "kelola")) return galat("Tidak punya izin mengatur revisit.", 403);
+      const cek = periksaAturRevisit(b);
+      if (!cek.ok) return galat(cek.pesan, 400);
+      const h = await aturRevisit(db, akun.id, cek.isi.ids, cek.isi.aktif);
+      if (!h.ok) return galat(h.pesan, h.status);
+      return NextResponse.json({ ok: true, diubah: h.diubah });
     }
     if (b.aksi === "email") {
       const { izin } = await izinAkun(db, akun.id);

@@ -5,6 +5,8 @@
 // proyeksi titik ke kanvas peta (tanpa basemap), dan penghitung ringkasan monitoring.
 // Aturan inti (keputusan user): HASIL TERAKHIR YANG BERLAKU menurut waktu kejadian di HP; tanpa klaim lunak "sedang didata".
 
+import { revisitBerlaku } from "./revisit";
+
 export const HASIL_KK = ["terdampak", "tidak_terdampak", "tidak_ditemukan"] as const;
 export type HasilKk = (typeof HASIL_KK)[number];
 /** 'belum' = Urungkan (kembali ke belum didata); hanya ada di log. */
@@ -35,6 +37,8 @@ export type IsiCatat = {
   waktu: string;
   kunci: string;
   pos: { lat: number; lng: number; akurasi: number | null } | null;
+  /** (31 Okt 2026) hanya ada bila true: "tidak terdampak, revisit menjadi terdampak" (hasil tetap 'terdampak'); lihat lib/revisit.ts */
+  revisit?: true;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -60,7 +64,8 @@ export function periksaCatat(b: unknown): { ok: true; isi: IsiCatat } | { ok: fa
     const lng = angkaHingga(p.lng);
     if (lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) pos = { lat, lng, akurasi: angkaHingga(p.akurasi) };
   }
-  return { ok: true, isi: { kk_id: kk, hasil: r.hasil, alasan: alasanMentah || null, waktu: new Date(t).toISOString(), kunci, pos } };
+  const revisit = revisitBerlaku(r.hasil, r.revisit);
+  return { ok: true, isi: { kk_id: kk, hasil: r.hasil, alasan: alasanMentah || null, waktu: new Date(t).toISOString(), kunci, pos, ...(revisit ? { revisit: true as const } : {}) } };
 }
 
 // ------------------------------------------------------------------ unggahan daftar KK
@@ -446,6 +451,8 @@ export type KkLembar = {
   status_at: string | null;
   /** (21 Okt 2026) akun yang menambahkan KK ini lewat tombol "+ Keluarga baru"; null = KK dari daftar awal (unggahan FASIH) */
   ditambah_oleh_akun?: number | null;
+  /** (31 Okt 2026) true = hasil 'terdampak' hasil REVISIT (tadinya tidak terdampak); kolom baru dari SQL 20261031c, tak ada = false */
+  revisit?: boolean;
 };
 
 /**
@@ -473,7 +480,10 @@ export type DataTimPendataan = { sekarang: string; saya: { akun_id: number; pera
   proporsional?: { total: number; didata: number } | null;
 };
 // (27 Okt 2026) `konfig` = pengaturan tampilan Lembar untuk kegiatan Sub SLS ini (lib/lembarKonfig.ts); kosong/rusak -> tampilan bawaan.
-export type DataKkSub = { sekarang: string; idsubsls: string; kk: KkLembar[]; konfig?: unknown };
+export type DataKkSub = { sekarang: string; idsubsls: string; kk: KkLembar[]; konfig?: unknown;
+  /** (31 Okt 2026) true = Sub SLS ini ditandai revisit oleh admin: kartu KK menampilkan pilihan "Tidak terdampak, revisit menjadi terdampak" */
+  revisit?: boolean;
+};
 
 
 export type Hitung = { terdampak: number; tidak_terdampak: number; tidak_ditemukan: number };

@@ -13,10 +13,12 @@ import { apiPortal } from "@/app/portal/sesi";
 import { waktuRingkas } from "@/app/sigap/pendataan/usePendataan";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import BelumDiajukan from "./BelumDiajukan";
+import RevisitSub from "./RevisitSub";
+import { daftarSubRevisit } from "@/lib/revisit";
 import type { DataBelum } from "@/lib/belumDiajukan";
 import { API_PERMINTAAN, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, JUDUL_TEMPLAT_FASIH, LABEL_STATUS_MINTA, barisTemplatFasih, namaBerkasTemplat, periksaEmail, tanggalWib, tanpaEmail, urutPermintaan, MAKS_ALASAN_TOLAK, type DataPermintaanAdmin, type PeranEmail, type PermintaanAdmin } from "@/lib/permintaanDaftar";
 
-type Saring = "belum" | "menunggu" | "sudah_keluar" | "dibatalkan";
+type Saring = "belum" | "menunggu" | "sudah_keluar" | "dibatalkan" | "revisit";
 
 const namaSub = (p: Pick<PermintaanAdmin, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(p.sls)}${p.sub_sls ? ` Sub ${p.sub_sls}` : ""} · Nagari ${rapikanNama(p.nagari)}`;
 
@@ -27,7 +29,7 @@ export default function PermintaanDaftar() {
   const [saring, setSaring] = useState<Saring>("menunggu");
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [yakin, setYakin] = useState(false);
-  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | "hapus" | "tolak" | null>(null);
+  const [sibuk, setSibuk] = useState<"muat" | "ekspor" | "tandai" | "tarik" | "hapus" | "tolak" | string | null>(null);
   const [yakinTarik, setYakinTarik] = useState(false);
   const [yakinTolak, setYakinTolak] = useState(false);
   const [alasanTolak, setAlasanTolak] = useState("");
@@ -59,6 +61,9 @@ export default function PermintaanDaftar() {
   const batal = useMemo(() => semua.filter((p) => p.status === "dibatalkan"), [semua]);
   const batalPerSub = useMemo(() => new Set(batal.map((p) => p.idsubsls)), [batal]);
   const tampil = saring === "menunggu" ? menunggu : saring === "sudah_keluar" ? keluar : saring === "dibatalkan" ? batal : [];
+  // (31 Okt 2026) tab Revisit: tanda revisit per Sub SLS (lib/revisit.ts)
+  const daftarRevisit = useMemo(() => daftarSubRevisit(semua, new Set(data?.revisit?.aktif ?? [])), [semua, data]);
+  const daftarMode = saring !== "belum" && saring !== "revisit";
   const dipilih = useMemo(() => semua.filter((p) => pilih.has(p.id)), [semua, pilih]);
   const dipilihMenunggu = dipilih.filter((p) => p.status === "menunggu");
   const dipilihKeluar = dipilih.filter((p) => p.status === "sudah_keluar");
@@ -156,6 +161,22 @@ export default function PermintaanDaftar() {
     }
   }
 
+  async function ubahRevisit(idsubsls: string, aktif: boolean) {
+    if (sibuk) return;
+    setSibuk(idsubsls);
+    setPesan(null);
+    setGalat(null);
+    try {
+      await apiPortal(API_PERMINTAAN, { method: "POST", body: JSON.stringify({ aksi: "revisit", ids: [idsubsls], aktif }) });
+      setPesan(aktif ? "Sub SLS ditandai revisit. Semua KK di dalamnya kini punya pilihan \"Tidak terdampak, revisit menjadi terdampak\"." : "Tanda revisit dicabut. KK yang sudah dicatat revisit tetap tercatat.");
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error && e.message !== "SESI_BERAKHIR" ? e.message : "Gagal menyimpan tanda revisit. Coba lagi.");
+    } finally {
+      setSibuk(null);
+    }
+  }
+
   async function tarik() {
     if (dipilihKeluar.length === 0 || sibuk) return;
     setSibuk("tarik");
@@ -209,11 +230,12 @@ export default function PermintaanDaftar() {
       </p>
       {galat && <p className="mt-3 rounded-[12px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Saring status">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5" role="group" aria-label="Saring status">
         {tombolSaring("belum", "Belum diajukan", belum?.items.length ?? 0)}
         {tombolSaring("menunggu", LABEL_STATUS_MINTA.menunggu, menunggu.length)}
         {tombolSaring("sudah_keluar", "Sudah keluar", keluar.length)}
         {tombolSaring("dibatalkan", "Hapus di FASIH", batal.length)}
+        {tombolSaring("revisit", "Revisit", daftarRevisit.filter((b) => b.aktif).length)}
       </div>
       {batal.length > 0 && saring !== "dibatalkan" && (
         <p className="mt-2 rounded-[12px] bg-[#FDE8E8] px-3 py-2 text-[12.5px] font-bold text-[#7A1D22]">
@@ -223,17 +245,18 @@ export default function PermintaanDaftar() {
       )}
 
       {saring === "belum" && <BelumDiajukan data={belum} onSelesai={muat} />}
+      {saring === "revisit" && data && <RevisitSub baris={daftarRevisit} tersedia={data.revisit?.tersedia === true} boleh={boleh} sibuk={sibuk} onUbah={(id, aktif) => void ubahRevisit(id, aktif)} />}
 
-      {saring !== "belum" && <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
+      {daftarMode && <div className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5 text-[12px] leading-snug text-[#52627A]">
         <p>{CATATAN_CEK_SUBMIT}</p>
         <p className="mt-1.5 rounded-[8px] px-2 py-1 font-extrabold" style={{ background: "#FFE680", color: "#4A3500" }}>
           Catatan: {CATATAN_KEROYOKAN}
         </p>
       </div>}
 
-      {saring !== "belum" && data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : saring === "sudah_keluar" ? "Belum ada permintaan yang ditandai sudah keluar." : "Tidak ada pembatalan yang perlu dihapus di FASIH."}</p>}
+      {daftarMode && data && tampil.length === 0 && <p className="mt-3 rounded-[12px] bg-[#F5F8FE] px-3 py-3 text-[13px] text-[#55657D]">{saring === "menunggu" ? "Tidak ada permintaan yang menunggu." : saring === "sudah_keluar" ? "Belum ada permintaan yang ditandai sudah keluar." : "Tidak ada pembatalan yang perlu dihapus di FASIH."}</p>}
 
-      {saring !== "belum" && tampil.length > 0 && (
+      {daftarMode && tampil.length > 0 && (
         <>
           <button type="button" onClick={pilihSemuaTampil} className="mt-3 min-h-[40px] rounded-full bg-[#F5F8FE] px-3 text-[12px] font-extrabold text-[#1F5FD1]">
             {tampil.every((p) => pilih.has(p.id)) ? "Batal pilih semua" : "Pilih semua di daftar ini"}
@@ -289,7 +312,7 @@ export default function PermintaanDaftar() {
         </>
       )}
 
-      {saring !== "belum" && dipilih.length > 0 && (
+      {daftarMode && dipilih.length > 0 && (
         <div className="mt-3 space-y-2">
           {dipilihAktif.length > 0 && (
             <button type="button" disabled={sibuk !== null} onClick={() => void ekspor()} className="min-h-[50px] w-full rounded-[14px] bg-[#1F5FD1] px-4 text-[14px] font-extrabold text-white disabled:bg-[#A9BCD8]">

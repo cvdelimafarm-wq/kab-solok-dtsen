@@ -93,8 +93,8 @@ function terapkanPendataan(d: unknown, items: ItemAntre[], pemilik: number): unk
     if (!it) return k;
     if (k.status_at && Date.parse(k.status_at) > Date.parse(it.waktu)) return k;
     return it.hasil === "belum"
-      ? { ...k, hasil: null, alasan: null, ppl_akun_id: null, status_at: it.waktu }
-      : { ...k, hasil: it.hasil, alasan: it.alasan, ppl_akun_id: pemilik, status_at: it.waktu };
+      ? { ...k, hasil: null, alasan: null, ppl_akun_id: null, status_at: it.waktu, revisit: false }
+      : { ...k, hasil: it.hasil, alasan: it.alasan, ppl_akun_id: pemilik, status_at: it.waktu, revisit: it.revisit === true };
   });
   return { ...data, kk };
 }
