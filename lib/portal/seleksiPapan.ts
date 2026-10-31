@@ -10,6 +10,7 @@ import {
   type Hasil, type Peran, type PesertaNilai, type Variabel,
 } from "@/lib/seleksiNilai";
 import { bacaWilayah } from "@/lib/portal/seleksiKandidat";
+import { rataPenilaianPerAkun } from "@/lib/portal/rataPenilaian";
 
 export type SeleksiLengkap = {
   id: number; kegiatan_id: number; nama: string; jalur: string; status: string; kebutuhan_ppl: number; kebutuhan_pml: number; sudah_ppl: number; sudah_pml: number;
@@ -82,6 +83,8 @@ export async function bacaPapan(db: Db, s: SeleksiLengkap): Promise<Papan> {
 
   const petugasIds = akun.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number");
   const kinerja = new Map((await dalamPotongan<{ id: number; nilai_kinerja: number | null }>(petugasIds, (c) => db.from("bencana_petugas").select("id, nilai_kinerja").in("id", c))).map((p) => [p.id, p.nilai_kinerja]));
+  // (31 Okt 2026) Rekam jejak = rata-rata persis penilaian Mitra per kegiatan (tab Penilaian Mitra); belum ada tabelnya / belum dinilai -> nilai_kinerja lama.
+  const rataPenilaian = await rataPenilaianPerAkun(db, ids);
 
   const sesiTes = new Map<number, number | null>();
   const { data: ses } = await db.from("sigap_seleksi_sesi").select("akun_id, skor, selesai_at, batas_at").eq("seleksi_id", s.id);
@@ -112,7 +115,7 @@ export async function bacaPapan(db: Db, s: SeleksiLengkap): Promise<Papan> {
     for (const v of variabel) {
       const n =
         v.sumber === "tes" ? sesiTes.get(p.akun_id) ?? null
-        : v.sumber === "rekam_jejak" ? nilaiRekamJejak(a?.petugas_bencana_id ? kinerja.get(a.petugas_bencana_id) : null)
+        : v.sumber === "rekam_jejak" ? nilaiRekamJejak(rataPenilaian?.get(p.akun_id) ?? (a?.petugas_bencana_id ? kinerja.get(a.petugas_bencana_id) : null))
         : v.sumber === "jarak" ? nilaiJarak(kel.jarak_km, maksJarak)
         : manual.get(`${v.id}:${p.akun_id}`) ?? null;
       nilai.set(v.id, n);

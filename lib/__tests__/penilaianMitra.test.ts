@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buatKode, cocokkanMitra, normalNama, periksaBanyak, periksaKolomBaru, periksaNilai, rataRata, uraiTempel } from "../penilaianMitra";
+import { buatKode, cocokkanMitra, normalNama, periksaBanyak, periksaKolomBaru, periksaNilai, rataPersis, rataRata, uraiTempel } from "../penilaianMitra";
 
 describe("rataRata", () => {
   it("rata-rata satu desimal, abaikan kosong/tak sah", () => {
@@ -115,5 +115,14 @@ describe("cocokkanMitra", () => {
   });
   it("normalNama", () => {
     expect(normalNama(" Ani,  Putri. ")).toBe("ani putri");
+  });
+});
+
+describe("rataPersis", () => {
+  it("rata-rata tanpa pembulatan, abaikan nilai tak sah", () => {
+    expect(rataPersis([5, 4])).toBe(4.5);
+    expect(rataPersis([5, 4, 4])).toBeCloseTo(4.3333, 4);
+    expect(rataPersis([null, undefined, 0, 9])).toBeNull();
+    expect(rataPersis([])).toBeNull();
   });
 });

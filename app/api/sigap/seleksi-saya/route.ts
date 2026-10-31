@@ -1,6 +1,7 @@
 // app/api/sigap/seleksi-saya/route.ts
 //
 // (31 Okt 2026) Sisi Mitra pada seleksi petugas (paket 3): melihat seleksi yang diikuti, memeriksa kelayakan diri, mendaftar, dan mundur.
+//   GET  (tanpa id)                     -> { kartu: KartuSeleksi[] }  kartu Beranda: seleksi dibuka yang relevan bagi Mitra ini (lib/seleksiBeranda)
 //   GET  ?id=N                          -> { seleksi, jendela, kelayakan, saya, boleh: {ppl, pml} }
 //   POST { aksi: "daftar", id, peran }  -> terdaftar (diperiksa ulang di server: jadwal, kebutuhan peran, kelayakan)
 //   POST { aksi: "mundur", id }         -> mundur selama pendaftaran masih dibuka
@@ -20,6 +21,7 @@ import { bersihkanJawaban, hitungBatas, hitungSkor, lewatBatas, TOLERANSI_DETIK,
 import { putusanKonfirmasi, statusTesSeleksi } from "@/lib/seleksiNilai";
 import { tugaskanPeserta } from "@/lib/portal/seleksiPenugasan";
 import { jendelaPendaftaran, peranDaftarSah, putusanDaftar, type PeranDaftar } from "@/lib/seleksiDaftar";
+import { susunKartuSeleksi, type MasukanKartu } from "@/lib/seleksiBeranda";
 import { bacaCalonSatu, bacaWilayah, tahunPoolKegiatan } from "@/lib/portal/seleksiKandidat";
 
 export const runtime = "nodejs";
@@ -104,12 +106,48 @@ async function ringkasPaket4(db: Db, id: number, akunId: number, terdaftar: bool
   return { tes, hasil };
 }
 
+/** Kartu seleksi untuk Beranda. Gagal membaca (mis. tabel belum ada) = tanpa kartu; Beranda tidak boleh terganggu. */
+async function kartuBeranda(db: Db, akunId: number) {
+  try {
+    const { data: akun } = await db.from("sigap_akun").select("jenis").eq("id", akunId).maybeSingle();
+    if (!akun || akun.jenis !== "mitra") return [];
+    const { data: buka } = await db
+      .from("sigap_seleksi")
+      .select("id, kegiatan_id, nama, jalur, status, kebutuhan_ppl, kebutuhan_pml, sudah_ppl, sudah_pml, syarat, jadwal_buka, jadwal_tutup")
+      .eq("jalur", "seleksi")
+      .eq("status", "dibuka")
+      .order("id", { ascending: false })
+      .limit(10);
+    const daftar = (buka ?? []) as BarisSeleksi[];
+    if (daftar.length === 0) return [];
+    const { data: ikut } = await db.from("sigap_seleksi_peserta").select("seleksi_id, peran, status").eq("akun_id", akunId).in("seleksi_id", daftar.map((b) => b.id));
+    const sayaPer = new Map(((ikut ?? []) as { seleksi_id: number; peran: string; status: string }[]).map((x) => [x.seleksi_id, { peran: x.peran, status: x.status }]));
+    const { data: keg } = await db.from("sigap_kegiatan").select("id, nama").in("id", [...new Set(daftar.map((b) => b.kegiatan_id))]);
+    const namaKeg = new Map(((keg ?? []) as { id: number; nama: string }[]).map((k) => [k.id, k.nama]));
+    const masukan: MasukanKartu[] = [];
+    for (const b of daftar) {
+      const n = await nilaiSaya(db, b, akunId);
+      masukan.push({
+        id: b.id, nama: b.nama, kegiatan: namaKeg.get(b.kegiatan_id) ?? "", jadwal_tutup: b.jadwal_tutup,
+        jendela: n.ok ? n.jendela : jendelaPendaftaran({ status: b.status, jadwal_buka: b.jadwal_buka, jadwal_tutup: b.jadwal_tutup, nowMs: Date.now() }),
+        kelayakan: n.ok ? n.kelayakan : null,
+        boleh: n.ok ? { ppl: n.putus("ppl"), pml: n.putus("pml") } : null,
+        saya: sayaPer.get(b.id) ?? null,
+      });
+    }
+    return susunKartuSeleksi(masukan);
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   try {
     const akunId = await akunAktif(req, db);
     if (!akunId) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
+    if (!req.nextUrl.searchParams.has("id")) return NextResponse.json({ kartu: await kartuBeranda(db, akunId) });
     const id = Number(req.nextUrl.searchParams.get("id"));
     if (!Number.isInteger(id) || id <= 0) return galat("Seleksi tidak sah.");
     const b = await muat(db, id);

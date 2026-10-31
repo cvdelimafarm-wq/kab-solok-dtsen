@@ -21,6 +21,12 @@ export function rataRata(nilai: (number | null | undefined)[]): number | null {
   return Math.round((ada.reduce((a, b) => a + b, 0) / ada.length) * 10) / 10;
 }
 
+/** Rata-rata nilai TANPA pembulatan (dipakai skor rekam jejak seleksi); null bila tidak ada nilai sah. */
+export function rataPersis(nilai: (number | null | undefined)[]): number | null {
+  const ada = nilai.filter((x): x is number => nilaiSah(x));
+  return ada.length === 0 ? null : ada.reduce((a, b) => a + b, 0) / ada.length;
+}
+
 /** Kode kolom dari nama: huruf besar, angka, tanda minus; maks 40 karakter ("Sakernas TW IV" -> "SAKERNAS-TW-IV"). Kosong -> null. */
 export function buatKode(teks: string): string | null {
   const k = teks

@@ -16,7 +16,7 @@ import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type U
 import { MAKS_CATATAN, rataRata, type NilaiMitra } from "@/lib/penilaianMitra";
 
 type Kolom = { id: number; kode: string; nama: string; kegiatan_id: number | null; urutan: number; dibuka: boolean };
-type Mitra = { akun_id: number; nama: string; kecamatan: string | null; nagari: string | null; aktif: boolean; nilai: Record<string, NilaiMitra> };
+type Mitra = { akun_id: number; nama: string; kecamatan: string | null; nagari: string | null; aktif: boolean; red_flag: boolean; rekomendasi_pml: boolean; nilai: Record<string, NilaiMitra> };
 type Respons = { tabel_siap: boolean; boleh_kelola: boolean; kolom: Kolom[]; mitra: Mitra[]; kegiatan_tersedia: { id: number; nama: string }[] };
 type LaporanTempel = {
   cocok: number; contoh: { nama: string; nilai: number }[]; tidak_cocok: { kunci: string; baris_ke: number }[]; jumlah_tidak_cocok: number;
@@ -80,6 +80,7 @@ export default function PenilaianMitra() {
       if (k === "nag") return kapitalWilayah(m.nagari) ?? "";
       if (k === "rata") return rataRata(Object.values(m.nilai).map((x) => x.n)) ?? "";
       if (k === "jml") return Object.keys(m.nilai).length;
+      if (k === "tanda") return m.red_flag ? "Red flag" : m.rekomendasi_pml ? "Rekomendasi PML" : "";
       if (k.startsWith("k:")) return m.nilai[k.slice(2)]?.n ?? "";
       return "";
     },
@@ -199,7 +200,7 @@ export default function PenilaianMitra() {
     return <Pesan jenis="peringatan">Tabel penilaian Mitra belum dibuat. Jalankan SQL 20261031j_penilaian_mitra.sql, lalu muat ulang halaman ini.</Pesan>;
   }
 
-  const jumlahKolomTabel = 3 + kolom.length + 2;
+  const jumlahKolomTabel = 3 + kolom.length + 3;
 
   return (
     <div className="space-y-3">
@@ -347,6 +348,7 @@ export default function PenilaianMitra() {
               {kolom.map((k) => kepala(`k:${k.id}`, k.nama))}
               {kepala("rata", "Rata-rata")}
               {kepala("jml", "Jml dinilai")}
+              {kepala("tanda", "Penanda")}
             </tr>
           </thead>
           <tbody>
@@ -392,6 +394,13 @@ export default function PenilaianMitra() {
                     })}
                     <td className={TD}>{rata != null ? <span className={`rounded-md px-2 py-0.5 text-[12.5px] font-extrabold ${kelasNilai(rata)}`}>{rata}</span> : "–"}</td>
                     <td className={TD}>{Object.keys(m.nilai).length}</td>
+                    <td className={TD}>
+                      <div className="flex flex-wrap gap-1">
+                        {m.red_flag && <Chip w="bad">Red flag</Chip>}
+                        {m.rekomendasi_pml && <Chip w="ok">Rekomendasi PML</Chip>}
+                        {!m.red_flag && !m.rekomendasi_pml && "–"}
+                      </div>
+                    </td>
                   </tr>
                   {buka && (
                     <tr className="bg-[#F3F7FE]">

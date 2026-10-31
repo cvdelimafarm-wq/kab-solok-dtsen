@@ -22,6 +22,7 @@ import { chipPeranTim, susunTahap, type Induk } from "@/lib/sigapTahap";
 import { aktivitasDariInduk } from "@/lib/sigapAktivitas"; // (30 Okt 2026) kegiatan aktif per jenis (Pelatihan / Pendataan)
 import { susunDaftarKartu } from "@/lib/sigapBerandaDaftar"; // (31 Okt 2026) satu kartu per survei
 import KartuSurvei from "./KartuSurvei";
+import KartuSeleksi from "./KartuSeleksi"; // (31 Okt 2026) ajakan seleksi petugas yang sedang dibuka (Mitra)
 import { KUNCI_PINTASAN, bacaPintasan, kodeTampil, susunPintasan } from "@/lib/sigapPintasan"; // (30 Okt 2026) pintasan pilihan petugas
 import AturPintasan from "./AturPintasan";
 import { peringatanDariInduk, type PeringatanBeranda } from "@/lib/sigapPrioritas";
@@ -417,6 +418,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
             <span aria-hidden className="flex-none text-[18px] text-[#8A6200]">›</span>
           </Link>
         ))}
+
+        {adaSesi && !memuatAwal && <KartuSeleksi />}
 
         {/* (31 Okt 2026) Satu kartu per survei: nama + poin mendesak menurut peran; usang di bawah dan redup */}
         {memuatAwal ? (

@@ -83,6 +83,18 @@ export async function GET(req: NextRequest) {
 
     const rincian = await rincianPerAkun(db, akun.baris);
 
+    // Penanda dari data Bencana (hanya tampil; diubah di halaman Bencana): red flag kinerja dan rekomendasi PML.
+    const penanda = new Map<number, { red_flag: boolean; rekomendasi_pml: boolean }>();
+    try {
+      const idPetugas = [...new Set(akun.baris.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number"))];
+      for (let i = 0; i < idPetugas.length; i += 200) {
+        const { data } = await db.from("bencana_petugas").select("id, red_flag_kinerja, rekomendasi_pml").in("id", idPetugas.slice(i, i + 200));
+        for (const r of (data ?? []) as { id: number; red_flag_kinerja: boolean | null; rekomendasi_pml: boolean | null }[]) penanda.set(r.id, { red_flag: r.red_flag_kinerja === true, rekomendasi_pml: r.rekomendasi_pml === true });
+      }
+    } catch {
+      /* abaikan: penanda kosong */
+    }
+
     const pakai = new Set(kolom.map((k) => k.kegiatan_id).filter((x): x is number => x !== null));
     const { data: keg } = await db.from("sigap_kegiatan").select("id, nama, aktif").order("id", { ascending: false });
     const kegiatanTersedia = ((keg ?? []) as { id: number; nama: string; aktif: boolean | null }[]).filter((k) => !pakai.has(k.id)).map((k) => ({ id: k.id, nama: k.nama }));
@@ -97,6 +109,8 @@ export async function GET(req: NextRequest) {
         kecamatan: a.alamat_kecamatan,
         nagari: rincian.get(a.id)?.nagari ?? null,
         aktif: a.aktif,
+        red_flag: a.petugas_bencana_id !== null ? penanda.get(a.petugas_bencana_id)?.red_flag === true : false,
+        rekomendasi_pml: a.petugas_bencana_id !== null ? penanda.get(a.petugas_bencana_id)?.rekomendasi_pml === true : false,
         nilai: perAkun.get(a.id) ?? {},
       })),
       kegiatan_tersedia: kegiatanTersedia,
