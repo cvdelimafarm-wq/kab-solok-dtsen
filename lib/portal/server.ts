@@ -148,7 +148,9 @@ export async function susunBeranda(db: Db, akun: AkunPortal): Promise<{ peran: P
   // (11 Okt 2026) Lembar Pendataan KK tidak lagi kartu lepas: kini modul "pendataan" di tahap Pendataan kegiatan Pendataan Pascabencana (lib/sigapTahap.ts) -- permintaan user.
 
   // 3. Penyisiran SE2026 (nama cocok di daftar petugas penyisiran).
-  const ps = await cocokPenyisiran(db, akun.nama);
+  // (31 Okt 2026) Kegiatan penyisiran SUDAH SELESAI (padam): kartunya tidak lagi muncul di Beranda petugas. Untuk membukanya kembali (mis. susulan)
+  // set variabel lingkungan PORTAL_PENYISIRAN=1 di server; tanpa perubahan kode. Aplikasi /penyisiran dan menu admin penyisiran tidak berubah.
+  const ps = process.env.PORTAL_PENYISIRAN === "1" ? await cocokPenyisiran(db, akun.nama) : null;
   if (ps) {
     kartu.push({ kode: "penyisiran", grup: "tugas", judul: "Penyisiran & Identifikasi SE2026", uraian: "Checklist penyisiran usaha, identifikasi jorong, administrasi.", sso: "penyisiran", label_aksi: "Buka" });
   }

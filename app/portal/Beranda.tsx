@@ -115,6 +115,12 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     }
   }
   const [sibuk, setSibuk] = useState<string | null>(null);
+  // (31 Okt 2026) Halaman dipulihkan dari cache peramban (Back dari aplikasi lain): status "Membuka…" lama dibuang, kartu bisa diketuk lagi.
+  useEffect(() => {
+    const pulih = () => setSibuk(null);
+    window.addEventListener("pageshow", pulih);
+    return () => window.removeEventListener("pageshow", pulih);
+  }, []);
   // (8 Okt 2026) Ajakan ganti PIN awal 1303: spanduk tetap tampil sampai PIN diganti; tombolnya membuka layar ganti cepat.
   const [gantiPin, setGantiPin] = useState(false);
   // (21 Okt 2026) Akun super: ketuk bubble inisial = "Lihat sebagai" akun lain (sama dengan "Ganti" di spanduk oranye; mode tetap simulasi, tidak ada data dikirim).
@@ -182,6 +188,9 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       const d = await apiPortal<SsoPenyisiran>("/api/portal/sso", { method: "POST", body: JSON.stringify({ app: "penyisiran" }) });
       simpanPenyisiran(d);
       window.location.href = "/penyisiran";
+      // (31 Okt 2026) Jaring pengaman: bila peralihan halaman tidak terjadi (jaringan lambat, dibatalkan) kartu tidak boleh macet di "Membuka…".
+      // Kembali lewat tombol Back juga ditangani pageshow di bawah (halaman dipulihkan dari cache dengan status sibuk lama).
+      window.setTimeout(() => setSibuk(null), 10_000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal membuka penyisiran.");
       setSibuk(null);
