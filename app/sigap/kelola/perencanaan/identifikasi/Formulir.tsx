@@ -377,6 +377,11 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                   )}
                   {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
                   {id === "pelatihan" && (luring || hybrid) && <Isian judul="Perlengkapan pelatihan?"><YaTidak nama={`${nama} perlengkapan`} nilai={s.perl} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].perl = v; })} /></Isian>}
+                  {id === "pelatihan" && (
+                    <Isian judul="Gunakan Vanguard (simulasi pengisian kuesioner) di pelatihan ini?" ket="Bila Ya dan identifikasi ini ditautkan ke kegiatan pelatihan, kartu Vanguard muncul di tab Hari Ini petugas dan hasil latihannya dicatat. Tanpa ini, Vanguard hanya simulasi bebas yang tidak dicatat.">
+                      <YaTidak nama="Vanguard di pelatihan" nilai={f.vanguard.pelatihan} mati={mati} onPilih={(v) => ubah((g) => { g.vanguard.pelatihan = v; })} />
+                    </Isian>
+                  )}
                   <Isian judul="Ada instruktur (pengajar atau narasumber)?"><YaTidak nama={`${nama} pengajar`} nilai={s.pengajar} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pengajar = v; })} /></Isian>
                   {s.pengajar && (() => {
                     const ins = instrDari(s);
@@ -467,6 +472,11 @@ function KartuInstrumen({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "m
       <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Instrumen pendataan <span className="text-[12px] font-normal text-[#5B6B84]">· GSBPM 4.3</span></h3>
       <Pilihan nama="Instrumen" nilai={f.instrumen} opsi={["Tanpa pendataan", "FASIH", "PAPI"] as readonly Instrumen[]} mati={mati} onPilih={(v) => ubah((g) => { g.instrumen = v; if (v !== "PAPI") g.peran.entri.on = false; })} />
       {f.instrumen === "Tanpa pendataan" && <Cat>Tanpa pendataan: bagian D (organisasi pendataan lapangan) tidak ditanya dan tahap Pendataan tidak aktif.</Cat>}
+      {f.instrumen !== "Tanpa pendataan" && (
+        <Isian judul="Gunakan Vanguard sebagai QC pengisian kuesioner di pendataan?" ket="Bila Ya dan identifikasi ini ditautkan ke kegiatan pendataan, kartu Vanguard muncul di tab Hari Ini petugas dan hasil latihannya dicatat untuk BPS. Tanpa ini, Vanguard hanya simulasi bebas yang tidak dicatat.">
+          <YaTidak nama="Vanguard di pendataan" nilai={f.vanguard.pendataan} mati={mati} onPilih={(v) => ubah((g) => { g.vanguard.pendataan = v; })} />
+        </Isian>
+      )}
       {f.instrumen === "PAPI" && <Isian judul="Dokumen PAPI dicetak di kabupaten?"><YaTidak nama="Cetak PAPI" nilai={f.cetakPapi} mati={mati} onPilih={(v) => ubah((g) => { g.cetakPapi = v; })} /></Isian>}
       {f.instrumen === "FASIH" && (
         <Isian judul="Pulsa untuk petugas lapangan?" ket={kunciPulsa ? "Pulsa sudah dibiayai lewat sesi pelatihan atau briefing, jadi tidak diminta lagi di sini." : undefined}>

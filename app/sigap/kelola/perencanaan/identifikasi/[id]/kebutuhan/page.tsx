@@ -21,6 +21,7 @@ import { hariIniWib, useIdent } from "../../useIdent";
 import { loncat } from "../../Kontrol";
 import { useLanjutan } from "../lanjutan/useLanjutan";
 import { ID_KB, KartuPengadaan, KartuRekrutmen } from "./Kartu";
+import KartuHasilSeleksi from "./KartuHasilSeleksi"; // (1 Nov 2026) hasil seleksi dibaca balik (hanya baca)
 import { useStatusPengadaan } from "./useStatusPengadaan";
 
 function Isi() {
@@ -89,6 +90,7 @@ function Isi() {
                 <KartuPengadaan identId={row.id} ro={ro} judul={row.nama} daftar={pengadaan} hariIni={hariIni} dariAwal={dariAwal} halamanIni={halamanIni} pelacakan={{ tersedia: sp.tersedia, peta: sp.peta, mengirim: sp.mengirim, galat: sp.galat, hapusGalat: sp.hapusGalat, catat: sp.catat }} />
               </div>
             )}
+            {rekrutmen && isi && <KartuHasilSeleksi identId={row.id} r={rekrutmen} />}
           </>
         )}
         {!ident.memuat && !row && id !== null && !ident.galat && <Kosong teks="Survei tidak ditemukan." />}

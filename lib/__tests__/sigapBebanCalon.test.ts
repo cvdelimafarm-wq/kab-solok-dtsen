@@ -35,6 +35,11 @@ describe("bebanMingguan", () => {
     const d = dlg({ target_harian: 30, riwayat_target: [{ berlaku_mulai: "2026-11-02", target_harian: 15, alasan: "awal" }, { berlaku_mulai: "2026-11-04", target_harian: 30, alasan: "naik" }] });
     expect(bebanMingguan([d], akun, "2026-11-03", 1).minggu[0].poin).toBe(15 * 2 + 30 * 3);
   });
+  it("hari Sabtu/Minggu: mulai dari pekan depan", () => {
+    expect(bebanMingguan([], akun, "2026-11-01", 2).minggu.map((m) => m.mulai)).toEqual(["2026-11-02", "2026-11-09"]);
+    expect(bebanMingguan([], akun, "2026-10-31", 1).minggu[0].mulai).toBe("2026-11-02");
+    expect(bebanMingguan([], akun, "2026-10-30", 1).minggu[0].mulai).toBe("2026-10-26");
+  });
   it("jumlah minggu dibatasi 1..12", () => {
     expect(bebanMingguan([], akun, "2026-11-03", 0).minggu).toHaveLength(1);
     expect(bebanMingguan([], akun, "2026-11-03", 99).minggu).toHaveLength(12);

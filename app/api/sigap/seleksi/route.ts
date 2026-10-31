@@ -20,6 +20,7 @@ import { nilaiKelayakan, normalWilayah, periksaRancangan, ringkasKelayakan, sisa
 import { pesanPushAjakan, pesanUndangan } from "@/lib/seleksiDaftar";
 import { bacaKandidat, bacaWilayah, tahunPoolKegiatan } from "@/lib/portal/seleksiKandidat";
 import { usulanSeleksi } from "@/lib/portal/seleksiTurunan"; // (1 Nov 2026) usulan kebutuhan + wilayah dari identifikasi dan sampel
+import { hasilSeleksiIdent } from "@/lib/portal/seleksiHasil"; // (1 Nov 2026) hasil seleksi dibaca balik oleh Rekrutmen (halaman Kebutuhan identifikasi)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,6 +113,13 @@ export async function GET(req: NextRequest) {
         kebutuhan_pml: 0,
       }));
       return NextResponse.json({ wilayah: hasil });
+    }
+
+    // (1 Nov 2026) Hasil seleksi untuk satu identifikasi (kegiatan tertaut): ringkasan per seleksi + penugasan bersumber seleksi. Hanya baca.
+    if (sp.get("aksi") === "terisi") {
+      const ident = Number(sp.get("ident_id"));
+      if (!Number.isInteger(ident) || ident <= 0) return galat("Identifikasi tidak sah.");
+      return NextResponse.json(await hasilSeleksiIdent(db, ident, (kg) => bolehLihat(s.izin, kg)));
     }
 
     // (1 Nov 2026) Usulan kebutuhan (identifikasi lanjutan + organik terplot) dan wilayah (sampel PJ). Hanya baca.

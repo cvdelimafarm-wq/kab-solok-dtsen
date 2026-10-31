@@ -87,6 +87,11 @@ export type Form = {
   /** Cetak buku publikasi: belanja persediaan (521811) bila dicetak di kabupaten. Rilis dan spanduk tidak ada di kabupaten/kota. */
   cetakBuku: boolean;
   cetakKab: boolean;
+  /**
+   * (1 Nov 2026) Vanguard (simulasi pengisian kuesioner, lihat lib/vanguard): apakah dipakai di pelatihan dan/atau sebagai QC di pendataan survei ini.
+   * Hanya NIAT perencanaan; yang menyalakan fitur di kegiatan adalah tautan identifikasi ke kegiatan (fungsi pelatihan atau pendataan), lihat `vanguardUntuk`.
+   */
+  vanguard: { pelatihan: boolean; pendataan: boolean };
 };
 
 export const PERAN_DEF: readonly { id: PeranId; nama: string; translok: "kunci" | "pilih" | "skip"; honor: "pilih" | "skip" }[] = [
@@ -159,6 +164,7 @@ export function awalForm(): Form {
     rekon: false,
     cetakBuku: false,
     cetakKab: false,
+    vanguard: { pelatihan: false, pendataan: false },
   };
 }
 
@@ -275,6 +281,17 @@ export const adalahAdhoc = (f: Form): boolean => f.periode === "Ad-hoc";
 /** Jabatan tim yang menerima honor (hanya periode Ad-hoc dan bila honor tim = Ya). */
 export const jabatanHonorTim = (f: Form): string[] => (adalahAdhoc(f) && f.tim.honor ? JABATAN_TIM.filter((j) => f.tim[j.id]).map((j) => j.nama) : []);
 export const adaPendataan = (f: Form): boolean => f.instrumen !== "Tanpa pendataan";
+
+/**
+ * Apakah identifikasi ini meminta Vanguard untuk fungsi kegiatan tertentu. Jawaban hanya berlaku bila bagiannya memang ada:
+ * pelatihan = ada sesi pelatihan sendiri (bukan berbagi dengan survei lain); pendataan = instrumen bukan "Tanpa pendataan".
+ * Fungsi "lain" tidak pernah meminta Vanguard.
+ */
+export function vanguardUntuk(f: Form, fungsi: "pendataan" | "pelatihan" | "lain"): boolean {
+  if (fungsi === "pelatihan") return f.vanguard.pelatihan && !f.berbagi && f.sesi.pelatihan.on;
+  if (fungsi === "pendataan") return f.vanguard.pendataan && adaPendataan(f);
+  return false;
+}
 /** Daftar periode yang dipakai; "Tanpa periode" menjadi satu entri "Kegiatan". */
 export const daftarPeriode = (f: Form): string[] => (adaPeriode(f) ? f.keList.slice() : ["Kegiatan"]);
 
@@ -745,6 +762,7 @@ const TOP: Record<string, string> = {
   berbagi: "Berbagi pelatihan dengan survei lain", rujukan: "Survei yang dirujuk", instrumen: "Instrumen", cetakPapi: "Dokumen PAPI dicetak di kabupaten",
   pulsaLap: "Pulsa petugas lapangan", konsultasi: "Ada konsultasi teknis", cara: "Cara konsultasi", rekon: "Ada rekonsiliasi data",
   cetakBuku: "Cetak buku publikasi", cetakKab: "Buku dicetak di kabupaten",
+  "vanguard.pelatihan": "Vanguard di pelatihan", "vanguard.pendataan": "Vanguard sebagai QC di pendataan",
 };
 
 function ratakan(o: unknown, pre: string, out: Record<string, unknown>): Record<string, unknown> {

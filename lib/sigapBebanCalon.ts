@@ -4,17 +4,19 @@
 // memakai rumus yang sama dengan layar Delego (lib/delego/hitung.ts) dan (2) penugasan kegiatan lain yang periodenya beririsan. Hanya peringatan; tidak memblokir.
 // Alasan dua sumber: penugasan survei (sigap_penugasan) tidak dihitung Delego, sehingga Mitra yang sudah dua survei tampak "ringan" bila hanya melihat Delego.
 
-import { awalMinggu, bebanPerOrang, kapasitasMinggu, kategoriBeban, tambahHari, tglPendek, type KategoriBeban } from "@/lib/delego/hitung";
+import { awalMinggu, bebanPerOrang, hariKe, kapasitasMinggu, kategoriBeban, tambahHari, tglPendek, type KategoriBeban } from "@/lib/delego/hitung";
 import type { Delegasi } from "@/lib/delego/tipe";
 
 export type MingguBeban = { mulai: string; poin: number; kapasitas: number; persen: number; kategori: KategoriBeban };
 
-/** Beban satu orang pada `jumlah` minggu berturut-turut mulai minggu yang memuat `hariIni` (poin Delego aktif: baru/berjalan). */
+/** Beban satu orang pada `jumlah` minggu berturut-turut mulai minggu yang memuat `hariIni` (mulai pekan depan bila hariIni Sabtu/Minggu); poin Delego aktif: baru/berjalan. */
 export function bebanMingguan(delegasi: Delegasi[], akun: { id: number; nama: string; jenis: "organik" | "mitra" }, hariIni: string, jumlah = 4): { minggu: MingguBeban[]; delegasiAktif: number } {
   const milik = delegasi.filter((d) => d.penerima_akun === akun.id && (d.status === "baru" || d.status === "berjalan"));
   const minggu: MingguBeban[] = [];
+  // Sabtu dan Minggu: pekan berjalan hampir habis (hari kerjanya sudah lewat), mulai dari pekan depan.
+  const awal = hariKe(hariIni) >= 6 ? tambahHari(awalMinggu(hariIni), 7) : awalMinggu(hariIni);
   for (let i = 0; i < Math.max(1, Math.min(12, jumlah)); i++) {
-    const hari = tambahHari(awalMinggu(hariIni), 7 * i);
+    const hari = tambahHari(awal, 7 * i);
     const o = bebanPerOrang(milik, hari, [akun]).find((x) => x.akun === akun.id);
     const poin = o?.beban ?? 0;
     const kapasitas = kapasitasMinggu(hari);
