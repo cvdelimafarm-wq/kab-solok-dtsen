@@ -24,7 +24,8 @@ import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from ".
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, lulusAkhirDari, ringkasSkema, tambahanDari, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 import ModalFotoPanitia from "../ModalFotoPanitia";
-import DaftarPelatihan, { type PelatihanDaftar } from "./daftar"; // (10 Okt 2026) halaman awal = daftar pelatihan per kegiatan
+import { HubSurvei, PemilihSurveiPelatihan, SurveiTanpaPelatihan, useDaftarSurvei } from "./survei"; // (31 Okt 2026) halaman awal = satu kartu per survei + dropdown survei
+import { bacaParamKelola, cariSurvei, pilihPelatihanAwal, urlKelola, type Survei } from "@/lib/sigapPelatihanSurvei";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; nilai_lulus?: number | null; wajib_lulus?: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -50,28 +51,67 @@ export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
-  // (10 Okt 2026) "daftar" = daftar pelatihan per kegiatan (halaman awal); "kelola" = tab-tab pelatihan terpilih.
-  // Tautan bertab (?tab=...) atau ?kegiatan=ID langsung membuka mode kelola.
+  // (31 Okt 2026) "daftar" = satu kartu per survei (halaman awal); "kelola" = tab-tab pelatihan pada survei terpilih, dengan dropdown Survei (+ Pelatihan bila lebih dari satu).
+  // Alamat: ?survei=<kode>&kegiatan=<id pelatihan>&tab=...; salah satu saja sudah membuka mode kelola. Alamat lama (?kegiatan= / ?tab= saja) tetap berlaku.
   const [mode, setMode] = useState<"memuat" | "daftar" | "kelola">("memuat");
-  const [namaPelatihan, setNamaPelatihan] = useState<string | null>(null);
+  const [kegId, setKegId] = useState<number | null>(null);
+  const [surveiKode, setSurveiKode] = useState<string | null>(null);
+  const { data: dataSurvei, galat: galatSurvei } = useDaftarSurvei();
+  const daftarSurvei = dataSurvei?.survei ?? [];
   useEffect(() => {
     const sinkron = () => {
-      const q = new URLSearchParams(window.location.search);
-      setMode(q.get("kegiatan") || q.get("tab") ? "kelola" : "daftar");
+      const p = bacaParamKelola(window.location.search);
+      setKegId(p.kegiatan);
+      setSurveiKode(p.survei);
+      setMode(p.kegiatan || p.tab || p.survei ? "kelola" : "daftar");
     };
     sinkron();
     window.addEventListener("popstate", sinkron);
     return () => window.removeEventListener("popstate", sinkron);
   }, []);
-  function pilihPelatihan(p: PelatihanDaftar) {
-    setNamaPelatihan(p.nama);
-    window.history.pushState(null, "", `${window.location.pathname}?kegiatan=${p.id}`);
+
+  const surveiAktif = cariSurvei(daftarSurvei, kegId, surveiKode);
+  const pelatihanAktif = surveiAktif?.pelatihan.find((x) => x.id === kegId) ?? null;
+  const namaPelatihan = pelatihanAktif?.nama ?? null;
+
+  // Alamat tanpa ?kegiatan (mis. ?tab=... lama atau ?survei=...) dilengkapi setelah daftar survei termuat, agar semua panggilan API membawa pelatihan yang benar.
+  useEffect(() => {
+    if (mode !== "kelola" || kegId !== null || !dataSurvei) return;
+    const s = surveiKode ? (daftarSurvei.find((x) => x.kode === surveiKode) ?? null) : null;
+    let tujuan = s ? pilihPelatihanAwal(s.pelatihan) : null;
+    if (!s && !surveiKode) tujuan = daftarSurvei.flatMap((x) => x.pelatihan).find((x) => x.bawaan) ?? null; // alamat lama: pelatihan bawaan server
+    if (!tujuan) return;
+    const kode = s?.kode ?? daftarSurvei.find((x) => x.pelatihan.some((y) => y.id === tujuan!.id))?.kode ?? null;
+    window.history.replaceState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: kode, kegiatan: tujuan.id }));
+    setSurveiKode(kode);
+    setKegId(tujuan.id);
+  }, [mode, kegId, surveiKode, dataSurvei]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pilihSurveiKartu(s: Survei) {
+    const awal = pilihPelatihanAwal(s.pelatihan);
+    window.history.pushState(null, "", urlKelola(window.location.pathname, "", { survei: s.kode, kegiatan: awal?.id ?? null }));
+    setSurveiKode(s.kode);
+    setKegId(awal?.id ?? null);
     setTab("soal");
     setMode("kelola");
     window.scrollTo(0, 0);
   }
+  function gantiSurvei(kode: string) {
+    const s = daftarSurvei.find((x) => x.kode === kode);
+    if (!s) return;
+    const awal = pilihPelatihanAwal(s.pelatihan);
+    window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: s.kode, kegiatan: awal?.id ?? null }));
+    setSurveiKode(s.kode);
+    setKegId(awal?.id ?? null);
+  }
+  function gantiPelatihan(id: number) {
+    window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: surveiAktif?.kode ?? null, kegiatan: id }));
+    setKegId(id);
+  }
   function keDaftar() {
     window.history.pushState(null, "", window.location.pathname);
+    setKegId(null);
+    setSurveiKode(null);
     setMode("daftar");
     window.scrollTo(0, 0);
   }
@@ -86,20 +126,42 @@ export default function KelolaPelatihan() {
   }, []);
   useEffect(() => {
     if (!bacaSesi()) return keMasuk();
-    muat();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
       if (t === "monitoring" || t === "kuis" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat") setTab(t);
     } catch {
       /* abaikan */
     }
-  }, [muat]);
+  }, []);
+  // Ringkasan (tes + izin) dimuat ulang tiap pelatihan berganti; alamat sudah memuat ?kegiatan sebelum kegId diset, jadi panggilan membawa pelatihan yang benar.
+  useEffect(() => {
+    if (mode !== "kelola" || !bacaSesi()) return;
+    if (kegId === null && surveiKode !== null) return; // alamat ?survei= tanpa ?kegiatan: tunggu pelatihannya ditentukan (efek di atas), supaya tidak sempat memuat pelatihan bawaan
+    setRingkas(null);
+    muat();
+  }, [kegId, surveiKode, mode, muat]);
 
   if (mode !== "kelola")
     return (
-      <Bingkai<TabK> aktif="pelatihan_kelola" kecil="SIGAP · Kelola Pelatihan" jejak={["Pelatihan", "Kelola"]} judul="Kelola Pelatihan" sub="Pilih pelatihan yang ingin dikelola, dikelompokkan per kegiatan">
-        {mode === "daftar" ? <DaftarPelatihan onPilih={pilihPelatihan} /> : <Memuat />}
+      <Bingkai<TabK> aktif="pelatihan_kelola" kecil="SIGAP · Kelola Pelatihan" jejak={["Pelatihan", "Kelola"]} judul="Kelola Pelatihan" sub="Pilih survei yang pelatihannya ingin dikelola">
+        {mode === "daftar" ? <HubSurvei data={dataSurvei} galat={galatSurvei} onPilih={pilihSurveiKartu} /> : <Memuat />}
         <ModalFotoPanitia />
+      </Bingkai>
+    );
+
+  // survei terpilih belum punya pelatihan
+  if (surveiKode && kegId === null && surveiAktif && surveiAktif.pelatihan.length === 0)
+    return (
+      <Bingkai<TabK>
+        aktif="pelatihan_kelola"
+        kecil="SIGAP · Kelola Pelatihan"
+        jejak={["Pelatihan", "Kelola", surveiAktif.nama]}
+        judul="Kelola Pelatihan"
+        sub={`${surveiAktif.nama} · belum ada pelatihan`}
+        kembali={{ label: "Daftar survei", onKlik: keDaftar }}
+      >
+        <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={null} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} />
+        <SurveiTanpaPelatihan nama={surveiAktif.nama} />
       </Bingkai>
     );
 
@@ -107,10 +169,10 @@ export default function KelolaPelatihan() {
     <Bingkai<TabK>
       aktif="pelatihan_kelola"
       kecil="SIGAP · Kelola Pelatihan"
-      jejak={["Pelatihan", "Kelola", namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"]}
+      jejak={["Pelatihan", "Kelola", surveiAktif?.nama ?? namaPelatihan ?? "Pelatihan"]}
       judul="Kelola Pelatihan"
-      sub={`Soal, jadwal, pengumuman, kuis live & monitoring · ${namaPelatihan ?? "Pelatihan PSP Pascabencana 2026"}`}
-      kembali={{ label: "Daftar pelatihan", onKlik: keDaftar }}
+      sub={`Soal, jadwal, pengumuman, kuis live & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
+      kembali={{ label: "Daftar survei", onKlik: keDaftar }}
       tab={[
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Adu Sigap" },
@@ -123,10 +185,11 @@ export default function KelolaPelatihan() {
       aktifTab={tab}
       onTab={setTab}
     >
+      <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} />
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!ringkas && !galat && <Memuat />}
       {ringkas && tab === "soal" && (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div key={kegId ?? 0} className="grid gap-3 lg:grid-cols-2">
           {DAFTAR_JENIS_TES.map((j) => {
             const t = ringkas.tes.find((x) => x.jenis === j);
             return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
@@ -139,12 +202,12 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
-      {ringkas && tab === "pengumuman" && <PengumumanKelola />}
-      {ringkas && tab === "rapat" && <RapatKelola />}
-      {ringkas && tab === "notifikasi" && <NotifikasiKelola />}
-      {ringkas && tab === "kuis" && <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} />}
-      {ringkas && tab === "monitoring" && <MonitoringBagian />}
-      {ringkas && tab === "administrasi" && <Administrasi />}
+      {ringkas && tab === "pengumuman" && <PengumumanKelola key={kegId ?? 0} />}
+      {ringkas && tab === "rapat" && <RapatKelola key={kegId ?? 0} />}
+      {ringkas && tab === "notifikasi" && <NotifikasiKelola key={kegId ?? 0} />}
+      {ringkas && tab === "kuis" && <KuisLive key={kegId ?? 0} bisaKelolaAwal={ringkas.boleh_kelola} />}
+      {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
+      {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
       <ModalFotoPanitia sembunyi={tab === "administrasi"} />
     </Bingkai>
