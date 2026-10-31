@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { aksi, ambil, bukaUrlAsync, fetchJson, pesanGalat, rentangPendek, SesiBerakhir } from "./api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import UnggahSt from "./UnggahSt";
+import PeringatanBeban from "./PeringatanBeban"; // (1 Nov 2026) peringatan beban calon (Delego + penugasan lain)
 
 export type StBaris = { id: number; nomor: string; tanggal_st: string | null; mulai: string | null; selesai: string | null; tujuan: string[]; ada_file: boolean };
 export type BarisPen = {
@@ -433,6 +434,7 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
         </button>
       </div>
       {opsi.length === 0 && <p className="mt-2 text-[11.5px] text-amber-800">Kegiatan ini belum punya peran/tarif. Atur di tab Kegiatan &amp; Tarif.</p>}
+      {pilih && <PeringatanBeban akunId={pilih.id} kegiatanId={kegiatanId} />}
       {galat && (
         <div className="mt-2">
           <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>

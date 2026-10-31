@@ -1,0 +1,332 @@
+[
+ {
+  "kode": "C01",
+  "level": "C",
+  "judul": "Imunisasi gratis di puskesmas",
+  "cerita": "Anak diimunisasi campak gratis di puskesmas. Jika membayar, harganya sekitar Rp120.000.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "288.a",
+     "kode": "",
+     "rin": "Imunisasi · biaya yang dibayar tunai (out of pocket)",
+     "oop": 0
+    },
+    {
+     "no": "288",
+     "kode": "06211",
+     "rin": "Imunisasi",
+     "thn": 120000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_bantuan_barangD": 120000
+  },
+  "jebakan": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "m": "Imunisasi gratis dari puskesmas adalah layanan pemerintah (1.b), bukan badan usaha."
+   }
+  ],
+  "alternatif": [
+   {
+    "k": "e_bantuan_barangD",
+    "v": 1440000,
+    "m": "Kolom (5) Blok IV.2 sudah nilai setahun; jangan dikali 12 lagi."
+   }
+  ],
+  "petunjuk": [
+   "Puskesmas adalah layanan pemerintah. Yang diterima berupa uang atau jasa?",
+   "Nilainya sama dengan kolom (5) di Blok IV.2; sudah setahun, tidak perlu dikali."
+  ],
+  "langkah": [
+   "Blok IV.2 kolom (5) sudah setahun: <code>120.000</code>.",
+   "Layanan gratis dari pemerintah → V.E baris 1.b.",
+   "Berupa jasa → Kolom (3) barang/jasa diterima."
+  ],
+  "pembahasan": "Layanan gratis tetap dicatat sebagai konsumsi sebesar harga perkiraan (kolom 5), OOP nol, dan diimputasi sebagai transfer barang/jasa dari pemerintah di V.E 1.b kolom 3.",
+  "rujukan": "Buku 4 hlm. 297"
+ },
+ {
+  "kode": "C02",
+  "level": "C",
+  "judul": "Rawat inap ditanggung BPJS",
+  "cerita": "Pak Dedi dirawat inap di rumah sakit pemerintah. Seluruh biaya Rp8.000.000 dibayar BPJS langsung ke rumah sakit. Keluarga tidak membayar apa pun.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "276",
+     "kode": "06219/21",
+     "rin": "Rumah sakit pemerintah",
+     "thn": 8000000
+    },
+    {
+     "no": "276.b",
+     "kode": "",
+     "rin": "Rawat inap · biaya yang dibayar tunai (out of pocket)",
+     "oop": 0
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_badanUsaha_barangD": 8000000
+  },
+  "jebakan": [
+   {
+    "k": "e_rtLain_barangD",
+    "m": "BPJS bukan rumah tangga lain. Klaim penjamin dicatat di baris 2 (badan usaha)."
+   },
+   {
+    "k": "e_badanUsaha_uangD",
+    "m": "BPJS membayar langsung ke rumah sakit, jadi keluarga menerima jasa (kolom 3), bukan uang."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Klaim yang dibayar penjamin langsung ke rumah sakit dicatat sebagai transfer dari pihak mana?",
+   "Berupa jasa pelayanan kesehatan: kolom barang/jasa diterima."
+  ],
+  "langkah": [
+   "Nilai yang dibayar pihak lain = <code>8.000.000</code> (sudah setahun).",
+   "Pembayar BPJS/asuransi = badan usaha → V.E baris 2.",
+   "Berupa jasa → Kolom (3)."
+  ],
+  "pembahasan": "Biaya yang dibayar pihak lain langsung ke fasilitas kesehatan: OOP nol, kolom 5 tetap harga pasar, dan nilainya dicatat sebagai transfer dari badan usaha di V.E baris 2 kolom 3.",
+  "rujukan": "Buku 4 hlm. 296 dan 363"
+ },
+ {
+  "kode": "C03",
+  "level": "C",
+  "judul": "Premi BPJS PBI",
+  "cerita": "Tiga ART adalah peserta BPJS Kesehatan PBI. Iuran Rp42.000 per orang per bulan dibayar pemerintah.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "338",
+     "kode": "",
+     "rin": "Asuransi kesehatan",
+     "thn": 1512000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_bantuan_barangD": 1512000
+  },
+  "jebakan": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "m": "Iuran PBI dibayar pemerintah (baris 1.b). Klaim rumah sakit baru baris badan usaha."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Yang membayar iuran adalah pemerintah. Bentuknya barang/jasa atau uang?",
+   "Nilai di Blok IV.2 sudah setahun."
+  ],
+  "langkah": [
+   "Blok IV.2 R.338: <code>3 × 12 × 42.000 = 1.512.000</code>.",
+   "Iuran dibayar pemerintah → V.E 1.b, Kolom (3)."
+  ],
+  "pembahasan": "Premi PBI yang dibayar pemerintah dihitung sebagai konsumsi asuransi kesehatan (R.338) sekaligus bantuan pemerintah berupa barang/jasa (V.E R.1.b K.3).",
+  "rujukan": "Buku 4 hlm. 361"
+ },
+ {
+  "kode": "C04",
+  "level": "C",
+  "judul": "SPP ditanggung pemerintah",
+  "cerita": "SPP seorang anak sepanjang tahun ditanggung pemerintah dengan perkiraan nilai Rp1.080.000.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "293",
+     "kode": "10101/02/10200-10400",
+     "rin": "Uang sekolah (SPP/UKT) dan iuran komite sekolah/POMG",
+     "thn": 1080000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_bantuan_barangD": 1080000
+  },
+  "jebakan": [
+   {
+    "k": "e_bantuan_uangD",
+    "m": "Yang diterima berupa jasa pendidikan, bukan uang: gunakan kolom (3)."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Biaya yang ditanggung pemerintah tetap dicatat di Blok IV.2 dan menjadi transfer.",
+   "Berupa jasa pendidikan: kolom barang/jasa."
+  ],
+  "langkah": [
+   "Nilai setahun sudah di Blok IV.2: <code>1.080.000</code>.",
+   "Pemerintah → V.E 1.b, Kolom (3)."
+  ],
+  "pembahasan": "Biaya sekolah yang dibebaskan atau ditanggung pemerintah tetap dicatat sebagai pengeluaran, dan nilai yang sama menjadi transfer diterima dari pemerintah (V.E R.1.b).",
+  "rujukan": "Buku 4 hlm. 297 dan 338"
+ },
+ {
+  "kode": "C05",
+  "level": "C",
+  "judul": "Asuransi swasta bayar langsung ke RS",
+  "cerita": "Pak Anto dirawat di rumah sakit swasta, biaya Rp20.000.000 dibayar langsung oleh asuransi swasta ke rumah sakit. Premi Rp500.000 per bulan.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "277",
+     "kode": "06219/21",
+     "rin": "Rumah sakit swasta",
+     "thn": 20000000
+    },
+    {
+     "no": "277.b",
+     "kode": "",
+     "rin": "Rawat inap · OOP",
+     "oop": 0
+    },
+    {
+     "no": "338",
+     "kode": "",
+     "rin": "Asuransi kesehatan (premi)",
+     "thn": 6000000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_badanUsaha_barangD": 20000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "v": 26000000,
+    "m": "Premi tidak digabung ke klaim. Hanya nilai yang dibayar asuransi ke rumah sakit."
+   }
+  ],
+  "petunjuk": [
+   "Pembayar langsung ke rumah sakit dicatat sebagai transfer dari pihak mana?",
+   "Premi tetap konsumsi di Blok IV.2 dan tidak ikut dalam transfer."
+  ],
+  "langkah": [
+   "Biaya yang dibayar pihak lain: <code>20.000.000</code> → V.E baris 2 (badan usaha), Kolom (3).",
+   "Premi <code>500.000 × 12 = 6.000.000</code> hanya konsumsi (R.338), tidak masuk V.E."
+  ],
+  "pembahasan": "Biaya yang dibayar penjamin langsung ke fasilitas kesehatan dicatat sebagai transfer dari badan usaha (V.E R.2 K.3). Premi bulanan tetap konsumsi di R.338.",
+  "rujukan": "Buku 4 hlm. 296"
+ },
+ {
+  "kode": "C06",
+  "level": "C",
+  "judul": "Biaya RS ditanggung sebagian",
+  "cerita": "Biaya rawat inap Rp10.000.000. BPJS membayar Rp7.000.000 langsung ke rumah sakit, sisanya Rp3.000.000 dibayar keluarga dari tabungan.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "276",
+     "kode": "06219/21",
+     "rin": "Rumah sakit pemerintah",
+     "thn": 10000000
+    },
+    {
+     "no": "276.b",
+     "kode": "",
+     "rin": "Rawat inap · OOP",
+     "oop": 3000000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_badanUsaha_barangD": 7000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "v": 10000000,
+    "m": "Anda mencatat seluruh biaya. Bagian OOP dibayar keluarga, bukan transfer."
+   }
+  ],
+  "petunjuk": [
+   "Hanya bagian yang dibayar pihak lain yang menjadi transfer.",
+   "Bagian yang dibayar keluarga (OOP) tidak dicatat di Blok V."
+  ],
+  "langkah": [
+   "Yang dibayar BPJS = <code>10.000.000 − 3.000.000 = 7.000.000</code>.",
+   "Dicatat di V.E baris 2, Kolom (3). OOP Rp3.000.000 hanya konsumsi dan Blok VII."
+  ],
+  "pembahasan": "Untuk biaya yang dibayar sebagian oleh pihak lain, nilai yang dibayar pihak lain dicatat di V.E, sedangkan OOP dicatat sebagai pengambilan tabungan di Blok VII.",
+  "rujukan": "Buku 4 hlm. 296"
+ },
+ {
+  "kode": "C07",
+  "level": "C",
+  "judul": "Tes kesehatan gratis dari pemerintah",
+  "cerita": "Seorang ART mendapat tes kesehatan/deteksi dini gratis dari puskesmas. Perkiraan harga Rp150.000.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "289.a",
+     "kode": "",
+     "rin": "Tes kesehatan · OOP",
+     "oop": 0
+    },
+    {
+     "no": "289",
+     "kode": "06219",
+     "rin": "Tes kesehatan/deteksi dini/Medical Check Up",
+     "thn": 150000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {
+   "e_bantuan_barangD": 150000
+  },
+  "jebakan": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "m": "Puskesmas adalah layanan pemerintah (1.b), bukan badan usaha."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Puskesmas = pemerintah. Layanan gratis tetap diimputasi.",
+   "Nilainya sudah setahun di kolom (5) Blok IV.2."
+  ],
+  "langkah": [
+   "Kolom (5) Blok IV.2: <code>150.000</code>, OOP nol.",
+   "Pemerintah → V.E 1.b, Kolom (3)."
+  ],
+  "pembahasan": "Tes kesehatan gratis dari pemerintah dicatat dengan OOP nol, kolom 5 harga perkiraan, dan diimputasi di V.E R.1.b K.3.",
+  "rujukan": "Buku 4 hlm. 297"
+ }
+]

@@ -1,0 +1,27 @@
+[
+ {
+  "kode": "H01",
+  "level": "H",
+  "judul": "Kalkulator neraca bebas",
+  "cerita": "Isi blok mana pun untuk melihat hitungan otomatis Blok VI, Blok VII, tabel kontrol, dan diskrepansi. Tidak ada kunci jawaban pada mode ini.",
+  "blok": [
+   "A",
+   "B",
+   "C",
+   "D",
+   "E",
+   "F",
+   "G",
+   "VI",
+   "VII"
+  ],
+  "kunci": {},
+  "jebakan": [],
+  "alternatif": [],
+  "bebas": true,
+  "petunjuk": [],
+  "langkah": [],
+  "pembahasan": "",
+  "rujukan": ""
+ }
+]

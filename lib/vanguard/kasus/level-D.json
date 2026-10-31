@@ -1,0 +1,816 @@
+[
+ {
+  "kode": "D01",
+  "level": "D",
+  "judul": "Gaji, THR, dan lembur",
+  "cerita": "Bu Rahma bekerja sebagai tenaga produksi di pabrik garmen. Gaji pokok dan tunjangan bruto Rp6.000.000 per bulan (yang diterima Rp5.550.000 setelah potongan BPJS dan PPh). Setahun terakhir ia juga menerima THR Rp6.000.000 dan lembur Rp2.000.000. Tidak ada fasilitas barang/jasa.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Tenaga produksi di pabrik garmen",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_uang": 72000000,
+   "a1_lembur": 8000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 66600000,
+    "m": "Anda memakai gaji neto. Gaji dicatat bruto, sebelum potongan BPJS dan PPh."
+   },
+   {
+    "k": "a1_uang",
+    "v": 80000000,
+    "m": "THR dan lembur sebaiknya di kolom (7), bukan digabung ke kolom (5)."
+   }
+  ],
+  "petunjuk": [
+   "Gaji dicatat sebelum atau sesudah potongan?",
+   "THR dan lembur masuk kolom khusus honorarium dan sejenisnya."
+  ],
+  "langkah": [
+   "Kolom (5): gaji bruto <code>6.000.000 × 12 = 72.000.000</code>.",
+   "Kolom (6): tidak ada fasilitas barang/jasa → kosong.",
+   "Kolom (7): THR + lembur = <code>6.000.000 + 2.000.000 = 8.000.000</code>."
+  ],
+  "pembahasan": "Upah dan gaji dicatat bruto (sebelum potongan iuran dan PPh). Lembur, honorarium, bonus, dan THR masuk kolom 7; fasilitas barang/jasa masuk kolom 6.",
+  "rujukan": "Buku 4 hlm. 313"
+ },
+ {
+  "kode": "D02",
+  "level": "D",
+  "judul": "Menempati rumah dinas",
+  "cerita": "Pak Budi (PNS di bagian tata usaha) menempati rumah dinas dari kantornya. Perkiraan sewa rumah serupa Rp1.000.000 per bulan. Abaikan gaji dan pendapatan lainnya.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "227",
+     "kode": "",
+     "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+     "teks": "5 · Dinas"
+    },
+    {
+     "no": "231",
+     "kode": "04220",
+     "rin": "Jika dinas atau lainnya, perkiraan sewa sebulan",
+     "bln": 1000000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "PNS di bagian tata usaha",
+     "kat": "20",
+     "jenis": "4"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 12000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 12000000,
+    "m": "Rumah dinas bukan uang tunai: gunakan kolom (6)."
+   },
+   {
+    "k": "a1_barang",
+    "v": 1000000,
+    "m": "Nilai Anda masih sebulan. Kalikan 12."
+   }
+  ],
+  "petunjuk": [
+   "Rumah dinas adalah imbalan kerja. Kolom upah mana yang berupa barang/jasa?",
+   "Nilai sebulan × 12."
+  ],
+  "langkah": [
+   "Setahun: <code>1.000.000 × 12 = 12.000.000</code>.",
+   "Fasilitas rumah dinas = upah dalam bentuk barang/jasa → V.A Kolom (6)."
+  ],
+  "pembahasan": "Fasilitas rumah dinas termasuk upah/gaji dalam bentuk barang/jasa. Nilai konsumsi sewa di Blok IV.2 dicatat pula (× 12) di V.A kolom 6.",
+  "rujukan": "Buku 4 hlm. 313"
+ },
+ {
+  "kode": "D03",
+  "level": "D",
+  "judul": "Warung kelontong",
+  "cerita": "Bu Ani memiliki warung kelontong. Setiap bulan penjualan Rp8.000.000, belanja barang dagangan Rp6.000.000, dan biaya plastik serta angkut Rp200.000. Isi V.B untuk setahun.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Toko kelontong",
+     "kat": "12",
+     "jenis": "5"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 24000000,
+   "b1_biaya": 2400000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 96000000,
+    "m": "Anda memakai omzet. Nilai produksi perdagangan = penjualan − pembelian."
+   },
+   {
+    "k": "b1_biaya",
+    "v": 74400000,
+    "m": "Pembelian dagangan sudah dikurangkan di kolom (5); jangan dihitung lagi sebagai biaya."
+   }
+  ],
+  "petunjuk": [
+   "Untuk usaha perdagangan, nilai produksi bukan omzet. Apa selisih yang dimaksud?",
+   "Semuanya dikali 12. Surplus dihitung otomatis."
+  ],
+  "langkah": [
+   "Kolom (5) (margin): <code>(8.000.000 − 6.000.000) × 12 = 24.000.000</code>.",
+   "Kolom (6): <code>200.000 × 12 = 2.400.000</code> (tanpa pembelian dagangan).",
+   "Kolom (7) terhitung otomatis: <code>24.000.000 − 2.400.000 = 21.600.000</code>."
+  ],
+  "pembahasan": "Nilai produksi usaha perdagangan adalah selisih penjualan dan pembelian. Biaya produksi hanya biaya lain (plastik, angkut). Barang warung yang dikonsumsi sendiri sudah tercakup dalam penjualan.",
+  "rujukan": "Buku 4 hlm. 329"
+ },
+ {
+  "kode": "D04",
+  "level": "D",
+  "judul": "Petani padi",
+  "cerita": "Pak Iwan petani padi. Panen 4 ton gabah setahun: 3,6 ton dijual Rp7.000 per kg dan 0,4 ton dikonsumsi sendiri. Biaya bibit, pupuk, dan bajak Rp5.000.000.",
+  "iv": {
+   "t": 1,
+   "rows": [
+    {
+     "no": 2,
+     "kode": "01111",
+     "rin": "Beras (hasil sawah sendiri, dianggap pembelian)",
+     "sat": "Kg",
+     "beli": [
+      "5,00",
+      70000
+     ],
+     "prod": null,
+     "jml": [
+      "5,00",
+      70000
+     ]
+    }
+   ]
+  },
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Petani padi",
+     "kat": "01",
+     "jenis": "6"
+    }
+   ]
+  },
+  "blok": [
+   "B",
+   "C"
+  ],
+  "kunci": {
+   "b1_produksi": 28000000,
+   "b1_biaya": 5000000
+  },
+  "jebakan": [
+   {
+    "k": "c_hasilLain_produksi",
+    "m": "Padi sendiri tidak masuk V.C; seluruh produksi sudah di V.B."
+   }
+  ],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 25200000,
+    "m": "Anda hanya menghitung yang dijual. Bagian yang dikonsumsi sendiri tetap masuk V.B untuk padi."
+   }
+  ],
+  "petunjuk": [
+   "Padi dan palawija punya aturan khusus: seluruh panen, termasuk yang dikonsumsi sendiri, dicatat di satu blok.",
+   "Lalu apakah V.C perlu diisi untuk beras ini?"
+  ],
+  "langkah": [
+   "Kolom (5): seluruh panen <code>4.000 kg × 7.000 = 28.000.000</code>.",
+   "Kolom (6): <code>5.000.000</code>. Kolom (7) otomatis: 23.000.000.",
+   "V.C dikosongkan: padi sendiri dianggap pembelian dan seluruh produksinya ada di V.B."
+  ],
+  "pembahasan": "Khusus padi dan palawija, seluruh produksi (termasuk yang dikonsumsi sendiri) dicatat di V.B, dan konsumsi berasnya di Blok IV.1 dianggap pembelian.",
+  "rujukan": "Buku 4 hlm. 252 dan 328"
+ },
+ {
+  "kode": "D05",
+  "level": "D",
+  "judul": "Buruh tani dibayar beras",
+  "cerita": "Seorang buruh tani menerima upah berupa 50 kg beras sepanjang tahun (harga pasar Rp12.000 per kg). Tidak ada upah uang.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Buruh tani",
+     "kat": "01",
+     "jenis": "9"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 600000,
+    "m": "Upah dalam bentuk beras adalah barang: gunakan kolom (6)."
+   }
+  ],
+  "petunjuk": [
+   "Upah berupa beras termasuk bentuk uang atau barang?",
+   "50 kg × Rp12.000."
+  ],
+  "langkah": [
+   "<code>50 × 12.000 = 600.000</code> → V.A Kolom (6).",
+   "Kolom (5) kosong karena tidak ada upah uang."
+  ],
+  "pembahasan": "Upah dan gaji dalam bentuk barang/jasa mencakup barang seperti beras dan pakaian, dan dicatat di V.A kolom 6 berdasarkan harga pasar.",
+  "rujukan": "Buku 4 hlm. 313"
+ },
+ {
+  "kode": "D06",
+  "level": "D",
+  "judul": "Pembantu rumah tangga anggota rumah tangga",
+  "cerita": "Sari adalah ART di rumah tangga ini dan bekerja sebagai pembantu rumah tangga; gaji Rp1.000.000 per bulan dari majikannya (rumah tangga ini, atau isi untuk rumah tangga Sari).",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "304",
+     "kode": "05621",
+     "rin": "Gaji/upah pembantu rumah tangga, satpam, tukang kebun, dan sopir",
+     "bln": 1000000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "02",
+     "uraian": "Pembantu rumah tangga",
+     "kat": "25",
+     "jenis": "5"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_uang": 12000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 1000000,
+    "m": "Nilai Anda masih sebulan. Kalikan 12."
+   }
+  ],
+  "petunjuk": [
+   "Pembantu yang menjadi ART: upahnya juga menjadi pendapatan rumah tangga.",
+   "Nilai sebulan × 12."
+  ],
+  "langkah": [
+   "<code>1.000.000 × 12 = 12.000.000</code> → V.A Kolom (5)."
+  ],
+  "pembahasan": "Untuk pembantu rumah tangga atau sopir yang menjadi anggota rumah tangga, gaji dicatat sebagai pengeluaran di Blok IV.2 R.304 dan sebagai pendapatan di Blok V.A.",
+  "rujukan": "Buku 4 hlm. 298"
+ },
+ {
+  "kode": "D07",
+  "level": "D",
+  "judul": "Pembantu rumah tangga bukan ART",
+  "cerita": "Rumah tangga Bu Dewi mempekerjakan seorang pembantu yang tinggal di rumah lain (bukan ART). Gajinya Rp1.000.000 per bulan.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "304",
+     "kode": "05621",
+     "rin": "Gaji/upah pembantu rumah tangga, satpam, tukang kebun, dan sopir",
+     "bln": 1000000
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {},
+  "jebakan": [],
+  "alternatif": [],
+  "nol": "Gaji pembantu bukan ART tidak menjadi pendapatan rumah tangga majikan.",
+  "petunjuk": [
+   "Apakah pembantu ini anggota rumah tangga?",
+   "Pendapatan pembantu menjadi milik rumah tangga pembantu itu sendiri."
+  ],
+  "langkah": [
+   "Gaji pembantu bukan ART hanya konsumsi di Blok IV.2 R.304.",
+   "V.A rumah tangga majikan dikosongkan."
+  ],
+  "pembahasan": "Untuk pembantu atau sopir yang bukan ART, nilai gajinya tidak dicatat lagi sebagai pendapatan di rumah tangga majikannya.",
+  "rujukan": "Buku 4 hlm. 298"
+ },
+ {
+  "kode": "D08",
+  "level": "D",
+  "judul": "Dua pekerjaan berbeda lapangan usaha",
+  "cerita": "Seorang ART bekerja sebagai buruh tani: 5 kali masing-masing Rp150.000. Setelah itu ia menjadi buruh bangunan 20 hari dengan Rp100.000 per hari. Isi dua baris karena lapangan usahanya berbeda.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Buruh tani",
+     "kat": "01",
+     "jenis": "9"
+    },
+    {
+     "no": "01",
+     "uraian": "Buruh bangunan",
+     "kat": "11",
+     "jenis": "9"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_uang": 750000,
+   "a2_uang": 2000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 2750000,
+    "m": "Gabungan kedua pekerjaan harus dipisah ke dua baris karena lapangan usaha berbeda."
+   }
+  ],
+  "petunjuk": [
+   "Pekerjaan dengan lapangan usaha berbeda ditulis pada baris yang berbeda.",
+   "Buruh tani: 5 × 150.000. Buruh bangunan: 20 × 100.000."
+  ],
+  "langkah": [
+   "Baris 1: <code>5 × 150.000 = 750.000</code>.",
+   "Baris 2: <code>20 × 100.000 = 2.000.000</code>."
+  ],
+  "pembahasan": "Pekerjaan tambahan dengan lapangan usaha atau jenis pekerjaan berbeda ditulis pada baris berbeda dengan nomor urut ART yang sama.",
+  "rujukan": "Buku 4 hlm. 316"
+ },
+ {
+  "kode": "D09",
+  "level": "D",
+  "judul": "Usaha ojek (jasa angkutan)",
+  "cerita": "Pak Rudi mengojek dengan motornya. Penerimaan Rp3.000.000 per bulan; bensin dan perawatan Rp1.200.000 per bulan.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Tukang ojek",
+     "kat": "13",
+     "jenis": "8"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 36000000,
+   "b1_biaya": 14400000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 21600000,
+    "m": "Anda memasukkan surplus. Nilai produksi adalah penerimaan jasa sebelum dikurangi biaya."
+   }
+  ],
+  "petunjuk": [
+   "Untuk usaha jasa, nilai produksi adalah penerimaan dari jasa.",
+   "Semua dikali 12."
+  ],
+  "langkah": [
+   "Kolom (5): <code>3.000.000 × 12 = 36.000.000</code>.",
+   "Kolom (6): <code>1.200.000 × 12 = 14.400.000</code>. Surplus otomatis 21.600.000."
+  ],
+  "pembahasan": "Pada usaha jasa seperti angkutan, nilai produksi merupakan nilai penerimaan dari jasa yang diberikan; biaya produksi mencakup bahan bakar dan perawatan.",
+  "rujukan": "Buku 4 hlm. 322"
+ },
+ {
+  "kode": "D10",
+  "level": "D",
+  "judul": "Usaha kost-kostan",
+  "cerita": "Bu Tini memiliki usaha kost 8 kamar, tiap kamar Rp400.000 per bulan, semua terisi sepanjang tahun. Biaya listrik, air, dan kebersihan Rp800.000 per bulan.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Usaha kost-kostan",
+     "kat": "14",
+     "jenis": "5"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 38400000,
+   "b1_biaya": 9600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 3200000,
+    "m": "Nilai Anda masih sebulan. Kalikan 12."
+   }
+  ],
+  "petunjuk": [
+   "Penerimaan sewa kamar adalah nilai produksi usaha jasa.",
+   "8 kamar × 400.000 × 12."
+  ],
+  "langkah": [
+   "Kolom (5): <code>8 × 400.000 × 12 = 38.400.000</code>.",
+   "Kolom (6): <code>800.000 × 12 = 9.600.000</code>."
+  ],
+  "pembahasan": "Usaha jasa mencatat penerimaan jasa sebagai nilai produksi dan biaya yang dikeluarkan untuk menghasilkannya sebagai biaya produksi.",
+  "rujukan": "Buku 4 hlm. 322"
+ },
+ {
+  "kode": "D11",
+  "level": "D",
+  "judul": "Tanaman belum panen",
+  "cerita": "Usaha tani bawang rumah tangga belum panen sampai hari pendataan. Biaya bibit, pupuk, dan tenaga yang sudah keluar Rp9.200.000.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Petani bawang",
+     "kat": "02",
+     "jenis": "6"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 9200000,
+   "b1_biaya": 9200000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 0,
+    "m": "Nilai produksi tidak nol: tanaman belum menghasilkan dinilai sebesar biaya."
+   }
+  ],
+  "petunjuk": [
+   "Tanaman yang belum menghasilkan dinilai dengan pendekatan biaya.",
+   "Nilai produksi sama dengan biaya yang telah dikeluarkan."
+  ],
+  "langkah": [
+   "Nilai produksi (pendekatan biaya): <code>9.200.000</code>.",
+   "Biaya produksi: <code>9.200.000</code>. Surplus otomatis nol."
+  ],
+  "pembahasan": "Tanaman yang belum menghasilkan dinilai berdasarkan biaya yang telah dikeluarkan. Surplus negatif hanya wajar untuk gagal panen atau usaha yang baru dirintis dan belum menjual.",
+  "rujukan": "Buku 4 hlm. 321 dan 322"
+ },
+ {
+  "kode": "D12",
+  "level": "D",
+  "judul": "Usaha baru belum ada penjualan",
+  "cerita": "Bu Ratna baru merintis warung. Biaya Rp3.000.000 sudah keluar, tetapi belum ada penjualan sampai hari pendataan.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Warung baru dirintis",
+     "kat": "12",
+     "jenis": "5"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_biaya": 3000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 3000000,
+    "m": "Belum ada penjualan, jadi nilai produksi nol."
+   }
+  ],
+  "petunjuk": [
+   "Apakah sudah ada barang atau jasa yang terjual?",
+   "Jika belum, nilai produksi nol dan surplus negatif."
+  ],
+  "langkah": [
+   "Nilai produksi: belum ada penjualan → kosong.",
+   "Biaya produksi: <code>3.000.000</code>. Surplus otomatis −3.000.000."
+  ],
+  "pembahasan": "Surplus usaha dapat negatif, misalnya pada usaha perdagangan baru dirintis yang biayanya sudah keluar tetapi belum ada produk yang terjual.",
+  "rujukan": "Buku 4 hlm. 328"
+ },
+ {
+  "kode": "D13",
+  "level": "D",
+  "judul": "Gurame dijual dan dikonsumsi",
+  "cerita": "Usaha budidaya gurame: nilai panen setahun Rp30.000.000, terjual Rp27.000.000, sisanya dikonsumsi sendiri (nilai pasar Rp3.000.000). Biaya produksi total Rp6.000.000, dibagi sesuai proporsi 90% dijual dan 10% dikonsumsi.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Budidaya ikan gurame",
+     "kat": "04",
+     "jenis": "6"
+    }
+   ]
+  },
+  "blok": [
+   "B",
+   "C"
+  ],
+  "kunci": {
+   "b1_produksi": 27000000,
+   "b1_biaya": 5400000,
+   "c_hasilLain_produksi": 3000000,
+   "c_hasilLain_biaya": 600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 30000000,
+    "m": "Bagian yang dikonsumsi sendiri tidak masuk V.B (kecuali padi/palawija); catat di V.C Rincian 2."
+   }
+  ],
+  "petunjuk": [
+   "Yang dijual dan yang dikonsumsi sendiri dicatat di blok berbeda.",
+   "Biaya produksi dipisah dengan persentase nilai produksi."
+  ],
+  "langkah": [
+   "V.B: dijual <code>27.000.000</code>, biaya <code>90% × 6.000.000 = 5.400.000</code>.",
+   "V.C Rincian 2: dikonsumsi <code>3.000.000</code>, biaya <code>10% × 6.000.000 = 600.000</code>."
+  ],
+  "pembahasan": "Hasil produksi yang dijual dicatat di V.B dan yang dikonsumsi sendiri di V.C R.2 (kecuali padi/palawija). Biaya produksi dapat didekati dengan persentase nilai produksi yang dijual atau dikonsumsi.",
+  "rujukan": "Buku 4 hlm. 328"
+ },
+ {
+  "kode": "D14",
+  "level": "D",
+  "judul": "Industri kue rumahan",
+  "cerita": "Bu Sinta membuat kue di rumah. Seluruh kue terjual: Rp1.800.000 per bulan. Biaya bahan baku dan kemasan Rp500.000 per bulan.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Industri kue rumahan",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 21600000,
+   "b1_biaya": 6000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_produksi",
+    "v": 15600000,
+    "m": "Industri bukan perdagangan: nilai produksi tidak dikurangi biaya bahan baku."
+   }
+  ],
+  "petunjuk": [
+   "Usaha yang menghasilkan barang: output = kuantitas × harga, di sini sama dengan nilai penjualan.",
+   "Dikali 12."
+  ],
+  "langkah": [
+   "Kolom (5): <code>1.800.000 × 12 = 21.600.000</code>.",
+   "Kolom (6): <code>500.000 × 12 = 6.000.000</code>."
+  ],
+  "pembahasan": "Untuk usaha berupa barang (industri), nilai produksi adalah kuantitas produksi × harga per unit. Margin penjualan dikurangi pembelian hanya untuk perdagangan.",
+  "rujukan": "Buku 4 hlm. 322"
+ },
+ {
+  "kode": "D15",
+  "level": "D",
+  "judul": "Royalti buku",
+  "cerita": "Seorang penulis (ART) menerima royalti buku Rp12.000.000 selama setahun. Tidak ada biaya produksi.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Penulis (royalti)",
+     "kat": "19",
+     "jenis": "2"
+    }
+   ]
+  },
+  "blok": [
+   "B",
+   "D"
+  ],
+  "kunci": {
+   "b1_produksi": 12000000
+  },
+  "jebakan": [
+   {
+    "k": "d_keuntunganModal_diterima",
+    "m": "Royalti bukan pendapatan kepemilikan. Catat di V.B."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Royalti tidak termasuk pendapatan kepemilikan.",
+   "Royalti dicatat sebagai usaha rumah tangga dengan lapangan usaha 19."
+  ],
+  "langkah": [
+   "Royalti → V.B kategori lapangan usaha 19: Kolom (5) = <code>12.000.000</code>.",
+   "V.D dikosongkan."
+  ],
+  "pembahasan": "Royalti tidak termasuk pendapatan kepemilikan, tetapi termasuk usaha rumah tangga: dicatat di V.B dengan kategori lapangan usaha 19.",
+  "rujukan": "Buku 4 hlm. 332"
+ },
+ {
+  "kode": "D16",
+  "level": "D",
+  "judul": "Medical check up dari kantor",
+  "cerita": "Seorang karyawan mendapat medical check up gratis dari tempatnya bekerja. Perkiraan nilai Rp450.000.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "289.a",
+     "kode": "",
+     "rin": "Tes kesehatan · OOP",
+     "oop": 0
+    },
+    {
+     "no": "289",
+     "kode": "06219",
+     "rin": "Tes kesehatan/deteksi dini/Medical Check Up",
+     "thn": 450000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Karyawan swasta",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "A",
+   "E"
+  ],
+  "kunci": {
+   "a1_barang": 450000
+  },
+  "jebakan": [
+   {
+    "k": "e_bantuan_barangD",
+    "m": "Dari tempat kerja → V.A kolom (6), bukan bantuan pemerintah."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Pemberi gratis di sini adalah tempat bekerja, bukan pemerintah.",
+   "Imbalan kerja berupa jasa = upah barang/jasa."
+  ],
+  "langkah": [
+   "Nilai <code>450.000</code> → V.A Kolom (6) (upah dalam bentuk barang/jasa).",
+   "V.E dikosongkan."
+  ],
+  "pembahasan": "Medical check up gratis dari tempat ART bekerja dicatat pada Blok V.A Kolom 6 sebagai upah/gaji dalam bentuk barang/jasa, bukan transfer pemerintah.",
+  "rujukan": "Buku 4 hlm. 297"
+ },
+ {
+  "kode": "D17",
+  "level": "D",
+  "judul": "Bus jemputan kantor",
+  "cerita": "Seorang karyawan memakai bus jemputan gratis dari kantor selama 250 hari kerja. Tarif angkutan umum termurah untuk rute yang sama Rp6.000 per hari.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Karyawan swasta",
+     "kat": "08",
+     "jenis": "8"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 1500000
+  },
+  "jebakan": [],
+  "alternatif": [],
+  "petunjuk": [
+   "Fasilitas antar-jemput dari kantor termasuk upah dalam bentuk apa?",
+   "Nilai dengan tarif angkutan umum paling murah."
+  ],
+  "langkah": [
+   "<code>250 × 6.000 = 1.500.000</code> → V.A Kolom (6)."
+  ],
+  "pembahasan": "Biaya transportasi karyawan yang mendapat fasilitas jemputan gratis dari kantor diperkirakan dengan tarif angkutan umum paling murah dan dianggap upah/gaji dalam bentuk barang/jasa (V.A K.6).",
+  "rujukan": "Buku 4 hlm. 298"
+ },
+ {
+  "kode": "D18",
+  "level": "D",
+  "judul": "Perjalanan dinas",
+  "cerita": "Seorang PNS bertugas ke luar kota. Tiket pesawat Rp2.000.000 dan hotel Rp900.000 dibayar kantor. Ia menerima uang saku Rp1.000.000 dan makan di tempat tugas senilai Rp600.000.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "PNS di bagian tata usaha",
+     "kat": "20",
+     "jenis": "4"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 3500000,
+   "a1_lembur": 1000000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_barang",
+    "v": 2900000,
+    "m": "Makanan yang dikonsumsi selama dinas juga ikut dicatat di kolom (6)."
+   }
+  ],
+  "petunjuk": [
+   "Uang saku dan uang harian masuk kolom honorarium dan sejenisnya.",
+   "Tiket, hotel, dan makan dicatat kembali sebagai upah barang/jasa."
+  ],
+  "langkah": [
+   "Kolom (6): <code>2.000.000 + 900.000 + 600.000 = 3.500.000</code>.",
+   "Kolom (7): uang saku <code>1.000.000</code>."
+  ],
+  "pembahasan": "Uang saku dan uang harian yang diterima dicatat di V.A kolom 7. Pengeluaran transportasi, akomodasi, dan makanan dicatat kembali di V.A kolom 6 sebagai upah/gaji dalam bentuk barang/jasa.",
+  "rujukan": "Buku 4 hlm. 298"
+ }
+]
