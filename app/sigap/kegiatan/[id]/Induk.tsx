@@ -21,6 +21,8 @@ import { tahapSekarang, type TahapHasil } from "@/lib/sigapTahap";
 import type { StatusLangkah } from "@/lib/sigapKegiatan";
 import { useInduk } from "../useInduk";
 import BarKegiatan, { useBarKegiatan } from "../../BarKegiatan";
+import BarisPengawasan from "../../BarisPengawasan";
+import BarisLangkah from "../../BarisLangkah";
 
 const NODE: Record<StatusLangkah, string> = {
   selesai: "bg-[#19A463] text-white",
@@ -115,7 +117,7 @@ export default function HalamanInduk({ kode }: { kode: string }) {
     if (alihKeTranslok && hariIni) router.replace(hariIni.href);
   }, [alihKeTranslok, hariIni, router]);
   if (bar.items && bar.kode) {
-    return alihKeTranslok ? <KerangkaMuat /> : <HariIniSederhana kode={bar.kode} items={bar.items} />;
+    return alihKeTranslok ? <KerangkaMuat /> : <HariIniSederhana kode={bar.kode} items={bar.items} peran={bar.peran} langkah={bar.langkah} />;
   }
   // belum diketahui kegiatan ini bermenu rutin atau tidak: jangan kedip-kedip menampilkan garis waktu lalu berganti (galat -> halaman lama yang menampilkannya)
   if (!bar.siap && !bar.galat) return <KerangkaMuat />;
@@ -134,9 +136,10 @@ function KerangkaMuat() {
 }
 
 /** Hari Ini untuk petugas tanpa penugasan Transport Lokal (mis. Supervisor SPDT): pintasan ke menu yang ada di bar bawah. */
-function HariIniSederhana({ kode, items }: { kode: string; items: NonNullable<ReturnType<typeof useBarKegiatan>["items"]> }) {
+function HariIniSederhana({ kode, items, peran, langkah }: { kode: string; items: NonNullable<ReturnType<typeof useBarKegiatan>["items"]>; peran: ReturnType<typeof useBarKegiatan>["peran"]; langkah: ReturnType<typeof useBarKegiatan>["langkah"] }) {
   const { induk } = useInduk(kode);
   const pintasan = items.filter((i) => i.kunci !== "hari_ini" && i.kunci !== "kamera");
+  const awas = items.find((i) => i.kunci === "pengawasan");
   const kamera = items.find((i) => i.kunci === "kamera");
   return (
     <main className="min-h-screen bg-[#F5F8FE] pb-28 text-[#1B2B4B]">
@@ -151,6 +154,8 @@ function HariIniSederhana({ kode, items }: { kode: string; items: NonNullable<Re
         </div>
       </header>
       <div className="relative z-10 mx-auto -mt-[44px] max-w-xl space-y-3 px-3.5">
+        <BarisLangkah langkah={langkah} />
+        {awas && <BarisPengawasan kode={kode} peran={peran} label={awas.label} href={awas.href} />}
         <section aria-label="Menu kegiatan" className="space-y-2.5 rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
           <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Menu kegiatan</h2>
           {pintasan.map((i) => (

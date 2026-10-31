@@ -6,10 +6,12 @@
 //  - (27 Okt 2026, permintaan user) KORWIL <- Lembar Quality Check (kuesioner supervisi): jumlah = lembar QC yang disimpan korwil hari itu (sigap_qc_lembar).
 //    Lokasi hanya ada bila lembarnya menunjuk KK (objek "kk"); lembar objek "petugas" tidak punya lokasi, jadi korwil mengisi lokasi sendiri.
 //    Hari SEBELUM tanggal mulai QC (BATAS_QC_KORWIL, lihat migrasi 20261027e) tetap memakai data pendataan lama supaya "laporan dianggap" hari lampau tidak hilang.
+//  - (31 Okt 2026, permintaan user) SPDT NTP (PPL & PML) <- menu Sampel: jumlah = KK berbeda yang koordinatnya dibuka akun itu hari itu (sigap_spdt_buka),
+//    lokasi = jorong KK tersebut. Data menu cukup untuk mengisi laporan harian Translok; petugas boleh mengubahnya dan menambah catatan (Kendala).
 // Isian otomatis hanya SARAN: petugas tetap menekan Simpan (laporan menentukan hak translok), dan boleh mengubahnya.
 // Murni (tanpa DB/React) supaya mudah diuji.
 
-export type SumberOtomatis = "identifikasi" | "pendataan" | "qc";
+export type SumberOtomatis = "identifikasi" | "pendataan" | "qc" | "spdt";
 export type LokasiRealisasi = { kecamatan: string; nagari: string; jorong: string; idsubsls?: string | null };
 export type BarisOtomatis = { tanggal: string; idsubsls: string | null; n: number; sumber: SumberOtomatis };
 export type WilayahRingkas = { idsubsls: string; kecamatan: string; nagari: string; sls: string };
@@ -25,7 +27,7 @@ export type RealisasiOtomatis = {
 /** Batas lokasi per laporan (sama dengan penyimpanan di API). */
 export const MAKS_LOKASI = 10;
 
-export const LABEL_SUMBER: Record<SumberOtomatis, string> = { identifikasi: "data identifikasi", pendataan: "data pendataan", qc: "Lembar Quality Check" };
+export const LABEL_SUMBER: Record<SumberOtomatis, string> = { identifikasi: "data identifikasi", pendataan: "data pendataan", qc: "Lembar Quality Check", spdt: "koordinat KK yang dibuka di menu Sampel" };
 
 /** Tanggal (WIB) mulai korwil dihitung dari Lembar Quality Check; sebelum ini tetap dari data pendataan. Harus sama dengan tanggal di migrasi 20261027e. */
 export const BATAS_QC_KORWIL = "2026-10-27";
@@ -53,6 +55,7 @@ export function satuanLaporanTanggal(kodeKegiatan: string, peran: string, satuan
 
 /** Peran apa yang punya sumber otomatis (hanya Pendataan Pascabencana). */
 export function sumberUntukPeran(kodeKegiatan: string, peran: string): SumberOtomatis | null {
+  if (kodeKegiatan.startsWith("spdt_ntp")) return peran === "ppl" || peran === "pml" ? "spdt" : null;
   if (!kodeKegiatan.startsWith("pascabencana")) return null;
   if (peran === "pml") return "identifikasi";
   if (peran === "ppl") return "pendataan";
@@ -93,6 +96,31 @@ export function susunRealisasiOtomatis(baris: BarisOtomatis[], wilayah: WilayahR
     // korwil: hari lampau dari pendataan memakai satuan lama (keluarga), hari QC memakai "lembar QC"
     const satuanHari = sumberHari === "pendataan" && satuan === SATUAN_QC ? SATUAN_PENDATAAN_LAMA : satuan;
     hasil.set(tanggal, { sumber: sumberHari, jumlah, satuan: satuanHari, lokasi: semua.slice(0, MAKS_LOKASI), lokasi_terpotong: Math.max(0, semua.length - MAKS_LOKASI) });
+  }
+  return hasil;
+}
+
+/** Baris log "koordinat KK dibuka" (sigap_spdt_buka) bersama wilayah KK-nya. */
+export type BukaSpdt = { tanggal: string; kk_id: number; kecamatan: string; nagari: string; jorong: string };
+
+/** SPDT NTP: jumlah = KK berbeda yang dibuka per tanggal; lokasi = jorong berbeda (maks MAKS_LOKASI). Tanggal tanpa baris tidak ada di hasil. */
+export function susunRealisasiSpdt(baris: BukaSpdt[], satuan: string): Map<string, RealisasiOtomatis> {
+  const per = new Map<string, BukaSpdt[]>();
+  for (const b of baris) {
+    const a = per.get(b.tanggal);
+    if (a) a.push(b);
+    else per.set(b.tanggal, [b]);
+  }
+  const hasil = new Map<string, RealisasiOtomatis>();
+  for (const [tanggal, rows] of per) {
+    const kk = new Set(rows.map((r) => r.kk_id));
+    const lok = new Map<string, LokasiRealisasi>();
+    for (const r of rows) {
+      const l: LokasiRealisasi = { kecamatan: r.kecamatan, nagari: r.nagari, jorong: r.jorong, idsubsls: null };
+      if (!lok.has(kunciLokasi(l))) lok.set(kunciLokasi(l), l);
+    }
+    const semua = [...lok.values()].sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.jorong.localeCompare(b.jorong));
+    hasil.set(tanggal, { sumber: "spdt", jumlah: kk.size, satuan, lokasi: semua.slice(0, MAKS_LOKASI), lokasi_terpotong: Math.max(0, semua.length - MAKS_LOKASI) });
   }
   return hasil;
 }

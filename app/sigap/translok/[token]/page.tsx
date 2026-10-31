@@ -25,6 +25,8 @@ import { namaDepanTampil, namaTampil } from "@/lib/namaTampil";
 import { kalimatHariKerja, ringkasHariKerja } from "@/lib/ringkasHariKerja";
 import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalAwalArsip, type NadaArsip } from "@/lib/sigapArsipTanggal";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import BarisPengawasan from "@/app/sigap/BarisPengawasan";
+import BarisLangkah from "@/app/sigap/BarisLangkah";
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
 import { tabBarDariTranslok, type ItemBar } from "@/lib/sigapMenuKegiatan";
@@ -301,11 +303,16 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       }
       if (!adaTautan) {
         const s = bacaTampilanKerja(window.sessionStorage.getItem(kunciTampilanKerja(token)), Date.now());
+        // (31 Okt 2026) bar bawah: bila entri riwayat ini membawa tab (Back/mundur dari halaman lain), itu yang menang atas ingatan terakhir
+        const tr = (window.history.state as { tabKerja?: unknown } | null)?.tabKerja;
+        const tabRiwayat = tr === "hari_ini" || tr === "hari_kerja" || tr === "arsip" || tr === "foto" ? tr : null;
         if (s) {
           panduanDiputuskan.current = true; // yang diingat (termasuk "tanpa panduan") menggantikan keputusan awal dari data
-          setTab(s.tab);
+          setTab(tabRiwayat ?? s.tab);
           setLangkah(s.langkah);
           if (s.pen && !new URLSearchParams(window.location.search).get("p")) setPenId(s.pen);
+        } else if (tabRiwayat) {
+          setTab(tabRiwayat);
         }
       }
     } catch {
@@ -589,6 +596,11 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         )}
         {tab === "hari_ini" && (
           <>
+            {kodeBar && bar.items && bar.kode && <BarisLangkah langkah={bar.langkah} />}
+            {kodeBar && bar.items && bar.kode && (() => {
+              const w = bar.items.find((i) => i.kunci === "pengawasan");
+              return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
+            })()}
             <Ringkasan pen={pen} hariIni={data.hari_ini} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>

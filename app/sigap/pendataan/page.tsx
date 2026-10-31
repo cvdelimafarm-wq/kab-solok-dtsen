@@ -12,7 +12,7 @@
 //   Header navy tunggal (judul + angka, pemilih Sub SLS, tab bersegmen); pemilih Sub SLS jadi lembar bawah (menggantikan <select> dan tombol "← Plotting tim");
 //   kartu filter tunggal (bilah progres + pemilih PPL + 4 angka saring); peta mengisi sisa layar; Daftar KK satu kartu rapat; Monitoring per-PPL berupa baris (bukan tabel).
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import TombolKembali from "@/app/components/TombolKembali";
 import { pilihSubPrioritas } from "@/lib/sigapSubPrioritas";
@@ -56,6 +56,7 @@ import {
   type SubTim,
 } from "@/lib/pendataan";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
 
 type Tab = "peta" | "daftar" | "mon" | "wilayah"; // tab "wilayah" tampil sebagai "Batas" (diganti 17 Okt) -- (17 Okt 2026) "wilayah" = peta Sub SLS & peta nagari (berkas peta jadi BPS)
@@ -213,6 +214,16 @@ export default function LembarPendataan() {
   const [batalId, setBatalId] = useState<number | null>(null);
   const [batalSibuk, setBatalSibuk] = useState(false);
   const dariKartu = useRef(false); // true bila Sub SLS dibuka dari kartu (ada entri riwayat yang bisa di-"back")
+  // (31 Okt 2026, Fase 4) Bar bawah seragam kegiatan bermenu (lib/sigapMenuKegiatan.ts). Tautan dari bar membawa ?k=<kode induk>; tautan lama tanpa ?k= dicari lewat modul "pendataan".
+  const [kodeBar, setKodeBar] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setKodeBar(new URLSearchParams(window.location.search).get("k"));
+    } catch {
+      /* alamat tak terbaca: tanpa kode, bar dicari lewat modul */
+    }
+  }, []);
+  const bar = useBarKegiatan(kodeBar, "pendataan");
   // (15 Okt 2026) MODE PERBAIKAN (?perbaikan=<penugasan>&tgl=<hari kerja>): daftar KK sama persis, tetapi penandaan hanya ditampung dulu di HP ini lalu dikirim
   // sekali lewat tombol "Kirim perbaikan laporan" (dicatat sebagai pendataan tanggal hari kerja itu). Hanya KK yang belum punya hasil yang bisa ditandai.
   const [perbaikan, setPerbaikan] = useState<{ pen: number; tanggal: string } | null>(null);
@@ -648,10 +659,12 @@ export default function LembarPendataan() {
 
   // (17 Okt 2026) tab yang menampilkan KK sebuah Sub SLS (Peta titik, Daftar KK); Monitoring dan Wilayah tidak memakai saringan, tombol "Keluarga baru", maupun tombol capaian
   const tabKk = tab === "peta" || tab === "daftar";
+  // (31 Okt 2026, Fase 4) bar bawah hanya di halaman utama (kartu plotting / kolam): saat sebuah Sub SLS dibuka, layar penuh untuk peta & daftar KK dan "Semua Sub SLS" mengembalikan ke sini
+  const tampilBar = !!(bar.items && bar.kode) && !subId && !perbaikan; // mode perbaikan (dari laporan translok) punya tombol kirim sendiri
   const adaFilter = !!data && !!subId && tabKk && kk.length > 0;
 
   return (
-    <main className="flex min-h-[calc(100dvh_-_var(--tinggi-banner,0px))] flex-col bg-[#F2F6FC] text-[#1B2B4B]">
+    <main className="flex min-h-[calc(100dvh_-_var(--tinggi-banner,0px))] flex-col bg-[#F2F6FC] text-[#1B2B4B]" style={tampilBar ? ({ "--bar-bawah": "72px" } as CSSProperties) : undefined}>
       {/* Header navy: baris 1 judul + angka, baris 2 pemilih Sub SLS, baris 3 tab bersegmen (sama untuk tiga tab) */}
       <header className="flex-none bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-2.5 pt-2 text-white">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
@@ -1241,7 +1254,7 @@ export default function LembarPendataan() {
       {data && data.sub.length > 0 && !subId && !kolamBuka && !perbaikan && !terpilih && !lembar && <KolamTombol onBuka={() => setKolamBuka(true)} />}
 
       {toast && (
-        <div role="status" className={`fixed inset-x-3 ${subAktif && tabKk && !terpilih ? "bottom-24" : "bottom-4"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
+        <div role="status" className={`fixed inset-x-3 ${subAktif && tabKk && !terpilih ? "bottom-24" : "bottom-[calc(1rem+var(--bar-bawah,0px))]"} z-[60] mx-auto flex max-w-md items-center gap-3 rounded-[16px] bg-[#0F2A52] px-4 py-3 text-[13px] font-bold text-white shadow-[0_12px_30px_rgba(15,42,82,.4)]`}>
           <span className="min-w-0 flex-1">{toast.pesan}</span>
           {toast.urungkan && (
             <button
@@ -1296,6 +1309,7 @@ export default function LembarPendataan() {
           </div>
         </div>
       )}
+      {tampilBar && bar.items && bar.kode && <BarKegiatan kode={bar.kode} items={bar.items} aktif="sampel" />}
     </main>
   );
 }

@@ -22,6 +22,7 @@ import { kelompokDariAlamat, tabDariAlamat } from "@/lib/sigapKorwilTab";
 import KorwilLapangan from "./KorwilLapangan";
 import KorwilLembarQc from "./KorwilLembarQc";
 import KorwilHasilQc from "./KorwilHasilQc";
+import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 
 type Tab = "lapangan" | "kuesioner" | "hasil";
 
@@ -35,10 +36,13 @@ export default function MonitoringKorwil() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("lapangan");
   const [pilih, setPilih] = useState<number | null>(null);
+  // (31 Okt 2026, Fase 4) Bar bawah seragam kegiatan bermenu: tab "Supervisi". ?k=<kode induk> dari bar; tautan lama tanpa ?k= dicari lewat modul "monitoring_korwil".
+  const [kodeBar, setKodeBar] = useState<string | null>(null);
   // (27 Okt 2026) ?tab=kuesioner membuka Lembar Quality Check langsung (dari tombol di formulir laporan translok korwil); nilai di luar daftar diabaikan.
   useEffect(() => {
     try {
       const q = new URLSearchParams(window.location.search);
+      setKodeBar(q.get("k"));
       const t = tabDariAlamat(q.get("tab"));
       if (t) setTab(t);
       // (31 Okt 2026) ?kelompok=n: kartu "Kelompok n · ..." membuka kelompok itu (server menolak kelompok yang bukan hak akun ini)
@@ -49,6 +53,7 @@ export default function MonitoringKorwil() {
     }
   }, []);
 
+  const bar = useBarKegiatan(kodeBar, "monitoring_korwil");
   const d = useData<DataKorwil>(`/api/portal/korwil/monitoring${pilih ? `?kelompok=${pilih}` : ""}`);
   useEffect(() => {
     if (d.galat === "SESI_BERAKHIR") router.replace(alamatMasukKembali());
@@ -61,7 +66,7 @@ export default function MonitoringKorwil() {
   const perTim = data ? data.lapangan.tim.reduce((a, t) => a + t.sub.length, 0) : 0;
 
   return (
-    <main className="min-h-screen bg-[#F2F6FC] pb-16 text-[#1B2B4B]">
+    <main className={`min-h-screen bg-[#F2F6FC] text-[#1B2B4B] ${bar.items && bar.kode ? "pb-28" : "pb-16"}`}>
       <header className="sticky top-0 z-20 bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-3 pb-0 pt-2 text-white">
         <div className="mx-auto flex max-w-xl flex-col gap-2">
           <div className="flex items-center gap-2.5">
@@ -161,6 +166,7 @@ export default function MonitoringKorwil() {
           </>
         )}
       </div>
+      {bar.items && bar.kode && <BarKegiatan kode={bar.kode} items={bar.items} aktif="pengawasan" />}
     </main>
   );
 }

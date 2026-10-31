@@ -29,6 +29,7 @@ import DokumenPml from "./DokumenPml";
 import DokumenSupervisor from "./DokumenSupervisor";
 import KartuKkSpdt from "./KartuKkSpdt";
 import BarKegiatan, { useBarKegiatan } from "../BarKegiatan";
+import { useCatatBukaMenu } from "../BarisPengawasan";
 
 // (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
 const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
@@ -74,6 +75,8 @@ function Isi() {
   const tabAktif: Tab = tab && tabs.includes(tab) ? tab : tabs[0];
   const labelTab = (k: Tab) => (k === "dokumen" ? `Lembar ${namaPengawasan}` : LABEL_TAB[k]);
   const judulBagian = bar.items?.find((i) => i.kunci === bagian)?.label ?? (bagian === "sampel" ? "Sampel" : namaPengawasan);
+  // (31 Okt 2026) catat bahwa menu Pengawasan/Supervisi dibuka hari ini (hanya terlihat oleh yang bersangkutan; baris pengingat di Hari Ini)
+  useCatatBukaMenu(bar.kode, "pengawasan", bagian === "pengawasan" && !!data && peran !== "ppl");
   const semuaKk: KkSpdt[] = useMemo(() => data?.kk ?? [], [data]);
 
   const ppl = useMemo(() => daftarPpl(semuaKk), [semuaKk]);

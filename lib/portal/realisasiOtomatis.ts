@@ -6,12 +6,36 @@
 // Kegagalan membaca TIDAK boleh merusak halaman petugas: dikembalikan kosong (form tetap bisa diisi manual).
 
 import type { Db } from "@/lib/sigap";
-import { susunRealisasiOtomatis, sumberUntukPeran, type BarisOtomatis, type RealisasiOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
+import { susunRealisasiOtomatis, susunRealisasiSpdt, sumberUntukPeran, type BarisOtomatis, type BukaSpdt, type RealisasiOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
+import { judulKata } from "@/lib/spdtNtp";
 
 /** Satu baris hasil fungsi database -> BarisOtomatis. Sub SLS boleh kosong (lembar QC objek petugas tidak punya lokasi). */
 export function barisDari(tanggal: string, r: Record<string, unknown>): BarisOtomatis {
   const sumber = r.sumber === "identifikasi" ? "identifikasi" : r.sumber === "qc" ? "qc" : "pendataan";
   return { tanggal, idsubsls: typeof r.idsubsls === "string" && r.idsubsls ? r.idsubsls : null, n: Number(r.n) || 0, sumber };
+}
+
+/** SPDT NTP: log koordinat KK yang dibuka akun pada tanggal-tanggal ini (tabel sigap_spdt_buka) + wilayah KK-nya. Gagal = kosong (form tetap bisa diisi manual). */
+export async function ambilBukaSpdt(db: Db, akunId: number, tanggal: string[], satuan: string): Promise<Map<string, RealisasiOtomatis>> {
+  if (tanggal.length === 0) return new Map();
+  const { data: buka, error } = await db.from("sigap_spdt_buka").select("kk_id, tanggal").eq("akun_id", akunId).in("tanggal", tanggal);
+  if (error) {
+    console.error("[realisasiOtomatis:spdt]", error.message);
+    return new Map();
+  }
+  const ids = Array.from(new Set((buka ?? []).map((b) => b.kk_id as number)));
+  if (ids.length === 0) return new Map();
+  const wil = new Map<number, { kecamatan: string; nagari: string; jorong: string }>();
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data: kk } = await db.from("sigap_spdt_kk").select("id, kecamatan, nagari, jorong").in("id", ids.slice(i, i + 300));
+    for (const k of kk ?? []) wil.set(k.id as number, { kecamatan: judulKata(String(k.kecamatan ?? "")), nagari: judulKata(String(k.nagari ?? "")), jorong: judulKata(String(k.jorong ?? "")) });
+  }
+  const baris: BukaSpdt[] = [];
+  for (const b of buka ?? []) {
+    const w = wil.get(b.kk_id as number);
+    if (w) baris.push({ tanggal: String(b.tanggal).slice(0, 10), kk_id: b.kk_id as number, ...w });
+  }
+  return susunRealisasiSpdt(baris, satuan);
 }
 
 export async function ambilRealisasiOtomatis(
@@ -23,7 +47,9 @@ export async function ambilRealisasiOtomatis(
   tanggal: string[],
   wilayah: WilayahRingkas[]
 ): Promise<Map<string, RealisasiOtomatis>> {
-  if (!sumberUntukPeran(kodeKegiatan, peran) || tanggal.length === 0) return new Map();
+  const sumber = sumberUntukPeran(kodeKegiatan, peran);
+  if (!sumber || tanggal.length === 0) return new Map();
+  if (sumber === "spdt") return ambilBukaSpdt(db, akunId, tanggal, satuan);
   const { data, error } = await db.rpc("bencana_realisasi_otomatis", { p_akun: akunId, p_peran: peran });
   if (error) {
     console.error("[realisasiOtomatis]", error.message);
@@ -46,11 +72,18 @@ const CACHE_RINGAN = new Map<string, { at: number; data: Map<string, RealisasiOt
 const UMUR_CACHE_RINGAN_MS = 30_000;
 
 export async function ambilRealisasiOtomatisRingan(db: Db, akunId: number, peran: string, kodeKegiatan: string, satuan: string, tanggal: string[]): Promise<Map<string, RealisasiOtomatis>> {
-  if (!sumberUntukPeran(kodeKegiatan, peran) || tanggal.length === 0) return new Map();
+  const sumberPeran = sumberUntukPeran(kodeKegiatan, peran);
+  if (!sumberPeran || tanggal.length === 0) return new Map();
   const kunci = `${akunId}|${peran}|${satuan}|${tanggal.join(",")}`;
   const sekarang = Date.now();
   const ada = CACHE_RINGAN.get(kunci);
   if (ada && sekarang - ada.at < UMUR_CACHE_RINGAN_MS) return ada.data;
+  if (sumberPeran === "spdt") {
+    const h = await ambilBukaSpdt(db, akunId, tanggal, satuan);
+    if (CACHE_RINGAN.size > 500) CACHE_RINGAN.clear();
+    CACHE_RINGAN.set(kunci, { at: sekarang, data: h });
+    return h;
+  }
   const { data, error } = await db.rpc("bencana_realisasi_otomatis", { p_akun: akunId, p_peran: peran });
   if (error) {
     console.error("[realisasiOtomatisRingan]", error.message);

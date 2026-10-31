@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alamatHariIni, alamatPengawasan, alamatSampel, modulRutin, pakaiTemplateMenu, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok } from "../sigapMenuKegiatan";
+import { alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
 
 const TL = { href: "/sigap/translok/tok123?p=7", kegiatanId: 2 };
 
@@ -9,9 +9,65 @@ describe("template menu kegiatan", () => {
     for (const m of ["konfirmasi", "pelatihan", "identifikasi", "wilayah_tim"]) expect(modulRutin(m)).toBe(false);
   });
 
-  it("SPDT NTP (semua rutin dan berbar) memakai template; Pasca Bencana (ada sekali jalan) tidak", () => {
+  it("SPDT NTP (semua rutin dan berbar) memakai template", () => {
     expect(pakaiTemplateMenu([{ isi: ["spdt_lembar"] }, { isi: ["translok:2"] }])).toBe(true);
-    expect(pakaiTemplateMenu([{ isi: ["konfirmasi"] }, { isi: ["pelatihan", "translok:3"] }, { isi: ["pendataan", "translok:1"] }, { isi: [] }])).toBe(false);
+  });
+
+  it("Pascabencana (Fase 4): bagian Pendataan memakai template, tahap Pelatihan diabaikan; konfirmasi/identifikasi = langkah sekali jalan", () => {
+    const pasca = [{ isi: ["konfirmasi"] }, { isi: ["pelatihan", "translok:3"] }, { isi: ["monitoring_korwil", "wilayah_tim", "identifikasi", "pendataan", "translok:1"] }, { isi: [] }];
+    expect(pakaiTemplateMenu(pasca)).toBe(true);
+    // tanpa modul pemicu (lembar pendataan / supervisi) belum bertemplate
+    expect(pakaiTemplateMenu([{ isi: ["konfirmasi"] }, { isi: ["pelatihan", "translok:3"] }, { isi: ["wilayah_tim", "translok:1"] }, { isi: [] }])).toBe(false);
+    // modul rutin yang halamannya belum berbar membatalkan template
+    expect(pakaiTemplateMenu([{ isi: ["pendataan", "sampel:9"] }])).toBe(false);
+    // hanya pelatihan: bukan kegiatan bermenu
+    expect(pakaiTemplateMenu([{ isi: ["pelatihan", "translok:3"] }])).toBe(false);
+  });
+
+  it("tahapMenu membuang tahap Pelatihan; idTranslokMenu hanya translok milik kegiatan bermenu", () => {
+    const pasca = [{ isi: ["konfirmasi"] }, { isi: ["pelatihan", "translok:3"] }, { isi: ["pendataan", "translok:1"] }];
+    expect(tahapMenu(pasca)).toHaveLength(2);
+    expect(idTranslokMenu(pasca)).toEqual([1]);
+    expect(idTranslokMenu([{ isi: ["spdt_lembar"] }, { isi: ["translok:2"] }])).toEqual([2]);
+  });
+
+  it("peran menu: SPDT menurut spdt.peran; Pascabencana kortim = supervisor, selain itu peran tim", () => {
+    expect(peranMenuDariInduk({ spdt: { peran: "pml" } })).toBe("pml");
+    expect(peranMenuDariInduk({ spdt: { peran: "supervisor" } })).toBe("supervisor");
+    expect(peranMenuDariInduk({ korwil: { kelompok: 1 }, wilayah: { peran: "pml" } })).toBe("supervisor");
+    expect(peranMenuDariInduk({ wilayah: { peran: "ppl" } })).toBe("ppl");
+    expect(peranMenuDariInduk({ wilayah: { peran: "pml" } })).toBe("pml");
+    expect(peranMenuDariInduk({ spdt: null, korwil: null, wilayah: null })).toBeNull();
+    expect(peranMenuDariInduk({ wilayah: { peran: "tak-dikenal" } })).toBeNull();
+  });
+
+  it("Pascabencana: bar PPL, PML (belum ada lembar pengawasan) dan kortim", () => {
+    const TL1 = { href: "/sigap/translok/tokabc?p=4", kegiatanId: 1 };
+    const ppl = susunBar({ kode: "pascabencana", peran: "ppl", modul: ["wilayah_tim", "identifikasi", "pendataan"], translok: TL1 });
+    expect(ppl.map((x) => x.kunci)).toEqual(["hari_ini", "sampel", "kamera", "translok"]);
+    expect(ppl[1].href).toBe("/sigap/pendataan?k=pascabencana");
+    expect(ppl[2].href).toBe("/sigap/foto?kegiatan=1");
+    const pml = susunBar({ kode: "pascabencana", peran: "pml", modul: ["wilayah_tim", "identifikasi", "pendataan"], translok: TL1 });
+    expect(pml.map((x) => x.kunci)).toEqual(["hari_ini", "sampel", "kamera", "translok"]);
+    const kortim = susunBar({ kode: "pascabencana", peran: "supervisor", modul: ["monitoring_korwil"], translok: TL1 });
+    expect(kortim.map((x) => x.label)).toEqual(["Hari Ini", "Supervisi", "Kamera", "Translok"]);
+    expect(kortim[1].href).toBe("/sigap/korwil?k=pascabencana");
+  });
+
+  it("langkah sekali jalan: hanya konfirmasi/identifikasi yang belum selesai; ?dari= dialihkan ke Hari Ini", () => {
+    const modul = [
+      { kode: "konfirmasi", judul: "Konfirmasi kesediaan & wilayah", ket: "Konfirmasi bersedia", status: "perlu", href: "/sigap/bencana/konfirmasi", aksi: "Konfirmasi sekarang" },
+      { kode: "identifikasi", judul: "Lembar Identifikasi SLS", ket: "3 dari 10 Sub SLS identifikasi terisi", status: "berjalan", href: "/sigap/identifikasi?dari=%2Fsigap%2Fkegiatan%2Fpascabencana%2Fpendataan", aksi: "Isi sekarang" },
+      { kode: "pendataan", judul: "Lembar Pendataan KK", ket: "x", status: "perlu", href: "/sigap/pendataan", aksi: "Buka" },
+      { kode: "wilayah_tim", judul: "Wilayah", ket: "x", status: "menunggu", href: null },
+    ];
+    const l = langkahSekali("pascabencana", modul);
+    expect(l.map((x) => x.kode)).toEqual(["konfirmasi", "identifikasi"]);
+    expect(l[0]).toMatchObject({ href: "/sigap/bencana/konfirmasi", aksi: "Konfirmasi sekarang", mendesak: true });
+    expect(l[1].href).toBe("/sigap/identifikasi?dari=%2Fsigap%2Fkegiatan%2Fpascabencana");
+    expect(l[1].mendesak).toBe(false);
+    // selesai atau tanpa halaman: tidak tampil
+    expect(langkahSekali("pascabencana", [{ ...modul[0], status: "selesai" }, { ...modul[1], href: null }])).toEqual([]);
   });
 
   it("kegiatan rutin yang halamannya belum berbar belum memakai template", () => {

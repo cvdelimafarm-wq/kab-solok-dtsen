@@ -44,6 +44,16 @@ describe("aktivitasDariInduk", () => {
     expect(a[1].href).toBe("/sigap/kegiatan/pascabencana/pendataan");
   });
 
+  it("Pascabencana bertemplate (ada Lembar Pendataan): ikon Pendataan membuka Hari Ini; ikon Pelatihan tetap halaman pelatihan", () => {
+    const bermenu = INDUK([T("perencanaan", 1, ["konfirmasi"]), T("pelatihan", 2, ["pelatihan", "translok:3"]), T("pendataan", 3, ["wilayah_tim", "identifikasi", "pendataan", "translok:1"]), T("evaluasi", 4, [])], {
+      pendataan: { total: 10, didata: 2, terdampak: 1 },
+      identifikasi: { total: 5, terisi: 5, tidak_terdampak: 0, hasil: 9 },
+    });
+    const a = aktivitasDariInduk(K(bermenu, [TL(3, "biru"), TL(1, "biru")]));
+    expect(a.find((x) => x.jenis === "pelatihan")!.href).toBe("/sigap/pelatihan");
+    expect(a.find((x) => x.jenis === "pendataan")!.href).toBe("/sigap/kegiatan/pascabencana");
+  });
+
   it("keterangan = informasi paling mendesak dan bertautan ke bagian yang sesuai (foto), bukan sekadar status", () => {
     const a = aktivitasDariInduk(K(induk, [TL(3, "hijau"), TL(1, "emas", true)]));
     const p = a.find((x) => x.jenis === "pendataan")!;
@@ -63,6 +73,7 @@ describe("aktivitasDariInduk", () => {
     const a = aktivitasDariInduk(K(spdt, [TL(2, "biru")]));
     expect(a.map((x) => x.judul)).toEqual(["Pendataan SPDT NTP"]);
     expect(a[0].ikon).toBe("grafik");
+    expect(a[0].href).toBe("/sigap/kegiatan/spdt_ntp"); // bermenu rutin -> mendarat di Hari Ini
   });
 
   it("akun tanpa modul yang berlaku tidak mendapat kegiatan", () => {

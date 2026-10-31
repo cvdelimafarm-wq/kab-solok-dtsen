@@ -47,7 +47,7 @@ export function KolamTombol({ onBuka }: { onBuka: () => void }) {
       type="button"
       onClick={onBuka}
       aria-label={`Buka kolam wilayah kerja, ${bebas} Sub SLS masih bebas`}
-      className="fixed bottom-6 right-4 z-30 flex min-h-[52px] items-center gap-2 rounded-full px-4 text-[14px] font-extrabold text-white shadow-[0_10px_24px_rgba(107,31,150,.45)] active:scale-95"
+      className="fixed bottom-[calc(1.5rem+var(--bar-bawah,0px))] right-4 z-30 flex min-h-[52px] items-center gap-2 rounded-full px-4 text-[14px] font-extrabold text-white shadow-[0_10px_24px_rgba(107,31,150,.45)] active:scale-95"
       style={{ background: GRADIEN }}
     >
       <svg aria-hidden width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

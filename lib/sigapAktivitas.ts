@@ -5,12 +5,13 @@
 // Logika murni (tanpa React/DB) supaya teruji:
 //  - tahap berisi modul pelatihan -> kegiatan "Pelatihan"; tahap berisi modul lain -> kegiatan "Pendataan" (perencanaan/konfirmasi ikut di sini);
 //    tahap tanpa isi (mis. Evaluasi kosong) tidak membentuk kegiatan.
-//  - ketukan ikon = halaman kerja tahap utama kegiatan itu (tahap dengan modul terbanyak; Layer "Tahapan" dilewati).
+//  - ketukan ikon = halaman kerja tahap utama kegiatan itu (tahap dengan modul terbanyak; Layer "Tahapan" dilewati); kegiatan bermenu rutin -> Hari Ini.
 //  - keterangan di bawah ikon = informasi paling mendesak, DAN bisa diketuk: membuka halaman/bagian yang sesuai dengan informasi itu (bukan sekadar status).
 //  - kegiatan yang sudah selesai dipisah (Beranda meringkasnya) supaya yang aktif tampil lebih dulu.
 
 import { URUT_NADA, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { susunTahap, tahapSekarang, type KonteksTahap, type TahapHasil } from "@/lib/sigapTahap";
+import { pakaiTemplateMenu } from "@/lib/sigapMenuKegiatan";
 
 export type JenisAktivitas = "pelatihan" | "pendataan";
 export type InfoAktivitas = { teks: string; href: string };
@@ -54,7 +55,8 @@ function bangun(jenis: JenisAktivitas, k: KonteksTahap, grup: TahapHasil[]): Akt
     total: grup.length,
     sub: pesan,
     peringatan: nada === "merah" || nada === "emas",
-    href: utama.rute,
+    // (31 Okt 2026) kegiatan bermenu rutin (bar bawah): ikon membuka "Hari Ini" kegiatan (/sigap/kegiatan/<kode>), bukan halaman tahap
+    href: jenis === "pendataan" && pakaiTemplateMenu(k.induk.tahap) ? `/sigap/kegiatan/${k.induk.kode}` : utama.rute,
     jenis,
     indukKode: k.induk.kode,
     info: sekarang ? { teks: sekarang.modul.ket, href: sekarang.modul.href ?? sekarang.tahap.rute } : null,

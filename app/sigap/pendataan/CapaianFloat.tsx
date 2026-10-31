@@ -166,7 +166,7 @@ export default function CapaianFloat() {
           setBuka(true);
         }}
         aria-label={`Capaian hari ini ${formatAngka(h.total)} dari ${formatAngka(h.target)} poin, ${teksPersen(h.total, h.target)}`}
-        className="fixed bottom-6 left-4 z-20 flex h-[52px] items-center gap-2 rounded-full border-[1.5px] border-[#1F5FD1] bg-white pl-2 pr-4 text-left text-[#0F2A52] shadow-[0_8px_22px_rgba(15,42,82,.25)] active:bg-[#F2F6FD]"
+        className="fixed bottom-[calc(1.5rem+var(--bar-bawah,0px))] left-4 z-20 flex h-[52px] items-center gap-2 rounded-full border-[1.5px] border-[#1F5FD1] bg-white pl-2 pr-4 text-left text-[#0F2A52] shadow-[0_8px_22px_rgba(15,42,82,.25)] active:bg-[#F2F6FD]"
       >
         <Cincin persen={h.persen} warna={tercapai ? "#13794B" : "#B7791F"} />
         <span className="leading-tight">

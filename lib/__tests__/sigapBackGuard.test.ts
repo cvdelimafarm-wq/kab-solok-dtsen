@@ -71,6 +71,7 @@ const PEMILIK_RIWAYAT = new Set([
   "app/portal/navigasi.ts",
   "app/portal/lapisan.ts",
   "app/sigap/pendataan/page.tsx", // Sub SLS dibuka dengan pushState; menutupnya = mundur satu entri
+  "app/sigap/BarKegiatan.tsx", // bar bawah kegiatan bermenu: pindah ke tab yang sudah ada di tumpukan = history.go(-n) (lib/sigapMenuKegiatan.ts: putuskanTab), bukan tombol kembali buatan
   "app/sigap/foto/useTombolKembali.ts", // pratinjau/hasil foto: Back kembali ke kamera (mekanisme 20 Okt 2026, terpisah dari lapisan)
 ]);
 

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
+import { HK_AKTIF, hariIniWib } from "@/lib/sigap";
 import { modeBawaan, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -19,7 +20,13 @@ export async function GET(req: NextRequest) {
   try {
     const pen = await penugasanAkunMemo(db, akunId);
     const ids = Array.from(new Set(pen.map((p) => p.kegiatan.id)));
-    const [bawaan, mode] = await Promise.all([modeBawaan(db), modeKegiatan(db, ids)]);
+    const [bawaan, mode, { data: hk }] = await Promise.all([
+      modeBawaan(db),
+      modeKegiatan(db, ids),
+      // (31 Okt 2026) apakah hari ini hari kerja tiap penugasan: bar bawah kegiatan menanyakan dulu bila Kamera dibuka di luar hari kerja
+      db.from("sigap_hari_kerja").select("penugasan_id").eq("akun_id", akunId).eq("tanggal", hariIniWib()).or(HK_AKTIF()),
+    ]);
+    const hariKerjaIni = new Set((hk ?? []).map((h) => h.penugasan_id as number));
     return NextResponse.json({
       bawaan,
       nama_saya: m.akun.nama, // untuk draft cap di layar kamera (cap resmi tetap dicetak server)
@@ -32,6 +39,7 @@ export async function GET(req: NextRequest) {
         jenis: p.kegiatan.jenis, // untuk keterangan tiap nomor foto (lib/sigapLabelFoto.ts)
         mode: mode[p.kegiatan.id] ?? "unggah",
         status_periode: p.status_periode,
+        hari_kerja_hari_ini: hariKerjaIni.has(p.id),
       })),
     });
   } catch (e) {

@@ -7,6 +7,8 @@
 //   Supervisor : Hari Ini | Sampel | Supervisi  | [Kamera] | Translok        ([Kamera] = tombol aksi, bukan tab)
 // Aturan UMUM (tanpa konfigurasi per kegiatan): pekerjaan RUTIN (translok, sampel, pendataan, pengawasan) tampil sebagai tab sejajar tanpa nomor/kunci;
 // hanya langkah SEKALI JALAN dan berurutan (konfirmasi, pelatihan, identifikasi) yang disebut "tahap". Kegiatan yang seluruh isinya rutin memakai template ini.
+// (31 Okt 2026, Fase 4) Pascabencana ikut: bagian PENDATAANnya (tahap tanpa modul pelatihan -- pelatihan tetap kegiatan sendiri dengan ikon sendiri) memakai template;
+// langkah sekali jalan (konfirmasi kesediaan, identifikasi SLS) tampil sebagai kartu "Selesaikan dulu" di Hari Ini, bukan tahap bernomor.
 // Bawaan ada di sini (kode); penggantian per kegiatan lewat Kelola menyusul (Fase 2).
 
 export type PeranMenu = "ppl" | "pml" | "supervisor";
@@ -22,13 +24,66 @@ export function modulRutin(kode: string): boolean {
  * Modul yang halamannya SUDAH memasang bar bawah ini. Kegiatan hanya memakai template bila semua modulnya ada di sini (kegiatan lain tetap memakai
  * garis waktu tahap sampai halamannya ikut dipasangi bar). Tambahkan kode modul di sini ketika halamannya selesai diadaptasi.
  */
-const MODUL_BERBAR = new Set<string>(["spdt_lembar"]);
+const MODUL_BERBAR = new Set<string>(["spdt_lembar", "pendataan", "monitoring_korwil"]);
 const adaBar = (kode: string) => MODUL_BERBAR.has(kode) || /^translok:\d+$/.test(kode);
 
-/** Kegiatan memakai template menu bila ada isinya dan SEMUA isinya rutin sekaligus sudah berbar. */
+/** Langkah SEKALI JALAN: tidak menjadi tab, melainkan kartu "Selesaikan dulu" di Hari Ini selama belum selesai. */
+export const MODUL_SEKALI = ["konfirmasi", "identifikasi"] as const;
+/** Modul hanya-informasi (tanpa halaman sendiri): ikut kegiatan bermenu tanpa menjadi tab. */
+const MODUL_INFO = new Set<string>(["wilayah_tim"]);
+const sekali = (kode: string) => (MODUL_SEKALI as readonly string[]).includes(kode);
+
+/** Tahap yang membentuk kegiatan "Pendataan" (semua selain Pelatihan; kegiatan Pelatihan punya ikon dan halaman sendiri). */
+export function tahapMenu<T extends { isi: readonly string[] }>(tahap: readonly T[]): T[] {
+  return tahap.filter((t) => !t.isi.includes("pelatihan"));
+}
+
+/** id kegiatan Transport Lokal yang termasuk kegiatan bermenu (bukan translok milik tahap Pelatihan). */
+export function idTranslokMenu(tahap: readonly { isi: readonly string[] }[]): number[] {
+  return tahapMenu(tahap)
+    .flatMap((t) => [...t.isi])
+    .flatMap((m) => (/^translok:\d+$/.test(m) ? [Number(m.slice(9))] : []));
+}
+
+/**
+ * Kegiatan memakai template menu bila (di luar tahap Pelatihan) ada isinya, SEMUA isinya rutin-dan-berbar / sekali jalan / informasi, dan sedikitnya
+ * satu modul pemicu (lembar pendataan atau supervisi) sudah berbar.
+ */
 export function pakaiTemplateMenu(tahap: readonly { isi: readonly string[] }[]): boolean {
-  const semua = tahap.flatMap((t) => [...t.isi]);
-  return semua.length > 0 && semua.every((m) => modulRutin(m) && adaBar(m)) && semua.some((m) => MODUL_BERBAR.has(m));
+  const semua = tahapMenu(tahap).flatMap((t) => [...t.isi]);
+  return semua.length > 0 && semua.every((m) => (modulRutin(m) && adaBar(m)) || sekali(m) || MODUL_INFO.has(m)) && semua.some((m) => MODUL_BERBAR.has(m));
+}
+
+/**
+ * Peran akun di menu: Supervisor SPDT / PPL / PML SPDT menurut `spdt.peran`; Pascabencana: kortim (korwil) = supervisor, selain itu peran di tim wilayah
+ * (pml/ppl). null = akun tidak punya peran di kegiatan ini (halaman memakai tampilan lamanya).
+ */
+export function peranMenuDariInduk(i: { spdt?: { peran?: string | null } | null; korwil?: unknown | null; wilayah?: { peran?: string | null } | null }): PeranMenu | null {
+  const sah = (p: string | null | undefined): PeranMenu | null => (p === "ppl" || p === "pml" || p === "supervisor" ? p : null);
+  const dariSpdt = sah(i.spdt?.peran);
+  if (dariSpdt) return dariSpdt;
+  if (i.korwil) return "supervisor";
+  return sah(i.wilayah?.peran);
+}
+
+export type LangkahSekali = { kode: string; judul: string; ket: string; href: string; aksi: string; mendesak: boolean };
+
+/**
+ * Langkah sekali jalan yang BELUM selesai, dari modul hasil susunTahap. Tautan `?dari=` (tujuan tombol Kembali tahap lama) dialihkan ke Hari Ini kegiatan.
+ */
+export function langkahSekali(
+  kodeInduk: string,
+  modul: readonly { kode: string; judul: string; ket: string; status: string; href: string | null; aksi?: string }[],
+): LangkahSekali[] {
+  return modul
+    .filter((m) => sekali(m.kode) && m.status !== "selesai" && !!m.href)
+    .map((m) => {
+      const [dasar, qs = ""] = (m.href as string).split("?");
+      const q = new URLSearchParams(qs);
+      if (q.has("dari")) q.set("dari", `/sigap/kegiatan/${kodeInduk}`);
+      const s = q.toString();
+      return { kode: m.kode, judul: m.judul, ket: m.ket, href: s ? `${dasar}?${s}` : dasar, aksi: m.aksi ?? "Buka", mendesak: m.status === "mendesak" || m.status === "perlu" };
+    });
 }
 
 export type ItemBar = { kunci: KunciItem; label: string; href: string };

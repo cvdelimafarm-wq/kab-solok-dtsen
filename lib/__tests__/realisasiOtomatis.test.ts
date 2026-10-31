@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BATAS_QC_KORWIL, LABEL_SUMBER, MAKS_LOKASI, SATUAN_QC, satuanLaporanTanggal, bandingkanOtomatis, catatanDianggap, laporanDianggap, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
+import { susunRealisasiSpdt, BATAS_QC_KORWIL, LABEL_SUMBER, MAKS_LOKASI, SATUAN_QC, satuanLaporanTanggal, bandingkanOtomatis, catatanDianggap, laporanDianggap, satuanLaporan, sumberUntukPeran, susunRealisasiOtomatis, type BarisOtomatis, type WilayahRingkas } from "@/lib/realisasiOtomatis";
 
 // (11 Okt 2026) Uji isian otomatis Laporan realisasi PML (identifikasi) dan PPL (pendataan).
 const W: WilayahRingkas[] = [
@@ -24,7 +24,10 @@ describe("satuan & sumber menurut peran", () => {
     expect(sumberUntukPeran("pascabencana_2026", "ppl")).toBe("pendataan");
     expect(sumberUntukPeran("pascabencana_2026", "korwil")).toBe("qc"); // 27 Okt 2026: korwil <- Lembar Quality Check, bukan pendataan
     expect(sumberUntukPeran("pascabencana_2026", "lainnya")).toBeNull();
-    expect(sumberUntukPeran("spdt_ntp_2026", "ppl")).toBeNull();
+    expect(sumberUntukPeran("spdt_ntp_2026", "ppl")).toBe("spdt"); // 31 Okt 2026: SPDT <- koordinat KK yang dibuka di menu Sampel
+    expect(sumberUntukPeran("spdt_ntp_2026", "pml")).toBe("spdt");
+    expect(sumberUntukPeran("spdt_ntp_2026", "lainnya")).toBeNull();
+    expect(sumberUntukPeran("kegiatan_lain", "ppl")).toBeNull();
   });
 });
 
@@ -143,5 +146,30 @@ describe("laporanDianggap (12 Okt 2026)", () => {
   it("tanpa hasil lapangan -> tidak dianggap", () => {
     expect(laporanDianggap("2026-10-10", "2026-10-12", false, null)).toBe(false);
     expect(laporanDianggap("2026-10-10", "2026-10-12", false, { jumlah: 0 })).toBe(false);
+  });
+});
+
+describe("SPDT NTP <- koordinat KK yang dibuka (31 Okt 2026)", () => {
+  const b = (tanggal: string, kk_id: number, jorong: string) => ({ tanggal, kk_id, kecamatan: "Lembah Gumanti", nagari: "Aia Dingin", jorong });
+  it("jumlah = KK berbeda per tanggal, lokasi = jorong berbeda", () => {
+    const h = susunRealisasiSpdt([b("2026-10-20", 1, "Koto"), b("2026-10-20", 2, "Koto"), b("2026-10-20", 2, "Koto"), b("2026-10-20", 3, "Padang"), b("2026-10-21", 9, "Koto")], "ruta");
+    expect(h.get("2026-10-20")).toMatchObject({ sumber: "spdt", jumlah: 3, satuan: "ruta", lokasi_terpotong: 0 });
+    expect(h.get("2026-10-20")?.lokasi.map((l) => l.jorong)).toEqual(["Koto", "Padang"]);
+    expect(h.get("2026-10-21")?.jumlah).toBe(1);
+    expect(h.has("2026-10-22")).toBe(false);
+  });
+  it("lokasi dibatasi MAKS_LOKASI dan sisanya dihitung", () => {
+    const baris = Array.from({ length: MAKS_LOKASI + 3 }, (_, i) => b("2026-10-20", i + 1, `Jorong ${String(i).padStart(2, "0")}`));
+    const o = susunRealisasiSpdt(baris, "ruta").get("2026-10-20")!;
+    expect(o.lokasi).toHaveLength(MAKS_LOKASI);
+    expect(o.lokasi_terpotong).toBe(3);
+  });
+  it("hari lampau tanpa laporan manual tetapi ada KK dibuka dianggap sudah lapor", () => {
+    const o = susunRealisasiSpdt([b("2026-10-20", 1, "Koto")], "ruta").get("2026-10-20")!;
+    expect(laporanDianggap("2026-10-20", "2026-10-31", false, o)).toBe(true);
+    expect(laporanDianggap("2026-10-31", "2026-10-31", false, o)).toBe(false);
+  });
+  it("labelnya jelas bagi petugas", () => {
+    expect(LABEL_SUMBER.spdt).toContain("menu Sampel");
   });
 });

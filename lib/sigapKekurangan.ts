@@ -85,7 +85,7 @@ export type MasukanKekurangan = {
   /** "/sigap/translok/<token>?p=<id>" -- ke halaman kerja; parameter tab/tgl/fokus ditambahkan di sini */
   hrefDasar: string;
   /** sumber laporan otomatis menurut peran (PML = identifikasi, PPL/korwil = pendataan); null = tak ada lembar */
-  sumber?: "identifikasi" | "pendataan" | "qc" | null;
+  sumber?: "identifikasi" | "pendataan" | "qc" | "spdt" | null; // (31 Okt 2026) "spdt" = laporan otomatis dari "sudah buka lembar" SPDT NTP (lib/realisasiOtomatis.ts)
   hrefLembar?: string | null;
   /** nomor WhatsApp admin anggaran berbentuk 62xxxxxxxxxx; null = tombol WhatsApp tidak ditampilkan */
   waAdmin?: string | null;
