@@ -3,7 +3,7 @@
 // (31 Okt 2026) Daftar pegawai organik di tab Pengguna: profil kepegawaian (sigap_pegawai_profil) digabung dengan akun SIGAP.
 // Usia dan masa kerja dihitung saat tampil (tahun penuh, tanggal WIB), tidak disimpan. NIP disamarkan kecuali diminta penuh.
 
-import { samarkanId } from "./penggunaPool";
+import { buangKodeWilayah, samarkanId } from "./penggunaPool";
 
 export type ProfilPegawai = {
   id: number;
@@ -104,11 +104,8 @@ export function teksDurasi(d: Durasi | null, denganHari = false): string | null 
 /** Total bulan penuh (kunci urut). */
 export const totalBulan = (d: Durasi | null): number | null => (d ? d.tahun * 12 + d.bulan : null);
 
-/** Buang kode BPS di depan nama wilayah: "(002) SUNGAI NANAM" -> "SUNGAI NANAM". */
-export function bersihKodeWilayah(s: string | null | undefined): string | null {
-  const t = (s ?? "").replace(/^\s*\(\d+\)\s*/, "").trim();
-  return t === "" ? null : t;
-}
+/** Buang kode BPS di depan nama wilayah (lihat penggunaPool.buangKodeWilayah). */
+export const bersihKodeWilayah = buangKodeWilayah;
 
 /** "1982-09-28" -> "28 Sep 1982". */
 export function tanggalIndo(iso: string | null | undefined): string | null {

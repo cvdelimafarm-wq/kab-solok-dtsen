@@ -12,9 +12,9 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import ResetPin from "../admin/ResetPin";
-import DaftarPegawai from "./DaftarPegawai";
+import DaftarPegawai, { useHariIni } from "./DaftarPegawai";
 import KepalaKolom from "../admin/KepalaKolom";
-import { kapitalWilayah, tanggalWib, type BarisPegawai, type DaftarWilayah, type RingkasPegawai } from "@/lib/pegawaiOrganik";
+import { durasi, kapitalWilayah, tanggalIndo, tanggalWib, teksDurasi, type BarisPegawai, type DaftarWilayah, type RingkasPegawai } from "@/lib/pegawaiOrganik";
 import { ringkas, saring, statusLokasi, type AkunPengguna, type JenisPengguna, type Ringkasan } from "@/lib/penggunaPool";
 import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 
@@ -24,7 +24,9 @@ type Respons = {
 };
 
 const HALAMAN = 200;
-type KolMitra = "nama" | "kec" | "nag" | "id" | "lokasi" | "pool" | "masuk";
+type KolMitra = "nama" | "kec" | "nag" | "id" | "hp" | "email" | "lahir" | "usia" | "lokasi" | "se" | "pool" | "masuk";
+const KOLOM_ANGKA: KolMitra[] = ["usia"];
+const teksSe = (a: AkunPengguna) => (a.nilai_se2026 != null ? "Mitra SE2026" : "Belum tercatat");
 
 export default function Pengguna() {
   const [jenis, setJenis] = useState<JenisPengguna>("mitra");
@@ -37,6 +39,7 @@ export default function Pengguna() {
   const [sKol, setSKol] = useState<Saring<KolMitra>>({}); // saringan per kolom (standar tabel SIGAP)
   const [urut, setUrut] = useState<Urut<KolMitra>>(null);
   const [terbuka, setTerbuka] = useState<number | null>(null); // baris yang dibuka (tombol Reset PIN)
+  const hariIni = useHariIni();
   const [hanyaAktif, setHanyaAktif] = useState(true);
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [tampil, setTampil] = useState(HALAMAN);
@@ -83,6 +86,11 @@ export default function Pengguna() {
         case "kec": return kapitalWilayah(a.alamat_kecamatan) ?? "";
         case "nag": return kapitalWilayah(a.alamat_nagari) ?? "";
         case "id": return (jenis === "mitra" ? a.nik : a.nip) ?? "";
+        case "hp": return a.no_hp ?? "";
+        case "email": return a.email ?? "";
+        case "lahir": return a.tanggal_lahir ?? "";
+        case "usia": return durasi(a.tanggal_lahir ?? null, hariIni)?.tahun ?? "";
+        case "se": return teksSe(a);
         case "lokasi": {
           const l = statusLokasi(a);
           return l === "terverifikasi" ? "Terverifikasi" : l === "berkoordinat" ? "Berkoordinat" : "Belum ada";
@@ -91,19 +99,19 @@ export default function Pengguna() {
         case "masuk": return a.terakhir_masuk_at ? tanggalWib(Date.parse(a.terakhir_masuk_at)) : "";
       }
     },
-    [jenis],
+    [jenis, hariIni],
   );
   const terlihat = useMemo(() => terapkanTabel(awal, sKol, urut, nilaiSel), [awal, sKol, urut, nilaiSel]);
   const adaFilterKolom = adaSaring(sKol) || urut !== null;
   const kepala = (id: KolMitra, label: string) => (
     <th className={TH}>
-      <KepalaKolom id={id} label={label} saring={sKol} setSaring={setSKol} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(awal, id, nilaiSel, false)} />
+      <KepalaKolom id={id} label={label} saring={sKol} setSaring={setSKol} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(awal, id, nilaiSel, KOLOM_ANGKA.includes(id))} />
     </th>
   );
   const ring = useMemo(() => data?.ringkasan ?? ringkas(akun), [data, akun]);
   const bolehKelola = data?.boleh_kelola === true && data.tabel_pool_siap && jenis === "mitra";
   const bolehResetPin = data?.boleh_kelola === true;
-  const jumlahKolom = (bolehKelola ? 1 : 0) + (jenis === "mitra" ? 7 : 6);
+  const jumlahKolom = (bolehKelola ? 1 : 0) + (jenis === "mitra" ? 12 : 6);
   const pakaiProfil = jenis === "organik" && data?.profil_siap === true && !!data.pegawai && !!data.ringkasan_pegawai;
 
   const semuaTerpilih = terlihat.length > 0 && terlihat.every((a) => pilih.has(a.id));
@@ -263,7 +271,12 @@ export default function Pengguna() {
               {kepala("kec", "Kecamatan")}
               {kepala("nag", "Nagari")}
               {kepala("id", jenis === "mitra" ? "NIK" : "NIP")}
+              {jenis === "mitra" && kepala("hp", "No HP")}
+              {jenis === "mitra" && kepala("email", "Email")}
+              {jenis === "mitra" && kepala("lahir", "Tanggal Lahir")}
+              {jenis === "mitra" && kepala("usia", "Usia (th)")}
               {kepala("lokasi", "Lokasi")}
+              {jenis === "mitra" && kepala("se", "Status Mitra SE2026")}
               {jenis === "mitra" && kepala("pool", `Pool ${tahun}`)}
               {kepala("masuk", "Terakhir masuk")}
             </tr>
@@ -271,6 +284,7 @@ export default function Pengguna() {
           <tbody>
             {terlihat.slice(0, tampil).map((a) => {
               const buka = terbuka === a.id;
+              const usia = durasi(a.tanggal_lahir ?? null, hariIni);
               return (
                 <Fragment key={a.id}>
                   <tr className={`${a.aktif ? "" : "opacity-60"} ${buka ? "bg-[#F3F7FE]" : ""}`}>
@@ -297,7 +311,22 @@ export default function Pengguna() {
                     <td className={`${TD} whitespace-nowrap`}>{kapitalWilayah(a.alamat_kecamatan) ?? "–"}</td>
                     <td className={`${TD} whitespace-nowrap`}>{kapitalWilayah(a.alamat_nagari) ?? "–"}</td>
                     <td className={`${TD} font-mono text-[12px]`}>{(jenis === "mitra" ? a.nik : a.nip) ?? "–"}</td>
+                    {jenis === "mitra" && (
+                      <>
+                        <td className={`${TD} whitespace-nowrap`}>{a.no_hp ?? "–"}</td>
+                        <td className={`${TD} text-[12px]`}>{a.email ?? "–"}</td>
+                        <td className={`${TD} whitespace-nowrap`}>{(a.tanggal_lahir ? tanggalIndo(a.tanggal_lahir) : null) ?? "–"}</td>
+                        <td className={`${TD} whitespace-nowrap`} title={usia ? `${usia.tahun} tahun ${usia.bulan} bulan ${usia.hari} hari` : undefined}>
+                          {teksDurasi(usia) ?? "–"}
+                        </td>
+                      </>
+                    )}
                     <td className={TD}>{chipLokasi(a)}</td>
+                    {jenis === "mitra" && (
+                      <>
+                        <td className={TD}>{a.nilai_se2026 != null ? <Chip w="ok">Mitra SE2026</Chip> : <Chip w="mut">Belum tercatat</Chip>}</td>
+                      </>
+                    )}
                     {jenis === "mitra" && (
                       <td className={TD} title={a.pool?.catatan ?? undefined}>
                         {chipPool(a)}

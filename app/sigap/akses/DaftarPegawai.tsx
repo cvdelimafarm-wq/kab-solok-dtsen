@@ -130,7 +130,7 @@ const dash = (v: string | number | null | undefined) => (v === null || v === und
 const teksJk = (b: BarisPegawai) => (b.jenis_kelamin === "L" ? "Laki-laki" : b.jenis_kelamin === "P" ? "Perempuan" : null);
 
 /** Tanggal hari ini (WIB) menurut jam perangkat; diperbarui tiap menit supaya usia dan masa kerja ikut bergerak saat halaman dibiarkan terbuka. */
-function useHariIni(): string {
+export function useHariIni(): string {
   const [h, setH] = useState(() => tanggalWib(Date.now()));
   useEffect(() => {
     const t = setInterval(() => setH(tanggalWib(Date.now())), 60_000);

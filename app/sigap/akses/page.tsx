@@ -22,13 +22,15 @@ import AkunPeranTab from "./AkunPeran";
 import { DaftarPortal, Riwayat } from "./PortalRiwayat";
 import LogLogin from "./LogLogin";
 import Pengguna from "./Pengguna";
+import PenilaianMitra from "./PenilaianMitra";
 import { useDetak } from "../useDetak";
 
-type Tab = "izin" | "akun" | "pengguna" | "portal" | "riwayat" | "log";
+type Tab = "izin" | "akun" | "pengguna" | "penilaian" | "portal" | "riwayat" | "log";
 const TAB: ItemTab<Tab>[] = [
   { kode: "izin", label: "🎭 Peran & Izin" },
   { kode: "akun", label: "👤 Akun & Peran" },
   { kode: "pengguna", label: "👥 Pengguna" }, // (31 Okt 2026) Mitra Kepka | Pegawai organik + pool
+  { kode: "penilaian", label: "⭐ Penilaian Mitra" }, // (31 Okt 2026) nilai 1-5 per Mitra, satu kolom per kegiatan
   { kode: "portal", label: "🧭 Daftar Portal & Menu" },
   { kode: "riwayat", label: "🕘 Riwayat" },
   { kode: "log", label: "🕒 Log Login" }, // (6 Okt 2026) terakhir login & durasi -- permintaan user
@@ -135,6 +137,8 @@ export default function KelolaPeranAkses() {
         <AkunPeranTab data={data} onMuatUlang={muat} />
       ) : tab === "pengguna" ? (
         <Pengguna />
+      ) : tab === "penilaian" ? (
+        <PenilaianMitra />
       ) : tab === "portal" ? (
         <DaftarPortal data={data} />
       ) : tab === "riwayat" ? (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daftarKecamatan, periksaPermintaanPool, ringkas, samarkanId, saring, statusLokasi, tahunSah, titikSah, type AkunPengguna } from "../penggunaPool";
+import { buangKodeWilayah, daftarKecamatan, periksaPermintaanPool, ringkas, rincianAkun, samarkanId, saring, statusLokasi, tahunSah, titikSah, type AkunPengguna } from "../penggunaPool";
 
 const dasar: AkunPengguna = {
   id: 1, nama: "Ani Putri", jenis: "mitra", nik: null, nip: null, alamat_kecamatan: "Kubung", domisili_lat: null, domisili_lng: null,
@@ -89,5 +89,38 @@ describe("periksaPermintaanPool", () => {
   it("membatasi jumlah akun sekali proses", () => {
     const ids = Array.from({ length: 501 }, (_, i) => i + 1);
     expect(periksaPermintaanPool({ akun_ids: ids, tahun: 2026, status: "aktif" }).ok).toBe(false);
+  });
+});
+
+describe("rincianAkun (data pendaftaran Mitra)", () => {
+  const m = { id: 1, alamat_desa: "(002) SUNGAI NANAM", no_telp: " 0812345 ", email: "a@b.id", tanggal_lahir: "1990-05-17" };
+  const p = { id: 9, alamat_nagari: "KOTO BARU", no_hp: "0899", nilai_kinerja: 4, nilai_kinerja_sumber: "SE2026" };
+
+  it("kode BPS di depan nagari dibuang", () => {
+    expect(buangKodeWilayah("(002) SUNGAI NANAM")).toBe("SUNGAI NANAM");
+    expect(buangKodeWilayah("  ")).toBeNull();
+    expect(buangKodeWilayah(null)).toBeNull();
+  });
+  it("data Mitra diutamakan, data petugas jadi cadangan", () => {
+    expect(rincianAkun(m, p)).toEqual({ nagari: "SUNGAI NANAM", no_hp: "0812345", email: "a@b.id", tanggal_lahir: "1990-05-17", nilai_se2026: 4 });
+    expect(rincianAkun({ ...m, alamat_desa: null, no_telp: null }, p)).toMatchObject({ nagari: "KOTO BARU", no_hp: "0899" });
+  });
+  it("tanpa data Mitra: hanya data petugas", () => {
+    expect(rincianAkun(undefined, p)).toEqual({ nagari: "KOTO BARU", no_hp: "0899", email: null, tanggal_lahir: null, nilai_se2026: 4 });
+  });
+  it("tanpa data sama sekali: semuanya kosong, bukan Mitra SE2026", () => {
+    expect(rincianAkun(undefined, undefined)).toEqual({ nagari: null, no_hp: null, email: null, tanggal_lahir: null, nilai_se2026: null });
+  });
+  it("nilai hanya sah bila bulat 1-5 dan bersumber SE2026", () => {
+    expect(rincianAkun(m, { ...p, nilai_kinerja: 0 }).nilai_se2026).toBeNull();
+    expect(rincianAkun(m, { ...p, nilai_kinerja: 6 }).nilai_se2026).toBeNull();
+    expect(rincianAkun(m, { ...p, nilai_kinerja: 3.5 }).nilai_se2026).toBeNull();
+    expect(rincianAkun(m, { ...p, nilai_kinerja: null }).nilai_se2026).toBeNull();
+    expect(rincianAkun(m, { ...p, nilai_kinerja_sumber: "lain" }).nilai_se2026).toBeNull();
+    expect(rincianAkun(m, { ...p, nilai_kinerja: 5, nilai_kinerja_sumber: "se2026" }).nilai_se2026).toBe(5);
+  });
+  it("tanggal lahir tak sah menjadi kosong", () => {
+    expect(rincianAkun({ ...m, tanggal_lahir: "bukan tanggal" }, p).tanggal_lahir).toBeNull();
+    expect(rincianAkun({ ...m, tanggal_lahir: "1990-05-17T00:00:00Z" }, p).tanggal_lahir).toBe("1990-05-17");
   });
 });

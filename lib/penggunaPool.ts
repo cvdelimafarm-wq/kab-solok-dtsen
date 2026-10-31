@@ -22,6 +22,11 @@ export type AkunPengguna = {
   alamat_kecamatan: string | null;
   /** Nagari/desa tempat tinggal (dari data pendaftaran Mitra/petugas bila ada). */
   alamat_nagari?: string | null;
+  /** Data pendaftaran Mitra (hanya jenis mitra): nomor HP, email, tanggal lahir (yyyy-mm-dd), dan penilaian Mitra SE2026 (1-5). */
+  no_hp?: string | null;
+  email?: string | null;
+  tanggal_lahir?: string | null;
+  nilai_se2026?: number | null;
   domisili_lat: number | null;
   domisili_lng: number | null;
   domisili_sumber: string | null;
@@ -53,6 +58,38 @@ export function titikSah(lat: unknown, lng: unknown): boolean {
 export function statusLokasi(a: Pick<AkunPengguna, "domisili_lat" | "domisili_lng" | "verif_at">): StatusLokasi {
   if (!titikSah(a.domisili_lat, a.domisili_lng)) return "belum";
   return a.verif_at ? "terverifikasi" : "berkoordinat";
+}
+
+/** Buang kode BPS di depan nama wilayah: "(002) SUNGAI NANAM" -> "SUNGAI NANAM". Kosong -> null. */
+export function buangKodeWilayah(s: string | null | undefined): string | null {
+  const t = (s ?? "").replace(/^\s*\(\d+\)\s*/, "").trim();
+  return t === "" ? null : t;
+}
+
+export type BarisBencanaMitra = { id: number; alamat_desa: string | null; no_telp: string | null; email: string | null; tanggal_lahir: string | null };
+export type BarisBencanaPetugas = { id: number; alamat_nagari: string | null; no_hp: string | null; nilai_kinerja: number | null; nilai_kinerja_sumber: string | null };
+export type RincianAkun = { nagari: string | null; no_hp: string | null; email: string | null; tanggal_lahir: string | null; nilai_se2026: number | null };
+
+const teksAtauNull = (v: string | null | undefined) => {
+  const t = (v ?? "").trim();
+  return t === "" ? null : t;
+};
+
+/**
+ * Rincian akun dari data pendaftaran: bencana_mitra (via mitra_id) diutamakan, bencana_petugas (via petugas_bencana_id) sebagai cadangan.
+ * Penilaian Mitra SE2026 = nilai_kinerja 1-5 bersumber "SE2026" (nilai ini yang menandai Mitra SE2026 dan dibawa sebagai rekam jejak ke kegiatan berikutnya).
+ */
+export function rincianAkun(m: BarisBencanaMitra | undefined, p: BarisBencanaPetugas | undefined): RincianAkun {
+  const lahir = /^\d{4}-\d{2}-\d{2}/.exec(m?.tanggal_lahir ?? "");
+  const n = p?.nilai_kinerja;
+  const nilaiSah = typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5 && (p?.nilai_kinerja_sumber ?? "").toUpperCase() === "SE2026";
+  return {
+    nagari: buangKodeWilayah(m?.alamat_desa) ?? buangKodeWilayah(p?.alamat_nagari),
+    no_hp: teksAtauNull(m?.no_telp) ?? teksAtauNull(p?.no_hp),
+    email: teksAtauNull(m?.email),
+    tanggal_lahir: lahir ? lahir[0] : null,
+    nilai_se2026: nilaiSah ? (n as number) : null,
+  };
 }
 
 /** Samarkan identitas untuk tampilan daftar: hanya 4 digit terakhir. */

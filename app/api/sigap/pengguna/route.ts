@@ -2,7 +2,7 @@
 //
 // (31 Okt 2026) Manajemen Pengguna: daftar akun Mitra Kepka dan Pegawai organik + penanda anggota pool per tahun.
 //   GET  ?jenis=mitra|organik&tahun=2026   -> { tahun, jenis, tabel_pool_siap, boleh_kelola, ringkasan, akun[] }   (izin akses.kelola, level lihat)
-//   (nagari tiap akun dari bencana_mitra.alamat_desa / bencana_petugas.alamat_nagari, kode BPS dibuang)
+//   Mitra juga membawa nagari, no_hp, email, tanggal_lahir, nilai_se2026 (bencana_mitra / bencana_petugas; penilaian dari sigap_penilaian_mitra bila SQL 20261031j sudah jalan; lihat lib/portal/rincianAkun).
 //   POST { aksi: "ubah_profil_pegawai", profil_id, domisili_kecamatan, domisili_nagari, kantor_kecamatan, kantor_semua? }  (izin akses.kelola, level kelola)
 //   POST { aksi: "set_pool", akun_ids[], tahun, status, no_kepka?, catatan? }                                   (izin akses.kelola, level kelola)
 //   jenis=organik juga mengirim { pegawai[], ringkasan_pegawai, profil_siap } dari sigap_pegawai_profil (SQL 20261031h); ?nip=penuh (izin kelola) membuka NIP utuh dan dicatat di audit.
@@ -13,8 +13,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { aktorDariHeader, boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
-import { bentukDaftarPegawai, bersihKodeWilayah, periksaUbahProfil, ringkasPegawai, susunDaftarWilayah, type DaftarWilayah, type ProfilPegawai } from "@/lib/pegawaiOrganik";
+import { bentukDaftarPegawai, periksaUbahProfil, ringkasPegawai, susunDaftarWilayah, type DaftarWilayah, type ProfilPegawai } from "@/lib/pegawaiOrganik";
 import { periksaPermintaanPool, ringkas, samarkanId, tahunSah, type AkunPengguna, type BarisPool, type JenisPengguna } from "@/lib/penggunaPool";
+import { rincianPerAkun } from "@/lib/portal/rincianAkun";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,37 +61,6 @@ type BarisAkun = {
 
 const KOLOM = "id, nama, jenis, nik, nip, alamat_kecamatan, mitra_id, petugas_bencana_id, domisili_lat, domisili_lng, domisili_sumber, verif_at, verif_jarak_m, terakhir_masuk_at, aktif";
 
-/** Nagari/desa per akun: dari bencana_mitra.alamat_desa (kode BPS di depan dibuang), cadangan bencana_petugas.alamat_nagari. Gagal baca = kosong, daftar tetap tampil. */
-async function nagariPerAkun(db: Db, akun: BarisAkun[]): Promise<Map<number, string>> {
-  const hasil = new Map<number, string>();
-  const bagi = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
-  const dariMitra = new Map<number, string>();
-  const dariPetugas = new Map<number, string>();
-  try {
-    for (const g of bagi([...new Set(akun.map((a) => a.mitra_id).filter((x): x is number => typeof x === "number"))], 200)) {
-      const { data } = await db.from("bencana_mitra").select("id, alamat_desa").in("id", g);
-      for (const m of (data ?? []) as { id: number; alamat_desa: string | null }[]) {
-        const n = bersihKodeWilayah(m.alamat_desa);
-        if (n) dariMitra.set(m.id, n);
-      }
-    }
-    for (const g of bagi([...new Set(akun.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number"))], 200)) {
-      const { data } = await db.from("bencana_petugas").select("id, alamat_nagari").in("id", g);
-      for (const m of (data ?? []) as { id: number; alamat_nagari: string | null }[]) {
-        const n = bersihKodeWilayah(m.alamat_nagari);
-        if (n) dariPetugas.set(m.id, n);
-      }
-    }
-  } catch {
-    /* abaikan: kolom nagari kosong */
-  }
-  for (const a of akun) {
-    const n = (a.mitra_id !== null ? dariMitra.get(a.mitra_id) : undefined) ?? (a.petugas_bencana_id !== null ? dariPetugas.get(a.petugas_bencana_id) : undefined);
-    if (n) hasil.set(a.id, n);
-  }
-  return hasil;
-}
-
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
@@ -127,8 +97,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const nagari = await nagariPerAkun(db, akun);
-    const akunNagari = akun.map((a) => ({ ...a, alamat_nagari: nagari.get(a.id) ?? null }));
+    const rincian = await rincianPerAkun(db, akun);
+    const akunNagari = akun.map((a) => ({ ...a, alamat_nagari: rincian.get(a.id)?.nagari ?? null }));
 
     const daftar: AkunPengguna[] = akun.map((a) => ({
       id: a.id,
@@ -137,7 +107,11 @@ export async function GET(req: NextRequest) {
       nik: samarkanId(a.nik),
       nip: samarkanId(a.nip),
       alamat_kecamatan: a.alamat_kecamatan,
-      alamat_nagari: nagari.get(a.id) ?? null,
+      alamat_nagari: rincian.get(a.id)?.nagari ?? null,
+      // data pendaftaran hanya untuk Mitra (halaman ini butuh izin akses.kelola)
+      ...(jenis === "mitra"
+        ? { no_hp: rincian.get(a.id)?.no_hp ?? null, email: rincian.get(a.id)?.email ?? null, tanggal_lahir: rincian.get(a.id)?.tanggal_lahir ?? null, nilai_se2026: rincian.get(a.id)?.nilai_se2026 ?? null }
+        : {}),
       domisili_lat: a.domisili_lat,
       domisili_lng: a.domisili_lng,
       domisili_sumber: a.domisili_sumber,
