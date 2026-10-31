@@ -5,7 +5,8 @@
 -- Aman dijalankan ulang (on conflict do update). Jalankan setelah 20261031e/f/g (urutan tidak bergantung).
 
 create table if not exists sigap_pegawai_profil (
-  nip_lama           text primary key,
+  id                 bigint generated always as identity primary key,
+  nip_lama           text not null unique,
   urutan             int  not null default 0,
   akun_id            bigint references sigap_akun(id) on delete set null,
   nama_lengkap       text not null,
@@ -22,6 +23,9 @@ create table if not exists sigap_pegawai_profil (
   kantor_kecamatan   text,
   diubah_at          timestamptz not null default now()
 );
+-- Tabel versi awal (tanpa kolom id) yang sudah terlanjur dibuat: tambahkan id (baris lama otomatis bernomor).
+alter table sigap_pegawai_profil add column if not exists id bigint generated always as identity;
+create unique index if not exists sigap_pegawai_profil_id_uq on sigap_pegawai_profil (id);
 create index if not exists sigap_pegawai_profil_akun_idx on sigap_pegawai_profil (akun_id);
 alter table sigap_pegawai_profil enable row level security;
 

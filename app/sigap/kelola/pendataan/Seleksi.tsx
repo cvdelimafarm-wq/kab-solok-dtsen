@@ -6,11 +6,12 @@
 //   Penunjukan langsung  PJ memplot nama Mitra Kepka ke survei lewat tab 2 · Tim & Surat Tugas (di sini hanya penjelasan).
 //   Seleksi              PJ merancang kebutuhan (PPL/PML, dikurangi yang sudah di-plot organik), wilayah sampel, syarat khusus (domisili, jarak),
 //                        jadwal, ketentuan peringkat; layar menampilkan PRATINJAU kandidat (Mitra Kepka anggota pool) yang memenuhi syarat.
-// TAHAP INI: rancangan + pratinjau. Pembukaan pendaftaran, push ajakan, tes, nilai, dan pengumuman menyusul.
+// Paket 4: setelah dibuka, panel PenilaianSeleksi (kertas kerja, tes, peringkat per wilayah, penetapan, pengumuman) tampil di bawah daftar pendaftar.
 // Aturan murni: lib/seleksiSyarat.ts. Data: /api/sigap/seleksi.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import PenilaianSeleksi from "./PenilaianSeleksi";
 import { SYARAT_BAWAAN, sisaKebutuhan, type HasilKelayakan, type JalurPerekrutan, type PeringkatLevel, type RingkasKelayakan, type SyaratSeleksi, type WilayahSeleksi } from "@/lib/seleksiSyarat";
 
 type RingkasSeleksi = { id: number; nama: string; jalur: JalurPerekrutan; status: string; kebutuhan_ppl: number; kebutuhan_pml: number; sudah_ppl: number; sudah_pml: number; diubah_at: string };
@@ -477,6 +478,10 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                     </div>
                   )}
                 </div>
+              )}
+
+              {detail && form.id && form.jalur === "seleksi" && detail.seleksi.status !== "draft" && detail.seleksi.status !== "batal" && (
+                <PenilaianSeleksi key={`${form.id}-${detail.seleksi.status}`} seleksiId={form.id} />
               )}
             </div>
           )}
