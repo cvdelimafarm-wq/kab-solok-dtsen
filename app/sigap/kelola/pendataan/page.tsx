@@ -2,6 +2,7 @@
 
 // app/sigap/kelola/pendataan/page.tsx
 //
+// (31 Okt 2026) Tab 3 kini "Notifikasi" (Notifikasi.tsx): sub-tab Otomatis (pengingat Translok + alur FASIH, bawaan ketentuan umum), Manual (Siaran + KirimSatu dipindah apa adanya), Riwayat.
 // (30 Okt 2026) PROFIL FITUR KEGIATAN: tab, sub-tab, dan isi Persiapan mengikuti strategi + centang fitur survei terpilih (lib/sigapFitur.ts, useFitur.ts, layar
 // Fitur kegiatan di tab 1 · Persiapan). Menggantikan penanda "belum tersedia" per tab; fitur yang layarnya masih terikat data Pascabencana otomatis mati untuk survei lain.
 // (29 Okt 2026, lanjutan) Tab 2 (Penugasan & ST), 3 (Siaran + kirim satu petugas) dan 7 (Administrasi: transport lokal) kini juga mengikuti survei terpilih.
@@ -25,14 +26,13 @@ import PemilihSurvei, { namaSurvei } from "./PemilihSurvei";
 import FiturKegiatan from "./FiturKegiatan";
 import { useFitur } from "./useFitur";
 import { tabAktifKelola, tabTampilKelola } from "@/lib/sigapFitur";
-import KirimSatu from "./KirimSatu";
 import Monitoring from "./Monitoring";
 import Administrasi from "./Administrasi";
 import Pemeriksaan from "./Pemeriksaan";
 import QcPemahaman from "./QcPemahaman";
 import Laporan from "./Laporan";
 import Ringkasan from "./Ringkasan";
-import Siaran from "./Siaran";
+import Notifikasi from "./Notifikasi";
 import Tim from "./Tim";
 import PengaturanLembar from "./PengaturanLembar";
 import IsiLaporanSpj from "./IsiLaporanSpj";
@@ -121,12 +121,7 @@ export default function KelolaPendataan() {
         </>
       )}
       {tabIni === "tim" && <Tim key={kegId} kegiatanId={kegId} fitur={f} />}
-      {tabIni === "siaran" && (
-        <>
-          <Siaran key={kegId} kegiatanId={kegId} namaKegiatan={nama} />
-          <KirimSatu key={`k${kegId}`} kegiatanId={kegId} />
-        </>
-      )}
+      {tabIni === "siaran" && <Notifikasi key={kegId} kegiatanId={kegId} namaKegiatan={nama} adaQc={f.qc_pemahaman} onBukaTab={pilihTab} />}
       {tabIni === "monitoring" && f.monitoring && <Monitoring />}
       {tabIni === "pemeriksaan" && <Pemeriksaan fitur={f} />}
       {tabIni === "administrasi" && <Administrasi key={kegId} kegiatanId={kegId} />}

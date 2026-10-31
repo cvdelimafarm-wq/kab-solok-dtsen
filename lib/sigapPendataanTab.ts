@@ -23,7 +23,7 @@ export const TAB_PENDATAAN: ItemTabPendataan[] = [
   { kode: "ringkasan", label: "Ringkasan", ket: "Angka utama dan langkah-langkah pendataan dalam satu layar." },
   { kode: "persiapan", label: "1 · Persiapan", ket: "Unggah daftar KK sasaran, permintaan daftar KK ke FASIH, dan Sub SLS yang belum diajukan." },
   { kode: "tim", label: "2 · Tim & Surat Tugas", ket: "Alokasi PML/PPL per Sub SLS, penugasan, Surat Tugas, dan pelatihan petugas." },
-  { kode: "siaran", label: "3 · Siaran & Notifikasi", ket: "Siaran ke seluruh petugas dan notifikasi ke satu petugas." },
+  { kode: "siaran", label: "3 · Notifikasi", ket: "Notifikasi otomatis per kegiatan (pengingat Translok, alur FASIH), siaran dan kirim manual ke petugas, serta riwayat." },
   { kode: "qc", label: "4 · QC", ket: "Quality check: kuis pemahaman harian PML/PPL (hari ini, pengaturan, bank soal) dan kuesioner supervisi untuk Lembar Supervisi korwil." },
   { kode: "monitoring", label: "5 · Monitoring", ket: "Progres petugas, transport lokal, poin kinerja harian, dan perkiraan kebutuhan anggaran." },
   { kode: "pemeriksaan", label: "6 · Pemeriksaan", ket: "Hasil identifikasi, pemantauan lapangan per petugas, dan foto dokumentasi." },
@@ -108,6 +108,12 @@ export const SUB_QC: SubItem[] = [
   { kode: "soal", label: "Pemahaman · Bank soal", ket: "Tambah, ubah, matikan soal, atur kata kunci yang disorot, atau impor banyak soal." },
   { kode: "dokumen", label: "Dokumen pemeriksaan PML", ket: "Unduh PDF hasil pemeriksaan yang diunggah PML, dikelompokkan per PML. Daftar terisi setelah ada dokumen yang masuk." },
   { kode: "kuesioner", label: "Kuesioner supervisi", ket: "Kuesioner quality check untuk Lembar Supervisi (korwil): unggah dari Excel untuk petugas dan keluarga (KK), kelola versinya." },
+];
+/** (31 Okt 2026) Tab "3 · Notifikasi": Otomatis (bawaan ketentuan umum, bisa diubah per kegiatan), Manual (siaran + kirim satu petugas), Riwayat. Sengaja tidak masuk SUB_PER_TAB. */
+export const SUB_NOTIFIKASI: SubItem[] = [
+  { kode: "otomatis", label: "Otomatis", ket: "Notifikasi yang dikirim sistem. Terisi bawaan sesuai ketentuan umum; ubah hanya bila kegiatan ini berbeda." },
+  { kode: "manual", label: "Manual", ket: "Instruksi atau hal lain di luar ketentuan umum: siaran ke seluruh petugas atau kirim ke satu petugas." },
+  { kode: "riwayat", label: "Riwayat", ket: "Semua notifikasi non-QC untuk kegiatan ini: siaran, pengingat, dan alur FASIH." },
 ];
 export const SUB_PER_TAB: Partial<Record<KodeTabPendataan, SubItem[]>> = { tim: SUB_TIM, administrasi: SUB_ADMINISTRASI, qc: SUB_QC };
 

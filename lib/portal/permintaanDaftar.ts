@@ -7,7 +7,7 @@
 // - Pembatalan dan penyelesaian bersifat lunak (kolom status); tidak ada yang dihapus.
 
 import type { Db } from "@/lib/sigap";
-import { kirimKeAkun } from "@/lib/sigapPush";
+import { kirimFasih } from "@/lib/portal/pushTerkelola"; // (31 Okt 2026) saklar per kegiatan: tab Notifikasi di Kelola Pendataan
 import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
@@ -174,7 +174,7 @@ export async function buatPermintaan(db: Db, akun: { id: number; nama?: string |
     const namaPpl = new Map(tim.anggota.map((a) => [a.akun_id, a.nama]));
     const daftar = pilihan.map((p) => `${labelWilayah(wil.get(p.idsubsls), p.idsubsls)} → ${namaPpl.get(p.ppl_akun_id) ?? "PPL"}`).join("; ");
     const admin = await akunAdminBencana(db);
-    const h = await kirimKeAkun(db, gabungPenerima([admin], akun.id), {
+    const h = await kirimFasih(db, "fasih_minta", gabungPenerima([admin], akun.id), {
       judul: "Permintaan daftar KK ke FASIH",
       isi: ringkas(`PML ${rapikanNama(tim.pml.nama)} meminta daftar KK keluar di FASIH: ${daftar}.`, 240),
       url: "/sigap/kelola/pendataan",
@@ -233,9 +233,9 @@ export async function ajukanPembatalan(db: Db, akun: { id: number }, tim: Tim, i
     const jorong = w ? labelJorong(String(w.sls ?? ""), String(w.sub_sls ?? "")) : (s.idsubsls as string);
     const namaPpl = String(ppl?.nama ?? "PPL");
     const a = susunPushBatal("admin", tim.pml.nama, [{ jorong, ppl: namaPpl }]);
-    const h1 = await kirimKeAkun(db, gabungPenerima([admin], akun.id), { judul: a.judul, isi: a.isi, url: "/sigap/kelola/pendataan", tag: `batal-fasih-${id}` });
+    const h1 = await kirimFasih(db, "fasih_batal", gabungPenerima([admin], akun.id), { judul: a.judul, isi: a.isi, url: "/sigap/kelola/pendataan", tag: `batal-fasih-${id}` });
     const p = susunPushBatal("ppl", tim.pml.nama, [{ jorong, ppl: namaPpl }]);
-    const h2 = await kirimKeAkun(db, [s.ppl_akun_id as number], { judul: p.judul, isi: p.isi, url: "/sigap/pendataan", tag: `batal-ppl-${id}` });
+    const h2 = await kirimFasih(db, "fasih_batal", [s.ppl_akun_id as number], { judul: p.judul, isi: p.isi, url: "/sigap/pendataan", tag: `batal-ppl-${id}` });
     dikirim = h1.terkirim + h2.terkirim;
   } catch (e) {
     console.error("[batal fasih push]", e instanceof Error ? e.message : e);
@@ -296,12 +296,12 @@ export async function selesaikanPermintaan(db: Db, akun: { id: number }, ids: nu
       const a = akunPml.get(pmlId);
       if (!a) continue;
       const { judul, isi } = susunPushKeluar("pml", rows.map((b) => ({ jorong: jorong(b.idsubsls), ppl: namaPpl.get(b.ppl_akun_id) ?? "PPL" })));
-      const h = await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `keluar-pml-${pmlId}` });
+      const h = await kirimFasih(db, "fasih_keluar", [a], { judul, isi, url: "/sigap/pendataan", tag: `keluar-pml-${pmlId}` });
       dikirim += h.terkirim;
     }
     for (const [pplId, rows] of perPpl) {
       const { judul, isi } = susunPushKeluar("ppl", rows.map((b) => ({ jorong: jorong(b.idsubsls), ppl: namaPpl.get(pplId) ?? "PPL" })));
-      const h = await kirimKeAkun(db, [pplId], { judul, isi, url: "/sigap/pendataan", tag: `keluar-ppl-${pplId}` });
+      const h = await kirimFasih(db, "fasih_keluar", [pplId], { judul, isi, url: "/sigap/pendataan", tag: `keluar-ppl-${pplId}` });
       dikirim += h.terkirim;
     }
   } catch (e) {
@@ -353,7 +353,7 @@ export async function tolakPermintaan(db: Db, akun: { id: number }, ids: number[
       const a = akunPml.get(pmlId);
       if (!a) continue;
       const { judul, isi } = susunPushTolak(jorong, alasan);
-      const h = await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tolak-pml-${pmlId}` });
+      const h = await kirimFasih(db, "fasih_tolak", [a], { judul, isi, url: "/sigap/pendataan", tag: `tolak-pml-${pmlId}` });
       dikirim += h.terkirim;
     }
   } catch (e) {

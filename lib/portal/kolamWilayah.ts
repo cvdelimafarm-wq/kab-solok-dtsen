@@ -8,7 +8,7 @@
 // Hanya PML tim yang boleh memilih. Kegagalan push TIDAK menggagalkan pilihan.
 
 import type { Db } from "@/lib/sigap";
-import { kirimKeAkun } from "@/lib/sigapPush";
+import { kirimFasih } from "@/lib/portal/pushTerkelola"; // (31 Okt 2026) saklar per kegiatan: tab Notifikasi di Kelola Pendataan
 import { catatAudit } from "@/lib/sigapAkses";
 import { gabungPenerima, rapikanNama } from "@/lib/rekapIdentifikasi";
 import { akunAdminBencana } from "@/lib/portal/sanggahIdentifikasi";
@@ -105,7 +105,7 @@ export async function pilihKolam(db: Db, akun: { id: number }, tim: Tim, pilihan
     const namaPpl = new Map(tim.anggota.map((a) => [a.akun_id, a.nama]));
     const daftar = pilihan.map((p) => `${nama.get(p.idsubsls) ?? p.idsubsls} → ${rapikanNama(namaPpl.get(p.ppl_akun_id) ?? "PPL")}`).join("; ");
     const admin = await akunAdminBencana(db);
-    const h = await kirimKeAkun(db, gabungPenerima([admin], akun.id), {
+    const h = await kirimFasih(db, "fasih_kolam", gabungPenerima([admin], akun.id), {
       judul: "Permintaan daftar KK dari kolam wilayah",
       isi: ringkas(`PML ${rapikanNama(tim.pml.nama)} mengambil dari kolam wilayah kerja: ${daftar}. Assign di FASIH lalu tandai sudah keluar.`, 240),
       url: "/sigap/kelola/pendataan",

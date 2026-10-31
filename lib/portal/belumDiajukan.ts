@@ -6,7 +6,7 @@
 // lalu menandai "sudah keluar". Bila PML tujuan beda dari plotting awal, alokasi lama dipindah (barisnya disimpan di audit).
 
 import type { Db } from "@/lib/sigap";
-import { kirimKeAkun } from "@/lib/sigapPush";
+import { kirimFasih } from "@/lib/portal/pushTerkelola"; // (31 Okt 2026) saklar per kegiatan: tab Notifikasi di Kelola Pendataan
 import { catatAudit } from "@/lib/sigapAkses";
 import { akunPerPetugas, emailPerAkun, petaWilayah, type Galat } from "@/lib/portal/permintaanDaftar";
 import { labelJorong, tanggalWib } from "@/lib/permintaanDaftar";
@@ -99,11 +99,11 @@ export async function tugaskanSubsls(
       const a = akunPml.get(pmlId);
       if (!a) continue;
       const { judul, isi } = susunPushTugas("pml", rows.map((p) => ({ jorong: jorong(p.idsubsls), ppl: namaPpl.get(p.ppl_akun_id) ?? "PPL" })));
-      dikirim += (await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-pml-${pmlId}` })).terkirim;
+      dikirim += (await kirimFasih(db, "fasih_tugas", [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-pml-${pmlId}` })).terkirim;
     }
     for (const [pplId, rows] of perPpl) {
       const { judul, isi } = susunPushTugas("ppl", rows.map((p) => ({ jorong: jorong(p.idsubsls), ppl: namaPpl.get(pplId) ?? "PPL" })));
-      dikirim += (await kirimKeAkun(db, [pplId], { judul, isi, url: "/sigap/pendataan", tag: `tugas-ppl-${pplId}` })).terkirim;
+      dikirim += (await kirimFasih(db, "fasih_tugas", [pplId], { judul, isi, url: "/sigap/pendataan", tag: `tugas-ppl-${pplId}` })).terkirim;
     }
     // PML asal (bila Sub SLS-nya dipindah ke tim lain): satu notifikasi per PML
     const perLama = new Map<number, string[]>();
@@ -112,7 +112,7 @@ export async function tugaskanSubsls(
       const a = akunPml.get(pmlId);
       if (!a) continue;
       const { judul, isi } = susunPushTugas("lama", daftar.map((j) => ({ jorong: j, ppl: "" })));
-      dikirim += (await kirimKeAkun(db, [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-lama-${pmlId}` })).terkirim;
+      dikirim += (await kirimFasih(db, "fasih_tugas", [a], { judul, isi, url: "/sigap/pendataan", tag: `tugas-lama-${pmlId}` })).terkirim;
     }
   } catch (e) {
     console.error("[tugaskan push]", e instanceof Error ? e.message : e);

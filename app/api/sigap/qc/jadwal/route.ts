@@ -19,6 +19,7 @@ import { dbPortal } from "@/lib/portal/server";
 import { pushSiap } from "@/lib/sigapPush";
 import { galatServer } from "@/lib/sigapGalat";
 import { jalankanJadwal } from "@/lib/portal/qc";
+import { catatDenyut } from "@/lib/portal/pushTerkelola"; // (31 Okt 2026) denyut cron untuk kartu kesehatan di Kelola > Notifikasi
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ async function jalankan(req: NextRequest) {
   if (slot !== null && slot !== "auto") return NextResponse.json({ error: "slot harus auto." }, { status: 400 });
   try {
     const hasil = await jalankanJadwal(db, Date.now(), uji);
+    if (!uji) await catatDenyut(db, "qc", { kegiatan: hasil.length });
     return NextResponse.json({ ok: true, hasil });
   } catch (e) {
     return galatServer("[api/sigap/qc/jadwal]", e, "Gagal menjalankan jadwal QC.");

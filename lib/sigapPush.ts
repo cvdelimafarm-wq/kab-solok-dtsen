@@ -67,5 +67,16 @@ export async function kirimKeAkun(db: Db, akunIds: number[], pesan: PesanPush & 
     const n = (b.gagal ?? 0) + 1;
     await db.from("sigap_push_langganan").update({ gagal: n, aktif: n < GAGAL_MAKS, diperbarui_at: sekarang }).eq("id", b.id);
   }
+  // (31 Okt 2026) Pencacah push per petugas per hari (sigap_push_hitung): dasar batas harian pesan penyemangat. Gagal/tabel belum ada = diabaikan.
+  if (ok.length) {
+    try {
+      const sukses = new Set(ok);
+      const akunOk = [...new Set(baris.filter((b) => sukses.has(b.id)).map((b) => b.akun_id))];
+      const hariWib = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+      if (akunOk.length) await db.rpc("sigap_push_hitung_tambah", { p_tanggal: hariWib, p_akun: akunOk });
+    } catch {
+      /* pencacah hanya pelengkap */
+    }
+  }
   return { akun_berlangganan: [...new Set(baris.map((b) => b.akun_id))], perangkat: baris.length, terkirim: ok.length, gagal: baris.length - ok.length };
 }
