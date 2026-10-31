@@ -131,12 +131,15 @@ export function kegiatanPelatihanAktif(): number | null {
   try {
     const angka = (v: string | null) => (v && /^\d{1,12}$/.test(v) && Number(v) > 0 ? Number(v) : null);
     const dariUrl = angka(new URLSearchParams(window.location.search).get("kegiatan"));
+    // Hanya halaman PESERTA (/sigap/pelatihan/...) yang menyimpan/membaca pilihan; halaman Kelola (/sigap/kelola/pelatihan) memakai URL-nya saja,
+    // supaya parameter dari Kelola (atau yang tidak valid) tidak terbawa ke halaman peserta.
+    const p = window.location.pathname;
+    const halamanPeserta = (p === "/sigap/pelatihan" || p.startsWith("/sigap/pelatihan/")) && !p.startsWith("/sigap/pelatihan/kelola");
     if (dariUrl !== null) {
-      window.sessionStorage.setItem(KUNCI_KEGIATAN_PELATIHAN, String(dariUrl));
+      if (halamanPeserta) window.sessionStorage.setItem(KUNCI_KEGIATAN_PELATIHAN, String(dariUrl));
       return dariUrl;
     }
-    const p = window.location.pathname;
-    if (!p.startsWith("/sigap/pelatihan") || p.startsWith("/sigap/pelatihan/kelola")) return null;
+    if (!halamanPeserta) return null;
     return angka(window.sessionStorage.getItem(KUNCI_KEGIATAN_PELATIHAN));
   } catch {
     return null;

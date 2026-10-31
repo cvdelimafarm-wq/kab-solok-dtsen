@@ -20,8 +20,8 @@ import RapatKelola from "./rapat"; // (9 Okt 2026) tab Rapat Zoom
 import NotifikasiKelola from "./notifikasi";
 import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
-import { PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
-import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, ringkasSkema, type HasilAkhir } from "@/lib/sigapNilaiHitung";
+import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
+import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, lulusAkhirDari, ringkasSkema, tambahanDari, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 import ModalFotoPanitia from "../ModalFotoPanitia";
 import DaftarPelatihan, { type PelatihanDaftar } from "./daftar"; // (10 Okt 2026) halaman awal = daftar pelatihan per kegiatan
@@ -525,7 +525,8 @@ type PesertaMon = Monitor["peserta"][number];
 function nilaiPeserta(p: PesertaMon, d: ReturnType<typeof useSkemaNilai>["data"]): HasilAkhir {
   const skor = (j: JenisTes) => p.tes[j]?.skor ?? null; // server: nilai resmi = skor tertinggi dari semua percobaan (null bila belum ada yang selesai)
   const kuis = d?.kuis[String(p.akun_id)] ?? null;
-  return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis });
+  const id = String(p.akun_id);
+  return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis, disiplin: d?.disiplin?.[id] ?? null, sikap: d?.sikap?.[id] ?? null });
 }
 
 function Monitoring() {
@@ -595,7 +596,9 @@ function Monitoring() {
     if (!data) return;
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
-    const aoa: (string | number)[][] = [["No", "Nama", "Jenis", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)", "Kuis nilai", "Kuis benar", "Kuis poin", "Nilai akhir", "Nilai akhir lengkap?"]];
+    const tamPakai = tambahanDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
+    const lulusPakai = lulusAkhirDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
+    const aoa: (string | number)[][] = [["No", "Nama", "Jenis", "Kelas", "Peran", "Pretest status", "Pretest skor", "Pretest benar", "Pretest mulai (WIB)", "Pretest selesai (WIB)", "Posttest status", "Posttest skor", "Posttest benar", "Posttest mulai (WIB)", "Posttest selesai (WIB)", "Kenaikan (post-pre)", "Kuis nilai", "Kuis benar", "Kuis poin", ...(tamPakai.disiplin.pakai ? ["Kedisiplinan"] : []), ...(tamPakai.sikap.pakai ? ["Sikap"] : []), "Nilai akhir", "Nilai akhir lengkap?", ...(lulusPakai.wajib ? ["Lulus nilai akhir?"] : [])]];
     baris.forEach((p, i) => {
       const a = p.tes.pretest;
       const b = p.tes.posttest;
@@ -619,12 +622,12 @@ function Monitoring() {
         ...(() => {
           const nl = nilaiPeserta(p, nilai.data);
           const kz = nilai.data?.kuis[String(p.akun_id)] ?? null;
-          return [nl.komponen.kuis ?? "", kz ? `${kz.benar}/${kz.total_soal}` : "", kz ? kz.poin : "", nl.akhir ?? "", nl.akhir == null ? "" : nl.lengkap ? "ya" : "belum"];
+          return [nl.komponen.kuis ?? "", kz ? `${kz.benar}/${kz.total_soal}` : "", kz ? kz.poin : "", ...(tamPakai.disiplin.pakai ? [nl.tambahan?.disiplin ?? ""] : []), ...(tamPakai.sikap.pakai ? [nl.tambahan?.sikap ?? ""] : []), nl.akhir ?? "", nl.akhir == null ? "" : nl.lengkap ? "ya" : "belum", ...(lulusPakai.wajib ? [nl.lulus == null ? "" : nl.lulus ? "lulus" : "belum lulus"] : [])];
         })(),
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 12 }, { wch: 18 }];
+    ws["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 9 }, { wch: 7 }, { wch: 7 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 13 }, { wch: 11 }, { wch: 11 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, ...Array.from({ length: 3 + (tamPakai.disiplin.pakai ? 1 : 0) + (tamPakai.sikap.pakai ? 1 : 0) }, () => ({ wch: 16 }))];
     XLSX.utils.book_append_sheet(wb, ws, "Peserta");
     {
       const sk = nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN;
@@ -673,6 +676,9 @@ function Monitoring() {
   const tertinggi = urut[urut.length - 1];
   const fmt = (n: number | null | undefined) => (n == null ? "—" : String(n).replace(".", ","));
   const hasilNilai = baris.map((p) => nilaiPeserta(p, nilai.data));
+  const tamUI = tambahanDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
+  const lulusUI = lulusAkhirDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
+  const belumLulusAkhir = lulusUI.wajib ? hasilNilai.filter((h) => h.lulus === false).length : 0;
   const rata2 = (xs: (number | null)[]) => {
     const v = xs.filter((x): x is number => x != null);
     return { n: v.length, rata: v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null };
@@ -701,6 +707,7 @@ function Monitoring() {
         <KartuAngka label="Rata-rata kuis" nilai={fmt(rataKuis.rata)} ket={`${rataKuis.n} peserta ikut`} warna="#C2570C" />
         <KartuAngka label="Rata-rata nilai akhir" nilai={fmt(rataAkhir.rata)} ket={`${rataAkhir.n} peserta · ${rataAkhir.lengkap} lengkap`} warna="#0F3D7A" />
         {adaWajib && <KartuAngka label="Belum lulus" nilai={belumLulus} ket="nilai di bawah nilai lulus" warna="#B42329" />}
+        {lulusUI.wajib && <KartuAngka label="Belum lulus nilai akhir" nilai={belumLulusAkhir} ket={`di bawah ${fmt(lulusUI.nilai)}`} warna="#B42329" />}
       </div>
 
       <Kartu
@@ -723,6 +730,8 @@ function Monitoring() {
               <ThKontrol label="Posttest" filter={{ options: opsiStatusTes("posttest"), selected: new Set([...f.status].filter((v) => v.startsWith("posttest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("posttest:")), ...v])) }} sort={sortKolom(f, "posttest")} />
               <ThKontrol label="Naik" sort={sortKolom(f, "naik")} />
               <ThKontrol label="Kuis" sort={sortKolom(f, "kuis")} />
+              {tamUI.disiplin.pakai && <ThKontrol label="Disiplin" />}
+              {tamUI.sikap.pakai && <ThKontrol label="Sikap" />}
               <ThKontrol label="Nilai akhir" sort={sortKolom(f, "akhir")} />
             </tr>
           </thead>
@@ -752,11 +761,19 @@ function Monitoring() {
                       <span className="text-[#7B8794]">—</span>
                     )}
                   </td>
+                  {tamUI.disiplin.pakai && <td className={`${TD} tabular-nums`}>{nl.tambahan?.disiplin != null ? fmt(nl.tambahan.disiplin) : <span className="text-[#7B8794]">—</span>}</td>}
+                  {tamUI.sikap.pakai && (
+                    <td className={TD}>
+                      <InputSikap akunId={p.akun_id} nilai={nl.tambahan?.sikap ?? null} boleh={nilai.data?.boleh_ubah === true} tersedia={nilai.data?.sikap_tersedia !== false} simpan={nilai.simpanSikap} />
+                    </td>
+                  )}
                   <td className={TD}>
                     {nl.akhir != null ? (
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
                         <b className="tabular-nums text-[#0F3D7A]">{fmt(nl.akhir)}</b>
                         {!nl.lengkap && <Chip w="wait" title="Ada komponen terpilih yang belum punya nilai (dihitung 0)">belum lengkap</Chip>}
+                        {nl.lulus === true && <Chip w="ok" title={`Nilai akhir memenuhi batas ${fmt(lulusUI.nilai)}`}>lulus</Chip>}
+                        {nl.lulus === false && <Chip w="bad" title={`Nilai akhir di bawah batas ${fmt(lulusUI.nilai)}`}>belum lulus</Chip>}
                       </span>
                     ) : (
                       <span className="text-[#7B8794]">—</span>
@@ -767,7 +784,7 @@ function Monitoring() {
             })}
             {baris.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#7B8794]`} colSpan={9}>Tidak ada peserta yang cocok dengan filter.</td>
+                <td className={`${TD} text-center text-[#7B8794]`} colSpan={9 + (tamUI.disiplin.pakai ? 1 : 0) + (tamUI.sikap.pakai ? 1 : 0)}>Tidak ada peserta yang cocok dengan filter.</td>
               </tr>
             )}
           </tbody>
