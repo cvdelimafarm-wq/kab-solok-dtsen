@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
+import { alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, indukMemuatModul, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
 
 const TL = { href: "/sigap/translok/tok123?p=7", kegiatanId: 2 };
 
@@ -145,5 +145,23 @@ describe("Back antar tab", () => {
     let t: string[] = ["a"];
     for (const x of ["b", "c", "d", "e", "f", "g", "h"]) t = (putuskanTab(t, t[t.length - 1], x) as { tumpuk: string[] }).tumpuk;
     expect(t.length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("indukMemuatModul (tautan Translok tanpa ?k=)", () => {
+  const spdt = [{ isi: ["spdt_lembar", "translok:2"] }];
+  const bencana = [{ isi: ["translok:3", "pelatihan"] }, { isi: ["pendataan", "translok:1"] }];
+  it("translok kegiatan bermenu cocok", () => {
+    expect(indukMemuatModul(spdt, "translok:2")).toBe(true);
+    expect(indukMemuatModul(bencana, "translok:1")).toBe(true);
+  });
+  it("translok tahap Pelatihan dan translok kegiatan lain tidak cocok", () => {
+    expect(indukMemuatModul(bencana, "translok:3")).toBe(false);
+    expect(indukMemuatModul(spdt, "translok:9")).toBe(false);
+  });
+  it("modul biasa cukup ada di salah satu tahap", () => {
+    expect(indukMemuatModul(spdt, "spdt_lembar")).toBe(true);
+    expect(indukMemuatModul(bencana, "pendataan")).toBe(true);
+    expect(indukMemuatModul(bencana, "spdt_lembar")).toBe(false);
   });
 });

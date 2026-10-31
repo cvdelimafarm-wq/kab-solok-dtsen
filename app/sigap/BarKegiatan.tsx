@@ -15,7 +15,7 @@ import { useData } from "@/app/portal/dataBersama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { susunTahap, type Induk } from "@/lib/sigapTahap";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { idTranslokMenu, langkahSekali, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, type ItemBar, type KunciTab, type LangkahSekali, type PeranMenu } from "@/lib/sigapMenuKegiatan";
+import { idTranslokMenu, indukMemuatModul, langkahSekali, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, type ItemBar, type KunciTab, type LangkahSekali, type PeranMenu } from "@/lib/sigapMenuKegiatan";
 
 const kunciTumpuk = (kode: string) => `sigap_tabbar:${kode}`;
 function bacaTumpuk(kode: string): string[] {
@@ -45,7 +45,7 @@ export function useBarKegiatan(kode: string | null, cariModul?: string): { kode:
   const induk = useMemo(() => {
     const semua = dInduk.data?.induk ?? [];
     if (kode) return semua.find((x) => x.kode === kode) ?? null;
-    if (cariModul) return semua.find((x) => x.tahap.some((t) => t.isi.includes(cariModul))) ?? null;
+    if (cariModul) return semua.find((x) => indukMemuatModul(x.tahap, cariModul)) ?? null;
     return null;
   }, [dInduk.data, kode, cariModul]);
   const keg = dKeg.data?.kegiatan ?? null;

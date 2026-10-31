@@ -223,7 +223,11 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     return () => clearTimeout(t);
   }, []);
   const subTerakhir = useRef<Tab>("hari_kerja");
-  const bar = useBarKegiatan(kodeBar);
+  // (31 Okt 2026) Tautan tanpa ?k= (kartu Beranda, pengingat, notifikasi) tetap mendapat bar seragam: induk dicari dari translok kegiatan yang sedang dibuka
+  // (diisi di bawah setelah penugasan diketahui). Translok tahap Pelatihan tidak cocok, jadi tetap memakai tampilan lamanya.
+  const [cariTl, setCariTl] = useState<string | undefined>(undefined);
+  const bar = useBarKegiatan(kodeBar, cariTl);
+  const pakaiBar = !!(bar.items && bar.kode);
   useEffect(() => {
     try {
       const k = new URLSearchParams(window.location.search).get("k");
@@ -296,6 +300,11 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     );
   }, [data, penId]);
 
+  const idKegTl = pen?.kegiatan.id ?? null;
+  useEffect(() => {
+    setCariTl(!kodeBar && idKegTl != null ? `translok:${idKegTl}` : undefined);
+  }, [kodeBar, idKegTl]);
+
   // (27 Okt 2026) Tab dan langkah panduan yang sedang dibuka diingat di sessionStorage HP. Back dari halaman Kamera SIGAP memuat halaman ini dari awal;
   // tanpa ini tampilan kembali ke "Hari Ini" atau ke panduan Langkah 1. Tautan dalam (?tab=&tgl=&fokus=) tetap menang atas ingatan ini.
   const [tampilanPulih, setTampilanPulih] = useState(false);
@@ -337,7 +346,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
 
   // (31 Okt 2026) Riwayat tab untuk bar bawah: entri riwayat saat ini selalu membawa tab yang tampil (tabKerja); Back/mundur dari bar mengembalikannya.
   useEffect(() => {
-    if (!kodeBar) return;
+    if (!pakaiBar) return;
     if (tab !== "hari_ini") subTerakhir.current = tab;
     try {
       const st = window.history.state;
@@ -345,9 +354,9 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     } catch {
       /* abaikan */
     }
-  }, [kodeBar, tab]);
+  }, [pakaiBar, tab]);
   useEffect(() => {
-    if (!kodeBar) return;
+    if (!pakaiBar) return;
     const saatPop = (e: PopStateEvent) => {
       if (popDariLapisan()) return; // modal ditutup dengan Back: bukan pindah tab
       const t = (e.state as { tabKerja?: unknown } | null)?.tabKerja;
@@ -355,7 +364,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
     };
     window.addEventListener("popstate", saatPop);
     return () => window.removeEventListener("popstate", saatPop);
-  }, [kodeBar]);
+  }, [pakaiBar]);
   // Hari Ini <-> Translok ditangani di halaman ini (satu entri riwayat per perpindahan); tab lain berpindah halaman
   const ketukBar = useCallback(
     (it: ItemBar): boolean => {
@@ -603,8 +612,8 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         )}
         {tab === "hari_ini" && (
           <>
-            {kodeBar && bar.items && bar.kode && <BarisLangkah langkah={bar.langkah} />}
-            {kodeBar && bar.items && bar.kode && (() => {
+            {bar.items && bar.kode && <BarisLangkah langkah={bar.langkah} />}
+            {bar.items && bar.kode && (() => {
               const w = bar.items.find((i) => i.kunci === "pengawasan");
               return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
             })()}
@@ -612,7 +621,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
-        {kodeBar && bar.items && tab !== "hari_ini" && (
+        {bar.items && tab !== "hari_ini" && (
           <div role="group" aria-label="Isi Translok" className="grid grid-cols-3 gap-[3px] rounded-[12px] bg-white p-[3px] shadow-sm">
             {(
               [
@@ -642,9 +651,9 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
       </div>
 
       {/* ===== NAVIGASI BAWAH ===== */}
-      {kodeBar && bar.items && bar.kode ? (
+      {bar.items && bar.kode ? (
         <BarKegiatan kode={bar.kode} items={bar.items} aktif={tabBarDariTranslok(tab)} onKetuk={ketukBar} sinkron={tabAwalPasti} />
-      ) : kodeBar && !bar.siap ? null : (
+      ) : (kodeBar || cariTl) && !bar.siap ? null : (
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="mx-auto flex max-w-lg">
           {(

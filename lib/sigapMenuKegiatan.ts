@@ -46,6 +46,16 @@ export function idTranslokMenu(tahap: readonly { isi: readonly string[] }[]): nu
 }
 
 /**
+ * Induk ini memuat modul yang dicari halaman (tanpa ?k= di tautan)? Untuk "translok:<id>" hanya translok milik kegiatan bermenu yang cocok
+ * (translok tahap Pelatihan tidak, supaya halamannya tetap memakai tampilan Pelatihan); modul lain cukup ada di salah satu tahap.
+ */
+export function indukMemuatModul(tahap: readonly { isi: readonly string[] }[], modul: string): boolean {
+  const m = /^translok:(\d+)$/.exec(modul);
+  if (m) return idTranslokMenu(tahap).includes(Number(m[1]));
+  return tahap.some((t) => t.isi.includes(modul));
+}
+
+/**
  * Kegiatan memakai template menu bila (di luar tahap Pelatihan) ada isinya, SEMUA isinya rutin-dan-berbar / sekali jalan / informasi, dan sedikitnya
  * satu modul pemicu (lembar pendataan atau supervisi) sudah berbar.
  */
