@@ -28,6 +28,33 @@ export type LangkahKegiatan = {
   pesanKunci?: string | null;
 };
 
+/**
+ * (31 Okt 2026) Ringkasan HARI INI satu penugasan Transport Lokal untuk kartu Beranda per survei (lib/sigapBerandaKartu.ts) dan push 13.00.
+ * adaJadwal = hari ini termasuk hari kerja yang dipilih petugas (tidak libur). Nomor slot foto: 1 Berangkat, 2 Tiba di lokasi, 3 Mendata, 4 Pulang, 5 Tiba di rumah.
+ */
+export type RingkasHariIni = {
+  tanggal: string;
+  adaJadwal: boolean;
+  /** hari kerja terdekat sesudah hari ini (YYYY-MM-DD); null = tidak ada */
+  hariKerjaBerikut: string | null;
+  /** peran penugasan: ppl | pml | supervisor | korwil */
+  peran: string;
+  fotoTotal: number;
+  /** nomor slot foto yang sudah terisi hari ini */
+  slot: number[];
+  wajibLaporan: boolean;
+  /** laporan manual sudah ada ATAU lembar pendataan hari ini sudah berhasil (laporan terisi otomatis) */
+  laporanSudah: boolean;
+  /** jumlah hasil lembar hari ini (null = tidak terhitung) */
+  hasilLembar: number | null;
+  sumber: "identifikasi" | "pendataan" | "qc" | "spdt" | null;
+  /** awal periode dan target selesai pendataan (YYYY-MM-DD); target = kolom target_selesai kegiatan bila ada, selain itu akhir periode */
+  mulai: string | null;
+  targetSelesai: string | null;
+  hrefKerja: string;
+  hrefLembar: string | null;
+};
+
 export type RingkasKegiatan = {
   id: string;
   judul: string;
@@ -56,6 +83,8 @@ export type RingkasKegiatan = {
    * kosong berarti tidak ada yang perlu diingatkan. Tidak ada (undefined) = adapter lama / kegiatan tanpa hitungan -> pakai langkah.
    */
   kekurangan?: Kekurangan[];
+  /** (31 Okt 2026) ringkasan hari ini (Transport Lokal) untuk kartu Beranda per survei dan push 13.00; tidak ada = adapter lama */
+  hariIni?: RingkasHariIni;
 };
 
 export const URUT_NADA: Record<NadaKegiatan, number> = { merah: 0, emas: 1, biru: 2, abu: 3, hijau: 4 };

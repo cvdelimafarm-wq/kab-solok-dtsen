@@ -27,6 +27,9 @@ type Kegiatan = {
   jenis?: string;
   wajib_laporan?: boolean;
   jumlah_foto?: number;
+  // (31 Okt 2026) target selesai pendataan (kolom sigap_kegiatan.target_selesai); tersedia = kolom sudah ada di database
+  target_selesai?: string | null;
+  target_selesai_tersedia?: boolean;
 };
 type Tarif = { id: number; peran: string; uraian_detail: string | null; tarif: number; label_jabatan: string | null; maks_hari_default: number | null };
 type Data = { kegiatan: Kegiatan | null; tarif: Tarif[]; boleh_kelola: boolean };
@@ -97,6 +100,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
   const [kodeAnggaran, setKodeAnggaran] = useState(k?.kode_anggaran ?? "");
   const [mulai, setMulai] = useState(k?.tanggal_mulai ?? "");
   const [selesai, setSelesai] = useState(k?.tanggal_selesai ?? "");
+  const [targetSelesai, setTargetSelesai] = useState(k?.target_selesai ?? "");
   const [satuan, setSatuan] = useState(k?.satuan_realisasi ?? "ruta");
   const [aktif, setAktif] = useState(k?.aktif ?? true);
   // (7 Okt 2026) jenis kegiatan menentukan bawaan wajib laporan & jumlah foto (tetap bisa diubah) -- permintaan user
@@ -111,6 +115,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
     e.preventDefault();
     if (!nama.trim()) return setPesan({ jenis: "galat", teks: "Nama kegiatan wajib diisi." });
     if (mulai && selesai && mulai > selesai) return setPesan({ jenis: "galat", teks: "Tanggal mulai melewati tanggal selesai." });
+    if (mulai && targetSelesai && targetSelesai < mulai) return setPesan({ jenis: "galat", teks: "Target selesai pendataan lebih awal daripada tanggal mulai." });
     setBusy(true);
     setPesan(null);
     try {
@@ -126,6 +131,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
         jenis,
         wajib_laporan: wajibLaporan,
         jumlah_foto: Number(jumlahFoto) || 5,
+        ...(k?.target_selesai_tersedia ? { target_selesai: targetSelesai || null } : {}),
       });
       setPesan({ jenis: "ok", teks: baru ? "Kegiatan baru dibuat." : "Data kegiatan disimpan." });
       await onTersimpan(r.id);
@@ -156,6 +162,15 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
             <input type="date" value={mulai} onChange={(e) => setMulai(e.target.value)} className={INPUT} disabled={!kelola} aria-label="Tanggal mulai" />
             <span>–</span>
             <input type="date" value={selesai} onChange={(e) => setSelesai(e.target.value)} className={INPUT} disabled={!kelola} aria-label="Tanggal selesai" />
+          </div>
+          <span className={label}>Target selesai pendataan</span>
+          <div>
+            <input type="date" value={targetSelesai} onChange={(e) => setTargetSelesai(e.target.value)} className={INPUT} disabled={!kelola || !k?.target_selesai_tersedia} aria-label="Target selesai pendataan" />
+            <p className="mt-1 text-[11.5px] leading-snug text-[#7B8794]">
+              Batas penyelesaian pendataan (bukan akhir masa lapangan). Dipakai peringatan realisasi di Beranda: realisasi dibandingkan dengan sisa hari kerja sampai tanggal ini. Kosong = memakai tanggal selesai periode.
+              {k && !k.target_selesai_tersedia && " Kolom ini belum ada di database; jalankan skema-sql/fase-b/20261031b_target_selesai_pendataan.sql dulu."}
+              {!k && " Dapat diisi setelah kegiatan disimpan."}
+            </p>
           </div>
           <span className={label}>Satuan realisasi</span>
           <input value={satuan} onChange={(e) => setSatuan(e.target.value)} className={INPUT} disabled={!kelola} placeholder="ruta" />

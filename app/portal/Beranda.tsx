@@ -7,22 +7,25 @@
 // (8 Okt 2026) Struktur 3 layer (permintaan user, mockup disetujui): halaman lama "Menu Anda" (/sigap) dihapus; Beranda ini = Layer 1 "Kegiatan saya":
 // ikon bulat per kegiatan dengan cincin progres + tanda seru bila mendesak, mendesak di depan (lib/sigapKegiatan.ts). Mengetuk ikon membuka
 // Layer 2 (tahapan bernomor) atau langsung halaman kerja bila kegiatan belum punya tahapan terukur.
+// (31 Okt 2026) Beranda = SATU KARTU PER SURVEI (permintaan user; Pelatihan dan Pendataan boleh dua kartu): nama survei + satu poin mendesak menurut peran
+// (PPL/PML/Supervisor), peringatan merah bila belum ada kegiatan sampai 13.00, dan realisasi berdampingan dengan Translok. Kartu usang di bawah dan redup.
+// Menggantikan kartu "Tugas utama", kartu Transport Lokal, dan ikon "Kegiatan aktif". Aturan: lib/sigapBerandaKartu.ts, lib/sigapBerandaDaftar.ts.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
-import { ikonKartu, pilihTugasUtama, tugasDariKartu, tugasUtamaPelatihan, type HubTugas, type NadaLencana, type TugasUtama } from "@/lib/sigapTugasUtama";
-import { ringkasDariKartu, ringkasPelatihan, tugasDariKegiatan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
+import { ikonKartu, tugasUtamaPelatihan, type HubTugas } from "@/lib/sigapTugasUtama";
+import { ringkasDariKartu, ringkasPelatihan, urutKegiatan, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { chipPeranTim, susunTahap, type Induk } from "@/lib/sigapTahap";
-import { aktivitasDariInduk, pisahAktif } from "@/lib/sigapAktivitas"; // (30 Okt 2026) ikon kegiatan aktif per jenis (Pelatihan / Pendataan)
+import { aktivitasDariInduk } from "@/lib/sigapAktivitas"; // (30 Okt 2026) kegiatan aktif per jenis (Pelatihan / Pendataan)
+import { susunDaftarKartu } from "@/lib/sigapBerandaDaftar"; // (31 Okt 2026) satu kartu per survei
+import KartuSurvei from "./KartuSurvei";
 import { KUNCI_PINTASAN, bacaPintasan, kodeTampil, susunPintasan } from "@/lib/sigapPintasan"; // (30 Okt 2026) pintasan pilihan petugas
 import AturPintasan from "./AturPintasan";
-import { peringatanDariInduk, translokDariInduk, tugasDariInduk, type KartuTranslokBeranda, type PeringatanBeranda } from "@/lib/sigapPrioritas";
+import { peringatanDariInduk, type PeringatanBeranda } from "@/lib/sigapPrioritas";
 import { ketModulSpdt } from "@/lib/spdtNtp";
-import KartuTranslok from "./KartuTranslok"; // (19 Okt 2026) kartu Transport Lokal sendiri di bawah kartu utama
-import { IkonKegiatan } from "./CincinKegiatan";
 import AktifkanNotifikasi from "./AktifkanNotifikasi";
 import PengaturanAwal from "./PengaturanAwal";
 import ModalFotoPanitia from "@/app/sigap/pelatihan/ModalFotoPanitia"; // (9 Okt 2026) pengingat foto pelatihan untuk panitia
@@ -59,14 +62,6 @@ const tanggalIndo = (ms: number) => {
   return `${NAMA_HARI[d.getUTCDay()]}, ${d.getUTCDate()} ${NAMA_BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
-const LENCANA: Record<NadaLencana, string> = {
-  merah: "bg-[#FDE8E8] text-[#B42329]",
-  emas: "bg-[#FFF4D6] text-[#8A6200]",
-  biru: "bg-[#E6EEFC] text-[#1F5FD1]",
-  hijau: "bg-[#E3F6EC] text-[#13794B]",
-  abu: "bg-[#EEF2F7] text-[#5B6B84]",
-};
-
 /** "M. Iqbal Hadi, SST." -> "M. Iqbal Hadi"; inisial "MH". */
 const namaSapaan = (n: string) => namaTanpaGelar(n); // (26 Okt 2026) satu gaya nama: lib/namaTampil.ts
 const inisial = (n: string) => {
@@ -101,7 +96,6 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   // (30 Okt 2026) pintasan pilihan petugas (null = belum memilih -> bawaan) dan daftar kegiatan selesai yang diringkas
   const [pilihPintasan, setPilihPintasan] = useState<string[] | null>(null);
   const [aturMenu, setAturMenu] = useState(false);
-  const [selesaiBuka, setSelesaiBuka] = useState(false);
   const kunciPintasan = `${KUNCI_PINTASAN}_${pemilikSesi() ?? 0}`;
   useEffect(() => {
     try {
@@ -195,7 +189,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   }
 
   const nowMs = Date.now() + offset;
-  const { kartu, utama, kegiatan, peringatan, kartuTL } = useMemo(() => {
+  const { kartu, daftarKartu, peringatan } = useMemo(() => {
     const k: Kartu[] = [...(data?.kartu ?? [])];
     if (dtsen) {
       k.unshift({
@@ -235,7 +229,6 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     // (Layer 1); tahapnya tampil di Layer 2. Menunggu data pelatihan & Transport Lokal siap dulu supaya ikon tidak berganti-ganti.
     const indukRingkas: RingkasKegiatan[] = [];
     const serap = new Set<string>();
-    const tugasInduk: TugasUtama[] = [];
     const tahapInduk: ReturnType<typeof susunTahap>[] = [];
     if (induk && keg && hubMuat !== "memuat") {
       for (const i of induk) {
@@ -244,12 +237,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         if (akt.length === 0) continue;
         indukRingkas.push(...akt);
         i.menyerap.forEach((x) => serap.add(x));
-        // (10 Okt 2026) Kartu "Tugas aktif" kegiatan induk memakai aturan prioritas umum (lib/sigapPrioritas.ts): mendesak > perlu > berikutnya;
-        // tombol langsung ke langkah yang diprioritaskan -- permintaan user (tangkapan layar akun Valina: tombol salah ke halaman undangan).
-        const tahapI = susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang });
-        tahapInduk.push(tahapI);
-        const tI = tugasDariInduk(i, tahapI, keg, sekarang);
-        if (tI) tugasInduk.push(tI);
+        // (31 Okt 2026) tahap tiap induk dipakai untuk peringatan Kesediaan; poin tiap kartu dihitung di lib/sigapBerandaDaftar.ts
+        tahapInduk.push(susunTahap({ induk: i, hub, hubMuat, keg, nowMs: sekarang }));
       }
     }
     const semua = urutKegiatan([...indukRingkas, ...(pel && !serap.has("pelatihan") ? [pel] : []), ...translok.filter((x) => !serap.has(x.id)), ...lain.filter((x) => !serap.has(x.id))]);
@@ -258,20 +247,15 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     const jadiKegiatan = (x: Kartu) => (x.grup === "tugas" && (x.kode.startsWith("translok-") || ringkasDariKartu(x) !== null)) || x.kode === "pelatihan" || x.kode === "pelatihan-undangan" || x.kode === "pelatihan-instrumen";
     const sisa = k.filter((x) => !jadiKegiatan(x));
     if (hub?.boleh_lihat_kelola) sisa.push({ kode: "pelatihan-kelola", grup: "kelola", judul: "Kelola Pelatihan", uraian: "Peserta, presensi, tes, notifikasi.", href: "/sigap/kelola/pelatihan" });
-    // Kartu & kegiatan yang sudah diserap kegiatan induk tidak lagi jadi kandidat tugas sendiri (supaya tidak dobel / tujuan lama)
-    const untukTugas = (keg ? k.filter((x) => !x.kode.startsWith("translok-")) : k).filter((x) => !(x.kode === "bencana" && serap.has("bencana")));
-    const kegTugas = (keg ?? []).filter((x) => !serap.has(x.id));
-    const utama = pilihTugasUtama(tp, tugasDariKegiatan(kegTugas, sekarang), tugasDariKartu(untukTugas), ...tugasInduk);
-    // (19 Okt 2026) kartu pendamping kartu utama: peringatan Kesediaan & kartu Transport Lokal (tidak mengulang bila kartu utama sudah memuatnya)
+    // (19 Okt 2026) peringatan Kesediaan belum dikonfirmasi: di atas daftar kartu (kartu per survei tidak memuatnya)
     const peringatan: PeringatanBeranda[] = [];
-    const kartuTL: KartuTranslokBeranda[] = [];
     for (const th of tahapInduk) {
-      const w = peringatanDariInduk(th, utama?.kodeModul);
+      const w = peringatanDariInduk(th, undefined);
       if (w) peringatan.push(w);
-      const t = keg ? translokDariInduk(th, keg, utama?.kodeModul) : null;
-      if (t) kartuTL.push(t);
     }
-    return { kartu: sisa, kegiatan: semua, utama, peringatan, kartuTL };
+    // (31 Okt 2026) satu kartu per survei; Pelatihan dan Pendataan terpisah, usang di bawah dan redup
+    const daftarKartu = susunDaftarKartu({ kegiatan: semua, induk, keg, tugasPelatihan: tp, nowMs: sekarang });
+    return { kartu: sisa, daftarKartu, peringatan };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, dtsen, hub, hubMuat, keg, induk, offset, tik]);
@@ -304,7 +288,6 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   // (30 Okt 2026) Menu saya = pintasan pilihan petugas dari SEMUA menu yang boleh diakses (menu umum lalu pengelolaan); bawaan: beberapa yang pertama
   const semuaMenu: Kartu[] = [...menuUrut, ...kelola];
   const kodePintasan = kodeTampil(semuaMenu, pilihPintasan);
-  const aktifSelesai = useMemo(() => pisahAktif(kegiatan), [kegiatan]);
   const menuSaya = susunPintasan(semuaMenu, pilihPintasan);
   // tombol "Kegiatan saya": kartu SSO (penyisiran) butuh aksi khusus -> cari kartunya
   const bukaSsoKegiatan = (idKeg: string) => {
@@ -426,7 +409,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
           </Link>
         ))}
 
-        {/* Tugas utama */}
+        {/* (31 Okt 2026) Satu kartu per survei: nama + poin mendesak menurut peran; usang di bawah dan redup */}
         {memuatAwal ? (
           <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-busy="true">
             <div className="h-3 w-28 animate-pulse rounded bg-[#E6EDF8]" />
@@ -440,9 +423,24 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
             <div className="mt-4 h-[46px] animate-pulse rounded-[13px] bg-[#E6EDF8]" />
           </section>
         ) : (
-          <KartuUtama u={utama} />
+          (daftarKartu.length > 0 || tampilDelego) && (
+            <section aria-label="Kegiatan saya" className="space-y-3">
+              {daftarKartu.map((k) => (
+                <KartuSurvei key={k.id} k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
+              ))}
+              {tampilDelego && (
+                <Link href="/sigap/delego/saya" className="flex min-h-[56px] items-center gap-3 rounded-[20px] bg-white p-3.5 shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF4F2]" aria-label="Delego: delegasi, laporan harian, dan penilaian saya">
+                  <KegiatanDelegoIkon />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10.5px] font-extrabold tracking-[0.14em] text-[#6B7A90]">DELEGO</span>
+                    <b className="block text-[15px] leading-snug text-[#0F2A52]">Tugas dan laporan</b>
+                  </span>
+                  <span aria-hidden className="flex-none text-[20px] text-[#A5B3C7]">›</span>
+                </Link>
+              )}
+            </section>
+          )
         )}
-        {!memuatAwal && kartuTL.map((d) => <KartuTranslok key={d.kegiatan.id} d={d} />)}
         {/* (20 Okt 2026) Pintasan Lembar Pendataan SPDT NTP: lembar bantu (bukan tugas bernomor) tidak pernah jadi kartu utama, jadi diberi kartu sendiri */}
         {!memuatAwal && lembarSpdt && (
           <Link href={`/sigap/spdt?dari=${encodeURIComponent("/")}`} className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF1FC]" aria-label="Lembar Pendataan SPDT NTP">
@@ -472,7 +470,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         {error && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{error}</p>}
         <PembaruanTersedia bolehOtomatis />
         <BannerAntrean />
-        {(data || dtsen) && kartu.length === 0 && kegiatan.length === 0 && (
+        {(data || dtsen) && kartu.length === 0 && daftarKartu.length === 0 && (
           <p className="rounded-[18px] bg-white px-4 py-6 text-center text-[13.5px] text-[#5B6B84] shadow-[0_8px_22px_rgba(15,42,82,.06)]">
             Belum ada tugas atau menu aktif untuk akun Anda. Hubungi admin anggaran atau PJ kegiatan.
           </p>
@@ -497,46 +495,6 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
               </ul>
             ) : (
               <p className="rounded-[14px] bg-white px-4 py-4 text-center text-[12.5px] text-[#5B6B84]">Belum ada pintasan. Ketuk Atur untuk memilih menu.</p>
-            )}
-          </section>
-        )}
-
-        {/* BAGIAN BAWAH: kegiatan survei yang aktif, per jenis (Pelatihan / Pendataan) + Delego */}
-        {(kegiatan.length > 0 || tampilDelego) && (
-          <section aria-label="Kegiatan aktif">
-            <div className="mb-2.5 flex items-baseline gap-2 px-1">
-              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kegiatan aktif</h2>
-              <span className="text-[11.5px] text-[#6B7A90]">{aktifSelesai.aktif.length + (tampilDelego ? 1 : 0)} kegiatan</span>
-              {aktifSelesai.aktif.length > 1 && <span className="ml-auto text-[11.5px] text-[#6B7A90]">mendesak di depan</span>}
-            </div>
-            <ul className="grid grid-cols-3 gap-x-1.5 gap-y-4">
-              {aktifSelesai.aktif.map((k) => (
-                <li key={k.id}>
-                  <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
-                </li>
-              ))}
-              {tampilDelego && (
-                <li>
-                  <KegiatanDelego />
-                </li>
-              )}
-            </ul>
-            {aktifSelesai.selesai.length > 0 && (
-              <div className="mt-3">
-                <button type="button" onClick={() => setSelesaiBuka((b) => !b)} aria-expanded={selesaiBuka} className="flex min-h-[44px] w-full items-center justify-between rounded-[12px] bg-white px-3.5 text-[12.5px] font-bold text-[#55657D] shadow-[0_3px_10px_rgba(15,42,82,.05)] active:bg-[#F1F5FC]">
-                  <span>Kegiatan selesai ({aktifSelesai.selesai.length})</span>
-                  <span aria-hidden>{selesaiBuka ? "▴" : "▾"}</span>
-                </button>
-                {selesaiBuka && (
-                  <ul className="mt-3 grid grid-cols-3 gap-x-1.5 gap-y-4">
-                    {aktifSelesai.selesai.map((k) => (
-                      <li key={k.id}>
-                        <IkonKegiatan k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             )}
           </section>
         )}
@@ -580,84 +538,18 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   );
 }
 
-function KartuUtama({ u }: { u: TugasUtama | null }) {
-  if (!u) {
-    return (
-      <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
-        <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">HARI INI</span>
-        <div className="mt-3 flex items-center gap-3">
-          <span className="grid h-[50px] w-[50px] flex-none place-items-center rounded-[15px] bg-[#E3F6EC] text-[#13794B]">
-            <IkonMenu n="centang" className="h-[26px] w-[26px]" />
-          </span>
-          <div>
-            <p className="text-[16px] font-extrabold text-[#0F2A52]">Tidak ada tugas mendesak</p>
-            <p className="text-[12.5px] text-[#5B6B84]">Pilih menu di bawah untuk melanjutkan.</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-  const p = u.progres;
+/** Ikon kecil Delego (hijau, merek sendiri) pada baris Delego di bawah daftar kartu. */
+function KegiatanDelegoIkon() {
   return (
-    <section className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]" aria-label="Tugas utama">
-      <div className="flex items-center gap-2">
-        <span className="text-[11.5px] font-extrabold tracking-[0.16em] text-[#B8860B]">{u.label}</span>
-        {u.lencana && <span className={`ml-auto rounded-[9px] px-2 py-[3px] text-[11px] font-bold ${LENCANA[u.lencana.nada]}`}>{u.lencana.teks}</span>}
-      </div>
-      <div className="mt-3 flex items-center gap-3">
-        <span className="grid h-[50px] w-[50px] flex-none place-items-center rounded-[15px] bg-gradient-to-br from-[#3B78E0] to-[#1A4590] text-white">
-          <IkonMenu n={u.ikon} className="h-[26px] w-[26px]" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[16px] font-extrabold leading-snug text-[#0F2A52]">{u.judul}</p>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#5B6B84]">{u.uraian}</p>
-        </div>
-      </div>
-      {p && p.total > 0 && (
-        <div className="mt-3.5" role="img" aria-label={`${p.selesai} dari ${p.total} langkah selesai`}>
-          <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${p.total}, minmax(0, 1fr))` }}>
-            {Array.from({ length: p.total }, (_, i) => (
-              <span key={i} className={`h-1.5 rounded-[3px] ${i < p.selesai ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} />
-            ))}
-          </div>
-          <p className="mt-1 text-[11.5px] text-[#6B7A90]">{p.selesai} dari {p.total} selesai</p>
-        </div>
-      )}
-      <Link href={u.href} className="mt-3.5 inline-flex min-h-[46px] w-full items-center justify-center rounded-[13px] bg-[#1F5FD1] px-4 text-[14.5px] font-extrabold text-white transition hover:bg-[#1A4FB8]">
-        {u.aksi}
-      </Link>
-    </section>
-  );
-}
-
-/** Ikon "Delego" di Kegiatan saya: membuka tampilan HP Delego (hijau, merek sendiri). Ukuran dan susunan sama dengan IkonKegiatan. */
-function KegiatanDelego() {
-  return (
-    <Link
-      href="/sigap/delego/saya"
-      aria-label="Delego: delegasi, laporan harian, dan penilaian saya"
-      className="block w-full rounded-[14px] px-0.5 py-1 outline-none transition active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#0F6B63]/50"
-    >
-      <span className="flex flex-col items-center gap-[5px]">
-        <span className="relative grid flex-none place-items-center" style={{ width: 64, height: 64 }}>
-          <svg width={64} height={64} viewBox="0 0 64 64" className="absolute inset-0" aria-hidden>
-            <circle cx={32} cy={32} r={28} fill="none" stroke="#CFE4E1" strokeWidth={5} />
-            <circle cx={32} cy={32} r={28} fill="none" stroke="#0F6B63" strokeWidth={5} strokeDasharray="3 6" />
-          </svg>
-          <span className="grid place-items-center rounded-full bg-[#E3F0EE]" style={{ width: 44, height: 44 }}>
-            <svg width={28} height={28} viewBox="0 0 32 32" aria-hidden>
-              <rect width="32" height="32" rx="8" fill="#0F6B63" />
-              <path d="M7 16h7m0 0c3 0 3-7 7-7h4M14 16h11M14 16c3 0 3 7 7 7h4" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="26.5" cy="9" r="1.8" fill="#CFE4E1" />
-              <circle cx="26.5" cy="16" r="1.8" fill="#CFE4E1" />
-              <circle cx="26.5" cy="23" r="1.8" fill="#CFE4E1" />
-            </svg>
-          </span>
-        </span>
-        <span className="line-clamp-2 min-h-[2.4em] text-center text-[11.5px] font-bold leading-[1.2] text-[#0F2A52]">Delego</span>
-        <span className="line-clamp-2 text-center text-[10.5px] font-bold leading-[1.15] text-[#0F6B63]">Tugas dan laporan</span>
-      </span>
-    </Link>
+    <span className="relative grid h-[46px] w-[46px] flex-none place-items-center rounded-[14px] bg-[#E3F0EE]" aria-hidden>
+      <svg width={28} height={28} viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="8" fill="#0F6B63" />
+        <path d="M7 16h7m0 0c3 0 3-7 7-7h4M14 16h11M14 16c3 0 3 7 7 7h4" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="26.5" cy="9" r="1.8" fill="#CFE4E1" />
+        <circle cx="26.5" cy="16" r="1.8" fill="#CFE4E1" />
+        <circle cx="26.5" cy="23" r="1.8" fill="#CFE4E1" />
+      </svg>
+    </span>
   );
 }
 

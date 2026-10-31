@@ -11,7 +11,7 @@ import type { Db, Penugasan } from "@/lib/sigap";
 import { HK_AKTIF, hariIniWib } from "@/lib/sigap";
 import { laporanDianggap, satuanLaporan, sumberUntukPeran, type SumberOtomatis } from "@/lib/realisasiOtomatis";
 import { ambilRealisasiOtomatisRingan } from "@/lib/portal/realisasiOtomatis";
-import type { LangkahKegiatan, NadaKegiatan, RingkasKegiatan, StatusLangkah } from "@/lib/sigapKegiatan";
+import type { LangkahKegiatan, NadaKegiatan, RingkasHariIni, RingkasKegiatan, StatusLangkah } from "@/lib/sigapKegiatan";
 import { hariLengkapDinilai, hitungTerlewat, susunKekurangan, type IsianHari, type MasukanKekurangan } from "@/lib/sigapKekurangan";
 import { alamatLembarUtama } from "@/lib/sigapSubPrioritas";
 import { ALAMAT_LEMBAR_QC_KORWIL } from "@/lib/sigapKorwilTab";
@@ -39,7 +39,7 @@ export type IsianTranslok = {
 };
 
 export type MasukanTranslok = {
-  p: Pick<Penugasan, "id" | "kegiatan" | "label_jabatan" | "status_periode" | "ditutup_pada" | "dikunci_at">;
+  p: Pick<Penugasan, "id" | "kegiatan" | "label_jabatan" | "status_periode" | "ditutup_pada" | "dikunci_at"> & Partial<Pick<Penugasan, "peran" | "periode">>;
   hariKerja: string[];
   /** tanggal -> isian hari itu */
   isian: Record<string, IsianTranslok>;
@@ -53,6 +53,8 @@ export type MasukanTranslok = {
   sumber?: SumberOtomatis | null;
   hrefLembar?: string | null;
   waAdmin?: string | null;
+  /** (31 Okt 2026) kolom sigap_kegiatan.target_selesai (target selesai pendataan); kosong -> akhir periode */
+  targetSelesai?: string | null;
 };
 
 /** Murni (tanpa DB) supaya bisa diuji. */
@@ -205,6 +207,25 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     pesan = "Berjalan";
   }
 
+  // (31 Okt 2026) ringkasan hari ini untuk kartu Beranda per survei dan push 13.00 (lib/sigapBerandaKartu.ts)
+  const ih = isianKek[hariIni];
+  const hariIniRingkas: RingkasHariIni = {
+    tanggal: hariIni,
+    adaJadwal: adaHariIni,
+    hariKerjaBerikut: hariKerja.find((t) => t > hariIni) ?? null,
+    peran: p.peran ?? "ppl",
+    fotoTotal: k.jumlah_foto,
+    slot: ih?.slot ?? [],
+    wajibLaporan: !!k.wajib_laporan,
+    laporanSudah: !!ih && (ih.laporan || (ih.hasilLembar ?? 0) > 0),
+    hasilLembar: ih?.hasilLembar ?? null,
+    sumber: m.sumber ?? null,
+    mulai: p.periode?.mulai ?? null,
+    targetSelesai: m.targetSelesai ?? p.periode?.selesai ?? null,
+    hrefKerja,
+    hrefLembar: m.hrefLembar ?? null,
+  };
+
   return {
     id: `translok-${p.id}`,
     judul: `Transport Lokal — ${k.nama}`,
@@ -221,6 +242,7 @@ export function susunTranslok(m: MasukanTranslok): RingkasKegiatan {
     kegiatan_id: k.id,
     hrefKerja,
     kekurangan: kek,
+    hariIni: hariIniRingkas,
   };
 }
 
@@ -260,6 +282,22 @@ export async function hitungCadanganFoto(db: Db, akunId: number, fotoDipakai: (n
 }
 
 /**
+ * (31 Okt 2026) Target selesai pendataan per kegiatan (kolom sigap_kegiatan.target_selesai, skema-sql/fase-b/20261031b_target_selesai_pendataan.sql).
+ * Kolom belum ada / gagal dibaca = kosong (kartu Beranda memakai akhir periode); Beranda tidak boleh ikut rusak.
+ */
+export async function muatTargetSelesai(db: Db, kegiatanIds: number[]): Promise<Map<number, string>> {
+  const hasil = new Map<number, string>();
+  try {
+    const { data, error } = await db.from("sigap_kegiatan").select("id, target_selesai").in("id", Array.from(new Set(kegiatanIds)));
+    if (error) return hasil;
+    for (const r of (data ?? []) as { id: number; target_selesai: string | null }[]) if (r.target_selesai) hasil.set(r.id, String(r.target_selesai).slice(0, 10));
+  } catch {
+    /* kolom belum ada */
+  }
+  return hasil;
+}
+
+/**
  * (15 Okt 2026) Bahan mentah per penugasan (hari kerja, isian per tanggal, izin susulan aktif) sebelum disusun menjadi ringkasan.
  * Dipakai kegiatanTranslok dan siaran perbaikan admin (perlu isian per tanggal, bukan hanya kekurangan).
  */
@@ -281,6 +319,7 @@ export async function muatMasukanTranslok(
     db.from("sigap_izin_susulan").select("penugasan_id, tanggal, berlaku_sampai").in("penugasan_id", ids).gt("berlaku_sampai", new Date(nowMs).toISOString()),
   ]);
   const hariIni = hariIniWib();
+  const targetSelesai = await muatTargetSelesai(db, aktif.map((p) => p.kegiatan.id));
   const cadangan = await hitungCadanganFoto(db, akunId, (dok ?? []).map((d) => d.foto_id as number | null));
   return Promise.all(
     aktif.map(async (p) => {
@@ -319,6 +358,7 @@ export async function muatMasukanTranslok(
         sumber,
         hrefLembar: sumber === "identifikasi" ? alamatLembarUtama("/sigap/identifikasi") : sumber === "pendataan" ? alamatLembarUtama("/sigap/pendataan") : sumber === "qc" ? ALAMAT_LEMBAR_QC_KORWIL : null, // (27 Okt 2026) korwil -> Lembar Quality Check
         waAdmin: opsi.waAdmin ?? null,
+        targetSelesai: targetSelesai.get(p.kegiatan.id) ?? null,
       };
       return masukan;
     })

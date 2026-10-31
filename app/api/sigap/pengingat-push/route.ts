@@ -9,6 +9,8 @@
 //   POST /api/sigap/pengingat-push?slot=sore    17.00 WIB  -> cron "0 10 * * *"
 //   POST /api/sigap/pengingat-push?slot=malam   22.15 WIB  -> cron "15 15 * * *"
 //   Header:  Authorization: Bearer <SIGAP_CRON_SECRET>      (variabel lingkungan di server; tanpa ini route menolak semua panggilan)
+//   (31 Okt 2026) Slot siang (13.00) juga mengirim "belum mendata hari ini" bagi petugas yang hari ini hari kerjanya tetapi belum ada foto maupun isian
+//   (aturan: lib/sigapBerandaKartu.ts pilihPeringatanPush; supervisor hanya pada hari ke-1,3,5,... periode). Pesan ini didahulukan di atas pengingat biasa.
 //   Uji kering (tidak mengirim, tidak mencatat): tambahkan &uji=1 -> daftar yang AKAN dikirim.
 // Perlu juga VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (lib/sigapPush.ts). Tanpa migrasi: riwayat kiriman dicatat di sigap_push_log
 //   (jenis = 'pengingat_terjadwal', oleh_akun_id = PENERIMA, kegiatan_id kosong, isi = "[kunci] kode|judul" untuk mencegah kiriman kembar hari itu).
@@ -21,7 +23,9 @@ import { kegiatanTranslok } from "@/lib/portal/kegiatan";
 import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
 import { normalisasiNomorWa, type Kekurangan } from "@/lib/sigapKekurangan";
 import { kunciKekurangan } from "@/lib/sigapPengingat";
-import { JENIS_LOG_PUSH, adalahSlotPush, awalHariWibIso, jamSenyap, pilihPushJadwal, slotDariJam, susunPesanPush, type RiwayatHariIni } from "@/lib/sigapPushJadwal";
+import { JENIS_LOG_PUSH, MAKS_PUSH_PER_HARI, adalahSlotPush, awalHariWibIso, jamSenyap, pilihPushJadwal, slotDariJam, susunPesanPush, type RiwayatHariIni } from "@/lib/sigapPushJadwal";
+import { pilihPeringatanPush } from "@/lib/sigapBerandaKartu"; // (31 Okt 2026) push 13.00: belum mendata hari ini
+import { urlInternalAman } from "@/lib/sigapPushUtil";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,22 +105,27 @@ async function jalankan(req: NextRequest) {
           }
           const keg = await kegiatanTranslok(db!, a.id, a.token, pen, Date.now(), { namaPetugas: a.nama, waAdmin });
           const semua: Kekurangan[] = keg.flatMap((k) => k.kekurangan ?? []);
-          if (semua.length === 0) {
+          const riwayatAkun = riwayat.get(a.id) ?? { jumlah: 0, kunci: [] };
+          // (31 Okt 2026) slot siang: peringatan "belum mendata hari ini" didahulukan (satu per kegiatan per hari, dalam batas kiriman harian)
+          const peringatan = slot === "siang" && riwayatAkun.jumlah < MAKS_PUSH_PER_HARI ? pilihPeringatanPush(keg, Date.now(), new Set(riwayatAkun.kunci)) : null;
+          if (semua.length === 0 && !peringatan) {
             hasil.tanpa_kekurangan++;
             continue;
           }
-          const pilih = pilihPushJadwal(semua, slot, Date.now(), riwayat.get(a.id) ?? { jumlah: 0, kunci: [] });
-          if (!pilih) {
+          const pilih = peringatan ? null : pilihPushJadwal(semua, slot, Date.now(), riwayatAkun);
+          if (!pilih && !peringatan) {
             hasil.dilewati_batas_atau_kembar++;
             continue;
           }
-          const pesan = susunPesanPush(pilih);
+          const pesan = peringatan ? { judul: peringatan.judul, isi: peringatan.isi, url: urlInternalAman(peringatan.url) ?? "/" } : susunPesanPush(pilih!);
+          const kunciKirim = peringatan ? peringatan.kunci : kunciKekurangan(pilih!);
+          const tagKirim = peringatan ? "pengingat-belum-mendata" : `pengingat-${pilih!.jenis}`;
           if (uji) {
             rencana.push({ akun_id: a.id, judul: pesan.judul, url: pesan.url });
             hasil.dikirim++;
             continue;
           }
-          const h = await kirimKeAkun(db!, [a.id], { ...pesan, tag: `pengingat-${pilih.jenis}` });
+          const h = await kirimKeAkun(db!, [a.id], { ...pesan, tag: tagKirim });
           if (h.terkirim > 0) {
             hasil.dikirim++;
             hasil.perangkat_terkirim += h.terkirim;
@@ -125,7 +134,7 @@ async function jalankan(req: NextRequest) {
               oleh_akun_id: a.id,
               jenis: JENIS_LOG_PUSH,
               judul: pesan.judul,
-              isi: `${AWALAN_KUNCI}${kunciKekurangan(pilih)}`,
+              isi: `${AWALAN_KUNCI}${kunciKirim}`,
               url: pesan.url,
               jumlah_akun: 1,
               jumlah_perangkat: h.perangkat,

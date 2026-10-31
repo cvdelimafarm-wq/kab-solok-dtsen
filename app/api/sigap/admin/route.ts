@@ -302,7 +302,17 @@ export async function GET(req: NextRequest) {
           db.from("sigap_kegiatan").select("id, kode, nama, kode_anggaran, tanggal_mulai, tanggal_selesai, satuan_realisasi, aktif, jenis, wajib_laporan, jumlah_foto").eq("id", kegiatanId).maybeSingle(),
           db.from("sigap_kegiatan_tarif").select("id, peran, uraian_detail, tarif, label_jabatan, maks_hari_default, urutan").eq("kegiatan_id", kegiatanId).order("urutan").order("peran"),
         ]);
-        return NextResponse.json({ kegiatan: keg, tarif: tarif ?? [], boleh_kelola: perlu(menu, "kelola") });
+        // (31 Okt 2026) target selesai pendataan: dibaca terpisah supaya halaman tetap jalan sebelum kolomnya dibuat (skema-sql/fase-b/20261031b)
+        let kegOut: Record<string, unknown> | null = keg ? { ...(keg as Record<string, unknown>), target_selesai_tersedia: false } : null;
+        if (kegOut) {
+          try {
+            const { data: ts, error: tsGalat } = await db.from("sigap_kegiatan").select("target_selesai").eq("id", kegiatanId).maybeSingle();
+            if (!tsGalat && ts) kegOut = { ...kegOut, target_selesai: (ts as { target_selesai: string | null }).target_selesai ?? null, target_selesai_tersedia: true };
+          } catch {
+            /* kolom belum ada */
+          }
+        }
+        return NextResponse.json({ kegiatan: kegOut, tarif: tarif ?? [], boleh_kelola: perlu(menu, "kelola") });
       }
 
       const { kegiatan, baris, peranOpsi } = await dataPenugasan(db, kegiatanId);
@@ -624,10 +634,19 @@ async function proses(req: NextRequest) {
         isi.jumlah_foto = a.jumlah_foto;
       }
       if (isi.tanggal_mulai && isi.tanggal_selesai && (isi.tanggal_mulai as string) > (isi.tanggal_selesai as string)) return galat("Tanggal mulai melewati tanggal selesai.");
+      // (31 Okt 2026) target selesai pendataan (hanya bila dikirim): tanggal sah atau kosong; tidak boleh lebih awal daripada tanggal mulai
+      const adaTarget = body?.target_selesai !== undefined;
+      const targetSelesai = adaTarget ? (body.target_selesai === null || body.target_selesai === "" ? null : tanggalValid(body.target_selesai) ? (body.target_selesai as string) : undefined) : undefined;
+      if (adaTarget && targetSelesai === undefined) return galat("Target selesai pendataan tidak valid.");
+      if (targetSelesai && isi.tanggal_mulai && targetSelesai < (isi.tanggal_mulai as string)) return galat("Target selesai pendataan lebih awal daripada tanggal mulai.");
       if (id) {
         const { error } = await db.from("sigap_kegiatan").update(isi).eq("id", id);
         if (error) return galat(error.message, 500);
-        await audit({ kegiatan_id: id, ...isi });
+        if (adaTarget) {
+          const { error: eTarget } = await db.from("sigap_kegiatan").update({ target_selesai: targetSelesai ?? null }).eq("id", id);
+          if (eTarget) return galat("Data kegiatan tersimpan, tetapi target selesai pendataan belum bisa disimpan (kolom target_selesai belum dibuat di database).", 500);
+        }
+        await audit({ kegiatan_id: id, ...isi, ...(adaTarget ? { target_selesai: targetSelesai ?? null } : {}) });
         return NextResponse.json({ ok: true, id });
       }
       const kode =
