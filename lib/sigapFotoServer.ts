@@ -7,7 +7,7 @@
 import crypto from "crypto";
 import type { Db } from "@/lib/sigap";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
-import { jarakM, modeEfektif, slotBerlokasi, teksLokasiWilayah, type ModeFoto, type ModeKegiatan } from "@/lib/sigapFoto";
+import { jarakM, modeEfektif, slotBerlokasi, teksLokasiWilayah, waktuHpTerjepit, type ModeFoto, type ModeKegiatan } from "@/lib/sigapFoto";
 
 /** Menu izin (sigap_peran_izin.menu_kode, level 'kelola') yang boleh mengelola saklar dan usulan hapus selain akun super.
  *  Dipilih 'translok.verifikasi' (verifikasi SPJ; dimiliki 4 peran) karena foto adalah bukti SPJ. Mudah diganti ke menu lain yang ada. */
@@ -254,7 +254,7 @@ export async function teksLokasi(db: Db, akunId: number, lat: number, lng: numbe
 
 // ------------------------------------------------------------------ pembanding untuk tingkat kepercayaan
 export type Pembanding = {
-  sebelumnya: { lat: number; lng: number; ms: number } | null;
+  sebelumnya: { lat: number; lng: number; ms: number; /** jam HP foto itu dijepit [waktu resmi, waktu terima]; null bila tak terbaca */ hpMs: number | null } | null;
   koordinatIdentik: boolean;
   sidikLain: string[];
 };
@@ -262,7 +262,7 @@ export type Pembanding = {
 /** Foto terakhir pemotret (untuk kecepatan), koordinat identik di hari lain (slot berlokasi), dan sidik gambar foto lain pada kegiatan sama. */
 export async function ambilPembanding(db: Db, akunId: number, kegiatanId: number, lat: number, lng: number, tanggal: string, cekIdentik: boolean): Promise<Pembanding> {
   const [{ data: akhir }, { data: sidik }] = await Promise.all([
-    db.from("sigap_foto").select("lat, lng, diambil_at").eq("akun_pengambil", akunId).not("lat", "is", null).order("diambil_at", { ascending: false }).limit(1),
+    db.from("sigap_foto").select("lat, lng, diambil_at, diterima_at, waktu_hp").eq("akun_pengambil", akunId).not("lat", "is", null).order("diambil_at", { ascending: false }).limit(1),
     db.from("sigap_foto").select("sidik_gambar").eq("kegiatan_id", kegiatanId).not("sidik_gambar", "is", null).order("id", { ascending: false }).limit(5000),
   ]);
   const a = (akhir ?? [])[0];
@@ -280,7 +280,14 @@ export async function ambilPembanding(db: Db, akunId: number, kegiatanId: number
     identik = !!(data && data.length);
   }
   return {
-    sebelumnya: a ? { lat: a.lat as number, lng: a.lng as number, ms: new Date(a.diambil_at as string).getTime() } : null,
+    sebelumnya: a
+      ? (() => {
+          const ms = new Date(a.diambil_at as string).getTime();
+          const terima = a.diterima_at ? new Date(a.diterima_at as string).getTime() : ms;
+          const hp = a.waktu_hp ? new Date(a.waktu_hp as string).getTime() : null;
+          return { lat: a.lat as number, lng: a.lng as number, ms, hpMs: waktuHpTerjepit(hp, ms, terima) };
+        })()
+      : null,
     koordinatIdentik: identik,
     sidikLain: (sidik ?? []).map((s) => s.sidik_gambar as string),
   };

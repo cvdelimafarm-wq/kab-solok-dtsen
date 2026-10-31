@@ -25,6 +25,8 @@ export type Survei = {
   kode: string;
   nama: string;
   pelatihan: PelatihanSurvei[];
+  /** Akun ini boleh membuat pelatihan baru di bawah survei ini (admin atau PJ kegiatan yang lingkupnya mencakup survei). Diisi API daftar. */
+  boleh_buat?: boolean;
 };
 
 export const KODE_SURVEI_LAIN = "_lain";
@@ -123,4 +125,69 @@ export function cariSurvei(daftar: readonly Survei[], kegiatanId: number | null,
     if (s) return s;
   }
   return kode ? (daftar.find((x) => x.kode === kode) ?? null) : null;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Membuat pelatihan baru di bawah survei (31 Okt 2026) -- permintaan Iqbal: "admin dan PJ"
+// ----------------------------------------------------------------------------------------------
+/** Peran yang boleh membuat pelatihan: admin (anggaran/aplikasi) dan PJ kegiatan. */
+export const PERAN_PEMBUAT_PELATIHAN = ["admin_anggaran", "admin_aplikasi", "pj_kegiatan"] as const;
+
+/**
+ * Boleh membuat pelatihan di survei dengan kegiatan `kegiatanIdsInduk`? Syarat: memegang salah satu peran pembuat dengan lingkup "semua kegiatan" (kegiatan_id null)
+ * atau lingkup ke salah satu kegiatan survei itu. Peran pengelola lain (mis. pengelola survei, panitia, instruktur) tidak otomatis boleh.
+ */
+export function bolehBuatPelatihan(peran: readonly { kode: string; kegiatan_id: number | null }[], kegiatanIdsInduk: readonly (number | string)[] | null): boolean {
+  const ids = (kegiatanIdsInduk ?? []).map(Number);
+  return peran.some((p) => (PERAN_PEMBUAT_PELATIHAN as readonly string[]).includes(p.kode) && (p.kegiatan_id === null || ids.includes(Number(p.kegiatan_id))));
+}
+
+export type PelatihanBaru = { nama: string; tanggal_mulai: string; tanggal_selesai: string };
+
+const TGL = /^\d{4}-\d{2}-\d{2}$/;
+const tglSah = (t: string) => TGL.test(t) && !Number.isNaN(Date.parse(`${t}T00:00:00Z`)) && new Date(`${t}T00:00:00Z`).toISOString().slice(0, 10) === t;
+
+/** Memeriksa isian formulir pelatihan baru. Tanggal selesai kosong = sama dengan tanggal mulai. */
+export function validasiPelatihanBaru(x: unknown): { ok: true; data: PelatihanBaru } | { ok: false; error: string } {
+  const o = (x ?? {}) as Record<string, unknown>;
+  const nama = String(o.nama ?? "").replace(/\s+/g, " ").trim();
+  if (nama.length < 5 || nama.length > 120) return { ok: false, error: "Nama pelatihan 5–120 karakter." };
+  const mulai = String(o.tanggal_mulai ?? "").trim();
+  if (!tglSah(mulai)) return { ok: false, error: "Tanggal mulai tidak sah (format tahun-bulan-tanggal)." };
+  const selesaiTeks = String(o.tanggal_selesai ?? "").trim();
+  const selesai = selesaiTeks === "" ? mulai : selesaiTeks;
+  if (!tglSah(selesai)) return { ok: false, error: "Tanggal selesai tidak sah (format tahun-bulan-tanggal)." };
+  if (selesai < mulai) return { ok: false, error: "Tanggal selesai tidak boleh sebelum tanggal mulai." };
+  const hari = (Date.parse(`${selesai}T00:00:00Z`) - Date.parse(`${mulai}T00:00:00Z`)) / 86_400_000;
+  if (hari > 60) return { ok: false, error: "Rentang pelatihan maksimal 60 hari." };
+  return { ok: true, data: { nama, tanggal_mulai: mulai, tanggal_selesai: selesai } };
+}
+
+/** Kode kegiatan: pelatihan_<kode survei>_<nama ringkas>_<tahun>, huruf kecil/angka/garis bawah, maksimal 80 karakter. */
+export function kodePelatihan(kodeSurvei: string, nama: string, tanggalMulai: string): string {
+  const ringkas = (s: string, maks: number) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, maks).replace(/_+$/g, "");
+  const bagian = ["pelatihan", ringkas(kodeSurvei, 30), ringkas(nama, 40), tanggalMulai.slice(0, 4)].filter(Boolean);
+  return bagian.join("_").slice(0, 80);
+}
+
+export type TesBawaan = { jenis: "pretest" | "posttest"; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks: number; wajib_lulus: boolean; nilai_lulus: number };
+
+/**
+ * Pretest dan posttest bawaan untuk pelatihan baru: buka pukul 07.00 WIB hari pertama, tutup 22.00 WIB hari terakhir, durasi 15 menit.
+ * Dibuat TIDAK AKTIF (belum tampil bagi peserta) sampai soal diunggah dan jadwalnya disetel panitia; wajib lulus tidak dicentang (PJ memilih sendiri).
+ */
+export function tesBawaan(nama: string, tanggalMulai: string, tanggalSelesai: string): TesBawaan[] {
+  const buka = new Date(`${tanggalMulai}T07:00:00+07:00`).toISOString();
+  const tutup = new Date(`${tanggalSelesai}T22:00:00+07:00`).toISOString();
+  return (["pretest", "posttest"] as const).map((jenis) => ({
+    jenis,
+    judul: `${jenis === "pretest" ? "Pretest" : "Posttest"} · ${nama}`.slice(0, 160),
+    buka_at: buka,
+    tutup_at: tutup,
+    durasi_menit: 15,
+    aktif: false,
+    ulang_maks: 1,
+    wajib_lulus: false,
+    nilai_lulus: 70,
+  }));
 }

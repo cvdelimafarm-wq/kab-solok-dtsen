@@ -56,7 +56,7 @@ export default function KelolaPelatihan() {
   const [mode, setMode] = useState<"memuat" | "daftar" | "kelola">("memuat");
   const [kegId, setKegId] = useState<number | null>(null);
   const [surveiKode, setSurveiKode] = useState<string | null>(null);
-  const { data: dataSurvei, galat: galatSurvei } = useDaftarSurvei();
+  const { data: dataSurvei, galat: galatSurvei, muat: muatSurvei } = useDaftarSurvei();
   const daftarSurvei = dataSurvei?.survei ?? [];
   useEffect(() => {
     const sinkron = () => {
@@ -107,6 +107,14 @@ export default function KelolaPelatihan() {
   function gantiPelatihan(id: number) {
     window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: surveiAktif?.kode ?? null, kegiatan: id }));
     setKegId(id);
+  }
+  /** Pelatihan baru selesai dibuat: muat ulang daftar lalu buka pelatihannya. */
+  async function setelahDibuat(id: number, kode: string) {
+    await muatSurvei();
+    window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: kode, kegiatan: id }));
+    setSurveiKode(kode);
+    setKegId(id);
+    setTab("soal");
   }
   function keDaftar() {
     window.history.pushState(null, "", window.location.pathname);
@@ -160,8 +168,8 @@ export default function KelolaPelatihan() {
         sub={`${surveiAktif.nama} · belum ada pelatihan`}
         kembali={{ label: "Daftar survei", onKlik: keDaftar }}
       >
-        <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={null} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} />
-        <SurveiTanpaPelatihan nama={surveiAktif.nama} />
+        <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={null} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} onDibuat={setelahDibuat} />
+        <SurveiTanpaPelatihan nama={surveiAktif.nama} bolehBuat={surveiAktif.boleh_buat === true} />
       </Bingkai>
     );
 
@@ -185,7 +193,7 @@ export default function KelolaPelatihan() {
       aktifTab={tab}
       onTab={setTab}
     >
-      <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} />
+      <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} onDibuat={setelahDibuat} />
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!ringkas && !galat && <Memuat />}
       {ringkas && tab === "soal" && (

@@ -15,7 +15,7 @@ import { cekAksesIsian, BUCKET_SIGAP } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
-  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
+  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, KECEPATAN_MERAH_KMJAM, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai, waktuHpTerjepit,
   SLOT_FOTO_LAPORAN, bolehFotoLaporan, slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
@@ -184,12 +184,20 @@ export async function POST(req: NextRequest) {
   const kecepatan = pembanding.sebelumnya
     ? kecepatanKmJam(pembanding.sebelumnya, { lat: posisi.lat, lng: posisi.lng, ms: w.diambilMs })
     : null;
+  // (31 Okt 2026) Kecepatan menurut jam HP kedua foto (dijepit antara waktu resmi dan waktu terima). Hanya dihitung bila menurut jam resmi tak wajar;
+  // dipakai nilaiKepercayaan untuk menurunkan merah palsu akibat jam resmi tertinggal (HP tidur) menjadi kuning.
+  let kecepatanHp: number | null = null;
+  if (kecepatan !== null && kecepatan > KECEPATAN_MERAH_KMJAM && pembanding.sebelumnya && pembanding.sebelumnya.hpMs !== null) {
+    const hpIni = waktuHpTerjepit(angka(form.get("waktu_hp")), w.diambilMs, terimaMs);
+    if (hpIni !== null) kecepatanHp = kecepatanKmJam({ lat: pembanding.sebelumnya.lat, lng: pembanding.sebelumnya.lng, ms: pembanding.sebelumnya.hpMs }, { lat: posisi.lat, lng: posisi.lng, ms: hpIni });
+  }
   const nilai = nilaiKepercayaan({
     akurasiM: posisi.akurasi,
     waktu: w,
     umurPosisiMs: umurPosisi !== null && umurPosisi <= 24 * 3600_000 ? umurPosisi : null,
     jarakWilayahM: jarakEfektifM(jarakWilayah, jarakRumah), // (20 Okt 2026) titik terdekat dari KK atau rumah petugas
     kecepatanKmJam: kecepatan,
+    kecepatanHpKmJam: kecepatanHp,
     koordinatIdentik: pembanding.koordinatIdentik,
     hammingTerdekat: hamMin,
   });

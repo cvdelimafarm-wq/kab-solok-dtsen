@@ -178,6 +178,26 @@ export function kecepatanKmJam(a: { lat: number; lng: number; ms: number }, b: {
   return (jarakM(a.lat, a.lng, b.lat, b.lng) / dt) * 3.6;
 }
 
+/**
+ * (31 Okt 2026) Waktu menurut jam HP (waktu_hp) dijepit ke rentang [waktu resmi, waktu terima server]: foto tidak mungkin diambil setelah diterima server,
+ * dan jam monotonik hanya bisa tertinggal (HP tidur), tidak mendahului. Jam HP yang dimajukan/dimundurkan sengaja tidak bisa keluar dari rentang ini.
+ * null bila jam HP tidak terbaca.
+ */
+export function waktuHpTerjepit(hpMs: number | null | undefined, diambilMs: number, terimaMs: number): number | null {
+  if (hpMs == null || !Number.isFinite(hpMs)) return null;
+  return Math.min(Math.max(hpMs, diambilMs), Math.max(terimaMs, diambilMs));
+}
+
+/** "Jam resmi 14.24 · jam HP 14.44 WIB" bila keduanya berbeda lebih dari 2 menit (untuk layar periksa PML); selain itu null. */
+export function labelJamHp(diambilIso: string | null | undefined, waktuHpIso: string | null | undefined): string | null {
+  if (!diambilIso || !waktuHpIso) return null;
+  const a = new Date(diambilIso).getTime();
+  const b = new Date(waktuHpIso).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(b - a) / 1000 <= BEDA_JAM_KUNING_DETIK) return null;
+  const jam = (ms: number) => new Date(ms + 7 * 3_600_000).toISOString().slice(11, 16).replace(":", ".");
+  return `Jam resmi ${jam(a)} · jam HP ${jam(b)} WIB`;
+}
+
 /** Jarak Hamming dua sidik gambar heksa (64 bit = 16 karakter). Null bila bentuk tidak sama. */
 export function jarakHamming(a: string | null | undefined, b: string | null | undefined): number | null {
   if (!a || !b || a.length !== b.length || !/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b)) return null;
@@ -202,6 +222,12 @@ export type MasukanKepercayaan = {
   jarakWilayahM: number | null;
   /** kecepatan dari foto sebelumnya pemotret yang sama (km/jam); null = tidak ada pembanding */
   kecepatanKmJam: number | null;
+  /**
+   * (31 Okt 2026) Kecepatan yang sama dihitung dengan JAM HP kedua foto (masing-masing dijepit antara waktu resmi dan waktu terima server, lihat waktuHpTerjepit).
+   * Dipakai hanya bila kecepatan menurut waktu resmi tak wajar: jam monotonik HP berhenti saat HP tidur sehingga waktu resmi bisa tertinggal puluhan menit
+   * (kasus 31 Okt: 2 menit 22 detik untuk 9,9 km = 251 km/jam menurut jam resmi, 26 km/jam menurut jam HP). undefined/null = tidak ada pembanding.
+   */
+  kecepatanHpKmJam?: number | null;
   /** koordinat identik (6 desimal) dengan foto lain pemotret di hari berbeda pada slot berlokasi */
   koordinatIdentik: boolean;
   /** jarak Hamming terkecil ke foto lain (semua pemotret); null = tidak ada */
@@ -222,6 +248,7 @@ export const LABEL_ALASAN: Record<string, string> = {
   luar_wilayah_dekat: "Titik 5-10 km dari KK wilayah tugas dan dari rumah petugas",
   jauh_dari_wilayah: "Titik lebih dari 10 km dari KK wilayah tugas dan dari rumah petugas",
   kecepatan_tak_wajar: "Perpindahan dari foto sebelumnya lebih cepat dari 120 km/jam",
+  kecepatan_wajar_jam_hp: "Perpindahan dari foto sebelumnya tampak lebih cepat dari 120 km/jam menurut jam resmi (jam resmi tertinggal karena HP tidur), tetapi wajar menurut jam HP",
   koordinat_identik: "Koordinat sama persis dengan foto di hari lain",
   mirip_foto_lain: "Gambar mirip foto lain yang sudah tersimpan",
 };
@@ -243,7 +270,11 @@ export function nilaiKepercayaan(m: MasukanKepercayaan): HasilKepercayaan {
     if (m.jarakWilayahM > WILAYAH_MERAH_M) kuning.push("jauh_dari_wilayah");
     else if (m.jarakWilayahM > WILAYAH_KUNING_M) kuning.push("luar_wilayah_dekat");
   }
-  if (m.kecepatanKmJam !== null && m.kecepatanKmJam > KECEPATAN_MERAH_KMJAM) merah.push("kecepatan_tak_wajar");
+  if (m.kecepatanKmJam !== null && m.kecepatanKmJam > KECEPATAN_MERAH_KMJAM) {
+    // (31 Okt 2026) Bila menurut jam HP perpindahan itu wajar, foto tidak ditahan (kuning, tetap diperiksa PML); bila tetap tak wajar atau tak ada pembanding: merah.
+    if (m.kecepatanHpKmJam != null && m.kecepatanHpKmJam <= KECEPATAN_MERAH_KMJAM) kuning.push("kecepatan_wajar_jam_hp");
+    else merah.push("kecepatan_tak_wajar");
+  }
   if (m.koordinatIdentik) kuning.push("koordinat_identik");
   if (m.hammingTerdekat !== null && m.hammingTerdekat <= AMBANG_MIRIP_BIT) kuning.push("mirip_foto_lain");
   const alasan = [...merah, ...kuning];

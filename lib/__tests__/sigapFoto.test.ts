@@ -5,6 +5,7 @@ import {
   SLOT_FOTO_LAPORAN, bolehFotoLaporan,
   TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, BATAS_HARI_BAGI, jendelaBagiFoto, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
+  waktuHpTerjepit, labelJamHp, jarakM,
   type MasukanKepercayaan,
 } from "@/lib/sigapFoto";
 
@@ -216,6 +217,46 @@ describe("nilaiKepercayaan", () => {
     expect(nilaiKepercayaan(dasar({ jarakWilayahM: 3300 })).tingkat).toBe("hijau");
   });
   it("kecepatan 300 km/jam = merah", () => expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 300 })).alasan).toContain("kecepatan_tak_wajar"));
+  // (31 Okt 2026) Kasus Hariston: 9,9 km dalam 2 mnt 22 dtk menurut jam resmi (251 km/jam), tetapi 22 mnt 34 dtk menurut jam HP (26 km/jam)
+  it("kecepatan tak wajar menurut jam resmi tetapi wajar menurut jam HP = kuning (tidak ditahan)", () => {
+    const h = nilaiKepercayaan(dasar({ kecepatanKmJam: 251, kecepatanHpKmJam: 26 }));
+    expect(h.tingkat).toBe("kuning");
+    expect(h.alasan).toContain("kecepatan_wajar_jam_hp");
+    expect(h.alasan).not.toContain("kecepatan_tak_wajar");
+    expect(LABEL_ALASAN.kecepatan_wajar_jam_hp).toBeTruthy();
+  });
+  it("kecepatan tetap tak wajar menurut jam HP, atau tanpa pembanding jam HP = merah", () => {
+    expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 251, kecepatanHpKmJam: 200 })).alasan).toContain("kecepatan_tak_wajar");
+    expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 251, kecepatanHpKmJam: null })).tingkat).toBe("merah");
+    expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 251 })).tingkat).toBe("merah");
+  });
+  it("kecepatan jam HP tidak dipakai bila jam resmi sudah wajar", () => expect(nilaiKepercayaan(dasar({ kecepatanKmJam: 20, kecepatanHpKmJam: 999 })).tingkat).toBe("hijau"));
+  it("kasus nyata 31 Okt: 9,9 km, 142 dtk resmi vs 1354 dtk jam HP", () => {
+    const a = { lat: -0.8216432, lng: 100.6565988 };
+    const b = { lat: -0.7437969, lng: 100.6131146 };
+    const t1 = Date.UTC(2026, 9, 31, 7, 22, 4);
+    const resmi2 = Date.UTC(2026, 9, 31, 7, 24, 26);
+    const hp2 = Date.UTC(2026, 9, 31, 7, 44, 37);
+    const terima2 = Date.UTC(2026, 9, 31, 7, 44, 52);
+    const kResmi = kecepatanKmJam({ ...a, ms: t1 }, { ...b, ms: resmi2 }) as number;
+    const kHp = kecepatanKmJam({ ...a, ms: t1 }, { ...b, ms: waktuHpTerjepit(hp2, resmi2, terima2) as number }) as number;
+    expect(Math.round(jarakM(a.lat, a.lng, b.lat, b.lng))).toBeGreaterThan(9800);
+    expect(kResmi).toBeGreaterThan(200);
+    expect(kHp).toBeLessThan(40);
+    expect(nilaiKepercayaan(dasar({ kecepatanKmJam: kResmi, kecepatanHpKmJam: kHp })).tingkat).toBe("kuning");
+  });
+  it("waktuHpTerjepit: dijepit antara waktu resmi dan waktu terima; tak terbaca = null", () => {
+    expect(waktuHpTerjepit(1500, 1000, 2000)).toBe(1500);
+    expect(waktuHpTerjepit(500, 1000, 2000)).toBe(1000); // jam HP dimundurkan: tidak lebih awal dari waktu resmi
+    expect(waktuHpTerjepit(9000, 1000, 2000)).toBe(2000); // jam HP dimajukan: tidak lebih akhir dari waktu terima
+    expect(waktuHpTerjepit(null, 1000, 2000)).toBeNull();
+    expect(waktuHpTerjepit(Number.NaN, 1000, 2000)).toBeNull();
+  });
+  it("labelJamHp: hanya bila beda > 2 menit", () => {
+    expect(labelJamHp("2026-10-31T07:24:26Z", "2026-10-31T07:44:37Z")).toBe("Jam resmi 14.24 · jam HP 14.44 WIB");
+    expect(labelJamHp("2026-10-31T07:24:26Z", "2026-10-31T07:25:30Z")).toBeNull();
+    expect(labelJamHp(null, "2026-10-31T07:25:30Z")).toBeNull();
+  });
   it("koordinat identik & mirip = kuning", () => {
     expect(nilaiKepercayaan(dasar({ koordinatIdentik: true })).tingkat).toBe("kuning");
     expect(nilaiKepercayaan(dasar({ hammingTerdekat: AMBANG_MIRIP_BIT })).alasan).toContain("mirip_foto_lain");

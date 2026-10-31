@@ -6,29 +6,30 @@
 // lewat dropdown survei". Halaman awal = satu kartu per survei (kegiatan induk); di dalam halaman kelola ada pemilih Survei (dan Pelatihan bila lebih dari satu).
 // Data: /api/sigap/pelatihan/daftar (survei). Logika murni: lib/sigapPelatihanSurvei.ts.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
-import { Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
-import { pilihPelatihanAwal, ringkasSurvei, type PelatihanSurvei, type StatusPelatihan, type Survei } from "@/lib/sigapPelatihanSurvei";
+import { BTN_G, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
+import { ringkasSurvei, validasiPelatihanBaru, type PelatihanSurvei, type StatusPelatihan, type Survei } from "@/lib/sigapPelatihanSurvei";
 
 export type DataSurvei = { survei: Survei[] };
 
-/** Memuat daftar survei + pelatihan. `muatUlang` memuat ulang (mis. setelah ada perubahan). */
+/** Memuat daftar survei + pelatihan. `muat` memuat ulang (mis. setelah pelatihan baru dibuat). */
 export function useDaftarSurvei() {
   const [data, setData] = useState<DataSurvei | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
-  useEffect(() => {
-    let batal = false;
-    fetchJson<DataSurvei>("/api/sigap/pelatihan/daftar")
-      .then((d) => !batal && setData({ survei: d.survei ?? [] }))
-      .catch((e) => {
-        if (!batal && !(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
-      });
-    return () => {
-      batal = true;
-    };
+  const muat = useCallback(async () => {
+    try {
+      const d = await fetchJson<DataSurvei>("/api/sigap/pelatihan/daftar");
+      setData({ survei: d.survei ?? [] });
+      setGalat(null);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    }
   }, []);
-  return { data, galat };
+  useEffect(() => {
+    void muat();
+  }, [muat]);
+  return { data, galat, muat };
 }
 
 const STATUS: Record<StatusPelatihan | "kosong", { label: string; w: "ok" | "navy" | "mut" | "wait" }> = {
@@ -98,17 +99,23 @@ export function PemilihSurveiPelatihan({
   kegiatanId,
   onSurvei,
   onPelatihan,
+  onDibuat,
 }: {
   daftar: Survei[];
   survei: Survei | null;
   kegiatanId: number | null;
   onSurvei: (kode: string) => void;
   onPelatihan: (id: number) => void;
+  /** Dipanggil setelah pelatihan baru dibuat (id pelatihan, kode survei); halaman memuat ulang daftar dan membukanya. */
+  onDibuat: (id: number, kodeSurvei: string) => Promise<void>;
 }) {
+  const [formBuka, setFormBuka] = useState(false);
+  useEffect(() => setFormBuka(false), [survei?.kode]);
   if (daftar.length === 0) return null;
   const kelas = "min-h-[40px] min-w-[220px] max-w-full flex-1 rounded-lg border border-[#C9D4E8] bg-white px-3 text-[14px] font-bold text-[#0F2A52] sm:flex-none";
   const banyak = (survei?.pelatihan.length ?? 0) > 1;
   return (
+    <>
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2.5">
       <label htmlFor="pilih-survei-pelatihan" className="text-[13px] font-extrabold text-[#0F2A52]">
         Survei
@@ -137,17 +144,87 @@ export function PemilihSurveiPelatihan({
         </>
       )}
       <span className="text-[12.5px] text-[#6B7A90]">Semua tab di bawah mengikuti survei{banyak ? " dan pelatihan" : ""} yang dipilih.</span>
+      {survei?.boleh_buat && (
+        <button type="button" className={`${BTN_O} ml-auto`} onClick={() => setFormBuka((x) => !x)} aria-expanded={formBuka}>
+          ＋ Pelatihan baru
+        </button>
+      )}
     </div>
+    {formBuka && survei && <FormPelatihanBaru survei={survei} onBatal={() => setFormBuka(false)} onDibuat={onDibuat} />}
+    </>
+  );
+}
+
+/** Formulir pelatihan baru di bawah survei (admin / PJ). Jadwal pretest/posttest bawaan dibuat TIDAK aktif sampai soal diunggah dan jadwal disetel. */
+function FormPelatihanBaru({ survei, onBatal, onDibuat }: { survei: Survei; onBatal: () => void; onDibuat: (id: number, kodeSurvei: string) => Promise<void> }) {
+  const [nama, setNama] = useState(`Pelatihan Petugas ${survei.nama}`);
+  const [mulai, setMulai] = useState("");
+  const [selesai, setSelesai] = useState("");
+  const [sibuk, setSibuk] = useState(false);
+  const [galat, setGalat] = useState<string | null>(null);
+  const v = validasiPelatihanBaru({ nama, tanggal_mulai: mulai, tanggal_selesai: selesai });
+
+  async function simpan() {
+    if (!v.ok) {
+      setGalat(v.error);
+      return;
+    }
+    setSibuk(true);
+    setGalat(null);
+    try {
+      const r = await fetchJson<{ pelatihan: { id: number } }>("/api/sigap/pelatihan/buat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ survei: survei.kode, ...v.data }),
+      });
+      await onDibuat(r.pelatihan.id, survei.kode);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  return (
+    <Kartu judul={`Pelatihan baru · ${survei.nama}`} ket="dibuat di bawah survei ini">
+      <div className="grid gap-2.5 sm:grid-cols-[1fr_auto_auto]">
+        <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
+          Nama pelatihan
+          <input className={`${INPUT} mt-1 w-full`} value={nama} maxLength={120} onChange={(e) => setNama(e.target.value)} disabled={sibuk} />
+        </label>
+        <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
+          Mulai
+          <input type="date" className={`${INPUT} mt-1 w-full`} value={mulai} onChange={(e) => setMulai(e.target.value)} disabled={sibuk} />
+        </label>
+        <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
+          Selesai (boleh kosong)
+          <input type="date" className={`${INPUT} mt-1 w-full`} value={selesai} min={mulai || undefined} onChange={(e) => setSelesai(e.target.value)} disabled={sibuk} />
+        </label>
+      </div>
+      <p className="mt-2 text-[12px] leading-snug text-[#6B7A90]">
+        Pretest dan posttest dibuat otomatis dalam keadaan <b>tidak aktif</b> (buka pukul 07.00 hari pertama, tutup 22.00 hari terakhir, 15 menit); unggah soal dan setel jadwalnya di tab Soal &amp; Jadwal. Pengelola pelatihan pada survei ini otomatis mendapat akses ke pelatihan baru.
+        Peserta ditambahkan lewat penugasan.
+      </p>
+      {galat && <p className="mt-2 text-[13px] font-bold text-[#B42329]">{galat}</p>}
+      <div className="mt-3 flex justify-end gap-2">
+        <button type="button" className={BTN_O} onClick={onBatal} disabled={sibuk}>
+          Batal
+        </button>
+        <button type="button" className={BTN_G} onClick={simpan} disabled={sibuk || !v.ok} title={!v.ok ? v.error : undefined}>
+          {sibuk ? "Membuat…" : "Buat pelatihan"}
+        </button>
+      </div>
+    </Kartu>
   );
 }
 
 /** Isi halaman bila survei terpilih belum punya pelatihan. */
-export function SurveiTanpaPelatihan({ nama }: { nama: string }) {
+export function SurveiTanpaPelatihan({ nama, bolehBuat = false }: { nama: string; bolehBuat?: boolean }) {
   return (
     <Kartu judul={`${nama}: belum ada pelatihan`} ket="belum ada yang bisa dikelola">
       <p className="text-[13px] leading-relaxed text-[#33455F]">
         Survei ini belum memiliki pelatihan. Pelatihan dikelola sebagai kegiatan berjenis <b>pelatihan</b> di bawah survei, lengkap dengan soal pretest/posttest, jadwal, presensi, dan nilai akhir.
-        Setelah pelatihannya dibuat dan ditautkan ke survei ini, pelatihan itu langsung muncul di sini. Pilih survei lain pada pilihan di atas untuk melanjutkan.
+        {bolehBuat ? "Gunakan tombol “＋ Pelatihan baru” di atas untuk membuatnya; pelatihan itu langsung muncul di sini." : "Hanya admin atau PJ survei ini yang dapat membuat pelatihan; hubungi mereka bila pelatihannya perlu dibuat."} Pilih survei lain pada pilihan di atas untuk melanjutkan.
       </p>
     </Kartu>
   );

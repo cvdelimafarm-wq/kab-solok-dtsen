@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun, lingkup } from "@/lib/sigapAkses";
-import { susunSurvei, type StatusPelatihan } from "@/lib/sigapPelatihanSurvei";
+import { bolehBuatPelatihan, susunSurvei, type StatusPelatihan } from "@/lib/sigapPelatihanSurvei";
 import { KODE_KEGIATAN_PELATIHAN } from "@/lib/sigapTes";
 import { akunDariRequest, dbAdmin } from "@/lib/sigapTesDb";
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const akun = await akunDariRequest(req, db);
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
 
-  const [{ izin }, { data: keg }, { data: induk }] = await Promise.all([
+  const [{ izin, peran }, { data: keg }, { data: induk }] = await Promise.all([
     izinAkun(db, akun.id),
     db.from("sigap_kegiatan").select("id, kode, nama, tanggal_mulai, tanggal_selesai, aktif").eq("jenis", "pelatihan").order("tanggal_mulai", { ascending: false }),
     db.from("sigap_induk").select("kode, nama, kegiatan_ids, urutan").eq("aktif", true).order("urutan"),
@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
   const terlihat = ((keg ?? []) as Keg[]).filter((k) => boleh(izin, "pelatihan.kelola", "lihat", k.id));
   const lingkupAkun = lingkup(izin, "pelatihan.kelola");
   const indukRingkas = ((induk ?? []) as { kode: unknown; nama: unknown; kegiatan_ids: unknown }[]).map((i) => ({ kode: String(i.kode), nama: String(i.nama), kegiatan_ids: (i.kegiatan_ids as (number | string)[] | null) ?? null }));
-  if (terlihat.length === 0) return NextResponse.json({ grup: [], survei: susunSurvei(indukRingkas, [], lingkupAkun) });
+  /** Menandai survei yang boleh dibuatkan pelatihan baru oleh akun ini (admin / PJ kegiatan yang lingkupnya mencakup survei). */
+  const dengBolehBuat = <T extends { kode: string }>(daftar: T[]): (T & { boleh_buat: boolean })[] =>
+    daftar.map((sv) => ({ ...sv, boleh_buat: bolehBuatPelatihan(peran, indukRingkas.find((x) => x.kode === sv.kode)?.kegiatan_ids ?? null) }));
+  if (terlihat.length === 0) return NextResponse.json({ grup: [], survei: dengBolehBuat(susunSurvei(indukRingkas, [], lingkupAkun)) });
 
   const ids = terlihat.map((k) => k.id);
   const { data: pen } = await db.from("sigap_penugasan").select("kegiatan_id").in("kegiatan_id", ids).eq("aktif", true);
@@ -68,6 +71,6 @@ export async function GET(req: NextRequest) {
   }
   const lain = terlihat.filter((k) => sisa.has(k.id));
   if (lain.length) grup.push({ induk_kode: null, induk_nama: "Pelatihan lainnya", pelatihan: lain.map(baris) });
-  const survei = susunSurvei(indukRingkas, terlihat.map((k) => baris(k)), lingkupAkun);
+  const survei = dengBolehBuat(susunSurvei(indukRingkas, terlihat.map((k) => baris(k)), lingkupAkun));
   return NextResponse.json({ grup, survei });
 }

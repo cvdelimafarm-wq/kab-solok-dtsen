@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KODE_SURVEI_LAIN, bacaParamKelola, cariSurvei, pilihPelatihanAwal, ringkasSurvei, susunSurvei, urlKelola, type PelatihanSurvei } from "@/lib/sigapPelatihanSurvei";
+import { KODE_SURVEI_LAIN, bacaParamKelola, bolehBuatPelatihan, cariSurvei, kodePelatihan, pilihPelatihanAwal, ringkasSurvei, susunSurvei, tesBawaan, urlKelola, validasiPelatihanBaru, type PelatihanSurvei } from "@/lib/sigapPelatihanSurvei";
 
 const p = (id: number, status: PelatihanSurvei["status"], mulai: string | null, peserta = 0): PelatihanSurvei => ({ id, kode: `k${id}`, nama: `Pelatihan ${id}`, tanggal_mulai: mulai, tanggal_selesai: mulai, status, peserta, boleh_kelola: true });
 
@@ -71,5 +71,62 @@ describe("alamat", () => {
     expect(cariSurvei(d, null, "b")?.kode).toBe("b");
     expect(cariSurvei(d, 99, "b")?.kode).toBe("b");
     expect(cariSurvei(d, null, null)).toBeNull();
+  });
+});
+
+describe("bolehBuatPelatihan", () => {
+  it("admin lingkup semua dan PJ yang lingkupnya mencakup survei boleh", () => {
+    expect(bolehBuatPelatihan([{ kode: "admin_aplikasi", kegiatan_id: null }], [2])).toBe(true);
+    expect(bolehBuatPelatihan([{ kode: "pj_kegiatan", kegiatan_id: 2 }], ["2"])).toBe(true);
+    expect(bolehBuatPelatihan([{ kode: "admin_anggaran", kegiatan_id: 2 }], [2])).toBe(true);
+  });
+  it("PJ di survei lain, peran non-pembuat, atau tanpa peran tidak boleh", () => {
+    expect(bolehBuatPelatihan([{ kode: "pj_kegiatan", kegiatan_id: 2 }], [1, 3])).toBe(false);
+    expect(bolehBuatPelatihan([{ kode: "panitia_pelatihan", kegiatan_id: null }], [3])).toBe(false);
+    expect(bolehBuatPelatihan([{ kode: "pengelola_psp", kegiatan_id: 3 }], [1, 3])).toBe(false);
+    expect(bolehBuatPelatihan([], [3])).toBe(false);
+    expect(bolehBuatPelatihan([{ kode: "pj_kegiatan", kegiatan_id: 2 }], null)).toBe(false);
+  });
+});
+
+describe("validasiPelatihanBaru", () => {
+  it("menerima isian sah; selesai kosong = mulai; spasi dirapikan", () => {
+    expect(validasiPelatihanBaru({ nama: "  Pelatihan   Petugas SPDT NTP ", tanggal_mulai: "2026-11-10", tanggal_selesai: "" })).toEqual({ ok: true, data: { nama: "Pelatihan Petugas SPDT NTP", tanggal_mulai: "2026-11-10", tanggal_selesai: "2026-11-10" } });
+  });
+  it("menolak nama pendek/panjang, tanggal salah, selesai sebelum mulai, rentang > 60 hari", () => {
+    expect(validasiPelatihanBaru({ nama: "abc", tanggal_mulai: "2026-11-10" }).ok).toBe(false);
+    expect(validasiPelatihanBaru({ nama: "x".repeat(121), tanggal_mulai: "2026-11-10" }).ok).toBe(false);
+    expect(validasiPelatihanBaru({ nama: "Pelatihan Baru", tanggal_mulai: "10-11-2026" }).ok).toBe(false);
+    expect(validasiPelatihanBaru({ nama: "Pelatihan Baru", tanggal_mulai: "2026-02-30" }).ok).toBe(false);
+    expect(validasiPelatihanBaru({ nama: "Pelatihan Baru", tanggal_mulai: "2026-11-10", tanggal_selesai: "2026-11-09" }).ok).toBe(false);
+    expect(validasiPelatihanBaru({ nama: "Pelatihan Baru", tanggal_mulai: "2026-11-10", tanggal_selesai: "2027-02-01" }).ok).toBe(false);
+    expect(validasiPelatihanBaru(null).ok).toBe(false);
+  });
+});
+
+describe("kodePelatihan", () => {
+  it("huruf kecil, tanpa tanda baca, memuat kode survei dan tahun", () => {
+    expect(kodePelatihan("spdt_ntp", "Pelatihan Petugas SPDT NTP 2026!", "2026-11-10")).toBe("pelatihan_spdt_ntp_pelatihan_petugas_spdt_ntp_2026_2026");
+    expect(kodePelatihan("a", "Café Ünik", "2027-01-01")).toBe("pelatihan_a_cafe_unik_2027");
+  });
+  it("tidak melebihi 80 karakter dan tidak berakhir garis bawah", () => {
+    const k = kodePelatihan("x".repeat(60), "y".repeat(100), "2026-01-01");
+    expect(k.length).toBeLessThanOrEqual(80);
+    expect(k.endsWith("_")).toBe(false);
+  });
+});
+
+describe("tesBawaan", () => {
+  it("dua tes tidak aktif, buka 07.00 WIB hari mulai, tutup 22.00 WIB hari selesai", () => {
+    const t = tesBawaan("Pelatihan X", "2026-11-10", "2026-11-12");
+    expect(t.map((x) => x.jenis)).toEqual(["pretest", "posttest"]);
+    expect(t[0].buka_at).toBe("2026-11-10T00:00:00.000Z");
+    expect(t[0].tutup_at).toBe("2026-11-12T15:00:00.000Z");
+    expect(t.every((x) => x.aktif === false && x.wajib_lulus === false && x.durasi_menit === 15 && x.ulang_maks === 1)).toBe(true);
+    expect(Date.parse(t[0].tutup_at)).toBeGreaterThan(Date.parse(t[0].buka_at));
+  });
+  it("sehari penuh tetap valid (tutup sesudah buka)", () => {
+    const t = tesBawaan("Pelatihan X", "2026-11-10", "2026-11-10");
+    expect(Date.parse(t[1].tutup_at)).toBeGreaterThan(Date.parse(t[1].buka_at));
   });
 });

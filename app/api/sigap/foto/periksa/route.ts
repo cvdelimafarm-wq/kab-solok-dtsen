@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const admin = await adalahAdminFoto(db, akunId);
   let q = db
     .from("sigap_foto")
-    .select("id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa")
+    .select("id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, waktu_hp, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa")
     .eq("status_periksa", "belum")
     .in("kepercayaan", ["kuning", "merah"])
     .order("diambil_at", { ascending: false })
