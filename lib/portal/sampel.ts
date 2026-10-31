@@ -7,6 +7,7 @@
 import type { Db } from "@/lib/sigap";
 import { penugasanAkun } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
+import { peringatanWilayah } from "@/lib/wilayah/wilayah";
 import {
   KONFIG_SAMPEL_AWAL, bacaKonfigSampel, cocokkanPetugasSampel, kelompokPpl, ketModulSampel, periksaAlokasi, periksaBarisSampel, periksaPermintaanGanti, rekapSampel,
   type BarisSampelCocok, type DataSampelAdmin, type DataSampelSaya, type GalatBaris, type InfoSampel, type Kandidat, type KonfigSampel, type Pemetaan, type RekapSampel, type RiwayatUnggah, type SampelRow,
@@ -182,7 +183,10 @@ const bentukJson = (b: BarisSampelCocok) => ({
 async function siapkanBaris(db: Db, kegiatanId: number, mentah: unknown) {
   if (!Array.isArray(mentah)) throw new GalatSampel("Isi berkas tidak terbaca.");
   const baris = mentah.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x));
-  const periksa = periksaBarisSampel(baris);
+  const periksa0 = periksaBarisSampel(baris);
+  // Master wilayah tertanam di kode: kode yang tidak ada di master jadi peringatan (baris tetap masuk, PJ yang memutuskan).
+  const wilayah = peringatanWilayah(periksa0.baris.map((x) => x.kode_wilayah), periksa0.nomor);
+  const periksa = { ...periksa0, peringatan: [...periksa0.peringatan, ...wilayah].sort((x, y) => x.baris - y.baris) };
   const [petugas, konfig] = await Promise.all([petugasKegiatan(db, kegiatanId), muatKonfigSampel(db, kegiatanId)]);
   const cocok = cocokkanPetugasSampel(periksa.baris, petugas.ppl, petugas.pml, periksa.nomor);
   const namaAkun = new Map<number, string>([...petugas.ppl, ...petugas.pml].map((p) => [p.id, p.nama]));
