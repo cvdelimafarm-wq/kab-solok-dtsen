@@ -26,6 +26,7 @@ import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hu
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
 import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (tampil bila diaktifkan panitia)
+import KartuKelas from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -1019,6 +1020,7 @@ export default function HalamanPelatihan() {
             </ol>
           </Kartu>
           {/* (9 Okt 2026) Transport Lokal pelatihan ada di dalam tahap Pelatihan */}
+          <KartuKelas />
           <KartuKuisPra />
           <KartuTranslokPelatihan />
           <div className="rounded-[14px] border border-[#DDE6F3] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5B6B84]">

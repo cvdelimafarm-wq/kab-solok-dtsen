@@ -16,6 +16,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import KuisPraKelola from "./kuisPra"; // (31 Okt 2026) tab Kuis Pra
+import KelasIdentKelola from "./kelasIdent"; // (1 Nov 2026) tab Kelas (perencanaan, hanya baca)
 import PengumumanKelola from "./pengumuman";
 import RapatKelola from "./rapat"; // (9 Okt 2026) tab Rapat Zoom
 import NotifikasiKelola from "./notifikasi";
@@ -46,7 +47,7 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring" | "kuis" | "kuispra" | "administrasi" | "pengumuman" | "notifikasi" | "rapat";
+type TabK = "soal" | "monitoring" | "kuis" | "kuispra" | "kelas" | "administrasi" | "pengumuman" | "notifikasi" | "rapat";
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
@@ -137,7 +138,7 @@ export default function KelolaPelatihan() {
     if (!bacaSesi()) return keMasuk();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring" || t === "kuis" || t === "kuispra" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat") setTab(t);
+      if (t === "monitoring" || t === "kuis" || t === "kuispra" || t === "kelas" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat") setTab(t);
     } catch {
       /* abaikan */
     }
@@ -189,6 +190,7 @@ export default function KelolaPelatihan() {
         { kode: "rapat", label: "🎥 Rapat Zoom" },
         { kode: "notifikasi", label: "🔔 Notifikasi" },
         { kode: "monitoring", label: "Monitoring" },
+        { kode: "kelas", label: "🏫 Kelas" },
         { kode: "kuispra", label: "🧠 Kuis Pra" },
         { kode: "administrasi", label: "🗂 Administrasi" },
       ]}
@@ -217,6 +219,7 @@ export default function KelolaPelatihan() {
       {ringkas && tab === "notifikasi" && <NotifikasiKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisLive key={kegId ?? 0} bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
+      {ringkas && tab === "kelas" && <KelasIdentKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuispra" && <KuisPraKelola key={kegId ?? 0} />}
       {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
