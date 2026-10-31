@@ -61,8 +61,9 @@ export default function KartuSurvei({ k, sibuk, onSso }: { k: KartuBeranda; sibu
             <b className="block text-[14.5px] font-extrabold leading-tight text-[#0F2A52]">{poinKegiatanSelanjutnya(k.poin.kode) ? `Selanjutnya: ${k.poin.judul}` : k.poin.judul}</b>
             {k.poin.uraian && <span className="mt-0.5 block text-[12.5px] leading-snug text-[#55657D]">{k.poin.uraian}</span>}
           </span>
-          <Link href={k.poin.href} className={`inline-flex min-h-[44px] flex-none items-center rounded-[12px] px-3.5 text-[13px] font-extrabold ${TOMBOL[k.poin.nada]}`}>
-            {k.poin.aksi}
+          {/* (31 Okt 2026) Tombol kartu SELALU "Masuk" (permintaan user): tujuan tetap tugas yang disebut di sebelah kirinya; kata aksi aslinya hanya untuk pembaca layar */}
+          <Link href={k.poin.href} aria-label={`Masuk: ${k.poin.aksi}`} className={`inline-flex min-h-[44px] flex-none items-center rounded-[12px] px-4 text-[13px] font-extrabold ${TOMBOL[k.poin.nada]}`}>
+            Masuk
           </Link>
         </div>
       )}
