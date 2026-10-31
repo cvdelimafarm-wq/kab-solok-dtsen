@@ -4,9 +4,10 @@
 //
 // (29 Okt 2026) Tab "QC" untuk Supervisor SPDT NTP (BACA SAJA). Tampilan di dalamnya:
 //  - Tim: hasil per PML (PPL yang KK-nya di dua PML tampil di kedua PML) + soal yang paling sering salah.
-//  - Petugas: daftar semua peserta dengan percobaan, nilai, status push dan modal; penyaring peran/status/PML/nama.
+//  - Petugas: daftar semua peserta dengan jumlah percobaan dan pergerakan nilai (P1 → Pn); penyaring peran/status/PML/nama. Status modal/push tidak ditampilkan.
 //  - Matriks: baris = soal, kolom = petugas (sama dengan Hasil QC di Lembar Supervisi Pasca Bencana).
-//  - Monitoring: apakah modal wajib sudah sampai ke petugas (sudah membuka SIGAP sejak soal dirilis) dan apakah push masuk.
+//  - Infografis: infografis hasil QC + tabel yang sama dengan Kelola Pendataan (InfografisQc, TabelQc); ketuk batang = tabel tersaring.
+//    (31 Okt 2026) Menggantikan tampilan "Monitoring" (modal wajib dan push) yang tidak dipakai Supervisor. Periode: per tanggal, rentang tanggal, semua periode (seperti Kelola).
 // (31 Okt 2026) Disamakan dan dipadatkan dengan tab QC Pasca Bencana (app/portal/qc/QcBersama.tsx):
 //  - kartu ringkasan = saringan: "Sudah mengisi" -> tampilkan yang belum mengisi, "Lulus" -> tampilkan yang belum lulus (lib/sigapQcSaring.ts); berlaku di Tim, Petugas, Matriks;
 //  - chip "Semua / Belum mengisi / Belum lulus" dan opsi status yang sama di daftar Petugas dihapus (duplikat kartu);
@@ -21,6 +22,14 @@ import { API_SPDT_QC, jamWib, judulKata, type HasilQcSpdt } from "@/lib/spdtNtp"
 import { SARINGAN_AWAL, susunHasil, type HasilQc } from "@/lib/korwilHasilQc";
 import { LABEL_KARTU, ketukKartu, lolosKartuPetugas, type KartuQc } from "@/lib/sigapQcSaring";
 import Ik from "./Ik";
+import InfografisQc from "@/app/sigap/kelola/pendataan/InfografisQc";
+import TabelQc from "@/app/sigap/kelola/pendataan/TabelQc";
+import RekapRentangQc from "@/app/sigap/kelola/pendataan/RekapRentangQc";
+import RekapSemuaQc from "@/app/sigap/kelola/pendataan/RekapSemuaQc";
+import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "@/app/sigap/kelola/pendataan/PeriodeQc";
+import { jumlahKolomNilai, susunBarisQc, type BarisQc, type FokusQc } from "@/lib/sigapQcTabel";
+import { Pergerakan } from "@/app/sigap/kelola/pendataan/BatangQc";
+import { rentangTerakhir } from "@/lib/sigapQcRentang";
 import { IsiRincianQc } from "@/app/portal/qc/RincianQc";
 import { BarisSaring, IsiSoal, KartuSaring, LembarBawah, MatriksQc } from "@/app/portal/qc/QcBersama";
 
@@ -32,8 +41,8 @@ function tglPendek(iso: string): string {
   return `${HARI[h]}, ${d} ${BULAN[m - 1]}`;
 }
 
-type Lihat = "tim" | "petugas" | "matriks" | "monitoring";
-const LABEL_LIHAT: Record<Lihat, string> = { tim: "Tim", petugas: "Petugas", matriks: "Matriks", monitoring: "Monitoring" };
+type Lihat = "infografis" | "tim" | "petugas" | "matriks";
+const LABEL_LIHAT: Record<Lihat, string> = { infografis: "Infografis", tim: "Tim", petugas: "Petugas", matriks: "Matriks" };
 type Lembar = { jenis: "petugas"; akun: number } | { jenis: "soal"; soal: string; akun: number | null };
 const SELECT = "h-10 min-w-0 flex-1 rounded-[10px] border border-[#DCE5F2] bg-white px-2 text-[12.5px] font-semibold text-[#0F2A52] outline-none";
 const CHIP_ON = "border-[#1F5FD1] bg-[#1F5FD1] text-white";
@@ -44,9 +53,6 @@ const BARIS = "flex min-h-[44px] w-full items-center gap-2 px-3 text-left";
 const STATUS_OPSI: [SaringPetugas["status"], string][] = [
   ["semua", "Semua status"],
   ["lulus", "Lulus"],
-  ["modal_belum", "Modal belum sampai"],
-  ["tanpa_push", "Tanpa push aktif"],
-  ["push_belum_dikirim", "Push rilis belum tercatat"],
 ];
 
 /** "PML 2/15 · PPL 0/40": angka dipisah per peran supaya tidak tercampur. */
@@ -58,22 +64,16 @@ function Rinci({ pml, ppl, ambil }: { pml: HitunganPeran; ppl: HitunganPeran; am
   );
 }
 
-function Bilah({ n, dari, warna = "#1F5FD1" }: { n: number; dari: number; warna?: string }) {
-  const p = dari > 0 ? Math.min(1, n / dari) : 0;
-  return (
-    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E3E8F0]" role="img" aria-label={`${n} dari ${dari}`}>
-      <div className="h-full rounded-full" style={{ width: `${Math.round(p * 100)}%`, background: warna }} />
-    </div>
-  );
-}
-
 const warnaStatus = (percobaan: number, lulus: boolean) => (percobaan === 0 ? "text-[#B42329]" : lulus ? "text-[#13794B]" : "text-[#8A4B08]");
 
 export default function QcSpdt({ aktif }: { aktif: boolean }) {
   const [d, setD] = useState<HasilQcSpdt | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [tanggal, setTanggal] = useState<string | null>(null);
-  const [lihat, setLihat] = useState<Lihat>("tim");
+  const [lihat, setLihat] = useState<Lihat>("infografis");
+  const [mode, setMode] = useState<ModePeriode>("hari");
+  const [rentangPilih, setRentangPilih] = useState<Rentang | null>(null);
+  const [fokus, setFokusState] = useState<FokusQc | null>(null);
   const [kartu, setKartu] = useState<KartuQc | null>(null);
   const [f, setF] = useState<SaringPetugas>({ peran: "semua", status: "semua", pml: "semua", cari: "" });
   const [muatUlang, setMuatUlang] = useState(false);
@@ -96,6 +96,16 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
     if (aktif) void muat(tanggal);
   }, [aktif, tanggal, muat]);
 
+  const kolomQc = useMemo(() => jumlahKolomNilai(d?.maks_percobaan ?? 4, d?.rincian), [d]);
+  const barisQc = useMemo(() => (d ? susunBarisQc(d.rekap, d.rincian, kolomQc) : []), [d, kolomQc]);
+  // kartu ringkasan (belum mengisi / belum lulus) juga menyaring tabel di tampilan Infografis; batang infografis tetap menghitung semua petugas
+  const barisPeta = useMemo(() => new Map(barisQc.map((b) => [b.akun_id, b])), [barisQc]);
+  const barisTabel = useMemo(() => barisQc.filter((b) => lolosKartuPetugas(kartu, b)), [barisQc, kartu]);
+  // ketuk batang infografis = tabel di bawahnya tersaring ke orang-orang itu, lalu layar bergulir ke tabel
+  const setFokus = useCallback((f: FokusQc | null) => {
+    setFokusState(f);
+    if (f) setTimeout(() => document.getElementById("tabel-qc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }, []);
   const tutup = useCallback(() => setLembar(null), []);
   const ketuk = useCallback((k: KartuQc) => setKartu((s) => ketukKartu(s, k)), []);
   const peta = useMemo(() => new Map((d?.petugas ?? []).map((p) => [p.akun_id, p])), [d]);
@@ -144,12 +154,18 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
 
   // hari yang bisa dipilih: yang sudah terbentuk + hari berlaku (walau belum terbentuk)
   const hariPilih = d.hari_berlaku && !d.hari_ada.includes(d.hari_berlaku) ? [d.hari_berlaku, ...d.hari_ada] : d.hari_ada;
+  const hariIni = d.hari_berlaku ?? hariIniWib(d.sekarang);
+  const rentang = rentangPilih ?? rentangTerakhir(hariIni, 7);
+  const bukaHariDari = (t: string) => {
+    setTanggal(t);
+    setMode("hari");
+  };
   const m = d.monitoring;
   const belum = m.peserta - m.sudah_mengisi;
   const pm = m.per_peran.pml;
   const pp = m.per_peran.ppl;
   const adaSaringAtas = f.peran !== "semua" || f.status !== "semua" || f.pml !== "semua" || f.cari !== "";
-  const jumlahTampil = lihat === "petugas" ? petugas.length : lihat === "matriks" ? (hasilMat?.matriks.kolom.length ?? 0) : tim.reduce((a, t) => a + t.ppl.length + (t.pml_akun_id != null && t.pmlTampil ? 1 : 0), 0);
+  const jumlahTampil = lihat === "infografis" ? barisTabel.length : lihat === "petugas" ? petugas.length : lihat === "matriks" ? (hasilMat?.matriks.kolom.length ?? 0) : tim.reduce((a, t) => a + t.ppl.length + (t.pml_akun_id != null && t.pmlTampil ? 1 : 0), 0);
   const kolomLembar = barisSemua?.matriks.kolom ?? [];
   const barisSoal = lembar?.jenis === "soal" && barisSemua ? barisSemua.matriks.baris.find((b) => b.soal.id === lembar.soal) ?? null : null;
   const namaLembar = lembar ? judulKata(peta.get(lembar.akun ?? -1)?.nama ?? kolomLembar.find((p) => p.akun_id === lembar.akun)?.nama ?? "") : "";
@@ -161,15 +177,28 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
         <p className="rounded-[16px] bg-white px-4 py-8 text-center text-[13.5px] leading-snug text-[#55657D]">{d.aktif ? "Belum ada soal QC yang dirilis." : "QC Pemahaman SPDT NTP belum diaktifkan."}</p>
       ) : (
         <>
-          <div className="-mx-2.5 flex gap-1.5 overflow-x-auto px-2.5 pb-0.5" role="tablist" aria-label="Pilih hari QC">
-            {hariPilih.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={d.hari === t} onClick={() => setTanggal(t)} className={`h-9 flex-none whitespace-nowrap rounded-full border-[1.5px] px-3 text-[12.5px] font-semibold ${d.hari === t ? CHIP_ON : CHIP_OFF}`}>
-                {tglPendek(t)}
-                {t === d.hari_berlaku ? " · hari ini" : ""}
+          {mode === "hari" ? (
+            <div className="-mx-2.5 flex gap-1.5 overflow-x-auto px-2.5 pb-0.5" role="tablist" aria-label="Pilih hari QC">
+              {hariPilih.map((t) => (
+                <button key={t} type="button" role="tab" aria-selected={d.hari === t} onClick={() => setTanggal(t)} className={`h-9 flex-none whitespace-nowrap rounded-full border-[1.5px] px-3 text-[12.5px] font-semibold ${d.hari === t ? CHIP_ON : CHIP_OFF}`}>
+                  {tglPendek(t)}
+                  {t === d.hari_berlaku ? " · hari ini" : ""}
+                </button>
+              ))}
+              <button type="button" onClick={() => setMode("rentang")} className="h-9 flex-none whitespace-nowrap rounded-full border-[1.5px] border-dashed border-[#1F5FD1] bg-white px-3 text-[12.5px] font-bold text-[#1F5FD1]">
+                Rentang tanggal
               </button>
-            ))}
-          </div>
-
+              <button type="button" onClick={() => setMode("semua")} className="h-9 flex-none whitespace-nowrap rounded-full border-[1.5px] border-dashed border-[#1F5FD1] bg-white px-3 text-[12.5px] font-bold text-[#1F5FD1]">
+                Semua periode
+              </button>
+            </div>
+          ) : (
+            <PeriodeQc mode={mode} onMode={setMode} hari={d.hari} hariAda={d.hari_ada} hariBerlaku={d.hari_berlaku} sekarang={d.sekarang} sibuk={muatUlang} onHari={(t) => setTanggal(t)} rentang={rentang} onRentang={setRentangPilih} />
+          )}
+          {mode === "rentang" && <RekapRentangQc kegiatanId={d.kegiatan_id} api={API_SPDT_QC} rentang={rentang} onBukaHari={bukaHariDari} />}
+          {mode === "semua" && <RekapSemuaQc kegiatanId={d.kegiatan_id} api={API_SPDT_QC} onBukaHari={bukaHariDari} />}
+          {mode === "hari" && (
+            <>
           <KartuSaring
             item={[
               { kunci: "isi", angka: `${m.sudah_mengisi}/${m.peserta}`, label: "Sudah mengisi", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.sudah_mengisi} />, aktif: kartu === "belum_mengisi", petunjuk: "Ketuk untuk menampilkan yang belum mengisi.", onKlik: () => ketuk("belum_mengisi") },
@@ -311,7 +340,7 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
               {petugas.length === 0 && <p className="rounded-[16px] bg-white px-4 py-6 text-center text-[13.5px] text-[#55657D]">Tidak ada petugas yang cocok dengan penyaring ini.</p>}
               <ul className="divide-y divide-[#EEF2F7] overflow-hidden rounded-[14px] border border-[#D9E2F1] bg-white">
                 {petugas.map((p) => (
-                  <BarisPetugas key={p.akun_id} p={p} d={d} onBuka={() => setLembar({ jenis: "petugas", akun: p.akun_id })} />
+                  <BarisPetugas key={p.akun_id} p={p} d={d} baris={barisPeta.get(p.akun_id)} onBuka={() => setLembar({ jenis: "petugas", akun: p.akun_id })} />
                 ))}
               </ul>
             </>
@@ -336,84 +365,18 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
             </>
           )}
 
-          {lihat === "monitoring" && (
+          {lihat === "infografis" && (
             <>
-              {m.peringatan_penjadwal && (
-                <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[12.5px] leading-snug text-[#7A1D22]">
-                  Jam rilis sudah lewat lebih dari 15 menit tetapi belum ada catatan push rilis. Penjadwal (cron) kemungkinan belum berjalan, jadi petugas baru melihat soal ketika membuka SIGAP sendiri.
-                </p>
+              {d.rekap.length === 0 ? (
+                <p className="rounded-[16px] bg-white px-4 py-6 text-center text-[13.5px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
+              ) : (
+                <>
+                  <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={d.nilai_lulus} kolom={kolomQc} onFokus={setFokus} />
+                  <TabelQc baris={barisTabel} kolom={kolomQc} rincian={d.rincian} nilaiLulus={d.nilai_lulus} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
+                </>
               )}
-              <div className="rounded-[16px] border border-[#D9E2F1] bg-white px-3.5 py-3">
-                <h3 className="text-[13.5px] font-extrabold text-[#0F2A52]">Modal wajib menjawab soal</h3>
-                <p className="mt-0.5 text-[12px] leading-snug text-[#55657D]">Modal muncul begitu petugas membuka SIGAP setelah soal dirilis dan memblokir layar sampai lulus.</p>
-                <div className="mt-2 text-[13px]">
-                  <div className="flex justify-between">
-                    <span>Sudah muncul (membuka SIGAP / menjawab / menunda)</span>
-                    <b className="tabular-nums">
-                      {m.modal_sampai}/{m.peserta}
-                    </b>
-                  </div>
-                  <Bilah n={m.modal_sampai} dari={m.peserta} />
-                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
-                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.modal_sampai} />
-                  </p>
-                  <div className="mt-2 flex justify-between">
-                    <span>Sudah mengisi</span>
-                    <b className="tabular-nums">
-                      {m.sudah_mengisi}/{m.peserta}
-                    </b>
-                  </div>
-                  <Bilah n={m.sudah_mengisi} dari={m.peserta} warna="#13794B" />
-                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
-                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.sudah_mengisi} />
-                  </p>
-                  <p className="mt-2 text-[12px] text-[#55657D]">
-                    Belum membuka SIGAP sejak rilis: <b className={m.belum_buka > 0 ? "text-[#B42329]" : "text-[#13794B]"}>{m.belum_buka} petugas</b> (PML {pm.belum_buka} · PPL {pp.belum_buka}). Yang menekan &ldquo;ingatkan lagi&rdquo;: {m.tunda}.
-                  </p>
-                </div>
-              </div>
-              <div className="rounded-[16px] border border-[#D9E2F1] bg-white px-3.5 py-3">
-                <h3 className="text-[13.5px] font-extrabold text-[#0F2A52]">Push notifikasi</h3>
-                <p className="mt-0.5 text-[12px] leading-snug text-[#55657D]">&ldquo;Tercatat dikirim&rdquo; = dicatat penjadwal sebelum mengirim; belum tentu sudah dibuka petugas.</p>
-                <div className="mt-2 text-[13px]">
-                  <div className="flex justify-between">
-                    <span>Punya perangkat dengan push aktif</span>
-                    <b className="tabular-nums">
-                      {m.push_aktif}/{m.peserta}
-                    </b>
-                  </div>
-                  <Bilah n={m.push_aktif} dari={m.peserta} />
-                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
-                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_aktif} />
-                  </p>
-                  <div className="mt-2 flex justify-between">
-                    <span>Push rilis tercatat dikirim</span>
-                    <b className={`tabular-nums ${m.push_rilis_dikirim === 0 ? "text-[#B42329]" : ""}`}>
-                      {m.push_rilis_dikirim}/{m.peserta}
-                    </b>
-                  </div>
-                  <Bilah n={m.push_rilis_dikirim} dari={m.peserta} warna={m.push_rilis_dikirim === 0 ? "#B42329" : "#1F5FD1"} />
-                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
-                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_rilis_dikirim} />
-                  </p>
-                  <div className="mt-2 flex justify-between">
-                    <span>Pernah dikirimi pengingat</span>
-                    <b className="tabular-nums">
-                      {m.push_ingat_dikirim}/{m.peserta}
-                    </b>
-                  </div>
-                  <Bilah n={m.push_ingat_dikirim} dari={m.peserta} />
-                  <p className="mt-0.5 text-[11.5px] text-[#6B7A90]">
-                    <Rinci pml={pm} ppl={pp} ambil={(h) => h.push_ingat_dikirim} />
-                  </p>
-                  <p className="mt-2 text-[12px] text-[#55657D]">
-                    Penjadwal: <b className={m.penjadwal_terdeteksi ? "text-[#13794B]" : "text-[#B42329]"}>{m.penjadwal_terdeteksi ? "terdeteksi berjalan hari ini" : "belum ada catatan pengiriman hari ini"}</b>.
-                  </p>
-                </div>
-              </div>
-              <p className="rounded-[14px] border border-dashed border-[#C9D6EC] bg-white/60 px-3 py-2.5 text-[12px] leading-snug text-[#55657D]">
-                Petugas tertentu yang belum kena modal atau push dapat disaring di tampilan Petugas (status &ldquo;Modal belum sampai&rdquo;, &ldquo;Tanpa push aktif&rdquo;, &ldquo;Push rilis belum tercatat&rdquo;).
-              </p>
+            </>
+          )}
             </>
           )}
           <p className="px-1 text-[11.5px] leading-snug text-[#6B7A90]">Tampilan ini hanya untuk melihat hasil. Soal dan jadwal QC diatur di Kelola Pendataan (QC Pemahaman).</p>
@@ -422,7 +385,6 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
 
       {lembar?.jenis === "petugas" && (
         <LembarBawah judul={`Rincian ${namaLembar || "petugas"}`} onTutup={tutup}>
-          {peta.get(lembar.akun) && <DetailPush p={peta.get(lembar.akun)!} />}
           <IsiRincianQc akunId={lembar.akun} rincian={d.rincian} />
         </LembarBawah>
       )}
@@ -435,35 +397,33 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
   );
 }
 
-/** Status modal dan push satu petugas (di lembar rincian, bukan di setiap baris daftar). */
-function DetailPush({ p }: { p: PetugasQc }) {
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-0.5 rounded-[10px] bg-[#F5F8FD] px-3 py-2 text-[12px]">
-      <span className={p.modal_sampai ? "text-[#13794B]" : "text-[#B42329]"}>{p.modal_sampai ? `Modal sampai${p.buka_at ? ` · buka ${jamWib(p.buka_at)}` : ""}` : "Modal belum sampai"}</span>
-      <span className={p.perangkat > 0 && !p.push_bermasalah ? "text-[#13794B]" : "text-[#B42329]"}>{p.perangkat === 0 ? "Tanpa push aktif" : p.push_bermasalah ? "Push gagal berulang" : `Push aktif (${p.perangkat})`}</span>
-      <span className={p.push_rilis_at ? "text-[#13794B]" : "text-[#8A4B08]"}>{p.push_rilis_at ? `Rilis terkirim ${jamWib(p.push_rilis_at)}` : "Rilis belum tercatat"}</span>
-      {p.push_ingat > 0 && <span className="text-[#55657D]">{p.push_ingat}× pengingat</span>}
-      {p.selesai_at && <span className="text-[#55657D]">selesai terakhir {jamWib(p.selesai_at)}</span>}
-    </div>
-  );
-}
-
-/** Satu baris per petugas (dua baris teks): nama, status, lalu ringkasan angka. Rincian lengkap di lembar bawah. */
-function BarisPetugas({ p, d, onBuka }: { p: PetugasQc; d: HasilQcSpdt; onBuka: () => void }) {
+/**
+ * Satu baris per petugas: nama + status, lalu jumlah percobaan dan PERGERAKAN NILAI (P1 → P2 …, batang mini, selisih). Status modal/push tidak ditampilkan
+ * (tidak dipakai Supervisor di HP). Rincian soal yang salah dibuka di lembar bawah.
+ */
+function BarisPetugas({ p, d, baris, onBuka }: { p: PetugasQc; d: HasilQcSpdt; baris: BarisQc | undefined; onBuka: () => void }) {
   const status = p.percobaan === 0 ? "Belum mengisi" : labelStatusPpl({ percobaan: p.percobaan, lulus: p.lulus, skor_terbaik: p.skor_terbaik }, d.maks_percobaan, d.nilai_lulus);
   const peran = p.peran === "pml" ? "PML" : "PPL";
+  const nilai = baris?.nilai ?? (p.skor_awal != null ? [p.skor_awal, ...(p.percobaan > 1 && p.skor_terbaik != null ? [p.skor_terbaik] : [])] : []);
+  const rantai = nilai.filter((n): n is number => n != null);
   return (
     <li>
-      <button type="button" onClick={onBuka} className="flex min-h-[48px] w-full items-center gap-2 px-3 py-1 text-left">
+      <button type="button" onClick={onBuka} className="flex min-h-[56px] w-full items-center gap-2 px-3 py-1.5 text-left">
         <span className="min-w-0 flex-1">
           <b className="block truncate text-[13px] text-[#0F2A52]">
             {judulKata(p.nama)} <span className="text-[10.5px] font-extrabold text-[#6B7A90]">{peran}</span>
             {p.peran === "ppl" && <span className="ml-1 text-[11px] font-normal text-[#6B7A90]">{p.pml_nama ? `· ${judulKata(p.pml_nama)}` : "· tanpa PML"}</span>}
           </b>
-          <span className="block truncate text-[11px] text-[#55657D]">
-            {p.percobaan}× · awal {p.skor_awal ?? "-"} · terbaik {p.skor_terbaik ?? "-"} ·{" "}
-            <span className={p.modal_sampai ? "" : "font-bold text-[#B42329]"}>{p.modal_sampai ? "modal ✓" : "modal ✕"}</span> ·{" "}
-            <span className={p.perangkat > 0 && !p.push_bermasalah ? "" : "font-bold text-[#B42329]"}>{p.perangkat === 0 ? "tanpa push" : p.push_bermasalah ? "push gagal" : "push ✓"}</span>
+          <span className="mt-0.5 flex items-center gap-2 text-[11.5px] text-[#55657D]">
+            <span className="flex-none tabular-nums">
+              <b className="text-[#0F2A52]">{p.percobaan}×</b> mencoba
+            </span>
+            {rantai.length > 0 && (
+              <>
+                <span className="min-w-0 truncate font-semibold tabular-nums text-[#0F2A52]">{rantai.join(" → ")}</span>
+                {rantai.length > 1 && <Pergerakan nilai={nilai} nilaiLulus={d.nilai_lulus} />}
+              </>
+            )}
           </span>
         </span>
         <span className={`flex-none text-right text-[12px] font-semibold ${warnaStatus(p.percobaan, p.lulus)}`}>

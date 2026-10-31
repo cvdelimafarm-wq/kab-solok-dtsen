@@ -41,7 +41,8 @@ function buatCsv(d: DataRentang, baris: BarisRentang[]): string {
   return "﻿" + [kepala, ...isi].map((r) => r.map(csvSel).join(",")).join("\r\n");
 }
 
-export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari }: { kegiatanId: number; rentang: Rentang; onBukaHari: (t: string) => void }) {
+// `api`: alamat lain (mis. /api/portal/spdt-qc untuk Supervisor SPDT NTP, tanpa ?k=); bawaan = API admin Kelola.
+export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari, api }: { kegiatanId: number; rentang: Rentang; onBukaHari: (t: string) => void; api?: string }) {
   const [d, setD] = useState<DataRentang | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
@@ -56,7 +57,7 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari }: { ke
       const n = ++nomor.current;
       setMemuat(true);
       try {
-        const r = await apiPortal<{ rentang: DataRentang }>(`${API}?k=${kegiatanId}&dari=${rentang.dari}&sampai=${rentang.sampai}`);
+        const r = await apiPortal<{ rentang: DataRentang }>(api ? `${api}?dari=${rentang.dari}&sampai=${rentang.sampai}` : `${API}?k=${kegiatanId}&dari=${rentang.dari}&sampai=${rentang.sampai}`);
         if (n !== nomor.current) return; // permintaan lebih baru sudah berjalan
         setD(r.rentang);
         setGalat(null);
@@ -67,7 +68,7 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari }: { ke
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [kegiatanId, rentang.dari, rentang.sampai, cek.ok]
+    [kegiatanId, api, rentang.dari, rentang.sampai, cek.ok]
   );
   useEffect(() => {
     void muat();

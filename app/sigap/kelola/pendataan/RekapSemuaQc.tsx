@@ -38,7 +38,8 @@ function buatCsv(d: DataSemua, baris: BarisSemua[]): string {
   return "﻿" + [kepala, ...isi].map((r) => r.map(csvSel).join(",")).join("\r\n");
 }
 
-export default function RekapSemuaQc({ kegiatanId, onBukaHari }: { kegiatanId: number; onBukaHari: (t: string) => void }) {
+// `api`: alamat lain (mis. /api/portal/spdt-qc untuk Supervisor SPDT NTP, tanpa ?k=); bawaan = API admin Kelola.
+export default function RekapSemuaQc({ kegiatanId, onBukaHari, api }: { kegiatanId: number; onBukaHari: (t: string) => void; api?: string }) {
   const [d, setD] = useState<DataSemua | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
@@ -50,7 +51,7 @@ export default function RekapSemuaQc({ kegiatanId, onBukaHari }: { kegiatanId: n
     const n = ++nomor.current;
     setMemuat(true);
     try {
-      const r = await apiPortal<{ semua: DataSemua }>(`${API}?k=${kegiatanId}&semua=1`);
+      const r = await apiPortal<{ semua: DataSemua }>(api ? `${api}?semua=1` : `${API}?k=${kegiatanId}&semua=1`);
       if (n !== nomor.current) return;
       setD(r.semua);
       setGalat(null);
@@ -59,7 +60,7 @@ export default function RekapSemuaQc({ kegiatanId, onBukaHari }: { kegiatanId: n
     } finally {
       if (n === nomor.current) setMemuat(false);
     }
-  }, [kegiatanId]);
+  }, [kegiatanId, api]);
   useEffect(() => {
     setD(null);
     void muat();
