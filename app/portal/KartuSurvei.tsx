@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import IkonMenu from "./IkonMenu";
-import { labelPeran, type KartuBeranda, type NadaPoin } from "@/lib/sigapBerandaKartu";
+import { labelPeran, poinKegiatanSelanjutnya, type KartuBeranda, type NadaPoin } from "@/lib/sigapBerandaKartu";
 
 const GARIS: Record<NadaPoin, string> = { merah: "border-[#D43A3A]", emas: "border-[#F4B400]", biru: "border-[#3B78E0]", abu: "border-[#C9D3E3]", hijau: "border-[#19A463]" };
 const TOMBOL: Record<NadaPoin, string> = { merah: "bg-[#B42329] text-white", emas: "bg-[#0F2A52] text-white", biru: "bg-[#1F5FD1] text-white", abu: "bg-[#EEF2F7] text-[#0F2A52]", hijau: "bg-[#E3F6EC] text-[#13794B]" };
@@ -58,7 +58,7 @@ export default function KartuSurvei({ k, sibuk, onSso }: { k: KartuBeranda; sibu
       {k.poin && !k.redup && (
         <div className={`mt-2 flex items-center gap-3 rounded-[14px] border-l-4 bg-[#F7FAFF] py-2.5 pl-3 pr-2.5 ${GARIS[k.poin.nada]}`}>
           <span className="min-w-0 flex-1">
-            <b className="block text-[14.5px] font-extrabold leading-tight text-[#0F2A52]">{k.poin.judul}</b>
+            <b className="block text-[14.5px] font-extrabold leading-tight text-[#0F2A52]">{poinKegiatanSelanjutnya(k.poin.kode) ? `Selanjutnya: ${k.poin.judul}` : k.poin.judul}</b>
             {k.poin.uraian && <span className="mt-0.5 block text-[12.5px] leading-snug text-[#55657D]">{k.poin.uraian}</span>}
           </span>
           <Link href={k.poin.href} className={`inline-flex min-h-[44px] flex-none items-center rounded-[12px] px-3.5 text-[13px] font-extrabold ${TOMBOL[k.poin.nada]}`}>

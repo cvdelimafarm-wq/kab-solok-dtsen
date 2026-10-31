@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RingkasHariIni } from "@/lib/sigapKegiatan";
 import {
   belumAdaKerja,
+  poinKegiatanSelanjutnya,
   hariKeN,
   hitungHariKerja,
   kartuBiasa,
@@ -170,6 +171,23 @@ describe("poin mendesak per peran", () => {
     const pilih = poinHariIni(hi({ adaJadwal: false, hariKerjaBerikut: null }), HREF);
     expect(pilih.kode).toBe("pilih_hari");
     expect(pilih.href).toBe("/sigap/translok/tok?p=7&tab=hari_kerja");
+  });
+});
+
+describe("tombol dan awalan Selanjutnya", () => {
+  it("tombol foto bertuliskan Masuk; tombol laporan/lembar tidak berubah", () => {
+    expect(poinHariIni(hi(), "/x").aksi).toBe("Masuk");
+    expect(poinHariIni(hi({ slot: [1, 2], laporanSudah: true }), "/x").aksi).toBe("Masuk");
+    expect(poinHariIni(hi({ slot: [1, 2] }), "/x").aksi).toBe("Buka laporan");
+    expect(poinHariIni(hi({ slot: [1, 2], peran: "pml" }), "/x").aksi).toBe("Buka lembar");
+    expect(poinHariIni(hi({ slot: [1, 2], peran: "supervisor" }), "/x").aksi).toBe("Buka lembar");
+  });
+  it("poin yang harus dikerjakan diberi awalan Selanjutnya; lengkap, libur, dan info tidak", () => {
+    for (const h of [hi(), hi({ slot: [1, 2] }), hi({ slot: [1, 2], laporanSudah: true })]) expect(poinKegiatanSelanjutnya(poinHariIni(h, "/x").kode)).toBe(true);
+    expect(poinKegiatanSelanjutnya(poinHariIni(hi({ adaJadwal: false, hariKerjaBerikut: null }), "/x").kode)).toBe(true);
+    expect(poinKegiatanSelanjutnya(poinHariIni(hi({ slot: [1, 2, 3, 4, 5], laporanSudah: true }), "/x").kode)).toBe(false);
+    expect(poinKegiatanSelanjutnya(poinHariIni(hi({ adaJadwal: false }), "/x").kode)).toBe(false);
+    expect(poinKegiatanSelanjutnya("info")).toBe(false);
   });
 });
 

@@ -121,6 +121,9 @@ export function peringatanMerah(h: RingkasHariIni | null | undefined, nowMs: num
 // ------------------------------------------------------------------------------------------------------------------------------ poin mendesak
 export type NadaPoin = "merah" | "emas" | "biru" | "abu" | "hijau";
 export type KodePoin = "foto_awal" | "laporan" | "sisa_foto" | "lengkap" | "libur" | "pilih_hari" | "info";
+/** Poin yang berupa kegiatan selanjutnya (ada yang harus dikerjakan): kartu menulis "Selanjutnya: " di depan judulnya. */
+export const poinKegiatanSelanjutnya = (kode: string): boolean => kode === "foto_awal" || kode === "laporan" || kode === "sisa_foto" || kode === "pilih_hari";
+
 export type Poin = { kode: KodePoin; nada: NadaPoin; judul: string; uraian: string; aksi: string; href: string };
 
 const namaSlot = (n: number, total: number): string => (total === 5 && NAMA_SLOT[n] ? `${n} ${NAMA_SLOT[n]}` : `${n}`);
@@ -143,7 +146,7 @@ export function poinHariIni(h: RingkasHariIni, hrefHariIni: string): Poin {
   const ada = new Set(h.slot);
   const awalKurang = SLOT_AWAL.filter((n) => n <= h.fotoTotal && !ada.has(n));
   if (awalKurang.length > 0) {
-    return { kode: "foto_awal", nada: "biru", judul: "Foto Transport Lokal dulu", uraian: `Foto awal belum lengkap: ${daftarSlot(awalKurang, h.fotoTotal)}.`, aksi: "Ambil foto", href: hrefHariIni };
+    return { kode: "foto_awal", nada: "biru", judul: "Foto Transport Lokal dulu", uraian: `Foto awal belum lengkap: ${daftarSlot(awalKurang, h.fotoTotal)}.`, aksi: "Masuk", href: hrefHariIni };
   }
   if (h.wajibLaporan && !h.laporanSudah) {
     const l = LABEL_LAPORAN[peran];
@@ -152,7 +155,7 @@ export function poinHariIni(h: RingkasHariIni, hrefHariIni: string): Poin {
   const sisa: number[] = [];
   for (let n = 1; n <= h.fotoTotal; n++) if (!ada.has(n)) sisa.push(n);
   if (sisa.length > 0) {
-    return { kode: "sisa_foto", nada: "biru", judul: `Lengkapi ${sisa.length} foto lagi`, uraian: `Foto yang tersisa: ${daftarSlot(sisa, h.fotoTotal)}.`, aksi: "Ambil foto", href: hrefHariIni };
+    return { kode: "sisa_foto", nada: "biru", judul: `Lengkapi ${sisa.length} foto lagi`, uraian: `Foto yang tersisa: ${daftarSlot(sisa, h.fotoTotal)}.`, aksi: "Masuk", href: hrefHariIni };
   }
   return { kode: "lengkap", nada: "hijau", judul: "Hari ini sudah lengkap", uraian: "Foto dan laporan hari ini terisi.", aksi: "Lihat", href: hrefHariIni };
 }
