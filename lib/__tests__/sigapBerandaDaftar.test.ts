@@ -84,3 +84,12 @@ describe("pelatihan di luar kegiatan induk", () => {
     expect(d[0]).toMatchObject({ jenis: "pelatihan", poin: { judul: "Baca undangan pelatihan" } });
   });
 });
+
+describe("kartu lain tanpa informasi", () => {
+  it("keterangan generik 'Buka' tidak dijadikan poin (kartu hanya bisa diketuk)", () => {
+    const k: RingkasKegiatan = { id: "penyisiran", judul: "Penyisiran SE2026", pendek: "Penyisiran SE2026", ikon: "peta", nada: "biru", pecahan: null, selesai: null, total: null, sub: "Buka", peringatan: false, href: null, sso: "penyisiran" };
+    const d = susunDaftarKartu({ kegiatan: [k], induk: null, keg: null, tugasPelatihan: null, nowMs: NOW });
+    expect(d[0].poin).toBeNull();
+    expect(d[0].sso).toBe("penyisiran");
+  });
+});
