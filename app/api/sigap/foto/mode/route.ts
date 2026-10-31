@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { HK_AKTIF, hariIniWib } from "@/lib/sigap";
+import { SLOT_FOTO_LAPORAN } from "@/lib/sigapFoto";
 import { modeBawaan, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
@@ -20,12 +21,18 @@ export async function GET(req: NextRequest) {
   try {
     const pen = await penugasanAkunMemo(db, akunId);
     const ids = Array.from(new Set(pen.map((p) => p.kegiatan.id)));
-    const [bawaan, mode, { data: hk }] = await Promise.all([
+    const [bawaan, mode, { data: hk }, { data: dokIni }] = await Promise.all([
       modeBawaan(db),
       modeKegiatan(db, ids),
       // (31 Okt 2026) apakah hari ini hari kerja tiap penugasan: bar bawah kegiatan menanyakan dulu bila Kamera dibuka di luar hari kerja
       db.from("sigap_hari_kerja").select("penugasan_id").eq("akun_id", akunId).eq("tanggal", hariIniWib()).or(HK_AKTIF()),
+      // (31 Okt 2026) foto laporan hari ini (nomor 3) tiap penugasan: di luar hari kerja foto baru MENIMPA yang ini (lib/sigapFoto.ts SLOT_FOTO_LAPORAN)
+      pen.length
+        ? db.from("sigap_dokumentasi").select("penugasan_id, sumber, diunggah_at").in("penugasan_id", pen.map((p) => p.id)).eq("tanggal", hariIniWib()).eq("slot", SLOT_FOTO_LAPORAN)
+        : Promise.resolve({ data: [] as { penugasan_id: number; sumber: string; diunggah_at: string }[] }),
     ]);
+    const laporanIni = new Map<number, { sumber: string; diunggah_at: string }>();
+    for (const d of dokIni ?? []) laporanIni.set(d.penugasan_id as number, { sumber: String(d.sumber), diunggah_at: String(d.diunggah_at) });
     const hariKerjaIni = new Set((hk ?? []).map((h) => h.penugasan_id as number));
     return NextResponse.json({
       bawaan,
@@ -40,6 +47,7 @@ export async function GET(req: NextRequest) {
         mode: mode[p.kegiatan.id] ?? "unggah",
         status_periode: p.status_periode,
         hari_kerja_hari_ini: hariKerjaIni.has(p.id),
+        laporan_hari_ini: laporanIni.get(p.id) ?? null, // foto nomor 3 tanggal hari ini (dipakai layar kamera di luar hari kerja)
       })),
     });
   } catch (e) {

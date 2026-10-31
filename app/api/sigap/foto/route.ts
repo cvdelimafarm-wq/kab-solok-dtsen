@@ -16,7 +16,7 @@ import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
   MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai,
-  slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
+  SLOT_FOTO_LAPORAN, bolehFotoLaporan, slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
 import {
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   if (!kegiatanId) return galat("kegiatan_id wajib.");
   const nomorMentah = angka(form.get("slot"));
   if (nomorMentah !== null && !slotValid(nomorMentah)) return galat("Nomor foto tidak valid.");
-  const nomor = nomorMentah as 1 | 2 | 3 | 4 | 5 | null;
+  let nomor = nomorMentah as 1 | 2 | 3 | 4 | 5 | null;
   const posisi = { lat: angka(form.get("lat")), lng: angka(form.get("lng")), akurasi: angka(form.get("akurasi")) };
   if (!posisiMasukanValid(posisi)) return galat("Lokasi tidak terbaca. Aktifkan lokasi lalu potret ulang.", 422, { kode: "lokasi" });
   // (21 Okt 2026) Akurasi 300-5000 m = dispensasi: diterima, ditandai kuning "akurasi_kasar" (lihat nilaiKepercayaan) untuk diperiksa PML/admin.
@@ -128,8 +128,11 @@ export async function POST(req: NextRequest) {
 
   // 4) Hari kerja, 23.59, kunci, periode -- sama seperti jalur unggah lama
   // (23 Okt 2026) Foto tanpa sinyal yang waktunya lolos (w.offline) boleh terkirim sampai TOLERANSI_KIRIM_HARI hari sesudah tanggalnya.
-  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {});
+  // (31 Okt 2026) Tanggal yang bukan hari kerja petugas tetap boleh untuk foto laporan: selalu menempati nomor 3 (Saat mendata) tanggal itu dan MENIMPA foto lamanya
+  // (penempatan sigap_foto_tempatkan menggantikan nomor yang terisi; foto lama kamera jadi cadangan). Tidak masuk perhitungan SPJ karena bukan hari kerja.
+  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, { ...(w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {}), izinTanpaHariKerja: bolehFotoLaporan(pen.kegiatan.jumlah_foto) });
   if ("error" in akses) return galat(akses.error, akses.status);
+  if (akses.tanpaHariKerja) nomor = SLOT_FOTO_LAPORAN as 3;
 
   // 5-7) (27 Okt 2026) Bagian yang tidak saling bergantung dijalankan BERSAMAAN (dulu satu per satu): pemeriksaan tag, bahan penilaian
   // (jarak wilayah/rumah, pembanding), sidik gambar, teks lokasi, dan kode verifikasi. Galat tetap dinilai berurutan seperti semula (tag -> gambar -> kode).
@@ -260,6 +263,7 @@ export async function POST(req: NextRequest) {
     penempatan,
     ditahan: nilai.tingkat === "merah",
     jumlah_tag: tagBaru.length,
+    tanpa_hari_kerja: akses.tanpaHariKerja === true,
   });
 }
 

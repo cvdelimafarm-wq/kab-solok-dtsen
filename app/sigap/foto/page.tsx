@@ -14,8 +14,9 @@ import PeriksaFoto from "./PeriksaFoto";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { siapkanData, useData } from "@/app/portal/dataBersama";
 import { galatSinyal, jalurFotoSaya } from "@/lib/sigapFotoCache";
+import { bolehFotoLaporan } from "@/lib/sigapFoto";
 
-type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string }[] };
+type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string; hari_kerja_hari_ini?: boolean; laporan_hari_ini?: { sumber: string; diunggah_at: string } | null }[] };
 type Tab = "kamera" | "saya" | "periksa";
 
 // (23 Okt 2026) Daftar kegiatan bermode kamera disimpan di HP tiap kali berhasil dimuat, supaya Kamera SIGAP tetap bisa dibuka di daerah tanpa sinyal.
@@ -83,6 +84,11 @@ function Isi() {
 
   const kamera = (mode?.kegiatan ?? []).filter((k) => k.mode === "kamera");
   const aktif = kamera.find((k) => k.kegiatan_id === pilih) ?? kamera[0] ?? null;
+  // (31 Okt 2026) Hari ini bukan hari kerja (tidak ada hari Translok) pada SEMUA penugasan kegiatan ini: Kamera memotret FOTO LAPORAN yang menempati nomor 3
+  // dan menimpa foto lamanya; unggah dari galeri hanya diizinkan di kondisi ini. Data lama/simpanan HP tanpa bidang ini dianggap hari kerja biasa (server yang memutuskan).
+  const penugasanIni = aktif ? kamera.filter((k) => k.kegiatan_id === aktif.kegiatan_id) : [];
+  const tanpaJadwal = !!aktif && bolehFotoLaporan(aktif.jumlah_foto) && penugasanIni.length > 0 && penugasanIni.every((k) => k.hari_kerja_hari_ini === false);
+  const laporanIni = penugasanIni.map((k) => k.laporan_hari_ini).find((x) => !!x) ?? null;
 
   const TabBtn = ({ t, teks }: { t: Tab; teks: string }) => (
     <button type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${tab === t ? "bg-[#0F2A52] text-white" : "bg-white text-[#0F2A52] border border-[#C9D3E6]"}`}>{teks}</button>
@@ -110,7 +116,7 @@ function Isi() {
               </select>
             </label>
           )}
-          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} nomorGanti={nomorGanti} />}
+          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} nomorGanti={tanpaJadwal ? null : nomorGanti} tanpaJadwal={tanpaJadwal} laporanIni={laporanIni} onLaporanBaru={() => void md.muat()} />}
         </>
       )}
       {tab === "saya" && <FotoSaya />}

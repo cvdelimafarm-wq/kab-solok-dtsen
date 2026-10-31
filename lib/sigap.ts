@@ -236,8 +236,13 @@ export async function cekAksesIsian(
   tanggal: unknown,
   /** (23 Okt 2026) Foto yang DIPOTRET tanpa sinyal (token paket) boleh terkirim sampai `toleransiOfflineHari` hari sesudah tanggalnya,
    *  melewati batas 23:59 WIB. Hanya melonggarkan alasan "terlewat"; arsip, kunci SPJ, hari kerja, dan "akan datang" tetap berlaku. */
-  opsi: { toleransiOfflineHari?: number } = {}
-): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean }> {
+  opsi: {
+    toleransiOfflineHari?: number;
+    /** (31 Okt 2026) Kamera SIGAP: tanggal yang BUKAN hari kerja tetap lolos (hasilnya `tanpaHariKerja: true`) supaya petugas boleh memotret
+     *  satu foto laporan. Pemanggil wajib membatasi jumlahnya (lihat MAKS_FOTO_TANPA_HARI_KERJA di lib/sigapFoto.ts). Pemeriksaan lain tetap berlaku. */
+    izinTanpaHariKerja?: boolean;
+  } = {}
+): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean; tanpaHariKerja?: boolean }> {
   if (!tanggalValid(tanggal)) return { error: "Tanggal tidak valid.", status: 400 };
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
   if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
@@ -245,10 +250,11 @@ export async function cekAksesIsian(
   // (7 Okt 2026) arsip baca-saja sesudah tgl selesai + masa tenggang
   if (pen.status_periode === "arsip") return { error: PESAN_ARSIP, status: 403 };
   const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
-  if (!hk) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
+  if (!hk && !opsi.izinTanpaHariKerja) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
+  const tanpaHariKerja = !hk;
   const kunci = await statusKunci(db, penugasanId, tanggal);
   if (!kunci.boleh && kunci.alasan === "terlewat" && opsi.toleransiOfflineHari !== undefined && dalamToleransiKirim(tanggal, hariIniWib(), opsi.toleransiOfflineHari)) {
-    return { penugasan: pen, tanggal, susulan: false };
+    return { penugasan: pen, tanggal, susulan: false, ...(tanpaHariKerja ? { tanpaHariKerja } : {}) };
   }
   if (!kunci.boleh) {
     return {
@@ -259,7 +265,7 @@ export async function cekAksesIsian(
       status: 403,
     };
   }
-  return { penugasan: pen, tanggal, susulan: kunci.alasan === "izin" };
+  return { penugasan: pen, tanggal, susulan: kunci.alasan === "izin", ...(tanpaHariKerja ? { tanpaHariKerja } : {}) };
 }
 
 /**

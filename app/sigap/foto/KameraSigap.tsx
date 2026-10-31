@@ -30,7 +30,7 @@ import { hapusEntri, nomorDipesanLatar, tambahEntri, teksStatusEntri, ubahEntri,
 import { daftarAntrean, formDariItem, lepasAntrean, perbaruiAntrean, tambahAntrean, type ItemAntrean } from "./antreanFoto";
 import { drafMasihBaru, kirimSemuaAntrean } from "./kirimAntrean";
 import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
-import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, MAKS_TAG, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
+import { MAKS_AKURASI_M, MAKS_AKURASI_DISPENSASI_M, TUNGGU_AKURASI_KASAR_DTK, UMUR_TOKEN_MS, LABEL_KEPERCAYAAN, LABEL_ALASAN, labelFotoTanpaSinyal, SLOT_BERLOKASI, MAKS_TAG, SLOT_FOTO_LAPORAN, teksKoordinat, teksWaktuWib, type Kepercayaan } from "@/lib/sigapFoto";
 import { labelFoto } from "@/lib/sigapLabelFoto";
 import { fotoWajibLandscape, perluMiringkanHp, fotoTertahanTegak, TEKS_LANDSCAPE } from "@/lib/sigapFotoLandscape";
 import { nomorBerikutnya } from "@/lib/sigapFotoSusun";
@@ -121,6 +121,9 @@ export default function KameraSigap({
   peran = "",
   jenis = null,
   nomorGanti = null,
+  tanpaJadwal = false,
+  laporanIni = null,
+  onLaporanBaru,
   onSelesai,
 }: {
   kegiatanId: number;
@@ -131,6 +134,12 @@ export default function KameraSigap({
   jenis?: string | null;
   /** (23 Okt 2026) tombol "Ganti foto": jepretan berikutnya otomatis memakai nomor ini dan menggantikan foto lamanya (foto lama jadi cadangan) */
   nomorGanti?: number | null;
+  /** (31 Okt 2026) Hari ini bukan hari kerja petugas: Kamera memotret FOTO LAPORAN = Foto 3 (Saat mendata) yang MENIMPA foto lamanya, dan unggah dari galeri diizinkan. Server yang memutuskan. */
+  tanpaJadwal?: boolean;
+  /** foto laporan (nomor 3) tanggal hari ini yang sudah ada, dari /api/sigap/foto/mode */
+  laporanIni?: { sumber: string; diunggah_at: string } | null;
+  /** dipanggil sesudah foto laporan terkirim/terunggah supaya keterangan "sudah ada" diperbarui */
+  onLaporanBaru?: () => void;
   onSelesai?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -171,6 +180,8 @@ export default function KameraSigap({
   const kidRef = useRef(0);
   const rantaiRef = useRef<Promise<void>>(Promise.resolve()); // unggahan berjalan satu per satu (sinyal lemah tidak dibagi-bagi)
   const [antre, setAntre] = useState(0);
+  const [mengunggah, setMengunggah] = useState(false); // unggah foto laporan dari galeri sedang berjalan
+  const inputUnggahRef = useRef<HTMLInputElement>(null);
   const [hadap, setHadap] = useState<Hadap>("environment"); // kamera belakang dulu; tombol Putar kamera untuk depan
   const [banyakKamera, setBanyakKamera] = useState<boolean | null>(null); // null = belum diketahui (tombol tetap tampil)
   // (21 Okt 2026) Landscape otomatis ala kamera cap waktu: aplikasi tetap terkunci tegak, arah HP dibaca dari sensor gerak (gravitasi).
@@ -468,7 +479,8 @@ export default function KameraSigap({
   const terisiSemuaNomor = useMemo(() => new Set([...terisiServer, ...terisiAntre, ...nomorDipesanLatar(latar)]), [terisiServer, terisiAntre, latar]);
   // nomor yang sudah dipesan foto kuning/merah (menunggu diperiksa) juga dilewati saat memilih nomor otomatis: foto tetap bernomor tahapannya
   const dipesanSemua = useMemo(() => new Set([...terisiSemuaNomor, ...ditahanServer]), [terisiSemuaNomor, ditahanServer]);
-  const saran = nomorBerikutnya(dipesanSemua, jumlahNomor); // null = semua nomor hari ini sudah terisi/dipesan
+  // tanpaJadwal: foto laporan selalu Foto 3 (Saat mendata), tanpa memilih nomor; foto baru menimpa yang lama
+  const saran = tanpaJadwal ? SLOT_FOTO_LAPORAN : nomorBerikutnya(dipesanSemua, jumlahNomor); // null = semua nomor hari ini sudah terisi/dipesan
   // (28 Okt 2026) Foto 3 (Saat mendata) wajib landscape (lib/sigapFotoLandscape.ts): HP masih tegak -> modal "miringkan HP" dan tombol Potret nonaktif;
   // hasil foto yang tetap tegak (mis. HP tanpa sensor gerak) tertahan di pratinjau sampai diambil ulang.
   const nomorKamera = ganti ?? nomorAwal ?? saran;
@@ -554,7 +566,7 @@ export default function KameraSigap({
     const tujuan = tujuanAwal;
     setNomor(tujuan);
     setNomorOtomatis(ganti === null && tujuan !== null);
-    setHitung(ganti === null && tujuan !== null ? DETIK_KIRIM_OTOMATIS : null); // kirim otomatis jaga-jaga lupa menekan kirim (tidak untuk mode ambil ulang)
+    setHitung(ganti === null && tujuan !== null && !tanpaJadwal ? DETIK_KIRIM_OTOMATIS : null); // kirim otomatis jaga-jaga lupa menekan kirim (tidak untuk mode ambil ulang)
     setArahOk(false);
     setJepretan(j);
     setPesan(null);
@@ -583,7 +595,7 @@ export default function KameraSigap({
       if (!blob) throw new Error("blob");
       const url = URL.createObjectURL(blob);
       setJepretan((p) => (p ? { ...p, blob, url, lebar: r.lebar, tinggi: r.tinggi, kuartal: (p.kuartal + k) % 4 } : p)); // url lama dilepas oleh efek pada jepretan
-      if (nomorOtomatis && nomor !== null) setHitung(DETIK_KIRIM_OTOMATIS); // sudah memeriksa arah: hitungan jaga-jaga mulai lagi dari awal
+      if (nomorOtomatis && nomor !== null && !tanpaJadwal) setHitung(DETIK_KIRIM_OTOMATIS); // sudah memeriksa arah: hitungan jaga-jaga mulai lagi dari awal
     } catch {
       setPesan({ jenis: "galat", teks: "Foto tidak dapat diputar. Coba lagi, atau pakai Buang & ulangi." });
     }
@@ -778,6 +790,7 @@ export default function KameraSigap({
       ubah({ status: "selesai", progres: 1, hasil: r.data });
       if (item.slot !== null) setTerisiServer((p) => Array.from(new Set([...p, item.slot as number]))); // muatTerisi meluruskan bila ditahan
       void muatTerisi();
+      if (tanpaJadwal) onLaporanBaru?.(); // keterangan "sudah ada foto laporan" diperbarui
       onSelesai?.();
     } catch (e) {
       const g = e as GalatFoto;
@@ -837,6 +850,31 @@ export default function KameraSigap({
     return () => window.removeEventListener("pagehide", lepas);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** (31 Okt 2026) Unggah foto laporan dari galeri (hanya di luar hari kerja; server menolak di hari kerja). Menimpa Foto 3 hari ini. */
+  async function unggahLaporan(berkas: File) {
+    if (mengunggah) return;
+    setMengunggah(true);
+    setPesan(null);
+    try {
+      const fd = new FormData();
+      fd.append("kegiatan_id", String(kegiatanId));
+      fd.append("berkas", berkas);
+      const r = await kirimMultipart<{ ok: boolean; menimpa?: boolean }>("/api/sigap/foto/laporan-unggah", fd);
+      if (r.simulasi) {
+        setPesan({ jenis: "galat", teks: "Mode simulasi (masuk sebagai akun lain): foto TIDAK dikirim." });
+      } else {
+        tandaBasi("/api/sigap/foto");
+        onLaporanBaru?.();
+        setPesan({ jenis: "ok", teks: r.data.menimpa ? `Foto ${SLOT_FOTO_LAPORAN} hari ini diganti dengan foto yang Anda unggah.` : `Foto laporan terunggah sebagai Foto ${SLOT_FOTO_LAPORAN}.` });
+      }
+    } catch (e) {
+      const g = e as GalatFoto;
+      setPesan({ jenis: "galat", teks: g.message === "SESI_BERAKHIR" ? "Sesi berakhir. Masuk kembali lalu coba lagi." : g.status === undefined ? "Tidak ada sambungan. Unggah butuh internet; coba lagi saat ada sinyal." : g.message });
+    } finally {
+      setMengunggah(false);
+    }
+  }
 
   /** (27 Okt 2026) Lanjut ke kamera dengan nomor pilihan petugas. Nomor terisi = mode ambil ulang (foto lama jadi cadangan); nomor kosong = jepretan berikutnya masuk nomor itu. */
   function mulaiDenganNomor() {
@@ -936,7 +974,7 @@ export default function KameraSigap({
         </ul>
       )}
 
-      {rapi && rapi.cadangan > 0 && rapi.kosong.length > 0 && !jepretan && (
+      {!tanpaJadwal && rapi && rapi.cadangan > 0 && rapi.kosong.length > 0 && !jepretan && (
         <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#F2B632] bg-[#FFF4D6] px-3 py-2.5">
           <div className="text-[13px] font-extrabold text-[#5E4300]">Nomor foto hari ini belum lengkap</div>
           <p className="text-xs leading-relaxed text-[#5E4300]">
@@ -968,7 +1006,26 @@ export default function KameraSigap({
         </div>
       )}
 
-      {!jepretan && awalSiap && (
+      {!jepretan && tanpaJadwal && (
+        <div role="status" className="flex flex-col gap-2 rounded-xl border-2 border-[#F2B632] bg-[#FFF4D6] px-3 py-2.5">
+          <div className="text-[13px] font-extrabold text-[#5E4300]">Hari ini bukan hari kerja Anda</div>
+          <p className="text-xs leading-relaxed text-[#5E4300]">
+            Foto laporan hari ini menjadi <b>Foto {SLOT_FOTO_LAPORAN} · {etiket[SLOT_FOTO_LAPORAN - 1] ?? "Saat mendata"}</b>. Foto baru MENIMPA foto laporan sebelumnya; foto kamera yang lama tetap tersimpan sebagai cadangan.
+          </p>
+          <p className="text-xs font-bold text-[#5E4300]">
+            {laporanIni
+              ? `Sudah ada foto laporan hari ini (${laporanIni.sumber === "kamera" ? "dari kamera" : "unggahan"}, ${new Date(laporanIni.diunggah_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })} WIB).`
+              : "Belum ada foto laporan hari ini."}
+          </p>
+          <input ref={inputUnggahRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void unggahLaporan(f); }} />
+          <button type="button" onClick={() => inputUnggahRef.current?.click()} disabled={mengunggah} className="min-h-[48px] rounded-xl border-2 border-[#0F2A52] bg-white text-sm font-extrabold text-[#0F2A52] disabled:opacity-50">
+            {mengunggah ? "Mengunggah…" : laporanIni ? "Unggah foto dari galeri (menimpa)" : "Unggah foto dari galeri"}
+          </button>
+          <p className="text-[11.5px] leading-snug text-[#5E4300]">Unggah dari galeri hanya diizinkan di luar hari kerja. Pada hari kerja/Translok, foto wajib dari kamera.</p>
+        </div>
+      )}
+
+      {!jepretan && awalSiap && !tanpaJadwal && (
         <div className="flex items-center gap-2 rounded-xl border border-[#C9D3E6] bg-white px-3 py-2" aria-label="Nomor foto hari ini">
           <div className="flex gap-1.5">
             {NOMOR(jumlahNomor).map((n) => {
@@ -986,7 +1043,14 @@ export default function KameraSigap({
         </div>
       )}
 
-      {!jepretan && !awalSiap && (
+      {!jepretan && !awalSiap && tanpaJadwal && (
+        <section className="flex flex-col gap-2" aria-label="Foto laporan">
+          <button type="button" onClick={lewatiPilihNomor} className="min-h-[56px] rounded-2xl bg-[#0F2A52] px-3 text-base font-extrabold text-white">Buka kamera untuk Foto {SLOT_FOTO_LAPORAN} (laporan)</button>
+          {galatGps && posisi === null && <div role="alert" className="rounded-lg bg-[#FDE8E8] px-3 py-2 text-xs text-[#9B1C23]">{galatGps}</div>}
+        </section>
+      )}
+
+      {!jepretan && !awalSiap && !tanpaJadwal && (
         <section className="flex flex-col gap-2" aria-label="Pilih nomor foto sebelum memotret">
           <h2 className="text-sm font-bold text-[#0F2A52]">Foto ini untuk nomor berapa?</h2>
           <p className="text-xs leading-relaxed text-[#3C4C68]">
@@ -1251,6 +1315,9 @@ export default function KameraSigap({
             <>
           <p className="px-1 text-xs leading-relaxed text-[#3C4C68]">Ini draft tampilan cap. Cap resmi dicetak server saat Kirim: jam resmi mengikuti server, lalu ditambah nama lokasi, kode, dan QR.</p>
 
+          {tanpaJadwal ? (
+            <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-xs font-semibold leading-snug text-[#5E4300]">Foto laporan di luar hari kerja: foto ini menjadi Foto {SLOT_FOTO_LAPORAN} dan menimpa foto laporan sebelumnya (bila ada). Periksa pratinjau dulu, lalu tekan Kirim.</p>
+          ) : (
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-bold text-[#0F2A52]">Foto ini untuk nomor berapa?</legend>
             <p className="text-xs leading-relaxed text-[#3C4C68]">
@@ -1307,6 +1374,7 @@ export default function KameraSigap({
               })}
             </div>
           </fieldset>
+          )}
 
           {konfirmasiGanti !== null && (
             <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="presentation" onClick={() => setKonfirmasiGanti(null)}>

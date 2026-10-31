@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   jarakEfektifM, teksLokasiWilayah, lokasiDuaBaris,
   AMBANG_MIRIP_BIT, MASA_SIMPAN_TAHUN, jarakHamming, kecepatanKmJam, kedaluwarsaTanpaTag, kodeDariByte, modeEfektif,
+  SLOT_FOTO_LAPORAN, bolehFotoLaporan,
   TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, BATAS_HARI_BAGI, jendelaBagiFoto, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
   type MasukanKepercayaan,
@@ -325,5 +326,18 @@ describe("teks lokasi cap (SLS, Nagari, Kecamatan)", () => {
   it("tanpa SLS atau tanpa Nagari tidak dipecah", () => {
     expect(lokasiDuaBaris("Nagari Koto Baru, Kec. Lembang")).toBe("Nagari Koto Baru, Kec. Lembang");
     expect(lokasiDuaBaris("SLS Rt 02")).toBe("SLS Rt 02");
+  });
+});
+
+describe("foto laporan di luar hari kerja (menempati nomor 3)", () => {
+  it("selalu nomor 3 (Saat mendata)", () => {
+    expect(SLOT_FOTO_LAPORAN).toBe(3);
+  });
+  it("hanya kegiatan dengan minimal 3 foto per hari yang menerima foto laporan", () => {
+    expect(bolehFotoLaporan(5)).toBe(true);
+    expect(bolehFotoLaporan(3)).toBe(true);
+    expect(bolehFotoLaporan(2)).toBe(false);
+    expect(bolehFotoLaporan(0)).toBe(false);
+    expect(bolehFotoLaporan(Number.NaN)).toBe(false);
   });
 });

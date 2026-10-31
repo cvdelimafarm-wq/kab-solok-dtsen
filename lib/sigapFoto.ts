@@ -35,6 +35,14 @@ export function dalamToleransiKirim(tanggalFoto: string, hariIni: string, hari =
   const selisih = Math.round((a - b) / 86_400_000);
   return selisih >= 0 && selisih <= hari;
 }
+// (31 Okt 2026) FOTO LAPORAN DI LUAR HARI KERJA: kegiatan bermode kamera (mis. SPDT NTP) boleh dipotret atau diunggah pada tanggal yang BUKAN hari kerja
+// petugas (tidak ada hari Translok). Fotonya selalu menempati nomor 3 (Saat mendata) tanggal itu; foto baru MENIMPA foto lama (yang lama tetap tersimpan
+// sebagai cadangan bila berasal dari kamera). Tanggal bukan hari kerja tidak ikut perhitungan SPJ, jadi tidak memengaruhi Kwitansi/Dokumentasi.
+export const SLOT_FOTO_LAPORAN = 3;
+/** Kegiatan hanya bisa menerima foto laporan bila punya nomor 3 (jumlah foto per hari >= 3). */
+export function bolehFotoLaporan(jumlahFoto: number): boolean {
+  return Number.isFinite(jumlahFoto) && jumlahFoto >= SLOT_FOTO_LAPORAN;
+}
 // (26 Okt 2026) BERBAGI FOTO (menandai rekan + penerima menekan Terima) dibuka paling lama sampai akhir H+1:
 // foto tanggal H masih bisa dibagikan dan diterima sampai 23.59 WIB tanggal H+1. Nomor foto milik pemotret sendiri tidak ikut dilonggarkan.
 export const BATAS_HARI_BAGI = 1;
