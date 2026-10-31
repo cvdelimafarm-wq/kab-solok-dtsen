@@ -24,4 +24,4 @@ export function teksStatusBuka(iso: string | null): { sudah: boolean; teks: stri
   return { sudah: true, teks: `Sudah dibuka hari ini pukul ${jam} WIB` };
 }
 
-export const CATATAN_LAPORAN_OTOMATIS = "Laporan Translok terisi otomatis dari data menu Sampel; Anda cukup memeriksa dan menambah catatan bila perlu.";
+export const CATATAN_LAPORAN_OTOMATIS = "Laporan Translok terisi otomatis dari data kerja Anda di menu kegiatan; Anda cukup memeriksa dan menambah catatan bila perlu.";

@@ -49,6 +49,19 @@ export default function TombolKembali({ tema = "gelap", induk, label, onKlik, cl
       setDari(null);
     }
     setSebelum(sebelumnyaNyata());
+    // (31 Okt 2026) Back / mundur banyak langkah (bar tab: history.go(-n)) pada halaman yang SAMA (path tak berubah) menggeser entri riwayat: label ikut dihitung ulang
+    const hitung = () => {
+      setTimeout(() => {
+        try {
+          setDari(new URLSearchParams(window.location.search).get("dari"));
+        } catch {
+          /* abaikan */
+        }
+        setSebelum(sebelumnyaNyata());
+      }, 0);
+    };
+    window.addEventListener("popstate", hitung);
+    return () => window.removeEventListener("popstate", hitung);
   }, [path]);
 
   // ?dari= valid (bukan halaman ini sendiri) > `induk` halaman > induk logis > Beranda

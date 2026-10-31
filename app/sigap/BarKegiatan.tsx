@@ -101,16 +101,19 @@ function Ikon({ k }: { k: ItemBar["kunci"] }) {
  * `onKetuk` (opsional): halaman yang menangani sendiri sebagian tab di tempat (mis. Translok: Hari Ini <-> Translok) mengembalikan true setelah
  * mendorong entri riwayatnya; bila false/tidak ada, bar berpindah halaman (router.push). Mundur selalu lewat riwayat peramban.
  */
-export default function BarKegiatan({ kode, items, aktif, onKetuk }: { kode: string; items: ItemBar[]; aktif: KunciTab; onKetuk?: (it: ItemBar) => boolean }) {
+export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = true }: { kode: string; items: ItemBar[]; aktif: KunciTab; onKetuk?: (it: ItemBar) => boolean; sinkron?: boolean }) {
   const router = useRouter();
   // (31 Okt 2026) Kamera tetap ada di semua kegiatan. Dibuka di luar hari kerja Translok -> tanya dulu (bisa saja foto untuk laporan). Data dari simpanan bersama
   // (/api/sigap/foto/mode, sama dengan halaman Kamera); belum termuat/gagal = langsung buka kamera.
   const dMode = useData<{ kegiatan: { kegiatan_id: number; hari_kerja_hari_ini?: boolean }[] }>("/api/sigap/foto/mode");
   const [tanyaKamera, setTanyaKamera] = useState<string | null>(null);
   // selaraskan tumpukan dengan tab yang tampil (Back sistem bisa mengubahnya tanpa lewat bar)
+  // `sinkron=false` selama halaman belum menentukan tab awalnya (Translok: tab dari tautan baru dipakai setelah data masuk); tanpa itu tab sementara "Hari Ini"
+  // memotong tumpukan yang baru disimpan ketuk() dan Back antar tab berikutnya salah arah.
   useEffect(() => {
+    if (!sinkron) return;
     simpanTumpuk(kode, selaraskanTumpuk(bacaTumpuk(kode), aktif));
-  }, [kode, aktif]);
+  }, [kode, aktif, sinkron]);
 
   function ketuk(it: ItemBar) {
     if (it.kunci === "kamera") {

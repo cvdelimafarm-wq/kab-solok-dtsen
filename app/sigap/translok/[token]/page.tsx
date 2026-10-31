@@ -216,6 +216,12 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   // (31 Okt 2026) Kegiatan bertemplate menu (lib/sigapMenuKegiatan.ts): tautan dari bar membawa ?k=<kode induk>. Dengan itu bar bawah seragam
   // (Hari Ini | Sampel | Pengawasan | Kamera | Translok) menggantikan bar lama; tanpa ?k= (Pasca Bencana dll.) bar lama tetap.
   const [kodeBar, setKodeBar] = useState<string | null>(null);
+  // tab awal sudah pasti (tautan dalam ?tab= sudah diterapkan): baru saat itu bar boleh menyelaraskan tumpukan tab-nya (BarKegiatan sinkron)
+  const [tabAwalPasti, setTabAwalPasti] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTabAwalPasti(true), 6000); // cadangan bila data tak kunjung masuk
+    return () => clearTimeout(t);
+  }, []);
   const subTerakhir = useRef<Tab>("hari_kerja");
   const bar = useBarKegiatan(kodeBar);
   useEffect(() => {
@@ -372,6 +378,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   useEffect(() => {
     if (!data || !pen || langkah !== null || tautanDiterapkan.current) return;
     tautanDiterapkan.current = true;
+    setTabAwalPasti(true);
     try {
       const f = bacaTautanKerja(window.location.search, pen.hari.map((h) => h.tanggal), data.hari_ini);
       if (!f) return;
@@ -636,7 +643,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
 
       {/* ===== NAVIGASI BAWAH ===== */}
       {kodeBar && bar.items && bar.kode ? (
-        <BarKegiatan kode={bar.kode} items={bar.items} aktif={tabBarDariTranslok(tab)} onKetuk={ketukBar} />
+        <BarKegiatan kode={bar.kode} items={bar.items} aktif={tabBarDariTranslok(tab)} onKetuk={ketukBar} sinkron={tabAwalPasti} />
       ) : kodeBar && !bar.siap ? null : (
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="mx-auto flex max-w-lg">
