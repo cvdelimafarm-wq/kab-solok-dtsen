@@ -1,6 +1,6 @@
 // (29 Okt 2026) Uji tombol Back HP = tutup modal (app/portal/lapisan.ts) dengan riwayat peramban tiruan.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { daftarLapisan, jumlahLapisan, popDariLapisan, setelUlangLapisan } from "@/app/portal/lapisan";
+import { daftarLapisan, jumlahLapisan, popDariLapisan, setelahLapisanTutup, setelUlangLapisan } from "@/app/portal/lapisan";
 
 type Entri = { state: unknown; url: string };
 type Pendengar = { fn: (e: { state: unknown }) => void; tangkap: boolean };
@@ -177,5 +177,30 @@ describe("lapisan: tombol Back HP menutup modal", () => {
     await tunggu();
     expect(a).toHaveBeenCalledTimes(1);
     expect(jumlahLapisan()).toBe(0);
+  });
+});
+
+describe("setelahLapisanTutup: pindah halaman sesudah modal ditutup", () => {
+  it("fn berjalan setelah entri penanda dibuang, jadi halaman baru tidak ikut termundurkan", async () => {
+    const lepas = daftarLapisan(vi.fn());
+    await tunggu();
+    expect(p.idx).toBe(1);
+    lepas(); // modal ditutup: history.back() milik kita
+    let idxSaatFn = -1;
+    setelahLapisanTutup(() => {
+      idxSaatFn = p.idx;
+      p.pindahHalaman("/kamera");
+    });
+    await tunggu(300);
+    expect(idxSaatFn).toBe(0); // penanda sudah dibuang saat pindah
+    expect(p.entri[p.idx].url).toBe("/kamera");
+    expect(p.entri.length).toBe(2); // tanpa entri penanda tersisa
+  });
+
+  it("tanpa lapisan yang sedang ditutup, fn tetap berjalan", async () => {
+    const fn = vi.fn();
+    setelahLapisanTutup(fn);
+    await tunggu(150);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

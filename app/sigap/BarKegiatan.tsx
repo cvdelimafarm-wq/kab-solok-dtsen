@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { useData } from "@/app/portal/dataBersama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { setelahLapisanTutup } from "@/app/portal/lapisan";
 import { susunTahap, type Induk } from "@/lib/sigapTahap";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
 import { idTranslokMenu, indukMemuatModul, langkahSekali, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, type ItemBar, type KunciTab, type LangkahSekali, type PeranMenu } from "@/lib/sigapMenuKegiatan";
@@ -158,7 +159,7 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
       </div>
     </nav>
     {/* di luar <nav>: backdrop-blur membuat nav menjadi acuan posisi "fixed" anaknya */}
-    {tanyaKamera && <ModalKameraTanpaJadwal onBatal={() => setTanyaKamera(null)} onYa={() => { const h = tanyaKamera; setTanyaKamera(null); router.push(h); }} />}
+    {tanyaKamera && <ModalKameraTanpaJadwal onBatal={() => setTanyaKamera(null)} onYa={() => { const h = tanyaKamera; setTanyaKamera(null); setelahLapisanTutup(() => router.push(h)); }} />}
     </>
   );
 }

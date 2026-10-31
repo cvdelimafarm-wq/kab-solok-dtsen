@@ -125,6 +125,23 @@ export function daftarLapisan(tutup: () => void): () => void {
   };
 }
 
+/**
+ * Jalankan `fn` (biasanya router.push) SESUDAH lapisan yang baru ditutup selesai membuang entri penandanya.
+ * (31 Okt 2026) Menutup lapisan memanggil history.back() yang tak sinkron; router.push yang dijalankan bersamaan dikalahkan oleh mundur itu, sehingga
+ * tombol modal "Ya, lanjut" tidak berpindah halaman (Kamera dari bar bawah). Panggil SESUDAH menutup lapisan (setState false), bukan sebelumnya.
+ */
+export function setelahLapisanTutup(fn: () => void) {
+  const coba = (sisa: number) => {
+    bersihkanKembali();
+    if (kembaliSendiri.length > 0 && sisa > 0) {
+      setTimeout(() => coba(sisa - 1), 40);
+      return;
+    }
+    fn();
+  };
+  setTimeout(() => coba(40), 60); // beri waktu agar pembersihan lapisan (unmount) sempat mendaftarkan history.back()-nya
+}
+
 /** Khusus uji: kembalikan keadaan modul. */
 export function setelUlangLapisan() {
   tumpukan = [];
