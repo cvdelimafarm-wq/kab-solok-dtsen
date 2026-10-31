@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ambilRingkas, bacaSesi, keMasuk, type KegiatanRingkas } from "../../admin/api";
+import { Kartu } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
 import { KEGIATAN_PENDATAAN, TAB_PENDATAAN, bacaKegiatanPendataan, bacaTabPendataan, labelTabPendataan, urlKegiatanPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
 import PemilihSurvei, { namaSurvei } from "./PemilihSurvei";
@@ -110,6 +111,12 @@ export default function KelolaPendataan() {
           {f.persiapan_sampel && <AlokasiSampel key={kegId} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_laporan_spj && <IsiLaporanSpj />}
           <Seleksi key={kegId} kegiatanId={kegId} nama={nama} />
+          <Kartu judul="Anomali petugas" ket="impor anomali, antrean pencocokan nama, rekap konfirmasi">
+            <p className="text-[12.5px] leading-snug text-[#55657D]">Unggah anomali dari aplikasi lain dengan templat SIGAP; temuan otomatis ditugaskan ke petugas untuk dikonfirmasi.</p>
+            <a href={`/sigap/kelola/anomali${kegId === KEGIATAN_PENDATAAN ? "" : `?k=${kegId}`}`} className="mt-2 inline-block text-[13px] font-bold text-[#1F6FD1]">
+              Buka anomali petugas →
+            </a>
+          </Kartu>
           <FiturKegiatan
             kegiatanId={kegId}
             nama={nama}
