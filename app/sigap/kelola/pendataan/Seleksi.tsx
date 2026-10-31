@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import PenilaianSeleksi from "./PenilaianSeleksi";
+import { kebutuhanSama } from "@/lib/seleksiTurunan";
+import type { UsulanSeleksi } from "@/lib/portal/seleksiTurunan";
 import { SYARAT_BAWAAN, sisaKebutuhan, type HasilKelayakan, type JalurPerekrutan, type PeringkatLevel, type RingkasKelayakan, type SyaratSeleksi, type WilayahSeleksi } from "@/lib/seleksiSyarat";
 
 type RingkasSeleksi = { id: number; nama: string; jalur: JalurPerekrutan; status: string; kebutuhan_ppl: number; kebutuhan_pml: number; sudah_ppl: number; sudah_pml: number; diubah_at: string };
@@ -45,6 +47,17 @@ const FORM_BARU: Form = {
   peringkat_level: "kabupaten", tampil_nilai: false, wilayah: [], status: "draft",
 };
 
+/** Rancangan baru diisi dari usulan (kebutuhan dari identifikasi, wilayah dari sampel) bila ada; PJ tetap bisa mengubahnya. */
+function denganUsulan(f: Form, u: UsulanSeleksi | null): Form {
+  if (!u) return f;
+  const k = u.kebutuhan;
+  return {
+    ...f,
+    ...(k ? { kebutuhan_ppl: String(k.kebutuhan_ppl), kebutuhan_pml: String(k.kebutuhan_pml), sudah_ppl: String(k.sudah_ppl), sudah_pml: String(k.sudah_pml) } : {}),
+    wilayah: u.sampel.wilayah.length > 0 ? u.sampel.wilayah : f.wilayah,
+  };
+}
+
 /** ISO UTC -> nilai input datetime-local dalam WIB. */
 const isoKeLokal = (iso: string | null): string => (iso ? new Date(Date.parse(iso) + 7 * 3_600_000).toISOString().slice(0, 16) : "");
 /** Nilai input datetime-local (dianggap WIB) -> ISO UTC. Kosong/rusak -> "". */
@@ -77,6 +90,7 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
   const [cari, setCari] = useState("");
   const [hasilCari, setHasilCari] = useState<WilayahSeleksi[]>([]);
   const [mencari, setMencari] = useState(false);
+  const [usulan, setUsulan] = useState<UsulanSeleksi | null>(null); // (1 Nov 2026) usulan dari identifikasi + sampel
 
   const muatDaftar = useCallback(async () => {
     try {
@@ -90,6 +104,17 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
   useEffect(() => {
     if (buka) void muatDaftar();
   }, [buka, muatDaftar]);
+
+  const muatUsulan = useCallback(async () => {
+    try {
+      setUsulan(await apiPortal<UsulanSeleksi>(`/api/sigap/seleksi?aksi=usulan&kegiatan_id=${kegiatanId}`));
+    } catch {
+      setUsulan(null); // usulan hanya bantuan; kegagalan tidak mengganggu rancangan
+    }
+  }, [kegiatanId]);
+  useEffect(() => {
+    if (buka) void muatUsulan();
+  }, [buka, muatUsulan]);
 
   const bukaSeleksi = useCallback(async (id: number) => {
     setSibuk(true);
@@ -248,7 +273,7 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[13px] text-[#55657D]">{daftar.seleksi.length === 0 ? "Belum ada rancangan untuk kegiatan ini." : `${daftar.seleksi.length} rancangan`}</p>
                 {daftar.boleh_kelola && (
-                  <button type="button" className={tombol} onClick={() => { setForm(FORM_BARU); setDetail(null); setInfo(null); }}>
+                  <button type="button" className={tombol} onClick={() => { setForm(denganUsulan(FORM_BARU, usulan)); setDetail(null); setInfo(null); }}>
                     Rancang baru
                   </button>
                 )}
@@ -296,6 +321,48 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                 ))}
               </div>
               <p className={ket}>Yang diseleksi: <b>{sisaPpl}</b> PPL dan <b>{sisaPml}</b> PML (kebutuhan dikurangi yang sudah di-plot pegawai organik).</p>
+              {usulan && (
+                <div className="rounded-[14px] border border-[#CFE0F7] bg-[#F4F8FE] p-3 text-[13px] text-[#34455F]" data-testid="usulan-seleksi">
+                  <h4 className="text-[13.5px] font-extrabold text-[#0F2A52]">Usulan dari perencanaan dan sampel</h4>
+                  {usulan.kebutuhan ? (
+                    <div className="mt-1.5">
+                      <p>
+                        Perencanaan ({usulan.identifikasi.nama ?? "identifikasi"}
+                        {usulan.identifikasi.versi ? `, lanjutan v${usulan.identifikasi.versi} ${usulan.identifikasi.status_lanjutan === "final" ? "final" : "draf"}` : ""}): PPL {usulan.kebutuhan.kebutuhan_ppl} ({usulan.kebutuhan.org_ppl} organik + {usulan.kebutuhan.mit_ppl} Mitra), PML {usulan.kebutuhan.kebutuhan_pml} ({usulan.kebutuhan.org_pml} organik + {usulan.kebutuhan.mit_pml} Mitra).
+                        Organik yang sudah di-plot: PPL {usulan.kebutuhan.sudah_ppl}, PML {usulan.kebutuhan.sudah_pml}.
+                        {usulan.kebutuhan.perkiraan && <span className="text-[#8A6200]"> Sebagian jumlah masih Perkiraan (belum Fix).</span>}
+                      </p>
+                      {kebutuhanSama(form, usulan.kebutuhan) ? (
+                        <p className="mt-1 font-semibold text-[#13794B]">✓ Kebutuhan di atas sudah sama dengan perencanaan.</p>
+                      ) : (
+                        <button type="button" className={`${tombolPutih} mt-2`} disabled={!bolehUbah} onClick={() => { const k = usulan.kebutuhan!; setForm((f) => (f ? { ...f, kebutuhan_ppl: String(k.kebutuhan_ppl), kebutuhan_pml: String(k.kebutuhan_pml), sudah_ppl: String(k.sudah_ppl), sudah_pml: String(k.sudah_pml) } : f)); }}>
+                          Terapkan kebutuhan dari perencanaan
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-1.5">{usulan.identifikasi.tersambung ? "Identifikasi sudah tertaut, tetapi belum punya isian lanjutan sehingga kebutuhan belum bisa diturunkan." : "Kebutuhan belum bisa diturunkan: kegiatan ini belum ditautkan ke identifikasi (kartu Pelaksanaan pada identifikasi)."}</p>
+                  )}
+                  {form.jalur === "seleksi" && (
+                    <div className="mt-2.5 border-t border-[#DCE7F6] pt-2">
+                      {usulan.sampel.ada ? (
+                        <>
+                          <p>
+                            Sampel yang diunggah: {usulan.sampel.baris_utama} sampel utama di {usulan.sampel.sls} SLS.
+                            {usulan.sampel.tak_dikenal > 0 && <span className="text-[#8A6200]"> {usulan.sampel.tak_dikenal} SLS tidak dikenal master wilayah (domisili tidak bisa dicocokkan).</span>}
+                            {usulan.sampel.terpotong > 0 && <span className="text-[#B42329]"> {usulan.sampel.terpotong} SLS melebihi batas wilayah per seleksi dan tidak dimasukkan.</span>}
+                          </p>
+                          <button type="button" className={`${tombolPutih} mt-2`} disabled={!bolehUbah} onClick={() => setForm((f) => (f ? { ...f, wilayah: usulan.sampel.wilayah } : f))}>
+                            Ganti wilayah dengan wilayah dari sampel ({usulan.sampel.wilayah.length} SLS)
+                          </button>
+                        </>
+                      ) : (
+                        <p>Belum ada sampel untuk kegiatan ini. PJ mengunggah sampel di kartu Alokasi Sampel (tab 1 · Persiapan); wilayah seleksi lalu bisa diturunkan dari sana, atau dicari manual di bawah.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {form.jalur === "penunjukan" ? (
                 <p className="rounded-[12px] bg-[#EEF3FB] px-3 py-2.5 text-[13px] text-[#44546F]">

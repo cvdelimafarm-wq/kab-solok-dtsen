@@ -19,6 +19,7 @@ import { kirimKeAkun } from "@/lib/sigapPush";
 import { nilaiKelayakan, normalWilayah, periksaRancangan, ringkasKelayakan, sisaKebutuhan, bacaSyarat, type HasilKelayakan, type WilayahSeleksi } from "@/lib/seleksiSyarat";
 import { pesanPushAjakan, pesanUndangan } from "@/lib/seleksiDaftar";
 import { bacaKandidat, bacaWilayah, tahunPoolKegiatan } from "@/lib/portal/seleksiKandidat";
+import { usulanSeleksi } from "@/lib/portal/seleksiTurunan"; // (1 Nov 2026) usulan kebutuhan + wilayah dari identifikasi dan sampel
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,6 +112,14 @@ export async function GET(req: NextRequest) {
         kebutuhan_pml: 0,
       }));
       return NextResponse.json({ wilayah: hasil });
+    }
+
+    // (1 Nov 2026) Usulan kebutuhan (identifikasi lanjutan + organik terplot) dan wilayah (sampel PJ). Hanya baca.
+    if (sp.get("aksi") === "usulan") {
+      const kg = Number(sp.get("kegiatan_id"));
+      if (!Number.isInteger(kg) || kg <= 0) return galat("Kegiatan tidak sah.");
+      if (!bolehLihat(s.izin, kg)) return galat("Tidak punya izin.", 403);
+      return NextResponse.json(await usulanSeleksi(db, kg));
     }
 
     const id = Number(sp.get("id")) || null;
