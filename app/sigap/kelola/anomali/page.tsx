@@ -410,7 +410,7 @@ function KartuRekap({ temuan }: { temuan: Temuan[] }) {
             <tr>
               <th className={TH}>{lihat === "petugas" ? "Petugas" : lihat === "kode" ? "Kode temuan" : "Sampel"}</th>
               <th className={TH}>Temuan</th>
-              <th className={TH}>Menunggu</th>
+              <th className={TH}>Belum dikonfirmasi</th>
               <th className={TH}>Dikonfirmasi</th>
               <th className={TH}>{lihat === "petugas" ? "Kode" : lihat === "kode" ? "Petugas" : "Kode pada sampel ini"}</th>
             </tr>

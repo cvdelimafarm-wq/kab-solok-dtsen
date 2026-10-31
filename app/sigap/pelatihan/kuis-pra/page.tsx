@@ -3,7 +3,7 @@
 // app/sigap/pelatihan/kuis-pra/page.tsx
 //
 // (31 Okt 2026) KUIS PRA PELATIHAN (peserta): soal dipilih per petugas menurut riwayat anomalinya; tinjauan + pembahasan sesudah dikirim.
-// API: /api/sigap/kuis-pra. Logika: lib/sigapKuisPra.ts. Pengaturan oleh panitia: Kelola Pelatihan > tab Kuis Pra.
+// API: /api/sigap/pelatihan/kuis-pra. Logika: lib/sigapKuisPra.ts. Pengaturan oleh panitia: Kelola Pelatihan > tab Kuis Pra.
 
 import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir, urlPelatihan, waktuWib } from "../../admin/api";
@@ -11,7 +11,7 @@ import { BTN_G, BTN_O, Chip, HeaderAdmin, Kartu, Memuat, Pesan } from "../../adm
 import TombolKembali from "@/app/components/TombolKembali";
 import type { StatusKuisPra } from "@/lib/sigapKuisPra";
 
-const URL_API = "/api/sigap/kuis-pra";
+const URL_API = "/api/sigap/pelatihan/kuis-pra";
 type Opsi = { kode: string; teks: string };
 type Soal = { id: string; judul_paket: string; pertanyaan: string; kata_kunci: string[]; opsi: Opsi[] };
 type Berjalan = { id: number; ke: number; soal: Soal[] };

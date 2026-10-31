@@ -21,7 +21,6 @@ type Temuan = {
   kode_temuan: string;
   kelompok: string | null;
   rekomendasi: string | null;
-  makna: string | null;
   id_sampel: string | null;
   periode: string | null;
   keterangan: string | null;
@@ -133,12 +132,6 @@ function KartuTemuan({ t, bisaIsi, setelah, lihatPetugas }: { t: Temuan; bisaIsi
           <div className="flex gap-2">
             <dt className="w-24 shrink-0 text-[#6B7A90]">Keterangan</dt>
             <dd>{t.keterangan}</dd>
-          </div>
-        )}
-        {t.makna && (
-          <div className="flex gap-2">
-            <dt className="w-24 shrink-0 text-[#6B7A90]">Maksud kode</dt>
-            <dd>{t.makna}</dd>
           </div>
         )}
         {rincian.map(([k, v]) => (

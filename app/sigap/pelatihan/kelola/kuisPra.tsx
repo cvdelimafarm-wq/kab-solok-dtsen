@@ -3,14 +3,14 @@
 // app/sigap/pelatihan/kelola/kuisPra.tsx
 //
 // (31 Okt 2026) Tab "Kuis Pra" di Kelola Pelatihan: pengaturan (aktif, survei sumber anomali, bank soal, jumlah soal, percobaan, nilai lulus, jadwal) + rekap per peserta.
-// Soal dipilih PER PETUGAS menurut riwayat anomalinya dari bank soal berkode KT-<KODE>-<urut>. API: /api/sigap/kuis-pra. Logika: lib/sigapKuisPra.ts.
+// Soal dipilih PER PETUGAS menurut riwayat anomalinya dari bank soal berkode KT-<KODE>-<urut>. API: /api/sigap/pelatihan/kuis-pra. Logika: lib/sigapKuisPra.ts.
 
 import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN_G, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import type { PengaturanKuisPra, StatusKuisPra } from "@/lib/sigapKuisPra";
 
-const URL_API = "/api/sigap/kuis-pra";
+const URL_API = "/api/sigap/pelatihan/kuis-pra";
 type Pengaturan = PengaturanKuisPra & { kegiatan_anomali_id: number | null; kegiatan_bank_id: number | null };
 type Pilihan = { id: number; nama: string; jenis: string; soal_kt: number };
 type Rekap = { akun_id: number; nama: string; anomali: number; percobaan: number; terbaik: number | null; lulus: boolean; status: StatusKuisPra["status"] };

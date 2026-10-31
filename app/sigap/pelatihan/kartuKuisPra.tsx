@@ -15,7 +15,7 @@ export default function KartuKuisPra() {
   const [d, setD] = useState<Ringkas | null>(null);
   useEffect(() => {
     let batal = false;
-    fetchJson<Ringkas>(urlPelatihan("/api/sigap/kuis-pra"))
+    fetchJson<Ringkas>(urlPelatihan("/api/sigap/pelatihan/kuis-pra"))
       .then((r) => !batal && setD(r))
       .catch(() => undefined);
     return () => {

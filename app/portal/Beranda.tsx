@@ -23,6 +23,7 @@ import { aktivitasDariInduk } from "@/lib/sigapAktivitas"; // (30 Okt 2026) kegi
 import { susunDaftarKartu } from "@/lib/sigapBerandaDaftar"; // (31 Okt 2026) satu kartu per survei
 import KartuSurvei from "./KartuSurvei";
 import KartuSeleksi from "./KartuSeleksi"; // (31 Okt 2026) ajakan seleksi petugas yang sedang dibuka (Mitra)
+import KartuAnomali from "./KartuAnomali"; // (31 Okt 2026) temuan anomali yang menunggu konfirmasi petugas
 import { KUNCI_PINTASAN, bacaPintasan, kodeTampil, susunPintasan } from "@/lib/sigapPintasan"; // (30 Okt 2026) pintasan pilihan petugas
 import AturPintasan from "./AturPintasan";
 import { peringatanDariInduk, type PeringatanBeranda } from "@/lib/sigapPrioritas";
@@ -420,6 +421,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         ))}
 
         {adaSesi && !memuatAwal && <KartuSeleksi />}
+        {adaSesi && !memuatAwal && <KartuAnomali />}
 
         {/* (31 Okt 2026) Satu kartu per survei: nama + poin mendesak menurut peran; usang di bawah dan redup */}
         {memuatAwal ? (
