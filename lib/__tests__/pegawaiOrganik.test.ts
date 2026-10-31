@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bentukDaftarPegawai, kapitalWilayah, ringkasPegawai, saringPegawai, selisihTahun, tanggalIndo, tanggalWib, type AkunOrganik, type ProfilPegawai } from "../pegawaiOrganik";
+import { bentukDaftarPegawai, bersihKodeWilayah, bersihWilayah, durasi, teksDurasi, totalBulan, kapitalWilayah, periksaUbahProfil, susunDaftarWilayah, ringkasPegawai, saringPegawai, selisihTahun, tanggalIndo, tanggalWib, type AkunOrganik, type ProfilPegawai } from "../pegawaiOrganik";
 
 const SEKARANG = Date.parse("2026-10-31T03:00:00Z"); // 31 Okt 2026 10:00 WIB
 
 const p = (o: Partial<ProfilPegawai>): ProfilPegawai => ({
-  nip_lama: "340000001", urutan: 1, akun_id: null, nama_lengkap: "Ani", nip_baru: "198001012000011001", jabatan: "Pegawai", status_pegawai: "PNS", jenis_kelamin: "P",
+  id: 1, nip_lama: "340000001", urutan: 1, akun_id: null, nama_lengkap: "Ani", nip_baru: "198001012000011001", jabatan: "Pegawai", status_pegawai: "PNS", jenis_kelamin: "P",
   tanggal_lahir: "1980-01-01", tmt: "2000-01-01", tmt_teks: "Jan 2000", email: "ani@bps.go.id", domisili_kecamatan: null, domisili_nagari: null, kantor_kecamatan: "Gunung Talang", ...o,
 });
 const a = (o: Partial<AkunOrganik>): AkunOrganik => ({ id: 1, nama: "Ani", nip: null, aktif: true, alamat_kecamatan: null, ...o });
@@ -83,5 +83,86 @@ describe("ringkas dan saring", () => {
     expect(saringPegawai(daftar, { status: "tanpa_akun" }).map((x) => x.nama)).toEqual(["Budi"]);
     expect(saringPegawai(daftar, { status: "luar_daftar" }).map((x) => x.nama)).toEqual(["Zed"]);
     expect(saringPegawai(daftar, { q: "ani" }).map((x) => x.nama)).toEqual(["Ani"]);
+  });
+});
+
+describe("ubah profil", () => {
+  it("bersihWilayah", () => {
+    expect(bersihWilayah("  Gunung   Talang ")).toEqual({ ok: true, nilai: "Gunung Talang" });
+    expect(bersihWilayah("")).toEqual({ ok: true, nilai: null });
+    expect(bersihWilayah(null)).toEqual({ ok: true, nilai: null });
+    expect(bersihWilayah("a<b").ok).toBe(false);
+    expect(bersihWilayah("x".repeat(61)).ok).toBe(false);
+    expect(bersihWilayah(5).ok).toBe(false);
+  });
+  it("periksaUbahProfil", () => {
+    expect(periksaUbahProfil({ profil_id: 3, domisili_kecamatan: "Kubung", domisili_nagari: "Selayo", kantor_kecamatan: "Gunung Talang", kantor_semua: true })).toEqual({
+      ok: true, nilai: { profil_id: 3, domisili_kecamatan: "Kubung", domisili_nagari: "Selayo", kantor_kecamatan: "Gunung Talang", kantor_semua: true },
+    });
+    expect(periksaUbahProfil({ profil_id: 0 }).ok).toBe(false);
+    expect(periksaUbahProfil({ profil_id: 1, domisili_nagari: "Selayo" }).ok).toBe(false); // nagari tanpa kecamatan
+    expect(periksaUbahProfil({ profil_id: 1, domisili_kecamatan: "Kubung", domisili_nagari: "S<" }).ok).toBe(false);
+  });
+  it("susunDaftarWilayah", () => {
+    const d = susunDaftarWilayah([
+      { kecamatan: "KUBUNG", nagari: "SELAYO" }, { kecamatan: "KUBUNG", nagari: "SELAYO" }, { kecamatan: "GUNUNG TALANG", nagari: "BATANG BARUS" }, { kecamatan: null, nagari: "X" },
+    ]);
+    expect(d.kecamatan).toEqual(["Gunung Talang", "Kubung"]);
+    expect(d.nagari).toEqual([{ nagari: "Batang Barus", kecamatan: "Gunung Talang" }, { nagari: "Selayo", kecamatan: "Kubung" }]);
+  });
+});
+
+describe("durasi (usia dan masa kerja yang bergerak)", () => {
+  it("menghitung tahun, bulan, hari kalender", () => {
+    expect(durasi("2004-12-01", "2026-10-31")).toEqual({ tahun: 21, bulan: 10, hari: 30 });
+    expect(durasi("1982-09-28", "2026-10-31")).toEqual({ tahun: 44, bulan: 1, hari: 3 });
+  });
+  it("meminjam hari dari bulan sebelumnya saat hari lebih kecil", () => {
+    expect(durasi("2025-01-31", "2025-03-01")).toEqual({ tahun: 0, bulan: 1, hari: 1 }); // Feb 2025 = 28 hari
+    expect(durasi("2024-01-31", "2024-03-01")).toEqual({ tahun: 0, bulan: 1, hari: 1 }); // Feb 2024 = 29 hari
+  });
+  it("meminjam tahun saat bulan lebih kecil", () => {
+    expect(durasi("2000-11-15", "2026-02-10")).toEqual({ tahun: 25, bulan: 2, hari: 26 });
+  });
+  it("bergerak: besok lebih besar satu hari, bulan depan satu bulan", () => {
+    const a = durasi("2004-12-01", "2026-10-31")!;
+    const b = durasi("2004-12-01", "2026-11-01")!;
+    expect(b).toEqual({ tahun: 21, bulan: 11, hari: 0 });
+    expect(totalBulan(b)).toBe((totalBulan(a) as number) + 1);
+  });
+  it("null untuk tanggal tak sah atau di masa depan", () => {
+    expect(durasi(null, "2026-10-31")).toBeNull();
+    expect(durasi("2030-01-01", "2026-10-31")).toBeNull();
+    expect(durasi("abc", "2026-10-31")).toBeNull();
+  });
+  it("teks durasi", () => {
+    expect(teksDurasi({ tahun: 21, bulan: 10, hari: 12 })).toBe("21 th 10 bln");
+    expect(teksDurasi({ tahun: 21, bulan: 10, hari: 12 }, true)).toBe("21 th 10 bln 12 hr");
+    expect(teksDurasi(null)).toBeNull();
+  });
+  it("bentukDaftarPegawai menyertakan tanggal mentah untuk dihitung layar", () => {
+    const [b] = bentukDaftarPegawai([p({ tanggal_lahir: "1982-09-28", tmt: "2004-12-01" })], [], SEKARANG);
+    expect(b.lahir_iso).toBe("1982-09-28");
+    expect(b.tmt_iso).toBe("2004-12-01");
+    const [k] = bentukDaftarPegawai([p({ tanggal_lahir: null, tmt: null })], [], SEKARANG);
+    expect(k.lahir_iso).toBeNull();
+    expect(k.tmt_iso).toBeNull();
+  });
+});
+
+describe("nagari domisili dari akun", () => {
+  it("kode BPS di depan nama dibuang", () => {
+    expect(bersihKodeWilayah("(002) SUNGAI NANAM")).toBe("SUNGAI NANAM");
+    expect(bersihKodeWilayah("  (130) X KOTO SINGKARAK ")).toBe("X KOTO SINGKARAK");
+    expect(bersihKodeWilayah("Koto Baru")).toBe("Koto Baru");
+    expect(bersihKodeWilayah("")).toBeNull();
+    expect(bersihKodeWilayah(null)).toBeNull();
+  });
+  it("nagari profil menang; bila kosong memakai nagari akun", () => {
+    const akun = [a({ id: 5, nip: "340000001", alamat_kecamatan: "KUBUNG", alamat_nagari: "KOTO BARU" })];
+    const [x] = bentukDaftarPegawai([p({ domisili_nagari: null })], akun, SEKARANG);
+    expect(x.domisili_nagari).toBe("Koto Baru");
+    const [y] = bentukDaftarPegawai([p({ domisili_nagari: "Selayo" })], akun, SEKARANG);
+    expect(y.domisili_nagari).toBe("Selayo");
   });
 });

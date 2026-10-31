@@ -2,6 +2,8 @@
 //
 // (31 Okt 2026) Manajemen Pengguna: daftar akun Mitra Kepka dan Pegawai organik + penanda anggota pool per tahun.
 //   GET  ?jenis=mitra|organik&tahun=2026   -> { tahun, jenis, tabel_pool_siap, boleh_kelola, ringkasan, akun[] }   (izin akses.kelola, level lihat)
+//   (nagari tiap akun dari bencana_mitra.alamat_desa / bencana_petugas.alamat_nagari, kode BPS dibuang)
+//   POST { aksi: "ubah_profil_pegawai", profil_id, domisili_kecamatan, domisili_nagari, kantor_kecamatan, kantor_semua? }  (izin akses.kelola, level kelola)
 //   POST { aksi: "set_pool", akun_ids[], tahun, status, no_kepka?, catatan? }                                   (izin akses.kelola, level kelola)
 //   jenis=organik juga mengirim { pegawai[], ringkasan_pegawai, profil_siap } dari sigap_pegawai_profil (SQL 20261031h); ?nip=penuh (izin kelola) membuka NIP utuh dan dicatat di audit.
 // NIK/NIP tidak dikirim utuh: hanya empat digit terakhir (samarkanId). Tabel sigap_mitra_pool belum dibuat = daftar tetap tampil, penanda dinonaktifkan.
@@ -11,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { aktorDariHeader, boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
-import { bentukDaftarPegawai, ringkasPegawai, type ProfilPegawai } from "@/lib/pegawaiOrganik";
+import { bentukDaftarPegawai, bersihKodeWilayah, periksaUbahProfil, ringkasPegawai, susunDaftarWilayah, type DaftarWilayah, type ProfilPegawai } from "@/lib/pegawaiOrganik";
 import { periksaPermintaanPool, ringkas, samarkanId, tahunSah, type AkunPengguna, type BarisPool, type JenisPengguna } from "@/lib/penggunaPool";
 
 export const runtime = "nodejs";
@@ -45,6 +47,8 @@ type BarisAkun = {
   nik: string | null;
   nip: string | null;
   alamat_kecamatan: string | null;
+  mitra_id: number | null;
+  petugas_bencana_id: number | null;
   domisili_lat: number | null;
   domisili_lng: number | null;
   domisili_sumber: string | null;
@@ -54,7 +58,38 @@ type BarisAkun = {
   aktif: boolean;
 };
 
-const KOLOM = "id, nama, jenis, nik, nip, alamat_kecamatan, domisili_lat, domisili_lng, domisili_sumber, verif_at, verif_jarak_m, terakhir_masuk_at, aktif";
+const KOLOM = "id, nama, jenis, nik, nip, alamat_kecamatan, mitra_id, petugas_bencana_id, domisili_lat, domisili_lng, domisili_sumber, verif_at, verif_jarak_m, terakhir_masuk_at, aktif";
+
+/** Nagari/desa per akun: dari bencana_mitra.alamat_desa (kode BPS di depan dibuang), cadangan bencana_petugas.alamat_nagari. Gagal baca = kosong, daftar tetap tampil. */
+async function nagariPerAkun(db: Db, akun: BarisAkun[]): Promise<Map<number, string>> {
+  const hasil = new Map<number, string>();
+  const bagi = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
+  const dariMitra = new Map<number, string>();
+  const dariPetugas = new Map<number, string>();
+  try {
+    for (const g of bagi([...new Set(akun.map((a) => a.mitra_id).filter((x): x is number => typeof x === "number"))], 200)) {
+      const { data } = await db.from("bencana_mitra").select("id, alamat_desa").in("id", g);
+      for (const m of (data ?? []) as { id: number; alamat_desa: string | null }[]) {
+        const n = bersihKodeWilayah(m.alamat_desa);
+        if (n) dariMitra.set(m.id, n);
+      }
+    }
+    for (const g of bagi([...new Set(akun.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number"))], 200)) {
+      const { data } = await db.from("bencana_petugas").select("id, alamat_nagari").in("id", g);
+      for (const m of (data ?? []) as { id: number; alamat_nagari: string | null }[]) {
+        const n = bersihKodeWilayah(m.alamat_nagari);
+        if (n) dariPetugas.set(m.id, n);
+      }
+    }
+  } catch {
+    /* abaikan: kolom nagari kosong */
+  }
+  for (const a of akun) {
+    const n = (a.mitra_id !== null ? dariMitra.get(a.mitra_id) : undefined) ?? (a.petugas_bencana_id !== null ? dariPetugas.get(a.petugas_bencana_id) : undefined);
+    if (n) hasil.set(a.id, n);
+  }
+  return hasil;
+}
 
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
@@ -92,6 +127,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const nagari = await nagariPerAkun(db, akun);
+    const akunNagari = akun.map((a) => ({ ...a, alamat_nagari: nagari.get(a.id) ?? null }));
+
     const daftar: AkunPengguna[] = akun.map((a) => ({
       id: a.id,
       nama: a.nama,
@@ -99,6 +137,7 @@ export async function GET(req: NextRequest) {
       nik: samarkanId(a.nik),
       nip: samarkanId(a.nip),
       alamat_kecamatan: a.alamat_kecamatan,
+      alamat_nagari: nagari.get(a.id) ?? null,
       domisili_lat: a.domisili_lat,
       domisili_lng: a.domisili_lng,
       domisili_sumber: a.domisili_sumber,
@@ -115,17 +154,21 @@ export async function GET(req: NextRequest) {
     let pegawai = null;
     let ringkasanPegawai = null;
     let profilSiap = false;
+    let wilayah: DaftarWilayah | null = null;
     if (jenis === "organik") {
       const { data, error } = await db
         .from("sigap_pegawai_profil")
-        .select("nip_lama, urutan, akun_id, nama_lengkap, nip_baru, jabatan, status_pegawai, jenis_kelamin, tanggal_lahir, tmt, tmt_teks, email, domisili_kecamatan, domisili_nagari, kantor_kecamatan")
+        .select("id, nip_lama, urutan, akun_id, nama_lengkap, nip_baru, jabatan, status_pegawai, jenis_kelamin, tanggal_lahir, tmt, tmt_teks, email, domisili_kecamatan, domisili_nagari, kantor_kecamatan")
         .order("urutan");
       if (!error) {
         profilSiap = true;
         const nipPenuh = sp.get("nip") === "penuh" && bolehKelola;
-        const baris = bentukDaftarPegawai((data ?? []) as ProfilPegawai[], akun, Date.now(), nipPenuh);
+        const baris = bentukDaftarPegawai((data ?? []) as ProfilPegawai[], akunNagari, Date.now(), nipPenuh);
         pegawai = baris;
         ringkasanPegawai = ringkasPegawai(baris);
+        // daftar kecamatan/nagari untuk pilihan isian (bencana_wilayah, ±1.100 baris)
+        const { data: w } = await db.from("bencana_wilayah").select("kecamatan, nagari").range(0, 1999);
+        wilayah = susunDaftarWilayah((w ?? []) as { kecamatan: string | null; nagari: string | null }[]);
         if (nipPenuh) await catatAudit(db, s.akunId, "lihat_nip_pegawai", { jumlah: baris.length }).catch(() => undefined);
       }
     }
@@ -140,6 +183,7 @@ export async function GET(req: NextRequest) {
       profil_siap: profilSiap,
       pegawai,
       ringkasan_pegawai: ringkasanPegawai,
+      wilayah,
     });
   } catch {
     return galat("Gagal memuat daftar pengguna.", 500);
@@ -156,6 +200,25 @@ export async function POST(req: NextRequest) {
     if (aktorDariHeader(req.headers) !== null) return galat("Tidak dapat mengubah pool saat masuk sebagai akun lain.", 403);
 
     const isi = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (isi?.aksi === "ubah_profil_pegawai") {
+      const u = periksaUbahProfil(isi);
+      if (!u.ok) return galat(u.pesan);
+      const n = u.nilai;
+      const { data: ada, error: e0 } = await db.from("sigap_pegawai_profil").select("id").eq("id", n.profil_id).maybeSingle();
+      if (e0) return galat("Gagal membaca profil. Pastikan SQL 20261031h sudah dijalankan.", 500);
+      if (!ada) return galat("Pegawai tidak ditemukan.", 404);
+      const sekarang = new Date().toISOString();
+      const { error: e1 } = await db.from("sigap_pegawai_profil").update({ domisili_kecamatan: n.domisili_kecamatan, domisili_nagari: n.domisili_nagari, kantor_kecamatan: n.kantor_kecamatan, diubah_at: sekarang }).eq("id", n.profil_id);
+      if (e1) return galat("Gagal menyimpan.", 500);
+      let semua = 0;
+      if (n.kantor_semua) {
+        const { data: u2, error: e2 } = await db.from("sigap_pegawai_profil").update({ kantor_kecamatan: n.kantor_kecamatan, diubah_at: sekarang }).gte("id", 0).select("id");
+        if (e2) return galat("Domisili tersimpan, tetapi kecamatan kantor semua pegawai gagal diubah.", 500);
+        semua = (u2 ?? []).length;
+      }
+      await catatAudit(db, s.akunId, "profil_pegawai", { profil_id: n.profil_id, kantor_semua: n.kantor_semua, diubah: semua || 1 }).catch(() => undefined);
+      return NextResponse.json({ ok: true, diubah_semua: semua });
+    }
     if (!isi || isi.aksi !== "set_pool") return galat("Aksi tidak dikenal.");
     const p = periksaPermintaanPool(isi);
     if (!p.ok) return galat(p.pesan);

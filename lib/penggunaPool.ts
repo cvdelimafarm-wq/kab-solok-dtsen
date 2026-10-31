@@ -20,6 +20,8 @@ export type AkunPengguna = {
   nik: string | null;
   nip: string | null;
   alamat_kecamatan: string | null;
+  /** Nagari/desa tempat tinggal (dari data pendaftaran Mitra/petugas bila ada). */
+  alamat_nagari?: string | null;
   domisili_lat: number | null;
   domisili_lng: number | null;
   domisili_sumber: string | null;

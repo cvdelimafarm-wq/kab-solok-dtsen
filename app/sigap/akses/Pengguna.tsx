@@ -5,19 +5,22 @@
 // (31 Okt 2026) Tab 👥 Pengguna di Kelola Peran & Akses: daftar akun dibagi dua -- "Mitra Kepka" (pool yang boleh dipekerjakan, ditandai per tahun)
 // dan "Pegawai organik". Biodata ringkas (kecamatan, NIK/NIP disamarkan, kelengkapan lokasi, terakhir masuk). Penanda pool hanya untuk Mitra.
 // Kelengkapan lokasi (domisili berkoordinat/terverifikasi) adalah bahan syarat jarak/domisili pada seleksi nanti.
+// Tabel: judul kolom berfilter ala spreadsheet (KepalaKolom), Kecamatan dan Nagari dua kolom, klik nama untuk membuka tombol Reset PIN.
 // Logika murni (saringan, ringkasan, lokasi): lib/penggunaPool.ts. Data: /api/sigap/pengguna.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import ResetPin from "../admin/ResetPin";
 import DaftarPegawai from "./DaftarPegawai";
-import type { BarisPegawai, RingkasPegawai } from "@/lib/pegawaiOrganik";
-import { daftarKecamatan, ringkas, saring, statusLokasi, type AkunPengguna, type FilterLokasi, type FilterPool, type JenisPengguna, type Ringkasan } from "@/lib/penggunaPool";
+import KepalaKolom from "./KepalaKolom";
+import { kapitalWilayah, tanggalIndo, tanggalWib, type BarisPegawai, type DaftarWilayah, type RingkasPegawai } from "@/lib/pegawaiOrganik";
+import { ringkas, saring, statusLokasi, type AkunPengguna, type JenisPengguna, type Ringkasan } from "@/lib/penggunaPool";
+import { jumlahSaringan, STATUS_AWAL, terapkan, type DefKolom, type StatusKolom } from "@/lib/saringKolom";
 
 type Respons = {
   tahun: number; jenis: JenisPengguna; tabel_pool_siap: boolean; boleh_kelola: boolean; ringkasan: Ringkasan; akun: AkunPengguna[];
-  profil_siap?: boolean; pegawai?: BarisPegawai[] | null; ringkasan_pegawai?: RingkasPegawai | null;
+  profil_siap?: boolean; pegawai?: BarisPegawai[] | null; ringkasan_pegawai?: RingkasPegawai | null; wilayah?: DaftarWilayah | null;
 };
 
 const HALAMAN = 200;
@@ -30,9 +33,8 @@ export default function Pengguna() {
   const [ok, setOk] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
   const [q, setQ] = useState("");
-  const [fPool, setFPool] = useState<FilterPool>("semua");
-  const [fLokasi, setFLokasi] = useState<FilterLokasi>("semua");
-  const [fKec, setFKec] = useState("");
+  const [kol, setKol] = useState<StatusKolom>(STATUS_AWAL); // saringan/urutan judul kolom
+  const [terbuka, setTerbuka] = useState<number | null>(null); // baris yang dibuka (tombol Reset PIN)
   const [hanyaAktif, setHanyaAktif] = useState(true);
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [tampil, setTampil] = useState(HALAMAN);
@@ -60,16 +62,41 @@ export default function Pengguna() {
   }, [muat]);
 
   useEffect(() => {
+    setKol(STATUS_AWAL);
+    setTerbuka(null);
+  }, [jenis]);
+
+  useEffect(() => {
     setPilih(new Set());
     setTampil(HALAMAN);
-  }, [jenis, q, fPool, fLokasi, fKec, hanyaAktif]);
+  }, [jenis, q, kol, hanyaAktif]);
 
   const akun = useMemo(() => data?.akun ?? [], [data]);
-  const kecamatan = useMemo(() => daftarKecamatan(akun), [akun]);
-  const terlihat = useMemo(() => saring(akun, { q, pool: jenis === "mitra" ? fPool : "semua", lokasi: fLokasi, kecamatan: fKec, hanyaAktif }), [akun, q, fPool, fLokasi, fKec, hanyaAktif, jenis]);
+  const awal = useMemo(() => saring(akun, { q, hanyaAktif }), [akun, q, hanyaAktif]);
+  const kolom = useMemo<DefKolom<AkunPengguna>[]>(() => {
+    const lokasi = (a: AkunPengguna) => {
+      const l = statusLokasi(a);
+      return l === "terverifikasi" ? "Terverifikasi" : l === "berkoordinat" ? "Berkoordinat" : "Belum ada";
+    };
+    const pool = (a: AkunPengguna) => (a.pool ? (a.pool.status === "aktif" ? "Pool aktif" : "Nonaktif") : "Belum masuk pool");
+    const terakhir = (a: AkunPengguna) => (a.terakhir_masuk_at ? tanggalIndo(tanggalWib(Date.parse(a.terakhir_masuk_at))) : "Belum pernah");
+    return [
+      { id: "nama", label: "Nama", nilai: (a) => a.nama },
+      { id: "kec", label: "Kecamatan", nilai: (a) => kapitalWilayah(a.alamat_kecamatan) },
+      { id: "nag", label: "Nagari", nilai: (a) => kapitalWilayah(a.alamat_nagari) },
+      { id: "id", label: jenis === "mitra" ? "NIK" : "NIP", nilai: (a) => (jenis === "mitra" ? a.nik : a.nip) },
+      { id: "lokasi", label: "Lokasi", nilai: lokasi },
+      { id: "pool", label: `Pool ${tahun}`, nilai: pool },
+      { id: "masuk", label: "Terakhir masuk", nilai: terakhir, urut: (a) => a.terakhir_masuk_at },
+    ];
+  }, [jenis, tahun]);
+  const terlihat = useMemo(() => terapkan(awal, kolom, kol), [awal, kolom, kol]);
+  const jmlSaringan = jumlahSaringan(kol);
+  const kepala = (id: string) => <KepalaKolom<AkunPengguna> kolom={kolom} id={id} rows={awal} status={kol} onUbah={setKol} />;
   const ring = useMemo(() => data?.ringkasan ?? ringkas(akun), [data, akun]);
   const bolehKelola = data?.boleh_kelola === true && data.tabel_pool_siap && jenis === "mitra";
   const bolehResetPin = data?.boleh_kelola === true;
+  const jumlahKolom = (bolehKelola ? 1 : 0) + (jenis === "mitra" ? 7 : 6);
   const pakaiProfil = jenis === "organik" && data?.profil_siap === true && !!data.pegawai && !!data.ringkasan_pegawai;
 
   const semuaTerpilih = terlihat.length > 0 && terlihat.every((a) => pilih.has(a.id));
@@ -171,6 +198,12 @@ export default function Pengguna() {
           onAlihNip={() => setNipPenuh((v) => !v)}
           onMuat={() => void muat()}
           onResetPin={(id, nama) => setResetPin({ id, nama })}
+          wilayah={data.wilayah ?? null}
+          onSimpan={async (v) => {
+            const r = await fetchJson<{ ok: boolean; diubah_semua: number }>("/api/sigap/pengguna", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "ubah_profil_pegawai", ...v }) });
+            setOk(r.diubah_semua > 0 ? `Tersimpan; kecamatan kantor ${r.diubah_semua} pegawai diseragamkan.` : "Domisili dan kecamatan kantor tersimpan.");
+            await muat();
+          }}
         />
       )}
 
@@ -186,32 +219,15 @@ export default function Pengguna() {
       >
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input aria-label="Cari nama" className={`${INPUT} min-w-[180px] flex-1`} placeholder="Cari nama…" value={q} onChange={(e) => setQ(e.target.value)} />
-          {jenis === "mitra" && (
-            <select aria-label="Saring pool" className={INPUT} value={fPool} onChange={(e) => setFPool(e.target.value as FilterPool)}>
-              <option value="semua">Semua status pool</option>
-              <option value="aktif">Pool aktif</option>
-              <option value="nonaktif">Pool nonaktif</option>
-              <option value="belum">Belum masuk pool</option>
-            </select>
-          )}
-          <select aria-label="Saring lokasi" className={INPUT} value={fLokasi} onChange={(e) => setFLokasi(e.target.value as FilterLokasi)}>
-            <option value="semua">Semua lokasi</option>
-            <option value="terverifikasi">Terverifikasi</option>
-            <option value="berkoordinat">Berkoordinat</option>
-            <option value="belum">Belum ada titik</option>
-          </select>
-          <select aria-label="Saring kecamatan" className={INPUT} value={fKec} onChange={(e) => setFKec(e.target.value)}>
-            <option value="">Semua kecamatan</option>
-            {kecamatan.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
           <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#44546F]">
             <input type="checkbox" checked={hanyaAktif} onChange={(e) => setHanyaAktif(e.target.checked)} />
             Hanya akun aktif
           </label>
+          {(jmlSaringan > 0 || kol.urut) && (
+            <button type="button" className={BTN_O} onClick={() => setKol(STATUS_AWAL)}>
+              Hapus saringan kolom{jmlSaringan > 0 ? ` (${jmlSaringan})` : ""}
+            </button>
+          )}
         </div>
 
         {bolehKelola && (
@@ -236,49 +252,75 @@ export default function Pengguna() {
                   <input type="checkbox" aria-label="Pilih semua yang terlihat" checked={semuaTerpilih} onChange={alihSemua} />
                 </th>
               )}
-              <th className={TH}>Nama</th>
-              <th className={TH}>Kecamatan</th>
-              <th className={TH}>{jenis === "mitra" ? "NIK" : "NIP"}</th>
-              <th className={TH}>Lokasi</th>
-              {jenis === "mitra" && <th className={TH}>Pool {tahun}</th>}
-              <th className={TH}>Terakhir masuk</th>
-              {bolehResetPin && <th className={TH}>PIN</th>}
+              {kepala("nama")}
+              {kepala("kec")}
+              {kepala("nag")}
+              {kepala("id")}
+              {kepala("lokasi")}
+              {jenis === "mitra" && kepala("pool")}
+              {kepala("masuk")}
             </tr>
           </thead>
           <tbody>
-            {terlihat.slice(0, tampil).map((a) => (
-              <tr key={a.id} className={a.aktif ? "" : "opacity-60"}>
-                {bolehKelola && (
-                  <td className={TD}>
-                    <input type="checkbox" aria-label={`Pilih ${a.nama}`} checked={pilih.has(a.id)} onChange={() => alih(a.id)} />
-                  </td>
-                )}
-                <td className={`${TD} font-semibold text-[#1B2B4B]`}>
-                  {a.nama}
-                  {!a.aktif && <span className="ml-1.5 text-[11px] font-bold text-[#B42329]">nonaktif</span>}
-                </td>
-                <td className={TD}>{a.alamat_kecamatan ?? "–"}</td>
-                <td className={`${TD} font-mono text-[12px]`}>{(jenis === "mitra" ? a.nik : a.nip) ?? "–"}</td>
-                <td className={TD}>{chipLokasi(a)}</td>
-                {jenis === "mitra" && (
-                  <td className={TD} title={a.pool?.catatan ?? undefined}>
-                    {chipPool(a)}
-                    {a.pool?.no_kepka && <span className="ml-1.5 text-[11px] text-[#6B7A90]">{a.pool.no_kepka}</span>}
-                  </td>
-                )}
-                <td className={`${TD} text-[12px] text-[#6B7A90]`}>{a.terakhir_masuk_at ? waktuWib(a.terakhir_masuk_at) : "belum pernah"}</td>
-                {bolehResetPin && (
-                  <td className={TD}>
-                    <button type="button" className={`${BTN_O} whitespace-nowrap`} onClick={() => setResetPin({ id: a.id, nama: a.nama })}>
-                      🔑 Reset PIN
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+            {terlihat.slice(0, tampil).map((a) => {
+              const buka = terbuka === a.id;
+              return (
+                <Fragment key={a.id}>
+                  <tr className={`${a.aktif ? "" : "opacity-60"} ${buka ? "bg-[#F3F7FE]" : ""}`}>
+                    {bolehKelola && (
+                      <td className={TD}>
+                        <input type="checkbox" aria-label={`Pilih ${a.nama}`} checked={pilih.has(a.id)} onChange={() => alih(a.id)} />
+                      </td>
+                    )}
+                    <td className={`${TD} font-semibold text-[#1B2B4B]`}>
+                      <button
+                        type="button"
+                        aria-expanded={buka}
+                        aria-label={`${buka ? "Tutup" : "Buka"} aksi untuk ${a.nama}`}
+                        className="inline-flex items-start gap-1.5 text-left font-semibold text-[#1B2B4B] hover:text-[#1F5FD1]"
+                        onClick={() => setTerbuka(buka ? null : a.id)}
+                      >
+                        <span aria-hidden className="mt-[3px] text-[10px] text-[#6B7A90]">
+                          {buka ? "▾" : "▸"}
+                        </span>
+                        <span>{a.nama}</span>
+                      </button>
+                      {!a.aktif && <span className="ml-1.5 text-[11px] font-bold text-[#B42329]">nonaktif</span>}
+                    </td>
+                    <td className={`${TD} whitespace-nowrap`}>{kapitalWilayah(a.alamat_kecamatan) ?? "–"}</td>
+                    <td className={`${TD} whitespace-nowrap`}>{kapitalWilayah(a.alamat_nagari) ?? "–"}</td>
+                    <td className={`${TD} font-mono text-[12px]`}>{(jenis === "mitra" ? a.nik : a.nip) ?? "–"}</td>
+                    <td className={TD}>{chipLokasi(a)}</td>
+                    {jenis === "mitra" && (
+                      <td className={TD} title={a.pool?.catatan ?? undefined}>
+                        {chipPool(a)}
+                        {a.pool?.no_kepka && <span className="ml-1.5 text-[11px] text-[#6B7A90]">{a.pool.no_kepka}</span>}
+                      </td>
+                    )}
+                    <td className={`${TD} text-[12px] text-[#6B7A90]`}>{a.terakhir_masuk_at ? waktuWib(a.terakhir_masuk_at) : "belum pernah"}</td>
+                  </tr>
+                  {buka && (
+                    <tr className="bg-[#F3F7FE]">
+                      <td className="border-t border-[#DDE6F3] px-3.5 py-2.5" colSpan={jumlahKolom}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {bolehResetPin ? (
+                            <button type="button" className={`${BTN_O} whitespace-nowrap`} onClick={() => setResetPin({ id: a.id, nama: a.nama })}>
+                              🔑 Reset PIN
+                            </button>
+                          ) : (
+                            <span className="text-[12px] text-[#6B7A90]">Mode lihat saja: tidak punya izin mengelola.</span>
+                          )}
+                          {a.pool?.catatan && <span className="text-[12px] text-[#6B7A90]">Catatan pool: {a.pool.catatan}</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
             {terlihat.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#6B7A90]`} colSpan={8}>
+                <td className={`${TD} text-center text-[#6B7A90]`} colSpan={jumlahKolom}>
                   {memuat ? "Memuat…" : "Tidak ada akun yang cocok dengan saringan."}
                 </td>
               </tr>
