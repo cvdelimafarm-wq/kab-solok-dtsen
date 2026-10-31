@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { catatAudit } from "@/lib/sigapAkses";
 import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
-import { UNDANGAN } from "@/lib/sigapTes";
+import { undanganUntuk } from "@/lib/sigapTesDb";
 import { muatSkema } from "@/lib/sigapNilai";
 import { ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan } from "@/lib/sigapAdministrasi";
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const bagian = sp.get("bagian") ?? "ringkas";
 
     if (bagian === "ringkas") {
-      return NextResponse.json({ nama: k.akun.nama, boleh_kelola: k.bisaKelola, kelas: k.cakupan.kelas, semua_kelas: k.cakupan.semua, kelas_bawaan: k.cakupan.bawaan, tanggal: UNDANGAN.tanggal_iso });
+      return NextResponse.json({ nama: k.akun.nama, boleh_kelola: k.bisaKelola, kelas: k.cakupan.kelas, semua_kelas: k.cakupan.semua, kelas_bawaan: k.cakupan.bawaan, tanggal: (await undanganUntuk(k.db, k.kegiatanId)).tanggal_iso });
     }
     // (9 Okt 2026) pengingat panitia: jumlah foto lampiran per kelas yang boleh diakses akun
     if (bagian === "foto_ringkas") {
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
         penugasanId = baru.id as number;
       }
       // Hari kerja pelatihan, supaya halaman Transport Lokal peserta ini bisa diisi & SPJ-nya bisa dicetak.
-      const { error: eHk } = await k.db.from("sigap_hari_kerja").upsert({ penugasan_id: penugasanId, akun_id: akunId, tanggal: UNDANGAN.tanggal_iso }, { onConflict: "penugasan_id,tanggal", ignoreDuplicates: true });
+      const { error: eHk } = await k.db.from("sigap_hari_kerja").upsert({ penugasan_id: penugasanId, akun_id: akunId, tanggal: (await undanganUntuk(k.db, k.kegiatanId)).tanggal_iso }, { onConflict: "penugasan_id,tanggal", ignoreDuplicates: true });
       if (eHk) {
         const bentrok = eHk.code === "23505";
         return galat(bentrok ? "Orang ini sudah punya hari kerja Transport Lokal pada tanggal pelatihan di kegiatan lain, sehingga tidak bisa ditambahkan." : eHk.message, bentrok ? 409 : 500);

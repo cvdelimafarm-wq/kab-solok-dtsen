@@ -22,7 +22,7 @@ async function siapkan(req: NextRequest, tulis: boolean) {
   if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const akun = await akunDariRequest(req, db);
   if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-  const kegiatanId = await idKegiatanPelatihan(db);
+  const kegiatanId = await idKegiatanPelatihan(db, req);
   if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
   const { izin } = await izinAkun(db, akun.id);
   const bolehUbah = boleh(izin, "pelatihan.kelola", "kelola", kegiatanId);

@@ -8,7 +8,8 @@
 // GET ?bagian=soal&jenis=pretest       -> soal lengkap dgn kunci (izin kelola)
 // GET ?bagian=monitoring               -> peserta x (pretest, posttest), statistik, analisis per soal
 // POST {aksi:"simpan_soal", jenis, soal:[{nomor,teks,opsi:[{kode,teks}],kunci,bobot}]}
-// POST {aksi:"atur_jadwal", jenis, buka_at, tutup_at, durasi_menit, judul?, aktif?}
+// POST {aksi:"atur_jadwal", jenis, buka_at, tutup_at, durasi_menit, judul?, aktif?, ulang_maks?, wajib_lulus?, nilai_lulus?}
+//   (31 Okt 2026) wajib_lulus + nilai_lulus (SQL 20261031k): peserta di bawah nilai lulus boleh mengulang sampai lulus (maks 3 percobaan).
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Db } from "@/lib/sigap";
@@ -19,8 +20,10 @@ import {
   bersihkanJawaban,
   jenisTesValid,
   skorResmi,
+  statusLulus,
   statusTes,
   validasiSoalJson,
+  wajibLulus,
   type JenisTes,
   type SesiBaris,
   type SoalLengkap,
@@ -50,7 +53,7 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return galat("Tidak punya izin membuka menu ini.", 403);
@@ -124,6 +127,8 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
           // (8 Okt 2026) skor = nilai resmi (tertinggi dari semua percobaan); skor_terakhir = percobaan berjalan/terakhir
           skor: skorResmi(sesi),
           skor_terakhir: sesi?.selesai_at && sesi.skor != null ? Number(sesi.skor) : null,
+          // (31 Okt 2026) kelulusan menurut nilai resmi; null bila tes tidak wajib lulus
+          lulus: wajibLulus(t) ? statusLulus(t, skorResmi(sesi)) : null,
           percobaan: sesi?.percobaan ?? 0,
           benar: sesi?.benar ?? null,
           total: sesi?.total ?? null,
@@ -155,6 +160,9 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
       tertinggi: skor.length ? Math.max(...skor) : null,
       terendah: skor.length ? Math.min(...skor) : null,
       mengulang,
+      // (31 Okt 2026) hanya terisi bila tes wajib lulus: yang sudah punya nilai resmi dibagi lulus / belum lulus
+      lulus: wajibLulus(t) ? skor.filter((x) => statusLulus(t, x) === "lulus").length : null,
+      belum_lulus: wajibLulus(t) ? skor.filter((x) => statusLulus(t, x) === "belum_lulus").length : null,
     };
     analisis[t.jenis] = soal.map((s) => {
       const sebaran: Record<string, number> = {};
@@ -182,7 +190,7 @@ export async function POST(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "kelola", kegiatanId)) return galat("Tidak punya izin mengelola soal & jadwal pelatihan.", 403);
@@ -218,16 +226,37 @@ export async function POST(req: NextRequest) {
       const upd: Record<string, unknown> = { buka_at: buka.toISOString(), tutup_at: tutup.toISOString(), durasi_menit: durasi, diubah_at: new Date().toISOString() };
       if (typeof body?.judul === "string" && body.judul.trim()) upd.judul = body.judul.trim().slice(0, 200);
       if (typeof body?.aktif === "boolean") upd.aktif = body.aktif;
+      // (31 Okt 2026) wajib lulus + nilai lulus
+      if (body?.wajib_lulus !== undefined) {
+        if (typeof body.wajib_lulus !== "boolean") return galat("Setelan wajib lulus tidak sah.");
+        upd.wajib_lulus = body.wajib_lulus;
+      }
+      if (body?.nilai_lulus !== undefined) {
+        const nl = Number(body.nilai_lulus);
+        if (body.nilai_lulus === "" || body.nilai_lulus === null || !Number.isFinite(nl) || nl < 0 || nl > 100) return galat("Nilai lulus harus angka 0–100.");
+        upd.nilai_lulus = Math.round(nl * 100) / 100;
+      }
+      const wajibBerlaku = typeof upd.wajib_lulus === "boolean" ? upd.wajib_lulus : wajibLulus(tes);
       // (8 Okt 2026) kesempatan mengulang: hanya Posttest; 1 = tidak boleh mengulang, 2–5 = jumlah percobaan maksimal per peserta
+      // (31 Okt 2026) bila wajib lulus aktif, jumlah percobaan tetap 3 dan berlaku juga untuk Pretest (ulang_maks tidak dipakai)
       if (body?.ulang_maks !== undefined) {
         const um = Number(body.ulang_maks);
         if (!Number.isInteger(um) || um < 1 || um > ULANG_MAKS_TERTINGGI) return galat(`Jumlah percobaan harus 1–${ULANG_MAKS_TERTINGGI}.`);
-        if (jenis !== "posttest" && um > 1) return galat("Kesempatan mengulang hanya tersedia untuk Posttest.");
-        upd.ulang_maks = um;
+        if (jenis !== "posttest" && um > 1 && !wajibBerlaku) return galat("Kesempatan mengulang hanya tersedia untuk Posttest.");
+        upd.ulang_maks = jenis !== "posttest" ? 1 : um;
       }
       const { error } = await db.from("sigap_tes").update(upd).eq("id", tes.id);
-      if (error) return galat(error.message, 500);
-      await catatAudit(db, akun.id, "pelatihan_atur_jadwal", { tes_id: tes.id, jenis, sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif, ulang_maks: tes.ulang_maks }, sesudah: upd });
+      if (error) {
+        // kolom wajib_lulus/nilai_lulus belum ada (SQL belum dijalankan) -> pesan yang menunjuk langkahnya
+        if ((upd.wajib_lulus !== undefined || upd.nilai_lulus !== undefined) && /wajib_lulus|nilai_lulus/.test(error.message)) return galat("Setelan wajib lulus belum bisa disimpan: jalankan dulu SQL 20261031k_tes_wajib_lulus.sql.", 409);
+        return galat(error.message, 500);
+      }
+      await catatAudit(db, akun.id, "pelatihan_atur_jadwal", {
+        tes_id: tes.id,
+        jenis,
+        sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif, ulang_maks: tes.ulang_maks, wajib_lulus: tes.wajib_lulus ?? null, nilai_lulus: tes.nilai_lulus ?? null },
+        sesudah: upd,
+      });
       return NextResponse.json({ ok: true });
     }
 

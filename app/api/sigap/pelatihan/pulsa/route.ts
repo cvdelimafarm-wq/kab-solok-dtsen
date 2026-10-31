@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     if (!(await pesertaPelatihan(db, akun.id, kegiatanId))) return NextResponse.json({ peserta: false });
     return NextResponse.json({ peserta: true, ...(await statusPulsa(db, kegiatanId, akun.id)) });
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     if (!(await pesertaPelatihan(db, akun.id, kegiatanId))) return galat("Hanya peserta pelatihan yang mengisi nomor pulsa.", 403);
     const body = await req.json().catch(() => null);

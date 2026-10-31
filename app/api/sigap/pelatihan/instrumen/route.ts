@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const [peserta, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), izinAkun(db, akun.id)]);
     const lihatKelola = boleh(izin, "pelatihan.kelola", "lihat", kegiatanId);
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "kelola", kegiatanId)) return galat("Tidak punya izin mengelola instrumen pelatihan.", 403);

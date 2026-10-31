@@ -121,8 +121,35 @@ export async function ambilRingkas(): Promise<Ringkas> {
 }
 
 /** Fetch bebas (mis. multipart / GET lain) dengan header Bearer + penanganan 401. */
+/**
+ * (31 Okt 2026) Pelatihan per kegiatan: panggilan ke /api/sigap/pelatihan* disisipi ?kegiatan=ID bila halaman dibuka dengan ?kegiatan=ID
+ * (disimpan di sessionStorage agar sub-halaman peserta ikut). Tanpa itu, server memakai pelatihan bawaan/pelatihan peserta.
+ */
+const KUNCI_KEGIATAN_PELATIHAN = "sigap_pel_kegiatan";
+export function kegiatanPelatihanAktif(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const angka = (v: string | null) => (v && /^\d{1,12}$/.test(v) && Number(v) > 0 ? Number(v) : null);
+    const dariUrl = angka(new URLSearchParams(window.location.search).get("kegiatan"));
+    if (dariUrl !== null) {
+      window.sessionStorage.setItem(KUNCI_KEGIATAN_PELATIHAN, String(dariUrl));
+      return dariUrl;
+    }
+    const p = window.location.pathname;
+    if (!p.startsWith("/sigap/pelatihan") || p.startsWith("/sigap/pelatihan/kelola")) return null;
+    return angka(window.sessionStorage.getItem(KUNCI_KEGIATAN_PELATIHAN));
+  } catch {
+    return null;
+  }
+}
+export function urlPelatihan(url: string): string {
+  if (!url.startsWith("/api/sigap/pelatihan") || /[?&]kegiatan=/.test(url)) return url;
+  const id = kegiatanPelatihanAktif();
+  return id === null ? url : `${url}${url.includes("?") ? "&" : "?"}kegiatan=${id}`;
+}
+
 export async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, { ...init, headers: { ...header(), ...((init.headers as Record<string, string>) ?? {}) }, cache: "no-store" });
+  const res = await fetch(urlPelatihan(url), { ...init, headers: { ...header(), ...((init.headers as Record<string, string>) ?? {}) }, cache: "no-store" });
   return olah<T>(res);
 }
 
@@ -134,7 +161,7 @@ export async function bukaBlob(url: string): Promise<void> {
   const w = window.open("", "_blank");
   try {
     if (w) w.document.write("<p style='font-family:sans-serif;padding:16px'>Menyiapkan dokumen…</p>");
-    const res = await fetch(url, { headers: header(), cache: "no-store" });
+    const res = await fetch(urlPelatihan(url), { headers: header(), cache: "no-store" });
     if (res.status === 401) {
       w?.close();
       hapusSesi();
@@ -162,7 +189,7 @@ export async function bukaBlob(url: string): Promise<void> {
  * 401 -> sesi dihapus & ke halaman masuk; galat lain -> Error dengan pesan server.
  */
 export async function ambilBlob(url: string): Promise<{ blob: Blob; namaFile: string; dilewati: string[] }> {
-  const res = await fetch(url, { headers: header(), cache: "no-store" });
+  const res = await fetch(urlPelatihan(url), { headers: header(), cache: "no-store" });
   if (res.status === 401) {
     hapusSesi();
     keMasuk();

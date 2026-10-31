@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
   try {
     const akunId = sesiDariHeader(req.headers);
     if (!akunId) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await dariCache("kegiatan", 60_000, () => idKegiatanPelatihan(db));
+    const kegiatanId = await dariCache(`kegiatan:${req.nextUrl.searchParams.get("kegiatan") ?? ""}:${akunId}`, 60_000, () => idKegiatanPelatihan(db, req, akunId));
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const now = new Date();
     const q = req.nextUrl.searchParams;
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await dariCache("kegiatan", 60_000, () => idKegiatanPelatihan(db));
+    const kegiatanId = await dariCache(`kegiatan:${req.nextUrl.searchParams.get("kegiatan") ?? ""}:${akun.id}`, 60_000, () => idKegiatanPelatihan(db, req, akun.id));
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const ak = await aksesMain(db, kegiatanId, akun.id);
     if (!ak) return galat("Akun ini bukan peserta pelatihan.", 403);

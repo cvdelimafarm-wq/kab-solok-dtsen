@@ -31,6 +31,8 @@ describe("kartuSeleksi", () => {
   it("perlu lokasi -> kartu emas", () => {
     const k = kartuSeleksi({ ...dasar, kelayakan: { status: "perlu_lokasi", alasan: ["titik"], jarak_km: null, wilayah_terdekat: null }, boleh: { ppl: tidak, pml: tidak } })!;
     expect(k.nada).toBe("emas");
+    expect(k.aksi).toBe("Lengkapi");
+    expect(k.href).toBe("/sigap/lokasi-saya?kembali=%2Fsigap%2Fseleksi%2F1");
   });
   it("tidak memenuhi syarat atau bukan calon -> tidak tampil", () => {
     expect(kartuSeleksi({ ...dasar, kelayakan: { status: "tidak", alasan: ["jauh"], jarak_km: 40, wilayah_terdekat: "A" }, boleh: { ppl: tidak, pml: tidak } })).toBeNull();

@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {KELAS_GABUNGAN, labelKelas, DETIK_MAX, DETIK_MIN, JEDA_MAKS, PENGATURAN_DEFAULT, TOPIK_UMUM, normalisasiPengaturan, pilihSoalMerata, rngBenih, ringkasMain, type Pengaturan, type SoalKuis } from "@/lib/sigapKuis";
 import { MAKS_SOAL } from "@/lib/sigapTes";
-import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
+import { fetchJson, kegiatanPelatihanAktif, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, Pesan } from "../../admin/ui";
 import { URL_KUIS_ADMIN } from "./kuisHost";
 import { LABEL_STATUS, kirim, menit, type AksiFn, type Daftar, type KonfigKelas } from "./kuisBersama";
@@ -372,7 +372,7 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
                   ▶ Buka ruang & layar host
                 </button>
               )}
-              <a className={BTN_O} href={`/sigap/pelatihan/kuis?kelas=${kelas}&gabung=1`} target="_blank" rel="noreferrer">📱 Main sebagai peserta</a>
+              <a className={BTN_O} href={`/sigap/pelatihan/kuis?kelas=${kelas}&gabung=1${kegiatanPelatihanAktif() ? `&kegiatan=${kegiatanPelatihanAktif()}` : ""}`} target="_blank" rel="noreferrer">📱 Main sebagai peserta</a>
             </div>
           )}
         </Kartu>

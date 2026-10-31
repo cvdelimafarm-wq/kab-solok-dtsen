@@ -41,7 +41,7 @@ async function siapkan(req: NextRequest, ctx: Ctx) {
   if (!jenisTesValid(jenis)) return { err: galat("Jenis tes tidak dikenal.", 404) } as const;
   const akun = await akunDariRequest(req, db);
   if (!akun) return { err: galat("Sesi berakhir. Silakan masuk kembali.", 401) } as const;
-  const kegiatanId = await idKegiatanPelatihan(db);
+  const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
   if (!kegiatanId) return { err: galat("Kegiatan pelatihan belum dibuat.", 404) } as const;
   const tes = await muatTes(db, kegiatanId, jenis);
   if (!tes || !tes.aktif) return { err: galat("Tes belum tersedia.", 404) } as const;

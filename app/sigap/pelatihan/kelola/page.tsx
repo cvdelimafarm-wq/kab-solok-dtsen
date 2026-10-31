@@ -26,13 +26,13 @@ import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lol
 import ModalFotoPanitia from "../ModalFotoPanitia";
 import DaftarPelatihan, { type PelatihanDaftar } from "./daftar"; // (10 Okt 2026) halaman awal = daftar pelatihan per kegiatan
 
-type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; jumlah_soal: number; jumlah_sesi: number };
+type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; nilai_lulus?: number | null; wajib_lulus?: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
 
 type StatusPes = "belum_mulai" | "mengerjakan" | "selesai" | "terlewat" | "soal_belum_ada" | "nonaktif" | "belum_buka" | "buka";
-type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; skor_terakhir?: number | null; percobaan?: number; benar: number | null; total: number | null; jawab?: Record<string, string> | null };
+type CelTes = { status: StatusPes; mulai_at: string | null; selesai_at: string | null; batas_at: string | null; terjawab: number; skor: number | null; skor_terakhir?: number | null; percobaan?: number; lulus?: "tidak_wajib" | "belum_dinilai" | "lulus" | "belum_lulus" | null; benar: number | null; total: number | null; jawab?: Record<string, string> | null };
 type Peserta = { akun_id: number; nama: string; jenis_akun: string; peran: string; kelas: number | null; tes: Partial<Record<JenisTes, CelTes>> };
-type Stat = { peserta: number; sudah_mulai: number; mengerjakan: number; selesai: number; belum_mulai: number; rata_skor: number | null; tertinggi: number | null; terendah: number | null; mengulang?: number };
+type Stat = { peserta: number; sudah_mulai: number; mengerjakan: number; selesai: number; belum_mulai: number; rata_skor: number | null; tertinggi: number | null; terendah: number | null; mengulang?: number; lulus?: number | null; belum_lulus?: number | null };
 type Analisis = { nomor: number; teks: string; kunci: string; bobot: number; menjawab: number; benar: number; persen_benar: number | null; sebaran: Record<string, number> };
 type Monitor = { sekarang: string; tes: TesRingkas[]; peserta: Peserta[]; statistik: Partial<Record<JenisTes, Stat>>; analisis: Partial<Record<JenisTes, Analisis[]>> };
 
@@ -164,6 +164,10 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const bisaUlang = tes.jenis === "posttest";
   const [ulang, setUlang] = useState((tes.ulang_maks ?? 1) > 1);
   const [ulangMaks, setUlangMaks] = useState(String(Math.max(2, tes.ulang_maks ?? 2)));
+  // (31 Okt 2026) wajib lulus + nilai lulus. Kolom belum ada di database (SQL 20261031k belum dijalankan) = tes.wajib_lulus undefined -> setelan disembunyikan.
+  const adaSetelanLulus = tes.wajib_lulus !== undefined;
+  const [wajib, setWajib] = useState(tes.wajib_lulus === true);
+  const [nilaiLulusIsi, setNilaiLulusIsi] = useState(String(tes.nilai_lulus ?? 70));
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [pratinjau, setPratinjau] = useState<{ soal: SoalLengkap[]; galat: string[]; nama: string } | null>(null);
@@ -171,7 +175,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const [lihat, setLihat] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
 
-  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}|${tes.ulang_maks ?? 1}`;
+  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}|${tes.ulang_maks ?? 1}|${tes.wajib_lulus ?? "-"}|${tes.nilai_lulus ?? "-"}`;
   useEffect(() => {
     setBuka(keInputWib(tes.buka_at));
     setTutup(keInputWib(tes.tutup_at));
@@ -179,6 +183,8 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
     setAktif(tes.aktif);
     setUlang((tes.ulang_maks ?? 1) > 1);
     setUlangMaks(String(Math.max(2, tes.ulang_maks ?? 2)));
+    setWajib(tes.wajib_lulus === true);
+    setNilaiLulusIsi(String(tes.nilai_lulus ?? 70));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kunciJadwal]);
 
@@ -194,13 +200,26 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   }
 
   async function simpanJadwal() {
+    if (adaSetelanLulus && wajib && !(nilaiLulusIsi.trim() !== "" && Number(nilaiLulusIsi) >= 0 && Number(nilaiLulusIsi) <= 100)) {
+      setPesan({ jenis: "galat", teks: "Nilai lulus harus angka 0–100." });
+      return;
+    }
     setSibuk(true);
     setPesan(null);
     try {
       await fetchJson(URL_ADMIN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aksi: "atur_jadwal", jenis: tes.jenis, buka_at: buka, tutup_at: tutup, durasi_menit: Number(durasi), aktif, ...(bisaUlang ? { ulang_maks: ulang ? Number(ulangMaks) : 1 } : {}) }),
+        body: JSON.stringify({
+          aksi: "atur_jadwal",
+          jenis: tes.jenis,
+          buka_at: buka,
+          tutup_at: tutup,
+          durasi_menit: Number(durasi),
+          aktif,
+          ...(bisaUlang && !wajib ? { ulang_maks: ulang ? Number(ulangMaks) : 1 } : {}),
+          ...(adaSetelanLulus ? { wajib_lulus: wajib, ...(wajib ? { nilai_lulus: Number(nilaiLulusIsi) } : {}) } : {}),
+        }),
       });
       setPesan({ jenis: "ok", teks: "Jadwal tersimpan." });
       setelahSimpan();
@@ -284,7 +303,25 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
         <label className="col-span-2 flex items-center gap-2 pt-4 text-[12.5px] sm:col-span-1">
           <input type="checkbox" checked={aktif} disabled={!bisaKelola} onChange={(e) => setAktif(e.target.checked)} /> Tes aktif (tampil bagi peserta)
         </label>
-        {bisaUlang && (
+        {adaSetelanLulus && (
+          <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
+            <label className="flex items-center gap-2 text-[12.5px]">
+              <input type="checkbox" checked={wajib} disabled={!bisaKelola} onChange={(e) => setWajib(e.target.checked)} /> Peserta wajib lulus {label}
+            </label>
+            {wajib && (
+              <label className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-[#7B8794]">
+                Nilai lulus (0–100)
+                <input type="number" min={0} max={100} step="any" className={`${INPUT} w-24`} value={nilaiLulusIsi} disabled={!bisaKelola} onChange={(e) => setNilaiLulusIsi(e.target.value)} />
+              </label>
+            )}
+            <p className="mt-1 text-[11.5px] text-[#7B8794]">
+              {wajib
+                ? `Peserta yang nilainya di bawah nilai lulus melihat tombol "Ulangi ${label}" sampai lulus, maksimal 3 percobaan, selama jadwal masih terbuka. Nilai yang dipakai tetap skor tertinggi. Peserta langsung diberi tahu lulus atau belum; skor dan pembahasan tetap tampil setelah jam tutup. Status lulus tampil di Monitoring dan tidak otomatis menahan penempatan ke pendataan.`
+                : "Nonaktif: tes ini tidak mensyaratkan kelulusan."}
+            </p>
+          </div>
+        )}
+        {bisaUlang && !wajib && (
           <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
             <label className="flex items-center gap-2 text-[12.5px]">
               <input type="checkbox" checked={ulang} disabled={!bisaKelola} onChange={(e) => setUlang(e.target.checked)} /> Peserta boleh mengulang {label} (mengulang sendiri)
@@ -423,6 +460,8 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
       <span className="flex items-center gap-1.5">
         <b className="tabular-nums">{c.skor ?? "–"}</b>
         <Chip w="ok">selesai</Chip>
+        {c.lulus === "lulus" && <Chip w="ok">lulus</Chip>}
+        {c.lulus === "belum_lulus" && <Chip w="bad">belum lulus</Chip>}
         {(c.percobaan ?? 0) > 1 && <span className="text-[11px] text-[#7B8794]">tertinggi dari {c.percobaan}×</span>}
       </span>
     );
@@ -640,6 +679,9 @@ function Monitoring() {
   };
   const rataKuis = rata2(hasilNilai.map((h) => h.komponen.kuis));
   const rataAkhir = { ...rata2(hasilNilai.map((h) => h.akhir)), lengkap: hasilNilai.filter((h) => h.akhir != null && h.lengkap).length };
+  // (31 Okt 2026) tes wajib lulus: peserta (dalam filter) yang nilai resminya masih di bawah nilai lulus pada salah satu tes
+  const adaWajib = data.tes.some((t) => t.wajib_lulus === true);
+  const belumLulus = baris.filter((p) => DAFTAR_JENIS_TES.some((j) => p.tes[j]?.lulus === "belum_lulus")).length;
 
   return (
     <div className="space-y-3">
@@ -658,6 +700,7 @@ function Monitoring() {
         <KartuAngka label="Rata-rata posttest" nilai={fmt(post.rata)} ket={`selesai ${persen(post.selesai)}% (${post.selesai})`} />
         <KartuAngka label="Rata-rata kuis" nilai={fmt(rataKuis.rata)} ket={`${rataKuis.n} peserta ikut`} warna="#C2570C" />
         <KartuAngka label="Rata-rata nilai akhir" nilai={fmt(rataAkhir.rata)} ket={`${rataAkhir.n} peserta · ${rataAkhir.lengkap} lengkap`} warna="#0F3D7A" />
+        {adaWajib && <KartuAngka label="Belum lulus" nilai={belumLulus} ket="nilai di bawah nilai lulus" warna="#B42329" />}
       </div>
 
       <Kartu

@@ -14,7 +14,7 @@ import { PulsaPeserta } from "./pulsa";
 import PengaturanAwal from "@/app/portal/PengaturanAwal";
 import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
-import type { JenisTes, StatusTes, UNDANGAN } from "@/lib/sigapTes";
+import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 
 export type TesHub = {
   jenis: JenisTes;
@@ -39,7 +39,7 @@ export type Hub = {
   nama: string;
   jenis_akun: string;
   peserta: { penugasan_id: number; peran: string; kelas: number | null } | null;
-  undangan: typeof UNDANGAN;
+  undangan: InfoUndangan;
   tes: TesHub[];
   /** (7 Okt 2026) Langkah Pelatihan: null bila akun bukan peserta. */
   langkah: { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto: number; foto_total: number; slot: number[] } | null;

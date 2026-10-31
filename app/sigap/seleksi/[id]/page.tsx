@@ -12,6 +12,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import { bacaSesi } from "@/app/sigap/admin/api";
 import { teksWaktuWib, type JendelaDaftar, type PutusanDaftar } from "@/lib/seleksiDaftar";
 import type { HasilKelayakan } from "@/lib/seleksiSyarat";
+import { alamatLokasi } from "@/lib/lokasiMitra";
 
 type Data = {
   seleksi: { id: number; nama: string; kegiatan: string; status: string; jadwal_buka: string | null; jadwal_tutup: string | null; sisa_ppl: number; sisa_pml: number; syarat: { domisili: string | null; jarak_km: number | null } };
@@ -174,6 +175,9 @@ export default function HalamanSeleksi() {
                         ? `Lokasi Anda belum lengkap: ${d.kelayakan.alasan.join("; ")}.`
                         : `Belum memenuhi syarat: ${d.kelayakan.alasan.join("; ")}.`}
                   </p>
+                )}
+                {d.kelayakan?.status === "perlu_lokasi" && (
+                  <a href={alamatLokasi(`/sigap/seleksi/${id}`)} className={`${tombol} no-underline`}>Lengkapi lokasi rumah</a>
                 )}
 
                 {terdaftar ? (

@@ -79,7 +79,7 @@ export async function siapkanAdministrasi(req: NextRequest, tulis: boolean): Pro
   if (!db) return galatJson("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
   const akun = await akunDariRequest(req, db);
   if (!akun) return galatJson("Sesi berakhir. Silakan masuk kembali.", 401);
-  const kegiatanId = await idKegiatanPelatihan(db);
+  const kegiatanId = await idKegiatanPelatihan(db, req);
   if (!kegiatanId) return galatJson("Kegiatan pelatihan belum dibuat.", 404);
   const { izin, peran } = await izinAkun(db, akun.id);
   if (!boleh(izin, MENU_ADMINISTRASI, "lihat", kegiatanId)) return galatJson("Tidak punya izin membuka menu Administrasi pelatihan.", 403);

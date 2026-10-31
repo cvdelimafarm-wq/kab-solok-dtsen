@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
     const body = await req.json().catch(() => null);
     if (body?.kode !== "undangan") return galat("Langkah tidak dikenal.");
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     if (!(await pesertaPelatihan(db, akun.id, kegiatanId))) return NextResponse.json({ ok: true, dicatat: false });
     await catatLangkah(db, akun.id, kegiatanId, "undangan");

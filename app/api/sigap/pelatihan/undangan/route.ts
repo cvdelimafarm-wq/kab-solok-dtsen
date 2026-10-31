@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
+import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +21,11 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const [peserta, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), izinAkun(db, akun.id)]);
     if (!peserta && !boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return galat("Undangan hanya untuk peserta pelatihan.", 403);
+    if (!(await undanganUntuk(db, kegiatanId)).pdf) return galat("Surat undangan resmi belum tersedia untuk pelatihan ini.", 404);
     const berkas = await readFile(path.join(process.cwd(), "data", "undangan-pelatihan-8okt2026.pdf"));
     return new NextResponse(new Uint8Array(berkas), {
       headers: {

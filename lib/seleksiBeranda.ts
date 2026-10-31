@@ -7,6 +7,7 @@
 import type { HasilKelayakan } from "@/lib/seleksiSyarat";
 import type { JendelaDaftar, PutusanDaftar } from "@/lib/seleksiDaftar";
 import { alamatSeleksi, teksWaktuWib } from "@/lib/seleksiDaftar";
+import { alamatLokasi } from "@/lib/lokasiMitra";
 
 export type NadaKartuSeleksi = "biru" | "emas" | "hijau";
 
@@ -44,7 +45,8 @@ export function kartuSeleksi(m: MasukanKartu): KartuSeleksi | null {
     return { ...dasar, nada: "biru", pesan: `Pendaftaran dibuka untuk ${peran}.${dasar.tutup ? ` Tutup ${dasar.tutup}.` : ""}`, aksi: "Daftar" };
   }
   if (m.kelayakan.status === "perlu_lokasi") {
-    return { ...dasar, nada: "emas", pesan: "Lengkapi lokasi rumah Anda agar bisa ikut seleksi ini.", aksi: "Lihat" };
+    // (31 Okt 2026) langsung ke layar melengkapi lokasi; setelah tersimpan kembali ke halaman seleksi ini
+    return { ...dasar, nada: "emas", pesan: "Lengkapi lokasi rumah Anda agar bisa ikut seleksi ini.", aksi: "Lengkapi", href: alamatLokasi(alamatSeleksi(m.id)) };
   }
   return null;
 }

@@ -11,13 +11,22 @@ import { sesiDariHeader } from "@/lib/sigapAkses";
 import { SESI_BAWAAN, aturanDariJamLama, hariKegiatan, jadwalSesi, tanggalWib, validasiSesi, type AturanSesi, type PengaturanPresensi, type RekamPresensi } from "@/lib/sigapPresensi";
 import {
   KODE_KEGIATAN_PELATIHAN,
+  UNDANGAN,
+  kegiatanDariParam,
+  undanganDariKegiatan,
+  type InfoUndangan,
   bersihkanJawaban,
+  alasanTakBisaUlang,
   bisaUlang,
   hasilBolehTampil,
   hitungBatas,
   hitungSkor,
+  nilaiLulus,
+  percobaanMaks,
   skorResmi,
+  statusLulus,
   statusTes,
+  wajibLulus,
   type JenisTes,
   type SesiBaris,
   type SoalLengkap,
@@ -41,21 +50,74 @@ export async function akunDariRequest(req: NextRequest, db: Db): Promise<{ id: n
   return { id: a.id as number, nama: a.nama as string, jenis: a.jenis as string };
 }
 
-export async function idKegiatanPelatihan(db: Db): Promise<number | null> {
-  const { data } = await db.from("sigap_kegiatan").select("id").eq("kode", KODE_KEGIATAN_PELATIHAN).maybeSingle();
-  return (data?.id as number | undefined) ?? null;
+/** (31 Okt 2026) Kegiatan pelatihan yang diminta lewat ?kegiatan=ID pada permintaan; null bila tidak ada/tidak valid. */
+export function kegiatanDiminta(req?: { nextUrl?: { searchParams: URLSearchParams } } | null): number | null {
+  return kegiatanDariParam(req?.nextUrl?.searchParams?.get("kegiatan"));
 }
 
-const KOLOM_TES = "id, kegiatan_id, jenis, judul, buka_at, durasi_menit, tutup_at, aktif, ulang_maks";
+const cachePilihan = new Map<number, { sampai: number; id: number | null }>();
+
+/**
+ * (31 Okt 2026) Kegiatan pelatihan yang sedang dilayani. Urutan: (1) ?kegiatan=ID bila diminta (harus kegiatan berjenis pelatihan);
+ * (2) bila `akunId` diberikan (rute peserta) dan akun itu BUKAN peserta pelatihan bawaan tetapi peserta tepat satu pelatihan lain, pelatihan itu;
+ * (3) pelatihan bawaan PSP Pascabencana (perilaku lama). Rute admin cukup memberi `req` saja.
+ */
+export async function idKegiatanPelatihan(db: Db, req?: { nextUrl?: { searchParams: URLSearchParams } } | null, akunId?: number): Promise<number | null> {
+  const diminta = kegiatanDiminta(req);
+  if (diminta !== null) {
+    const { data } = await db.from("sigap_kegiatan").select("id").eq("id", diminta).eq("jenis", "pelatihan").maybeSingle();
+    return (data?.id as number | undefined) ?? null;
+  }
+  const { data } = await db.from("sigap_kegiatan").select("id").eq("kode", KODE_KEGIATAN_PELATIHAN).maybeSingle();
+  const bawaan = (data?.id as number | undefined) ?? null;
+  if (!akunId) return bawaan;
+  const ada = cachePilihan.get(akunId);
+  if (ada && ada.sampai > Date.now()) return ada.id ?? bawaan;
+  let pilih: number | null = null;
+  if (bawaan !== null && !(await pesertaPelatihan(db, akunId, bawaan))) {
+    const { data: pen } = await db.from("sigap_penugasan").select("kegiatan_id").eq("akun_id", akunId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(50);
+    const ids = Array.from(new Set(((pen ?? []) as { kegiatan_id: number }[]).map((r) => r.kegiatan_id)));
+    if (ids.length > 0) {
+      const { data: keg } = await db.from("sigap_kegiatan").select("id").in("id", ids).eq("jenis", "pelatihan").eq("aktif", true);
+      const lain = ((keg ?? []) as { id: number }[]).map((r) => r.id);
+      if (lain.length === 1) pilih = lain[0];
+    }
+  }
+  cachePilihan.set(akunId, { sampai: Date.now() + 30_000, id: pilih });
+  return pilih ?? bawaan;
+}
+
+/** (31 Okt 2026) Info undangan untuk kegiatan itu: UNDANGAN resmi untuk PSP, selain itu disusun dari data kegiatan. */
+export async function undanganUntuk(db: Db, kegiatanId: number): Promise<InfoUndangan> {
+  const { data: k } = await db.from("sigap_kegiatan").select("kode, nama, tanggal_mulai").eq("id", kegiatanId).maybeSingle();
+  if (!k || k.kode === KODE_KEGIATAN_PELATIHAN) return UNDANGAN;
+  const { data: p } = await db.from("sigap_pelatihan_pengaturan").select("tempat, presensi_buka_at, presensi_tutup_at").eq("kegiatan_id", kegiatanId).maybeSingle();
+  return undanganDariKegiatan({ nama: k.nama as string, tanggal_mulai: (k.tanggal_mulai as string | null) ?? null }, (p as { tempat?: string | null; presensi_buka_at?: string | null; presensi_tutup_at?: string | null } | null) ?? null, tanggalWib(new Date().getTime()));
+}
+
+const KOLOM_TES_LAMA = "id, kegiatan_id, jenis, judul, buka_at, durasi_menit, tutup_at, aktif, ulang_maks";
+// (31 Okt 2026) + nilai lulus / wajib lulus (SQL 20261031k). Bila kolom belum ada, bacaan jatuh ke KOLOM_TES_LAMA (perilaku lama, tanpa wajib lulus).
+const KOLOM_TES = `${KOLOM_TES_LAMA}, nilai_lulus, wajib_lulus`;
+
+/** Nilai numeric dari PostgREST bisa berupa teks ("70.00"): jadikan angka agar perbandingan skor benar. */
+function rapikanTes(t: TesBaris): TesBaris {
+  return t.nilai_lulus === undefined || t.nilai_lulus === null ? t : { ...t, nilai_lulus: Number(t.nilai_lulus) };
+}
 
 export async function muatTesDaftar(db: Db, kegiatanId: number): Promise<TesBaris[]> {
-  const { data } = await db.from("sigap_tes").select(KOLOM_TES).eq("kegiatan_id", kegiatanId).order("jenis", { ascending: false }); // pretest dulu
-  return (data ?? []) as TesBaris[];
+  const q = (kolom: string) => db.from("sigap_tes").select(kolom).eq("kegiatan_id", kegiatanId).order("jenis", { ascending: false }); // pretest dulu
+  const { data, error } = await q(KOLOM_TES);
+  if (!error) return ((data ?? []) as unknown as TesBaris[]).map(rapikanTes);
+  const { data: lama } = await q(KOLOM_TES_LAMA);
+  return (lama ?? []) as unknown as TesBaris[];
 }
 
 export async function muatTes(db: Db, kegiatanId: number, jenis: JenisTes): Promise<TesBaris | null> {
-  const { data } = await db.from("sigap_tes").select(KOLOM_TES).eq("kegiatan_id", kegiatanId).eq("jenis", jenis).maybeSingle();
-  return (data as TesBaris | null) ?? null;
+  const q = (kolom: string) => db.from("sigap_tes").select(kolom).eq("kegiatan_id", kegiatanId).eq("jenis", jenis).maybeSingle();
+  const { data, error } = await q(KOLOM_TES);
+  if (!error) return data ? rapikanTes(data as unknown as TesBaris) : null;
+  const { data: lama } = await q(KOLOM_TES_LAMA);
+  return (lama as unknown as TesBaris | null) ?? null;
 }
 
 export async function muatSoal(db: Db, tesId: number): Promise<SoalLengkap[]> {
@@ -125,6 +187,11 @@ export type KeadaanTes = {
   percobaan: number;
   ulang_maks: number;
   bisa_ulang: boolean;
+  /** (31 Okt 2026) Wajib lulus: nilai lulus, dan putusan setelah ada percobaan selesai ("lulus" | "belum_lulus"; null = tidak wajib / belum selesai).
+   *  Putusan lulus/belum lulus boleh tampil segera agar peserta tahu perlu mengulang; skor dan pembahasan tetap menunggu tes ditutup. */
+  wajib_lulus: boolean;
+  nilai_lulus: number;
+  lulus: "lulus" | "belum_lulus" | null;
   /** Hanya saat status "mengerjakan". */
   soal?: SoalPeserta[];
   jawaban?: Record<string, string>;
@@ -154,10 +221,17 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
     jumlah_soal: soal.length,
     sesi: sesi ? { mulai_at: sesi.mulai_at, batas_at: sesi.batas_at, selesai_at: sesi.selesai_at, terjawab: Object.keys(bersihkanJawaban(sesi.jawaban, soal)).length } : null,
     percobaan: sesi?.percobaan ?? 1,
-    ulang_maks: tes.jenis === "posttest" ? Math.max(1, tes.ulang_maks ?? 1) : 1,
+    ulang_maks: percobaanMaks(tes),
     bisa_ulang: bisaUlang(tes, sesi, soal.length, sekarang),
+    wajib_lulus: wajibLulus(tes),
+    nilai_lulus: nilaiLulus(tes),
+    lulus: null,
     hasil_tertunda: false,
   };
+  if (wajibLulus(tes) && sesi?.selesai_at) {
+    const sl = statusLulus(tes, skorResmi(sesi));
+    k.lulus = sl === "lulus" || sl === "belum_lulus" ? sl : null;
+  }
   if (status === "mengerjakan" && sesi) {
     k.soal = soal.map((s) => ({ nomor: s.nomor, teks: s.teks, opsi: s.opsi }));
     k.jawaban = bersihkanJawaban(sesi.jawaban, soal);
@@ -207,12 +281,7 @@ export type HasilUlang = { ok: true } | { ok: false; pesan: string; status: numb
  * Aman dari klik ganda/dua perangkat: reset hanya berhasil bila percobaan & status selesai masih seperti yang dibaca.
  */
 export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: SoalLengkap[], sekarang: Date): Promise<HasilUlang> {
-  if (!bisaUlang(tes, sesi, soal.length, sekarang)) {
-    if (tes.jenis !== "posttest" || !(tes.ulang_maks > 1)) return { ok: false, pesan: "Tes ini tidak membuka kesempatan mengulang.", status: 409 };
-    if (!sesi.selesai_at) return { ok: false, pesan: "Selesaikan percobaan yang sedang berjalan terlebih dahulu.", status: 409 };
-    if (sesi.percobaan >= tes.ulang_maks) return { ok: false, pesan: `Kesempatan mengulang sudah habis (maksimal ${tes.ulang_maks} percobaan).`, status: 409 };
-    return { ok: false, pesan: "Waktu tes sudah hampir/ sudah ditutup, tidak bisa mengulang lagi.", status: 409 };
-  }
+  if (!bisaUlang(tes, sesi, soal.length, sekarang)) return { ok: false, pesan: alasanTakBisaUlang(tes, sesi), status: 409 };
   // 1) arsipkan percobaan yang baru selesai (unik per sesi+percobaan: klik ganda tidak menggandakan)
   const { error: eArsip } = await db.from("sigap_tes_sesi_arsip").upsert(
     {

@@ -35,8 +35,11 @@ export type TesBaris = {
   durasi_menit: number;
   tutup_at: string;
   aktif: boolean;
-  /** (8 Okt 2026) Jumlah percobaan maksimal per peserta; 1 = tidak boleh mengulang. Hanya berlaku utk posttest. */
+  /** (8 Okt 2026) Jumlah percobaan maksimal per peserta; 1 = tidak boleh mengulang. Hanya berlaku utk posttest (kecuali wajib_lulus). */
   ulang_maks: number;
+  /** (31 Okt 2026) Nilai lulus 0-100 dan setelan wajib lulus. Kolom belum ada (SQL 20261031k belum dijalankan) = undefined = perilaku lama. */
+  nilai_lulus?: number | null;
+  wajib_lulus?: boolean;
 };
 
 export type SesiBaris = {
@@ -117,18 +120,66 @@ export function skorResmi(s: Pick<SesiBaris, "selesai_at" | "skor" | "skor_terba
   return Math.max(a, b);
 }
 
-/** Tawarkan "Ulangi"? Posttest saja, percobaan sebelumnya sudah selesai, kuota belum habis, dan jadwal tes masih terbuka. */
-export function bisaUlang(
-  tes: Pick<TesBaris, "jenis" | "aktif" | "buka_at" | "tutup_at" | "ulang_maks">,
-  sesi: Pick<SesiBaris, "selesai_at" | "percobaan"> | null,
-  jumlahSoal: number,
-  sekarang: Date
-): boolean {
+// ---------------------------------------------------------------------------------------------
+// (31 Okt 2026) Wajib lulus. Pengaturan per tes: centang wajib_lulus + nilai_lulus (bawaan 70).
+// Bila wajib: skor resmi (tertinggi dari semua percobaan) di bawah nilai lulus -> peserta boleh mengulang sampai lulus, maksimal 3 percobaan,
+// selama jadwal tes terbuka (berlaku untuk pretest maupun posttest). Sudah lulus -> tombol ulang hilang. Kuis (Adu Sigap) tidak termasuk.
+// Kelulusan hanya penanda/analisis; tidak memblokir penempatan ke pendataan.
+// ---------------------------------------------------------------------------------------------
+export const NILAI_LULUS_BAWAAN = 70;
+export const PERCOBAAN_WAJIB_LULUS = 3;
+
+export const wajibLulus = (t: Pick<TesBaris, "wajib_lulus">): boolean => t.wajib_lulus === true;
+
+/** Nilai lulus 0-100; kosong/rusak jatuh ke bawaan 70. */
+export function nilaiLulus(t: Pick<TesBaris, "nilai_lulus">): number {
+  const n = t.nilai_lulus === null || t.nilai_lulus === undefined ? NaN : Number(t.nilai_lulus);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : NILAI_LULUS_BAWAAN;
+}
+
+/** Jumlah percobaan maksimal per peserta: wajib lulus = 3; selain itu posttest mengikuti ulang_maks, pretest 1. */
+export function percobaanMaks(t: Pick<TesBaris, "jenis" | "ulang_maks" | "wajib_lulus">): number {
+  if (wajibLulus(t)) return PERCOBAAN_WAJIB_LULUS;
+  if (t.jenis !== "posttest") return 1;
+  const n = Number(t.ulang_maks);
+  return Number.isInteger(n) ? Math.min(ULANG_MAKS_TERTINGGI, Math.max(1, n)) : 1;
+}
+
+export type StatusLulus = "tidak_wajib" | "belum_dinilai" | "lulus" | "belum_lulus";
+export const LABEL_STATUS_LULUS: Record<StatusLulus, string> = { tidak_wajib: "Tidak wajib lulus", belum_dinilai: "Belum dinilai", lulus: "Lulus", belum_lulus: "Belum lulus" };
+
+/** Kelulusan menurut skor resmi (null = belum ada percobaan yang selesai). Tes yang tidak wajib lulus selalu "tidak_wajib". */
+export function statusLulus(t: Pick<TesBaris, "wajib_lulus" | "nilai_lulus">, skor: number | null): StatusLulus {
+  if (!wajibLulus(t)) return "tidak_wajib";
+  if (skor === null || skor === undefined || !Number.isFinite(Number(skor))) return "belum_dinilai";
+  return Number(skor) >= nilaiLulus(t) ? "lulus" : "belum_lulus";
+}
+
+type TesUlang = Pick<TesBaris, "jenis" | "aktif" | "buka_at" | "tutup_at" | "ulang_maks" | "nilai_lulus" | "wajib_lulus">;
+type SesiUlang = Pick<SesiBaris, "selesai_at" | "percobaan" | "skor" | "skor_terbaik">;
+
+/**
+ * Tawarkan "Ulangi"? Percobaan sebelumnya sudah selesai, kuota belum habis, jadwal tes masih terbuka, dan:
+ *   - tes biasa: hanya posttest yang diberi kesempatan ulang (ulang_maks > 1);
+ *   - tes wajib lulus (pretest/posttest): hanya selama skor resmi belum mencapai nilai lulus.
+ */
+export function bisaUlang(tes: TesUlang, sesi: SesiUlang | null, jumlahSoal: number, sekarang: Date): boolean {
   if (!sesi || !sesi.selesai_at) return false;
-  if (tes.jenis !== "posttest" || !tes.aktif || jumlahSoal <= 0) return false;
-  if (!(tes.ulang_maks > 1) || sesi.percobaan >= tes.ulang_maks) return false;
+  if (!tes.aktif || jumlahSoal <= 0) return false;
+  if (!wajibLulus(tes) && tes.jenis !== "posttest") return false;
+  if (sesi.percobaan >= percobaanMaks(tes)) return false;
+  if (statusLulus(tes, skorResmi(sesi)) === "lulus") return false;
   const t = sekarang.getTime();
   return t >= new Date(tes.buka_at).getTime() && new Date(tes.tutup_at).getTime() - t >= SISA_ULANG_MIN_DETIK * 1000;
+}
+
+/** Pesan bila "ulang" ditolak (urutan pemeriksaan mengikuti bisaUlang). */
+export function alasanTakBisaUlang(tes: TesUlang, sesi: SesiUlang): string {
+  if (!wajibLulus(tes) && (tes.jenis !== "posttest" || percobaanMaks(tes) <= 1)) return "Tes ini tidak membuka kesempatan mengulang.";
+  if (!sesi.selesai_at) return "Selesaikan percobaan yang sedang berjalan terlebih dahulu.";
+  if (statusLulus(tes, skorResmi(sesi)) === "lulus") return "Anda sudah mencapai nilai lulus, tidak perlu mengulang.";
+  if (sesi.percobaan >= percobaanMaks(tes)) return `Kesempatan mengulang sudah habis (maksimal ${percobaanMaks(tes)} percobaan).`;
+  return "Waktu tes sudah hampir/ sudah ditutup, tidak bisa mengulang lagi.";
 }
 
 /** Hasil (skor & pembahasan) boleh ditampilkan setelah tes ditutup utk semua peserta. */
@@ -328,3 +379,80 @@ export const UNDANGAN = {
   ],
   ttd: { jabatan: "Kepala BPS Kabupaten Solok", nama: "Bambang Suryanggono" },
 } as const;
+
+// ======================================================================
+// (31 Okt 2026) Pelatihan per kegiatan: info undangan umum + pembaca parameter ?kegiatan=ID (murni, bisa diuji)
+// ======================================================================
+/** Bentuk umum info undangan. UNDANGAN (PSP Pascabencana) memenuhinya; pelatihan lain disusun `undanganDariKegiatan`. */
+export type InfoUndangan = {
+  nomor: string;
+  tanggal_surat: string;
+  hal: string;
+  hari_tanggal: string;
+  tanggal_iso: string;
+  pukul: string;
+  tempat: string;
+  pakaian: string;
+  ketentuan: readonly string[];
+  pdf: string;
+  jadwal: readonly { waktu: string; materi: readonly string[]; ket: string }[];
+  ttd: { jabatan: string; nama: string };
+  /** true = disusun otomatis dari data kegiatan (bukan surat undangan resmi); layar menyembunyikan bagian yang kosong. */
+  turunan?: boolean;
+};
+
+/** Angka kegiatan dari parameter ?kegiatan=ID; null bila kosong/tidak valid. */
+export function kegiatanDariParam(v: string | null | undefined): number | null {
+  if (v === null || v === undefined || !/^\d{1,12}$/.test(v.trim())) return null;
+  const n = Number(v.trim());
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+const NAMA_HARI_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const NAMA_BULAN_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+/** "2026-10-08" -> "Kamis, 8 Oktober 2026"; "" bila bukan tanggal yang benar. */
+export function tanggalPanjangId(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return "";
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return "";
+  return `${NAMA_HARI_ID[dt.getUTCDay()]}, ${d} ${NAMA_BULAN_ID[mo - 1]} ${y}`;
+}
+
+const jamWib = (iso: string | null | undefined): string => {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return "";
+  const w = new Date(t + 7 * 3_600_000);
+  return `${String(w.getUTCHours()).padStart(2, "0")}.${String(w.getUTCMinutes()).padStart(2, "0")}`;
+};
+
+/**
+ * Info undangan untuk pelatihan selain PSP Pascabencana: hanya memuat yang diketahui dari data kegiatan dan pengaturan presensi.
+ * Nomor surat, jadwal acara, ketentuan, dan PDF dibiarkan kosong (tidak mengarang); layar menyembunyikannya.
+ */
+export function undanganDariKegiatan(
+  k: { nama: string; tanggal_mulai: string | null },
+  p: { tempat?: string | null; presensi_buka_at?: string | null; presensi_tutup_at?: string | null } | null,
+  hariIniWib: string,
+): InfoUndangan {
+  const tgl = k.tanggal_mulai && tanggalPanjangId(k.tanggal_mulai) ? k.tanggal_mulai : hariIniWib;
+  const buka = jamWib(p?.presensi_buka_at);
+  const tutup = jamWib(p?.presensi_tutup_at);
+  return {
+    nomor: "",
+    tanggal_surat: "",
+    hal: k.nama,
+    hari_tanggal: tanggalPanjangId(tgl),
+    tanggal_iso: tgl,
+    pukul: buka && tutup ? `${buka}\u2013${tutup} WIB` : "",
+    tempat: (p?.tempat ?? "").trim(),
+    pakaian: "",
+    ketentuan: [],
+    pdf: "",
+    jadwal: [],
+    ttd: { jabatan: "", nama: "" },
+    turunan: true,
+  };
+}

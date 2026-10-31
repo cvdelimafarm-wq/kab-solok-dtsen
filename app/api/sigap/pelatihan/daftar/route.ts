@@ -10,7 +10,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin } from "@/lib/sigapTesDb";
-import { KODE_KEGIATAN_PELATIHAN } from "@/lib/sigapTes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +47,7 @@ export async function GET(req: NextRequest) {
     status: status(k),
     peserta: jumlah.get(k.id) ?? 0,
     boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", k.id),
-    dapat_dikelola: k.kode === KODE_KEGIATAN_PELATIHAN,
+    dapat_dikelola: true, // (31 Okt 2026) semua pelatihan dapat dikelola: rute memakai ?kegiatan=ID
   });
 
   const sisa = new Set(ids);

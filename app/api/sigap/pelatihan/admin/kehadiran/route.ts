@@ -16,10 +16,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
-import { UNDANGAN } from "@/lib/sigapTes";
 import { resetPinOlehAdmin } from "@/lib/sigapPin";
 import { jadwalSesi, keadaanHari, susunHari, validasiSesi, type AturanSesi } from "@/lib/sigapPresensi";
-import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, bawaanPengaturanPresensi, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, muatRekamPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, bawaanPengaturanPresensi, dbAdmin, idKegiatanPelatihan, undanganUntuk, muatPengaturanPresensi, muatRekamPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,8 +38,9 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
+    const tglPel = (await undanganUntuk(db, kegiatanId)).tanggal_iso;
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return galat("Tidak punya izin membuka menu ini.", 403);
     const bagian = req.nextUrl.searchParams.get("bagian") ?? "";
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
     if (bagian === "translok") {
       const { data: kg } = await db.from("sigap_kegiatan").select("jumlah_foto").eq("id", kegiatanId).maybeSingle();
       const total = Number(kg?.jumlah_foto) > 0 ? Number(kg?.jumlah_foto) : 5;
-      const { data: fo } = await db.from("sigap_dokumentasi").select("penugasan_id, slot, diunggah_at").eq("kegiatan_id", kegiatanId).eq("tanggal", UNDANGAN.tanggal_iso).limit(20000);
+      const { data: fo } = await db.from("sigap_dokumentasi").select("penugasan_id, slot, diunggah_at").eq("kegiatan_id", kegiatanId).eq("tanggal", tglPel).limit(20000);
       const per = new Map<number, { slot: Set<number>; terakhir: string }>();
       for (const f of fo ?? []) {
         const id = f.penugasan_id as number;
@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
       );
       const lengkap = peserta.filter((p) => p.slot.length >= total).length;
       const belum = peserta.filter((p) => p.slot.length === 0).length;
-      return NextResponse.json({ sekarang: sekarang.toISOString(), tanggal: UNDANGAN.tanggal_iso, foto_total: total, stat: { peserta: peserta.length, lengkap, sebagian: peserta.length - lengkap - belum, belum }, peserta });
+      return NextResponse.json({ sekarang: sekarang.toISOString(), tanggal: tglPel, foto_total: total, stat: { peserta: peserta.length, lengkap, sebagian: peserta.length - lengkap - belum, belum }, peserta });
     }
 
     if (bagian === "akses") {
@@ -202,7 +202,7 @@ export async function GET(req: NextRequest) {
       const penugasanId = Number(req.nextUrl.searchParams.get("penugasan_id"));
       const ok = pen?.some((p) => p.id === penugasanId);
       if (!ok) return galat("Penugasan tidak ditemukan.", 404);
-      const { data: fo } = await db.from("sigap_dokumentasi").select("slot, file_path, diunggah_at, susulan").eq("kegiatan_id", kegiatanId).eq("penugasan_id", penugasanId).eq("tanggal", UNDANGAN.tanggal_iso).order("slot");
+      const { data: fo } = await db.from("sigap_dokumentasi").select("slot, file_path, diunggah_at, susulan").eq("kegiatan_id", kegiatanId).eq("penugasan_id", penugasanId).eq("tanggal", tglPel).order("slot");
       const foto = [];
       for (const f of fo ?? []) {
         const { data: s } = await db.storage.from(BUCKET_SIGAP).createSignedUrl(String(f.file_path), 3600);
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "kelola", kegiatanId)) return galat("Tidak punya izin mengelola presensi pelatihan.", 403);

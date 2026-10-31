@@ -228,8 +228,23 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
 
   const sisaBuka = (new Date(k.tes.buka_at).getTime() - sekarang()) / 1000;
   const sisaTutup = (new Date(k.tes.tutup_at).getTime() - sekarang()) / 1000;
+  // (31 Okt 2026) Wajib lulus: peserta diberi tahu lulus / belum lulus segera setelah mengirim (skor dan pembahasan tetap menunggu tes ditutup).
+  const kartuLulus =
+    k.wajib_lulus && k.lulus ? (
+      <Kartu judul={k.lulus === "lulus" ? "Anda lulus ✓" : "Anda belum mencapai nilai lulus"}>
+        <p className={`text-[13px] leading-relaxed ${k.lulus === "lulus" ? "text-[#13794B]" : "text-[#B42329]"}`}>
+          {k.lulus === "lulus"
+            ? `Nilai Anda mencapai nilai lulus (${k.nilai_lulus}). Tidak perlu mengulang.`
+            : k.bisa_ulang
+              ? `Nilai lulus ${label} adalah ${k.nilai_lulus}. Anda perlu mengulang sampai lulus (percobaan ke-${k.percobaan} dari maksimal ${k.ulang_maks}).`
+              : k.percobaan >= k.ulang_maks
+                ? `Nilai lulus ${label} adalah ${k.nilai_lulus}. Kesempatan mengulang (maksimal ${k.ulang_maks} percobaan) sudah habis. Hubungi panitia pelatihan.`
+                : `Nilai lulus ${label} adalah ${k.nilai_lulus}. Waktu tes sudah ditutup atau hampir ditutup sehingga tidak bisa mengulang lagi. Hubungi panitia pelatihan.`}
+        </p>
+      </Kartu>
+    ) : null;
   const kartuUlang = k.bisa_ulang ? (
-    <Kartu judul={`Kesempatan mengulang ${label}`}>
+    <Kartu judul={k.wajib_lulus ? `Ulangi ${label} sampai lulus` : `Kesempatan mengulang ${label}`}>
       <p className="text-[13px] leading-relaxed text-[#5B6B84]">
         Percobaan ke-{k.percobaan} dari maksimal {k.ulang_maks}. Anda boleh mengulang selama sesi masih terbuka (sampai pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>, {formatSisa(sisaTutup)} lagi). Nilai yang dipakai adalah <b>skor tertinggi</b> dari semua percobaan, jadi mengulang tidak menurunkan nilai Anda.
       </p>
@@ -390,6 +405,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
           {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#5B6B84]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
         </Kartu>
       )}
+      {status === "selesai" && kartuLulus}
       {status === "selesai" && kartuUlang}
       {status === "selesai" && k.hasil && (
         <>

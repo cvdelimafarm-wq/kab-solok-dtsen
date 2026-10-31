@@ -11,9 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { keadaanHari, susunHari } from "@/lib/sigapPresensi";
 import { KOLOM_PENGUMUMAN, keBentukPeserta, tampilUntuk, type Pengumuman } from "@/lib/sigapPengumuman";
-import { UNDANGAN, statusTes } from "@/lib/sigapTes";
+import { statusTes } from "@/lib/sigapTes";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
-import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
+import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, undanganUntuk, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +26,9 @@ export async function GET(req: NextRequest) {
   try {
     const akun = await akunDariRequest(req, db);
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const kegiatanId = await idKegiatanPelatihan(db);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
+    const undangan = await undanganUntuk(db, kegiatanId);
     const sekarang = new Date();
     const [peserta, daftar, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), muatTesDaftar(db, kegiatanId), izinAkun(db, akun.id)]);
     const nSoal = await jumlahSoal(db, daftar.map((t) => t.id));
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
         ringkasanKuisHub(db, kegiatanId, akun.id, peserta.kelas ?? null).catch(() => null),
         muatPengaturanPresensi(db, kegiatanId),
         muatRekamPresensi(db, kegiatanId, akun.id),
-        muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, UNDANGAN.tanggal_iso),
+        muatLangkah(db, akun.id, kegiatanId, peserta.penugasan_id, undangan.tanggal_iso),
         db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle(),
       ]);
       kuis = kuisHasil;
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
       nama: akun.nama,
       jenis_akun: akun.jenis,
       peserta,
-      undangan: UNDANGAN,
+      undangan,
       tes,
       langkah,
       presensi,

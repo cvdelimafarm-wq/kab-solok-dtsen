@@ -47,7 +47,7 @@ export default function HalamanUndangan() {
   }
 
   return (
-    <Kerangka aktif="undangan" nama={data?.nama} judul="Undangan Pelatihan" sub={u ? `Nomor surat: ${u.nomor}` : undefined}>
+    <Kerangka aktif="undangan" nama={data?.nama} judul="Undangan Pelatihan" sub={u && u.nomor ? `Nomor surat: ${u.nomor}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!data && !galat && <Memuat />}
       {data && u && !data.peserta && (
@@ -62,7 +62,7 @@ export default function HalamanUndangan() {
       )}
       {data && u && data.peserta && (
         <>
-          <Kartu judul="Undangan Anda" ket={`Batang Barus, ${u.tanggal_surat}`}>
+          <Kartu judul="Undangan Anda" ket={u.tanggal_surat ? `Batang Barus, ${u.tanggal_surat}` : undefined}>
             <dl>
               <Baris k="Nama" v={data.nama} />
               <Baris k="Peran" v={peranLabel(data.peserta.peran)} />
@@ -71,11 +71,14 @@ export default function HalamanUndangan() {
               <Baris k="Pukul" v={u.pukul} />
               <Baris k="Tempat" v={u.tempat} />
             </dl>
-            <p className="mt-2 rounded-lg bg-[#F6F8FB] px-3 py-2 text-[12.5px] leading-relaxed text-[#5B6B84]">
-              <b>Pakaian:</b> {u.pakaian}
-            </p>
+            {u.pakaian && (
+              <p className="mt-2 rounded-lg bg-[#F6F8FB] px-3 py-2 text-[12.5px] leading-relaxed text-[#5B6B84]">
+                <b>Pakaian:</b> {u.pakaian}
+              </p>
+            )}
           </Kartu>
 
+          {!u.turunan && (
           <Kartu judul="Ketentuan transpor lokal" className="border-l-4 border-l-[#F4B400]">
             <p className="text-[13px] leading-relaxed">
               Seluruh peserta dibayarkan transpor lokal sehingga <b>wajib melampirkan 5 foto ber-time stamp</b>:
@@ -94,7 +97,9 @@ export default function HalamanUndangan() {
               </Link>
             )}
           </Kartu>
+          )}
 
+          {u.jadwal.length > 0 && (
           <Kartu judul="Jadwal" ket={u.hari_tanggal}>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[13px]">
@@ -128,7 +133,9 @@ export default function HalamanUndangan() {
               .
             </p>
           </Kartu>
+          )}
 
+          {u.ketentuan.length > 0 && (
           <Kartu judul="Ketentuan lain">
             <ul className="list-disc space-y-1 pl-5 text-[13px] leading-relaxed">
               {u.ketentuan.map((k, i) => (
@@ -136,14 +143,19 @@ export default function HalamanUndangan() {
               ))}
             </ul>
           </Kartu>
+          )}
 
-          {galatPdf && <Pesan jenis="galat">{galatPdf}</Pesan>}
-          <button type="button" onClick={bukaPdf} disabled={unduh} className={`${BTN} w-full !py-3 !text-[14px]`}>
-            {unduh ? "Menyiapkan PDF…" : "⬇ Unduh PDF Undangan"}
-          </button>
-          <p className="text-center text-[11.5px] text-[#6B7A90]">
-            {u.ttd.jabatan}, {u.ttd.nama}
-          </p>
+          {u.pdf && (
+            <>
+              {galatPdf && <Pesan jenis="galat">{galatPdf}</Pesan>}
+              <button type="button" onClick={bukaPdf} disabled={unduh} className={`${BTN} w-full !py-3 !text-[14px]`}>
+                {unduh ? "Menyiapkan PDF…" : "⬇ Unduh PDF Undangan"}
+              </button>
+              <p className="text-center text-[11.5px] text-[#6B7A90]">
+                {u.ttd.jabatan}, {u.ttd.nama}
+              </p>
+            </>
+          )}
         </>
       )}
     </Kerangka>
