@@ -4,16 +4,17 @@
 //
 // (31 Okt 2026) Tabel "Daftar pegawai organik" di tab Pengguna. Urutan kolom: No, Nama, Kecamatan & Nagari domisili (dua kolom), NIP lama/baru, jabatan,
 // tanggal lahir, usia, TMT, masa kerja, email, status, jenis kelamin, kecamatan kantor.
-// - Judul kolom berfilter ala spreadsheet (KepalaKolom + lib/saringKolom.ts): urut naik/turun dan centang nilai.
+// - Judul kolom memakai standar tabel SIGAP (app/sigap/admin/KepalaKolom + lib/sigapTabelKolom): cari, urut, dan filter nilai per kolom.
 // - Klik nama -> baris terbuka berisi tombol Reset PIN dan Edit (domisili & kecamatan kantor).
 // - Usia dan masa kerja dihitung di layar dari tanggal lahir/TMT (tahun-bulan-hari) dan ikut bergerak tiap hari, bukan angka tersimpan.
 // NIP disamarkan kecuali "Tampilkan NIP lengkap" (izin kelola, tercatat di audit).
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { BTN, BTN_O, Chip, INPUT, Kartu, TabelKartu, TD, TH } from "../admin/ui";
-import KepalaKolom from "./KepalaKolom";
-import { durasi, saringPegawai, tanggalWib, teksDurasi, totalBulan, type BarisPegawai, type DaftarWilayah, type RingkasPegawai, type SaringanPegawai } from "@/lib/pegawaiOrganik";
-import { jumlahSaringan, STATUS_AWAL, terapkan, type DefKolom, type StatusKolom } from "@/lib/saringKolom";
+import KepalaKolom from "../admin/KepalaKolom";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { durasi, saringPegawai, tanggalWib, teksDurasi, type BarisPegawai, type DaftarWilayah, type RingkasPegawai, type SaringanPegawai } from "@/lib/pegawaiOrganik";
+import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 
 type Props = {
   baris: BarisPegawai[];
@@ -36,6 +37,7 @@ function DialogUbah({ b, wilayah, onTutup, onSimpan }: { b: BarisPegawai; wilaya
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
 
+  useTutupDenganBack(true, () => !sibuk && onTutup()); // Back HP menutup dialog (sama dengan Batal)
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && !sibuk && onTutup();
     document.addEventListener("keydown", esc);
@@ -139,40 +141,66 @@ function useHariIni(): string {
 
 const JUMLAH_KOLOM = 15;
 
+type Kol = "nama" | "kec" | "nag" | "niplama" | "nipbaru" | "jabatan" | "lahir" | "usia" | "tmt" | "kerja" | "email" | "status" | "jk" | "kantor";
+/** Kolom tabel (urutan tampil). `angka` = diurut dan disaring sebagai angka. Usia/Masa kerja: angka tahun penuh (tampilan sel tetap tahun-bulan-hari). */
+const KOLOM: { id: Kol; label: string; angka: boolean }[] = [
+  { id: "nama", label: "Nama Lengkap", angka: false },
+  { id: "kec", label: "Kecamatan Domisili", angka: false },
+  { id: "nag", label: "Nagari Domisili", angka: false },
+  { id: "niplama", label: "NIP Lama", angka: false },
+  { id: "nipbaru", label: "NIP Baru", angka: false },
+  { id: "jabatan", label: "Kelompok/Jabatan", angka: false },
+  { id: "lahir", label: "Tanggal Lahir", angka: false },
+  { id: "usia", label: "Usia (th)", angka: true },
+  { id: "tmt", label: "TMT Pengangkatan", angka: false },
+  { id: "kerja", label: "Masa Kerja (th)", angka: true },
+  { id: "email", label: "Email", angka: false },
+  { id: "status", label: "Status", angka: false },
+  { id: "jk", label: "Jenis Kelamin", angka: false },
+  { id: "kantor", label: "Kecamatan Kantor", angka: false },
+];
+
 export default function DaftarPegawai({ baris, ringkasan, memuat, bolehKelola, nipPenuh, onAlihNip, onMuat, onResetPin, wilayah, onSimpan }: Props) {
   const [ubah, setUbah] = useState<BarisPegawai | null>(null);
   const [terbuka, setTerbuka] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<NonNullable<SaringanPegawai["status"]>>("semua");
-  const [kol, setKol] = useState<StatusKolom>(STATUS_AWAL);
+  const [saring, setSaring] = useState<Saring<Kol>>({});
+  const [urut, setUrut] = useState<Urut<Kol>>(null);
   const hariIni = useHariIni();
 
-  const kolom = useMemo<DefKolom<BarisPegawai>[]>(() => {
-    const usia = (b: BarisPegawai) => durasi(b.lahir_iso, hariIni);
-    const kerja = (b: BarisPegawai) => durasi(b.tmt_iso, hariIni);
-    const tahun = (d: ReturnType<typeof durasi>) => (d ? `${d.tahun} th` : null);
-    return [
-      { id: "nama", label: "Nama Lengkap", nilai: (b) => b.nama },
-      { id: "kec", label: "Kecamatan Domisili", nilai: (b) => b.domisili_kecamatan },
-      { id: "nag", label: "Nagari Domisili", nilai: (b) => b.domisili_nagari },
-      { id: "niplama", label: "NIP Lama", nilai: (b) => b.nip_lama },
-      { id: "nipbaru", label: "NIP Baru", nilai: (b) => b.nip_baru },
-      { id: "jabatan", label: "Kelompok/Jabatan", nilai: (b) => b.jabatan },
-      { id: "lahir", label: "Tanggal Lahir", nilai: (b) => b.tanggal_lahir, urut: (b) => b.lahir_iso },
-      { id: "usia", label: "Usia", nilai: (b) => tahun(usia(b)), urut: (b) => totalBulan(usia(b)) },
-      { id: "tmt", label: "TMT Pengangkatan", nilai: (b) => b.tmt_teks, urut: (b) => b.tmt_iso },
-      { id: "kerja", label: "Masa Kerja", nilai: (b) => tahun(kerja(b)), urut: (b) => totalBulan(kerja(b)) },
-      { id: "email", label: "Email", nilai: (b) => b.email },
-      { id: "status", label: "Status", nilai: (b) => b.status },
-      { id: "jk", label: "Jenis Kelamin", nilai: teksJk },
-      { id: "kantor", label: "Kecamatan Kantor", nilai: (b) => b.kantor_kecamatan },
-    ];
-  }, [hariIni]);
+  // Nilai sel untuk saringan/urut. Tanggal memakai bentuk ISO (urut benar); kosong = "" (tampil "(kosong)" di filter).
+  const nilaiSel = useMemo<NilaiSel<BarisPegawai, Kol>>(
+    () => (b, k) => {
+      switch (k) {
+        case "nama": return b.nama;
+        case "kec": return b.domisili_kecamatan ?? "";
+        case "nag": return b.domisili_nagari ?? "";
+        case "niplama": return b.nip_lama ?? "";
+        case "nipbaru": return b.nip_baru ?? "";
+        case "jabatan": return b.jabatan ?? "";
+        case "lahir": return b.lahir_iso ?? "";
+        case "usia": return durasi(b.lahir_iso, hariIni)?.tahun ?? "";
+        case "tmt": return b.tmt_iso ?? b.tmt_teks ?? "";
+        case "kerja": return durasi(b.tmt_iso, hariIni)?.tahun ?? "";
+        case "email": return b.email ?? "";
+        case "status": return b.status ?? "";
+        case "jk": return teksJk(b) ?? "";
+        case "kantor": return b.kantor_kecamatan ?? "";
+      }
+    },
+    [hariIni],
+  );
 
   const awal = useMemo(() => saringPegawai(baris, { q, status }), [baris, q, status]);
-  const terlihat = useMemo(() => terapkan(awal, kolom, kol), [awal, kolom, kol]);
-  const jmlSaringan = jumlahSaringan(kol);
-  const kepala = (id: string) => <KepalaKolom<BarisPegawai> kolom={kolom} id={id} rows={awal} status={kol} onUbah={setKol} />;
+  const terlihat = useMemo(() => terapkanTabel(awal, saring, urut, nilaiSel), [awal, saring, urut, nilaiSel]);
+  const adaFilterKolom = adaSaring(saring) || urut !== null;
+  const kepala = (k: (typeof KOLOM)[number]) => (
+    <th key={k.id} className={TH}>
+      <KepalaKolom id={k.id} label={k.label} saring={saring} setSaring={setSaring} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(awal, k.id, nilaiSel, k.angka)} />
+    </th>
+  );
+  const kolomDi = (...id: Kol[]) => id.map((i) => kepala(KOLOM.find((k) => k.id === i) as (typeof KOLOM)[number]));
 
   return (
     <Kartu
@@ -200,9 +228,9 @@ export default function DaftarPegawai({ baris, ringkasan, memuat, bolehKelola, n
           <option value="tanpa_akun">Belum punya akun ({ringkasan.tanpa_akun})</option>
           <option value="luar_daftar">Akun di luar daftar ({ringkasan.akun_di_luar_daftar})</option>
         </select>
-        {(jmlSaringan > 0 || kol.urut) && (
-          <button type="button" className={BTN_O} onClick={() => setKol(STATUS_AWAL)}>
-            Hapus saringan kolom{jmlSaringan > 0 ? ` (${jmlSaringan})` : ""}
+        {adaFilterKolom && (
+          <button type="button" className={BTN_O} onClick={() => (setSaring({}), setUrut(null))}>
+            Hapus saringan &amp; urutan kolom
           </button>
         )}
         <span className="text-[12px] font-semibold text-[#6B7A90]">
@@ -214,20 +242,7 @@ export default function DaftarPegawai({ baris, ringkasan, memuat, bolehKelola, n
         <thead>
           <tr>
             <th className={TH}>No</th>
-            {kepala("nama")}
-            {kepala("kec")}
-            {kepala("nag")}
-            {kepala("niplama")}
-            {kepala("nipbaru")}
-            {kepala("jabatan")}
-            {kepala("lahir")}
-            {kepala("usia")}
-            {kepala("tmt")}
-            {kepala("kerja")}
-            {kepala("email")}
-            {kepala("status")}
-            {kepala("jk")}
-            {kepala("kantor")}
+            {kolomDi("nama", "kec", "nag", "niplama", "nipbaru", "jabatan", "lahir", "usia", "tmt", "kerja", "email", "status", "jk", "kantor")}
           </tr>
         </thead>
         <tbody>

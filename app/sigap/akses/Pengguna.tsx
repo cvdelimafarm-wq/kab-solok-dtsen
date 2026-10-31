@@ -5,7 +5,7 @@
 // (31 Okt 2026) Tab 👥 Pengguna di Kelola Peran & Akses: daftar akun dibagi dua -- "Mitra Kepka" (pool yang boleh dipekerjakan, ditandai per tahun)
 // dan "Pegawai organik". Biodata ringkas (kecamatan, NIK/NIP disamarkan, kelengkapan lokasi, terakhir masuk). Penanda pool hanya untuk Mitra.
 // Kelengkapan lokasi (domisili berkoordinat/terverifikasi) adalah bahan syarat jarak/domisili pada seleksi nanti.
-// Tabel: judul kolom berfilter ala spreadsheet (KepalaKolom), Kecamatan dan Nagari dua kolom, klik nama untuk membuka tombol Reset PIN.
+// Tabel: judul kolom memakai standar tabel SIGAP (admin/KepalaKolom + lib/sigapTabelKolom), Kecamatan dan Nagari dua kolom, klik nama untuk membuka tombol Reset PIN.
 // Logika murni (saringan, ringkasan, lokasi): lib/penggunaPool.ts. Data: /api/sigap/pengguna.
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -13,10 +13,10 @@ import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import ResetPin from "../admin/ResetPin";
 import DaftarPegawai from "./DaftarPegawai";
-import KepalaKolom from "./KepalaKolom";
-import { kapitalWilayah, tanggalIndo, tanggalWib, type BarisPegawai, type DaftarWilayah, type RingkasPegawai } from "@/lib/pegawaiOrganik";
+import KepalaKolom from "../admin/KepalaKolom";
+import { kapitalWilayah, tanggalWib, type BarisPegawai, type DaftarWilayah, type RingkasPegawai } from "@/lib/pegawaiOrganik";
 import { ringkas, saring, statusLokasi, type AkunPengguna, type JenisPengguna, type Ringkasan } from "@/lib/penggunaPool";
-import { jumlahSaringan, STATUS_AWAL, terapkan, type DefKolom, type StatusKolom } from "@/lib/saringKolom";
+import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 
 type Respons = {
   tahun: number; jenis: JenisPengguna; tabel_pool_siap: boolean; boleh_kelola: boolean; ringkasan: Ringkasan; akun: AkunPengguna[];
@@ -24,6 +24,7 @@ type Respons = {
 };
 
 const HALAMAN = 200;
+type KolMitra = "nama" | "kec" | "nag" | "id" | "lokasi" | "pool" | "masuk";
 
 export default function Pengguna() {
   const [jenis, setJenis] = useState<JenisPengguna>("mitra");
@@ -33,7 +34,8 @@ export default function Pengguna() {
   const [ok, setOk] = useState<string | null>(null);
   const [memuat, setMemuat] = useState(false);
   const [q, setQ] = useState("");
-  const [kol, setKol] = useState<StatusKolom>(STATUS_AWAL); // saringan/urutan judul kolom
+  const [sKol, setSKol] = useState<Saring<KolMitra>>({}); // saringan per kolom (standar tabel SIGAP)
+  const [urut, setUrut] = useState<Urut<KolMitra>>(null);
   const [terbuka, setTerbuka] = useState<number | null>(null); // baris yang dibuka (tombol Reset PIN)
   const [hanyaAktif, setHanyaAktif] = useState(true);
   const [pilih, setPilih] = useState<Set<number>>(new Set());
@@ -62,37 +64,42 @@ export default function Pengguna() {
   }, [muat]);
 
   useEffect(() => {
-    setKol(STATUS_AWAL);
+    setSKol({});
+    setUrut(null);
     setTerbuka(null);
   }, [jenis]);
 
   useEffect(() => {
     setPilih(new Set());
     setTampil(HALAMAN);
-  }, [jenis, q, kol, hanyaAktif]);
+  }, [jenis, q, sKol, hanyaAktif]);
 
   const akun = useMemo(() => data?.akun ?? [], [data]);
   const awal = useMemo(() => saring(akun, { q, hanyaAktif }), [akun, q, hanyaAktif]);
-  const kolom = useMemo<DefKolom<AkunPengguna>[]>(() => {
-    const lokasi = (a: AkunPengguna) => {
-      const l = statusLokasi(a);
-      return l === "terverifikasi" ? "Terverifikasi" : l === "berkoordinat" ? "Berkoordinat" : "Belum ada";
-    };
-    const pool = (a: AkunPengguna) => (a.pool ? (a.pool.status === "aktif" ? "Pool aktif" : "Nonaktif") : "Belum masuk pool");
-    const terakhir = (a: AkunPengguna) => (a.terakhir_masuk_at ? tanggalIndo(tanggalWib(Date.parse(a.terakhir_masuk_at))) : "Belum pernah");
-    return [
-      { id: "nama", label: "Nama", nilai: (a) => a.nama },
-      { id: "kec", label: "Kecamatan", nilai: (a) => kapitalWilayah(a.alamat_kecamatan) },
-      { id: "nag", label: "Nagari", nilai: (a) => kapitalWilayah(a.alamat_nagari) },
-      { id: "id", label: jenis === "mitra" ? "NIK" : "NIP", nilai: (a) => (jenis === "mitra" ? a.nik : a.nip) },
-      { id: "lokasi", label: "Lokasi", nilai: lokasi },
-      { id: "pool", label: `Pool ${tahun}`, nilai: pool },
-      { id: "masuk", label: "Terakhir masuk", nilai: terakhir, urut: (a) => a.terakhir_masuk_at },
-    ];
-  }, [jenis, tahun]);
-  const terlihat = useMemo(() => terapkan(awal, kolom, kol), [awal, kolom, kol]);
-  const jmlSaringan = jumlahSaringan(kol);
-  const kepala = (id: string) => <KepalaKolom<AkunPengguna> kolom={kolom} id={id} rows={awal} status={kol} onUbah={setKol} />;
+  const nilaiSel = useMemo<NilaiSel<AkunPengguna, KolMitra>>(
+    () => (a, k) => {
+      switch (k) {
+        case "nama": return a.nama;
+        case "kec": return kapitalWilayah(a.alamat_kecamatan) ?? "";
+        case "nag": return kapitalWilayah(a.alamat_nagari) ?? "";
+        case "id": return (jenis === "mitra" ? a.nik : a.nip) ?? "";
+        case "lokasi": {
+          const l = statusLokasi(a);
+          return l === "terverifikasi" ? "Terverifikasi" : l === "berkoordinat" ? "Berkoordinat" : "Belum ada";
+        }
+        case "pool": return a.pool ? (a.pool.status === "aktif" ? "Pool aktif" : "Nonaktif") : "Belum masuk pool";
+        case "masuk": return a.terakhir_masuk_at ? tanggalWib(Date.parse(a.terakhir_masuk_at)) : "";
+      }
+    },
+    [jenis],
+  );
+  const terlihat = useMemo(() => terapkanTabel(awal, sKol, urut, nilaiSel), [awal, sKol, urut, nilaiSel]);
+  const adaFilterKolom = adaSaring(sKol) || urut !== null;
+  const kepala = (id: KolMitra, label: string) => (
+    <th className={TH}>
+      <KepalaKolom id={id} label={label} saring={sKol} setSaring={setSKol} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(awal, id, nilaiSel, false)} />
+    </th>
+  );
   const ring = useMemo(() => data?.ringkasan ?? ringkas(akun), [data, akun]);
   const bolehKelola = data?.boleh_kelola === true && data.tabel_pool_siap && jenis === "mitra";
   const bolehResetPin = data?.boleh_kelola === true;
@@ -223,9 +230,9 @@ export default function Pengguna() {
             <input type="checkbox" checked={hanyaAktif} onChange={(e) => setHanyaAktif(e.target.checked)} />
             Hanya akun aktif
           </label>
-          {(jmlSaringan > 0 || kol.urut) && (
-            <button type="button" className={BTN_O} onClick={() => setKol(STATUS_AWAL)}>
-              Hapus saringan kolom{jmlSaringan > 0 ? ` (${jmlSaringan})` : ""}
+          {adaFilterKolom && (
+            <button type="button" className={BTN_O} onClick={() => (setSKol({}), setUrut(null))}>
+              Hapus saringan &amp; urutan kolom
             </button>
           )}
         </div>
@@ -252,13 +259,13 @@ export default function Pengguna() {
                   <input type="checkbox" aria-label="Pilih semua yang terlihat" checked={semuaTerpilih} onChange={alihSemua} />
                 </th>
               )}
-              {kepala("nama")}
-              {kepala("kec")}
-              {kepala("nag")}
-              {kepala("id")}
-              {kepala("lokasi")}
-              {jenis === "mitra" && kepala("pool")}
-              {kepala("masuk")}
+              {kepala("nama", "Nama")}
+              {kepala("kec", "Kecamatan")}
+              {kepala("nag", "Nagari")}
+              {kepala("id", jenis === "mitra" ? "NIK" : "NIP")}
+              {kepala("lokasi", "Lokasi")}
+              {jenis === "mitra" && kepala("pool", `Pool ${tahun}`)}
+              {kepala("masuk", "Terakhir masuk")}
             </tr>
           </thead>
           <tbody>

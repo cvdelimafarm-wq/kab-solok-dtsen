@@ -88,7 +88,7 @@ describe("ringkasKelayakan & sisaKebutuhan", () => {
       { status: "perlu_lokasi", alasan: [], jarak_km: null, wilayah_terdekat: null },
       { status: "memenuhi", alasan: [], jarak_km: 2, wilayah_terdekat: "a" },
     ] as const;
-    expect(ringkasKelayakan([...hs])).toEqual({ total: 4, memenuhi: 2, tidak: 1, perlu_lokasi: 1 });
+    expect(ringkasKelayakan(hs.map((h) => ({ ...h, alasan: [...h.alasan] })))).toEqual({ total: 4, memenuhi: 2, tidak: 1, perlu_lokasi: 1 });
   });
   it("sisa kebutuhan tidak negatif", () => {
     expect(sisaKebutuhan(10, 3)).toBe(7);
