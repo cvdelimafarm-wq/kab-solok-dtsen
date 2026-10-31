@@ -3,6 +3,7 @@
 // (31 Okt 2026) Manajemen Pengguna: daftar akun Mitra Kepka dan Pegawai organik + penanda anggota pool per tahun.
 //   GET  ?jenis=mitra|organik&tahun=2026   -> { tahun, jenis, tabel_pool_siap, boleh_kelola, ringkasan, akun[] }   (izin akses.kelola, level lihat)
 //   POST { aksi: "set_pool", akun_ids[], tahun, status, no_kepka?, catatan? }                                   (izin akses.kelola, level kelola)
+//   jenis=organik juga mengirim { pegawai[], ringkasan_pegawai, profil_siap } dari sigap_pegawai_profil (SQL 20261031h); ?nip=penuh (izin kelola) membuka NIP utuh dan dicatat di audit.
 // NIK/NIP tidak dikirim utuh: hanya empat digit terakhir (samarkanId). Tabel sigap_mitra_pool belum dibuat = daftar tetap tampil, penanda dinonaktifkan.
 // Akun "masuk sebagai" (aktor lain) tidak boleh mengubah pool.
 
@@ -10,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { aktorDariHeader, boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
+import { bentukDaftarPegawai, ringkasPegawai, type ProfilPegawai } from "@/lib/pegawaiOrganik";
 import { periksaPermintaanPool, ringkas, samarkanId, tahunSah, type AkunPengguna, type BarisPool, type JenisPengguna } from "@/lib/penggunaPool";
 
 export const runtime = "nodejs";
@@ -107,13 +109,37 @@ export async function GET(req: NextRequest) {
       pool: jenis === "mitra" ? peta.get(a.id) ?? null : null,
     }));
 
+    const bolehKelola = boleh(s.izin, "akses.kelola", "kelola");
+
+    // Profil kepegawaian (hanya jenis organik). Tabel belum dibuat -> profil_siap=false, tampilan kembali ke daftar akun biasa.
+    let pegawai = null;
+    let ringkasanPegawai = null;
+    let profilSiap = false;
+    if (jenis === "organik") {
+      const { data, error } = await db
+        .from("sigap_pegawai_profil")
+        .select("nip_lama, urutan, akun_id, nama_lengkap, nip_baru, jabatan, status_pegawai, jenis_kelamin, tanggal_lahir, tmt, tmt_teks, email, domisili_kecamatan, domisili_nagari, kantor_kecamatan")
+        .order("urutan");
+      if (!error) {
+        profilSiap = true;
+        const nipPenuh = sp.get("nip") === "penuh" && bolehKelola;
+        const baris = bentukDaftarPegawai((data ?? []) as ProfilPegawai[], akun, Date.now(), nipPenuh);
+        pegawai = baris;
+        ringkasanPegawai = ringkasPegawai(baris);
+        if (nipPenuh) await catatAudit(db, s.akunId, "lihat_nip_pegawai", { jumlah: baris.length }).catch(() => undefined);
+      }
+    }
+
     return NextResponse.json({
       tahun,
       jenis,
       tabel_pool_siap: tabelSiap,
-      boleh_kelola: boleh(s.izin, "akses.kelola", "kelola"),
+      boleh_kelola: bolehKelola,
       ringkasan: ringkas(daftar),
       akun: daftar,
+      profil_siap: profilSiap,
+      pegawai,
+      ringkasan_pegawai: ringkasanPegawai,
     });
   } catch {
     return galat("Gagal memuat daftar pengguna.", 500);

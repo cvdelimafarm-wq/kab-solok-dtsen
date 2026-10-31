@@ -10,9 +10,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
+import ResetPin from "../admin/ResetPin";
+import DaftarPegawai from "./DaftarPegawai";
+import type { BarisPegawai, RingkasPegawai } from "@/lib/pegawaiOrganik";
 import { daftarKecamatan, ringkas, saring, statusLokasi, type AkunPengguna, type FilterLokasi, type FilterPool, type JenisPengguna, type Ringkasan } from "@/lib/penggunaPool";
 
-type Respons = { tahun: number; jenis: JenisPengguna; tabel_pool_siap: boolean; boleh_kelola: boolean; ringkasan: Ringkasan; akun: AkunPengguna[] };
+type Respons = {
+  tahun: number; jenis: JenisPengguna; tabel_pool_siap: boolean; boleh_kelola: boolean; ringkasan: Ringkasan; akun: AkunPengguna[];
+  profil_siap?: boolean; pegawai?: BarisPegawai[] | null; ringkasan_pegawai?: RingkasPegawai | null;
+};
 
 const HALAMAN = 200;
 
@@ -33,11 +39,13 @@ export default function Pengguna() {
   const [noKepka, setNoKepka] = useState("");
   const [catatan, setCatatan] = useState("");
   const [sibuk, setSibuk] = useState(false);
+  const [nipPenuh, setNipPenuh] = useState(false);
+  const [resetPin, setResetPin] = useState<{ id: number; nama: string } | null>(null); // dialog Reset PIN (sama dengan tab Log Login)
 
   const muat = useCallback(async () => {
     setMemuat(true);
     try {
-      const d = await fetchJson<Respons>(`/api/sigap/pengguna?jenis=${jenis}&tahun=${tahun}`);
+      const d = await fetchJson<Respons>(`/api/sigap/pengguna?jenis=${jenis}&tahun=${tahun}${jenis === "organik" && nipPenuh ? "&nip=penuh" : ""}`);
       setData(d);
       setGalat(null);
     } catch (e) {
@@ -45,7 +53,7 @@ export default function Pengguna() {
     } finally {
       setMemuat(false);
     }
-  }, [jenis, tahun]);
+  }, [jenis, tahun, nipPenuh]);
 
   useEffect(() => {
     void muat();
@@ -61,6 +69,8 @@ export default function Pengguna() {
   const terlihat = useMemo(() => saring(akun, { q, pool: jenis === "mitra" ? fPool : "semua", lokasi: fLokasi, kecamatan: fKec, hanyaAktif }), [akun, q, fPool, fLokasi, fKec, hanyaAktif, jenis]);
   const ring = useMemo(() => data?.ringkasan ?? ringkas(akun), [data, akun]);
   const bolehKelola = data?.boleh_kelola === true && data.tabel_pool_siap && jenis === "mitra";
+  const bolehResetPin = data?.boleh_kelola === true;
+  const pakaiProfil = jenis === "organik" && data?.profil_siap === true && !!data.pegawai && !!data.ringkasan_pegawai;
 
   const semuaTerpilih = terlihat.length > 0 && terlihat.every((a) => pilih.has(a.id));
   const alihSemua = () => setPilih(semuaTerpilih ? new Set() : new Set(terlihat.map((a) => a.id)));
@@ -140,6 +150,10 @@ export default function Pengguna() {
         <Pesan jenis="peringatan">Tabel pool Mitra belum dibuat (SQL 20261031e_mitra_pool.sql). Daftar tetap tampil; penanda pool aktif setelah SQL dijalankan.</Pesan>
       )}
 
+      {data && jenis === "organik" && !data.profil_siap && (
+        <Pesan jenis="peringatan">Profil kepegawaian belum dibuat (SQL 20261031h_pegawai_profil.sql). Daftar akun tetap tampil; kolom NIP baru, jabatan, status, dan lainnya muncul setelah SQL dijalankan.</Pesan>
+      )}
+
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {kpi(jenis === "mitra" ? "Akun Mitra" : "Pegawai organik", ring.total)}
         {jenis === "mitra" ? kpi(`Pool aktif ${tahun}`, ring.pool_aktif, "text-[#13794B]") : kpi("Akun aktif", ring.aktif, "text-[#13794B]")}
@@ -147,6 +161,20 @@ export default function Pengguna() {
         {jenis === "mitra" ? kpi("Lokasi lengkap", `${ring.lokasi_terverifikasi + ring.lokasi_berkoordinat}/${ring.total}`) : kpi("Lokasi terverifikasi", ring.lokasi_terverifikasi)}
       </div>
 
+      {pakaiProfil && data?.pegawai && data.ringkasan_pegawai && (
+        <DaftarPegawai
+          baris={data.pegawai}
+          ringkasan={data.ringkasan_pegawai}
+          memuat={memuat}
+          bolehKelola={bolehResetPin}
+          nipPenuh={nipPenuh}
+          onAlihNip={() => setNipPenuh((v) => !v)}
+          onMuat={() => void muat()}
+          onResetPin={(id, nama) => setResetPin({ id, nama })}
+        />
+      )}
+
+      {!pakaiProfil && (
       <Kartu
         judul={jenis === "mitra" ? "Daftar Mitra Kepka" : "Daftar pegawai organik"}
         ket={`${terlihat.length} dari ${akun.length} akun${memuat ? " · memuat…" : ""}`}
@@ -214,6 +242,7 @@ export default function Pengguna() {
               <th className={TH}>Lokasi</th>
               {jenis === "mitra" && <th className={TH}>Pool {tahun}</th>}
               <th className={TH}>Terakhir masuk</th>
+              {bolehResetPin && <th className={TH}>PIN</th>}
             </tr>
           </thead>
           <tbody>
@@ -238,11 +267,18 @@ export default function Pengguna() {
                   </td>
                 )}
                 <td className={`${TD} text-[12px] text-[#6B7A90]`}>{a.terakhir_masuk_at ? waktuWib(a.terakhir_masuk_at) : "belum pernah"}</td>
+                {bolehResetPin && (
+                  <td className={TD}>
+                    <button type="button" className={`${BTN_O} whitespace-nowrap`} onClick={() => setResetPin({ id: a.id, nama: a.nama })}>
+                      🔑 Reset PIN
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {terlihat.length === 0 && (
               <tr>
-                <td className={`${TD} text-center text-[#6B7A90]`} colSpan={7}>
+                <td className={`${TD} text-center text-[#6B7A90]`} colSpan={8}>
                   {memuat ? "Memuat…" : "Tidak ada akun yang cocok dengan saringan."}
                 </td>
               </tr>
@@ -263,6 +299,9 @@ export default function Pengguna() {
           </p>
         )}
       </Kartu>
+      )}
+
+      {resetPin && <ResetPin url="/api/sigap/admin" akunId={resetPin.id} nama={resetPin.nama} tutup={() => setResetPin(null)} />}
     </div>
   );
 }
