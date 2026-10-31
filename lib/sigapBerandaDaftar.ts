@@ -57,7 +57,8 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
       const k = kartuTemplate({ id: x.id, judul: x.pendek || x.judul, href, nada: x.nada }, { induk: undefined, keg: [x], idTranslok: x.kegiatan_id !== undefined ? [x.kegiatan_id] : [], nowMs: b.nowMs }, poinDariKekurangan(x.kekurangan?.[0]));
       return { ...k, jenis: "lain" };
     }
-    const poin = poinDariKekurangan(x.kekurangan?.[0]) ?? (x.sub ? poinInfo(x.sub, href, x.nada === "merah" ? "merah" : x.nada === "emas" ? "emas" : "biru", "Buka") : null);
+    // keterangan generik "Buka" tidak menambah informasi (kartu sudah bisa diketuk): bukan poin
+    const poin = poinDariKekurangan(x.kekurangan?.[0]) ?? (x.sub && !/^buka$/i.test(x.sub.trim()) ? poinInfo(x.sub, href, x.nada === "merah" ? "merah" : x.nada === "emas" ? "emas" : "biru", "Buka") : null);
     const k = kartuBiasa({ id: x.id, judul: x.pendek || x.judul, href, nada: x.nada, jenis: "lain" }, poin);
     return x.sso ? { ...k, sso: x.sso } : k;
   });
