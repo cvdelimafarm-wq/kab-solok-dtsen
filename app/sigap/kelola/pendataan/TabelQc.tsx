@@ -6,6 +6,8 @@
 // Standar kolom: klik judul = urut (naik, turun, tanpa urut), baris filter di bawah judul (teks / pilihan) untuk tiap kolom, dan saringan status cepat.
 // "Fokus" datang dari luar (klik batang infografis, kartu "Tanpa notifikasi") dan membatasi baris yang tampil sampai dihapus.
 // Ketuk nama = jendela rincian soal dan jawaban yang salah (Back HP menutupnya). Logika murni ada di lib/sigapQcTabel.ts (diuji).
+// (31 Okt 2026) Di layar HP (di bawah lebar `md`) tabel diganti DAFTAR RINGKAS: satu baris per orang (nama, peran, tim PML, jumlah percobaan, nilai P1 → Pn dan
+// pergerakannya); kolom per percobaan, filter per kolom, dan judul urut dibuang. Pencarian, peran, tim, dan urutan lewat kotak pilihan di atas daftar. Layar lebar tetap tabel penuh.
 
 import { useMemo, useState } from "react";
 import { IsiRincianQc } from "@/app/portal/qc/RincianQc";
@@ -31,7 +33,8 @@ import {
   type StatusSaring,
 } from "@/lib/sigapQcTabel";
 import { Chip, INPUT } from "../../admin/ui";
-import { Pergerakan, SelNilai } from "./BatangQc";
+import { Pergerakan, SelNilai, warnaNilai } from "./BatangQc";
+import { judulKata } from "@/lib/spdtNtp";
 
 const SARING: { id: StatusSaring; label: string }[] = [
   { id: "semua", label: "Semua" },
@@ -127,13 +130,21 @@ export default function TabelQc({
       return null;
     });
   const ariaSort = (k: KolomUrut): "ascending" | "descending" | "none" => (urut?.kolom === k ? (urut.arah === "asc" ? "ascending" : "descending") : "none");
+  // pilihan urutan untuk tampilan HP: "kolom:arah" (kosong = urutan bawaan)
+  const urutHp = urut ? `${urut.kolom}:${urut.arah}` : "";
+  const aturUrutHp = (v: string) => {
+    if (!v) return setUrut(null);
+    const [kolomU, arah] = v.split(":");
+    setUrut({ kolom: kolomU as KolomUrut, arah: arah as ArahUrut });
+  };
   const aturNilai = (i: number, v: FilterNilai) => setFilter((f) => ({ ...f, nilai: { ...f.nilai, [i]: v } }));
 
   return (
     <section id="tabel-qc" className="scroll-mt-24 rounded-[16px] border border-[#DDE6F3] bg-white p-3.5 shadow-[0_2px_10px_rgba(15,42,82,.06)]" aria-label="Hasil QC Pemahaman per petugas">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <b className="text-[15px] text-[#0F2A52]">Hasil per petugas</b>
-        <span className="text-[12px] text-[#6B7A90]">Klik judul kolom untuk mengurutkan · ketuk nama untuk melihat soal dan jawaban yang salah</span>
+        <span className="hidden text-[12px] text-[#6B7A90] md:inline">Klik judul kolom untuk mengurutkan · ketuk nama untuk melihat soal dan jawaban yang salah</span>
+        <span className="text-[12px] text-[#6B7A90] md:hidden">Ketuk nama untuk melihat soal dan jawaban yang salah</span>
       </div>
 
       {fokus && (
@@ -180,7 +191,78 @@ export default function TabelQc({
         )}
       </div>
 
-      <div className="mt-3 overflow-x-auto rounded-lg border border-[#E3E8EE]">
+      <div className="mt-3 md:hidden">
+        <div className="flex flex-col gap-1.5">
+          <input type="search" value={filter.nama} onChange={(e) => setFilter((f) => ({ ...f, nama: e.target.value }))} placeholder="Cari nama" className={`${INPUT} !min-h-[40px] text-[13px]`} aria-label="Cari nama" />
+          <div className="flex gap-1.5">
+            <select value={filter.peran} onChange={(e) => setFilter((f) => ({ ...f, peran: e.target.value as FilterKolom["peran"] }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter peran">
+              <option value="">PML &amp; PPL</option>
+              <option value="PML">Hanya PML</option>
+              <option value="PPL">Hanya PPL</option>
+            </select>
+            <select value={filter.pml} onChange={(e) => setFilter((f) => ({ ...f, pml: e.target.value }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter tim PML">
+              <option value="">Semua tim</option>
+              <option value="-">(tanpa PML)</option>
+              {pmlList.map((n) => (
+                <option key={n} value={n}>
+                  {judulKata(n)}
+                </option>
+              ))}
+            </select>
+            <select value={urutHp} onChange={(e) => aturUrutHp(e.target.value)} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Urutkan">
+              <option value="">Urut: bawaan</option>
+              <option value="nama:asc">Nama A–Z</option>
+              <option value="percobaan:desc">Percobaan terbanyak</option>
+              <option value="percobaan:asc">Percobaan tersedikit</option>
+              <option value="p1:asc">Nilai awal terendah</option>
+              <option value="p1:desc">Nilai awal tertinggi</option>
+            </select>
+          </div>
+        </div>
+        <ul className="mt-2 divide-y divide-[#E3E8EE] overflow-hidden rounded-lg border border-[#E3E8EE]">
+          {tampil.length === 0 && <li className="px-3 py-5 text-center text-[13px] text-[#55657D]">Tidak ada petugas yang cocok dengan filter.</li>}
+          {tampil.map((b) => {
+            const rantai = b.nilai.filter((n): n is number => n != null);
+            return (
+              <li key={`${b.peran}-${b.akun_id}`}>
+                <button type="button" onClick={() => setPilih(b)} className={`flex min-h-[56px] w-full items-center gap-2 px-3 py-1.5 text-left ${b.peran === "PML" ? "bg-[#FAF7FD]" : "bg-white"}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <b className="min-w-0 truncate text-[13px] text-[#0F2A52]">{judulKata(b.nama)}</b>
+                      <Chip w={b.peran === "PML" ? "vio" : "navy"}>{b.peran}</Chip>
+                      {b.terlambat && <Chip w="wait">Terlambat</Chip>}
+                    </span>
+                    {b.peran === "PPL" && <span className="block truncate text-[11px] text-[#6B7A90]">PML {b.pml ? judulKata(b.pml) : "-"}</span>}
+                    <span className="mt-0.5 flex items-center gap-2 text-[12px]">
+                      <span className="flex-none tabular-nums text-[#55657D]">
+                        <b className="text-[#0F2A52]">{b.percobaan}×</b> mencoba
+                      </span>
+                      {rantai.length > 0 ? (
+                        <span className="min-w-0 truncate font-bold tabular-nums">
+                          {rantai.map((n, i) => (
+                            <span key={i}>
+                              {i > 0 && <span className="font-normal text-[#9AA7BA]"> → </span>}
+                              <span className={warnaNilai(n, nilaiLulus).teks}>{n}</span>
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-[#B42329]">Belum mengisi</span>
+                      )}
+                      {rantai.length > 1 && <Pergerakan nilai={b.nilai} nilaiLulus={nilaiLulus} />}
+                    </span>
+                  </span>
+                  <span aria-hidden className="flex-none text-[11px] text-[#6B7A90]">
+                    ›
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="mt-3 hidden overflow-x-auto rounded-lg border border-[#E3E8EE] md:block">
         <table className="w-full min-w-[820px] border-collapse text-left text-[13px]">
           <thead className="bg-[#F2F5FA] text-[11.5px]">
             <tr>
@@ -296,7 +378,10 @@ export default function TabelQc({
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-[11.5px] text-[#6B7A90]">
+      <p className="mt-1.5 text-[11.5px] text-[#6B7A90] md:hidden">
+        Hijau = nilai {nilaiLulus >= 100 ? "100" : `${nilaiLulus} ke atas`} (lulus), oranye = di bawahnya. Angka berurutan = nilai tiap percobaan (P1 → terakhir); ▲/▼ = naik/turun dibanding P1. Menampilkan {tampil.length} dari {baris.length} orang.
+      </p>
+      <p className="mt-1.5 hidden text-[11.5px] text-[#6B7A90] md:block">
         Hijau = nilai {nilaiLulus >= 100 ? "100" : `${nilaiLulus} ke atas`} (lulus), oranye = di bawahnya, - = percobaan itu belum ada. Batang di bawah angka = besar nilai; kolom Pergerakan = batang P1 sampai terakhir, ▲ naik / ▼ turun dibanding P1. Menampilkan {tampil.length} dari {baris.length} orang.
       </p>
 
