@@ -66,3 +66,13 @@ export function tekanTombol(ekspresi: string, k: string): string {
   if (k === "⌫") return ekspresi.slice(0, -1);
   return (ekspresi + k).slice(0, MAKS_PANJANG_EKSPRESI);
 }
+
+/**
+ * Tombol pada lembar entri dengan "mode ganti": saat kotak yang sudah berisi dibuka, ekspresi awal = nilai lama dan `ganti` = true.
+ * Angka, kurung buka, dan koma menggantikan nilai lama (ketikan pertama = angka baru); operator (+ − × ÷) dan pintasan konversi melanjutkan nilai lama
+ * (mis. 6000 lalu ×12). Hapus dan C membuang mode ganti. Tanpa ini ketikan baru menempel di belakang angka lama dan menghasilkan angka salah.
+ */
+export function tekanPad(ekspresi: string, ganti: boolean, k: string): { expr: string; ganti: boolean } {
+  const menggantikan = ganti && /^(?:[0-9(,]|000)/.test(k);
+  return { expr: tekanTombol(menggantikan ? "" : ekspresi, k), ganti: false };
+}

@@ -17,7 +17,7 @@ import { bacaSesi } from "@/app/sigap/admin/api";
 import { compute, engineChecks, fmt, hitungBintang, isiOtomatisR1, kasusBenar, rp } from "@/lib/vanguard/engine";
 import { KASUS, KASUS_BERNILAI, MAKS_BINTANG, NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus";
 import { kutipanIv, lembarBlok, type Status } from "@/lib/vanguard/lembar";
-import { FUNGSI, TOMBOL, hitungEkspresi, tekanTombol } from "@/lib/vanguard/keypad";
+import { FUNGSI, TOMBOL, hitungEkspresi, tekanPad } from "@/lib/vanguard/keypad";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
 import { labelSel } from "@/lib/vanguard/sel";
 import type { Kasus, Koreksi, Kontrol, Nilai, PeriksaEngine } from "@/lib/vanguard/tipe";
@@ -55,7 +55,7 @@ export default function Vanguard() {
   const [rev, setRev] = useState<Record<string, boolean>>({});
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const [catat, setCatat] = useState<Catat>({ status: "tidak" });
-  const [pad, setPad] = useState<{ id: string; expr: string } | null>(null);
+  const [pad, setPad] = useState<{ id: string; expr: string; ganti: boolean } | null>(null);
   const [pas, setPas] = useState(false);
   const [info, setInfo] = useState<Info>({ memuat: kegiatan !== null, mode: kegiatan ? "tercatat" : "bebas", boleh: false, alasan: null });
   const mulaiRef = useRef(Date.now());
@@ -205,7 +205,7 @@ export default function Vanguard() {
   const padSah = nilaiPad !== null && nilaiPad >= 0;
   const bukaPad = (id: string) => {
     (document.activeElement as HTMLElement | null)?.blur(); // fokus dilepas dari kotak agar Enter di kalkulator tidak membuka ulang kotak yang sama
-    setPad({ id, expr: vals[id] ? String(vals[id]) : "" });
+    setPad({ id, expr: vals[id] ? String(vals[id]) : "", ganti: !!vals[id] });
   };
   const simpanPad = useCallback(() => {
     if (!pad) return;
@@ -221,13 +221,13 @@ export default function Vanguard() {
     const tombol = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") setPad(null);
       else if (ev.key === "Enter") { ev.preventDefault(); simpanPad(); }
-      else if (ev.key === "Backspace") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, "⌫") } : p));
-      else if (/^[0-9()]$/.test(ev.key)) setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, ev.key) } : p));
-      else if (ev.key === "," || ev.key === ".") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, ",") } : p));
-      else if (ev.key === "+") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, "+") } : p));
-      else if (ev.key === "-") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, "−") } : p));
-      else if (ev.key === "*" || ev.key === "x") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, "×") } : p));
-      else if (ev.key === "/") setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, "÷") } : p));
+      else if (ev.key === "Backspace") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, "⌫") } : p));
+      else if (/^[0-9()]$/.test(ev.key)) setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, ev.key) } : p));
+      else if (ev.key === "," || ev.key === ".") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, ",") } : p));
+      else if (ev.key === "+") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, "+") } : p));
+      else if (ev.key === "-") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, "−") } : p));
+      else if (ev.key === "*" || ev.key === "x") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, "×") } : p));
+      else if (ev.key === "/") setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, "÷") } : p));
     };
     document.addEventListener("keydown", tombol);
     return () => document.removeEventListener("keydown", tombol);
@@ -346,14 +346,15 @@ export default function Vanguard() {
           <div className="ttl">Isi angka (Rp)</div>
           <div className="lab">{labelSel(pad.id)}</div>
           <div className="disp">{pad.expr || "0"}</div>
+          {pad.ganti && <div style={{ fontSize: 11.5, color: "#444", marginTop: 3 }}>Ketik angka untuk mengganti nilai ini, atau tekan + − × ÷ untuk melanjutkannya.</div>}
           <div className="out">{nilaiPad === null ? "…" : nilaiPad < 0 ? "Tidak boleh negatif" : `Rp${fmt(nilaiPad)}`}</div>
           <div className="keys">
-            {TOMBOL.map((t) => <button key={t} type="button" className={`k${/[÷×−+]/.test(t) ? " op" : ""}`} onClick={() => setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, t) } : p))}>{t}</button>)}
-            {FUNGSI.map((f) => <button key={f.teks} type="button" className="k fn" style={{ gridColumn: "span 2" }} onClick={() => setPad((p) => (p ? { ...p, expr: tekanTombol(p.expr, f.nilai) } : p))}>{f.teks}</button>)}
+            {TOMBOL.map((t) => <button key={t} type="button" className={`k${/[÷×−+]/.test(t) ? " op" : ""}`} onClick={() => setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, t) } : p))}>{t}</button>)}
+            {FUNGSI.map((f) => <button key={f.teks} type="button" className="k fn" style={{ gridColumn: "span 2" }} onClick={() => setPad((p) => (p ? { ...p, ...tekanPad(p.expr, p.ganti, f.nilai) } : p))}>{f.teks}</button>)}
           </div>
           <div className="row2">
             <button type="button" className="btn" onClick={() => setPad(null)}>Batal</button>
-            <button type="button" className="btn" onClick={() => setPad((p) => (p ? { ...p, expr: "" } : p))}>Kosongkan</button>
+            <button type="button" className="btn" onClick={() => setPad((p) => (p ? { ...p, expr: "", ganti: false } : p))}>Kosongkan</button>
             <button type="button" className="btn pri" disabled={!padSah} onClick={simpanPad}>Simpan</button>
           </div>
         </div></div>

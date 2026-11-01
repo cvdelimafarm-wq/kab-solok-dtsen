@@ -3,7 +3,7 @@ import { compute } from "../vanguard/engine";
 import { KASUS } from "../vanguard/kasus";
 import { boxes, idDiLembar, kutipanIv, lembarBlok, mny } from "../vanguard/lembar";
 import { idSelKasus } from "../vanguard/sel";
-import { hitungEkspresi, tekanTombol } from "../vanguard/keypad";
+import { hitungEkspresi, tekanPad, tekanTombol } from "../vanguard/keypad";
 import { alamatVanguard, tujuanAman } from "../vanguard/navigasi";
 
 /** Angka yang tampil pada sebuah sel (gabungan digit kotak) menurut atribut data-id atau data-co. */
@@ -76,6 +76,26 @@ describe("kalkulator", () => {
     expect(tekanTombol("12", "⌫")).toBe("1");
     expect(tekanTombol("12", "3")).toBe("123");
     expect(tekanTombol("1".repeat(200), "2").length).toBe(200);
+  });
+});
+
+describe("kalkulator: mode ganti pada kotak berisi", () => {
+  it("angka pertama menggantikan nilai lama; operator melanjutkannya; hapus membuang mode ganti", () => {
+    expect(tekanPad("6000", true, "7")).toEqual({ expr: "7", ganti: false });
+    expect(tekanPad("6000", true, "000")).toEqual({ expr: "000", ganti: false });
+    expect(tekanPad("6000", true, "(")).toEqual({ expr: "(", ganti: false });
+    expect(tekanPad("6000", true, ",")).toEqual({ expr: ",", ganti: false });
+    expect(tekanPad("6000", true, "×")).toEqual({ expr: "6000×", ganti: false });
+    expect(tekanPad("6000", true, "×30÷7×12")).toEqual({ expr: "6000×30÷7×12", ganti: false });
+    expect(tekanPad("6000", true, "⌫")).toEqual({ expr: "600", ganti: false });
+    expect(tekanPad("6000", true, "C")).toEqual({ expr: "", ganti: false });
+    expect(tekanPad("6000", false, "7")).toEqual({ expr: "60007", ganti: false });
+  });
+  it("urutan ketikan: angka baru lalu rumus menghasilkan nilai benar, bukan menempel pada angka lama", () => {
+    let st = { expr: "6000", ganti: true };
+    for (const ch of "6000×30÷7×12") st = { ...st, ...tekanPad(st.expr, st.ganti, ch === "×" || ch === "÷" ? ch : ch) };
+    expect(st.expr).toBe("6000×30÷7×12");
+    expect(Math.round(hitungEkspresi(st.expr) as number)).toBe(308571);
   });
 });
 

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { Chip, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
-import { rentangTanggal, type AturanMode, type KelasInfo, type PeringatanKelas } from "@/lib/sigapKelasIdent";
+import { rentangTanggal, type AturanMode, type BandingPeriode, type KelasInfo, type PeriodeRencana, type PeringatanKelas } from "@/lib/sigapKelasIdent";
 
 type KelasAdmin = KelasInfo & { aturan: AturanMode | null; peserta: number };
 type Data = {
@@ -19,6 +19,9 @@ type Data = {
   tanpa_kelas: number;
   di_luar: number;
   peringatan: PeringatanKelas[];
+  kegiatan: { tanggal_mulai: string | null; tanggal_selesai: string | null };
+  periode_rencana: PeriodeRencana | null;
+  banding_periode: BandingPeriode | null;
 };
 
 const WARNA = { Daring: "navy", Luring: "ok", Hybrid: "wait" } as const;
@@ -96,6 +99,12 @@ export default function KelasIdentKelola() {
           {data.di_luar > 0 ? ` · ${data.di_luar} bernomor kelas yang tidak ada pada perencanaan` : ""}. Urutan kelas di atas = nomor kelas pada penugasan.
         </p>
       </Kartu>
+      {data.periode_rencana && data.banding_periode && data.banding_periode !== "sama" && (
+        <Pesan jenis="info">
+          <strong>Tanggal kegiatan belum sama dengan perencanaan.</strong> Kelas pada perencanaan berlangsung {rentangTanggal(data.periode_rencana.mulai, data.periode_rencana.selesai)}, sedangkan periode kegiatan{" "}
+          {data.banding_periode === "kosong" ? "belum diisi" : `tercatat ${rentangTanggal(data.kegiatan.tanggal_mulai ?? "", data.kegiatan.tanggal_selesai ?? "")}`}. Hari presensi mengikuti periode kegiatan; samakan lewat tab Kegiatan (panel &quot;Usulan dari perencanaan&quot;).
+        </Pesan>
+      )}
       {data.peringatan.length > 0 && (
         <Pesan jenis="info">
           <strong>Perlu dilengkapi pada perencanaan:</strong>

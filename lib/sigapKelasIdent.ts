@@ -168,3 +168,26 @@ export function sebaranPeserta(daftar: readonly KelasInfo[], nomorPenugasan: rea
   }
   return { per_kelas: per, tanpa_kelas: tanpa, di_luar: luar };
 }
+
+export type PeriodeRencana = { mulai: string; selesai: string; hari: number };
+
+/** Periode kegiatan menurut perencanaan = tanggal mulai paling awal sampai selesai paling akhir di antara kelas bertanggal sah. Tidak ada kelas bertanggal -> null. */
+export function periodeKelas(daftar: readonly KelasInfo[]): PeriodeRencana | null {
+  let mulai = "";
+  let selesai = "";
+  for (const k of daftar) {
+    if (k.hari === 0) continue; // tanggal belum lengkap / terbalik
+    if (mulai === "" || k.mulai < mulai) mulai = k.mulai;
+    if (selesai === "" || k.selesai > selesai) selesai = k.selesai;
+  }
+  if (mulai === "" || selesai === "") return null;
+  return { mulai, selesai, hari: (hariUtc(selesai) as number) - (hariUtc(mulai) as number) + 1 };
+}
+
+export type BandingPeriode = "sama" | "beda" | "kosong";
+
+/** Periode tercatat pada kegiatan dibanding rencana: sama / beda / kosong (kegiatan belum punya salah satu tanggal). */
+export function bandingPeriode(rencana: Pick<PeriodeRencana, "mulai" | "selesai">, kegiatan: { mulai: string | null; selesai: string | null }): BandingPeriode {
+  if (!kegiatan.mulai || !kegiatan.selesai) return "kosong";
+  return kegiatan.mulai === rencana.mulai && kegiatan.selesai === rencana.selesai ? "sama" : "beda";
+}

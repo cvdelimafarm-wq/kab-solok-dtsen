@@ -9,7 +9,7 @@ const SEMUA_TAB = ["ringkasan", "persiapan", "tim", "siaran", "qc", "monitoring"
 describe("daftar fitur", () => {
   it("kode unik dan lengkap", () => {
     expect(new Set(KODE_FITUR).size).toBe(FITUR.length);
-    expect(KODE_FITUR).toHaveLength(17);
+    expect(KODE_FITUR).toHaveLength(18);
     expect(fiturSah("laporan")).toBe(true);
     expect(fiturSah("tidakada")).toBe(false);
   });
@@ -34,7 +34,8 @@ describe("daftar fitur", () => {
 describe("fiturEfektif", () => {
   it("Pascabencana (strategi status, kegiatan 1) menyalakan seluruh fitur = perilaku sebelum profil fitur", () => {
     const f = fiturEfektif("status_per_sasaran", {}, 1);
-    expect(KODE_FITUR.filter((k) => k !== "persiapan_sampel").every((k) => f[k])).toBe(true);
+    expect(KODE_FITUR.filter((k) => k !== "persiapan_sampel" && k !== "vanguard").every((k) => f[k])).toBe(true);
+    expect(f.vanguard).toBe(false); // Vanguard tidak menyala sendiri di kegiatan lama
     expect(tabTampilKelola(f)).toEqual(SEMUA_TAB);
   });
   it("SPDT NTP (lembar bantu, kegiatan 2) hanya fitur umum = tab yang kini tersedia", () => {

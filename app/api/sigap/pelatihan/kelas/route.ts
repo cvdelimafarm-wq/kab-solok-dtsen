@@ -4,13 +4,13 @@
 // Tanpa tautan identifikasi <-> kegiatan, semua jawaban { tersambung: false } dan layar tidak berubah. Logika: lib/sigapKelasIdent.ts, lib/portal/kelasIdent.ts.
 //
 // GET ?mode=peserta (bawaan) -> { tersedia, tersambung, cara, kelas, kandidat, aturan }   (peserta pelatihan)
-// GET ?mode=admin            -> { tersambung, ident, kelas[+peserta], tanpa_kelas, di_luar, peringatan }   (izin pelatihan.kelola lihat)
+// GET ?mode=admin            -> { tersambung, ident, kelas[+peserta], tanpa_kelas, di_luar, peringatan, kegiatan{tanggal_mulai,tanggal_selesai}, periode_rencana, banding_periode }   (izin pelatihan.kelola lihat)
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, FILTER_BUKAN_ADMINISTRASI, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { muatKelasTertaut } from "@/lib/portal/kelasIdent";
-import { aturanMode, kelasUntukPeserta, peringatanKelas, sebaranPeserta } from "@/lib/sigapKelasIdent";
+import { aturanMode, bandingPeriode, kelasUntukPeserta, periodeKelas, peringatanKelas, sebaranPeserta } from "@/lib/sigapKelasIdent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +33,9 @@ export async function GET(req: NextRequest) {
     const { data: pen } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
     const nomor = ((pen ?? []) as { kelas: number | null }[]).map((r) => (r.kelas === null || r.kelas === undefined ? null : Number(r.kelas)));
     const sebar = sebaranPeserta(tertaut.kelas, nomor);
+    const { data: keg } = await db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
+    const tgl = { tanggal_mulai: (keg?.tanggal_mulai as string | null | undefined) ?? null, tanggal_selesai: (keg?.tanggal_selesai as string | null | undefined) ?? null };
+    const rencana = periodeKelas(tertaut.kelas);
     return NextResponse.json({
       kegiatan_id: kegiatanId,
       tersambung: tertaut.tersambung,
@@ -42,6 +45,9 @@ export async function GET(req: NextRequest) {
       tanpa_kelas: sebar.tanpa_kelas,
       di_luar: sebar.di_luar,
       peringatan: peringatanKelas(tertaut.kelas),
+      kegiatan: tgl,
+      periode_rencana: rencana,
+      banding_periode: rencana ? bandingPeriode(rencana, { mulai: tgl.tanggal_mulai, selesai: tgl.tanggal_selesai }) : null,
     });
   }
 

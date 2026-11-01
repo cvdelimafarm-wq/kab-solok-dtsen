@@ -16,7 +16,7 @@ import { LABEL_ALASAN, LABEL_KEPERCAYAAN, labelFotoTanpaSinyal, labelJamHp, WARN
 
 /** 850 -> "850 m", 3276 -> "3,3 km". */
 const kmM = (m: number): string => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1).replace(".", ",")} km`);
-type Baris = { id: number; kode: string; pemotret: string; tanggal: string; diambil_at: string; diterima_at?: string | null; waktu_hp?: string | null; lokasi_teks: string | null; jarak_wilayah_m: number | null; jarak_rumah_m?: number | null; akurasi_m: number | null; kepercayaan: Kepercayaan; alasan: string[] };
+type Baris = { id: number; kode: string; pemotret: string; tanggal: string; diambil_at: string; diterima_at?: string | null; waktu_hp?: string | null; lokasi_teks: string | null; jarak_wilayah_m: number | null; jarak_rumah_m?: number | null; akurasi_m: number | null; kepercayaan: Kepercayaan; alasan: string[]; ditahan_untuk?: { nama: string; slot: number | null }[] };
 
 function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
   const kotak = useRef<HTMLLIElement>(null);
@@ -83,6 +83,12 @@ function Kartu({ b, muat }: { b: Baris; muat: () => void }) {
       </div>
       <div className="text-xs text-[#3C4C68]">{b.tanggal} · {b.kode}{b.lokasi_teks ? ` · ${b.lokasi_teks}` : ""}{b.akurasi_m != null ? ` · ±${Math.round(b.akurasi_m)} m` : ""}</div>
       {labelFotoTanpaSinyal(b.alasan, b.diambil_at, b.diterima_at) && <div className="rounded-lg bg-[#FFF4D6] px-3 py-1.5 text-xs font-semibold text-[#5E4300]">{labelFotoTanpaSinyal(b.alasan, b.diambil_at, b.diterima_at)}</div>}
+      {/* (1 Nov 2026) Foto ini menahan nomor milik rekan: "Diperiksa" melepasnya ke nomor itu. Foto hijau pun bisa tampil di sini bila nomor rekan sedang ditahan. */}
+      {b.ditahan_untuk && b.ditahan_untuk.length > 0 && (
+        <div className="rounded-lg bg-[#FFF4D6] px-3 py-1.5 text-xs font-semibold text-[#5E4300]">
+          Menahan nomor: {b.ditahan_untuk.map((d) => `${d.nama}${d.slot ? ` (nomor ${d.slot})` : ""}`).join(", ")}. Tandai Diperiksa agar nomornya terisi.
+        </div>
+      )}
       {/* (31 Okt 2026) Jam resmi dan jam HP berbeda > 2 menit (HP tidur/jam berubah): tampilkan keduanya supaya PML menilai kecepatan perpindahan dengan jam yang tepat */}
       {labelJamHp(b.diambil_at, b.waktu_hp) && <div className="rounded-lg bg-[#EEF2F7] px-3 py-1.5 text-xs font-semibold text-[#0F2A52]">{labelJamHp(b.diambil_at, b.waktu_hp)}</div>}
       {(b.jarak_wilayah_m != null || b.jarak_rumah_m != null) && (

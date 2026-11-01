@@ -8,14 +8,15 @@
 //  - Penerima di luar tim: boleh penugasan miliknya sendiri; kegiatan itu harus bermode kamera (keputusan user: sah sebagai bukti).
 //  - Hari kerja, 23.59 WIB, kunci, periode: cekAksesIsian terhadap TANGGAL FOTO (bukan hari ini).
 //    Foto yang dibagikan (bukan tag pemotret) boleh diterima sampai akhir H+1 (BATAS_HARI_BAGI, 26 Okt 2026).
-//  - Foto merah / dipertanyakan / di luar wilayah penerima (nomor 2-4) -> tag 'ditahan' sampai PML/admin menandai 'diperiksa'.
+//  - Foto merah / dipertanyakan -> tag 'ditahan' sampai PML/admin menandai 'diperiksa'. Tag LUAR TIM di luar wilayah penerima (> 10 km, nomor 2-4) juga ditahan.
+//    (1 Nov 2026) Rekan satu tim TIDAK ditahan karena jarak (satu tim bekerja bersama di wilayah rekan); lihat perluTahanTag di lib/sigapFoto.ts.
 //  - Setelah diterima, nomor tidak diubah penerima (mengubah berarti mencabut baris = hapus). Pilih nomor dengan teliti sebelum Terima.
 //  - Nomor sudah terisi foto lain: foto lama DILEPAS (bukan dihapus), berkas lama dicatat ke sigap_audit (di dalam fungsi SQL).
 
 import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, penugasanAkun } from "@/lib/sigap";
-import { BATAS_HARI_BAGI, WILAYAH_MERAH_M, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
-import { jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
+import { BATAS_HARI_BAGI, jarakEfektifM, perluTahanTag, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
+import { jarakKeRumah, jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
 import { galat, masukFoto } from "@/lib/sigapFotoRoute";
 
 export const runtime = "nodejs";
@@ -61,12 +62,13 @@ export async function POST(req: NextRequest) {
   const akses = await cekAksesIsian(db, akunId, penugasanId, foto.tanggal as string, tag.peran_tag === "pemotret" ? {} : { toleransiOfflineHari: BATAS_HARI_BAGI });
   if ("error" in akses) return galat(akses.error, akses.status);
 
-  let tahan = foto.kepercayaan === "merah" && foto.status_periksa !== "diperiksa";
-  if (foto.status_periksa === "dipertanyakan") tahan = true;
-  if (!tahan && foto.status_periksa !== "diperiksa" && slotBerlokasi(slot) && typeof foto.lat === "number" && typeof foto.lng === "number") {
-    const jarak = await jarakKeWilayah(db, akunId, foto.lat, foto.lng);
-    if (jarak !== null && jarak > WILAYAH_MERAH_M) tahan = true;
+  // (1 Nov 2026) Jarak ke wilayah penerima hanya dihitung untuk tag luar tim (lihat perluTahanTag). Rekan satu tim tidak lagi ditahan karena jarak.
+  let jarak: number | null = null;
+  if (tag.peran_tag === "luar_tim" && foto.status_periksa !== "diperiksa" && slotBerlokasi(slot) && typeof foto.lat === "number" && typeof foto.lng === "number") {
+    const [jw, jr] = await Promise.all([jarakKeWilayah(db, akunId, foto.lat, foto.lng), jarakKeRumah(db, akunId, foto.lat, foto.lng).catch(() => null)]);
+    jarak = jarakEfektifM(jw, jr);
   }
+  const tahan = perluTahanTag({ kepercayaan: foto.kepercayaan, statusPeriksa: foto.status_periksa, peranTag: tag.peran_tag, jarakEfektifM: jarak });
 
   const { data, error } = await db.rpc("sigap_foto_tempatkan", {
     p_tag_id: tagId, p_akun_id: akunId, p_penugasan_id: penugasanId, p_slot: slot, p_susulan: akses.susulan, p_tahan: tahan,

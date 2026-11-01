@@ -198,6 +198,21 @@ export function labelJamHp(diambilIso: string | null | undefined, waktuHpIso: st
   return `Jam resmi ${jam(a)} · jam HP ${jam(b)} WIB`;
 }
 
+/**
+ * (1 Nov 2026) Perlu-tidaknya tag yang DITERIMA seorang penerima ditahan (nomor dipesan, baru tertulis setelah PML/admin memeriksa).
+ * - Foto merah belum diperiksa, atau foto "dipertanyakan": ditahan.
+ * - Jarak ke wilayah tugas PENERIMA hanya menahan tag "luar_tim". Rekan satu tim (tag "tim") bekerja bersama di wilayah rekannya, jadi jarak ke
+ *   wilayah/rumah penerima tidak dipakai (foto sudah dinilai terhadap pemotretnya). Dulu semua tag ditahan bila > 10 km dan tag hijau yang
+ *   ditahan tidak pernah muncul di layar periksa, sehingga nomor kosong dan hari petugas tercatat "terlewat" (keluhan 1 Nov 2026).
+ * jarakEfektifM: jarak (m) titik foto ke KK wilayah atau rumah penerima; null = tidak dinilai / bukan nomor berlokasi.
+ */
+export function perluTahanTag(m: { kepercayaan: string | null | undefined; statusPeriksa: string | null | undefined; peranTag: string; jarakEfektifM: number | null }): boolean {
+  if (m.statusPeriksa === "dipertanyakan") return true;
+  if (m.kepercayaan === "merah" && m.statusPeriksa !== "diperiksa") return true;
+  if (m.peranTag === "luar_tim" && m.statusPeriksa !== "diperiksa" && m.jarakEfektifM !== null && m.jarakEfektifM > WILAYAH_MERAH_M) return true;
+  return false;
+}
+
 /** Jarak Hamming dua sidik gambar heksa (64 bit = 16 karakter). Null bila bentuk tidak sama. */
 export function jarakHamming(a: string | null | undefined, b: string | null | undefined): number | null {
   if (!a || !b || a.length !== b.length || !/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b)) return null;

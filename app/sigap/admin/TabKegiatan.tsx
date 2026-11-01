@@ -10,7 +10,8 @@
 
 import { JENIS_KEGIATAN } from "@/lib/sigap";
 import { useCallback, useEffect, useState } from "react";
-import { aksi, ambil, pesanGalat, rupiah, SesiBerakhir } from "./api";
+import { aksi, ambil, fetchJson, pesanGalat, rupiah, SesiBerakhir } from "./api";
+import { bandingPeriode, rentangTanggal, type PeriodeRencana } from "@/lib/sigapKelasIdent";
 import { PanelRujukan } from "../pedia/komponen";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH } from "./ui";
 
@@ -93,6 +94,37 @@ export default function TabKegiatan({
   );
 }
 
+// ---------------------------------------------------------------------- Usulan periode dari perencanaan
+// (1 Nov 2026) Pelatihan yang tertaut ke identifikasi: periode kegiatan diusulkan dari kelas pada perencanaan. Hanya mengisi form; tetap perlu menekan Simpan.
+// Tidak tertaut / tanpa tanggal kelas / tidak berizin melihat kelas -> panel tidak tampil.
+function UsulanPeriode({ kegiatanId, mulai, selesai, onTerapkan }: { kegiatanId: number; mulai: string; selesai: string; onTerapkan: (p: PeriodeRencana) => void }) {
+  const [rencana, setRencana] = useState<PeriodeRencana | null>(null);
+  useEffect(() => {
+    let batal = false;
+    fetchJson<{ tersambung: boolean; periode_rencana: PeriodeRencana | null }>(`/api/sigap/pelatihan/kelas?mode=admin&kegiatan=${kegiatanId}`)
+      .then((r) => { if (!batal) setRencana(r.tersambung ? r.periode_rencana : null); })
+      .catch(() => { if (!batal) setRencana(null); });
+    return () => { batal = true; };
+  }, [kegiatanId]);
+  if (!rencana) return null;
+  const banding = bandingPeriode(rencana, { mulai, selesai });
+  return (
+    <div className="rounded-lg border border-[#D6E2F5] bg-[#F3F7FD] p-2 text-[12px] leading-snug text-[#34455F] sm:col-start-2" data-testid="usulan-periode">
+      <strong>Usulan dari perencanaan:</strong> {rentangTanggal(rencana.mulai, rencana.selesai)} ({rencana.hari} hari, dari kelas pelatihan pada identifikasi).{" "}
+      {banding === "sama" ? (
+        <span className="font-semibold text-[#1B7F4B]">Periode di atas sudah sama.</span>
+      ) : (
+        <>
+          Hari presensi mengikuti periode kegiatan.{" "}
+          <button type="button" className={BTN_O} onClick={() => onTerapkan(rencana)} data-testid="terapkan-periode">
+            Terapkan ke periode
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------- Form kegiatan
 function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null; kelola: boolean; onTersimpan: (id: number) => void | Promise<void>; onBatal?: () => void }) {
   const [nama, setNama] = useState(k?.nama ?? "");
@@ -163,6 +195,9 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
             <span>–</span>
             <input type="date" value={selesai} onChange={(e) => setSelesai(e.target.value)} className={INPUT} disabled={!kelola} aria-label="Tanggal selesai" />
           </div>
+          {k && k.jenis === "pelatihan" && kelola && (
+            <UsulanPeriode kegiatanId={k.id} mulai={mulai} selesai={selesai} onTerapkan={(p) => { setMulai(p.mulai); setSelesai(p.selesai); }} />
+          )}
           <span className={label}>Target selesai pendataan</span>
           <div>
             <input type="date" value={targetSelesai} onChange={(e) => setTargetSelesai(e.target.value)} className={INPUT} disabled={!kelola || !k?.target_selesai_tersedia} aria-label="Target selesai pendataan" />

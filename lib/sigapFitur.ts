@@ -53,6 +53,7 @@ export type KodeFitur =
   | "qc_pemahaman"
   | "qc_dokumen"
   | "qc_kuesioner"
+  | "vanguard"
   | "monitoring"
   | "pemeriksaan_identifikasi"
   | "pemeriksaan_lapangan"
@@ -74,6 +75,8 @@ export const FITUR: DefFitur[] = [
   { kode: "siaran", kelompok: "3 · Siaran & Notifikasi", label: "Siaran dan notifikasi", ket: "Siaran ke seluruh petugas dan notifikasi ke satu petugas.", bergantung: "umum" },
   { kode: "qc_pemahaman", kelompok: "4 · QC", label: "QC Pemahaman harian", ket: "Hasil, pengaturan jadwal, dan bank soal kuis pemahaman PML/PPL.", bergantung: "umum" },
   { kode: "qc_dokumen", kelompok: "4 · QC", label: "Dokumen pemeriksaan PML", ket: "PDF hasil pemeriksaan yang diunggah PML.", bergantung: "umum" },
+  // (1 Nov 2026) VANGUARD: kartu di tab Hari Ini petugas; percobaan dicatat. Bawaan MATI di semua strategi (juga status_per_sasaran); lihat lib/vanguardAkses.ts
+  { kode: "vanguard", kelompok: "4 · QC", label: "Vanguard (simulasi pengisian kuesioner)", ket: "Kartu Vanguard di tab Hari Ini petugas; percobaan dan kesalahan tercatat untuk BPS. Juga menyala bila Identifikasi survei yang tertaut menjawab Ya.", bergantung: "umum" },
   { kode: "qc_kuesioner", kelompok: "4 · QC", label: "Kuesioner supervisi", ket: "Kuesioner quality check untuk Lembar Supervisi korwil.", bergantung: "status" },
   { kode: "monitoring", kelompok: "5 · Monitoring", label: "Monitoring progres dan kinerja", ket: "Progres petugas, poin kinerja harian, perkiraan kebutuhan anggaran.", bergantung: "status" },
   { kode: "pemeriksaan_identifikasi", kelompok: "6 · Pemeriksaan", label: "Identifikasi SLS", ket: "Progres Lembar Identifikasi SLS seluruh PML.", bergantung: "status" },
@@ -98,7 +101,7 @@ export function fiturTersedia(strategi: StrategiKegiatan, kode: KodeFitur, kegia
 const BAWAAN_UMUM: KodeFitur[] = ["tim_penugasan", "siaran", "qc_pemahaman", "qc_dokumen", "administrasi", "laporan"];
 /** Paket bawaan tiap strategi (kode fitur yang menyala). status_per_sasaran = seluruh fitur kecuali alokasi sampel (perilaku Pendataan Pascabencana). */
 export const BAWAAN_STRATEGI: Record<StrategiKegiatan, KodeFitur[]> = {
-  status_per_sasaran: KODE_FITUR.filter((k) => k !== "persiapan_sampel"), // Pascabencana tidak memakai alokasi sampel (daftar sasarannya KK, bukan sampel SLS)
+  status_per_sasaran: KODE_FITUR.filter((k) => k !== "persiapan_sampel" && k !== "vanguard"), // Pascabencana tidak memakai alokasi sampel (daftar sasarannya KK, bukan sampel SLS)
   lembar_bantu: BAWAAN_UMUM,
   sampel_sls: [...BAWAAN_UMUM, "persiapan_sampel"],
   pelatihan: ["tim_penugasan", "siaran", "administrasi"],

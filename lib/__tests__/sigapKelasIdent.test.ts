@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aturanMode, kelasUntukPeserta, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
+import { aturanMode, bandingPeriode, kelasUntukPeserta, periodeKelas, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
 
 const mentah = (o: Partial<Parameters<typeof ringkasKelas>[0][number]> = {}) => ({
   id: "k1", nama: "Pelatihan Triwulan IV", sesi: "pelatihan" as const, metode: "Luring" as const, tempat: "Hotel dalam kota" as const, lokasi: "Hotel Contoh, Arosuka",
@@ -119,5 +119,32 @@ describe("perluFotoTranslok", () => {
     expect(perluFotoTranslok(aturanMode(""))).toBe(true);
     expect(perluFotoTranslok(null)).toBe(true);
     expect(perluFotoTranslok(undefined)).toBe(true);
+  });
+});
+
+describe("periodeKelas / bandingPeriode", () => {
+  it("rentang paling awal sampai paling akhir; kelas bertanggal rusak diabaikan", () => {
+    const d = ringkasKelas([
+      mentah({ id: "a", mulai: "2026-11-10", selesai: "2026-11-11" }),
+      mentah({ id: "b", mulai: "2026-11-02", selesai: "2026-11-03" }),
+      mentah({ id: "c", mulai: "2026-10-01", selesai: "2026-09-01" }), // terbalik
+      mentah({ id: "d", mulai: "", selesai: "2026-12-31" }), // belum lengkap
+    ], false);
+    expect(periodeKelas(d)).toEqual({ mulai: "2026-11-02", selesai: "2026-11-11", hari: 10 });
+  });
+  it("satu kelas satu hari; tanpa tanggal sah -> null; daftar kosong -> null", () => {
+    expect(periodeKelas(ringkasKelas([mentah({ mulai: "2026-11-02", selesai: "2026-11-02" })], false))).toEqual({ mulai: "2026-11-02", selesai: "2026-11-02", hari: 1 });
+    expect(periodeKelas(ringkasKelas([mentah({ mulai: "", selesai: "" })], false))).toBeNull();
+    expect(periodeKelas([])).toBeNull();
+  });
+  it("lintas bulan/tahun dihitung benar", () => {
+    expect(periodeKelas(ringkasKelas([mentah({ mulai: "2026-12-30", selesai: "2027-01-02" })], false))?.hari).toBe(4);
+  });
+  it("bandingPeriode", () => {
+    const r = { mulai: "2026-11-02", selesai: "2026-11-03" };
+    expect(bandingPeriode(r, { mulai: "2026-11-02", selesai: "2026-11-03" })).toBe("sama");
+    expect(bandingPeriode(r, { mulai: "2026-11-02", selesai: "2026-11-04" })).toBe("beda");
+    expect(bandingPeriode(r, { mulai: null, selesai: "2026-11-03" })).toBe("kosong");
+    expect(bandingPeriode(r, { mulai: "", selesai: "" })).toBe("kosong");
   });
 });

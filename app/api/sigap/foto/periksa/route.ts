@@ -1,7 +1,8 @@
 // app/api/sigap/foto/periksa/route.ts
 //
 // (19 Okt 2026) Pemeriksaan foto oleh PML / admin.
-// GET  -> { foto: [...] } foto berstatus belum diperiksa yang kepercayaannya kuning/merah (admin: semua; PML: timnya).
+// GET  -> { foto: [...] } foto berstatus belum diperiksa yang kepercayaannya kuning/merah, DITAMBAH foto yang menahan nomor seseorang (tag 'ditahan', apa pun warnanya)
+//         (admin: semua; PML: timnya).
 // POST { foto_id, hasil: 'diperiksa'|'dipertanyakan', catatan? }
 //   'diperiksa'     -> tag yang ditahan dilepas dan ditulis ke nomor foto (sigap_foto_lepas_tahan).
 //   'dipertanyakan' -> HANYA menandai (lencana + tag baru tetap ditahan). Baris nomor foto yang sudah terisi TIDAK dicabut
@@ -47,29 +48,43 @@ export async function GET(req: NextRequest) {
   if (m instanceof NextResponse) return m;
   const { db, akunId } = m;
   const admin = await adalahAdminFoto(db, akunId);
-  let q = db
-    .from("sigap_foto")
-    .select("id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, waktu_hp, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa")
-    .eq("status_periksa", "belum")
-    .in("kepercayaan", ["kuning", "merah"])
-    .order("diambil_at", { ascending: false })
-    .limit(200);
+  const KOLOM = "id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, waktu_hp, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa";
+  let tim: number[] | null = null;
   if (!admin) {
-    const tim = await timDiawasi(db, akunId);
+    tim = await timDiawasi(db, akunId);
     if (!tim.length) return NextResponse.json({ foto: [] });
-    q = q.in("akun_pengambil", tim);
   }
-  const { data } = await q;
-  const ids = Array.from(new Set((data ?? []).map((f) => f.akun_pengambil as number)));
-  const { data: nama } = ids.length ? await db.from("sigap_akun").select("id, nama, domisili_lat, domisili_lng").in("id", ids) : { data: [] as Record<string, unknown>[] };
-  const peta = new Map((nama ?? []).map((a) => [a.id as number, a.nama as string]));
-  const rumah = new Map((nama ?? []).map((a) => [a.id as number, typeof a.domisili_lat === "number" && typeof a.domisili_lng === "number" ? { lat: a.domisili_lat, lng: a.domisili_lng } : null]));
+  // (1 Nov 2026) Foto yang MENAHAN nomor seseorang (tag 'ditahan') selalu ikut tampil, apa pun warnanya. Dulu hanya kuning/merah, sehingga tag ditahan pada foto hijau
+  // tidak pernah bisa dilepas oleh siapa pun dan nomor penerimanya kosong (hari petugas tercatat "terlewat").
+  const { data: tahanan } = await db.from("sigap_foto_tag").select("foto_id, akun_id, slot").eq("status", "ditahan");
+  const idTahan = Array.from(new Set((tahanan ?? []).map((t) => t.foto_id as number)));
+  let q = db.from("sigap_foto").select(KOLOM).eq("status_periksa", "belum").in("kepercayaan", ["kuning", "merah"]).order("diambil_at", { ascending: false }).limit(200);
+  if (tim) q = q.in("akun_pengambil", tim);
+  let q2 = idTahan.length ? db.from("sigap_foto").select(KOLOM).in("id", idTahan).limit(200) : null;
+  if (q2 && tim) q2 = q2.in("akun_pengambil", tim);
+  const [{ data: a }, { data: b }] = await Promise.all([q, q2 ?? Promise.resolve({ data: [] as Record<string, unknown>[] })]);
+  const gabung = new Map<number, Record<string, unknown>>();
+  for (const f of [...(a ?? []), ...(b ?? [])]) gabung.set(f.id as number, f as Record<string, unknown>);
+  const data = Array.from(gabung.values()).sort((x, y) => String(y.diambil_at).localeCompare(String(x.diambil_at))).slice(0, 200);
+  const idsAkun = Array.from(new Set([...data.map((f) => f.akun_pengambil as number), ...(tahanan ?? []).map((t) => t.akun_id as number)]));
+  type AkunRingkas = { id: number; nama: string; domisili_lat: number | null; domisili_lng: number | null };
+  const { data: namaRaw } = idsAkun.length ? await db.from("sigap_akun").select("id, nama, domisili_lat, domisili_lng").in("id", idsAkun) : { data: [] };
+  const nama = (namaRaw ?? []) as AkunRingkas[];
+  const peta = new Map(nama.map((x) => [x.id, x.nama]));
+  const rumah = new Map(nama.map((x) => [x.id, typeof x.domisili_lat === "number" && typeof x.domisili_lng === "number" ? { lat: x.domisili_lat, lng: x.domisili_lng } : null]));
+  // (1 Nov 2026) siapa yang nomornya ditahan oleh foto ini
+  const ditahanUntuk = new Map<number, { nama: string; slot: number | null }[]>();
+  for (const t of tahanan ?? []) {
+    const arr = ditahanUntuk.get(t.foto_id as number) ?? [];
+    arr.push({ nama: peta.get(t.akun_id as number) ?? "-", slot: (t.slot as number | null) ?? null });
+    ditahanUntuk.set(t.foto_id as number, arr);
+  }
   // (20 Okt 2026) jarak titik foto ke rumah petugas (m), bahan pemeriksa menilai "di luar wilayah"; null bila domisili/koordinat tidak ada
   return NextResponse.json({
-    foto: (data ?? []).map((f) => {
+    foto: data.map((f) => {
       const r = rumah.get(f.akun_pengambil as number) ?? null;
       const jarakRumah = r && typeof f.lat === "number" && typeof f.lng === "number" ? Math.round(jarakM(f.lat, f.lng, r.lat, r.lng)) : null;
-      return { ...f, pemotret: peta.get(f.akun_pengambil as number) ?? "-", jarak_rumah_m: jarakRumah };
+      return { ...f, pemotret: peta.get(f.akun_pengambil as number) ?? "-", jarak_rumah_m: jarakRumah, ditahan_untuk: ditahanUntuk.get(f.id as number) ?? [] };
     }),
   });
 }
