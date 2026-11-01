@@ -13,6 +13,7 @@ import { bacaSesi } from "@/app/sigap/admin/api";
 import { teksWaktuWib, type JendelaDaftar, type PutusanDaftar } from "@/lib/seleksiDaftar";
 import type { HasilKelayakan } from "@/lib/seleksiSyarat";
 import { alamatLokasi } from "@/lib/lokasiMitra";
+import type { OpsiKelas } from "@/lib/sigapKelasIdent";
 
 type Data = {
   seleksi: { id: number; nama: string; kegiatan: string; status: string; jadwal_buka: string | null; jadwal_tutup: string | null; sisa_ppl: number; sisa_pml: number; syarat: { domisili: string | null; jarak_km: number | null } };
@@ -25,6 +26,7 @@ type Data = {
   hasil?: {
     hasil: string | null; peringkat: number | null; skor: number | null; konfirmasi: string | null; ditugaskan: boolean; boleh_konfirmasi: boolean; alasan_konfirmasi: string | null;
     info_pelatihan: string | null; batas_konfirmasi: string | null;
+    kelas_opsi?: OpsiKelas[]; kelas_pilihan?: number | null;
   } | null;
 };
 type SoalMitra = { nomor: number; teks: string; opsi: { kode: string; teks: string }[] };
@@ -40,6 +42,7 @@ export default function HalamanSeleksi() {
   const [galat, setGalat] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
+  const [pilihKelas, setPilihKelas] = useState<number | null>(null);
   const [soal, setSoal] = useState<SoalMitra[] | null>(null);
   const [batas, setBatas] = useState<string | null>(null);
   const [jawab, setJawab] = useState<Record<string, string>>({});
@@ -276,6 +279,25 @@ export default function HalamanSeleksi() {
                 {d.hasil.hasil === "lulus" && (
                   <>
                     {d.hasil.info_pelatihan && <p className="whitespace-pre-line rounded-[12px] bg-[#F5F8FE] px-3 py-2 text-[13.5px]">{d.hasil.info_pelatihan}</p>}
+                    {(d.hasil.kelas_opsi?.length ?? 0) > 0 && (
+                      <div className="space-y-1.5 rounded-[12px] bg-[#F5F8FE] px-3 py-2.5" data-testid="pilih-kelas">
+                        <p className="text-[13px] font-bold text-[#0F2A52]">{(d.hasil.kelas_opsi?.length ?? 0) > 1 && !d.hasil.konfirmasi ? "Pilih kelas yang akan Anda ikuti" : "Kelas Anda"}</p>
+                        {(d.hasil.kelas_opsi ?? [])
+                          .filter((k) => !d.hasil?.konfirmasi || (d.hasil.kelas_opsi?.length ?? 0) === 1 || d.hasil.kelas_pilihan === k.nomor)
+                          .map((k) => (
+                            <label key={k.nomor} className="flex items-start gap-2 text-[13px] text-[#1B2B4B]">
+                              {(d.hasil?.kelas_opsi?.length ?? 0) > 1 && d.hasil?.boleh_konfirmasi ? (
+                                <input type="radio" name="kelas" className="mt-1" checked={pilihKelas === k.nomor} onChange={() => setPilihKelas(k.nomor)} />
+                              ) : null}
+                              <span>
+                                <strong>{k.nama}</strong> · {k.jadwal}
+                                {k.metode ? ` · ${k.metode === "Daring" ? "Daring (Zoom)" : k.metode}` : ""}
+                                {k.lokasi && k.metode !== "Daring" ? ` · ${k.lokasi}` : ""}
+                              </span>
+                            </label>
+                          ))}
+                      </div>
+                    )}
                     {d.hasil.konfirmasi ? (
                       <p className="rounded-[12px] bg-[#E6EEFC] px-3 py-2.5 text-[13.5px] font-semibold text-[#1F5FD1]">
                         {d.hasil.konfirmasi === "bersedia" ? (d.hasil.ditugaskan ? "Anda menyatakan bersedia dan sudah tercatat dalam penugasan kegiatan." : "Anda menyatakan bersedia.") : "Anda menyatakan tidak bersedia."}
@@ -284,7 +306,7 @@ export default function HalamanSeleksi() {
                     {d.hasil.batas_konfirmasi && !d.hasil.konfirmasi && <p className="text-[12.5px] text-[#55657D]">Konfirmasi paling lambat {teksWaktuWib(d.hasil.batas_konfirmasi)}.</p>}
                     {d.hasil.boleh_konfirmasi ? (
                       <div className="space-y-2">
-                        <button type="button" className={tombol} disabled={sibuk} onClick={() => void kirim({ aksi: "konfirmasi", bersedia: true }, "Terima kasih, kesediaan Anda tercatat.")}>
+                        <button type="button" className={tombol} disabled={sibuk || ((d.hasil.kelas_opsi?.length ?? 0) > 1 && pilihKelas === null)} onClick={() => void kirim({ aksi: "konfirmasi", bersedia: true, ...(pilihKelas !== null ? { kelas: pilihKelas } : {}) }, "Terima kasih, kesediaan Anda tercatat.")}>
                           Saya bersedia mengikuti kegiatan{d.hasil.info_pelatihan ? " dan jadwal pelatihan" : ""}
                         </button>
                         <button type="button" className={tombolPutih} disabled={sibuk} onClick={() => { if (window.confirm("Yakin tidak bersedia? Kursi Anda dapat diberikan kepada cadangan.")) void kirim({ aksi: "konfirmasi", bersedia: false }, "Pernyataan tidak bersedia tercatat."); }}>

@@ -9,7 +9,8 @@
 //   GET  juga memuat { tes, hasil }  -- tes seleksi (status, jadwal, skor bila ditampilkan) dan hasil yang sudah diumumkan (+ boleh konfirmasi)
 //   POST { aksi: "mulai_tes", id }   -> soal TANPA kunci + batas waktu (satu kali; mulai lagi = melanjutkan sesi yang berjalan)
 //   POST { aksi: "kirim_tes", id, jawaban: {"1":"A",...} } -> dinilai di server
-//   POST { aksi: "konfirmasi", id, bersedia: boolean } -> lulus menyatakan bersedia/menolak; bersedia otomatis masuk penugasan kegiatan
+//   POST { aksi: "konfirmasi", id, bersedia: boolean, kelas?: number } -> lulus menyatakan bersedia/menolak; bersedia otomatis masuk penugasan kegiatan.
+//        (1 Nov 2026) Bila identifikasi kegiatan tertaut dan perannya punya lebih dari satu kelas, `kelas` (nomor) wajib; GET hasil memuat kelas_opsi/kelas_pilihan.
 // Hanya akun Mitra aktif anggota pool (lib/portal/seleksiKandidat.bacaCalonSatu). Seleksi berstatus draft/batal tidak terlihat.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,6 +21,8 @@ import { bacaSyarat, nilaiKelayakan, sisaKebutuhan, type HasilKelayakan } from "
 import { bersihkanJawaban, hitungBatas, hitungSkor, lewatBatas, TOLERANSI_DETIK, validasiSoalJson } from "@/lib/sigapTes";
 import { putusanKonfirmasi, statusTesSeleksi } from "@/lib/seleksiNilai";
 import { tugaskanPeserta } from "@/lib/portal/seleksiPenugasan";
+import { muatKelasTertaut } from "@/lib/portal/kelasIdent";
+import { opsiKelasPeran, ringkasOpsi, tetapkanKelas, type OpsiKelas } from "@/lib/sigapKelasIdent";
 import { jendelaPendaftaran, peranDaftarSah, putusanDaftar, type PeranDaftar } from "@/lib/seleksiDaftar";
 import { susunKartuSeleksi, type MasukanKartu } from "@/lib/seleksiBeranda";
 import { bacaCalonSatu, bacaWilayah, tahunPoolKegiatan } from "@/lib/portal/seleksiKandidat";
@@ -80,7 +83,24 @@ async function bacaSayaPaket4(db: Db, id: number, akunId: number): Promise<SayaP
   return error || !data ? null : (data as SayaPaket4);
 }
 
-async function ringkasPaket4(db: Db, id: number, akunId: number, terdaftar: boolean) {
+/** Kelas pilihan Mitra (SQL 20261101s); kolom belum ada = null. */
+async function bacaKelasPilihan(db: Db, id: number, akunId: number): Promise<number | null> {
+  const { data, error } = await db.from("sigap_seleksi_peserta").select("kelas_pilihan").eq("seleksi_id", id).eq("akun_id", akunId).maybeSingle();
+  const v = error || !data ? null : (data as { kelas_pilihan?: number | null }).kelas_pilihan;
+  return v === null || v === undefined ? null : Number(v);
+}
+
+/** Kelas menurut perencanaan untuk peran ini; gagal/tak tertaut = daftar kosong (layar seperti semula). */
+async function kelasPerencanaan(db: Db, kegiatanId: number) {
+  try {
+    const kt = await muatKelasTertaut(db, kegiatanId, true);
+    return kt.tersambung ? kt.kelas : [];
+  } catch {
+    return [];
+  }
+}
+
+async function ringkasPaket4(db: Db, id: number, akunId: number, terdaftar: boolean, ctx?: { kegiatanId: number; peran: string | null }) {
   const p4 = await bacaPaket4(db, id);
   if (!p4 || !terdaftar) return { tes: null, hasil: null };
   const now = Date.now();
@@ -100,7 +120,12 @@ async function ringkasPaket4(db: Db, id: number, akunId: number, terdaftar: bool
         hasil: sp4.hasil, peringkat: p4.tampil_nilai ? sp4.peringkat : null, skor: p4.tampil_nilai && sp4.skor_akhir !== null ? Number(sp4.skor_akhir) : null,
         konfirmasi: sp4.konfirmasi, ditugaskan: !!sp4.ditugaskan_at, boleh_konfirmasi: k.boleh && !sp4.ditugaskan_at, alasan_konfirmasi: sp4.ditugaskan_at ? "Anda sudah tercatat dalam penugasan." : k.alasan,
         info_pelatihan: p4.info_pelatihan, batas_konfirmasi: p4.konfirmasi_batas,
+        kelas_opsi: [] as OpsiKelas[], kelas_pilihan: null as number | null,
       };
+      if (ctx && ctx.peran && sp4.hasil === "lulus") {
+        hasil.kelas_opsi = opsiKelasPeran(await kelasPerencanaan(db, ctx.kegiatanId), ctx.peran).map(ringkasOpsi);
+        hasil.kelas_pilihan = await bacaKelasPilihan(db, id, akunId);
+      }
     }
   }
   return { tes, hasil };
@@ -161,7 +186,7 @@ export async function GET(req: NextRequest) {
       sisa_ppl: sisaKebutuhan(b.kebutuhan_ppl, b.sudah_ppl), sisa_pml: sisaKebutuhan(b.kebutuhan_pml, b.sudah_pml),
       syarat: { domisili: s.domisili.aktif ? s.domisili.level : null, jarak_km: s.jarak.aktif ? s.jarak.maks_km : null },
     };
-    const p4 = await ringkasPaket4(db, id, akunId, saya?.status === "terdaftar");
+    const p4 = await ringkasPaket4(db, id, akunId, saya?.status === "terdaftar", { kegiatanId: b.kegiatan_id, peran: (saya?.peran as string | undefined) ?? null });
     if (!n.ok) return NextResponse.json({ seleksi, tidak_berhak: n.alasan, saya: saya ?? null, ...p4 });
     const ppl = n.putus("ppl");
     const pml = n.putus("pml");
@@ -205,8 +230,17 @@ export async function POST(req: NextRequest) {
         if (!k.boleh) return galat(k.alasan ?? "Belum dapat mengonfirmasi.", 403);
         if (typeof isi.bersedia !== "boolean") return galat("Pilih bersedia atau tidak bersedia.");
         if (sp4?.ditugaskan_at && !isi.bersedia) return galat("Anda sudah tercatat dalam penugasan. Hubungi penanggung jawab kegiatan untuk mengundurkan diri.", 403);
+        // (1 Nov 2026) pilihan kelas: wajib bila perannya punya lebih dari satu kelas pada perencanaan; selain itu diabaikan/otomatis
+        let kelasDipilih: number | null = null;
+        if (isi.bersedia) {
+          const t = tetapkanKelas(await kelasPerencanaan(db, b.kegiatan_id), String(sy.peran), isi.kelas === undefined || isi.kelas === null ? null : Number(isi.kelas));
+          if (t.perluPilih) return galat("Pilih kelas yang akan Anda ikuti.");
+          kelasDipilih = t.nomor;
+        }
         const { error } = await db.from("sigap_seleksi_peserta").update({ konfirmasi: isi.bersedia ? "bersedia" : "menolak", konfirmasi_at: sekarang.toISOString(), diubah_at: sekarang.toISOString() }).eq("seleksi_id", id).eq("akun_id", akunId);
         if (error) return galat("Gagal menyimpan konfirmasi.", 500);
+        // kolom kelas_pilihan baru ada setelah SQL 20261101s; gagal di sini tidak membatalkan konfirmasi
+        await db.from("sigap_seleksi_peserta").update({ kelas_pilihan: isi.bersedia ? kelasDipilih : null }).eq("seleksi_id", id).eq("akun_id", akunId);
         let ditugaskan: string | null = null;
         if (isi.bersedia) {
           const t = await tugaskanPeserta(db, { seleksiId: id, kegiatanId: b.kegiatan_id, akunId, peran: sy.peran as "ppl" | "pml" });

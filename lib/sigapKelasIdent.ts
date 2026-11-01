@@ -267,3 +267,28 @@ export function teksInfoPelatihan(daftar: readonly KelasInfo[], maks = 480): str
   if (hasil === "" && butir.length > 0) hasil = `${butir[0].slice(0, maks - 1)}…`;
   return hasil;
 }
+
+export type OpsiKelas = { nomor: number; nama: string; metode: MetodeInfo; jadwal: string; lokasi: string };
+
+/** Kelas yang memuat peran itu (calon pilihan Mitra saat konfirmasi). */
+export function opsiKelasPeran(daftar: readonly KelasInfo[], peran: string): KelasInfo[] {
+  return daftar.filter((k) => k.untuk.includes(peran));
+}
+
+/** Bentuk ringkas untuk layar Mitra. */
+export function ringkasOpsi(k: KelasInfo): OpsiKelas {
+  return { nomor: k.nomor, nama: k.nama, metode: k.metode, jadwal: rentangTanggal(k.mulai, k.selesai), lokasi: k.lokasi };
+}
+
+/**
+ * Kelas yang akan menjadi `sigap_penugasan.kelas` bagi Mitra yang bersedia: satu-satunya kelas untuk perannya (otomatis), atau pilihannya bila ada beberapa.
+ * `perluPilih` = ada lebih dari satu kelas dan pilihan belum ada/tidak sah. Tidak ada kelas untuk peran -> nomor null (penugasan tanpa kelas, seperti sekarang).
+ */
+export function tetapkanKelas(daftar: readonly KelasInfo[], peran: string, pilihan: number | null | undefined): { nomor: number | null; perluPilih: boolean } {
+  const opsi = opsiKelasPeran(daftar, peran);
+  if (opsi.length === 0) return { nomor: null, perluPilih: false };
+  if (opsi.length === 1) return { nomor: opsi[0].nomor, perluPilih: false };
+  const p = pilihan === null || pilihan === undefined ? NaN : Number(pilihan);
+  if (Number.isInteger(p) && opsi.some((k) => k.nomor === p)) return { nomor: p, perluPilih: false };
+  return { nomor: null, perluPilih: true };
+}

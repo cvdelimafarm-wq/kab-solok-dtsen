@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aturanMode, bandingPeriode, teksInfoPelatihan, sebaranDenganPeran, tanggalKelas, usulanRapat, kelasUntukPeserta, periodeKelas, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
+import { aturanMode, bandingPeriode, opsiKelasPeran, ringkasOpsi, tetapkanKelas, teksInfoPelatihan, sebaranDenganPeran, tanggalKelas, usulanRapat, kelasUntukPeserta, periodeKelas, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
 
 const mentah = (o: Partial<Parameters<typeof ringkasKelas>[0][number]> = {}) => ({
   id: "k1", nama: "Pelatihan Triwulan IV", sesi: "pelatihan" as const, metode: "Luring" as const, tempat: "Hotel dalam kota" as const, lokasi: "Hotel Contoh, Arosuka",
@@ -211,5 +211,32 @@ describe("teksInfoPelatihan", () => {
     const t = teksInfoPelatihan(panjang, 40);
     expect(t.length).toBe(40);
     expect(t.endsWith("…")).toBe(true);
+  });
+});
+
+describe("opsiKelasPeran / tetapkanKelas", () => {
+  const d = ringkasKelas([
+    mentah({ id: "a", nama: "Kelas PPL", untuk: ["ppl"] }),
+    mentah({ id: "b", nama: "Kelas PML 1", untuk: ["pml"], mulai: "2026-11-05", selesai: "2026-11-05" }),
+    mentah({ id: "c", nama: "Kelas PML 2", untuk: ["pml", "ppl"], metode: "Daring", lokasi: "" }),
+  ], false);
+  it("opsi menurut peran", () => {
+    expect(opsiKelasPeran(d, "ppl").map((k) => k.nomor)).toEqual([1, 3]);
+    expect(opsiKelasPeran(d, "pml").map((k) => k.nomor)).toEqual([2, 3]);
+    expect(opsiKelasPeran(d, "entri")).toEqual([]);
+  });
+  it("satu kelas -> otomatis; beberapa -> perlu pilih; pilihan harus salah satu opsi", () => {
+    const satu = ringkasKelas([mentah({ id: "a", untuk: ["ppl"] }), mentah({ id: "b", untuk: ["pml"] })], false);
+    expect(tetapkanKelas(satu, "ppl", null)).toEqual({ nomor: 1, perluPilih: false });
+    expect(tetapkanKelas(satu, "pml", 1)).toEqual({ nomor: 2, perluPilih: false }); // pilihan diabaikan bila hanya satu opsi
+    expect(tetapkanKelas(d, "ppl", null)).toEqual({ nomor: null, perluPilih: true });
+    expect(tetapkanKelas(d, "ppl", 3)).toEqual({ nomor: 3, perluPilih: false });
+    expect(tetapkanKelas(d, "ppl", 2)).toEqual({ nomor: null, perluPilih: true }); // kelas 2 bukan untuk PPL
+    expect(tetapkanKelas(d, "ppl", Number.NaN)).toEqual({ nomor: null, perluPilih: true });
+    expect(tetapkanKelas(d, "entri", 1)).toEqual({ nomor: null, perluPilih: false });
+    expect(tetapkanKelas([], "ppl", 1)).toEqual({ nomor: null, perluPilih: false });
+  });
+  it("ringkasOpsi", () => {
+    expect(ringkasOpsi(d[1])).toEqual({ nomor: 2, nama: "Kelas PML 1", metode: "Luring", jadwal: "5 Nov 2026", lokasi: "Hotel Contoh, Arosuka" });
   });
 });
