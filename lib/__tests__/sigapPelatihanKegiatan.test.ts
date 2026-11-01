@@ -106,10 +106,30 @@ describe("idKegiatanPelatihan", () => {
     const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [{ akun_id: 202, kegiatan_id: 9, aktif: true, sumber: null }, { akun_id: 202, kegiatan_id: 1, aktif: true, sumber: null }] });
     expect(await idKegiatanPelatihan(db, req(""), 202)).toBe(9);
   });
-  it("peserta dua pelatihan lain atau tidak punya penugasan: bawaan", async () => {
-    const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [{ akun_id: 303, kegiatan_id: 9, aktif: true, sumber: null }, { akun_id: 303, kegiatan_id: 10, aktif: true, sumber: null }] });
-    expect(await idKegiatanPelatihan(db, req(""), 303)).toBe(3);
+  it("tidak punya penugasan: bawaan", async () => {
+    const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [] });
     expect(await idKegiatanPelatihan(db, req(""), 404)).toBe(3);
+  });
+  // (1 Nov 2026) peserta lebih dari satu pelatihan: yang berlangsung / paling dekat (lib/sigapPelatihanPilih.ts); waktu dikunci agar tes tidak bergantung tanggal sistem
+  it("peserta dua pelatihan lain: yang paling dekat jadwalnya", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T03:00:00Z"));
+    try {
+      const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [{ akun_id: 303, kegiatan_id: 9, aktif: true, sumber: null }, { akun_id: 303, kegiatan_id: 10, aktif: true, sumber: null }] });
+      expect(await idKegiatanPelatihan(db, req(""), 303)).toBe(9);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("peserta pelatihan bawaan yang sudah selesai dan pelatihan baru yang akan datang: pelatihan baru", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T03:00:00Z"));
+    try {
+      const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [{ akun_id: 606, kegiatan_id: 3, aktif: true, sumber: null }, { akun_id: 606, kegiatan_id: 9, aktif: true, sumber: null }] });
+      expect(await idKegiatanPelatihan(db, req(""), 606)).toBe(9);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("?kegiatan=ID mengalahkan pemilihan otomatis", async () => {
     const db = dbPalsu({ sigap_kegiatan: KEG, sigap_penugasan: [{ akun_id: 505, kegiatan_id: 9, aktif: true, sumber: null }] });

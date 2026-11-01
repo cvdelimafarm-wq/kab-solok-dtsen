@@ -81,6 +81,23 @@ const urutDesc = (a: { jumlah: number; label: string }, b: { jumlah: number; lab
 
 /** `namaLain`: nama akun yang pernah mencoba tetapi bukan peserta aktif lagi (penyebut persen tetap peserta aktif). */
 export type OpsiDasbor = { pengaturan?: Pengaturan; kalkulator?: Record<number, number> };
+/**
+ * Buku kelulusan per petugas: kegiatan bermode uji memakai BUKU UJI (hanya percobaan bermode "uji"; latihan sebelumnya tidak menghitung), selain itu semua percobaan.
+ * Per petugas per kasus: jumlah percobaan di buku itu dan sudah benar atau belum (dasar hasilFinal).
+ */
+export function bukuPerAkun(peng: Pengaturan, perc: BarisPercobaanDb[]): Map<number, Map<string, { kasus: string; percobaan: number; benar: boolean }>> {
+  const buku = new Map<number, Map<string, { kasus: string; percobaan: number; benar: boolean }>>();
+  for (const p of perc) {
+    if (peng.mode === "uji" && p.mode !== "uji") continue;
+    const m = buku.get(p.akun_id) ?? buku.set(p.akun_id, new Map()).get(p.akun_id)!;
+    const r = m.get(p.kasus) ?? { kasus: p.kasus, percobaan: 0, benar: false };
+    r.percobaan += 1;
+    if (p.benar) r.benar = true;
+    m.set(p.kasus, r);
+  }
+  return buku;
+}
+
 export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: BarisKesalahanDb[], namaLain: Record<number, string> = {}, opsi: OpsiDasbor = {}): Dasbor {
   const peng = opsi.pengaturan ?? PENGATURAN_BAWAAN;
   const kalk = opsi.kalkulator ?? {};
@@ -98,17 +115,7 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
     if (p.benar) x.bintangTerbaik = Math.max(x.bintangTerbaik, p.bintang);
     pas.set(k, x);
   }
-  // Kelulusan: kegiatan bermode uji memakai BUKU UJI (hanya percobaan bermode "uji"); latihan sebelumnya tidak menghitung. Selain itu semua percobaan.
-  // Per petugas per kasus: jumlah percobaan di buku itu dan sudah benar atau belum (dasar hasil final).
-  const buku = new Map<number, Map<string, { kasus: string; percobaan: number; benar: boolean }>>();
-  for (const p of perc) {
-    if (peng.mode === "uji" && p.mode !== "uji") continue;
-    const m = buku.get(p.akun_id) ?? buku.set(p.akun_id, new Map()).get(p.akun_id)!;
-    const r = m.get(p.kasus) ?? { kasus: p.kasus, percobaan: 0, benar: false };
-    r.percobaan += 1;
-    if (p.benar) r.benar = true;
-    m.set(p.kasus, r);
-  }
+  const buku = bukuPerAkun(peng, perc);
   const semuaPasangan = [...pas.values()];
   const pasBenar = semuaPasangan.filter((x) => x.benarNomor !== null);
   const akunMencoba = new Set(perc.map((p) => p.akun_id));
