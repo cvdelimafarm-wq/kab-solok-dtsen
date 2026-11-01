@@ -15,7 +15,7 @@ import { cekAksesIsian, BUCKET_SIGAP } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { tanggalWib } from "@/lib/sigapPresensi";
 import {
-  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, KECEPATAN_MERAH_KMJAM, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, posisiMasukanValid, simpanSampai, waktuHpTerjepit,
+  MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, KECEPATAN_MERAH_KMJAM, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, perluTahanTag, posisiMasukanValid, simpanSampai, waktuHpTerjepit,
   SLOT_FOTO_LAPORAN, bolehFotoLaporan, slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
 } from "@/lib/sigapFoto";
 import { bubuhiCap, sidikGambar } from "@/lib/sigapFotoCap";
@@ -257,10 +257,12 @@ export async function POST(req: NextRequest) {
       : Promise.resolve(null),
   ]);
 
+  // (1 Nov 2026) satu aturan tahan untuk semua jalur; saat fitur dimatikan (TAHAN_FOTO_AKTIF) foto merah pun langsung masuk nomor
+  const tahanFoto = perluTahanTag({ kepercayaan: nilai.tingkat, statusPeriksa: "belum", peranTag: "pemotret", jarakEfektifM: null });
   let penempatan: unknown = null;
   if (nomor !== null && tagPemotret) {
     const { data, error } = await db.rpc("sigap_foto_tempatkan", {
-      p_tag_id: tagPemotret.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: nomor, p_susulan: akses.susulan, p_tahan: nilai.tingkat === "merah",
+      p_tag_id: tagPemotret.id, p_akun_id: akunId, p_penugasan_id: pen.id, p_slot: nomor, p_susulan: akses.susulan, p_tahan: tahanFoto,
     });
     penempatan = error ? { ok: false, error: error.message } : data;
   }
@@ -269,7 +271,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     foto: ringkas(foto),
     penempatan,
-    ditahan: nilai.tingkat === "merah",
+    ditahan: tahanFoto,
     jumlah_tag: tagBaru.length,
     tanpa_hari_kerja: akses.tanpaHariKerja === true,
   });

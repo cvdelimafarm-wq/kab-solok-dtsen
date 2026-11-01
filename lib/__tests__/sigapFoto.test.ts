@@ -5,7 +5,7 @@ import {
   SLOT_FOTO_LAPORAN, bolehFotoLaporan,
   TOLERANSI_KIRIM_HARI, UMUR_PAKET_MS, dalamToleransiKirim, BATAS_HARI_BAGI, jendelaBagiFoto, LABEL_ALASAN, labelFotoTanpaSinyal,
   nilaiKepercayaan, normalisasiKode, posisiMasukanValid, simpanSampai, statusPemeriksaan, teksWaktuWib, urlVerifikasi, waktuResmi,
-  waktuHpTerjepit, labelJamHp, jarakM, perluTahanTag,
+  waktuHpTerjepit, labelJamHp, jarakM, perluTahanTag, TAHAN_FOTO_AKTIF,
   type MasukanKepercayaan,
 } from "@/lib/sigapFoto";
 
@@ -386,18 +386,24 @@ describe("foto laporan di luar hari kerja (menempati nomor 3)", () => {
 // (1 Nov 2026) keluhan: rekan tim menerima foto bagian tim, ditahan karena > 10 km dari wilayah sendiri, tidak pernah dilepas -> hari "terlewat"
 describe("perluTahanTag", () => {
   const dasarT = { kepercayaan: "hijau", statusPeriksa: "belum", peranTag: "tim", jarakEfektifM: null as number | null };
-  it("rekan tim tidak ditahan karena jarak (foto hijau, 18 km dari wilayah penerima)", () => expect(perluTahanTag({ ...dasarT, jarakEfektifM: 18_000 })).toBe(false));
-  it("pemotret sendiri tidak ditahan karena jarak", () => expect(perluTahanTag({ ...dasarT, peranTag: "pemotret", jarakEfektifM: 18_000 })).toBe(false));
+  it("rekan tim tidak ditahan karena jarak (foto hijau, 18 km dari wilayah penerima)", () => expect(perluTahanTag({ ...dasarT, jarakEfektifM: 18_000 }, true)).toBe(false));
+  it("pemotret sendiri tidak ditahan karena jarak", () => expect(perluTahanTag({ ...dasarT, peranTag: "pemotret", jarakEfektifM: 18_000 }, true)).toBe(false));
   it("luar tim ditahan bila > 10 km, tidak bila <= 10 km atau jarak tak dinilai", () => {
-    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: 12_000 })).toBe(true);
-    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: 10_000 })).toBe(false);
-    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: null })).toBe(false);
+    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: 12_000 }, true)).toBe(true);
+    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: 10_000 }, true)).toBe(false);
+    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: null }, true)).toBe(false);
   });
-  it("luar tim jauh tidak ditahan bila foto sudah diperiksa", () => expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", statusPeriksa: "diperiksa", jarakEfektifM: 30_000 })).toBe(false));
+  it("luar tim jauh tidak ditahan bila foto sudah diperiksa", () => expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", statusPeriksa: "diperiksa", jarakEfektifM: 30_000 }, true)).toBe(false));
   it("foto merah belum diperiksa ditahan (semua peran); sesudah diperiksa tidak", () => {
-    for (const p of ["pemotret", "tim", "luar_tim"]) expect(perluTahanTag({ ...dasarT, peranTag: p, kepercayaan: "merah" })).toBe(true);
-    expect(perluTahanTag({ ...dasarT, kepercayaan: "merah", statusPeriksa: "diperiksa" })).toBe(false);
+    for (const p of ["pemotret", "tim", "luar_tim"]) expect(perluTahanTag({ ...dasarT, peranTag: p, kepercayaan: "merah" }, true)).toBe(true);
+    expect(perluTahanTag({ ...dasarT, kepercayaan: "merah", statusPeriksa: "diperiksa" }, true)).toBe(false);
   });
-  it("foto dipertanyakan selalu ditahan", () => expect(perluTahanTag({ ...dasarT, statusPeriksa: "dipertanyakan" })).toBe(true));
-  it("foto kuning biasa tidak ditahan", () => expect(perluTahanTag({ ...dasarT, kepercayaan: "kuning" })).toBe(false));
+  it("saklar TAHAN_FOTO_AKTIF mati: tidak ada yang ditahan, termasuk merah/dipertanyakan/luar tim jauh", () => {
+    expect(TAHAN_FOTO_AKTIF).toBe(false);
+    expect(perluTahanTag({ ...dasarT, kepercayaan: "merah" })).toBe(false);
+    expect(perluTahanTag({ ...dasarT, statusPeriksa: "dipertanyakan" })).toBe(false);
+    expect(perluTahanTag({ ...dasarT, peranTag: "luar_tim", jarakEfektifM: 30_000 })).toBe(false);
+  });
+  it("foto dipertanyakan selalu ditahan", () => expect(perluTahanTag({ ...dasarT, statusPeriksa: "dipertanyakan" }, true)).toBe(true));
+  it("foto kuning biasa tidak ditahan", () => expect(perluTahanTag({ ...dasarT, kepercayaan: "kuning" }, true)).toBe(false));
 });

@@ -25,7 +25,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { cekAksesSusunFoto, hariIniWib, penugasanAkun, tanggalValid, type Db } from "@/lib/sigap";
-import { WILAYAH_MERAH_M, jarakEfektifM, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
+import { TAHAN_FOTO_AKTIF, WILAYAH_MERAH_M, jarakEfektifM, slotBerlokasi, slotValid } from "@/lib/sigapFoto";
 import { BATAS_HARI_SUSUN, nomorBerikutnya, nomorKosong, susunFoto, umurHari, type Kandidat } from "@/lib/sigapFotoSusun";
 import { kunciLangkah, rencanaUrutJam, type IsiNomor, type Langkah } from "@/lib/sigapUrutanFoto";
 import { jarakKeRumah, jarakKeWilayah, modeKegiatan } from "@/lib/sigapFotoServer";
@@ -86,7 +86,8 @@ async function keadaan(db: Db, akunId: number, pen: Pen, tanggal: string) {
 
   const terisi = new Set(baris.map((b) => b.slot));
   const jumlahValid = (n: number) => Number.isInteger(n) && n >= 1 && n <= jumlah;
-  const merahBelumPeriksa = (f: FotoBaris) => f.kepercayaan === "merah" && f.status_periksa !== "diperiksa";
+  // (1 Nov 2026) bila fitur tahan foto dimatikan (TAHAN_FOTO_AKTIF=false), foto merah diperlakukan seperti foto biasa: langsung bisa dipasang ke nomor
+  const merahBelumPeriksa = (f: FotoBaris) => TAHAN_FOTO_AKTIF && f.kepercayaan === "merah" && f.status_periksa !== "diperiksa";
   // Foto yang sudah punya nomor sebagai TAHANAN (menunggu diperiksa): nomornya dipesan, belum tertulis di nomor foto.
   const tahanan = new Map<number, FotoBaris>(); // slot -> foto
   for (const f of milik) {

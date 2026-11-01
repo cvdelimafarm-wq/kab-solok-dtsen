@@ -58,6 +58,14 @@ export const KECEPATAN_MERAH_KMJAM = 120;
 export const WILAYAH_KUNING_M = 5000;
 // Batas pembeda alasan "luar_wilayah_dekat" (5-10 km) dan "jauh_dari_wilayah" (> 10 km); sejak 23 Okt 2026 keduanya kuning, bukan merah.
 export const WILAYAH_MERAH_M = 10_000;
+
+/**
+ * (1 Nov 2026) SAKLAR FITUR "TAHAN FOTO". false = tidak ada foto/tag yang ditahan sama sekali: setiap foto dari Kamera SIGAP atau
+ * kiriman rekan langsung masuk ke nomor yang dipilih, apa pun warnanya (merah/jarak jauh tetap tercatat sebagai tanda untuk PML,
+ * hanya tidak lagi menunda nomor). Dimatikan sementara karena menahan nomor rekan tim membuat hari petugas "terlewat" (keluhan Biki, 31 Okt).
+ * Aktifkan lagi dengan mengubah ke true (aturan di perluTahanTag tetap utuh).
+ */
+export const TAHAN_FOTO_AKTIF = false;
 export const AMBANG_MIRIP_BIT = 10; // jarak Hamming dHash 64-bit yang dianggap "mirip"
 export const SLOT_BERLOKASI = [2, 3, 4] as const; // nomor foto yang diwajibkan berada di wilayah tugas
 
@@ -206,7 +214,8 @@ export function labelJamHp(diambilIso: string | null | undefined, waktuHpIso: st
  *   ditahan tidak pernah muncul di layar periksa, sehingga nomor kosong dan hari petugas tercatat "terlewat" (keluhan 1 Nov 2026).
  * jarakEfektifM: jarak (m) titik foto ke KK wilayah atau rumah penerima; null = tidak dinilai / bukan nomor berlokasi.
  */
-export function perluTahanTag(m: { kepercayaan: string | null | undefined; statusPeriksa: string | null | undefined; peranTag: string; jarakEfektifM: number | null }): boolean {
+export function perluTahanTag(m: { kepercayaan: string | null | undefined; statusPeriksa: string | null | undefined; peranTag: string; jarakEfektifM: number | null }, aktif: boolean = TAHAN_FOTO_AKTIF): boolean {
+  if (!aktif) return false;
   if (m.statusPeriksa === "dipertanyakan") return true;
   if (m.kepercayaan === "merah" && m.statusPeriksa !== "diperiksa") return true;
   if (m.peranTag === "luar_tim" && m.statusPeriksa !== "diperiksa" && m.jarakEfektifM !== null && m.jarakEfektifM > WILAYAH_MERAH_M) return true;
