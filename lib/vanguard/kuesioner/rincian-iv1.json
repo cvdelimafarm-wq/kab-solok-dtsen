@@ -1,0 +1,1655 @@
+{
+ "kelompok": [
+  {
+   "kel": "A",
+   "nama": "Padi-padian",
+   "no": 1,
+   "sampai": 7
+  },
+  {
+   "kel": "B",
+   "nama": "Umbi-umbian",
+   "no": 8,
+   "sampai": 15
+  },
+  {
+   "kel": "C",
+   "nama": "Ikan/udang/cumi/kerang",
+   "no": 16,
+   "sampai": 60
+  },
+  {
+   "kel": "D",
+   "nama": "Daging",
+   "no": 61,
+   "sampai": 73
+  },
+  {
+   "kel": "E",
+   "nama": "Telur dan susu",
+   "no": 74,
+   "sampai": 84
+  },
+  {
+   "kel": "F",
+   "nama": "Sayur-sayuran",
+   "no": 85,
+   "sampai": 120
+  },
+  {
+   "kel": "G",
+   "nama": "Kacang-kacangan",
+   "no": 121,
+   "sampai": 128
+  },
+  {
+   "kel": "H",
+   "nama": "Buah-buahan",
+   "no": 129,
+   "sampai": 153
+  },
+  {
+   "kel": "I",
+   "nama": "Minyak dan kelapa",
+   "no": 154,
+   "sampai": 158
+  },
+  {
+   "kel": "J",
+   "nama": "Bahan minuman",
+   "no": 159,
+   "sampai": 166
+  },
+  {
+   "kel": "K",
+   "nama": "Bumbu-bumbuan",
+   "no": 167,
+   "sampai": 181
+  },
+  {
+   "kel": "L",
+   "nama": "Bahan makanan lainnya",
+   "no": 182,
+   "sampai": 186
+  },
+  {
+   "kel": "M",
+   "nama": "Makanan dan minuman jadi",
+   "no": 187,
+   "sampai": 219
+  },
+  {
+   "kel": "N",
+   "nama": "Rokok dan tembakau",
+   "no": 220,
+   "sampai": 225
+  }
+ ],
+ "rincian": [
+  {
+   "no": 2,
+   "kode": "01111",
+   "nama": "Beras (beras lokal, medium, premium, dan impor)",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 3,
+   "kode": "01111",
+   "nama": "Beras ketan",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 4,
+   "kode": "01111",
+   "nama": "Jagung basah dengan kulit",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 5,
+   "kode": "01111",
+   "nama": "Jagung pipilan/beras jagung/jagung titi",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 6,
+   "kode": "01112",
+   "nama": "Tepung terigu",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 7,
+   "kode": "01111",
+   "nama": "Padi-padian lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "A"
+  },
+  {
+   "no": 9,
+   "kode": "01175",
+   "nama": "Ketela pohon/singkong",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 10,
+   "kode": "01175",
+   "nama": "Ketela rambat/ubi jalar",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 11,
+   "kode": "01179",
+   "nama": "Sagu (bukan dari ketela pohon)",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 12,
+   "kode": "01175",
+   "nama": "Talas/keladi",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 13,
+   "kode": "01175",
+   "nama": "Kentang",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 14,
+   "kode": "01175",
+   "nama": "Gaplek",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 15,
+   "kode": "01175/01179",
+   "nama": "Umbi-umbian lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "B"
+  },
+  {
+   "no": 17,
+   "kode": "01131",
+   "nama": "Ekor kuning",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 18,
+   "kode": "01131",
+   "nama": "Tongkol",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 19,
+   "kode": "01131",
+   "nama": "Tuna",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 20,
+   "kode": "01131",
+   "nama": "Cakalang, dencis",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 21,
+   "kode": "01131",
+   "nama": "Tenggiri",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 22,
+   "kode": "01131",
+   "nama": "Selar",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 23,
+   "kode": "01131",
+   "nama": "Kembung, lema/tatare, banyar/banyara",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 24,
+   "kode": "01131",
+   "nama": "Teri basah",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 25,
+   "kode": "01131",
+   "nama": "Bandeng",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 26,
+   "kode": "01131",
+   "nama": "Gabus",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 27,
+   "kode": "01131",
+   "nama": "Mujair",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 28,
+   "kode": "01131",
+   "nama": "Mas",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 29,
+   "kode": "01131",
+   "nama": "Nila",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 30,
+   "kode": "01131",
+   "nama": "Lele",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 31,
+   "kode": "01131",
+   "nama": "Kakap",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 32,
+   "kode": "01131",
+   "nama": "Baronang",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 33,
+   "kode": "01131",
+   "nama": "Patin",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 34,
+   "kode": "01131",
+   "nama": "Bawal",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 35,
+   "kode": "01131",
+   "nama": "Gurame",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 36,
+   "kode": "01131",
+   "nama": "Ikan layang",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 37,
+   "kode": "01131",
+   "nama": "Ikan baung",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 38,
+   "kode": "01131",
+   "nama": "Ikan belanak",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 39,
+   "kode": "01131",
+   "nama": "Ikan wader/seluang",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 40,
+   "kode": "01131",
+   "nama": "Belut",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 41,
+   "kode": "01131",
+   "nama": "Ikan segar/basah lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 42,
+   "kode": "01133",
+   "nama": "Olahan ikan segar (siomai ikan, otak-otak ikan, dll.)",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Ikan segar/basah"
+  },
+  {
+   "no": 43,
+   "kode": "01134",
+   "nama": "Udang, lobster",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang segar"
+  },
+  {
+   "no": 44,
+   "kode": "01134",
+   "nama": "Cumi-cumi, sotong, gurita",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang segar"
+  },
+  {
+   "no": 45,
+   "kode": "01134",
+   "nama": "Ketam, kepiting, rajungan",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang segar"
+  },
+  {
+   "no": 46,
+   "kode": "01134",
+   "nama": "Kerang, siput, bekicot, remis",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang segar"
+  },
+  {
+   "no": 47,
+   "kode": "01134",
+   "nama": "Udang dan hewan air lainnya yang segar (sebutkan)",
+   "satuan": "Kg",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang segar"
+  },
+  {
+   "no": 48,
+   "kode": "01132",
+   "nama": "Kembung diawetkan/peda",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 49,
+   "kode": "01132",
+   "nama": "Tenggiri diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 50,
+   "kode": "01132",
+   "nama": "Tongkol, tuna, cakalang, dencis, ikan kayu diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 51,
+   "kode": "01132",
+   "nama": "Teri diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 52,
+   "kode": "01132",
+   "nama": "Selar diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 53,
+   "kode": "01132",
+   "nama": "Sepat diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 54,
+   "kode": "01132",
+   "nama": "Bandeng diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 55,
+   "kode": "01132",
+   "nama": "Gabus diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 56,
+   "kode": "01133",
+   "nama": "Ikan dalam kaleng (sardencis, tuna dalam kaleng, dll.)",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 57,
+   "kode": "01132/01133",
+   "nama": "Ikan diawetkan lainnya (sebutkan)",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Ikan diawetkan (diasinkan/diasap/dipresto/dll.)"
+  },
+  {
+   "no": 58,
+   "kode": "01135",
+   "nama": "Udang diawetkan (ebi, rebon)",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang diawetkan"
+  },
+  {
+   "no": 59,
+   "kode": "01135",
+   "nama": "Cumi-cumi, sotong, gurita diawetkan",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang diawetkan"
+  },
+  {
+   "no": 60,
+   "kode": "01132/01136",
+   "nama": "Udang dan hewan air lainnya yang diawetkan (sebutkan)",
+   "satuan": "Ons",
+   "kel": "C",
+   "sub": "Udang dan hewan air lainnya yang diawetkan"
+  },
+  {
+   "no": 62,
+   "kode": "01122",
+   "nama": "Daging sapi",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 63,
+   "kode": "01122",
+   "nama": "Daging kerbau",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 64,
+   "kode": "01122",
+   "nama": "Daging kambing, domba/biri-biri",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 65,
+   "kode": "01122",
+   "nama": "Daging babi",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 66,
+   "kode": "01122",
+   "nama": "Daging ayam ras",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 67,
+   "kode": "01122",
+   "nama": "Daging ayam kampung",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 68,
+   "kode": "01122",
+   "nama": "Daging segar lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging segar"
+  },
+  {
+   "no": 69,
+   "kode": "01123/01125",
+   "nama": "Daging sapi diawetkan/olahan daging sapi (sosis sapi, abon sapi, bakso sapi, dll.)",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging diawetkan"
+  },
+  {
+   "no": 70,
+   "kode": "01123/01125",
+   "nama": "Daging ayam diawetkan/olahan daging ayam (sosis ayam, abon ayam, bakso ayam, dll.)",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging diawetkan"
+  },
+  {
+   "no": 71,
+   "kode": "01123/01125",
+   "nama": "Daging lainnya diawetkan (olahan selain dari sapi & ayam) sebutkan",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Daging diawetkan"
+  },
+  {
+   "no": 72,
+   "kode": "01122",
+   "nama": "Tetelan, sandung lamur",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Lainnya"
+  },
+  {
+   "no": 73,
+   "kode": "01124",
+   "nama": "Lainnya (hati, jeroan, iga, kaki, buntut, kepala, dsb.)",
+   "satuan": "Kg",
+   "kel": "D",
+   "sub": "Lainnya"
+  },
+  {
+   "no": 75,
+   "kode": "01148",
+   "nama": "Telur ayam ras",
+   "satuan": "Butir",
+   "kel": "E"
+  },
+  {
+   "no": 76,
+   "kode": "01148",
+   "nama": "Telur ayam kampung",
+   "satuan": "Butir",
+   "kel": "E"
+  },
+  {
+   "no": 77,
+   "kode": "01148",
+   "nama": "Telur itik/telur itik manila",
+   "satuan": "Butir",
+   "kel": "E"
+  },
+  {
+   "no": 78,
+   "kode": "01148",
+   "nama": "Telur lainnya (telur puyuh, telur asin mentah maupun matang, telur penyu, telur angsa, dll.)",
+   "satuan": "Butir",
+   "kel": "E"
+  },
+  {
+   "no": 79,
+   "kode": "01141",
+   "nama": "Susu cair pabrik (±250 ml)",
+   "satuan": "Kotak kecil",
+   "kel": "E"
+  },
+  {
+   "no": 80,
+   "kode": "01143",
+   "nama": "Kental manis (±397 gr)",
+   "satuan": "Kaleng",
+   "kel": "E"
+  },
+  {
+   "no": 81,
+   "kode": "01143",
+   "nama": "Susu bubuk",
+   "satuan": "Kg",
+   "kel": "E"
+  },
+  {
+   "no": 82,
+   "kode": "01192",
+   "nama": "Susu bubuk bayi",
+   "satuan": "Kg",
+   "kel": "E"
+  },
+  {
+   "no": 83,
+   "kode": "01141",
+   "nama": "Susu murni",
+   "satuan": "250 ml",
+   "kel": "E"
+  },
+  {
+   "no": 84,
+   "kode": "01141/42/43/44/45/46/01191",
+   "nama": "Hasil lain dari susu (keju, yoghurt, dll.) (sebutkan)",
+   "satuan": null,
+   "kel": "E"
+  },
+  {
+   "no": 86,
+   "kode": "01171",
+   "nama": "Bayam",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 87,
+   "kode": "01171",
+   "nama": "Kangkung",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 88,
+   "kode": "01171",
+   "nama": "Kol/kubis",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 89,
+   "kode": "01171",
+   "nama": "Sawi putih (petsai)",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 90,
+   "kode": "01171",
+   "nama": "Sawi hijau",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 91,
+   "kode": "01173",
+   "nama": "Buncis",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 92,
+   "kode": "01173",
+   "nama": "Kacang panjang",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 93,
+   "kode": "01172",
+   "nama": "Tomat sayur, tomat ceri",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 94,
+   "kode": "01174",
+   "nama": "Wortel",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 95,
+   "kode": "01172",
+   "nama": "Mentimun",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 96,
+   "kode": "01171",
+   "nama": "Daun ketela pohon/daun singkong",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 97,
+   "kode": "01172",
+   "nama": "Terong",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 98,
+   "kode": "01176",
+   "nama": "Tauge",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 99,
+   "kode": "01172",
+   "nama": "Labu, labu siam, labu parang",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 100,
+   "kode": "01174",
+   "nama": "Bahan sayur sop/cap cai/kimlo (paket)",
+   "satuan": "Bungkus",
+   "kel": "F"
+  },
+  {
+   "no": 101,
+   "kode": "01171/01172",
+   "nama": "Bahan sayur asam/lodeh (paket)",
+   "satuan": "Bungkus",
+   "kel": "F"
+  },
+  {
+   "no": 102,
+   "kode": "01172",
+   "nama": "Nangka muda",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 103,
+   "kode": "01172",
+   "nama": "Pepaya muda",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 104,
+   "kode": "01173",
+   "nama": "Jengkol",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 105,
+   "kode": "01174",
+   "nama": "Bawang merah",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 106,
+   "kode": "01174",
+   "nama": "Bawang putih",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 107,
+   "kode": "01174",
+   "nama": "Bawang bombai",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 108,
+   "kode": "01172",
+   "nama": "Cabai merah",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 109,
+   "kode": "01172",
+   "nama": "Cabai hijau",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 110,
+   "kode": "01172",
+   "nama": "Cabai rawit",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 111,
+   "kode": "01171",
+   "nama": "Daun pepaya",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 112,
+   "kode": "01171",
+   "nama": "Daun kelor",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 113,
+   "kode": "01171",
+   "nama": "Daun katuk",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 114,
+   "kode": "01171",
+   "nama": "Daun bawang",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 115,
+   "kode": "01171",
+   "nama": "Daun pakis",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 116,
+   "kode": "01171",
+   "nama": "Daun kemangi",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 117,
+   "kode": "01172",
+   "nama": "Oyong/gambas",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 118,
+   "kode": "01174",
+   "nama": "Rebung",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 119,
+   "kode": "01174",
+   "nama": "Jamur (Jamur tiram, enoki, kancing, dll)",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 120,
+   "kode": "01171/01179",
+   "nama": "Sayur-sayuran lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "F"
+  },
+  {
+   "no": 122,
+   "kode": "01168",
+   "nama": "Kacang tanah tanpa kulit",
+   "satuan": "Kg",
+   "kel": "G"
+  },
+  {
+   "no": 123,
+   "kode": "01173",
+   "nama": "Kacang kedelai",
+   "satuan": "Kg",
+   "kel": "G"
+  },
+  {
+   "no": 124,
+   "kode": "01168",
+   "nama": "Kacang lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "G"
+  },
+  {
+   "no": 125,
+   "kode": "01179",
+   "nama": "Tahu",
+   "satuan": "Kg",
+   "kel": "G"
+  },
+  {
+   "no": 126,
+   "kode": "01179",
+   "nama": "Tempe",
+   "satuan": "Kg",
+   "kel": "G"
+  },
+  {
+   "no": 127,
+   "kode": "01179",
+   "nama": "Oncom",
+   "satuan": "Ons",
+   "kel": "G"
+  },
+  {
+   "no": 128,
+   "kode": "01168/01193",
+   "nama": "Hasil lain dari kacang-kacangan (sebutkan)",
+   "satuan": "Ons",
+   "kel": "G"
+  },
+  {
+   "no": 130,
+   "kode": "01162",
+   "nama": "Jeruk, jeruk bali",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 131,
+   "kode": "01161",
+   "nama": "Mangga",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 132,
+   "kode": "01163",
+   "nama": "Apel",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 133,
+   "kode": "01161",
+   "nama": "Rambutan",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 134,
+   "kode": "01161",
+   "nama": "Duku, langsat",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 135,
+   "kode": "01161",
+   "nama": "Durian (tanpa kulit)",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 136,
+   "kode": "01161",
+   "nama": "Salak",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 137,
+   "kode": "01161",
+   "nama": "Pisang ambon",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 138,
+   "kode": "01161",
+   "nama": "Pisang lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 139,
+   "kode": "01161",
+   "nama": "Pepaya",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 140,
+   "kode": "01165",
+   "nama": "Semangka",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 141,
+   "kode": "01172",
+   "nama": "Tomat buah",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 142,
+   "kode": "01161",
+   "nama": "Alpukat",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 143,
+   "kode": "01161",
+   "nama": "Jambu biji",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 144,
+   "kode": "01161",
+   "nama": "Nanas",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 145,
+   "kode": "01161",
+   "nama": "Nangka",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 146,
+   "kode": "01163",
+   "nama": "Pir",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 147,
+   "kode": "01165",
+   "nama": "Anggur",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 148,
+   "kode": "01161",
+   "nama": "Buah naga",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 149,
+   "kode": "01161",
+   "nama": "Jambu air",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 150,
+   "kode": "01165",
+   "nama": "Melon",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 151,
+   "kode": "01161",
+   "nama": "Manggis",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 152,
+   "kode": "01161",
+   "nama": "Kelengkeng",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 153,
+   "kode": "01161/01165",
+   "nama": "Buah-buahan lainnya (sebutkan)",
+   "satuan": "Kg",
+   "kel": "H"
+  },
+  {
+   "no": 155,
+   "kode": "01151",
+   "nama": "Minyak kelapa",
+   "satuan": "Liter",
+   "kel": "I"
+  },
+  {
+   "no": 156,
+   "kode": "01151",
+   "nama": "Minyak goreng (kelapa sawit, bunga matahari)",
+   "satuan": "Liter",
+   "kel": "I"
+  },
+  {
+   "no": 157,
+   "kode": "01161",
+   "nama": "Kelapa (tidak termasuk santan instan)",
+   "satuan": "Butir",
+   "kel": "I"
+  },
+  {
+   "no": 158,
+   "kode": "01151/01153",
+   "nama": "Minyak dan kelapa lainnya (sebutkan)",
+   "satuan": null,
+   "kel": "I"
+  },
+  {
+   "no": 160,
+   "kode": "01181",
+   "nama": "Gula pasir",
+   "satuan": "Ons",
+   "kel": "J"
+  },
+  {
+   "no": 161,
+   "kode": "01182",
+   "nama": "Gula merah, gula air (pohon aren, kelapa, lontar)",
+   "satuan": "Ons",
+   "kel": "J"
+  },
+  {
+   "no": 162,
+   "kode": "01230",
+   "nama": "Teh bubuk",
+   "satuan": "Ons",
+   "kel": "J"
+  },
+  {
+   "no": 163,
+   "kode": "01230",
+   "nama": "Teh celup (sachet)",
+   "satuan": "2 gr",
+   "kel": "J"
+  },
+  {
+   "no": 164,
+   "kode": "01220",
+   "nama": "Kopi (bubuk, biji)",
+   "satuan": "Ons",
+   "kel": "J"
+  },
+  {
+   "no": 165,
+   "kode": "01220",
+   "nama": "Kopi instan (sachet)",
+   "satuan": "20 gr",
+   "kel": "J"
+  },
+  {
+   "no": 166,
+   "kode": "01185/01240",
+   "nama": "Bahan minuman lainnya (sebutkan)",
+   "satuan": null,
+   "kel": "J"
+  },
+  {
+   "no": 168,
+   "kode": "01193",
+   "nama": "Garam",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 169,
+   "kode": "01194",
+   "nama": "Kemiri",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 170,
+   "kode": "01194",
+   "nama": "Ketumbar/jinten",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 171,
+   "kode": "01194",
+   "nama": "Merica/lada",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 172,
+   "kode": "01194",
+   "nama": "Jahe",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 173,
+   "kode": "01194",
+   "nama": "Kunyit",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 174,
+   "kode": "01161",
+   "nama": "Asam",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 175,
+   "kode": "01199",
+   "nama": "Terasi/petis",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 176,
+   "kode": "01193",
+   "nama": "Kecap",
+   "satuan": "100 ml",
+   "kel": "K"
+  },
+  {
+   "no": 177,
+   "kode": "01199",
+   "nama": "Penyedap masakan/vetsin",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 178,
+   "kode": "01193",
+   "nama": "Sambal jadi/sambal botol/saus cabai",
+   "satuan": "100 ml",
+   "kel": "K"
+  },
+  {
+   "no": 179,
+   "kode": "01193",
+   "nama": "Saus tomat",
+   "satuan": "100 ml",
+   "kel": "K"
+  },
+  {
+   "no": 180,
+   "kode": "01194",
+   "nama": "Bumbu masak jadi/kemasan, bumbu racikan",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 181,
+   "kode": "01194",
+   "nama": "Bumbu dapur lainnya (kencur, pala, kapulaga, dll.)",
+   "satuan": "Gram",
+   "kel": "K"
+  },
+  {
+   "no": 183,
+   "kode": "01115",
+   "nama": "Mi instan (± 80 gr)",
+   "satuan": "Bungkus",
+   "kel": "L"
+  },
+  {
+   "no": 184,
+   "kode": "01199",
+   "nama": "Kerupuk",
+   "satuan": "Ons",
+   "kel": "L"
+  },
+  {
+   "no": 185,
+   "kode": "01192",
+   "nama": "Makanan bayi kemasan (± 150 gr)",
+   "satuan": "Kotak kecil",
+   "kel": "L"
+  },
+  {
+   "no": 186,
+   "kode": "01115/01199",
+   "nama": "Lainnya (sebutkan)",
+   "satuan": null,
+   "kel": "L"
+  },
+  {
+   "no": 188,
+   "kode": null,
+   "nama": "Roti tawar",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 189,
+   "kode": null,
+   "nama": "Roti manis, roti lainnya",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 190,
+   "kode": null,
+   "nama": "Kue kering, biskuit, semprong",
+   "satuan": "Ons",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 191,
+   "kode": null,
+   "nama": "Kue basah (kue lapis, bika ambon, lemper, dll.)",
+   "satuan": "Buah",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 192,
+   "kode": null,
+   "nama": "Makanan gorengan (tahu, tempe, bakwan, pisang)",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 193,
+   "kode": null,
+   "nama": "Makanan gorengan lainnya, sebutkan",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 194,
+   "kode": null,
+   "nama": "Bubur kacang hijau",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 195,
+   "kode": null,
+   "nama": "Gado-gado, ketoprak, pecel",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 196,
+   "kode": null,
+   "nama": "Nasi campur/rames",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 197,
+   "kode": null,
+   "nama": "Nasi goreng",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 198,
+   "kode": null,
+   "nama": "Nasi putih",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 199,
+   "kode": null,
+   "nama": "Lontong/ketupat sayur",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 200,
+   "kode": null,
+   "nama": "Soto, gule, sop, rawon, cincang",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 201,
+   "kode": null,
+   "nama": "Sayur matang (ditumis, disantan, dll.)",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 202,
+   "kode": null,
+   "nama": "Sate, tongseng",
+   "satuan": "Porsi/ 5 tusuk",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 203,
+   "kode": null,
+   "nama": "Mi bakso, mi rebus, mi goreng",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 204,
+   "kode": null,
+   "nama": "Mi instan",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 205,
+   "kode": null,
+   "nama": "Makanan ringan anak-anak, kerupuk/keripik",
+   "satuan": "Ons",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 206,
+   "kode": null,
+   "nama": "Ikan matang",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 207,
+   "kode": null,
+   "nama": "Ayam/bebek/daging matang (ayam goreng, rendang, dll.)",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 208,
+   "kode": null,
+   "nama": "Daging olahan (sosis, nugget, daging asap, dll.) matang",
+   "satuan": "Potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 209,
+   "kode": null,
+   "nama": "Bubur ayam",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 210,
+   "kode": null,
+   "nama": "Siomai, batagor",
+   "satuan": "Porsi/ 5 potong",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 211,
+   "kode": null,
+   "nama": "Makanan jadi lainnya (sebutkan)",
+   "satuan": null,
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 212,
+   "kode": null,
+   "nama": "Air kemasan",
+   "satuan": "Liter",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 213,
+   "kode": null,
+   "nama": "Air kemasan galon",
+   "satuan": "Galon",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 214,
+   "kode": null,
+   "nama": "Air teh kemasan, minuman bersoda/mengandung CO2",
+   "satuan": "± 250 ml*)",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 215,
+   "kode": null,
+   "nama": "Sari buah kemasan, minuman kesehatan, minuman berenergi",
+   "satuan": "± 200 ml*)",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 216,
+   "kode": null,
+   "nama": "Minuman jadi (kopi, kopi susu, teh, susu coklat, dll.)",
+   "satuan": "Gelas",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 217,
+   "kode": null,
+   "nama": "Es krim",
+   "satuan": "Mangkok kecil",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 218,
+   "kode": null,
+   "nama": "Es lainnya (sebutkan)",
+   "satuan": "Porsi",
+   "kel": "M",
+   "sub": "Makanan dan minuman jadi"
+  },
+  {
+   "no": 219,
+   "kode": null,
+   "nama": "Minuman keras (sebutkan)",
+   "satuan": "Liter",
+   "kel": "M",
+   "sub": "Minuman mengandung alkohol"
+  },
+  {
+   "no": 221,
+   "kode": null,
+   "nama": "Rokok kretek filter",
+   "satuan": "Batang",
+   "kel": "N"
+  },
+  {
+   "no": 222,
+   "kode": null,
+   "nama": "Rokok kretek tanpa filter",
+   "satuan": "Batang",
+   "kel": "N"
+  },
+  {
+   "no": 223,
+   "kode": null,
+   "nama": "Rokok putih",
+   "satuan": "Batang",
+   "kel": "N"
+  },
+  {
+   "no": 224,
+   "kode": null,
+   "nama": "Tembakau",
+   "satuan": "Ons",
+   "kel": "N"
+  },
+  {
+   "no": 225,
+   "kode": null,
+   "nama": "Rokok dan tembakau lainnya (sebutkan)",
+   "satuan": null,
+   "kel": "N"
+  }
+ ]
+}
