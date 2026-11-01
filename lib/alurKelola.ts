@@ -15,6 +15,8 @@ export type TahapAlur = {
   ket?: string;
   /** Alamat halaman (alur berhalaman). Alur bertab tidak memakainya. */
   href?: string;
+  /** Nama ikon di lajur ikon bila berbeda dari `kode` (mis. sub-alur yang kodenya sama dengan kode tab lain). */
+  ikon?: string;
 };
 
 export type PosisiAlur = {
@@ -86,6 +88,16 @@ export const tahapTerakhir = (p: PosisiAlur): boolean => p.berikutnya === null;
 
 export function urutanDariTab(tab: readonly { kode: string; label: string; ket?: string }[]): TahapAlur[] {
   return tab.map((t) => ({ kode: t.kode, label: t.label, ket: t.ket }));
+}
+
+/**
+ * (1 Nov 2026) SUB-ALUR di dalam satu tab (mis. SPJ transport lokal: Kelengkapan -> Verifikasi & Kunci -> Unduh). `daftar` = sub yang sedang tampil
+ * (sudah disaring fitur), `kodeUrut` = urutan alur; sub yang tidak ada di `daftar` dilewati, sub di luar `kodeUrut` bukan bagian alur.
+ * Label diberi nomor 1..n supaya "Tahap 2 dari 3" cocok dengan yang tertulis.
+ */
+export function urutanSubAlur(daftar: readonly { kode: string; label: string; ket?: string }[], kodeUrut: readonly string[], ikon: Record<string, string> = {}): TahapAlur[] {
+  const ada = kodeUrut.map((k) => daftar.find((d) => d.kode === k)).filter((d): d is { kode: string; label: string; ket?: string } => Boolean(d));
+  return ada.map((d, i) => ({ kode: d.kode, label: `${i + 1} · ${d.label}`, ket: d.ket, ikon: ikon[d.kode] }));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

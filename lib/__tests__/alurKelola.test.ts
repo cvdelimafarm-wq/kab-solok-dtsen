@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alurIdentifikasi, alamatIdentifikasi, namaTanpaNomor, nomorDariLabel, posisiAlur, tahapTerakhir, teksPosisi, teksTombol, urutanDariTab } from "../alurKelola";
+import { alurIdentifikasi, alamatIdentifikasi, namaTanpaNomor, nomorDariLabel, posisiAlur, tahapTerakhir, teksPosisi, teksTombol, urutanDariTab, urutanSubAlur } from "../alurKelola";
 
 const TAB = [
   { kode: "ringkasan", label: "Ringkasan" },
@@ -112,5 +112,34 @@ describe("alur Identifikasi survei (berhalaman)", () => {
   });
   it("id di-encode agar tidak bisa menyisipkan jalur lain", () => {
     expect(alamatIdentifikasi("1/../x")).toBe("/sigap/kelola/perencanaan/identifikasi/1%2F..%2Fx");
+  });
+});
+
+describe("urutanSubAlur", () => {
+  const daftar = [
+    { kode: "monitoring", label: "Kelengkapan SPJ", ket: "k1" },
+    { kode: "verifikasi", label: "Verifikasi & Kunci" },
+    { kode: "unduh", label: "Unduh SPJ" },
+    { kode: "tarif", label: "Kegiatan & Tarif" },
+  ];
+  it("hanya sub di kodeUrut, berurutan menurut kodeUrut, label bernomor 1..n, ikon dibawa", () => {
+    const u = urutanSubAlur(daftar, ["monitoring", "verifikasi", "unduh"], { monitoring: "daftar" });
+    expect(u.map((t) => t.label)).toEqual(["1 · Kelengkapan SPJ", "2 · Verifikasi & Kunci", "3 · Unduh SPJ"]);
+    expect(u[0].ikon).toBe("daftar");
+    expect(u[1].ikon).toBeUndefined();
+    expect(u.some((t) => t.kode === "tarif")).toBe(false);
+  });
+  it("sub yang tidak tampil dilewati dan nomor dirapatkan", () => {
+    const u = urutanSubAlur(daftar.filter((d) => d.kode !== "verifikasi"), ["monitoring", "verifikasi", "unduh"]);
+    expect(u.map((t) => t.label)).toEqual(["1 · Kelengkapan SPJ", "2 · Unduh SPJ"]);
+    const p = posisiAlur(u, "unduh");
+    expect(p?.no).toBe(2);
+    expect(p?.total).toBe(2);
+    expect(p?.sebelumnya?.kode).toBe("monitoring");
+    expect(p?.berikutnya).toBeNull();
+  });
+  it("tidak ada yang cocok -> daftar kosong -> posisi null", () => {
+    expect(urutanSubAlur(daftar, ["x"])).toEqual([]);
+    expect(posisiAlur(urutanSubAlur(daftar, ["x"]), "monitoring")).toBeNull();
   });
 });

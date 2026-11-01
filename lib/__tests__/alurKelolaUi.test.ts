@@ -3,7 +3,7 @@ import * as React from "react";
 import { createElement as e } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NavAlur, PenunjukAlur } from "@/app/sigap/kelola/AlurKelola";
-import { alurIdentifikasi, posisiAlur, urutanDariTab } from "@/lib/alurKelola";
+import { alurIdentifikasi, posisiAlur, urutanDariTab, urutanSubAlur } from "@/lib/alurKelola";
 
 // Komponen memakai JSX runtime klasik di konfigurasi vitest proyek ini (tanpa transform otomatis): sediakan React global agar bisa dirender.
 (globalThis as unknown as { React: typeof React }).React = React;
@@ -83,4 +83,26 @@ describe("komponen alur", () => {
     const asing = urutanDariTab([{ kode: "asing", label: "Asing" }, { kode: "asing2", label: "Asing 2" }]);
     expect(renderToStaticMarkup(e(PenunjukAlur, { nama: "x", posisi: posisiAlur(asing, "asing") }))).toContain("<circle");
   });
+
+  it("sub-alur ringkas: ikon bernama, tanpa keterangan/daftar lengkap; teks terakhir khusus; navigasi berjudul", () => {
+    const sub = urutanSubAlur(
+      [{ kode: "monitoring", label: "Kelengkapan SPJ", ket: "Kelengkapan per petugas." }, { kode: "unduh", label: "Unduh SPJ" }],
+      ["monitoring", "unduh"],
+      { monitoring: "daftar", unduh: "unduh" }
+    );
+    const awal = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur SPJ transport lokal", posisi: posisiAlur(sub, "monitoring"), onPilih: () => undefined, ringkas: true }));
+    expect(awal).toContain("Tahap 1 dari 2 · Kelengkapan SPJ");
+    expect(awal).toContain('aria-label="Buka tahap 2 · Unduh SPJ"');
+    expect(awal.match(/<svg/g)?.length).toBe(2);
+    expect(awal).not.toContain("Lihat seluruh tahap");
+    expect(awal).not.toContain("Kelengkapan per petugas.");
+    const akhir = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur SPJ transport lokal", posisi: posisiAlur(sub, "unduh"), onPilih: () => undefined, ringkas: true }));
+    expect(akhir).toContain("Ini langkah terakhir di tahap ini.");
+    const nav = renderToStaticMarkup(e(NavAlur, { posisi: posisiAlur(sub, "unduh"), onPilih: () => undefined, judul: "Langkah dalam SPJ transport lokal" }));
+    expect(nav).toContain("Langkah dalam SPJ transport lokal");
+    expect(nav).toContain("Langkah terakhir di tahap ini");
+    expect(nav).not.toContain("Tahap terakhir alur");
+    expect(nav).toContain(">Sebelumnya<");
+  });
 });
+

@@ -6,9 +6,10 @@
 // "Penugasan & ST" (TabPenugasan tersemat untuk kegiatan Pendataan).
 
 import { useMemo } from "react";
-import { SUB_TIM } from "@/lib/sigapPendataanTab";
+import { SUB_ALUR, SUB_TIM, posisiSubAlur } from "@/lib/sigapPendataanTab";
 import type { PetaFitur } from "@/lib/sigapFitur";
 import { Pesan } from "../../admin/ui";
+import { NavAlur, PenunjukAlur } from "../AlurKelola";
 import PintuMasuk from "./PintuMasuk";
 import TransportLokal from "./TransportLokal";
 import { SubPilih, useSubTab } from "./useSubTab";
@@ -18,11 +19,16 @@ import { SubPilih, useSubTab } from "./useSubTab";
 export default function Tim({ kegiatanId = 1, fitur }: { kegiatanId?: number; fitur?: PetaFitur }) {
   const daftar = useMemo(() => (fitur ? SUB_TIM.filter((x) => (x.kode === "alokasi" ? fitur.tim_alokasi : fitur.tim_penugasan)) : SUB_TIM), [fitur]);
   const { sub, pilih } = useSubTab("tim", daftar.length > 0 ? daftar : SUB_TIM);
+  // (1 Nov 2026) sub-alur tim: alokasi -> penugasan (sub yang fiturnya mati dilewati; tersisa satu sub = tanpa alur)
+  const posisi = posisiSubAlur("tim", daftar.length > 0 ? daftar : SUB_TIM, sub);
+  const alurAda = posisi && posisi.urutan.length > 1 ? posisi : null;
   return (
     <div className="space-y-3">
       <SubPilih daftar={daftar.length > 0 ? daftar : SUB_TIM} aktif={sub} onPilih={pilih} label="Tim dan Surat Tugas" />
+      <PenunjukAlur posisi={alurAda} nama={SUB_ALUR.tim?.nama ?? ""} onPilih={pilih} ringkas />
       {sub === "alokasi" && (kegiatanId === 1 ? <PintuMasuk tab="tim" /> : <Pesan jenis="info">Alokasi PML/PPL per Sub SLS (peta Pascabencana) hanya untuk Pendataan Pascabencana. Untuk survei ini, atur petugas lewat sub Penugasan &amp; ST; pelatihan lewat Kelola Pelatihan.</Pesan>)}
       {sub === "penugasan" && <TransportLokal bagian="penugasan" kegiatanId={kegiatanId} />}
+      <NavAlur posisi={alurAda} onPilih={pilih} judul="Langkah dalam tim dan surat tugas" />
     </div>
   );
 }

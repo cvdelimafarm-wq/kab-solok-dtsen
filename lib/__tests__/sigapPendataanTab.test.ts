@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_QC_PEMAHAMAN, bacaKegiatanPendataan, urlKegiatanPendataan, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_QC, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan } from "../sigapPendataanTab";
+import { KEGIATAN_PENDATAAN, PINTU_TAB, SUB_QC_PEMAHAMAN, bacaKegiatanPendataan, urlKegiatanPendataan, SUB_ADMINISTRASI, SUB_PEMERIKSAAN, SUB_PER_TAB, SUB_QC, SUB_TIM, bacaSubDari, urlSubDari, TAB_AWAL, TAB_PENDATAAN, bacaSubPemeriksaan, bacaTabPendataan, labelTabPendataan, urlSubPemeriksaan, urlTabPendataan, type KodeTabPendataan, SUB_ALUR, posisiSubAlur } from "../sigapPendataanTab";
 
 describe("TAB_PENDATAAN", () => {
   it("urutan runut mengikuti alur kerja; kode unik; Ringkasan paling depan", () => {
@@ -193,5 +193,33 @@ describe("tab Laporan (30 Okt 2026)", () => {
   it("urlTabPendataan: pindah ke Laporan membuang ?sub dan ?v, mempertahankan ?k", () => {
     expect(urlTabPendataan(P, "?tab=qc&sub=soal&k=2", "laporan")).toBe(`${P}?tab=laporan&k=2`);
     expect(urlTabPendataan(P, "?tab=laporan", "ringkasan")).toBe(P);
+  });
+});
+
+describe("sub-alur (1 Nov 2026)", () => {
+  it("hanya Tim dan Administrasi yang punya sub-alur; setiap kode di alur ada di daftar sub tabnya", () => {
+    expect(Object.keys(SUB_ALUR).sort()).toEqual(["administrasi", "tim"]);
+    for (const [tab, cfg] of Object.entries(SUB_ALUR)) {
+      const daftar = SUB_PER_TAB[tab as KodeTabPendataan] ?? [];
+      for (const k of cfg!.urutan) expect(daftar.map((x) => x.kode)).toContain(k);
+    }
+  });
+  it("Administrasi: 3 langkah (kelengkapan -> verifikasi -> unduh); tarif/pengadaan/anggaran bukan bagian alur", () => {
+    const p = posisiSubAlur("administrasi", SUB_ADMINISTRASI, "verifikasi");
+    expect(p?.no).toBe(2);
+    expect(p?.total).toBe(3);
+    expect(p?.sebelumnya?.kode).toBe("monitoring");
+    expect(p?.berikutnya?.kode).toBe("unduh");
+    expect(posisiSubAlur("administrasi", SUB_ADMINISTRASI, "unduh")?.berikutnya).toBeNull();
+    for (const k of ["tarif", "pengadaan", "anggaran"]) expect(posisiSubAlur("administrasi", SUB_ADMINISTRASI, k)).toBeNull();
+  });
+  it("Tim: alokasi -> penugasan; bila satu sub dimatikan tersisa satu langkah", () => {
+    expect(posisiSubAlur("tim", SUB_TIM, "alokasi")?.berikutnya?.kode).toBe("penugasan");
+    expect(posisiSubAlur("tim", SUB_TIM.filter((x) => x.kode === "penugasan"), "penugasan")?.urutan.length).toBe(1);
+  });
+  it("tab tanpa sub-alur (QC, Pemeriksaan, Laporan) -> null", () => {
+    expect(posisiSubAlur("qc", SUB_QC, "hari")).toBeNull();
+    expect(posisiSubAlur("pemeriksaan", SUB_PEMERIKSAAN, "foto")).toBeNull();
+    expect(posisiSubAlur("laporan", [], "x")).toBeNull();
   });
 });

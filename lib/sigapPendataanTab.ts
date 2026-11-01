@@ -14,6 +14,8 @@
 //    menyematkan komponen tab Admin Transport Lokal (TabPenugasan, TabMonitoring, TabVerifikasi, TabKegiatan) untuk kegiatan Pendataan (id 1).
 //  - tidak ada alamat baru selain parameter ?tab= pada /sigap/kelola/pendataan.
 
+import { posisiAlur, urutanSubAlur, type PosisiAlur } from "./alurKelola";
+
 export type KodeTabPendataan = "ringkasan" | "persiapan" | "tim" | "siaran" | "qc" | "monitoring" | "pemeriksaan" | "administrasi" | "laporan";
 
 export type ItemTabPendataan = { kode: KodeTabPendataan; label: string; ket: string };
@@ -135,6 +137,23 @@ export function urlSubDari(daftar: SubItem[], tab: KodeTabPendataan, pathname: s
 
 /** Kegiatan induk Pendataan di sigap_kegiatan (sama dengan KEGIATAN_PENDATAAN_ID di lib/pendataan.ts). */
 export const KEGIATAN_PENDATAAN = 1;
+
+/**
+ * (1 Nov 2026) SUB-ALUR: sub-pilihan yang benar-benar berurutan diberi penunjuk tahap + Sebelumnya/Berikutnya di dalam tabnya.
+ * Hanya Tim (alokasi -> penugasan) dan Administrasi (SPJ transport lokal: kelengkapan -> verifikasi & kunci -> unduh). Sub lain (Kegiatan & Tarif,
+ * Pengadaan, Anggaran, dan seluruh sub QC / Pemeriksaan) adalah pengaturan atau tampilan sejajar, bukan urutan, sehingga tidak diberi alur.
+ */
+export const SUB_ALUR: Partial<Record<KodeTabPendataan, { nama: string; urutan: readonly string[]; ikon: Record<string, string> }>> = {
+  tim: { nama: "Alur tim dan surat tugas", urutan: ["alokasi", "penugasan"], ikon: { alokasi: "peta", penugasan: "surat" } },
+  administrasi: { nama: "Alur SPJ transport lokal", urutan: ["monitoring", "verifikasi", "unduh"], ikon: { monitoring: "daftar", verifikasi: "cek", unduh: "unduh" } },
+};
+
+/** Posisi sub `sub` dalam sub-alur tab `tab`; null bila tab tak punya sub-alur, atau sub itu bukan bagian alur (atau tersembunyi). */
+export function posisiSubAlur(tab: KodeTabPendataan, daftar: readonly SubItem[], sub: string): PosisiAlur | null {
+  const cfg = SUB_ALUR[tab];
+  if (!cfg) return null;
+  return posisiAlur(urutanSubAlur(daftar, cfg.urutan, cfg.ikon), sub);
+}
 
 /** (29 Okt 2026) Sub-pilihan QC untuk kegiatan selain Pascabencana: Kuesioner supervisi (Lembar Supervisi korwil) khusus Pascabencana. */
 export const SUB_QC_PEMAHAMAN: SubItem[] = SUB_QC.filter((x) => x.kode !== "kuesioner");

@@ -111,6 +111,37 @@ const G = {
       <path d="M3 20h18" />
     </>
   ),
+  daftar: () => (
+    <>
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <path d="m3.5 6 1 1 2-2" />
+      <path d="m3.5 12 1 1 2-2" />
+      <path d="m3.5 18 1 1 2-2" />
+    </>
+  ),
+  unduh: () => (
+    <>
+      <path d="M12 4v11" />
+      <path d="m7.5 11 4.5 4.5L16.5 11" />
+      <path d="M4 20h16" />
+    </>
+  ),
+  peta: () => (
+    <>
+      <path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z" />
+      <path d="M9 4v14" />
+      <path d="M15 6v14" />
+    </>
+  ),
+  surat: () => (
+    <>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M8.5 17c1.2-2 2-2 2.4-.6.3 1 .9 1 1.6-.4" />
+    </>
+  ),
   titik: () => <circle cx="12" cy="12" r="3" />,
 } satisfies Record<string, () => ReactNode>;
 
@@ -140,6 +171,7 @@ const PETA: Record<string, NamaIkon> = {
 export const adaIkonTahap = (kode: string): boolean => kode in PETA;
 
 export function IkonTahap({ kode, ukuran = 18 }: { kode: string; ukuran?: number }) {
+  // `kode` boleh berupa nama ikon langsung (mis. "daftar", "unduh") atau kode tahap.
   return (
     <svg
       aria-hidden
@@ -153,7 +185,7 @@ export function IkonTahap({ kode, ukuran = 18 }: { kode: string; ukuran?: number
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {G[PETA[kode] ?? "titik"]()}
+      {G[PETA[kode] ?? (kode in G ? (kode as NamaIkon) : "titik")]()}
     </svg>
   );
 }

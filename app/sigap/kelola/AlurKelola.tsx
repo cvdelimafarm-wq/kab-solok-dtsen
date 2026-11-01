@@ -44,7 +44,7 @@ function LajurIkon({ posisi, onPilih }: { posisi: PosisiAlur; onPilih?: (kode: s
         const isi = (
           <>
             <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full transition ${warnaBulat}`}>
-              <IkonTahap kode={t.kode} />
+              <IkonTahap kode={t.ikon ?? t.kode} />
             </span>
             <span className={`mt-1 line-clamp-2 w-full px-0.5 text-center text-[10.5px] leading-tight ${sekarang ? "font-extrabold text-[#1F5FD1]" : "font-semibold text-[#55657D]"}`}>
               {no !== null ? <b className="mr-0.5">{no}</b> : null}
@@ -77,7 +77,11 @@ function LajurIkon({ posisi, onPilih }: { posisi: PosisiAlur; onPilih?: (kode: s
   );
 }
 
-export function PenunjukAlur({ posisi, nama, onPilih }: Umum & { nama: string; onPilih?: (kode: string) => void }) {
+/**
+ * `ringkas` (sub-alur di dalam tab): hanya judul + lajur ikon + "Selanjutnya"; keterangan tahap dan daftar lengkap dilewati karena sub-pilihan
+ * di atasnya sudah menampilkan keterangan, dan penunjuk tab di atas halaman sudah memuat daftar tahap.
+ */
+export function PenunjukAlur({ posisi, nama, onPilih, ringkas }: Umum & { nama: string; onPilih?: (kode: string) => void; ringkas?: boolean }) {
   if (!posisi) return null;
   const berikut = posisi.berikutnya;
   return (
@@ -91,7 +95,7 @@ export function PenunjukAlur({ posisi, nama, onPilih }: Umum & { nama: string; o
         </div>
       </div>
       <LajurIkon posisi={posisi} onPilih={onPilih} />
-      {posisi.tahap.ket && <p className="mb-0 mt-1 text-[12.5px] leading-snug text-[#55657D]">{posisi.tahap.ket}</p>}
+      {!ringkas && posisi.tahap.ket && <p className="mb-0 mt-1 text-[12.5px] leading-snug text-[#55657D]">{posisi.tahap.ket}</p>}
       <p className="mb-0 mt-1.5 text-[12.5px] text-[#1F5FD1]">
         {berikut ? (
           <>
@@ -99,10 +103,10 @@ export function PenunjukAlur({ posisi, nama, onPilih }: Umum & { nama: string; o
             {berikut.ket ? <span className="text-[#55657D]"> — {berikut.ket}</span> : null}
           </>
         ) : (
-          <b>Ini tahap terakhir alur.</b>
+          <b>{ringkas ? "Ini langkah terakhir di tahap ini." : "Ini tahap terakhir alur."}</b>
         )}
       </p>
-      <DaftarTahap posisi={posisi} onPilih={onPilih} />
+      {!ringkas && <DaftarTahap posisi={posisi} onPilih={onPilih} />}
     </section>
   );
 }
@@ -186,16 +190,18 @@ function Tombol({ tahap, arah, onPilih }: { tahap: TahapAlur; arah: "sebelumnya"
   );
 }
 
-export function NavAlur({ posisi, onPilih, peringatan }: Umum & { onPilih?: (kode: string) => void; peringatan?: string | null }) {
+/** `judul` (sub-alur): teks kecil di atas tombol, mis. "Langkah dalam tahap 7 · Administrasi & SPJ", agar tidak tertukar dengan tombol tahap di bawahnya. */
+export function NavAlur({ posisi, onPilih, peringatan, judul }: Umum & { onPilih?: (kode: string) => void; peringatan?: string | null; judul?: string }) {
   if (!posisi) return null;
   const adaTombol = posisi.sebelumnya || posisi.berikutnya;
   if (!adaTombol) return null;
   return (
     <nav aria-label="Sebelumnya dan berikutnya dalam alur" className="mt-4 space-y-2 border-t border-[#E3E8EE] pt-3">
+      {judul && <p className="m-0 text-[11px] font-bold uppercase tracking-[.4px] text-[#6B7A90]">{judul}</p>}
       {peringatan && <p role="status" className="m-0 rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold text-[#7A5600]">{peringatan}</p>}
       <div className="flex gap-2.5">
         {posisi.sebelumnya ? <Tombol tahap={posisi.sebelumnya} arah="sebelumnya" onPilih={onPilih} /> : <span className="flex-1" />}
-        {posisi.berikutnya ? <Tombol tahap={posisi.berikutnya} arah="berikutnya" onPilih={onPilih} /> : tahapTerakhir(posisi) ? <p className="m-0 flex flex-1 items-center justify-end text-[12.5px] font-bold text-[#13794B]">Tahap terakhir alur</p> : null}
+        {posisi.berikutnya ? <Tombol tahap={posisi.berikutnya} arah="berikutnya" onPilih={onPilih} /> : tahapTerakhir(posisi) ? <p className="m-0 flex flex-1 items-center justify-end text-[12.5px] font-bold text-[#13794B]">{judul ? "Langkah terakhir di tahap ini" : "Tahap terakhir alur"}</p> : null}
       </div>
     </nav>
   );
