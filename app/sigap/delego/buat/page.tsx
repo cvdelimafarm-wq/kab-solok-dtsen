@@ -183,6 +183,7 @@ export default function Buat() {
 
   return (
     <Halaman judul="Buat delegasi" sub="Langsung dari Ketua Tim ke wakil, pegawai, PML, dan PPL">
+      <Info>Untuk rapat, koordinasi, atau perintah singkat dari Kepala atau Ketua Tim, gunakan <Link href="/sigap/delego/perintah" className="font-semibold underline">Perintah langsung</Link> (lebih ringkas). Formulir ini untuk delegasi survei yang berlangsung beberapa hari.</Info>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <Kartu judul="1. Asal pekerjaan">

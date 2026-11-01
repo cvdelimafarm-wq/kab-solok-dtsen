@@ -129,7 +129,7 @@ export default function Jadwal() {
                     <div className="min-w-0">
                       <div className="text-[15px] font-semibold leading-snug">{x.judul}</div>
                       <div className="text-[12.5px] text-[#3B4A57]">
-                        {x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {fmt(targetHariIni(x, hari), 1)} {x.perlu_hasil || x.poin_per_satuan ? x.satuan : "poin"} · tenggat {tglPendek(x.tenggat)}
+                        {x.kelas === "perintah" ? "Perintah langsung · " : ""}{x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {fmt(targetHariIni(x, hari), 1)} {x.perlu_hasil || x.poin_per_satuan ? x.satuan : "poin"} · tenggat {tglPendek(x.tenggat)}
                       </div>
                     </div>
                     <Lencana nada={st.nada}>{st.teks}</Lencana>

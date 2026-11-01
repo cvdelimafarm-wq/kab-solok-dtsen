@@ -16,7 +16,7 @@ import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang" | "jadwal" | "tinjau" | "monitor" | "skor" | "catat";
+type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang" | "jadwal" | "tinjau" | "monitor" | "skor" | "catat" | "perintah";
 const JALUR: Record<Ikon, string> = {
   ringkas: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
@@ -36,6 +36,7 @@ const JALUR: Record<Ikon, string> = {
   monitor: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
   skor: "M12 4v16M6 8h12M6 8l-3 6a3 3 0 0 0 6 0zM18 8l-3 6a3 3 0 0 0 6 0z",
   catat: "M4 20h4l10-10-4-4L4 16zM13 7l4 4",
+  perintah: "M4 11v2a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11",
   penilaian: "M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z",
 };
 function Gambar({ n, ukuran = 18 }: { n: Ikon; ukuran?: number }) {
@@ -73,6 +74,7 @@ const BUTIR_TIM: Butir[] = [
 ];
 const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };
+const BUTIR_PERINTAH: Butir = { href: "/sigap/delego/perintah", label: "Perintah langsung", ikon: "perintah" };
 const BUTIR_SAYA: Butir[] = [
   { href: "/sigap/delego/jadwal", label: "Pekerjaan saya", ikon: "jadwal", pendek: "Pekerjaan" },
   { href: "/sigap/delego/saya", label: "Delegasi saya", ikon: "tugas", pendek: "Delegasi" },
@@ -134,7 +136,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
   }, [hak, jam, h.muat]);
 
   const aktif = (b: Butir) => (b.persis ? path === b.href : path === b.href || path.startsWith(`${b.href}/`));
-  const tim = konteks?.manajer ? [...BUTIR_TIM, ...(konteks.pemberi ? [BUTIR_BUAT] : []), ...(hak?.semua ? [BUTIR_RINGKAS] : [])] : [];
+  const tim = konteks?.manajer ? [...BUTIR_TIM, ...(konteks.pemberi ? [BUTIR_PERINTAH, BUTIR_BUAT] : []), ...(hak?.semua ? [BUTIR_RINGKAS] : [])] : [];
   const peran = !hak ? "" : hak.akun.jenis === "mitra" ? "Mitra statistik" : konteks?.pemberi ? "Ketua Tim" : "Pegawai";
 
   const tautan = (b: Butir) => (
