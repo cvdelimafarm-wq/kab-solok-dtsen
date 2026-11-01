@@ -20,7 +20,7 @@ import { compute, engineChecks, fmt, hitungBintang, isiOtomatisR1, kasusBenar, r
 import { KASUS_PUBLIK, KASUS_PUBLIK_BERNILAI, NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus/daftar";
 import { kutipanIv, lembarBlok, type Status } from "@/lib/vanguard/lembar";
 import { FUNGSI, TOMBOL, hitungEkspresi, tekanPad } from "@/lib/vanguard/keypad";
-import { tujuanAman } from "@/lib/vanguard/navigasi";
+import { alamatVanguard, tujuanAman } from "@/lib/vanguard/navigasi";
 import { saranKasus, type Kelemahan, type PetaKemampuan, type Saran } from "@/lib/vanguard/remedial";
 import { LABEL_JENIS } from "@/lib/vanguard/dasbor";
 import { labelSel } from "@/lib/vanguard/sel";
@@ -366,7 +366,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        {layar === "beranda" && <Beranda bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
+        {layar === "beranda" && <Beranda balik={alamatVanguard({ kegiatan, dari: tujuan })} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
           <>
@@ -441,7 +441,7 @@ export default function Vanguard() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-function Beranda({ bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
+function Beranda({ balik, bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { balik: string; bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
   return (
     <>
       <div className={`catat ${dicatat ? "ya" : "tidak"}`} role="status">
@@ -451,6 +451,13 @@ function Beranda({ bintang, selesai, total, levelAktif, dicatat, uji, info, peng
       </div>
       <div className="sheet"><span className="tag">Cara main</span><p style={{ fontSize: 13 }}>Baca hasil wawancara dan kutipan Blok IV, lalu isi Blok V (dan VI–VII pada kasus lengkap) seperti di kuesioner. <b>Ketuk kotak isian</b> untuk memasukkan angka; kalkulator ada di lembar isian. Sel <span className="sw" style={{ background: "#a6a6a6", width: 11, height: 11 }} /> abu-abu tidak berlaku. Kotak bertinta biru adalah isian Anda; kotak abu muda dihitung otomatis.</p></div>
       <div className="panel"><div className="jd">RINGKASAN SAYA</div><div style={{ fontSize: 13, marginTop: 3 }}>{selesai} dari {total} kasus sudah dikerjakan.</div></div>
+      <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
+        <div className="jd">MODE KUESIONER PENUH · UJI COBA</div>
+        <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. Hanya latihan, tidak dicatat.</div>
+        <Link className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/kuesioner?kasus=K01&dari=${encodeURIComponent(balik)}`}>
+          <span className="num">K01</span><span className="t">Dapur Bu Maryati<small>Minyak, bumbu, minuman, bahan lainnya</small></span><span className="st">▶</span>
+        </Link>
+      </div>
       {peng && (peng.nilai_lulus !== null || peng.maks_percobaan !== null || peng.tutup_at) && (
         <div className="panel" role="region" aria-label="Aturan kegiatan">
           <div className="jd">ATURAN KEGIATAN INI</div>

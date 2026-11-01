@@ -4,6 +4,7 @@
 // pembahasan, rujukan). Berkas inilah satu-satunya data kasus yang boleh dimuat ke perangkat petugas (Mode Uji). Jalankan setelah mengubah berkas level-*.json:
 //   node scripts/vanguard-bangun-publik.mjs
 // Kasus ber-bidang "ditangguhkan" tidak ikut ke publik.json; kodenya ditulis ke ditangguhkan.json.
+// Juga membangun lib/vanguard/kuesioner/kasus-k-publik.json (V6d).
 // Tes lib/__tests__/vanguardPublik.test.ts gagal bila publik.json tertinggal dari level-*.json.
 
 import fs from "node:fs";
@@ -22,3 +23,11 @@ fs.writeFileSync(path.join(dir, "publik.json"), JSON.stringify(publik) + "\n");
 fs.writeFileSync(path.join(dir, "ditangguhkan.json"), JSON.stringify(tangguh) + "\n"); // hanya kode (tanpa alasan/kunci): dipakai dasbor untuk mengabaikan rekaman lama
 console.log(`ditangguhkan.json: ${tangguh.length} kode ${tangguh.join(",")}`);
 console.log(`publik.json: ${publik.length} kasus, ${fs.statSync(path.join(dir, "publik.json")).size} byte`);
+
+// (1 Nov 2026) V6d: bahan soal kasus K (Mode Kuesioner Penuh) tanpa kunci, jebakan, petunjuk, pembahasan, rujukan.
+const dirK = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "lib", "vanguard", "kuesioner");
+const PUBLIK_K = ["kode", "level", "judul", "cerita", "catatan", "info"];
+const kasusK = JSON.parse(fs.readFileSync(path.join(dirK, "kasus-k.json"), "utf8"));
+const publikK = kasusK.map((k) => Object.fromEntries(PUBLIK_K.filter((f) => k[f] !== undefined).map((f) => [f, k[f]])));
+fs.writeFileSync(path.join(dirK, "kasus-k-publik.json"), JSON.stringify(publikK) + "\n");
+console.log(`kasus-k-publik.json: ${publikK.length} kasus`);
