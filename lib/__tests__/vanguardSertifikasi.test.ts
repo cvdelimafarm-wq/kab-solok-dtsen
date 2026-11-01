@@ -9,7 +9,8 @@ import { soalK } from "../vanguard/kuesioner/nilaiK";
 import { kasusDariBenih } from "../vanguard/kasus/acak";
 
 let tabel: Tabel = {};
-vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel) }));
+let gagalTabel = false;
+vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel, () => (gagalTabel ? { code: "42P01", message: "relation does not exist" } : null)) }));
 vi.mock("@/lib/sigapAkses", () => ({
   sesiDariHeader: (h: Headers) => (h.get("x-akun") ? Number(h.get("x-akun")) : null),
   aktorDariHeader: (h: Headers) => (h.get("x-aktor") ? Number(h.get("x-aktor")) : null),
@@ -83,8 +84,8 @@ describe("pengundi ujian", () => {
       expect([...per.values()].sort()).toEqual([2, 2, 2]);
     }
   });
-  it("kolam awal memuat K01, K02 dan A01–A13", () => {
-    expect(KOLAM.map((x) => x.kode).sort()).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "K01", "K02"]);
+  it("kolam memuat K01, K02, A01–A13 dan B01–B10", () => {
+    expect(KOLAM.map((x) => x.kode).sort()).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "K01", "K02"]);
   });
 });
 
@@ -186,7 +187,7 @@ describe("rute sertifikasi", () => {
   });
   it("review setelah selesai memuat pesan koreksi; sebelum selesai tidak", async () => {
     const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
-    const row = tabel.sigap_vanguard_ujian_butir.find((x) => x.kasus === "A01" || x.kasus === "A02")!;
+    const row = tabel.sigap_vanguard_ujian_butir.find((x) => { const k = kunciDari(x.kasus, x.jenis, x.benih) as unknown; return Array.isArray(k) ? k.length > 0 : Object.keys(k as object).length > 0; })!; // butir yang isian kosongnya pasti salah
     await post({ aksi: "jawab", ujian: m.ujian, urut: row.urut, isian: kosong(row) });
     const sebelum = await (await ambil(`?ujian=${m.ujian}`)).json();
     expect(sebelum.butir.find((x: { urut: number }) => x.urut === row.urut).rincian).toBeUndefined();
@@ -194,5 +195,13 @@ describe("rute sertifikasi", () => {
     expect(sel.review.find((x: { urut: number }) => x.urut === row.urut).rincian.length).toBeGreaterThan(0);
     const sesudah = await (await ambil(`?ujian=${m.ujian}`)).json();
     expect(sesudah.butir.find((x: { urut: number }) => x.urut === row.urut).rincian.length).toBeGreaterThan(0);
+  });
+  it("tabel belum dibuat (SQL belum dijalankan) = 503 dengan pesan jelas, bukan 500", async () => {
+    const { buatDbPalsu: _b } = await import("./vanguardFakeDb");
+    void _b;
+    gagalTabel = true;
+    const r = await ambil(); expect(r.status).toBe(503); expect((await r.json()).error).toMatch(/20261101z/);
+    const m = await post({ aksi: "mulai", jenis: "latihan" }); expect(m.status).toBe(503);
+    gagalTabel = false;
   });
 });

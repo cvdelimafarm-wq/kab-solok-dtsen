@@ -177,7 +177,7 @@ export default function Sertifikasi() {
         {galat && <div className="catat gagal" role="alert">{galat}</div>}
 
         {layar === "beranda" && (
-          !beranda ? <div className="sheet">Memuat…</div> : (
+          !beranda ? <div className="sheet">{galat ? <button type="button" className="btn" onClick={() => void muatBeranda()}>Coba lagi</button> : "Memuat…"}</div> : (
             <>
               <div className="sr-kartu">
                 {beranda.sertifikat.tertinggi ? (

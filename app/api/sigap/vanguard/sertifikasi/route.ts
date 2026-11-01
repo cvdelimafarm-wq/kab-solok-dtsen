@@ -33,22 +33,25 @@ function supabaseAdmin() {
 type UjianRow = { id: number; akun_id: number; jenis: "sertifikasi" | "latihan"; benih: number; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; butir_fatal: number | null };
 type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null }[] | null };
 
+/** Kode Postgres 42P01 = tabel belum ada (SQL 20261101z belum dijalankan). */
+const tabelBelumAda = (e: unknown): boolean => { const x = e as { code?: string; message?: string } | null; return !!x && (x.code === "42P01" || /does not exist|schema cache/i.test(x.message ?? "")); };
+const PESAN_TABEL = "Fitur sertifikasi belum siap: tabel basis data belum dibuat (jalankan SQL 20261101z_vanguard_sertifikasi).";
 const id = (x: unknown): number | null => (typeof x === "number" && Number.isInteger(x) && x > 0 ? x : typeof x === "string" && /^\d{1,12}$/.test(x) && Number(x) > 0 ? Number(x) : null);
 const kedaluwarsa = (u: { mulai_at: string }) => Date.now() - new Date(u.mulai_at).getTime() >= KEDALUWARSA_JAM * 3_600_000;
 
 async function riwayatAkun(db: NonNullable<ReturnType<typeof supabaseAdmin>>, akun: number): Promise<UjianRow[]> {
   const { data, error } = await db.from("sigap_vanguard_ujian").select("id, akun_id, jenis, benih, jumlah, mulai_at, selesai_at, skor, tingkat, butir_fatal").eq("akun_id", akun).order("mulai_at", { ascending: false }).limit(200);
-  if (error) throw new Error("riwayat");
+  if (error) throw new Error(tabelBelumAda(error) ? "TABEL" : "riwayat");
   return (data ?? []) as unknown as UjianRow[];
 }
 async function ujianMilik(db: NonNullable<ReturnType<typeof supabaseAdmin>>, akun: number, ujian: number): Promise<UjianRow | null> {
   const { data, error } = await db.from("sigap_vanguard_ujian").select("id, akun_id, jenis, benih, jumlah, mulai_at, selesai_at, skor, tingkat, butir_fatal").eq("id", ujian).eq("akun_id", akun).limit(1);
-  if (error) throw new Error("ujian");
+  if (error) throw new Error(tabelBelumAda(error) ? "TABEL" : "ujian");
   return ((data ?? []) as unknown as UjianRow[])[0] ?? null;
 }
 async function butirUjian(db: NonNullable<ReturnType<typeof supabaseAdmin>>, ujian: number): Promise<ButirRow[]> {
   const { data, error } = await db.from("sigap_vanguard_ujian_butir").select("id, ujian_id, urut, kasus, jenis, benih, jawab_at, benar, poin, jml_fatal, jml_berat, jml_ringan, rincian").eq("ujian_id", ujian).order("urut", { ascending: true }).limit(100);
-  if (error) throw new Error("butir");
+  if (error) throw new Error(tabelBelumAda(error) ? "TABEL" : "butir");
   return (data ?? []) as unknown as ButirRow[];
 }
 const judulButir = (b: { kasus: string; benih: number }) => sajikanButir(b.kasus, b.benih)?.judul ?? b.kasus;
@@ -96,7 +99,8 @@ export async function GET(req: NextRequest) {
         ...(buka && !!b.jawab_at ? { benar: b.benar, poin: b.poin, rincian: b.rincian ?? [] } : {}),
       })),
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === "TABEL") return galat(PESAN_TABEL, 503);
     return galat("Gagal memuat sertifikasi.", 500);
   }
 }
@@ -122,6 +126,7 @@ export async function POST(req: NextRequest) {
       const daftar = susunUjian(benih, KOLAM, JUMLAH_BUTIR_UJIAN);
       if (daftar.length === 0) return galat("Belum ada butir ujian.", 500);
       const { data: baru, error } = await db.from("sigap_vanguard_ujian").insert({ akun_id: akun, jenis, versi: VERSI_UJIAN, benih, jumlah: daftar.length, mulai_at: new Date().toISOString() }).select("id").single();
+      if (tabelBelumAda(error)) return galat(PESAN_TABEL, 503);
       if (error || !baru) return galat("Gagal memulai ujian.", 500);
       const ujian = (baru as { id: number }).id;
       const { error: eB } = await db.from("sigap_vanguard_ujian_butir").insert(daftar.map((x) => ({ ujian_id: ujian, urut: x.urut, kasus: x.kode, jenis: x.jenis, benih: x.benih })));
@@ -163,7 +168,8 @@ export async function POST(req: NextRequest) {
       });
     }
     return galat("Aksi tidak dikenal.");
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === "TABEL") return galat(PESAN_TABEL, 503);
     return galat("Gagal memproses sertifikasi.", 500);
   }
 }

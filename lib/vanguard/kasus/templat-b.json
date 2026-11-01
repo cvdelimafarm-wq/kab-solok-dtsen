@@ -1,0 +1,679 @@
+[
+ {
+  "kode": "B01",
+  "parameter": {
+   "sewa": {
+    "baku": 600000,
+    "pilihan": [
+     500000,
+     600000,
+     700000,
+     800000,
+     900000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "sewa*12"
+  },
+  "kasus": {
+   "kode": "B01",
+   "level": "B",
+   "judul": "Rumah milik sendiri",
+   "cerita": "Pak Anwar tinggal di rumah milik sendiri. Sewa rumah sejenis di sekitarnya sekitar {sewa:rp} per bulan.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "1 · Milik sendiri"
+     },
+     {
+      "no": "228",
+      "kode": "04210",
+      "rin": "Jika milik sendiri/bebas sewa, perkiraan sewa sebulan",
+      "bln": "=sewa"
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_sewaRumah_produksi": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "v": "=sewa",
+     "m": "Nilai Anda masih sebulan. Kalikan 12."
+    }
+   ],
+   "petunjuk": [
+    "Rumah milik sendiri dianggap menghasilkan jasa sewa. Rincian mana di V.C?",
+    "Nilai sebulan × 12. Biaya produksinya tidak ada (sel abu)."
+   ],
+   "langkah": [
+    "Kolom (2): <code>600.000 × 12 = 7.200.000</code>.",
+    "Kolom (3) abu-abu: tidak ada biaya produksi.",
+    "Kolom (4) terhitung otomatis: {tahun}."
+   ],
+   "pembahasan": "Rumah milik sendiri yang ditempati dianggap menghasilkan jasa persewaan. Nilai produksinya adalah perkiraan sewa sebulan × 12. V.C Rincian 1 tidak boleh kosong bila R.227 berkode 1.",
+   "rujukan": "Buku 4 hlm. 330 dan 351"
+  }
+ },
+ {
+  "kode": "B02",
+  "parameter": {
+   "sewa": {
+    "baku": 500000,
+    "pilihan": [
+     400000,
+     500000,
+     600000,
+     700000,
+     800000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "sewa*12"
+  },
+  "kasus": {
+   "kode": "B02",
+   "level": "B",
+   "judul": "Menempati rumah kakak tanpa bayar",
+   "cerita": "Keluarga Bu Lina menempati rumah milik kakaknya tanpa membayar sewa. Sewa rumah sejenis di sekitarnya {sewa:rp} per bulan.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "4 · Bebas sewa"
+     },
+     {
+      "no": "228",
+      "kode": "04210",
+      "rin": "Jika milik sendiri/bebas sewa, perkiraan sewa sebulan",
+      "bln": "=sewa"
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "m": "Bebas sewa: V.C Rincian 1 hanya untuk rumah milik sendiri, biarkan kosong."
+    },
+    {
+     "k": "e_bantuan_barangD",
+     "m": "Pemberinya kakak (rumah tangga lain), bukan pemerintah."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Rumah ini bukan milik Bu Lina. Apakah V.C Rincian 1 boleh terisi?",
+    "Kakak adalah rumah tangga lain. Manfaat yang diterima berupa barang/jasa."
+   ],
+   "langkah": [
+    "Perkiraan sewa setahun = <code>500.000 × 12 = 6.000.000</code>.",
+    "V.C Rincian 1 dikosongkan karena rumah bukan milik sendiri.",
+    "Bebas sewa = transfer diterima dari rumah tangga lain → V.E baris 3, Kolom (3)."
+   ],
+   "pembahasan": "V.C Rincian 1 hanya terisi bila pemilik rumah adalah rumah tangga itu sendiri. Penghuni bebas sewa mencatat nilai sewa × 12 sebagai transfer barang/jasa diterima dari rumah tangga lain.",
+   "rujukan": "Buku 4 hlm. 351 dan 360"
+  }
+ },
+ {
+  "kode": "B03",
+  "parameter": {
+   "bayar": {
+    "baku": 450000,
+    "pilihan": [
+     350000,
+     400000,
+     450000,
+     500000,
+     550000
+    ]
+   },
+   "setempat": {
+    "baku": 700000,
+    "pilihan": [
+     650000,
+     700000,
+     750000,
+     800000,
+     850000
+    ]
+   }
+  },
+  "turunan": {
+   "selisih": "setempat-bayar",
+   "tahun": "selisih*12",
+   "penuh": "setempat*12"
+  },
+  "kasus": {
+   "kode": "B03",
+   "level": "B",
+   "judul": "Sewa murah dari kerabat",
+   "cerita": "Rumah tangga menyewa rumah milik kerabat dan membayar {bayar:rp} per bulan. Harga sewa yang berlaku di daerah itu untuk rumah serupa {setempat:rp} per bulan.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "3 · Sewa"
+     },
+     {
+      "no": "230",
+      "kode": "04110/11203",
+      "rin": "Jika sewa, nilai sewa sebulan (sudah disesuaikan ke harga setempat)",
+      "bln": "=setempat"
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_uangD",
+     "m": "Keringanan sewa berupa jasa, bukan uang tunai: gunakan kolom (3)."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "e_rtLain_barangD",
+     "v": "=penuh",
+     "m": "Anda mencatat seluruh nilai sewa. Yang menjadi transfer hanya selisihnya."
+    },
+    {
+     "k": "e_rtLain_barangD",
+     "v": "=selisih",
+     "m": "Nilai Anda masih sebulan. Kalikan 12."
+    }
+   ],
+   "petunjuk": [
+    "Yang dicatat di Blok V adalah keringanan yang diterima. Berapa selisih per bulan?",
+    "Selisih × 12, berupa jasa (kolom 3)."
+   ],
+   "langkah": [
+    "Selisih per bulan: <code>{setempat} − {bayar} = {selisih}</code>.",
+    "Setahun: <code>{selisih} × 12 = {tahun}</code>.",
+    "Keringanan dari kerabat = transfer diterima, rumah tangga lain, Kolom (3)."
+   ],
+   "pembahasan": "Sewa dari kerabat di bawah harga setempat tetap dicatat sebesar harga yang berlaku di Blok IV.2. Selisihnya dianggap penerimaan transfer dari rumah tangga lain (V.E baris 3, kolom 3), dihitung setahun.",
+   "rujukan": "Buku 4 hlm. 285"
+  }
+ },
+ {
+  "kode": "B04",
+  "parameter": {
+   "kontrak": {
+    "baku": 12000000,
+    "pilihan": [
+     9600000,
+     12000000,
+     14400000,
+     18000000,
+     24000000
+    ]
+   }
+  },
+  "turunan": {
+   "bulan": "kontrak/12"
+  },
+  "kasus": {
+   "kode": "B04",
+   "level": "B",
+   "judul": "Mengontrak rumah",
+   "cerita": "Keluarga Pak Hasan mengontrak rumah dengan nilai kontrak {kontrak:rp} untuk setahun.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "2 · Kontrak"
+     },
+     {
+      "no": "229",
+      "kode": "04110",
+      "rin": "Jika kontrak, nilai kontrak sebulan",
+      "bln": "=bulan"
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {},
+   "jebakan": [],
+   "alternatif": [],
+   "nol": "Kontrak sesuai harga setempat tidak punya isian di Blok V.",
+   "petunjuk": [
+    "Apakah rumah ini milik sendiri atau milik kerabat tanpa bayar?",
+    "Kontrak yang dibayar sendiri hanya menjadi konsumsi di Blok IV.2."
+   ],
+   "langkah": [
+    "R.229 = <code>{kontrak} ÷ 12 = {bulan}</code> per bulan.",
+    "Sewa yang dibayar sesuai harga setempat tidak menimbulkan transfer. V.C dan V.E dikosongkan."
+   ],
+   "pembahasan": "Hanya rumah milik sendiri (V.C R.1) dan rumah bebas sewa atau sewa di bawah harga setempat (V.E R.3 K.3) yang punya pasangan di Blok V. Kontrak sesuai harga hanya konsumsi.",
+   "rujukan": "Buku 4 hlm. 284"
+  }
+ },
+ {
+  "kode": "B05",
+  "parameter": {
+   "harga": {
+    "baku": 250000000,
+    "pilihan": [
+     150000000,
+     200000000,
+     250000000,
+     300000000,
+     350000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "B05",
+   "level": "B",
+   "judul": "Membeli rumah tahun ini",
+   "cerita": "Setahun terakhir rumah tangga membeli sebuah rumah tinggal seharga {harga:rp} secara tunai dari tabungan.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_bangunanTinggal_tambah": "=harga"
+   },
+   "jebakan": [
+    {
+     "k": "g_lahan_tambah",
+     "m": "Rumah beserta tanahnya dicatat sebagai bangunan tempat tinggal (baris 2) bila harga satu paket."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Pembelian rumah bukan konsumsi. Dicatat sebagai apa di V.G?",
+    "Bangunan tempat tinggal punya baris sendiri."
+   ],
+   "langkah": [
+    "Rumah tinggal = bangunan tempat tinggal → V.G baris 2.",
+    "Pembelian = penambahan, Kolom (2): <code>{harga}</code>."
+   ],
+   "pembahasan": "Karena konsumsi rumah dihitung lewat imputasi sewa, pembelian rumah dicatat sebagai penambahan aset bangunan tempat tinggal (V.G R.2 K.2), bukan pengeluaran konsumsi.",
+   "rujukan": "Buku 4 hlm. 331"
+  }
+ },
+ {
+  "kode": "B06",
+  "parameter": {
+   "setempat": {
+    "baku": 3000000,
+    "pilihan": [
+     2000000,
+     2500000,
+     3000000,
+     3500000,
+     4000000
+    ]
+   },
+   "kost": {
+    "baku": 1500000,
+    "pilihan": [
+     1000000,
+     1250000,
+     1500000,
+     1750000,
+     2000000
+    ]
+   }
+  },
+  "turunan": {
+   "total": "setempat+kost",
+   "tahun": "setempat*12",
+   "alt": "total*12"
+  },
+  "kasus": {
+   "kode": "B06",
+   "level": "B",
+   "judul": "KRT kost di luar kota",
+   "cerita": "Rumah tangga Pak Fulan menempati rumah milik sendiri (sewa setempat {setempat:rp} per bulan). Pak Fulan bekerja di luar kota dan membayar kost {kost:rp} per bulan secara tunai.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "1 · Milik sendiri"
+     },
+     {
+      "no": "228",
+      "kode": "04210",
+      "rin": "Perkiraan sewa sebulan (rumah sendiri + kost KRT)",
+      "bln": "=total"
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_sewaRumah_produksi": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "v": "=alt",
+     "m": "Anda memasukkan kost KRT. Kost dibayar tunai, bukan produksi sendiri."
+    }
+   ],
+   "petunjuk": [
+    "Kost dibayar tunai. Apakah ikut menjadi produksi sendiri?",
+    "Hanya sewa rumah milik sendiri yang menjadi nilai produksi."
+   ],
+   "langkah": [
+    "R.228 = {setempat} + {kost} = <code>{total}</code> (konsumsi).",
+    "Nilai produksi hanya rumah milik sendiri: <code>{setempat} × 12 = {tahun}</code>."
+   ],
+   "pembahasan": "Kost KRT dibayar tunai (OOP) sehingga masuk konsumsi R.228 tetapi bukan produksi sendiri. V.C R.1 kolom 2 hanya sewa rumah miliknya.",
+   "rujukan": "Buku 4 hlm. 285 dan 286"
+  }
+ },
+ {
+  "kode": "B07",
+  "parameter": {
+   "s1": {
+    "baku": 700000,
+    "pilihan": [
+     500000,
+     600000,
+     700000,
+     800000,
+     900000
+    ]
+   },
+   "s2": {
+    "baku": 400000,
+    "pilihan": [
+     300000,
+     350000,
+     400000,
+     450000,
+     500000
+    ]
+   }
+  },
+  "turunan": {
+   "prod": "(s1+s2)*12",
+   "beri": "s2*12",
+   "alt": "s1*12"
+  },
+  "kasus": {
+   "kode": "B07",
+   "level": "B",
+   "judul": "Rumah kedua ditempati adik",
+   "cerita": "Rumah tangga menempati rumah milik sendiri (sewa setempat {s1:rp} per bulan) dan memiliki rumah kedua yang ditempati adiknya tanpa membayar (sewa setempat {s2:rp} per bulan).",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "227",
+      "kode": "",
+      "rin": "Status kepemilikan bangunan tempat tinggal yang ditempati",
+      "teks": "1 · Milik sendiri"
+     },
+     {
+      "no": "228",
+      "kode": "04210",
+      "rin": "Perkiraan sewa sebulan (rumah yang ditempati)",
+      "bln": "=s1"
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {
+    "c_sewaRumah_produksi": "=prod",
+    "e_rtLain_barangB": "=beri"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_barangD",
+     "m": "Rumah tangga ini yang memberi, bukan menerima: gunakan kolom dibayar (5)."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "v": "=alt",
+     "m": "Rumah kedua juga menghasilkan jasa sewa dan harus ikut dihitung."
+    }
+   ],
+   "petunjuk": [
+    "Kedua rumah menghasilkan jasa sewa bagi pemiliknya. Rumah kedua juga diberikan kepada pihak lain.",
+    "Pemberian rumah tangga lain masuk kolom dibayar/diberikan, bentuk jasa."
+   ],
+   "langkah": [
+    "Nilai produksi: <code>({s1} + {s2}) × 12 = {prod}</code> → V.C R.1 kolom (2).",
+    "Rumah kedua diberikan ke adik: <code>{s2} × 12 = {beri}</code> → V.E baris 3, Kolom (5)."
+   ],
+   "pembahasan": "Nilai produksi jasa sewa mencakup rumah milik sendiri yang ditempati rumah tangga lain secara bebas sewa. Nilai sewa itu dicatat sebagai transfer dibayar kepada rumah tangga lain.",
+   "rujukan": "Buku 4 hlm. 330"
+  }
+ },
+ {
+  "kode": "B08",
+  "parameter": {
+   "kayu": {
+    "baku": 40000,
+    "pilihan": [
+     30000,
+     40000,
+     50000,
+     60000,
+     75000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "kayu*12"
+  },
+  "kasus": {
+   "kode": "B08",
+   "level": "B",
+   "judul": "Kayu bakar dari kebun sendiri",
+   "cerita": "Rumah tangga memakai kayu bakar dari kebun sendiri senilai {kayu:rp} sebulan terakhir. Tidak ada biaya khusus.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "261",
+      "kode": "04542",
+      "rin": "Kayu dan bahan bakar lainnya (kayu bakar dari kebun sendiri)",
+      "bln": "=kayu"
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_hasilLain_produksi": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "c_hasilLain_produksi",
+     "v": "=kayu",
+     "m": "Nilai Anda masih sebulan. Kalikan 12."
+    }
+   ],
+   "petunjuk": [
+    "Kayu bakar dari kebun sendiri adalah produksi sendiri yang dikonsumsi.",
+    "Nilai sebulan × 12."
+   ],
+   "langkah": [
+    "Nilai Blok IV.2 kolom (4) = <code>{kayu}</code> per bulan.",
+    "Setahun: <code>{kayu} × 12 = {tahun}</code> → V.C Rincian 2, Kolom (2)."
+   ],
+   "pembahasan": "Kayu bakar yang tidak berasal dari pembelian dianggap nilai produksi usaha rumah tangga dan dicatat di V.C Rincian 2; Blok IV.2 kolom 4 dikali 12.",
+   "rujukan": "Buku 4 hlm. 290 dan 351"
+  }
+ },
+ {
+  "kode": "B09",
+  "parameter": {
+   "listrik": {
+    "baku": 90000,
+    "pilihan": [
+     60000,
+     75000,
+     90000,
+     110000,
+     130000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "B09",
+   "level": "B",
+   "judul": "Listrik nyantol",
+   "cerita": "Rumah tangga Pak Ujang menyambung listrik langsung dari tiang PLN tanpa meteran dan tidak pernah membayar. Perkiraan nilai pemakaian listrik sebulan {listrik:rp}.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "234",
+      "kode": "04510",
+      "rin": "Listrik · nilai (perkiraan)",
+      "bln": "=listrik"
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {},
+   "jebakan": [
+    {
+     "k": "e_badanUsaha_barangD",
+     "m": "PLN bukan pemberi transfer. Imputasi listrik nyantol berhenti di Blok IV.2."
+    },
+    {
+     "k": "e_bantuan_barangD",
+     "m": "Ini bukan bantuan pemerintah. Tidak ada isian Blok V."
+    }
+   ],
+   "alternatif": [],
+   "nol": "Listrik nyantol hanya diimputasi di Blok IV.2 (R.233 dan 234). Karena tidak ada transaksi, tidak dicatat lagi di blok berikutnya.",
+   "petunjuk": [
+    "Tidak ada bukti pembayaran: ini non-transaksi.",
+    "Imputasinya cukup di Blok IV.2; Blok V dibiarkan kosong."
+   ],
+   "langkah": [
+    "Listrik nyantol tetap dianggap membayar, dicatat di R.233 dan R.234 (Blok IV.2).",
+    "Karena non-transaksi, tidak ada isian di Blok V.C maupun V.E: biarkan kosong."
+   ],
+   "pembahasan": "Rumah tangga yang menyambung listrik langsung dari PLN dan tidak pernah membayar tetap dianggap membayar listrik (R.233 dan 234). Karena kategori non-transaksi, imputasi ini tidak dicatat lagi pada blok berikutnya.",
+   "rujukan": "Buku 4 hlm. 289"
+  }
+ },
+ {
+  "kode": "B10",
+  "parameter": {
+   "listrik": {
+    "baku": 300000,
+    "pilihan": [
+     200000,
+     250000,
+     300000,
+     350000,
+     400000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "listrik*12"
+  },
+  "kasus": {
+   "kode": "B10",
+   "level": "B",
+   "judul": "Listrik rumah dinas dibayar kantor",
+   "cerita": "Pak Hasan (PNS di bagian tata usaha) menempati rumah dinas dan listriknya dibayar kantor {listrik:rp} per bulan; ia tidak membayar listrik apa pun. Abaikan gaji dan pendapatan lainnya.",
+   "iv": {
+    "t": 2,
+    "rows": [
+     {
+      "no": "234",
+      "kode": "04510",
+      "rin": "Listrik · nilai",
+      "bln": "=listrik"
+     }
+    ]
+   },
+   "meta": {
+    "A": [
+     {
+      "no": "01",
+      "uraian": "PNS di bagian tata usaha",
+      "kat": "20",
+      "jenis": "4"
+     }
+    ]
+   },
+   "blok": [
+    "A"
+   ],
+   "kunci": {
+    "a1_barang": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "a1_barang",
+     "v": "=listrik",
+     "m": "Nilai Anda masih sebulan. Kalikan 12."
+    }
+   ],
+   "petunjuk": [
+    "Listrik yang dibayar pemberi kerja adalah fasilitas dari tempat bekerja.",
+    "Fasilitas dari pemberi kerja = upah/gaji dalam bentuk barang/jasa."
+   ],
+   "langkah": [
+    "<code>{listrik} × 12 = {tahun}</code> → V.A Kolom (6).",
+    "Kolom (5) kosong karena tidak ada upah uang pada kasus ini."
+   ],
+   "pembahasan": "Upah dan gaji dalam bentuk barang/jasa mencakup fasilitas lain seperti listrik yang dibayar pemberi kerja, dicatat di V.A Kolom 6 menurut nilainya.",
+   "rujukan": "Buku 4 hlm. 313"
+  }
+ }
+]
