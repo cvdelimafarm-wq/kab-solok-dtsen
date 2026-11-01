@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import * as React from "react";
 import { createElement as e } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NavAlur, PenunjukAlur } from "@/app/sigap/kelola/AlurKelola";
 import { alurIdentifikasi, posisiAlur, urutanDariTab } from "@/lib/alurKelola";
+
+// Komponen memakai JSX runtime klasik di konfigurasi vitest proyek ini (tanpa transform otomatis): sediakan React global agar bisa dirender.
+(globalThis as unknown as { React: typeof React }).React = React;
 
 const tab = urutanDariTab([
   { kode: "ringkasan", label: "Ringkasan" },
