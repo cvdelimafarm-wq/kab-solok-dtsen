@@ -4,27 +4,43 @@
 //
 // (1 Nov 2026) Kartu "Kelas Anda" di halaman Langkah peserta: mode (daring/luring/hybrid), jadwal, tempat, dan apa artinya bagi presensi.
 // Data dari perencanaan (identifikasi lanjutan yang tertaut ke kegiatan). Tidak tampil bila belum tertaut. API: /api/sigap/pelatihan/kelas.
+// `useKelasSaya` dipakai bersama halaman Langkah (menyembunyikan langkah Foto Transport Lokal untuk kelas Daring); satu permintaan dibagi, kedaluwarsa 30 detik.
 
 import { useEffect, useState } from "react";
 import { fetchJson, urlPelatihan } from "../admin/api";
 import { Chip, Kartu } from "../admin/ui";
 import { rentangTanggal, type AturanMode, type CaraKelas, type KelasInfo } from "@/lib/sigapKelasIdent";
 
-type Jawab = { tersedia: boolean; tersambung: boolean; peran?: string; cara?: CaraKelas; kelas?: KelasInfo | null; kandidat?: KelasInfo[]; aturan?: AturanMode | null };
+export type JawabKelas = { tersedia: boolean; tersambung: boolean; peran?: string; cara?: CaraKelas; kelas?: KelasInfo | null; kandidat?: KelasInfo[]; aturan?: AturanMode | null };
 
 const WARNA = { Daring: "navy", Luring: "ok", Hybrid: "wait" } as const;
+const TTL_MS = 30_000;
+const cache = new Map<string, { t: number; p: Promise<JawabKelas | null> }>();
 
-export default function KartuKelas() {
-  const [d, setD] = useState<Jawab | null>(null);
+function ambilKelas(): Promise<JawabKelas | null> {
+  const url = urlPelatihan("/api/sigap/pelatihan/kelas");
+  const ada = cache.get(url);
+  if (ada && Date.now() - ada.t < TTL_MS) return ada.p;
+  const p = fetchJson<JawabKelas>(url).catch(() => null);
+  cache.set(url, { t: Date.now(), p });
+  return p;
+}
+
+/** undefined = sedang memuat; null = gagal memuat; selain itu jawaban API. */
+export function useKelasSaya(): JawabKelas | null | undefined {
+  const [d, setD] = useState<JawabKelas | null | undefined>(undefined);
   useEffect(() => {
     let batal = false;
-    fetchJson<Jawab>(urlPelatihan("/api/sigap/pelatihan/kelas"))
-      .then((r) => !batal && setD(r))
-      .catch(() => undefined);
+    void ambilKelas().then((r) => !batal && setD(r));
     return () => {
       batal = true;
     };
   }, []);
+  return d;
+}
+
+export default function KartuKelas() {
+  const d = useKelasSaya();
   if (!d?.tersedia || !d.tersambung) return null;
 
   if (!d.kelas) {

@@ -26,7 +26,8 @@ import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hu
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
 import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (tampil bila diaktifkan panitia)
-import KartuKelas from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
+import KartuKelas, { useKelasSaya } from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
+import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -725,6 +726,9 @@ type Langkah = { kode: string; judul: string; selesai: boolean; terlewat: boolea
 export default function HalamanPelatihan() {
   const { data, galat, muat, jam } = useHub(30_000);
   const router = useRouter();
+  // (1 Nov 2026) Kelas Daring tidak memerlukan foto bukti Transport Lokal: langkah foto dan kartu Transport Lokal disembunyikan. Selain itu (luring, hybrid, belum tertaut) tetap seperti biasa.
+  const kelasSaya = useKelasSaya();
+  const fotoTranslok = perluFotoTranslok(kelasSaya?.aturan);
   // (8 Okt 2026) Modal pengumuman dari panitia (Kelola Pelatihan > Pengumuman): antrian berurutan, ditentukan SEKALI saat data pertama
   // tiba (supaya muat-ulang otomatis tiap 30 dtk tidak mengacak). Modal "sekali" yang sudah ditutup dicatat di browser.
   const [antrianPeng, setAntrianPeng] = useState<PengumumanPeserta[] | null>(null);
@@ -876,9 +880,9 @@ export default function HalamanPelatihan() {
             } as Langkah,
           ]
         : []),
-      ...(slotAwal.length ? [langkahFoto("foto_awal", slotAwal, `Unggah ${slotAwal.length} foto sebelum Posttest`, "Boleh satu per satu: unggah yang sudah ada, lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.")] : []),
+      ...(fotoTranslok && slotAwal.length ? [langkahFoto("foto_awal", slotAwal, `Unggah ${slotAwal.length} foto sebelum Posttest`, "Boleh satu per satu: unggah yang sudah ada, lengkapi yang kurang sebelum 23.59 WIB di hari yang sama.")] : []),
       tes(post, "Kerjakan Posttest", "posttest"),
-      ...(slotAkhir.length ? [langkahFoto("foto_akhir", slotAkhir, `Unggah ${slotAkhir.length} foto sesudah Posttest`, "Boleh satu per satu; unggah setelah posttest selesai, sebelum 23.59 WIB di hari yang sama.")] : []),
+      ...(fotoTranslok && slotAkhir.length ? [langkahFoto("foto_akhir", slotAkhir, `Unggah ${slotAkhir.length} foto sesudah Posttest`, "Boleh satu per satu; unggah setelah posttest selesai, sebelum 23.59 WIB di hari yang sama.")] : []),
     ];
   }
 
@@ -1022,7 +1026,7 @@ export default function HalamanPelatihan() {
           {/* (9 Okt 2026) Transport Lokal pelatihan ada di dalam tahap Pelatihan */}
           <KartuKelas />
           <KartuKuisPra />
-          <KartuTranslokPelatihan />
+          {fotoTranslok && <KartuTranslokPelatihan />}
           <div className="rounded-[14px] border border-[#DDE6F3] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5B6B84]">
             Waktu mengikuti jam server. Skor &amp; pembahasan tampil setelah sesi tes ditutup; sebelum itu hanya tampil &ldquo;jawaban tersimpan&rdquo;.
           </div>

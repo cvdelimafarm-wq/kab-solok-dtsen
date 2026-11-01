@@ -133,6 +133,11 @@ export function aturanMode(metode: MetodeInfo): AturanMode | null {
   return null;
 }
 
+/** Foto bukti Transport Lokal diperlukan? Hanya kelas Daring yang tidak memerlukannya; bentuk belum diisi / tidak diketahui = tetap diperlukan (perilaku lama). */
+export function perluFotoTranslok(aturan: Pick<AturanMode, "foto_translok"> | null | undefined): boolean {
+  return aturan ? aturan.foto_translok : true;
+}
+
 export type PeringatanKelas = { nomor: number; pesan: string };
 
 /** Isian kelas yang belum cukup untuk dipakai layar pelaksanaan. Hanya saran; tidak memblokir apa pun. */

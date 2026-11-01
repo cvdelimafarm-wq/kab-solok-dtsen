@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aturanMode, kelasUntukPeserta, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
+import { aturanMode, kelasUntukPeserta, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
 
 const mentah = (o: Partial<Parameters<typeof ringkasKelas>[0][number]> = {}) => ({
   id: "k1", nama: "Pelatihan Triwulan IV", sesi: "pelatihan" as const, metode: "Luring" as const, tempat: "Hotel dalam kota" as const, lokasi: "Hotel Contoh, Arosuka",
@@ -108,5 +108,16 @@ describe("sebaranPeserta", () => {
     expect(s.per_kelas.get(2)).toBe(1);
     expect(s.tanpa_kelas).toBe(1);
     expect(s.di_luar).toBe(1);
+  });
+});
+
+describe("perluFotoTranslok", () => {
+  it("hanya Daring yang tidak perlu; luring, hybrid, kosong, dan tak diketahui tetap perlu", () => {
+    expect(perluFotoTranslok(aturanMode("Daring"))).toBe(false);
+    expect(perluFotoTranslok(aturanMode("Luring"))).toBe(true);
+    expect(perluFotoTranslok(aturanMode("Hybrid"))).toBe(true);
+    expect(perluFotoTranslok(aturanMode(""))).toBe(true);
+    expect(perluFotoTranslok(null)).toBe(true);
+    expect(perluFotoTranslok(undefined)).toBe(true);
   });
 });
