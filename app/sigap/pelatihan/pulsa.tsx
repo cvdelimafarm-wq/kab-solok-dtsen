@@ -10,10 +10,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { fetchJson, pesanGalat } from "../admin/api";
 import { tampilHp } from "@/lib/sigapPulsa";
+import { useInfoPelatihan } from "./infoPelatihan";
+import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 
 type Status = { peserta: boolean; asli?: string | null; pulsa?: string | null; diubah?: boolean; dikonfirmasi_at?: string | null };
 
 export function PulsaPeserta() {
+  const info = useInfoPelatihan();
   const [st, setSt] = useState<Status | null>(null);
   const [buka, setBuka] = useState(false); // pop-up dibuka manual (Ubah nomor) setelah terkonfirmasi
   const [mode, setMode] = useState<"pilih" | "lain">("pilih");
@@ -91,7 +94,7 @@ export function PulsaPeserta() {
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/55 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="judul-pulsa">
           <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl">
             <div className="rounded-t-3xl bg-gradient-to-r from-[#F58220] to-[#FB9B3F] px-5 py-4 text-white">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-white/85">Pelatihan PSP Pascabencana 2026</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-white/85">{judulPelatihan(info)}</p>
               <h2 id="judul-pulsa" className="text-[18px] font-extrabold leading-tight">
                 📱 Nomor HP untuk pengisian pulsa
               </h2>

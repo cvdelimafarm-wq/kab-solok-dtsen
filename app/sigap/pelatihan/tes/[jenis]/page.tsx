@@ -15,6 +15,8 @@ import type { KeadaanTes } from "@/lib/sigapTesDb";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglPanjang } from "../../../admin/api";
 import { BTN, BTN_O, Chip, Kartu, Memuat, Pesan } from "../../../admin/ui";
 import { Kerangka, formatSisa, jamWib, useJamServer, useSaatLewat } from "../../komponen";
+import { useInfoPelatihan } from "../../infoPelatihan";
+import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 
 type Keadaan = KeadaanTes;
 
@@ -30,6 +32,7 @@ export default function HalamanTes() {
 }
 
 function IsiTes({ jenis }: { jenis: JenisTes }) {
+  const info = useInfoPelatihan();
   const label = LABEL_JENIS_TES[jenis];
   const url = `/api/sigap/pelatihan/tes/${jenis}`;
   const jam = useJamServer();
@@ -216,7 +219,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const belum = soal.filter((s) => !jawaban[String(s.nomor)]).map((s) => s.nomor);
   const sekarangSoal = soal[Math.min(idx, Math.max(0, soal.length - 1))];
 
-  const judul = `${label} Pelatihan PSP Pascabencana`;
+  const judul = `${label} ${judulPelatihan(info)}`;
 
   // ------------------------------------------------ tampilan
   if (!k)

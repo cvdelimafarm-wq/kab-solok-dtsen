@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEL_PER_BLOK } from "../vanguard/sel";
-import { KOLOM_IV1, KOLOM_IV2, SKEMA_PANTAU, adaKolomPantau, kolomCetakKeVariabelIv1, kolomRekapIv32, namaVariabelKomoditas, petaSel, tabelKomoditas } from "../vanguard/pantau/peta";
+import { METADATA_KP, namaAplikasi, KOLOM_IV1, KOLOM_IV2, SKEMA_PANTAU, adaKolomPantau, kolomCetakKeVariabelIv1, kolomRekapIv32, namaVariabelKomoditas, petaSel, tabelKomoditas } from "../vanguard/pantau/peta";
 
 describe("pemetaan ke nama kolom PANTAU (V6-pra)", () => {
   it("skema.json memuat 10 berkas ekspor dan hanya nama/tipe kolom (tanpa data)", () => {
@@ -52,5 +52,18 @@ describe("pemetaan ke nama kolom PANTAU (V6-pra)", () => {
     expect([5, 6, 7, 8, 9, 10].map(kolomCetakKeVariabelIv1)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(namaVariabelKomoditas(74, 6)).toBe("R74K6");
     expect(namaVariabelKomoditas(199, 7)).toBe("R199K7");
+  });
+  it("nama aplikasi klien (Metadata_KP.xlsx v3.0): setiap id sel punya nama yang ada di metadata, berlevel RT atau ARTB5A/ARTB5B", () => {
+    const nama = new Map(METADATA_KP.map((f) => [f[0], f]));
+    expect(METADATA_KP.length).toBeGreaterThan(1800);
+    for (const s of Object.values(SEL_PER_BLOK).flat()) {
+      const a = namaAplikasi(s.id);
+      expect(a, s.id).not.toBeNull();
+      expect(nama.has(a!), `${s.id} → ${a}`).toBe(true);
+    }
+    expect(nama.get("MB5AK5")?.[1]).toBe("ARTB5A");
+    expect(nama.get("B5GR5_1K2")?.[1]).toBe("RT");
+    expect(nama.get("R199K7")).toMatchObject({ 1: "ART", 3: "0-3" });
+    expect(nama.has("R279K10")).toBe(true); // biaya berobat (OOP)
   });
 });

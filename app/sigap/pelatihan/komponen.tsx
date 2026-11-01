@@ -15,6 +15,8 @@ import PengaturanAwal from "@/app/portal/PengaturanAwal";
 import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
+import { useInfoPelatihan } from "./infoPelatihan";
+import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
 
 export type TesHub = {
   jenis: JenisTes;
@@ -151,11 +153,12 @@ export function Kerangka({
   // (8 Okt 2026) Struktur 3 layer: tab Undangan | Langkah | Instrumen | Transport Lokal dihapus (membingungkan & menumpuk riwayat Back).
   // Undangan & instrumen kini langkah bernomor di halaman Langkah (Layer 2); tombol panah di header naik satu layer.
   // (9 Okt 2026) Pelatihan kini tahap dalam garis waktu Pendataan Pascabencana -> panah kembali naik ke sana.
-  const induk = aktif === "pelatihan" ? "/sigap/kegiatan/pascabencana" : "/sigap/pelatihan";
+  const info = useInfoPelatihan();
+  const induk = aktif === "pelatihan" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
-        kecil="SIGAP · Pelatihan PSP Pascabencana 2026"
+        kecil={`SIGAP · ${judulPelatihan(info)}`}
         judul={judul}
         onKeluar={keluar}
         kembali={<TombolKembali tema="gelap" induk={induk} />}

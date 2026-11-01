@@ -3,14 +3,20 @@
 // (1 Nov 2026) VANGUARD V6-pra: pemetaan nama isian Vanguard (id sel, rincian) ke nama kolom PANTAU. Dasar: skema 10 berkas ekspor "Data KP" dari PANTAU (skema.json = HANYA nama/tipe kolom, tanpa data responden).
 // Id Vanguard TIDAK diganti (sudah tersimpan pada rekaman petugas); pemetaan ini dipakai untuk ekspor sebanding dengan PANTAU dan untuk memakai aturan anomali PANTAU sebagai validasi.
 // Pola nama PANTAU: B{blok}{sub}R{rincian}K{kolom} (mis. B5ER3K4 = Blok V.E Rincian 3 Kolom 4). Tabel baris (ART): ART_B5A, ART_B5B (satu baris per catatan). Tabel komoditas: NOURUTKOMO = nomor rincian R.x.
-// DUA DIALEK nama: (1) kolom berkas ekspor "Data KP" (skema.json) dan (2) nama variabel pada aturan konsistensi PANTAU (tabel kp_konsistensi_rules, 3.339 aturan KP). Umumnya sama; beda pada V.A/V.B per baris (aturan: MB5AK5..., ekspor: B5AK5...)
-// dan pada barang berharga V.G (aturan: B5GR5_1, dengan B5GR5 = jumlah; ekspor: R5 diduga barang berharga dan R6 jumlah).
+// DUA DIALEK nama: (1) nama pada APLIKASI klien Susenas 2026 SM2 v3.0 (Metadata_KP.xlsx, 1.837 field; juga dipakai aturan konsistensi PANTAU) = kolom `aturan`, yang BAKU; (2) kolom berkas ekspor "Data KP" (skema.json) = kolom `kolom`.
+// Umumnya sama; beda pada V.A/V.B per baris (aplikasi: MB5AK5..., ekspor: B5AK5...) dan pada barang berharga V.G (aplikasi: B5GR5_1, dengan B5GR5 = jumlah; ekspor: R5 diduga barang berharga dan R6 jumlah).
+// metadata-kp.json = ringkasan Metadata_KP.xlsx (nama field, level, halaman, range, blank/notblank); tes memastikan setiap nama aplikasi yang dipakai di sini ada di metadata.
 // kepastian: "pasti" = kolom ada di skema DAN dipakai/diuraikan pada aturan konsistensi PANTAU; "dugaan" = hanya disimpulkan dari pola (belum dikonfirmasi).
 
 import skema from "./skema.json";
+import metadataKp from "./metadata-kp.json";
 
 export type TabelPantau = keyof typeof skema;
 export type PetaKolom = { tabel: TabelPantau; kolom: string; baris?: number; kepastian: "pasti" | "dugaan"; /** nama variabel pada mesin aturan konsistensi PANTAU (kp_konsistensi_rules) bila berbeda dari nama kolom ekspor */ aturan?: string };
+export type FieldMetadataKp = [nama: string, level: string, halaman: number | null, range: string, blank: string];
+export const METADATA_KP = metadataKp as unknown as FieldMetadataKp[];
+/** Nama field pada aplikasi klien untuk sebuah id: nama aturan/aplikasi bila beda dari kolom ekspor. */
+export const namaAplikasi = (id: string): string | null => { const p = petaSel(id); return p ? p.aturan ?? p.kolom : null; };
 
 export const SKEMA_PANTAU = skema as Record<string, { berkas: string; kolom: { n: string; t: string; p: number; d?: number }[] }>;
 export const adaKolomPantau = (tabel: string, kolom: string): boolean => !!SKEMA_PANTAU[tabel]?.kolom.some((k) => k.n === kolom);
@@ -40,7 +46,7 @@ export function petaSel(id: string): PetaKolom | null {
   if ((m = /^f_(\w+)_(bangunanD|lahanD|bangunanB|lahanB)$/.exec(id)) && F_BARIS[m[1]]) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5FR${F_BARIS[m[1]]}K${F_KOLOM[m[2]]}`, kepastian: "pasti" };
   if ((m = /^g_(\w+)_(tambah|kurang)$/.exec(id))) {
     const r = G_SUB[m[1]] ?? G_UTAMA[m[1]];
-    if (r === 5) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR5K${m[2] === "tambah" ? 2 : 3}`, kepastian: "dugaan", aturan: `B5GR5_1K${m[2] === "tambah" ? 2 : 3}` };
+    if (r === 5) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR5K${m[2] === "tambah" ? 2 : 3}`, kepastian: "dugaan", aturan: `B5GR5_1K${m[2] === "tambah" ? 2 : 3}` }; // kolom ekspor dugaan; nama aplikasi (aturan) pasti
     if (r) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR${r}K${m[2] === "tambah" ? 2 : 3}`, kepastian: "pasti" };
   }
   if (id === "vi_g1") return { tabel: "Rekap_B6_B7_RT", kolom: "B6R1K4", kepastian: "pasti" }; // aturan PANTAU: B6R1K4 = B433R9K3 × 12 (konsumsi)
