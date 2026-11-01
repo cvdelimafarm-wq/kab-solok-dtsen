@@ -126,5 +126,133 @@
   ],
   "pembahasan": "Konsumsi dari warung sendiri dicatat di kolom pembelian pada harga jual; margin perdagangannya menjadi nilai produksi Blok V.B. Komoditas tanpa baris sendiri dicatat pada baris \"lainnya\" dengan nama dan satuan. Banyaknya dikonversi ke satuan standar rincian (mis. garam: 3 sendok teh × 4,8 gram × 7 hari = 100,8 → 101 gram).",
   "rujukan": "Buku 4 hlm. 269–276"
+ },
+ {
+  "kode": "K02",
+  "level": "K",
+  "judul": "Keluarga Pak Sucipto: makanan jadi dan rokok tiap anggota",
+  "cerita": "Catatan makanan dan minuman JADI serta rokok rumah tangga Pak Sucipto selama SEMINGGU terakhir. Makanan jadi dan rokok dicatat PER ANGGOTA rumah tangga (nomor ART), dan kolom sumber perolehan wajib diisi: 0 = bukan pembelian (pemberian dan sejenisnya), 1 = pembelian online, 2 = pembelian offline, 3 = online dan offline.",
+  "catatan": [
+   "Pak Sucipto (ART 1): minum air isi ulang 6 galon seminggu, harga Rp7.000 per galon, dibeli di depot. Airnya diminum bersama keluarga dan sulit dipisahkan per orang, jadi dicatat pada Pak Sucipto.",
+   "Pak Sucipto (ART 1): enam hari kerja seminggu, setiap hari makan siang nasi rames di tempat kerja, Rp10.000 per porsi.",
+   "Pak Sucipto (ART 1): satu bungkus rokok kretek filter isi 16 batang, Rp17.000 per bungkus, dibeli di warung. Dihabiskan seminggu itu.",
+   "Bu Maryati (ART 2): dibelikan tetangga satu porsi rawon (Rp16.000), satu porsi nasi putih (Rp3.000), dan satu gelas es jeruk (Rp5.000). Semuanya pemberian tetangga, bukan dibeli.",
+   "Tami (ART 3): membeli di sekolah 2 kali siomai, masing-masing satu porsi isi 4 buah, Rp4.000 per porsi. Satu porsi standar siomai = 5 buah. Tami juga membeli 2 potong tahu goreng, Rp1.500 per potong.",
+   "Desi (ART 4): setengah porsi bubur kacang hijau yang dibeli dari tetangga (Rp8.000 per porsi). Setengah porsi lainnya diberikan kepada Tami (ART 3).",
+   "Naldo (ART 5): bayi, hanya minum ASI dan bubur bayi kemasan. Tidak ada makanan atau minuman jadi."
+  ],
+  "info": [
+   "Anggota rumah tangga: 1 Pak Sucipto, 2 Bu Maryati, 3 Tami, 4 Desi, 5 Naldo.",
+   "Semua pembelian pada catatan ini dilakukan langsung (offline) kecuali disebut lain.",
+   "Anggota yang tidak mengonsumsi apa pun (Naldo) tidak diisi rincian apa pun; di kuesioner kertas ditandai Z.",
+   "Pembulatan matematika: banyaknya 2 desimal, nilai rupiah utuh.",
+   "Rincian: 192 gorengan (potong), 196 nasi campur/rames, 198 nasi putih, 200 soto/rawon, 210 siomai/batagor (5 potong = 1 porsi), 194 bubur kacang hijau, 213 air galon, 216 minuman jadi (gelas), 221 rokok kretek filter (batang)."
+  ],
+  "kunci": [
+   {
+    "r": 213,
+    "art": 1,
+    "k1": 6,
+    "k2": 42000,
+    "sumber": 2
+   },
+   {
+    "r": 196,
+    "art": 1,
+    "k1": 6,
+    "k2": 60000,
+    "sumber": 2
+   },
+   {
+    "r": 221,
+    "art": 1,
+    "k1": 16,
+    "k2": 17000,
+    "sumber": 2
+   },
+   {
+    "r": 200,
+    "art": 2,
+    "k3": 1,
+    "k4": 16000,
+    "sumber": 0
+   },
+   {
+    "r": 198,
+    "art": 2,
+    "k3": 1,
+    "k4": 3000,
+    "sumber": 0
+   },
+   {
+    "r": 216,
+    "art": 2,
+    "k3": 1,
+    "k4": 5000,
+    "sumber": 0
+   },
+   {
+    "r": 192,
+    "art": 3,
+    "k1": 2,
+    "k2": 3000,
+    "sumber": 2
+   },
+   {
+    "r": 210,
+    "art": 3,
+    "k1": 1.6,
+    "k2": 8000,
+    "sumber": 2
+   },
+   {
+    "r": 194,
+    "art": 3,
+    "k3": 0.5,
+    "k4": 4000,
+    "sumber": 0
+   },
+   {
+    "r": 194,
+    "art": 4,
+    "k1": 0.5,
+    "k2": 4000,
+    "sumber": 2
+   }
+  ],
+  "jebakan": [
+   {
+    "r": 213,
+    "k": "art",
+    "m": "Air isi ulang yang diminum bersama dicatat pada satu anggota saja (Pak Sucipto), bukan dibagi atau dikosongkan."
+   },
+   {
+    "r": 196,
+    "k": "hitung",
+    "m": "6 hari kerja × 1 porsi = 6 porsi; nilainya Rp10.000 × 6."
+   },
+   {
+    "r": 210,
+    "k": "satuan",
+    "m": "Siomai dikonversi ke porsi standar: 2 porsi × 4 buah ÷ 5 buah = 1,6 porsi."
+   },
+   {
+    "r": 200,
+    "k": "sumber",
+    "m": "Pemberian tetangga dicatat di kolom produksi sendiri/pemberian (kolom 7 dan 8) dengan kode sumber 0, bukan sebagai pembelian."
+   },
+   {
+    "r": 194,
+    "k": "art",
+    "m": "Setengah porsi bubur untuk Desi dibeli (kolom 5 dan 6, kode 2); setengah untuk Tami adalah pemberian (kolom 7 dan 8, kode 0)."
+   }
+  ],
+  "petunjuk": [
+   "Makanan jadi dan rokok dicatat per anggota rumah tangga: pilih nomor ART sebelum mengisi.",
+   "Beda pembelian dan pemberian: pembelian di kolom 5–6, pemberian di kolom 7–8. Kode sumber (K7) mengikuti.",
+   "Ubah ke satuan baku rincian (porsi standar, potong, gelas, batang) sebelum mengisi banyaknya."
+  ],
+  "pembahasan": "Makanan dan minuman jadi serta rokok dicatat per anggota rumah tangga dengan kode sumber perolehan: 0 untuk bukan pembelian, 1 online, 2 offline, 3 campuran. Pembelian masuk kolom 5–6, pemberian atau produksi sendiri kolom 7–8. Konsumsi bersama yang sulit dipisahkan boleh dicatat pada satu anggota. Anggota yang tidak mengonsumsi tidak diisi (Z di kertas). Porsi tidak standar dikonversi ke satuan baku (siomai: 5 buah = 1 porsi).",
+  "rujukan": "Buku 4 hlm. 276–282"
  }
 ]

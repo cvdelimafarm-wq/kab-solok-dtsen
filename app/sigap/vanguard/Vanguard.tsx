@@ -454,9 +454,11 @@ function Beranda({ balik, bintang, selesai, total, levelAktif, dicatat, uji, inf
       <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
         <div className="jd">MODE KUESIONER PENUH · UJI COBA</div>
         <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. Hanya latihan, tidak dicatat.</div>
-        <Link className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/kuesioner?kasus=K01&dari=${encodeURIComponent(balik)}`}>
-          <span className="num">K01</span><span className="t">Dapur Bu Maryati<small>Minyak, bumbu, minuman, bahan lainnya</small></span><span className="st">▶</span>
-        </Link>
+        {[{ k: "K01", t: "Dapur Bu Maryati", s: "Minyak, bumbu, minuman, bahan lainnya" }, { k: "K02", t: "Keluarga Pak Sucipto", s: "Makanan jadi dan rokok per anggota" }].map((c) => (
+          <Link key={c.k} className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/kuesioner?kasus=${c.k}&dari=${encodeURIComponent(balik)}`}>
+            <span className="num">{c.k}</span><span className="t">{c.t}<small>{c.s}</small></span><span className="st">▶</span>
+          </Link>
+        ))}
       </div>
       {peng && (peng.nilai_lulus !== null || peng.maks_percobaan !== null || peng.tutup_at) && (
         <div className="panel" role="region" aria-label="Aturan kegiatan">

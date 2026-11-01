@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KASUS_K, cariKasusK, nilaiKasusK, type IsianK } from "../vanguard/kuesioner/nilaiK";
-import { hitungIv1, rekapIv32 } from "../vanguard/kuesioner/engine";
+import { hitungIv1, periksaIv1, rekapIv31, rekapIv32 } from "../vanguard/kuesioner/engine";
 import { cariRincianIv1 } from "../vanguard/kuesioner/rincian";
 
 const k01 = cariKasusK("K01")!;
@@ -9,7 +9,7 @@ const ubah = (r: number, f: (e: IsianK) => void): IsianK[] => salin().map((e) =>
 
 describe("kasus K01 dan penilaian per entri (V6c)", () => {
   it("K01: 14 entri kunci, semua rincian ada di daftar IV.1 dan berada pada R.155–R.186", () => {
-    expect(KASUS_K).toHaveLength(1);
+    expect(KASUS_K).toHaveLength(2);
     expect(k01.kunci).toHaveLength(14);
     for (const e of k01.kunci) { expect(cariRincianIv1(e.r), `R${e.r}`).toBeDefined(); expect(e.r).toBeGreaterThanOrEqual(155); expect(e.r).toBeLessThanOrEqual(186); }
     expect(cariRincianIv1(158)?.nama).toContain("lainnya");
@@ -72,5 +72,40 @@ describe("kasus K01 dan penilaian per entri (V6c)", () => {
     const rek = rekapIv32(hitungIv1(k01.kunci));
     expect(rek[8].k3).toBe(25000 + 16000 + 4500); // R9 minyak dan kelapa (R156 + R157 + R158)
     expect(rek[9].k3).toBe(14000 + 300 + 10500);    // R10 bahan minuman (R160 + R161 + R165)
+  });
+});
+
+describe("kasus K02 (makanan jadi dan rokok per ART)", () => {
+  const k02 = cariKasusK("K02")!;
+  const salin2 = () => k02.kunci.map((e) => ({ ...e }));
+  const ubah2 = (r: number, art: number, f: (e: IsianK) => void) => { const x = salin2(); f(x.find((e) => e.r === r && e.art === art)!); return x; };
+  it("kunci sendiri = benar, rekap sesuai; 10 entri, 4 ART", () => {
+    const h = nilaiKasusK(k02, salin2());
+    expect(h.benar).toBe(true); expect(h.rekapSesuai).toBe(true); expect(h.total).toBe(10);
+    expect(new Set(k02.kunci.map((e) => e.art))).toEqual(new Set([1, 2, 3, 4]));
+  });
+  it("kunci K02 lolos aturan bentuk kuesioner (periksaIv1) dan rekap IV.3.1 per ART benar", () => {
+    expect(periksaIv1(k02.kunci)).toEqual([]);
+    const r = rekapIv31(hitungIv1(k02.kunci));
+    expect(r.baris.find((b) => b.art === 1)).toMatchObject({ k3: 102000 + 0, k4: 0, k5: 17000, k6: 0 });
+    expect(r.baris.find((b) => b.art === 2)).toMatchObject({ k3: 0, k4: 24000 });
+  });
+  it("pemberian dicatat sebagai pembelian = salah_sumber fatal dengan label ART", () => {
+    const x = ubah2(200, 2, (e) => { e.k1 = e.k3; e.k2 = e.k4; e.k3 = undefined; e.k4 = undefined; });
+    const s = nilaiKasusK(k02, x).kesalahan[0];
+    expect(s).toMatchObject({ jenis: "salah_sumber", tingkat: "fatal", r: 200, art: 2 });
+    expect(s.pesan.startsWith("ART 2:")).toBe(true);
+  });
+  it("kode sumber salah = kode_sumber (berat); dicatat pada ART lain = salah_art (berat)", () => {
+    const a = nilaiKasusK(k02, ubah2(192, 3, (e) => { e.sumber = 1; })).kesalahan[0];
+    expect(a).toMatchObject({ jenis: "kode_sumber", tingkat: "berat", r: 192, art: 3 });
+    const x = salin2().filter((e) => !(e.r === 192 && e.art === 3)); x.push({ r: 192, art: 4, k1: 2, k2: 3000, sumber: 2 });
+    const b = nilaiKasusK(k02, x).kesalahan.find((e) => e.jenis === "salah_art")!;
+    expect(b.tingkat).toBe("berat"); expect(b.pesan).toContain("ART 4"); expect(b.pesan).toContain("ART 3");
+  });
+  it("isian pada Naldo (ART 5) = harus_kosong fatal; konversi siomai 2 porsi = banyaknya_meleset", () => {
+    const x = salin2(); x.push({ r: 204, art: 5, k1: 1, k2: 3000, sumber: 2 });
+    expect(nilaiKasusK(k02, x).kesalahan.find((e) => e.art === 5)).toMatchObject({ jenis: "harus_kosong", tingkat: "fatal" });
+    expect(nilaiKasusK(k02, ubah2(210, 3, (e) => { e.k1 = 2; })).kesalahan[0]).toMatchObject({ jenis: "banyaknya_meleset", r: 210 });
   });
 });

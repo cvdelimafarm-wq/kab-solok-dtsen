@@ -17,13 +17,14 @@ export type KasusK = {
 export const KASUS_K = data as unknown as KasusK[];
 export const cariKasusK = (kode: string): KasusK | undefined => KASUS_K.find((k) => k.kode === kode);
 
-export type JenisK = "belum_diisi" | "salah_rincian" | "salah_sumber" | "harus_kosong" | "banyaknya_meleset" | "angka_meleset" | "nama_lainnya";
+export type JenisK = "belum_diisi" | "salah_rincian" | "salah_sumber" | "harus_kosong" | "banyaknya_meleset" | "angka_meleset" | "nama_lainnya" | "salah_art" | "kode_sumber";
 export type TingkatK = "fatal" | "berat" | "ringan";
 export type KesalahanK = { jenis: JenisK; tingkat: TingkatK; r: number; art: number | null; pesan: string };
 export type HasilK = { benar: boolean; kesalahan: KesalahanK[]; sesuai: number; total: number; rekapSesuai: boolean };
 
-export const TINGKAT_K: Record<JenisK, TingkatK> = { belum_diisi: "berat", salah_rincian: "fatal", salah_sumber: "fatal", harus_kosong: "fatal", banyaknya_meleset: "berat", angka_meleset: "ringan", nama_lainnya: "berat" };
+export const TINGKAT_K: Record<JenisK, TingkatK> = { belum_diisi: "berat", salah_rincian: "fatal", salah_sumber: "fatal", harus_kosong: "fatal", banyaknya_meleset: "berat", angka_meleset: "ringan", nama_lainnya: "berat", salah_art: "berat", kode_sumber: "berat" };
 
+export const KET_SUMBER: Record<number, string> = { 0: "bukan pembelian (pemberian, dll.)", 1: "pembelian online", 2: "pembelian offline", 3: "pembelian online dan offline" };
 const n = (x: number | undefined): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
 const kunciBaris = (e: IsianK): string => `${e.r}|${e.art ?? 0}`;
 const nilaiBeli = (e: IsianK) => n(e.k2), nilaiProd = (e: IsianK) => n(e.k4);
@@ -38,7 +39,7 @@ export function nilaiKasusK(kasus: Pick<KasusK, "kunci" | "jebakan">, isianMenta
   for (const e of isianMentah) if (!kosong(e)) isian.set(kunciBaris(e), e);
   const kunci = new Map(kasus.kunci.map((e) => [kunciBaris(e), e]));
   const kesalahan: KesalahanK[] = [];
-  const tambah = (jenis: JenisK, e: { r: number; art?: number }, pesan: string, tingkat: TingkatK = TINGKAT_K[jenis]) => kesalahan.push({ jenis, tingkat, r: e.r, art: e.art ?? null, pesan });
+  const tambah = (jenis: JenisK, e: { r: number; art?: number }, pesan: string, tingkat: TingkatK = TINGKAT_K[jenis]) => kesalahan.push({ jenis, tingkat, r: e.r, art: e.art ?? null, pesan: e.art ? `ART ${e.art}: ${pesan}` : pesan });
   const dipakai = new Set<string>();
   const V = (r: number, k: number) => `R${r}K${k}`;
   let sesuai = 0;
@@ -49,7 +50,10 @@ export function nilaiKasusK(kasus: Pick<KasusK, "kunci" | "jebakan">, isianMenta
       // adakah nilai yang sama pada rincian lain (salah letak)?
       const target = nilaiBeli(k) + nilaiProd(k);
       const lain = [...isian.entries()].find(([ib, x]) => !kunci.has(ib) && !dipakai.has(ib) && dekat(nilaiBeli(x) + nilaiProd(x), target, 1) && target > 0);
-      if (lain) {
+      if (lain && lain[1].r === k.r && lain[1].art !== k.art) {
+        dipakai.add(lain[0]);
+        tambah("salah_art", k, `R${k.r} dicatat pada ART ${lain[1].art ?? 1}, seharusnya pada ART ${k.art}.`);
+      } else if (lain) {
         dipakai.add(lain[0]);
         const khas = kasus.jebakan.find((j) => j.r === k.r);
         tambah("salah_rincian", lain[1], `Nilai Rp${fmt(target)} dicatat pada R${lain[1].r}, seharusnya pada R${k.r}${cariRincianIv1(k.r) ? ` (${cariRincianIv1(k.r)!.nama})` : ""}.${khas ? ` ${khas.m}` : ""}`);
@@ -75,6 +79,7 @@ export function nilaiKasusK(kasus: Pick<KasusK, "kunci" | "jebakan">, isianMenta
       };
       ([1, 2, 3, 4] as const).forEach(cek);
     }
+    if (k.sumber !== undefined && i.sumber !== k.sumber) tambah("kode_sumber", k, `${V(k.r, 7)} (kode sumber perolehan) seharusnya ${k.sumber}: ${KET_SUMBER[k.sumber] ?? ""}.`);
     if (k.nama !== undefined && norm(i.nama) !== norm(k.nama)) tambah("nama_lainnya", k, `Baris "lainnya" R${k.r} harus ditulis ${k.nama}${k.satuan ? ` dengan satuan ${k.satuan}` : ""}.`);
     else if (k.satuan !== undefined && norm(i.satuan) !== norm(k.satuan)) tambah("nama_lainnya", k, `Satuan baris R${k.r} harus ${k.satuan}.`);
     if (kesalahan.length === mulaiSalah) sesuai += 1;

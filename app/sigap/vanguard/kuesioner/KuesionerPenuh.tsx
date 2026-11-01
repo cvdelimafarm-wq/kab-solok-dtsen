@@ -18,7 +18,7 @@ import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi } from "@/app/sigap/admin/api";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
 import { KELOMPOK_IV1, RINCIAN_IV1, cariRincianIv1, rincianLainnya, type RincianIv1 } from "@/lib/vanguard/kuesioner/rincian";
-import { hitungBaris, hitungIv1, perART, periksaIv1, rekapIv32, type EntriIv1 } from "@/lib/vanguard/kuesioner/engine";
+import { hitungBaris, hitungIv1, perART, periksaIv1, rekapIv31, rekapIv32, type EntriIv1 } from "@/lib/vanguard/kuesioner/engine";
 import { cariKasusKPublik } from "@/lib/vanguard/kuesioner/publik";
 import { Lambang } from "../Logo";
 
@@ -72,7 +72,7 @@ export default function KuesionerPenuh() {
 
   const [isian, setIsian] = useState<Isian[]>([]);
   const [siap, setSiap] = useState(false);
-  const [tab, setTab] = useState<Tab>("I");
+  const [tab, setTab] = useState<Tab>(kode === "K02" ? "M" : "I");
   const [cari, setCari] = useState("");
   const [edit, setEdit] = useState<{ r: number; art: number } | null>(null);
   const [draf, setDraf] = useState<Draf>(kosongDraf());
@@ -102,6 +102,7 @@ export default function KuesionerPenuh() {
 
   const h = useMemo(() => hitungIv1(isian), [isian]);
   const rekap = useMemo(() => rekapIv32(h), [h]);
+  const rekap31 = useMemo(() => rekapIv31(h), [h]);
   const temuan = useMemo(() => periksaIv1(isian), [isian]);
   const terisiKel = useMemo(() => {
     const m: Record<string, number> = {};
@@ -220,7 +221,7 @@ export default function KuesionerPenuh() {
                 return (
                   <button key={r.no} type="button" className={`item${ent.length ? " done" : ""}`} onClick={() => bukaEdit(r.no)}>
                     <span className="num">{r.no}</span>
-                    <span className="t">{r.nama}<small>{r.satuan ? `Satuan: ${r.satuan}` : "Tulis nama dan satuan sendiri"}{r.kode ? ` · ${r.kode}` : ""}</small></span>
+                    <span className="t">{r.nama}<small>{r.satuan ? `Satuan: ${r.satuan}` : "Tulis nama dan satuan sendiri"}{perART(r.no) ? " · per ART" : ""}{r.kode ? ` · ${r.kode}` : ""}</small></span>
                     <span className="st">{ent.length ? `Rp${fmt(total)}` : "＋"}</span>
                   </button>
                 );
@@ -264,6 +265,18 @@ export default function KuesionerPenuh() {
                 ))}
               </tbody>
             </table>
+            {rekap31.baris.length > 0 && (
+              <>
+                <span className="tag" style={{ marginTop: 10 }}>Blok IV.3.1 per ART</span>
+                <table className="tbl">
+                  <thead><tr><th>ART</th><th style={{ textAlign: "right" }}>Jadi beli</th><th style={{ textAlign: "right" }}>Jadi beri</th><th style={{ textAlign: "right" }}>Rokok beli</th><th style={{ textAlign: "right" }}>Rokok beri</th></tr></thead>
+                  <tbody>
+                    {rekap31.baris.map((b) => <tr key={b.art}><td className="n kiri">{b.art}</td><td className="n">{fmt(b.k3)}</td><td className="n">{fmt(b.k4)}</td><td className="n">{fmt(b.k5)}</td><td className="n">{fmt(b.k6)}</td></tr>)}
+                    <tr><td className="kiri"><b>Jumlah</b></td><td className="n">{fmt(rekap31.jumlah.k3)}</td><td className="n">{fmt(rekap31.jumlah.k4)}</td><td className="n">{fmt(rekap31.jumlah.k5)}</td><td className="n">{fmt(rekap31.jumlah.k6)}</td></tr>
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         )}
 
@@ -315,7 +328,7 @@ export default function KuesionerPenuh() {
                 <label className="kp-f"><span>ART</span>
                   <select value={edit.art} onChange={(e) => bukaEdit(edit.r, Number(e.target.value))}>{Array.from({ length: 15 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
                 <label className="kp-f"><span>Sumber <small>R{edit.r}K7</small></span>
-                  <select value={draf.sumber} onChange={(e) => setDraf({ ...draf, sumber: e.target.value })}><option value="">—</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+                  <select value={draf.sumber} onChange={(e) => setDraf({ ...draf, sumber: e.target.value })}><option value="">—</option><option value="0">0 · bukan pembelian</option><option value="1">1 · online</option><option value="2">2 · offline</option><option value="3">3 · online dan offline</option></select></label>
               </div>
             )}
             {rincianLainnya(rincianEdit) && (
