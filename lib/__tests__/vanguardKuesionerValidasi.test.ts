@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { bersihkanIsian, MAKS_ENTRI } from "../vanguard/kuesioner/validasi";
-import { KASUS_K, cariKasusK } from "../vanguard/kuesioner/nilaiK";
+import { TEMPLAT_K, cariKasusK } from "../vanguard/kuesioner/nilaiK";
 import { KASUS_K_PUBLIK, cariKasusKPublik } from "../vanguard/kuesioner/publik";
 
 const AKAR = path.resolve(__dirname, "..", "..");
@@ -38,15 +38,14 @@ describe("bersihkanIsian (V6d)", () => {
   });
 });
 
-describe("bahan soal publik kasus K (V6d)", () => {
-  it("kasus-k-publik.json mengikuti kasus-k.json (jalankan node scripts/vanguard-bangun-publik.mjs bila gagal)", () => {
-    const harapan = KASUS_K.map((k) => ({ kode: k.kode, level: k.level, judul: k.judul, cerita: k.cerita, catatan: k.catatan, info: k.info }));
-    expect(KASUS_K_PUBLIK).toEqual(harapan);
+describe("daftar publik kasus K (V6d/V7a)", () => {
+  it("kasus-k-publik.json mengikuti templat-k.json (jalankan node scripts/vanguard-bangun-publik.mjs bila gagal) dan hanya memuat kode, level, judul", () => {
+    expect(KASUS_K_PUBLIK).toEqual(TEMPLAT_K.map((t) => ({ kode: t.kode, level: t.level, judul: t.judul })));
     expect(cariKasusKPublik("K01")?.judul).toBe(cariKasusK("K01")?.judul);
+    for (const k of KASUS_K_PUBLIK) expect(Object.keys(k).sort()).toEqual(["judul", "kode", "level"]);
   });
-  it("tidak memuat bidang rahasia", () => {
+  it("tidak memuat cerita, angka, kunci, jebakan, petunjuk, pembahasan", () => {
     const mentah = fs.readFileSync(path.join(AKAR, "lib/vanguard/kuesioner/kasus-k-publik.json"), "utf8");
-    for (const f of ['"kunci"', '"jebakan"', '"petunjuk"', '"pembahasan"', '"rujukan"']) expect(mentah).not.toContain(f);
-    for (const k of KASUS_K_PUBLIK) expect(Object.keys(k).sort()).toEqual(["catatan", "cerita", "info", "judul", "kode", "level"]);
+    for (const f of ['"kunci"', '"jebakan"', '"petunjuk"', '"pembahasan"', '"rujukan"', '"cerita"', '"catatan"', '"parameter"']) expect(mentah).not.toContain(f);
   });
 });

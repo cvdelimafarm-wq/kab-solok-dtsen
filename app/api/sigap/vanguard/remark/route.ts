@@ -5,6 +5,7 @@
 //   PPL bermasalah terlihat oleh PML dan supervisor/korwil; PML bermasalah hanya oleh supervisor/korwil. Peran lain mendapat daftar kosong (boleh:false).
 // Hanya hasil final TIDAK LULUS yang ditampilkan. Kegiatan tanpa Vanguard atau tanpa nilai lulus: kosong. Hanya baca (akun "masuk sebagai" boleh melihat).
 
+import { adalahKasusK } from "@/lib/vanguard/kuesioner/publik";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
       for (const r of (data ?? []) as { id: number; nama: string }[]) nama.set(r.id, r.nama);
     }
     const peserta: Peserta[] = bawahanId.map((id) => ({ akun_id: id, nama: nama.get(id) ?? `Akun ${id}`, peran: pegawai.get(id) ?? null }));
-    return NextResponse.json({ boleh: true, peran, remark: susunRemark(peran, peserta, perc, peng) });
+    return NextResponse.json({ boleh: true, peran, remark: susunRemark(peran, peserta, perc.filter((b) => !adalahKasusK(b.kasus)), peng) });
   } catch {
     return galat("Gagal memuat remark Vanguard.", 500);
   }

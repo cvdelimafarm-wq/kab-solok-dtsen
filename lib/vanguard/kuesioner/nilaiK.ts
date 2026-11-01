@@ -5,7 +5,8 @@
 // Jenis kesalahan (menambah jenis V1, tidak mengubahnya): salah_rincian (fatal), salah_sumber (fatal), harus_kosong (fatal), belum_diisi (berat), nama_lainnya (berat), banyaknya_meleset dan angka_meleset (ringan sampai 5%, berat lebih dari itu).
 // Toleransi: nilai rupiah ±Rp1, banyaknya ±0,01. Rekap IV.3.2 dihitung engine dari isian petugas dan dibandingkan dengan rekap kunci.
 
-import data from "./kasus-k.json";
+import data from "./templat-k.json";
+import { susunSoalK, type SoalK, type TemplatK } from "./templat";
 import { hitungIv1, rekapIv32, type EntriIv1 } from "./engine";
 import { rincianLainnya, cariRincianIv1 } from "./rincian";
 
@@ -14,8 +15,12 @@ export type KasusK = {
   kode: string; judul: string; level: "K"; cerita: string; catatan: string[]; info: string[];
   kunci: IsianK[]; jebakan: { r: number; k: string; m: string }[]; petunjuk: string[]; pembahasan: string; rujukan: string;
 };
-export const KASUS_K = data as unknown as KasusK[];
-export const cariKasusK = (kode: string): KasusK | undefined => KASUS_K.find((k) => k.kode === kode);
+export const TEMPLAT_K = data as unknown as TemplatK[];
+/** Soal K untuk satu benih. Benih 0 = angka baku (kasus asli). Kunci dibangun di server dari benih. */
+export const soalK = (kode: string, benih = 0): SoalK | undefined => { const t = TEMPLAT_K.find((x) => x.kode === kode); return t ? susunSoalK(t, benih) : undefined; };
+export const cariKasusK = (kode: string, benih = 0): KasusK | undefined => soalK(kode, benih) as unknown as KasusK | undefined;
+/** Kasus pada angka baku (benih 0): dasar tes dan pembanding. */
+export const KASUS_K = TEMPLAT_K.map((t) => susunSoalK(t, 0) as unknown as KasusK);
 
 export type JenisK = "belum_diisi" | "salah_rincian" | "salah_sumber" | "harus_kosong" | "banyaknya_meleset" | "angka_meleset" | "nama_lainnya" | "salah_art" | "kode_sumber";
 export type TingkatK = "fatal" | "berat" | "ringan";

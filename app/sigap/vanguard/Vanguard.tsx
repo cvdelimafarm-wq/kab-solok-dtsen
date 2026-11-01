@@ -366,7 +366,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        {layar === "beranda" && <Beranda balik={alamatVanguard({ kegiatan, dari: tujuan })} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
+        {layar === "beranda" && <Beranda balik={alamatVanguard({ kegiatan, dari: tujuan })} kegiatanK={dicatat ? kegiatan : null} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
           <>
@@ -441,7 +441,7 @@ export default function Vanguard() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-function Beranda({ balik, bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { balik: string; bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
+function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { balik: string; kegiatanK: number | null; bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
   return (
     <>
       <div className={`catat ${dicatat ? "ya" : "tidak"}`} role="status">
@@ -453,9 +453,9 @@ function Beranda({ balik, bintang, selesai, total, levelAktif, dicatat, uji, inf
       <div className="panel"><div className="jd">RINGKASAN SAYA</div><div style={{ fontSize: 13, marginTop: 3 }}>{selesai} dari {total} kasus sudah dikerjakan.</div></div>
       <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
         <div className="jd">MODE KUESIONER PENUH · UJI COBA</div>
-        <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. Hanya latihan, tidak dicatat.</div>
+        <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. {kegiatanK ? "Percobaan dicatat seperti kasus lain." : "Hanya latihan, tidak dicatat."}</div>
         {[{ k: "K01", t: "Dapur Bu Maryati", s: "Minyak, bumbu, minuman, bahan lainnya" }, { k: "K02", t: "Keluarga Pak Sucipto", s: "Makanan jadi dan rokok per anggota" }].map((c) => (
-          <Link key={c.k} className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/kuesioner?kasus=${c.k}&dari=${encodeURIComponent(balik)}`}>
+          <Link key={c.k} className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/kuesioner?kasus=${c.k}${kegiatanK ? `&k=${kegiatanK}` : ""}&dari=${encodeURIComponent(balik)}`}>
             <span className="num">{c.k}</span><span className="t">{c.t}<small>{c.s}</small></span><span className="st">▶</span>
           </Link>
         ))}

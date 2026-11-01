@@ -4,7 +4,8 @@
 //
 // (1 Nov 2026) VANGUARD V6d: Mode Kuesioner Penuh, Blok IV.1 (kasus K). Petugas menyalin catatan konsumsi ke kuesioner:
 // pilih kelompok (A–N) atau cari rincian, ketuk rincian, isi K1–K4 (K5 dan K6 dihitung), lalu Periksa. Rekap IV.3.2 dihitung engine dari isian.
-// Penilaian di SERVER (api/sigap/vanguard/kuesioner); kunci tidak ada di perangkat sampai petugas memilih "Lihat kunci". Tahap ini latihan: tidak dicatat.
+// Penilaian di SERVER (api/sigap/vanguard/kuesioner); kunci tidak ada di perangkat sampai petugas memilih "Lihat kunci".
+// Masuk dari kartu kegiatan (?k=ID): setiap Periksa juga dicatat di server (latihan, V6g). Tanpa ?k=: tidak dicatat.
 // Back (layar dan Back HP): lembar isian tertutup dulu, baru keluar halaman. Draf isian disimpan di perangkat (localStorage, boleh gagal).
 // Berkas ini TIDAK boleh mengimpor nilaiK.ts atau kasus-k.json (dijaga tes vanguardPublik).
 
@@ -24,12 +25,13 @@ import { Lambang } from "../Logo";
 
 type Isian = EntriIv1 & { nama?: string; satuan?: string };
 type Kesalahan = { jenis: string; tingkat: "fatal" | "berat" | "ringan"; r: number; art: number | null; pesan: string };
-type Hasil = { benar: boolean; kesalahan: Kesalahan[]; sesuai: number; total: number; rekapSesuai: boolean; pembahasan?: string; rujukan?: string; kunci?: Isian[] };
+type Hasil = { benar: boolean; kesalahan: Kesalahan[]; sesuai: number; total: number; rekapSesuai: boolean; pembahasan?: string; rujukan?: string; kunci?: Isian[]; dicatat?: boolean; nomor?: number; bintang?: number; pesanCatat?: string };
 type Draf = { k1: string; k2: string; k3: string; k4: string; nama: string; satuan: string; sumber: string };
+type Soal = { benih: number; cerita: string; catatan: string[]; info: string[] };
 type Tab = string; // "A".."N" | "diisi" | "rekap"
 
 const fmt = (x: number) => x.toLocaleString("id-ID", { maximumFractionDigits: 4 });
-const kunciDraf = (kode: string) => `vanguard.kp.draf.${kode}`;
+const kunciDraf = (kode: string) => `vanguard.kp.d2.${kode}`; // {benih, isian}: draf terikat pada angka soal (benih)
 const kunciIsi = (e: Isian) => `${e.r}|${e.art ?? 0}`;
 const kosongDraf = (): Draf => ({ k1: "", k2: "", k3: "", k4: "", nama: "", satuan: "", sumber: "" });
 const LABEL_TINGKAT = { fatal: "Fatal", berat: "Berat", ringan: "Ringan" } as const;
@@ -68,9 +70,13 @@ export default function KuesionerPenuh() {
   const q = useSearchParams();
   const kode = useMemo(() => { const v = q.get("kasus"); return v && /^[A-Z][0-9]{2}$/.test(v) ? v : "K01"; }, [q]);
   const kasus = cariKasusKPublik(kode);
+  const kegiatan = useMemo(() => { const v = q.get("k"); return v && /^\d{1,9}$/.test(v) && Number(v) > 0 ? Number(v) : null; }, [q]);
+  const mulaiRef = useRef(Date.now());
   const tujuan = useMemo(() => { const d = q.get("dari"); return d ? tujuanAman(d) : "/sigap/vanguard"; }, [q]);
 
   const [isian, setIsian] = useState<Isian[]>([]);
+  const [soal, setSoal] = useState<Soal | null>(null);
+  const [galatSoal, setGalatSoal] = useState<string | null>(null);
   const [siap, setSiap] = useState(false);
   const [tab, setTab] = useState<Tab>(kode === "K02" ? "M" : "I");
   const [cari, setCari] = useState("");
@@ -85,18 +91,37 @@ export default function KuesionerPenuh() {
   const skrol = useRef<HTMLDivElement>(null);
   const hasilRef = useRef<HTMLDivElement>(null);
 
+  const muatSoal = async (benih: number | null): Promise<Soal | null> => {
+    setGalatSoal(null);
+    try {
+      const r = await apiPortal<{ benih: number; cerita: string; catatan: string[]; info: string[] }>(`/api/sigap/vanguard/kuesioner?kode=${kode}&soal=1${benih === null ? "" : `&benih=${benih}`}`);
+      const x: Soal = { benih: r.benih, cerita: r.cerita, catatan: r.catatan, info: r.info };
+      setSoal(x);
+      return x;
+    } catch (e) {
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return null;
+      setGalatSoal(e instanceof Error ? e.message : "Gagal memuat soal.");
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (!bacaSesi()) { window.location.replace(`/?lanjut=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`); return; }
+    let benihTersimpan: number | null = null;
     try {
       const t = window.localStorage.getItem(kunciDraf(kode));
-      if (t) { const d = JSON.parse(t); if (Array.isArray(d)) setIsian(d.filter((x) => x && typeof x.r === "number")); }
+      if (t) {
+        const d = JSON.parse(t);
+        if (d && Number.isInteger(d.benih) && Array.isArray(d.isian)) { benihTersimpan = d.benih; setIsian(d.isian.filter((x: Isian) => x && typeof x.r === "number")); }
+      }
     } catch { /* penyimpanan lokal boleh gagal */ }
-    setSiap(true);
+    void muatSoal(benihTersimpan).then((x) => { if (!x && benihTersimpan !== null) { setIsian([]); } setSiap(true); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kode]);
   useEffect(() => {
-    if (!siap) return;
-    try { window.localStorage.setItem(kunciDraf(kode), JSON.stringify(isian)); } catch { /* abaikan */ }
-  }, [isian, siap, kode]);
+    if (!siap || !soal) return;
+    try { window.localStorage.setItem(kunciDraf(kode), JSON.stringify({ benih: soal.benih, isian })); } catch { /* abaikan */ }
+  }, [isian, siap, kode, soal]);
 
   useTutupDenganBack(edit !== null, () => setEdit(null));
 
@@ -146,7 +171,7 @@ export default function KuesionerPenuh() {
   const minta = async (lihat: boolean) => {
     setKerja(true); setGalat(null);
     try {
-      const r = await apiPortal<Hasil>("/api/sigap/vanguard/kuesioner", { method: "POST", body: JSON.stringify({ kode, isian, lihat }) });
+      const r = await apiPortal<Hasil>("/api/sigap/vanguard/kuesioner", { method: "POST", body: JSON.stringify({ kode, benih: soal?.benih ?? 0, isian, lihat, ...(kegiatan ? { kegiatan, petunjuk: petunjuk.length, durasiDtk: Math.min(86400, Math.round((Date.now() - mulaiRef.current) / 1000)) } : {}) }) });
       setHasil(r);
       setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
     } catch (e) {
@@ -158,12 +183,17 @@ export default function KuesionerPenuh() {
     const n = petunjuk.length + 1;
     setKerja(true); setGalat(null);
     try {
-      const r = await apiPortal<{ petunjuk: string[]; total: number }>(`/api/sigap/vanguard/kuesioner?kode=${kode}&petunjuk=${n}`);
+      const r = await apiPortal<{ petunjuk: string[]; total: number }>(`/api/sigap/vanguard/kuesioner?kode=${kode}&petunjuk=${n}&benih=${soal?.benih ?? 0}`);
       setPetunjuk(r.petunjuk); setTotalPetunjuk(r.total);
     } catch (e) {
       if (e instanceof Error && e.message === "SESI_BERAKHIR") return;
       setGalat(e instanceof Error ? e.message : "Gagal memuat petunjuk.");
     } finally { setKerja(false); }
+  };
+  const soalBaru = async () => {
+    if (isian.length > 0 && !window.confirm("Ganti ke soal baru dengan angka berbeda? Isian sekarang akan dihapus.")) return;
+    const x = await muatSoal(null);
+    if (x) { setIsian([]); setHasil(null); setPetunjuk([]); setTotalPetunjuk(null); setGalat(null); }
   };
   const ulang = () => {
     if (isian.length > 0 && !window.confirm("Hapus semua isian kasus ini dan mulai dari awal?")) return;
@@ -185,17 +215,22 @@ export default function KuesionerPenuh() {
       <div className="appbar">
         <div className="l1"><b>BADAN PUSAT STATISTIK · VSEN26.KP</b><span className="r">RAHASIA</span></div>
         <h1>Blok IV.1 · {kasus.kode} · {kasus.judul}</h1>
-        <div className="l3"><span>{isian.length} rincian terisi · {h.komoditasRt + Object.values(h.komoditasPerArt).reduce((a, b) => a + b, 0)} komoditas</span><button className="tog" type="button" onClick={ulang}>Mulai ulang</button></div>
+        <div className="l3"><span>{isian.length} rincian terisi · {h.komoditasRt + Object.values(h.komoditasPerArt).reduce((a, b) => a + b, 0)} komoditas</span><span><button className="tog" type="button" onClick={ulang}>Hapus isian</button> <button className="tog" type="button" onClick={soalBaru}>Soal baru</button></span></div>
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        <div className="catat tidak" role="status"><b>Latihan:</b> isian dinilai di server dan tidak dicatat. Draf tersimpan di perangkat ini.</div>
+        <div className={`catat ${kegiatan ? "ya" : "tidak"}`} role="status">{kegiatan ? <><b>Pelatihan:</b> setiap kali Anda menekan Periksa, percobaan dicatat untuk BPS Kabupaten Solok.</> : <><b>Latihan bebas:</b> isian dinilai di server dan tidak dicatat.</>} Draf tersimpan di perangkat ini.</div>
 
         <details className="kp-cerita" open>
           <summary>Catatan konsumsi (baca dulu)</summary>
-          <p>{kasus.cerita}</p>
-          <ol>{kasus.catatan.map((c, i) => <li key={i}>{c}</li>)}</ol>
-          <ul className="kp-info">{kasus.info.map((c, i) => <li key={i}>{c}</li>)}</ul>
+          {soal ? (
+            <>
+              <p>{soal.cerita}</p>
+              <ol>{soal.catatan.map((c, i) => <li key={i}>{c}</li>)}</ol>
+              <ul className="kp-info">{soal.info.map((c, i) => <li key={i}>{c}</li>)}</ul>
+              <p className="ref">Nomor soal: {soal.benih === 0 ? "baku" : soal.benih}. Angka tiap soal berbeda.</p>
+            </>
+          ) : galatSoal ? <p role="alert">{galatSoal} <button type="button" className="tog" onClick={() => void muatSoal(null)}>Coba lagi</button></p> : <p>Memuat soal…</p>}
         </details>
 
         {petunjuk.length > 0 && <div className="hint" role="note"><b>Petunjuk</b><ol style={{ margin: "4px 0 0 18px" }}>{petunjuk.map((p, i) => <li key={i}>{p}</li>)}</ol></div>}
@@ -290,6 +325,9 @@ export default function KuesionerPenuh() {
                 <div><strong>{hasil.benar ? "Semua rincian sudah benar" : `${hasil.kesalahan.length} temuan`}</strong>
                   <small>{hasil.sesuai} dari {hasil.total} rincian sesuai · rekap IV.3.2 {hasil.rekapSesuai ? "sesuai" : "belum sesuai"}</small></div>
               </div>
+              {hasil.dicatat !== undefined && kegiatan && (
+                <section><div className="ref" role="status">{hasil.dicatat ? `Tercatat sebagai percobaan ke-${hasil.nomor}${hasil.benar ? ` · ${"★".repeat(hasil.bintang ?? 0)}${"☆".repeat(Math.max(0, 3 - (hasil.bintang ?? 0)))}` : ""}.${hasil.pesanCatat ? ` ${hasil.pesanCatat}` : ""}` : `Hasil tidak dicatat: ${hasil.pesanCatat ?? "gagal"}`}</div></section>
+              )}
               {hasil.kesalahan.length > 0 && (
                 <section><h3>Yang perlu diperbaiki</h3>
                   <ul className="fb">{hasil.kesalahan.map((k, i) => (
@@ -314,9 +352,9 @@ export default function KuesionerPenuh() {
 
       <div className="dock">
         <button type="button" className="btn" disabled={kerja || habisPetunjuk} onClick={mintaPetunjuk}>Petunjuk{totalPetunjuk !== null ? ` ${petunjuk.length}/${totalPetunjuk}` : ""}</button>
-        <button type="button" className="btn pri" disabled={kerja || isian.length === 0} onClick={() => minta(false)}>{kerja ? "Memeriksa…" : "Periksa"}</button>
+        <button type="button" className="btn pri" disabled={kerja || !soal || isian.length === 0} onClick={() => minta(false)}>{kerja ? "Memeriksa…" : "Periksa"}</button>
       </div>
-      <div className="vgfoot"><b>Latihan · Mode Kuesioner Penuh</b> · tidak dicatat</div>
+      <div className="vgfoot"><b>{kegiatan ? "Pelatihan" : "Latihan"} · Mode Kuesioner Penuh</b>{kegiatan ? " · hasil dicatat" : " · tidak dicatat"}</div>
 
       {edit && rincianEdit && (
         <div className="ov" onClick={(e) => { if (e.target === e.currentTarget) setEdit(null); }}>

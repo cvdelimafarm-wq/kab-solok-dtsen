@@ -39,7 +39,7 @@ describe("data kasus publik (V5b)", () => {
 
 // Kode klien (dimuat ke perangkat petugas) tidak boleh mencapai data kasus penuh. Ditelusuri lewat rantai impor dari berkas klien.
 describe("kode klien tidak mengimpor kunci (V5b)", () => {
-  const TERLARANG = [/lib\/vanguard\/kasus\/index\.ts$/, /lib\/vanguard\/kasus\/level-[A-Z]\.json$/, /lib\/vanguard\/rekam\.ts$/, /lib\/vanguard\/kuesioner\/nilaiK\.ts$/, /lib\/vanguard\/kuesioner\/kasus-k\.json$/, /lib\/vanguardAkses\.ts$/, /lib\/vanguardPengaturanDb\.ts$/, /app\/api\//];
+  const TERLARANG = [/lib\/vanguard\/kasus\/index\.ts$/, /lib\/vanguard\/kasus\/level-[A-Z]\.json$/, /lib\/vanguard\/rekam\.ts$/, /lib\/vanguard\/kuesioner\/nilaiK\.ts$/, /lib\/vanguard\/kuesioner\/templat-k\.json$/, /lib\/vanguard\/kuesioner\/templat\.ts$/, /lib\/vanguard\/kuesioner\/rekamK\.ts$/, /lib\/vanguardAkses\.ts$/, /lib\/vanguardPengaturanDb\.ts$/, /app\/api\//];
   const MULAI = ["app/sigap/vanguard/Vanguard.tsx", "app/sigap/vanguard/kuesioner/KuesionerPenuh.tsx", "app/sigap/vanguard/dasbor/Dasbor.tsx", "app/sigap/vanguard/TautanDasborVanguard.tsx", "app/sigap/vanguard/RemarkBawahanVanguard.tsx", "app/portal/KartuVanguard.tsx", "app/sigap/KartuVanguardHariIni.tsx"];
   const coba = (dasar: string): string | null => {
     for (const ekor of ["", ".ts", ".tsx", ".json", "/index.ts", "/index.tsx"]) { const p = dasar + ekor; if (fs.existsSync(p) && fs.statSync(p).isFile()) return p; }

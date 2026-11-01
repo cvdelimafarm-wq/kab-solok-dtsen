@@ -20,6 +20,7 @@ import { bolehMencatat } from "@/lib/vanguardAkses";
 import { barisKesalahan, barisPercobaan, bacaMuatan, modeMasuk, ringkasLemah, ringkasPercobaan, ringkasRiwayat } from "@/lib/vanguard/rekam";
 import { bolehMencoba, hasilFinal, hitungLulus, statusJadwal, ujiBerlaku } from "@/lib/vanguard/pengaturan";
 import { KASUS } from "@/lib/vanguard/kasus";
+import { adalahKasusK } from "@/lib/vanguard/kuesioner/publik";
 import { petaKemampuan } from "@/lib/vanguard/remedial";
 import { muatPengaturan, tambahKalkulator } from "@/lib/vanguardPengaturanDb";
 
@@ -49,14 +50,16 @@ export async function GET(req: NextRequest) {
     const peng = await muatPengaturan(db as Db, kegiatan as number);
     const { data, error } = await db.from("sigap_vanguard_percobaan").select("kasus, benar, bintang, mode").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
     if (error) return galat("Gagal memuat riwayat.", 500);
-    const { data: ks, error: eKs } = await db.from("sigap_vanguard_kesalahan").select("jenis").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
+    const { data: ks, error: eKs } = await db.from("sigap_vanguard_kesalahan").select("jenis, kasus").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
     if (eKs) return galat("Gagal memuat riwayat.", 500);
     // Kegiatan bermode uji memakai BUKU UJI: hanya percobaan bermode "uji" yang dihitung (riwayat, bintang, lulus); latihan sebelumnya tidak ikut.
-    const baris = ((data ?? []) as { kasus: string; benar: boolean; bintang: number; mode?: string }[]).filter((b) => peng.mode !== "uji" || b.mode === "uji");
+    const semuaBaris = ((data ?? []) as { kasus: string; benar: boolean; bintang: number; mode?: string }[]);
+    const baris = semuaBaris.filter((b) => !adalahKasusK(b.kasus)).filter((b) => peng.mode !== "uji" || b.mode === "uji");
     const riwayat = ringkasRiwayat(baris);
+    const riwayatK = ringkasRiwayat(semuaBaris.filter((b) => adalahKasusK(b.kasus))); // Mode Kuesioner Penuh: terpisah dari bintang dan kelulusan
     const uji = ujiBerlaku(peng, Date.now());
     return NextResponse.json({
-      mode: "tercatat", boleh: true, alasan: null, riwayat, lemah: ringkasLemah((ks ?? []) as { jenis: string }[]),
+      mode: "tercatat", boleh: true, alasan: null, riwayat, riwayatK, lemah: ringkasLemah(((ks ?? []) as { jenis: string; kasus: string }[]).filter((k) => !adalahKasusK(k.kasus))),
       uji, ...(uji ? {} : { kemampuan: petaKemampuan(KASUS) }),
       pengaturan: { ...peng, status: statusJadwal(peng, Date.now()) },
       lulus: hitungLulus(peng, riwayat.filter((r) => r.benar).map((r) => r.kasus)),

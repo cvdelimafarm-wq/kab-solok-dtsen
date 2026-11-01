@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { KASUS_K } from "../vanguard/kuesioner/nilaiK";
+import { KASUS_K, soalK } from "../vanguard/kuesioner/nilaiK";
+import { buatDbPalsu } from "./vanguardFakeDb";
 
+vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu({}) }));
 vi.mock("@/lib/sigapAkses", () => ({
   sesiDariHeader: (h: Headers) => (h.get("x-akun") ? Number(h.get("x-akun")) : null),
   aktorDariHeader: () => null,
@@ -56,5 +58,34 @@ describe("POST penilaian", () => {
     const j = await (await kirim({ kode: "K01", isian: [], lihat: true })).json();
     expect(j.kunci).toHaveLength(K.kunci.length);
     expect(j.pembahasan).toBe(K.pembahasan);
+  });
+});
+
+describe("soal acak per benih (V7a)", () => {
+  it("GET soal=1: tanpa benih = benih baru; dengan benih = soal yang sama; benih 0 = baku; kunci/petunjuk tidak ikut", async () => {
+    const a = await (await ambil("kode=K01&soal=1")).json();
+    expect(a.benih).toBeGreaterThan(0);
+    expect(a.catatan.length).toBeGreaterThan(5);
+    expect(Object.keys(a).sort()).toEqual(["benih", "catatan", "cerita", "info", "kode"]);
+    const b = await (await ambil(`kode=K01&soal=1&benih=${a.benih}`)).json();
+    expect(b).toEqual(a);
+    const baku = await (await ambil("kode=K01&soal=1&benih=0")).json();
+    expect(baku.catatan[0]).toContain("2 liter diambil dari warung");
+    expect(baku.catatan[0]).toContain("Rp25.000");
+    expect(JSON.stringify(a)).not.toMatch(/kunci|petunjuk|pembahasan/);
+  });
+  it("benih tidak sah = 400", async () => {
+    for (const b of ["-1", "1.5", "abc", "9999999999", ""]) expect((await ambil(`kode=K01&soal=1&benih=${b}`)).status, b).toBe(400);
+    expect((await kirim({ kode: "K01", isian: [], benih: -5 })).status).toBe(400);
+    expect((await kirim({ kode: "K01", isian: [], benih: "7" })).status).toBe(400);
+  });
+  it("POST dinilai terhadap kunci benih yang sama: kunci benih 123 benar pada benih 123 tetapi tidak pada benih 456", async () => {
+    const kunci = (b: number) => soalK("K01", b)!.kunci;
+    const benar = await (await kirim({ kode: "K01", benih: 123, isian: kunci(123) })).json();
+    expect(benar.benar).toBe(true);
+    const salah = await (await kirim({ kode: "K01", benih: 456, isian: kunci(123) })).json();
+    expect(salah.benar).toBe(false);
+    const tanpaBenih = await (await kirim({ kode: "K01", isian: KASUS_K[0].kunci })).json(); // tanpa benih = baku
+    expect(tanpaBenih.benar).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ export type Galat = { code?: string; message: string } | null;
 
 class Q implements PromiseLike<any> {
   private saring: ((r: Baris) => boolean)[] = [];
-  private op: "select" | "insert" | "upsert" = "select";
+  private op: "select" | "insert" | "upsert" | "update" = "select";
   private konflik: string[] = ["id"];
   private muat: Baris[] = [];
   private opsi: { count?: string; head?: boolean } = {};
@@ -24,6 +24,7 @@ class Q implements PromiseLike<any> {
   in(k: string, v: unknown[]) { this.saring.push((r) => v.includes(r[k])); return this; }
   range(a: number, b: number) { this.dari = a; this.batas = b - a + 1; return this; }
   insert(baris: Baris | Baris[]) { this.op = "insert"; this.muat = Array.isArray(baris) ? baris : [baris]; return this; }
+  update(isi: Baris) { this.op = "update"; this.muat = [isi]; return this; }
   upsert(baris: Baris, o?: { onConflict?: string }) { this.op = "upsert"; this.muat = [baris]; this.konflik = (o?.onConflict ?? "id").split(",").map((x) => x.trim()); return this; }
   maybeSingle() { return Promise.resolve(this.jalan(true)); }
   single() { return Promise.resolve(this.jalan(true)); }
@@ -32,6 +33,10 @@ class Q implements PromiseLike<any> {
     const g = this.gagal(this.nama + ":" + this.op);
     if (g) return { data: null, error: g };
     const tabel = (this.t[this.nama] ??= []);
+    if (this.op === "update") {
+      for (const r of tabel.filter((x) => this.saring.every((f) => f(x)))) Object.assign(r, this.muat[0]);
+      return { data: null, error: null };
+    }
     if (this.op === "upsert") {
       for (const b of this.muat) {
         const ada = tabel.find((r) => this.konflik.every((k) => r[k] === b[k]));

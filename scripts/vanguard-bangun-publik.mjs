@@ -24,10 +24,10 @@ fs.writeFileSync(path.join(dir, "ditangguhkan.json"), JSON.stringify(tangguh) + 
 console.log(`ditangguhkan.json: ${tangguh.length} kode ${tangguh.join(",")}`);
 console.log(`publik.json: ${publik.length} kasus, ${fs.statSync(path.join(dir, "publik.json")).size} byte`);
 
-// (1 Nov 2026) V6d: bahan soal kasus K (Mode Kuesioner Penuh) tanpa kunci, jebakan, petunjuk, pembahasan, rujukan.
+// (1 Nov 2026) V6d/V7a: daftar kasus K untuk perangkat petugas = HANYA kode, level, dan judul. Cerita dan angka dibangun di server dari benih (templat-k.json memuat rumus kunci).
 const dirK = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "lib", "vanguard", "kuesioner");
-const PUBLIK_K = ["kode", "level", "judul", "cerita", "catatan", "info"];
-const kasusK = JSON.parse(fs.readFileSync(path.join(dirK, "kasus-k.json"), "utf8"));
-const publikK = kasusK.map((k) => Object.fromEntries(PUBLIK_K.filter((f) => k[f] !== undefined).map((f) => [f, k[f]])));
+const PUBLIK_K = ["kode", "level", "judul"];
+const templatK = JSON.parse(fs.readFileSync(path.join(dirK, "templat-k.json"), "utf8"));
+const publikK = templatK.map((k) => Object.fromEntries(PUBLIK_K.filter((f) => k[f] !== undefined).map((f) => [f, k[f]])));
 fs.writeFileSync(path.join(dirK, "kasus-k-publik.json"), JSON.stringify(publikK) + "\n");
 console.log(`kasus-k-publik.json: ${publikK.length} kasus`);

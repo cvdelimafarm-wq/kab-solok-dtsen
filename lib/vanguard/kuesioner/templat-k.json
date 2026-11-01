@@ -1,0 +1,799 @@
+[
+ {
+  "kode": "K01",
+  "level": "K",
+  "judul": "Dapur Bu Maryati: minyak, bumbu, minuman, dan bahan lainnya",
+  "parameter": {
+   "minyak_l": {
+    "baku": 2,
+    "pilihan": [
+     2,
+     4,
+     6,
+     8,
+     10
+    ]
+   },
+   "minyak_jual": {
+    "baku": 25000,
+    "pilihan": [
+     24000,
+     25000,
+     26000,
+     27000,
+     28000
+    ]
+   },
+   "kelapa_n": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "kelapa_h": {
+    "baku": 8000,
+    "pilihan": [
+     7000,
+     7500,
+     8000,
+     8500,
+     9000
+    ]
+   },
+   "santan_n": {
+    "baku": 1.5,
+    "pilihan": [
+     1,
+     1.5,
+     2,
+     2.5,
+     3
+    ]
+   },
+   "santan_ml": {
+    "baku": 70,
+    "pilihan": [
+     65,
+     70,
+     75,
+     80,
+     100
+    ]
+   },
+   "santan_h": {
+    "baku": 3000,
+    "pilihan": [
+     2500,
+     3000,
+     3500,
+     4000,
+     4500
+    ]
+   },
+   "gula_kg": {
+    "baku": 1,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "gula_jual": {
+    "baku": 14000,
+    "pilihan": [
+     13000,
+     14000,
+     15000,
+     16000,
+     17000
+    ]
+   },
+   "gm_g": {
+    "baku": 20,
+    "pilihan": [
+     10,
+     20,
+     25,
+     30,
+     40
+    ]
+   },
+   "gm_h": {
+    "baku": 15000,
+    "pilihan": [
+     12000,
+     14000,
+     15000,
+     16000,
+     18000
+    ]
+   },
+   "kopi_hari": {
+    "baku": 7,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
+   },
+   "kopi_jual": {
+    "baku": 1500,
+    "pilihan": [
+     1000,
+     1250,
+     1500,
+     1750,
+     2000
+    ]
+   },
+   "garam_sdt": {
+    "baku": 3,
+    "pilihan": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   "garam_hari": {
+    "baku": 7,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
+   },
+   "garam_bks": {
+    "baku": 150,
+    "pilihan": [
+     100,
+     150,
+     200,
+     250,
+     300
+    ]
+   },
+   "garam_jual": {
+    "baku": 2000,
+    "pilihan": [
+     1500,
+     2000,
+     2500,
+     3000,
+     3500
+    ]
+   },
+   "merica_n": {
+    "baku": 3,
+    "pilihan": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   "merica_g": {
+    "baku": 7,
+    "pilihan": [
+     5,
+     7,
+     10,
+     12,
+     15
+    ]
+   },
+   "merica_h": {
+    "baku": 500,
+    "pilihan": [
+     400,
+     500,
+     600,
+     700,
+     800
+    ]
+   },
+   "kecap_bagian": {
+    "baku": 0.5,
+    "pilihan": [
+     0.5,
+     1,
+     1.5,
+     2,
+     2.5
+    ]
+   },
+   "kecap_ml": {
+    "baku": 135,
+    "pilihan": [
+     135,
+     150,
+     200,
+     250,
+     275
+    ]
+   },
+   "kecap_h": {
+    "baku": 7500,
+    "pilihan": [
+     6500,
+     7000,
+     7500,
+     8000,
+     8500
+    ]
+   },
+   "penyedap_n": {
+    "baku": 4,
+    "pilihan": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   "penyedap_g": {
+    "baku": 11,
+    "pilihan": [
+     8,
+     11,
+     15,
+     20,
+     25
+    ]
+   },
+   "penyedap_h": {
+    "baku": 500,
+    "pilihan": [
+     400,
+     500,
+     600,
+     700,
+     800
+    ]
+   },
+   "tepung_g": {
+    "baku": 200,
+    "pilihan": [
+     100,
+     150,
+     200,
+     250,
+     300
+    ]
+   },
+   "tepung_h": {
+    "baku": 4500,
+    "pilihan": [
+     4000,
+     4500,
+     5000,
+     5500,
+     6000
+    ]
+   },
+   "bumbu_ons": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "bumbu_h": {
+    "baku": 3000,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   },
+   "bihun_n": {
+    "baku": 3,
+    "pilihan": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   "bihun_g": {
+    "baku": 250,
+    "pilihan": [
+     200,
+     250,
+     300,
+     350,
+     400
+    ]
+   },
+   "bihun_h": {
+    "baku": 4000,
+    "pilihan": [
+     3500,
+     4000,
+     4500,
+     5000,
+     5500
+    ]
+   },
+   "bayi_kotak": {
+    "baku": 0.5,
+    "pilihan": [
+     0.5,
+     1,
+     1.5,
+     2,
+     2.5
+    ]
+   },
+   "bayi_isi": {
+    "baku": 100,
+    "pilihan": [
+     80,
+     100,
+     120,
+     125,
+     150
+    ]
+   },
+   "bayi_h": {
+    "baku": 14000,
+    "pilihan": [
+     12000,
+     13000,
+     14000,
+     15000,
+     16000
+    ]
+   }
+  },
+  "turunan": {
+   "minyak_kulak": "minyak_jual-2000",
+   "gula_kulak": "gula_jual-2000",
+   "kopi_kulak": "kopi_jual-500",
+   "garam_kulak": "garam_jual-500",
+   "merica_kulak": "merica_h-100",
+   "kecap_kulak": "kecap_h-300",
+   "penyedap_kulak": "penyedap_h-100",
+   "tepung_kulak": "tepung_h-300",
+   "garam_raw": "garam_sdt*4.8*garam_hari",
+   "garam_g": "bulat(garam_raw)",
+   "bumbu_g": "bumbu_ons*100"
+  },
+  "cerita": "Catatan belanja dan pemakaian dapur rumah tangga Pak Sucipto selama SEMINGGU terakhir (kelompok minyak dan kelapa sampai bahan makanan lainnya). Warung Bu Maryati adalah usaha rumah tangga sendiri: barang yang diambil dari warung dicatat sebagai pembelian pada harga JUAL warung (bukan harga kulakan).",
+  "catatan": [
+   "Minyak goreng: {minyak_l} liter diambil dari warung. Harga kulakan kemasan 2 liter {minyak_kulak:rp}; harga jual di warung {minyak_jual:rp}.",
+   "Kelapa: {kelapa_n} butir dibeli di pasar, {kelapa_h:rp} per butir.",
+   "Santan instan: {santan_n} kemasan @{santan_ml} ml dibeli di minimarket, {santan_h:rp} per kemasan.",
+   "Gula pasir: {gula_kg} kg dari warung. Harga kulakan {gula_kulak:rp}/kg; harga jual {gula_jual:rp}/kg.",
+   "Gula merah: sekitar {gm_g} gram dari pembelian di pasar, harga {gm_h:rp} per kg.",
+   "Kopi instan: tiap hari 1 sachet (kemasan 20 gram) dari warung, {kopi_hari} hari. Harga kulakan {kopi_kulak:rp}; harga jual {kopi_jual:rp} per sachet.",
+   "Garam: tiap hari {garam_sdt} sendok teh dari warung, {garam_hari} hari. Sebungkus garam {garam_bks} gram dijual {garam_jual:rp} (kulakan {garam_kulak:rp}).",
+   "Merica: {merica_n} sachet kemasan {merica_g} gram dari warung. Harga jual {merica_h:rp} per sachet (kulakan {merica_kulak:rp}).",
+   "Kecap manis: {kecap_bagian} botol kemasan {kecap_ml} ml dari warung. Harga jual {kecap_h:rp} per botol (kulakan {kecap_kulak:rp}). Satuan kuesioner kecap: 100 ml.",
+   "Penyedap masakan: {penyedap_n} bungkus kemasan {penyedap_g} gram dari warung. Harga jual {penyedap_h:rp} per bungkus (kulakan {penyedap_kulak:rp}).",
+   "Tepung bumbu: 1 bungkus {tepung_g} gram dari warung, dipakai untuk tempe goreng. Harga jual {tepung_h:rp} (kulakan {tepung_kulak:rp}).",
+   "Bumbu dapur: 1 bungkus sekitar {bumbu_ons} ons dibeli di pasar, {bumbu_h:rp} per bungkus.",
+   "Bihun: {bihun_n} bungkus kemasan {bihun_g} gram dibeli di pasar, {bihun_h:rp} per bungkus.",
+   "Bubur bayi: {bayi_kotak} kotak kemasan {bayi_isi} gram dimakan Naldo (bayi). Harga {bayi_h:rp} per kotak. Satuan kuesioner: kotak kecil = 150 gram."
+  ],
+  "info": [
+   "1 sendok teh garam = 4,8 gram.",
+   "1 ons = 100 gram; 1 kg = 10 ons.",
+   "Pembulatan matematika: banyaknya 2 desimal (garam dalam gram dibulatkan ke bilangan bulat), nilai rupiah utuh.",
+   "Rincian yang tidak punya baris sendiri dicatat pada baris \"lainnya (sebutkan)\" dengan nama komoditas huruf kapital dan satuan standar."
+  ],
+  "kunci": [
+   {
+    "r": 156,
+    "k1": "minyak_l",
+    "k2": "minyak_jual*minyak_l/2"
+   },
+   {
+    "r": 157,
+    "k1": "kelapa_n",
+    "k2": "kelapa_n*kelapa_h"
+   },
+   {
+    "r": 158,
+    "k1": "bulat2(santan_n*santan_ml)",
+    "k2": "bulat(santan_n*santan_h)",
+    "nama": "SANTAN INSTAN",
+    "satuan": "ML"
+   },
+   {
+    "r": 160,
+    "k1": "gula_kg*10",
+    "k2": "gula_kg*gula_jual"
+   },
+   {
+    "r": 161,
+    "k1": "bulat2(gm_g/100)",
+    "k2": "bulat(gm_g*gm_h/1000)"
+   },
+   {
+    "r": 165,
+    "k1": "kopi_hari",
+    "k2": "kopi_hari*kopi_jual"
+   },
+   {
+    "r": 168,
+    "k1": "garam_g",
+    "k2": "bulat(garam_g*garam_jual/garam_bks)"
+   },
+   {
+    "r": 171,
+    "k1": "merica_n*merica_g",
+    "k2": "merica_n*merica_h"
+   },
+   {
+    "r": 176,
+    "k1": "bulat2(kecap_bagian*kecap_ml/100)",
+    "k2": "bulat(kecap_bagian*kecap_h)"
+   },
+   {
+    "r": 177,
+    "k1": "penyedap_n*penyedap_g",
+    "k2": "penyedap_n*penyedap_h"
+   },
+   {
+    "r": 180,
+    "k1": "tepung_g",
+    "k2": "tepung_h"
+   },
+   {
+    "r": 181,
+    "k1": "bumbu_g",
+    "k2": "bumbu_h"
+   },
+   {
+    "r": 185,
+    "k1": "bulat2(bayi_kotak*bayi_isi/150)",
+    "k2": "bulat(bayi_kotak*bayi_h)"
+   },
+   {
+    "r": 186,
+    "k1": "bihun_n*bihun_g",
+    "k2": "bihun_n*bihun_h",
+    "nama": "BIHUN",
+    "satuan": "GRAM"
+   }
+  ],
+  "jebakan": [
+   {
+    "r": 158,
+    "k": "nama",
+    "m": "Santan instan tidak punya baris sendiri: catat di R158 (minyak dan kelapa lainnya), tulis SANTAN INSTAN dan satuan ML."
+   },
+   {
+    "r": 186,
+    "k": "nama",
+    "m": "Bihun dicatat di R186 (bahan makanan lainnya) dengan nama BIHUN dan satuan GRAM."
+   },
+   {
+    "r": 168,
+    "k": "harga",
+    "m": "Barang dari warung sendiri dicatat pada harga JUAL warung, bukan harga kulakan. Margin warung masuk Blok V.B, bukan di sini."
+   }
+  ],
+  "petunjuk": [
+   "Mulai dari kelompok mana setiap barang berada? Tiap barang punya nomor rincian sendiri.",
+   "Semua barang pada catatan ini berasal dari pembelian (kolom 5 dan 6), termasuk yang diambil dari warung sendiri.",
+   "Ubah semua pemakaian ke satuan baku kuesioner (ons, gram, ml, liter, butir) sebelum mengisi banyaknya."
+  ],
+  "pembahasan": "Konsumsi dari warung sendiri dicatat di kolom pembelian pada harga jual; margin perdagangannya menjadi nilai produksi Blok V.B. Komoditas tanpa baris sendiri dicatat pada baris \"lainnya\" dengan nama dan satuan. Banyaknya dikonversi ke satuan standar rincian (mis. garam: {garam_sdt} sendok teh × 4,8 gram × {garam_hari} hari = {garam_raw} → {garam_g} gram).",
+  "rujukan": "Buku 4 hlm. 269–276"
+ },
+ {
+  "kode": "K02",
+  "level": "K",
+  "judul": "Keluarga Pak Sucipto: makanan jadi dan rokok tiap anggota",
+  "parameter": {
+   "galon_n": {
+    "baku": 6,
+    "pilihan": [
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "galon_h": {
+    "baku": 7000,
+    "pilihan": [
+     6000,
+     6500,
+     7000,
+     7500,
+     8000
+    ]
+   },
+   "rames_hari": {
+    "baku": 6,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
+   },
+   "rames_h": {
+    "baku": 10000,
+    "pilihan": [
+     8000,
+     9000,
+     10000,
+     12000,
+     15000
+    ]
+   },
+   "rokok_isi": {
+    "baku": 16,
+    "pilihan": [
+     10,
+     12,
+     14,
+     16,
+     20
+    ]
+   },
+   "rokok_h": {
+    "baku": 17000,
+    "pilihan": [
+     15000,
+     17000,
+     20000,
+     22000,
+     25000
+    ]
+   },
+   "rawon_h": {
+    "baku": 16000,
+    "pilihan": [
+     12000,
+     14000,
+     16000,
+     18000,
+     20000
+    ]
+   },
+   "nasi_h": {
+    "baku": 3000,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   },
+   "esjeruk_h": {
+    "baku": 5000,
+    "pilihan": [
+     3000,
+     4000,
+     5000,
+     6000,
+     7000
+    ]
+   },
+   "siomai_kali": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "siomai_isi": {
+    "baku": 4,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     8
+    ]
+   },
+   "siomai_h": {
+    "baku": 4000,
+    "pilihan": [
+     3000,
+     3500,
+     4000,
+     4500,
+     5000
+    ]
+   },
+   "tahu_n": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "tahu_h": {
+    "baku": 1500,
+    "pilihan": [
+     1000,
+     1500,
+     2000,
+     2500,
+     3000
+    ]
+   },
+   "bubur_tot": {
+    "baku": 1,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "bubur_h": {
+    "baku": 8000,
+    "pilihan": [
+     6000,
+     7000,
+     8000,
+     9000,
+     10000
+    ]
+   }
+  },
+  "turunan": {
+   "bubur_sep": "bubur_tot/2",
+   "siomai_porsi": "bulat2(siomai_kali*siomai_isi/5)"
+  },
+  "cerita": "Catatan makanan dan minuman JADI serta rokok rumah tangga Pak Sucipto selama SEMINGGU terakhir. Makanan jadi dan rokok dicatat PER ANGGOTA rumah tangga (nomor ART), dan kolom sumber perolehan wajib diisi: 0 = bukan pembelian (pemberian dan sejenisnya), 1 = pembelian online, 2 = pembelian offline, 3 = online dan offline.",
+  "catatan": [
+   "Pak Sucipto (ART 1): minum air isi ulang {galon_n} galon seminggu, harga {galon_h:rp} per galon, dibeli di depot. Airnya diminum bersama keluarga dan sulit dipisahkan per orang, jadi dicatat pada Pak Sucipto.",
+   "Pak Sucipto (ART 1): dalam seminggu bekerja {rames_hari} hari kerja. Setiap hari kerja makan siang nasi rames di tempat kerja, {rames_h:rp} per porsi.",
+   "Pak Sucipto (ART 1): satu bungkus rokok kretek filter isi {rokok_isi} batang, {rokok_h:rp} per bungkus, dibeli di warung. Dihabiskan seminggu itu.",
+   "Bu Maryati (ART 2): dibelikan tetangga satu porsi rawon ({rawon_h:rp}), satu porsi nasi putih ({nasi_h:rp}), dan satu gelas es jeruk ({esjeruk_h:rp}). Semuanya pemberian tetangga, bukan dibeli.",
+   "Tami (ART 3): membeli di sekolah {siomai_kali} kali siomai, masing-masing satu porsi isi {siomai_isi} buah, {siomai_h:rp} per porsi. Satu porsi standar siomai = 5 buah. Tami juga membeli {tahu_n} potong tahu goreng, {tahu_h:rp} per potong.",
+   "Desi (ART 4): membeli {bubur_tot} porsi bubur kacang hijau dari tetangga ({bubur_h:rp} per porsi). Desi memakan separuhnya; separuh lainnya diberikan kepada Tami (ART 3).",
+   "Naldo (ART 5): bayi, hanya minum ASI dan bubur bayi kemasan. Tidak ada makanan atau minuman jadi."
+  ],
+  "info": [
+   "Anggota rumah tangga: 1 Pak Sucipto, 2 Bu Maryati, 3 Tami, 4 Desi, 5 Naldo.",
+   "Semua pembelian pada catatan ini dilakukan langsung (offline) kecuali disebut lain.",
+   "Anggota yang tidak mengonsumsi apa pun (Naldo) tidak diisi rincian apa pun; di kuesioner kertas ditandai Z.",
+   "Pembulatan matematika: banyaknya 2 desimal, nilai rupiah utuh.",
+   "Rincian: 192 gorengan (potong), 196 nasi campur/rames, 198 nasi putih, 200 soto/rawon, 210 siomai/batagor (5 potong = 1 porsi), 194 bubur kacang hijau, 213 air galon, 216 minuman jadi (gelas), 221 rokok kretek filter (batang)."
+  ],
+  "kunci": [
+   {
+    "r": 213,
+    "art": 1,
+    "k1": "galon_n",
+    "k2": "galon_n*galon_h",
+    "sumber": 2
+   },
+   {
+    "r": 196,
+    "art": 1,
+    "k1": "rames_hari",
+    "k2": "rames_hari*rames_h",
+    "sumber": 2
+   },
+   {
+    "r": 221,
+    "art": 1,
+    "k1": "rokok_isi",
+    "k2": "rokok_h",
+    "sumber": 2
+   },
+   {
+    "r": 200,
+    "art": 2,
+    "k3": 1,
+    "k4": "rawon_h",
+    "sumber": 0
+   },
+   {
+    "r": 198,
+    "art": 2,
+    "k3": 1,
+    "k4": "nasi_h",
+    "sumber": 0
+   },
+   {
+    "r": 216,
+    "art": 2,
+    "k3": 1,
+    "k4": "esjeruk_h",
+    "sumber": 0
+   },
+   {
+    "r": 192,
+    "art": 3,
+    "k1": "tahu_n",
+    "k2": "tahu_n*tahu_h",
+    "sumber": 2
+   },
+   {
+    "r": 210,
+    "art": 3,
+    "k1": "siomai_porsi",
+    "k2": "siomai_kali*siomai_h",
+    "sumber": 2
+   },
+   {
+    "r": 194,
+    "art": 3,
+    "k3": "bubur_sep",
+    "k4": "bulat(bubur_sep*bubur_h)",
+    "sumber": 0
+   },
+   {
+    "r": 194,
+    "art": 4,
+    "k1": "bubur_sep",
+    "k2": "bulat(bubur_sep*bubur_h)",
+    "sumber": 2
+   }
+  ],
+  "jebakan": [
+   {
+    "r": 213,
+    "k": "art",
+    "m": "Air isi ulang yang diminum bersama dicatat pada satu anggota saja (Pak Sucipto), bukan dibagi atau dikosongkan."
+   },
+   {
+    "r": 196,
+    "k": "hitung",
+    "m": "Banyaknya = jumlah hari kerja × 1 porsi; nilainya harga per porsi × banyaknya."
+   },
+   {
+    "r": 210,
+    "k": "satuan",
+    "m": "Siomai dikonversi ke porsi standar: banyaknya porsi × isi per porsi ÷ 5 buah."
+   },
+   {
+    "r": 200,
+    "k": "sumber",
+    "m": "Pemberian tetangga dicatat di kolom produksi sendiri/pemberian (kolom 7 dan 8) dengan kode sumber 0, bukan sebagai pembelian."
+   },
+   {
+    "r": 194,
+    "k": "art",
+    "m": "Separuh bubur yang dimakan Desi dibeli (kolom 5 dan 6, kode 2); separuh untuk Tami adalah pemberian (kolom 7 dan 8, kode 0)."
+   }
+  ],
+  "petunjuk": [
+   "Makanan jadi dan rokok dicatat per anggota rumah tangga: pilih nomor ART sebelum mengisi.",
+   "Beda pembelian dan pemberian: pembelian di kolom 5–6, pemberian di kolom 7–8. Kode sumber (K7) mengikuti.",
+   "Ubah ke satuan baku rincian (porsi standar, potong, gelas, batang) sebelum mengisi banyaknya."
+  ],
+  "pembahasan": "Makanan dan minuman jadi serta rokok dicatat per anggota rumah tangga dengan kode sumber perolehan: 0 untuk bukan pembelian, 1 online, 2 offline, 3 campuran. Pembelian masuk kolom 5–6, pemberian atau produksi sendiri kolom 7–8. Konsumsi bersama yang sulit dipisahkan boleh dicatat pada satu anggota. Anggota yang tidak mengonsumsi tidak diisi (Z di kertas). Porsi tidak standar dikonversi ke satuan baku (siomai: 5 buah = 1 porsi; di soal ini {siomai_kali} porsi × {siomai_isi} buah ÷ 5 buah = {siomai_porsi} porsi standar).",
+  "rujukan": "Buku 4 hlm. 276–282"
+ }
+]

@@ -5,6 +5,7 @@
 // Satu "pasangan" = satu petugas pada satu kasus. Peserta = akun dengan penugasan aktif di kegiatan itu (sebagai penyebut).
 
 import { cariKasusPublik, KODE_DITANGGUHKAN } from "./kasus/daftar";
+import { adalahKasusK } from "./kuesioner/publik";
 import { hasilFinal, PENGATURAN_BAWAAN, type Pengaturan, type StatusFinal } from "./pengaturan";
 import { labelSel } from "./sel";
 import type { JenisKesalahan, Tingkat } from "./tipe";
@@ -100,8 +101,8 @@ export function bukuPerAkun(peng: Pengaturan, perc: BarisPercobaanDb[]): Map<num
 
 export function susunDasbor(peserta: Peserta[], percSemua: BarisPercobaanDb[], kesSemua: BarisKesalahanDb[], namaLain: Record<number, string> = {}, opsi: OpsiDasbor = {}): Dasbor {
   // Kasus yang DITANGGUHKAN tidak dihitung (rekaman lama atasnya diabaikan).
-  const perc = percSemua.filter((p) => !KODE_DITANGGUHKAN.has(p.kasus));
-  const kes = kesSemua.filter((e) => !KODE_DITANGGUHKAN.has(e.kasus));
+  const perc = percSemua.filter((p) => !KODE_DITANGGUHKAN.has(p.kasus) && !adalahKasusK(p.kasus)); // kasus K (Mode Kuesioner Penuh) dihitung terpisah
+  const kes = kesSemua.filter((e) => !KODE_DITANGGUHKAN.has(e.kasus) && !adalahKasusK(e.kasus));
   const peng = opsi.pengaturan ?? PENGATURAN_BAWAAN;
   const kalk = opsi.kalkulator ?? {};
   const namaAkun = new Map(peserta.map((p) => [p.akun_id, p]));
