@@ -451,6 +451,13 @@ function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicata
       </div>
       <div className="sheet"><span className="tag">Cara main</span><p style={{ fontSize: 13 }}>Baca hasil wawancara dan kutipan Blok IV, lalu isi Blok V (dan VI–VII pada kasus lengkap) seperti di kuesioner. <b>Ketuk kotak isian</b> untuk memasukkan angka; kalkulator ada di lembar isian. Sel <span className="sw" style={{ background: "#a6a6a6", width: 11, height: 11 }} /> abu-abu tidak berlaku. Kotak bertinta biru adalah isian Anda; kotak abu muda dihitung otomatis.</p></div>
       <div className="panel"><div className="jd">RINGKASAN SAYA</div><div style={{ fontSize: 13, marginTop: 3 }}>{selesai} dari {total} kasus sudah dikerjakan.</div></div>
+      <div className="panel" role="region" aria-label="Sertifikasi kemampuan">
+        <div className="jd">SERTIFIKASI KEMAMPUAN · BARU</div>
+        <div style={{ fontSize: 12.5, marginTop: 3 }}>Ujian 15 butir acak dan berimbang (angka berbeda tiap ujian), hasilnya tingkat 1–5 bintang: Pemula sampai Expert. Hanya kepemilikan, belum berdampak ke penilaian.</div>
+        <Link className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/sertifikasi?dari=${encodeURIComponent(balik)}`}>
+          <span className="num">★</span><span className="t">Ujian Sertifikasi<small>Cek kemampuan Anda dan raih bintang</small></span><span className="st">▶</span>
+        </Link>
+      </div>
       <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
         <div className="jd">MODE KUESIONER PENUH · UJI COBA</div>
         <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. {kegiatanK ? "Percobaan dicatat seperti kasus lain." : "Hanya latihan, tidak dicatat."}</div>

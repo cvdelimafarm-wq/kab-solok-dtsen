@@ -1,0 +1,1208 @@
+[
+ {
+  "kode": "A01",
+  "parameter": {
+   "butir": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "h": {
+    "baku": 3000,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "butir*h",
+   "tahun": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A01",
+   "level": "A",
+   "judul": "Telur asin kiriman saudara",
+   "cerita": "Seminggu terakhir keluarga Pak Hendra (4 ART) menghabiskan {butir} butir telur asin kiriman saudaranya yang tinggal di rumah lain.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 78,
+      "kode": "01148",
+      "rin": "Telur lainnya (telur puyuh, telur asin mentah maupun matang, dll.)",
+      "sat": "Butir",
+      "beli": null,
+      "prod": [
+       "{butir:d2}",
+       "=butir*h"
+      ],
+      "jml": [
+       "{butir:d2}",
+       "=butir*h"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_bantuan_barangD",
+     "m": "Pemberinya saudara (rumah tangga lain), bukan pemerintah."
+    },
+    {
+     "k": "e_rtLain_uangD",
+     "m": "Telur asin adalah barang, bukan uang: gunakan kolom (3)."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Pemberinya saudara yang tinggal di rumah lain. Baris mana di V.E?",
+    "Barang yang diterima = Kolom (3). Nilai seminggu harus dijadikan nilai setahun: × 30/7 × 12."
+   ],
+   "langkah": [
+    "Nilai Blok IV.1 = <code>{nilai:rp}</code> untuk seminggu.",
+    "Ke setahun: <code>{nilai} × 30/7 × 12 = {tahun}</code>.",
+    "Pemberian rumah tangga lain → V.E Rincian 3, Kolom (3) barang/jasa diterima."
+   ],
+   "pembahasan": "Konsumsi barang pemberian dicatat di Blok IV.1 kolom 7–8, lalu diimputasi sebagai transfer barang/jasa diterima dari rumah tangga lain senilai harga pasar × 30/7 × 12. Mengisi {nilai:rp} berarti nilai seminggu, bukan setahun.",
+   "rujukan": "Buku 4 hlm. 336 dan 350"
+  }
+ },
+ {
+  "kode": "A02",
+  "parameter": {
+   "hari": {
+    "baku": 5,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
+   },
+   "h": {
+    "baku": 15000,
+    "pilihan": [
+     12000,
+     13000,
+     15000,
+     17000,
+     20000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "hari*h",
+   "tahun": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A02",
+   "level": "A",
+   "judul": "MBG untuk anak sekolah",
+   "cerita": "Rini (SD) menerima MBG dari sekolah selama {hari} hari pada seminggu terakhir. Perkiraan harga {h:rp} per porsi.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 196,
+      "kode": "—",
+      "rin": "Nasi campur/rames",
+      "sat": "Porsi",
+      "beli": null,
+      "prod": [
+       "{hari:d2}",
+       "=hari*h"
+      ],
+      "jml": [
+       "{hari:d2}",
+       "=hari*h"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_barangD",
+     "m": "MBG berasal dari pemerintah, jadi baris 1.b, bukan baris 3 (rumah tangga lain)."
+    },
+    {
+     "k": "e_bantuan_uangD",
+     "m": "MBG berupa makanan, bukan uang: gunakan kolom (3)."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "MBG adalah program pemerintah. Baris mana yang memuat bantuan pemerintah?",
+    "Berupa makanan (barang/jasa), jadi kolom (3), dan nilainya setahun."
+   ],
+   "langkah": [
+    "Nilai Blok IV.1 = {hari} × {h} = <code>{nilai}</code> (seminggu).",
+    "Ke setahun: <code>{nilai} × 30/7 × 12 = {tahun}</code>.",
+    "Pemberi pemerintah → V.E 1.b; barang/jasa diterima → Kolom (3)."
+   ],
+   "pembahasan": "Penerimaan Program MBG termasuk bantuan pemerintah (V.E 1.b). Karena berupa makanan, nilainya dicatat di kolom barang/jasa diterima setelah dikonversi ke setahun.",
+   "rujukan": "Buku 4 hlm. 335 dan 361"
+  }
+ },
+ {
+  "kode": "A03",
+  "parameter": {
+   "bantuan": {
+    "baku": 200000,
+    "pilihan": [
+     150000,
+     200000,
+     250000,
+     300000,
+     350000
+    ]
+   },
+   "kg": {
+    "baku": 9,
+    "pilihan": [
+     8,
+     9,
+     10,
+     11,
+     12
+    ]
+   },
+   "hb": {
+    "baku": 11000,
+    "pilihan": [
+     10000,
+     11000,
+     12000,
+     13000,
+     14000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "kg*hb",
+   "tahun": "bantuan*12",
+   "alt": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A03",
+   "level": "A",
+   "judul": "Program Sembako",
+   "cerita": "Bu Sari menerima Program Sembako {bantuan:rp} setiap bulan sepanjang tahun, dipakai membeli beras. Seminggu terakhir keluarganya mengonsumsi {kg} kg beras dari dana itu.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 2,
+      "kode": "01111",
+      "rin": "Beras (beras lokal, medium, premium, dan impor)",
+      "sat": "Kg",
+      "beli": [
+       "{kg:d2}",
+       "=kg*hb"
+      ],
+      "prod": null,
+      "jml": [
+       "{kg:d2}",
+       "=kg*hb"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_uangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_bantuan_barangD",
+     "m": "Sembako berupa saldo uang, jadi dicatat sebagai uang (kolom 2), bukan barang."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "e_bantuan_uangD",
+     "v": "=alt",
+     "m": "Anda menghitung dari beras yang dikonsumsi. Nilai transfer adalah nilai bantuan setahun (Rp{bantuan} × 12)."
+    }
+   ],
+   "petunjuk": [
+    "Sembako adalah bantuan pemerintah. Bentuknya uang (tunai atau nontunai) atau barang?",
+    "Nilai bantuan dihitung setahun penuh, bukan dari konsumsi beras seminggu."
+   ],
+   "langkah": [
+    "Bantuan setahun = <code>200.000 × 12 = 2.400.000</code>.",
+    "Berupa uang tunai/nontunai → V.E 1.b, Kolom (2) uang diterima.",
+    "Beras yang dibeli tetap pembelian di IV.1; tidak dicatat lagi sebagai transfer barang."
+   ],
+   "pembahasan": "Bantuan dalam bentuk uang (tunai maupun nontunai) dicatat di kolom uang diterima sebesar nilai setahun. Pembelian beras dengan dana itu tetap pembelian di Blok IV.1.",
+   "rujukan": "Buku 4 hlm. 337"
+  }
+ },
+ {
+  "kode": "A04",
+  "parameter": {
+   "nilai": {
+    "baku": 18000,
+    "pilihan": [
+     15000,
+     18000,
+     20000,
+     22000,
+     25000
+    ]
+   },
+   "kg": {
+    "baku": 0.3,
+    "pilihan": [
+     0.2,
+     0.3,
+     0.4,
+     0.5,
+     0.6
+    ]
+   },
+   "biaya": {
+    "baku": 60000,
+    "pilihan": [
+     40000,
+     50000,
+     60000,
+     70000,
+     80000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "bulat(nilai*30/7*12)",
+   "surplus": "tahun-biaya"
+  },
+  "kasus": {
+   "kode": "A04",
+   "level": "A",
+   "judul": "Cabai dari pekarangan",
+   "cerita": "Seminggu terakhir keluarga mengonsumsi {kg} kg cabai rawit dari pekarangan sendiri (harga pasar {nilai:rp}). Biaya bibit dan pupuk setahun terakhir {biaya:rp}.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 110,
+      "kode": "01172",
+      "rin": "Cabai rawit",
+      "sat": "Kg",
+      "beli": null,
+      "prod": [
+       "{kg:d2}",
+       "=nilai"
+      ],
+      "jml": [
+       "{kg:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_hasilLain_produksi": "=tahun",
+    "c_hasilLain_biaya": "=biaya"
+   },
+   "jebakan": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "m": "Rincian 1 hanya untuk perkiraan sewa rumah milik sendiri."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "c_hasilLain_produksi",
+     "v": "=nilai",
+     "m": "Nilai Anda masih seminggu. Kalikan 30/7 × 12."
+    }
+   ],
+   "petunjuk": [
+    "Hasil pekarangan yang dikonsumsi sendiri masuk rincian mana di V.C?",
+    "Kolom (2) nilai setahun, kolom (3) biaya. Surplus dihitung otomatis."
+   ],
+   "langkah": [
+    "Kolom (2): <code>{nilai} × 30/7 × 12 = {tahun}</code>.",
+    "Kolom (3): biaya bibit dan pupuk = <code>{biaya}</code>.",
+    "Kolom (4) terhitung otomatis: <code>{tahun} − {biaya} = {surplus}</code>."
+   ],
+   "pembahasan": "Hasil pertanian yang dikonsumsi sendiri dicatat di V.C Rincian 2: nilai produksi (harga pasar × 30/7 × 12), biaya produksi, dan surplus sebagai selisihnya.",
+   "rujukan": "Buku 4 hlm. 330 dan 332"
+  }
+ },
+ {
+  "kode": "A05",
+  "parameter": {
+   "r": {
+    "baku": 16000,
+    "pilihan": [
+     12000,
+     14000,
+     16000,
+     18000,
+     20000
+    ]
+   },
+   "n": {
+    "baku": 3000,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   },
+   "e": {
+    "baku": 5000,
+    "pilihan": [
+     3000,
+     4000,
+     5000,
+     6000,
+     7000
+    ]
+   }
+  },
+  "turunan": {
+   "total": "r+n+e",
+   "tahun": "bulat(total*30/7*12)",
+   "rt": "bulat(r*30/7*12)",
+   "nt": "bulat(n*30/7*12)",
+   "et": "bulat(e*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A05",
+   "level": "A",
+   "judul": "Makanan jadi pemberian tetangga",
+   "cerita": "Seminggu terakhir Bu Maryati dibelikan tetangga satu porsi rawon ({r:rp}), nasi putih ({n:rp}), dan satu gelas es ({e:rp}).",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 200,
+      "kode": "—",
+      "rin": "Soto, gule, sop, rawon, cincang",
+      "sat": "Porsi",
+      "beli": null,
+      "prod": [
+       "1,00",
+       "=r"
+      ],
+      "jml": [
+       "1,00",
+       "=r"
+      ]
+     },
+     {
+      "no": 198,
+      "kode": "—",
+      "rin": "Nasi putih",
+      "sat": "Porsi",
+      "beli": null,
+      "prod": [
+       "1,00",
+       "=n"
+      ],
+      "jml": [
+       "1,00",
+       "=n"
+      ]
+     },
+     {
+      "no": 218,
+      "kode": "—",
+      "rin": "Es lainnya",
+      "sat": "Porsi",
+      "beli": null,
+      "prod": [
+       "1,00",
+       "=e"
+      ],
+      "jml": [
+       "1,00",
+       "=e"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_bantuan_barangD",
+     "m": "Pemberinya tetangga (rumah tangga lain), bukan pemerintah."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Pemberinya tetangga. Baris mana di V.E, dan kolom uang atau barang?",
+    "Setiap nilai seminggu dikali 30/7 × 12, lalu dijumlahkan."
+   ],
+   "langkah": [
+    "Rawon <code>{r} × 30/7 × 12 = {rt}</code>.",
+    "Nasi putih <code>{n} × 30/7 × 12 = {nt}</code>; es <code>{e} × 30/7 × 12 = {et}</code>.",
+    "Total <code>{tahun}</code> → V.E baris 3, Kolom (3)."
+   ],
+   "pembahasan": "Makanan pemberian yang dikonsumsi dicatat di Blok IV (kolom pemberian) dan diimputasi sebagai transfer barang/jasa diterima dari rumah tangga lain senilai harga × 30/7 × 12.",
+   "rujukan": "Buku 4 hlm. 338"
+  }
+ },
+ {
+  "kode": "A06",
+  "parameter": {
+   "p": {
+    "baku": 9000,
+    "pilihan": [
+     7000,
+     8000,
+     9000,
+     10000,
+     12000
+    ]
+   },
+   "m": {
+    "baku": 30000,
+    "pilihan": [
+     20000,
+     25000,
+     30000,
+     35000,
+     40000
+    ]
+   },
+   "pupuk": {
+    "baku": 10000,
+    "pilihan": [
+     8000,
+     10000,
+     12000,
+     15000,
+     20000
+    ]
+   }
+  },
+  "turunan": {
+   "tot": "p+m",
+   "tahun": "bulat(tot*30/7*12)",
+   "pt": "bulat(p*30/7*12)",
+   "mt": "bulat(m*30/7*12)",
+   "biaya": "pupuk*12",
+   "surplus": "tahun-biaya"
+  },
+  "kasus": {
+   "kode": "A06",
+   "level": "A",
+   "judul": "Mangga dan daun pepaya dari kebun",
+   "cerita": "Seminggu terakhir keluarga Pak Sucipto mengonsumsi daun pepaya ({p:rp}) dan mangga ({m:rp}) dari kebunnya yang tidak diperjualbelikan. Pupuk untuk pohon-pohon itu {pupuk:rp} per bulan.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 111,
+      "kode": "01171",
+      "rin": "Daun pepaya",
+      "sat": "Kg",
+      "beli": null,
+      "prod": [
+       "1,00",
+       "=p"
+      ],
+      "jml": [
+       "1,00",
+       "=p"
+      ]
+     },
+     {
+      "no": 131,
+      "kode": "01161",
+      "rin": "Mangga",
+      "sat": "Kg",
+      "beli": null,
+      "prod": [
+       "2,00",
+       "=m"
+      ],
+      "jml": [
+       "2,00",
+       "=m"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_hasilLain_produksi": "=tahun",
+    "c_hasilLain_biaya": "=biaya"
+   },
+   "jebakan": [
+    {
+     "k": "c_sewaRumah_produksi",
+     "m": "Rincian 1 hanya untuk perkiraan sewa rumah milik sendiri."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "c_hasilLain_produksi",
+     "v": "=tot",
+     "m": "Nilai Anda masih seminggu. Kalikan 30/7 × 12."
+    }
+   ],
+   "petunjuk": [
+    "Hasil kebun yang dikonsumsi sendiri masuk V.C rincian berapa?",
+    "Kedua komoditas dikali 30/7 × 12 lalu dijumlahkan; biaya pupuk dikali 12."
+   ],
+   "langkah": [
+    "Daun pepaya <code>{p} × 30/7 × 12 = {pt}</code>; mangga <code>{m} × 30/7 × 12 = {mt}</code>.",
+    "Kolom (2) = <code>{tahun}</code>.",
+    "Kolom (3): <code>{pupuk} × 12 = {biaya}</code>. Kolom (4) otomatis."
+   ],
+   "pembahasan": "Hasil pertanian yang dikonsumsi sendiri dicatat di V.C Rincian 2. Contoh Buku 4 menghasilkan nilai produksi {tahun:rp}, biaya {biaya:rp}, dan surplus {surplus:rp}.",
+   "rujukan": "Buku 4 hlm. 332"
+  }
+ },
+ {
+  "kode": "A07",
+  "parameter": {
+   "butir": {
+    "baku": 10,
+    "pilihan": [
+     6,
+     8,
+     10,
+     12,
+     15
+    ]
+   },
+   "h": {
+    "baku": 2500,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   },
+   "pakan": {
+    "baku": 240000,
+    "pilihan": [
+     120000,
+     180000,
+     240000,
+     300000,
+     360000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "butir*h",
+   "tahun": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A07",
+   "level": "A",
+   "judul": "Telur dari ayam sendiri",
+   "cerita": "Seminggu terakhir keluarga mengonsumsi {butir} butir telur dari ayam kampung yang dipelihara sendiri (harga pasar {h:rp} per butir). Biaya pakan setahun {pakan:rp}.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 76,
+      "kode": "01148",
+      "rin": "Telur ayam kampung",
+      "sat": "Butir",
+      "beli": null,
+      "prod": [
+       "{butir:d2}",
+       "=nilai"
+      ],
+      "jml": [
+       "{butir:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_hasilLain_produksi": "=tahun",
+    "c_hasilLain_biaya": "=pakan"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "c_hasilLain_produksi",
+     "v": "=nilai",
+     "m": "Nilai Anda masih seminggu. Kalikan 30/7 × 12."
+    }
+   ],
+   "petunjuk": [
+    "Ayam yang dipelihara sendiri adalah produksi rumah tangga untuk dikonsumsi sendiri.",
+    "Nilai dikali 30/7 × 12; biaya pakan sudah setahun."
+   ],
+   "langkah": [
+    "Nilai Blok IV.1 = {butir} × {h} = <code>{nilai}</code>.",
+    "Kolom (2): <code>{nilai} × 30/7 × 12 = {tahun}</code>. Kolom (3): <code>{pakan}</code>."
+   ],
+   "pembahasan": "Konsumsi ayam, telur, dan ikan dari pemeliharaan sendiri dinilai harga pasar, sedangkan biaya produksinya biaya pemeliharaan (pakan, dll.).",
+   "rujukan": "Buku 4 hlm. 330"
+  }
+ },
+ {
+  "kode": "A08",
+  "parameter": {
+   "porsi": {
+    "baku": 5,
+    "pilihan": [
+     3,
+     4,
+     5,
+     6,
+     8
+    ]
+   },
+   "h": {
+    "baku": 18000,
+    "pilihan": [
+     15000,
+     16000,
+     18000,
+     20000,
+     25000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "porsi*h",
+   "tahun": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A08",
+   "level": "A",
+   "judul": "Nasi bungkus bantuan banjir",
+   "cerita": "Saat banjir, rumah tangga menerima {porsi} porsi nasi rames dari pemerintah setempat untuk seluruh ART, dikonsumsi seminggu terakhir. Perkiraan harga {h:rp} per porsi.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 196,
+      "kode": "—",
+      "rin": "Nasi campur/rames",
+      "sat": "Porsi",
+      "beli": null,
+      "prod": [
+       "{porsi:d2}",
+       "=nilai"
+      ],
+      "jml": [
+       "{porsi:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_barangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_barangD",
+     "m": "Pemberinya pemerintah setempat, jadi baris 1.b."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Pemberi pemerintah. Makanan = barang/jasa atau uang?",
+    "Nilai seminggu dikali 30/7 × 12."
+   ],
+   "langkah": [
+    "Nilai Blok IV.1 = {porsi} × {h} = <code>{nilai}</code>.",
+    "Setahun: <code>{nilai} × 30/7 × 12 = {tahun}</code>.",
+    "V.E 1.b, Kolom (3)."
+   ],
+   "pembahasan": "Bantuan pemerintah berupa barang dicatat di Blok IV.1 sebagai pemberian dan diimputasi di V.E R.1.b K.3 sebesar harga × 30/7 × 12.",
+   "rujukan": "Buku 4 hlm. 337"
+  }
+ },
+ {
+  "kode": "A09",
+  "parameter": {
+   "kg": {
+    "baku": 10,
+    "pilihan": [
+     6,
+     8,
+     10,
+     12,
+     15
+    ]
+   },
+   "prog": {
+    "baku": 9000,
+    "pilihan": [
+     7000,
+     8000,
+     9000,
+     10000,
+     11000
+    ]
+   },
+   "pasar": {
+    "baku": 14000,
+    "pilihan": [
+     13000,
+     14000,
+     15000,
+     16000,
+     18000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "kg*pasar",
+   "selisih": "(pasar-prog)*kg",
+   "tahun": "bulat(selisih*30/7*12)",
+   "alt": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A09",
+   "level": "A",
+   "judul": "Beras operasi pasar",
+   "cerita": "Seminggu terakhir keluarga mengonsumsi {kg} kg beras yang dibeli dari program pemerintah seharga {prog:rp} per kg, padahal harga pasar {pasar:rp} per kg. Blok IV.1 mencatat harga pasar.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 2,
+      "kode": "01111",
+      "rin": "Beras (beras lokal, medium, premium, dan impor)",
+      "sat": "Kg",
+      "beli": [
+       "{kg:d2}",
+       "=nilai"
+      ],
+      "prod": null,
+      "jml": [
+       "{kg:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_barangD": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "e_bantuan_barangD",
+     "v": "=alt",
+     "m": "Anda memakai seluruh harga pasar. Yang menjadi transfer hanya selisihnya."
+    }
+   ],
+   "petunjuk": [
+    "Yang dicatat di Blok V adalah keringanan harga yang diterima dari pemerintah.",
+    "Selisih harga × jumlah = Rp{selisih} untuk seminggu."
+   ],
+   "langkah": [
+    "Selisih: <code>({pasar} − {prog}) × {kg} = {selisih}</code> (seminggu).",
+    "Setahun: <code>{selisih} × 30/7 × 12 = {tahun}</code>.",
+    "Subsidi pemerintah → V.E 1.b, Kolom (3)."
+   ],
+   "pembahasan": "Pembelian di bawah harga pasar karena bantuan pemerintah dicatat sebesar harga pasar di Blok IV.1. Selisih harga × 30/7 × 12 dicatat di V.E R.1.b K.3, dan yang benar-benar dibayar masuk Blok VII.",
+   "rujukan": "Buku 4 hlm. 282 dan 350"
+  }
+ },
+ {
+  "kode": "A10",
+  "parameter": {
+   "kg": {
+    "baku": 1,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "h": {
+    "baku": 8000,
+    "pilihan": [
+     6000,
+     7000,
+     8000,
+     9000,
+     10000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "kg*h"
+  },
+  "kasus": {
+   "kode": "A10",
+   "level": "A",
+   "judul": "Beli sayur tunai di pasar",
+   "cerita": "Seminggu terakhir keluarga membeli {kg} kg bayam di pasar dengan uang sendiri seharga {nilai:rp}.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 86,
+      "kode": "01171",
+      "rin": "Bayam",
+      "sat": "Kg",
+      "beli": [
+       "{kg:d2}",
+       "=nilai"
+      ],
+      "prod": null,
+      "jml": [
+       "{kg:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {},
+   "jebakan": [],
+   "alternatif": [],
+   "nol": "Pembelian tunai tidak punya isian di Blok V.",
+   "petunjuk": [
+    "Apakah ada pemberian, bantuan, atau produksi sendiri di cerita ini?",
+    "Pembelian tunai punya pasangan di Blok VII, bukan Blok V."
+   ],
+   "langkah": [
+    "Pembelian tunai di Blok IV.1 kolom 5–6 berpasangan dengan VII Rincian 1 Kolom (2) (pengambilan tabungan).",
+    "Tidak ada isian di V.C maupun V.E: biarkan semua kotak kosong."
+   ],
+   "pembahasan": "Hanya konsumsi non-tunai (pemberian, bantuan, produksi sendiri) yang muncul di Blok V. Pembelian tunai senilai harga × 30/7 × 12 menjadi bagian pengambilan tabungan di Blok VII.",
+   "rujukan": "Buku 4 hlm. 350"
+  }
+ },
+ {
+  "kode": "A11",
+  "parameter": {
+   "kg": {
+    "baku": 10,
+    "pilihan": [
+     6,
+     8,
+     10,
+     12,
+     15
+    ]
+   },
+   "h": {
+    "baku": 14000,
+    "pilihan": [
+     12000,
+     13000,
+     14000,
+     15000,
+     16000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "kg*h"
+  },
+  "kasus": {
+   "kode": "A11",
+   "level": "A",
+   "judul": "Beli beras secara bon",
+   "cerita": "Seminggu terakhir keluarga mengonsumsi {kg} kg beras yang dibeli di warung dengan cara bon (utang), harga {nilai:rp}.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 2,
+      "kode": "01111",
+      "rin": "Beras (beras lokal, medium, premium, dan impor)",
+      "sat": "Kg",
+      "beli": [
+       "{kg:d2}",
+       "=nilai"
+      ],
+      "prod": null,
+      "jml": [
+       "{kg:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C",
+    "E"
+   ],
+   "kunci": {},
+   "jebakan": [],
+   "alternatif": [],
+   "nol": "Pembelian bon tidak punya isian di Blok V.",
+   "petunjuk": [
+    "Bon adalah pembelian, bukan pemberian atau bantuan.",
+    "Pasangannya ada di Blok VII Rincian 2."
+   ],
+   "langkah": [
+    "Pembelian bon/utang berpasangan dengan VII Rincian 2 Kolom (2) (meminjam uang) senilai harga × 30/7 × 12.",
+    "Blok V tidak diisi: biarkan kosong."
+   ],
+   "pembahasan": "Pembelian bon/utang dicatat di Blok IV.1 kolom 5–6 dan di Blok VII R.2 K.2, bukan di Blok V.",
+   "rujukan": "Buku 4 hlm. 350"
+  }
+ },
+ {
+  "kode": "A12",
+  "parameter": {
+   "buah": {
+    "baku": 12,
+    "pilihan": [
+     8,
+     10,
+     12,
+     15,
+     20
+    ]
+   },
+   "h": {
+    "baku": 2500,
+    "pilihan": [
+     2000,
+     2500,
+     3000,
+     3500,
+     4000
+    ]
+   },
+   "biaya": {
+    "baku": 900000,
+    "pilihan": [
+     600000,
+     750000,
+     900000,
+     1000000,
+     1200000
+    ]
+   }
+  },
+  "turunan": {
+   "nilai": "buah*h",
+   "tahun": "bulat(nilai*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A12",
+   "level": "A",
+   "judul": "Kue buatan sendiri dimakan sendiri",
+   "cerita": "Seminggu terakhir keluarga memakan {buah} buah kue basah yang dibuat sendiri di rumah (harga pasar {h:rp} per buah). Biaya bahan (tepung, gula, dan santan) setahun {biaya:rp}. Kue tidak dijual.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 191,
+      "kode": "",
+      "rin": "Kue basah (kue lapis, bika ambon, lemper, dll.)",
+      "sat": "Buah",
+      "beli": null,
+      "prod": [
+       "{buah:d2}",
+       "=nilai"
+      ],
+      "jml": [
+       "{buah:d2}",
+       "=nilai"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "C"
+   ],
+   "kunci": {
+    "c_hasilLain_produksi": "=tahun",
+    "c_hasilLain_biaya": "=biaya"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "c_hasilLain_produksi",
+     "v": "=nilai",
+     "m": "Nilai Anda masih seminggu. Kalikan 30/7 × 12."
+    }
+   ],
+   "petunjuk": [
+    "Kue dibuat sendiri dan dimakan sendiri: produksi rumah tangga untuk dikonsumsi sendiri.",
+    "Nilai produksi = harga pasar × 30/7 × 12; biaya bahan sudah setahun."
+   ],
+   "langkah": [
+    "Nilai produksi: <code>{buah} × {h} × 30/7 × 12 = {tahun}</code> → V.C Rincian 2 Kolom (2).",
+    "Biaya produksi: <code>{biaya}</code> → V.C Rincian 2 Kolom (3)."
+   ],
+   "pembahasan": "Kegiatan industri (membuat kue) untuk dikonsumsi sendiri dinilai menurut harga pasar sebagai nilai produksi di Blok V.C Rincian 2 Kolom 2, dan biaya memperolehnya (bahan) di Kolom 3. Berbeda dengan kue yang dijual, yang masuk Blok V.B.",
+   "rujukan": "Buku 4 hlm. 331 dan 350"
+  }
+ },
+ {
+  "kode": "A13",
+  "parameter": {
+   "gkg": {
+    "baku": 2,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "gh": {
+    "baku": 15000,
+    "pilihan": [
+     12000,
+     14000,
+     15000,
+     16000,
+     17000
+    ]
+   },
+   "ml": {
+    "baku": 1,
+    "pilihan": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "mh": {
+    "baku": 18000,
+    "pilihan": [
+     16000,
+     17000,
+     18000,
+     19000,
+     20000
+    ]
+   }
+  },
+  "turunan": {
+   "gn": "gkg*gh",
+   "mn": "ml*mh",
+   "total": "gn+mn",
+   "gons": "gkg*10",
+   "tahun": "bulat(total*30/7*12)"
+  },
+  "kasus": {
+   "kode": "A13",
+   "level": "A",
+   "judul": "Makan dari stok warung sendiri",
+   "cerita": "Bu Eli punya warung kelontong. Seminggu terakhir keluarganya memakai dagangan warung sendiri: {gkg} kg gula pasir dan {ml} liter minyak goreng, dinilai dengan harga jual di warung {total:rp}. Abaikan Blok V dan fokus pada pasangan di Blok VII.",
+   "iv": {
+    "t": 1,
+    "rows": [
+     {
+      "no": 160,
+      "kode": "01181",
+      "rin": "Gula pasir",
+      "sat": "Ons",
+      "beli": [
+       "{gons:d2}",
+       "=gn"
+      ],
+      "prod": null,
+      "jml": [
+       "{gons:d2}",
+       "=gn"
+      ]
+     },
+     {
+      "no": 156,
+      "kode": "01151",
+      "rin": "Minyak goreng (kelapa sawit, bunga matahari)",
+      "sat": "Liter",
+      "beli": [
+       "{ml:d2}",
+       "=mn"
+      ],
+      "prod": null,
+      "jml": [
+       "{ml:d2}",
+       "=mn"
+      ]
+     }
+    ]
+   },
+   "blok": [
+    "VII"
+   ],
+   "kunci": {
+    "vii_p1": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "vii_p2",
+     "m": "Mengambil dagangan sendiri bukan berutang. Rincian 2 (Meminjam uang) dipakai untuk pembelian bon di warung milik orang lain."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Konsumsi dari usaha perdagangan milik sendiri dinilai dengan harga penjualan di usaha itu.",
+    "Pasangannya ada di VII Rincian 1 Kolom (2), dan nilainya setahun."
+   ],
+   "langkah": [
+    "Harga penjualan seminggu: <code>{gn} + {mn} = {total}</code>.",
+    "Setahun: <code>{total} × 30/7 × 12 = {tahun}</code> → VII Rincian 1 Kolom (2)."
+   ],
+   "pembahasan": "Barang dagangan usaha milik sendiri yang dikonsumsi sendiri dicatat di Blok IV.1 pada harga penjualan di usaha, dan senilai harga itu × 30/7 × 12 menjadi pengambilan uang tunai dan tabungan (VII Rincian 1 Kolom 2). Tidak ada isian di Blok V.",
+   "rujukan": "Buku 4 hlm. 350"
+  }
+ }
+]

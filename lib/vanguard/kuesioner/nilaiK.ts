@@ -92,7 +92,7 @@ export function nilaiKasusK(kasus: Pick<KasusK, "kunci" | "jebakan">, isianMenta
   for (const [ib, x] of isian) if (!kunci.has(ib) && !dipakai.has(ib)) tambah("harus_kosong", x, `Rincian R${x.r} tidak seharusnya terisi pada catatan ini.`);
 
   // petunjuk jebakan khas: pesan ditempel pada kesalahan pertama di rincian yang sama
-  for (const j of kasus.jebakan) { const s = kesalahan.find((x) => x.r === j.r); if (s) s.pesan += ` ${j.m}`; }
+  for (const j of kasus.jebakan) { const s = kesalahan.find((x) => x.r === j.r && (x.jenis !== "kode_sumber" || j.k === "sumber")); if (s) s.pesan += ` ${j.m}`; } // kesalahan kode sumber tidak diberi jebakan yang tak terkait
 
   const a = rekapIv32(hitungIv1(kasus.kunci)), b = rekapIv32(hitungIv1(isianMentah));
   const rekapSesuai = a.every((x, idx) => x.k3 === b[idx].k3 && x.k4 === b[idx].k4 && x.k5 === b[idx].k5);

@@ -6,7 +6,7 @@
 // jadi kunci tidak pernah sampai ke perangkat petugas dan hasil bisa diulang untuk pembahasan.
 //
 // Rumus: + - * / ( ), angka, nama variabel, bulat(x) (setengah ke atas), bulat2(x) (2 desimal), min(a,b), max(a,b).
-// Penampung teks: {nama} angka (koma desimal, titik ribuan); {nama:rp} "Rp25.000".
+// Penampung teks: {nama} angka (koma desimal, titik ribuan); {nama:rp} "Rp25.000"; {nama:d2} dua desimal tetap "2,00".
 
 export type ParameterT = { baku: number; pilihan: number[] };
 export type KunciT = { r: number; art?: number; k1?: number | string; k2?: number | string; k3?: number | string; k4?: number | string; sumber?: number; nama?: string; satuan?: string };
@@ -86,11 +86,12 @@ export function hitungRumus(rumus: string, v: Record<string, number>): number {
 }
 
 const fmtAngka = (x: number) => x.toLocaleString("id-ID", { maximumFractionDigits: 2 });
+const fmtD2 = (x: number) => x.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Mengisi penampung {nama} dan {nama:rp}. Penampung tak dikenal = galat (templat salah ketik tertangkap tes). */
 export function isiTeks(teks: string, v: Record<string, number>): string {
-  return teks.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(?::(rp))?\}/g, (_m, nama: string, f?: string) => {
+  return teks.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(?::(rp|d2))?\}/g, (_m, nama: string, f?: string) => {
     if (!(nama in v)) throw new Error(`Penampung {${nama}} tidak punya nilai`);
-    return f === "rp" ? `Rp${fmtAngka(v[nama])}` : fmtAngka(v[nama]);
+    return f === "rp" ? `Rp${fmtAngka(v[nama])}` : f === "d2" ? fmtD2(v[nama]) : fmtAngka(v[nama]);
   });
 }
 

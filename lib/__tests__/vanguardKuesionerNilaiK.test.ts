@@ -108,4 +108,13 @@ describe("kasus K02 (makanan jadi dan rokok per ART)", () => {
     expect(nilaiKasusK(k02, x).kesalahan.find((e) => e.art === 5)).toMatchObject({ jenis: "harus_kosong", tingkat: "fatal" });
     expect(nilaiKasusK(k02, ubah2(210, 3, (e) => { e.k1 = 2; })).kesalahan[0]).toMatchObject({ jenis: "banyaknya_meleset", r: 210 });
   });
+  it("kesalahan kode sumber saja tidak ditempeli jebakan R yang sama jika jebakannya bukan soal sumber", () => {
+    const x = k02.kunci.map((e) => ({ ...e })); x.find((e) => e.r === 213)!.sumber = 1;
+    const k = nilaiKasusK(k02, x).kesalahan;
+    expect(k).toHaveLength(1);
+    expect(k[0].jenis).toBe("kode_sumber");
+    expect(k[0].pesan).not.toContain("Air isi ulang");
+    const y = k02.kunci.map((e) => ({ ...e })); y.find((e) => e.r === 200)!.sumber = 2;
+    expect(nilaiKasusK(k02, y).kesalahan[0].pesan).toContain("kode sumber 0"); // jebakan bertema sumber tetap menempel
+  });
 });

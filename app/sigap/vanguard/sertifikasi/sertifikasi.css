@@ -1,0 +1,24 @@
+/* app/sigap/vanguard/sertifikasi/sertifikasi.css  (1 Nov 2026, V7e). Dicakup di bawah .vg. */
+.vg .sr-bintang{font-size:34px;letter-spacing:4px;color:#d99a00;line-height:1.1}
+.vg .sr-bintang .off{color:#c9c9c9}
+.vg .sr-pop span{display:inline-block;animation:sr-pop .5s ease-out both}
+.vg .sr-pop span:nth-child(2){animation-delay:.1s}.vg .sr-pop span:nth-child(3){animation-delay:.2s}.vg .sr-pop span:nth-child(4){animation-delay:.3s}.vg .sr-pop span:nth-child(5){animation-delay:.4s}
+@keyframes sr-pop{0%{transform:scale(.2) rotate(-30deg);opacity:0}70%{transform:scale(1.25) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+@media (prefers-reduced-motion:reduce){.vg .sr-pop span{animation:none}}
+.vg .sr-kartu{background:linear-gradient(160deg,#fff 0%,var(--u-muda) 100%);border:2px solid var(--u-mid);border-radius:14px;padding:12px;text-align:center}
+.vg .sr-kartu .nm{font-size:20px;font-weight:800;color:var(--u-tua);margin-top:2px}
+.vg .sr-kartu .sub{font-size:12px;color:#444;margin-top:2px}
+.vg .sr-chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:6px 0 10px}
+.vg .sr-chip{height:44px;border:1.5px solid #000;background:#fff;font-weight:700;font-size:14px;position:relative}
+.vg .sr-chip.ya{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+.vg .sr-chip[aria-current="true"]{outline:3px solid var(--u-mid)}
+.vg .sr-skor{font-family:var(--mono);font-size:40px;font-weight:700;line-height:1}
+.vg .sr-rev{border:1.5px solid #000;background:#fff;margin-bottom:6px}
+.vg .sr-rev summary{padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px}
+.vg .sr-rev .poin{margin-left:auto;font-family:var(--mono)}
+.vg .sr-rev ul{margin:0 10px 8px 28px;font-size:12.5px}
+.vg .sr-rev li{margin-bottom:4px}
+.vg .sr-rev.ok summary{background:var(--good-bg)}
+.vg .sr-rev.no summary{background:var(--warn-bg)}
+.vg .sr-aturan{font-size:12.5px;line-height:1.5}
+.vg .sr-aturan li{margin:0 0 3px 18px}
