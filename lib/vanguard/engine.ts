@@ -139,8 +139,24 @@ export function evaluate(c: Kasus, vals: Nilai): HasilEvaluasi {
     if (!good) ok = false;
     rows.push({ k: id, e, u, ok: good });
   });
-  rows.filter((r) => !r.ok).forEach((r) => {
+  // (V8d) Salah letak dihitung SEKALI: nilai di kotak yang seharusnya kosong dipasangkan satu-satu dengan kotak wajib yang kosong bernilai sama.
+  // Sebelumnya satu kekeliruan (angka masuk ke baris sebelah) dihukum dua kali fatal: "belum diisi/salah letak" dan "harus kosong".
+  const hilang = rows.filter((r) => !r.ok && r.e !== 0 && r.u === 0);
+  const keliru = rows.filter((r) => !r.ok && r.e === 0 && r.u !== 0);
+  const pasangan = new Map<string, BarisNilai>(); // kotak wajib -> kotak keliru yang berisi nilainya
+  const terpakai = new Set<string>();
+  for (const m of hilang) {
+    const w = keliru.find((x) => !terpakai.has(x.k) && Math.abs(x.u - m.e) <= TOLERANSI);
+    if (w) { pasangan.set(m.k, w); terpakai.add(w.k); }
+  }
+  rows.filter((r) => !r.ok && !terpakai.has(r.k)).forEach((r) => {
     const msgs: string[] = [];
+    const ps = pasangan.get(r.k);
+    if (ps) {
+      const jb = c.jebakan.find((t) => t.k === ps.k);
+      fb.push({ k: r.k, m: `Angka ${rp(r.e)} sudah Anda isi, tetapi di kotak yang salah: ${labelSel(ps.k)}. Pindahkan ke kotak ini.${jb ? ` ${jb.m}` : ""}`, jenis: "salah_letak", tingkat: tingkatKesalahan("salah_letak", r.e, r.u), dari: ps.k });
+      return;
+    }
     let jenis: JenisKesalahan = "angka_meleset";
     const tr = c.jebakan.find((t) => t.k === r.k && r.e === 0 && r.u !== 0);
     if (tr) { msgs.push(tr.m); jenis = "jebakan"; }
@@ -149,9 +165,7 @@ export function evaluate(c: Kasus, vals: Nilai): HasilEvaluasi {
     if (!msgs.length) {
       if (r.e === 0 && r.u !== 0) { msgs.push("Kotak ini seharusnya kosong."); jenis = "harus_kosong"; }
       else if (r.e !== 0 && r.u === 0) {
-        const el = rows.find((o) => o.k !== r.k && o.e === 0 && Math.abs(o.u - r.e) <= TOLERANSI);
-        if (el) { msgs.push(`Nilai yang benar ada di kotak lain (${labelSel(el.k)}). Pindahkan ke sini.`); jenis = "salah_letak"; }
-        else { msgs.push("Kotak ini belum diisi."); jenis = "belum_diisi"; }
+        msgs.push("Kotak ini belum diisi."); jenis = "belum_diisi";
       } else if (r.e !== 0) {
         if (Math.abs(r.u - R(r.e / F)) <= TOLERANSI) { msgs.push("Nilai Anda sepertinya masih nilai seminggu. Kalikan 30/7 × 12."); jenis = "konversi_seminggu"; }
         else if (Math.abs(r.u - R(r.e / 12)) <= TOLERANSI) { msgs.push("Nilai Anda sepertinya masih nilai sebulan. Kalikan 12."); jenis = "konversi_sebulan"; }

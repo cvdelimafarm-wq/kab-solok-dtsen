@@ -67,7 +67,7 @@ export type JenisKesalahan =
 export type Tingkat = "fatal" | "berat" | "ringan";
 
 export type BarisNilai = { k: string; e: number; u: number; ok: boolean };
-export type Koreksi = { k: string | null; m: string; jenis: JenisKesalahan; tingkat: Tingkat };
+export type Koreksi = { k: string | null; m: string; jenis: JenisKesalahan; tingkat: Tingkat; dari?: string };
 export type HasilEvaluasi = { ok: boolean; rows: BarisNilai[]; fb: Koreksi[] };
 
 export type RincianKontrol = [string, number][];

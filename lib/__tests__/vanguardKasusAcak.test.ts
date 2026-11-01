@@ -62,3 +62,34 @@ describe("tidak ada angka tertinggal pada teks pendamping (V7c)", () => {
     }
   });
 });
+
+describe("keadilan penilaian lintas kasus (V8d)", () => {
+  it("satu nilai salah letak di tiap kasus dan tiap kotak dihitung SATU kesalahan (tidak berpoin 20 karena dihukum ganda)", async () => {
+    const { nilaiButir } = await import("../vanguard/sertifikasi/nilai");
+    const { idSelKasus } = await import("../vanguard/sel");
+    let skenario = 0;
+    for (const t of TEMPLAT_V1) {
+      const k = kasusDariBenih(t.kode, 3)!; const kunci = k.kunci as Record<string, number>;
+      const ids = idSelKasus(k); const terisi = ids.filter((i) => kunci[i]); const kosong = ids.filter((i) => !kunci[i]);
+      if (!kosong.length) continue;
+      for (const s of terisi) {
+        const isian = { ...Object.fromEntries(terisi.filter((x) => x !== s).map((x) => [x, kunci[x]])), [kosong[0]]: kunci[s] };
+        const h = nilaiButir(t.kode, 3, isian) as { fatal: number; berat: number; ringan: number; poin: number };
+        expect({ kode: t.kode, s, n: h.fatal + h.berat + h.ringan }).toEqual({ kode: t.kode, s, n: 1 });
+        expect(h.poin).toBe(60);
+        skenario++;
+      }
+    }
+    expect(skenario).toBeGreaterThan(60);
+  });
+  it("satu angka meleset 30% pada satu kotak hanya menghasilkan satu kesalahan di semua kasus", async () => {
+    const { nilaiButir } = await import("../vanguard/sertifikasi/nilai");
+    for (const t of TEMPLAT_V1) {
+      const kunci = kasusDariBenih(t.kode, 3)!.kunci as Record<string, number>;
+      for (const s of Object.keys(kunci)) {
+        const h = nilaiButir(t.kode, 3, { ...kunci, [s]: Math.round(kunci[s] * 1.3) }) as { fatal: number; berat: number; ringan: number };
+        expect({ kode: t.kode, s, n: h.fatal + h.berat + h.ringan }).toEqual({ kode: t.kode, s, n: 1 });
+      }
+    }
+  });
+});

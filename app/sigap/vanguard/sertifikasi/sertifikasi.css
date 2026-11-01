@@ -50,7 +50,7 @@
 .vg .catat .sr-kor{margin:8px 0 0}
 
 .vg .sr-kor .lihat{margin-top:6px;min-height:40px;padding:0 10px;border:1.5px solid #000;background:#fff;font-size:12.5px;font-weight:700}
-.vg .sr-pop h4{margin:10px 0 2px;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.vg .sr-pop h4{margin:10px 0 2px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .vg .sr-pop p{margin:0 0 4px;font-size:13px;line-height:1.45}
 .vg .sr-pop ol{margin:0 0 4px 20px;font-size:13px;line-height:1.45}
 .vg .sr-pop .sr-kor{margin:4px 0 0}
@@ -58,3 +58,5 @@
 .vg .sr-pop .row2{margin-top:12px}
 .vg td.in.sr-sorot{outline:4px solid #b3261e;outline-offset:-4px;animation:srsorot 1s ease-in-out 4}
 @keyframes srsorot{50%{background:#ffd9d6}}
+.vg .sr-kor .vs em{font-style:normal;font-size:11px;line-height:1.3;color:#333}
+.vg td.in.sr-sorot-asal{outline:4px dashed #e08a00;outline-offset:-4px}

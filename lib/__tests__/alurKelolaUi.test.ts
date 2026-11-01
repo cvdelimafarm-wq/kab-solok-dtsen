@@ -52,4 +52,14 @@ describe("komponen alur", () => {
     const h = renderToStaticMarkup(e(NavAlur, { posisi: posisiAlur(tab, "tim"), onPilih: () => undefined }));
     expect(h).toContain("Tahap terakhir alur");
   });
+  it("daftar seluruh tahap: semua tahap tampil, tahap sekarang ditandai, tahap lain berupa tautan", () => {
+    const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur identifikasi survei", posisi: posisiAlur(alurIdentifikasi(9), "pelatihan") }));
+    expect(h).toContain("Lihat seluruh tahap (6)");
+    for (const nama of ["1 · Identifikasi awal", "2 · Identifikasi lanjutan", "3 · Rekrutmen dan pengadaan", "4 · Persiapan pelatihan", "5 · Persiapan pendataan", "6 · Gap pelaksanaan"]) {
+      expect(h).toContain(nama);
+    }
+    expect(h).toContain("(Anda di sini)");
+    expect(h).toContain('href="/sigap/kelola/perencanaan/identifikasi/9/pendataan"');
+    expect(h).not.toContain('href="/sigap/kelola/perencanaan/identifikasi/9/pelatihan"'); // tahap sekarang bukan tautan
+  });
 });

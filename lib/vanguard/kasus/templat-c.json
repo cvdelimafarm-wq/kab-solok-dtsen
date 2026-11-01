@@ -641,7 +641,7 @@
    "kode": "C10",
    "level": "C",
    "judul": "Biaya berobat diganti pemberi kerja (reimburse)",
-   "cerita": "Pak Anwar (karyawan swasta) berobat ke dokter spesialis. Ia membayar sendiri dulu {total:rp}, lalu perusahaan mengganti {ganti:rp}. Abaikan gaji dan pendapatan lainnya.",
+   "cerita": "Pak Anwar (karyawan swasta) berobat ke dokter spesialis. Ia membayar sendiri dulu {total:rp} dengan uang dari tabungannya, lalu perusahaan mengganti {ganti:rp} dan uang pengganti itu ia simpan kembali di tabungan. Abaikan gaji dan pendapatan lainnya.",
    "iv": {
     "t": 2,
     "rows": [
@@ -726,7 +726,7 @@
    "kode": "C11",
    "level": "C",
    "judul": "Biaya rawat inap dibiayai pinjaman",
-   "cerita": "Bu Dewi dirawat inap di rumah sakit swasta. Biaya {biaya:rp} ia bayar sendiri dengan uang pinjaman dari koperasi (tidak ada pihak lain yang menanggung). Setahun terakhir ia sudah mencicil pokok {cicil:rp}. Abaikan Blok V dan fokus pada Blok VII.",
+   "cerita": "Bu Dewi dirawat inap di rumah sakit swasta. Biaya {biaya:rp} ia bayar sendiri dengan uang pinjaman dari koperasi (tidak ada pihak lain yang menanggung). Setahun terakhir ia sudah mencicil pokok {cicil:rp} yang dibayar dari uang tabungannya. Abaikan Blok V dan fokus pada Blok VII.",
    "iv": {
     "t": 2,
     "rows": [

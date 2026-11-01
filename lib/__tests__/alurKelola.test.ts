@@ -81,19 +81,34 @@ describe("posisiAlur (alur bertab)", () => {
 });
 
 describe("alur Identifikasi survei (berhalaman)", () => {
-  it("lima tahap berurutan dengan alamat benar", () => {
+  it("enam tahap berurutan dengan alamat benar", () => {
     const u = alurIdentifikasi(42);
-    expect(u.map((t) => t.kode)).toEqual(["awal", "lanjutan", "kebutuhan", "pelaksanaan", "gap"]);
+    expect(u.map((t) => t.kode)).toEqual(["awal", "lanjutan", "kebutuhan", "pelatihan", "pendataan", "gap"]);
+    expect(u.map((t) => nomorDariLabel(t.label))).toEqual([1, 2, 3, 4, 5, 6]);
     expect(u[0].href).toBe("/sigap/kelola/perencanaan/identifikasi/42");
-    expect(u[1].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/lanjutan");
-    expect(u[4].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/gap");
+    expect(u[3].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pelatihan");
+    expect(u[4].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pendataan");
+    expect(u[5].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/gap");
   });
-  it("posisi lanjutan: sebelumnya awal, berikutnya kebutuhan", () => {
-    const p = posisiAlur(alurIdentifikasi("7"), "lanjutan")!;
-    expect(p.no).toBe(2);
-    expect(p.total).toBe(5);
-    expect(p.sebelumnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7");
-    expect(p.berikutnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/kebutuhan");
+  it("tahap 4 dan 5 disebut sebagai persiapan yang rinciannya di menu masing-masing", () => {
+    const u = alurIdentifikasi(1);
+    expect(u[3].label).toBe("4 · Persiapan pelatihan");
+    expect(u[3].ket).toContain("menu Pelatihan");
+    expect(u[4].label).toBe("5 · Persiapan pendataan");
+    expect(u[4].ket).toContain("menu Pendataan");
+  });
+  it("posisi persiapan pelatihan: sebelumnya rekrutmen, berikutnya persiapan pendataan", () => {
+    const p = posisiAlur(alurIdentifikasi("7"), "pelatihan")!;
+    expect(p.no).toBe(4);
+    expect(p.total).toBe(6);
+    expect(p.sebelumnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/kebutuhan");
+    expect(p.berikutnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/pendataan");
+  });
+  it("gap adalah tahap terakhir dan sebelumnya persiapan pendataan", () => {
+    const p = posisiAlur(alurIdentifikasi(3), "gap")!;
+    expect(p.no).toBe(6);
+    expect(tahapTerakhir(p)).toBe(true);
+    expect(p.sebelumnya?.kode).toBe("pendataan");
   });
   it("id di-encode agar tidak bisa menyisipkan jalur lain", () => {
     expect(alamatIdentifikasi("1/../x")).toBe("/sigap/kelola/perencanaan/identifikasi/1%2F..%2Fx");

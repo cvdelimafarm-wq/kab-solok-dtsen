@@ -26,7 +26,7 @@ function Titik({ posisi }: { posisi: PosisiAlur }) {
   );
 }
 
-export function PenunjukAlur({ posisi, nama }: Umum & { nama: string }) {
+export function PenunjukAlur({ posisi, nama, onPilih }: Umum & { nama: string; onPilih?: (kode: string) => void }) {
   if (!posisi) return null;
   const berikut = posisi.berikutnya;
   return (
@@ -51,7 +51,49 @@ export function PenunjukAlur({ posisi, nama }: Umum & { nama: string }) {
           <b>Ini tahap terakhir alur.</b>
         )}
       </p>
+      <DaftarTahap posisi={posisi} onPilih={onPilih} />
     </section>
+  );
+}
+
+/** (1 Nov 2026) Seluruh tahap dijejerkan agar jelas apa saja yang harus dikerjakan; tahap sekarang ditandai, setiap tahap bisa dibuka. */
+function DaftarTahap({ posisi, onPilih }: { posisi: PosisiAlur; onPilih?: (kode: string) => void }) {
+  return (
+    <details className="group mt-2 border-t border-[#EEF1F6] pt-2">
+      <summary className="cursor-pointer list-none text-[12.5px] font-bold text-[#1F5FD1] [&::-webkit-details-marker]:hidden">
+        <span className="group-open:hidden">Lihat seluruh tahap ({posisi.urutan.length}) ›</span>
+        <span className="hidden group-open:inline">Sembunyikan daftar tahap ‹</span>
+      </summary>
+      <ol className="m-0 mt-2 grid list-none gap-1.5 p-0">
+        {posisi.urutan.map((t, i) => {
+          const sekarang = i === posisi.indeks;
+          const isi = (
+            <>
+              <span className={`mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-full text-[10.5px] font-extrabold ${sekarang ? "bg-[#1F5FD1] text-white" : "bg-[#E3EEFF] text-[#1F5FD1]"}`}>{i + 1}</span>
+              <span className="min-w-0">
+                <b className={`block text-[13px] ${sekarang ? "text-[#1F5FD1]" : "text-[#0F2A52]"}`}>
+                  {t.label}
+                  {sekarang && <em className="ml-1.5 text-[11px] font-semibold not-italic text-[#6B7A90]">(Anda di sini)</em>}
+                </b>
+                {t.ket && <span className="block text-[12px] leading-snug text-[#55657D]">{t.ket}</span>}
+              </span>
+            </>
+          );
+          const kelas = `flex w-full gap-2.5 rounded-lg px-2 py-1.5 text-left ${sekarang ? "bg-[#F1F6FE]" : "hover:bg-[#F8FAFC]"}`;
+          return (
+            <li key={t.kode}>
+              {sekarang ? (
+                <div className={kelas} aria-current="step">{isi}</div>
+              ) : t.href ? (
+                <Link href={t.href} className={kelas}>{isi}</Link>
+              ) : (
+                <button type="button" className={kelas} onClick={() => onPilih?.(t.kode)}>{isi}</button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
   );
 }
 

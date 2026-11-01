@@ -106,7 +106,7 @@ function Isi() {
       kanan={(gelap) => <LencanaNotif gelap={gelap} />}
       atas={<PenunjukAlur posisi={posisiAlurIni} nama="Alur identifikasi survei" />}
       bawah={<NavAlur posisi={posisiAlurIni} />}
-      kembali={{ induk: id ? `/sigap/kelola/perencanaan/identifikasi/${id}/pelaksanaan` : "/sigap/kelola/perencanaan/identifikasi", label: "Pelaksanaan" }}
+      kembali={{ induk: id ? `/sigap/kelola/perencanaan/identifikasi/${id}/pendataan` : "/sigap/kelola/perencanaan/identifikasi", label: "Persiapan pendataan" }}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">
         {id === null && <Galat pesan="Alamat survei tidak sah." />}

@@ -165,10 +165,16 @@ describe("jenis dan tingkat kesalahan (keputusan 1 Nov 2026)", () => {
     expect(f).toMatchObject({ jenis: "konversi_sebulan", tingkat: "fatal" });
     expect(f.m).toContain("masih nilai sebulan");
   });
-  it("nilai benar di kotak lain → salah_letak (fatal); kotak itu sendiri kena jebakan", () => {
+  it("nilai benar di kotak lain → SATU kesalahan salah_letak (fatal) yang menyebut kotak asalnya; kotak keliru tidak dihukum lagi (V8d)", () => {
     const hasil = fb({ e_nirlaba_uangD: benar });
-    expect(hasil.find((x) => x.k === sel)).toMatchObject({ jenis: "salah_letak", tingkat: "fatal" });
-    expect(hasil.find((x) => x.k === "e_nirlaba_uangD")).toMatchObject({ jenis: "harus_kosong", tingkat: "fatal" });
+    expect(hasil).toHaveLength(1);
+    expect(hasil[0]).toMatchObject({ k: sel, jenis: "salah_letak", tingkat: "fatal", dari: "e_nirlaba_uangD" });
+    expect(hasil[0].m).toContain("kotak yang salah");
+  });
+  it("pasangan salah letak satu-satu: satu nilai tidak dapat menjelaskan dua kotak wajib; kotak wajib lain tetap belum_diisi", () => {
+    const hasil = fb({ e_nirlaba_uangD: benar, e_nirlaba_barangD: benar + 5 });
+    expect(hasil.filter((x) => x.jenis === "salah_letak")).toHaveLength(1);
+    expect(hasil.some((x) => x.k === "e_nirlaba_barangD" && x.jenis === "harus_kosong")).toBe(true);
   });
   it("kotak yang harus kosong terisi → harus_kosong (fatal)", () => {
     expect(fb({ [sel]: benar, e_nirlaba_uangD: 500 })[0]).toMatchObject({ k: "e_nirlaba_uangD", jenis: "harus_kosong", tingkat: "fatal" });

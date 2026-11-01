@@ -40,7 +40,7 @@ type Beranda = {
   sertifikat: { terbaru: Ringkas; tertinggi: Ringkas };
 };
 type Penjelasan = { langkah: string[]; pembahasan: string; rujukan: string };
-type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null };
+type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null; dari?: string };
 type ButirRingkas = { urut: number; kode: string; jenis: "k" | "v1"; judul: string; terjawab: boolean; benar?: boolean | null; poin?: number | null; rincian?: Rincian[] };
 type UjianDetail = { ujian: { id: number; jenis: JenisUjian; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; kedaluwarsa: boolean }; butir: ButirRingkas[] };
 type Soal = { soal: { jenis: "k" | "v1"; kode: string; benih: number; judul: string; data: Record<string, unknown> }; terjawab: boolean };
@@ -73,7 +73,7 @@ const labelKotak = (sel: string | null): string | null => {
 const ARTI_JENIS: Record<string, string> = {
   harus_kosong: "Kotak ini tidak berlaku untuk cerita ini, jadi harus dibiarkan kosong. Angka yang diisi di sini membuat total ikut keliru.",
   belum_diisi: "Cerita memuat angka untuk kotak ini, tetapi kotaknya masih kosong.",
-  salah_letak: "Angkanya benar, tetapi tercatat di kotak lain. Pindahkan ke kotak yang ditunjuk.",
+  salah_letak: "Angkanya sudah benar, hanya kotaknya yang keliru. Kesalahan ini dihitung satu kali (fatal), bukan dua.",
   konversi_seminggu: "Nilai yang dicatat masih nilai seminggu. Blok V meminta nilai setahun terakhir.",
   konversi_sebulan: "Nilai yang dicatat masih nilai sebulan. Blok V meminta nilai setahun terakhir.",
   angka_meleset: "Angka yang diisi berbeda dari nilai seharusnya.",
@@ -82,6 +82,15 @@ const ARTI_JENIS: Record<string, string> = {
   diskrepansi: "Selisih Blok VI dan Blok VII harus nol. Ada isian di salah satu blok yang belum sesuai.",
   kontrol_vii: "Rincian 1 Blok VII harus sesuai tabel kontrol.",
 };
+/** Dua kotak berdampingan. Untuk salah letak, masing-masing menyebut letaknya ("di V.G · 4 Lahan/tanah" vs "di V.G · 2 Bangunan tempat tinggal"). */
+function VsKotak({ x }: { x: Rincian }) {
+  return (
+    <div className="vs">
+      <div className="anda"><small>Jawaban Anda</small><b>{teksRp(x.anda)}</b>{x.dari && <em>di {labelSel(x.dari)}</em>}</div>
+      <div className="seharusnya"><small>Seharusnya</small><b>{teksRp(x.seharusnya)}</b>{x.dari && x.sel && <em>di {labelKotak(x.sel)}</em>}</div>
+    </div>
+  );
+}
 type Lihat = { x: Rincian; penjelasan: Penjelasan | null; bisaSorot: boolean };
 /** Koreksi satu kesalahan: kotak mana, jawaban Anda vs seharusnya (bila ada angkanya), lalu petunjuk singkat; ketuk untuk pop-up penjelasan. */
 function KoreksiButir({ daftar, penjelasan, bisaSorot, onLihat }: { daftar: Rincian[]; penjelasan: Penjelasan | null | undefined; bisaSorot: boolean; onLihat: (l: Lihat) => void }) {
@@ -93,12 +102,7 @@ function KoreksiButir({ daftar, penjelasan, bisaSorot, onLihat }: { daftar: Rinc
         return (
           <div key={i} className={`kor ${x.tingkat}`}>
             <div className="kh"><span className="lv">{NAMA_TINGKAT_SALAH[x.tingkat] ?? x.tingkat}</span>{kotak && <span className="kt">{kotak}</span>}</div>
-            {punyaNilai && (
-              <div className="vs">
-                <div className="anda"><small>Jawaban Anda</small><b>{teksRp(x.anda)}</b></div>
-                <div className="seharusnya"><small>Seharusnya</small><b>{teksRp(x.seharusnya)}</b></div>
-              </div>
-            )}
+            {punyaNilai && <VsKotak x={x} />}
             <p className="ps">{x.pesan}</p>
             <button type="button" className="lihat" onClick={() => onLihat({ x, penjelasan: penjelasan ?? null, bisaSorot: bisaSorot && !!x.sel && !/^R\d/.test(x.sel) })}>Lihat penjelasan ›</button>
           </div>
@@ -119,7 +123,7 @@ export default function Sertifikasi() {
   const [hasil, setHasil] = useState<HasilUjian | null>(null);
   const [jawab, setJawab] = useState<Jawab | null>(null);
   const [jelas, setJelas] = useState<Lihat | null>(null); // pop-up penjelasan kotak
-  const [sorot, setSorot] = useState<string | null>(null); // kotak yang disorot pada lembar
+  const [sorot, setSorot] = useState<{ target: string; asal?: string } | null>(null); // kotak yang disorot pada lembar
   const [kerja, setKerja] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [isianK, setIsianK] = useState<Isian[]>([]);
@@ -151,16 +155,20 @@ export default function Sertifikasi() {
   // sorot kotak pada lembar (merah berdenyut) dan gulir ke sana; hilang saat pindah butir
   useEffect(() => {
     if (!sorot || layar !== "butir") return;
-    const el = skrol.current?.querySelector<HTMLElement>(`td[data-id="${sorot}"]`);
+    const el = skrol.current?.querySelector<HTMLElement>(`td[data-id="${sorot.target}"]`);
+    const asal = sorot.asal ? skrol.current?.querySelector<HTMLElement>(`td[data-id="${sorot.asal}"]`) : null;
     if (!el) return;
     el.classList.add("sr-sorot");
+    asal?.classList.add("sr-sorot-asal");
     el.scrollIntoView({ block: "center", behavior: "smooth" });
-    return () => el.classList.remove("sr-sorot");
+    return () => { el.classList.remove("sr-sorot"); asal?.classList.remove("sr-sorot-asal"); };
   }, [sorot, layar, soal]);
 
   const mulai = async (jenis: JenisUjian) => {
     setKerja(true);
-    const r = await api<{ ujian: number; jumlah: number }>("/api/sigap/vanguard/sertifikasi", { method: "POST", body: JSON.stringify({ aksi: "mulai", jenis }) });
+    const r = await api<{ ujian: number; jumlah: number; jenis?: JenisUjian; dilanjutkan?: boolean }>("/api/sigap/vanguard/sertifikasi", { method: "POST", body: JSON.stringify({ aksi: "mulai", jenis }) });
+    // (V8d) Jangan diam-diam membuka ujian LAIN yang masih berjalan: beri tahu dan biarkan petugas memilih Lanjutkan atau Batalkan.
+    if (r && r.dilanjutkan && r.jenis && r.jenis !== jenis) { setGalat(`Masih ada ${LABEL_JENIS_UJIAN[r.jenis].toLowerCase()} yang belum selesai. Lanjutkan atau batalkan dulu, lalu mulai ${LABEL_JENIS_UJIAN[jenis].toLowerCase()}.`); setKerja(false); return; }
     if (r) { const d = await muatDetail(r.ujian); if (d) { setHasil(null); setLayar("ujian"); } }
     setKerja(false);
   };
@@ -309,7 +317,7 @@ export default function Sertifikasi() {
               <div className="sheet">
                 <span className="tag">Tantangan minggu ini</span>
                 <p style={{ fontSize: 12.5 }}>5 butir yang sama untuk semua petugas minggu ini, disusun dari kesalahan yang paling sering muncul di Vanguard seminggu terakhir. Terbit tiap Senin.</p>
-                <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" disabled={kerja || (beranda.tantangan.selesai && !beranda.berjalan)} onClick={() => void mulai("tantangan")}>{beranda.tantangan.selesai ? "Tantangan minggu ini selesai ✓" : "Ikuti tantangan mingguan"}</button></div>
+                <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" disabled={kerja || (beranda.tantangan.selesai && !beranda.berjalan)} onClick={() => void mulai("tantangan")}>{beranda.tantangan.selesai ? "Tantangan minggu ini selesai ✓" : beranda.riwayat.some((r) => r.jenis === "tantangan" && !r.selesai_at) ? "Lanjutkan tantangan mingguan" : "Ikuti tantangan mingguan"}</button></div>
               </div>
               <div className="sheet">
                 <span className="tag">Usul kasus</span>
@@ -454,12 +462,7 @@ export default function Sertifikasi() {
         <div className="ov" onClick={() => setJelas(null)}><div className="pad sr-pop" role="dialog" aria-label="Penjelasan kotak" onClick={(ev) => ev.stopPropagation()}>
           <div className="ttl">Penjelasan · kesalahan {(NAMA_TINGKAT_SALAH[jelas.x.tingkat] ?? jelas.x.tingkat).toLowerCase()}</div>
           {labelKotak(jelas.x.sel) && <div className="lab">{labelKotak(jelas.x.sel)}</div>}
-          {jelas.x.anda !== undefined && jelas.x.seharusnya !== undefined && (
-            <div className="sr-kor"><div className="vs">
-              <div className="anda"><small>Jawaban Anda</small><b>{teksRp(jelas.x.anda)}</b></div>
-              <div className="seharusnya"><small>Seharusnya</small><b>{teksRp(jelas.x.seharusnya)}</b></div>
-            </div></div>
-          )}
+          {jelas.x.anda !== undefined && jelas.x.seharusnya !== undefined && <div className="sr-kor"><VsKotak x={jelas.x} /></div>}
           {ARTI_JENIS[jelas.x.jenis] && <><h4>Artinya</h4><p>{ARTI_JENIS[jelas.x.jenis]}</p></>}
           <h4>Catatan penilai</h4><p>{jelas.x.pesan}</p>
           {jelas.penjelasan && (jelas.penjelasan.langkah.length > 0 || jelas.penjelasan.pembahasan) && (
@@ -472,7 +475,7 @@ export default function Sertifikasi() {
           )}
           <div className="row2">
             <button type="button" className="btn" onClick={() => setJelas(null)}>Tutup</button>
-            {jelas.bisaSorot && jelas.x.sel && <button type="button" className="btn pri" onClick={() => { setSorot(jelas.x.sel); setJelas(null); }}>Tunjukkan di lembar</button>}
+            {jelas.bisaSorot && jelas.x.sel && <button type="button" className="btn pri" onClick={() => { setSorot({ target: jelas.x.sel as string, asal: jelas.x.dari }); setJelas(null); }}>Tunjukkan di lembar</button>}
           </div>
         </div></div>
       )}

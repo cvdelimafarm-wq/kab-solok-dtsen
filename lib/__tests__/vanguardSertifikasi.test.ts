@@ -7,6 +7,7 @@ import { susunUjian } from "../vanguard/sertifikasi/ujian";
 import { KOLAM, nilaiButir, sajikanButir } from "../vanguard/sertifikasi/nilai";
 import { soalK } from "../vanguard/kuesioner/nilaiK";
 import { kasusDariBenih } from "../vanguard/kasus/acak";
+import { idSelKasus } from "../vanguard/sel";
 
 let tabel: Tabel = {};
 let gagalTabel = false;
@@ -233,6 +234,22 @@ describe("rute sertifikasi", () => {
     expect(sel.review.find((x: { urut: number }) => x.urut === row.urut).rincian.length).toBeGreaterThan(0);
     const sesudah = await (await ambil(`?ujian=${m.ujian}`)).json();
     expect(sesudah.butir.find((x: { urut: number }) => x.urut === row.urut).rincian.length).toBeGreaterThan(0);
+  });
+  it("selesai menilai ULANG butir yang sudah dijawab dengan penilai terbaru (poin lama yang tersimpan tidak dipakai) (V8d)", async () => {
+    const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
+    let pilih: (typeof tabel.sigap_vanguard_ujian_butir)[number] | undefined; let isian: Record<string, number> = {};
+    for (const row of tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === m.ujian && x.jenis === "v1")) {
+      const k = kasusDariBenih(row.kasus, row.benih)!; const kunci = k.kunci as Record<string, number>; const ids = idSelKasus(k);
+      const terisi = ids.filter((i) => kunci[i]), kosongId = ids.filter((i) => !kunci[i]);
+      if (terisi.length >= 1 && kosongId.length >= 1) { pilih = row; isian = { ...Object.fromEntries(terisi.slice(1).map((i) => [i, kunci[i]])), [kosongId[0]]: kunci[terisi[0]] }; break; }
+    }
+    expect(pilih).toBeTruthy();
+    await post({ aksi: "jawab", ujian: m.ujian, urut: pilih!.urut, isian });
+    expect(pilih!.poin).toBe(60); // satu salah letak = satu kesalahan fatal
+    pilih!.poin = 20; pilih!.jml_fatal = 2; // keadaan lama: dihukum dua kali
+    const sel = await (await post({ aksi: "selesai", ujian: m.ujian, menyerah: true })).json();
+    expect(sel.review.find((x: { urut: number }) => x.urut === pilih!.urut).poin).toBe(60);
+    expect(pilih!.jml_fatal).toBe(1);
   });
   it("tabel belum dibuat (SQL belum dijalankan) = 503 dengan pesan jelas, bukan 500", async () => {
     const { buatDbPalsu: _b } = await import("./vanguardFakeDb");

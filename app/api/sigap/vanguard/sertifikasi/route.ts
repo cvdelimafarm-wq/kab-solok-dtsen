@@ -39,7 +39,7 @@ function supabaseAdmin() {
 
 type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
 type UjianRow = { id: number; akun_id: number; jenis: JenisUjian; benih: number; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; butir_fatal: number | null };
-type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null }[] | null };
+type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null; dari?: string }[] | null; isian?: unknown };
 
 /** Kode Postgres 42P01 = tabel belum ada (SQL 20261101z belum dijalankan). */
 const tabelBelumAda = (e: unknown): boolean => { const x = e as { code?: string; message?: string } | null; return !!x && (x.code === "42P01" || /does not exist|schema cache/i.test(x.message ?? "")); };
@@ -58,7 +58,7 @@ async function ujianMilik(db: NonNullable<ReturnType<typeof supabaseAdmin>>, aku
   return ((data ?? []) as unknown as UjianRow[])[0] ?? null;
 }
 async function butirUjian(db: NonNullable<ReturnType<typeof supabaseAdmin>>, ujian: number): Promise<ButirRow[]> {
-  const { data, error } = await db.from("sigap_vanguard_ujian_butir").select("id, ujian_id, urut, kasus, jenis, benih, jawab_at, benar, poin, jml_fatal, jml_berat, jml_ringan, rincian").eq("ujian_id", ujian).order("urut", { ascending: true }).limit(100);
+  const { data, error } = await db.from("sigap_vanguard_ujian_butir").select("id, ujian_id, urut, kasus, jenis, benih, jawab_at, benar, poin, jml_fatal, jml_berat, jml_ringan, rincian, isian").eq("ujian_id", ujian).order("urut", { ascending: true }).limit(100);
   if (error) throw new Error(tabelBelumAda(error) ? "TABEL" : "butir");
   return (data ?? []) as unknown as ButirRow[];
 }
@@ -211,6 +211,15 @@ export async function POST(req: NextRequest) {
     if (b.aksi === "selesai") {
       const belum = butir.filter((x) => !x.jawab_at).length;
       if (belum > 0 && b.menyerah !== true) return galat(`Masih ada ${belum} butir belum dijawab.`, 400, { belum });
+      // (V8d) Butir yang sudah dijawab dinilai ULANG dengan penilai terbaru dari isian tersimpan, supaya ujian yang dimulai sebelum perbaikan penilai
+      // (mis. satu salah letak yang dulu dihukum dua kali) tidak memakai poin lama. Gagal menilai ulang tidak menggagalkan ujian: poin lama dipakai.
+      for (const x of butir) {
+        if (!x.jawab_at || x.isian == null) continue;
+        const n = nilaiButir(x.kasus, x.benih, x.isian);
+        if ("galat" in n || (n.poin === x.poin && n.fatal === (x.jml_fatal ?? 0) && n.berat === (x.jml_berat ?? 0))) continue;
+        const { error: eN } = await db.from("sigap_vanguard_ujian_butir").update({ benar: n.benar, poin: n.poin, jml_fatal: n.fatal, jml_berat: n.berat, jml_ringan: n.ringan, rincian: n.rincian }).eq("id", x.id);
+        if (!eN) Object.assign(x, { benar: n.benar, poin: n.poin, jml_fatal: n.fatal, jml_berat: n.berat, jml_ringan: n.ringan, rincian: n.rincian });
+      }
       const hasil = hitungUjian(butir.map((x) => ({ poin: x.poin, fatal: x.jml_fatal ?? 0 })), u.jumlah);
       const { error } = await db.from("sigap_vanguard_ujian").update({ selesai_at: new Date().toISOString(), skor: hasil.skor, tingkat: hasil.tingkat, butir_fatal: hasil.butirFatal }).eq("id", u.id);
       if (error) return galat("Gagal menyelesaikan ujian.", 500);

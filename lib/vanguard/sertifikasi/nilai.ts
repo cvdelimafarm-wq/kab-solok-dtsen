@@ -36,7 +36,7 @@ export function sajikanButir(kode: string, benih: number): SoalSaji | null {
   return { jenis: "v1", kode, benih, judul: String(k.judul ?? kode), data: Object.fromEntries(PUBLIK_V1.filter((f) => k[f] !== undefined).map((f) => [f, k[f]])) };
 }
 
-export type RincianNilai = { jenis: string; tingkat: "fatal" | "berat" | "ringan"; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null };
+export type RincianNilai = { jenis: string; tingkat: "fatal" | "berat" | "ringan"; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null; dari?: string };
 export type HasilButir = { benar: boolean; poin: number; fatal: number; berat: number; ringan: number; rincian: RincianNilai[]; isianBersih: unknown };
 
 function bersihkanNilaiV1(mentah: unknown): { nilai: Nilai; galat: string | null } {
@@ -76,7 +76,7 @@ export function nilaiButir(kode: string, benih: number, isian: unknown): HasilBu
     benar = h.benar; isianBersih = nilai;
     // "anda" dan "seharusnya" (rupiah; 0 = kosong) agar tinjauan dapat menampilkan jawaban petugas berdampingan dengan jawaban seharusnya
     const baris = new Map(h.evaluasi.rows.map((r) => [r.k, r]));
-    rincian = h.evaluasi.fb.map((f) => { const r = f.k ? baris.get(f.k) : undefined; return { jenis: f.jenis, tingkat: f.tingkat, pesan: f.m, sel: f.k, ...(r ? { anda: r.u, seharusnya: r.e } : {}) }; });
+    rincian = h.evaluasi.fb.map((f) => { const r = f.k ? baris.get(f.k) : undefined; const d = f.dari ? baris.get(f.dari) : undefined; return { jenis: f.jenis, tingkat: f.tingkat, pesan: f.m, sel: f.k, ...(r ? { anda: d ? d.u : r.u, seharusnya: r.e } : {}), ...(f.dari ? { dari: f.dari } : {}) }; });
     for (const p of h.pemeriksaan) if (!p.ok && !p.info && p.jenis) rincian.push({ jenis: p.jenis, tingkat: p.tingkat ?? "fatal", pesan: p.t, sel: null });
   }
   const c = cacahKesalahan(rincian);
