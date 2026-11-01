@@ -16,7 +16,7 @@ import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang";
+type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang" | "jadwal" | "tinjau" | "monitor" | "skor" | "catat";
 const JALUR: Record<Ikon, string> = {
   ringkas: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
@@ -31,6 +31,11 @@ const JALUR: Record<Ikon, string> = {
   libur: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4M9 14h2M13 14h2",
   katalog: "M5 4h11l3 3v13H5zM8 11h8M8 15h8M8 8h4",
   ulang: "M4 12a8 8 0 0 1 13.7-5.6L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.6L4 16M4 20v-4h4",
+  jadwal: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4M8 14l2 2 4-4",
+  tinjau: "M5 4h14v16H5zM8.5 12l2.5 2.5 4.5-5M8 7h8",
+  monitor: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  skor: "M12 4v16M6 8h12M6 8l-3 6a3 3 0 0 0 6 0zM18 8l-3 6a3 3 0 0 0 6 0z",
+  catat: "M4 20h4l10-10-4-4L4 16zM13 7l4 4",
   penilaian: "M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z",
 };
 function Gambar({ n, ukuran = 18 }: { n: Ikon; ukuran?: number }) {
@@ -54,12 +59,14 @@ export function TandaDelego({ ukuran = 30 }: { ukuran?: number }) {
   );
 }
 
-type Butir = { href: string; label: string; ikon: Ikon; persis?: boolean };
+type Butir = { href: string; label: string; ikon: Ikon; persis?: boolean; pendek?: string };
 const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego", label: "Beranda tim", ikon: "beranda", persis: true },
   { href: "/sigap/delego/papan", label: "Papan delegasi", ikon: "papan" },
+  { href: "/sigap/delego/tinjau", label: "Tinjau laporan", ikon: "tinjau" },
   { href: "/sigap/delego/laporan", label: "Laporan tim", ikon: "laporan" },
   { href: "/sigap/delego/beban", label: "Beban kerja", ikon: "beban" },
+  { href: "/sigap/delego/monitor", label: "Monitoring Kepala", ikon: "monitor" },
   { href: "/sigap/delego/pembinaan", label: "Pembinaan dan skor", ikon: "pembinaan" },
   { href: "/sigap/delego/jenis", label: "Katalog pekerjaan", ikon: "katalog" },
   { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
@@ -68,11 +75,16 @@ const BUTIR_TIM: Butir[] = [
 const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };
 const BUTIR_SAYA: Butir[] = [
-  { href: "/sigap/delego/saya", label: "Delegasi saya", ikon: "tugas" },
-  { href: "/sigap/delego/lapor", label: "Lapor harian", ikon: "lapor" },
-  { href: "/sigap/delego/riwayat", label: "Riwayat", ikon: "riwayat" },
-  { href: "/sigap/delego/penilaian", label: "Penilaian saya", ikon: "penilaian" },
+  { href: "/sigap/delego/jadwal", label: "Pekerjaan saya", ikon: "jadwal", pendek: "Pekerjaan" },
+  { href: "/sigap/delego/saya", label: "Delegasi saya", ikon: "tugas", pendek: "Delegasi" },
+  { href: "/sigap/delego/lapor", label: "Lapor harian", ikon: "lapor", pendek: "Lapor" },
+  { href: "/sigap/delego/catat", label: "Catat pekerjaan", ikon: "catat", pendek: "Catat" },
+  { href: "/sigap/delego/skor", label: "Katalog skor", ikon: "skor", pendek: "Skor" },
+  { href: "/sigap/delego/riwayat", label: "Riwayat", ikon: "riwayat", pendek: "Riwayat" },
+  { href: "/sigap/delego/penilaian", label: "Penilaian saya", ikon: "penilaian", pendek: "Nilai" },
 ];
+/** Lima entri tab bawah di HP (yang lain ada di sidebar layar lebar dan lewat tautan di halaman). */
+const BUTIR_TAB: Butir[] = BUTIR_SAYA.filter((b) => ["/sigap/delego/jadwal", "/sigap/delego/saya", "/sigap/delego/lapor", "/sigap/delego/catat", "/sigap/delego/riwayat"].includes(b.href));
 
 const inisial = (nama: string) =>
   nama
@@ -212,7 +224,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
 
         {/* ------------------------------------------------ Tab bawah (HP) */}
         <nav aria-label="Menu saya" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[#D5DCE2] bg-white lg:hidden print:hidden">
-          {BUTIR_SAYA.map((b) => (
+          {BUTIR_TAB.map((b) => (
             <Link
               key={b.href}
               href={b.href}
@@ -220,7 +232,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
               className={`flex min-h-[60px] flex-1 flex-col items-center justify-center gap-0.5 text-[12px] ${aktif(b) ? "font-bold text-[#0B524C]" : "font-medium text-[#33404B]"}`}
             >
               <Gambar n={b.ikon} ukuran={22} />
-              {b.label.replace(" saya", "").replace(" harian", "")}
+              {b.pendek ?? b.label}
             </Link>
           ))}
         </nav>

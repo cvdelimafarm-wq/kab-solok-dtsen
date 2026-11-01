@@ -41,7 +41,7 @@ export function Lencana({ nada = "abu", children }: { nada?: Nada; children: Rea
   return <span className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-[2px] text-[12px] font-semibold ${KELAS_NADA[nada]}`}>{children}</span>;
 }
 
-export const NADA_STATUS: Record<StatusDelegasi, Nada> = { baru: "abu", berjalan: "biru", selesai: "hijau", ditunda: "amber", batal: "merah" };
+export const NADA_STATUS: Record<StatusDelegasi, Nada> = { usulan: "biru", baru: "abu", berjalan: "biru", selesai: "hijau", ditunda: "amber", batal: "merah" };
 
 export function Batang({ persen, nada = "hijau", tinggi = 8 }: { persen: number; nada?: "hijau" | "amber" | "merah"; tinggi?: number }) {
   const lebar = Math.max(0, Math.min(100, persen));

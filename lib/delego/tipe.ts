@@ -4,11 +4,11 @@
 // (berkas SQL 20261026c_keu_delego.sql, diperluas 20261026g). Angka numeric dari Postgres tiba sebagai string ("60.00"); gunakan `angka()` dari hitung.ts.
 
 export type PeranDelegasi = "wakil" | "pegawai" | "pml" | "ppl";
-export type StatusDelegasi = "baru" | "berjalan" | "selesai" | "ditunda" | "batal";
+export type StatusDelegasi = "usulan" | "baru" | "berjalan" | "selesai" | "ditunda" | "batal";
 export type JenisAkun = "organik" | "mitra";
 
 export const NAMA_PERAN: Record<PeranDelegasi, string> = { wakil: "Wakil Ketua Tim", pegawai: "Pegawai", pml: "PML", ppl: "PPL" };
-export const NAMA_STATUS: Record<StatusDelegasi, string> = { baru: "Baru", berjalan: "Berjalan", selesai: "Selesai", ditunda: "Ditunda", batal: "Batal" };
+export const NAMA_STATUS: Record<StatusDelegasi, string> = { usulan: "Usulan", baru: "Baru", berjalan: "Berjalan", selesai: "Selesai", ditunda: "Ditunda", batal: "Batal" };
 
 /** Satu baris riwayat target harian (baris pertama = target awal). Perubahan berlaku mulai `berlaku_mulai`, tidak surut. */
 export type RiwayatTarget = { berlaku_mulai: string; target_harian: string | number; alasan: string };
@@ -62,6 +62,37 @@ export type Delegasi = {
   rutin_id?: number | null;
   /** Nama kelompok "Pekerjaan tim" bila ro_kode berawalan TIM-. */
   kelompok_nama?: string | null;
+  // --- Delego perangkum (20261101zb)
+  kelas?: KelasPekerjaan;
+  /** Kegiatan SIGAP yang ditautkan (kunci rekap lintas kegiatan; satu RO bisa dipakai beberapa kegiatan). */
+  kegiatan_id?: number | null;
+  mode_tutup?: "tinjau" | "ringan" | "sumber";
+  terhalang_oleh?: string | null;
+  terhalang_sejak?: string | null;
+  usulan_oleh?: number | null;
+  usulan_at?: string | null;
+  usulan_catatan?: string;
+  skor_alasan?: string;
+};
+
+export type KelasPekerjaan = "langsung" | "penunjang" | "proses" | "lapangan" | "perintah" | "rutin";
+export const NAMA_KELAS: Record<KelasPekerjaan, string> = {
+  langsung: "Pekerjaan langsung",
+  penunjang: "Penunjang organisasi",
+  proses: "Proses administrasi",
+  lapangan: "Lapangan dan pelatihan",
+  perintah: "Perintah langsung",
+  rutin: "Urusan kantor rutin",
+};
+
+/** Status tinjau sebuah laporan (kolom keu_dlg_laporan.tinjau_status). */
+export type StatusTinjau = "menunggu" | "disetujui" | "ditolak" | "disanggah" | "tidak_diakui";
+export const NAMA_TINJAU: Record<StatusTinjau, string> = {
+  menunggu: "Menunggu tinjau",
+  disetujui: "Disetujui",
+  ditolak: "Perlu revisi",
+  disanggah: "Disanggah",
+  tidak_diakui: "Tidak diakui",
 };
 
 export type Laporan = {
@@ -78,6 +109,14 @@ export type Laporan = {
   dikirim_at: string;
   /** Jumlah satuan (hanya laporan delegasi berjenis); poin = jumlah x poin_per_satuan. */
   jumlah?: string | number | null;
+  // --- Tinjau (20261101zb)
+  tinjau_status?: StatusTinjau;
+  tinjau_oleh?: number | null;
+  tinjau_at?: string | null;
+  tinjau_alasan?: string;
+  /** Poin yang diakui setelah putusan Kepala (null = seluruh poin laporan). */
+  poin_diakui?: string | number | null;
+  menit_nyata?: number | null;
 };
 
 export type Tanggapan = { id: number; delegasi_id: number; laporan_id: number | null; isi: string; dibuat_at: string; dari_nama: string | null };
@@ -210,3 +249,210 @@ export type BahanTim = {
 export type CalonLanjutan = { nama: string; peran: string | null; jenis: string | null; akun_id: number | null };
 export type CalonAkun = { id: number; nama: string; jenis: JenisAkun; kecamatan?: string | null };
 export type Calon = { lanjutan: CalonLanjutan[]; organik: CalonAkun[]; cari: CalonAkun[] };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Delego perangkum (20261101zb): tinjau, sanggah, usulan pegawai, katalog skor, rekap beban, monitoring Kepala
+// ---------------------------------------------------------------------------------------------------------------------
+export type LaporanTinjau = {
+  id: number;
+  delegasi_id: number;
+  tanggal: string;
+  poin: string | number;
+  uraian: string;
+  kendala: string;
+  bukti: unknown[];
+  jumlah?: string | number | null;
+  menit_nyata?: number | null;
+  dikirim_at: string;
+  tinjau_status: StatusTinjau;
+  tinjau_alasan: string;
+  mewakili: boolean;
+  judul: string;
+  ro_kode: string;
+  satuan: string;
+  poin_per_satuan: string | number | null;
+  target_total: string | number | null;
+  target_harian: string | number;
+  tenggat: string;
+  penerima_akun: number;
+  pemberi_akun: number | null;
+  kegiatan_id: number | null;
+  penerima_nama: string;
+  kegiatan_nama: string | null;
+  /** Hari kerja sejak laporan dikirim (dihitung basis data). */
+  hk_lewat: number;
+  poin_total: string | number;
+};
+
+export type UsulanMenunggu = {
+  id: number;
+  judul: string;
+  uraian: string;
+  ro_kode: string;
+  satuan: string;
+  poin_per_satuan: string | number | null;
+  target_total: string | number | null;
+  target_harian: string | number;
+  mulai: string;
+  tenggat: string;
+  penerima_akun: number;
+  usulan_oleh: number | null;
+  usulan_at: string | null;
+  kegiatan_id: number | null;
+  kelas: KelasPekerjaan;
+  skor_alasan: string;
+  hari_kerja: number[];
+  penerima_nama: string;
+  kegiatan_nama: string | null;
+  hk_lewat: number;
+};
+
+export type StatusSanggah = "menunggu_jawab" | "menunggu_putusan" | "diputus";
+export type PutusanSanggah = "benar" | "sebagian" | "salah";
+export type Sanggah = {
+  id: number;
+  laporan_id: number;
+  delegasi_id: number;
+  alasan: string;
+  bukti: unknown[];
+  diajukan_oleh: number;
+  diajukan_at: string;
+  batas_jawab: string;
+  jawaban: string | null;
+  jawaban_bukti: unknown[];
+  dijawab_at: string | null;
+  status: StatusSanggah;
+  putusan: PutusanSanggah | null;
+  poin_diakui: string | number | null;
+  catatan_putusan: string;
+  diputus_at: string | null;
+  pengaju_nama: string;
+  penerima_nama: string;
+  penerima_akun: number;
+  judul: string;
+  ro_kode: string;
+  satuan: string;
+  tanggal: string;
+  poin: string | number;
+  uraian: string;
+  kendala: string;
+  bukti_laporan: unknown[];
+  jumlah?: string | number | null;
+};
+
+export type UsulanSaya = {
+  id: number;
+  judul: string;
+  status: StatusDelegasi;
+  ro_kode: string;
+  kegiatan_id: number | null;
+  kegiatan_nama: string | null;
+  satuan: string;
+  poin_per_satuan: string | number | null;
+  target_total: string | number | null;
+  tenggat: string;
+  usulan_at: string | null;
+  alasan: string;
+  usulan_catatan: string;
+};
+
+export type StatusSkor = "usulan" | "disetujui" | "ditolak";
+export type SkorSaya = { id: number; nama: string; satuan: string; poin_per_satuan: string | number; skor_status: StatusSkor; skor_alasan: string };
+
+export type BahanTinjau = {
+  hari_ini: string;
+  pemutus: boolean;
+  beri: boolean;
+  antrean: LaporanTinjau[];
+  revisi: LaporanTinjau[];
+  usulan: UsulanMenunggu[];
+  sanggah: Sanggah[];
+  saya: {
+    usulan: UsulanSaya[];
+    laporan: { id: number; delegasi_id: number; tanggal: string; poin: string | number; tinjau_status: StatusTinjau; tinjau_alasan: string; poin_diakui: string | number | null }[];
+    skor: SkorSaya[];
+  };
+};
+
+/** Satu jenis di Katalog skor (bentuk baca keu_dlg_katalog_skor). Kertas kerja disimpan sebagai objek bebas yang dibaca lib/delego/skor.ts. */
+export type JenisSkor = {
+  id: number;
+  kode: string;
+  nama: string;
+  satuan: string;
+  poin_per_satuan: string | number;
+  uraian: string;
+  aktif: boolean;
+  skor_status: StatusSkor;
+  skor_alasan: string;
+  kertas_kerja: Record<string, unknown> | null;
+  diusulkan_oleh: number | null;
+  diusulkan_nama: string | null;
+  urut: number;
+};
+export type KegiatanTim = { id: number; nama: string; jenis: string; ro_kode: string; tanggal_mulai: string | null; tanggal_selesai: string | null };
+export type KatalogSkor = {
+  hari_ini: string;
+  boleh_putus: boolean;
+  jenis: JenisSkor[];
+  kegiatan: KegiatanTim[];
+  kelompok: { kode: string; nama: string }[];
+};
+
+export type JenisKetersediaan = "cuti" | "izin" | "sakit" | "dinas_luar" | "lainnya";
+export type StatusKetersediaan = "diajukan" | "disetujui" | "ditolak";
+export type Ketersediaan = { id: number; akun: number; jenis: JenisKetersediaan; mulai: string; selesai: string; fraksi: string | number; status: StatusKetersediaan; catatan: string };
+export type BarisLapangan = { akun: number; tanggal: string; kegiatan_id: number; kegiatan: string; jenis: string; peran: string };
+export type Rekap = {
+  hari_ini: string;
+  dari: string;
+  sampai: string;
+  orang: { akun: number; nama: string; jenis: JenisAkun }[];
+  lapangan: BarisLapangan[];
+  ketersediaan: Ketersediaan[];
+};
+
+export type CapaianPegawai = {
+  akun: number;
+  nama: string;
+  mandiri: string | number;
+  terverifikasi: string | number;
+  disanggah: string | number;
+  belum: string | number;
+  tidak_diakui: string | number;
+  dikoreksi: string | number;
+  n_laporan: number;
+};
+export type PeninjauMonitor = { akun: number; nama: string; menunggu: number; lewat3: number; sanggah_diajukan: number; sanggah_ditolak: number };
+export type SanggahMonitor = {
+  id: number;
+  status: StatusSanggah;
+  penerima_akun: number;
+  penerima_nama: string;
+  judul: string;
+  ro_kode: string;
+  tanggal: string;
+  poin: string | number;
+  uraian: string;
+  alasan: string;
+  pengaju_nama: string;
+  diajukan_at: string;
+  batas_jawab: string;
+  jawaban: string | null;
+  dijawab_at: string | null;
+  putusan: PutusanSanggah | null;
+  poin_diakui: string | number | null;
+  catatan_putusan: string;
+};
+export type Monitor = {
+  hari_ini: string;
+  dari: string;
+  sampai: string;
+  pemutus: boolean;
+  capaian: CapaianPegawai[];
+  peninjau: PeninjauMonitor[];
+  terhalang: { oleh: string; jumlah: number }[];
+  tepat_waktu: { selesai: number; tepat: number };
+  usulan: { menunggu: number; lewat3: number };
+  sanggah: SanggahMonitor[];
+};

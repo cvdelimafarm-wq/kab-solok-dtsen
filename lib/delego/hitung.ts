@@ -385,7 +385,7 @@ export function skorPenerima(delegasi: Delegasi[], laporan: Laporan[], penilaian
   let tk = 0;
   let cap = 0;
   for (const d of delegasi) {
-    if (d.status === "batal") continue;
+    if (d.status === "batal" || d.status === "usulan") continue;
     const awal = maks(d.mulai, tambahHari(hari, -34));
     const akhir = mini(tambahHari(hari, -1), d.tenggat);
     harapan += hariKerjaAntara(awal, akhir, d.hari_kerja);

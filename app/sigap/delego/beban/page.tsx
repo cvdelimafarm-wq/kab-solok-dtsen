@@ -17,11 +17,12 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
+import Terpadu from "./Terpadu";
 
 /** Persentase beban yang dipetakan ke warna paling jenuh pada skala. */
 const PUNCAK_SKALA = 150;
 
-export default function Beban() {
+function BebanPerRo() {
   const { hari, hak, pemberi, bolehBeri } = useKonteksDelego();
   const f = useFilterRo();
   const b = useBahan();
@@ -169,6 +170,38 @@ export default function Beban() {
           </Kartu>
         </div>
       )}
+    </Halaman>
+  );
+}
+
+function Pengalih({ mode, ganti }: { mode: "terpadu" | "ro"; ganti: (m: "terpadu" | "ro") => void }) {
+  return (
+    <div className="flex gap-2" role="group" aria-label="Tampilan beban">
+      {(["terpadu", "ro"] as const).map((k) => (
+        <button key={k} type="button" aria-pressed={mode === k} onClick={() => ganti(k)} className={`min-h-[38px] rounded-full border px-3.5 text-[13.5px] font-semibold ${mode === k ? "border-[#0F6B63] bg-[#0F6B63] text-white" : "border-[#BCC6CE] bg-white"}`}>
+          {k === "terpadu" ? "Terpadu lintas kegiatan" : "Per RO dan saran pemerataan"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * (1 Nov 2026) Beban kerja: tampilan TERPADU (bawaan) merangkum seluruh pekerjaan pegawai lintas kegiatan per hari; tampilan Per RO adalah layar lama
+ * (beban mingguan per RO dan saran pemerataan) yang tetap tersedia.
+ */
+export default function Beban() {
+  const [mode, setMode] = useState<"terpadu" | "ro">("terpadu");
+  if (mode === "ro")
+    return (
+      <div className="space-y-3">
+        <Pengalih mode={mode} ganti={setMode} />
+        <BebanPerRo />
+      </div>
+    );
+  return (
+    <Halaman judul="Beban kerja pegawai" sub="Seluruh pekerjaan per hari: delegasi dari semua kegiatan, pekerjaan kantor, lapangan, pelatihan, dan ketersediaan." kanan={<Pengalih mode={mode} ganti={setMode} />}>
+      <Terpadu />
     </Halaman>
   );
 }

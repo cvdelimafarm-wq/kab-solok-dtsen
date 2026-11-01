@@ -5,7 +5,8 @@
 
 export type JenisNotif = "ident_fix" | "ident_pasca_h15" | "nama_terisi" | "lembar_menunggu" | "pengecualian_diajukan" | "pengecualian_putus" | "penugasan_diterapkan" | "gap_keras" | "gap_akhir"
   | "delegasi_baru" | "delegasi_ubah" | "delegasi_tanggapan" | "delegasi_pembinaan" | "delegasi_penghargaan" | "delegasi_pengingat"
-  | "delegasi_hasil" | "delegasi_tinjau" | "delegasi_tenggat";
+  | "delegasi_hasil" | "delegasi_tinjau" | "delegasi_tenggat"
+  | "delegasi_usulan" | "delegasi_usulan_putus" | "delegasi_laporan_tinjau" | "delegasi_sanggah" | "delegasi_sanggah_jawab" | "delegasi_putusan" | "delegasi_skor" | "delegasi_ketersediaan";
 export type Nada = "abu" | "biru" | "kuning" | "hijau" | "merah";
 
 export type Notifikasi = {
@@ -33,6 +34,14 @@ export const LABEL_NOTIF: Record<JenisNotif, { teks: string; nada: Nada }> = {
   delegasi_hasil: { teks: "Hasil kerja diserahkan", nada: "biru" },
   delegasi_tinjau: { teks: "Hasil kerja ditinjau", nada: "hijau" },
   delegasi_tenggat: { teks: "Tenggat jam", nada: "merah" },
+  delegasi_usulan: { teks: "Usulan pekerjaan", nada: "biru" },
+  delegasi_usulan_putus: { teks: "Putusan usulan", nada: "hijau" },
+  delegasi_laporan_tinjau: { teks: "Tinjau laporan", nada: "biru" },
+  delegasi_sanggah: { teks: "Sanggahan laporan", nada: "merah" },
+  delegasi_sanggah_jawab: { teks: "Jawaban sanggahan", nada: "kuning" },
+  delegasi_putusan: { teks: "Putusan sanggahan", nada: "hijau" },
+  delegasi_skor: { teks: "Skor beban", nada: "biru" },
+  delegasi_ketersediaan: { teks: "Ketersediaan", nada: "kuning" },
 };
 
 /** Tautan yang boleh dibuka dari notifikasi: hanya alamat dalam SIGAP (diawali /sigap/). */

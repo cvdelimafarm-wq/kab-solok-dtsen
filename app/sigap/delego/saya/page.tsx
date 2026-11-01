@@ -13,6 +13,7 @@ import { useKonteksDelego } from "../konteks";
 import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
 import { PanelHasil, PanelLangkah, Penanda } from "../KerjaTeknis";
+import PanelTinjauSaya, { TandaTerhalang } from "../PanelTinjauSaya";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, NADA_STATUS, Peringatan, fmt } from "../ui";
 import { useKirim, useSaya } from "../data";
 
@@ -37,7 +38,10 @@ function KartuTugas({ d, s, terima, sibuk, muat }: { d: Delegasi; s: BahanSaya; 
             {d.kelompok_nama ? ` · ${d.kelompok_nama}` : ""}
           </div>
         </div>
-        <Lencana nada={NADA_STATUS[d.status]}>{NAMA_STATUS[d.status]}</Lencana>
+        <div className="flex flex-col items-end gap-1">
+          <Lencana nada={NADA_STATUS[d.status]}>{NAMA_STATUS[d.status]}</Lencana>
+          {d.terhalang_oleh && <Lencana nada="amber">Terhalang</Lencana>}
+        </div>
       </div>
       <Penanda d={d} hasil={s.hasil} langkah={s.langkah} />
       <div className="space-y-1.5">
@@ -72,6 +76,7 @@ function KartuTugas({ d, s, terima, sibuk, muat }: { d: Delegasi; s: BahanSaya; 
             Target {fmt(angka(d.target_harian), 1)} {satuanAngka(d)} per hari kerja, {tglPendek(d.mulai)} sampai {tglPendek(d.tenggat)}.
           </div>
           <PanelLangkah d={d} langkah={s.langkah ?? []} bolehAtur={false} bolehCentang muat={muat} />
+          {(d.status === "baru" || d.status === "berjalan") && <TandaTerhalang id={d.id} oleh={d.terhalang_oleh} muat={muat} />}
           <PanelHasil d={d} hasil={s.hasil ?? []} sebagai="penerima" muat={muat} />
           {riwayat.length > 0 && (
             <ul className="m-0 list-none space-y-1 p-0">
@@ -106,7 +111,7 @@ export default function Saya() {
   const mitra = d?.akun.jenis === "mitra";
 
   const aktif = d ? d.delegasi.filter(aktifSaja) : [];
-  const lain = d ? d.delegasi.filter((x) => !aktifSaja(x)) : [];
+  const lain = d ? d.delegasi.filter((x) => !aktifSaja(x) && x.status !== "usulan") : [];
   const wajib = d ? aktif.filter((x) => ["belum", "perlu_pengingat"].includes(statusLaporanHariIni(x, d.laporan, hari, jam))) : [];
   const sudah = d ? aktif.filter((x) => statusLaporanHariIni(x, d.laporan, hari, jam) === "sudah") : [];
   const targetHariIni = wajib.reduce((t, x) => t + ringkasHariIni(x, d?.laporan ?? [], hari).sisaHariIni, 0);
@@ -140,6 +145,8 @@ export default function Saya() {
             ) : (
               <Info>Hari ini bukan hari kerja untuk delegasi Anda, jadi tidak ada laporan yang perlu dikirim.</Info>
             )}
+
+            <PanelTinjauSaya />
 
             {beban && beban.persen > 100 && (
               <Peringatan>Beban minggu ini {beban.persen}%. Bila terlalu berat, tulis di kolom kendala agar Ketua Tim dapat meratakan.</Peringatan>

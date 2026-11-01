@@ -36,6 +36,7 @@ export default function Lapor() {
   const [poin, setPoin] = useState(""); // untuk delegasi berjenis: jumlah satuan
   const [uraian, setUraian] = useState("");
   const [kendala, setKendala] = useState("");
+  const [menit, setMenit] = useState(""); // jam kerja nyata (menit), opsional: bahan kalibrasi skor
   const [bukti, setBukti] = useState<ButirForm[]>([]);
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const kirim = useKirim(s.muat);
@@ -56,6 +57,7 @@ export default function Lapor() {
     setPoin(ada ? (pp > 0 ? String(ada.jumlah !== null && ada.jumlah !== undefined ? angka(ada.jumlah) : jumlahDariPoin(pp, angka(ada.poin))) : String(angka(ada.poin))) : "");
     setUraian(ada?.uraian ?? "");
     setKendala(ada?.kendala ?? "");
+    setMenit(ada?.menit_nyata ? String(ada.menit_nyata) : "");
     setBukti(bacaDaftar(ada?.bukti).map((b) => ({ ket: b.ket, path: b.path })));
     setHasil(null);
   }, [ada?.id, terpilih?.id, tanggal]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,7 +80,14 @@ export default function Lapor() {
       const res = jenis
         ? await aksiKeu<Hasil>("keu_dlg_lapor_jumlah", { ...dasar, p_jumlah: isiAngka })
         : await aksiKeu<Hasil>("keu_dlg_lapor", { ...dasar, p_poin: poinAngka });
-      if (res.ok) setHasil(res.data);
+      if (res.ok) {
+        setHasil(res.data);
+        const m = Math.round(Number(menit.replace(",", ".")));
+        if (menit.trim() !== "" && Number.isFinite(m) && m >= 1 && m <= 1440) {
+          const r2 = await aksiKeu("keu_dlg_menit_nyata", { p_laporan: res.data.id, p_menit: m });
+          if (!r2.ok) return r2;
+        }
+      }
       return res;
     });
   }
@@ -141,8 +150,13 @@ export default function Lapor() {
               <Medan label="Kendala" bantu="Tulis bila beban terlalu berat atau ada hambatan di lapangan agar Ketua Tim dapat membantu.">
                 <textarea className={KELAS.isian} rows={2} maxLength={500} value={kendala} onChange={(e) => setKendala(e.target.value)} placeholder="Kosongkan bila tidak ada" />
               </Medan>
+              <Medan label="Jam kerja nyata (menit, boleh dikosongkan)" bantu="Membantu Ketua Tim memeriksa apakah skor pekerjaan ini wajar. Tidak memengaruhi poin laporan.">
+                <input type="number" inputMode="numeric" min={1} max={1440} step={1} className={KELAS.isian} value={menit} onChange={(e) => setMenit(e.target.value)} placeholder="Mis. 90" />
+              </Medan>
               <PenyuntingBukti delegasi={terpilih.id} butir={bukti} onUbah={setBukti} mati={kirim.mengirim} />
               {tanggal < hari && !ada && <Peringatan>Laporan untuk {tglPendek(tanggal)} akan ditandai terlambat.</Peringatan>}
+              {ada && ada.tinjau_status === "ditolak" && <Peringatan><b>Perlu revisi.</b> {ada.tinjau_alasan || "Ketua Tim meminta perbaikan."} Perbarui lalu kirim ulang.</Peringatan>}
+              {ada && ada.tinjau_status === "disanggah" && <Peringatan>Laporan ini sedang disanggah dan tidak dapat diubah. Jawab sanggahan di Delegasi saya.</Peringatan>}
               {ada && <Info>Sudah ada laporan {tglPendek(tanggal)} ({teksJumlah(terpilih, angka(ada.poin), (n) => fmt(n, 1))}). Mengirim akan memperbarui laporan itu.</Info>}
               {kirim.galat && <Galat>{kirim.galat}</Galat>}
               {hasil && (
