@@ -74,15 +74,22 @@ describe("susunRekap", () => {
     expect(b.sel[3].kapasitas).toBe(Math.round(kapasitasPada("2026-11-12") * 0.5 * 100) / 100); // setengah hari
     expect(h.ringkas.tidakTersedia).toBe(1);
   });
-  it("hari libur dan akhir pekan berkapasitas nol; beban di sana ditandai berlebih", () => {
+  it("hari libur dan akhir pekan tanpa pekerjaan berkapasitas nol; bila dikerjakan dihitung hari penuh dan ditandai lembur", () => {
     aturLibur([{ tanggal: "2026-11-11", nama: "Libur uji", aktif: true }]);
     const h = susunRekap({ ...dasar, lapangan: [lap({ tanggal: "2026-11-11" }), lap({ tanggal: "2026-11-14" })] });
     const a = h.baris.find((b) => b.akun === 4)!;
-    expect(a.sel.find((s) => s.tanggal === "2026-11-11")!.kapasitas).toBe(0);
-    expect(a.sel.find((s) => s.tanggal === "2026-11-11")!.libur).toBe("Libur uji");
-    expect(a.sel.find((s) => s.tanggal === "2026-11-11")!.kategori).toBe("berlebih");
-    expect(a.sel.find((s) => s.tanggal === "2026-11-14")!.kategori).toBe("berlebih");
+    const libur = a.sel.find((s) => s.tanggal === "2026-11-11")!;
+    expect(libur.libur).toBe("Libur uji");
+    expect(libur.lembur).toBe(true);
+    expect(libur.kapasitas).toBe(75);
+    expect(libur.persen).toBe(100);
+    expect(a.sel.find((s) => s.tanggal === "2026-11-14")!.kategori).toBe("sasaran");
+    expect(a.hariLembur).toBe(2);
+    expect(h.ringkas.lembur).toBe(1);
     expect(h.adaAkhirPekan).toBe(true);
+    const kosong = a.sel.find((s) => s.tanggal === "2026-11-15")!; // Minggu tanpa pekerjaan
+    expect(kosong.kapasitas).toBe(0);
+    expect(kosong.lembur).toBe(false);
   });
   it("saringan kegiatan hanya menampilkan beban kegiatan itu", () => {
     const masukan = { ...dasar, delegasi: [dg({ kegiatan_id: 6, target_harian: "20.00" }), dg({ kegiatan_id: null, target_harian: "10.00" })], lapangan: [lap({})] };

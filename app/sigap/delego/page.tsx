@@ -100,7 +100,7 @@ export default function BerandaTim() {
             <Statistik label="Sudah lapor hari ini" nilai={`${tim.sudahLapor}/${tim.sudahLapor + tim.belumLapor}`} ket="dari yang wajib lapor" />
             <Statistik label="Belum lapor" nilai={tim.belumLapor} ket={tim.perluPengingat > 0 ? `${tim.perluPengingat} lewat jam pengingat` : "belum lewat jam pengingat"} nada={tim.perluPengingat > 0 ? "amber" : "biasa"} />
             <Statistik label="Hutang poin" nilai={fmt(tim.hutangTotal)} ket={tim.perluCatatan > 0 ? `${tim.perluCatatan} perlu catatan lisan` : "tidak ada yang melewati ambang"} nada={tim.perluCatatan > 0 ? "amber" : "biasa"} />
-            <Statistik label="Beban berlebih" nilai={terpadu ? terpadu.ringkas.berlebih : tim.berlebih} ket="orang di atas 100% minggu ini (semua pekerjaan)" nada={(terpadu ? terpadu.ringkas.berlebih : tim.berlebih) > 0 ? "merah" : "biasa"} />
+            <Statistik label="Beban berlebih" nilai={terpadu ? terpadu.ringkas.berlebih : tim.berlebih} ket={terpadu && terpadu.ringkas.lembur > 0 ? `orang di atas 100% minggu ini; ${terpadu.ringkas.lembur} orang juga kerja di akhir pekan/libur` : "orang di atas 100% minggu ini (semua pekerjaan)"} nada={(terpadu ? terpadu.ringkas.berlebih : tim.berlebih) > 0 ? "merah" : "biasa"} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">

@@ -108,7 +108,7 @@ export default function Catat() {
     if (tautan === "kantor") data.kelompok = kelompok || d?.kelompok[0]?.kode;
     else data.kegiatan_id = Number(tautan);
     if (jenisId) data.jenis_id = Number(jenisId);
-    if (kelas) data.kelas = kelas;
+    data.kelas = kelas || "langsung"; // usulan pegawai adalah pekerjaan kerja, bukan kehadiran lapangan (itu dari penugasan)
     const r = await aksiKeu<{ poin_total: number; hari_kerja: number }>("keu_dlg_usul", { p_data: data });
     setMengirim(false);
     if (!r.ok) {
@@ -209,7 +209,7 @@ export default function Catat() {
                     )}
                   </div>
                 )}
-                <Medan label="Jenis urusan (opsional)" bantu="Bila dikosongkan, usulan bertaut kegiatan dicatat sebagai Lapangan dan pelatihan, selain itu Pekerjaan langsung.">
+                <Medan label="Jenis urusan (opsional)" bantu="Bila dikosongkan, dicatat sebagai Pekerjaan langsung. Kehadiran lapangan dan pelatihan tidak perlu dicatat di sini: sudah otomatis dari penugasan kegiatan.">
                   <select className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
                     <option value="">Otomatis</option>
                     {(Object.keys(NAMA_KELAS) as KelasPekerjaan[]).map((k) => (

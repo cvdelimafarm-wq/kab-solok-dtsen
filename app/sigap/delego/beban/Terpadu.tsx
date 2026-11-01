@@ -101,11 +101,12 @@ export default function Terpadu() {
       {hasil && hasil.baris.length === 0 && <Kosong>Belum ada pegawai atau pekerjaan pada rentang ini.</Kosong>}
       {hasil && hasil.baris.length > 0 && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <div className={KELAS.kartu}><div className="text-[12.5px] text-[#3B4A57]">Pegawai</div><div className="text-[24px] font-bold">{hasil.ringkas.jumlah}</div></div>
             <div className={KELAS.kartu}><div className="text-[12.5px] text-[#3B4A57]">Sesuai sasaran</div><div className="text-[24px] font-bold text-[#0B524C]">{hasil.ringkas.sasaran}</div></div>
             <div className={KELAS.kartu}><div className="text-[12.5px] text-[#3B4A57]">Berlebih</div><div className="text-[24px] font-bold text-[#9B2C2C]">{hasil.ringkas.berlebih}</div></div>
             <div className={KELAS.kartu}><div className="text-[12.5px] text-[#3B4A57]">Longgar atau kosong</div><div className="text-[24px] font-bold text-[#1D3F6B]">{hasil.ringkas.ringan}</div></div>
+            <div className={KELAS.kartu}><div className="text-[12.5px] text-[#3B4A57]">Kerja di akhir pekan atau libur</div><div className={`text-[24px] font-bold ${hasil.ringkas.lembur > 0 ? "text-[#8A4605]" : ""}`}>{hasil.ringkas.lembur}</div></div>
           </div>
 
           <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari kapasitas hari itu. Garis putus-putus: usulan belum disetujui.</span>}>
@@ -130,7 +131,7 @@ export default function Terpadu() {
                           type="button"
                           onClick={() => setPilih(pilihIni ? null : { akun: o.akun, tanggal: c.tanggal })}
                           title={`${tglPendek(c.tanggal)}: ${fmt(c.poin, 0)} poin (${c.persen}%)${c.libur ? ` · ${c.libur}` : ""}${c.bayangan > 0 ? ` · usulan ${fmt(c.bayangan, 0)} poin` : ""}`}
-                          className={`rounded-md py-1.5 text-[12px] ${w ? "font-bold" : c.kategori === "tidak_tersedia" ? "bg-[#E1E6EA] font-semibold text-[#3B4A57]" : "bg-[#F3F5F7] text-[#7A8793]"} ${c.tanggal === hari ? "ring-2 ring-[#0F6B63]" : ""} ${pilihIni ? "outline outline-2 outline-[#14212B]" : ""} ${c.bayangan > 0 ? "border border-dashed border-[#1D3F6B]" : "border border-transparent"}`}
+                          className={`rounded-md py-1.5 text-[12px] ${w ? "font-bold" : c.kategori === "tidak_tersedia" ? "bg-[#E1E6EA] font-semibold text-[#3B4A57]" : "bg-[#F3F5F7] text-[#7A8793]"} ${c.tanggal === hari ? "ring-2 ring-[#0F6B63]" : ""} ${c.lembur ? "underline decoration-2 underline-offset-2" : ""} ${pilihIni ? "outline outline-2 outline-[#14212B]" : ""} ${c.bayangan > 0 ? "border border-dashed border-[#1D3F6B]" : "border border-transparent"}`}
                           style={w ? { backgroundColor: w.latar, color: w.teks } : undefined}
                         >
                           {c.kategori === "tidak_tersedia" ? (c.ketersediaan?.jenis === "cuti" ? "C" : c.ketersediaan?.jenis === "sakit" ? "S" : c.ketersediaan?.jenis === "dinas_luar" ? "DL" : "I") : w ? (c.persen === 999 ? "!" : rentang === "bulan" ? Math.round(c.persen / 10) * 10 : c.persen) : c.libur ? "L" : "·"}
@@ -145,17 +146,17 @@ export default function Terpadu() {
               <div className="h-3 w-full rounded-full border border-[#D5DCE2]" style={{ backgroundImage: gradienLegenda(SASARAN.min, SASARAN.max, PUNCAK) }} />
               <div className="mt-1 flex flex-wrap gap-x-4 text-[12px] text-[#3B4A57]">
                 <span>0%</span><span>{SASARAN.min}% sampai {SASARAN.max}% = sasaran</span><span>{PUNCAK}%+</span>
-                <span>C cuti · S sakit · I izin · DL dinas luar · L libur · ! kerja di hari tanpa kapasitas (akhir pekan atau libur)</span>
+                <span>C cuti · S sakit · I izin · DL dinas luar · L libur · <u>garis bawah</u> = akhir pekan atau libur yang dikerjakan</span>
               </div>
             </div>
-            <p className="m-0 mt-2 text-[12.5px] text-[#3B4A57]">Aturan hitung: hari lapangan dan pelatihan dihitung satu hari penuh (sebesar kapasitas hari itu), ditambah delegasi yang jatuh di hari yang sama. Akhir pekan dan libur berkapasitas 0, sehingga kerja di hari itu bertanda !. Usulan yang belum disetujui tidak ikut dihitung.</p>
+            <p className="m-0 mt-2 text-[12.5px] text-[#3B4A57]">Aturan hitung: hari lapangan dan pelatihan dihitung satu hari penuh (sebesar kapasitas hari itu), ditambah delegasi yang jatuh di hari yang sama. Akhir pekan atau libur yang dikerjakan juga dihitung hari penuh dan diberi garis bawah (satu hari lapangan = 100%); jumlah orangnya tampil di ringkasan. Akhir pekan tanpa pekerjaan berkapasitas 0. Usulan yang belum disetujui tidak ikut dihitung.</p>
           </Kartu>
 
           {terpilih && (
             <Kartu judul={`${terpilih.baris.nama} · ${tglPendek(terpilih.sel.tanggal)}`} kanan={<button type="button" className={KELAS.tombolKecil} onClick={() => setPilih(null)}>Tutup</button>}>
               <div className="mb-2 text-[13.5px] text-[#3B4A57]">
                 {fmt(terpilih.sel.poin, 1)} poin dari kapasitas {fmt(terpilih.sel.kapasitas, 0)} ({terpilih.sel.persen === 999 ? "tanpa kapasitas" : `${terpilih.sel.persen}%`})
-                {terpilih.sel.libur ? ` · ${terpilih.sel.libur}` : ""}
+                {terpilih.sel.libur ? ` · ${terpilih.sel.libur}` : ""}{terpilih.sel.lembur ? " · hari non-kerja yang dikerjakan" : ""}
                 {terpilih.sel.ketersediaan ? ` · ${terpilih.sel.ketersediaan.jenis}${terpilih.sel.ketersediaan.status === "diajukan" ? " (diajukan)" : ""}` : ""}
               </div>
               {terpilih.sel.rincian.length === 0 ? <p className="m-0 text-[13.5px] text-[#3B4A57]">Tidak ada pekerjaan tercatat pada hari ini.</p> : (

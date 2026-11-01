@@ -23,6 +23,8 @@ export type SelRekap = {
   persen: number;
   kategori: KategoriSel;
   libur: string | null;
+  /** Ada pekerjaan di hari non-kerja (akhir pekan atau libur): kapasitas hari itu dihitung sebesar kapasitas hari kerja, ditandai terpisah. */
+  lembur: boolean;
   /** Poin dari usulan pegawai yang belum disetujui (tidak termasuk `poin`). */
   bayangan: number;
   ketersediaan: { jenis: string; status: string; fraksi: number } | null;
@@ -38,13 +40,15 @@ export type BarisRekap = {
   kategori: KategoriSel;
   perKegiatan: { kegiatanId: number | null; kegiatan: string; poin: number }[];
   bayangan: number;
+  /** Jumlah hari non-kerja (akhir pekan atau libur) yang dikerjakan pada rentang ini. */
+  hariLembur: number;
 };
 export type KegiatanRekap = { id: number | null; nama: string };
 export type HasilRekap = {
   tanggal: string[];
   baris: BarisRekap[];
   kegiatan: KegiatanRekap[];
-  ringkas: { jumlah: number; sasaran: number; berlebih: number; ringan: number; tidakTersedia: number };
+  ringkas: { jumlah: number; sasaran: number; berlebih: number; ringan: number; tidakTersedia: number; lembur: number };
   adaAkhirPekan: boolean;
 };
 
@@ -124,14 +128,16 @@ export function susunRekap(m: MasukanRekap): HasilRekap {
       const setuju = aktifPada.filter((k) => k.status === "disetujui");
       const fraksi = Math.min(1, setuju.reduce((s, k) => s + ambil(k.fraksi), 0));
       const tampil = setuju[0] ?? aktifPada.find((k) => k.status === "diajukan") ?? null;
-      const kapasitas = kerja ? Math.round(kapasitasPada(t) * (1 - fraksi) * 100) / 100 : 0;
       const poin = rincian.reduce((s, r) => s + r.poin, 0);
+      // hari non-kerja yang dikerjakan (lapangan/pelatihan di akhir pekan atau libur) dihitung sebagai hari kerja penuh: 1 hari lapangan = 100%, bukan 999%
+      const lembur = !kerja && poin > 0;
+      const kapasitas = kerja || lembur ? Math.round(kapasitasPada(t) * (1 - fraksi) * 100) / 100 : 0;
       const persen = kapasitas > 0 ? Math.round((poin / kapasitas) * 100) : poin > 0 ? 999 : 0;
       let kategori: KategoriSel;
       if (poin === 0) kategori = fraksi >= 1 ? "tidak_tersedia" : "kosong";
       else kategori = kapasitas > 0 ? kategoriBeban(persen) : "berlebih";
       return {
-        tanggal: t, hk, kapasitas, poin, persen, kategori, libur, bayangan,
+        tanggal: t, hk, kapasitas, poin, persen, kategori, libur, lembur, bayangan,
         ketersediaan: tampil ? { jenis: tampil.jenis, status: tampil.status, fraksi: ambil(tampil.fraksi) } : null,
         rincian,
       };
@@ -152,6 +158,7 @@ export function susunRekap(m: MasukanRekap): HasilRekap {
       akun: o.akun, nama: o.nama, sel, total, kapasitas, persen, kategori,
       perKegiatan: [...perKegiatan.values()].sort((a, b) => b.poin - a.poin),
       bayangan: sel.reduce((s, x) => s + x.bayangan, 0),
+      hariLembur: sel.filter((x) => x.lembur).length,
     };
   });
 
@@ -161,7 +168,7 @@ export function susunRekap(m: MasukanRekap): HasilRekap {
     tanggal,
     baris: urut,
     kegiatan: [...daftarKegiatan.values()].sort((a, b) => (a.id === null ? 1 : 0) - (b.id === null ? 1 : 0) || a.nama.localeCompare(b.nama)),
-    ringkas: { jumlah: urut.length, sasaran: hitung("sasaran"), berlebih: hitung("berlebih"), ringan: hitung("ringan") + hitung("kosong"), tidakTersedia: hitung("tidak_tersedia") },
+    ringkas: { jumlah: urut.length, sasaran: hitung("sasaran"), berlebih: hitung("berlebih"), ringan: hitung("ringan") + hitung("kosong"), tidakTersedia: hitung("tidak_tersedia"), lembur: urut.filter((b) => b.hariLembur > 0).length },
     adaAkhirPekan: urut.some((b) => b.sel.some((s) => s.hk >= 6 && s.poin > 0)),
   };
 }
