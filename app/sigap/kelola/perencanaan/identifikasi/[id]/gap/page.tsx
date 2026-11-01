@@ -12,6 +12,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
+import { NavAlur, PenunjukAlur } from "@/app/sigap/kelola/AlurKelola";
+import { alurIdentifikasi, posisiAlur } from "@/lib/alurKelola";
 import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
@@ -92,6 +94,8 @@ function Isi() {
   const tanggapi = useCallback((gapId: number, kunci: string, status: StatusTanggapan, catatan: string) =>
     kirim.jalankan(() => aksiKeu("keu_gap_tanggapi", { p_gap: gapId, p_kunci: kunci, p_status: status, ...(catatan ? { p_catatan: catatan } : {}) })), [kirim]);
 
+  // (1 Nov 2026) penunjuk tahap + Sebelumnya/Berikutnya alur Identifikasi survei (lib/alurKelola.ts)
+  const posisiAlurIni = id === null ? null : posisiAlur(alurIdentifikasi(id), "gap");
   return (
     <Bingkai
       aktif="identifikasi_survei"
@@ -100,6 +104,8 @@ function Isi() {
       judul={row ? <>Gap pelaksanaan: {row.nama}</> : "Gap pelaksanaan"}
       sub={row ? <>RO {row.ro_kode} · Tahun {row.tahun}</> : undefined}
       kanan={(gelap) => <LencanaNotif gelap={gelap} />}
+      atas={<PenunjukAlur posisi={posisiAlurIni} nama="Alur identifikasi survei" />}
+      bawah={<NavAlur posisi={posisiAlurIni} />}
       kembali={{ induk: id ? `/sigap/kelola/perencanaan/identifikasi/${id}/pelaksanaan` : "/sigap/kelola/perencanaan/identifikasi", label: "Pelaksanaan" }}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">

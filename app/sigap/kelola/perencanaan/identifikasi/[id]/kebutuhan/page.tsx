@@ -11,6 +11,8 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Bingkai from "@/app/sigap/kontrak/Bingkai";
+import { NavAlur, PenunjukAlur } from "@/app/sigap/kelola/AlurKelola";
+import { alurIdentifikasi, posisiAlur } from "@/lib/alurKelola";
 import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { awalLanjutan, jadwalPendataan, normalisasiLanjutan, rincianBiaya } from "@/lib/keu/lanjutan";
@@ -57,6 +59,8 @@ function Isi() {
 
   const ro = row?.ro_kode ?? "";
   const halamanIni = id ? `/sigap/kelola/perencanaan/identifikasi/${id}/kebutuhan` : "/sigap/kelola/perencanaan/identifikasi";
+  // (1 Nov 2026) penunjuk tahap + Sebelumnya/Berikutnya alur Identifikasi survei (lib/alurKelola.ts)
+  const posisiAlurIni = id === null ? null : posisiAlur(alurIdentifikasi(id), "kebutuhan");
   return (
     <Bingkai
       aktif="identifikasi_survei"
@@ -65,6 +69,8 @@ function Isi() {
       judul={row ? <>Rekrutmen dan pengadaan: {row.nama}</> : "Rekrutmen dan pengadaan"}
       sub={row ? <>RO {ro} · Tahun {row.tahun}</> : undefined}
       kanan={(gelap) => <LencanaNotif gelap={gelap} />}
+      atas={<PenunjukAlur posisi={posisiAlurIni} nama="Alur identifikasi survei" />}
+      bawah={<NavAlur posisi={posisiAlurIni} />}
       kembali={{ induk: id ? `/sigap/kelola/perencanaan/identifikasi/${id}/lanjutan` : "/sigap/kelola/perencanaan/identifikasi", label: "Identifikasi lanjutan" }}
     >
       <div className="flex flex-col gap-3.5 text-[#1B2B4B]">

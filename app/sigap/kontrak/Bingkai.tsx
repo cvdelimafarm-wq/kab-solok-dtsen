@@ -29,6 +29,8 @@ export default function Bingkai<K extends string>({
   onTab,
   kembali,
   penuh,
+  atas,
+  bawah,
   children,
 }: {
   /** (7 Okt 2026) menu sidebar yg aktif & label kecil header HP -- dipakai juga oleh SIGAP PEDIA. */
@@ -45,6 +47,10 @@ export default function Bingkai<K extends string>({
   kembali?: OpsiKembali;
   /** (25 Okt 2026) tidak berpengaruh lagi: lebar isi selalu dibatasi selebar laptop (lihat Shell). */
   penuh?: boolean;
+  /** (1 Nov 2026) Penunjuk tahap alur: tampil di bawah baris tab, sebelum isi (PenunjukAlur). */
+  atas?: React.ReactNode;
+  /** (1 Nov 2026) Tombol Sebelumnya/Berikutnya alur: tampil sesudah isi (NavAlur). */
+  bawah?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
@@ -104,7 +110,9 @@ export default function Bingkai<K extends string>({
           </PitaGeser>
         </div>
       )}
+      {atas}
       {children}
+      {bawah}
     </>
   );
 

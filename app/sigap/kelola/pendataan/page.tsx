@@ -22,6 +22,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ambilRingkas, bacaSesi, keMasuk, type KegiatanRingkas } from "../../admin/api";
 import { Kartu } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
+import { NavAlur, PenunjukAlur } from "../AlurKelola";
+import { posisiAlur, urutanDariTab } from "@/lib/alurKelola";
 import { KEGIATAN_PENDATAAN, TAB_PENDATAAN, bacaKegiatanPendataan, bacaTabPendataan, labelTabPendataan, urlKegiatanPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
 import PemilihSurvei, { namaSurvei } from "./PemilihSurvei";
 import FiturKegiatan from "./FiturKegiatan";
@@ -89,6 +91,9 @@ export default function KelolaPendataan() {
   const tampil = tabTampilKelola(f);
   /** Tab yang dipakai: pilihan bila fiturnya menyala, selain itu tab tampil pertama (alamat lama ke tab yang dimatikan). */
   const tabIni = tabAktifKelola(tab, tampil) as KodeTabPendataan;
+  // (1 Nov 2026) penunjuk tahap + Sebelumnya/Berikutnya: urutan = tab yang TAMPIL (tab yang dimatikan fitur dilewati)
+  const tabTampil = TAB_PENDATAAN.filter((t) => (tampil as string[]).includes(t.kode));
+  const posisi = posisiAlur(urutanDariTab(tabTampil), tabIni);
 
   return (
     <Bingkai<KodeTabPendataan>
@@ -97,9 +102,11 @@ export default function KelolaPendataan() {
       jejak={["Pelaksanaan", "Pendataan", labelTabPendataan(tabIni)]}
       judul="Kelola Pendataan"
       sub={pasca ? "Pendataan Status Pemulihan (PSP) Pascabencana · dari daftar KK sampai pertanggungjawaban" : `${nama} · penugasan, siaran, QC Pemahaman, dan administrasi`}
-      tab={TAB_PENDATAAN.filter((t) => (tampil as string[]).includes(t.kode)).map(({ kode, label }) => ({ kode, label }))}
+      tab={tabTampil.map(({ kode, label }) => ({ kode, label }))}
       aktifTab={tabIni}
       onTab={pilihTab}
+      atas={<PenunjukAlur posisi={posisi} nama="Alur pendataan" />}
+      bawah={<NavAlur posisi={posisi} onPilih={(k) => pilihTab(k as KodeTabPendataan)} />}
     >
       <PemilihSurvei daftar={daftar} aktif={kegId} onPilih={pilihKegiatan} />
       {tabIni === "qc" && <QcPemahaman key={kegId} kegiatanId={kegId} fitur={f} />}
